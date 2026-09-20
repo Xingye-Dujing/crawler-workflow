@@ -18,6 +18,18 @@ class ZhihuCrawler(Crawler):
     login_url = 'https://www.zhihu.com/signin'
 
     def search(self, keyword: str, target_count: int = 200, **_kwargs):
+        # Nothing to seek past: a search result page cannot be re-entered at an
+        # old scroll offset, so the position records how many items are in hand
+        # and duplicates are dropped by the sink while scrolling continues.
+        have = self.collected()
+        if have:
+            # Everything scraped by an earlier attempt is already in hand; the
+            # crawl only has to top the count up to the target.
+            logger.info(t('crawl.resume_have', n=have))
+        if have >= target_count:
+            logger.info(t('crawl.zhihu.target_reached', n=target_count))
+            return self.results()
+
         encoded = quote(keyword)
         url = f'https://www.zhihu.com/search?q={encoded}&type=content'
         logger.info(t('crawl.zhihu.start', kw=keyword, n=target_count))
@@ -26,25 +38,39 @@ class ZhihuCrawler(Crawler):
         self.wait_for_element('.SearchResult-Card')
         logger.info(t('crawl.zhihu.loaded'))
 
-        cards = self._scroll_to_load(target_count)
+        # Where this attempt starts from. A scroll-based result page cannot be
+        # re-entered at an old scroll offset, so the position records the count
+        # rather than a scroll index: on resume the duplicates already in hand
+        # are dropped by the sink while scrolling continues until the target is
+        # met.
+        self.mark_position(keyword=keyword, phase='cards', done=have)
+
+        cards = self._scroll_to_load(target_count, have=have)
         logger.info(t('crawl.zhihu.cards', n=len(cards)))
 
-        results = []
         for idx, card in enumerate(cards, 1):
+            if self.collected() >= target_count:
+                logger.info(t('crawl.zhihu.target_reached', n=target_count))
+                break
             try:
                 item = self._scrape_card(card)
                 if item.get('作者') or item.get('正文'):
-                    results.append(item)
-                    logger.info(t('crawl.zhihu.processed', i=idx, n=len(results)))
+                    if self.emit(item):
+                        logger.info(t('crawl.zhihu.processed', i=idx, n=self.collected()))
+                    else:
+                        logger.debug(t('crawl.zhihu.duplicate', i=idx))
                 else:
                     logger.debug(t('crawl.zhihu.skipped', i=idx))
             except Exception as e:
                 logger.error(t('crawl.zhihu.process_error', i=idx, err=e))
+            # Recorded per card: a kill between two cards costs at most the one
+            # in flight.
+            self.mark_position(done=self.collected(), scanned=idx)
 
-        logger.info(t('crawl.zhihu.finished', n=len(results), total=target_count))
-        return results
+        logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
+        return self.results()
 
-    def _scroll_to_load(self, target_count: int, max_scrolls: int = 150):
+    def _scroll_to_load(self, target_count: int, max_scrolls: int = 150, have: int = 0):
         last_count = 0
         stuck_count = 0
         for i in range(1, max_scrolls + 1):
@@ -66,7 +92,9 @@ class ZhihuCrawler(Crawler):
             count = len(cards)
             logger.info(t('crawl.zhihu.scroll_round', i=i, n=count, total=target_count))
 
-            if count >= target_count:
+            # Counts what is already in hand too: on a resumed crawl the first
+            # screens are mostly rows that were collected last time.
+            if have + count >= target_count:
                 logger.info(t('crawl.zhihu.target_reached', n=target_count))
                 break
 

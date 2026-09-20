@@ -326,6 +326,23 @@ _ZH = {
     'set.outOfRange': '{key} 超出范围 {lo}-{hi}，已恢复默认 {value}',
     'set.badOllamaHost': 'Ollama 地址需以 http:// 或 https:// 开头，已恢复默认',
     'set.saveFailed': '设置未能写入磁盘（本次会话内仍生效）：{err}',
+    # ── 断点续跑（durable run state） ────────────────────────
+    'run.row_limit': '节点 {nid} 已达到保存上限 {limit} 行，超出部分不再落库',
+    'run.interrupted_by_restart': '服务重启时被打断',
+    'run.promoted': '发现 {n} 条上次没跑完的记录，已标记为「可续跑」',
+    'run.started': '本次运行已记账：{rid}（随时可中断，数据逐条落库）',
+    'run.resume_from': '续跑模式：接着 {at} 那次往下跑，此前已保存 {rows} 行',
+    'run.restored': '节点 {nid} 沿用上次结果（{n} 行），不再重跑',
+    'run.resume_crawl': '节点 {nid} 从上次中断处继续抓取（已有 {have} 行）',
+    'run.partial_down': '节点 {nid} 中断：已把 {n} 行已完成的结果交给下游',
+    'run.failed_down': '节点 {nid} 失败且没有可用数据，下游按空表继续',
+    'run.skipped_empty': '节点 {nid} 跳过：上游没有数据',
+    'run.finished': '运行结束（{done}/{total} 个节点完成）',
+    'resume.no_run': '续跑节点：没有选择运行记录，也没找到可续跑的记录',
+    'resume.empty': '续跑节点：运行 {rid} 的节点 {nid} 没有可读取的数据行',
+    'resume.loaded': '续跑节点：载入运行 {rid} 中节点 {nid} 的 {n} 行',
+    'api.runNotFound': '找不到运行记录：{rid}',
+    'api.resumeNoNode': '这次运行里没有可续跑的节点输出',
 }
 
 _EN = {
@@ -617,6 +634,23 @@ _EN = {
     'set.outOfRange': '{key} is outside {lo}-{hi} — restored the default {value}',
     'set.badOllamaHost': 'The Ollama address must start with http:// or https:// — restored the default',
     'set.saveFailed': 'Settings could not be written to disk (still active for this session): {err}',
+    # ── resumable runs ────────────────────────────────────────
+    'run.row_limit': 'Node {nid} hit its {limit}-row safety cap — further rows are not stored',
+    'run.interrupted_by_restart': 'Interrupted by a service restart',
+    'run.promoted': '{n} unfinished run(s) from an earlier session marked resumable',
+    'run.started': 'This run is checkpointed as {rid} — every row lands in the database as it is produced',
+    'run.resume_from': 'Resuming the run interrupted at {at} — {rows} rows already stored',
+    'run.restored': 'Node {nid} reuses its previous result ({n} rows) instead of running again',
+    'run.resume_crawl': 'Node {nid} continues crawling from where it stopped ({have} rows already saved)',
+    'run.partial_down': 'Node {nid} interrupted — its {n} finished rows are handed downstream',
+    'run.failed_down': 'Node {nid} failed with nothing usable — downstream sees an empty table',
+    'run.skipped_empty': 'Node {nid} skipped: no data arrived from upstream',
+    'run.finished': 'Run finished ({done}/{total} nodes)',
+    'resume.no_run': 'Resume node: no run selected, and no resumable run was found',
+    'resume.empty': 'Resume node: node {nid} of run {rid} has no stored rows',
+    'resume.loaded': 'Resume node: loaded {n} rows from node {nid} of run {rid}',
+    'api.runNotFound': 'No such run: {rid}',
+    'api.resumeNoNode': 'That run has no node output to resume from',
 }
 
 MESSAGES = {'zh': _ZH, 'en': _EN}

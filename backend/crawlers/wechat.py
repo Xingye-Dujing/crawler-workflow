@@ -9,7 +9,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from i18n import t
 
-from .base import Crawler
+from .base import Crawler, as_index
 
 logger = logging.getLogger(__name__)
 
@@ -42,34 +42,51 @@ class WechatCrawler(Crawler):
             logger.info(t('crawl.wechat.no_urls'))
             return []
 
-        results = []
+        resume = self.resume_of(_kwargs)
+        urls = [str(u).strip() for u in urls if str(u).strip()]
+        start_index = as_index(resume.get('url_index'))
+        have = self.collected()
+        if have:
+            # The articles already scraped are in hand; the run picks up at the
+            # next link instead of fetching the same pages again.
+            logger.info(t('crawl.resume_have', n=have))
+
         total = len(urls)
         logger.info('=' * 70)
         logger.info(t('crawl.wechat.batch_start', n=total))
         logger.info('=' * 70)
+        self.mark_position(urls=urls, url_total=total, url_index=start_index, done=have)
 
         for idx, url in enumerate(urls, start=1):
+            if idx <= start_index:
+                continue
             logger.info('')
             logger.info(t('crawl.wechat.processing', i=idx, total=total))
             logger.info(t('crawl.wechat.url', url=url))
 
             data = self.get_detail(url)
             if data:
-                results.append(data)
-                logger.info(
-                    t(
-                        'crawl.wechat.success',
-                        i=idx,
-                        total=total,
-                        title=data.get('标题', '?'),
-                        author=data.get('公众号', '?'),
-                        reads=data.get('阅读数', '?'),
-                        likes=data.get('在看数', '?'),
-                        rewards=data.get('赞赏数', '?'),
+                if self.emit(data):
+                    logger.info(
+                        t(
+                            'crawl.wechat.success',
+                            i=idx,
+                            total=total,
+                            title=data.get('标题', '?'),
+                            author=data.get('公众号', '?'),
+                            reads=data.get('阅读数', '?'),
+                            likes=data.get('在看数', '?'),
+                            rewards=data.get('赞赏数', '?'),
+                        )
                     )
-                )
+                else:
+                    logger.debug(t('crawl.wechat.duplicate', url=url))
             else:
                 logger.warning(t('crawl.wechat.failed', i=idx, total=total))
+
+            # The cursor moves with the article, so a kill here costs at most
+            # the page in flight.
+            self.mark_position(url_index=idx, done=self.collected())
 
             if idx < total:
                 logger.info(t('crawl.wechat.wait'))
@@ -77,9 +94,9 @@ class WechatCrawler(Crawler):
 
         logger.info('')
         logger.info('=' * 70)
-        logger.info(t('crawl.wechat.batch_done', n=len(results), total=total))
+        logger.info(t('crawl.wechat.batch_done', n=self.collected(), total=total))
         logger.info('=' * 70)
-        return results
+        return self.results()
 
     # ------------------------------------------------------------------
     # Single article detail

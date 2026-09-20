@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from i18n import t
 
-from .base import Crawler
+from .base import Crawler, as_index
 
 logger = logging.getLogger(__name__)
 
@@ -35,27 +35,28 @@ class WeiboCrawler(Crawler):
             raise ValueError(t('crawl.weibo.bad_date', value=value)) from e
 
     def search(self, keyword: str, start_time: str = None, end_time: str = None, **_kwargs):
-        if start_time or end_time:
-            # One bound alone used to be ignored silently, which quietly ran a
-            # completely different (unbounded) search.
-            if not (start_time and end_time):
-                raise ValueError(t('crawl.weibo.need_both_dates'))
-            s = self._parse_date(start_time)
-            e = self._parse_date(end_time)
-            if e <= s:
-                raise ValueError(t('crawl.weibo.bad_range', start=start_time, end=end_time))
-            urls = self._generate_hourly_urls(keyword, s, e)
-            logger.info(t('crawl.weibo.keyword', kw=keyword))
-            logger.info(t('crawl.weibo.range', start=s.strftime('%Y-%m-%d'), end=e.strftime('%Y-%m-%d')))
-            logger.info(t('crawl.weibo.links', n=len(urls)))
+        resume = self.resume_of(_kwargs)
+        stored = resume.get('urls')
+        # This crawl is a walk over a URL list, so the list plus the index into
+        # it *is* the resume point. It is reused when the keyword still matches;
+        # otherwise it is rebuilt from the (validated) dates.
+        if isinstance(stored, list) and stored and resume.get('keyword') == keyword:
+            urls = [str(u) for u in stored]
+            logger.info(t('crawl.resume_urls', n=len(urls)))
         else:
-            encoded = quote(keyword)
-            urls = [f'https://s.weibo.com/weibo?q={encoded}&typeall=1&suball=1&Refer=g']
-            logger.info(t('crawl.weibo.keyword_plain', kw=keyword))
+            urls = self._build_urls(keyword, start_time, end_time)
 
+        have = self.collected()
+        if have:
+            logger.info(t('crawl.resume_have', n=have))
+
+        start_index = as_index(resume.get('url_index'))
         total_urls = len(urls)
-        all_data = []
+        self.mark_position(keyword=keyword, urls=urls, url_index=start_index, url_total=total_urls, done=have)
+
         for idx, url in enumerate(urls, start=1):
+            if idx <= start_index:
+                continue
             logger.info('')
             logger.info('=' * 80)
             logger.info(t('crawl.weibo.processing', i=idx, total=total_urls))
@@ -64,13 +65,34 @@ class WeiboCrawler(Crawler):
 
             page_data = self._scrape_single_search(url)
             logger.info(t('crawl.weibo.link_done', i=idx, n=len(page_data)))
-            all_data.extend(page_data)
-            logger.info(t('crawl.weibo.accumulated', n=len(all_data)))
+            logger.info(t('crawl.weibo.accumulated', n=self.collected()))
+            # Position after each window: a kill here costs at most the window
+            # in flight, never the windows already walked.
+            self.mark_position(url_index=idx, done=self.collected())
 
             if idx < total_urls:
                 time.sleep(0.5)
 
-        return all_data
+        return self.results()
+
+    def _build_urls(self, keyword: str, start_time: str, end_time: str) -> list:
+        if start_time or end_time:
+            # One bound alone used to be ignored silently, which quietly ran a
+            # completely different (unbounded) search.
+            if not (start_time and end_time):
+                raise ValueError(t('crawl.weibo.need_both_dates'))
+            start = self._parse_date(start_time)
+            end = self._parse_date(end_time)
+            if end <= start:
+                raise ValueError(t('crawl.weibo.bad_range', start=start_time, end=end_time))
+            urls = self._generate_hourly_urls(keyword, start, end)
+            logger.info(t('crawl.weibo.keyword', kw=keyword))
+            logger.info(t('crawl.weibo.range', start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d')))
+            logger.info(t('crawl.weibo.links', n=len(urls)))
+            return urls
+        encoded = quote(keyword)
+        logger.info(t('crawl.weibo.keyword_plain', kw=keyword))
+        return [f'https://s.weibo.com/weibo?q={encoded}&typeall=1&suball=1&Refer=g']
 
     def _generate_hourly_urls(self, keyword: str, start: datetime, end: datetime):
         windows = int((end - start).total_seconds() // 3600) + 1
@@ -203,17 +225,19 @@ class WeiboCrawler(Crawler):
                 images = self._get_images(card)
                 logger.debug(t('crawl.debug.card_images', i=idx, n=len(images.split(' | ')) if images else 0))
 
-                page_data.append(
-                    {
-                        '发布者': author,
-                        '发布时间': publish_time,
-                        '正文': text,
-                        '转发数': forward,
-                        '评论数': comment,
-                        '点赞数': like,
-                        '图片链接': images,
-                    }
-                )
+                item = {
+                    '发布者': author,
+                    '发布时间': publish_time,
+                    '正文': text,
+                    '转发数': forward,
+                    '评论数': comment,
+                    '点赞数': like,
+                    '图片链接': images,
+                }
+                page_data.append(item)
+                # Handed over the moment it is scraped: this page's items are on
+                # disk before the next card is even looked at.
+                self.emit(item)
             except Exception:
                 logger.warning(t('crawl.weibo.card_error', i=idx), exc_info=True)
                 continue

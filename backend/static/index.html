@@ -255,6 +255,39 @@
 
     <!-- Workspace -->
     <div id="workspace">
+      <!-- Shown when a previous run of this workflow was interrupted and its
+           rows are still on disk: continue it, or throw it away and start over. -->
+      <div id="resume-banner" class="resume-banner hidden">
+        <span class="resume-dot"></span>
+        <span class="resume-text" id="resume-text"></span>
+        <span class="resume-actions">
+          <button
+            class="menu-btn primary"
+            type="button"
+            onclick="resumeBar.continueRun()"
+            data-i18n="resume.continue"
+          >
+            Continue
+          </button>
+          <button
+            class="menu-btn"
+            type="button"
+            onclick="resumeBar.restart()"
+            data-i18n="resume.restart"
+          >
+            Start over
+          </button>
+          <button
+            class="menu-btn"
+            type="button"
+            onclick="resumeBar.dismiss()"
+            title="Dismiss"
+            data-i18n-title="resume.dismissTitle"
+          >
+            &times;
+          </button>
+        </span>
+      </div>
       <div id="canvas-inner">
         <svg id="svg-layer"></svg>
         <div id="nodes-container"></div>

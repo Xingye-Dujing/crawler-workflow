@@ -131,7 +131,8 @@ const workflow = {
         showToast(I18n.t('toast.newWorkflow'));
     },
 
-    async execute() {
+    async execute(opts) {
+        opts = opts || {};
         /* Validate before running */
         var validationErrors = this.validate();
         /* Async cookie check */
@@ -328,6 +329,9 @@ const workflow = {
                         showToast(I18n.t('toast.workflowCompleted'));
                         I18n.apply();
                         stats.refresh();
+                        /* Whatever left nodes unfinished is now worth offering
+                           to continue — including a run someone stopped. */
+                        if (window.resumeBar) resumeBar.refresh();
                         /* Auto-display charts for visualize nodes */
                         if (result.chart_results) {
                             var vizNodes = Object.keys(result.chart_results);
@@ -513,6 +517,14 @@ function openSettings(nodeId) {
                 '<input class="settings-input" type="number" value="' + (p.top_n || '') + '" placeholder="' + I18n.t('settings.topNPlaceholder') + '" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'top_n\',this.value)"></div>' : '') +
             '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
+    } else if (node.type === 'resume') {
+        /* Adopts rows a previous run already paid for. Both lists live on the
+           server, so the panel fills them asynchronously below. */
+        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('resume.hint') + '</div>' +
+            '<div id="resume-pick" data-node="' + nodeId + '">' +
+            '<span style="font-size:11px;color:var(--text-dim);">…</span></div>' +
+            '<div class="settings-group"><button class="menu-btn" onclick="renderResumeSettings(\'' + nodeId + '\')">' +
+            I18n.t('resume.refresh') + '</button></div>';
     } else if (node.type === 'output') {
         var p = node.params;
         var fmt = p.format || (p.operation === 'save_csv' ? 'csv' : 'csv');
@@ -533,7 +545,65 @@ function openSettings(nodeId) {
         html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
     }
     content.innerHTML = html;
+    if (node.type === 'resume') renderResumeSettings(nodeId);
     canvas.updateSettingsButton();
+}
+
+/* ── Resume node: pick a stored run and one of its node outputs ── */
+async function renderResumeSettings(nodeId) {
+    var node = canvas.nodes[nodeId];
+    var holder = document.getElementById('resume-pick');
+    /* The panel may have moved on to another node while this request was in
+       flight; writing then would overwrite that node's settings. */
+    if (!node || !holder || holder.dataset.node !== nodeId) return;
+    var p = node.params;
+    var runs = [];
+    try {
+        var resp = await fetch('/api/runs/resumable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workflow: canvas.toWorkflowJSON() }),
+        });
+        var result = await resp.json();
+        runs = (result.ok && result.runs) || [];
+    } catch (e) {
+        runs = [];
+    }
+    if (!runs.length) {
+        holder.innerHTML = '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('resume.none') + '</div>';
+        return;
+    }
+    /* Whatever it was pointed at may have been purged since; falling back to
+       the newest keeps the node usable instead of silently reading nothing. */
+    if (!runs.some(function (r) { return r.run_id === p.resume_run_id; })) {
+        p.resume_run_id = runs[0].run_id;
+        canvas.saveState();
+    }
+    var run = runs.filter(function (r) { return r.run_id === p.resume_run_id; })[0] || runs[0];
+    var nodes = (run.nodes || []).filter(function (n) { return (n.row_count || 0) > 0; });
+    if (!nodes.some(function (n) { return n.node_id === p.resume_node_id; })) {
+        p.resume_node_id = '';
+    }
+    var html = '<div class="settings-group"><label class="settings-label">' + I18n.t('resume.runSelect') + '</label>' +
+        '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'resume_run_id\',this.value);renderResumeSettings(\'' + nodeId + '\')">' +
+        runs.map(function (r) {
+            var label = (r.started_at || r.run_id) + ' · ' + (r.rows_kept || 0) + ' ' + I18n.t('settings.rows');
+            return '<option value="' + r.run_id + '"' + (r.run_id === p.resume_run_id ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+        }).join('') +
+        '</select></div>';
+    html += '<div class="settings-group"><label class="settings-label">' + I18n.t('resume.nodeSelect') + '</label>' +
+        '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'resume_node_id\',this.value);canvas.updateNodeDisplay(\'' + nodeId + '\')">' +
+        '<option value=""' + (!p.resume_node_id ? ' selected' : '') + '>' + I18n.t('resume.autoNode') + '</option>' +
+        nodes.map(function (n) {
+            var label = (n.title || n.node_id) + ' · ' + n.row_count + ' ' + I18n.t('settings.rows');
+            return '<option value="' + n.node_id + '"' + (n.node_id === p.resume_node_id ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+        }).join('') +
+        '</select></div>';
+    html += '<div class="settings-group"><label class="settings-label">' + I18n.t('resume.limit') + '</label>' +
+        '<input class="settings-input" type="number" value="' + (p.resume_limit || 0) + '" placeholder="' + I18n.t('resume.limitPlaceholder') + '" ' +
+        'onchange="updateParam(\'' + nodeId + '\',\'resume_limit\',parseInt(this.value)||0)"></div>';
+    holder.innerHTML = html;
+    canvas.updateNodeDisplay(nodeId);
 }
 
 /* Format -> file-extension map for the Save node. Keeps the filename's
@@ -1823,6 +1893,91 @@ function generateCookie() {
         });
 }
 
+/* ── Resume banner ─────────────────────────────────────────────
+   A run that was interrupted leaves its rows behind, and the only place to say
+   so is here: the alternative is a silent re-run that throws away everything
+   already paid for. It is refreshed after every run and whenever the canvas
+   is rebuilt, because the match depends on the workflow's shape. */
+var resumeBar = {
+    candidate: null,
+
+    async refresh() {
+        const banner = document.getElementById('resume-banner');
+        if (!banner) return null;
+        if (!window.canvas || !Object.keys(canvas.nodes || {}).length) {
+            this.candidate = null;
+            banner.classList.add('hidden');
+            return null;
+        }
+        let runs = [];
+        try {
+            const resp = await fetch('/api/runs/resumable', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workflow: canvas.toWorkflowJSON() }),
+            });
+            const result = await resp.json();
+            runs = (result.ok && result.runs) || [];
+        } catch (e) {
+            runs = [];
+        }
+        /* Anything still running belongs to this moment, not to a past attempt. */
+        this.candidate = runs[0] || null;
+        this.render();
+        return this.candidate;
+    },
+
+    render() {
+        const banner = document.getElementById('resume-banner');
+        const text = document.getElementById('resume-text');
+        if (!banner || !text) return;
+        if (!this.candidate) {
+            banner.classList.add('hidden');
+            return;
+        }
+        const run = this.candidate;
+        const detail = I18n.t('resume.detail')
+            .replace('{done}', run.node_done || 0)
+            .replace('{total}', run.node_total || 0)
+            .replace('{rows}', run.rows_kept || 0);
+        text.textContent = I18n.t('resume.interrupted').replace('{at}', run.started_at || run.run_id) + ' — ' + detail;
+        banner.classList.remove('hidden');
+    },
+
+    continueRun() {
+        if (!this.candidate) return;
+        workflow.execute({ resumeRunId: this.candidate.run_id });
+    },
+
+    async restart() {
+        const runId = this.candidate && this.candidate.run_id;
+        this.hide();
+        if (runId) {
+            try {
+                /* Dropping the saved run includes its "already crawled" claims,
+                   otherwise the fresh run would skip everything it fetched. */
+                await fetch('/api/runs/discard', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ run_id: runId }),
+                });
+            } catch (e) { /* a failed discard still starts the run */ }
+            showToast(I18n.t('toast.runDiscarded'));
+        }
+        workflow.execute();
+    },
+
+    dismiss() {
+        this.hide();
+    },
+
+    hide() {
+        this.candidate = null;
+        const banner = document.getElementById('resume-banner');
+        if (banner) banner.classList.add('hidden');
+    },
+};
+
 workflow.validate = function () {
     var errors = [];
     var nodes = canvas.nodes;
@@ -1933,7 +2088,7 @@ workflow.validate = function () {
     });
 
     var hasUpstream = Object.keys(nodes).some(function (id) {
-        return ['source', 'upload', 'process', 'analysis', 'tokenize'].indexOf(nodes[id].type) >= 0;
+        return ['source', 'upload', 'process', 'analysis', 'tokenize', 'resume'].indexOf(nodes[id].type) >= 0;
     });
     if (hasUpstream) {
         var hasTerminal = Object.keys(nodes).some(function (id) {

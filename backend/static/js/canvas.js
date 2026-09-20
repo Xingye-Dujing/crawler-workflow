@@ -426,6 +426,9 @@ const canvas = {
         if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };
         if (type === 'visualize') return { chart_type: 'bar', x_field: '', y_field: '', value_field: '', agg: 'sum', engine: 'echarts', title: '', tokenize: false };
         if (type === 'tokenize') return { text_column: '', top_n: '', output_mode: 'word_freq' };
+        /* Empty run ids mean "auto": pick the newest interrupted run, and
+           inside it whichever node holds the most rows. */
+        if (type === 'resume') return { resume_run_id: '', resume_node_id: '', resume_limit: 0 };
         if (type === 'output') return { operation: 'save', format: 'csv', filename: 'export.csv' };
         return {};
     },
@@ -468,6 +471,13 @@ const canvas = {
                 summary += I18n.t('summary.tokenizeTop').replace('{n}', params.top_n);
             }
             return summary;
+        }
+        if (type === 'resume') {
+            /* What it will hand downstream is stored server-side, so the node
+               has nothing to summarise beyond which pick it will use. */
+            var runPart = params.resume_run_id || I18n.t('resume.autoNode');
+            return I18n.t('settings.operation') + ': ' + runPart +
+                (params.resume_node_id ? '\n' + params.resume_node_id : '');
         }
         if (type === 'output') {
             var op = params.operation || '';

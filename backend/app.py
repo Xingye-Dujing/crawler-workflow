@@ -41,6 +41,20 @@ from services.cookie_manager import CookieManager
 from services.data_analysis import DataAnalysisService, UnknownOperationError
 from services.execution_history import ExecutionHistoryService
 from services.exporter import DataExporter, UnsupportedFormatError
+from services.run_store import (
+    NODE_DONE,
+    NODE_FAILED,
+    NODE_PARTIAL,
+    NODE_RESTORED,
+    NODE_SKIPPED,
+    RUN_COMPLETED,
+    RUN_FAILED,
+    RUN_INTERRUPTED,
+    RowCache,
+    RunStore,
+    fingerprints_for_workflow,
+    workflow_fingerprint,
+)
 from services.visualizer import ChartConfigError, VisualizationService
 from services.workflow_manager import WorkflowManager
 from settings_store import all_settings, get_setting, save_settings
@@ -239,6 +253,61 @@ execution_state = {
 _completed_lock = threading.Lock()
 
 
+# ─── Durable run state ──────────────────────────────────────────
+
+_RUN_STORE = None
+_RUN_STORE_LOCK = threading.Lock()
+
+
+def get_run_store() -> RunStore:
+    """The single SQLite store behind resumable runs, opened on first use.
+
+    Deliberately lazy: at import time nothing here is ready, and anything that
+    merely imports app.py would otherwise pay for opening a connection and
+    running recovery on every start.
+    """
+    global _RUN_STORE
+    if _RUN_STORE is None:
+        with _RUN_STORE_LOCK:
+            if _RUN_STORE is None:
+                _RUN_STORE = RunStore()
+    return _RUN_STORE
+
+
+def _close_run(ctx: dict, outcome: str):
+    """Record how a run ended. Never raises: losing the record must never lose
+    the run itself — the rows were already safely in the database, this says
+    only whether they are complete."""
+    with contextlib.suppress(Exception):
+        ctx['store'].settle_nodes(ctx['run_id'])
+        ctx['store'].finish_run(ctx['run_id'], outcome)
+
+
+def _item_scope(ctx: dict, node: dict) -> str:
+    """Namespace for "have I crawled this already?".
+
+    The node fingerprint, not the run id: an item collected once under this
+    keyword must not be collected again by the next attempt, or by another
+    workflow that asks the same question. That is what keeps a resumed crawl
+    from handing back duplicates.
+    """
+    return 'item:' + str((ctx.get('fingerprints') or {}).get(node.get('id') or '', ''))
+
+
+def _llm_scope(cfg: dict, op: str, text_column: str) -> str:
+    """Namespace for model answers: same operation, model and column → the same
+    answer is reusable, whatever row it arrived in and whatever run asked."""
+    return '|'.join(
+        str(part)
+        for part in (
+            op,
+            cfg.get('provider') or 'ollama',
+            cfg.get('model') or '',
+            text_column,
+        )
+    )
+
+
 def _workflow_needs_llm(workflow: dict) -> bool:
     """True when any process node in the payload will actually call a model.
 
@@ -259,16 +328,21 @@ def _workflow_needs_llm(workflow: dict) -> bool:
     return False
 
 
-def _llm_run_ctx(node: dict, op: str) -> dict:
+def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     """Build the per-node run context the LLM analyzers consume.
 
     The transport (local Ollama vs OpenRouter API), model, key and batching
     all come from the settings panel via the execute request. ``publish``
     makes finished rows visible node-by-node: the node's entry in
     execution_state['results'] updates after every batch, so a crash or a
-    stop mid-run leaves the partial table usable instead of gone. Rows are
-    also appended to a checkpoint file (analyzers/llm_client.RowCheckpoint),
-    which a re-run resumes from.
+    stop mid-run leaves the partial table usable instead of gone.
+
+    Every answered row also lands in a *cache keyed by text*, not by row
+    index (``RowCache``, in runs.db when a run is being recorded). Re-running
+    after a re-crawl — where nothing sits at the same index any more — still
+    gets those answers free instead of paying the model twice for the same
+    sentence. The JSONL checkpoint stays as the fallback for callers with no
+    store.
     """
     cfg = execution_state.get('llm') or {}
     provider = cfg.get('provider') or 'ollama'
@@ -292,7 +366,7 @@ def _llm_run_ctx(node: dict, op: str) -> dict:
         with _completed_lock:
             execution_state['results'][node_id] = df.to_dict('records')
 
-    return {
+    run_ctx = {
         'client': client,
         'node_id': node_id,
         'batch_size': cfg.get('batch_size') or 10,
@@ -303,6 +377,10 @@ def _llm_run_ctx(node: dict, op: str) -> dict:
         'cancel_event': execution_state.get('cancel_event'),
         'checkpoint_dir': Config.LLM_CHECKPOINT_DIR,
     }
+    if ctx is not None:
+        text_column = str((node.get('params') or {}).get('text_column') or 'content')
+        run_ctx['cache'] = RowCache(ctx['store'], _llm_scope(cfg, op, text_column))
+    return run_ctx
 
 
 def add_log(msg: str, wf_idx: int = None):
@@ -410,6 +488,14 @@ def execute_workflow():
     max_workers = _safe_int(settings.get('max_workers'), Config.DEFAULT_MAX_WORKERS, minimum=1, maximum=16)
     # Recorded with the run so the history panel can group by workflow rather
     # than showing every run as "untitled".
+    # ── Resumable run identity ─────────────────────────────────
+    # Continuing an interrupted run reuses its id, which is what makes the
+    # stored rows of the old attempt the rows of the new one: same node rows,
+    # same cursor, accumulating instead of duplicated.
+    resume_run_id = str(data.get('resume_run_id') or '').strip()
+    run_id = resume_run_id or uuid.uuid4().hex[:12]
+    execution_state['run_id'] = run_id
+    execution_state['resume'] = bool(resume_run_id)
     workflow_name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
 
     # AI transport chosen in the settings panel: 'ollama' (local daemon) or
@@ -455,13 +541,18 @@ def execute_workflow():
     execution_state['_mode'] = mode
     execution_state['executor'] = TaskExecutor(max_workers=max_workers, mode=mode)
 
-    def _run_single_workflow(wf_engine, wf_idx: int):
+    def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict):
         """Execute one workflow (single connected component) level by level,
         with its own isolated wf_input. Returns {nid: result, ...}.
 
         At each level the input is SNAPSHOTTED so that forked nodes at the
         same level all receive the same parent data (e.g. node-1 → node-2 AND
         node-1 → node-4 → both see node-1's result, not node-2's).
+
+        A node that fails no longer ends the branch. It hands downstream what
+        it managed to produce — the rows the model already answered, the items
+        the crawler already scraped — which is the whole point of checkpointing
+        them, and the console says that is what happened.
         """
         _wf_local.idx = wf_idx
         levels = wf_engine.group_by_level()
@@ -505,22 +596,12 @@ def execute_workflow():
                     t('wf.executing_node', i=wf_idx, nid=nid, ntype=node.get('type', '?')),
                     wf_idx=wf_idx,
                 )
-                try:
-                    primary, upstream = _inputs_for(nid)
-                    result = _execute_node(node, headless, primary, upstream=upstream)
-                except Exception as e:
-                    # A dead node must not take finished work with it: rows the
-                    # LLM already completed were published into results as they
-                    # landed, so they stay. This branch stops here rather than
-                    # feeding half-processed data downstream; sibling workflows
-                    # (parallel mode) keep running.
-                    msg = str(e)
-                    add_log(t('wf.node_failed', i=wf_idx, nid=nid, err=msg), wf_idx=wf_idx)
-                    add_log(t('wf.partial_kept', i=wf_idx), wf_idx=wf_idx)
-                    break
+                primary, upstream = _inputs_for(nid)
+                result, status = _run_node_durable(ctx, node, headless, primary, upstream, wf_idx)
                 results[nid] = result
-                with _completed_lock:
-                    execution_state['completed_nodes'] += 1
+                if status != NODE_SKIPPED:
+                    with _completed_lock:
+                        execution_state['completed_nodes'] += 1
                 add_log(
                     t(
                         'wf.node_completed',
@@ -539,6 +620,19 @@ def execute_workflow():
         # server default.
         set_lang(execution_state.get('lang'))
         sys.stdout = _LogTee(sys.__stdout__)
+        # Everything below is recorded against one run row, so whatever leaves
+        # this thread early — Stop, an exception, the process dying — leaves
+        # behind enough state to continue instead of starting over.
+        store = get_run_store()
+        wf_fp = workflow_fingerprint(workflow)
+        ctx = {
+            'store': store,
+            'run_id': run_id,
+            'resume': bool(resume_run_id),
+            'fingerprints': fingerprints_for_workflow(workflow),
+            'statuses': {},
+        }
+        outcome = RUN_FAILED
         try:
             engine = WorkflowEngine(workflow, execution_state['executor'])
             errors = engine.validate()
@@ -546,6 +640,8 @@ def execute_workflow():
                 for e in errors:
                     add_log(t('wf.validation_error', err=e))
                 execution_state['running'] = False
+                # Mistakes in the definition, not something to continue later.
+                outcome = RUN_FAILED
                 return
 
             # Split into per-workflow connected components
@@ -557,6 +653,26 @@ def execute_workflow():
             execution_state['total_nodes'] = sum(len(se.nodes) for se in sub_engines)
             add_log(t('wf.found', n=wf_count))
 
+            store.start_run(
+                run_id,
+                workflow_name,
+                wf_fp,
+                mode=mode,
+                headless=headless,
+                llm=execution_state['llm'],
+                lang=execution_state.get('lang'),
+                node_total=execution_state['total_nodes'],
+            )
+            # Read *after* start_run so nodes left 'running' by the promotion
+            # are visible as partial, which is what makes them resumable.
+            ctx['statuses'] = store.node_statuses(run_id)
+            if resume_run_id:
+                previous = store.get_run(run_id) or {}
+                saved = sum(int(n.get('row_count') or 0) for n in previous.get('nodes') or [])
+                add_log(t('run.resume_from', at=previous.get('started_at') or '?', rows=saved))
+            else:
+                add_log(t('run.started', rid=run_id))
+
             if mode == 'serial' or wf_count <= 1:
                 # ── Serial: one workflow at a time ──
                 all_results = {}
@@ -564,7 +680,7 @@ def execute_workflow():
                     if not execution_state['running']:
                         break
                     add_log(t('wf.starting', i=wf_idx + 1, n=wf_count))
-                    results = _run_single_workflow(se, wf_idx)
+                    results = _run_single_workflow(se, wf_idx, ctx)
                     all_results.update(results)
                 # update(), not replace(): a branch that died halfway already
                 # published its partial rows, and they must survive the merge.
@@ -581,7 +697,7 @@ def execute_workflow():
                     # Pool threads do not inherit the starter's thread-local.
                     set_lang(execution_state.get('lang'))
                     try:
-                        results = _run_single_workflow(wf_engine, wf_idx)
+                        results = _run_single_workflow(wf_engine, wf_idx, ctx)
                         with wf_lock:
                             all_results.update(results)
                     except Exception:
@@ -601,21 +717,35 @@ def execute_workflow():
                         fut.result()
                 pool.shutdown(wait=False, cancel_futures=True)
 
+                # Merged whether or not the run finished: update() keeps partial
+                # rows from branches that stopped mid-way (a Stop, or a dieing
+                # LLM) instead of throwing away what they already produced.
+                with wf_lock:
+                    execution_state['results'].update(all_results)
                 if execution_state['running']:
-                    with wf_lock:
-                        # update() keeps partial rows published by branches that
-                        # died (LLM abort) — never wipe finished work at the end.
-                        execution_state['results'].update(all_results)
                     add_log(t('wf.all_completed'))
 
-            if execution_state['running']:
+            still_running = execution_state['running']
+            add_log(
+                t(
+                    'run.finished',
+                    done=execution_state['completed_nodes'],
+                    total=execution_state['total_nodes'],
+                )
+            )
+            if still_running:
                 _record_execution_history(workflow, engine, execution_state['results'], workflow_name)
+            outcome = RUN_COMPLETED if still_running else RUN_INTERRUPTED
 
         except Exception:
             logger.exception(t('wf.exec_exception'))
             add_log(t('wf.exec_failed'))
+            outcome = RUN_INTERRUPTED if not execution_state['running'] else RUN_FAILED
         finally:
             execution_state['running'] = False
+            # Whatever is left claiming to be running was killed, not finished;
+            # the rows it published are what the next attempt resumes from.
+            _close_run(ctx, outcome)
             # The tee exists to catch the analyzers' print() output *during* a
             # run; leaving it installed meant every later print — from any
             # request — also showed up in the console panel.
@@ -625,13 +755,43 @@ def execute_workflow():
     execution_state['thread'] = threading.Thread(target=run, daemon=True)
     execution_state['thread'].start()
 
-    return jsonify({'ok': True, 'message': 'Workflow started'})
+    return jsonify({'ok': True, 'message': 'Workflow started', 'run_id': run_id})
 
 
 # ─── Node execution helpers ────────────────────────────────────
 
 
-def _execute_source_node(node: dict, headless: bool):
+def _source_stream(ctx: dict, nid: str, scope: str):
+    """Row sink + cursor sink for one source node.
+
+    Every scraped item goes straight into the database as it is scraped, so a
+    kill at item 900 of 1000 still owns those 900 rows; the position goes with
+    it so the next attempt can continue instead of starting over.
+    """
+    store = ctx['store']
+    run_id = ctx['run_id']
+
+    def row_sink(item):
+        # A sink answers "was this new?" — the crawler drops duplicates itself,
+        # which is how a resumed crawl re-reading the same page stays honest.
+        kept, _dropped = store.append_rows(run_id, nid, [item], dedupe_scope=scope)
+        return bool(kept)
+
+    def cursor_sink(position):
+        store.save_cursor(run_id, nid, position)
+
+    return row_sink, cursor_sink
+
+
+def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
+    """Scrape a platform, one row at a time.
+
+    With a run context the crawler streams into the database instead of
+    building a list in memory: rows survive whatever kills the run, and the
+    items an earlier attempt already collected are given back to it so it can
+    stop scraping early rather than refilling them (and so the duplicates are
+    dropped rather than handed downstream twice).
+    """
     params = node.get('params', {})
     platform = node.get('platform', params.get('platform', ''))
     keyword = params.get('keyword', '')
@@ -640,16 +800,30 @@ def _execute_source_node(node: dict, headless: bool):
     end_time = params.get('end_time')
 
     crawler = get_crawler(platform, headless=headless, cookie_dir=Config.COOKIE_DIR)
+    resume = {}
+    nid = str(node.get('id') or '')
+    if ctx is not None:
+        row_sink, cursor_sink = _source_stream(ctx, nid, _item_scope(ctx, node))
+        crawler.set_sink(row_sink)
+        crawler.set_cursor_sink(cursor_sink)
+        if ctx.get('resume'):
+            resume = ctx['store'].get_cursor(ctx['run_id'], nid) or {}
+        # Rows saved by an earlier attempt, handed back so `collected()` starts
+        # honest: targeting 200 with 180 already saved asks the page for 20.
+        saved = ctx['store'].load_rows(ctx['run_id'], nid)
+        if saved:
+            crawler.seed(saved)
+            add_log(t('run.resume_crawl', nid=nid, have=len(saved)))
     execution_state['active_crawlers'].add(crawler)
     try:
         if platform == 'wechat':
             # WeChat scrapes a list of article URLs, not a keyword.
-            return crawler.search(urls=_split_urls(params.get('urls')))
+            return crawler.search(urls=_split_urls(params.get('urls')), resume=resume)
         if platform == 'weibo' and (start_time or end_time):
             # Both bounds are required: the crawler raises a readable error
             # otherwise instead of silently searching something else.
-            return crawler.search(keyword, start_time=start_time, end_time=end_time)
-        return crawler.search(keyword, target_count=target_count)
+            return crawler.search(keyword, start_time=start_time, end_time=end_time, resume=resume)
+        return crawler.search(keyword, target_count=target_count, resume=resume)
     finally:
         crawler.close()
         execution_state['active_crawlers'].discard(crawler)
@@ -1031,18 +1205,142 @@ def _execute_visualize_node(node: dict, current_input: list):
     return spec
 
 
-def _execute_node(node: dict, headless: bool, current_input: list, run_ctx: dict = None, upstream: list = None):
+def _execute_resume_node(node: dict, ctx: dict):
+    """Adopt a stored node output from an earlier run as this node's rows.
+
+    This is the node you drop in when the original source is no longer
+    co-operating — logged out, blocked, expensive — but its rows are already
+    paid for and sitting in runs.db. It replaces nothing upstream: whatever it
+    produces flows onward exactly as the original node's output would have.
+    """
+    store = ctx['store']
+    params = node.get('params') or {}
+    run_id = str(params.get('resume_run_id') or '').strip()
+    node_id = str(params.get('resume_node_id') or '').strip()
+    limit = _safe_int(params.get('resume_limit'), 0, minimum=0)
+
+    if not run_id:
+        # Nothing picked yet: fall back to the newest unfinished run, i.e. the
+        # one the banner would have offered.
+        candidates = store.list_resumable(limit=5)
+        if not candidates:
+            add_log(t('resume.no_run'))
+            return []
+        run_id = str(candidates[0].get('run_id') or '')
+    rows = store.load_rows(run_id, node_id) if node_id else []
+    if not rows:
+        # No node picked (or the pick holds nothing): take the fullest one.
+        statuses = store.node_statuses(run_id)
+        best = max(statuses.values(), key=lambda n: int(n.get('row_count') or 0), default=None)
+        if best and int(best.get('row_count') or 0) > 0:
+            node_id = str(best.get('node_id') or '')
+            rows = store.load_rows(run_id, node_id)
+    if not rows:
+        add_log(t('resume.empty', rid=run_id, nid=node_id or '?'))
+        return []
+    if limit and len(rows) > limit:
+        rows = rows[:limit]
+    add_log(t('resume.loaded', rid=run_id, nid=node_id, n=len(rows)))
+    return rows
+
+
+def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upstream: list, wf_idx: int):
+    """Run one node with the run store underneath it. Returns (result, status).
+
+    Three things it adds over calling ``_execute_node`` directly:
+
+    1. **Reuse.** A node that finished cleanly on the previous attempt and has
+       not been edited since is not run again — its rows are read back. (Source
+       nodes are the exception: they always run, because their job this time is
+       to go and get *more*.)
+    2. **Persistence.** Rows land in the database as they are produced, so the
+       work already paid for survives whatever kills the run.
+    3. **Loss containment.** A node that dies still owns what it produced, and
+       that goes downstream rather than being thrown away with the exception.
+    """
+    store = ctx['store']
+    run_id = ctx['run_id']
+    nid = str(node.get('id') or '')
+    ntype = str(node.get('type') or '')
+    fingerprint = (ctx.get('fingerprints') or {}).get(nid, '')
+    stored = (ctx.get('statuses') or {}).get(nid) or {}
+    title = str(node.get('title') or node.get('name') or '')
+
+    reusable = (
+        ctx.get('resume')
+        and stored.get('status') == NODE_DONE
+        and stored.get('fingerprint') == fingerprint
+        and int(stored.get('row_count') or 0) > 0
+        and ntype != 'source'
+    )
+    # Rows stored for an *edited* node describe something else, so begin_node
+    # drops them and reports it: they are gone, and there is nothing to reuse.
+    dropped_stale = store.begin_node(run_id, nid, ntype, title=title, fingerprint=fingerprint)
+    if reusable and dropped_stale:
+        reusable = False
+
+    if reusable:
+        rows = store.load_rows(run_id, nid)
+        store.finish_node(run_id, nid, NODE_RESTORED)
+        add_log(t('run.restored', nid=nid, n=len(rows)), wf_idx=wf_idx)
+        return rows, NODE_RESTORED
+
+    if upstream and not any(isinstance(res, list) and res for _pid, res in upstream):
+        # Everything this node would work on came up empty — usually because
+        # its parent died with nothing. Skipping beats pretending we ran.
+        store.finish_node(run_id, nid, NODE_SKIPPED)
+        add_log(t('run.skipped_empty', nid=nid), wf_idx=wf_idx)
+        return [], NODE_SKIPPED
+
+    try:
+        result = _execute_node(node, headless, primary, upstream=upstream, ctx=ctx)
+    except Exception as e:
+        # What the node already produced: process nodes publish finished rows
+        # after every batch, and crawlers stream every item into the store.
+        published = execution_state['results'].get(nid)
+        rows = published if isinstance(published, list) else []
+        if rows and store.row_count(run_id, nid) == 0:
+            store.append_rows(run_id, nid, rows)
+        if not rows:
+            rows = store.load_rows(run_id, nid)
+        status = NODE_PARTIAL if rows else NODE_FAILED
+        store.finish_node(run_id, nid, status, error=str(e))
+        add_log(t('wf.node_failed', i=wf_idx, nid=nid, err=e), wf_idx=wf_idx)
+        if rows:
+            add_log(t('run.partial_down', nid=nid, n=len(rows)), wf_idx=wf_idx)
+        else:
+            add_log(t('run.failed_down', nid=nid), wf_idx=wf_idx)
+        return rows, status
+
+    if isinstance(result, list) and ntype != 'source':
+        # Source rows are already in the store — the sink put every item there
+        # as it was scraped, and re-writing them here would only renumber.
+        store.replace_rows(run_id, nid, result)
+    store.finish_node(run_id, nid, NODE_DONE)
+    return result, NODE_DONE
+
+
+def _execute_node(
+    node: dict,
+    headless: bool,
+    current_input: list,
+    run_ctx: dict = None,
+    upstream: list = None,
+    ctx: dict = None,
+):
     """Run one node. ``upstream`` is [(parent_id, result), …] in connection
     order — only the analysis node needs more than the first entry (a join uses
     the second one as its right-hand table)."""
     ntype = node.get('type')
     if ntype == 'source':
-        return _execute_source_node(node, headless)
+        return _execute_source_node(node, headless, ctx=ctx)
     if ntype == 'upload':
         return _execute_upload_node(node)
+    if ntype == 'resume':
+        return _execute_resume_node(node, ctx or {'store': get_run_store(), 'run_id': ''})
     if ntype == 'process':
         op = node.get('operation') or node.get('params', {}).get('operation', '')
-        return _execute_process_node(node, current_input, run_ctx=run_ctx or _llm_run_ctx(node, op))
+        return _execute_process_node(node, current_input, run_ctx=run_ctx or _llm_run_ctx(node, op, ctx))
     if ntype == 'analysis':
         return _execute_analysis_node(node, current_input, upstream=upstream)
     if ntype == 'visualize':
@@ -2062,6 +2360,96 @@ def history_series():
 def history_clear():
     history_service.clear()
     return jsonify({'ok': True, 'message': 'History cleared'})
+
+
+# ─── Resumable runs ────────────────────────────────────────────
+
+
+@app.route('/api/runs/resumable', methods=['POST'])
+def runs_resumable():
+    """Runs worth offering to resume, for the workflow currently on the canvas.
+
+    Matched on the *structure* (node ids, types and wiring), not the settings:
+    tweaking a keyword should still find the interrupted attempt of this same
+    workflow. The browser also gets the per-node breakdown it needs to say what
+    is already paid for.
+    """
+    data = request.get_json(silent=True) or {}
+    workflow = data.get('workflow') or {}
+    if not isinstance(workflow, dict) or not workflow.get('nodes'):
+        return jsonify({'ok': True, 'runs': []})
+    limit = _safe_int(data.get('limit'), 10, minimum=1, maximum=100)
+    runs = get_run_store().list_resumable(workflow_fingerprint(workflow), limit=limit)
+    return jsonify({'ok': True, 'runs': runs})
+
+
+@app.route('/api/runs/status', methods=['GET'])
+def runs_status():
+    """Live state of the run in flight (its id and how far it got), so a page
+    reload mid-run can still offer to continue it afterwards."""
+    return jsonify(
+        {
+            'ok': True,
+            'running': bool(execution_state.get('running')),
+            'run_id': execution_state.get('run_id') or '',
+            'resume': bool(execution_state.get('resume')),
+        }
+    )
+
+
+@app.route('/api/runs/stats', methods=['GET'])
+def runs_stats():
+    return jsonify({'ok': True, 'stats': get_run_store().stats()})
+
+
+@app.route('/api/runs/purge', methods=['POST'])
+def runs_purge():
+    """Housekeeping. Interrupted runs are the last to go — they are the ones
+    somebody may still want to continue."""
+    removed = get_run_store().purge()
+    return jsonify({'ok': True, 'removed': removed})
+
+
+@app.route('/api/runs/discard', methods=['POST'])
+def runs_discard():
+    """Throw away an interrupted run and start the next one from scratch.
+
+    The "already collected" claims go with it: without that, pressing start
+    over would silently return fewer rows than asked for, because every item
+    the discarded attempt fetched still counts as seen.
+    """
+    data = request.get_json(silent=True) or {}
+    run_id = str(data.get('run_id') or '').strip()
+    if not run_id:
+        return jsonify({'ok': False, 'error': t('api.runNotFound', rid='-')}), 400
+    store = get_run_store()
+    if store.get_run(run_id) is None:
+        return jsonify({'ok': False, 'error': t('api.runNotFound', rid=run_id)}), 404
+    removed = store.delete_run(run_id)
+    removed['item_claims'] = store.forget_run_items(run_id)
+    return jsonify({'ok': True, 'removed': removed})
+
+
+@app.route('/api/runs/delete', methods=['POST'])
+def runs_delete():
+    """Drop a finished run's copy of the data. Kept separate from discard:
+    deleting an old run must not resurrect items as "unseen" for a crawl
+    that is still being continued."""
+    data = request.get_json(silent=True) or {}
+    run_id = str(data.get('run_id') or '').strip()
+    if not run_id:
+        return jsonify({'ok': False, 'error': t('api.runNotFound', rid='-')}), 400
+    removed = get_run_store().delete_run(run_id)
+    return jsonify({'ok': True, 'removed': removed})
+
+
+@app.route('/api/runs/<run_id>', methods=['GET'])
+def runs_detail(run_id: str):
+    """One run, node by node — what the resume node's picker enumerates."""
+    run = get_run_store().get_run(run_id)
+    if run is None:
+        return jsonify({'ok': False, 'error': t('api.runNotFound', rid=run_id)}), 404
+    return jsonify({'ok': True, 'run': run})
 
 
 # ─── Main ──────────────────────────────────────────────────────

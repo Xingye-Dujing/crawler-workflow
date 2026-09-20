@@ -670,8 +670,12 @@ def run_llm_dataframe(
         jobs.append((idx, text))
 
     checkpoint_dir = cfg.get('checkpoint_dir')
-    checkpoint = None
-    if checkpoint_dir:
+    # Two interchangeable back-ends, same three calls: get(idx, thash) ->
+    # {'r': [...]}, add(idx, thash, result), discard(). `cache` (the durable
+    # database) wins because its answers outlive both the dataset ordering
+    # and the process; the JSONL file remains for callers without one.
+    checkpoint = cfg.get('cache')
+    if checkpoint is None and checkpoint_dir:
         # Keyed by node + operation + transport + the dataset's own content:
         # a different table, model or column starts a fresh file, the same one
         # resumes.

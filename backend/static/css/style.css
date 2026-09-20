@@ -671,6 +671,59 @@ input[type="range"]::-moz-range-thumb {
   overflow: hidden;
   cursor: default;
 }
+/* ── Resume banner ──────────────────────────────────────────────────────────
+   Sits above the canvas because a resumable run is a fact about *this*
+   workflow, not about any one node. `hidden` is the plain utility class the
+   rest of the shell uses. */
+#resume-banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(760px, calc(100% - 40px));
+  padding: 8px 10px 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 10px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  font-size: 11px;
+  color: var(--text);
+}
+#resume-banner.hidden {
+  display: none;
+}
+#resume-banner .resume-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e08a00;
+}
+#resume-banner .resume-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+#resume-banner .resume-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#resume-banner .resume-actions .menu-btn {
+  padding: 4px 9px;
+  font-size: 10px;
+}
+#resume-banner .resume-actions .menu-btn.primary {
+  border-color: var(--accent, var(--ink));
+  color: var(--accent, var(--ink));
+}
+
 #canvas-inner {
   position: absolute;
   top: 0;
@@ -852,6 +905,9 @@ input[type="range"]::-moz-range-thumb {
 }
 .node-type-tokenize.selected {
   border-color: var(--accent-tokenize);
+}
+.node-type-resume.selected {
+  border-color: var(--accent-resume);
 }
 .node-type-output.selected {
   border-color: var(--accent-output);

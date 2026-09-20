@@ -16,8 +16,33 @@ from settings_store import get_setting
 logger = logging.getLogger(__name__)
 
 
+def as_index(value, default: int = 0) -> int:
+    """A cursor field, coerced. Cursors are read back from JSON and may hold
+    anything at all; a bad value must degrade to "start from the beginning"
+    rather than crash the crawl that was supposed to save work."""
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
 class Crawler(ABC):
-    """Base class for all platform crawlers."""
+    """Base class for all platform crawlers.
+
+    Streams results instead of accumulating them. A crawl used to build a local
+    list and return it at the end, so killing the run at item 900 of 1000 threw
+    all 900 away. The runner installs a *sink* before searching, and every item
+    is handed to it the moment it is scraped — the sink writes it to disk and
+    answers whether it was new. Subclasses therefore call ``emit(item)`` rather
+    than ``results.append(item)``, and return ``self.results()``.
+
+    Resumption rests on two things, both owned by the sink:
+
+    - the items already collected (the sink's own store), which also lets
+      duplicate rows be dropped instead of re-added;
+    - the *cursor* (``mark_position``), which says where the crawl got to —
+      which URL of the list, which page, how many items are already in hand.
+    """
 
     domain = ''
     login_url = ''
@@ -26,7 +51,79 @@ class Crawler(ABC):
         self.headless = headless
         self.cookie_path = cookie_path
         self.driver = None
+        self._sink = None
+        self._cursor_sink = None
+        self._collected = []
+        self._cursor = {}
         self._create_driver()
+
+    # ── streaming hooks (installed by the runner) ───────────────
+
+    def set_sink(self, sink):
+        """sink(item) -> bool — True to keep the item, False if the sink
+        already has it. Called for every scraped item, in scrape order."""
+        self._sink = sink
+
+    def set_cursor_sink(self, sink):
+        """sink(position: dict) -> None — called whenever the crawl advances,
+        so the recorded position never lags behind the collected items."""
+        self._cursor_sink = sink
+
+    def emit(self, item) -> bool:
+        """Hand one scraped item over. Returns whether it was kept."""
+        if item is None:
+            return False
+        if self._sink is None:
+            self._collected.append(item)
+            return True
+        try:
+            kept = self._sink(item)
+        except Exception as e:
+            # Persistence is best-effort: a broken sink must never abort the
+            # crawl, and the item still travels in this run's results.
+            logger.warning(t('crawl.sink_failed', err=e))
+            kept = True
+        if kept:
+            self._collected.append(item)
+        return kept
+
+    def seed(self, rows):
+        """Hand a resumed crawler the items the previous attempt collected.
+
+        They are put straight into the collected list — not through ``emit``,
+        since the sink already has them and would answer "not new" for every
+        one. Restored to the crawler they are what makes ``collected()`` honest
+        from the first item: a target of 200 with 180 already saved asks the
+        page for 20 more, not 200.
+        """
+        if not rows:
+            return
+        self._collected.extend(rows)
+
+    def mark_position(self, **position):
+        """Record where the crawl has got to. Merged into the previous position
+        rather than replacing it, so a caller only passes what changed."""
+        self._cursor.update(position)
+        if self._cursor_sink is not None:
+            with contextlib.suppress(Exception):
+                self._cursor_sink(dict(self._cursor))
+
+    @property
+    def position(self) -> dict:
+        return dict(self._cursor)
+
+    def results(self) -> list:
+        """Everything collected so far, in scrape order."""
+        return list(self._collected)
+
+    def collected(self) -> int:
+        return len(self._collected)
+
+    @staticmethod
+    def resume_of(kwargs: dict) -> dict:
+        """The cursor handed back to a resumed crawl ({} on a fresh one)."""
+        cursor = (kwargs or {}).get('resume')
+        return cursor if isinstance(cursor, dict) else {}
 
     def _create_driver(self):
         opts = Options()

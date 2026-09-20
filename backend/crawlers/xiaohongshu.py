@@ -10,7 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from i18n import t
 
-from .base import Crawler
+from .base import Crawler, as_index
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,61 @@ class XiaohongshuCrawler(Crawler):
     login_url = 'https://www.xiaohongshu.com/login'
 
     def search(self, keyword: str, target_count: int = 50, **_kwargs):
+        resume = self.resume_of(_kwargs)
+        have = self.collected()
+        if have:
+            # Notes fetched before the interruption are already in hand; only
+            # the shortfall is left to fetch.
+            logger.info(t('crawl.resume_have', n=have))
+        if have >= target_count:
+            logger.info(t('crawl.xhs.target_reached', n=target_count))
+            return self.results()
+
+        stored = resume.get('links')
+        links = [str(u) for u in stored] if isinstance(stored, list) and resume.get('keyword') == keyword else []
+        if len(links) < target_count:
+            # The link list is fetched when it is missing or short. On a resume
+            # with a full list this whole stage is skipped — the detail pages
+            # are the expensive part, and those are what the cursor protects.
+            if links:
+                logger.info(t('crawl.resume_links', n=len(links)))
+            self._open_search(keyword, target_count)
+            fresh = self._collect_links(target_count)
+            known = set(links)
+            links.extend(u for u in fresh if u not in known)
+        logger.info(t('crawl.xhs.links', n=len(links)))
+
+        start_index = as_index(resume.get('link_index'))
+        self.mark_position(keyword=keyword, links=links, link_index=start_index, done=have)
+
+        for idx, link in enumerate(links, start=1):
+            if idx <= start_index:
+                continue
+            if self.collected() >= target_count:
+                logger.info(t('crawl.xhs.target_reached', n=target_count))
+                break
+            logger.info(t('crawl.xhs.note_processing', i=idx, total=len(links), url=link))
+            try:
+                data = self._scrape_note(link)
+                if data:
+                    if self.emit(data):
+                        title_preview = data['标题'][:30] if data['标题'] else t('crawl.xhs.untitled')
+                        logger.info(t('crawl.xhs.note_ok', title=title_preview))
+                    else:
+                        logger.debug(t('crawl.xhs.note_dup', url=link))
+                else:
+                    logger.warning(t('crawl.xhs.note_fail', url=link))
+            except Exception as e:
+                logger.error(t('crawl.xhs.note_error', err=e), exc_info=True)
+            # Index and item advance together, so a resumed crawl goes straight
+            # to the first note it has not fetched.
+            self.mark_position(link_index=idx, done=self.collected())
+            time.sleep(0.1)
+
+        logger.info(t('crawl.xhs.finished', n=self.collected()))
+        return self.results()
+
+    def _open_search(self, keyword: str, target_count: int):
         logger.info(t('crawl.xhs.start', kw=keyword, n=target_count))
         encoded = quote(keyword)
         url = f'https://www.xiaohongshu.com/search_result?keyword={encoded}&source=web_explore_feed&type=51'
@@ -30,27 +85,6 @@ class XiaohongshuCrawler(Crawler):
             logger.info(t('crawl.xhs.page_ready'))
         except TimeoutException:
             logger.warning(t('crawl.xhs.page_timeout'))
-
-        links = self._collect_links(target_count)
-        logger.info(t('crawl.xhs.links', n=len(links)))
-
-        results = []
-        for idx, link in enumerate(links, 1):
-            logger.info(t('crawl.xhs.note_processing', i=idx, total=len(links), url=link))
-            try:
-                data = self._scrape_note(link)
-                if data:
-                    results.append(data)
-                    title_preview = data['标题'][:30] if data['标题'] else t('crawl.xhs.untitled')
-                    logger.info(t('crawl.xhs.note_ok', title=title_preview))
-                else:
-                    logger.warning(t('crawl.xhs.note_fail', url=link))
-            except Exception as e:
-                logger.error(t('crawl.xhs.note_error', err=e), exc_info=True)
-            time.sleep(0.1)
-
-        logger.info(t('crawl.xhs.finished', n=len(results)))
-        return results
 
     def _collect_links(self, target_count: int, max_scrolls: int = 100):
         logger.info(t('crawl.xhs.collect_start', n=target_count))

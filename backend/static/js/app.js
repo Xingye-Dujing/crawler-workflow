@@ -41,8 +41,23 @@ const I18n = {
             'bg.cross': 'Cross', 'bg.diagonal': 'Diagonal',
             'palette.header': 'Node Library',
             'palette.source': 'Data Source', 'palette.upload': 'Upload File', 'palette.process': 'Process', 'palette.output': 'Output',
+            'palette.resume': 'Resume Run',
             'node.source': 'Data Source', 'node.upload': 'Upload File', 'node.process': 'Process',
             'node.analysis': 'Analysis', 'node.visualize': 'Visualize', 'node.tokenize': 'Tokenize', 'node.output': 'Output',
+            'node.resume': 'Resume Run',
+            /* Resumable runs: everything happens while nobody is watching, so
+               the wording has to state what is already paid for. */
+            'resume.continue': 'Continue', 'resume.restart': 'Start over', 'resume.dismissTitle': 'Dismiss',
+            'resume.interrupted': 'Interrupted run found ({at})',
+            'resume.detail': '{done}/{total} nodes done, {rows} rows saved — continue picks up from there',
+            'resume.incomplete': '{rows} rows saved before it stopped',
+            'resume.runSelect': 'Saved run', 'resume.nodeSelect': 'Node output',
+            'resume.autoNode': 'Biggest table (auto)',
+            'resume.limit': 'Row limit', 'resume.limitPlaceholder': '0 = all',
+            'resume.refresh': 'Refresh list', 'resume.none': 'No saved run yet — run this workflow once',
+            'resume.hint': 'Reads a node\'s stored rows from a previous run, with no need to crawl again',
+            'toast.resumeStarted': 'Continuing the interrupted run',
+            'toast.runDiscarded': 'Saved run discarded — starting fresh',
             'settings.file': 'File', 'settings.rows': 'rows',
             'stats.header': 'Statistics', 'stats.close': 'Close',
             'stats.emotion': 'Emotion', 'stats.tendency': 'Tendency',
@@ -111,6 +126,7 @@ const I18n = {
             'nodeType.analysis': 'Analysis',
             'nodeType.visualize': 'Visualize',
             'nodeType.tokenize': 'Tokenize',
+            'nodeType.resume': 'Resume Run',
             'nodeType.output': 'Output',
             'op.clean': 'Clean',
             'op.emotion': 'Emotion',
@@ -418,8 +434,22 @@ const I18n = {
             'bg.cross': '十字', 'bg.diagonal': '斜纹',
             'palette.header': '节点库',
             'palette.source': '数据源', 'palette.upload': '上传文件', 'palette.process': '处理', 'palette.output': '输出',
+            'palette.resume': '断点续跑',
             'node.source': '数据源', 'node.upload': '上传文件', 'node.process': '处理',
             'node.analysis': '分析', 'node.visualize': '可视化', 'node.tokenize': '分词', 'node.output': '输出',
+            'node.resume': '断点续跑',
+            /* 断点续跑：提示要说清已经保留了什么，否则用户不知道「继续」会发生什么 */
+            'resume.continue': '继续执行', 'resume.restart': '从头开始', 'resume.dismissTitle': '忽略',
+            'resume.interrupted': '发现 {at} 那次未跑完的运行',
+            'resume.detail': '已完成 {done}/{total} 个节点，保留了 {rows} 行数据 —— 继续执行从这里接着跑',
+            'resume.incomplete': '中断前已保存 {rows} 行数据',
+            'resume.runSelect': '选择运行记录', 'resume.nodeSelect': '选择节点输出',
+            'resume.autoNode': '数据量最大的节点（自动）',
+            'resume.limit': '读取行数上限', 'resume.limitPlaceholder': '0 表示全部',
+            'resume.refresh': '刷新列表', 'resume.none': '还没有可续跑的记录，先跑一次完整流程',
+            'resume.hint': '直接读取上次运行里某个节点已保存的数据，不需要重新爬取',
+            'toast.resumeStarted': '正在从断点继续执行',
+            'toast.runDiscarded': '已丢弃上次的记录，从头开始',
             'settings.file': '文件', 'settings.rows': '行',
             'stats.header': '统计', 'stats.close': '关闭',
             'stats.emotion': '情感', 'stats.tendency': '倾向',
@@ -488,6 +518,7 @@ const I18n = {
             'nodeType.analysis': '分析',
             'nodeType.visualize': '可视化',
             'nodeType.tokenize': '分词',
+            'nodeType.resume': '断点续跑',
             'nodeType.output': '输出',
             'op.clean': '清洗',
             'op.emotion': '情感分析',
@@ -1322,6 +1353,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 30000);
 
     console.log('Crawler Workflow initialized');
+
+    /* An interrupted run may be waiting from before this page opened. */
+    if (window.resumeBar) resumeBar.refresh();
 });
 
 /* Background selection is handled by setBg() in workflow.js, which the menu
