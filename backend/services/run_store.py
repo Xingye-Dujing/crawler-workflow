@@ -136,13 +136,13 @@ def item_key(item) -> str:
     return _sha1('json', _dumps(item))
 
 
-# Params that describe *where the input came from* rather than what the node
-# does. A re-uploaded file gets a new dataset id and a new row count, but the
-# downstream pipeline is unchanged — counting them would invalidate every
-# stored row on every re-upload, which is exactly when resuming matters most
-# (the dataset registry lives in memory, so after a restart the rows in this
-# database are the only copy left).
-_VOLATILE_PARAMS = frozenset({'dataset_id', 'dataset_name', 'row_count'})
+# The two labels an Upload node carries about its file. They are left out of a
+# fingerprint because they *follow* from ``dataset_id`` and describe nothing
+# new — so re-saving a workflow with a tidied name does not invalidate a single
+# stored row. The id itself is deliberately part of the fingerprint: files are
+# stored durably now, so it identifies real input, and pointing a node at a
+# different file must invalidate everything downstream of it.
+_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count'})
 
 
 def stable_params(params) -> dict:
@@ -691,6 +691,32 @@ class RunStore:
             except (TypeError, ValueError):
                 continue
         return out
+
+    def latest_rows(self, node_id: str, fingerprint: str = '', workflow_name: str = '') -> tuple:
+        """The newest rows this node ever produced → (run_id, rows).
+
+        This is what lets a preview answer after a page refresh — and after a
+        restart: ``execution_state['results']`` is memory-only, but the rows a
+        node produced were filed here as they were made. ``fingerprint`` pins
+        the lookup to one workflow shape, which a caller that knows it should
+        pass (node ids like "node-2" repeat across workflows).
+        """
+        sql = (
+            'SELECT r.run_id, MAX(r.seq) AS seq FROM node_rows n JOIN runs r ON r.run_id = n.run_id WHERE n.node_id = ?'
+        )
+        params = [str(node_id)]
+        if fingerprint:
+            sql += ' AND r.workflow_fingerprint = ?'
+            params.append(fingerprint)
+        if workflow_name:
+            sql += ' AND r.workflow_name = ?'
+            params.append(workflow_name)
+        sql += ' GROUP BY r.run_id ORDER BY seq DESC LIMIT 5'
+        for row in self._query(sql, tuple(params)):
+            rows = self.load_rows(row['run_id'], node_id)
+            if rows:
+                return row['run_id'], rows
+        return '', []
 
     def row_count(self, run_id: str, node_id: str) -> int:
         rows = self._query('SELECT COUNT(*) AS n FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))

@@ -69,6 +69,10 @@ const workflow = {
                 this.loadFromJSON(result.workflow);
                 this.currentFile = name;
                 showToast(I18n.t('toast.workflowLoaded') + ': ' + name);
+                /* The workflow we just opened may have an unfinished run filed
+                   under the same shape — offer to continue it before the user
+                   starts a second attempt from scratch. */
+                if (window.resumeBar) resumeBar.refresh();
             } else {
                 showToast(I18n.t('toast.loadFailed') + ': ' + result.error);
             }
@@ -87,14 +91,6 @@ const workflow = {
             var id = 'node-' + (canvas.nextId - 1);
             if (canvas.nodes[id]) {
                 canvas.nodes[id].params = n.params || {};
-                /* Uploaded datasets live in server memory, so a dataset_id from
-                   a saved workflow is dead on load — drop it (and the label
-                   derived from it) so the Upload node asks for the file again. */
-                delete canvas.nodes[id].params.dataset_id;
-                if (n.type === 'upload') {
-                    canvas.nodes[id].params.dataset_name = '';
-                    canvas.nodes[id].params.row_count = '';
-                }
                 canvas.updateNodeDisplay(id);
             }
         });
@@ -110,6 +106,9 @@ const workflow = {
         canvas.scheduleRender();
         canvas.updateStatus();
         canvas.saveState();
+        /* The nodes we just built may point at files the server still has —
+           check each one instead of assuming it must be re-uploaded. */
+        dataNodes.reconcileDatasets();
         /* Node ids are reassigned on load, so any panel on screen now belongs to
            a workflow that is no longer open. */
         if (canvas._settingsNodeId) closeSettings();
@@ -418,6 +417,12 @@ function openSettings(nodeId) {
         if (p.dataset_id && p.row_count) {
             html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
                 p.row_count + ' ' + I18n.t('settings.rows') + '</div>';
+        }
+        if (p.dataset_id) {
+            /* Worth saying out loud: this is the reason reopening the saved
+               workflow does not ask for the file again. */
+            html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+                I18n.t('dataSource.persisted') + '</div>';
         }
         html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' +
             I18n.t('btn.previewData') + '</button></div>';
@@ -908,6 +913,51 @@ var dataNodes = {
         } catch (e) {
             showToast(I18n.t('toast.uploadFailed') + ': ' + e.message);
         }
+    },
+
+    /* Keep every Upload node in touch with the file it points at.
+
+       Uploaded files are stored in a database on the server, so a node's
+       dataset_id is a pointer that outlives the page: a refresh, a restart or
+       reopening the saved workflow should leave the file attached. Instead of
+       throwing those ids away on every load, re-check them — the file is used
+       when it is still there, and only nodes whose file really is gone fall
+       back to asking for it again. */
+    async reconcileDatasets() {
+        var pending = Object.keys(canvas.nodes).filter(function (id) {
+            var n = canvas.nodes[id];
+            return n && n.type === 'upload' && n.params && n.params.dataset_id;
+        });
+        if (!pending.length) return;
+        var known = {};
+        try {
+            var resp = await fetch('/api/data/datasets?limit=1000');
+            var result = await resp.json();
+            (result.datasets || []).forEach(function (d) { known[d.dataset_id] = d; });
+        } catch (e) {
+            /* Offline or a dead server: keep the ids. Losing them would mean
+               re-uploading a file that is very likely still on disk. */
+            return;
+        }
+        var missing = [];
+        pending.forEach(function (id) {
+            var node = canvas.nodes[id];
+            if (!node) return;
+            var meta = known[node.params.dataset_id];
+            if (!meta) {
+                node.params.dataset_id = '';
+                node.params.dataset_name = '';
+                node.params.row_count = '';
+                missing.push(node.title || id);
+            } else {
+                node.params.dataset_name = meta.name || node.params.dataset_name || '';
+                node.params.row_count = meta.row_count || 0;
+            }
+            canvas.updateNodeDisplay(id);
+            if (canvas._settingsNodeId === id) openSettings(id);
+        });
+        canvas.saveState();
+        if (missing.length) showToast(I18n.t('toast.datasetsMissing') + ': ' + missing.join(', '));
     },
 
     async previewVisualize(nodeId) {

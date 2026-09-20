@@ -183,6 +183,8 @@ const I18n = {
             'settings.dataSource': 'Data Source',
             'dataSource.loaded': 'Loaded',
             'dataSource.none': 'No file uploaded yet',
+            'dataSource.persisted': 'Stored in the database — still attached after a refresh or reopening this workflow',
+            'toast.datasetsMissing': 'These Upload nodes need their file re-uploaded',
             'toast.datasetUploaded': 'Dataset uploaded',
             'toast.txtUploaded': 'Text file uploaded — ready for word cloud',
             'toast.uploadFailed': 'Upload failed',
@@ -575,6 +577,8 @@ const I18n = {
             'settings.dataSource': '数据来源',
             'dataSource.loaded': '已加载',
             'dataSource.none': '尚未上传文件',
+            'dataSource.persisted': '已存入数据库：刷新页面或重开工作流后依然带着这个文件',
+            'toast.datasetsMissing': '这些上传节点需要重新上传文件',
             'toast.datasetUploaded': '数据集已上传',
             'toast.txtUploaded': '文本文件已上传，已自动配置词云',
             'toast.uploadFailed': '上传失败',
@@ -1321,23 +1325,12 @@ document.addEventListener('DOMContentLoaded', () => {
        other modules rendered during init. */
     CustomSelect.init();
 
+    /* Uploaded files are stored on the server, so the canvas restored from
+       localStorage very likely still owns every file it referenced. Verify
+       each one instead of clearing it — see dataNodes.reconcileDatasets. */
+    dataNodes.reconcileDatasets();
+    /* Sweep orphaned files (only ones no saved workflow points at go). */
     fetch('/api/data/clear', { method: 'POST' }).catch(() => { });
-
-    /* Uploaded datasets live in server memory, so any dataset_id left over
-       from a previous session is dead. Drop it from Upload nodes (which are
-       the only nodes that own one) and let the node read "no file". */
-    let changed = false;
-    Object.keys(canvas.nodes).forEach(id => {
-        const node = canvas.nodes[id];
-        if (node.type === 'upload' && node.params.dataset_id) {
-            delete node.params.dataset_id;
-            node.params.dataset_name = '';
-            node.params.row_count = '';
-            canvas.updateNodeDisplay(id);
-            changed = true;
-        }
-    });
-    if (changed) canvas.saveState();
 
     /* Palette drag */
     document.querySelectorAll('.palette-item').forEach(item => {

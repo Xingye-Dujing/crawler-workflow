@@ -39,6 +39,7 @@ from i18n import audit, normalize, set_lang, t
 from services import StatsService
 from services.cookie_manager import CookieManager
 from services.data_analysis import DataAnalysisService, UnknownOperationError
+from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD, DatasetStore
 from services.execution_history import ExecutionHistoryService
 from services.exporter import DataExporter, UnsupportedFormatError
 from services.run_store import (
@@ -162,24 +163,70 @@ def _apply_request_lang():
     set_lang(request.headers.get('X-Lang') or request.args.get('lang') or 'zh')
 
 
-# In-memory registry of uploaded/pasted datasets, keyed by a generated id.
-# This is what backs the Upload node: a file the user picked is registered
-# here, and the node publishes it as ordinary rows, so downstream nodes get
-# data that didn't come from a crawl without any of them knowing the
-# difference.
-_datasets = {}
-MAX_DATASETS = 50
+# Uploaded, pasted and cleaned files live in the DatasetStore (data/datasets.db)
+# rather than in this process. They back the Upload node exactly as the registry
+# below used to — a file becomes ordinary rows, and no downstream node knows it
+# did not come from a crawl — except that a workflow saved today still finds its
+# file tomorrow.
+#
+# The dictionary is only a read-through cache now: the store is the source of
+# truth, so anything registered days ago still resolves.
+_dataset_cache = {}
+_DATASET_CACHE_MAX = 24
+_DATASET_STORE = None
+_DATASET_LOCK = threading.Lock()
 
 
-def _register_dataset(df: pd.DataFrame, name: str = 'dataset') -> str:
-    """Store a DataFrame under a fresh id, evicting the oldest entry if the
-    in-memory registry is full (this is a lightweight cache, not persistence)."""
-    if len(_datasets) >= MAX_DATASETS:
-        oldest = next(iter(_datasets))
-        _datasets.pop(oldest, None)
-    dataset_id = uuid.uuid4().hex[:12]
-    _datasets[dataset_id] = {'name': name, 'df': df}
-    return dataset_id
+def get_dataset_store() -> DatasetStore:
+    """The single SQLite store behind persisted files, opened on first use."""
+    global _DATASET_STORE
+    if _DATASET_STORE is None:
+        with _DATASET_LOCK:
+            if _DATASET_STORE is None:
+                _DATASET_STORE = DatasetStore()
+    return _DATASET_STORE
+
+
+def _cache_dataset(dataset_id: str, df: pd.DataFrame):
+    """Remember a frame for a while. Bounded, because the store is not."""
+    with _DATASET_LOCK:
+        _dataset_cache[dataset_id] = df
+        while len(_dataset_cache) > _DATASET_CACHE_MAX:
+            _dataset_cache.pop(next(iter(_dataset_cache)), None)
+
+
+def _register_dataset(df: pd.DataFrame, name: str = 'dataset', source: str = SOURCE_UPLOAD) -> str:
+    """Persist a frame and return its id.
+
+    Content-addressed, so handing over the same rows twice reuses one copy
+    instead of piling up duplicates of a file somebody re-uploads every run.
+    """
+    meta = get_dataset_store().put(df, name=str(name), source=source)
+    _cache_dataset(meta['dataset_id'], df)
+    return meta['dataset_id']
+
+
+def _load_dataset(dataset_id: str) -> pd.DataFrame | None:
+    """A persisted frame by id, or None. Cache first, then the database."""
+    cached = _dataset_cache.get(dataset_id)
+    if cached is not None:
+        return cached
+    df = get_dataset_store().get(dataset_id)
+    if df is not None:
+        _cache_dataset(dataset_id, df)
+    return df
+
+
+def _apply_dataset_meta(params: dict, meta: dict):
+    """Write what is known about a stored file back into a node's params.
+
+    Keeping name and row count beside the id is what later makes a file whose
+    row went missing re-bindable: those two together identify it well enough
+    to find the same file again under a new id.
+    """
+    params['dataset_id'] = meta.get('dataset_id') or ''
+    params['dataset_name'] = meta.get('name') or ''
+    params['row_count'] = int(meta.get('row_count') or 0)
 
 
 def _json_safe_records(df: pd.DataFrame, limit: int = None) -> list:
@@ -189,21 +236,42 @@ def _json_safe_records(df: pd.DataFrame, limit: int = None) -> list:
     return page.astype(object).where(pd.notna(page), None).to_dict('records')
 
 
+def _durable_node_rows(node_id: str) -> list:
+    """Rows this node produced in an earlier run, newest first — or [].
+
+    Previews, charts and exports all resolve a node by id, and
+    execution_state['results'] only exists while the process has been running
+    without a refresh. Everything since then is in the run store, so asking
+    there is what keeps a reopened workflow inspectable instead of blank.
+    """
+    return get_run_store().latest_rows(
+        node_id,
+        fingerprint=execution_state.get('fingerprint') or '',
+        workflow_name=execution_state.get('workflow_name') or '',
+    )[1]
+
+
 def _resolve_dataframe(payload: dict) -> pd.DataFrame:
-    """Resolve a DataFrame from a request payload that may reference an
-    uploaded dataset id, a workflow node's result, or inline records."""
+    """Resolve a DataFrame from a request payload that may reference a
+    persisted file, a workflow node's result (live *or* recorded), or inline
+    records."""
     dataset_id = payload.get('dataset_id')
     if dataset_id:
-        entry = _datasets.get(dataset_id)
-        if entry is None:
+        df = _load_dataset(dataset_id)
+        if df is None:
             raise KeyError(f'Unknown dataset_id: {dataset_id}')
-        return entry['df']
+        return df
 
     node_id = payload.get('node_id')
     if node_id:
         result = execution_state['results'].get(node_id)
         if isinstance(result, list):
             return pd.DataFrame(result)
+        # Nothing live: fall back to the rows this node last filed away, which
+        # is also the only copy left after a restart.
+        rows = _durable_node_rows(node_id)
+        if rows:
+            return pd.DataFrame(rows)
         raise KeyError(f'No tabular result available for node: {node_id}')
 
     records = payload.get('data')
@@ -249,6 +317,11 @@ execution_state = {
     '_mode': 'serial',
     'llm': None,  # AI transport config from the settings panel (see /api/workflow/execute)
     'cancel_event': threading.Event(),  # set by Stop; checked between LLM rows
+    # Which workflow was last opened, and what shape it has: previews resolve a
+    # node from the database when results are gone, and these tell it which
+    # workflow's rows count as "this node's".
+    'workflow_name': '',
+    'fingerprint': '',
 }
 _completed_lock = threading.Lock()
 
@@ -434,6 +507,76 @@ def index():
 # ─── Workflow API ──────────────────────────────────────────────
 
 
+def _workflow_dataset_refs(workflow: dict) -> dict:
+    """{node_id: params} for every Upload node that carries a file.
+
+    Saving records these alongside the JSON, so the mapping "this node of this
+    workflow reads that file" survives a hand-edited file, a rename, or a job
+    that restores only the database.
+    """
+    refs = {}
+    for node in workflow.get('nodes') or []:
+        if not isinstance(node, dict) or node.get('type') != 'upload':
+            continue
+        params = node.get('params') or {}
+        if str(params.get('dataset_id') or ''):
+            refs[str(node.get('id') or '')] = params
+    return refs
+
+
+def _restore_workflow_datasets(name: str, workflow: dict) -> list:
+    """Put every Upload node back in touch with the file it was saved with.
+
+    A reopened workflow should run, not ask for the file again. Where the id
+    no longer resolves, the same *file name and row count* is looked up before
+    the node is declared empty — re-uploading an unchanged CSV is enough to
+    bring the whole workflow back to life. Returns one report entry per Upload
+    node so the UI can say exactly which files came back and which did not.
+    """
+    store = get_dataset_store()
+    refs = store.refs_for(name)
+    report = []
+    for node in workflow.get('nodes') or []:
+        if not isinstance(node, dict) or node.get('type') != 'upload':
+            continue
+        node_id = str(node.get('id') or '')
+        params = node.get('params') or {}
+        node['params'] = params
+        entry = {
+            'node_id': node_id,
+            'dataset_id': str(params.get('dataset_id') or ''),
+            'name': str(params.get('dataset_name') or ''),
+            'row_count': _optional_int(params.get('row_count')) or 0,
+            'restored': False,
+            'rebound': False,
+            'missing': False,
+        }
+        dataset_id = entry['dataset_id'] or str((refs.get(node_id) or {}).get('dataset_id') or '')
+        meta = store.meta(dataset_id) if dataset_id else None
+        if meta is None and dataset_id:
+            # Same name, same size → almost certainly the same file.
+            replacement = store.find_replacement(entry['name'], entry['row_count'] or None)
+            if replacement:
+                meta = store.meta(replacement)
+                entry['rebound'] = True
+                logger.info(t('ds.rebound', name=entry['name'] or replacement, did=replacement))
+        if meta is None:
+            # Nothing left to point at: drop the id so the UI asks for a file
+            # instead of claiming one is attached.
+            params['dataset_id'] = ''
+            params['row_count'] = ''
+            entry['missing'] = bool(entry['dataset_id'])
+            entry['dataset_id'] = ''
+            if entry['missing']:
+                logger.warning(t('ds.missing', name=entry['name'] or '?'))
+        else:
+            _apply_dataset_meta(params, meta)
+            entry['dataset_id'] = meta['dataset_id']
+            entry['restored'] = True
+        report.append(entry)
+    return report
+
+
 @app.route('/api/workflow/save', methods=['POST'])
 def save_workflow():
     data = request.get_json()
@@ -441,19 +584,30 @@ def save_workflow():
     workflow = data.get('workflow', {})
     try:
         path = workflow_manager.save(name, workflow)
-        return jsonify({'ok': True, 'path': path})
     except OSError as e:
         logger.exception(t('misc.save_workflow_failed'))
         return jsonify({'ok': False, 'error': str(e)}), 500
+    # The file mapping is part of the save: every Upload node records which
+    # stored dataset it reads, so reopening this workflow later finds its file
+    # already loaded instead of asking for another upload.
+    bound = get_dataset_store().bind(workflow_manager.clean_name(name), _workflow_dataset_refs(workflow))
+    if bound:
+        logger.info(t('store.datasets_bound', wf=workflow_manager.clean_name(name), n=bound))
+    return jsonify({'ok': True, 'path': path, 'datasets': bound})
 
 
 @app.route('/api/workflow/load', methods=['GET'])
 def load_workflow():
     name = request.args.get('name', '')
     workflow = workflow_manager.load(name)
-    if workflow:
-        return jsonify({'ok': True, 'workflow': workflow})
-    return jsonify({'ok': False, 'error': 'Not found'}), 404
+    if not workflow:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    # Reconnect the nodes with their files *before* the canvas draws them, so
+    # the workflow it returns is the runnable one.
+    datasets = _restore_workflow_datasets(workflow_manager.clean_name(name), workflow)
+    execution_state['workflow_name'] = str(workflow.get('name') or name or '')
+    execution_state['fingerprint'] = workflow_fingerprint(workflow)
+    return jsonify({'ok': True, 'workflow': workflow, 'datasets': datasets})
 
 
 @app.route('/api/workflow/list', methods=['GET'])
@@ -465,6 +619,10 @@ def list_workflows():
 def delete_workflow():
     name = request.get_json().get('name', '')
     workflow_manager.delete(name)
+    # The files stay: another workflow may well read the same one, and an
+    # orphan is cleaned up later rather than on a deletion the user may undo
+    # by saving something else with the same name.
+    get_dataset_store().unbind(workflow_manager.clean_name(name))
     return jsonify({'ok': True})
 
 
@@ -497,6 +655,11 @@ def execute_workflow():
     execution_state['run_id'] = run_id
     execution_state['resume'] = bool(resume_run_id)
     workflow_name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
+    # Recorded so a preview can find this workflow's rows in the store once the
+    # live results are gone (a refresh, a restart) rather than guessing from a
+    # node id alone — "node-2" exists in every workflow.
+    execution_state['workflow_name'] = workflow_name
+    execution_state['fingerprint'] = workflow_fingerprint(workflow)
 
     # AI transport chosen in the settings panel: 'ollama' (local daemon) or
     # 'openrouter' (API). The key only ever lives in the browser's
@@ -832,25 +995,48 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
 def _execute_upload_node(node: dict, headless: bool = True):
     """Upload node — the one place a file can enter a workflow.
 
-    It publishes a dataset the user already picked in the node's settings
-    (registered by /api/data/upload) as ordinary rows, so every downstream
-    node sees a file exactly as it sees a crawl. That is why the visualize
-    and tokenize nodes no longer carry their own upload UI: any node that
-    needs data now connects upstream, and the upstream may be a crawler or
-    a file.
+    It publishes a stored file (``data/datasets.db``) as ordinary rows, so
+    every downstream node sees it exactly as it sees a crawl. That is why the
+    visualize and tokenize nodes no longer carry their own upload UI: any node
+    that needs data connects upstream, and the upstream may be a crawler or a
+    file.
+
+    The file is looked up by its id, and failing that by its *name* plus row
+    count: re-uploading after a row was lost hands back something usable
+    instead of forcing a second edit of the workflow.
     """
     params = node.get('params', {})
-    dataset_id = params.get('dataset_id', '')
+    dataset_id = str(params.get('dataset_id') or '')
     if not dataset_id:
         raise ValueError(t('upload.no_file'))
-    entry = _datasets.get(dataset_id)
-    if entry is None:
-        # Registered datasets live in memory only: a server restart (or an
-        # eviction once 50 of them piled up) leaves the node pointing at
-        # nothing. Say so instead of silently producing zero rows.
+
+    df = _load_dataset(dataset_id)
+    if df is None:
+        replacement = get_dataset_store().find_replacement(
+            str(params.get('dataset_name') or ''),
+            _optional_int(params.get('row_count')),
+        )
+        if replacement:
+            df = _load_dataset(replacement)
+            if df is not None:
+                dataset_id = replacement
+                add_log(t('ds.rebound', name=params.get('dataset_name') or replacement, did=replacement))
+    if df is None:
+        # Nothing to publish, and pretending otherwise would hand downstream an
+        # empty table that looks like a successful run.
         raise ValueError(t('upload.stale'))
-    df = entry['df']
-    add_log(t('upload.loaded', name=entry.get('name') or dataset_id, n=len(df)))
+
+    stored = get_dataset_store().meta(dataset_id) or {}
+    # The name in storage is authoritative: it is the one every saved workflow
+    # knows the file by, and writing it back keeps this node's params usable as
+    # a re-binding hint later.
+    meta = {
+        'dataset_id': dataset_id,
+        'name': stored.get('name') or str(params.get('dataset_name') or '') or dataset_id,
+        'row_count': len(df),
+    }
+    _apply_dataset_meta(params, meta)
+    add_log(t('upload.loaded', name=params.get('dataset_name') or dataset_id, n=len(df)))
     return _json_safe_records(df)
 
 
@@ -1525,7 +1711,11 @@ def upload_dataset():
         return jsonify({'ok': False, 'error': t('api.parseFailed', err=e)}), 400
 
     is_txt = name_lower.endswith('.txt')
-    dataset_id = _register_dataset(df, name=filename)
+    try:
+        dataset_id = _register_dataset(df, name=filename, source=SOURCE_UPLOAD)
+    except ValueError as e:
+        # Over the row ceiling: refusing beats storing half a file.
+        return jsonify({'ok': False, 'error': t('api.datasetTooBig', err=e)}), 400
     return jsonify(
         {
             'ok': True,
@@ -1537,9 +1727,45 @@ def upload_dataset():
             'columns': list(df.columns),
             'row_count': len(df),
             'is_txt': is_txt,
+            # False when identical rows were already stored: the UI can then
+            # say "already saved" rather than pretending it wrote something new.
+            'persisted': True,
             'preview': _json_safe_records(df, 10),
         }
     )
+
+
+@app.route('/api/data/datasets', methods=['GET'])
+def list_datasets():
+    """Every stored file, newest first, with the workflows that read it.
+
+    This is how a page that has only its own canvas asks "do my Upload nodes
+    still have their files?" — one request, no guessing.
+    """
+    limit = _safe_int(request.args.get('limit'), 200, minimum=1, maximum=1000)
+    datasets = get_dataset_store().list_datasets(limit=limit)
+    return jsonify({'ok': True, 'datasets': datasets, 'stats': get_dataset_store().stats()})
+
+
+@app.route('/api/data/datasets/<dataset_id>', methods=['GET'])
+def dataset_detail(dataset_id: str):
+    """Metadata (and a short preview) for one stored file."""
+    meta = get_dataset_store().meta(dataset_id)
+    if meta is None:
+        return jsonify({'ok': False, 'error': t('api.datasetMissing', did=dataset_id)}), 404
+    df = _load_dataset(dataset_id)
+    meta['preview'] = _json_safe_records(df, 10) if df is not None else []
+    return jsonify({'ok': True, 'dataset': meta})
+
+
+@app.route('/api/data/datasets/<dataset_id>', methods=['DELETE'])
+def dataset_delete(dataset_id: str):
+    """Forget one file and every pointer to it."""
+    removed = get_dataset_store().delete(dataset_id)
+    _dataset_cache.pop(dataset_id, None)
+    if not removed:
+        return jsonify({'ok': False, 'error': t('api.datasetMissing', did=dataset_id)}), 404
+    return jsonify({'ok': True, 'dataset_id': dataset_id})
 
 
 @app.route('/api/data/paste', methods=['POST'])
@@ -1550,7 +1776,10 @@ def paste_dataset():
     if not isinstance(records, list):
         return jsonify({'ok': False, 'error': t('api.badRequest', what='data must be a list of records')}), 400
     df = pd.DataFrame(records)
-    dataset_id = _register_dataset(df, name=data.get('name', 'pasted'))
+    try:
+        dataset_id = _register_dataset(df, name=data.get('name', 'pasted'), source=SOURCE_PASTE)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': t('api.datasetTooBig', err=e)}), 400
     return jsonify(
         {
             'ok': True,
@@ -1617,7 +1846,10 @@ def run_analysis():
     except UnknownOperationError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
 
-    dataset_id = _register_dataset(cleaned, name='cleaned')
+    try:
+        dataset_id = _register_dataset(cleaned, name='cleaned', source=SOURCE_ANALYSIS)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': t('api.datasetTooBig', err=e)}), 400
     return jsonify(
         {
             'ok': True,
@@ -1975,8 +2207,28 @@ def llm_test():
 
 @app.route('/api/data/clear', methods=['POST'])
 def clear_datasets():
-    _datasets.clear()
-    return jsonify({'ok': True, 'message': 'All datasets cleared'})
+    """Housekeeping on stored files.
+
+    By default it drops only *orphans* — files no saved workflow points at and
+    nobody has read for a while. That used to be a blunt "forget everything",
+    which made no sense once a saved workflow came to depend on those files.
+    ``?all=1`` really does empty the store, pointers included, for the rare
+    case of wanting a clean slate.
+    """
+    store = get_dataset_store()
+    payload = request.get_json(silent=True) or {}
+    wipe = str(payload.get('all') or request.args.get('all') or '') in ('1', 'true', 'yes')
+    if wipe:
+        removed = store.clear()
+        _dataset_cache.clear()
+        logger.warning(t('ds.cleared', n=removed))
+        return jsonify({'ok': True, 'removed': removed, 'orphans': 0})
+
+    _dataset_cache.clear()
+    removed = store.purge_unreferenced()
+    kept = store.stats()
+    logger.info(t('ds.purge_result', n=removed, kept=kept['datasets']))
+    return jsonify({'ok': True, 'removed': removed, 'kept': kept['datasets']})
 
 
 # ─── Chart Studio API (embedded ZENVIZ workbench) ─────────────────
@@ -2234,10 +2486,9 @@ def _probe_source(payload: dict | None) -> tuple[bool, int, str, list]:
 
     dataset_id = payload.get('dataset_id')
     if dataset_id:
-        entry = _datasets.get(dataset_id)
-        if entry is None:
+        df = _load_dataset(dataset_id)
+        if df is None:
             return False, 0, SRC_STALE_DATASET, []
-        df = entry['df']
         rows = len(df)
         return (True, rows, '', _column_names(df)) if rows else (False, 0, SRC_EMPTY, [])
 
@@ -2252,6 +2503,13 @@ def _probe_source(payload: dict | None) -> tuple[bool, int, str, list]:
         first = result[0]
         cols = list(first.keys()) if isinstance(first, dict) else []
         return True, rows, '', [str(c) for c in cols[:PROBE_MAX_COLUMNS]]
+
+    # Nothing live: fall back to the rows the node last stored, so a probe right
+    # after a page refresh answers instead of reporting "no data".
+    stored = _durable_node_rows(node_id)
+    if stored:
+        cols = list(stored[0].keys()) if isinstance(stored[0], dict) else []
+        return True, len(stored), '', [str(c) for c in cols[:PROBE_MAX_COLUMNS]]
 
     try:
         df = _resolve_dataframe(payload)

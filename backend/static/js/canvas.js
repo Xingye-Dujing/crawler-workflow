@@ -57,20 +57,9 @@ const canvas = {
                 this.restoreState(state);
             } catch (e) { /* ignore */ }
         }
-        /* Uploaded datasets live in server memory only, so a saved workflow's
-           dataset_id is dead on the next start. Drop it — and the label that
-           was derived from it — so an Upload node reads "no file" instead of
-           looking ready when it isn't. */
-        Object.values(this.nodes).forEach(function (n) {
-            if (n.params && n.params.dataset_id) {
-                delete n.params.dataset_id;
-                if (n.type === 'upload') {
-                    n.params.dataset_name = '';
-                    n.params.row_count = '';
-                }
-                canvas.updateNodeDisplay(n.id);
-            }
-        });
+        /* Uploaded files live in the server's database now, so a node's
+           dataset_id is a pointer that outlives this page — it is kept and
+           re-verified (see dataNodes.reconcileDatasets) rather than dropped. */
         this._pushState();
     },
 
