@@ -234,6 +234,16 @@ const workflow = {
             var dropped = Math.max(0, (total || lines.length) - lines.length);
             return lines.slice(Math.max(0, seen - dropped));
         }
+        /* Stick-to-bottom, not force-to-bottom. Measure BEFORE appending: if
+           the user is already near the bottom they are "following" the stream,
+           so keep doing it; if they scrolled up to read history, leave their
+           position alone until they scroll back down themselves. Measuring
+           before the append also keeps the first big batch flowing to the
+           bottom — after it, the new rows themselves would look like the
+           user having scrolled away. */
+        function consoleWantsFollow(el) {
+            return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+        }
         var lastLogIdx = 0;
         var interval = setInterval(async function () {
             try {
@@ -271,13 +281,14 @@ const workflow = {
                         /* Render the active tab's logs */
                         if (activeTab === 'all') {
                             var newLogs = freshLines(result.logs, result.log_total, lastLogIdx);
+                            var follow = newLogs.length > 0 && consoleWantsFollow(consoleOut);
                             newLogs.forEach(function (log) {
                                 var line = document.createElement('div');
                                 line.className = 'console-line';
                                 line.textContent = log;
                                 consoleOut.appendChild(line);
                             });
-                            if (newLogs.length > 0) {
+                            if (follow) {
                                 consoleOut.scrollTop = consoleOut.scrollHeight;
                             }
                             lastLogIdx = result.log_total || result.logs.length;
@@ -288,13 +299,14 @@ const workflow = {
                                 if (typeof _wfLastIdx === 'undefined') _wfLastIdx = {};
                                 if (_wfLastIdx[activeTab] === undefined) _wfLastIdx[activeTab] = 0;
                                 var newWfLogs = freshLines(wfData.logs, wfData.total, _wfLastIdx[activeTab]);
+                                var followWf = newWfLogs.length > 0 && consoleWantsFollow(consoleOut);
                                 newWfLogs.forEach(function (log) {
                                     var line = document.createElement('div');
                                     line.className = 'console-line';
                                     line.textContent = log;
                                     consoleOut.appendChild(line);
                                 });
-                                if (newWfLogs.length > 0) {
+                                if (followWf) {
                                     consoleOut.scrollTop = consoleOut.scrollHeight;
                                 }
                                 _wfLastIdx[activeTab] = wfData.total || wfData.logs.length;
@@ -305,13 +317,14 @@ const workflow = {
                         consoleTabs.style.display = 'none';
                         consoleTabs.innerHTML = '';
                         var newLogs = freshLines(result.logs, result.log_total, lastLogIdx);
+                        var followSingle = newLogs.length > 0 && consoleWantsFollow(consoleOut);
                         newLogs.forEach(function (log) {
                             var line = document.createElement('div');
                             line.className = 'console-line';
                             line.textContent = log;
                             consoleOut.appendChild(line);
                         });
-                        if (newLogs.length > 0) {
+                        if (followSingle) {
                             consoleOut.scrollTop = consoleOut.scrollHeight;
                         }
                         lastLogIdx = result.log_total || result.logs.length;
@@ -522,6 +535,15 @@ function openSettings(nodeId) {
                 '<input class="settings-input" type="number" value="' + (p.top_n || '') + '" placeholder="' + I18n.t('settings.topNPlaceholder') + '" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'top_n\',this.value)"></div>' : '') +
             '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
+    } else if (node.type === 'name') {
+        /* The workflow's label for the Execution History panel. It is the one
+           node that must sit at the head of a workflow and wire into what
+           follows, so the panel says so and validates the same way. */
+        var p = node.params;
+        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('name.hint') + '</div>' +
+            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.workflowName') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.workflow_name || '') + '" placeholder="' + I18n.t('name.unnamed') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'workflow_name\',this.value)"></div>';
     } else if (node.type === 'resume') {
         /* Adopts rows a previous run already paid for. Both lists live on the
            server, so the panel fills them asynchronously below. */
@@ -1497,13 +1519,80 @@ var historyPanel = {
         } catch (e) { /* non-fatal */ }
     },
 
-    _renderChart(rows, metric) {
+    /* Editorial palette drawn from the design system's muted accents
+       (paper-white ground, ink #1a1a1a). The same label names the stats
+       pies use are mapped here so a metric reads the same colour in both
+       places. */
+    _COLORS: {
+        'Anger': '#a85454',
+        'Joy': '#9a7740',
+        'Sadness': '#4a6fa5',
+        'Fear': '#8a6ea8',
+        'Neutral': '#6f7f8a',
+        'Objective Statement': '#6f7f8a',
+        'Praise/Affirmation': '#4e8061',
+        'Criticism/Questioning': '#a85454',
+        'Controversy/Reflection': '#9a7740',
+        'Advocacy/Call-to-action': '#4a6fa5',
+        'Satire/Mockery': '#8a6ea8',
+    },
+    _FALLBACK: ['#4a6fa5', '#9a7740', '#4e8061', '#a85454', '#8a6ea8', '#6f7f8a', '#b5895a', '#5a8a7a'],
+
+    _colorFor(metric, label, i) {
+        if (metric === 'rows') return '#4a6fa5';
+        var named = this._COLORS[label];
+        if (named) return named;
+        return this._FALLBACK[(i || 0) % this._FALLBACK.length];
+    },
+
+    _rgba(hex, alpha) {
+        var h = String(hex || '').replace('#', '');
+        if (h.length === 3) h = h.split('').map(function (c) { return c + c; }).join('');
+        var r = parseInt(h.slice(0, 2), 16) || 0;
+        var g = parseInt(h.slice(2, 4), 16) || 0;
+        var b = parseInt(h.slice(4, 6), 16) || 0;
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    },
+
+    _ensureChart() {
         var el = document.getElementById('history-chart');
-        if (!this._instance) this._instance = echarts.init(el);
+        if (this._instance) return el;
+        /* SVG renderer: the chart is real, interactive SVG — crisp at any zoom,
+           printable, and resizable without a canvas re-alloc. */
+        this._instance = echarts.init(el, null, { renderer: 'svg' });
+        if (window.ResizeObserver) {
+            var inst = this._instance;
+            new ResizeObserver(function () { inst.resize(); }).observe(el);
+        }
+        return el;
+    },
+
+    _renderChart(rows, metric) {
+        this._ensureChart();
+        var inst = this._instance;
+        var metricLabel = I18n.t('history.metric.' + (metric || 'rows'));
+        var wf = document.getElementById('history-workflow-select').value;
+        var subtext = wf ? wf : I18n.t('history.allWorkflows');
+        var ink = '#1a1a1a';
+        var dim = 'rgba(26,26,26,0.55)';
+        var faint = 'rgba(26,26,26,0.06)';
+        /* Single source of truth is --font in style.css: Literata carries the
+           latin glyphs and digits, 宋体/SimSun carries the CJK ones. ECharts
+           text defaults to sans-serif, so the stack must be passed explicitly
+           to every text block — reading the CSS variable keeps them in sync. */
+        var chartFont = (getComputedStyle(document.documentElement)
+            .getPropertyValue('--font') || '').trim()
+            || '"Literata", "Songti SC", "SimSun", "宋体", serif';
 
         if (!rows.length) {
-            this._instance.setOption({
-                title: { text: I18n.t('history.empty'), left: 'center', top: 'middle', textStyle: { color: '#888', fontSize: 12 } },
+            var emptyFont = (getComputedStyle(document.documentElement)
+                .getPropertyValue('--font') || '').trim()
+                || '"Literata", "Songti SC", "SimSun", "宋体", serif';
+            inst.setOption({
+                title: {
+                    text: I18n.t('history.empty'), left: 'center', top: 'middle',
+                    textStyle: { color: 'rgba(26,26,26,0.4)', fontSize: 12, fontWeight: 400, fontFamily: emptyFont },
+                },
                 xAxis: { show: false }, yAxis: { show: false }, series: [],
             }, true);
             return;
@@ -1512,24 +1601,88 @@ var historyPanel = {
         var labelSet = {};
         rows.forEach(function (r) { labelSet[r.label || r.metric] = true; });
         var labels = Object.keys(labelSet);
-        var series = labels.map(function (label) {
+        var self = this;
+        var series = labels.map(function (label, i) {
+            var color = self._colorFor(metric, label, i);
             var pts = rows
                 .filter(function (r) { return (r.label || r.metric) === label; })
                 .map(function (r) { return [r.timestamp, r.value]; });
-            return { name: label, type: metric === 'rows' ? 'bar' : 'line', data: pts, smooth: true };
+            if (metric === 'rows') {
+                return {
+                    name: label, type: 'bar', data: pts, barWidth: '46%',
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: color },
+                            { offset: 1, color: self._rgba(color, 0.5) },
+                        ]),
+                        borderRadius: [3, 3, 0, 0],
+                    },
+                };
+            }
+            return {
+                name: label, type: 'line', data: pts, smooth: true,
+                symbol: 'circle', symbolSize: 5, showSymbol: true,
+                lineStyle: { width: 2, color: color },
+                itemStyle: { color: color },
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: self._rgba(color, 0.22) },
+                        { offset: 1, color: self._rgba(color, 0.02) },
+                    ]),
+                },
+            };
         });
 
-        this._instance.setOption({
+        inst.setOption({
             backgroundColor: 'transparent',
-            tooltip: { trigger: 'axis' },
-            legend: { data: labels, textStyle: { color: '#ccc' }, top: 0 },
-            grid: { top: 40, left: 50, right: 20, bottom: 60 },
-            xAxis: { type: 'time' },
-            yAxis: { type: 'value' },
-            dataZoom: [{ type: 'inside' }, { type: 'slider', height: 16 }],
+            /* Title → legend → plot are stacked with real gaps: the title block
+               ends ~45px down, the legend sits below it, and the grid starts
+               low enough that neither can clip the other. Legend is scroll
+               type so many workflow labels stay on one line instead of
+               wrapping down over the plot. Left/right grid margins stay
+               symmetric so the plot area reads as centred in the panel. */
+            title: {
+                text: metricLabel, subtext: subtext, left: 'center', top: 8,
+                textStyle: { color: ink, fontSize: 14, fontWeight: 500, fontFamily: chartFont },
+                subtextStyle: { color: 'rgba(26,26,26,0.45)', fontSize: 11, fontFamily: chartFont },
+            },
+            tooltip: {
+                trigger: 'axis',
+                backgroundColor: '#fff',
+                borderColor: 'rgba(26,26,26,0.15)', borderWidth: 1,
+                textStyle: { color: ink, fontSize: 12, fontFamily: chartFont },
+                axisPointer: { type: 'line', lineStyle: { color: 'rgba(26,26,26,0.25)', type: 'dashed' } },
+            },
+            legend: {
+                data: labels, top: 50, left: 'center', icon: 'circle',
+                type: 'scroll', width: '86%',
+                itemWidth: 8, itemHeight: 8, itemGap: 12,
+                textStyle: { color: ink, fontSize: 11, fontFamily: chartFont },
+            },
+            grid: { top: 84, left: 44, right: 44, bottom: 56, containLabel: true },
+            xAxis: {
+                type: 'time',
+                axisLine: { lineStyle: { color: 'rgba(26,26,26,0.15)' } },
+                axisLabel: { color: dim, fontSize: 10, hideOverlap: true, fontFamily: chartFont },
+                splitLine: { show: true, lineStyle: { color: faint } },
+            },
+            yAxis: {
+                type: 'value',
+                axisLine: { show: false }, axisTick: { show: false },
+                axisLabel: { color: dim, fontSize: 10, fontFamily: chartFont },
+                splitLine: { lineStyle: { color: faint } },
+            },
+            dataZoom: [
+                { type: 'inside' },
+                {
+                    type: 'slider', height: 14, bottom: 4, borderColor: 'transparent',
+                    fillerColor: 'rgba(26,26,26,0.06)', handleStyle: { color: ink },
+                    textStyle: { color: dim, fontFamily: chartFont }, moveHandleSize: 4,
+                },
+            ],
             series: series,
         }, true);
-        this._instance.resize();
+        inst.resize();
     },
 
     async clear() {
@@ -1650,6 +1803,13 @@ function toggleConsole() {
         panel.classList.remove('open');
     } else {
         panel.classList.toggle('open');
+        if (!panel.classList.contains('open')) {
+            /* Dropping .open only shrinks the panel if nothing overrides the
+               CSS `height: 0` — the dock resize handle writes an inline
+               height, and that inline value survives the class toggle. Clear
+               it, or Close looks dead after the user resized the panel. */
+            panel.style.height = '';
+        }
     }
 }
 
@@ -2103,6 +2263,22 @@ workflow.validate = function () {
             }
             if (!hasOutput[id]) {
                 errors.push(I18n.t('validate.uploadDownstream').replace('{title}', node.title));
+            }
+        }
+
+        if (type === 'name') {
+            /* The name node is metadata, not data: it must sit at the head of
+               the workflow (no incoming edges), wire into something, and
+               carry a non-empty label — that label is what groups the run in
+               the Execution History panel. */
+            if (!params.workflow_name || !String(params.workflow_name).trim()) {
+                errors.push(I18n.t('validate.nameEmpty').replace('{title}', node.title));
+            }
+            if (hasInput[id]) {
+                errors.push(I18n.t('validate.nameMustLead').replace('{title}', node.title));
+            }
+            if (!hasOutput[id]) {
+                errors.push(I18n.t('validate.nameDownstream').replace('{title}', node.title));
             }
         }
 

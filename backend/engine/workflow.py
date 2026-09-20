@@ -163,6 +163,17 @@ class WorkflowEngine:
                     errors.append(t('engine.visualize_no_chart', nid=nid))
                 if not params.get('x_field'):
                     errors.append(t('engine.visualize_no_x', nid=nid))
+            if ntype == 'name':
+                # The name node is pure metadata: it carries no data, so it
+                # must sit at the head (nothing feeds into it), wire into a
+                # real node, and carry a non-empty label — that label is what
+                # groups the run in the Execution History panel.
+                if not str(params.get('workflow_name') or '').strip():
+                    errors.append(t('engine.name_no_label', nid=nid))
+                if any(c.get('to') == nid for c in self.connections):
+                    errors.append(t('engine.name_not_head', nid=nid))
+                if not any(c.get('from') == nid for c in self.connections):
+                    errors.append(t('engine.name_no_downstream', nid=nid))
         try:
             self.topological_sort()
         except ValueError as e:

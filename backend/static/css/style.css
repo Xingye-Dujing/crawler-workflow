@@ -49,6 +49,8 @@
   --accent-visualize: #4e8061;
   --accent-tokenize: #8a6ea8;
   --accent-output: #6f7f8a;
+  --accent-resume: #7a6a8a;
+  --accent-name: #3a4a5a;
 
   /* ── canvas ── */
   --node-bg: rgba(255, 255, 255, 0.96);
@@ -888,6 +890,12 @@ input[type="range"]::-moz-range-thumb {
 .node-type-output .node-header {
   border-left: 3px solid var(--accent-output);
 }
+.node-type-name .node-header {
+  border-left: 3px solid var(--accent-name);
+}
+.node-type-resume .node-header {
+  border-left: 3px solid var(--accent-resume);
+}
 .node-type-source.selected {
   border-color: var(--accent-source);
 }
@@ -911,6 +919,9 @@ input[type="range"]::-moz-range-thumb {
 }
 .node-type-output.selected {
   border-color: var(--accent-output);
+}
+.node-type-name.selected {
+  border-color: var(--accent-name);
 }
 
 .node.node-folded .node-content {
@@ -1337,8 +1348,19 @@ table.history-runs-table tr:hover td {
   flex-wrap: wrap;
 }
 #history-chart {
-  flex: 0 0 45%;
-  min-height: 180px;
+  /* Centred in the panel with breathing room either side, so the plot
+     itself reads as level rather than pressed against the edges. The
+     echarts grid's left/right margins are symmetric to match. The chart
+     container inherits --font (Literata for latin/digits, 宋体 for CJK) —
+     echarts text blocks also set it explicitly, this covers the fallback. */
+  flex: 0 0 48%;
+  width: calc(100% - 24px);
+  max-width: 600px;
+  min-height: 260px;
+  margin: 8px auto 0;
+  padding: 6px 4px 0;
+  box-sizing: border-box;
+  font-family: var(--font);
 }
 #history-runs-wrap {
   flex: 1;

@@ -655,6 +655,16 @@ def execute_workflow():
     execution_state['run_id'] = run_id
     execution_state['resume'] = bool(resume_run_id)
     workflow_name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
+    # A name node on the canvas overrides whatever the browser sent: its label
+    # is the user-facing category for this run in the Execution History panel.
+    # First name node wins; the engine's validate() guarantees the label is
+    # non-empty before a run is allowed to start.
+    for _node in workflow.get('nodes') or []:
+        if _node.get('type') == 'name':
+            _label = str((_node.get('params') or {}).get('workflow_name') or '').strip()
+            if _label:
+                workflow_name = _label
+            break
     # Recorded so a preview can find this workflow's rows in the store once the
     # live results are gone (a refresh, a restart) rather than guessing from a
     # node id alone — "node-2" exists in every workflow.
@@ -1430,6 +1440,14 @@ def _execute_resume_node(node: dict, ctx: dict):
     return rows
 
 
+# Node types that never read the rows their inputs carry. Their data comes
+# from somewhere else — the platform crawler, the already-uploaded file, the
+# run store, or (for `name`) nowhere at all. The "upstream came up empty →
+# skip" rule below must not apply to them, or a whole chain hanging off a
+# name node gets silently skipped: the name node produces no rows by design.
+_NON_INPUT_NODES = frozenset({'source', 'upload', 'resume', 'name'})
+
+
 def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upstream: list, wf_idx: int):
     """Run one node with the run store underneath it. Returns (result, status).
 
@@ -1471,9 +1489,11 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         add_log(t('run.restored', nid=nid, n=len(rows)), wf_idx=wf_idx)
         return rows, NODE_RESTORED
 
-    if upstream and not any(isinstance(res, list) and res for _pid, res in upstream):
+    if upstream and ntype not in _NON_INPUT_NODES and not any(isinstance(res, list) and res for _pid, res in upstream):
         # Everything this node would work on came up empty — usually because
         # its parent died with nothing. Skipping beats pretending we ran.
+        # Types that ignore their inputs entirely are exempt: an empty
+        # upstream says nothing about whether *they* can produce rows.
         store.finish_node(run_id, nid, NODE_SKIPPED)
         add_log(t('run.skipped_empty', nid=nid), wf_idx=wf_idx)
         return [], NODE_SKIPPED
@@ -1506,6 +1526,14 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
     return result, NODE_DONE
 
 
+def _execute_name_node(node: dict) -> list:
+    """The name node is metadata, not data: its label was already lifted into
+    ``workflow_name`` before the run started (so the history panel can group by
+    it). It produces no rows — downstream source/upload nodes read nothing
+    from their inputs, which is exactly why the node must connect to one."""
+    return []
+
+
 def _execute_node(
     node: dict,
     headless: bool,
@@ -1518,6 +1546,8 @@ def _execute_node(
     order — only the analysis node needs more than the first entry (a join uses
     the second one as its right-hand table)."""
     ntype = node.get('type')
+    if ntype == 'name':
+        return _execute_name_node(node)
     if ntype == 'source':
         return _execute_source_node(node, headless, ctx=ctx)
     if ntype == 'upload':

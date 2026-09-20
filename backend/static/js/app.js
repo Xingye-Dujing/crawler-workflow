@@ -41,10 +41,10 @@ const I18n = {
             'bg.cross': 'Cross', 'bg.diagonal': 'Diagonal',
             'palette.header': 'Node Library',
             'palette.source': 'Data Source', 'palette.upload': 'Upload File', 'palette.process': 'Process', 'palette.output': 'Output',
-            'palette.resume': 'Resume Run',
+            'palette.resume': 'Resume Run', 'palette.name': 'Workflow Name',
             'node.source': 'Data Source', 'node.upload': 'Upload File', 'node.process': 'Process',
             'node.analysis': 'Analysis', 'node.visualize': 'Visualize', 'node.tokenize': 'Tokenize', 'node.output': 'Output',
-            'node.resume': 'Resume Run',
+            'node.resume': 'Resume Run', 'node.name': 'Workflow Name',
             /* Resumable runs: everything happens while nobody is watching, so
                the wording has to state what is already paid for. */
             'resume.continue': 'Continue', 'resume.restart': 'Start over', 'resume.dismissTitle': 'Dismiss',
@@ -120,13 +120,14 @@ const I18n = {
             'settings.textColumn': 'Text Column',
             'settings.topic': 'Topic',
             'settings.filename': 'Filename',
+            'settings.workflowName': 'Workflow name',
             'nodeType.source': 'Data Source',
             'nodeType.upload': 'Upload File',
             'nodeType.process': 'Process',
             'nodeType.analysis': 'Analysis',
             'nodeType.visualize': 'Visualize',
             'nodeType.tokenize': 'Tokenize',
-            'nodeType.resume': 'Resume Run',
+            'nodeType.resume': 'Resume Run', 'nodeType.name': 'Workflow Name',
             'nodeType.output': 'Output',
             'op.clean': 'Clean',
             'op.emotion': 'Emotion',
@@ -408,6 +409,11 @@ const I18n = {
             'validate.joinNeedsTwo': 'Analysis node "{title}": joining needs two input connections (left table, right table)',
             'validate.uploadFile': 'Upload node "{title}": no file uploaded yet',
             'validate.uploadDownstream': 'Upload node "{title}": must connect to a downstream node',
+            'validate.nameEmpty': 'Name node "{title}": workflow name cannot be empty',
+            'validate.nameMustLead': 'Name node "{title}": must be the first node — nothing should feed into it',
+            'validate.nameDownstream': 'Name node "{title}": connect it to a downstream node',
+            'name.hint': 'This name labels the run in the Execution History panel.',
+            'name.unnamed': 'Untitled',
             'validate.processInput': 'Process node "{title}": must have an input connection',
             'validate.processDownstream': 'Process node "{title}": must connect to a downstream node',
             'validate.analysisInput': 'Analysis node "{title}": must have an input connection',
@@ -436,10 +442,10 @@ const I18n = {
             'bg.cross': '十字', 'bg.diagonal': '斜纹',
             'palette.header': '节点库',
             'palette.source': '数据源', 'palette.upload': '上传文件', 'palette.process': '处理', 'palette.output': '输出',
-            'palette.resume': '断点续跑',
+            'palette.resume': '断点续跑', 'palette.name': '工作流命名',
             'node.source': '数据源', 'node.upload': '上传文件', 'node.process': '处理',
             'node.analysis': '分析', 'node.visualize': '可视化', 'node.tokenize': '分词', 'node.output': '输出',
-            'node.resume': '断点续跑',
+            'node.resume': '断点续跑', 'node.name': '工作流命名',
             /* 断点续跑：提示要说清已经保留了什么，否则用户不知道「继续」会发生什么 */
             'resume.continue': '继续执行', 'resume.restart': '从头开始', 'resume.dismissTitle': '忽略',
             'resume.interrupted': '发现 {at} 那次未跑完的运行',
@@ -514,13 +520,14 @@ const I18n = {
             'settings.textColumn': '文本列',
             'settings.topic': '主题',
             'settings.filename': '文件名',
+            'settings.workflowName': '工作流名称',
             'nodeType.source': '数据源',
             'nodeType.upload': '上传文件',
             'nodeType.process': '处理',
             'nodeType.analysis': '分析',
             'nodeType.visualize': '可视化',
             'nodeType.tokenize': '分词',
-            'nodeType.resume': '断点续跑',
+            'nodeType.resume': '断点续跑', 'nodeType.name': '工作流命名',
             'nodeType.output': '输出',
             'op.clean': '清洗',
             'op.emotion': '情感分析',
@@ -797,6 +804,11 @@ const I18n = {
             'validate.joinNeedsTwo': '分析节点 "{title}"：合并表需要两条输入连线（左表、右表）',
             'validate.uploadFile': '上传节点 "{title}"：尚未上传文件',
             'validate.uploadDownstream': '上传节点 "{title}"：必须连接到下游节点',
+            'validate.nameEmpty': '命名节点 "{title}"：工作流名称不能为空',
+            'validate.nameMustLead': '命名节点 "{title}"：必须是开头节点，不能有上游接入',
+            'validate.nameDownstream': '命名节点 "{title}"：请连接下游节点',
+            'name.hint': '这个名字会作为分类显示在「历史」区域。',
+            'name.unnamed': '未命名',
             'validate.processInput': '处理节点 "{title}"：必须有一个输入连接',
             'validate.processDownstream': '处理节点 "{title}"：必须连接到下游节点',
             'validate.analysisInput': '分析节点 "{title}"：必须有一个输入连接',
@@ -1539,13 +1551,20 @@ function toggleConsolePopout() {
     });
 })();
 
-/* ── Cookie dialog: close on outside click ── */
+/* ── Cookie dialog: close on outside click ──
+   The platform dropdown is a CustomSelect: its menu is rendered into <body>,
+   OUTSIDE the dialog's DOM. Clicking a row there must count as an interaction
+   with the dialog, not as an outside click — same two guards as the
+   node-settings panel below. */
 
 document.addEventListener('mousedown', (e) => {
     const dialog = document.getElementById('cookie-dialog');
     if (!dialog.classList.contains('open')) return;
     if (e.target.closest('#cookie-dialog')) return;
     if (e.target.closest('[data-i18n="btn.cookies"]')) return;
+    /* A dropdown row belongs to the dialog's own control — never "outside". */
+    if (e.target.closest('.cselect-menu, .cand-menu')) return;
+    if (window.CustomSelect && CustomSelect.ownsPopup(e.target, dialog)) return;
     closeCookieDialog();
 });
 

@@ -347,6 +347,7 @@ const canvas = {
     addNode(type, x, y) {
         const id = 'node-' + (this.nextId++);
         const labels = {
+            name: I18n.t('node.name'),
             source: I18n.t('node.source'),
             upload: I18n.t('node.upload'),
             process: I18n.t('node.process'),
@@ -354,6 +355,7 @@ const canvas = {
             visualize: I18n.t('node.visualize'),
             tokenize: I18n.t('node.tokenize'),
             output: I18n.t('node.output'),
+            resume: I18n.t('node.resume'),
         };
         const title = labels[type] || 'Node';
         const el = document.createElement('div');
@@ -409,6 +411,9 @@ const canvas = {
     },
 
     getDefaultParams(type) {
+        /* The name node carries the workflow's label for the Execution History
+           panel — it is metadata, not data, so its params are just the name. */
+        if (type === 'name') return { workflow_name: '' };
         if (type === 'source') return { platform: 'zhihu', keyword: '', urls: '', target_count: 50, headless: true };
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '' };
@@ -423,6 +428,10 @@ const canvas = {
     },
 
     getNodeSummary(type, params) {
+        if (type === 'name') {
+            var n = String(params.workflow_name || '').trim();
+            return I18n.t('settings.workflowName') + ': ' + (n || I18n.t('name.unnamed'));
+        }
         if (type === 'source') {
             var plat = params.platform || '';
             var head = I18n.t('settings.platform') + ': ' + (plat ? I18n.t('platform.' + plat) : '?');
