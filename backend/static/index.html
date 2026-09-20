@@ -1,0 +1,1109 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>采析绘</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;0,7..72,600;0,7..72,700;1,7..72,400&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="icon" href="/icon.ico" type="image/x-icon" />
+  </head>
+  <body class="theme-light bg-grid">
+    <script>
+      /* Apply saved settings immediately to prevent flash */
+      (function () {
+        try {
+          var s = JSON.parse(localStorage.getItem("crawler_settings"));
+          if (s) {
+            var body = document.body;
+            body.classList.add("theme-light"); /* light-only design system */
+            var bgs = [
+              "bg-void",
+              "bg-grid",
+              "bg-dots",
+              "bg-cross",
+              "bg-diagonal",
+            ];
+            bgs.forEach(function (b) {
+              body.classList.remove(b);
+            });
+            if (s.bg) body.classList.add(s.bg);
+            body.dataset.lang = s.lang || "zh";
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <!-- Menu Trigger -->
+    <div id="menu-trigger"></div>
+
+    <!-- Top Menu — ZENVIZ-style: every entry is flat in the bar (no dropdown).
+         Tiny uppercase group label + inline buttons/controls, hairline dividers. -->
+    <nav id="top-menu">
+      <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.file">File</span>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="workflow.save()"
+          data-i18n="menu.save"
+        >
+          Save
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="workflow.load()"
+          data-i18n="menu.load"
+        >
+          Load
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="workflow.newFile()"
+          data-i18n="menu.new"
+        >
+          New
+        </button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.edit">Edit</span>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="canvas.undo()"
+          data-i18n="canvas.undo"
+        >
+          Undo
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="canvas.redo()"
+          data-i18n="canvas.redo"
+        >
+          Redo
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="canvas.autoLayout()"
+          data-i18n="canvas.autoLayout"
+        >
+          Layout
+        </button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.view">View</span>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="canvas.resetView()"
+          data-i18n="btn.fit"
+        >
+          Fit
+        </button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.style">Style</span>
+        <button
+          class="menu-btn"
+          type="button"
+          id="btn-style"
+          onclick="toggleStyleMenu(event)"
+          data-i18n="menu.style"
+        >
+          Style
+        </button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.run">Run</span>
+        <button
+          class="menu-btn"
+          type="button"
+          id="btn-execute"
+          onclick="workflow.execute()"
+          data-i18n="btn.execute"
+        >
+          Execute
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          id="btn-stop"
+          onclick="workflow.stop()"
+          data-i18n="btn.stop"
+        >
+          Stop
+        </button>
+        <button
+          class="menu-btn toggle-on"
+          type="button"
+          id="btn-parallel"
+          onclick="RunState.toggle('parallel')"
+          data-i18n="btn.parallel"
+        >
+          Parallel
+        </button>
+        <button
+          class="menu-btn toggle-on"
+          type="button"
+          id="btn-headless"
+          onclick="RunState.toggle('headless')"
+          data-i18n="btn.headless"
+        >
+          Headless
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          id="btn-ai"
+          onclick="toggleAiMenu(event)"
+          data-i18n="btn.ai"
+        >
+          AI
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          id="btn-settings"
+          onclick="toggleSettingsMenu(event)"
+          data-i18n="btn.settings"
+        >
+          设置
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="openCookieDialog()"
+          data-i18n="btn.cookies"
+        >
+          Cookies
+        </button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.data">Data</span>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="dashboard.open()"
+          data-i18n="btn.dashboard"
+        >
+          Dashboard
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="historyPanel.open()"
+          data-i18n="btn.history"
+        >
+          History
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="chartStudio.open()"
+          data-i18n="btn.studio"
+        >
+          Studio
+        </button>
+      </div>
+      <div class="menu-group">
+        <span class="menu-label" data-i18n="menu.lang">Lang</span>
+        <button
+          class="menu-btn lang-btn"
+          type="button"
+          data-lang="zh"
+          onclick="setLang('zh')"
+        >
+          中文
+        </button>
+        <button
+          class="menu-btn lang-btn"
+          type="button"
+          data-lang="en"
+          onclick="setLang('en')"
+        >
+          EN
+        </button>
+      </div>
+      <button
+        class="pin-btn"
+        id="pin-btn"
+        type="button"
+        onclick="togglePin()"
+        title="Pin menu"
+        aria-pressed="true"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+    </nav>
+
+    <!-- Workspace -->
+    <div id="workspace">
+      <div id="canvas-inner">
+        <svg id="svg-layer"></svg>
+        <div id="nodes-container"></div>
+      </div>
+    </div>
+
+    <!-- Palette -->
+    <div id="node-palette">
+      <div class="palette-header" data-i18n="palette.header">Node Library</div>
+      <div class="palette-item" data-type="source" draggable="true">
+        <span class="palette-tag">[SRC]</span>
+        <span data-i18n="palette.source">Data Source</span>
+      </div>
+      <div class="palette-item" data-type="process" draggable="true">
+        <span class="palette-tag">[PRC]</span>
+        <span data-i18n="palette.process">Process</span>
+      </div>
+      <div class="palette-item" data-type="analysis" draggable="true">
+        <span class="palette-tag">[ANL]</span>
+        <span data-i18n="palette.analysis">Analysis</span>
+      </div>
+      <div class="palette-item" data-type="visualize" draggable="true">
+        <span class="palette-tag">[VIZ]</span>
+        <span data-i18n="palette.visualize">Visualize</span>
+      </div>
+      <div class="palette-item" data-type="tokenize" draggable="true">
+        <span class="palette-tag">[TKN]</span>
+        <span data-i18n="palette.tokenize">Tokenize</span>
+      </div>
+      <div class="palette-item" data-type="output" draggable="true">
+        <span class="palette-tag">[OUT]</span>
+        <span data-i18n="palette.output">Output</span>
+      </div>
+    </div>
+
+    <!-- Stats Panel -->
+    <div id="stats-panel">
+      <div class="panel-header">
+        <span data-i18n="stats.header">Statistics</span>
+        <button
+          class="panel-close"
+          data-i18n="stats.close"
+          onclick="toggleStats()"
+        >
+          Close
+        </button>
+      </div>
+      <div class="panel-tabs">
+        <button
+          class="tab-btn active"
+          data-i18n="stats.emotion"
+          onclick="switchTab('emotion')"
+        >
+          Emotion
+        </button>
+        <button
+          class="tab-btn"
+          data-i18n="stats.tendency"
+          onclick="switchTab('tendency')"
+        >
+          Tendency
+        </button>
+      </div>
+      <div id="chart-emotion" class="chart-container"></div>
+      <div
+        id="chart-tendency"
+        class="chart-container"
+        style="display: none"
+      ></div>
+    </div>
+
+    <!-- Chart Preview Panel (Visualize node standalone render) -->
+    <div id="chart-preview-panel">
+      <div class="panel-header">
+        <span data-i18n="chart.header">Chart Preview</span>
+        <button
+          class="panel-close"
+          data-i18n="stats.close"
+          onclick="toggleChartPreview()"
+        >
+          Close
+        </button>
+      </div>
+      <div id="chart-preview-echarts" class="chart-container"></div>
+      <img id="chart-preview-image" style="display: none; max-width: 100%" />
+    </div>
+
+    <!-- Data Preview Panel (generic paginated table for any dataset) -->
+    <div id="data-preview-panel">
+      <div class="panel-header">
+        <span data-i18n="dataPreview.header">Data Preview</span>
+        <button
+          class="panel-close"
+          data-i18n="stats.close"
+          onclick="toggleDataPreview()"
+        >
+          Close
+        </button>
+      </div>
+      <div id="data-preview-meta" class="data-preview-meta"></div>
+      <div id="data-preview-table-wrap" class="data-preview-table-wrap"></div>
+      <div id="data-preview-pager" class="data-preview-pager">
+        <button class="menu-btn" onclick="dataPreview.prevPage()">
+          &lsaquo; <span data-i18n="btn.prev">Prev</span>
+        </button>
+        <span id="data-preview-page-label"></span>
+        <button class="menu-btn" onclick="dataPreview.nextPage()">
+          <span data-i18n="btn.next">Next</span> &rsaquo;
+        </button>
+      </div>
+    </div>
+
+    <!-- Dashboard Panel (grid of all Visualize nodes' charts) -->
+    <div id="dashboard-panel">
+      <div class="panel-header">
+        <span data-i18n="dashboard.header">Dashboard</span>
+        <button
+          class="panel-close"
+          data-i18n="stats.close"
+          onclick="dashboard.close()"
+        >
+          Close
+        </button>
+        <button
+          class="panel-close"
+          data-i18n="btn.refresh"
+          onclick="dashboard.open()"
+          style="margin-left: 6px"
+        >
+          Refresh
+        </button>
+      </div>
+      <div id="dashboard-grid" class="dashboard-grid"></div>
+    </div>
+
+    <!-- Execution History Panel (time-series comparison across runs) -->
+    <div id="history-panel">
+      <div class="panel-header">
+        <span data-i18n="history.header">Execution History</span>
+        <button
+          class="panel-close"
+          data-i18n="stats.close"
+          onclick="historyPanel.close()"
+        >
+          Close
+        </button>
+      </div>
+      <div class="history-controls">
+        <select
+          id="history-workflow-select"
+          class="settings-select"
+          onchange="historyPanel.loadSeries()"
+        ></select>
+        <select
+          id="history-metric-select"
+          class="settings-select"
+          onchange="historyPanel.loadSeries()"
+        >
+          <option value="emotion" data-i18n="history.metric.emotion">
+            Emotion
+          </option>
+          <option value="tendency" data-i18n="history.metric.tendency">
+            Tendency
+          </option>
+          <option value="rows" data-i18n="history.metric.rows">
+            Row Count
+          </option>
+        </select>
+        <button
+          class="menu-btn"
+          onclick="historyPanel.loadSeries()"
+          data-i18n="btn.refresh"
+        >
+          Refresh
+        </button>
+        <button
+          class="menu-btn"
+          onclick="historyPanel.clear()"
+          data-i18n="history.clearAll"
+        >
+          Clear History
+        </button>
+      </div>
+      <div id="history-chart" class="chart-container"></div>
+      <div id="history-runs-wrap" class="data-preview-table-wrap"></div>
+    </div>
+
+    <!-- Chart Studio — embedded ZENVIZ visualization workbench.
+         Same-origin iframe, so the host can hand workflow datasets to it
+         (and pull rendered charts back) through postMessage. -->
+    <div id="studio-overlay" aria-label="Chart Studio">
+      <div class="studio-bar">
+        <div class="studio-brand">
+          <strong data-i18n="studio.title">CHART STUDIO</strong>
+          <span data-i18n="studio.subtitle">ZENVIZ · WORKFLOW</span>
+        </div>
+        <!-- Mirror of the studio's own nav (engine / data / style / export).
+                 The bridge hands us the list once the iframe is live; clicking a
+                 chip asks the studio to drop its dropdown under that chip, so the
+                 studio never grows a second toolbar row of its own. -->
+        <div class="studio-menus" id="studio-menus"></div>
+        <div class="studio-spacer"></div>
+        <!-- Nodes are picked one by one — several can be chosen at once, and
+                 their tables are merged. The row then reports the count, and the
+                 merge control appears next to it once there is something to
+                 merge. -->
+        <div class="studio-field">
+          <label data-i18n="studio.source">Source</label>
+          <select id="studio-source" class="studio-select" multiple></select>
+        </div>
+        <div class="studio-field" id="studio-merge-field" hidden>
+          <label data-i18n="studio.merge">Combine</label>
+          <select id="studio-merge" class="studio-select compact">
+            <option value="rows" data-i18n="studio.merge.rows" selected>
+              Place below
+            </option>
+            <option value="side" data-i18n="studio.merge.side">
+              Place to the right
+            </option>
+          </select>
+        </div>
+        <button
+          class="studio-btn primary"
+          id="studio-load"
+          onclick="chartStudio.loadSelected()"
+          data-i18n="studio.load"
+        >
+          Load Data
+        </button>
+        <button
+          class="studio-btn"
+          id="studio-save"
+          onclick="chartStudio.saveBack()"
+          data-i18n="studio.saveBack"
+        >
+          Export Image
+        </button>
+        <span class="studio-status" id="studio-status"></span>
+        <button
+          class="studio-btn"
+          onclick="chartStudio.close()"
+          data-i18n="studio.close"
+        >
+          Close
+        </button>
+      </div>
+      <div class="studio-frame-wrap">
+        <div class="studio-loading" id="studio-loading">
+          <div class="loading-container">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+        <iframe id="studio-frame" title="ZENVIZ Chart Studio"></iframe>
+      </div>
+    </div>
+
+    <!-- Hidden file input used by the Visualize/Analysis node settings panel to upload a CSV/JSON dataset -->
+    <input
+      type="file"
+      id="dataset-file-input"
+      accept=".csv,.json,.txt"
+      style="display: none"
+      onchange="dataNodes.handleFileSelected(event)"
+    />
+
+    <!-- Node Settings Sidebar -->
+    <div id="node-settings">
+      <div class="settings-header">
+        <span data-i18n="settings.header">Node Settings</span>
+        <button
+          class="panel-close"
+          data-i18n="settings.close"
+          onclick="closeSettings()"
+        >
+          Close
+        </button>
+      </div>
+      <div id="settings-content"></div>
+    </div>
+
+    <!-- Console Panel -->
+    <div id="console-panel">
+      <div id="console-resize-handle"></div>
+      <div class="console-header">
+        <span data-i18n="console.header">Console</span>
+        <div class="console-actions">
+          <button
+            class="panel-close"
+            id="btn-console-popout"
+            onclick="toggleConsolePopout()"
+            data-i18n="console.popout"
+          >
+            Pop
+          </button>
+          <button
+            class="panel-close"
+            onclick="clearConsole()"
+            data-i18n="console.clear"
+          >
+            Clear
+          </button>
+          <button
+            class="panel-close"
+            onclick="toggleConsole()"
+            data-i18n="console.close"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <div id="console-tabs" style="display: none"></div>
+      <div id="console-output"></div>
+    </div>
+
+    <!-- Processes Panel -->
+    <div id="processes-panel">
+      <div class="console-header">
+        <span data-i18n="processes.header">Processes</span>
+        <div class="console-actions">
+          <button
+            class="panel-close"
+            onclick="toggleProcessesPanel()"
+            data-i18n="processes.close"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <div id="processes-output"></div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="status-bar">
+      <span id="status-text" data-i18n="status.ready">Ready</span>
+      <span id="status-nodes">Nodes: 0</span>
+      <button
+        class="status-btn"
+        id="btn-console"
+        onclick="toggleConsole()"
+        data-i18n="console.header"
+      >
+        Console
+      </button>
+      <button
+        class="status-btn"
+        id="btn-processes"
+        onclick="toggleProcessesPanel()"
+        data-i18n="processes.header"
+      >
+        Processes
+      </button>
+      <span id="status-zoom">100%</span>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu">
+      <div
+        class="ctx-item"
+        data-action="ctxNewSource"
+        data-i18n="ctx.newSource"
+      >
+        New Source Node
+      </div>
+      <div
+        class="ctx-item"
+        data-action="ctxNewProcess"
+        data-i18n="ctx.newProcess"
+      >
+        New Process Node
+      </div>
+      <div
+        class="ctx-item"
+        data-action="ctxNewAnalysis"
+        data-i18n="ctx.newAnalysis"
+      >
+        New Analysis Node
+      </div>
+      <div
+        class="ctx-item"
+        data-action="ctxNewVisualize"
+        data-i18n="ctx.newVisualize"
+      >
+        New Visualize Node
+      </div>
+      <div
+        class="ctx-item"
+        data-action="ctxNewTokenize"
+        data-i18n="ctx.newTokenize"
+      >
+        New Tokenize Node
+      </div>
+      <div
+        class="ctx-item"
+        data-action="ctxNewOutput"
+        data-i18n="ctx.newOutput"
+      >
+        New Output Node
+      </div>
+      <div class="ctx-divider"></div>
+      <div
+        class="ctx-item"
+        id="ctx-edit"
+        data-action="ctxEdit"
+        data-i18n="ctx.edit"
+      >
+        Edit Node
+      </div>
+      <div
+        class="ctx-item"
+        id="ctx-copy"
+        data-action="ctxCopy"
+        data-i18n="ctx.copy"
+      >
+        Copy Node
+      </div>
+      <div
+        class="ctx-item"
+        id="ctx-paste-node"
+        data-action="ctxPasteNode"
+        data-i18n="ctx.paste"
+      >
+        Paste Node
+      </div>
+      <div
+        class="ctx-item"
+        id="ctx-delete-node"
+        data-action="ctxDeleteNode"
+        data-i18n="ctx.delete"
+        style="color: #ff4444"
+      >
+        Delete Node
+      </div>
+      <div
+        class="ctx-item"
+        id="ctx-fold-node"
+        data-action="ctxFoldNode"
+        data-i18n="canvas.fold"
+        style="display: none"
+      >
+        Fold Node
+      </div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" data-action="clearConns" data-i18n="ctx.clear">
+        Clear All Connections
+      </div>
+      <div class="ctx-item" data-action="undo" data-i18n="canvas.undo">
+        Undo
+      </div>
+      <div class="ctx-item" data-action="redo" data-i18n="canvas.redo">
+        Redo
+      </div>
+      <div
+        class="ctx-item"
+        data-action="autoLayout"
+        data-i18n="canvas.autoLayout"
+      >
+        Auto Layout
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <!-- Custom Dialog Overlay -->
+    <div id="dialog-overlay">
+      <div id="dialog-box">
+        <div id="dialog-message"></div>
+        <div id="dialog-input-area" style="display: none">
+          <input id="dialog-input" class="settings-input" />
+        </div>
+        <div id="dialog-list-area" style="display: none"></div>
+        <div id="dialog-actions"></div>
+      </div>
+    </div>
+
+    <!-- Cookie Config Dialog -->
+    <div id="cookie-dialog">
+      <div class="settings-header">
+        <span data-i18n="cookies.header">Cookie Settings</span>
+        <button
+          class="panel-close"
+          onclick="closeCookieDialog()"
+          data-i18n="settings.close"
+        >
+          Close
+        </button>
+      </div>
+      <div id="cookie-content">
+        <div class="settings-group">
+          <label class="settings-label" data-i18n="cookies.platform"
+            >Platform</label
+          >
+          <select id="cookie-platform" class="settings-select">
+            <option value="zhihu">Zhihu</option>
+            <option value="weibo">Weibo</option>
+            <option value="xiaohongshu">Xiaohongshu</option>
+            <option value="wechat">WeChat</option>
+          </select>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label" data-i18n="cookies.paste"
+            >Paste Cookies JSON</label
+          >
+          <textarea
+            id="cookie-json"
+            class="settings-input"
+            rows="6"
+            placeholder='[{"name":"...","value":"...","domain":"..."}]'
+          ></textarea>
+        </div>
+        <div class="settings-group" style="display: flex; gap: 8px">
+          <button
+            class="menu-btn toggle-on"
+            onclick="saveCookieConfig()"
+            data-i18n="cookies.save"
+          >
+            Save Cookies
+          </button>
+          <button
+            class="menu-btn"
+            onclick="generateCookie()"
+            data-i18n="cookies.generate"
+          >
+            Generate via Browser
+          </button>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label" data-i18n="cookies.waitTime"
+            >Wait time (seconds) for login:</label
+          >
+          <input
+            id="cookie-wait"
+            class="settings-input"
+            type="number"
+            value="120"
+            min="10"
+            max="600"
+          />
+        </div>
+        <div class="settings-group">
+          <span
+            id="cookie-status"
+            style="font-size: 11px; color: var(--text-dim)"
+          ></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Style submenu — background & corner radius live together here -->
+    <div id="style-menu" class="dropdown">
+      <div class="dd-item-row">
+        <span data-i18n="style.bg">Background</span>
+        <div class="settings-bg-options">
+          <button
+            class="bar-bg-dot active"
+            type="button"
+            data-bg="bg-grid"
+            title="Grid"
+            onclick="setBg('bg-grid', this)"
+          ></button>
+          <button
+            class="bar-bg-dot"
+            type="button"
+            data-bg="bg-void"
+            title="Void"
+            onclick="setBg('bg-void', this)"
+          ></button>
+          <button
+            class="bar-bg-dot"
+            type="button"
+            data-bg="bg-dots"
+            title="Dots"
+            onclick="setBg('bg-dots', this)"
+          ></button>
+          <button
+            class="bar-bg-dot"
+            type="button"
+            data-bg="bg-cross"
+            title="Cross"
+            onclick="setBg('bg-cross', this)"
+          ></button>
+          <button
+            class="bar-bg-dot"
+            type="button"
+            data-bg="bg-diagonal"
+            title="Diagonal"
+            onclick="setBg('bg-diagonal', this)"
+          ></button>
+        </div>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item-row">
+        <span data-i18n="style.radius">Radius</span>
+        <span class="dd-ctrl">
+          <input
+            type="range"
+            id="radius-slider"
+            class="bar-slider"
+            min="0"
+            max="16"
+            step="1"
+            value="2"
+            oninput="setRadius(this.value)"
+            data-i18n-title="style.radius"
+            title="Corner radius"
+          />
+          <span class="bar-slider-val" id="radius-val">2px</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- AI submenu — transport (local Ollama / OpenRouter), model, key, batching.
+         The key lives ONLY in the browser's localStorage (see LLMSettings). -->
+    <div id="ai-menu" class="dropdown dropdown-wide">
+      <div class="dd-item-row">
+        <span data-i18n="ai.provider">Provider</span>
+        <span class="dd-ctrl">
+          <select
+            id="ai-provider"
+            class="settings-select"
+            onchange="onAIProviderChange(this.value)"
+          >
+            <option value="ollama" data-i18n="ai.provider.ollama">
+              本地 Ollama
+            </option>
+            <option value="openrouter" data-i18n="ai.provider.openrouter">
+              OpenRouter API
+            </option>
+          </select>
+        </span>
+      </div>
+      <div class="dd-item-row ai-only-openrouter">
+        <span data-i18n="ai.model">模型</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="ai-model"
+            class="settings-input"
+            placeholder="openrouter/free"
+            oninput="onAIModelInput(this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row ai-only-openrouter">
+        <span data-i18n="ai.freeModels">免费模型</span>
+        <span class="dd-ctrl">
+          <select
+            id="ai-models"
+            class="settings-select"
+            onchange="onAIModelPick(this.value)"
+          >
+            <option value="" data-i18n="ai.refreshModels">
+              — 点右侧刷新获取 —
+            </option>
+          </select>
+          <button
+            class="menu-btn"
+            type="button"
+            id="ai-refresh-btn"
+            onclick="refreshAIModels()"
+            data-i18n="ai.refresh"
+          >
+            刷新
+          </button>
+        </span>
+      </div>
+      <div class="dd-item-row ai-only-openrouter">
+        <span data-i18n="ai.key">API Key</span>
+        <span class="dd-ctrl">
+          <input
+            type="password"
+            id="ai-key"
+            class="settings-input"
+            placeholder="sk-or-..."
+            oninput="onAIKeyInput(this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row ai-only-openrouter">
+        <span></span>
+        <span class="dd-ctrl">
+          <button
+            class="menu-btn"
+            type="button"
+            id="ai-test-btn"
+            onclick="testAIConnection()"
+            data-i18n="ai.test"
+          >
+            测试连接
+          </button>
+        </span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item-row">
+        <span data-i18n="ai.batch">每批保存条数</span>
+        <span class="dd-ctrl">
+          <input
+            type="number"
+            id="ai-batch"
+            class="settings-input"
+            min="1"
+            max="100"
+            value="10"
+            oninput="onAINumberInput('batch_size', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="ai.maxChars">单行截断长度</span>
+        <span class="dd-ctrl">
+          <input
+            type="number"
+            id="ai-maxchars"
+            class="settings-input"
+            min="0"
+            max="20000"
+            step="50"
+            value="600"
+            oninput="onAINumberInput('max_chars', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="ai-hint">
+        <div class="ai-hint-title" data-i18n="ai.hintTitle">调用方式说明</div>
+        <div data-i18n="ai.hint1">
+          每条数据 =
+          一次询问（一条消息一次调用），逐行处理。数据多时比较耗时，也比较耗
+          token——文本越长消耗越多，请务必注意控制数据量。
+        </div>
+        <div data-i18n="ai.hint2">
+          免费模型完全够用，不需要掏钱；建议先小批量试跑，确认效果后再放量。
+        </div>
+        <div data-i18n="ai.hint3">
+          结果分批保存：中途出错或停止时，已得到的结果不会丢失；修复后重新执行会从断点续跑。
+        </div>
+        <div class="ai-hint-note" data-i18n="ai.keyNote">
+          API Key 仅保存在本浏览器 Local Storage，不会写入服务器文件。
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings submenu — machine-local values that used to be hardcoded in
+         config.py / base.py. Saved to data/settings.json via /api/settings;
+         applies from the next execution, no server restart needed. -->
+    <div id="settings-menu" class="dropdown dropdown-wide">
+      <div class="dd-item-row">
+        <span data-i18n="set.driver">浏览器驱动路径</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-driver"
+            class="settings-input"
+            placeholder="C:\...\chromedriver.exe"
+            oninput="onSettingInput('driver_path', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.binary">浏览器程序路径</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-binary"
+            class="settings-input"
+            placeholder="chrome.exe（留空=自动）"
+            oninput="onSettingInput('browser_binary', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.window">窗口大小</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-window"
+            class="settings-input settings-input-sm"
+            placeholder="1920x1080"
+            oninput="onSettingInput('window_size', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.pageLoad">页面加载超时(秒)</span>
+        <span class="dd-ctrl">
+          <input
+            type="number"
+            id="set-pageload"
+            class="settings-input settings-input-sm"
+            min="5"
+            max="300"
+            oninput="onSettingInput('page_load_timeout', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.elementWait">元素等待超时(秒)</span>
+        <span class="dd-ctrl">
+          <input
+            type="number"
+            id="set-elementwait"
+            class="settings-input settings-input-sm"
+            min="3"
+            max="600"
+            oninput="onSettingInput('element_timeout', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.ollamaHost">Ollama 服务地址</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-ollamahost"
+            class="settings-input"
+            placeholder="http://localhost:11434"
+            oninput="onSettingInput('ollama_host', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item-row">
+        <span></span>
+        <span class="dd-ctrl">
+          <button
+            class="menu-btn"
+            type="button"
+            id="set-save-btn"
+            onclick="saveAppSettings()"
+            data-i18n="set.save"
+          >
+            保存设置
+          </button>
+        </span>
+      </div>
+      <div class="ai-hint">
+        <div class="ai-hint-note" data-i18n="set.note">
+          这些是本机相关设置（以前写死在代码里）。保存后写入服务器
+          data/settings.json，下次执行即生效，无需重启服务。
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/canvas.js"></script>
+    <script src="/js/workflow.js"></script>
+    <script src="/js/stats.js"></script>
+    <script src="/js/menu.js"></script>
+    <script src="/js/zenviz.js"></script>
+    <script src="/js/custom-select.js"></script>
+    <script src="/js/app.js"></script>
+  </body>
+</html>

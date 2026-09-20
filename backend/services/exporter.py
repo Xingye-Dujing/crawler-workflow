@@ -1,0 +1,140 @@
+"""Generic data export service.
+
+Decoupled from the workflow engine on purpose: any code (a workflow output
+node, a standalone REST endpoint, a unit test, a future CLI...) can call
+``DataExporter.save(df, path)`` and get consistent, format-aware behaviour.
+The workflow "Save" node is just a thin wrapper around this service.
+"""
+
+import json
+import logging
+import os
+
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+
+class UnsupportedFormatError(ValueError):
+    """Raised when an export format is not recognised."""
+
+
+class DataExporter:
+    """Saves a DataFrame (or list-of-dict records) to disk in various formats."""
+
+    # Maps a format key to the file extension used when one isn't supplied.
+    EXTENSIONS = {
+        'csv': '.csv',
+        'json': '.json',
+        'excel': '.xlsx',
+        'xlsx': '.xlsx',
+        'txt': '.txt',
+        'html': '.html',
+        'markdown': '.md',
+    }
+
+    SUPPORTED_FORMATS = tuple(EXTENSIONS.keys())
+
+    @classmethod
+    def infer_format(cls, filename: str) -> str:
+        """Guess the export format from a filename's extension."""
+        ext = os.path.splitext(filename)[1].lower().lstrip('.')
+        mapping = {'xlsx': 'excel', 'xls': 'excel', 'md': 'markdown'}
+        return mapping.get(ext, ext or 'csv')
+
+    @classmethod
+    def normalize_filename(cls, filename: str, fmt: str) -> str:
+        """Ensure the filename carries the extension matching *fmt*."""
+        root, ext = os.path.splitext(filename)
+        wanted = cls.EXTENSIONS.get(fmt, '.csv')
+        if ext.lower() in ('.csv', '.json', '.xlsx', '.xls', '.txt', '.html', '.md'):
+            return filename
+        return root + wanted
+
+    @classmethod
+    def save(
+        cls,
+        data,
+        filepath: str,
+        fmt: str = None,
+        text_column: str = None,
+        **kwargs,
+    ) -> dict:
+        """Persist *data* (DataFrame or list[dict]) to *filepath*.
+
+        Parameters
+        ----------
+        data : pd.DataFrame | list[dict]
+        filepath : str
+            Full destination path. Directory is created if missing.
+        fmt : str, optional
+            One of SUPPORTED_FORMATS. Inferred from the filepath extension
+            when omitted.
+        text_column : str, optional
+            When exporting to ``txt``, the column whose values are written
+            one-per-line. If omitted, every column is written as a
+            tab-separated line.
+
+        Returns
+        -------
+        dict with keys: path, format, rows
+        """
+        df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data or [])
+        fmt = (fmt or cls.infer_format(filepath)).lower()
+        if fmt not in cls.SUPPORTED_FORMATS:
+            raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
+
+        os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
+
+        if fmt == ('xlsx', 'excel'):
+            cls._write_excel(df, filepath, **kwargs)
+        elif fmt == 'csv':
+            cls._write_csv(df, filepath, **kwargs)
+        elif fmt == 'json':
+            cls._write_json(df, filepath, **kwargs)
+        elif fmt == 'txt':
+            cls._write_txt(df, filepath, text_column=text_column, **kwargs)
+        elif fmt == 'html':
+            cls._write_html(df, filepath, **kwargs)
+        elif fmt == 'markdown':
+            cls._write_markdown(df, filepath, **kwargs)
+        else:
+            raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
+
+        logger.info('Exported %s rows to %s (%s)', len(df), filepath, fmt)
+        return {'path': filepath, 'format': fmt, 'rows': len(df)}
+
+    # ── Individual writers ──────────────────────────────────────
+
+    @staticmethod
+    def _write_csv(df: pd.DataFrame, filepath: str, encoding: str = 'utf-8-sig', **_):
+        df.to_csv(filepath, index=False, encoding=encoding)
+
+    @staticmethod
+    def _write_json(df: pd.DataFrame, filepath: str, orient: str = 'records', **_):
+        records = df.to_dict(orient) if orient == 'records' else json.loads(df.to_json(orient=orient))
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(records, f, ensure_ascii=False, indent=2, default=str)
+
+    @staticmethod
+    def _write_excel(df: pd.DataFrame, filepath: str, sheet_name: str = 'Sheet1', **_):
+        df.to_excel(filepath, index=False, sheet_name=sheet_name, engine='openpyxl')
+
+    @staticmethod
+    def _write_txt(df: pd.DataFrame, filepath: str, text_column: str = None, **_):
+        with open(filepath, 'w', encoding='utf-8') as f:
+            if text_column and text_column in df.columns:
+                for value in df[text_column].fillna(''):
+                    f.write(str(value).strip() + '\n')
+            else:
+                for _, row in df.iterrows():
+                    f.write('\t'.join(str(v) for v in row.tolist()) + '\n')
+
+    @staticmethod
+    def _write_html(df: pd.DataFrame, filepath: str, **_):
+        df.to_html(filepath, index=False, escape=True)
+
+    @staticmethod
+    def _write_markdown(df: pd.DataFrame, filepath: str, **_):
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(df.to_markdown(index=False))

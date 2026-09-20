@@ -1,0 +1,9 @@
+.venv/
+.vscode/
+.ruff_cache/
+__pycache__/
+data/
+logs/
+.pylintrc
+backend/test_*.py
+.qoder/settings.local.json

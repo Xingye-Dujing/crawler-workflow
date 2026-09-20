@@ -1,0 +1,13 @@
+flask
+flask-cors
+selenium
+pandas
+numpy
+matplotlib
+openpyxl
+tabulate
+ollama
+webdriver-manager
+ruff
+jieba
+scikit-learn
