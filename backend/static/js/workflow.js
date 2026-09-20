@@ -169,8 +169,18 @@ const workflow = {
                 (n.params.operation === 'clean' ||
                     ((n.params.operation === 'emotion' || n.params.operation === 'tendency') && n.params.mode !== 'ml'));
         })) {
-            if (llm.provider === 'openrouter' && (!llm.api_key || !llm.model)) {
-                showToast(I18n.t('toast.aiNeedKey'));
+            /* Each transport has its own prerequisite: OpenRouter needs a key
+               *and* a catalog model, the local daemon needs a tag it has pulled.
+               The backend enforces the same rules, so neither side can start a
+               run the other would refuse. */
+            var missing = '';
+            if (llm.provider === 'openrouter') {
+                missing = !llm.api_key ? 'toast.aiNeedKey' : (!llm.model ? 'toast.aiNeedModel' : '');
+            } else if (!llm.model) {
+                missing = 'toast.aiNeedOllamaModel';
+            }
+            if (missing) {
+                showToast(I18n.t(missing));
                 RunState.setRunning(false);
                 return;
             }

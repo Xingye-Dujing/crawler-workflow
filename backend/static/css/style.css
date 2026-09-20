@@ -431,6 +431,11 @@ body.style-menu-open #top-menu {
 .dropdown.dropdown-wide {
   width: 330px;
   padding: 8px;
+  /* These panels grow with every setting; on a short window the AI panel would
+     otherwise run off the bottom of the screen with no way to reach the last
+     rows (the menu is anchored under the bar, not vertically clamped). */
+  max-height: calc(100vh - 70px);
+  overflow-y: auto;
 }
 #ai-menu .dd-item-row,
 #settings-menu .dd-item-row {
@@ -488,6 +493,17 @@ body.style-menu-open #top-menu {
   margin-bottom: 0 !important;
   font-size: 10px;
   color: var(--text-dim);
+}
+/* Local Ollama address — read-only here; the value lives in 设置. */
+.ai-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
 }
 @keyframes dropIn {
   from {

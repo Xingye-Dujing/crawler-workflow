@@ -282,10 +282,13 @@ const I18n = {
             'ai.provider.ollama': 'Local Ollama',
             'ai.provider.openrouter': 'OpenRouter API',
             'ai.model': 'Model',
+            'ai.localModels': 'Local models',
+            'ai.ollamaHost': 'Server address',
+            'ai.ollamaHostNote': 'Edit the Ollama address in the Settings panel',
             'ai.freeModels': 'Free models',
             'ai.refreshModels': '— click Refresh to load —',
             'ai.refresh': 'Refresh',
-            'ai.pickModel': 'Pick a free model…',
+            'ai.pickModel': 'Pick a model…',
             'ai.key': 'API Key',
             'ai.test': 'Test connection',
             'ai.testing': 'Testing…',
@@ -301,10 +304,16 @@ const I18n = {
                 'Results are saved in batches: if something breaks or you stop midway, ' +
                 'finished rows are kept, and re-running resumes from the checkpoint.',
             'ai.keyNote': 'The API key is stored only in this browser (localStorage) — never written to server files.',
+            'ai.ollamaNote':
+                'Ollama: the model name must be one the daemon already has (press Refresh to list them); ' +
+                'the server address is edited in the Settings panel. The two providers keep separate models.',
             'toast.aiTestOk': 'AI connection OK ({ms} ms)',
             'toast.aiTestFail': 'AI connection failed',
             'toast.aiNeedKey': 'Please fill in the OpenRouter API Key first',
-            'toast.aiModelsLoaded': 'Loaded {n} free models',
+            'toast.aiNeedModel': 'Please pick an OpenRouter model first',
+            'toast.aiNeedOllamaModel': 'Please set an Ollama model first (Refresh lists the local ones)',
+            'toast.aiModelsLoaded': 'Loaded {n} models',
+            'toast.ollamaNoModels': 'The Ollama daemon has no model pulled yet (run “ollama pull …”)',
             'toast.aiModelsFail': 'Failed to load model list',
             'btn.settings': 'Settings',
             'set.driver': 'Browser driver path',
@@ -647,10 +656,13 @@ const I18n = {
             'ai.provider.ollama': '本地 Ollama',
             'ai.provider.openrouter': 'OpenRouter API',
             'ai.model': '模型',
+            'ai.localModels': '本地模型',
+            'ai.ollamaHost': '服务地址',
+            'ai.ollamaHostNote': 'Ollama 服务地址在「设置」面板修改',
             'ai.freeModels': '免费模型',
             'ai.refreshModels': '— 点「刷新」获取列表 —',
             'ai.refresh': '刷新',
-            'ai.pickModel': '选择一个免费模型…',
+            'ai.pickModel': '选择一个模型…',
             'ai.key': 'API Key',
             'ai.test': '测试连接',
             'ai.testing': '测试中…',
@@ -664,11 +676,17 @@ const I18n = {
             'ai.hint3':
                 '结果分批保存：中途出错或停止时，已得到的结果不会丢失；修复后重新执行会自动从断点续跑。',
             'ai.keyNote': 'API Key 仅保存在本浏览器 Local Storage，不会写入服务器文件。',
+            'ai.ollamaNote':
+                'Ollama：模型名必须是本地已拉取的名称（点「刷新」可读取）；服务地址在「设置」面板修改。' +
+                '两种调用方式各自保存模型，互不影响。',
             'toast.aiTestOk': 'AI 连接正常（{ms} 毫秒）',
             'toast.aiTestFail': 'AI 连接失败',
             'toast.aiNeedKey': '请先填写 OpenRouter API Key',
-            'toast.aiModelsLoaded': '已加载 {n} 个免费模型',
-            'toast.aiModelsFail': '免费模型列表加载失败',
+            'toast.aiNeedModel': '请先选择 OpenRouter 模型',
+            'toast.aiNeedOllamaModel': '请先设置 Ollama 模型（可点「刷新」读取本地模型）',
+            'toast.aiModelsLoaded': '已加载 {n} 个模型',
+            'toast.ollamaNoModels': '本地 Ollama 还没有拉取任何模型（请先执行 ollama pull）',
+            'toast.aiModelsFail': '模型列表加载失败',
             'btn.settings': '设置',
             'set.driver': '浏览器驱动路径',
             'set.binary': '浏览器程序路径',
@@ -888,6 +906,14 @@ const Settings = {
 };
 
 /* ── AI (LLM) settings — transport, model, key, batching ────────────────────
+   The two transports keep *separate* settings blocks. They used to share one
+   `model` field, so a local Ollama run inherited whatever OpenRouter id was
+   left in the box (e.g. `nex-agi/nex-n2.5-pro:free`) and the daemon answered
+   "unexpected keyword argument" long before it ever got to complain about the
+   model. Ollama needs a tag the daemon has pulled; OpenRouter needs a catalog
+   id plus a key. Nothing is shared, so switching provider no longer carries a
+   stale value across.
+
    Everything lives in localStorage; the key never leaves the browser except
    inside the execute / test request bodies. workflow.execute() sends
    LLMSettings.payload() alongside the workflow. */
@@ -895,35 +921,69 @@ const LLMSettings = {
     _key: 'crawler_llm',
     defaults: {
         provider: 'ollama',   // 'ollama' | 'openrouter'
-        model: '',            // required for openrouter (a :free model)
-        api_key: '',          // openrouter only, localStorage only
+        ollama: {
+            model: '',        // a tag pulled locally (see 刷新 / list_ollama_models)
+        },
+        openrouter: {
+            model: '',        // required, a :free model id
+            api_key: '',      // localStorage only, never written server-side
+        },
         batch_size: 10,       // rows between checkpoint saves
         max_chars: 600,       // per-row truncation — long texts burn tokens
         workers: 3,           // openrouter only
     },
 
     load() {
+        let raw = {};
         try {
-            return Object.assign({}, this.defaults, JSON.parse(localStorage.getItem(this._key) || '{}'));
+            raw = JSON.parse(localStorage.getItem(this._key) || '{}');
         } catch (e) {
-            return Object.assign({}, this.defaults);
+            raw = {};
         }
+        const s = Object.assign({}, this.defaults, raw);
+        /* Object.assign above replaces the nested blocks wholesale, so a stored
+           block from an older build would drop its newer defaults. Merge both. */
+        s.ollama = Object.assign({}, this.defaults.ollama, raw.ollama || {});
+        s.openrouter = Object.assign({}, this.defaults.openrouter, raw.openrouter || {});
+        /* Migration from the pre-split shape: the single flat `model`/`api_key`
+           pair only ever appeared while OpenRouter was selected, so that is
+           where it belongs. save() drops the flat keys, making this one-shot. */
+        if (!s.openrouter.model && raw.model) s.openrouter.model = raw.model;
+        if (!s.openrouter.api_key && raw.api_key) s.openrouter.api_key = raw.api_key;
+        /* Anything but a known transport normalises to the local one, so a
+           hand-edited localStorage entry cannot desync the panel and the
+           backend (which treats every non-OpenRouter provider as Ollama). */
+        if (s.provider !== 'openrouter') s.provider = 'ollama';
+        return s;
     },
 
     save(patch) {
         const data = Object.assign(this.load(), patch || {});
+        /* Written in the nested shape only: leaving the flat fields behind
+           would let a stale OpenRouter id resurface after the user clears it. */
+        delete data.model;
+        delete data.api_key;
         localStorage.setItem(this._key, JSON.stringify(data));
         return data;
     },
 
-    /* What the backend needs for a run. The key is included — it travels with
-       the request and is kept in memory server-side, never persisted. */
+    /* Patch one provider's block without touching the other's. */
+    saveProvider(provider, patch) {
+        const s = this.load();
+        s[provider] = Object.assign({}, s[provider], patch);
+        return this.save({ [provider]: s[provider] });
+    },
+
+    /* What the backend needs for a run: the *active* provider's model, never
+       the other one's. The key is included — it travels with the request and
+       is kept in memory server-side, never persisted. */
     payload() {
         const s = this.load();
+        const active = s[s.provider] || {};
         return {
             provider: s.provider,
-            model: s.model,
-            api_key: s.api_key,
+            model: active.model || '',
+            api_key: s.provider === 'openrouter' ? active.api_key || '' : '',
             batch_size: s.batch_size,
             max_chars: s.max_chars,
             workers: s.workers,
@@ -933,23 +993,51 @@ const LLMSettings = {
     /* Mirror saved values into the panel inputs. */
     applyToPanel() {
         const s = this.load();
-        const prov = document.getElementById('ai-provider');
-        const model = document.getElementById('ai-model');
-        const key = document.getElementById('ai-key');
-        const batch = document.getElementById('ai-batch');
-        const maxchars = document.getElementById('ai-maxchars');
-        if (prov) prov.value = s.provider;
-        if (model) model.value = s.model || '';
-        if (key) key.value = s.api_key || '';
-        if (batch) batch.value = s.batch_size;
-        if (maxchars) maxchars.value = s.max_chars;
-        this.toggleOpenRouterRows(s.provider === 'openrouter');
+        const put = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.value = value;
+        };
+        put('ai-provider', s.provider);
+        put('ai-ollama-model', s.ollama.model || '');
+        put('ai-model', s.openrouter.model || '');
+        put('ai-key', s.openrouter.api_key || '');
+        put('ai-batch', s.batch_size);
+        put('ai-maxchars', s.max_chars);
+        this.toggleProviderRows(s.provider);
+        this.renderOllamaHost();
     },
 
-    toggleOpenRouterRows(show) {
-        document.querySelectorAll('.ai-only-openrouter').forEach(el => {
-            el.style.display = show ? '' : 'none';
+    toggleProviderRows(provider) {
+        document.querySelectorAll('.ai-only-ollama').forEach(el => {
+            el.style.display = provider === 'ollama' ? '' : 'none';
         });
+        document.querySelectorAll('.ai-only-openrouter').forEach(el => {
+            el.style.display = provider === 'openrouter' ? '' : 'none';
+        });
+    },
+
+    /* The placeholder should show the model the server considers the local
+       default (Config.OLLAMA_MODEL) rather than a hardcoded copy of it that
+       silently drifts when the environment variable changes. */
+    async loadDefaults() {
+        if (this._defaultsPulled) return;
+        this._defaultsPulled = true;
+        try {
+            const cfg = await (await fetch('/api/config')).json();
+            const input = document.getElementById('ai-ollama-model');
+            if (input && cfg && cfg.ollama_model) input.placeholder = cfg.ollama_model;
+        } catch (e) {
+            /* Unreachable server: the built-in placeholder stands. */
+        }
+    },
+
+    /* The daemon address is server-side (设置 → Ollama 服务地址). Show what is
+       actually configured: "connection refused" is unreadable otherwise. */
+    renderOllamaHost() {
+        const el = document.getElementById('ai-ollama-host');
+        if (!el) return;
+        const values = (window.AppSettings && AppSettings._values) || {};
+        el.textContent = values.ollama_host || 'http://localhost:11434';
     },
 };
 
@@ -959,17 +1047,29 @@ const LLMSettings = {
 window.LLMSettings = LLMSettings;
 
 function onAIProviderChange(value) {
-    const s = LLMSettings.save({ provider: value });
-    LLMSettings.toggleOpenRouterRows(value === 'openrouter');
-    if (value === 'openrouter') refreshAIModels();
+    const provider = value === 'openrouter' ? 'openrouter' : 'ollama';
+    const s = LLMSettings.save({ provider });
+    LLMSettings.toggleProviderRows(provider);
+    if (provider === 'openrouter') {
+        refreshAIModels();
+    } else if (!s.ollama.model) {
+        /* The tag must be one the daemon actually has, and listing it is cheap
+           — so offer the list instead of making the user guess. */
+        refreshOllamaModels();
+    }
+}
+
+/* Ollama model — its own field, kept apart from the OpenRouter one. */
+function onAIOllamaModelInput(value) {
+    LLMSettings.saveProvider('ollama', { model: value.trim() });
 }
 
 function onAIModelInput(value) {
-    LLMSettings.save({ model: value.trim() });
+    LLMSettings.saveProvider('openrouter', { model: value.trim() });
 }
 
 function onAIKeyInput(value) {
-    LLMSettings.save({ api_key: value.trim() });
+    LLMSettings.saveProvider('openrouter', { api_key: value.trim() });
 }
 
 function onAINumberInput(field, value) {
@@ -981,6 +1081,17 @@ function onAINumberInput(field, value) {
     LLMSettings.save({ [field]: n });
 }
 
+/* Fill a model <select> from a list of ids. The ids come from a remote
+   catalog / local daemon and go straight into innerHTML, so they are escaped
+   rather than trusted. */
+function fillModelSelect(sel, ids, current, placeholderKey) {
+    sel.innerHTML = '<option value="">' + I18n.t(placeholderKey) + '</option>' +
+        ids.map(id =>
+            '<option value="' + escapeHtml(id) + '"' + (id === current ? ' selected' : '') + '>' +
+            escapeHtml(id) + '</option>'
+        ).join('');
+}
+
 async function refreshAIModels() {
     const sel = document.getElementById('ai-models');
     const btn = document.getElementById('ai-refresh-btn');
@@ -990,12 +1101,37 @@ async function refreshAIModels() {
         const resp = await fetch('/api/llm/models');
         const result = await resp.json();
         if (result.ok && result.models.length) {
-            const current = LLMSettings.load().model;
-            sel.innerHTML = '<option value="">' + I18n.t('ai.pickModel') + '</option>' +
-                result.models.map(id =>
-                    '<option value="' + id + '"' + (id === current ? ' selected' : '') + '>' + id + '</option>'
-                ).join('');
+            fillModelSelect(sel, result.models, LLMSettings.load().openrouter.model, 'ai.pickModel');
             showToast(I18n.t('toast.aiModelsLoaded').replace('{n}', result.models.length));
+        } else {
+            showToast(I18n.t('toast.aiModelsFail') + ': ' + (result.error || ''));
+        }
+    } catch (e) {
+        showToast(I18n.t('toast.aiModelsFail') + ': ' + e.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+/* Local daemon tags — a different endpoint from the OpenRouter catalog because
+   the two providers no longer share a model setting. */
+async function refreshOllamaModels() {
+    const sel = document.getElementById('ai-ollama-models');
+    const btn = document.getElementById('ai-ollama-refresh-btn');
+    if (!sel) return;
+    if (btn) btn.disabled = true;
+    try {
+        const resp = await fetch('/api/llm/ollama/models');
+        const result = await resp.json();
+        if (result.ok && result.models.length) {
+            fillModelSelect(sel, result.models, LLMSettings.load().ollama.model, 'ai.pickModel');
+            /* Remembered so merely reopening the panel does not re-hit the
+               daemon; 刷新 always re-reads. */
+            sel.dataset.loaded = '1';
+            showToast(I18n.t('toast.aiModelsLoaded').replace('{n}', result.models.length));
+        } else if (result.ok) {
+            /* Daemon answered but has nothing pulled — say that, don't fail. */
+            showToast(I18n.t('toast.ollamaNoModels'));
         } else {
             showToast(I18n.t('toast.aiModelsFail') + ': ' + (result.error || ''));
         }
@@ -1008,8 +1144,15 @@ async function refreshAIModels() {
 
 function onAIModelPick(id) {
     if (!id) return;
-    LLMSettings.save({ model: id });
+    LLMSettings.saveProvider('openrouter', { model: id });
     const input = document.getElementById('ai-model');
+    if (input) input.value = id;
+}
+
+function onAIOllamaModelPick(id) {
+    if (!id) return;
+    LLMSettings.saveProvider('ollama', { model: id });
+    const input = document.getElementById('ai-ollama-model');
     if (input) input.value = id;
 }
 
@@ -1053,6 +1196,9 @@ const AppSettings = {
             const el = document.getElementById(this._inputMap[key]);
             if (el) el.value = v[key] !== undefined && v[key] !== null ? v[key] : '';
         });
+        /* The AI panel shows the Ollama address read-only, and it is fetched
+           asynchronously — mirror it now that the values have arrived. */
+        if (window.LLMSettings) LLMSettings.renderOllamaHost();
     },
 
     async save() {
@@ -1105,8 +1251,13 @@ window.AppSettings = AppSettings;
 async function testAIConnection() {
     const btn = document.getElementById('ai-test-btn');
     const s = LLMSettings.load();
-    if (s.provider === 'openrouter' && !s.api_key) {
-        showToast(I18n.t('toast.aiNeedKey'));
+    /* Per-provider prerequisites — the same rules the backend enforces before
+       a run, so the panel never promises a run it would refuse. */
+    if (s.provider === 'openrouter') {
+        if (!s.openrouter.api_key) { showToast(I18n.t('toast.aiNeedKey')); return; }
+        if (!s.openrouter.model) { showToast(I18n.t('toast.aiNeedModel')); return; }
+    } else if (!s.ollama.model) {
+        showToast(I18n.t('toast.aiNeedOllamaModel'));
         return;
     }
     if (btn) { btn.disabled = true; btn.textContent = I18n.t('ai.testing'); }

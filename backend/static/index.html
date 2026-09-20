@@ -897,6 +897,47 @@
           </select>
         </span>
       </div>
+      <div class="dd-item-row ai-only-ollama">
+        <span data-i18n="ai.model">模型</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="ai-ollama-model"
+            class="settings-input"
+            placeholder="qwen3.5:9b"
+            oninput="onAIOllamaModelInput(this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row ai-only-ollama">
+        <span data-i18n="ai.localModels">本地模型</span>
+        <span class="dd-ctrl">
+          <select
+            id="ai-ollama-models"
+            class="settings-select"
+            onchange="onAIOllamaModelPick(this.value)"
+          >
+            <option value="" data-i18n="ai.refreshModels">
+              — 点右侧刷新获取 —
+            </option>
+          </select>
+          <button
+            class="menu-btn"
+            type="button"
+            id="ai-ollama-refresh-btn"
+            onclick="refreshOllamaModels()"
+            data-i18n="ai.refresh"
+          >
+            刷新
+          </button>
+        </span>
+      </div>
+      <div class="dd-item-row ai-only-ollama">
+        <span data-i18n="ai.ollamaHost">服务地址</span>
+        <span class="dd-ctrl">
+          <span class="ai-host" id="ai-ollama-host" data-i18n-title="ai.ollamaHostNote">—</span>
+        </span>
+      </div>
       <div class="dd-item-row ai-only-openrouter">
         <span data-i18n="ai.model">模型</span>
         <span class="dd-ctrl">
@@ -944,7 +985,9 @@
           />
         </span>
       </div>
-      <div class="dd-item-row ai-only-openrouter">
+      <!-- Not provider-gated: the test always exercises whichever transport is
+           selected, so the button must be reachable on both. -->
+      <div class="dd-item-row">
         <span></span>
         <span class="dd-ctrl">
           <button
@@ -1002,7 +1045,10 @@
         <div data-i18n="ai.hint3">
           结果分批保存：中途出错或停止时，已得到的结果不会丢失；修复后重新执行会从断点续跑。
         </div>
-        <div class="ai-hint-note" data-i18n="ai.keyNote">
+        <div class="ai-hint-note ai-only-ollama" data-i18n="ai.ollamaNote">
+          Ollama：模型名必须是本地已拉取的名称（可点“刷新”读取）；服务地址在「设置」面板修改。两个供应商的模型各自独立保存，互不影响。
+        </div>
+        <div class="ai-hint-note ai-only-openrouter" data-i18n="ai.keyNote">
           API Key 仅保存在本浏览器 Local Storage，不会写入服务器文件。
         </div>
       </div>

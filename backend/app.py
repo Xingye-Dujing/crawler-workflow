@@ -29,7 +29,7 @@ from analyzers import (
     build_training_data,
     get_classifier,
 )
-from analyzers.llm_client import LLMClient, LLMError, list_free_models
+from analyzers.llm_client import LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
 from crawlers import get_crawler
 from engine.executor import TaskExecutor
@@ -239,6 +239,26 @@ execution_state = {
 _completed_lock = threading.Lock()
 
 
+def _workflow_needs_llm(workflow: dict) -> bool:
+    """True when any process node in the payload will actually call a model.
+
+    Cleaner always does; the two classifiers only when they are not running the
+    locally trained scikit-learn model. A crawl-and-save workflow must not be
+    blocked by a missing API key or an unpicked Ollama tag — the frontend makes
+    the same distinction before it opens the console.
+    """
+    for node in workflow.get('nodes') or []:
+        if not isinstance(node, dict) or node.get('type') != 'process':
+            continue
+        params = node.get('params') or {}
+        op = str(params.get('operation') or node.get('operation') or '')
+        if op == 'clean':
+            return True
+        if op in ('emotion', 'tendency') and str(params.get('mode') or '') != 'ml':
+            return True
+    return False
+
+
 def _llm_run_ctx(node: dict, op: str) -> dict:
     """Build the per-node run context the LLM analyzers consume.
 
@@ -261,8 +281,10 @@ def _llm_run_ctx(node: dict, op: str) -> dict:
         max_tokens=2048 if op == 'clean' else 512,
         max_chars=cfg.get('max_chars') or 0,
         timeout=300 if provider == 'ollama' else 120,
-        # Daemon address follows the settings panel (设置 → Ollama 服务地址).
-        host=str(get_setting('ollama_host') or '') if provider == 'ollama' else '',
+        # Daemon address pinned when the run started (设置 → Ollama 服务地址),
+        # so a settings save mid-run cannot split one run across two hosts.
+        # OpenRouter's address is its endpoint, not a setting.
+        host=(cfg.get('ollama_host') or '') if provider == 'ollama' else '',
     )
     node_id = node.get('id', '')
 
@@ -403,15 +425,22 @@ def execute_workflow():
         'provider': llm_cfg.get('provider') or 'ollama',
         'model': (llm_cfg.get('model') or '').strip(),
         'api_key': (llm_cfg.get('api_key') or '').strip(),
+        'ollama_host': str(get_setting('ollama_host') or ''),
         'batch_size': _safe_int(llm_cfg.get('batch_size'), 10, minimum=1, maximum=100),
         'max_chars': _safe_int(llm_cfg.get('max_chars'), 600, minimum=0, maximum=20000),
         'workers': _safe_int(llm_cfg.get('workers'), 3, minimum=1, maximum=8),
     }
-    if execution_state['llm']['provider'] == 'openrouter':
-        if not execution_state['llm']['api_key']:
-            return jsonify({'ok': False, 'error': t('api.needApiKey')}), 400
-        if not execution_state['llm']['model']:
-            return jsonify({'ok': False, 'error': t('api.needModel')}), 400
+    # Per-provider requirements: the key belongs to OpenRouter, the pulled tag
+    # to the local daemon — and neither is demanded by a run that never calls
+    # a model.
+    if _workflow_needs_llm(workflow):
+        if execution_state['llm']['provider'] == 'openrouter':
+            if not execution_state['llm']['api_key']:
+                return jsonify({'ok': False, 'error': t('api.needApiKey')}), 400
+            if not execution_state['llm']['model']:
+                return jsonify({'ok': False, 'error': t('api.needModel')}), 400
+        elif not execution_state['llm']['model']:
+            return jsonify({'ok': False, 'error': t('api.needOllamaModel')}), 400
 
     cancel_event = threading.Event()
     execution_state['cancel_event'] = cancel_event
@@ -1583,6 +1612,28 @@ def llm_models():
         return jsonify({'ok': False, 'error': t('api.llmModelsFailed', err=e), 'models': []}), 502
 
 
+@app.route('/api/llm/ollama/models', methods=['GET'])
+def llm_ollama_models():
+    """Tags the local daemon has pulled, so the AI panel can offer a picker
+    instead of demanding a hand-typed model name.
+
+    Kept apart from /api/llm/models (the OpenRouter catalog) on purpose: the
+    two providers no longer share a model setting, so they must not share a
+    dropdown either.
+    """
+    host = str(get_setting('ollama_host') or '')
+    shown = host or 'http://localhost:11434'
+    try:
+        models = list_ollama_models(host, timeout=8)
+        return jsonify({'ok': True, 'models': models, 'host': shown})
+    except (requests.RequestException, ValueError) as e:
+        # Daemon not running / wrong address / something else answering on the
+        # port: the panel shows the reason *and* the address it tried, which is
+        # the whole point of the button.
+        logger.warning(t('api.ollamaModelsFailed', host=shown, err=e))
+        return jsonify({'ok': False, 'error': t('api.ollamaModelsFailed', host=shown, err=e), 'models': []}), 502
+
+
 @app.route('/api/llm/test', methods=['POST'])
 def llm_test():
     """Tiny round-trip so the user can validate provider/model/key before
@@ -1608,6 +1659,10 @@ def llm_test():
                 'latency_ms': latency,
                 'reply': reply.strip()[:80],
                 'provider': client.label,
+                'model': client.model,
+                # Which daemon answered — with the local transport the address
+                # is half of "why did this fail", so the panel can show it.
+                'host': client.host if provider == 'ollama' else '',
             }
         )
     except LLMError as e:

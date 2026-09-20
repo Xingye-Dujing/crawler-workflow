@@ -2,10 +2,18 @@
 
 Two transports behind one ``chat()`` call:
 
-- ``ollama``     — the local daemon (the original path).
+- ``ollama``     — the local daemon (the original path). Address comes from
+  the runtime settings store (设置 → Ollama 服务地址) and is bound to the
+  ollama *client*; the model is its own setting (AI → 模型), a tag the daemon
+  actually has — ``list_ollama_models()`` lists them.
 - ``openrouter`` — OpenRouter's OpenAI-compatible chat API. Aimed at the
   ``:free`` models: the API key lives in the browser's localStorage and is
   posted with each request, never written to disk on this machine.
+
+The two share nothing but the ``chat()`` signature: the local daemon needs a
+host and a pulled tag, the API needs a key and a catalog id. Keeping one
+``model`` field for both is what sent OpenRouter ids like
+``nex-agi/nex-n2.5-pro:free`` to a local daemon that had never heard of them.
 
 Also lives here the machinery that keeps a slow, fragile LLM run from losing
 work: ``RowCheckpoint`` (every processed row appended to a JSONL file, keyed by
@@ -16,6 +24,7 @@ failure circuit breaker, and incremental publishing of partial results).
 
 import contextlib
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -34,6 +43,12 @@ OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models'
 OPENROUTER_REFERER = 'http://localhost:5000'
 OPENROUTER_TITLE = 'Crawler Workflow'
 
+OLLAMA_DEFAULT_HOST = 'http://localhost:11434'
+OLLAMA_TAGS_PATH = '/api/tags'
+
+# Filled on first use: which optional kwargs this installed ollama build takes.
+_CHAT_KWARGS: frozenset | None = None
+
 
 def _settings_host() -> str:
     """Ollama daemon address from the runtime settings store. Imported lazily
@@ -48,6 +63,42 @@ def _settings_host() -> str:
         return ''
 
 
+def _ollama_base_url(host: str = '') -> str:
+    """Turn whatever the settings hold into a usable daemon base URL.
+
+    The panel normally stores ``http://localhost:11434``, but ``OLLAMA_HOST``
+    (and the ollama server itself) also accept a bare ``host:port`` — so the
+    scheme is added here rather than letting a scheme-less value fail much
+    later with a confusing parse error.
+    """
+    raw = (host or os.environ.get('OLLAMA_HOST') or '').strip().rstrip('/')
+    if not raw:
+        return OLLAMA_DEFAULT_HOST
+    if not raw.startswith(('http://', 'https://')):
+        raw = 'http://' + raw
+    return raw
+
+
+def _chat_kwargs() -> frozenset:
+    """Names of the keyword arguments this ollama build's ``Client.chat``
+    accepts.
+
+    The library type-checks keywords strictly — an unknown one raises
+    ``TypeError`` before anything is sent — and ``think`` only exists in newer
+    releases. Probing the signature once keeps the call portable instead of
+    pinning a version.
+    """
+    global _CHAT_KWARGS
+    if _CHAT_KWARGS is None:
+        try:
+            from ollama import Client
+
+            _CHAT_KWARGS = frozenset(inspect.signature(Client.chat).parameters)
+        except (ImportError, TypeError, ValueError):  # pragma: no cover
+            _CHAT_KWARGS = frozenset()
+    return _CHAT_KWARGS
+
+
 class LLMError(Exception):
     """A chat call failed. ``kind`` tells the caller how fatal it is:
     auth / quota / model are deterministic (retrying cannot help), network /
@@ -57,6 +108,27 @@ class LLMError(Exception):
     def __init__(self, message: str, kind: str = 'error'):
         super().__init__(message)
         self.kind = kind
+
+
+def _ollama_error(err: Exception, model: str) -> LLMError:
+    """Map a daemon failure onto one of LLMError's kinds.
+
+    The client raises ``ResponseError`` carrying the daemon's own status and
+    message. A 404 means the tag was never pulled, which no amount of retrying
+    fixes — saying so stops the row loop instead of letting it grind through
+    the circuit breaker.
+    """
+    status = getattr(err, 'status_code', None)
+    text = str(err)
+    lowered = text.lower()
+    # "not found" on its own is too loose — a wrong address can answer 404 with
+    # an HTML page. Require the daemon's own wording, or the model's own name.
+    named = bool(model) and model.lower() in lowered and 'not found' in lowered
+    if status == 404 or 'try pulling' in lowered or named:
+        return LLMError(t('llm.ollama_model_missing', model=model, err=text), 'model')
+    if status in (401, 403):
+        return LLMError(t('llm.ollama_http', code=status, err=text), 'auth')
+    return LLMError(text, 'network')
 
 
 class LLMClient:
@@ -82,7 +154,9 @@ class LLMClient:
         # are what burns tokens on a per-row API; 0 disables the cut.
         self.max_chars = max(0, int(max_chars or 0))
         self.timeout = timeout
-        # Ollama daemon address (settings panel); empty = ollama lib default.
+        # Ollama daemon address (设置 → Ollama 服务地址); empty = default host.
+        # Only used by the ollama transport — OpenRouter carries its address in
+        # the URL, so the two providers no longer share any connection setting.
         self.host = (host or '').strip()
 
     @property
@@ -108,21 +182,38 @@ class LLMClient:
 
     def _ollama(self, prompt: str, max_retries: int) -> str:
         try:
-            from ollama import chat  # imported lazily: the daemon is optional
+            from ollama import Client  # imported lazily: the daemon is optional
         except ImportError as e:  # pragma: no cover
             raise LLMError(t('llm.ollama_pkg_missing', err=e), 'model') from e
+
+        if not self.model:
+            raise LLMError(t('llm.no_ollama_model'), 'model')
+
+        # `host` is a *client* option, never a chat() one. Handing it to chat()
+        # (or to the module-level ollama.chat, which forwards to Client.chat)
+        # raises "unexpected keyword argument 'host'" before a single byte is
+        # sent — which is exactly how the local Ollama path used to die.
+        base = _ollama_base_url(self.host)
+        try:
+            client = Client(host=base)
+        except Exception as e:
+            raise LLMError(t('llm.ollama_client_failed', host=base, err=e), 'network') from e
+
+        kwargs = {
+            'model': self.model,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'stream': False,
+            'options': {'temperature': self.temperature, 'num_predict': self.max_tokens},
+        }
+        if 'think' in _chat_kwargs():
+            # A thinking model would otherwise spend the whole token budget
+            # between  tags and hand back an empty answer.
+            kwargs['think'] = False
 
         last = None
         for attempt in range(1, max_retries + 1):
             try:
-                resp = chat(
-                    model=self.model,
-                    messages=[{'role': 'user', 'content': prompt}],
-                    think=False,
-                    stream=False,
-                    options={'temperature': self.temperature, 'num_predict': self.max_tokens},
-                    host=self.host or None,
-                )
+                resp = client.chat(**kwargs)
                 content = self._ollama_content(resp)
                 if not content or not content.strip():
                     raise LLMError(t('llm.ollama_empty'), 'bad_response')
@@ -131,10 +222,17 @@ class LLMClient:
                 last = e
                 logger.warning(t('llm.ollama_fail_attempt', i=attempt, n=max_retries, err=e))
             except Exception as e:  # connection refused, model missing, timeout…
-                last = e
-                logger.warning(t('llm.ollama_exception', i=attempt, n=max_retries, err=e))
+                last = _ollama_error(e, self.model)
+                logger.warning(t('llm.ollama_exception', i=attempt, n=max_retries, err=last))
+                if last.kind == 'model':
+                    # Missing model / bad tag: deterministic, retrying is noise.
+                    raise LLMError(t('llm.ollama_failed', model=self.model, err=last), last.kind) from e
             time.sleep(0.5 * attempt)
         kind = last.kind if isinstance(last, LLMError) else 'network'
+        if kind == 'network':
+            # "Connection refused" alone is unactionable — name the address,
+            # which is the thing the settings panel controls.
+            raise LLMError(t('llm.ollama_unreachable', host=base, err=last), kind)
         raise LLMError(t('llm.ollama_failed', model=self.model, err=last), kind)
 
     @staticmethod
@@ -222,6 +320,25 @@ def list_free_models(timeout: int = 15) -> list:
         and str(m.get('pricing', {}).get('completion', '1')) == '0'
     ]
     return sorted(free)
+
+
+def list_ollama_models(host: str = '', timeout: int = 8) -> list:
+    """Tags the *local* daemon has pulled, for the AI panel's model picker.
+
+    Read straight off ``/api/tags`` over HTTP instead of going through the
+    ollama package: the panel only needs names, and a plain GET keeps working
+    across client releases (the package's own list() has changed shape more
+    than once). Embedding-only models are dropped — they are listed like any
+    other but cannot answer a chat request.
+    """
+    resp = requests.get(_ollama_base_url(host) + OLLAMA_TAGS_PATH, timeout=timeout)
+    resp.raise_for_status()
+    names = set()
+    for model in resp.json().get('models', []):
+        name = str(model.get('name') or model.get('model') or '').strip()
+        if name and 'embed' not in name.lower():
+            names.add(name)
+    return sorted(names)
 
 
 # ─── Row checkpoint ─────────────────────────────────────────────

@@ -75,7 +75,10 @@ var TopMenu = {
         });
 
         /* Load the saved AI settings into the panel once at startup. */
-        if (window.LLMSettings) LLMSettings.applyToPanel();
+        if (window.LLMSettings) {
+            LLMSettings.applyToPanel();
+            LLMSettings.loadDefaults();
+        }
         if (window.AppSettings) AppSettings.pull();
     },
 
@@ -130,7 +133,16 @@ function toggleAiMenu(e) {
     }
     closeStyleMenu();
     closeSettingsMenu();
-    if (window.LLMSettings) LLMSettings.applyToPanel();
+    if (window.LLMSettings) {
+        LLMSettings.applyToPanel();
+        /* Local tags come from the daemon, so the picker starts empty until it
+           is read once. Fetch on the first open rather than at page load, and
+           let the 刷新 button handle later changes. */
+        var tags = document.getElementById('ai-ollama-models');
+        if (LLMSettings.load().provider === 'ollama' && tags && !tags.dataset.loaded) {
+            refreshOllamaModels();
+        }
+    }
     menu.classList.add('open');
     btn.classList.add('active');
     var r = btn.getBoundingClientRect();
