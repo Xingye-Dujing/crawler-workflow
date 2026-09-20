@@ -449,6 +449,7 @@ var chartStudio = {
        identically — the number identifies it and the summary says what it does. */
     _DEFAULT_TITLES: {
         source: 'Data Source',
+        upload: 'Upload File',
         process: 'Process',
         analysis: 'Analysis',
         visualize: 'Visualize',
@@ -494,8 +495,10 @@ var chartStudio = {
         var node = canvas.nodes[nodeId];
         if (!node) return null;
 
-        if (node.params && node.params.dataset_id) {
-            return { dataset_id: node.params.dataset_id };
+        /* An Upload node carries its own file, so the studio can read it
+           without the workflow having run. */
+        if (node.type === 'upload') {
+            return node.params && node.params.dataset_id ? { dataset_id: node.params.dataset_id } : null;
         }
         if (['source', 'process', 'analysis', 'tokenize'].indexOf(node.type) >= 0) {
             return { node_id: nodeId };
@@ -503,22 +506,7 @@ var chartStudio = {
 
         var upstream = canvas.getUpstreamNodeId(nodeId);
         if (!upstream) return null;
-        var payload = { node_id: upstream };
-        var up = canvas.nodes[upstream];
-
-        /* Upload-backed tokenize nodes have no execution result — reproduce the
-           preview path so the studio sees the same table. */
-        if (up && up.type === 'tokenize' && up.params.data_source === 'upload' && up.params.dataset_id) {
-            payload.node_type = up.type;
-            payload.node_params = {
-                data_source: up.params.data_source,
-                dataset_id: up.params.dataset_id,
-                text_column: up.params.text_column,
-                output_mode: up.params.output_mode,
-                top_n: up.params.top_n,
-            };
-        }
-        return payload;
+        return { node_id: upstream };
     },
 
     /* ── Hand a dataset to the studio ────────────────────────────────────── */

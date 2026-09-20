@@ -57,10 +57,17 @@ const canvas = {
                 this.restoreState(state);
             } catch (e) { /* ignore */ }
         }
-        /* Clear stale dataset_ids on page load (backend datasets are ephemeral) */
+        /* Uploaded datasets live in server memory only, so a saved workflow's
+           dataset_id is dead on the next start. Drop it — and the label that
+           was derived from it — so an Upload node reads "no file" instead of
+           looking ready when it isn't. */
         Object.values(this.nodes).forEach(function (n) {
             if (n.params && n.params.dataset_id) {
                 delete n.params.dataset_id;
+                if (n.type === 'upload') {
+                    n.params.dataset_name = '';
+                    n.params.row_count = '';
+                }
                 canvas.updateNodeDisplay(n.id);
             }
         });
@@ -203,6 +210,7 @@ const canvas = {
             ctxMenu.classList.remove('open');
             switch (action) {
                 case 'ctxNewSource':
+                case 'ctxNewUpload':
                 case 'ctxNewProcess':
                 case 'ctxNewAnalysis':
                 case 'ctxNewVisualize':
@@ -212,7 +220,8 @@ const canvas = {
                         ? this._screenToCanvas(this._contextMenuPos.x - 110, this._contextMenuPos.y - 40)
                         : { x: 50 + Math.random() * 200, y: 50 + Math.random() * 200 };
                     const typeMap = {
-                        ctxNewSource: 'source', ctxNewProcess: 'process',
+                        ctxNewSource: 'source', ctxNewUpload: 'upload',
+                        ctxNewProcess: 'process',
                         ctxNewAnalysis: 'analysis', ctxNewVisualize: 'visualize',
                         ctxNewTokenize: 'tokenize',
                         ctxNewOutput: 'output',
@@ -348,7 +357,15 @@ const canvas = {
 
     addNode(type, x, y) {
         const id = 'node-' + (this.nextId++);
-        const labels = { source: 'Data Source', process: 'Process', analysis: 'Analysis', visualize: 'Visualize', tokenize: 'Tokenize', output: 'Output' };
+        const labels = {
+            source: I18n.t('node.source'),
+            upload: I18n.t('node.upload'),
+            process: I18n.t('node.process'),
+            analysis: I18n.t('node.analysis'),
+            visualize: I18n.t('node.visualize'),
+            tokenize: I18n.t('node.tokenize'),
+            output: I18n.t('node.output'),
+        };
         const title = labels[type] || 'Node';
         const el = document.createElement('div');
         el.className = 'node node-type-' + type;
@@ -404,10 +421,11 @@ const canvas = {
 
     getDefaultParams(type) {
         if (type === 'source') return { platform: 'zhihu', keyword: '', target_count: 50, headless: true };
+        if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '' };
         if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };
-        if (type === 'visualize') return { chart_type: 'bar', x_field: '', y_field: '', value_field: '', agg: 'sum', engine: 'echarts', data_source: 'input', title: '', tokenize: false };
-        if (type === 'tokenize') return { text_column: '', top_n: '', output_mode: 'word_freq', data_source: 'input' };
+        if (type === 'visualize') return { chart_type: 'bar', x_field: '', y_field: '', value_field: '', agg: 'sum', engine: 'echarts', title: '', tokenize: false };
+        if (type === 'tokenize') return { text_column: '', top_n: '', output_mode: 'word_freq' };
         if (type === 'output') return { operation: 'save', format: 'csv', filename: 'export.csv' };
         return {};
     },
@@ -416,6 +434,12 @@ const canvas = {
         if (type === 'source') {
             var plat = params.platform || '';
             return I18n.t('settings.platform') + ': ' + (plat ? I18n.t('platform.' + plat) : '?') + '\n' + I18n.t('settings.keyword') + ': ' + (params.keyword || 'any');
+        }
+        if (type === 'upload') {
+            var name = params.dataset_name || '';
+            var rows = params.row_count || '';
+            if (!name) return I18n.t('dataSource.none');
+            return I18n.t('settings.file') + ': ' + name + (rows ? '\n' + rows + ' ' + I18n.t('settings.rows') : '');
         }
         if (type === 'process') {
             var op = params.operation || '';
@@ -762,6 +786,21 @@ const canvas = {
         if (!el) return;
         const content = el.querySelector('.node-content');
         if (content) content.textContent = this.getNodeSummary(node.type, node.params);
+        /* The header label is stamped once, at creation time, so a language
+           switch would leave "Data Source" sitting on a node while the rest of
+           the UI turns Chinese. Re-stamp it — but only while it still is one of
+           that type's default labels, so a renamed node keeps its name. */
+        const titleEl = el.querySelector('.node-title');
+        if (titleEl) {
+            const defaults = Object.keys(I18n.dict).map(function (lang) {
+                return I18n.dict[lang]['node.' + node.type];
+            });
+            if (defaults.indexOf(titleEl.textContent) >= 0) {
+                const label = I18n.t('node.' + node.type);
+                titleEl.textContent = label;
+                node.title = label;
+            }
+        }
         /* The two header buttons are built once at creation time, so their
            tooltips have to be re-stamped whenever the language changes. */
         const btns = el.querySelectorAll('.node-action-btn');

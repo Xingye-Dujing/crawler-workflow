@@ -129,6 +129,8 @@ class WorkflowEngine:
             ntype = node.get('type')
             if ntype == 'source' and not node.get('platform'):
                 errors.append(f'Node {nid}: source node missing platform')
+            if ntype == 'upload' and not node.get('params', {}).get('dataset_id'):
+                errors.append(f'Node {nid}: upload node has no file selected')
             if ntype == 'process' and not node.get('operation'):
                 errors.append(f'Node {nid}: process node missing operation')
             if ntype == 'output' and not node.get('operation'):
@@ -146,7 +148,7 @@ class WorkflowEngine:
                 params = node.get('params', {})
                 if not params.get('chart_type'):
                     errors.append(f'Node {nid}: visualize node missing chart_type')
-                if params.get('data_source', 'input') == 'input' and not params.get('x_field'):
+                if not params.get('x_field'):
                     errors.append(f'Node {nid}: visualize node missing x_field')
         try:
             self.topological_sort()

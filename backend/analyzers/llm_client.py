@@ -347,7 +347,11 @@ def run_llm_rows(
         if cancel_event is not None and cancel_event.is_set():
             raise LLMError(t('llm.cancelled'), 'cancelled')
 
-    def _finish(idx, result):
+    # One line per finished row on small tables; on a 2 000-row crawl that
+    # would be 2 000 console lines, so thin it to roughly a hundred of them.
+    progress_step = 1 if total <= 100 else -(-total // 100)
+
+    def _finish(idx, result, announce=True):
         nonlocal done, failures
         if result is None or (isinstance(result, tuple) and result and result[0] is None):
             failures += 1
@@ -358,8 +362,12 @@ def run_llm_rows(
         if apply_result is not None:
             apply_result(idx, result)
         done += 1
+        # Rows replayed from a checkpoint land far too fast to narrate; the
+        # "loaded N finished rows" line at startup already covers them.
+        if announce and (done % progress_step == 0 or done == total):
+            say(t('llm.row_done', label=label, done=done, total=total))
 
-    def _complete(idx, thash, result):
+    def _complete(idx, thash, result, announce=True):
         """A row actually finished: land it in the checkpoint file first, then
         everywhere else. The file is what survives a crash. Rows the model
         could not classify are NOT checkpointed — the next run should retry
@@ -370,7 +378,7 @@ def run_llm_rows(
             and checkpoint is not None
         ):
             checkpoint.add(idx, thash, result)
-        _finish(idx, result)
+        _finish(idx, result, announce=announce)
 
     def _wait_pending(pending):
         """Drain a batch: (future, row_index, text_hash) triples, finish order."""
@@ -386,7 +394,8 @@ def run_llm_rows(
                 for other, _i, _h in pending:
                     other.cancel()
                 raise
-            except Exception as e:  # noqa: BLE001 — one row failing is never fatal by itself
+            except Exception as e:
+                # One row failing is never fatal by itself — count it and keep going.
                 failures += 1
                 logger.warning(t('llm.row_exception', label=label, err=e))
 
@@ -398,7 +407,7 @@ def run_llm_rows(
                 publish()
         say(t('llm.progress', label=label, done=done, total=total))
 
-    pending = []  # [(future, row_index)] in flight within the current batch
+    pending = []  # [(future, row_index, text_hash)] in flight within the current batch
     try:
         in_batch = 0
         for idx, text in jobs:
@@ -413,7 +422,7 @@ def run_llm_rows(
             # Resume: the checkpoint owns any row this exact dataset already paid for.
             cached = checkpoint.get(idx, thash) if checkpoint is not None else None
             if cached is not None:
-                _finish(idx, tuple(cached['r']))
+                _finish(idx, tuple(cached['r']), announce=False)
                 continue
 
             truncated = client.truncate(str(text))
@@ -456,7 +465,10 @@ def run_llm_rows(
     except LLMError as e:
         # Cancel / circuit-break: publish what is done, then bubble up so the
         # workflow stops this branch instead of feeding partial data downstream.
-        for fut, _i in pending:
+        # pending holds triples — unpacking two of them here used to raise a
+        # ValueError that replaced the real LLM error, so the node died with a
+        # baffling "too many values to unpack".
+        for fut, _i, _h in pending:
             fut.cancel()
         if publish is not None:
             with contextlib.suppress(Exception):
@@ -583,7 +595,12 @@ def run_llm_dataframe(
             # after the finished rows are published and visible.
             _mark_unprocessed(df, process_indices, result_columns, blank)
             publish()
-            logger.error(t('llm.aborted', label=label, err=e, done=int((df[result_columns[0]] != blank[0]).sum())))
+            # Count only rows that really carry a result: the ones just marked
+            # 未处理 are non-empty too, and counting them used to claim
+            # "14/14 rows saved" when only one had actually landed.
+            col = df[result_columns[0]]
+            finished = int((col.notna() & (col != blank[0]) & (col != ABORT_MARK)).sum())
+            logger.error(t('llm.aborted', label=label, err=e, done=finished))
             raise
         logger.warning(t('llm.stopped', label=label, err=e))
 

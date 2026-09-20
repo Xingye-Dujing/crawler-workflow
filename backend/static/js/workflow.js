@@ -87,8 +87,14 @@ const workflow = {
             var id = 'node-' + (canvas.nextId - 1);
             if (canvas.nodes[id]) {
                 canvas.nodes[id].params = n.params || {};
-                /* Clear stale dataset_id on load (backend datasets are ephemeral) */
+                /* Uploaded datasets live in server memory, so a dataset_id from
+                   a saved workflow is dead on load — drop it (and the label
+                   derived from it) so the Upload node asks for the file again. */
                 delete canvas.nodes[id].params.dataset_id;
+                if (n.type === 'upload') {
+                    canvas.nodes[id].params.dataset_name = '';
+                    canvas.nodes[id].params.row_count = '';
+                }
                 canvas.updateNodeDisplay(id);
             }
         });
@@ -212,7 +218,9 @@ const workflow = {
                     document.getElementById('status-text').textContent = lastLog || I18n.t('status.running');
                     var statusNodes = document.getElementById('status-nodes');
                     if (result.total_nodes > 0) {
-                        statusNodes.textContent = 'Progress: ' + result.completed_nodes + '/' + result.total_nodes;
+                        statusNodes.textContent = I18n.t('status.progress')
+                            .replace('{done}', result.completed_nodes)
+                            .replace('{total}', result.total_nodes);
                     }
                     var consoleOut = document.getElementById('console-output');
                     var consoleTabs = document.getElementById('console-tabs');
@@ -290,7 +298,7 @@ const workflow = {
                         if (result.logs && result.logs.length) {
                             document.getElementById('status-text').textContent = I18n.t('status.completed');
                         }
-                        document.getElementById('status-nodes').textContent = 'Nodes: ' + Object.keys(canvas.nodes).length;
+                        document.getElementById('status-nodes').textContent = I18n.t('status.nodes') + Object.keys(canvas.nodes).length;
                         showToast(I18n.t('toast.workflowCompleted'));
                         I18n.apply();
                         stats.refresh();
@@ -354,6 +362,21 @@ function openSettings(nodeId) {
                 '<input class="settings-input" value="' + (p.end_time || '') + '" placeholder="2026-12-31" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'end_time\',this.value)"></div>';
         }
+    } else if (node.type === 'upload') {
+        /* The single place a file enters a workflow: pick a CSV / JSON / TXT
+           and this node publishes its rows to whatever is connected below. */
+        var p = node.params;
+        html += '<div class="settings-group" style="display:flex;gap:8px;align-items:center;">' +
+            '<button class="menu-btn" onclick="dataNodes.pickFile(\'' + nodeId + '\')">' + I18n.t('btn.uploadFile') + '</button>' +
+            '<span style="font-size:11px;color:var(--text-dim);">' +
+            (p.dataset_id ? I18n.t('dataSource.loaded') + ': ' + escapeHtml(p.dataset_name || p.dataset_id) : I18n.t('dataSource.none')) +
+            '</span></div>';
+        if (p.dataset_id && p.row_count) {
+            html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+                p.row_count + ' ' + I18n.t('settings.rows') + '</div>';
+        }
+        html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' +
+            I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'process') {
         var p = node.params;
         var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'keyword', 'cluster', 'ner', 'anomaly', 'correlation'];
@@ -449,15 +472,6 @@ function openSettings(nodeId) {
                 '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.topN') + '</label>' +
                 '<input class="settings-input" type="number" value="' + (p.top_n || '') + '" placeholder="' + I18n.t('settings.topNPlaceholder') + '" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'top_n\',this.value)"></div>' : '') +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.dataSource') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'data_source\',this.value);openSettings(\'' + nodeId + '\')">' +
-            '<option value="input"' + ((p.data_source || 'input') === 'input' ? ' selected' : '') + '>' + I18n.t('dataSource.input') + '</option>' +
-            '<option value="upload"' + (p.data_source === 'upload' ? ' selected' : '') + '>' + I18n.t('dataSource.upload') + '</option>' +
-            '</select></div>' +
-            (p.data_source === 'upload' ? '<div class="settings-group" style="display:flex;gap:8px;align-items:center;">' +
-                '<button class="menu-btn" onclick="dataNodes.pickFile(\'' + nodeId + '\')">' + I18n.t('btn.uploadFile') + '</button>' +
-                '<span style="font-size:11px;color:var(--text-dim);">' + (p.dataset_id ? I18n.t('dataSource.loaded') + ': ' + p.dataset_id : I18n.t('dataSource.none')) + '</span>' +
-                '</div>' : '') +
             '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'output') {
         var p = node.params;
@@ -729,18 +743,7 @@ function renderVisualizeSettings(nodeId, p) {
     }
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.title') + '</label>' +
         '<input class="settings-input" value="' + (p.title || '') + '" ' +
-        'onchange="updateParam(\'' + nodeId + '\',\'title\',this.value)"></div>' +
-        '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.dataSource') + '</label>' +
-        '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'data_source\',this.value)">' +
-        '<option value="input"' + ((p.data_source || 'input') === 'input' ? ' selected' : '') + '>' + I18n.t('dataSource.input') + '</option>' +
-        '<option value="upload"' + (p.data_source === 'upload' ? ' selected' : '') + '>' + I18n.t('dataSource.upload') + '</option>' +
-        '</select></div>';
-    if (p.data_source === 'upload') {
-        html += '<div class="settings-group" style="display:flex;gap:8px;align-items:center;">' +
-            '<button class="menu-btn" onclick="dataNodes.pickFile(\'' + nodeId + '\')">' + I18n.t('btn.uploadFile') + '</button>' +
-            '<span style="font-size:11px;color:var(--text-dim);">' + (p.dataset_id ? I18n.t('dataSource.loaded') + ': ' + p.dataset_id : I18n.t('dataSource.none')) + '</span>' +
-            '</div>';
-    }
+        'onchange="updateParam(\'' + nodeId + '\',\'title\',this.value)"></div>';
     html += '<div class="settings-group" style="display:flex;gap:8px;flex-wrap:wrap;">' +
         '<button class="menu-btn toggle-on" onclick="dataNodes.previewVisualize(\'' + nodeId + '\')">' + I18n.t('btn.preview') + '</button>' +
         '<button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button>' +
@@ -749,10 +752,10 @@ function renderVisualizeSettings(nodeId, p) {
     return html;
 }
 
-/* ── Standalone data helpers: upload / paste / preview ──
-   These let Analysis and Visualize nodes work fully independently of a
-   crawl — the node's own configured dataset (an uploaded CSV/JSON) is
-   used instead of an upstream workflow connection. */
+/* ── Data helpers for the Upload node: pick a file / preview it ──
+   The Upload node is the single entry point for files, so a workflow can
+   start from an uploaded CSV/JSON/TXT instead of a crawl. Downstream
+   nodes just see rows, whoever produced them. */
 var dataNodes = {
     _pendingNodeId: null,
 
@@ -775,16 +778,13 @@ var dataNodes = {
                 var node = canvas.nodes[nodeId];
                 if (node) {
                     node.params.dataset_id = result.dataset_id;
-                    if (result.is_txt && node.type === 'visualize') {
-                        node.params.x_field = 'content';
-                        node.params.tokenize = true;
-                        showToast(I18n.t('toast.txtUploaded') + ' (' + result.row_count + ' rows)');
-                    } else if (result.is_txt && node.type === 'tokenize') {
-                        node.params.text_column = 'content';
-                        showToast(I18n.t('toast.txtUploaded') + ' (' + result.row_count + ' rows)');
-                    } else {
-                        showToast(I18n.t('toast.datasetUploaded') + ' (' + result.row_count + ' rows)');
-                    }
+                    node.params.dataset_name = result.name || '';
+                    node.params.row_count = result.row_count || 0;
+                    /* A .txt arrives as one row in a 'content' column — worth
+                       saying out loud, since word clouds read that column. */
+                    showToast(result.is_txt
+                        ? I18n.t('toast.txtUploaded') + ' (' + result.row_count + ' rows)'
+                        : I18n.t('toast.datasetUploaded') + ' (' + result.row_count + ' rows)');
                     canvas.updateNodeDisplay(nodeId);
                     canvas.saveState();
                 }
@@ -807,39 +807,14 @@ var dataNodes = {
             tokenize: !!p.tokenize,
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
-        if (p.data_source === 'upload') {
-            if (p.dataset_id) {
-                payload.dataset_id = p.dataset_id;
-            } else {
-                showToast(I18n.t('toast.previewNeedsUpload'));
-                return;
-            }
-        } else {
-            var upstream = canvas.getUpstreamNodeId(nodeId);
-            if (!upstream) {
-                showToast(I18n.t('toast.previewNeedsInput'));
-                return;
-            }
-            payload.node_id = upstream;
-            // On-the-fly dry-run preview for upload-based tokenize upstreams
-            var upstreamNode = canvas.nodes[upstream];
-            if (upstreamNode && upstreamNode.type === 'tokenize') {
-                if (upstreamNode.params.data_source === 'upload' &&
-                    upstreamNode.params.dataset_id) {
-                    payload.node_type = upstreamNode.type;
-                    payload.node_params = {
-                        data_source: upstreamNode.params.data_source,
-                        dataset_id: upstreamNode.params.dataset_id,
-                        text_column: upstreamNode.params.text_column,
-                        output_mode: upstreamNode.params.output_mode,
-                        top_n: upstreamNode.params.top_n
-                    };
-                } else {
-                    showToast(I18n.t('toast.previewNeedsInput'));
-                    return;
-                }
-            }
+        /* A chart always renders whatever its upstream produced — a crawl or
+           an Upload node's file, it makes no difference here. */
+        var upstream = canvas.getUpstreamNodeId(nodeId);
+        if (!upstream) {
+            showToast(I18n.t('toast.previewNeedsInput'));
+            return;
         }
+        payload.node_id = upstream;
         /* Show panel with loading spinner immediately */
         var panel = document.getElementById('chart-preview-panel');
         panel.classList.add('open');
@@ -880,41 +855,22 @@ var dataNodes = {
         var node = canvas.nodes[nodeId];
         if (!node) return;
         var payload = {};
-        if (node.params.dataset_id) {
+        if (node.type === 'upload') {
+            /* Its own file, no execution needed. */
+            if (!node.params.dataset_id) {
+                showToast(I18n.t('toast.previewNeedsUpload'));
+                return;
+            }
             payload.dataset_id = node.params.dataset_id;
         } else if (['source', 'process', 'analysis', 'tokenize'].indexOf(node.type) >= 0) {
             payload.node_id = nodeId;
         } else {
             var upstream = canvas.getUpstreamNodeId(nodeId);
             if (!upstream) {
-                if (node.type === 'output') {
-                    showToast(I18n.t('toast.previewNeedsInput'));
-                } else if (node.params.data_source === 'upload') {
-                    showToast(I18n.t('toast.previewNeedsUpload'));
-                } else {
-                    showToast(I18n.t('toast.previewNeedsInput'));
-                }
+                showToast(I18n.t('toast.previewNeedsInput'));
                 return;
             }
             payload.node_id = upstream;
-            // On-the-fly dry-run preview for upload-based tokenize nodes.
-            var upstreamNode = canvas.nodes[upstream];
-            if (upstreamNode && upstreamNode.type === 'tokenize') {
-                if (upstreamNode.params.data_source === 'upload' &&
-                    upstreamNode.params.dataset_id) {
-                    payload.node_type = upstreamNode.type;
-                    payload.node_params = {
-                        data_source: upstreamNode.params.data_source,
-                        dataset_id: upstreamNode.params.dataset_id,
-                        text_column: upstreamNode.params.text_column,
-                        output_mode: upstreamNode.params.output_mode,
-                        top_n: upstreamNode.params.top_n
-                    };
-                } else {
-                    showToast(I18n.t('toast.previewNeedsInput'));
-                    return;
-                }
-            }
             // Pass output format so preview matches saved file format.
             if (node.type === 'output' && node.params.format) {
                 payload.preview_format = node.params.format;
@@ -929,15 +885,15 @@ async function trainMLModel(nodeId, modelType) {
     var node = canvas.nodes[nodeId];
     if (!node) return;
     var payload = {};
+    /* Training data comes from upstream, like every other data-consuming
+       node: a file reaches here through an Upload node, not from a dataset
+       stored on this node. */
     var upstream = canvas.getUpstreamNodeId(nodeId);
-    if (upstream) {
-        payload.node_id = upstream;
-    } else if (node.params.dataset_id) {
-        payload.dataset_id = node.params.dataset_id;
-    } else {
+    if (!upstream) {
         showToast(I18n.t('toast.mlUpstreamNeeded'));
         return;
     }
+    payload.node_id = upstream;
     payload.model_type = modelType;
     payload.text_column = node.params.text_column || '正文';
     payload.label_column = modelType === 'emotion' ? 'emotion' : 'tendency';
@@ -1225,7 +1181,7 @@ function toggleDataPreview() {
    the canvas — it doesn't introduce a new workflow/DAG node type, it
    just renders each one's current settings side by side, like a simple
    BI board. Requires the workflow to have been executed at least once
-   for nodes using data_source=input (so there's a result to render). */
+   (so there's an upstream result to render). */
 var dashboard = {
     _instances: {},
 
@@ -1268,16 +1224,12 @@ var dashboard = {
             title: p.title, tokenize: !!p.tokenize,
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
-        if (p.data_source === 'upload' && p.dataset_id) {
-            payload.dataset_id = p.dataset_id;
-        } else {
-            var upstream = canvas.getUpstreamNodeId(nodeId);
-            if (!upstream) {
-                body.innerHTML = '<div class="dashboard-cell-error">' + I18n.t('dashboard.noData') + '</div>';
-                return;
-            }
-            payload.node_id = upstream;
+        var upstream = canvas.getUpstreamNodeId(nodeId);
+        if (!upstream) {
+            body.innerHTML = '<div class="dashboard-cell-error">' + I18n.t('dashboard.noData') + '</div>';
+            return;
         }
+        payload.node_id = upstream;
 
         try {
             var resp = await fetch('/api/visualize/render', {
@@ -1781,7 +1733,7 @@ function saveCookieConfig() {
     var platform = document.getElementById('cookie-platform').value;
     var jsonStr = document.getElementById('cookie-json').value.trim();
     if (!jsonStr) {
-        showToast('Please paste cookies JSON');
+        showToast(I18n.t('cookie.pasteFirst'));
         return;
     }
     try {
@@ -1797,11 +1749,11 @@ function saveCookieConfig() {
                     showToast(I18n.t('toast.cookiesSaved') + ' - ' + platform);
                     document.getElementById('cookie-json').value = '';
                 } else {
-                    showToast('Failed: ' + (result.error || ''));
+                    showToast(I18n.t('cookie.failed').replace('{err}', result.error || ''));
                 }
             });
     } catch (e) {
-        showToast('Invalid JSON: ' + e.message);
+        showToast(I18n.t('cookie.invalidJson').replace('{err}', e.message));
     }
 }
 
@@ -1809,7 +1761,9 @@ function generateCookie() {
     var platform = document.getElementById('cookie-platform').value;
     var waitSeconds = parseInt(document.getElementById('cookie-wait').value) || 120;
     var statusEl = document.getElementById('cookie-status');
-    statusEl.textContent = 'Opening browser for ' + platform + ' login (waiting ' + waitSeconds + 's)...';
+    statusEl.textContent = I18n.t('cookie.opening')
+        .replace('{platform}', platform)
+        .replace('{s}', waitSeconds);
     fetch('/api/cookies/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1818,10 +1772,10 @@ function generateCookie() {
         .then(function (r) { return r.json(); })
         .then(function (result) {
             if (result.ok) {
-                statusEl.textContent = 'Cookies generated for ' + platform;
+                statusEl.textContent = I18n.t('cookie.generated').replace('{platform}', platform);
                 showToast(I18n.t('toast.cookiesSaved') + ' - ' + platform);
             } else {
-                statusEl.textContent = 'Failed: ' + (result.error || '');
+                statusEl.textContent = I18n.t('cookie.failed').replace('{err}', result.error || '');
             }
         });
 }
@@ -1879,12 +1833,19 @@ workflow.validate = function () {
             }
         }
 
-        if (type === 'tokenize') {
-            if (!hasInput[id] && params.data_source !== 'upload') {
-                errors.push(I18n.t('validate.tokenizeInput').replace('{title}', node.title));
+        if (type === 'upload') {
+            /* A source like any other: nothing upstream, but it must have a file. */
+            if (!params.dataset_id) {
+                errors.push(I18n.t('validate.uploadFile').replace('{title}', node.title));
             }
-            if (params.data_source === 'upload' && !params.dataset_id) {
-                errors.push(I18n.t('validate.tokenizeUpload').replace('{title}', node.title));
+            if (!hasOutput[id]) {
+                errors.push(I18n.t('validate.uploadDownstream').replace('{title}', node.title));
+            }
+        }
+
+        if (type === 'tokenize') {
+            if (!hasInput[id]) {
+                errors.push(I18n.t('validate.tokenizeInput').replace('{title}', node.title));
             }
             if (!params.text_column || !params.text_column.trim()) {
                 errors.push(I18n.t('validate.tokenizeColumn').replace('{title}', node.title));
@@ -1892,11 +1853,8 @@ workflow.validate = function () {
         }
 
         if (type === 'visualize') {
-            if (!hasInput[id] && params.data_source !== 'upload') {
+            if (!hasInput[id]) {
                 errors.push(I18n.t('validate.visualizeInput').replace('{title}', node.title));
-            }
-            if (params.data_source === 'upload' && !params.dataset_id) {
-                errors.push(I18n.t('validate.visualizeUpload').replace('{title}', node.title));
             }
             if (!params.chart_type) {
                 errors.push(I18n.t('validate.visualizeChartType').replace('{title}', node.title));
@@ -1917,7 +1875,7 @@ workflow.validate = function () {
     });
 
     var hasUpstream = Object.keys(nodes).some(function (id) {
-        return ['source', 'process', 'analysis', 'tokenize'].indexOf(nodes[id].type) >= 0;
+        return ['source', 'upload', 'process', 'analysis', 'tokenize'].indexOf(nodes[id].type) >= 0;
     });
     if (hasUpstream) {
         var hasTerminal = Object.keys(nodes).some(function (id) {

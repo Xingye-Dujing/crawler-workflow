@@ -35,7 +35,7 @@ from crawlers import get_crawler
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine
-from i18n import normalize, set_lang, t
+from i18n import audit, normalize, set_lang, t
 from services import StatsService
 from services.cookie_manager import CookieManager
 from services.data_analysis import DataAnalysisService, UnknownOperationError
@@ -51,6 +51,12 @@ app.config['SECRET_KEY'] = Config.SECRET_KEY
 CORS(app)
 
 logger = setup_logger(Config.LOG_DIR)
+
+# Catalogue self-check. A message template carrying a printf placeholder never
+# raises — it just prints as a literal "%s" in the console — so surface it here,
+# where the offending key is named, instead of leaving it to be spotted later.
+for _issue in audit():
+    logger.warning('i18n: %s', _issue)
 
 # Thread-local storage: tracks which workflow index the current thread belongs to.
 # Used by LogBufferHandler, _LogTee, and add_log to route log lines into the
@@ -123,9 +129,10 @@ def _apply_request_lang():
 
 
 # In-memory registry of uploaded/pasted datasets, keyed by a generated id.
-# Lets the Analysis and Visualize nodes (and their standalone/no-workflow
-# counterparts) operate on data that didn't come from a crawl — an
-# uploaded CSV/JSON file or data pasted directly in the UI.
+# This is what backs the Upload node: a file the user picked is registered
+# here, and the node publishes it as ordinary rows, so downstream nodes get
+# data that didn't come from a crawl without any of them knowing the
+# difference.
 _datasets = {}
 MAX_DATASETS = 50
 
@@ -163,19 +170,6 @@ def _resolve_dataframe(payload: dict) -> pd.DataFrame:
         result = execution_state['results'].get(node_id)
         if isinstance(result, list):
             return pd.DataFrame(result)
-        # Fallback: on-the-fly processing for dry-run preview (no workflow execution yet)
-        node_type = payload.get('node_type')
-        node_params = payload.get('node_params', {})
-        if (
-            node_type == 'tokenize'
-            and node_params.get('data_source') == 'upload'
-            and node_params.get('dataset_id')
-            and node_params.get('text_column')
-        ):
-            raw_df = _resolve_dataframe(node_params)
-            df = _tokenize_dataframe(raw_df, node_params)
-            if df is not None:
-                return df
         raise KeyError(f'No tabular result available for node: {node_id}')
 
     records = payload.get('data')
@@ -412,14 +406,34 @@ def execute_workflow():
         """
         _wf_local.idx = wf_idx
         levels = wf_engine.group_by_level()
-        wf_input = []
         results = {}
+        # Every node reads the result of the node wired into it. A level-wide
+        # "last transform wins" input is wrong as soon as one workflow holds two
+        # data branches: with s1→p1 and s2→p2 both feeding a later node, p1 and
+        # p2 would each receive whichever source ran last, so p1 would silently
+        # process s2's rows.
+        upstream_of = {}
+        for conn in wf_engine.connections:
+            upstream_of.setdefault(conn['to'], []).append(conn['from'])
+
+        def _input_for(nid: str):
+            parents = upstream_of.get(nid) or []
+            if not parents:
+                # A source (crawler or upload) has nothing upstream.
+                return []
+            if len(parents) > 1:
+                # Several arrows into one node: the first one drawn wins and the
+                # rest are dropped — worth saying out loud rather than silently
+                # picking one.
+                add_log(t('wf.multi_input', nid=nid, up=parents[0], n=len(parents)), wf_idx=wf_idx)
+            upstream_result = results.get(parents[0])
+            # A chart spec (dict) is not tabular input; neither is a node that
+            # has not produced a list.
+            return upstream_result if isinstance(upstream_result, list) else []
+
         for level in levels:
             if not execution_state['running']:
                 break
-            # Snapshot: all nodes in this level see the same parent input
-            level_input = wf_input if wf_input else []
-            level_output = None
             for nid in level:
                 if not execution_state['running']:
                     break
@@ -429,8 +443,8 @@ def execute_workflow():
                     wf_idx=wf_idx,
                 )
                 try:
-                    result = _execute_node(node, headless, level_input)
-                except Exception as e:  # noqa: BLE001
+                    result = _execute_node(node, headless, _input_for(nid))
+                except Exception as e:
                     # A dead node must not take finished work with it: rows the
                     # LLM already completed were published into results as they
                     # landed, so they stay. This branch stops here rather than
@@ -441,8 +455,6 @@ def execute_workflow():
                     add_log(t('wf.partial_kept', i=wf_idx), wf_idx=wf_idx)
                     break
                 results[nid] = result
-                if node.get('type') in ('source', 'process', 'analysis', 'tokenize') and isinstance(result, list):
-                    level_output = result
                 with _completed_lock:
                     execution_state['completed_nodes'] += 1
                 add_log(
@@ -455,9 +467,6 @@ def execute_workflow():
                     ),
                     wf_idx=wf_idx,
                 )
-            # Pass the last transform result to the next level
-            if level_output is not None:
-                wf_input = level_output
         return results
 
     def run():
@@ -573,6 +582,31 @@ def _execute_source_node(node: dict, headless: bool):
     finally:
         crawler.close()
         execution_state['active_crawlers'].discard(crawler)
+
+
+def _execute_upload_node(node: dict, headless: bool = True):
+    """Upload node — the one place a file can enter a workflow.
+
+    It publishes a dataset the user already picked in the node's settings
+    (registered by /api/data/upload) as ordinary rows, so every downstream
+    node sees a file exactly as it sees a crawl. That is why the visualize
+    and tokenize nodes no longer carry their own upload UI: any node that
+    needs data now connects upstream, and the upstream may be a crawler or
+    a file.
+    """
+    params = node.get('params', {})
+    dataset_id = params.get('dataset_id', '')
+    if not dataset_id:
+        raise ValueError(t('upload.no_file'))
+    entry = _datasets.get(dataset_id)
+    if entry is None:
+        # Registered datasets live in memory only: a server restart (or an
+        # eviction once 50 of them piled up) leaves the node pointing at
+        # nothing. Say so instead of silently producing zero rows.
+        raise ValueError(t('upload.stale'))
+    df = entry['df']
+    add_log(t('upload.loaded', name=entry.get('name') or dataset_id, n=len(df)))
+    return _json_safe_records(df)
 
 
 def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
@@ -794,21 +828,18 @@ def _execute_analysis_node(node: dict, current_input: list):
 def _execute_tokenize_node(node: dict, current_input: list):
     """Tokenize node: segments a free-text column with jieba and outputs
     word-frequency pairs for downstream save or word-cloud nodes.
-    Supports both upstream data and standalone uploaded datasets."""
+    Data always comes from the upstream connection — a file reaches it by
+    sitting behind an Upload node, not by being configured here."""
     params = node.get('params', {})
     column = params.get('text_column', '')
     output_mode = params.get('output_mode', 'word_freq')
     if not column:
         add_log(t('wf.tokenize_no_column'))
         return []
-    if current_input:
-        df = pd.DataFrame(current_input)
-    else:
-        try:
-            df = _resolve_dataframe(params)
-        except KeyError as e:
-            add_log(t('wf.tokenize_failed', err=e))
-            return []
+    if not current_input:
+        add_log(t('wf.tokenize_no_input'))
+        return []
+    df = pd.DataFrame(current_input)
     result_df = _tokenize_dataframe(df, params)
     if result_df is None:
         add_log(t('wf.tokenize_no_col', col=column, cols=list(df.columns)))
@@ -818,11 +849,13 @@ def _execute_tokenize_node(node: dict, current_input: list):
 
 
 def _execute_visualize_node(node: dict, current_input: list):
-    """Visualize node: builds a chart from the upstream data (or, if the
-    node is used standalone with no upstream connection, from its own
-    configured dataset_id / inline data). Returns a chart spec dict that
-    the frontend renders — either an ECharts option or a base64 image —
-    so this node works identically to /api/visualize/render.
+    """Visualize node: builds a chart from the upstream data and returns a
+    chart spec dict the frontend renders — either an ECharts option or a
+    base64 image — so this node works identically to /api/visualize/render.
+
+    It has no data source of its own on purpose: files enter a workflow
+    through the Upload node, so a chart is always "whatever upstream
+    produced", crawl or file alike.
     """
     params = node.get('params', {})
     chart_type = params.get('chart_type', 'bar')
@@ -835,14 +868,10 @@ def _execute_visualize_node(node: dict, current_input: list):
     tokenize = bool(params.get('tokenize'))
     wordcloud_style = params.get('wordcloud_style')
 
-    if current_input:
-        df = pd.DataFrame(current_input)
-    else:
-        try:
-            df = _resolve_dataframe(params)
-        except KeyError as e:
-            add_log(t('wf.visualize_failed', err=e))
-            return {'error': str(e)}
+    if not current_input:
+        add_log(t('wf.visualize_no_input'))
+        return {'error': t('wf.visualize_no_input')}
+    df = pd.DataFrame(current_input)
 
     try:
         if engine == 'matplotlib':
@@ -877,6 +906,8 @@ def _execute_node(node: dict, headless: bool, current_input: list, run_ctx: dict
     ntype = node.get('type')
     if ntype == 'source':
         return _execute_source_node(node, headless)
+    if ntype == 'upload':
+        return _execute_upload_node(node)
     if ntype == 'process':
         op = node.get('operation') or node.get('params', {}).get('operation', '')
         return _execute_process_node(node, current_input, run_ctx=run_ctx or _llm_run_ctx(node, op))
@@ -1062,6 +1093,10 @@ def upload_dataset():
         {
             'ok': True,
             'dataset_id': dataset_id,
+            # The Upload node labels itself with this name, so it must travel
+            # back with the id — otherwise a successful upload still reads
+            # "no file uploaded yet".
+            'name': filename,
             'columns': list(df.columns),
             'row_count': len(df),
             'is_txt': is_txt,
@@ -1083,6 +1118,7 @@ def paste_dataset():
         {
             'ok': True,
             'dataset_id': dataset_id,
+            'name': data.get('name', 'pasted'),
             'columns': list(df.columns),
             'row_count': len(df),
             'preview': _json_safe_records(df, 10),
@@ -1441,7 +1477,8 @@ def llm_test():
         )
     except LLMError as e:
         return jsonify({'ok': False, 'error': str(e), 'kind': e.kind})
-    except Exception as e:  # noqa: BLE001 — the test endpoint reports, never raises
+    except Exception as e:
+        # The test endpoint reports the failure; it never raises.
         return jsonify({'ok': False, 'error': str(e), 'kind': 'error'})
 
 
@@ -1695,11 +1732,11 @@ def _probe_source(payload: dict | None) -> tuple[bool, int, str, list]:
     columns).
 
     Deliberately cheap. The picker probes every node on the canvas in one go, so
-    for the two common cases — a node's stored run result and an uploaded dataset
-    — the row count and column names are read straight off the stored list /
-    DataFrame instead of materialising a copy. Only the on-the-fly dry run
-    (upload-backed tokenize) has to go through _resolve_dataframe, because that
-    one is computed rather than stored.
+    for the two common cases — an uploaded dataset and a node's stored run
+    result — the row count and column names are read straight off the stored
+    DataFrame / list instead of materialising a copy. Only payloads carrying
+    inline records have to go through _resolve_dataframe, because those are
+    computed rather than stored.
     """
     if not isinstance(payload, dict):
         return False, 0, SRC_NO_UPSTREAM, []
@@ -1800,7 +1837,7 @@ def studio_save_image():
     except OSError as e:
         return jsonify({'ok': False, 'error': f'Could not write file: {e}'}), 500
 
-    logger.info(t('misc.studio_saved', filepath=filepath, bytes=len(payload)))
+    logger.info(t('misc.studio_saved', path=filepath, bytes=len(payload)))
     return jsonify({'ok': True, 'filename': filename, 'path': filepath, 'bytes': len(payload)})
 
 

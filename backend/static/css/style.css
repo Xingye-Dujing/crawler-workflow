@@ -43,6 +43,7 @@
 
   /* ── node type accents ── */
   --accent-source: #4a6fa5;
+  --accent-upload: #4a8fa5;
   --accent-process: #a85454;
   --accent-analysis: #9a7740;
   --accent-visualize: #4e8061;
@@ -800,6 +801,9 @@ input[type="range"]::-moz-range-thumb {
 .node-type-source .node-header {
   border-left: 3px solid var(--accent-source);
 }
+.node-type-upload .node-header {
+  border-left: 3px solid var(--accent-upload);
+}
 .node-type-process .node-header {
   border-left: 3px solid var(--accent-process);
 }
@@ -817,6 +821,9 @@ input[type="range"]::-moz-range-thumb {
 }
 .node-type-source.selected {
   border-color: var(--accent-source);
+}
+.node-type-upload.selected {
+  border-color: var(--accent-upload);
 }
 .node-type-process.selected {
   border-color: var(--accent-process);

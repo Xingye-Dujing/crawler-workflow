@@ -40,12 +40,16 @@ const I18n = {
             'bg.void': 'Void', 'bg.grid': 'Grid', 'bg.dots': 'Dots',
             'bg.cross': 'Cross', 'bg.diagonal': 'Diagonal',
             'palette.header': 'Node Library',
-            'palette.source': 'Data Source', 'palette.process': 'Process', 'palette.output': 'Output',
+            'palette.source': 'Data Source', 'palette.upload': 'Upload File', 'palette.process': 'Process', 'palette.output': 'Output',
+            'node.source': 'Data Source', 'node.upload': 'Upload File', 'node.process': 'Process',
+            'node.analysis': 'Analysis', 'node.visualize': 'Visualize', 'node.tokenize': 'Tokenize', 'node.output': 'Output',
+            'settings.file': 'File', 'settings.rows': 'rows',
             'stats.header': 'Statistics', 'stats.close': 'Close',
             'stats.emotion': 'Emotion', 'stats.tendency': 'Tendency',
             'settings.header': 'Node Settings', 'settings.close': 'Close',
             'status.ready': 'Ready', 'status.completed': 'Completed', 'status.running': 'Running...',
-            'ctx.newSource': 'New Source Node', 'ctx.newProcess': 'New Process Node',
+            'ctx.newSource': 'New Source Node', 'ctx.newUpload': 'New Upload Node',
+            'ctx.newProcess': 'New Process Node',
             'ctx.newOutput': 'New Output Node', 'ctx.edit': 'Edit Node',
             'ctx.copy': 'Copy Node', 'ctx.paste': 'Paste Node',
             'ctx.delete': 'Delete Node', 'ctx.clear': 'Clear All Connections',
@@ -61,6 +65,11 @@ const I18n = {
             'cookies.header': 'Cookie Settings', 'cookies.platform': 'Platform',
             'cookies.paste': 'Paste Cookies JSON', 'cookies.save': 'Save Cookies',
             'cookies.generate': 'Generate via Browser', 'cookies.waitTime': 'Wait time (seconds) for login:',
+            'cookie.opening': 'Opening browser for {platform} login (waiting {s}s)...',
+            'cookie.generated': 'Cookies generated for {platform}',
+            'cookie.failed': 'Failed: {err}',
+            'cookie.invalidJson': 'Invalid JSON: {err}',
+            'cookie.pasteFirst': 'Paste the cookies JSON first',
             'toast.nodeDeleted': 'Node deleted',
             'toast.connCreated': 'Connection created',
             'toast.connRemoved': 'Connection removed',
@@ -95,6 +104,7 @@ const I18n = {
             'settings.topic': 'Topic',
             'settings.filename': 'Filename',
             'nodeType.source': 'Data Source',
+            'nodeType.upload': 'Upload File',
             'nodeType.process': 'Process',
             'nodeType.analysis': 'Analysis',
             'nodeType.visualize': 'Visualize',
@@ -153,14 +163,12 @@ const I18n = {
             'settings.agg': 'Aggregation',
             'settings.title': 'Chart Title',
             'settings.dataSource': 'Data Source',
-            'dataSource.input': 'Upstream Workflow Data',
-            'dataSource.upload': 'Upload File',
             'dataSource.loaded': 'Loaded',
             'dataSource.none': 'No file uploaded yet',
             'toast.datasetUploaded': 'Dataset uploaded',
             'toast.txtUploaded': 'Text file uploaded — ready for word cloud',
             'toast.uploadFailed': 'Upload failed',
-            'toast.previewNeedsUpload': 'Set Data Source to "Upload File" and upload a CSV/JSON file first',
+            'toast.previewNeedsUpload': 'Upload a CSV/JSON file in this upload node first',
             'toast.previewNeedsInput': 'Connect an upstream node and run the workflow first',
             'toast.renderFailed': 'Chart render failed',
             'toast.previewFailed': 'Data preview failed',
@@ -356,7 +364,7 @@ const I18n = {
             'canvas.fold': 'Fold Node',
             'canvas.unfold': 'Unfold Node',
             'canvas.autoLayout': 'Auto Layout',
-            'status.nodes': 'Nodes: ',
+            'status.nodes': 'Nodes: ', 'status.progress': 'Progress: {done}/{total}',
             'toast.layoutApplied': 'Layout applied',
             'summary.tokenizeTop': ' | Top-{n}',
             'settings.textColumnPlaceholder': 'e.g. content text field',
@@ -365,28 +373,21 @@ const I18n = {
             'validate.empty': 'Workflow is empty',
             'validate.sourceKeyword': 'Source node "{title}": keyword cannot be empty',
             'validate.sourceDownstream': 'Source node "{title}": must connect to a downstream node',
+            'validate.uploadFile': 'Upload node "{title}": no file uploaded yet',
+            'validate.uploadDownstream': 'Upload node "{title}": must connect to a downstream node',
             'validate.processInput': 'Process node "{title}": must have an input connection',
             'validate.processDownstream': 'Process node "{title}": must connect to a downstream node',
             'validate.analysisInput': 'Analysis node "{title}": must have an input connection',
             'validate.analysisDownstream': 'Analysis node "{title}": must connect to a downstream node',
             'validate.analysisOperation': 'Analysis node "{title}": operation must be selected',
-            'validate.tokenizeInput': 'Tokenize node "{title}": must have an input connection, or set Data Source to Upload',
-            'validate.tokenizeUpload': 'Tokenize node "{title}": no dataset uploaded yet',
+            'validate.tokenizeInput': 'Tokenize node "{title}": must have an input connection (a source or upload node)',
             'validate.tokenizeColumn': 'Tokenize node "{title}": text column cannot be empty',
-            'validate.visualizeInput': 'Visualize node "{title}": needs an input connection, or set Data Source to Upload',
-            'validate.visualizeUpload': 'Visualize node "{title}": no dataset uploaded yet',
+            'validate.visualizeInput': 'Visualize node "{title}": must have an input connection (a source or upload node)',
             'validate.visualizeChartType': 'Visualize node "{title}": chart type must be selected',
             'validate.visualizeXField': 'Visualize node "{title}": X field cannot be empty',
             'validate.outputInput': 'Output node "{title}": must have an input connection',
             'validate.outputFilename': 'Output node "{title}": filename cannot be empty',
-            'validate.hasUpstream': 'At least one Output (Save) or Visualize node is required',
-            'nodeColor.source': '#4a9eff',
-            'nodeColor.process': '#ff6b6b',
-            'nodeColor.analysis': '#ffd93d',
-            'nodeColor.visualize': '#6bcb77',
-            'nodeColor.tokenize': '#ff9f43',
-            'nodeColor.output': '#a66cff',
-        },
+            'validate.noTerminal': 'At least one Output (Save) or Visualize node is required',        },
         zh: {
             'menu.file': '文件', 'menu.save': '保存', 'menu.load': '打开', 'menu.new': '新建',
             'menu.edit': '编辑',
@@ -401,12 +402,16 @@ const I18n = {
             'bg.void': '无', 'bg.grid': '网格', 'bg.dots': '点阵',
             'bg.cross': '十字', 'bg.diagonal': '斜纹',
             'palette.header': '节点库',
-            'palette.source': '数据源', 'palette.process': '处理', 'palette.output': '输出',
+            'palette.source': '数据源', 'palette.upload': '上传文件', 'palette.process': '处理', 'palette.output': '输出',
+            'node.source': '数据源', 'node.upload': '上传文件', 'node.process': '处理',
+            'node.analysis': '分析', 'node.visualize': '可视化', 'node.tokenize': '分词', 'node.output': '输出',
+            'settings.file': '文件', 'settings.rows': '行',
             'stats.header': '统计', 'stats.close': '关闭',
             'stats.emotion': '情感', 'stats.tendency': '倾向',
             'settings.header': '节点设置', 'settings.close': '关闭',
             'status.ready': '就绪', 'status.completed': '已完成', 'status.running': '运行中...',
-            'ctx.newSource': '新建数据源', 'ctx.newProcess': '新建处理',
+            'ctx.newSource': '新建数据源', 'ctx.newUpload': '新建上传文件',
+            'ctx.newProcess': '新建处理',
             'ctx.newOutput': '新建输出', 'ctx.edit': '编辑节点',
             'ctx.copy': '复制节点', 'ctx.paste': '粘贴节点',
             'ctx.delete': '删除节点', 'ctx.clear': '清除所有连线',
@@ -422,6 +427,11 @@ const I18n = {
             'cookies.header': 'Cookie 设置', 'cookies.platform': '平台',
             'cookies.paste': '粘贴 Cookies JSON', 'cookies.save': '保存 Cookies',
             'cookies.generate': '浏览器生成', 'cookies.waitTime': '等待时间（秒）用于登录:',
+            'cookie.opening': '正在打开浏览器进行 {platform} 登录（等待 {s} 秒）...',
+            'cookie.generated': '已生成 {platform} 的 Cookies',
+            'cookie.failed': '失败：{err}',
+            'cookie.invalidJson': 'JSON 格式错误：{err}',
+            'cookie.pasteFirst': '请先粘贴 Cookies JSON',
             'toast.nodeDeleted': '节点已删除',
             'toast.connCreated': '连线已创建',
             'toast.connRemoved': '连线已删除',
@@ -456,6 +466,7 @@ const I18n = {
             'settings.topic': '主题',
             'settings.filename': '文件名',
             'nodeType.source': '数据源',
+            'nodeType.upload': '上传文件',
             'nodeType.process': '处理',
             'nodeType.analysis': '分析',
             'nodeType.visualize': '可视化',
@@ -514,14 +525,12 @@ const I18n = {
             'settings.agg': '聚合方式',
             'settings.title': '图表标题',
             'settings.dataSource': '数据来源',
-            'dataSource.input': '上游工作流数据',
-            'dataSource.upload': '上传文件',
             'dataSource.loaded': '已加载',
             'dataSource.none': '尚未上传文件',
             'toast.datasetUploaded': '数据集已上传',
             'toast.txtUploaded': '文本文件已上传，已自动配置词云',
             'toast.uploadFailed': '上传失败',
-            'toast.previewNeedsUpload': '请先将数据来源设为"上传文件"，然后上传 CSV 或 JSON 文件',
+            'toast.previewNeedsUpload': '请先在该上传节点中上传 CSV 或 JSON 文件',
             'toast.previewNeedsInput': '请先连接上游节点，然后完整执行一次工作流',
             'toast.renderFailed': '图表渲染失败',
             'toast.previewFailed': '数据预览失败',
@@ -712,7 +721,7 @@ const I18n = {
             'canvas.fold': '折叠节点',
             'canvas.unfold': '展开节点',
             'canvas.autoLayout': '自动布局',
-            'status.nodes': '节点数：',
+            'status.nodes': '节点数：', 'status.progress': '进度：{done}/{total}',
             'toast.layoutApplied': '已应用自动布局',
             'summary.tokenizeTop': ' | Top-{n}',
             'settings.textColumnPlaceholder': '例如：正文',
@@ -721,32 +730,44 @@ const I18n = {
             'validate.empty': '工作流为空',
             'validate.sourceKeyword': '数据源节点 "{title}"：关键词不能为空',
             'validate.sourceDownstream': '数据源节点 "{title}"：必须连接到下游节点',
+            'validate.uploadFile': '上传节点 "{title}"：尚未上传文件',
+            'validate.uploadDownstream': '上传节点 "{title}"：必须连接到下游节点',
             'validate.processInput': '处理节点 "{title}"：必须有一个输入连接',
             'validate.processDownstream': '处理节点 "{title}"：必须连接到下游节点',
             'validate.analysisInput': '分析节点 "{title}"：必须有一个输入连接',
             'validate.analysisDownstream': '分析节点 "{title}"：必须连接到下游节点',
             'validate.analysisOperation': '分析节点 "{title}"：必须选择操作',
-            'validate.tokenizeInput': '分词节点 "{title}"：需要输入连接，或将数据来源设为上传文件',
-            'validate.tokenizeUpload': '分词节点 "{title}"：尚未上传数据集',
+            'validate.tokenizeInput': '分词节点 "{title}"：必须有输入连接（数据源或上传节点）',
             'validate.tokenizeColumn': '分词节点 "{title}"：文本列不能为空',
-            'validate.visualizeInput': '图表节点 "{title}"：需要输入连接，或将数据来源设为上传文件',
-            'validate.visualizeUpload': '图表节点 "{title}"：尚未上传数据集',
+            'validate.visualizeInput': '图表节点 "{title}"：必须有输入连接（数据源或上传节点）',
             'validate.visualizeChartType': '图表节点 "{title}"：必须选择图表类型',
             'validate.visualizeXField': '图表节点 "{title}"：X 字段不能为空',
             'validate.outputInput': '输出节点 "{title}"：必须有一个输入连接',
             'validate.outputFilename': '输出节点 "{title}"：文件名不能为空',
-            'validate.noTerminal': '至少需要一个输出（保存）或可视化节点',
-            'nodeColor.source': '#4a9eff',
-            'nodeColor.process': '#ff6b6b',
-            'nodeColor.analysis': '#ffd93d',
-            'nodeColor.visualize': '#6bcb77',
-            'nodeColor.tokenize': '#ff9f43',
-            'nodeColor.output': '#a66cff',
-        },
+            'validate.noTerminal': '至少需要一个输出（保存）或可视化节点',        },
     },
+    /* Keys no dictionary defines, in the order they were first asked for. A
+       silent fallback is exactly how a raw "nodeType.upload" reached the screen
+       once: warn on the first miss (and keep the list available as
+       I18n.missing()) so a gap can never hide again. */
+    _missing: new Set(),
+
     t(key) {
         const d = this.dict[this.lang] || this.dict.en;
-        return d[key] !== undefined ? d[key] : key;
+        if (d[key] !== undefined) return d[key];
+        /* Show the other language before showing the raw key — a missing
+           translation should still read as a sentence ("Upload File"), not as
+           an identifier ("palette.upload"). */
+        const other = this.dict[this.lang === 'zh' ? 'en' : 'zh'] || {};
+        if (!this._missing.has(key)) {
+            this._missing.add(key);
+            console.warn('[i18n] missing ' + this.lang + ' string: ' + key);
+        }
+        return other[key] !== undefined ? other[key] : key;
+    },
+
+    missing() {
+        return Array.from(this._missing).sort();
     },
     apply() {
         this.lang = document.body.dataset.lang || 'en';
@@ -1108,11 +1129,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     fetch('/api/data/clear', { method: 'POST' }).catch(() => { });
 
+    /* Uploaded datasets live in server memory, so any dataset_id left over
+       from a previous session is dead. Drop it from Upload nodes (which are
+       the only nodes that own one) and let the node read "no file". */
     let changed = false;
     Object.keys(canvas.nodes).forEach(id => {
         const node = canvas.nodes[id];
-        if (node.type === 'visualize' && node.params.data_source === 'upload' && node.params.dataset_id) {
+        if (node.type === 'upload' && node.params.dataset_id) {
             delete node.params.dataset_id;
+            node.params.dataset_name = '';
+            node.params.row_count = '';
             canvas.updateNodeDisplay(id);
             changed = true;
         }

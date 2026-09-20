@@ -17,9 +17,13 @@ in the console instead of silently falling back to a foreign language.
 """
 
 import logging
+import re
 import threading
 
 logger = logging.getLogger(__name__)
+
+# printf-style placeholders ('%s', '%(name)d') that str.format cannot fill.
+_BAD_PLACEHOLDER = re.compile(r'%(?:\(\w+\))?[#0-9+.-]*[sdfgrx]')
 
 DEFAULT_LANG = 'zh'
 LANGS = ('zh', 'en')
@@ -39,6 +43,7 @@ _ZH = {
     'wf.node_failed': '[WF{i}] 节点 {nid} 执行失败：{err}',
     'wf.partial_kept': '[WF{i}] 已保留该节点已完成的部分结果；修复问题后重新执行可从断点续跑。',
     'wf.node_completed': '[WF{i}] 节点 {nid} 完成（{done}/{total}）',
+    'wf.multi_input': '节点 {nid} 有 {n} 条上游连线，只使用第一条（来自 {up}），其余输入被忽略',
     'wf.validation_error': '校验错误：{err}',
     'wf.found': '发现 {n} 条工作流：{c} 个连通子图',
     'wf.starting': '--- 开始执行工作流 {i}/{n} ---',
@@ -53,10 +58,12 @@ _ZH = {
     'wf.analysis_failed': '分析失败：{err}',
     'wf.analysis_step': '[分析] {op}：{before} → {after} 行（-{removed}）',
     'wf.tokenize_no_column': '分词失败：未配置 text_column',
+    'wf.tokenize_no_input': '分词失败：没有上游数据，请连接数据源或文件上传节点',
     'wf.tokenize_failed': '分词失败：{err}',
     'wf.tokenize_no_col': '分词失败：列“{col}”不在 {cols} 中',
     'wf.tokenize_done': '[分词] {mode} 已切分 {col} → {n} 行',
     'wf.visualize_failed': '可视化失败：{err}',
+    'wf.visualize_no_input': '可视化失败：没有上游数据，请连接数据源或文件上传节点',
     'wf.visualize_done': '[可视化] 已渲染 {chart} 图表（{engine}），共 {n} 行',
     'wf.browser_opened': '已打开浏览器用于 {platform} 登录，等待 {n} 秒完成登录…',
     'wf.cookies_generated': '已生成 {platform} 的 Cookie（{n} 项）',
@@ -85,6 +92,7 @@ _ZH = {
     'llm.cancelled': '已手动停止——已完成的行均已保存，可修复后从断点续跑',
     'llm.parse_failed': '[{label}] 第 {i}/{total} 行输出解析失败（连续失败 {f}）',
     'llm.row_exception': '[{label}] 行处理异常：{err}',
+    'llm.row_done': '[{label}] 第 {done}/{total} 行完成',
     'llm.progress': '[{label}] 进度 {done}/{total}（已保存）',
     'llm.circuit_break': '连续 {f} 行调用失败——疑似网络断开 / Key 失效 / 模型不可用，本节点已中止。'
     '已完成 {done}/{total} 行并全部保存，恢复后重新执行会自动从断点续跑。',
@@ -95,6 +103,10 @@ _ZH = {
     'llm.aborted': '[{label}] 中止：{err}（已完成 {done} 行的结果已保存）',
     'llm.stopped': '[{label}] 已停止：{err}（已完成行已保存）',
     'llm.unfinished': '[{label}] {n} 行未处理（标记为 {mark}）。重新执行同一节点将从断点续跑，只补这些行。',
+    # ── upload node ───────────────────────────────────────────
+    'upload.no_file': '文件上传节点未选择文件，请在节点设置里上传 CSV / JSON / TXT',
+    'upload.stale': '已上传的数据集失效（服务可能重启过），请重新上传文件',
+    'upload.loaded': '已载入上传文件 {name}：{n} 行',
     # ── analyzer labels (console prefix) ──────────────────────
     'label.clean': '清洗',
     'label.emotion': '情感分析',
@@ -231,9 +243,9 @@ _ZH = {
     'misc.cookie_gen_failed': '生成 Cookie 失败',
     'misc.studio_source_failed': '图表工坊合并载入：来源读取失败',
     'misc.source_probe_failed': '数据源探测失败',
-    'misc.studio_saved': '图表工坊已保存 %s（%d 字节）',
-    'misc.browser_open_failed': '无法打开浏览器：%s',
-    'misc.server_starting': '爬虫工作流服务启动，端口 %s',
+    'misc.studio_saved': '图表工坊已保存 {path}（{bytes} 字节）',
+    'misc.browser_open_failed': '无法打开浏览器：{err}',
+    'misc.server_starting': '爬虫工作流服务启动，端口 {port}',
 }
 
 _EN = {
@@ -242,6 +254,7 @@ _EN = {
     'wf.node_failed': '[WF{i}] Node {nid} failed: {err}',
     'wf.partial_kept': '[WF{i}] Partial results for this node are kept; re-running resumes from the checkpoint.',
     'wf.node_completed': '[WF{i}] Node {nid} completed ({done}/{total})',
+    'wf.multi_input': 'Node {nid} has {n} incoming connections; using the first one (from {up}) and ignoring the rest',
     'wf.validation_error': 'Validation error: {err}',
     'wf.found': 'Found {n} workflow(s): {c} component(s)',
     'wf.starting': '--- Starting workflow {i}/{n} ---',
@@ -256,10 +269,12 @@ _EN = {
     'wf.analysis_failed': 'Analysis failed: {err}',
     'wf.analysis_step': '[Analysis] {op}: {before} -> {after} rows (-{removed})',
     'wf.tokenize_no_column': 'Tokenize failed: text_column not configured',
+    'wf.tokenize_no_input': 'Tokenize failed: no upstream data — connect a data source or an upload node',
     'wf.tokenize_failed': 'Tokenize failed: {err}',
     'wf.tokenize_no_col': 'Tokenize failed: column "{col}" not found in {cols}',
     'wf.tokenize_done': '[Tokenize] {mode} segmented {col} -> {n} rows',
     'wf.visualize_failed': 'Visualize failed: {err}',
+    'wf.visualize_no_input': 'Visualize failed: no upstream data — connect a data source or an upload node',
     'wf.visualize_done': '[Visualize] Rendered {chart} chart ({engine}) from {n} rows',
     'wf.browser_opened': 'Browser opened for {platform} login. Waiting {n}s for user to log in...',
     'wf.cookies_generated': 'Cookies generated for {platform} ({n} cookies)',
@@ -288,6 +303,7 @@ _EN = {
     'llm.cancelled': 'Stopped manually — completed rows are saved; re-run resumes from the checkpoint',
     'llm.parse_failed': '[{label}] Row {i}/{total}: output could not be parsed ({f} in a row)',
     'llm.row_exception': '[{label}] Row processing error: {err}',
+    'llm.row_done': '[{label}] row {done}/{total} done',
     'llm.progress': '[{label}] Progress {done}/{total} (saved)',
     'llm.circuit_break': '{f} rows failed in a row — network down / invalid key / model unavailable. '
     'This node is aborted. {done}/{total} rows are finished and saved; re-running resumes from '
@@ -300,6 +316,10 @@ _EN = {
     'llm.stopped': '[{label}] Stopped: {err} (finished rows are saved)',
     'llm.unfinished': '[{label}] {n} rows not processed (marked {mark}). Re-running this node resumes from '
     'the checkpoint and fills only those.',
+    # ── upload node ───────────────────────────────────────────
+    'upload.no_file': 'Upload node has no file yet — upload a CSV / JSON / TXT in its settings',
+    'upload.stale': 'That uploaded dataset is gone (the server may have restarted) — upload the file again',
+    'upload.loaded': 'Loaded uploaded file {name}: {n} rows',
     # ── analyzer labels (console prefix) ──────────────────────
     'label.clean': 'Clean',
     'label.emotion': 'Emotion',
@@ -436,9 +456,9 @@ _EN = {
     'misc.cookie_gen_failed': 'Failed to generate cookies',
     'misc.studio_source_failed': 'Merged studio load: source failed',
     'misc.source_probe_failed': 'Source probe failed',
-    'misc.studio_saved': 'Chart studio saved %s (%d bytes)',
-    'misc.browser_open_failed': 'Could not open browser: %s',
-    'misc.server_starting': 'Starting crawler workflow server on port %s',
+    'misc.studio_saved': 'Chart studio saved {path} ({bytes} bytes)',
+    'misc.browser_open_failed': 'Could not open browser: {err}',
+    'misc.server_starting': 'Starting crawler workflow server on port {port}',
 }
 
 MESSAGES = {'zh': _ZH, 'en': _EN}
@@ -498,3 +518,23 @@ def missing_keys() -> dict:
     message cannot ship."""
     zh, en = set(_ZH), set(_EN)
     return {'en_only': sorted(en - zh), 'zh_only': sorted(zh - en)}
+
+
+def audit() -> list[str]:
+    """Self-check the catalogue; an empty list means it is healthy.
+
+    Worth calling at startup: a leftover printf placeholder ('端口 %s') does
+    not raise — ``str.format`` just fails and ``t()`` hands back the raw
+    template, so the user sees a literal ``%s`` in the console and nothing
+    points at the cause. This turns that into a warning that names the key.
+    """
+    problems = []
+    for key in sorted(set(_ZH) | set(_EN)):
+        for lang, table in MESSAGES.items():
+            template = table.get(key)
+            if template is None:
+                problems.append(f'{key}: missing translation for {lang}')
+                continue
+            if _BAD_PLACEHOLDER.search(template):
+                problems.append(f'{key} [{lang}]: printf-style placeholder in "{template}"')
+    return problems

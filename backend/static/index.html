@@ -268,6 +268,10 @@
         <span class="palette-tag">[SRC]</span>
         <span data-i18n="palette.source">Data Source</span>
       </div>
+      <div class="palette-item" data-type="upload" draggable="true">
+        <span class="palette-tag">[UPL]</span>
+        <span data-i18n="palette.upload">Upload File</span>
+      </div>
       <div class="palette-item" data-type="process" draggable="true">
         <span class="palette-tag">[PRC]</span>
         <span data-i18n="palette.process">Process</span>
@@ -511,7 +515,7 @@
       </div>
     </div>
 
-    <!-- Hidden file input used by the Visualize/Analysis node settings panel to upload a CSV/JSON dataset -->
+    <!-- Hidden file input used by the Upload node's settings panel to pick a CSV/JSON/TXT dataset -->
     <input
       type="file"
       id="dataset-file-input"
@@ -617,6 +621,13 @@
         data-i18n="ctx.newSource"
       >
         New Source Node
+      </div>
+      <div
+        class="ctx-item"
+        data-action="ctxNewUpload"
+        data-i18n="ctx.newUpload"
+      >
+        New Upload Node
       </div>
       <div
         class="ctx-item"
@@ -748,10 +759,10 @@
             >Platform</label
           >
           <select id="cookie-platform" class="settings-select">
-            <option value="zhihu">Zhihu</option>
-            <option value="weibo">Weibo</option>
-            <option value="xiaohongshu">Xiaohongshu</option>
-            <option value="wechat">WeChat</option>
+            <option value="zhihu" data-i18n="platform.zhihu">Zhihu</option>
+            <option value="weibo" data-i18n="platform.weibo">Weibo</option>
+            <option value="xiaohongshu" data-i18n="platform.xiaohongshu">Xiaohongshu</option>
+            <option value="wechat" data-i18n="platform.wechat">WeChat</option>
           </select>
         </div>
         <div class="settings-group">
