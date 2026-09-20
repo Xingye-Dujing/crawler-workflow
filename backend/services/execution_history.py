@@ -96,7 +96,8 @@ class ExecutionHistoryService:
     def list_workflow_names(self) -> list:
         conn = self._conn()
         cur = conn.execute(
-            'SELECT DISTINCT workflow_name FROM execution_history WHERE workflow_name IS NOT NULL ORDER BY workflow_name'
+            'SELECT DISTINCT workflow_name FROM execution_history '
+            'WHERE workflow_name IS NOT NULL ORDER BY workflow_name'
         )
         names = [row[0] for row in cur.fetchall()]
         conn.close()

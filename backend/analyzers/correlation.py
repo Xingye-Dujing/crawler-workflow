@@ -53,7 +53,9 @@ class CorrelationAnalyzer:
                         }
                     )
 
-        result = pd.DataFrame(pairs)
+        # Keep the same columns whether or not any pair survived: downstream
+        # nodes read them by name.
+        result = pd.DataFrame(pairs, columns=['col1', 'col2', 'method', 'correlation', 'abs_correlation'])
         if not result.empty:
             result = result.sort_values('abs_correlation', ascending=False).reset_index(drop=True)
 

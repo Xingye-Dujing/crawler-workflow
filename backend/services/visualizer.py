@@ -20,12 +20,16 @@ pasted into the UI.
 import base64
 import io
 import logging
+import math
 from collections import Counter
 
 import jieba
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+
+from i18n import t
 
 matplotlib.use('Agg')  # headless backend, safe for a web server
 plt.rcParams['font.sans-serif'] = [
@@ -41,6 +45,37 @@ plt.rcParams['axes.unicode_minus'] = False
 logger = logging.getLogger(__name__)
 
 CHART_TYPES = ('bar', 'line', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'wordcloud', 'map')
+
+
+def _json_safe(value):
+    """Recursively make a chart spec JSON-safe.
+
+    A mean over a group whose values are all missing is NaN, and JSON has no
+    NaN: ``jsonify`` would emit a bare ``NaN`` token and the browser's
+    ``JSON.parse`` would reject the *whole* response. numpy scalars are
+    converted too — Flask cannot serialise them either.
+    """
+    if isinstance(value, (np.floating, np.integer, np.bool_)):
+        value = value.item()
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
+def _finite(values) -> list:
+    """Only usable numbers, for min/max/visual-map bounds and link weights."""
+    out = []
+    for v in values:
+        if isinstance(v, (np.floating, np.integer, np.bool_)):
+            v = v.item()
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v):
+            out.append(float(v))
+    return out
+
 
 # ── Professional colour palette (Nature/Science journal inspired) ──
 CATEGORY_COLORS = [
@@ -207,9 +242,22 @@ class VisualizationService:
     # ── Shared data prep ────────────────────────────────────────
 
     @staticmethod
+    def _require_columns(df: pd.DataFrame, *names):
+        """Every builder indexes the frame by user-configured field names.
+
+        A renamed or mistyped column must say so: a bare ``KeyError: 'nope'``
+        reaches the user as an opaque node failure, and a missing *y* used to
+        silently degrade a sum chart into a row count.
+        """
+        for name in names:
+            if name and name not in df.columns:
+                raise ChartConfigError(f'Field not found in the data: {name}')
+
+    @staticmethod
     def _aggregate(df: pd.DataFrame, x: str, y: str = None, agg: str = 'sum'):
         """Group by *x* and aggregate *y* (or count rows if y is None)."""
-        if y and y in df.columns:
+        VisualizationService._require_columns(df, x, y)
+        if y:
             numeric = pd.to_numeric(df[y], errors='coerce')
             grouped = numeric.groupby(df[x]).agg(agg)
         else:
@@ -220,7 +268,17 @@ class VisualizationService:
     # ── ECharts option builder ───────────────────────────────────
 
     @classmethod
-    def to_echarts_option(
+    def to_echarts_option(cls, df: pd.DataFrame, chart_type: str, **kwargs) -> dict:
+        """Build a chart spec for *chart_type*.
+
+        The spec is always JSON-safe: non-finite numbers survive some
+        aggregations (a mean over an all-missing group is NaN) and a single
+        ``NaN`` token would make the browser reject the entire response.
+        """
+        return _json_safe(cls._build_option(df, chart_type, **kwargs))
+
+    @classmethod
+    def _build_option(
         cls,
         df: pd.DataFrame,
         chart_type: str,
@@ -308,6 +366,7 @@ class VisualizationService:
         if chart_type == 'scatter':
             if not x or not y:
                 raise ChartConfigError('Scatter chart requires both x and y fields')
+            cls._require_columns(df, x, y)
             xs = pd.to_numeric(df[x], errors='coerce')
             ys = pd.to_numeric(df[y], errors='coerce')
             base['grid'] = dict(_GRID)
@@ -342,6 +401,7 @@ class VisualizationService:
         if chart_type == 'histogram':
             if not x:
                 raise ChartConfigError('Histogram requires a numeric field (x)')
+            cls._require_columns(df, x)
             values = pd.to_numeric(df[x], errors='coerce').dropna()
             counts, edges = _histogram_bins(values)
             labels_bin = [f'{e:.1f}' for e in edges[:-1]]
@@ -355,7 +415,7 @@ class VisualizationService:
             }
             base['yAxis'] = {
                 'type': 'value',
-                'name': 'Frequency',
+                'name': t('chart.count'),
                 'nameTextStyle': _TEXT_STYLE,
                 **_AXIS_STYLE,
             }
@@ -435,7 +495,9 @@ class VisualizationService:
                 raise ChartConfigError('Heatmap requires two category fields (x and y)')
             xcats, ycats, matrix = cls._pivot(df, x, y, value_field, agg)
             data = [[xi, yi, matrix[yi][xi]] for yi in range(len(ycats)) for xi in range(len(xcats))]
-            vals = [row[2] for row in data]
+            # Bounds come from the usable numbers only: an all-missing cell makes
+            # the aggregate NaN, and NaN bounds would leave the colour scale blank.
+            vals = _finite(row[2] for row in data)
             max_val = max(vals) if vals else 1
             min_val = min(vals) if vals else 0
             base['grid'] = {'left': 80, 'right': 60, 'top': 10, 'bottom': 60}
@@ -571,7 +633,8 @@ class VisualizationService:
             if not x:
                 raise ChartConfigError('Map chart requires a region-name field (x)')
             labels, values = cls._aggregate(df, x, value_field, agg)
-            max_val = max(values, default=1) or 1
+            # NaN would poison the colour scale's upper bound.
+            max_val = max(_finite(values) or [1]) or 1
             base['tooltip']['formatter'] = '<b>{b}</b><br/>{c}'
             base['visualMap'] = {
                 'min': 0,
@@ -678,6 +741,7 @@ class VisualizationService:
         cloud. Uses jieba for Chinese segmentation (this app's crawler
         content is primarily Chinese); falls back to whitespace splitting
         for non-Chinese text if jieba isn't installed."""
+        VisualizationService._require_columns(df, column)
 
         stopwords = {
             '的',
@@ -765,6 +829,7 @@ class VisualizationService:
     def _pivot(df: pd.DataFrame, x: str, y: str, value_field: str = None, agg: str = 'count'):
         """Build a y-by-x matrix for a heatmap: counts co-occurrences of
         (x, y) pairs, or aggregates value_field over each pair if given."""
+        VisualizationService._require_columns(df, x, y)
         work = df[[x, y]].copy()
         if value_field and value_field in df.columns:
             work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
@@ -780,6 +845,7 @@ class VisualizationService:
     def _sankey_links(df: pd.DataFrame, source: str, target: str, value_field: str = None, agg: str = 'count'):
         """Build ECharts sankey nodes+links from a source/target column pair
         (e.g. platform -> emotion), weighted by row count or value_field."""
+        VisualizationService._require_columns(df, source, target)
         work = df[[source, target]].copy()
         work.columns = ['_s', '_t']
         if value_field and value_field in df.columns:
@@ -791,12 +857,14 @@ class VisualizationService:
         # Sankey requires distinct node names; if a value appears on both
         # sides (e.g. same label used as both source and target) ECharts
         # can still render it as one shared node, so no renaming is needed.
+        # A zero-weight link renders as nothing in ECharts and a NaN weight is
+        # not valid JSON, so neither one is emitted.
+        links = []
+        for _, row in grouped.iterrows():
+            weights = _finite([row['_v']])
+            if weights and weights[0]:
+                links.append({'source': str(row['_s']), 'target': str(row['_t']), 'value': weights[0]})
         nodes = sorted(set(grouped['_s'].astype(str)) | set(grouped['_t'].astype(str)))
-        links = [
-            {'source': str(row['_s']), 'target': str(row['_t']), 'value': float(row['_v'])}
-            for _, row in grouped.iterrows()
-            if row['_v']
-        ]
         return nodes, links
 
     # ── Matplotlib renderer (server-side PNG) ───────────────────
@@ -821,6 +889,15 @@ class VisualizationService:
                 f'"{chart_type}" is only available with engine=echarts '
                 f'(no matplotlib equivalent without extra dependencies)'
             )
+        # Same field requirements as the ECharts builder, so both engines fail
+        # the same readable way — groupby(None) is a bare pandas TypeError.
+        if chart_type in ('scatter', 'heatmap'):
+            if not x or not y:
+                raise ChartConfigError(f'{chart_type} chart requires both x and y fields')
+        elif chart_type in ('pie', 'histogram', 'box', 'line', 'bar') and not x:
+            raise ChartConfigError(f'{chart_type} chart requires a field (x)')
+        # Every branch below indexes the frame by the configured field names.
+        cls._require_columns(df, x, y)
 
         fig, ax = plt.subplots(figsize=(7, 4.2), dpi=130)
 
@@ -834,15 +911,15 @@ class VisualizationService:
         elif chart_type == 'histogram':
             ax.hist(pd.to_numeric(df[x], errors='coerce').dropna(), bins=20)
             ax.set_xlabel(x)
-            ax.set_ylabel('count')
+            ax.set_ylabel(t('chart.count'))
         elif chart_type == 'box':
-            if y and y in df.columns:
+            if y:
                 groups = [pd.to_numeric(group[y], errors='coerce').dropna().values for _, group in df.groupby(x)]
                 grp_labels = [str(name) for name in df.groupby(x).groups]
-                ax.boxplot(groups, labels=grp_labels)
+                _boxplot(ax, groups, grp_labels)
                 ax.set_xlabel(str(x))
             else:
-                ax.boxplot(pd.to_numeric(df[x], errors='coerce').dropna(), labels=[x])
+                _boxplot(ax, pd.to_numeric(df[x], errors='coerce').dropna(), [x])
         elif chart_type == 'heatmap':
             xcats, ycats, matrix = cls._pivot(df, x, y, value_field, agg if value_field else 'count')
             im = ax.imshow(matrix, cmap='YlOrRd', aspect='auto')
@@ -870,6 +947,18 @@ class VisualizationService:
         buf.seek(0)
         encoded = base64.b64encode(buf.read()).decode('ascii')
         return f'data:image/png;base64,{encoded}'
+
+
+def _boxplot(ax, data, labels):
+    """matplotlib ≥ 3.9 renamed ``boxplot(labels=…)`` to ``tick_labels=…``.
+
+    Called through a helper so the app still runs on an older matplotlib
+    instead of dying with "unexpected keyword argument 'labels'".
+    """
+    try:
+        return ax.boxplot(data, tick_labels=labels)
+    except TypeError:
+        return ax.boxplot(data, labels=labels)
 
 
 def _histogram_bins(values: pd.Series, bins: int = 10):

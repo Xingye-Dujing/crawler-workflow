@@ -50,8 +50,15 @@ class MLClassifier:
         self._path = os.path.join(MODEL_DIR, f'{model_name}.pkl')
 
     def fit(self, texts: list[str], labels: list[str]):
-        tokenized = [_tokenize(t) for t in texts]
+        if not texts:
+            raise ValueError(t('ml.no_training_rows'))
         unique = sorted(set(labels))
+        if len(unique) < 2:
+            # A logistic regression needs two classes; without this guard the
+            # failure surfaces as a bare sklearn ValueError hundreds of frames
+            # deep (and as an HTTP 500).
+            raise ValueError(t('ml.need_two_labels', label=unique[0] if unique else ''))
+        tokenized = [_tokenize(t) for t in texts]
         self._label_map = {lb: i for i, lb in enumerate(unique)}
         y = np.array([self._label_map[lb] for lb in labels])
         self.pipeline.fit(tokenized, y)

@@ -6,14 +6,9 @@ class StatsService:
 
     @staticmethod
     def emotion_distribution(data: list) -> dict:
-        labels = []
-        values = []
-        for item in data:
-            emotion = item.get('emotion')
-            if emotion:
-                labels.append(emotion)
-                values.append(item.get('confidence', 0.5))
-        counter = Counter(labels)
+        """Label → row count. The charts and the history series plot counts,
+        so the per-row confidence is deliberately not collected here."""
+        counter = Counter(item['emotion'] for item in data if item.get('emotion'))
         return {
             'labels': list(counter.keys()),
             'values': list(counter.values()),
@@ -21,14 +16,7 @@ class StatsService:
 
     @staticmethod
     def tendency_distribution(data: list) -> dict:
-        labels = []
-        values = []
-        for item in data:
-            tendency = item.get('tendency')
-            if tendency:
-                labels.append(tendency)
-                values.append(item.get('confidence', 0.5))
-        counter = Counter(labels)
+        counter = Counter(item['tendency'] for item in data if item.get('tendency'))
         return {
             'labels': list(counter.keys()),
             'values': list(counter.values()),

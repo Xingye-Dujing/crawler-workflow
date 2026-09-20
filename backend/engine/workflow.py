@@ -3,6 +3,8 @@
 import logging
 from collections import defaultdict, deque
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -124,32 +126,43 @@ class WorkflowEngine:
         return WorkflowEngine(sub_workflow, self.executor)
 
     def validate(self) -> list[str]:
+        """Everything that would make a node produce nothing.
+
+        Messages go through i18n (the engine is loaded by the app, which has the
+        catalogues) so a validation failure reads in the console's language
+        instead of as a stray English line. The one exception is the cycle
+        check below: that is a ValueError from the topological sort, i.e. a
+        malformed workflow rather than a configuration mistake.
+        """
         errors = []
         for nid, node in self.nodes.items():
             ntype = node.get('type')
-            if ntype == 'source' and not node.get('platform'):
-                errors.append(f'Node {nid}: source node missing platform')
-            if ntype == 'upload' and not node.get('params', {}).get('dataset_id'):
-                errors.append(f'Node {nid}: upload node has no file selected')
+            params = node.get('params', {})
+            if ntype == 'source':
+                platform = node.get('platform') or params.get('platform')
+                if not platform:
+                    errors.append(t('engine.source_no_platform', nid=nid))
+                elif platform == 'wechat':
+                    # WeChat scrapes article URLs; a keyword would do nothing.
+                    if not str(params.get('urls') or '').strip():
+                        errors.append(t('engine.source_no_urls', nid=nid))
+                elif not str(params.get('keyword') or '').strip():
+                    errors.append(t('engine.source_no_keyword', nid=nid))
+            if ntype == 'upload' and not params.get('dataset_id'):
+                errors.append(t('engine.upload_no_file', nid=nid))
             if ntype == 'process' and not node.get('operation'):
-                errors.append(f'Node {nid}: process node missing operation')
+                errors.append(t('engine.process_no_op', nid=nid))
             if ntype == 'output' and not node.get('operation'):
-                errors.append(f'Node {nid}: output node missing operation')
-            if ntype == 'analysis':
-                params = node.get('params', {})
-                steps = params.get('steps')
-                if not steps and not params.get('operation'):
-                    errors.append(f'Node {nid}: analysis node has no operation/steps configured')
-            if ntype == 'tokenize':
-                params = node.get('params', {})
-                if not params.get('text_column'):
-                    errors.append(f'Node {nid}: tokenize node missing text_column')
+                errors.append(t('engine.output_no_op', nid=nid))
+            if ntype == 'analysis' and not (params.get('steps') or params.get('operation')):
+                errors.append(t('engine.analysis_no_op', nid=nid))
+            if ntype == 'tokenize' and not params.get('text_column'):
+                errors.append(t('engine.tokenize_no_column', nid=nid))
             if ntype == 'visualize':
-                params = node.get('params', {})
                 if not params.get('chart_type'):
-                    errors.append(f'Node {nid}: visualize node missing chart_type')
+                    errors.append(t('engine.visualize_no_chart', nid=nid))
                 if not params.get('x_field'):
-                    errors.append(f'Node {nid}: visualize node missing x_field')
+                    errors.append(t('engine.visualize_no_x', nid=nid))
         try:
             self.topological_sort()
         except ValueError as e:

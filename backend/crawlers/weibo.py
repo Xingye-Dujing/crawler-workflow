@@ -20,10 +20,30 @@ class WeiboCrawler(Crawler):
     domain = 'weibo.com'
     login_url = 'https://passport.weibo.com/sso/signin?entry=miniblog'
 
+    # An hourly-window crawl loads one page per hour of the range, so two years
+    # would be ~17 500 page loads — a run that never ends. Past this many
+    # windows the range is refused instead of started.
+    MAX_HOURLY_WINDOWS = 720
+
+    @staticmethod
+    def _parse_date(value: str) -> datetime:
+        try:
+            return datetime.strptime(str(value).strip(), '%Y-%m-%d')
+        except ValueError as e:
+            # The field is free text ("2026-01-01"); a typo used to crash the
+            # node with a bare strptime error.
+            raise ValueError(t('crawl.weibo.bad_date', value=value)) from e
+
     def search(self, keyword: str, start_time: str = None, end_time: str = None, **_kwargs):
-        if start_time and end_time:
-            s = datetime.strptime(start_time, '%Y-%m-%d')
-            e = datetime.strptime(end_time, '%Y-%m-%d')
+        if start_time or end_time:
+            # One bound alone used to be ignored silently, which quietly ran a
+            # completely different (unbounded) search.
+            if not (start_time and end_time):
+                raise ValueError(t('crawl.weibo.need_both_dates'))
+            s = self._parse_date(start_time)
+            e = self._parse_date(end_time)
+            if e <= s:
+                raise ValueError(t('crawl.weibo.bad_range', start=start_time, end=end_time))
             urls = self._generate_hourly_urls(keyword, s, e)
             logger.info(t('crawl.weibo.keyword', kw=keyword))
             logger.info(t('crawl.weibo.range', start=s.strftime('%Y-%m-%d'), end=e.strftime('%Y-%m-%d')))
@@ -53,6 +73,9 @@ class WeiboCrawler(Crawler):
         return all_data
 
     def _generate_hourly_urls(self, keyword: str, start: datetime, end: datetime):
+        windows = int((end - start).total_seconds() // 3600) + 1
+        if windows > self.MAX_HOURLY_WINDOWS:
+            raise ValueError(t('crawl.weibo.range_too_wide', n=windows, max=self.MAX_HOURLY_WINDOWS))
         urls = []
         cur = start
         while cur < end:
@@ -132,7 +155,7 @@ class WeiboCrawler(Crawler):
 
             page_list = self.driver.find_elements(By.CSS_SELECTOR, 'ul[node-type="feed_list_page_morelist"] li a')
             if not page_list:
-                logger.debug('未找到页码列表，可能只有一页')
+                logger.debug(t('crawl.debug.page_list_missing'))
                 return 1
 
             max_page = 1
@@ -148,7 +171,7 @@ class WeiboCrawler(Crawler):
             logger.info(t('crawl.weibo.max_page', n=max_page))
             return max_page
         except TimeoutException:
-            logger.debug('未检测到分页按钮，只有一页')
+            logger.debug(t('crawl.debug.pager_missing'))
             return 1
         except Exception as e:
             logger.error(t('crawl.weibo.pages_fail', err=e))
@@ -162,23 +185,23 @@ class WeiboCrawler(Crawler):
             try:
                 author = self._extract_text(card, '.name')
                 if not author:
-                    logger.debug('    卡片 %s: 跳过（无发布者）', idx)
+                    logger.debug(t('crawl.debug.card_skip', i=idx))
                     continue
-                logger.debug('    卡片 %s: 发布者="%s"', idx, author)
+                logger.debug(t('crawl.debug.card_author', i=idx, v=author))
 
                 publish_time = self._get_publish_time(card)
-                logger.debug('    卡片 %s: 发布时间="%s"', idx, publish_time)
+                logger.debug(t('crawl.debug.card_time', i=idx, v=publish_time))
 
                 text = self._get_full_text(card)
-                logger.debug('    卡片 %s: 正文长度=%s', idx, len(text))
+                logger.debug(t('crawl.debug.card_len', i=idx, v=len(text)))
 
                 forward = self._extract_number(self._extract_text(card, '[action-type="feed_list_forward"]'))
                 comment = self._extract_number(self._extract_text(card, '[action-type="feed_list_comment"]'))
                 like = self._extract_number(self._extract_text(card, '.woo-like-count'))
-                logger.debug('    卡片 %s: 转发=%s 评论=%s 点赞=%s', idx, forward, comment, like)
+                logger.debug(t('crawl.debug.card_metrics', i=idx, f=forward, c=comment, l=like))
 
                 images = self._get_images(card)
-                logger.debug('    卡片 %s: 图片=%s张', idx, len(images.split(' | ')) if images else 0)
+                logger.debug(t('crawl.debug.card_images', i=idx, n=len(images.split(' | ')) if images else 0))
 
                 page_data.append(
                     {

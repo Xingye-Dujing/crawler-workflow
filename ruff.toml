@@ -3,8 +3,9 @@ line-length = 120
 indent-width = 4
 
 [lint]
+# Nothing is excluded on purpose: every rule enabled here has to hold, so the
+# only way to silence a finding is to fix the code.
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
-ignore = ["E501"]
 
 [lint.isort]
 # This project's own packages: they import each other by top-level name

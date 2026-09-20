@@ -420,7 +420,7 @@ const canvas = {
     },
 
     getDefaultParams(type) {
-        if (type === 'source') return { platform: 'zhihu', keyword: '', target_count: 50, headless: true };
+        if (type === 'source') return { platform: 'zhihu', keyword: '', urls: '', target_count: 50, headless: true };
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '' };
         if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };
@@ -433,7 +433,14 @@ const canvas = {
     getNodeSummary(type, params) {
         if (type === 'source') {
             var plat = params.platform || '';
-            return I18n.t('settings.platform') + ': ' + (plat ? I18n.t('platform.' + plat) : '?') + '\n' + I18n.t('settings.keyword') + ': ' + (params.keyword || 'any');
+            var head = I18n.t('settings.platform') + ': ' + (plat ? I18n.t('platform.' + plat) : '?');
+            if (plat === 'wechat') {
+                /* WeChat runs on pasted article URLs — show how many are set,
+                   the way the other platforms show their keyword. */
+                var urls = String(params.urls || '').split('\n').filter(function (u) { return u.trim(); }).length;
+                return head + '\n' + I18n.t('settings.urls') + ': ' + urls;
+            }
+            return head + '\n' + I18n.t('settings.keyword') + ': ' + (params.keyword || '—');
         }
         if (type === 'upload') {
             var name = params.dataset_name || '';

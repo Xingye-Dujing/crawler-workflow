@@ -172,7 +172,7 @@ class WechatCrawler(Crawler):
             el = self.driver.find_element(By.CSS_SELECTOR, '#activity-name')
             return el.text.strip()
         except NoSuchElementException:
-            logger.debug('Title element not found.')
+            logger.debug(t('crawl.debug.title_missing'))
             return ''
 
     def get_author(self) -> str:
@@ -187,7 +187,7 @@ class WechatCrawler(Crawler):
                         return text
             except Exception:
                 continue
-        logger.debug('Author element not found with any selector.')
+        logger.debug(t('crawl.debug.author_missing'))
         return ''
 
     def get_publish_time(self) -> str:
@@ -203,7 +203,7 @@ class WechatCrawler(Crawler):
                         return text
             except Exception:
                 continue
-        logger.debug('Publish time element not found.')
+        logger.debug(t('crawl.debug.time_missing'))
         return ''
 
     def get_content(self) -> str:
@@ -218,10 +218,10 @@ class WechatCrawler(Crawler):
             if text:
                 return text
         except NoSuchElementException:
-            logger.debug('Content element not found on first attempt.')
+            logger.debug(t('crawl.debug.content_missing'))
 
         # Retry once after a short wait
-        logger.debug('Retrying content extraction after 2 s...')
+        logger.debug(t('crawl.debug.content_retry'))
         time.sleep(0.1)
         try:
             el = self.driver.find_element(By.CSS_SELECTOR, '.rich_media_content')
@@ -245,7 +245,7 @@ class WechatCrawler(Crawler):
         # Fallback: try clicking a "read more" button to reveal hidden stats
         try:
             read_btn = self.driver.find_element(By.CSS_SELECTOR, '.read_more')
-            logger.debug('Clicking .read_more to reveal read count...')
+            logger.debug(t('crawl.debug.read_more'))
             self.driver.execute_script('arguments[0].scrollIntoView();', read_btn)
             read_btn.click()
             time.sleep(0.1)
@@ -255,7 +255,7 @@ class WechatCrawler(Crawler):
         except Exception:
             pass
 
-        logger.debug('Read count not found.')
+        logger.debug(t('crawl.debug.reads_missing'))
         return 0
 
     def get_like_count(self) -> int:
@@ -263,14 +263,14 @@ class WechatCrawler(Crawler):
         selectors = ['#like_num', '.like_num', 'span[class*="like"]']
         count = self._extract_number(selectors)
         if count == 0:
-            logger.debug('Like count not found.')
+            logger.debug(t('crawl.debug.likes_missing'))
         return count
 
     def get_reward_count(self) -> int:
         """Extract the reward / tip count (赞赏数)."""
         count = self._extract_number(['.reward_num'])
         if count == 0:
-            logger.debug('Reward count not found.')
+            logger.debug(t('crawl.debug.rewards_missing'))
         return count
 
     # ------------------------------------------------------------------

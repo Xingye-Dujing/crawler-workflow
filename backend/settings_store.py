@@ -18,6 +18,7 @@ import re
 import threading
 
 from config import Config
+from i18n import t
 
 _PATH = os.path.join(Config.DATA_DIR, 'settings.json')
 _lock = threading.Lock()
@@ -86,14 +87,14 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 if v:
                     vals[key] = v
                     if not os.path.isfile(v):
-                        warnings.append(f'驱动文件不存在: {v}')
+                        warnings.append(t('set.driverMissing', path=v))
                 else:
                     vals[key] = DEFAULTS[key]
-                    warnings.append('驱动路径为空，已恢复默认值')
+                    warnings.append(t('set.driverEmpty'))
             elif key == 'browser_binary':
                 v = str(raw or '').strip()
                 if v and not os.path.isfile(v):
-                    warnings.append(f'浏览器程序不存在: {v}')
+                    warnings.append(t('set.browserMissing', path=v))
                 vals[key] = v
             elif key == 'window_size':
                 v = str(raw or '').strip()
@@ -101,23 +102,23 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                     vals[key] = v
                 else:
                     vals[key] = DEFAULTS[key]
-                    warnings.append(f'窗口大小格式应为 宽x高（如 1920x1080），已恢复默认 {DEFAULTS[key]}')
+                    warnings.append(t('set.badWindow', default=DEFAULTS[key]))
             elif key in ('page_load_timeout', 'element_timeout'):
                 try:
                     v = int(float(raw))
                 except (TypeError, ValueError):
                     v = DEFAULTS[key]
-                    warnings.append(f'{key} 不是数字，已恢复默认 {v}')
+                    warnings.append(t('set.badNumber', key=key, value=v))
                 lo, hi = (5, 300) if key == 'page_load_timeout' else (3, 600)
                 if not lo <= v <= hi:
                     v = DEFAULTS[key]
-                    warnings.append(f'{key} 超出范围 {lo}-{hi}，已恢复默认 {v}')
+                    warnings.append(t('set.outOfRange', key=key, lo=lo, hi=hi, value=v))
                 vals[key] = v
             elif key == 'ollama_host':
                 v = str(raw or '').strip().rstrip('/')
                 if v and not re.match(r'^https?://', v):
                     vals[key] = DEFAULTS[key]
-                    warnings.append('Ollama 地址需以 http:// 或 https:// 开头，已恢复默认')
+                    warnings.append(t('set.badOllamaHost'))
                 else:
                     vals[key] = v or DEFAULTS[key]
         tmp = _PATH + '.tmp'
@@ -126,5 +127,5 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 json.dump(vals, f, ensure_ascii=False, indent=2)
             os.replace(tmp, _PATH)
         except OSError as e:
-            warnings.append(f'设置未能写入磁盘（本次会话内仍生效）: {e}')
+            warnings.append(t('set.saveFailed', err=e))
         return dict(vals), warnings

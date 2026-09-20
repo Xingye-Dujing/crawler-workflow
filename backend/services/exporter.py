@@ -46,11 +46,18 @@ class DataExporter:
 
     @classmethod
     def normalize_filename(cls, filename: str, fmt: str) -> str:
-        """Ensure the filename carries the extension matching *fmt*."""
-        root, ext = os.path.splitext(filename)
+        """Ensure the filename carries the extension matching *fmt*.
+
+        A blank or dot-only stem is replaced with a real default: joining
+        ``''`` onto the export directory used to produce a hidden/empty ``.csv``.
+        """
+        stem = str(filename or '').strip()
+        root, ext = os.path.splitext(stem)
         wanted = cls.EXTENSIONS.get(fmt, '.csv')
         if ext.lower() in ('.csv', '.json', '.xlsx', '.xls', '.txt', '.html', '.md'):
-            return filename
+            return stem
+        if not root.strip('. '):
+            return f'export{wanted}'
         return root + wanted
 
     @classmethod
@@ -88,7 +95,7 @@ class DataExporter:
 
         os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
 
-        if fmt == ('xlsx', 'excel'):
+        if fmt in ('xlsx', 'excel'):
             cls._write_excel(df, filepath, **kwargs)
         elif fmt == 'csv':
             cls._write_csv(df, filepath, **kwargs)
@@ -114,7 +121,13 @@ class DataExporter:
 
     @staticmethod
     def _write_json(df: pd.DataFrame, filepath: str, orient: str = 'records', **_):
-        records = df.to_dict(orient) if orient == 'records' else json.loads(df.to_json(orient=orient))
+        if orient == 'records':
+            # NaN / NaT are not valid JSON. json.dump writes bare ``NaN`` by
+            # default and no strict parser — the browser's JSON.parse included —
+            # accepts it, so the file could never be re-imported.
+            records = df.astype(object).where(pd.notna(df), None).to_dict('records')
+        else:
+            records = json.loads(df.to_json(orient=orient))
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(records, f, ensure_ascii=False, indent=2, default=str)
 

@@ -42,7 +42,9 @@ def _settings_host() -> str:
         from settings_store import get_setting
 
         return str(get_setting('ollama_host') or '')
-    except Exception:  # noqa: BLE001 — a missing store must not break analysis
+    except Exception:
+        # A missing settings store must not break analysis: the ollama library
+        # then falls back to its own default host.
         return ''
 
 
@@ -445,7 +447,9 @@ def run_llm_rows(
                     _idx, _hash, parsed = _call_row(client, parse, build_prompt(truncated), idx, thash)
                 except LLMError:
                     raise
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
+                    # One row failing is never fatal by itself — count it and
+                    # keep going (the circuit breaker handles a real outage).
                     failures += 1
                     logger.warning(t('llm.row_exception', label=label, err=e))
                     parsed = None

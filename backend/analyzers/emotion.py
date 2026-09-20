@@ -44,31 +44,46 @@ class EmotionAnalyzer:
             """
 Role: Fine-Grained Sentiment Analysis Expert (Academic Standard)
 
-Goal: Conduct fine-grained sentiment analysis on the provided text. Strictly distinguish between "social context implied emotion" and "actual expressed emotion in the text". Only assign corresponding labels when the text explicitly expresses subjective pain, joy, or fear. If the text primarily states facts, explains causes, verifies information, or objectively reports news (even if involving death), classify as [Neutral].
+Goal: Conduct fine-grained sentiment analysis on the provided text. Strictly distinguish between "social context
+implied emotion" and "actual expressed emotion in the text". Only assign corresponding labels when the text
+explicitly expresses subjective pain, joy, or fear. If the text primarily states facts, explains causes, verifies
+information, or objectively reports news (even if involving death), classify as [Neutral].
 
 Emotion Categories & Definitions:
-1. Anger: Expresses strong dissatisfaction, accusation, condemnation, wrath, or uses aggressive/insulting language against a behavior or entity (e.g., mocking the deceased).
+1. Anger: Expresses strong dissatisfaction, accusation, condemnation, wrath, or uses aggressive/insulting language
+   against a behavior or entity (e.g., mocking the deceased).
 2. Joy: Expresses happiness, excitement, satisfaction, love, or humor.
-3. Sadness: Explicitly expresses mourning, grief, crying, pain of loss using vocabulary like "heartbroken", "tears". Note: Mere notification of death without strong subjective sorrow descriptions is not this category.
+3. Sadness: Explicitly expresses mourning, grief, crying, pain of loss using vocabulary like "heartbroken",
+   "tears". Note: Mere notification of death without strong subjective sorrow descriptions is not this category.
 4. Fear: Expresses panic, worry, threat perception, or physiological fear reactions.
 5. Neutral:
    - Objective statement of facts (news style).
    - Explanation of reasons, logical reasoning, information verification process.
-   - Use of calm, rational, restrained tone even if the topic involves negative events (e.g., death), as long as there are no strong subjective emotion words like "sorrow" or "grief".
+   - Use of calm, rational, restrained tone even if the topic involves negative events (e.g., death), as long as
+     there are no strong subjective emotion words like "sorrow" or "grief".
 
 Processing Rules:
 - Ignore artifacts: Automatically filter out `##`, `#...#` tags or placeholders; analyze only the main text semantics.
 - Fact vs. Emotion Principle:
    - If a user says "Someone died." -> Neutral (stating fact).
    - If a user says "I'm very sad hearing the news..." -> Sadness (expressing subjective sorrow).
-   - If a user uses rhetorical exaggeration like "The sky fell!" -> Fear/Sadness (expression of strong emotion via rhetoric).
-- Anger Detection Special Rule: Even if no words like "angry" or "crazy" are used, if the text accuses someone of disrespecting a tragedy (e.g., treating death as a "joke/meme"), criticize behavior with rhetorical questioning ("Why do you...?") implying moral outrage, or use sarcastic tone to condemn actions related to a negative event, classify immediately as Anger.
+   - If a user uses rhetorical exaggeration like "The sky fell!" -> Fear/Sadness (expression of strong emotion via
+     rhetoric).
+- Anger Detection Special Rule: Even if no words like "angry" or "crazy" are used, if the text accuses someone of
+  disrespecting a tragedy (e.g., treating death as a "joke/meme"), criticize behavior with rhetorical questioning
+  ("Why do you...?") implying moral outrage, or use sarcastic tone to condemn actions related to a negative event,
+  classify immediately as Anger.
 - Confidence Setting:
    - High confidence for Neutral when facts are stated objectively without subjective emotion words.
-   - For Anger/Joy/Sadness/Fear, only give near 1.0 if the expression is direct and strong; if there is ambiguity between neutral description and weak mixed emotions, lower confidence accordingly or judge based on dominant tone (e.g., rhetorical questioning about disrespect = high anger).
+   - For Anger/Joy/Sadness/Fear, only give near 1.0 if the expression is direct and strong; if there is ambiguity
+     between neutral description and weak mixed emotions, lower confidence accordingly or judge based on dominant
+     tone (e.g., rhetorical questioning about disrespect = high anger).
 
 Output Format:
-Strictly output ONLY a plain string (not JSON, not Markdown) with the following structure: `Emotion: {label}, Confidence: {score}` where label is one of ['Anger','Joy','Sadness','Fear','Neutral'] and score is a number between 0-1 (with appropriate decimals). Do not include any additional text, explanations, or code blocks.
+Strictly output ONLY a plain string (not JSON, not Markdown) with the following structure:
+`Emotion: {label}, Confidence: {score}` where label is one of ['Anger','Joy','Sadness','Fear','Neutral'] and score
+is a number between 0-1 (with appropriate decimals). Do not include any additional text, explanations, or code
+blocks.
 
 Input Text:
 """

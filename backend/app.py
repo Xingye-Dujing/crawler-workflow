@@ -56,12 +56,42 @@ logger = setup_logger(Config.LOG_DIR)
 # raises — it just prints as a literal "%s" in the console — so surface it here,
 # where the offending key is named, instead of leaving it to be spotted later.
 for _issue in audit():
-    logger.warning('i18n: %s', _issue)
+    logger.warning(f'i18n: {_issue}')
 
 # Thread-local storage: tracks which workflow index the current thread belongs to.
 # Used by LogBufferHandler, _LogTee, and add_log to route log lines into the
 # correct per-workflow buffer (_wf_logs[wf_idx]) in parallel mode.
 _wf_local = threading.local()
+
+
+# Console lines kept in memory. The frontend only ever renders the last 200,
+# but the total count has to keep growing so the browser can tell how many it
+# has not seen yet (see _push_log).
+LOG_KEEP = 5000
+
+# Every message that reaches the console is i18n.t(key, **params) — add_log,
+# logging, and print() all funnel through here.
+
+
+def _push_log(line: str, wf_idx: int = None):
+    """Append one console line, keeping the buffer bounded.
+
+    ``_log_total`` counts every line ever produced, not the number retained: the
+    status endpoint ships only the tail, so without a running total the browser
+    cannot work out the delta and the console silently freezes at 200 lines.
+    """
+    logs = execution_state['logs']
+    logs.append(line)
+    if len(logs) > LOG_KEEP:
+        del logs[:-LOG_KEEP]
+    execution_state['_log_total'] += 1
+    idx = wf_idx if wf_idx is not None else getattr(_wf_local, 'idx', None)
+    if idx is not None:
+        buf = execution_state['_wf_logs'].setdefault(idx, [])
+        buf.append(line)
+        if len(buf) > LOG_KEEP:
+            del buf[:-LOG_KEEP]
+        execution_state['_wf_log_total'][idx] = execution_state['_wf_log_total'].get(idx, 0) + 1
 
 
 class LogBufferHandler(logging.Handler):
@@ -70,13 +100,7 @@ class LogBufferHandler(logging.Handler):
     def emit(self, record):
         if record.name.startswith('werkzeug'):
             return
-        ts = time.strftime('%H:%M:%S')
-        msg = self.format(record)
-        line = f'[{ts}] {msg}'
-        execution_state['logs'].append(line)
-        wf_idx = getattr(_wf_local, 'idx', None)
-        if wf_idx is not None:
-            execution_state['_wf_logs'].setdefault(wf_idx, []).append(line)
+        _push_log(f'[{time.strftime("%H:%M:%S")}] {self.format(record)}')
 
     def format(self, record):
         return record.getMessage()
@@ -97,14 +121,10 @@ class _LogTee:
     def write(self, text):
         if text and text != '\n':
             ts = time.strftime('%H:%M:%S')
-            wf_idx = getattr(_wf_local, 'idx', None)
             for line in text.rstrip('\n').split('\n'):
                 msg = line.rstrip()
                 if msg:
-                    full = f'[{ts}] {msg}'
-                    execution_state['logs'].append(full)
-                    if wf_idx is not None:
-                        execution_state['_wf_logs'].setdefault(wf_idx, []).append(full)
+                    _push_log(f'[{ts}] {msg}')
         self._original.write(text)
 
     def flush(self):
@@ -189,7 +209,7 @@ def _tokenize_dataframe(df: pd.DataFrame, params: dict) -> pd.DataFrame | None:
     top_n = params.get('top_n', '')
     kwargs = {}
     if output_mode == 'word_freq' and top_n:
-        kwargs['top_n'] = int(top_n)
+        kwargs['top_n'] = _safe_int(top_n, 120, minimum=1)
     labels, values = VisualizationService.tokenize_frequency(df, column, **kwargs)
     if not labels:
         return pd.DataFrame()
@@ -206,10 +226,12 @@ execution_state = {
     'thread': None,
     'results': {},
     'logs': [],
+    '_log_total': 0,  # lines ever produced (the list itself is capped)
     'total_nodes': 0,
     'completed_nodes': 0,
     'active_crawlers': set(),
     '_wf_logs': {},  # {wf_idx: [log lines]} per-workflow logs for parallel mode
+    '_wf_log_total': {},  # {wf_idx: lines ever produced} — see _push_log
     '_mode': 'serial',
     'llm': None,  # AI transport config from the settings panel (see /api/workflow/execute)
     'cancel_event': threading.Event(),  # set by Stop; checked between LLM rows
@@ -262,22 +284,21 @@ def _llm_run_ctx(node: dict, op: str) -> dict:
 
 
 def add_log(msg: str, wf_idx: int = None):
-    ts = time.strftime('%H:%M:%S')
-    line = f'[{ts}] {msg}'
-    execution_state['logs'].append(line)
-    actual_idx = wf_idx if wf_idx is not None else getattr(_wf_local, 'idx', None)
-    if actual_idx is not None:
-        execution_state['_wf_logs'].setdefault(actual_idx, []).append(line)
+    _push_log(f'[{time.strftime("%H:%M:%S")}] {msg}', wf_idx)
 
 
-def _record_execution_history(workflow: dict, engine: WorkflowEngine, results: dict):
+def _record_execution_history(workflow: dict, engine: WorkflowEngine, results: dict, workflow_name: str = ''):
     """After a run completes, snapshot per-node metrics (row counts, and
     emotion/tendency distributions where present) into execution_history so
     /api/history/* can chart trends across runs over time. Best-effort: a
-    failure here must never break the workflow run itself."""
+    failure here must never break the workflow run itself.
+
+    The name matters: without it every run was filed as "untitled" and the
+    history panel's per-workflow grouping could not distinguish anything.
+    """
     try:
         run_id = uuid.uuid4().hex[:12]
-        workflow_name = workflow.get('name') or 'untitled'
+        workflow_name = str(workflow_name or workflow.get('name') or '').strip() or 'untitled'
         ts = history_service.now()
         rows = []
         for nid, result in results.items():
@@ -352,15 +373,22 @@ def delete_workflow():
 
 @app.route('/api/workflow/execute', methods=['POST'])
 def execute_workflow():
-    if execution_state['running']:
-        return jsonify({'ok': False, 'error': 'A workflow is already running'}), 400
+    running_thread = execution_state['thread']
+    # The previous run's thread may still be unwinding after a Stop (it clears
+    # `running` first), so check liveness too — otherwise a quick Stop → Run
+    # leaves two threads appending to the same console and results.
+    if execution_state['running'] or (running_thread is not None and running_thread.is_alive()):
+        return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
 
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     workflow = data.get('workflow', {})
     settings = workflow.get('settings', {})
     mode = settings.get('mode', 'parallel')
     headless = settings.get('headless', True)
-    max_workers = settings.get('max_workers', Config.DEFAULT_MAX_WORKERS)
+    max_workers = _safe_int(settings.get('max_workers'), Config.DEFAULT_MAX_WORKERS, minimum=1, maximum=16)
+    # Recorded with the run so the history panel can group by workflow rather
+    # than showing every run as "untitled".
+    workflow_name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
 
     # AI transport chosen in the settings panel: 'ollama' (local daemon) or
     # 'openrouter' (API). The key only ever lives in the browser's
@@ -375,22 +403,24 @@ def execute_workflow():
         'provider': llm_cfg.get('provider') or 'ollama',
         'model': (llm_cfg.get('model') or '').strip(),
         'api_key': (llm_cfg.get('api_key') or '').strip(),
-        'batch_size': max(1, min(100, int(llm_cfg.get('batch_size') or 10))),
-        'max_chars': max(0, min(20000, int(llm_cfg.get('max_chars') or 600))),
-        'workers': max(1, min(8, int(llm_cfg.get('workers') or 3))),
+        'batch_size': _safe_int(llm_cfg.get('batch_size'), 10, minimum=1, maximum=100),
+        'max_chars': _safe_int(llm_cfg.get('max_chars'), 600, minimum=0, maximum=20000),
+        'workers': _safe_int(llm_cfg.get('workers'), 3, minimum=1, maximum=8),
     }
     if execution_state['llm']['provider'] == 'openrouter':
         if not execution_state['llm']['api_key']:
-            return jsonify({'ok': False, 'error': 'OpenRouter API Key 未填写（设置 → AI）'}), 400
+            return jsonify({'ok': False, 'error': t('api.needApiKey')}), 400
         if not execution_state['llm']['model']:
-            return jsonify({'ok': False, 'error': 'OpenRouter 模型未选择（设置 → AI）'}), 400
+            return jsonify({'ok': False, 'error': t('api.needModel')}), 400
 
     cancel_event = threading.Event()
     execution_state['cancel_event'] = cancel_event
     execution_state['running'] = True
     execution_state['results'] = {}
     execution_state['logs'] = []
+    execution_state['_log_total'] = 0
     execution_state['_wf_logs'] = {}
+    execution_state['_wf_log_total'] = {}
     execution_state['total_nodes'] = 0
     execution_state['completed_nodes'] = 0
     execution_state['_mode'] = mode
@@ -416,20 +446,24 @@ def execute_workflow():
         for conn in wf_engine.connections:
             upstream_of.setdefault(conn['to'], []).append(conn['from'])
 
-        def _input_for(nid: str):
+        def _inputs_for(nid: str):
+            """→ (rows of the first incoming connection, [(parent_id, result), …]).
+
+            The full list travels with the node so a join can use the *second*
+            incoming connection as its right-hand table; every other node just
+            takes the first one.
+            """
             parents = upstream_of.get(nid) or []
             if not parents:
                 # A source (crawler or upload) has nothing upstream.
-                return []
+                return [], []
             if len(parents) > 1:
-                # Several arrows into one node: the first one drawn wins and the
-                # rest are dropped — worth saying out loud rather than silently
-                # picking one.
                 add_log(t('wf.multi_input', nid=nid, up=parents[0], n=len(parents)), wf_idx=wf_idx)
-            upstream_result = results.get(parents[0])
+            pairs = [(pid, results.get(pid)) for pid in parents]
+            primary = pairs[0][1]
             # A chart spec (dict) is not tabular input; neither is a node that
             # has not produced a list.
-            return upstream_result if isinstance(upstream_result, list) else []
+            return (primary if isinstance(primary, list) else []), pairs
 
         for level in levels:
             if not execution_state['running']:
@@ -443,7 +477,8 @@ def execute_workflow():
                     wf_idx=wf_idx,
                 )
                 try:
-                    result = _execute_node(node, headless, _input_for(nid))
+                    primary, upstream = _inputs_for(nid)
+                    result = _execute_node(node, headless, primary, upstream=upstream)
                 except Exception as e:
                     # A dead node must not take finished work with it: rows the
                     # LLM already completed were published into results as they
@@ -491,7 +526,7 @@ def execute_workflow():
 
             wf_count = len(sub_engines)
             execution_state['total_nodes'] = sum(len(se.nodes) for se in sub_engines)
-            add_log(t('wf.found', n=wf_count, c=len(sub_engines)))
+            add_log(t('wf.found', n=wf_count))
 
             if mode == 'serial' or wf_count <= 1:
                 # ── Serial: one workflow at a time ──
@@ -545,13 +580,18 @@ def execute_workflow():
                     add_log(t('wf.all_completed'))
 
             if execution_state['running']:
-                _record_execution_history(workflow, engine, execution_state['results'])
+                _record_execution_history(workflow, engine, execution_state['results'], workflow_name)
 
         except Exception:
             logger.exception(t('wf.exec_exception'))
             add_log(t('wf.exec_failed'))
         finally:
             execution_state['running'] = False
+            # The tee exists to catch the analyzers' print() output *during* a
+            # run; leaving it installed meant every later print — from any
+            # request — also showed up in the console panel.
+            if isinstance(sys.stdout, _LogTee):
+                sys.stdout = sys.stdout._original
 
     execution_state['thread'] = threading.Thread(target=run, daemon=True)
     execution_state['thread'].start()
@@ -566,17 +606,19 @@ def _execute_source_node(node: dict, headless: bool):
     params = node.get('params', {})
     platform = node.get('platform', params.get('platform', ''))
     keyword = params.get('keyword', '')
-    target_count = params.get('target_count', 50)
+    target_count = _safe_int(params.get('target_count'), 50, minimum=1)
     start_time = params.get('start_time')
     end_time = params.get('end_time')
-    urls = params.get('urls')
 
     crawler = get_crawler(platform, headless=headless, cookie_dir=Config.COOKIE_DIR)
     execution_state['active_crawlers'].add(crawler)
     try:
         if platform == 'wechat':
-            return crawler.search(urls=urls)
-        if platform == 'weibo' and start_time and end_time:
+            # WeChat scrapes a list of article URLs, not a keyword.
+            return crawler.search(urls=_split_urls(params.get('urls')))
+        if platform == 'weibo' and (start_time or end_time):
+            # Both bounds are required: the crawler raises a readable error
+            # otherwise instead of silently searching something else.
             return crawler.search(keyword, start_time=start_time, end_time=end_time)
         return crawler.search(keyword, target_count=target_count)
     finally:
@@ -637,7 +679,7 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
 
     if op == 'keyword':
         method = params.get('method', 'tfidf')
-        topk = int(params.get('topk', 10))
+        topk = _safe_int(params.get('topk'), 10, minimum=1)
         merge = params.get('merge', 'true') == 'true'
         extractor = KeywordExtractor()
         df = extractor.analyze_dataframe(df, text_column=text_column, method=method, topk=topk, merge=merge)
@@ -645,9 +687,9 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
 
     if op == 'cluster':
         method = params.get('cluster_method', 'kmeans')
-        n_clusters = int(params.get('n_clusters', 3))
-        eps = float(params.get('eps', 0.5))
-        min_samples = int(params.get('min_samples', 2))
+        n_clusters = _safe_int(params.get('n_clusters'), 3, minimum=1)
+        eps = _safe_float(params.get('eps'), 0.5)
+        min_samples = _safe_int(params.get('min_samples'), 2, minimum=1)
         clusterer = TextCluster()
         df = clusterer.analyze_dataframe(
             df,
@@ -665,20 +707,25 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         return df.to_dict('records')
 
     if op == 'anomaly':
-        columns = params.get('columns', '').split(',') if params.get('columns') else None
-        contamination = float(params.get('contamination', 0.1))
+        # _split_columns, not raw .split(','): a list like "a, b" used to keep
+        # the leading space and match no column at all, silently.
+        columns = _split_columns(params.get('columns')) or None
+        contamination = min(max(_safe_float(params.get('contamination'), 0.1), 0.001), 0.5)
         detector = AnomalyDetector()
         df = detector.analyze_dataframe(df, columns=columns, contamination=contamination)
         return df.to_dict('records')
 
     if op == 'correlation':
-        columns = params.get('columns', '').split(',') if params.get('columns') else None
+        columns = _split_columns(params.get('columns')) or None
         corr_method = params.get('corr_method', 'pearson')
-        min_abs = float(params.get('min_abs', 0.0))
+        min_abs = _safe_float(params.get('min_abs'), 0.0)
         analyzer_corr = CorrelationAnalyzer()
         df = analyzer_corr.analyze_dataframe(df, columns=columns, method=corr_method, min_abs=min_abs)
         return df.to_dict('records')
 
+    # An unknown operation must not look like "this node simply has no data":
+    # the run continues, but the console says why the table is empty.
+    add_log(t('wf.unknown_process_op', op=op or '(empty)'))
     return []
 
 
@@ -702,8 +749,10 @@ def _execute_output_node(node: dict, current_input: list):
         fmt = params.get('format', 'csv' if op == 'save_csv' else None)
         filename = params.get('filename', 'export.csv')
         fmt = fmt or DataExporter.infer_format(filename)
-        filename = DataExporter.normalize_filename(filename, fmt)
-        filepath = os.path.join(Config.EXPORT_DIR, sanitize_filename(filename))
+        # Sanitize first, then (re)apply the extension: the other way round a
+        # name like ".." lost its extension and landed as a hidden file.
+        filename = DataExporter.normalize_filename(sanitize_filename(filename), fmt)
+        filepath = os.path.join(Config.EXPORT_DIR, filename)
         try:
             result = DataExporter.save(df, filepath, fmt=fmt, text_column=params.get('text_column'))
         except UnsupportedFormatError as e:
@@ -714,10 +763,62 @@ def _execute_output_node(node: dict, current_input: list):
     return current_input
 
 
+def _safe_int(value, default: int = 0, minimum: int = None, maximum: int = None) -> int:
+    """int() for numbers typed into the UI.
+
+    Every settings field arrives as a string, so "abc" used to raise a bare
+    ValueError from inside a request handler (HTTP 500) or from a node (opaque
+    node failure). A malformed value now falls back to the default.
+    """
+    try:
+        result = int(float(value))
+    except (TypeError, ValueError):
+        return default
+    if minimum is not None:
+        result = max(minimum, result)
+    if maximum is not None:
+        result = min(maximum, result)
+    return result
+
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _optional_int(value):
+    """Like _safe_int, but blank or unparseable means "not configured" (None)."""
+    raw = str(value or '').strip()
+    if not raw:
+        return None
+    try:
+        return int(float(raw))
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_float(value):
+    raw = str(value or '').strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _split_columns(value) -> list:
     if isinstance(value, list):
-        return value
+        return [str(c).strip() for c in value if str(c).strip()]
     return [c.strip() for c in str(value or '').split(',') if c.strip()]
+
+
+def _split_urls(value) -> list:
+    """WeChat article URLs: a real list, or one per line in a textarea."""
+    raw = value if isinstance(value, (list, tuple)) else str(value or '').replace(',', '\n').split('\n')
+    return [str(u).strip() for u in raw if str(u).strip()]
 
 
 def _normalize_analysis_params(op: str, params: dict) -> dict:
@@ -742,21 +843,10 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
     if op == 'sort_rows':
         return {'column': params.get('column', ''), 'ascending': params.get('ascending', 'true') == 'true'}
     if op == 'sample_rows':
-        n_raw = params.get('n', '')
-        frac_raw = params.get('frac', '')
-        seed = params.get('seed')
-        result = {}
-        try:
-            result['n'] = int(n_raw) if n_raw else None
-        except ValueError:
-            result['n'] = None
-        try:
-            result['frac'] = float(frac_raw) if frac_raw else None
-        except ValueError:
-            result['frac'] = None
-        if seed:
-            with contextlib.suppress(ValueError):
-                result['seed'] = int(seed)
+        result = {'n': _optional_int(params.get('n')), 'frac': _optional_float(params.get('frac'))}
+        seed = _optional_int(params.get('seed'))
+        if seed is not None:
+            result['seed'] = seed
         return result
     if op == 'groupby_agg':
         return {
@@ -783,12 +873,18 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
     return {}
 
 
-def _execute_analysis_node(node: dict, current_input: list):
+def _execute_analysis_node(node: dict, current_input: list, upstream: list = None):
     """Analysis node: runs a deterministic data-cleaning pipeline (null
     handling, de-duplication, filtering, renaming, ...) via
     DataAnalysisService. Supports either a single configured operation
     (as built by the Settings panel) or a full multi-step pipeline stored
-    under params['steps'] for advanced use / API callers."""
+    under params['steps'] for advanced use / API callers.
+
+    A ``join_tables`` step merges with the table of the node's *second*
+    incoming connection. The old design asked the user to paste an opaque
+    12-character dataset id instead — an id produced by the Upload node and
+    shown nowhere, so a join silently joined nothing.
+    """
     params = node.get('params', {})
     if not current_input:
         return []
@@ -800,11 +896,15 @@ def _execute_analysis_node(node: dict, current_input: list):
         op = node.get('operation', params.get('operation', ''))
         steps = [{'op': op, 'params': _normalize_analysis_params(op, params)}] if op else []
 
+    # upstream[0] is the left table (already current_input); anything after it is
+    # a candidate right table.
+    right_tables = [res for _pid, res in (upstream or [])[1:] if isinstance(res, list) and res]
+
     for step in steps:
         if step.get('op') == 'join_tables':
-            right_id = params.get('right_dataset_id', step.get('params', {}).get('right_dataset_id'))
-            if right_id and right_id in _datasets:
-                step['params']['other_df'] = _datasets[right_id]['df']
+            if not right_tables:
+                raise UnknownOperationError(t('wf.join_no_right_table'))
+            step['params']['other_df'] = pd.DataFrame(right_tables[0])
 
     try:
         cleaned, report = DataAnalysisService.run_pipeline(df, steps)
@@ -902,7 +1002,10 @@ def _execute_visualize_node(node: dict, current_input: list):
     return spec
 
 
-def _execute_node(node: dict, headless: bool, current_input: list, run_ctx: dict = None):
+def _execute_node(node: dict, headless: bool, current_input: list, run_ctx: dict = None, upstream: list = None):
+    """Run one node. ``upstream`` is [(parent_id, result), …] in connection
+    order — only the analysis node needs more than the first entry (a join uses
+    the second one as its right-hand table)."""
     ntype = node.get('type')
     if ntype == 'source':
         return _execute_source_node(node, headless)
@@ -912,7 +1015,7 @@ def _execute_node(node: dict, headless: bool, current_input: list, run_ctx: dict
         op = node.get('operation') or node.get('params', {}).get('operation', '')
         return _execute_process_node(node, current_input, run_ctx=run_ctx or _llm_run_ctx(node, op))
     if ntype == 'analysis':
-        return _execute_analysis_node(node, current_input)
+        return _execute_analysis_node(node, current_input, upstream=upstream)
     if ntype == 'visualize':
         return _execute_visualize_node(node, current_input)
     if ntype == 'tokenize':
@@ -953,7 +1056,9 @@ def stop_workflow():
     # Clear the console but NOT the results: a stopped run keeps everything it
     # already produced (rows, tables, exports) so nothing paid for is lost.
     execution_state['logs'] = []
+    execution_state['_log_total'] = 0
     execution_state['_wf_logs'] = {}
+    execution_state['_wf_log_total'] = {}
     execution_state['total_nodes'] = 0
     execution_state['completed_nodes'] = 0
     execution_state.pop('current_input', None)
@@ -974,6 +1079,9 @@ def workflow_status():
             {
                 'id': wk,
                 'logs': wf_logs[-200:],
+                # How many lines exist in total, so the browser can compute the
+                # delta even after the tail truncation above.
+                'total': execution_state['_wf_log_total'].get(wk, len(wf_logs)),
             }
         )
 
@@ -987,6 +1095,7 @@ def workflow_status():
         {
             'running': execution_state['running'],
             'logs': execution_state['logs'][-200:],
+            'log_total': execution_state['_log_total'],
             'workflows': wf_list,
             'mode': mode,
             'results': list(execution_state['results'].keys()),
@@ -1073,7 +1182,7 @@ def upload_dataset():
     """Upload a CSV, JSON, or TXT file and register it for analysis/visualization."""
     file = request.files.get('file')
     if not file:
-        return jsonify({'ok': False, 'error': 'No file provided'}), 400
+        return jsonify({'ok': False, 'error': t('api.badRequest', what='missing file')}), 400
     filename = file.filename or 'upload'
     name_lower = filename.lower()
     try:
@@ -1084,8 +1193,9 @@ def upload_dataset():
             df = pd.DataFrame({'content': [text]})
         else:
             df = pd.read_csv(file.stream)
-    except (ValueError, pd.errors.ParserError) as e:
-        return jsonify({'ok': False, 'error': f'Failed to parse file: {e}'}), 400
+    except (ValueError, OSError, UnicodeDecodeError, pd.errors.ParserError) as e:
+        # A corrupt or mis-encoded file is a user-input problem, not a crash.
+        return jsonify({'ok': False, 'error': t('api.parseFailed', err=e)}), 400
 
     is_txt = name_lower.endswith('.txt')
     dataset_id = _register_dataset(df, name=filename)
@@ -1111,7 +1221,7 @@ def paste_dataset():
     data = request.get_json(silent=True) or {}
     records = data.get('data')
     if not isinstance(records, list):
-        return jsonify({'ok': False, 'error': 'Expected "data" to be a list of records'}), 400
+        return jsonify({'ok': False, 'error': t('api.badRequest', what='data must be a list of records')}), 400
     df = pd.DataFrame(records)
     dataset_id = _register_dataset(df, name=data.get('name', 'pasted'))
     return jsonify(
@@ -1148,8 +1258,8 @@ def preview_dataset():
     except KeyError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
 
-    limit = max(1, min(int(data.get('limit', 50)), 500))
-    offset = max(0, int(data.get('offset', 0)))
+    limit = _safe_int(data.get('limit'), 50, minimum=1, maximum=500)
+    offset = _safe_int(data.get('offset'), 0, minimum=0)
     total = len(df)
     page = df.iloc[offset : offset + limit]
     return jsonify(
@@ -1209,16 +1319,21 @@ def train_ml_model():
     label_column = data.get('label_column', 'emotion')
 
     if text_column not in df.columns:
-        return jsonify({'ok': False, 'error': f'Text column "{text_column}" not found'}), 400
+        return jsonify({'ok': False, 'error': t('api.columnMissing', column=text_column)}), 400
     if label_column not in df.columns:
-        return jsonify({'ok': False, 'error': f'Label column "{label_column}" not found'}), 400
+        return jsonify({'ok': False, 'error': t('api.columnMissing', column=label_column)}), 400
 
     texts, labels = build_training_data(df, text_column, label_column)
     if len(texts) < 10:
-        return jsonify({'ok': False, 'error': f'Need at least 10 labeled rows, got {len(texts)}'}), 400
+        return jsonify({'ok': False, 'error': t('api.needLabeledRows', n=len(texts))}), 400
 
     classifier = get_classifier(model_type)
-    classifier.fit(texts, labels)
+    try:
+        classifier.fit(texts, labels)
+    except ValueError as e:
+        # One distinct label (or no usable rows) is a data problem the user can
+        # fix — it used to escape as an HTTP 500 from inside sklearn.
+        return jsonify({'ok': False, 'error': str(e)}), 400
 
     unique_labels = sorted(set(labels))
     return jsonify(
@@ -1274,6 +1389,12 @@ def render_visualization():
         return jsonify({'ok': True, 'engine': 'echarts', 'option': option})
     except ChartConfigError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
+    except (ValueError, KeyError, TypeError) as e:
+        # e.g. matplotlib refusing a pie chart of negative values: report it as
+        # a bad request instead of letting Flask return an HTML 500 (which the
+        # caller cannot even json.parse()).
+        logger.warning(t('misc.visualize_failed', err=e))
+        return jsonify({'ok': False, 'error': str(e)}), 400
 
 
 @app.route('/api/export/save', methods=['POST'])
@@ -1288,12 +1409,15 @@ def export_dataset():
 
     filename = data.get('filename', 'export.csv')
     fmt = data.get('format') or DataExporter.infer_format(filename)
-    filename = DataExporter.normalize_filename(filename, fmt)
-    filepath = os.path.join(Config.EXPORT_DIR, sanitize_filename(filename))
+    filename = DataExporter.normalize_filename(sanitize_filename(filename), fmt)
+    filepath = os.path.join(Config.EXPORT_DIR, filename)
     try:
         result = DataExporter.save(df, filepath, fmt=fmt, text_column=data.get('text_column'))
     except UnsupportedFormatError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
+    except OSError as e:
+        logger.exception(t('misc.export_failed'))
+        return jsonify({'ok': False, 'error': str(e)}), 500
     return jsonify({'ok': True, **result})
 
 
@@ -1345,54 +1469,63 @@ def cookie_status():
 
 @app.route('/api/cookies/save', methods=['POST'])
 def save_cookies():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     platform = data.get('platform', '')
     cookies = data.get('cookies', [])
     if not platform:
-        return jsonify({'ok': False, 'error': 'Platform is required'}), 400
+        return jsonify({'ok': False, 'error': t('api.platformRequired')}), 400
+    if not cookie_manager.is_supported(platform):
+        # The platform becomes part of a filename — refuse anything else.
+        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
     if not cookies:
-        return jsonify({'ok': False, 'error': 'Cookies data is required'}), 400
+        return jsonify({'ok': False, 'error': t('api.cookiesRequired')}), 400
     try:
         cookie_manager.save(platform, cookies)
         return jsonify({'ok': True, 'message': t('cookie.saved', platform=platform)})
-    except OSError as e:
+    except (OSError, ValueError) as e:
         logger.exception(t('misc.cookie_save_failed'))
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/api/cookies/generate', methods=['POST'])
 def generate_cookies():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     platform = data.get('platform', '')
     if not platform:
-        return jsonify({'ok': False, 'error': 'Platform is required'}), 400
-    wait_seconds = data.get('wait_seconds', 120)
+        return jsonify({'ok': False, 'error': t('api.platformRequired')}), 400
+    if not cookie_manager.is_supported(platform):
+        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+    # Bounded on purpose: this handler sleeps for the whole login wait, in a
+    # request thread. An unbounded value would hold that thread hostage.
+    wait_seconds = _safe_int(data.get('wait_seconds'), 120, minimum=10, maximum=600)
 
+    crawler = None
     try:
         crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR)
         url = crawler.login_url
         if not url:
-            crawler.close()
-            return jsonify({'ok': False, 'error': f'No login URL defined for platform: {platform}'}), 400
-        try:
-            crawler.driver.get(url)
-            add_log(t('wf.browser_opened', platform=platform, n=wait_seconds))
-            time.sleep(wait_seconds)
-            cookies = crawler.driver.get_cookies()
-            cookie_manager.save(platform, cookies)
-            add_log(t('wf.cookies_generated', platform=platform, n=len(cookies)))
-            return jsonify(
-                {
-                    'ok': True,
-                    'message': t('wf.cookies_generated', platform=platform, n=len(cookies)),
-                    'count': len(cookies),
-                }
-            )
-        finally:
-            crawler.close()
-    except OSError as e:
+            return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+        crawler.driver.get(url)
+        add_log(t('wf.browser_opened', platform=platform, n=wait_seconds))
+        time.sleep(wait_seconds)
+        cookies = crawler.driver.get_cookies()
+        cookie_manager.save(platform, cookies)
+        add_log(t('wf.cookies_generated', platform=platform, n=len(cookies)))
+        return jsonify(
+            {
+                'ok': True,
+                'message': t('wf.cookies_generated', platform=platform, n=len(cookies)),
+                'count': len(cookies),
+            }
+        )
+    except Exception as e:
+        # Selenium failures (no browser, no driver, network) are not OSErrors;
+        # without this they escaped as an HTML 500 the panel could not read.
         logger.exception(t('misc.cookie_gen_failed'))
         return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        if crawler is not None:
+            crawler.close()
 
 
 # ─── Config API ────────────────────────────────────────────────
@@ -1444,8 +1577,10 @@ def llm_models():
     try:
         models = list_free_models(timeout=15)
         return jsonify({'ok': True, 'models': models})
-    except requests.RequestException as e:
-        return jsonify({'ok': False, 'error': f'获取模型列表失败: {e}', 'models': []}), 502
+    except (requests.RequestException, ValueError, KeyError) as e:
+        # Offline / catalog changed shape: the panel just shows no models.
+        logger.warning(t('api.llmModelsFailed', err=e))
+        return jsonify({'ok': False, 'error': t('api.llmModelsFailed', err=e), 'models': []}), 502
 
 
 @app.route('/api/llm/test', methods=['POST'])
@@ -1498,6 +1633,9 @@ def clear_datasets():
 # finished chart back as a file next to the other workflow exports.
 
 STUDIO_MAX_ROWS = 5000
+# A chart PNG is a few hundred KB; 20 MB is a generous ceiling that still keeps
+# a malformed payload from ballooning the process.
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 def _first_tabular_result():
@@ -1592,7 +1730,7 @@ def _studio_dataset_merged(data: dict, sources: list):
     restart wipes the in-memory results). Every source's fate is reported back so
     the bar can say "2 of 3 loaded" rather than quietly pretending.
     """
-    limit = max(1, min(int(data.get('limit', STUDIO_MAX_ROWS)), STUDIO_MAX_ROWS))
+    limit = _safe_int(data.get('limit'), STUDIO_MAX_ROWS, minimum=1, maximum=STUDIO_MAX_ROWS)
     mode = str(data.get('merge') or 'concat').lower()
     frames = []
     report = []
@@ -1625,7 +1763,7 @@ def _studio_dataset_merged(data: dict, sources: list):
             {
                 'ok': False,
                 'code': 'no_result',
-                'error': 'None of the selected nodes could supply a table',
+                'error': t('api.noSourceTable'),
                 'sources': report,
             }
         )
@@ -1687,7 +1825,7 @@ def studio_dataset():
         df = fb_df
         fallback_note = {'requested': data.get('node_id'), 'used': fb_id}
 
-    limit = max(1, min(int(data.get('limit', STUDIO_MAX_ROWS)), STUDIO_MAX_ROWS))
+    limit = _safe_int(data.get('limit'), STUDIO_MAX_ROWS, minimum=1, maximum=STUDIO_MAX_ROWS)
     total = len(df)
     page = df.iloc[:limit]
     return jsonify(
@@ -1789,7 +1927,7 @@ def studio_sources():
     data = request.get_json(silent=True) or {}
     candidates = data.get('candidates')
     if not isinstance(candidates, list):
-        return jsonify({'ok': False, 'error': 'Expected a candidates list'}), 400
+        return jsonify({'ok': False, 'error': t('api.badRequest', what='candidates list')}), 400
 
     sources = []
     for item in candidates[:STUDIO_MAX_CANDIDATES]:
@@ -1814,7 +1952,7 @@ def studio_save_image():
     image = data.get('image') or ''
     match = re.match(r'^data:image/(png|jpeg|jpg|webp);base64,(.+)$', image, re.DOTALL)
     if not match:
-        return jsonify({'ok': False, 'error': 'Expected a base64 image data URL'}), 400
+        return jsonify({'ok': False, 'error': t('api.badRequest', what='image data URL')}), 400
 
     ext = match.group(1)
     if ext == 'jpeg':
@@ -1822,9 +1960,13 @@ def studio_save_image():
     try:
         payload = base64.b64decode(match.group(2), validate=False)
     except (ValueError, TypeError) as e:
-        return jsonify({'ok': False, 'error': f'Bad base64 payload: {e}'}), 400
+        return jsonify({'ok': False, 'error': t('api.parseFailed', err=e)}), 400
     if not payload:
-        return jsonify({'ok': False, 'error': 'Empty image payload'}), 400
+        return jsonify({'ok': False, 'error': t('api.badRequest', what='empty image')}), 400
+    if len(payload) > MAX_IMAGE_BYTES:
+        # A full-canvas chart is a few hundred KB; anything far past the cap is
+        # either a mistake or an attempt to exhaust memory.
+        return jsonify({'ok': False, 'error': t('api.badRequest', what='image too large')}), 400
 
     name = data.get('name') or 'studio-chart'
     name = re.sub(r'\.(png|jpe?g|webp)$', '', str(name), flags=re.IGNORECASE)
@@ -1846,7 +1988,7 @@ def studio_save_image():
 
 @app.route('/api/history/runs', methods=['GET'])
 def history_runs():
-    limit = int(request.args.get('limit', 50))
+    limit = _safe_int(request.args.get('limit'), 50, minimum=1, maximum=1000)
     df = history_service.list_runs(limit=limit)
     return jsonify({'ok': True, 'runs': df.to_dict('records'), 'workflow_names': history_service.list_workflow_names()})
 
@@ -1856,7 +1998,7 @@ def history_series():
     workflow_name = request.args.get('workflow_name') or None
     metric = request.args.get('metric') or None
     node_id = request.args.get('node_id') or None
-    limit = int(request.args.get('limit', 2000))
+    limit = _safe_int(request.args.get('limit'), 2000, minimum=1, maximum=20000)
     df = history_service.series(workflow_name=workflow_name, metric=metric, node_id=node_id, limit=limit)
     return jsonify({'ok': True, 'rows': df.to_dict('records')})
 
@@ -1876,7 +2018,8 @@ def _open_browser(url: str):
         import webbrowser
 
         webbrowser.open(url)
-    except Exception as e:  # noqa: BLE001 — a headless box has no browser to open
+    except Exception as e:
+        # A headless box has no browser to open — warn, never crash the startup.
         logger.warning(t('misc.browser_open_failed', err=e))
 
 

@@ -131,11 +131,13 @@ class ZhihuCrawler(Crawler):
         except NoSuchElementException:
             return ''
 
+    # NB: never name a local ``t`` in here — that is the i18n helper these
+    # modules import, and shadowing it silently breaks any later t('…') call.
     def _get_vote_count(self, card):
         try:
-            t = card.find_element(By.CSS_SELECTOR, '.VoteButton').text.strip()
-            if '赞同' in t:
-                m = re.search(r'(\d+(?:,\d+)*)', t.replace(',', ''))
+            label_text = card.find_element(By.CSS_SELECTOR, '.VoteButton').text.strip()
+            if '赞同' in label_text:
+                m = re.search(r'(\d+(?:,\d+)*)', label_text.replace(',', ''))
                 return int(m.group(1)) if m else 0
         except NoSuchElementException:
             pass
@@ -143,9 +145,9 @@ class ZhihuCrawler(Crawler):
 
     def _get_comment_count(self, card):
         try:
-            t = card.find_element(By.CSS_SELECTOR, 'button[aria-label*="评论"]').text.strip()
-            if '条评论' in t:
-                m = re.search(r'(\d+(?:,\d+)*)', t.replace(',', ''))
+            label_text = card.find_element(By.CSS_SELECTOR, 'button[aria-label*="评论"]').text.strip()
+            if '条评论' in label_text:
+                m = re.search(r'(\d+(?:,\d+)*)', label_text.replace(',', ''))
                 return int(m.group(1)) if m else 0
         except NoSuchElementException:
             pass

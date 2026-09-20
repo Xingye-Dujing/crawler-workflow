@@ -1,5 +1,6 @@
 import contextlib
 import json
+import logging
 import time
 from abc import ABC, abstractmethod
 
@@ -9,7 +10,10 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 
+from i18n import t
 from settings_store import get_setting
+
+logger = logging.getLogger(__name__)
 
 
 class Crawler(ABC):
@@ -52,16 +56,29 @@ class Crawler(ABC):
         try:
             with open(self.cookie_path, encoding='utf-8') as f:
                 cookies = json.load(f)
+        except (OSError, ValueError):
+            return
+        if not isinstance(cookies, list) or not cookies:
+            return
+        try:
             self.driver.get(f'https://{self.domain}')
             for c in cookies:
-                self.driver.add_cookie(c)
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
+                # A cookie for another domain (or an expired one the driver
+                # refuses) must not abort the rest of the list.
+                with contextlib.suppress(Exception):
+                    self.driver.add_cookie(c)
+        except Exception as e:
+            # A slow / blocked landing page must not kill the session before
+            # the crawl even starts — but it is worth saying out loud, since
+            # the run that follows may come back empty for lack of login.
+            logger.warning(t('crawl.cookies_failed', platform=self.domain, err=e))
 
-    def save_cookies(self, path: str):
+    def save_cookies(self, path: str) -> int:
+        """Write the session cookies to *path*; returns how many were saved."""
         cookies = self.driver.get_cookies()
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(cookies, f, ensure_ascii=False, indent=2)
+        return len(cookies)
 
     def wait_for_element(self, selector: str, timeout: int | None = None):
         # Default wait comes from the settings panel (元素等待超时).
@@ -87,8 +104,12 @@ class Crawler(ABC):
         pass
 
     def close(self):
+        # quit() on a dead session raises; callers close in a `finally`, where
+        # an exception would mask the real result of the crawl.
         if self.driver:
-            self.driver.quit()
+            with contextlib.suppress(Exception):
+                self.driver.quit()
+            self.driver = None
 
     def __enter__(self):
         return self

@@ -47,7 +47,7 @@ class KeywordExtractor:
         if merge:
             all_text = ' '.join(df[text_column].dropna().astype(str).tolist())
             keywords = extract_fn(all_text, topk=topk)
-            result = pd.DataFrame(keywords)
+            result = pd.DataFrame(keywords, columns=['keyword', 'weight'])
             result.insert(0, 'method', method)
             return result
 
@@ -58,7 +58,9 @@ class KeywordExtractor:
             kw_list = extract_fn(str(text), topk=topk)
             for kw in kw_list:
                 kw['row'] = idx
+                kw['method'] = method
                 all_rows.append(kw)
 
-        result = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
-        return result
+        # Same column set as the merged mode (plus the originating row), so a
+        # downstream node can address 'keyword'/'weight' either way.
+        return pd.DataFrame(all_rows, columns=['keyword', 'weight', 'row', 'method'])

@@ -180,8 +180,15 @@ const workflow = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 /* The run outlives this request, so its console language is
-                   pinned here — X-Lang alone would die with the request. */
-                body: JSON.stringify({ workflow: workflowData, llm: llm, lang: I18n.lang }),
+                   pinned here — X-Lang alone would die with the request. The
+                   workflow name travels too: execution history groups runs by
+                   it, and without it every run was filed as "untitled". */
+                body: JSON.stringify({
+                    workflow: workflowData,
+                    llm: llm,
+                    lang: I18n.lang,
+                    workflow_name: this.currentFile || '',
+                }),
             });
             var result = await resp.json();
             if (result.ok) {
@@ -208,6 +215,15 @@ const workflow = {
     },
 
     pollStatus: function () {
+        /* The status endpoint ships only the last 200 console lines, but also
+           reports how many exist in total. Deriving the delta from that total is
+           what keeps the console alive past 200 lines: indexing the truncated
+           array alone silently froze it (once the log passed 200 lines the
+           browser believed it had already seen everything). */
+        function freshLines(lines, total, seen) {
+            var dropped = Math.max(0, (total || lines.length) - lines.length);
+            return lines.slice(Math.max(0, seen - dropped));
+        }
         var lastLogIdx = 0;
         var interval = setInterval(async function () {
             try {
@@ -232,7 +248,7 @@ const workflow = {
                         /* Show tab bar */
                         consoleTabs.style.display = 'flex';
                         var activeTab = typeof _wfActiveTab !== 'undefined' ? _wfActiveTab : 'all';
-                        var tabHtml = '<div class="console-tab' + (activeTab === 'all' ? ' active' : '') + '" data-wf="all" onclick="switchWfTab(\'all\')">\u25a0 All</div>';
+                        var tabHtml = '<div class="console-tab' + (activeTab === 'all' ? ' active' : '') + '" data-wf="all" onclick="switchWfTab(\'all\')">\u25a0 ' + I18n.t('console.all') + '</div>';
                         result.workflows.forEach(function (wf) {
                             var dotClass = 'tab-dot-idle';
                             if (result.running) dotClass = 'tab-dot-run';
@@ -244,7 +260,7 @@ const workflow = {
 
                         /* Render the active tab's logs */
                         if (activeTab === 'all') {
-                            var newLogs = result.logs.slice(lastLogIdx);
+                            var newLogs = freshLines(result.logs, result.log_total, lastLogIdx);
                             newLogs.forEach(function (log) {
                                 var line = document.createElement('div');
                                 line.className = 'console-line';
@@ -253,15 +269,15 @@ const workflow = {
                             });
                             if (newLogs.length > 0) {
                                 consoleOut.scrollTop = consoleOut.scrollHeight;
-                                lastLogIdx = result.logs.length;
                             }
+                            lastLogIdx = result.log_total || result.logs.length;
                         } else {
                             var wfData = null;
                             result.workflows.forEach(function (w) { if (w.id === activeTab) wfData = w; });
                             if (wfData) {
                                 if (typeof _wfLastIdx === 'undefined') _wfLastIdx = {};
                                 if (_wfLastIdx[activeTab] === undefined) _wfLastIdx[activeTab] = 0;
-                                var newWfLogs = wfData.logs.slice(_wfLastIdx[activeTab]);
+                                var newWfLogs = freshLines(wfData.logs, wfData.total, _wfLastIdx[activeTab]);
                                 newWfLogs.forEach(function (log) {
                                     var line = document.createElement('div');
                                     line.className = 'console-line';
@@ -270,15 +286,15 @@ const workflow = {
                                 });
                                 if (newWfLogs.length > 0) {
                                     consoleOut.scrollTop = consoleOut.scrollHeight;
-                                    _wfLastIdx[activeTab] = wfData.logs.length;
                                 }
+                                _wfLastIdx[activeTab] = wfData.total || wfData.logs.length;
                             }
                         }
                     } else {
                         /* Single workflow — original behavior */
                         consoleTabs.style.display = 'none';
                         consoleTabs.innerHTML = '';
-                        var newLogs = result.logs.slice(lastLogIdx);
+                        var newLogs = freshLines(result.logs, result.log_total, lastLogIdx);
                         newLogs.forEach(function (log) {
                             var line = document.createElement('div');
                             line.className = 'console-line';
@@ -287,8 +303,8 @@ const workflow = {
                         });
                         if (newLogs.length > 0) {
                             consoleOut.scrollTop = consoleOut.scrollHeight;
-                            lastLogIdx = result.logs.length;
                         }
+                        lastLogIdx = result.log_total || result.logs.length;
                     }
 
                     /* Status bar update */
@@ -314,8 +330,11 @@ const workflow = {
                     }
                 }
             } catch (e) {
+                /* The server went away mid-run: stop polling, but say so
+                   instead of leaving a frozen "running" status bar. */
                 clearInterval(interval);
                 RunState.setRunning(false);
+                showToast(I18n.t('toast.pollFailed'));
             }
         }, 1000);
     },
@@ -340,20 +359,31 @@ function openSettings(nodeId) {
         '</div>';
     if (node.type === 'source') {
         var p = node.params;
+        /* WeChat scrapes a list of article URLs, not a keyword — the panel has
+           to change shape with the platform, which is why the select re-opens
+           itself on change. */
+        var isWechat = p.platform === 'wechat';
         html += '<div class="settings-group">' +
             '<label class="settings-label">' + I18n.t('settings.platform') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'platform\',this.value)">' +
+            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'platform\',this.value);openSettings(\'' + nodeId + '\')">' +
             '<option value="zhihu"' + (p.platform === 'zhihu' ? ' selected' : '') + '>' + I18n.t('platform.zhihu') + '</option>' +
             '<option value="weibo"' + (p.platform === 'weibo' ? ' selected' : '') + '>' + I18n.t('platform.weibo') + '</option>' +
             '<option value="xiaohongshu"' + (p.platform === 'xiaohongshu' ? ' selected' : '') + '>' + I18n.t('platform.xiaohongshu') + '</option>' +
             '<option value="wechat"' + (p.platform === 'wechat' ? ' selected' : '') + '>' + I18n.t('platform.wechat') + '</option>' +
-            '</select></div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.keyword') + '</label>' +
-            '<input class="settings-input" value="' + (p.keyword || '') + '" placeholder="keyword" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'keyword\',this.value)"></div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.targetCount') + '</label>' +
-            '<input class="settings-input" type="number" value="' + (p.target_count || 50) + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'target_count\',parseInt(this.value)||50)"></div>';
+            '</select></div>';
+        if (isWechat) {
+            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.urls') + '</label>' +
+                '<textarea class="settings-input" rows="5" placeholder="https://mp.weixin.qq.com/s/..." ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
+                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.urlsHint') + '</div></div>';
+        } else {
+            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.keyword') + '</label>' +
+                '<input class="settings-input" value="' + escapeHtml(p.keyword || '') + '" placeholder="keyword" ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'keyword\',this.value)"></div>' +
+                '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.targetCount') + '</label>' +
+                '<input class="settings-input" type="number" value="' + (p.target_count || 50) + '" ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'target_count\',parseInt(this.value)||50)"></div>';
+        }
         if (p.platform === 'weibo') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.startTime') + '</label>' +
                 '<input class="settings-input" value="' + (p.start_time || '') + '" placeholder="2026-01-01" ' +
@@ -608,7 +638,10 @@ function renderAnalysisSettings(nodeId, p) {
             [{ v: 'sum', l: 'Sum' }, { v: 'mean', l: 'Mean' }, { v: 'count', l: 'Count' }, { v: 'max', l: 'Max' }, { v: 'min', l: 'Min' }]);
     }
     if (op === 'join_tables') {
-        html += renderParamInput(nodeId, p, 'right_dataset_id', 'settings.datasetId', 'text', '');
+        /* The right table is the node's second incoming connection — the old
+           "dataset id" box asked for an id the user had no way to obtain. */
+        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.joinHint') + '</div>';
         html += renderParamSelect(nodeId, p, 'join_how', 'settings.joinHow', 'left',
             [{ v: 'left', l: 'Left' }, { v: 'right', l: 'Right' }, { v: 'inner', l: 'Inner' }, { v: 'outer', l: 'Outer' }]);
         html += renderParamInput(nodeId, p, 'left_on', 'settings.leftOn', 'text', '');
@@ -1790,12 +1823,15 @@ workflow.validate = function () {
         return errors;
     }
 
-    /* Build lookup: which nodes have inputs/outputs */
+    /* Build lookup: which nodes have inputs/outputs, and how many inputs each
+       one has (a join needs two: left table, right table). */
     var hasInput = {};
     var hasOutput = {};
+    var inputCount = {};
     conns.forEach(function (c) {
         hasOutput[c.from] = true;
         hasInput[c.to] = true;
+        inputCount[c.to] = (inputCount[c.to] || 0) + 1;
     });
 
     Object.keys(nodes).forEach(function (id) {
@@ -1804,7 +1840,14 @@ workflow.validate = function () {
         var type = node.type;
 
         if (type === 'source') {
-            if (!params.keyword || !params.keyword.trim()) {
+            if (params.platform === 'wechat') {
+                /* WeChat crawls the article URLs you paste; a keyword would be
+                   ignored, so asking for one (as this used to) both blocked a
+                   valid workflow and left the platform unusable. */
+                if (!params.urls || !String(params.urls).trim()) {
+                    errors.push(I18n.t('validate.sourceUrls').replace('{title}', node.title));
+                }
+            } else if (!params.keyword || !params.keyword.trim()) {
                 errors.push(I18n.t('validate.sourceKeyword').replace('{title}', node.title));
             }
             if (!hasOutput[id]) {
@@ -1830,6 +1873,11 @@ workflow.validate = function () {
             }
             if (!params.operation) {
                 errors.push(I18n.t('validate.analysisOperation').replace('{title}', node.title));
+            }
+            if (params.operation === 'join_tables' && (inputCount[id] || 0) < 2) {
+                /* The right-hand table is the node's second incoming
+                   connection — without it the join has nothing to join with. */
+                errors.push(I18n.t('validate.joinNeedsTwo').replace('{title}', node.title));
             }
         }
 

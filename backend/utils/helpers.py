@@ -1,20 +1,37 @@
 import io
+import os
 import re
 
 import pandas as pd
+
+# Longest name we hand to the OS: Windows caps a path component at 255 chars
+# and a full path at ~260, and exports live under an already-deep data/ path.
+MAX_FILENAME_LENGTH = 100
 
 
 def extract_number(text: str) -> int:
     """Extract first integer from text, supporting thousands separators."""
     if not text:
         return 0
-    m = re.search(r'(\d+(?:,\d+)*)', text.replace(',', ''))
-    return int(m.group(1)) if m else 0
+    m = re.search(r'\d+', str(text).replace(',', ''))
+    return int(m.group(0)) if m else 0
 
 
 def sanitize_filename(name: str) -> str:
-    """Remove illegal characters from filename."""
-    return re.sub(r'[\\/*?:"<>|]', '_', name)
+    """Make *name* safe to use as a single path component.
+
+    Strips directory separators (so a caller-supplied name can never escape the
+    target directory), control characters, leading/trailing dots and spaces, and
+    caps the length so the write itself cannot fail with a path-too-long error.
+    """
+    clean = re.sub(r'[\x00-\x1f\\/*?:"<>|]', '_', str(name or ''))
+    clean = clean.strip().strip('.')
+    # Keep the extension visible when truncating a long name.
+    if len(clean) > MAX_FILENAME_LENGTH:
+        root, ext = os.path.splitext(clean)
+        keep = max(1, MAX_FILENAME_LENGTH - len(ext))
+        clean = root[:keep] + ext
+    return clean
 
 
 def df_to_csv_string(df: pd.DataFrame) -> str:

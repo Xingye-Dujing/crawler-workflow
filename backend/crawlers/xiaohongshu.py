@@ -41,7 +41,7 @@ class XiaohongshuCrawler(Crawler):
                 data = self._scrape_note(link)
                 if data:
                     results.append(data)
-                    title_preview = data['标题'][:30] if data['标题'] else '无标题'
+                    title_preview = data['标题'][:30] if data['标题'] else t('crawl.xhs.untitled')
                     logger.info(t('crawl.xhs.note_ok', title=title_preview))
                 else:
                     logger.warning(t('crawl.xhs.note_fail', url=link))
@@ -61,12 +61,10 @@ class XiaohongshuCrawler(Crawler):
             logger.info(t('crawl.xhs.scroll_round', i=scroll_iter + 1, total=max_scrolls))
             self.scroll_to_bottom()
 
-            try:
-                logger.info(t('crawl.xhs.no_more'))
-                break
-            except NoSuchElementException:
-                pass
-
+            # (The old code wrapped a log call in try/except NoSuchElementException
+            # and then broke unconditionally, so only the first screenful was ever
+            # collected and target_count was ignored. End-of-list is detected by
+            # the "no growth" branch below instead.)
             cards = self.driver.find_elements(By.CSS_SELECTOR, '.note-item')
             current_count = len(cards)
             logger.info(t('crawl.xhs.cards', n=current_count))
@@ -121,7 +119,7 @@ class XiaohongshuCrawler(Crawler):
             preview = title[:40] + '...' if len(title) > 40 else title
             logger.info(t('crawl.xhs.title', title=preview))
         except NoSuchElementException:
-            logger.debug('[爬取详情] 未找到标题元素')
+            logger.debug(t('crawl.debug.title_missing'))
 
         content = ''
         try:
@@ -131,7 +129,7 @@ class XiaohongshuCrawler(Crawler):
             ).strip()
             logger.info(t('crawl.xhs.content_len', n=len(content)))
         except NoSuchElementException:
-            logger.debug('[爬取详情] 未找到正文元素')
+            logger.debug(t('crawl.debug.content_missing'))
 
         author = ''
         try:
@@ -139,7 +137,7 @@ class XiaohongshuCrawler(Crawler):
             author = el.text.strip()
             logger.info(t('crawl.xhs.author', author=author))
         except NoSuchElementException:
-            logger.debug('[爬取详情] 未找到作者元素')
+            logger.debug(t('crawl.debug.author_missing'))
 
         pub_time = ''
         try:
@@ -147,7 +145,7 @@ class XiaohongshuCrawler(Crawler):
             pub_time = el.text.strip()
             logger.info(t('crawl.xhs.pub_time', time=pub_time))
         except NoSuchElementException:
-            logger.debug('[爬取详情] 未找到发布时间元素')
+            logger.debug(t('crawl.debug.time_missing'))
 
         like_count = self._extract_count('.like-wrapper .count, .engage-bar .like-wrapper .count')
         collect_count = self._extract_count('.collect-wrapper .count, .engage-bar .collect-wrapper .count')
@@ -203,7 +201,7 @@ class XiaohongshuCrawler(Crawler):
             )
             logger.info(t('crawl.xhs.comment_found', n=len(comment_items)))
         except TimeoutException:
-            logger.debug('[提取评论] 评论区域未加载或不存在')
+            logger.debug(t('crawl.debug.comments_missing'))
             return comments
 
         for idx, item in enumerate(comment_items[:max_comments]):
@@ -256,10 +254,12 @@ class XiaohongshuCrawler(Crawler):
                         }
                     )
                     logger.debug(
-                        '[提取评论] 第 %s 条: %s - %s...',
-                        idx + 1,
-                        comment_author,
-                        comment_content[:20],
+                        t(
+                            'crawl.debug.comment_item',
+                            i=idx + 1,
+                            author=comment_author,
+                            text=comment_content[:20],
+                        )
                     )
             except Exception as e:
                 logger.error(t('crawl.xhs.comment_error', i=idx + 1, err=e))
