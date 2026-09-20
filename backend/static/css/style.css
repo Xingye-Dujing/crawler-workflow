@@ -1367,6 +1367,116 @@ table.history-runs-table tr:hover td {
   overflow: auto;
 }
 
+/* ── Run records manager (docked bottom panel content) ──────────────────── */
+.runs-mgr-empty {
+  padding: 14px 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+}
+.runs-mgr-table {
+  width: 100%;
+  font-size: 11px;
+}
+.runs-mgr-table th {
+  text-align: left;
+  padding: 6px 6px 4px;
+  font-weight: 500;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line2);
+  white-space: nowrap;
+}
+.runs-mgr-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--line2);
+  vertical-align: top;
+}
+.runs-mgr-wf {
+  max-width: 130px;
+  overflow-wrap: anywhere;
+}
+.runs-mgr-id {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.runs-mgr-time {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.runs-mgr-status {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.runs-mgr-status.st-running {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--text);
+}
+.runs-mgr-status.st-interrupted {
+  background: rgba(166, 111, 48, 0.14);
+  color: #8a5a26;
+}
+.runs-mgr-status.st-completed {
+  background: rgba(58, 111, 58, 0.12);
+  color: #3a6f3a;
+}
+.runs-mgr-status.st-failed,
+.runs-mgr-status.st-abandoned {
+  background: rgba(140, 40, 40, 0.1);
+  color: #8c2828;
+}
+.runs-mgr-ops {
+  white-space: nowrap;
+}
+.runs-mgr-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 10px;
+  padding: 2px 8px;
+  margin: 1px 2px 1px 0;
+  cursor: pointer;
+  border-radius: var(--radius);
+  font-family: var(--font);
+}
+.runs-mgr-btn:hover {
+  background: var(--hover);
+}
+.runs-mgr-btn.del:hover {
+  background: rgba(140, 40, 40, 0.08);
+  border-color: rgba(140, 40, 40, 0.4);
+}
+.runs-mgr-detail {
+  background: var(--hover);
+}
+.runs-mgr-detail-title {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.runs-mgr-node {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  padding: 2px 0;
+}
+.runs-mgr-node-id {
+  min-width: 56px;
+  color: var(--text-dim);
+}
+.runs-mgr-node-st {
+  min-width: 52px;
+}
+.runs-mgr-node-err {
+  color: #8c2828;
+  overflow-wrap: anywhere;
+}
+
 /* ── Node settings sidebar ──────────────────────────────────────────────── */
 #node-settings {
   position: fixed;
@@ -1899,6 +2009,52 @@ input:-webkit-autofill:focus {
 
 #console-panel.open ~ #status-bar {
   border-top-color: var(--line);
+}
+
+/* ── Run records panel (docked at the bottom, console-style) ────────────── */
+#runs-panel {
+  position: fixed;
+  bottom: var(--barH);
+  left: 0;
+  width: 100%;
+  height: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  z-index: 100;
+  transition: height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#runs-panel.open {
+  height: 240px;
+}
+#runs-panel.open ~ #status-bar {
+  border-top-color: var(--line);
+}
+#runs-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  cursor: ns-resize;
+  z-index: 5;
+  background: transparent;
+}
+#runs-resize-handle:hover,
+#runs-resize-handle.active {
+  background: var(--line);
+}
+#runs-mgr-body {
+  flex: 1;
+  overflow: auto;
+  padding: 0 8px 8px;
+}
+@media (max-width: 768px) {
+  #runs-panel.open {
+    height: 140px;
+  }
 }
 
 @media (max-width: 768px) {

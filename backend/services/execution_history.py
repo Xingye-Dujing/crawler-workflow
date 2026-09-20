@@ -122,6 +122,12 @@ class ExecutionHistoryService:
         params.append(limit)
         df = pd.read_sql(sql, conn, params=params)
         conn.close()
+        # Reads written before the recorder started deduplicating can hold the
+        # same point twice (an output node re-recording its process's
+        # distribution). Dropping exact duplicates at read time cleans those
+        # old rows without touching the database.
+        if not df.empty:
+            df = df.drop_duplicates(subset=['workflow_name', 'metric', 'label', 'timestamp', 'value'])
         return df
 
     def clear(self):

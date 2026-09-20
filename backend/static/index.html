@@ -614,6 +614,31 @@
       <div id="console-output"></div>
     </div>
 
+    <!-- Run Records Panel — docked at the bottom like the console -->
+    <div id="runs-panel">
+      <div id="runs-resize-handle"></div>
+      <div class="console-header">
+        <span data-i18n="runsMgr.header">Run Records</span>
+        <div class="console-actions">
+          <button
+            class="panel-close"
+            onclick="runsManager.refresh()"
+            data-i18n="btn.refresh"
+          >
+            Refresh
+          </button>
+          <button
+            class="panel-close"
+            onclick="toggleRunsPanel()"
+            data-i18n="stats.close"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <div id="runs-mgr-body" class="data-preview-table-wrap"></div>
+    </div>
+
     <!-- Processes Panel -->
     <div id="processes-panel">
       <div class="console-header">
@@ -650,6 +675,14 @@
         data-i18n="processes.header"
       >
         Processes
+      </button>
+      <button
+        class="status-btn"
+        id="btn-runs"
+        onclick="toggleRunsPanel()"
+        data-i18n="runsMgr.header"
+      >
+        Run Records
       </button>
       <span id="status-zoom">100%</span>
     </div>

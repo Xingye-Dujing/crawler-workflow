@@ -414,6 +414,28 @@ const I18n = {
             'validate.nameDownstream': 'Name node "{title}": connect it to a downstream node',
             'name.hint': 'This name labels the run in the Execution History panel.',
             'name.unnamed': 'Untitled',
+            'runsMgr.header': 'Run Records',
+            'runsMgr.empty': 'No runs recorded yet',
+            'runsMgr.colWorkflow': 'Workflow',
+            'runsMgr.colStatus': 'Status',
+            'runsMgr.colNodes': 'Nodes',
+            'runsMgr.colRows': 'Rows',
+            'runsMgr.colStarted': 'Started',
+            'runsMgr.status.running': 'Running',
+            'runsMgr.status.interrupted': 'Interrupted',
+            'runsMgr.status.completed': 'Completed',
+            'runsMgr.status.failed': 'Failed',
+            'runsMgr.status.abandoned': 'Abandoned',
+            'runsMgr.resume': 'Continue',
+            'runsMgr.restart': 'Restart',
+            'runsMgr.remove': 'Delete',
+            'runsMgr.detail': 'Details',
+            'runsMgr.detailNodes': 'Node breakdown',
+            'runsMgr.confirmRestart': 'Discard this interrupted attempt and start over from scratch?',
+            'runsMgr.confirmRemove': 'Delete this run and its kept rows?',
+            'runsMgr.removeDone': 'Run deleted',
+            'runsMgr.removeFailed': 'Delete failed',
+            'runsMgr.busy': 'A run is already in progress',
             'validate.processInput': 'Process node "{title}": must have an input connection',
             'validate.processDownstream': 'Process node "{title}": must connect to a downstream node',
             'validate.analysisInput': 'Analysis node "{title}": must have an input connection',
@@ -809,6 +831,28 @@ const I18n = {
             'validate.nameDownstream': '命名节点 "{title}"：请连接下游节点',
             'name.hint': '这个名字会作为分类显示在「历史」区域。',
             'name.unnamed': '未命名',
+            'runsMgr.header': '运行记录',
+            'runsMgr.empty': '还没有运行记录',
+            'runsMgr.colWorkflow': '工作流',
+            'runsMgr.colStatus': '状态',
+            'runsMgr.colNodes': '节点',
+            'runsMgr.colRows': '行数',
+            'runsMgr.colStarted': '开始时间',
+            'runsMgr.status.running': '运行中',
+            'runsMgr.status.interrupted': '已中断',
+            'runsMgr.status.completed': '已完成',
+            'runsMgr.status.failed': '失败',
+            'runsMgr.status.abandoned': '已放弃',
+            'runsMgr.resume': '继续',
+            'runsMgr.restart': '重新开始',
+            'runsMgr.remove': '删除',
+            'runsMgr.detail': '详情',
+            'runsMgr.detailNodes': '节点明细',
+            'runsMgr.confirmRestart': '丢弃这次中断的尝试，从头重新运行？',
+            'runsMgr.confirmRemove': '删除这条运行及其保留的数据行？',
+            'runsMgr.removeDone': '运行已删除',
+            'runsMgr.removeFailed': '删除失败',
+            'runsMgr.busy': '已有运行正在进行',
             'validate.processInput': '处理节点 "{title}"：必须有一个输入连接',
             'validate.processDownstream': '处理节点 "{title}"：必须连接到下游节点',
             'validate.analysisInput': '分析节点 "{title}"：必须有一个输入连接',
@@ -1528,6 +1572,39 @@ function toggleConsolePopout() {
     handle.addEventListener('mousedown', (e) => {
         const panel = document.getElementById('console-panel');
         if (panel.classList.contains('popout')) return;
+        e.preventDefault();
+        cs.panel = panel;
+        cs.startY = e.clientY;
+        cs.startH = panel.offsetHeight;
+        cs.active = true;
+        handle.classList.add('active');
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!cs.active) return;
+        const newH = Math.max(80, Math.min(window.innerHeight - 100, cs.startH + (cs.startY - e.clientY)));
+        cs.panel.style.height = newH + 'px';
+        cs.panel.classList.add('open'); /* keep open while resizing */
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (cs.active) {
+            cs.active = false;
+            handle.classList.remove('active');
+        }
+    });
+})();
+
+/* ── Run-records panel height resize (dock mode) ── */
+
+(function initRunsResize() {
+    const handle = document.getElementById('runs-resize-handle');
+    if (!handle) return;
+    let cs = {};
+
+    handle.addEventListener('mousedown', (e) => {
+        const panel = document.getElementById('runs-panel');
+        if (!panel.classList.contains('open')) return;
         e.preventDefault();
         cs.panel = panel;
         cs.startY = e.clientY;

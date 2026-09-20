@@ -160,6 +160,8 @@ const workflow = {
         /* Open console and clear previous output */
         document.getElementById('console-panel').classList.add('open');
         document.getElementById('console-output').innerHTML = '';
+        /* The run-records panel shares the console's bottom slot. */
+        if (window.runsManager) runsManager.close();
         var workflowData = canvas.toWorkflowJSON();
         /* AI transport check — fail fast instead of dying 200 rows into a run. */
         var llm = LLMSettings.payload();
@@ -198,6 +200,12 @@ const workflow = {
                     llm: llm,
                     lang: I18n.lang,
                     workflow_name: this.currentFile || '',
+                    /* The resume banner's "continue" passes the interrupted
+                       run's id here: the backend reuses that run (same node
+                       rows, same crawler cursors) instead of starting a fresh
+                       one. Without it the backend mints a new id and every
+                       cursor dies — the run silently degrades to a cold start. */
+                    resume_run_id: opts.resumeRunId || '',
                 }),
             });
             var result = await resp.json();
@@ -1811,6 +1819,12 @@ function toggleConsole() {
             panel.style.height = '';
         }
     }
+    /* The two panels share the same bottom slot; opening one closes the other. */
+    if (panel.classList.contains('open') && window.runsManager) runsManager.close();
+}
+
+function toggleRunsPanel() {
+    runsManager.toggle();
 }
 
 function clearConsole() {
@@ -2185,6 +2199,183 @@ var resumeBar = {
         this.candidate = null;
         const banner = document.getElementById('resume-banner');
         if (banner) banner.classList.add('hidden');
+    },
+};
+
+/* ── Run records manager ──────────────────────────────────────
+   Every recorded run — including orphans the resume banner can no longer
+   match (the workflow was rewired or deleted since). Each row offers the
+   three things the banner offers and one it can't: continue, restart from
+   scratch, delete outright, and a per-node breakdown. The panel itself is
+   docked at the bottom of the window, console-style. */
+var runsManager = {
+    panel() {
+        return document.getElementById('runs-panel');
+    },
+
+    toggle() {
+        var panel = this.panel();
+        if (!panel) return;
+        var opening = !panel.classList.contains('open');
+        /* Same bottom slot as the console — the two cannot stack. */
+        if (opening) {
+            var consolePanel = document.getElementById('console-panel');
+            if (consolePanel) consolePanel.classList.remove('open');
+            panel.classList.add('open');
+            this.refresh();
+        } else {
+            this.close();
+        }
+    },
+
+    close() {
+        var panel = this.panel();
+        if (!panel) return;
+        panel.classList.remove('open');
+        /* Same trap as the console: the resize handle leaves an inline height
+           behind, and an inline height overrides the CSS `height: 0` — the
+           panel would refuse to shrink after being resized. */
+        panel.style.height = '';
+    },
+
+    async refresh() {
+        var body = document.getElementById('runs-mgr-body');
+        if (!body) return;
+        try {
+            var resp = await fetch('/api/runs/list?limit=50');
+            var result = await resp.json();
+            this.render((result.ok && result.runs) || []);
+        } catch (e) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
+        }
+    },
+
+    statusKey(status) {
+        var known = ['running', 'interrupted', 'completed', 'failed', 'abandoned'];
+        return known.indexOf(status) >= 0 ? 'runsMgr.status.' + status : 'runsMgr.status.completed';
+    },
+
+    render(runs) {
+        var body = document.getElementById('runs-mgr-body');
+        var count = document.getElementById('runs-mgr-count');
+        if (!body) return;
+        if (count) count.textContent = runs.length ? '(' + runs.length + ')' : '';
+        if (!runs.length) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
+            return;
+        }
+        var rows = runs.map(function (r) {
+            var resumable = !!r.resumable;
+            var ops = '';
+            if (resumable) {
+                ops += '<button class="runs-mgr-btn" onclick="runsManager.continueRun(\'' + r.run_id + '\')">' + I18n.t('runsMgr.resume') + '</button>';
+                ops += '<button class="runs-mgr-btn" onclick="runsManager.restart(\'' + r.run_id + '\')">' + I18n.t('runsMgr.restart') + '</button>';
+            }
+            ops += '<button class="runs-mgr-btn del" onclick="runsManager.remove(\'' + r.run_id + '\', ' + (resumable ? 'true' : 'false') + ')">' + I18n.t('runsMgr.remove') + '</button>';
+            ops += '<button class="runs-mgr-btn" onclick="runsManager.detail(\'' + r.run_id + '\', this)">' + I18n.t('runsMgr.detail') + '</button>';
+            return '<tr>' +
+                '<td class="runs-mgr-wf">' + escapeHtml(r.workflow_name || I18n.t('name.unnamed')) + '</td>' +
+                '<td class="runs-mgr-id">' + escapeHtml(r.run_id) + '</td>' +
+                '<td><span class="runs-mgr-status st-' + escapeHtml(r.status || '') + '">' + I18n.t(runsManager.statusKey(r.status)) + '</span></td>' +
+                '<td>' + (r.node_done || 0) + '/' + (r.node_total || 0) + '</td>' +
+                '<td>' + (r.rows_kept || 0) + '</td>' +
+                '<td class="runs-mgr-time">' + escapeHtml(r.started_at || '') + '</td>' +
+                '<td class="runs-mgr-ops">' + ops + '</td>' +
+                '</tr>';
+        }).join('');
+        body.innerHTML =
+            '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
+            '<th>' + I18n.t('runsMgr.colWorkflow') + '</th>' +
+            '<th>run_id</th>' +
+            '<th>' + I18n.t('runsMgr.colStatus') + '</th>' +
+            '<th>' + I18n.t('runsMgr.colNodes') + '</th>' +
+            '<th>' + I18n.t('runsMgr.colRows') + '</th>' +
+            '<th>' + I18n.t('runsMgr.colStarted') + '</th>' +
+            '<th></th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table>';
+    },
+
+    _busy() {
+        if (window.RunState && RunState.running) {
+            showToast(I18n.t('runsMgr.busy'));
+            return true;
+        }
+        return false;
+    },
+
+    continueRun(runId) {
+        if (this._busy()) return;
+        /* Hand the bottom slot back to the console before the run starts. */
+        this.close();
+        workflow.execute({ resumeRunId: runId });
+    },
+
+    async restart(runId) {
+        if (this._busy()) return;
+        if (!window.confirm(I18n.t('runsMgr.confirmRestart'))) return;
+        try {
+            /* Same contract as the banner's restart: dropping the run drops
+               its "already crawled" claims, or the fresh attempt would see
+               everything as already-seen and quietly return fewer rows. */
+            await fetch('/api/runs/discard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ run_id: runId }),
+            });
+        } catch (e) { /* a failed discard still starts the run */ }
+        this.close();
+        workflow.execute();
+    },
+
+    async remove(runId, wasResumable) {
+        if (!window.confirm(I18n.t('runsMgr.confirmRemove'))) return;
+        /* An interrupted run being deleted outright means "never continue
+           it": its crawl claims must go too, or those items stay claimed by
+           a run that no longer exists. A finished run keeps them — deleting
+           its data must not resurrect items as unseen. */
+        var url = wasResumable ? '/api/runs/discard' : '/api/runs/delete';
+        try {
+            var resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ run_id: runId }),
+            });
+            var result = await resp.json();
+            showToast(result.ok ? I18n.t('runsMgr.removeDone') : I18n.t('runsMgr.removeFailed'));
+        } catch (e) {
+            showToast(I18n.t('runsMgr.removeFailed'));
+        }
+        this.refresh();
+        if (window.resumeBar) resumeBar.refresh();
+    },
+
+    async detail(runId, btn) {
+        var row = btn && btn.closest ? btn.closest('tr') : null;
+        var existing = document.getElementById('runs-mgr-detail-' + runId);
+        if (existing) {
+            existing.remove();
+            return;
+        }
+        try {
+            var resp = await fetch('/api/runs/' + encodeURIComponent(runId));
+            var result = await resp.json();
+            if (!result.ok || !result.run) return;
+            var run = result.run;
+            var tr = document.createElement('tr');
+            tr.id = 'runs-mgr-detail-' + runId;
+            tr.innerHTML = '<td colspan="7" class="runs-mgr-detail"><div class="runs-mgr-detail-title">' +
+                I18n.t('runsMgr.detailNodes') + '</div>' +
+                (run.nodes || []).map(function (n) {
+                    return '<div class="runs-mgr-node">' +
+                        '<span class="runs-mgr-node-id">' + escapeHtml(n.node_id || '') + '</span>' +
+                        '<span>' + escapeHtml(n.node_type || '') + '</span>' +
+                        '<span class="runs-mgr-node-st">' + escapeHtml(n.status || '') + '</span>' +
+                        '<span>' + (n.row_count || 0) + ' ' + I18n.t('runsMgr.colRows') + '</span>' +
+                        (n.error ? '<span class="runs-mgr-node-err">' + escapeHtml(n.error) + '</span>' : '') +
+                        '</div>';
+                }).join('') + '</td>';
+            if (row) row.after(tr);
+        } catch (e) { /* leave the table as it was */ }
     },
 };
 

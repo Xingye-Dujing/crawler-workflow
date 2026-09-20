@@ -460,6 +460,23 @@ def add_log(msg: str, wf_idx: int = None):
     _push_log(f'[{time.strftime("%H:%M:%S")}] {msg}', wf_idx)
 
 
+def _component_name(sub_engine) -> str:
+    """This connected component's own workflow name, from its name node.
+
+    The canvas may hold several workflows in one run, each headed by its own
+    name node — recording them all under the *first* name on the canvas
+    swallowed every other workflow's label (they all filed as the first
+    one's name, or as "untitled" when the label sat in another component).
+    """
+    for node in sub_engine.nodes.values():
+        if node.get('type') != 'name':
+            continue
+        label = str((node.get('params') or {}).get('workflow_name') or '').strip()
+        if label:
+            return label
+    return ''
+
+
 def _record_execution_history(workflow: dict, engine: WorkflowEngine, results: dict, workflow_name: str = ''):
     """After a run completes, snapshot per-node metrics (row counts, and
     emotion/tendency distributions where present) into execution_history so
@@ -471,9 +488,15 @@ def _record_execution_history(workflow: dict, engine: WorkflowEngine, results: d
     """
     try:
         run_id = uuid.uuid4().hex[:12]
-        workflow_name = str(workflow_name or workflow.get('name') or '').strip() or 'untitled'
+        workflow_name = str(workflow_name or (workflow or {}).get('name') or '').strip() or 'untitled'
         ts = history_service.now()
         rows = []
+        # One run can have several nodes carrying the same distribution — the
+        # emotion process computes it, then the output node exports the very
+        # same column, and both used to be recorded. Two identical points at
+        # one timestamp drew a doubled tooltip, so per run a (metric, label)
+        # pair is recorded once, from the first node that produced it.
+        seen_metrics = set()
         for nid, result in results.items():
             if not isinstance(result, list) or not result:
                 continue
@@ -485,10 +508,16 @@ def _record_execution_history(workflow: dict, engine: WorkflowEngine, results: d
             if 'emotion' in df.columns:
                 dist = StatsService.emotion_distribution(result)
                 for label, value in zip(dist['labels'], dist['values'], strict=True):
+                    if ('emotion', label) in seen_metrics:
+                        continue
+                    seen_metrics.add(('emotion', label))
                     rows.append((run_id, workflow_name, nid, ntype, 'emotion', label, float(value), ts))
             if 'tendency' in df.columns:
                 dist = StatsService.tendency_distribution(result)
                 for label, value in zip(dist['labels'], dist['values'], strict=True):
+                    if ('tendency', label) in seen_metrics:
+                        continue
+                    seen_metrics.add(('tendency', label))
                     rows.append((run_id, workflow_name, nid, ntype, 'tendency', label, float(value), ts))
 
         history_service.record_many(rows)
@@ -907,7 +936,13 @@ def execute_workflow():
                 )
             )
             if still_running:
-                _record_execution_history(workflow, engine, execution_state['results'], workflow_name)
+                # One history entry per connected component, each under its
+                # OWN name-node label — a multi-workflow canvas must land in
+                # the history panel as separate named workflows, not all
+                # under whichever name node happens to come first.
+                for se in sub_engines:
+                    sub_results = {nid: res for nid, res in execution_state['results'].items() if nid in se.nodes}
+                    _record_execution_history(None, se, sub_results, _component_name(se) or workflow_name)
             outcome = RUN_COMPLETED if still_running else RUN_INTERRUPTED
 
         except Exception:
@@ -2668,6 +2703,19 @@ def runs_resumable():
         return jsonify({'ok': True, 'runs': []})
     limit = _safe_int(data.get('limit'), 10, minimum=1, maximum=100)
     runs = get_run_store().list_resumable(workflow_fingerprint(workflow), limit=limit)
+    return jsonify({'ok': True, 'runs': runs})
+
+
+@app.route('/api/runs/list', methods=['GET'])
+def runs_list():
+    """Every recorded run, newest first — the run-records panel's backbone.
+
+    Unlike /resumable this is not filtered by the canvas: orphaned runs (the
+    workflow has since been rewired or deleted) must stay visible here, or
+    they can never be continued or cleaned up.
+    """
+    limit = _safe_int(request.args.get('limit'), 50, minimum=1, maximum=200)
+    runs = get_run_store().list_resumable(limit=limit, include_finished=True)
     return jsonify({'ok': True, 'runs': runs})
 
 
