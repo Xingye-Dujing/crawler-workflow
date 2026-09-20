@@ -1451,30 +1451,77 @@ table.history-runs-table tr:hover td {
 }
 .runs-mgr-detail {
   background: var(--hover);
+  border-left: 3px solid var(--line);
+  padding: 10px 12px;
 }
-.runs-mgr-detail-title {
+.rm-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
   font-size: 10px;
+  color: var(--text-dim);
+}
+.rm-meta-title {
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 4px;
 }
-.runs-mgr-node {
+.rm-meta-note {
+  overflow-wrap: anywhere;
+}
+.rm-nodes {
+  display: grid;
+  gap: 6px;
+}
+.rm-node {
+  background: var(--bg);
+  border: 1px solid var(--line2);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+.rm-node-head {
   display: flex;
+  align-items: center;
   gap: 10px;
   font-size: 11px;
-  padding: 2px 0;
 }
-.runs-mgr-node-id {
-  min-width: 56px;
+.rm-node-id {
+  min-width: 52px;
+  font-weight: 500;
+}
+.rm-node-type {
+  min-width: 64px;
   color: var(--text-dim);
 }
-.runs-mgr-node-st {
-  min-width: 52px;
+.rm-node-rows {
+  margin-left: auto;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
-.runs-mgr-node-err {
+.rm-node-err {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--line2);
+  font-size: 10px;
   color: #8c2828;
   overflow-wrap: anywhere;
+}
+/* Node cards take the canvas's own per-type accents, so the detail reads in
+   the same colour language as the workflow it describes. */
+.rm-node.nt-source { border-left-color: var(--accent-source); }
+.rm-node.nt-upload { border-left-color: var(--accent-upload); }
+.rm-node.nt-process { border-left-color: var(--accent-process); }
+.rm-node.nt-analysis { border-left-color: var(--accent-analysis); }
+.rm-node.nt-visualize { border-left-color: var(--accent-visualize); }
+.rm-node.nt-tokenize { border-left-color: var(--accent-tokenize); }
+.rm-node.nt-output { border-left-color: var(--accent-output); }
+.rm-node.nt-resume { border-left-color: var(--accent-resume); }
+.rm-node.nt-name { border-left-color: var(--accent-name); }
+.runs-mgr-status.st-skipped {
+  background: rgba(26, 26, 26, 0.05);
+  color: var(--text-faint);
 }
 
 /* ── Node settings sidebar ──────────────────────────────────────────────── */

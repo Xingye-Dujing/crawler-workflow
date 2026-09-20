@@ -1794,6 +1794,10 @@ function setLang(nextLang) {
         chartStudio.refreshSources();
     }
     if (window.CustomSelect) CustomSelect.refreshAll();
+    /* The run-records table is JS-rendered, so I18n.apply() never reaches it —
+       if the panel is open, redraw it in the new language right away instead
+       of only after the next open. */
+    if (window.runsManager) runsManager.onLanguageChange();
 }
 
 function showToast(msg) {
@@ -2244,10 +2248,21 @@ var runsManager = {
         try {
             var resp = await fetch('/api/runs/list?limit=50');
             var result = await resp.json();
-            this.render((result.ok && result.runs) || []);
+            this._lastRuns = (result.ok && result.runs) || [];
+            this.render(this._lastRuns);
         } catch (e) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
         }
+    },
+
+    /* Language switch: the table text is JS-built, so an open panel must be
+       redrawn now. Re-render from the cached rows — no refetch needed, the
+       data itself did not change, only its wording. */
+    onLanguageChange() {
+        var panel = this.panel();
+        if (!panel || !panel.classList.contains('open')) return;
+        if (this._lastRuns) this.render(this._lastRuns);
+        else this.refresh();
     },
 
     statusKey(status) {
@@ -2349,6 +2364,27 @@ var runsManager = {
         if (window.resumeBar) resumeBar.refresh();
     },
 
+    /* Node status → badge colour class + i18n key. Node statuses are their
+       own vocabulary (done/partial/skipped/restored …), distinct from the
+       run statuses above. */
+    nodeStatusInfo(status) {
+        var map = {
+            done: 'st-completed',
+            restored: 'st-completed',
+            running: 'st-running',
+            partial: 'st-interrupted',
+            failed: 'st-failed',
+            skipped: 'st-skipped',
+            pending: 'st-skipped',
+        };
+        var known = ['pending', 'running', 'done', 'partial', 'failed', 'skipped', 'restored'];
+        var s = String(status || '');
+        return {
+            cls: map[s] || 'st-completed',
+            key: known.indexOf(s) >= 0 ? 'runsMgr.node.' + s : 'runsMgr.node.done',
+        };
+    },
+
     async detail(runId, btn) {
         var row = btn && btn.closest ? btn.closest('tr') : null;
         var existing = document.getElementById('runs-mgr-detail-' + runId);
@@ -2361,19 +2397,38 @@ var runsManager = {
             var result = await resp.json();
             if (!result.ok || !result.run) return;
             var run = result.run;
+            var self = this;
+            var cards = (run.nodes || []).map(function (n) {
+                var info = self.nodeStatusInfo(n.status);
+                var typeLabel = n.node_type
+                    ? I18n.t('nodeType.' + n.node_type)
+                    : '';
+                return '<div class="rm-node nt-' + escapeHtml(n.node_type || 'misc') + '">' +
+                    '<div class="rm-node-head">' +
+                    '<span class="rm-node-id">' + escapeHtml(n.node_id || '') + '</span>' +
+                    '<span class="rm-node-type">' + escapeHtml(typeLabel) + '</span>' +
+                    '<span class="runs-mgr-status ' + info.cls + '">' + I18n.t(info.key) + '</span>' +
+                    '<span class="rm-node-rows">' + (n.row_count || 0) + ' ' + I18n.t('runsMgr.colRows') + '</span>' +
+                    '</div>' +
+                    (n.error ? '<div class="rm-node-err">' + escapeHtml(n.error) + '</div>' : '') +
+                    '</div>';
+            }).join('');
             var tr = document.createElement('tr');
             tr.id = 'runs-mgr-detail-' + runId;
-            tr.innerHTML = '<td colspan="7" class="runs-mgr-detail"><div class="runs-mgr-detail-title">' +
-                I18n.t('runsMgr.detailNodes') + '</div>' +
-                (run.nodes || []).map(function (n) {
-                    return '<div class="runs-mgr-node">' +
-                        '<span class="runs-mgr-node-id">' + escapeHtml(n.node_id || '') + '</span>' +
-                        '<span>' + escapeHtml(n.node_type || '') + '</span>' +
-                        '<span class="runs-mgr-node-st">' + escapeHtml(n.status || '') + '</span>' +
-                        '<span>' + (n.row_count || 0) + ' ' + I18n.t('runsMgr.colRows') + '</span>' +
-                        (n.error ? '<span class="runs-mgr-node-err">' + escapeHtml(n.error) + '</span>' : '') +
-                        '</div>';
-                }).join('') + '</td>';
+            tr.innerHTML = '<td colspan="7" class="runs-mgr-detail">' +
+                '<div class="rm-meta">' +
+                '<span class="rm-meta-title">' + I18n.t('runsMgr.detailNodes') + '</span>' +
+                '<span class="runs-mgr-status ' + this.nodeStatusInfo(run.status).cls + '">' +
+                I18n.t(this.statusKey(run.status)) + '</span>' +
+                '<span class="rm-meta-time">' + escapeHtml(run.started_at || '') +
+                (run.finished_at ? ' &rarr; ' + escapeHtml(run.finished_at) : '') +
+                '</span>' +
+                (run.note ? '<span class="rm-meta-note">' + escapeHtml(run.note) + '</span>' : '') +
+                '</div>' +
+                '<div class="rm-nodes">' +
+                (cards || '<div class="runs-mgr-empty">' + I18n.t('runsMgr.noNodes') + '</div>') +
+                '</div>' +
+                '</td>';
             if (row) row.after(tr);
         } catch (e) { /* leave the table as it was */ }
     },
