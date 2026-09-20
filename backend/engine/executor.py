@@ -6,6 +6,8 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +29,7 @@ class TaskExecutor:
             try:
                 results.append(task())
             except Exception as e:
-                logger.error('Task failed: %s', e)
+                logger.error(t('executor.task_failed', err=e))
                 results.append(None)
         return results
 
@@ -42,7 +44,7 @@ class TaskExecutor:
                 try:
                     results.append(fut.result())
                 except Exception as e:
-                    logger.error('Task failed: %s', e)
+                    logger.error(t('executor.task_failed', err=e))
                     results.append(None)
         finally:
             # Don't block — running threads will exit naturally once

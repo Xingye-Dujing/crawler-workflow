@@ -173,7 +173,9 @@ const workflow = {
             var resp = await fetch('/api/workflow/execute', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ workflow: workflowData, llm: llm }),
+                /* The run outlives this request, so its console language is
+                   pinned here — X-Lang alone would die with the request. */
+                body: JSON.stringify({ workflow: workflowData, llm: llm, lang: I18n.lang }),
             });
             var result = await resp.json();
             if (result.ok) {

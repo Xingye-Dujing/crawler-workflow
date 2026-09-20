@@ -2,6 +2,8 @@ import logging
 
 import pandas as pd
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -123,7 +125,7 @@ class DataAnalysisService:
             else:
                 work[column] = work[column].astype(str)
         except (ValueError, TypeError) as e:
-            logger.warning('Type conversion failed for column %s -> %s: %s', column, dtype, e)
+            logger.warning(t('analysis.type_convert_failed', col=column, dtype=dtype, err=e))
         return work
 
     # ── New operations (Phase 2) ────────────────────────────────
@@ -163,7 +165,7 @@ class DataAnalysisService:
         try:
             work[new_col] = work.eval(expr)
         except Exception as e:
-            logger.warning('Column calc failed for %s = %s: %s', new_col, expr, e)
+            logger.warning(t('analysis.calc_failed', col=new_col, expr=expr, err=e))
         return work
 
     @staticmethod
@@ -179,7 +181,7 @@ class DataAnalysisService:
         try:
             work[bin_col] = pd.cut(pd.to_numeric(work[column], errors='coerce'), bins=bins, labels=labels)
         except Exception as e:
-            logger.warning('Binning failed for %s: %s', column, e)
+            logger.warning(t('analysis.bin_failed', col=column, err=e))
         return work
 
     # ── Operation registry + pipeline runner ────────────────────

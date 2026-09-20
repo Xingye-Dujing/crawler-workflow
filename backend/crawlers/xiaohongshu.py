@@ -8,6 +8,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
+from i18n import t
+
 from .base import Crawler
 
 logger = logging.getLogger(__name__)
@@ -18,56 +20,56 @@ class XiaohongshuCrawler(Crawler):
     login_url = 'https://www.xiaohongshu.com/login'
 
     def search(self, keyword: str, target_count: int = 50, **_kwargs):
-        logger.info('[小红书搜索] 开始搜索关键词: "%s", 目标数量: %s', keyword, target_count)
+        logger.info(t('crawl.xhs.start', kw=keyword, n=target_count))
         encoded = quote(keyword)
         url = f'https://www.xiaohongshu.com/search_result?keyword={encoded}&source=web_explore_feed&type=51'
         self.driver.get(url)
-        logger.info('[小红书搜索] 已访问搜索URL: %s', url)
+        logger.info(t('crawl.xhs.url', url=url))
         try:
             WebDriverWait(self.driver, 15).until(ec.presence_of_element_located((By.CSS_SELECTOR, '.note-item')))
-            logger.info('[小红书搜索] 初始搜索结果页加载完成')
+            logger.info(t('crawl.xhs.page_ready'))
         except TimeoutException:
-            logger.warning('[小红书搜索] 初始内容加载超时，可能没有搜索结果，将继续尝试滚动')
+            logger.warning(t('crawl.xhs.page_timeout'))
 
         links = self._collect_links(target_count)
-        logger.info('[小红书搜索] 共收集到 %s 条笔记链接', len(links))
+        logger.info(t('crawl.xhs.links', n=len(links)))
 
         results = []
         for idx, link in enumerate(links, 1):
-            logger.info('[小红书搜索] 正在处理第 %s/%s 条笔记: %s', idx, len(links), link)
+            logger.info(t('crawl.xhs.note_processing', i=idx, total=len(links), url=link))
             try:
                 data = self._scrape_note(link)
                 if data:
                     results.append(data)
                     title_preview = data['标题'][:30] if data['标题'] else '无标题'
-                    logger.info('[小红书搜索] 成功提取: %s...', title_preview)
+                    logger.info(t('crawl.xhs.note_ok', title=title_preview))
                 else:
-                    logger.warning('[小红书搜索] 提取失败: %s', link)
+                    logger.warning(t('crawl.xhs.note_fail', url=link))
             except Exception as e:
-                logger.error('[小红书搜索] 处理笔记时出错: %s', e, exc_info=True)
+                logger.error(t('crawl.xhs.note_error', err=e), exc_info=True)
             time.sleep(0.1)
 
-        logger.info('[小红书搜索] 搜索完成，共获取 %s 条有效笔记数据', len(results))
+        logger.info(t('crawl.xhs.finished', n=len(results)))
         return results
 
     def _collect_links(self, target_count: int, max_scrolls: int = 100):
-        logger.info('[收集链接] 开始滚动收集笔记链接，目标: %s 条', target_count)
+        logger.info(t('crawl.xhs.collect_start', n=target_count))
         all_links = set()
         last_count = 0
 
         for scroll_iter in range(max_scrolls):
-            logger.info('[收集链接] 第 %s/%s 次滚动', scroll_iter + 1, max_scrolls)
+            logger.info(t('crawl.xhs.scroll_round', i=scroll_iter + 1, total=max_scrolls))
             self.scroll_to_bottom()
 
             try:
-                logger.info('[收集链接] 检测到"没有更多了"，停止加载')
+                logger.info(t('crawl.xhs.no_more'))
                 break
             except NoSuchElementException:
                 pass
 
             cards = self.driver.find_elements(By.CSS_SELECTOR, '.note-item')
             current_count = len(cards)
-            logger.info('[收集链接] 滚动后卡片数量: %s', current_count)
+            logger.info(t('crawl.xhs.cards', n=current_count))
 
             for card in cards:
                 try:
@@ -78,37 +80,37 @@ class XiaohongshuCrawler(Crawler):
                 except NoSuchElementException:
                     pass
 
-            logger.info('[收集链接] 当前已收集链接数: %s', len(all_links))
+            logger.info(t('crawl.xhs.collected', n=len(all_links)))
 
             if len(all_links) >= target_count:
-                logger.info('[收集链接] 已达到目标数量 %s，停止加载', target_count)
+                logger.info(t('crawl.xhs.target_reached', n=target_count))
                 break
 
             if current_count == last_count:
-                logger.info('[收集链接] 卡片数量未增加，尝试再次滚动...')
+                logger.info(t('crawl.xhs.no_growth'))
                 time.sleep(0.1)
                 self.scroll_to_bottom()
                 cur = len(self.driver.find_elements(By.CSS_SELECTOR, '.note-item'))
                 if cur == last_count:
-                    logger.info('[收集链接] 页面已无更多内容，停止加载')
+                    logger.info(t('crawl.xhs.exhausted'))
                     break
 
             last_count = current_count
 
         result = list(all_links)[:target_count]
-        logger.info('[收集链接] 收集完成，共 %s 条链接', len(result))
+        logger.info(t('crawl.xhs.collect_done', n=len(result)))
         return result
 
     def _scrape_note(self, url: str) -> dict | None:
-        logger.info('[爬取详情] 正在访问详情页: %s', url)
+        logger.info(t('crawl.xhs.detail_visit', url=url))
         self.driver.get(url)
         try:
             WebDriverWait(self.driver, 15).until(
                 ec.presence_of_element_located((By.CSS_SELECTOR, '.title, #detail-title'))
             )
-            logger.info('[爬取详情] 详情页加载完成')
+            logger.info(t('crawl.xhs.detail_ready'))
         except TimeoutException:
-            logger.warning('[爬取详情] 详情页加载超时')
+            logger.warning(t('crawl.xhs.detail_timeout'))
             return None
         time.sleep(0.1)
 
@@ -117,7 +119,7 @@ class XiaohongshuCrawler(Crawler):
             el = self.driver.find_element(By.CSS_SELECTOR, '#detail-title, .title')
             title = el.text.strip()
             preview = title[:40] + '...' if len(title) > 40 else title
-            logger.info('[爬取详情] 标题: %s', preview)
+            logger.info(t('crawl.xhs.title', title=preview))
         except NoSuchElementException:
             logger.debug('[爬取详情] 未找到标题元素')
 
@@ -127,7 +129,7 @@ class XiaohongshuCrawler(Crawler):
             content = self.driver.execute_script(
                 "return arguments[0].innerText || arguments[0].textContent || ''", el
             ).strip()
-            logger.info('[爬取详情] 正文长度: %s 字', len(content))
+            logger.info(t('crawl.xhs.content_len', n=len(content)))
         except NoSuchElementException:
             logger.debug('[爬取详情] 未找到正文元素')
 
@@ -135,7 +137,7 @@ class XiaohongshuCrawler(Crawler):
         try:
             el = self.driver.find_element(By.CSS_SELECTOR, '.author-container .name, .author .name')
             author = el.text.strip()
-            logger.info('[爬取详情] 作者: %s', author)
+            logger.info(t('crawl.xhs.author', author=author))
         except NoSuchElementException:
             logger.debug('[爬取详情] 未找到作者元素')
 
@@ -143,22 +145,17 @@ class XiaohongshuCrawler(Crawler):
         try:
             el = self.driver.find_element(By.CSS_SELECTOR, '.date, .publish-time')
             pub_time = el.text.strip()
-            logger.info('[爬取详情] 发布时间: %s', pub_time)
+            logger.info(t('crawl.xhs.pub_time', time=pub_time))
         except NoSuchElementException:
             logger.debug('[爬取详情] 未找到发布时间元素')
 
         like_count = self._extract_count('.like-wrapper .count, .engage-bar .like-wrapper .count')
         collect_count = self._extract_count('.collect-wrapper .count, .engage-bar .collect-wrapper .count')
         comment_count = self._extract_count('.chat-wrapper .count, .engage-bar .chat-wrapper .count')
-        logger.info(
-            '[爬取详情] 互动数据 - 点赞: %s, 收藏: %s, 评论数: %s',
-            like_count,
-            collect_count,
-            comment_count,
-        )
+        logger.info(t('crawl.xhs.metrics', likes=like_count, favs=collect_count, comments=comment_count))
 
         comments = self.extract_comments(max_comments=5)
-        logger.info('[爬取详情] 评论列表: %s 条', len(comments))
+        logger.info(t('crawl.xhs.comment_count', n=len(comments)))
 
         return {
             '笔记链接': url,
@@ -198,13 +195,13 @@ class XiaohongshuCrawler(Crawler):
         return int(m.group(1)) if m else 0
 
     def extract_comments(self, max_comments: int = 5):
-        logger.info('[提取评论] 开始提取评论，最多 %s 条', max_comments)
+        logger.info(t('crawl.xhs.comment_start', n=max_comments))
         comments = []
         try:
             comment_items = WebDriverWait(self.driver, 10).until(
                 ec.presence_of_all_elements_located((By.CSS_SELECTOR, '.comment-item, .parent-comment'))
             )
-            logger.info('[提取评论] 共找到 %s 个评论元素', len(comment_items))
+            logger.info(t('crawl.xhs.comment_found', n=len(comment_items)))
         except TimeoutException:
             logger.debug('[提取评论] 评论区域未加载或不存在')
             return comments
@@ -265,9 +262,9 @@ class XiaohongshuCrawler(Crawler):
                         comment_content[:20],
                     )
             except Exception as e:
-                logger.error('[提取评论] 提取第 %s 条评论时出错: %s', idx + 1, e)
+                logger.error(t('crawl.xhs.comment_error', i=idx + 1, err=e))
 
-        logger.info('[提取评论] 共提取 %s 条评论', len(comments))
+        logger.info(t('crawl.xhs.comment_done', n=len(comments)))
         return comments
 
     def get_detail(self, url: str) -> dict | None:

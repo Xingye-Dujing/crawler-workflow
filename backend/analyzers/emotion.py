@@ -4,6 +4,7 @@ import re
 import pandas as pd
 
 from analyzers.llm_client import run_llm_dataframe
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,18 @@ class EmotionAnalyzer:
         self.model_name = model_name
         self.mode = mode
         self.valid_labels = ['Anger', 'Joy', 'Sadness', 'Fear', 'Neutral']
-        self._ml = get_classifier(self._ML_MODEL_NAME)
+        # Lazily built: LLM mode never touches sklearn, and constructing the
+        # classifier here would pull it in (and touch the model file) for
+        # every run even when it is never used.
+        self._ml_instance = None
+
+    @property
+    def _ml(self):
+        if self._ml_instance is None:
+            from analyzers.ml_base import get_classifier
+
+            self._ml_instance = get_classifier(self._ML_MODEL_NAME)
+        return self._ml_instance
 
     # ── LLM mode ────────────────────────────────────────────────
 
@@ -114,7 +126,7 @@ Analyze strictly and output only the required plain string."""
             build_prompt=self.build_emotion_prompt,
             parse=self.parse_emotion_response,
             ctx=ctx,
-            label='情感分析',
+            label=t('label.emotion'),
             min_len=10,
             default_model=self.model_name,
         )
@@ -124,13 +136,13 @@ Analyze strictly and output only the required plain string."""
         df['confidence'] = None
 
         if text_column not in df.columns:
-            logger.error('DataFrame 缺少必需的列 "%s"。跳过分析。', text_column)
+            logger.error(t('ml.missing_col', col=text_column))
             return df
 
         mask = df[text_column].notna() & (df[text_column].astype(str).str.strip() != '')
         process_indices = df[mask].index.tolist()
         if not process_indices:
-            logger.info('没有需要处理的行（目标列为空）。')
+            logger.info(t('ml.no_rows'))
             return df
 
         total = len(process_indices)
@@ -138,10 +150,10 @@ Analyze strictly and output only the required plain string."""
         try:
             predictions = self._ml_predict(texts)
         except Exception as e:
-            logger.error('ML emotion prediction failed: %s — falling back to Neutral', e)
+            logger.error(t('ml.emotion_failed', err=e))
             predictions = [('Neutral', 0.5)] * len(texts)
         for idx, (label, score) in zip(process_indices, predictions, strict=False):
             df.at[idx, 'emotion'] = label
             df.at[idx, 'confidence'] = score
-        logger.info('[ML] 情感分类完成，共处理 %s 行，模式: ML', total)
+        logger.info(t('ml.emotion_done', n=total))
         return df

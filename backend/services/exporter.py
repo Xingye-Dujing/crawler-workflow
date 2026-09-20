@@ -12,6 +12,8 @@ import os
 
 import pandas as pd
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -101,7 +103,7 @@ class DataExporter:
         else:
             raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
 
-        logger.info('Exported %s rows to %s (%s)', len(df), filepath, fmt)
+        logger.info(t('export.done', n=len(df), path=filepath, fmt=fmt))
         return {'path': filepath, 'format': fmt, 'rows': len(df)}
 
     # ── Individual writers ──────────────────────────────────────

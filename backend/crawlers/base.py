@@ -1,3 +1,4 @@
+import contextlib
 import json
 import time
 from abc import ABC, abstractmethod
@@ -7,6 +8,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
+
 from settings_store import get_setting
 
 
@@ -39,10 +41,10 @@ class Crawler(ABC):
             opts.binary_location = browser_binary
         service = Service(executable_path=get_setting('driver_path'))
         self.driver: webdriver.Chrome = webdriver.Chrome(options=opts, service=service)  # pylint: disable=not-callable
-        try:
+        # A timeout the driver rejects (bad value, dead session) must not kill
+        # the session — the crawl can still run on the default timeout.
+        with contextlib.suppress(Exception):
             self.driver.set_page_load_timeout(int(get_setting('page_load_timeout')))
-        except Exception:  # noqa: BLE001 — a rejected timeout must not kill the session
-            pass
         if self.cookie_path:
             self._load_cookies()
 

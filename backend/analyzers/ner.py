@@ -3,6 +3,8 @@ import re
 
 import pandas as pd
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 _CHINESE_PERSON_PAT = re.compile(
@@ -36,7 +38,7 @@ class NamedEntityRecognizer:
 
     def analyze_dataframe(self, df: pd.DataFrame, text_column: str = '正文') -> pd.DataFrame:
         if text_column not in df.columns:
-            logger.error('Column "%s" not found', text_column)
+            logger.error(t('analysis.col_missing', col=text_column))
             return df
 
         all_entities = []

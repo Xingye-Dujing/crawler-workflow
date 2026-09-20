@@ -6,5 +6,20 @@ indent-width = 4
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 ignore = ["E501"]
 
+[lint.isort]
+# This project's own packages: they import each other by top-level name
+# (backend/ is the sys.path root at runtime), so isort needs to be told they
+# are first-party — otherwise they get sorted in among Flask and pandas.
+known-first-party = [
+    "analyzers",
+    "config",
+    "crawlers",
+    "engine",
+    "i18n",
+    "services",
+    "settings_store",
+    "utils",
+]
+
 [format]
 quote-style = "single"

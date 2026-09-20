@@ -4,6 +4,7 @@ import re
 import pandas as pd
 
 from analyzers.llm_client import run_llm_dataframe
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,18 @@ class TendencyAnalyzer:
             'Advocacy/Call-to-action',
             'Satire/Mockery',
         ]
-        self._ml = get_classifier(self._ML_MODEL_NAME)
+        # Lazily built: LLM mode never touches sklearn, and constructing the
+        # classifier here would pull it in (and touch the model file) for
+        # every run even when it is never used.
+        self._ml_instance = None
+
+    @property
+    def _ml(self):
+        if self._ml_instance is None:
+            from analyzers.ml_base import get_classifier
+
+            self._ml_instance = get_classifier(self._ML_MODEL_NAME)
+        return self._ml_instance
 
     # ── LLM mode ────────────────────────────────────────────────
 
@@ -115,14 +127,14 @@ Analyze strictly and output only the required plain string."""
             build_prompt=self.build_tendency_prompt,
             parse=self.parse_tendency_response,
             ctx=ctx,
-            label='倾向性分析',
+            label=t('label.tendency'),
             min_len=10,
             default_model=self.model_name,
         )
 
     def _analyze_ml(self, df: pd.DataFrame, text_column: str) -> pd.DataFrame:
         if text_column not in df.columns:
-            logger.error('DataFrame 缺少必需的列 "%s"。', text_column)
+            logger.error(t('ml.missing_col', col=text_column))
             return df
 
         df['tendency'] = ''
@@ -131,7 +143,7 @@ Analyze strictly and output only the required plain string."""
         mask = df[text_column].notna() & (df[text_column].astype(str).str.strip() != '')
         process_indices = df[mask].index.tolist()
         if not process_indices:
-            logger.info('没有需要处理的行（正文列为空）。')
+            logger.info(t('ml.no_rows'))
             return df
 
         total = len(process_indices)
@@ -139,10 +151,10 @@ Analyze strictly and output only the required plain string."""
         try:
             predictions = self._ml_predict(texts)
         except Exception as e:
-            logger.error('ML tendency prediction failed: %s — falling back to Objective', e)
+            logger.error(t('ml.tendency_failed', err=e))
             predictions = [('Objective Statement', 0.5)] * len(texts)
         for idx, (label, score) in zip(process_indices, predictions, strict=False):
             df.at[idx, 'tendency'] = label
             df.at[idx, 'tendency_confidence'] = score
-        logger.info('[ML] 倾向性分析完成，共处理 %s 行，模式: ML', total)
+        logger.info(t('ml.tendency_done', n=total))
         return df

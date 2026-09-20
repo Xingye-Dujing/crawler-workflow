@@ -2,6 +2,8 @@ import json
 import logging
 import os
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +18,7 @@ class CookieManager:
         path = os.path.join(self.cookie_dir, f'{platform}_cookies.json')
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(cookies, f, ensure_ascii=False, indent=2)
-        logger.info('Cookies saved for %s', platform)
+        logger.info(t('cookie.saved', platform=platform))
 
     def load(self, platform: str) -> list:
         path = os.path.join(self.cookie_dir, f'{platform}_cookies.json')
@@ -34,4 +36,4 @@ class CookieManager:
         path = os.path.join(self.cookie_dir, f'{platform}_cookies.json')
         if os.path.exists(path):
             os.remove(path)
-            logger.info('Cookies deleted for %s', platform)
+            logger.info(t('cookie.deleted', platform=platform))

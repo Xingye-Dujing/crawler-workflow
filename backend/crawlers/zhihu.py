@@ -6,6 +6,8 @@ from urllib.parse import quote
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
+from i18n import t
+
 from .base import Crawler
 
 logger = logging.getLogger(__name__)
@@ -18,14 +20,14 @@ class ZhihuCrawler(Crawler):
     def search(self, keyword: str, target_count: int = 200, **_kwargs):
         encoded = quote(keyword)
         url = f'https://www.zhihu.com/search?q={encoded}&type=content'
-        logger.info('开始搜索知乎关键词: "%s"，目标获取 %s 条结果', keyword, target_count)
-        logger.info('搜索URL: %s', url)
+        logger.info(t('crawl.zhihu.start', kw=keyword, n=target_count))
+        logger.info(t('crawl.zhihu.url', url=url))
         self.driver.get(url)
         self.wait_for_element('.SearchResult-Card')
-        logger.info('搜索页面已加载，开始滚动加载更多内容...')
+        logger.info(t('crawl.zhihu.loaded'))
 
         cards = self._scroll_to_load(target_count)
-        logger.info('滚动加载完成，共获取到 %s 个卡片元素', len(cards))
+        logger.info(t('crawl.zhihu.cards', n=len(cards)))
 
         results = []
         for idx, card in enumerate(cards, 1):
@@ -33,13 +35,13 @@ class ZhihuCrawler(Crawler):
                 item = self._scrape_card(card)
                 if item.get('作者') or item.get('正文'):
                     results.append(item)
-                    logger.info('已处理第 %s 条结果，当前有效数据: %s 条', idx, len(results))
+                    logger.info(t('crawl.zhihu.processed', i=idx, n=len(results)))
                 else:
-                    logger.debug('第 %s 条结果无有效内容，已跳过', idx)
+                    logger.debug(t('crawl.zhihu.skipped', i=idx))
             except Exception as e:
-                logger.error('处理第 %s 条结果时出错: %s', idx, e)
+                logger.error(t('crawl.zhihu.process_error', i=idx, err=e))
 
-        logger.info('搜索完成，共获取 %s 条有效结果（目标 %s 条）', len(results), target_count)
+        logger.info(t('crawl.zhihu.finished', n=len(results), total=target_count))
         return results
 
     def _scroll_to_load(self, target_count: int, max_scrolls: int = 150):
@@ -47,13 +49,13 @@ class ZhihuCrawler(Crawler):
         stuck_count = 0
         for i in range(1, max_scrolls + 1):
             self.scroll_to_bottom()
-            logger.info('滚动第 %s 次，等待内容加载...', i)
+            logger.info(t('crawl.zhihu.scrolling', i=i))
             time.sleep(2)
 
             try:
                 nm = self.driver.find_element(By.CSS_SELECTOR, '.css-7hmi9v')
                 if '没有更多了' in nm.text:
-                    logger.info('检测到"没有更多了"，停止滚动（滚动 %s 次）', i)
+                    logger.info(t('crawl.zhihu.no_more', i=i))
                     break
             except NoSuchElementException:
                 pass
@@ -62,30 +64,30 @@ class ZhihuCrawler(Crawler):
                 By.CSS_SELECTOR, '.SearchResult-Card[role="listitem"][data-za-detail-view-path-module="PostItem"]'
             )
             count = len(cards)
-            logger.info('滚动第 %s 次完成，当前卡片数: %s 条（目标: %s 条）', i, count, target_count)
+            logger.info(t('crawl.zhihu.scroll_round', i=i, n=count, total=target_count))
 
             if count >= target_count:
-                logger.info('已达到目标数量 %s 条，停止滚动', target_count)
+                logger.info(t('crawl.zhihu.target_reached', n=target_count))
                 break
 
             if count == last_count:
                 stuck_count += 1
                 if stuck_count >= 3:
-                    logger.info('连续 %s 次滚动未加载新内容，停止滚动', stuck_count)
+                    logger.info(t('crawl.zhihu.stuck', n=stuck_count))
                     break
-                logger.info('卡片数未增长 (%s/3)，再次滚动确认...', stuck_count)
+                logger.info(t('crawl.zhihu.no_growth', n=stuck_count))
                 self.scroll_to_bottom()
                 time.sleep(2)
                 cur = len(self.driver.find_elements(By.CSS_SELECTOR, '.SearchResult-Card'))
                 if cur == last_count:
-                    logger.info('二次确认后卡片数仍为 %s，内容已加载完毕', last_count)
+                    logger.info(t('crawl.zhihu.confirmed', n=last_count))
                     break
             else:
                 stuck_count = 0
 
             last_count = count
 
-        logger.info('滚动加载阶段完成，最终获取 %s 个卡片', len(cards))
+        logger.info(t('crawl.zhihu.phase_done', n=len(cards)))
         return cards
 
     def _scrape_card(self, card):

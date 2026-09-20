@@ -3,6 +3,7 @@ import logging
 import os
 
 from config import Config
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class WorkflowManager:
         path = os.path.join(self.workflow_dir, f'{name}.json')
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(workflow, f, ensure_ascii=False, indent=2)
-        logger.info('Workflow saved: %s', path)
+        logger.info(t('store.workflow_saved', path=path))
         return path
 
     def load(self, name: str) -> dict | None:

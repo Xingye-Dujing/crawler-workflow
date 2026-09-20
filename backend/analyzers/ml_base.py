@@ -9,6 +9,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data', 'models')
@@ -65,9 +67,7 @@ class MLClassifier:
                 self._label_map = data['label_map']
                 self._fitted = True
             else:
-                logger.warning(
-                    'Model %s not trained and no saved model found — falling back to default', self.model_name
-                )
+                logger.warning(t('ml.model_missing', name=self.model_name))
                 return [('Neutral', 0.5) for _ in texts]
         tokenized = [_tokenize(t) for t in texts]
         probs = self.pipeline.predict_proba(tokenized)

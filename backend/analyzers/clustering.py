@@ -6,6 +6,8 @@ from sklearn.cluster import DBSCAN, KMeans
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import silhouette_score
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,13 +34,13 @@ class TextCluster:
         max_features: int = 3000,
     ) -> pd.DataFrame:
         if text_column not in df.columns:
-            logger.error('Column "%s" not found', text_column)
+            logger.error(t('analysis.col_missing', col=text_column))
             return df
 
         mask = df[text_column].notna() & (df[text_column].astype(str).str.strip() != '')
         valid = df[mask].copy()
         if len(valid) < 2:
-            logger.warning('Not enough valid rows for clustering (need >= 2)')
+            logger.warning(t('cluster.not_enough'))
             valid['cluster'] = 0
             return valid
 
@@ -71,12 +73,10 @@ class TextCluster:
             valid['cluster'] = labels
             valid['silhouette'] = round(score, 4)
             valid['is_noise'] = (labels == -1).astype(int)
-            logger.info('DBSCAN found %s clusters + %s noise points', n_clusters_found, n_noise)
+            logger.info(t('cluster.dbscan', n=n_clusters_found, noise=n_noise))
 
         else:
             raise ValueError(f'Unknown clustering method: {method}')
 
-        logger.info(
-            'Clustering completed: %s rows into %s clusters (silhouette=%.3f)', len(valid), len(set(labels)), score
-        )
+        logger.info(t('cluster.done', rows=len(valid), clusters=len(set(labels)), score=score))
         return valid

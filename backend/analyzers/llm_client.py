@@ -25,6 +25,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -94,9 +96,9 @@ class LLMClient:
         """One user message in, the model's plain text out. Raises LLMError."""
         if self.provider == 'openrouter':
             if not self.api_key:
-                raise LLMError('未填写 OpenRouter API Key', 'auth')
+                raise LLMError(t('llm.no_key'), 'auth')
             if not self.model:
-                raise LLMError('未填写 OpenRouter 模型名', 'model')
+                raise LLMError(t('llm.no_model'), 'model')
             return self._openrouter(prompt, max_retries)
         return self._ollama(prompt, max_retries)
 
@@ -106,7 +108,7 @@ class LLMClient:
         try:
             from ollama import chat  # imported lazily: the daemon is optional
         except ImportError as e:  # pragma: no cover
-            raise LLMError(f'ollama 包不可用: {e}', 'model') from e
+            raise LLMError(t('llm.ollama_pkg_missing', err=e), 'model') from e
 
         last = None
         for attempt in range(1, max_retries + 1):
@@ -121,17 +123,17 @@ class LLMClient:
                 )
                 content = self._ollama_content(resp)
                 if not content or not content.strip():
-                    raise LLMError('Ollama 返回了空内容', 'bad_response')
+                    raise LLMError(t('llm.ollama_empty'), 'bad_response')
                 return content
             except LLMError as e:
                 last = e
-                logger.warning('Ollama 调用失败 (尝试 %s/%s): %s', attempt, max_retries, e)
+                logger.warning(t('llm.ollama_fail_attempt', i=attempt, n=max_retries, err=e))
             except Exception as e:  # connection refused, model missing, timeout…
                 last = e
-                logger.warning('Ollama 调用异常 (尝试 %s/%s): %s', attempt, max_retries, e)
+                logger.warning(t('llm.ollama_exception', i=attempt, n=max_retries, err=e))
             time.sleep(0.5 * attempt)
         kind = last.kind if isinstance(last, LLMError) else 'network'
-        raise LLMError(f'Ollama ({self.model}) 调用失败: {last}', kind)
+        raise LLMError(t('llm.ollama_failed', model=self.model, err=last), kind)
 
     @staticmethod
     def _ollama_content(resp) -> str:
@@ -158,12 +160,10 @@ class LLMClient:
         last = None
         for attempt in range(1, max_retries + 1):
             try:
-                resp = requests.post(
-                    OPENROUTER_CHAT_URL, headers=headers, json=payload, timeout=self.timeout
-                )
+                resp = requests.post(OPENROUTER_CHAT_URL, headers=headers, json=payload, timeout=self.timeout)
             except requests.RequestException as e:
-                last = LLMError(f'网络错误: {e}', 'network')
-                logger.warning('OpenRouter 网络异常 (尝试 %s/%s): %s', attempt, max_retries, e)
+                last = LLMError(t('llm.net_error', err=e), 'network')
+                logger.warning(t('llm.or_net_exception', i=attempt, n=max_retries, err=e))
                 time.sleep(delay)
                 delay *= 2
                 continue
@@ -172,44 +172,38 @@ class LLMClient:
                 try:
                     content = resp.json()['choices'][0]['message']['content'] or ''
                 except (KeyError, IndexError, TypeError, ValueError) as e:
-                    raise LLMError(f'OpenRouter 响应格式异常: {e}', 'bad_response') from e
+                    raise LLMError(t('llm.or_bad_format', err=e), 'bad_response') from e
                 if content.strip():
                     return content
-                last = LLMError('OpenRouter 返回了空内容', 'bad_response')
+                last = LLMError(t('llm.or_empty'), 'bad_response')
             elif resp.status_code == 401:
-                raise LLMError('OpenRouter: API Key 无效 (401)，请检查密钥', 'auth')
+                raise LLMError(t('llm.or_401'), 'auth')
             elif resp.status_code == 402:
-                raise LLMError(
-                    'OpenRouter: 余额不足 (402) — 免费模型不需要余额，请改选 :free 模型', 'quota'
-                )
+                raise LLMError(t('llm.or_402'), 'quota')
             elif resp.status_code == 404:
-                raise LLMError(
-                    f'OpenRouter: 模型不存在 (404) — "{self.model}"，请重新选择模型', 'model'
-                )
+                raise LLMError(t('llm.or_404', model=self.model), 'model')
             elif resp.status_code == 429:
                 try:
                     wait = max(1.0, min(20.0, float(resp.headers.get('Retry-After', 2.0))))
                 except (TypeError, ValueError):
                     wait = 2.0
-                last = LLMError('OpenRouter: 触发限流 (429) — 免费模型为共享额度，建议减小并发', 'rate_limit')
-                logger.warning('OpenRouter 429 限流 (尝试 %s/%s)，等待 %.1fs', attempt, max_retries, wait)
+                last = LLMError(t('llm.or_429'), 'rate_limit')
+                logger.warning(t('llm.or_429_wait', i=attempt, n=max_retries, wait=f'{wait:.1f}'))
                 time.sleep(wait)
                 continue
             elif 500 <= resp.status_code < 600:
-                last = LLMError(f'OpenRouter 服务端错误 ({resp.status_code})', 'network')
-                logger.warning('OpenRouter %s (尝试 %s/%s)', resp.status_code, attempt, max_retries)
+                last = LLMError(t('llm.or_5xx', code=resp.status_code), 'network')
+                logger.warning(t('llm.or_5xx_attempt', code=resp.status_code, i=attempt, n=max_retries))
                 time.sleep(delay)
                 delay *= 2
                 continue
             else:
-                raise LLMError(
-                    f'OpenRouter 请求失败 ({resp.status_code}): {resp.text[:200]}', 'error'
-                )
+                raise LLMError(t('llm.or_http_fail', code=resp.status_code, body=resp.text[:200]), 'error')
 
             time.sleep(delay)
             delay *= 2
 
-        raise last if last is not None else LLMError('OpenRouter 调用失败', 'network')
+        raise last if last is not None else LLMError(t('llm.or_failed'), 'network')
 
 
 def list_free_models(timeout: int = 15) -> list:
@@ -272,7 +266,7 @@ class RowCheckpoint:
         except OSError:
             pass
         if self.rows:
-            logger.info('断点续跑: 载入 %s 行已完成结果 (%s)', len(self.rows), os.path.basename(self.path))
+            logger.info(t('llm.checkpoint_loaded', n=len(self.rows), file=os.path.basename(self.path)))
 
     def get(self, idx, thash: str):
         rec = self.rows.get(idx)
@@ -295,10 +289,9 @@ class RowCheckpoint:
 
     def discard(self):
         """Call when the node finished cleanly — the real outputs own the data now."""
-        try:
+        # Best-effort: an already-removed or locked checkpoint file is fine.
+        with contextlib.suppress(OSError):
             os.remove(self.path)
-        except OSError:
-            pass
 
 
 # ─── Shared row runner ──────────────────────────────────────────
@@ -352,13 +345,13 @@ def run_llm_rows(
 
     def _check_cancel():
         if cancel_event is not None and cancel_event.is_set():
-            raise LLMError('已手动停止 — 已完成的行均已保存，可修复后从断点续跑', 'cancelled')
+            raise LLMError(t('llm.cancelled'), 'cancelled')
 
     def _finish(idx, result):
         nonlocal done, failures
         if result is None or (isinstance(result, tuple) and result and result[0] is None):
             failures += 1
-            say(f'[{label}] 第 {done + 1}/{total} 行输出解析失败 (连续失败 {failures})')
+            say(t('llm.parse_failed', label=label, i=done + 1, total=total, f=failures))
             return
         failures = 0
         results[idx] = result
@@ -381,6 +374,7 @@ def run_llm_rows(
 
     def _wait_pending(pending):
         """Drain a batch: (future, row_index, text_hash) triples, finish order."""
+        nonlocal failures
         futures = [f for f, _i, _h in pending]
         meta = {id(f): (i, h) for f, i, h in pending}
         for fut in as_completed(futures):
@@ -394,7 +388,7 @@ def run_llm_rows(
                 raise
             except Exception as e:  # noqa: BLE001 — one row failing is never fatal by itself
                 failures += 1
-                logger.warning('[%s] 行处理异常: %s', label, e)
+                logger.warning(t('llm.row_exception', label=label, err=e))
 
     def _after_batch():
         nonlocal in_batch
@@ -402,7 +396,7 @@ def run_llm_rows(
         if publish is not None:
             with contextlib.suppress(Exception):
                 publish()
-        say(f'[{label}] 进度 {done}/{total} (已保存)')
+        say(t('llm.progress', label=label, done=done, total=total))
 
     pending = []  # [(future, row_index)] in flight within the current batch
     try:
@@ -411,9 +405,7 @@ def run_llm_rows(
             _check_cancel()
             if failures >= max_consecutive_failures:
                 raise LLMError(
-                    f'连续 {failures} 行调用失败 — 疑似网络断开 / Key 失效 / 模型不可用，'
-                    f'本节点已中止。已完成 {done}/{total} 行并全部保存，'
-                    f'恢复后重新执行会自动从断点续跑。',
+                    t('llm.circuit_break', f=failures, done=done, total=total),
                     'circuit_break',
                 )
 
@@ -441,14 +433,12 @@ def run_llm_rows(
                     _after_batch()
             else:
                 try:
-                    _idx, _hash, parsed = _call_row(
-                        client, parse, build_prompt(truncated), idx, thash
-                    )
+                    _idx, _hash, parsed = _call_row(client, parse, build_prompt(truncated), idx, thash)
                 except LLMError:
                     raise
                 except Exception as e:  # noqa: BLE001
                     failures += 1
-                    logger.warning('[%s] 行处理异常: %s', label, e)
+                    logger.warning(t('llm.row_exception', label=label, err=e))
                     parsed = None
                 _complete(idx, thash, parsed)
                 in_batch += 1
@@ -462,7 +452,7 @@ def run_llm_rows(
         if publish is not None:
             with contextlib.suppress(Exception):
                 publish()
-        say(f'[{label}] 节点完成 {done}/{total} 行')
+        say(t('llm.node_done', label=label, done=done, total=total))
     except LLMError as e:
         # Cancel / circuit-break: publish what is done, then bubble up so the
         # workflow stops this branch instead of feeding partial data downstream.
@@ -514,24 +504,22 @@ def run_llm_dataframe(
     halts the rest of the workflow anyway).
     """
     cfg = ctx or {}
-    client = cfg.get('client') or LLMClient(
-        provider='ollama', model=default_model, host=_settings_host()
-    )
+    client = cfg.get('client') or LLMClient(provider='ollama', model=default_model, host=_settings_host())
 
     for col, val in zip(result_columns, blank, strict=True):
         df[col] = val
 
     if text_column not in df.columns:
-        logger.error('DataFrame 缺少必需的列 "%s"。跳过 %s。', text_column, label)
+        logger.error(t('llm.missing_column', col=text_column, label=label))
         return df
 
     mask = df[text_column].notna() & (df[text_column].astype(str).str.strip() != '')
     process_indices = df[mask].index.tolist()
     if not process_indices:
-        logger.info('[%s] 没有需要处理的行（"%s" 列为空）。', label, text_column)
+        logger.info(t('llm.no_rows', label=label, col=text_column))
         return df
     total = len(process_indices)
-    logger.info('[%s] 共 %s 行待处理，调用方式: %s（每条数据一次询问，文本越长越耗 token）', label, total, client.label)
+    logger.info(t('llm.start', label=label, total=total, transport=client.label))
 
     def publish():
         cb = cfg.get('publish')
@@ -595,9 +583,9 @@ def run_llm_dataframe(
             # after the finished rows are published and visible.
             _mark_unprocessed(df, process_indices, result_columns, blank)
             publish()
-            logger.error('[%s] 中止: %s（已完成 %s 行的结果已保存）', label, e, (df[result_columns[0]] != blank[0]).sum())
+            logger.error(t('llm.aborted', label=label, err=e, done=int((df[result_columns[0]] != blank[0]).sum())))
             raise
-        logger.warning('[%s] 已停止: %s（已完成行已保存）', label, e)
+        logger.warning(t('llm.stopped', label=label, err=e))
 
     # Rows that never landed: explicit parse-failures keep the analyzer's
     # failure value (same as the original code); anything the run never
@@ -618,12 +606,7 @@ def run_llm_dataframe(
     if abort_reason is None and checkpoint is not None:
         checkpoint.discard()  # clean finish — the real outputs own the data now
     if unfinished:
-        logger.warning(
-            '[%s] %s 行未处理（标记为 %s）。重新执行同一节点将从断点续跑，只补这些行。',
-            label,
-            unfinished,
-            ABORT_MARK,
-        )
+        logger.warning(t('llm.unfinished', label=label, n=unfinished, mark=ABORT_MARK))
     return df
 
 

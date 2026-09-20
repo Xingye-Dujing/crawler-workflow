@@ -14,6 +14,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 import requests
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
+
 from analyzers import (
     AnomalyDetector,
     ContentCleaner,
@@ -32,16 +35,15 @@ from crawlers import get_crawler
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine
-from flask import Flask, jsonify, request, send_from_directory
-from flask_cors import CORS
+from i18n import normalize, set_lang, t
 from services import StatsService
-from settings_store import all_settings, get_setting, save_settings
 from services.cookie_manager import CookieManager
 from services.data_analysis import DataAnalysisService, UnknownOperationError
 from services.execution_history import ExecutionHistoryService
 from services.exporter import DataExporter, UnsupportedFormatError
 from services.visualizer import ChartConfigError, VisualizationService
 from services.workflow_manager import WorkflowManager
+from settings_store import all_settings, get_setting, save_settings
 from utils.helpers import sanitize_filename
 
 app = Flask(__name__, static_folder='static', static_url_path='')
@@ -107,6 +109,19 @@ cookie_manager = CookieManager(Config.COOKIE_DIR)
 workflow_manager = WorkflowManager()
 history_service = ExecutionHistoryService()
 
+
+@app.before_request
+def _apply_request_lang():
+    """Pin the console language for this request/worker thread.
+
+    The UI language rides along as the ``X-Lang`` header (the frontend patches
+    fetch once so every call carries it); ``?lang=`` is accepted for manual
+    calls. Requests are served by Flask's own thread pool, so this is the only
+    place that can set it for the non-workflow endpoints.
+    """
+    set_lang(request.headers.get('X-Lang') or request.args.get('lang') or 'zh')
+
+
 # In-memory registry of uploaded/pasted datasets, keyed by a generated id.
 # Lets the Analysis and Visualize nodes (and their standalone/no-workflow
 # counterparts) operate on data that didn't come from a crawl — an
@@ -151,7 +166,12 @@ def _resolve_dataframe(payload: dict) -> pd.DataFrame:
         # Fallback: on-the-fly processing for dry-run preview (no workflow execution yet)
         node_type = payload.get('node_type')
         node_params = payload.get('node_params', {})
-        if node_type == 'tokenize' and node_params.get('data_source') == 'upload' and node_params.get('dataset_id') and node_params.get('text_column'):
+        if (
+            node_type == 'tokenize'
+            and node_params.get('data_source') == 'upload'
+            and node_params.get('dataset_id')
+            and node_params.get('text_column')
+        ):
             raw_df = _resolve_dataframe(node_params)
             df = _tokenize_dataframe(raw_df, node_params)
             if df is not None:
@@ -285,7 +305,7 @@ def _record_execution_history(workflow: dict, engine: WorkflowEngine, results: d
 
         history_service.record_many(rows)
     except Exception:
-        logger.exception('Failed to record execution history (non-fatal)')
+        logger.exception(t('misc.history_failed'))
 
 
 # ─── API Routes ────────────────────────────────────────────────
@@ -308,7 +328,7 @@ def save_workflow():
         path = workflow_manager.save(name, workflow)
         return jsonify({'ok': True, 'path': path})
     except OSError as e:
-        logger.exception('Failed to save workflow')
+        logger.exception(t('misc.save_workflow_failed'))
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
@@ -351,6 +371,11 @@ def execute_workflow():
     # AI transport chosen in the settings panel: 'ollama' (local daemon) or
     # 'openrouter' (API). The key only ever lives in the browser's
     # localStorage; it travels with this request and is kept in memory.
+    # Console language for this run. The UI sends it explicitly because the
+    # run outlives the request that started it — and thread-locals are not
+    # inherited by the worker threads below, so each one re-applies it.
+    execution_state['lang'] = normalize(data.get('lang') or request.headers.get('X-Lang') or 'zh')
+
     llm_cfg = data.get('llm') or {}
     execution_state['llm'] = {
         'provider': llm_cfg.get('provider') or 'ollama',
@@ -399,7 +424,10 @@ def execute_workflow():
                 if not execution_state['running']:
                     break
                 node = wf_engine.nodes[nid]
-                add_log(f'[WF{wf_idx}] Executing node: {nid} ({node.get("type", "?")})', wf_idx=wf_idx)
+                add_log(
+                    t('wf.executing_node', i=wf_idx, nid=nid, ntype=node.get('type', '?')),
+                    wf_idx=wf_idx,
+                )
                 try:
                     result = _execute_node(node, headless, level_input)
                 except Exception as e:  # noqa: BLE001
@@ -409,11 +437,8 @@ def execute_workflow():
                     # feeding half-processed data downstream; sibling workflows
                     # (parallel mode) keep running.
                     msg = str(e)
-                    add_log(f'[WF{wf_idx}] 节点 {nid} 执行失败: {msg}', wf_idx=wf_idx)
-                    add_log(
-                        f'[WF{wf_idx}] 已保留该节点已完成的部分结果；修复问题后重新执行可从断点续跑。',
-                        wf_idx=wf_idx,
-                    )
+                    add_log(t('wf.node_failed', i=wf_idx, nid=nid, err=msg), wf_idx=wf_idx)
+                    add_log(t('wf.partial_kept', i=wf_idx), wf_idx=wf_idx)
                     break
                 results[nid] = result
                 if node.get('type') in ('source', 'process', 'analysis', 'tokenize') and isinstance(result, list):
@@ -421,8 +446,13 @@ def execute_workflow():
                 with _completed_lock:
                     execution_state['completed_nodes'] += 1
                 add_log(
-                    f'[WF{wf_idx + 1}] Node {nid} completed '
-                    f'({execution_state["completed_nodes"]}/{execution_state["total_nodes"]})',
+                    t(
+                        'wf.node_completed',
+                        i=wf_idx + 1,
+                        nid=nid,
+                        done=execution_state['completed_nodes'],
+                        total=execution_state['total_nodes'],
+                    ),
                     wf_idx=wf_idx,
                 )
             # Pass the last transform result to the next level
@@ -431,13 +461,17 @@ def execute_workflow():
         return results
 
     def run():
+        # The run thread starts here, not in a request handler — inherit the
+        # language the UI asked for, or every line below would come out in the
+        # server default.
+        set_lang(execution_state.get('lang'))
         sys.stdout = _LogTee(sys.__stdout__)
         try:
             engine = WorkflowEngine(workflow, execution_state['executor'])
             errors = engine.validate()
             if errors:
                 for e in errors:
-                    add_log(f'Validation error: {e}')
+                    add_log(t('wf.validation_error', err=e))
                 execution_state['running'] = False
                 return
 
@@ -448,7 +482,7 @@ def execute_workflow():
 
             wf_count = len(sub_engines)
             execution_state['total_nodes'] = sum(len(se.nodes) for se in sub_engines)
-            add_log(f'Found {wf_count} workflow(s): {len(sub_engines)} component(s)')
+            add_log(t('wf.found', n=wf_count, c=len(sub_engines)))
 
             if mode == 'serial' or wf_count <= 1:
                 # ── Serial: one workflow at a time ──
@@ -456,14 +490,14 @@ def execute_workflow():
                 for wf_idx, se in enumerate(sub_engines):
                     if not execution_state['running']:
                         break
-                    add_log(f'--- Starting workflow {wf_idx + 1}/{wf_count} ---')
+                    add_log(t('wf.starting', i=wf_idx + 1, n=wf_count))
                     results = _run_single_workflow(se, wf_idx)
                     all_results.update(results)
                 # update(), not replace(): a branch that died halfway already
                 # published its partial rows, and they must survive the merge.
                 execution_state['results'].update(all_results)
                 if execution_state['running']:
-                    add_log('Workflow execution completed')
+                    add_log(t('wf.completed'))
             else:
                 # ── Parallel: one thread per workflow ──
 
@@ -471,13 +505,15 @@ def execute_workflow():
                 wf_lock = threading.Lock()
 
                 def _run_workflow_wrapper(wf_engine, wf_idx):
+                    # Pool threads do not inherit the starter's thread-local.
+                    set_lang(execution_state.get('lang'))
                     try:
                         results = _run_single_workflow(wf_engine, wf_idx)
                         with wf_lock:
                             all_results.update(results)
                     except Exception:
-                        logger.exception('Workflow %s failed', wf_idx)
-                        add_log(f'Workflow {wf_idx} failed', wf_idx=wf_idx)
+                        logger.exception(t('wf.wf_exception', i=wf_idx))
+                        add_log(t('wf.wf_failed', i=wf_idx), wf_idx=wf_idx)
 
                 pool = ThreadPoolExecutor(max_workers=min(wf_count, max_workers))
                 futures = [pool.submit(_run_workflow_wrapper, se, i) for i, se in enumerate(sub_engines)]
@@ -497,14 +533,14 @@ def execute_workflow():
                         # update() keeps partial rows published by branches that
                         # died (LLM abort) — never wipe finished work at the end.
                         execution_state['results'].update(all_results)
-                    add_log('All workflows completed')
+                    add_log(t('wf.all_completed'))
 
             if execution_state['running']:
                 _record_execution_history(workflow, engine, execution_state['results'])
 
         except Exception:
-            logger.exception('Execution failed')
-            add_log('Execution failed - see server logs')
+            logger.exception(t('wf.exec_exception'))
+            add_log(t('wf.exec_failed'))
         finally:
             execution_state['running'] = False
 
@@ -637,9 +673,9 @@ def _execute_output_node(node: dict, current_input: list):
         try:
             result = DataExporter.save(df, filepath, fmt=fmt, text_column=params.get('text_column'))
         except UnsupportedFormatError as e:
-            add_log(f'Save failed: {e}')
+            add_log(t('wf.save_failed', err=e))
             return {'error': str(e)}
-        add_log(f'Data saved to {result["path"]} ({result["format"]})')
+        add_log(t('wf.data_saved', path=result['path'], fmt=result['format']))
 
     return current_input
 
@@ -739,12 +775,18 @@ def _execute_analysis_node(node: dict, current_input: list):
     try:
         cleaned, report = DataAnalysisService.run_pipeline(df, steps)
     except UnknownOperationError as e:
-        add_log(f'Analysis failed: {e}')
+        add_log(t('wf.analysis_failed', err=e))
         return []
 
     for step in report:
         add_log(
-            f'[Analysis] {step["op"]}: {step["rows_before"]} -> {step["rows_after"]} rows (-{step["rows_removed"]})'
+            t(
+                'wf.analysis_step',
+                op=step['op'],
+                before=step['rows_before'],
+                after=step['rows_after'],
+                removed=step['rows_removed'],
+            )
         )
     return cleaned.to_dict('records')
 
@@ -757,7 +799,7 @@ def _execute_tokenize_node(node: dict, current_input: list):
     column = params.get('text_column', '')
     output_mode = params.get('output_mode', 'word_freq')
     if not column:
-        add_log('Tokenize failed: text_column not configured')
+        add_log(t('wf.tokenize_no_column'))
         return []
     if current_input:
         df = pd.DataFrame(current_input)
@@ -765,13 +807,13 @@ def _execute_tokenize_node(node: dict, current_input: list):
         try:
             df = _resolve_dataframe(params)
         except KeyError as e:
-            add_log(f'Tokenize failed: {e}')
+            add_log(t('wf.tokenize_failed', err=e))
             return []
     result_df = _tokenize_dataframe(df, params)
     if result_df is None:
-        add_log(f'Tokenize failed: column "{column}" not found in {list(df.columns)}')
+        add_log(t('wf.tokenize_no_col', col=column, cols=list(df.columns)))
         return []
-    add_log(f'[Tokenize] {output_mode} segmented {column} -> {len(result_df)} rows')
+    add_log(t('wf.tokenize_done', mode=output_mode, col=column, n=len(result_df)))
     return result_df.to_dict('records')
 
 
@@ -799,7 +841,7 @@ def _execute_visualize_node(node: dict, current_input: list):
         try:
             df = _resolve_dataframe(params)
         except KeyError as e:
-            add_log(f'Visualize failed: {e}')
+            add_log(t('wf.visualize_failed', err=e))
             return {'error': str(e)}
 
     try:
@@ -809,7 +851,7 @@ def _execute_visualize_node(node: dict, current_input: list):
             )
             spec = {'engine': 'matplotlib', 'image': image}
         else:
-            kw = { "tokenize": tokenize }
+            kw = {'tokenize': tokenize}
             if wordcloud_style:
                 kw['wordcloud_style'] = wordcloud_style
             option = VisualizationService.to_echarts_option(
@@ -824,10 +866,10 @@ def _execute_visualize_node(node: dict, current_input: list):
             )
             spec = {'engine': 'echarts', 'option': option}
     except ChartConfigError as e:
-        add_log(f'Visualize failed: {e}')
+        add_log(t('wf.visualize_failed', err=e))
         return {'error': str(e)}
 
-    add_log(f'[Visualize] Rendered {chart_type} chart ({engine}) from {len(df)} rows')
+    add_log(t('wf.visualize_done', chart=chart_type, engine=engine, n=len(df)))
     return spec
 
 
@@ -928,13 +970,13 @@ def workflow_status():
 def workflow_processes():
     """Return info about active threads/processes for the monitoring panel."""
     threads = []
-    for t in threading.enumerate():
+    for thread in threading.enumerate():
         threads.append(
             {
-                'name': t.name,
-                'daemon': t.daemon,
-                'alive': t.is_alive(),
-                'ident': t.ident,
+                'name': thread.name,
+                'daemon': thread.daemon,
+                'alive': thread.is_alive(),
+                'ident': thread.ident,
             }
         )
 
@@ -960,9 +1002,9 @@ def kill_process():
         return jsonify({'ok': False, 'error': 'Missing thread ident'}), 400
 
     target = None
-    for t in threading.enumerate():
-        if t.ident == ident:
-            target = t
+    for thread in threading.enumerate():
+        if thread.ident == ident:
+            target = thread
             break
 
     if target is None:
@@ -1180,7 +1222,7 @@ def render_visualization():
                 df, chart_type, x=x_field, y=y_field, value_field=value_field, agg=agg, title=title
             )
             return jsonify({'ok': True, 'engine': 'matplotlib', 'image': image})
-        kw = { "tokenize": tokenize }
+        kw = {'tokenize': tokenize}
         if wordcloud_style:
             kw['wordcloud_style'] = wordcloud_style
         option = VisualizationService.to_echarts_option(
@@ -1276,9 +1318,9 @@ def save_cookies():
         return jsonify({'ok': False, 'error': 'Cookies data is required'}), 400
     try:
         cookie_manager.save(platform, cookies)
-        return jsonify({'ok': True, 'message': f'Cookies saved for {platform}'})
+        return jsonify({'ok': True, 'message': t('cookie.saved', platform=platform)})
     except OSError as e:
-        logger.exception('Failed to save cookies')
+        logger.exception(t('misc.cookie_save_failed'))
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
@@ -1298,16 +1340,22 @@ def generate_cookies():
             return jsonify({'ok': False, 'error': f'No login URL defined for platform: {platform}'}), 400
         try:
             crawler.driver.get(url)
-            add_log(f'Browser opened for {platform} login. Waiting {wait_seconds}s for user to log in...')
+            add_log(t('wf.browser_opened', platform=platform, n=wait_seconds))
             time.sleep(wait_seconds)
             cookies = crawler.driver.get_cookies()
             cookie_manager.save(platform, cookies)
-            add_log(f'Cookies generated for {platform} ({len(cookies)} cookies)')
-            return jsonify({'ok': True, 'message': f'Cookies generated for {platform}', 'count': len(cookies)})
+            add_log(t('wf.cookies_generated', platform=platform, n=len(cookies)))
+            return jsonify(
+                {
+                    'ok': True,
+                    'message': t('wf.cookies_generated', platform=platform, n=len(cookies)),
+                    'count': len(cookies),
+                }
+            )
         finally:
             crawler.close()
     except OSError as e:
-        logger.exception('Failed to generate cookies')
+        logger.exception(t('misc.cookie_gen_failed'))
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
@@ -1532,7 +1580,7 @@ def _studio_dataset_merged(data: dict, sources: list):
         except KeyError:
             report.append({'node_id': node_id, 'ok': False, 'rows': 0, 'reason': SRC_NO_RESULT})
         except Exception:
-            logger.exception('Merged studio load: source failed')
+            logger.exception(t('misc.studio_source_failed'))
             report.append({'node_id': node_id, 'ok': False, 'rows': 0, 'reason': SRC_ERROR})
 
     if not frames:
@@ -1682,7 +1730,7 @@ def _probe_source(payload: dict | None) -> tuple[bool, int, str, list]:
     except KeyError:
         return False, 0, SRC_NO_RESULT, []
     except Exception:
-        logger.exception('Source probe failed')
+        logger.exception(t('misc.source_probe_failed'))
         return False, 0, SRC_ERROR, []
     rows = 0 if df is None else len(df)
     return (True, rows, '', _column_names(df)) if rows else (False, 0, SRC_EMPTY, [])
@@ -1752,7 +1800,7 @@ def studio_save_image():
     except OSError as e:
         return jsonify({'ok': False, 'error': f'Could not write file: {e}'}), 500
 
-    logger.info('Chart studio saved %s (%d bytes)', filepath, len(payload))
+    logger.info(t('misc.studio_saved', filepath=filepath, bytes=len(payload)))
     return jsonify({'ok': True, 'filename': filename, 'path': filepath, 'bytes': len(payload)})
 
 
@@ -1792,7 +1840,7 @@ def _open_browser(url: str):
 
         webbrowser.open(url)
     except Exception as e:  # noqa: BLE001 — a headless box has no browser to open
-        logger.warning('Could not open browser: %s', e)
+        logger.warning(t('misc.browser_open_failed', err=e))
 
 
 if __name__ == '__main__':
@@ -1805,5 +1853,5 @@ if __name__ == '__main__':
     # lets the child bind the port before the browser arrives.
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
         threading.Timer(1.5, _open_browser, args=(url,)).start()
-    logger.info('Starting crawler workflow server on port %s', port)
+    logger.info(t('misc.server_starting', port=port))
     app.run(host='0.0.0.0', port=port, debug=True, threaded=True)

@@ -20,7 +20,9 @@ import sqlite3
 import time
 
 import pandas as pd
+
 from config import Config
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +79,7 @@ class ExecutionHistoryService:
         )
         conn.commit()
         conn.close()
-        logger.info('Recorded %d history metric(s)', len(rows))
+        logger.info(t('history.recorded', n=len(rows)))
 
     def list_runs(self, limit: int = 50) -> pd.DataFrame:
         conn = self._conn()

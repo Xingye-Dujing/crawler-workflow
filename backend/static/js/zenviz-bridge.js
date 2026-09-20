@@ -21,6 +21,31 @@
    parent could script this DOM directly — postMessage is used anyway so the
    contract stays explicit and survives being moved to a sub-path later.
    ========================================================================== */
+
+/* Console i18n, studio side: this iframe has its own window, so the host's
+   fetch patch does not reach it. The UI language is read straight from the
+   same localStorage key the host settings use. */
+(function () {
+  try {
+    var nativeFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      var lang = 'zh';
+      try {
+        var raw = localStorage.getItem('crawler_settings');
+        if (raw) lang = (JSON.parse(raw) || {}).lang || 'zh';
+      } catch (e) { /* keep the default */ }
+      try {
+        var opts = Object.assign({}, init || {});
+        opts.headers = new Headers((init && init.headers) || (input instanceof Request ? input.headers : undefined) || undefined);
+        if (!opts.headers.has('X-Lang')) opts.headers.set('X-Lang', lang);
+        return nativeFetch(input, opts);
+      } catch (e) {
+        return nativeFetch(input, init);
+      }
+    };
+  } catch (e) { /* no fetch — nothing to patch */ }
+})();
+
 ; (function () {
   'use strict'
 

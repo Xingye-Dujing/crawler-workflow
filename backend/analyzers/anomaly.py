@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +31,7 @@ class AnomalyDetector:
             numeric_cols = [c for c in columns if c in numeric_cols]
 
         if not numeric_cols:
-            logger.warning('No numeric columns available for anomaly detection')
+            logger.warning(t('anomaly.no_numeric'))
             work['anomaly_score'] = 0.0
             work['is_anomaly'] = 0
             return work
@@ -37,7 +39,7 @@ class AnomalyDetector:
         x_mat = work[numeric_cols].fillna(0)
 
         if len(x_mat) < 5:
-            logger.warning('Too few rows (%s) for reliable anomaly detection', len(x_mat))
+            logger.warning(t('anomaly.too_few', n=len(x_mat)))
             work['anomaly_score'] = 0.0
             work['is_anomaly'] = 0
             return work
@@ -54,5 +56,5 @@ class AnomalyDetector:
         work['is_anomaly'] = (preds == -1).astype(int)
 
         n_anomalies = int((preds == -1).sum())
-        logger.info('Anomaly detection: %s/%s rows flagged (contamination=%.2f)', n_anomalies, len(work), contamination)
+        logger.info(t('anomaly.done', n=n_anomalies, total=len(work), c=contamination))
         return work

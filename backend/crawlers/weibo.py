@@ -9,6 +9,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
+from i18n import t
+
 from .base import Crawler
 
 logger = logging.getLogger(__name__)
@@ -23,27 +25,27 @@ class WeiboCrawler(Crawler):
             s = datetime.strptime(start_time, '%Y-%m-%d')
             e = datetime.strptime(end_time, '%Y-%m-%d')
             urls = self._generate_hourly_urls(keyword, s, e)
-            logger.info('关键词: %s', keyword)
-            logger.info('时间范围: %s 至 %s', s.strftime('%Y-%m-%d'), e.strftime('%Y-%m-%d'))
-            logger.info('共生成 %s 个搜索链接（每小时1个）', len(urls))
+            logger.info(t('crawl.weibo.keyword', kw=keyword))
+            logger.info(t('crawl.weibo.range', start=s.strftime('%Y-%m-%d'), end=e.strftime('%Y-%m-%d')))
+            logger.info(t('crawl.weibo.links', n=len(urls)))
         else:
             encoded = quote(keyword)
             urls = [f'https://s.weibo.com/weibo?q={encoded}&typeall=1&suball=1&Refer=g']
-            logger.info('关键词: %s（无时间范围，单链接搜索）', keyword)
+            logger.info(t('crawl.weibo.keyword_plain', kw=keyword))
 
         total_urls = len(urls)
         all_data = []
         for idx, url in enumerate(urls, start=1):
             logger.info('')
             logger.info('=' * 80)
-            logger.info('正在处理第 %s/%s 个搜索链接', idx, total_urls)
-            logger.info('URL: %s', url)
+            logger.info(t('crawl.weibo.processing', i=idx, total=total_urls))
+            logger.info(t('crawl.weibo.url', url=url))
             logger.info('=' * 80)
 
             page_data = self._scrape_single_search(url)
-            logger.info('第 %s 个链接爬取完成，获取 %s 条数据', idx, len(page_data))
+            logger.info(t('crawl.weibo.link_done', i=idx, n=len(page_data)))
             all_data.extend(page_data)
-            logger.info('当前累计数据: %s 条', len(all_data))
+            logger.info(t('crawl.weibo.accumulated', n=len(all_data)))
 
             if idx < total_urls:
                 time.sleep(0.5)
@@ -67,22 +69,22 @@ class WeiboCrawler(Crawler):
     def _scrape_single_search(self, base_url: str):
         try:
             self.driver.get(base_url)
-            logger.info('访问搜索链接: %s', base_url)
+            logger.info(t('crawl.weibo.visiting', url=base_url))
 
             try:
                 no_result = self.driver.find_element(By.CSS_SELECTOR, '.card-no-result')
                 if no_result:
-                    logger.info('该时间段无搜索结果，跳过')
+                    logger.info(t('crawl.weibo.no_result'))
                     return []
             except NoSuchElementException:
                 pass
 
-            logger.info('等待页面加载...')
+            logger.info(t('crawl.weibo.waiting'))
             WebDriverWait(self.driver, 10).until(ec.presence_of_element_located((By.CSS_SELECTOR, '.card-wrap')))
-            logger.info('页面加载完成')
+            logger.info(t('crawl.weibo.page_loaded'))
 
             total_pages = self._get_total_pages()
-            logger.info('检测到总页数: %s', total_pages)
+            logger.info(t('crawl.weibo.total_pages', n=total_pages))
 
             url_pattern = re.sub(r'[?&]page=\d+', '', base_url)
             sep = '&' if '?' in url_pattern else '?'
@@ -91,28 +93,28 @@ class WeiboCrawler(Crawler):
             all_data = []
             for page_num in range(1, total_pages + 1):
                 page_url = f'{url_pattern}{page_num}'
-                logger.info('  正在爬取第 %s/%s 页...', page_num, total_pages)
+                logger.info(t('crawl.weibo.page_crawling', i=page_num, total=total_pages))
                 page_data = self._scrape_page_by_url(page_url)
                 if not page_data:
-                    logger.warning('  第 %s 页无有效卡片，跳过', page_num)
+                    logger.warning(t('crawl.weibo.page_empty', i=page_num))
                     continue
                 all_data.extend(page_data)
-                logger.info('  第 %s 页爬取完成，共 %s 条，累计 %s 条', page_num, len(page_data), len(all_data))
+                logger.info(t('crawl.weibo.page_done', i=page_num, n=len(page_data), total=len(all_data)))
                 time.sleep(0.3)
 
             return all_data
 
         except Exception as e:
-            logger.error('处理搜索链接时出错: %s', e, exc_info=True)
+            logger.error(t('crawl.weibo.link_error', err=e), exc_info=True)
             return []
 
     def _scrape_page_by_url(self, page_url: str):
         self.driver.get(page_url)
-        logger.info('    访问分页: %s', page_url)
+        logger.info(t('crawl.weibo.page_visit', url=page_url))
         try:
             WebDriverWait(self.driver, 10).until(ec.presence_of_element_located((By.CSS_SELECTOR, '.card-wrap')))
         except TimeoutException:
-            logger.warning('    页面加载超时，可能无内容')
+            logger.warning(t('crawl.weibo.page_timeout'))
             return []
         self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
         time.sleep(0.3)
@@ -143,18 +145,18 @@ class WeiboCrawler(Crawler):
                     except ValueError:
                         pass
             page_more_btn.click()
-            logger.info('最大页码: %s', max_page)
+            logger.info(t('crawl.weibo.max_page', n=max_page))
             return max_page
         except TimeoutException:
             logger.debug('未检测到分页按钮，只有一页')
             return 1
         except Exception as e:
-            logger.error('获取总页数失败: %s', e)
+            logger.error(t('crawl.weibo.pages_fail', err=e))
             return 1
 
     def _scrape_page(self):
         cards = self.driver.find_elements(By.CSS_SELECTOR, '.card-wrap')
-        logger.info('    本页共发现 %s 个卡片', len(cards))
+        logger.info(t('crawl.weibo.page_cards', n=len(cards)))
         page_data = []
         for idx, card in enumerate(cards, start=1):
             try:
@@ -190,7 +192,7 @@ class WeiboCrawler(Crawler):
                     }
                 )
             except Exception:
-                logger.warning('    卡片 %s: 处理出错，已跳过', idx, exc_info=True)
+                logger.warning(t('crawl.weibo.card_error', i=idx), exc_info=True)
                 continue
         return page_data
 

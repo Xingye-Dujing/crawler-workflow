@@ -4,6 +4,7 @@ import re
 import pandas as pd
 
 from analyzers.llm_client import run_llm_dataframe
+from i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ Think silently about whether this meets the Target Topic criteria, then output s
             build_prompt=lambda text: self.build_prompt(text, topic),
             parse=self.parse_model_output,
             ctx=ctx,
-            label='清洗',
+            label=t('label.clean'),
             min_len=20,
             default_model=self.model_name,
             extra_key=topic or '',

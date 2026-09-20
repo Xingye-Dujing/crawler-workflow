@@ -7,6 +7,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
+from i18n import t
+
 from .base import Crawler
 
 logger = logging.getLogger(__name__)
@@ -37,43 +39,45 @@ class WechatCrawler(Crawler):
             List of result dicts.
         """
         if not urls:
-            logger.info('No URLs provided, returning empty results.')
+            logger.info(t('crawl.wechat.no_urls'))
             return []
 
         results = []
         total = len(urls)
         logger.info('=' * 70)
-        logger.info('Starting batch scrape of %d WeChat article(s)', total)
+        logger.info(t('crawl.wechat.batch_start', n=total))
         logger.info('=' * 70)
 
         for idx, url in enumerate(urls, start=1):
             logger.info('')
-            logger.info('--- Processing article %d / %d ---', idx, total)
-            logger.info('URL: %s', url)
+            logger.info(t('crawl.wechat.processing', i=idx, total=total))
+            logger.info(t('crawl.wechat.url', url=url))
 
             data = self.get_detail(url)
             if data:
                 results.append(data)
                 logger.info(
-                    '>>> SUCCESS [%d/%d]: "%s" by "%s" | reads=%s likes=%s rewards=%s',
-                    idx,
-                    total,
-                    data.get('标题', '?'),
-                    data.get('公众号', '?'),
-                    data.get('阅读数', '?'),
-                    data.get('在看数', '?'),
-                    data.get('赞赏数', '?'),
+                    t(
+                        'crawl.wechat.success',
+                        i=idx,
+                        total=total,
+                        title=data.get('标题', '?'),
+                        author=data.get('公众号', '?'),
+                        reads=data.get('阅读数', '?'),
+                        likes=data.get('在看数', '?'),
+                        rewards=data.get('赞赏数', '?'),
+                    )
                 )
             else:
-                logger.warning('>>> FAILED [%d/%d]: Could not scrape article', idx, total)
+                logger.warning(t('crawl.wechat.failed', i=idx, total=total))
 
             if idx < total:
-                logger.info('Waiting 1 s before next article...')
+                logger.info(t('crawl.wechat.wait'))
                 time.sleep(0.1)
 
         logger.info('')
         logger.info('=' * 70)
-        logger.info('Batch scrape complete: %d / %d succeeded', len(results), total)
+        logger.info(t('crawl.wechat.batch_done', n=len(results), total=total))
         logger.info('=' * 70)
         return results
 
@@ -83,52 +87,52 @@ class WechatCrawler(Crawler):
 
     def get_detail(self, url: str) -> dict | None:
         """Scrape a single WeChat article and return structured data."""
-        logger.info('Navigating to article URL...')
+        logger.info(t('crawl.wechat.navigating'))
         self.driver.get(url)
 
-        logger.info('Waiting for article title (#activity-name) to load...')
+        logger.info(t('crawl.wechat.wait_title'))
         try:
             WebDriverWait(self.driver, 15).until(ec.presence_of_element_located((By.CSS_SELECTOR, '#activity-name')))
-            logger.info('Article page loaded successfully.')
+            logger.info(t('crawl.wechat.loaded'))
         except TimeoutException:
-            logger.warning('Page load timed out for: %s', url)
+            logger.warning(t('crawl.wechat.timeout', url=url))
             return None
 
         # Scroll to bottom to trigger lazy-loaded elements (read counts, etc.)
-        logger.info('Scrolling to bottom to trigger lazy loading...')
+        logger.info(t('crawl.wechat.scroll'))
         self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
         time.sleep(0.1)
-        logger.info('Scroll complete.')
+        logger.info(t('crawl.wechat.scroll_done'))
 
         # ---- Extract fields ----
-        logger.info('Extracting article fields...')
+        logger.info(t('crawl.wechat.extracting'))
 
         title = self.get_article_title()
-        logger.info('  Title: %s', title or '(empty)')
+        logger.info(t('crawl.wechat.title', title=title or '(empty)'))
 
         author = self.get_author()
-        logger.info('  Author (公众号): %s', author or '(empty)')
+        logger.info(t('crawl.wechat.author', author=author or '(empty)'))
 
         pub_time = self.get_publish_time()
-        logger.info('  Publish time: %s', pub_time or '(empty)')
+        logger.info(t('crawl.wechat.pub_time', time=pub_time or '(empty)'))
 
         content = self.get_content()
-        logger.info('  Content length: %d characters', len(content))
+        logger.info(t('crawl.wechat.content_len', n=len(content)))
 
         read_num = self.get_read_count()
-        logger.info('  Read count: %d', read_num)
+        logger.info(t('crawl.wechat.reads', n=read_num))
 
         like_num = self.get_like_count()
-        logger.info('  Like count: %d', like_num)
+        logger.info(t('crawl.wechat.likes', n=like_num))
 
         reward_num = self.get_reward_count()
-        logger.info('  Reward count: %d', reward_num)
+        logger.info(t('crawl.wechat.rewards', n=reward_num))
 
         # Summarise extracted content (first 120 chars)
         content_preview = content[:120].replace('\n', ' ').strip()
         if len(content) > 120:
             content_preview += '...'
-        logger.info('  Content preview: %s', content_preview)
+        logger.info(t('crawl.wechat.preview', preview=content_preview))
 
         return {
             '标题': title,
@@ -228,7 +232,7 @@ class WechatCrawler(Crawler):
             text = re.sub(r'\n\s*\n', '\n', text)
             return text
         except NoSuchElementException:
-            logger.warning('Content element not found after retry.')
+            logger.warning(t('crawl.wechat.no_content'))
             return ''
 
     def get_read_count(self) -> int:

@@ -1,5 +1,27 @@
 /* Main Application Entry */
 
+/* Console i18n: every request carries the UI language as X-Lang, so the log
+   lines the server streams into the console (crawl progress, LLM batches,
+   errors) come back in the language being read. Patching fetch once covers
+   every call site, including the ones added later. */
+(function () {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+        let lang = 'zh';
+        try {
+            lang = (typeof I18n !== 'undefined' && I18n.lang) || document.body.dataset.lang || 'zh';
+        } catch (e) { /* keep the default */ }
+        try {
+            const opts = Object.assign({}, init || {});
+            opts.headers = new Headers((init && init.headers) || (input instanceof Request ? input.headers : undefined) || undefined);
+            if (!opts.headers.has('X-Lang')) opts.headers.set('X-Lang', lang);
+            return nativeFetch(input, opts);
+        } catch (e) {
+            return nativeFetch(input, init);
+        }
+    };
+})();
+
 /* I18n - Internationalization */
 const I18n = {
     lang: 'en',

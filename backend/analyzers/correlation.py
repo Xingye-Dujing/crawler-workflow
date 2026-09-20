@@ -3,6 +3,8 @@ import logging
 import numpy as np
 import pandas as pd
 
+from i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +31,7 @@ class CorrelationAnalyzer:
             numeric_cols = [c for c in columns if c in numeric_cols]
 
         if len(numeric_cols) < 2:
-            logger.warning('Need at least 2 numeric columns for correlation analysis')
+            logger.warning(t('corr.need_cols'))
             return pd.DataFrame(columns=['col1', 'col2', 'method', 'correlation', 'abs_correlation'])
 
         corr_matrix = df[numeric_cols].corr(method=method)
@@ -55,5 +57,5 @@ class CorrelationAnalyzer:
         if not result.empty:
             result = result.sort_values('abs_correlation', ascending=False).reset_index(drop=True)
 
-        logger.info('Correlation analysis (%s): %s pairs found (min_abs=%.2f)', method, len(result), min_abs)
+        logger.info(t('corr.done', method=method, n=len(result), min_abs=min_abs))
         return result
