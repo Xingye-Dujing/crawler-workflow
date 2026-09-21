@@ -1,5 +1,6 @@
 flask
 flask-cors
+requests
 selenium
 pandas
 numpy
@@ -8,7 +9,11 @@ openpyxl
 tabulate
 ollama
 webdriver-manager
+joblib
 ruff
 pylint
+pytest
+pytest-cov
+pytest-socket
 jieba
 scikit-learn

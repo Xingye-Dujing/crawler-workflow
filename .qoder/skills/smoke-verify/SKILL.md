@@ -1,21 +1,31 @@
 ---
 name: smoke-verify
-description: Verify backend changes in this repo — ruff lint, boot the Flask server headlessly, smoke-test key GET endpoints, then shut it down cleanly. Use after changing backend code.
+description: Verify backend changes in this repo — pytest fast suite, ruff lint, boot the Flask server headlessly, smoke-test key GET endpoints, then shut it down cleanly. Use after changing backend code.
 ---
 
 Verify recent changes to the crawler_workflow backend. Run steps in order; stop and report on the first failure.
 
-## 1. Lint
+## 1. Automated tests
 
 ```bash
-.venv/Scripts/ruff.exe check backend/
+.venv/Scripts/python.exe -m pytest -q
+```
+
+All tests must pass (~860 cases, under a minute). If the change touched crawling, LLM transports,
+or checkpoint/resume, also run the device tier:
+`.venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"` (real Chrome + real Ollama).
+
+## 2. Lint
+
+```bash
+.venv/Scripts/ruff.exe check backend/ tests/
 ```
 
 If findings exist, fix them (never add blanket ignores) and re-run. Optionally run
 `.venv/Scripts/pylint.exe <module>` on each changed module as a deeper check — report findings but only fix
 real problems, not style nits that conflict with ruff.
 
-## 2. Boot the server headlessly
+## 3. Boot the server headlessly
 
 Do NOT run `python app.py` directly — its `__main__` opens a browser and enables the
 reloader (two processes, messy to kill). Instead, in the background with cwd `backend/`:
@@ -31,7 +41,7 @@ cd backend && PORT=5057 ../.venv/Scripts/python.exe -c "from app import app; app
 - Ollama/Chrome need not be running for these checks; do not exercise crawl or LLM
   endpoints — only GETs listed below.
 
-## 3. Smoke-test endpoints
+## 4. Smoke-test endpoints
 
 ```bash
 for ep in / /api/config /api/settings /api/workflow/list /api/data/datasets /api/runs/list /api/stats/summary; do
@@ -43,13 +53,13 @@ done
 Expect `200` for all (and `200` for `/`, the HTML page). Anything else: read the server log
 output and the failing handler, fix, re-run from step 1.
 
-## 4. Shut down
+## 5. Shut down
 
 Kill only the background server you started (match on port 5057, e.g.
 `taskkill //F //PID <pid>` after `netstat -ano | grep :5057`, or stop the background task).
 Confirm the port is free.
 
-## 5. Report
+## 6. Report
 
-Summarize: lint result, boot result, per-endpoint status codes, anything not covered
-(e.g. changes to crawler/LLM paths need manual browser testing by the user).
+Summarize: test-suite result, lint result, boot result, per-endpoint status codes, anything not covered
+(e.g. changes to logged-in crawler paths need manual browser testing by the user).

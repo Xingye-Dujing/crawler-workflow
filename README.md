@@ -349,7 +349,30 @@ ML 模型保存在 `data/models/` 目录下，训练一次后持久可用。
 
 ## 开发与验证
 
-- 依赖安装、lint（ruff + pylint）与启动均使用项目虚拟环境 `.venv/`
+- 依赖安装、lint（ruff + pylint）、启动与测试均使用项目虚拟环境 `.venv/`
 - 代码风格由 `ruff.toml` 约束（行宽 120、单引号），提交前必须通过
   `ruff check` 与 `ruff format --check`，且只允许真正修复，禁止 `# noqa` 式忽略
-- 改动后建议运行完整的冒烟验证（起服务 + 关键端点探测），详见 `AGENTS.md`
+
+### 自动化测试（pytest，约 860 用例）
+
+测试体系分四层，位于 `tests/` 目录，全部运行在临时目录中（绝不触碰真实 `data/`）：
+
+| 层 | 内容 | 外部依赖 |
+|----|------|----------|
+| `tests/unit` | 纯逻辑：断点续跑存储、数据集存储、DAG 引擎、执行器、14 种清洗算子、10 种图表、6 种导出、分析器、i18n | 无 |
+| `tests/api` | Flask test_client：覆盖 47 个端点中的绝大多数，含「上传→清洗→导出」完整执行链路 | 无（外部调用全 mock） |
+| `tests/integration` | LLM 传输边界（OpenRouter 一律 mock，绝不真实请求） | 无 / 见下 |
+| 设备层（marker 选择） | 真 Chrome 解析本地 `file://` 页面夹具；真调本地 Ollama（不可达时自动跳过） | Chrome、Ollama |
+
+```bash
+# 快速套件（默认，<60 秒，CI 友好）
+python -m pytest -q
+
+# 设备套件（需要本机 Chrome + chromedriver / Ollama 服务）
+python -m pytest -q -m "integration or live_ollama"
+
+# 覆盖率
+python -m pytest -q --cov=backend --cov-report=term
+```
+
+修改代码后的完整验证流程见 `AGENTS.md` 的 "Change workflow"。

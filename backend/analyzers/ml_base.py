@@ -21,6 +21,17 @@ def _tokenize(text: str) -> str:
     return ' '.join(jieba.cut(str(text)))
 
 
+# Module level, not lambdas: MLClassifier.fit() joblib-dumps the pipeline, and
+# a lambda has no importable path to pickle by — the whole "train ML from
+# labelled rows" feature died with PicklingError while these were inline.
+def _whitespace_tokenizer(text: str) -> list:
+    return str(text).split()
+
+
+def _no_preprocessing(text: str) -> str:
+    return text
+
+
 def build_tfidf_pipeline(classifier=None, max_features: int = 5000):
     if classifier is None:
         classifier = LogisticRegression(max_iter=1000)
@@ -29,8 +40,8 @@ def build_tfidf_pipeline(classifier=None, max_features: int = 5000):
             (
                 'tfidf',
                 TfidfVectorizer(
-                    tokenizer=lambda t: t.split(),
-                    preprocessor=lambda t: t,
+                    tokenizer=_whitespace_tokenizer,
+                    preprocessor=_no_preprocessing,
                     token_pattern=None,
                     max_features=max_features,
                     ngram_range=(1, 2),

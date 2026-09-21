@@ -1908,7 +1908,11 @@ def run_analysis():
     steps = data.get('steps', [])
     try:
         cleaned, report = DataAnalysisService.run_pipeline(df, steps)
-    except UnknownOperationError as e:
+    except (ValueError, TypeError) as e:
+        # UnknownOperationError (a ValueError), but also the steps whose
+        # parameters only the node executor can supply — join_tables without a
+        # second input reaches run_pipeline as a plain TypeError. A caller
+        # error is a 400 with a reason, never an HTML 500.
         return jsonify({'ok': False, 'error': str(e)}), 400
 
     try:

@@ -125,9 +125,11 @@ class ExecutionHistoryService:
         # Reads written before the recorder started deduplicating can hold the
         # same point twice (an output node re-recording its process's
         # distribution). Dropping exact duplicates at read time cleans those
-        # old rows without touching the database.
+        # old rows without touching the database — node_id included, or two
+        # *different* nodes legitimately reporting the same count in the same
+        # second would collapse into one chart point.
         if not df.empty:
-            df = df.drop_duplicates(subset=['workflow_name', 'metric', 'label', 'timestamp', 'value'])
+            df = df.drop_duplicates(subset=['workflow_name', 'metric', 'label', 'timestamp', 'value', 'node_id'])
         return df
 
     def clear(self):

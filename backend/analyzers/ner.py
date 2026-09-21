@@ -7,10 +7,16 @@ from i18n import t
 
 logger = logging.getLogger(__name__)
 
-_CHINESE_PERSON_PAT = re.compile(
-    r'[\u4e00-\u9fa5]{2,4}'
-    r'(?:先生|女士|同志|教授|医生|老师|局长|主任|经理|总裁|董事长|主席|委员|部长|省长|市长|县长|书记)'
+# The bare 2-4 character prefix used to miss the single most common Chinese
+# mention form — a lone surname before the honorific (张先生, 李女士). The
+# one-character branch is therefore restricted to a whitelist of common
+# surnames: any CJK character there would fabricate hits like 的先生.
+_COMMON_SURNAMES = (
+    '王李张刘陈杨黄赵吴周徐孙马朱胡郭何高林罗郑梁谢宋唐许韩冯邓曹彭曾肖田董袁潘于蒋蔡余杜叶程苏魏吕丁任沈姚卢'
+    '姜崔钟谭陆汪范金石廖贾夏韦付方白邹孟熊秦邱江尹薛闫段雷侯龙史陶黎贺顾毛郝龚邵万钱严覃武戴莫孔向汤'
 )
+_HONORIFICS = '先生|女士|同志|教授|医生|老师|局长|主任|经理|总裁|董事长|主席|委员|部长|省长|市长|县长|书记'
+_CHINESE_PERSON_PAT = re.compile(rf'(?:[\u4e00-\u9fa5]{{2,4}}|[{_COMMON_SURNAMES}])(?:{_HONORIFICS})')
 _CHINESE_ORG_PAT = re.compile(
     r'[\u4e00-\u9fa5]{2,}'
     r'(?:大学|学院|医院|集团|公司|银行|协会|基金会|委员会|局|部|办|社|中心|研究院|研究所|厂)'

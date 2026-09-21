@@ -336,8 +336,8 @@ _ZH = {
     'set.driverEmpty': '驱动路径为空，已恢复默认值',
     'set.browserMissing': '浏览器程序不存在：{path}',
     'set.badWindow': '窗口大小格式应为 宽x高（如 1920x1080），已恢复默认 {default}',
-    'set.badNumber': '{key} 不是数字，已恢复默认 {value}',
-    'set.outOfRange': '{key} 超出范围 {lo}-{hi}，已恢复默认 {value}',
+    'set.badNumber': '{setting} 不是数字，已恢复默认 {value}',
+    'set.outOfRange': '{setting} 超出范围 {lo}-{hi}，已恢复默认 {value}',
     'set.badOllamaHost': 'Ollama 地址需以 http:// 或 https:// 开头，已恢复默认',
     'set.saveFailed': '设置未能写入磁盘（本次会话内仍生效）：{err}',
     # ── 断点续跑（durable run state） ────────────────────────
@@ -658,8 +658,8 @@ _EN = {
     'set.driverEmpty': 'Driver path was empty — restored the default',
     'set.browserMissing': 'Browser executable does not exist: {path}',
     'set.badWindow': 'Window size must look like WIDTHxHEIGHT (e.g. 1920x1080) — restored the default {default}',
-    'set.badNumber': '{key} is not a number — restored the default {value}',
-    'set.outOfRange': '{key} is outside {lo}-{hi} — restored the default {value}',
+    'set.badNumber': '{setting} is not a number — restored the default {value}',
+    'set.outOfRange': '{setting} is outside {lo}-{hi} — restored the default {value}',
     'set.badOllamaHost': 'The Ollama address must start with http:// or https:// — restored the default',
     'set.saveFailed': 'Settings could not be written to disk (still active for this session): {err}',
     # ── resumable runs ────────────────────────────────────────

@@ -14,7 +14,12 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
 install, lint and test goes through it: in Git Bash run `source .venv/Scripts/activate`, or call
 `.venv/Scripts/python.exe` / `ruff.exe` / `pylint.exe` / `pip.exe` directly.
 - Install new third-party libraries: `.venv/Scripts/pip.exe install <pkg>`, and add it to
-  `requirements.txt` **in the same change** — no exceptions.
+  `requirements.txt` **in the same change** — no exceptions. The rule is broader than installs:
+  *every package imported directly by code must be declared in requirements.txt*, even when it
+  arrives transitively (e.g. `requests`, `joblib` were both imported directly but undeclared).
+- **Repo hygiene**: a new tool leaves caches/artifacts behind — record them in `.gitignore` in the
+  same change that adds the tool (pytest → `.pytest_cache/`, coverage → `.coverage` and `htmlcov/`;
+  already covered: `.venv/`, `.ruff_cache/`, `__pycache__/`, `data/`, `logs/`).
 - Install/restore deps: `pip install -r requirements.txt`
 - Run the app: `cd backend && python app.py` → http://localhost:5000 (port via `PORT` env).
   **Must run from `backend/`** — it is the `sys.path` root, so imports are top-level
@@ -22,7 +27,15 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Lint: `ruff check backend/` then `pylint <module>` (both configured; ruff is the fast gate, pylint the deeper check).
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
-  (test_*.py are manual run scripts, NOT pytest; there is no test suite).
+  (test_*.py are manual run scripts, NOT pytest).
+- **Automated tests (pytest, ~860 cases)**:
+  - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
+  - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
+    `.venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"`
+  - Coverage: append `--cov=backend --cov-report=term` (total target ≥70%).
+  - Layout: `tests/unit` (pure logic), `tests/api` (Flask test_client, fully tmp-isolated),
+    `tests/integration` (LLM boundary mocks run by default; real-Chrome/Ollama are marked).
+    OpenRouter is **never** really called — patch `analyzers.llm_client.requests.post/get`.
 
 ## Style (differs from defaults)
 
@@ -50,17 +63,34 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
 
 ## Change workflow (MANDATORY — run the full loop on every change)
 
-No automated test suite exists, so correctness comes from this loop. Every step must actually
-pass — a change is not done until the whole chain is green end to end.
+Correctness comes from this loop. Every step must actually pass — a change is not done
+until the whole chain is green end to end.
 
 1. **Edit** — the PostToolUse hook auto-runs `ruff format` + `ruff check --fix` on each touched `.py` file.
-2. **Lint every file being committed**: `.venv/Scripts/ruff.exe check <files>` and `format --check <files>`
+2. **Tests are part of the change — never an afterthought.** Any code file touched (backend *or*
+   frontend JS) means syncing the pytest suite in the same change:
+   - new functionality → introduce tests for it,
+   - changed behavior → update the affected assertions,
+   - deleted functionality → remove its tests (no orphans kept for a feature that no longer exists).
+   The suite must prove two things every time: the new feature is correct, and nothing that worked
+   before broke. If a previously-green test now fails because of your change, the bug is in the
+   change — fix the code, not the test (exception: a test pinned an old bug that is now genuinely
+   fixed, in which case update it to the correct expectation).
+3. **Fast test suite**: `.venv/Scripts/python.exe -m pytest -q` must be green. If a test exposes a
+   genuine product bug: fix the product code (never bend the test to the bug); if the fix cannot
+   land now, pin it with `@pytest.mark.xfail(strict=False, reason='product bug <file:line> — ...')`
+   and report it.
+4. **Lint every file being committed**: `.venv/Scripts/ruff.exe check <files>` and `format --check <files>`
    must both pass. Fix real warnings/errors in code — suppression (noqa/ignores) is forbidden (see Style).
-3. **New packages**: installed into `.venv/` AND listed in `requirements.txt` in the same change,
-   then verify `pip install -r requirements.txt` in a clean env would work (import matches a listed package).
-4. **Verify with `/smoke-verify` end to end**: lint → boot server (port 5057, headless) → all GET
-   endpoints return 200 → clean shutdown. Do not skip the boot step; import errors are the commonest
-   regression. If the change touches paths the GET smoke list can't reach (crawler, LLM analysis,
-   workflow execution, checkpoint/resume), exercise them for real — Ollama and Chrome are available
-   on this machine; use `backend/test_*.py` scripts or run the app in a browser.
-5. **Commit** last, with a Chinese type prefix (`功能更新：` / `问题修复：` / `修改：`).
+5. **New packages**: installed into `.venv/` AND listed in `requirements.txt` in the same change
+   (see the declare-every-direct-import rule under Commands), plus their cache artifacts added to
+   `.gitignore`; then verify `pip install -r requirements.txt` in a clean env would work.
+6. **Docs stay true**: update `README.md` in the same change whenever code behavior is visible to
+   users — feature list, node types, API tables, config tables, project structure, quickstart.
+   README must always match the current code; a stale README is a failed change.
+7. **Device paths**: if the change touches crawling, LLM transports, or checkpoint/resume, also run
+   `-m "integration or live_ollama"` (Chrome + Ollama are available on this machine) and
+   `/smoke-verify` end to end (lint → boot server on port 5057 → GET endpoints 200 → clean shutdown).
+   Paths neither suite reaches (logged-in scraping against live sites, UI) must be exercised by the user
+   in a browser.
+8. **Commit** last, with a Chinese type prefix (`功能更新：` / `问题修复：` / `修改：`).

@@ -73,10 +73,22 @@ class ZhihuCrawler(Crawler):
     def _scroll_to_load(self, target_count: int, max_scrolls: int = 150, have: int = 0):
         last_count = 0
         stuck_count = 0
+        # A page that opens already showing 没有更多了 breaks out before the
+        # first assignment below — the summary line after the loop must still
+        # have a card list to talk about.
+        cards = []
         for i in range(1, max_scrolls + 1):
             self.scroll_to_bottom()
             logger.info(t('crawl.zhihu.scrolling', i=i))
             time.sleep(2)
+
+            # Read the cards BEFORE honouring the end marker: a first page that
+            # already says 没有更多了 still has results to scrape — breaking
+            # here used to return nothing for a page that had them.
+            cards = self.driver.find_elements(
+                By.CSS_SELECTOR, '.SearchResult-Card[role="listitem"][data-za-detail-view-path-module="PostItem"]'
+            )
+            count = len(cards)
 
             try:
                 nm = self.driver.find_element(By.CSS_SELECTOR, '.css-7hmi9v')
@@ -86,10 +98,6 @@ class ZhihuCrawler(Crawler):
             except NoSuchElementException:
                 pass
 
-            cards = self.driver.find_elements(
-                By.CSS_SELECTOR, '.SearchResult-Card[role="listitem"][data-za-detail-view-path-module="PostItem"]'
-            )
-            count = len(cards)
             logger.info(t('crawl.zhihu.scroll_round', i=i, n=count, total=target_count))
 
             # Counts what is already in hand too: on a resumed crawl the first

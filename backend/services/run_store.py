@@ -587,17 +587,20 @@ class RunStore:
         Nodes only ever leave ``running`` through ``finish_node``, which a kill
         never reaches — so whatever interrupted the run leaves them claiming to
         be alive. Rows already handed over make them partial (and therefore
-        resumable); nothing produced means failed.
+        resumable); nothing produced means failed. The stored ``row_count``
+        cannot be trusted here: it is only written by ``finish_node``, which is
+        exactly the call that was skipped, so the live count is taken from the
+        rows themselves and written back.
         """
-        rows = self._query(
-            'SELECT node_id, row_count FROM node_runs WHERE run_id = ? AND status = ?', (run_id, NODE_RUNNING)
-        )
+        rows = self._query('SELECT node_id FROM node_runs WHERE run_id = ? AND status = ?', (run_id, NODE_RUNNING))
         stamp = self.now()
         for row in rows:
-            status = NODE_PARTIAL if int(row['row_count'] or 0) > 0 else NODE_FAILED
+            live = self.row_count(run_id, row['node_id'])
+            status = NODE_PARTIAL if live > 0 else NODE_FAILED
             self._execute(
-                'UPDATE node_runs SET status = ?, finished_at = ?, updated_at = ? WHERE run_id = ? AND node_id = ?',
-                (status, stamp, stamp, run_id, row['node_id']),
+                'UPDATE node_runs SET status = ?, row_count = ?, finished_at = ?, updated_at = ? '
+                'WHERE run_id = ? AND node_id = ?',
+                (status, live, stamp, stamp, run_id, row['node_id']),
             )
         return len(rows)
 

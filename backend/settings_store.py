@@ -104,15 +104,21 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                     vals[key] = DEFAULTS[key]
                     warnings.append(t('set.badWindow', default=DEFAULTS[key]))
             elif key in ('page_load_timeout', 'element_timeout'):
+                # ``setting=`` rather than ``key=``: i18n.t() owns a parameter
+                # called ``key`` itself and the kwarg collision used to raise
+                # TypeError right here, 500-ing the panel that was only trying
+                # to report a warning. The value reported back is the submitted
+                # one — a warning quoting the restored default tells nothing.
                 try:
                     v = int(float(raw))
                 except (TypeError, ValueError):
+                    warnings.append(t('set.badNumber', setting=key, value=raw))
                     v = DEFAULTS[key]
-                    warnings.append(t('set.badNumber', key=key, value=v))
-                lo, hi = (5, 300) if key == 'page_load_timeout' else (3, 600)
-                if not lo <= v <= hi:
-                    v = DEFAULTS[key]
-                    warnings.append(t('set.outOfRange', key=key, lo=lo, hi=hi, value=v))
+                else:
+                    lo, hi = (5, 300) if key == 'page_load_timeout' else (3, 600)
+                    if not lo <= v <= hi:
+                        warnings.append(t('set.outOfRange', setting=key, lo=lo, hi=hi, value=v))
+                        v = DEFAULTS[key]
                 vals[key] = v
             elif key == 'ollama_host':
                 v = str(raw or '').strip().rstrip('/')
