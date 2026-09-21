@@ -60,7 +60,7 @@ from services.run_store import (
 from services.visualizer import ChartConfigError, VisualizationService
 from services.workflow_manager import WorkflowManager
 from settings_store import all_settings, get_setting, save_settings
-from utils.helpers import sanitize_filename
+from utils.helpers import platform_for, sanitize_filename, split_urls
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
@@ -145,7 +145,15 @@ class LogBufferHandler(logging.Handler):
     def emit(self, record):
         if record.name.startswith('werkzeug'):
             return
-        _push_log(f'[{time.strftime("%H:%M:%S")}] {self.format(record)}')
+        msg = self.format(record)
+        stripped = msg.strip()
+        # Blank lines and '=' banner rows are how a standalone script keeps its
+        # terminal output readable. In the UI console they are pure noise the
+        # user scrolls past, so the console handler drops them — the file log
+        # (root handler's twin) still receives every line.
+        if not stripped or (len(set(stripped)) == 1 and stripped[0] in '=-*#─—'):
+            return
+        _push_log(f'[{time.strftime("%H:%M:%S")}] {msg}')
 
     def format(self, record):
         return record.getMessage()
@@ -925,6 +933,17 @@ def execute_workflow():
                 # the claim back — the guard must not lock out every later Run.
                 execution_state['running'] = False
 
+    def _wf_display_name(wf_engine, wf_idx: int) -> str:
+        """Console name of one component: the user's 工作流命名 label when the
+        canvas carries one, else the workflow name the browser sent with the
+        run, else a localized placeholder. Never the old positional 'WF1' —
+        an index the user cannot map back to a canvas is noise."""
+        return (
+            _component_name(wf_engine)
+            or str(execution_state.get('workflow_name') or '').strip()
+            or t('wf.unnamed', i=wf_idx + 1)
+        )
+
     def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict):
         """Execute one workflow (single connected component) level by level,
         with its own isolated wf_input. Returns {nid: result, ...}.
@@ -941,9 +960,8 @@ def execute_workflow():
         _wf_local.idx = wf_idx
         # Console messages address this workflow by the name the user gave it
         # (its name node) — 'WF0' style indices forced a cross-reference against
-        # the canvas for every line. The fallback keeps numbered components
-        # distinguishable when no name node exists.
-        wf_name = _component_name(wf_engine) or f'WF{wf_idx + 1}'
+        # the canvas for every line.
+        wf_name = _wf_display_name(wf_engine, wf_idx)
         with _completed_lock:
             execution_state['_wf_names'][wf_idx] = wf_name
         levels = wf_engine.group_by_level()
@@ -995,8 +1013,14 @@ def execute_workflow():
                     break
                 node = wf_engine.nodes[nid]
                 label = node_label(node, nid)
+                ntype = str(node.get('type') or '')
+                # '（source）' in a Chinese console reads like a stack trace; the
+                # type labels are catalogued, so show the reader's own words.
+                ntype_label = t(f'node.{ntype}')
+                if ntype_label.startswith('node.'):
+                    ntype_label = ntype
                 add_log(
-                    t('wf.executing_node', wf=wf_name, nid=label, ntype=node.get('type', '?')),
+                    t('wf.executing_node', wf=wf_name, nid=label, ntype=ntype_label),
                     wf_idx=wf_idx,
                 )
                 primary, upstream = _inputs_for(nid)
@@ -1006,12 +1030,22 @@ def execute_workflow():
                     # The skip was already announced (with its reason) by
                     # _run_node_durable — a 'completed' line on top of it lied.
                     continue
+                if status == NODE_RESTORED:
+                    # 'run.restored' already announced this node in its own
+                    # words; counting it as done is right — its rows are in
+                    # hand — but a second line calling it 'completed' only
+                    # repeats what the user just read.
+                    with _completed_lock:
+                        execution_state['completed_nodes'] += 1
+                    continue
                 with _completed_lock:
-                    execution_state['completed_nodes'] += 1
+                    # Failed/partial do NOT count as done: the run's progress
+                    # line must say how much actually finished, not how many
+                    # nodes were visited. Their story is told by node_failed
+                    # and the partial-rows line.
+                    if status not in (NODE_FAILED, NODE_PARTIAL):
+                        execution_state['completed_nodes'] += 1
                 if status in (NODE_FAILED, NODE_PARTIAL):
-                    # Failed/partial already told their own story (node_failed,
-                    # partial rows handed downstream); calling them 'completed'
-                    # afterwards contradicted it.
                     continue
                 add_log(
                     t(
@@ -1097,7 +1131,7 @@ def execute_workflow():
                 for wf_idx, se in enumerate(sub_engines):
                     if not execution_state['running']:
                         break
-                    add_log(t('wf.starting', wf=_component_name(se) or f'WF{wf_idx + 1}', i=wf_idx + 1, n=wf_count))
+                    add_log(t('wf.starting', wf=_wf_display_name(se, wf_idx), i=wf_idx + 1, n=wf_count))
                     results = _run_single_workflow(se, wf_idx, ctx)
                     all_results.update(results)
                 # update(), not replace(): a branch that died halfway already
@@ -1121,9 +1155,8 @@ def execute_workflow():
                         with wf_lock:
                             all_results.update(results)
                     except Exception:
-                        wf_name = _component_name(wf_engine) or f'WF{wf_idx + 1}'
-                        logger.exception(t('wf.wf_exception', wf=wf_name))
-                        add_log(t('wf.wf_failed', wf=wf_name), wf_idx=wf_idx)
+                        logger.exception(t('wf.wf_exception', wf=_wf_display_name(wf_engine, wf_idx)))
+                        add_log(t('wf.wf_failed', wf=_wf_display_name(wf_engine, wf_idx)), wf_idx=wf_idx)
 
                 pool = ThreadPoolExecutor(max_workers=min(wf_count, max_workers))
                 futures = [pool.submit(_run_workflow_wrapper, se, i) for i, se in enumerate(sub_engines)]
@@ -1238,12 +1271,16 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     dropped rather than handed downstream twice).
     """
     params = node.get('params', {})
-    if str(params.get('collect') or 'posts') == 'comments':
+    platform = node.get('platform', params.get('platform', ''))
+    if str(params.get('collect') or 'posts') == 'comments' and platform != 'wechat':
         # 评论采集 is a mode of the Data Source (they share the 数据输入 category):
         # links go in, comment rows come out. Same engine as the standalone
-        # Comment node — which remains valid for older canvases.
+        # Comment node — which remains valid for older canvases. WeChat has no
+        # comment adapter, so a stale collect='comments' flag left on a wechat
+        # node (saved before the panel normalized it) must not reroute its
+        # article URLs into the comment engine — they would ALL be dropped as
+        # unsupported. For wechat it still simply means "crawl these URLs".
         return _execute_comment_node(dict(node, type='comment'), ctx=ctx)
-    platform = node.get('platform', params.get('platform', ''))
     keyword = params.get('keyword', '')
     target_count = _safe_int(params.get('target_count'), 50, minimum=1)
     start_time = params.get('start_time')
@@ -1302,7 +1339,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     try:
         if platform == 'wechat':
             # WeChat scrapes a list of article URLs, not a keyword.
-            rows = crawler.search(urls=_split_urls(params.get('urls')), resume=resume)
+            rows = crawler.search(urls=split_urls(params.get('urls')), resume=resume)
         elif platform == 'weibo' and (start_time or end_time):
             # Both bounds are required: the crawler raises a readable error
             # otherwise instead of silently searching something else.
@@ -1590,12 +1627,6 @@ def _split_columns(value) -> list:
     return [c.strip() for c in str(value or '').split(',') if c.strip()]
 
 
-def _split_urls(value) -> list:
-    """WeChat article URLs: a real list, or one per line in a textarea."""
-    raw = value if isinstance(value, (list, tuple)) else str(value or '').replace(',', '\n').split('\n')
-    return [str(u).strip() for u in raw if str(u).strip()]
-
-
 def _normalize_analysis_params(op: str, params: dict) -> dict:
     """The Settings panel stores everything as flat strings (e.g. a
     comma-separated 'columns' field). Translate that into the exact kwargs
@@ -1788,17 +1819,31 @@ def _execute_comment_node(node: dict, ctx: dict = None):
     the rows already in those files). zhihu content pages reject headless
     sessions, so this node always drives a visible browser.
     """
-    from crawlers.comments import BLOCKED, DEAD, OK, CommentSession, platform_for
+    from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
     from services.part_writer import PartWriter, safe_stem
 
     params = node.get('params') or {}
-    all_urls = [u for u in _split_urls(params.get('urls')) if u]
-    urls, dropped = [], []
+    # A Data Source in comments mode carries the platform the user selected;
+    # links from another site must not silently crawl a platform nobody chose.
+    # The standalone Comment node has no platform param, so it stays mixed-input.
+    want = str(params.get('platform') or '').strip().lower()
+    all_urls = split_urls(params.get('urls'))
+    urls, dropped, mismatched = [], [], []
     for u in all_urls:
-        (urls if platform_for(u) else dropped).append(u)
+        plat = platform_for(u)
+        if not plat:
+            dropped.append(u)
+        elif want and plat != want:
+            mismatched.append(u)
+        else:
+            urls.append(u)
     if dropped:
         add_log(t('comment.unsupported', n=len(dropped)))
+    if mismatched:
+        add_log(t('comment.platformMismatch', n=len(mismatched), platform=want))
     if not urls:
+        if mismatched:
+            raise ValueError(t('comment.allMismatched', platform=want))
         raise ValueError(t('comment.no_urls'))
 
     limit = _safe_int(params.get('comment_limit'), 0, minimum=0)  # 0 = every comment
@@ -1877,7 +1922,7 @@ def _execute_comment_node(node: dict, ctx: dict = None):
         # cookie likely died — the collected comments are already merged to
         # disk and stored; refresh the cookie and resume for the rest.
         execution_state['cookie_expired'] = True
-        add_log(t('run.cookieExpired', platform='zhihu/weibo/xiaohongshu'))
+        add_log(t('run.cookieExpired', platform=want or 'zhihu/weibo/xiaohongshu'))
     add_log(
         t(
             'comment.done',
@@ -1892,7 +1937,7 @@ def _execute_comment_node(node: dict, ctx: dict = None):
     if blocked_seen:
         # Failed (not done) → the run lands in the resume banner and 继续
         # retries exactly the articles the wall refused.
-        raise ValueError(t('run.cookieExpired', platform='zhihu/weibo/xiaohongshu'))
+        raise ValueError(t('run.cookieExpired', platform=want or 'zhihu/weibo/xiaohongshu'))
     return rows_out
 
 
@@ -2016,7 +2061,7 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         add_log(
             t(
                 'wf.node_failed',
-                wf=execution_state['_wf_names'].get(wf_idx) or f'WF{wf_idx + 1}',
+                wf=execution_state['_wf_names'].get(wf_idx) or t('wf.unnamed', i=wf_idx + 1),
                 nid=label,
                 err=e,
             ),
@@ -2145,6 +2190,10 @@ def workflow_status():
         wf_list.append(
             {
                 'id': wk,
+                # The console tab bar speaks the workflow's name (set by the
+                # 工作流命名 node), not a positional 'WF2' the user cannot map
+                # back to a canvas.
+                'name': execution_state['_wf_names'].get(wk) or f'#{wk + 1}',
                 'logs': wf_logs[-200:],
                 # How many lines exist in total, so the browser can compute the
                 # delta even after the tail truncation above.

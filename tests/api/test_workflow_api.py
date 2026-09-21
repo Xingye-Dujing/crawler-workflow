@@ -553,6 +553,93 @@ class TestSourceCommentsMode:
         status = client.get('/api/workflow/status').get_json()
         assert any('comments mode needs at least one article URL' in line for line in status['logs'])
 
+    def test_foreign_platform_links_stop_the_run_before_any_browser(self, client, app_module, monkeypatch):
+        # Selected platform zhihu + a weibo link: validate() must refuse the
+        # design, and refuse it EARLY — no visible window may open just to
+        # say no (the user pays for cookies and time otherwise).
+        built = {'n': 0}
+
+        def counting_get_crawler(*args, **kwargs):
+            built['n'] += 1
+            raise AssertionError('a workflow that fails validation must not open a browser')
+
+        monkeypatch.setattr(app_module, 'get_crawler', counting_get_crawler)
+        workflow = _workflow(
+            [
+                _node(
+                    'node-1',
+                    'source',
+                    params={'platform': 'zhihu', 'collect': 'comments', 'urls': 'https://weibo.com/123/AbC'},
+                )
+            ],
+            [],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'cmt-mismatch'})
+        assert started.status_code == 200
+        assert _wait_for_worker(app_module)
+        status = client.get('/api/workflow/status').get_json()
+        assert any('do not match the selected platform (zhihu)' in line for line in status['logs'])
+        assert built['n'] == 0
+
+    def test_runtime_skips_foreign_links_and_refuses_when_none_match(self, app_module, monkeypatch):
+        """The crawl-time second line of defence (a hand-made JSON that never
+        passed validate() still must not crawl a platform nobody selected)."""
+        import crawlers.comments as comments_module
+
+        crawled = []
+
+        class _FakeCrawler:
+            driver = None
+
+            def close(self):
+                pass
+
+        class _RecordingSession:
+            def __init__(self, driver, log=None):
+                pass
+
+            def crawl_zhihu(self, url, limit):
+                crawled.append(url)
+                return [{'评论内容': 'kept'}], 'ok'
+
+            def crawl_weibo(self, url, limit):
+                crawled.append(url)
+                return [], 'ok'
+
+            def crawl_xiaohongshu(self, url, limit):
+                crawled.append(url)
+                return [], 'ok'
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _FakeCrawler())
+        monkeypatch.setattr(comments_module, 'CommentSession', _RecordingSession)
+        # setitem (not a bare assignment) so the flag is handed back at teardown —
+        # a leaked running=True blocks the next test's execute (already-running).
+        monkeypatch.setitem(app_module.execution_state, 'running', True)
+
+        from i18n import get_lang, set_lang
+
+        previous = get_lang()
+        set_lang('en')  # a direct call skips the per-request X-Lang routing
+        try:
+            mixed = {
+                'id': 'node-1',
+                'type': 'comment',
+                'params': {'platform': 'zhihu', 'urls': 'https://weibo.com/1/a\nhttps://www.zhihu.com/question/2'},
+            }
+            rows = app_module._execute_comment_node(mixed)
+            assert [r['评论内容'] for r in rows] == ['kept']
+            assert crawled == ['https://www.zhihu.com/question/2'], 'only the selected platform may be crawled'
+
+            all_foreign = {
+                'id': 'node-2',
+                'type': 'comment',
+                'params': {'platform': 'zhihu', 'urls': 'https://weibo.com/1/a'},
+            }
+            with pytest.raises(ValueError, match='conflicts with the selected platform'):
+                app_module._execute_comment_node(all_foreign)
+        finally:
+            set_lang(previous)
+
 
 class TestConsoleReadabilityRegression:
     """The bug this repo shipped with: the console printed 'node-1' / '[WF0]'
@@ -637,3 +724,115 @@ class TestConsoleReadabilityRegression:
         assert '#node-1' in blob, 'the source should read "Data Source #node-1", not a bare node-1'
         # And the node it names must be the one that actually ran.
         assert app_module._RUN_STORE.row_count(started.get_json()['run_id'], 'node-1') == 1
+
+
+class TestConsoleSemantics:
+    """The progress console keeps told two lies: a failed node was counted in
+    'completed_nodes' (so 'Run finished (3/3)' announced a broken run as a
+    clean one), and every decorative logger line — blanks, '=' banners —
+    marched into the UI console because the file log and the console shared
+    one handler. Both are pinned here."""
+
+    @pytest.mark.serial
+    def test_a_failed_node_is_visited_but_not_done(self, client, app_module, monkeypatch):
+        class _BoomCrawler:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def set_sink(self, sink):
+                pass
+
+            def set_cursor_sink(self, sink):
+                pass
+
+            def seed(self, rows):
+                pass
+
+            def close(self):
+                pass
+
+            def search(self, *args, **kwargs):
+                raise RuntimeError('driver exploded')
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _BoomCrawler())
+        workflow = _workflow(
+            [
+                _node('node-1', 'source', params={'platform': 'zhihu', 'keyword': 'k', 'target_count': 5}),
+                _node('node-2', 'output', operation='save', params={'format': 'csv', 'filename': 'boom-out'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+            settings={'mode': 'serial'},
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'boom'})
+        assert started.get_json()['ok'] is True
+        assert _wait_for_worker(app_module)
+
+        status = client.get('/api/workflow/status').get_json()
+        assert status['total_nodes'] == 2
+        # The source failed and the output skipped for lack of upstream data:
+        # NOTHING was completed. The old count called that '1/2' or '2/2'.
+        assert status['completed_nodes'] == 0
+        blob = '\n'.join(status['logs'])
+        assert 'driver exploded' in blob
+        assert 'completed (' not in blob, 'a failed or skipped node must never print a completed line'
+        assert 'Run finished (0/2 nodes)' in blob
+
+    def test_decorative_logger_lines_never_reach_the_console(self, app_module):
+        import logging
+
+        logs = app_module.execution_state['logs']
+        before = len(logs)
+        crawler_log = logging.getLogger('crawlers.wechat')
+        crawler_log.info('=' * 70)  # standalone-script banner
+        crawler_log.info('')  # blank separator
+        crawler_log.info('   ')  # whitespace-only
+        crawler_log.info('real progress line')
+        assert len(logs) == before + 1, 'only the meaningful line may be kept'
+        assert 'real progress line' in logs[-1]
+        # The banner lines the console refused...
+        blob = '\n'.join(logs[before:])
+        assert '====' not in blob
+
+    @pytest.mark.serial
+    def test_run_lines_name_the_workflow_not_an_index(self, client, app_module, monkeypatch):
+        # No name node on this canvas: the console must fall back to the
+        # workflow name the browser sent with the run — never 'WF1'.
+        workflow = _workflow(
+            [
+                _node('node-1', 'source', params={'platform': 'zhihu', 'keyword': 'k', 'target_count': 1}),
+                _node('node-2', 'output', operation='save', params={'format': 'csv', 'filename': 'na-out'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+            settings={'mode': 'serial'},
+        )
+
+        class _One:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def set_sink(self, sink):
+                pass
+
+            def set_cursor_sink(self, sink):
+                pass
+
+            def seed(self, rows):
+                pass
+
+            def close(self):
+                pass
+
+            def search(self, *args, **kwargs):
+                return [{'标题': 'a'}]
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _One())
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': '命名测试'})
+        assert _wait_for_worker(app_module)
+        assert started.get_json()['ok'] is True
+        # Per-workflow tab metadata is only built for multi-component runs, so
+        # check the single-run story instead: the console named the workflow,
+        # not an index.
+        status = client.get('/api/workflow/status').get_json()
+        blob = '\n'.join(status['logs'])
+        assert '[命名测试]' in blob or '命名测试' in blob
+        assert 'WF1' not in blob and 'WF0' not in blob

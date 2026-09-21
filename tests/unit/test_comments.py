@@ -19,10 +19,10 @@ from crawlers.comments import (
     CommentSession,
     page_is_blocked,
     parse_weibo_comments,
-    platform_for,
     weibo_bid,
 )
 from engine.workflow import WorkflowEngine
+from utils.helpers import platform_for
 
 pytestmark = pytest.mark.unit
 

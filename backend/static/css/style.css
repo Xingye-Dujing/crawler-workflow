@@ -446,11 +446,28 @@ body.style-menu-open #top-menu {
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
+  /* These two panels carry full sentences (path labels, the cookie-check
+     inline hint), not just menu words. Inheriting the base row's
+     `white-space: nowrap` pushed the settings panel past its fixed width and
+     raised a horizontal scrollbar the user could not dismiss — wrapping is
+     the real fix: the panel never scrolls sideways. */
+  white-space: normal;
 }
-#ai-menu .dd-item-row > span:first-child {
-  flex: 0 0 88px;
+#ai-menu .dd-item-row > span:first-child,
+#settings-menu .dd-item-row > span:first-child {
+  flex: 0 0 92px;
   font-size: 11px;
   color: var(--text-dim);
+  line-height: 1.35;
+}
+#settings-menu .settings-checkbox-label {
+  /* The inline checkbox hint is a whole clause; keep the tick aligned with the
+     text block it belongs to rather than floating on its first line. */
+  white-space: normal;
+  align-items: flex-start;
+}
+#settings-menu .settings-checkbox-label input {
+  margin-top: 2px;
 }
 #ai-menu .dd-ctrl,
 #settings-menu .dd-ctrl {

@@ -9,6 +9,33 @@ import pandas as pd
 MAX_FILENAME_LENGTH = 100
 
 
+# The comment router's domain table. Lives here — browser-free and framework-free —
+# because THREE callers must agree on it verbatim: crawlers.comments (routing),
+# engine.workflow (design-time validation, which must never import crawlers) and
+# static/js/workflow.js:urlPlatform (pre-run validation). The frontend contract
+# test pins the JS copy against this one.
+_COMMENT_DOMAINS = (
+    ('zhihu', ('zhihu.com',)),
+    ('xiaohongshu', ('xiaohongshu.com', 'xhslink.com')),
+    ('weibo', ('weibo.com', 'weibo.cn')),
+)
+
+
+def platform_for(url: str) -> str:
+    """Which comment adapter handles this article link ('' = unsupported)."""
+    u = str(url or '').strip().lower()
+    for platform, marks in _COMMENT_DOMAINS:
+        if any(mark in u for mark in marks):
+            return platform
+    return ''
+
+
+def split_urls(value) -> list[str]:
+    """Textareas arrive as one blob: accept a real list, or comma/newline separated text."""
+    raw = value if isinstance(value, (list, tuple)) else str(value or '').replace(',', '\n').split('\n')
+    return [str(u).strip() for u in raw if str(u).strip()]
+
+
 def extract_number(text: str) -> int:
     """Extract first integer from text, supporting thousands separators."""
     if not text:

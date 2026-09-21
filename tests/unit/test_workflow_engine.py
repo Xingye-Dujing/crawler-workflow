@@ -339,3 +339,38 @@ class TestValidateUsesLabels:
             'params': {'platform': 'zhihu', 'collect': 'comments', 'urls': 'https://www.zhihu.com/question/1'},
         }
         assert WorkflowEngine(_wf([node], [])).validate() == []
+
+    def test_comments_mode_flags_links_of_a_foreign_platform(self, en):
+        # The platform select binds the node to ONE site — a weibo link under
+        # zhihu (and an unknown domain) must be named before the run, exactly
+        # like the JS pre-run validation and the crawl-time filter agree.
+        node = {
+            'id': 'node-1',
+            'type': 'source',
+            'params': {
+                'platform': 'zhihu',
+                'collect': 'comments',
+                'urls': 'https://www.zhihu.com/question/1\nhttps://weibo.com/123/AbC\nhttps://example.com/x',
+            },
+        }
+        errors = WorkflowEngine(_wf([node], [])).validate()
+        assert any('2 link(s) do not match the selected platform (zhihu)' in e for e in errors)
+
+    def test_wechat_node_reads_a_stale_comments_flag_as_article_crawl(self, en):
+        # WeChat has no comment adapter. The panel now clears collect when
+        # wechat is picked, but files saved before that keep the flag: it must
+        # validate (and execute) as the URL-driven crawl it really is.
+        node = {
+            'id': 'node-1',
+            'type': 'source',
+            'params': {'platform': 'wechat', 'collect': 'comments', 'urls': 'https://mp.weixin.qq.com/s/abc'},
+        }
+        assert WorkflowEngine(_wf([node], [])).validate() == []
+        empty = {
+            'id': 'node-1',
+            'type': 'source',
+            'params': {'platform': 'wechat', 'collect': 'comments', 'urls': ''},
+        }
+        errors = WorkflowEngine(_wf([empty], [])).validate()
+        assert any('WeChat source needs' in e for e in errors)
+        assert not any('comments mode' in e for e in errors)

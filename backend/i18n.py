@@ -41,7 +41,7 @@ _ZH = {
     # ── workflow ──────────────────────────────────────────────
     'wf.executing_node': '[{wf}] 正在执行节点：{nid}（{ntype}）',
     'wf.node_failed': '[{wf}] 节点 {nid} 执行失败：{err}',
-    'wf.partial_kept': '[WF{i}] 已保留该节点已完成的部分结果；修复问题后重新执行可从断点续跑。',
+    'wf.unnamed': '未命名工作流{i}',
     'wf.node_completed': '[{wf}] 节点 {nid} 完成（{done}/{total}）',
     'wf.multi_input': '节点 {nid} 有 {n} 条上游连线，主输入取第一条（来自 {up}）；合并表用第二条当右表',
     'wf.validation_error': '校验错误：{err}',
@@ -331,11 +331,14 @@ _ZH = {
     'engine.source_no_platform': '节点 {nid}：数据源节点没有选择平台',
     'engine.source_no_keyword': '节点 {nid}：数据源节点缺少关键词',
     'engine.source_no_urls': '节点 {nid}：微信数据源需要至少一个文章链接',
-    'engine.source_comments_urls': '节点 {nid}：评论采集需要至少一个文章链接（知乎/微博/小红书）',
+    'engine.source_comments_urls': '节点 {nid}：评论采集需要至少一个文章链接',
+    'engine.source_comments_mismatch': '节点 {nid}：{n} 个链接与所选平台（{platform}）不符',
     'engine.upload_no_file': '节点 {nid}：上传节点还没有选择文件',
     'engine.comment_no_urls': '节点 {nid}：评论节点还没有填写文章链接',
     'comment.no_urls': '评论节点没有可抓取的链接（支持知乎/微博/小红书链接）',
     'comment.unsupported': '评论节点忽略了 {n} 个不支持的链接（仅支持知乎/微博/小红书）',
+    'comment.platformMismatch': '已忽略 {n} 个与所选平台（{platform}）不符的链接',
+    'comment.allMismatched': '所有链接都与所选平台（{platform}）不符，请检查文章链接',
     'comment.article': '评论：{url} 新增 {n} 条（{status}）',
     'comment.done': (
         '评论采集完成：{urls} 个链接（正常 {ok}、拦截 {blocked}、失效 {dead}），共 {rows} 条评论，输出 {files} 个文件'
@@ -419,7 +422,7 @@ _EN = {
     # ── workflow ──────────────────────────────────────────────
     'wf.executing_node': '[{wf}] Executing node: {nid} ({ntype})',
     'wf.node_failed': '[{wf}] Node {nid} failed: {err}',
-    'wf.partial_kept': '[WF{i}] Partial results for this node are kept; re-running resumes from the checkpoint.',
+    'wf.unnamed': 'Unnamed workflow {i}',
     'wf.node_completed': '[{wf}] Node {nid} completed ({done}/{total})',
     'wf.multi_input': 'Node {nid} has {n} incoming connections — the first (from {up}) is the primary input',
     'wf.validation_error': 'Validation error: {err}',
@@ -716,11 +719,14 @@ _EN = {
     'engine.source_no_platform': 'Node {nid}: source node has no platform',
     'engine.source_no_keyword': 'Node {nid}: source node has no keyword',
     'engine.source_no_urls': 'Node {nid}: a WeChat source needs at least one article URL',
-    'engine.source_comments_urls': 'Node {nid}: comments mode needs at least one article URL (zhihu/weibo/xiaohongshu)',
+    'engine.source_comments_urls': 'Node {nid}: comments mode needs at least one article URL',
+    'engine.source_comments_mismatch': 'Node {nid}: {n} link(s) do not match the selected platform ({platform})',
     'engine.upload_no_file': 'Node {nid}: upload node has no file selected',
     'engine.comment_no_urls': 'Node {nid}: comment node has no article URLs yet',
     'comment.no_urls': 'comment node has no crawlable URLs (zhihu/weibo/xiaohongshu links only)',
     'comment.unsupported': 'comment node ignored {n} unsupported link(s) (zhihu/weibo/xiaohongshu only)',
+    'comment.platformMismatch': 'skipped {n} link(s) that do not match the selected platform ({platform})',
+    'comment.allMismatched': 'every link conflicts with the selected platform ({platform}) — check the article URLs',
     'comment.article': 'comments: {url} added {n} ({status})',
     'comment.done': (
         'comment crawl finished: {urls} links (ok {ok}, blocked {blocked}, '

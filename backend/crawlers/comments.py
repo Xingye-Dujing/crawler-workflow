@@ -29,17 +29,8 @@ DEAD = 'dead'
 
 _BLOCK_MARKS = ('暂时限制', '40362', '扫码登录', '登录后查看', '当前请求存在异常')
 
-
-def platform_for(url: str) -> str:
-    """Which adapter handles this article link ('' = unsupported)."""
-    u = (url or '').strip().lower()
-    if 'zhihu.com' in u:
-        return 'zhihu'
-    if 'xiaohongshu.com' in u or 'xhslink.com' in u:
-        return 'xiaohongshu'
-    if 'weibo.com' in u or 'weibo.cn' in u:
-        return 'weibo'
-    return ''
+# platform_for (the article-link → adapter router) lives in utils.helpers:
+# the engine validator needs the same table without importing any crawler.
 
 
 # ---------------------------------------------------------------------------

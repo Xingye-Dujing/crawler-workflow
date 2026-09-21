@@ -4,6 +4,7 @@ import logging
 from collections import defaultdict, deque
 
 from i18n import t
+from utils.helpers import platform_for, split_urls
 
 logger = logging.getLogger(__name__)
 
@@ -164,13 +165,21 @@ class WorkflowEngine:
             # so "node-7" never has to be decoded against the canvas.
             label = node_label(node, nid)
             if ntype == 'source':
-                if str(params.get('collect') or 'posts') == 'comments':
-                    # Comments mode feeds on article links, not a keyword —
-                    # requiring one would reject a perfectly configured node.
-                    if not str(params.get('urls') or '').strip():
+                platform = node.get('platform') or params.get('platform')
+                # WeChat has no comment adapter, so a stale collect='comments'
+                # on a wechat node is read exactly like the executor reads it —
+                # the plain article-URL crawl — rather than demanding links the
+                # comment engine could never use.
+                if str(params.get('collect') or 'posts') == 'comments' and platform != 'wechat':
+                    # Comments mode feeds on article links, not a keyword.
+                    urls = split_urls(params.get('urls'))
+                    if not urls:
                         errors.append(t('engine.source_comments_urls', nid=label))
+                    elif platform:
+                        bad = sum(1 for u in urls if platform_for(u) != platform)
+                        if bad:
+                            errors.append(t('engine.source_comments_mismatch', nid=label, n=bad, platform=platform))
                 else:
-                    platform = node.get('platform') or params.get('platform')
                     if not platform:
                         errors.append(t('engine.source_no_platform', nid=label))
                     elif platform == 'wechat':

@@ -369,8 +369,8 @@ const I18n = {
             'set.cookieConfirmInline': 'Ask every time a run contains a crawler node',
             'set.save': 'Save settings',
             'set.note':
-                'Machine-local settings, previously hardcoded in the backend. Saved to ' +
-                'data/settings.json on the server and applied from the next execution — no restart needed.',
+                'Machine-local settings. Saved to data/settings.json on the server ' +
+                'and applied from the next execution — no restart needed.',
             'toast.setSaved': 'Settings saved',
             'toast.setSavedWarn': 'Settings saved, with warnings:',
             'toast.setSaveFail': 'Failed to save settings',
@@ -411,7 +411,8 @@ const I18n = {
             'settings.urls': 'Article URLs',
             'settings.urlsHint': 'One URL per line — WeChat crawls these articles',
             'settings.commentUrls': 'Article Links',
-            'settings.commentUrlsHint': 'One article link per line — Zhihu / Weibo / Xiaohongshu',
+            'settings.commentUrlsHintPlat': 'One article link per line — must match the selected platform ({plat})',
+            'settings.commentUrlsHintMixed': 'One link per line; Zhihu / Weibo / Xiaohongshu may be mixed — each link is routed by its own domain',
             'settings.commentLimit': 'Comments Limit',
             'settings.commentLimitHint': '0 = every comment',
             'settings.partSize': 'Part Size',
@@ -445,6 +446,7 @@ const I18n = {
             'validate.sourceDownstream': 'Source node "{title}": must connect to a downstream node',
             'validate.sourceUrls': 'Source node "{title}": WeChat needs at least one article URL',
             'validate.sourceCommentUrls': 'Source node "{title}": comments mode needs at least one article URL',
+            'validate.sourceCommentPlat': 'Source node "{title}": {n} link(s) do not match the selected platform ({plat})',
             'validate.joinNeedsTwo': 'Analysis node "{title}": joining needs two input connections (left table, right table)',
             'validate.uploadFile': 'Upload node "{title}": no file uploaded yet',
             'validate.uploadDownstream': 'Upload node "{title}": must connect to a downstream node',
@@ -833,7 +835,7 @@ const I18n = {
             'set.cookieConfirmInline': '每次含采集节点的运行前都弹确认框',
             'set.save': '保存设置',
             'set.note':
-                '这些是本机相关设置（以前写死在后端代码里）。保存后写入服务器 ' +
+                '这些是本机相关设置。保存后写入服务器 ' +
                 'data/settings.json，下次执行即生效，无需重启服务。',
             'toast.setSaved': '设置已保存',
             'toast.setSavedWarn': '设置已保存，但有问题：',
@@ -875,7 +877,8 @@ const I18n = {
             'settings.urls': '文章链接',
             'settings.urlsHint': '每行一个链接，微信按这些文章逐个抓取',
             'settings.commentUrls': '文章链接',
-            'settings.commentUrlsHint': '每行一个文章链接（知乎 / 微博 / 小红书）',
+            'settings.commentUrlsHintPlat': '每行一个文章链接，须与所选平台（{plat}）一致',
+            'settings.commentUrlsHintMixed': '每行一个文章链接，可混合知乎 / 微博 / 小红书，每个链接按域名自动识别平台',
             'settings.commentLimit': '评论条数上限',
             'settings.commentLimitHint': '0 表示采集全部评论',
             'settings.partSize': '分片大小',
@@ -909,6 +912,7 @@ const I18n = {
             'validate.sourceDownstream': '数据源节点 "{title}"：必须连接到下游节点',
             'validate.sourceUrls': '数据源节点 "{title}"：微信平台需要填写至少一个文章链接',
             'validate.sourceCommentUrls': '数据源节点 "{title}"：评论模式需要填写至少一个文章链接',
+            'validate.sourceCommentPlat': '数据源节点 "{title}"：{n} 个链接与所选平台（{plat}）不符',
             'validate.joinNeedsTwo': '分析节点 "{title}"：合并表需要两条输入连线（左表、右表）',
             'validate.uploadFile': '上传节点 "{title}"：尚未上传文件',
             'validate.uploadDownstream': '上传节点 "{title}"：必须连接到下游节点',
@@ -1768,6 +1772,30 @@ document.addEventListener('mousedown', (e) => {
     if (e.target.closest('#studio-overlay, #data-preview-panel')) return;
     if (window.CustomSelect && CustomSelect.ownsPopup(e.target, panel)) return;
     closeSettings();
+});
+
+/* Close the dashboard (看板) and Execution History (执行历史) popups on an
+   outside click. They are floating windows, not modal overlays — while one
+   is open the canvas stays usable, so the user expects it to be gone once
+   they click back into the workspace. What must NOT count as "outside":
+   · either panel itself (headers, drag/resize handles — and working with
+     one popup may never discard the other; they are sized to sit side by side);
+   · CustomSelect option menus — the panel's own <select>s render their menus
+     into <body>, so a click there is an inside choice, not a click-away;
+   · the modal dialogs (generic confirm, cookie capture) — the history panel's
+     own button can raise one, and discarding the panel underneath while the
+     answer is pending would strand the dialog over an empty canvas. */
+document.addEventListener('mousedown', (e) => {
+    if (!e.target || !e.target.closest) return;
+    if (e.target.closest('#dashboard-panel, #history-panel')) return;
+    if (e.target.closest('.cselect-menu, .cand-menu')) return;
+    if (e.target.closest('#dialog-overlay, #cookie-dialog')) return;
+    ['dashboard-panel', 'history-panel'].forEach((id) => {
+        const panel = document.getElementById(id);
+        if (!panel || !panel.classList.contains('open')) return;
+        if (window.CustomSelect && CustomSelect.ownsPopup(e.target, panel)) return;
+        panel.classList.remove('open');
+    });
 });
 
 /* ── Init draggable panels on first open ── */

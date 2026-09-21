@@ -325,7 +325,7 @@ const workflow = {
                             if (result.running) dotClass = 'tab-dot-run';
                             else dotClass = 'tab-dot-done';
                             tabHtml += '<div class="console-tab' + (activeTab === wf.id ? ' active' : '') + '" data-wf="' + wf.id + '" onclick="switchWfTab(' + wf.id + ')">' +
-                                '<span class="tab-dot ' + dotClass + '"></span>WF' + (wf.id + 1) + '</div>';
+                                '<span class="tab-dot ' + dotClass + '"></span>' + escapeHtml(wf.name || ('#' + (wf.id + 1))) + '</div>';
                         });
                         consoleTabs.innerHTML = tabHtml;
 
@@ -441,9 +441,12 @@ function openSettings(nodeId) {
            itself on change. */
         var isWechat = p.platform === 'wechat';
         var collect = p.collect || 'posts';
+        /* WeChat has no comment adapter — a stale comments flag on a wechat
+           node still means "crawl these article URLs" (the backend agrees). */
+        if (isWechat) collect = 'posts';
         html += '<div class="settings-group">' +
             '<label class="settings-label">' + I18n.t('settings.platform') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'platform\',this.value);openSettings(\'' + nodeId + '\')">' +
+            '<select class="settings-select" onchange="selectSourcePlatform(\'' + nodeId + '\', this.value)">' +
             '<option value="zhihu"' + (p.platform === 'zhihu' ? ' selected' : '') + '>' + I18n.t('platform.zhihu') + '</option>' +
             '<option value="weibo"' + (p.platform === 'weibo' ? ' selected' : '') + '>' + I18n.t('platform.weibo') + '</option>' +
             '<option value="xiaohongshu"' + (p.platform === 'xiaohongshu' ? ' selected' : '') + '>' + I18n.t('platform.xiaohongshu') + '</option>' +
@@ -464,10 +467,14 @@ function openSettings(nodeId) {
                 'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.urlsHint') + '</div></div>';
         } else if (collect === 'comments') {
+            /* The selected platform pins what a valid link looks like — the
+               placeholder must show ONE example shape, not all three at once
+               (and the engine now refuses links that contradict the choice). */
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentUrls') + '</label>' +
-                '<textarea class="settings-input" rows="5" placeholder="https://www.zhihu.com/... https://weibo.com/... https://www.xiaohongshu.com/..." ' +
+                '<textarea class="settings-input" rows="5" placeholder="' + commentUrlPlaceholder(p.platform) + '" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
-                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentUrlsHint') + '</div></div>' +
+                '<div style="font-size:11px;color:var(--text-dim);">' +
+                I18n.t('settings.commentUrlsHintPlat').replace('{plat}', I18n.t('platform.' + p.platform)) + '</div></div>' +
                 '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentLimit') + '</label>' +
                 '<input class="settings-input" type="number" min="0" value="' + (p.comment_limit != null ? p.comment_limit : 0) + '" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'comment_limit\',parseInt(this.value)||0)">' +
@@ -518,10 +525,13 @@ function openSettings(nodeId) {
            recrawl checkbox markup, because zhihu comment pages refuse headless
            sessions — so the hint has to warn that a visible window opens. */
         var p = node.params;
+        /* The legacy standalone Comment node (kept for older canvases) has no
+           platform selector — each link is dispatched by its own domain, so
+           the hint says the mix is deliberate, not an oversight. */
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentUrls') + '</label>' +
-            '<textarea class="settings-input" rows="5" placeholder="https://www.zhihu.com/... https://weibo.com/... https://www.xiaohongshu.com/..." ' +
+            '<textarea class="settings-input" rows="5" placeholder="https://www.zhihu.com/question/... &#10;https://weibo.com/... &#10;https://www.xiaohongshu.com/explore/..." ' +
             'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
-            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentUrlsHint') + '</div></div>' +
+            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentUrlsHintMixed') + '</div></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentLimit') + '</label>' +
             '<input class="settings-input" type="number" min="0" value="' + (p.comment_limit != null ? p.comment_limit : 0) + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'comment_limit\',parseInt(this.value)||0)">' +
@@ -1857,6 +1867,39 @@ function updateParam(nodeId, key, value) {
     }
 }
 
+/* ─── Data Source platform helpers (mirror the backend's routing rules) ───
+   urlPlatform duplicates crawlers/comments.py:platform_for on purpose: the
+   designer must reject a wrong-platform link before the run, and the engine
+   rejects it at crawl time — the two answers have to agree. The frontend
+   contract test pins the table against the Python one. */
+function urlPlatform(url) {
+    var u = String(url || '').toLowerCase();
+    if (u.indexOf('zhihu.com') !== -1) return 'zhihu';
+    if (u.indexOf('xiaohongshu.com') !== -1 || u.indexOf('xhslink.com') !== -1) return 'xiaohongshu';
+    if (u.indexOf('weibo.com') !== -1 || u.indexOf('weibo.cn') !== -1) return 'weibo';
+    return '';
+}
+
+/* One example shape per platform — the comments textarea must not suggest
+   that links from the other sites are acceptable when a platform is chosen. */
+function commentUrlPlaceholder(platform) {
+    if (platform === 'weibo') return 'https://weibo.com/...';
+    if (platform === 'xiaohongshu') return 'https://www.xiaohongshu.com/explore/...';
+    return 'https://www.zhihu.com/question/...';
+}
+
+/* updateParam re-opens the panel itself, so this only has to fix the state
+   the next render reads: WeChat has no comment adapter, and a stale
+   collect='comments' left over from another platform would otherwise sit in
+   the saved JSON (the backend normalizes it, but the canvas should not lie). */
+function selectSourcePlatform(nodeId, value) {
+    var node = canvas.nodes[nodeId];
+    if (node && node.params && value === 'wechat' && node.params.collect === 'comments') {
+        node.params.collect = 'posts';
+    }
+    updateParam(nodeId, 'platform', value);
+}
+
 function closeSettings() {
     document.getElementById('node-settings').classList.remove('open');
     canvas._settingsNodeId = null;
@@ -2712,62 +2755,81 @@ workflow.validate = function () {
         var node = nodes[id];
         var params = node.params || {};
         var type = node.type;
+        /* Old saved workflows can carry title:null — the message must still
+           name the node (type label + id), never read 'node "null"'. */
+        var label = node.title || I18n.t('node.' + type);
 
         if (type === 'source') {
-            if (params.collect === 'comments') {
+            var commentsMode = params.collect === 'comments' && params.platform !== 'wechat';
+            if (commentsMode) {
                 /* Comments mode: links are the input — a keyword would be
-                   silently ignored, exactly like WeChat's rule below. */
-                if (!params.urls || !String(params.urls).trim()) {
-                    errors.push(I18n.t('validate.sourceCommentUrls').replace('{title}', node.title));
+                   silently ignored, exactly like WeChat's rule below. Each
+                   pasted line must also belong to the selected platform — the
+                   engine refuses others at crawl time; say it before the run. */
+                var lines = String(params.urls || '').replace(/,/g, '\n').split(/\r?\n/).filter(function (s) {
+                    return s.trim();
+                });
+                if (!lines.length) {
+                    errors.push(I18n.t('validate.sourceCommentUrls').replace('{title}', label));
+                } else if (params.platform) {
+                    var bad = lines.filter(function (u) {
+                        return urlPlatform(u) !== params.platform;
+                    }).length;
+                    if (bad) {
+                        errors.push(I18n.t('validate.sourceCommentPlat')
+                            .replace('{title}', label)
+                            .replace('{n}', bad)
+                            .replace('{plat}', I18n.t('platform.' + params.platform)));
+                    }
                 }
             } else if (params.platform === 'wechat') {
                 /* WeChat crawls the article URLs you paste; a keyword would be
                    ignored, so asking for one (as this used to) both blocked a
                    valid workflow and left the platform unusable. */
                 if (!params.urls || !String(params.urls).trim()) {
-                    errors.push(I18n.t('validate.sourceUrls').replace('{title}', node.title));
+                    errors.push(I18n.t('validate.sourceUrls').replace('{title}', label));
                 }
             } else if (!params.keyword || !params.keyword.trim()) {
-                errors.push(I18n.t('validate.sourceKeyword').replace('{title}', node.title));
+                errors.push(I18n.t('validate.sourceKeyword').replace('{title}', label));
             }
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.sourceDownstream').replace('{title}', node.title));
+                errors.push(I18n.t('validate.sourceDownstream').replace('{title}', label));
             }
         }
 
         if (type === 'process') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.processInput').replace('{title}', node.title));
+                errors.push(I18n.t('validate.processInput').replace('{title}', label));
             }
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.processDownstream').replace('{title}', node.title));
+                errors.push(I18n.t('validate.processDownstream').replace('{title}', label));
             }
         }
 
         if (type === 'analysis') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.analysisInput').replace('{title}', node.title));
+                errors.push(I18n.t('validate.analysisInput').replace('{title}', label));
             }
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.analysisDownstream').replace('{title}', node.title));
+                errors.push(I18n.t('validate.analysisDownstream').replace('{title}', label));
             }
             if (!params.operation) {
-                errors.push(I18n.t('validate.analysisOperation').replace('{title}', node.title));
+                errors.push(I18n.t('validate.analysisOperation').replace('{title}', label));
             }
             if (params.operation === 'join_tables' && (inputCount[id] || 0) < 2) {
                 /* The right-hand table is the node's second incoming
                    connection — without it the join has nothing to join with. */
-                errors.push(I18n.t('validate.joinNeedsTwo').replace('{title}', node.title));
+                errors.push(I18n.t('validate.joinNeedsTwo').replace('{title}', label));
             }
         }
 
         if (type === 'upload') {
             /* A source like any other: nothing upstream, but it must have a file. */
             if (!params.dataset_id) {
-                errors.push(I18n.t('validate.uploadFile').replace('{title}', node.title));
+                errors.push(I18n.t('validate.uploadFile').replace('{title}', label));
             }
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.uploadDownstream').replace('{title}', node.title));
+                errors.push(I18n.t('validate.uploadDownstream').replace('{title}', label));
             }
         }
 
@@ -2777,43 +2839,43 @@ workflow.validate = function () {
                carry a non-empty label — that label is what groups the run in
                the Execution History panel. */
             if (!params.workflow_name || !String(params.workflow_name).trim()) {
-                errors.push(I18n.t('validate.nameEmpty').replace('{title}', node.title));
+                errors.push(I18n.t('validate.nameEmpty').replace('{title}', label));
             }
             if (hasInput[id]) {
-                errors.push(I18n.t('validate.nameMustLead').replace('{title}', node.title));
+                errors.push(I18n.t('validate.nameMustLead').replace('{title}', label));
             }
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.nameDownstream').replace('{title}', node.title));
+                errors.push(I18n.t('validate.nameDownstream').replace('{title}', label));
             }
         }
 
         if (type === 'tokenize') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.tokenizeInput').replace('{title}', node.title));
+                errors.push(I18n.t('validate.tokenizeInput').replace('{title}', label));
             }
             if (!params.text_column || !params.text_column.trim()) {
-                errors.push(I18n.t('validate.tokenizeColumn').replace('{title}', node.title));
+                errors.push(I18n.t('validate.tokenizeColumn').replace('{title}', label));
             }
         }
 
         if (type === 'visualize') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.visualizeInput').replace('{title}', node.title));
+                errors.push(I18n.t('validate.visualizeInput').replace('{title}', label));
             }
             if (!params.chart_type) {
-                errors.push(I18n.t('validate.visualizeChartType').replace('{title}', node.title));
+                errors.push(I18n.t('validate.visualizeChartType').replace('{title}', label));
             }
             if (!params.x_field || !params.x_field.trim()) {
-                errors.push(I18n.t('validate.visualizeXField').replace('{title}', node.title));
+                errors.push(I18n.t('validate.visualizeXField').replace('{title}', label));
             }
         }
 
         if (type === 'output') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.outputInput').replace('{title}', node.title));
+                errors.push(I18n.t('validate.outputInput').replace('{title}', label));
             }
             if ((params.operation === 'save' || params.operation === 'save_csv') && (!params.filename || !params.filename.trim())) {
-                errors.push(I18n.t('validate.outputFilename').replace('{title}', node.title));
+                errors.push(I18n.t('validate.outputFilename').replace('{title}', label));
             }
         }
     });
