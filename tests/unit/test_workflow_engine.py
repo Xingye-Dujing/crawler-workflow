@@ -198,7 +198,11 @@ class TestValidate:
 
     def test_blank_keyword_counts_as_missing(self, en):
         wf = _wf([_node('node-1', platform='zhihu', params={'keyword': '   '})], [])
-        assert WorkflowEngine(wf).validate() == ['Node node-1: source node has no keyword']
+        errors = WorkflowEngine(wf).validate()
+        assert len(errors) == 1
+        assert 'source node has no keyword' in errors[0]
+        # The node is named by its type label + id, not a bare 'node-1'.
+        assert 'Data Source #node-1' in errors[0]
 
     def test_platform_may_come_from_params(self, en):
         wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw'})], [])
@@ -238,7 +242,7 @@ class TestValidate:
     def test_each_misconfiguration_names_its_node(self, en, node, expected):
         errors = WorkflowEngine(_wf([node], [])).validate()
         assert any(expected in e for e in errors), errors
-        assert all(e.startswith('Node node-1') for e in errors)
+        assert all('#node-1' in e for e in errors)
 
     def test_wechat_source_is_satisfied_by_urls_only(self, en):
         node = _node('node-1', platform='wechat', params={'urls': 'https://mp.weixin.qq.com/s/abc'})
@@ -251,7 +255,7 @@ class TestValidate:
     def test_visualize_needs_chart_and_x_field(self, en):
         node = _node('node-1', 'visualize', params={'chart_type': 'bar'})
         errors = WorkflowEngine(_wf([node], [])).validate()
-        assert errors == ['Node node-1: visualize node is missing the x field']
+        assert errors == ['Node Visualize #node-1: visualize node is missing the x field']
 
     @pytest.mark.parametrize('ntype', ['resume', 'unknown', 'clean', ''])
     def test_node_types_the_engine_does_not_own_pass_silently(self, en, ntype):
@@ -266,7 +270,9 @@ class TestValidate:
         ]
         errors = WorkflowEngine(_wf(nodes, [])).validate()
         assert len(errors) == 3
-        assert sorted(e.split(':')[0] for e in errors) == ['Node node-1', 'Node node-2', 'Node node-3']
+        # Every message names its own node — type label plus the id suffix.
+        assert sorted(e.split('#')[-1].split(':')[0].strip() for e in errors) == ['node-1', 'node-2', 'node-3']
+        assert all(e.startswith('Node ') for e in errors)
 
     def test_messages_are_rendered_in_the_active_language(self):
         # The language is process state another test (or a request handler) may
@@ -291,10 +297,15 @@ class TestNodeLabel:
     def test_title_is_stripped(self):
         assert node_label({'title': '  清洗  '}, 'node-1') == '清洗 #node-1'
 
-    def test_untitled_node_falls_back_to_the_id(self):
-        assert node_label({'type': 'source'}, 'node-3') == 'node-3'
+    def test_untitled_node_falls_back_to_the_type_label(self, en):
+        # No title (older saved workflows dropped it) still reads as the
+        # type's label, not a bare id — 'Data Source #node-3' beats 'node-3'.
+        assert node_label({'type': 'source'}, 'node-3') == 'Data Source #node-3'
+
+    def test_no_title_and_no_known_type_still_reads_as_the_id(self):
         assert node_label({}, 'node-3') == 'node-3'
         assert node_label(None, 'node-3') == 'node-3'
+        assert node_label({'type': 'not-a-real-type'}, 'node-3') == 'node-3'
 
     def test_a_title_equal_to_the_id_is_not_doubled(self):
         # A saved workflow that stored the raw id as the title must not read
@@ -308,3 +319,23 @@ class TestValidateUsesLabels:
         node['title'] = '微博抓取'
         errors = WorkflowEngine(_wf([node], [])).validate()
         assert '微博抓取 #node-2' in errors[0]
+
+    def test_source_comments_mode_needs_urls_not_keyword(self, en):
+        node = {
+            'id': 'node-1',
+            'type': 'source',
+            'title': '评论抓取',
+            'params': {'platform': 'zhihu', 'collect': 'comments', 'urls': ''},
+        }
+        errors = WorkflowEngine(_wf([node], [])).validate()
+        assert any('comments mode needs at least one article URL' in e for e in errors)
+        # A keyword must NOT be demanded once comments mode is chosen.
+        assert not any('keyword' in e for e in errors)
+
+    def test_source_comments_mode_is_satisfied_by_urls(self):
+        node = {
+            'id': 'node-1',
+            'type': 'source',
+            'params': {'platform': 'zhihu', 'collect': 'comments', 'urls': 'https://www.zhihu.com/question/1'},
+        }
+        assert WorkflowEngine(_wf([node], [])).validate() == []

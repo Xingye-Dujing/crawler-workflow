@@ -1015,6 +1015,15 @@ input[type="range"]::-moz-range-thumb {
   padding: 4px 6px 8px;
   font-weight: 500;
 }
+.palette-cat {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+  padding: 8px 6px 3px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  font-weight: 500;
+}
 .palette-item {
   padding: 7px 10px;
   cursor: grab;

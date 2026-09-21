@@ -419,7 +419,7 @@ const canvas = {
         /* The name node carries the workflow's label for the Execution History
            panel — it is metadata, not data, so its params are just the name. */
         if (type === 'name') return { workflow_name: '' };
-        if (type === 'source') return { platform: 'zhihu', keyword: '', urls: '', target_count: 50, headless: true, part_size: 0, keep_parts: false, format: 'csv' };
+        if (type === 'source') return { platform: 'zhihu', keyword: '', urls: '', target_count: 50, headless: true, collect: 'posts', part_size: 0, keep_parts: false, format: 'csv' };
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '', live_export: false, format: 'csv' };
         if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };
@@ -441,6 +441,11 @@ const canvas = {
         if (type === 'source') {
             var plat = params.platform || '';
             var head = I18n.t('settings.platform') + ': ' + (plat ? I18n.t('platform.' + plat) : '?');
+            if ((params.collect || 'posts') === 'comments') {
+                // Comments mode feeds on links, like WeChat — show the count.
+                var cUrls = String(params.urls || '').split('\n').filter(function (u) { return u.trim(); }).length;
+                return head + ' · ' + I18n.t('node.comment') + '\n' + I18n.t('settings.commentUrls') + ': ' + cUrls;
+            }
             if (plat === 'wechat') {
                 /* WeChat runs on pasted article URLs — show how many are set,
                    the way the other platforms show their keyword. */
@@ -1041,6 +1046,10 @@ const canvas = {
             nodes.push({
                 id: id,
                 type: n.type,
+                // The console addresses nodes by this title ('数据源 #node-1');
+                // omitting it here (as an earlier revision did) silently sent
+                // title:None to the backend, so every run spoke in bare node-N.
+                title: n.title,
                 platform: n.params.platform,
                 params: n.params,
                 operation: n.params.operation,

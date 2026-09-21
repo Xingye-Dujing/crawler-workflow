@@ -117,7 +117,7 @@ class TestThreadLocality:
 class TestTranslation:
     def test_a_known_key_renders_in_the_active_language(self, restore_lang):
         key = 'wf.executing_node'
-        params = {'i': 1, 'nid': 'node-2', 'ntype': 'source'}
+        params = {'wf': 'WF1', 'nid': 'node-2', 'ntype': 'source'}
         set_lang('zh')
         zh = t(key, **params)
         set_lang('en')

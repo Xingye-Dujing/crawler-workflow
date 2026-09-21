@@ -344,6 +344,7 @@ execution_state = {
     'active_crawlers': set(),
     '_wf_logs': {},  # {wf_idx: [log lines]} per-workflow logs for parallel mode
     '_wf_log_total': {},  # {wf_idx: lines ever produced} — see _push_log
+    '_wf_names': {},  # {wf_idx: the workflow's user-facing name} for console lines
     '_mode': 'serial',
     'llm': None,  # AI transport config from the settings panel (see /api/workflow/execute)
     'cancel_event': threading.Event(),  # set by Stop; checked between LLM rows
@@ -911,6 +912,7 @@ def execute_workflow():
             execution_state['_log_total'] = 0
             execution_state['_wf_logs'] = {}
             execution_state['_wf_log_total'] = {}
+            execution_state['_wf_names'] = {}
             execution_state['total_nodes'] = 0
             execution_state['completed_nodes'] = 0
             execution_state['cookie_expired'] = False
@@ -937,6 +939,13 @@ def execute_workflow():
         them, and the console says that is what happened.
         """
         _wf_local.idx = wf_idx
+        # Console messages address this workflow by the name the user gave it
+        # (its name node) — 'WF0' style indices forced a cross-reference against
+        # the canvas for every line. The fallback keeps numbered components
+        # distinguishable when no name node exists.
+        wf_name = _component_name(wf_engine) or f'WF{wf_idx + 1}'
+        with _completed_lock:
+            execution_state['_wf_names'][wf_idx] = wf_name
         levels = wf_engine.group_by_level()
         results = {}
         # Every node reads the result of the node wired into it. A level-wide
@@ -987,19 +996,27 @@ def execute_workflow():
                 node = wf_engine.nodes[nid]
                 label = node_label(node, nid)
                 add_log(
-                    t('wf.executing_node', i=wf_idx, nid=label, ntype=node.get('type', '?')),
+                    t('wf.executing_node', wf=wf_name, nid=label, ntype=node.get('type', '?')),
                     wf_idx=wf_idx,
                 )
                 primary, upstream = _inputs_for(nid)
                 result, status = _run_node_durable(ctx, node, headless, primary, upstream, wf_idx)
                 results[nid] = result
-                if status != NODE_SKIPPED:
-                    with _completed_lock:
-                        execution_state['completed_nodes'] += 1
+                if status == NODE_SKIPPED:
+                    # The skip was already announced (with its reason) by
+                    # _run_node_durable — a 'completed' line on top of it lied.
+                    continue
+                with _completed_lock:
+                    execution_state['completed_nodes'] += 1
+                if status in (NODE_FAILED, NODE_PARTIAL):
+                    # Failed/partial already told their own story (node_failed,
+                    # partial rows handed downstream); calling them 'completed'
+                    # afterwards contradicted it.
+                    continue
                 add_log(
                     t(
                         'wf.node_completed',
-                        i=wf_idx + 1,
+                        wf=wf_name,
                         nid=label,
                         done=execution_state['completed_nodes'],
                         total=execution_state['total_nodes'],
@@ -1080,7 +1097,7 @@ def execute_workflow():
                 for wf_idx, se in enumerate(sub_engines):
                     if not execution_state['running']:
                         break
-                    add_log(t('wf.starting', i=wf_idx + 1, n=wf_count))
+                    add_log(t('wf.starting', wf=_component_name(se) or f'WF{wf_idx + 1}', i=wf_idx + 1, n=wf_count))
                     results = _run_single_workflow(se, wf_idx, ctx)
                     all_results.update(results)
                 # update(), not replace(): a branch that died halfway already
@@ -1104,8 +1121,9 @@ def execute_workflow():
                         with wf_lock:
                             all_results.update(results)
                     except Exception:
-                        logger.exception(t('wf.wf_exception', i=wf_idx))
-                        add_log(t('wf.wf_failed', i=wf_idx), wf_idx=wf_idx)
+                        wf_name = _component_name(wf_engine) or f'WF{wf_idx + 1}'
+                        logger.exception(t('wf.wf_exception', wf=wf_name))
+                        add_log(t('wf.wf_failed', wf=wf_name), wf_idx=wf_idx)
 
                 pool = ThreadPoolExecutor(max_workers=min(wf_count, max_workers))
                 futures = [pool.submit(_run_workflow_wrapper, se, i) for i, se in enumerate(sub_engines)]
@@ -1220,6 +1238,11 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     dropped rather than handed downstream twice).
     """
     params = node.get('params', {})
+    if str(params.get('collect') or 'posts') == 'comments':
+        # 评论采集 is a mode of the Data Source (they share the 数据输入 category):
+        # links go in, comment rows come out. Same engine as the standalone
+        # Comment node — which remains valid for older canvases.
+        return _execute_comment_node(dict(node, type='comment'), ctx=ctx)
     platform = node.get('platform', params.get('platform', ''))
     keyword = params.get('keyword', '')
     target_count = _safe_int(params.get('target_count'), 50, minimum=1)
@@ -1295,6 +1318,11 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
             # Incremental dedupe made visible: a re-run that already knows
             # every item would otherwise end as '0 results' with no reason.
             add_log(t('run.dedupe_skipped', n=skipped))
+            if not rows:
+                # …and when EVERY item was skipped, say what happens next —
+                # downstream sees an empty table, which reads as a failure
+                # unless the console named the two ways out.
+                add_log(t('run.dedupe_all_skipped'))
     wall = bool(getattr(crawler, 'login_wall', False))
     if writer is not None:
         if ctx is None:
@@ -1985,7 +2013,15 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
             rows = store.load_rows(run_id, nid)
         status = NODE_PARTIAL if rows else NODE_FAILED
         store.finish_node(run_id, nid, status, error=str(e))
-        add_log(t('wf.node_failed', i=wf_idx, nid=label, err=e), wf_idx=wf_idx)
+        add_log(
+            t(
+                'wf.node_failed',
+                wf=execution_state['_wf_names'].get(wf_idx) or f'WF{wf_idx + 1}',
+                nid=label,
+                err=e,
+            ),
+            wf_idx=wf_idx,
+        )
         if rows:
             add_log(t('run.partial_down', nid=label, n=len(rows)), wf_idx=wf_idx)
         else:
@@ -2088,6 +2124,7 @@ def stop_workflow():
     execution_state['_log_total'] = 0
     execution_state['_wf_logs'] = {}
     execution_state['_wf_log_total'] = {}
+    execution_state['_wf_names'] = {}
     execution_state['total_nodes'] = 0
     execution_state['completed_nodes'] = 0
     execution_state.pop('current_input', None)

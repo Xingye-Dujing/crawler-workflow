@@ -477,3 +477,163 @@ class TestProgressiveOutput:
 
         stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p2')
         assert not list((data_root / 'data' / 'exports').glob(f'{stem}.live.*'))
+
+
+class _FakeCommentSession:
+    """Stands in for crawlers.comments.CommentSession: returns canned rows.
+
+    The dispatch under test routes a comments-mode Data Source into the shared
+    comment engine; this proves the wiring without a browser (the real adapters
+    are live-tested in the live_site tier).
+    """
+
+    rows = [{'平台': 'zhihu', '文章URL': 'https://x/1', '评论者': 'a', '评论内容': 'good'}]
+
+    def __init__(self, driver, log=None):
+        self.log = log
+
+    def crawl_zhihu(self, url, limit):
+        return list(self.rows), 'ok'
+
+
+class TestSourceCommentsMode:
+    def test_comments_mode_routes_to_the_comment_engine(self, client, app_module, monkeypatch):
+        made = {'crawlers': 0}
+
+        class _FakeCrawler:
+            driver = None
+
+            def close(self):
+                pass
+
+        def fake_get_crawler(kind, headless=True, cookie_dir=None):
+            # Comments mode must force a VISIBLE browser even though the source
+            # param says headless — zhihu content pages reject headless.
+            assert headless is False, 'comment crawl opens a visible window'
+            made['crawlers'] += 1
+            return _FakeCrawler()
+
+        import crawlers.comments as comments_module
+
+        monkeypatch.setattr(app_module, 'get_crawler', fake_get_crawler)
+        monkeypatch.setattr(comments_module, 'CommentSession', _FakeCommentSession)
+
+        workflow = _workflow(
+            [
+                _node(
+                    'node-1',
+                    'source',
+                    params={
+                        'platform': 'zhihu',
+                        'collect': 'comments',
+                        'urls': 'https://www.zhihu.com/question/1/answer/2',
+                        'headless': True,
+                    },
+                )
+            ],
+            [],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'cmt-mode'})
+        assert started.get_json()['ok'] is True
+        run_id = started.get_json()['run_id']
+        assert _wait_for_worker(app_module)
+
+        rows = app_module._RUN_STORE.load_rows(run_id, 'node-1')
+        assert made['crawlers'] == 1, 'the comments route built its own crawler'
+        assert len(rows) == 1 and rows[0]['评论内容'] == 'good'
+
+    def test_comments_mode_without_urls_is_a_validation_error(self, client, app_module):
+        workflow = _workflow(
+            [_node('node-1', 'source', params={'platform': 'zhihu', 'collect': 'comments', 'urls': ''})],
+            [],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'cmt-bad'})
+        assert started.status_code == 200  # a validation failure is a logged outcome, not an HTTP error
+        assert _wait_for_worker(app_module)
+        status = client.get('/api/workflow/status').get_json()
+        assert any('comments mode needs at least one article URL' in line for line in status['logs'])
+
+
+class TestConsoleReadabilityRegression:
+    """The bug this repo shipped with: the console printed 'node-1' / '[WF0]'
+    because toWorkflowJSON dropped each node's title (so the backend got
+    title:None) and the workflow prefix was an index. This test drives the
+    user's REAL saved workflow (微博-ChatGPT.json — every node title:None)
+    through the fixed pipeline and proves the console now speaks in the
+    workflow's name and readable node labels, never a bare id or a WF index.
+    """
+
+    def test_saved_titleless_workflow_still_reads_with_names(self, client, app_module, monkeypatch):
+        import json
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[2]
+        wf_path = repo / 'data' / 'workflows' / '微博-ChatGPT.json'
+        if wf_path.exists():  # the user's actual reported workflow, if present
+            doc = json.loads(wf_path.read_text(encoding='utf-8'))
+            workflow = doc.get('workflow') or doc
+        else:
+            # Same shape reconstructed: name + source(weibo) + output.
+            source = {
+                'id': 'node-1',
+                'type': 'source',
+                'params': {'platform': 'weibo', 'keyword': 'ChatGPT', 'target_count': 2},
+            }
+            workflow = _workflow(
+                [
+                    {'id': 'node-2', 'type': 'name', 'params': {'workflow_name': '获取微博'}},
+                    source,
+                    {
+                        'id': 'node-3',
+                        'type': 'output',
+                        'operation': 'save',
+                        'params': {'format': 'csv', 'filename': 'probe'},
+                    },
+                ],
+                [{'from': 'node-2', 'to': 'node-1'}, {'from': 'node-1', 'to': 'node-3'}],
+            )
+        # Drop titles to mirror the pre-fix payload even if the file has them.
+        for n in workflow.get('nodes', []):
+            n['title'] = None
+
+        rows = [{'发布者': 'a', '正文': 'hello', '链接': 'https://weibo.com/1'}]
+
+        class _C:
+            login_wall = False
+
+            def __init__(self, *a, **k):
+                self.driver = None
+
+            def set_sink(self, s):
+                self._s = s
+
+            def set_cursor_sink(self, s):
+                pass
+
+            def seed(self, saved):
+                pass
+
+            def close(self):
+                pass
+
+            def search(self, keyword=None, target_count=None, resume=None, **k):
+                kept = []
+                for item in rows:
+                    if self._s is None or self._s(item):
+                        kept.append(item)
+                return kept
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda platform, headless=True, cookie_dir=None: _C())
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': '获取微博'})
+        assert started.get_json()['ok'] is True
+        assert _wait_for_worker(app_module)
+
+        logs = client.get('/api/workflow/status').get_json()['logs']
+        blob = '\n'.join(logs)
+        # The console addresses the workflow by name (from the name node), never
+        # by a '[WF0]' index — 'WF0' must not appear anywhere.
+        assert 'WF0' not in blob, 'the console must not fall back to WF indices'
+        # A titleless source still reads as a label + id, not a lone 'node-1'.
+        assert '#node-1' in blob, 'the source should read "Data Source #node-1", not a bare node-1'
+        # And the node it names must be the one that actually ran.
+        assert app_module._RUN_STORE.row_count(started.get_json()['run_id'], 'node-1') == 1

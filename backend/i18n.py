@@ -39,20 +39,20 @@ _local = threading.local()
 
 _ZH = {
     # ── workflow ──────────────────────────────────────────────
-    'wf.executing_node': '[WF{i}] 正在执行节点：{nid}（{ntype}）',
-    'wf.node_failed': '[WF{i}] 节点 {nid} 执行失败：{err}',
+    'wf.executing_node': '[{wf}] 正在执行节点：{nid}（{ntype}）',
+    'wf.node_failed': '[{wf}] 节点 {nid} 执行失败：{err}',
     'wf.partial_kept': '[WF{i}] 已保留该节点已完成的部分结果；修复问题后重新执行可从断点续跑。',
-    'wf.node_completed': '[WF{i}] 节点 {nid} 完成（{done}/{total}）',
+    'wf.node_completed': '[{wf}] 节点 {nid} 完成（{done}/{total}）',
     'wf.multi_input': '节点 {nid} 有 {n} 条上游连线，主输入取第一条（来自 {up}）；合并表用第二条当右表',
     'wf.validation_error': '校验错误：{err}',
     'wf.found': '发现 {n} 条工作流',
-    'wf.starting': '--- 开始执行工作流 {i}/{n} ---',
+    'wf.starting': '--- 开始执行工作流「{wf}」（{i}/{n}）---',
     'wf.completed': '工作流执行完成',
-    'wf.wf_failed': '工作流 {i} 执行失败',
+    'wf.wf_failed': '工作流「{wf}」执行失败',
     'wf.all_completed': '全部工作流执行完成',
     'wf.exec_failed': '执行失败，详见服务端日志',
     'wf.exec_exception': '执行失败',
-    'wf.wf_exception': '工作流 {i} 执行失败',
+    'wf.wf_exception': '工作流「{wf}」执行失败',
     'wf.save_failed': '保存失败：{err}',
     'wf.data_saved': '数据已保存至 {path}（{fmt}）',
     'wf.analysis_failed': '分析失败：{err}',
@@ -116,6 +116,17 @@ _ZH = {
     'label.clean': '清洗',
     'label.emotion': '情感分析',
     'label.tendency': '倾向性分析',
+    # ── node type labels (console fallbacks; mirror frontend app.js) ──
+    'node.name': '工作流命名',
+    'node.source': '数据源',
+    'node.upload': '上传文件',
+    'node.process': '处理',
+    'node.analysis': '分析',
+    'node.visualize': '可视化',
+    'node.tokenize': '分词',
+    'node.output': '输出',
+    'node.resume': '断点续跑',
+    'node.comment': '评论采集',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': '开始搜索知乎关键词: "{kw}"，目标获取 {n} 条结果',
     'crawl.zhihu.fallbackSearch': '知乎深链搜索返回空壳，改用搜索框重新提交关键词',
@@ -320,6 +331,7 @@ _ZH = {
     'engine.source_no_platform': '节点 {nid}：数据源节点没有选择平台',
     'engine.source_no_keyword': '节点 {nid}：数据源节点缺少关键词',
     'engine.source_no_urls': '节点 {nid}：微信数据源需要至少一个文章链接',
+    'engine.source_comments_urls': '节点 {nid}：评论采集需要至少一个文章链接（知乎/微博/小红书）',
     'engine.upload_no_file': '节点 {nid}：上传节点还没有选择文件',
     'engine.comment_no_urls': '节点 {nid}：评论节点还没有填写文章链接',
     'comment.no_urls': '评论节点没有可抓取的链接（支持知乎/微博/小红书链接）',
@@ -380,6 +392,10 @@ _ZH = {
     'run.resume_crawl': '节点 {nid} 从上次中断处继续抓取（已有 {have} 行）',
     'run.recrawl': '重新采集：已释放 {n} 条历史去重记录，本节点将重新抓取',
     'run.dedupe_skipped': '增量采集：{n} 条结果此前已采集，本次被跳过（如需重抓请在采集节点开启「重新采集」）',
+    'run.dedupe_all_skipped': (
+        '本节点的结果此前已全部采集，本次没有新数据传给下游；'
+        '要重抓请在采集节点开启「重新采集」，要用旧数据请从运行记录导出或用断点续跑（Resume）节点续接'
+    ),
     'run.progress_file': '分批导出：{file}（{rows} 行，共 {parts} 个分批文件）',
     'run.live_export': '实时导出：{file}（每处理完一批刷新一次，运行结束后保留）',
     'run.live_export_failed': '实时导出写入失败：{err}',
@@ -401,20 +417,20 @@ _ZH = {
 
 _EN = {
     # ── workflow ──────────────────────────────────────────────
-    'wf.executing_node': '[WF{i}] Executing node: {nid} ({ntype})',
-    'wf.node_failed': '[WF{i}] Node {nid} failed: {err}',
+    'wf.executing_node': '[{wf}] Executing node: {nid} ({ntype})',
+    'wf.node_failed': '[{wf}] Node {nid} failed: {err}',
     'wf.partial_kept': '[WF{i}] Partial results for this node are kept; re-running resumes from the checkpoint.',
-    'wf.node_completed': '[WF{i}] Node {nid} completed ({done}/{total})',
+    'wf.node_completed': '[{wf}] Node {nid} completed ({done}/{total})',
     'wf.multi_input': 'Node {nid} has {n} incoming connections — the first (from {up}) is the primary input',
     'wf.validation_error': 'Validation error: {err}',
     'wf.found': 'Found {n} workflow(s)',
-    'wf.starting': '--- Starting workflow {i}/{n} ---',
+    'wf.starting': '--- Starting workflow "{wf}" ({i}/{n}) ---',
     'wf.completed': 'Workflow execution completed',
-    'wf.wf_failed': 'Workflow {i} failed',
+    'wf.wf_failed': 'Workflow "{wf}" failed',
     'wf.all_completed': 'All workflows completed',
     'wf.exec_failed': 'Execution failed - see server logs',
     'wf.exec_exception': 'Execution failed',
-    'wf.wf_exception': 'Workflow {i} failed',
+    'wf.wf_exception': 'Workflow "{wf}" failed',
     'wf.save_failed': 'Save failed: {err}',
     'wf.data_saved': 'Data saved to {path} ({fmt})',
     'wf.analysis_failed': 'Analysis failed: {err}',
@@ -482,6 +498,17 @@ _EN = {
     'label.clean': 'Clean',
     'label.emotion': 'Emotion',
     'label.tendency': 'Tendency',
+    # ── node type labels (console fallbacks; mirror frontend app.js) ──
+    'node.name': 'Workflow Name',
+    'node.source': 'Data Source',
+    'node.upload': 'Upload File',
+    'node.process': 'Process',
+    'node.analysis': 'Analysis',
+    'node.visualize': 'Visualize',
+    'node.tokenize': 'Tokenize',
+    'node.output': 'Output',
+    'node.resume': 'Resume Run',
+    'node.comment': 'Comments',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': 'Searching Zhihu for "{kw}", target {n} results',
     'crawl.zhihu.fallbackSearch': (
@@ -689,6 +716,7 @@ _EN = {
     'engine.source_no_platform': 'Node {nid}: source node has no platform',
     'engine.source_no_keyword': 'Node {nid}: source node has no keyword',
     'engine.source_no_urls': 'Node {nid}: a WeChat source needs at least one article URL',
+    'engine.source_comments_urls': 'Node {nid}: comments mode needs at least one article URL (zhihu/weibo/xiaohongshu)',
     'engine.upload_no_file': 'Node {nid}: upload node has no file selected',
     'engine.comment_no_urls': 'Node {nid}: comment node has no article URLs yet',
     'comment.no_urls': 'comment node has no crawlable URLs (zhihu/weibo/xiaohongshu links only)',
@@ -751,6 +779,11 @@ _EN = {
     'run.recrawl': 'Re-crawl: released {n} dedupe records; this node will collect again',
     'run.dedupe_skipped': (
         'Incremental: {n} already-collected items were skipped (enable Recrawl on the source node to re-collect)'
+    ),
+    'run.dedupe_all_skipped': (
+        'every item of this node was already collected — nothing new flows downstream; '
+        'enable Recrawl on the source node to re-collect, or reach the stored rows through '
+        'the run records / a Resume node'
     ),
     'run.progress_file': 'progress export: {file} ({rows} rows in {parts} part files)',
     'run.live_export': 'live export: {file} (rewritten after every batch; kept when the run ends)',

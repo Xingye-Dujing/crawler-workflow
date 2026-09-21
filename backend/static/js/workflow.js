@@ -440,6 +440,7 @@ function openSettings(nodeId) {
            to change shape with the platform, which is why the select re-opens
            itself on change. */
         var isWechat = p.platform === 'wechat';
+        var collect = p.collect || 'posts';
         html += '<div class="settings-group">' +
             '<label class="settings-label">' + I18n.t('settings.platform') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'platform\',this.value);openSettings(\'' + nodeId + '\')">' +
@@ -448,11 +449,33 @@ function openSettings(nodeId) {
             '<option value="xiaohongshu"' + (p.platform === 'xiaohongshu' ? ' selected' : '') + '>' + I18n.t('platform.xiaohongshu') + '</option>' +
             '<option value="wechat"' + (p.platform === 'wechat' ? ' selected' : '') + '>' + I18n.t('platform.wechat') + '</option>' +
             '</select></div>';
+        if (!isWechat) {
+            /* 评论采集 lives here as a mode of the Data Source (same 数据输入
+               category as its own node): links in, comment rows out. */
+            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.collect') + '</label>' +
+                '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'collect\',this.value);openSettings(\'' + nodeId + '\')">' +
+                '<option value="posts"' + (collect !== 'comments' ? ' selected' : '') + '>' + I18n.t('settings.collectPosts') + '</option>' +
+                '<option value="comments"' + (collect === 'comments' ? ' selected' : '') + '>' + I18n.t('settings.collectComments') + '</option>' +
+                '</select></div>';
+        }
         if (isWechat) {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.urls') + '</label>' +
                 '<textarea class="settings-input" rows="5" placeholder="https://mp.weixin.qq.com/s/..." ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.urlsHint') + '</div></div>';
+        } else if (collect === 'comments') {
+            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentUrls') + '</label>' +
+                '<textarea class="settings-input" rows="5" placeholder="https://www.zhihu.com/... https://weibo.com/... https://www.xiaohongshu.com/..." ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
+                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentUrlsHint') + '</div></div>' +
+                '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentLimit') + '</label>' +
+                '<input class="settings-input" type="number" min="0" value="' + (p.comment_limit != null ? p.comment_limit : 0) + '" ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'comment_limit\',parseInt(this.value)||0)">' +
+                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentLimitHint') + '</div></div>' +
+                '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
+                '<input type="checkbox" ' + (p.per_article_file ? 'checked' : '') + ' ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'per_article_file\',this.checked)">' + I18n.t('settings.perArticleFile') + '</label></div>' +
+                '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentHint') + '</div>';
         } else {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.keyword') + '</label>' +
                 '<input class="settings-input" value="' + escapeHtml(p.keyword || '') + '" placeholder="keyword" ' +
@@ -465,7 +488,7 @@ function openSettings(nodeId) {
                 'onchange="updateParam(\'' + nodeId + '\',\'recrawl\',this.checked)">' + I18n.t('settings.recrawl') + '</label>' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.recrawlHint') + '</div></div>';
         }
-        if (p.platform === 'weibo') {
+        if (p.platform === 'weibo' && collect !== 'comments') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.startTime') + '</label>' +
                 '<input class="settings-input" value="' + (p.start_time || '') + '" placeholder="2026-01-01" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'start_time\',this.value)"></div>' +
@@ -2691,7 +2714,13 @@ workflow.validate = function () {
         var type = node.type;
 
         if (type === 'source') {
-            if (params.platform === 'wechat') {
+            if (params.collect === 'comments') {
+                /* Comments mode: links are the input — a keyword would be
+                   silently ignored, exactly like WeChat's rule below. */
+                if (!params.urls || !String(params.urls).trim()) {
+                    errors.push(I18n.t('validate.sourceCommentUrls').replace('{title}', node.title));
+                }
+            } else if (params.platform === 'wechat') {
                 /* WeChat crawls the article URLs you paste; a keyword would be
                    ignored, so asking for one (as this used to) both blocked a
                    valid workflow and left the platform unusable. */
