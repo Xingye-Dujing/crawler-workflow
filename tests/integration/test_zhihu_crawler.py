@@ -394,9 +394,7 @@ class TestZeroCardSearch:
         rows = crawler.search('三亚', target_count=1)
         assert len(rows) == 1
 
-    def test_a_retry_that_lands_on_the_no_result_plate_raises_the_actionable_line(
-        self, make_crawler, monkeypatch
-    ):
+    def test_a_retry_that_lands_on_the_no_result_plate_raises_the_actionable_line(self, make_crawler, monkeypatch):
         crawler, driver = make_crawler([])
 
         def fake_input(kw):

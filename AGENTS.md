@@ -28,17 +28,25 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~1050 cases)**:
+- **Automated tests (pytest, ~1150 cases)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
+    (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
     `.venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"`
   - Live-site tier (REAL crawls — every platform runs in BOTH browser modes, headless and visible
     window, plus the comment node across zhihu/weibo/xiaohongshu and 3 real WeChat articles;
     per-platform skip when a cookie is absent): `.venv/Scripts/python.exe -m pytest -q -m live_site`
   - Coverage: append `--cov=backend --cov-report=term` (total target ≥70%).
-  - Layout: `tests/unit` (pure logic), `tests/api` (Flask test_client, fully tmp-isolated),
-    `tests/integration` (LLM boundary mocks run by default; real-Chrome/Ollama are marked).
-    OpenRouter is **never** really called — patch `analyzers.llm_client.requests.post/get`.
+  - Layout: `tests/unit` (pure logic + frontend-JS behavior harnesses), `tests/api` (Flask
+    test_client, fully tmp-isolated), `tests/integration` (LLM boundary mocks run by default;
+    real-Chrome/Ollama are marked). OpenRouter is **never** really called — patch
+    `analyzers.llm_client.requests.post/get`.
+  - **Frontend JS is under test too**: `tests/frontend/harness_*.mjs` load the REAL
+    canvas.js/workflow.js/app.js in a zero-dependency node vm (shared `harness_dom.mjs`) and
+    are driven by `tests/unit/test_frontend_*` pytest modules — validation gates, panel HTML,
+    popup outside-click, catalog parity, undo/redo, the save/open/new lifecycle and the
+    run-records table. Any JS change to result-affecting logic must sync a scenario there;
+    `urlPlatform` (workflow.js) is contract-pinned against `utils.helpers.platform_for`.
 
 ## Style (differs from defaults)
 
