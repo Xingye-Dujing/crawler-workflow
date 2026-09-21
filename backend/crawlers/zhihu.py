@@ -95,8 +95,13 @@ class ZhihuCrawler(Crawler):
             self.check_login_wall(url)
             if self.login_wall:
                 raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
-            if self._card_count() == 0 and not self._deep_link_came_up_empty():
-                raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
+        if self._card_count() == 0:
+            # Nothing after the fallback either. Zhihu answers common keywords
+            # with a blank page day-by-day (headless risk control) — a legit
+            # outcome, but never one to 'succeed' silently: the catalog's own
+            # line tells the user the actionable choice (visible window, or
+            # retry later; collected data stays safe).
+            raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
         logger.info(t('crawl.zhihu.loaded'))
 
         # ``scanned`` is how far the card walk has got; a resume reads only the
@@ -151,6 +156,57 @@ class ZhihuCrawler(Crawler):
 
     def _card_count(self) -> int:
         return len(self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR))
+
+    # Zhihu's own NO-RESULT page is a plain text plate (deep links sometimes
+    # skip the fetch entirely and leave a silent shell instead — the two must
+    # not blur: only the shell deserves a retry through the search box).
+    _NO_RESULT_MARKS = ('未搜索到', '没有找到', '暂无相关', '没有相关')
+
+    def _page_text(self) -> str:
+        body = self._element_or_none('body')
+        try:
+            return (body.text or '') if body is not None else ''
+        except Exception:
+            return ''
+
+    def _no_result_plate_present(self) -> bool:
+        body = self._page_text()
+        return any(mark in body for mark in self._NO_RESULT_MARKS)
+
+    def _deep_link_came_up_empty(self) -> bool:
+        """True when the zero-card page is still a shell: no cards and no
+        definitive no-results plate, so the search request itself deserves a
+        second issue. A definite plate means zero IS the answer, and retrying
+        would only burn time against a page that already replied."""
+        return not self._no_result_plate_present()
+
+    # Zhihu's search input has carried these classes across the 2026 redesign;
+    # tried in order because the deep-link shell may render only some of them.
+    _SEARCH_BOX_SELECTORS = (
+        '.PromptInput',
+        'input[placeholder]',
+        'input[type="search"]',
+    )
+
+    def _search_via_input(self, keyword: str) -> bool:
+        """Best-effort human path: type the keyword into the site's own search
+        box and press Enter — the request the SPA expects when a deep link
+        printed its shell without fetching. A missing box (DOM drift) is not
+        fatal: the caller's zero-card check still ends the crawl with the
+        actionable risk-control message."""
+        box = None
+        for selector in self._SEARCH_BOX_SELECTORS:
+            box = self._element_or_none(selector)
+            if box is not None:
+                break
+        if box is None:
+            logger.debug('zhihu fallback: no search box among %s', self._SEARCH_BOX_SELECTORS)
+            return False
+        with contextlib.suppress(NoSuchElementException):
+            box.clear()
+            box.send_keys(f'{keyword}\n')
+        self.wait_for_element(self.CARD_SELECTOR)
+        return True
 
     def _end_marker_present(self) -> bool:
         """The 没有更多了 footer, if this page has rendered one yet."""

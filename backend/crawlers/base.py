@@ -282,6 +282,14 @@ class Crawler(ABC):
             return default
         return self._node_text(el, default)
 
+    def _element_or_none(self, selector: str):
+        """The first node matching *selector*, or None — pages routinely lack
+        an element and the caller's loop must keep running either way."""
+        try:
+            return self.driver.find_element('css selector', selector)
+        except Exception:
+            return None
+
     def _node_text(self, element, default: str = '') -> str:
         script = 'return arguments[0].innerText || arguments[0].textContent || ""'
         try:

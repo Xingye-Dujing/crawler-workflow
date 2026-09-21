@@ -73,13 +73,14 @@ class FakeDriver:
     """Returns a fixed card list, or one that grows on every scroll round (the
     interleaved harvest is only observable if the page can gain cards)."""
 
-    def __init__(self, cards, grow_by=0, max_cards=200, no_more=None):
+    def __init__(self, cards, grow_by=0, max_cards=200, no_more=None, body_text=''):
         self.cards = list(cards)
         self.grow_by = grow_by
         self.max_cards = max_cards
         self.visited = []
         self.scrolls = 0
         self._no_more = no_more
+        self._body = body_text
 
     def get(self, url):
         self.visited.append(url)
@@ -87,6 +88,8 @@ class FakeDriver:
     def find_element(self, by, selector):
         if selector == '.css-7hmi9v' and self._no_more is not None:
             return FakeElement(self._no_more)
+        if selector == 'body':
+            return FakeElement(self._body)
         raise NoSuchElementException(selector)
 
     def find_elements(self, by, selector):
@@ -353,3 +356,46 @@ class TestPromoCardsExcluded:
         rows = crawler.search('三亚', target_count=5)
         assert len(rows) == 1
         assert rows[0]['链接'] == CARD_1_HREFS['.ContentItem-title a']
+
+
+class TestZeroCardSearch:
+    """A search page that loads no cards is zhihu's day-by-day headless risk
+    control — and, historically, the one branch that crashed with an
+    AttributeError because its fallback helpers were never implemented.
+    Zero cards must speak with the catalog's actionable line, never a
+    traceback, and the shell/no-result distinction must actually branch."""
+
+    def test_a_silent_zero_page_raises_the_actionable_message(self, make_crawler):
+        crawler, _ = make_crawler([])
+        with pytest.raises(RuntimeError) as exc:
+            crawler.search('三亚', target_count=3)
+        assert '风控' in str(exc.value) or 'risk control' in str(exc.value)
+
+    def test_a_definite_no_result_plate_does_not_burn_the_fallback(self, make_crawler, monkeypatch):
+        crawler, driver = make_crawler([])
+        driver._body = '未搜索到相关内容'  # the page already ANSWERED: zero is real
+        tried = []
+        monkeypatch.setattr(crawler, '_search_via_input', lambda kw: tried.append(kw) or True)
+        with pytest.raises(RuntimeError):
+            crawler.search('三亚', target_count=3)
+        assert tried == [], 'a definitive no-results plate must not trigger a retry'
+
+    def test_the_shell_page_retries_once_through_the_search_box(self, make_crawler, monkeypatch):
+        crawler, driver = make_crawler([])
+        card = _card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS)
+
+        def fake_input(kw):
+            # The resubmitted request is the one the SPA actually fetches.
+            driver.cards.append(card)
+            return True
+
+        monkeypatch.setattr(crawler, '_search_via_input', fake_input)
+        rows = crawler.search('三亚', target_count=1)
+        assert len(rows) == 1
+
+    def test_the_fallback_gives_up_quietly_when_the_box_moved(self, make_crawler):
+        # No 'body'/'PromptInput'/input in the fake driver at all except body
+        # (empty text): the real _search_via_input finds no box and must say
+        # so with False, not an exception.
+        crawler, _ = make_crawler([])
+        assert crawler._search_via_input('三亚') is False

@@ -267,12 +267,6 @@ class WeiboCrawler(Crawler):
         cleaned = re.sub(r'[?&]page=\d+', '', base_url)
         return f'{cleaned}{"&" if "?" in cleaned else "?"}page='
 
-    def _element_or_none(self, selector: str):
-        try:
-            return self.driver.find_element(By.CSS_SELECTOR, selector)
-        except Exception:
-            return None
-
     # ─── card harvest ─────────────────────────────────────────────────
 
     def _harvest(self, target: int) -> list:
