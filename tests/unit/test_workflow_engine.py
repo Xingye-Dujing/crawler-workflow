@@ -12,7 +12,7 @@ contracts pinned here are the ones the executor silently relies on:
 
 import pytest
 
-from engine.workflow import WorkflowEngine
+from engine.workflow import WorkflowEngine, node_label
 from i18n import get_lang, set_lang
 
 pytestmark = pytest.mark.unit
@@ -282,3 +282,29 @@ class TestValidate:
             set_lang(previous)
         assert zh != en
         assert '没有选择平台' in zh[0]
+
+
+class TestNodeLabel:
+    def test_a_titled_node_reads_as_its_name_plus_id(self):
+        assert node_label({'title': '知乎采集'}, 'node-7') == '知乎采集 #node-7'
+
+    def test_title_is_stripped(self):
+        assert node_label({'title': '  清洗  '}, 'node-1') == '清洗 #node-1'
+
+    def test_untitled_node_falls_back_to_the_id(self):
+        assert node_label({'type': 'source'}, 'node-3') == 'node-3'
+        assert node_label({}, 'node-3') == 'node-3'
+        assert node_label(None, 'node-3') == 'node-3'
+
+    def test_a_title_equal_to_the_id_is_not_doubled(self):
+        # A saved workflow that stored the raw id as the title must not read
+        # "node-1 #node-1" — one honest label, not the same token twice.
+        assert node_label({'title': 'node-1'}, 'node-1') == 'node-1'
+
+
+class TestValidateUsesLabels:
+    def test_a_renamed_node_is_named_in_the_error(self, en):
+        node = _node('node-2', params={})
+        node['title'] = '微博抓取'
+        errors = WorkflowEngine(_wf([node], [])).validate()
+        assert '微博抓取 #node-2' in errors[0]

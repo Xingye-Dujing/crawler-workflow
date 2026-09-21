@@ -8,6 +8,20 @@ from i18n import t
 logger = logging.getLogger(__name__)
 
 
+def node_label(node: dict, nid: str) -> str:
+    """Console-friendly reference to a node: the user's name, plus its id.
+
+    'node-7' means nothing once a canvas holds a dozen boxes; the title the
+    user gave the node (or its type label) says which one a message is about.
+    The id stays appended because titles repeat — '#node-7' is what lets two
+    nodes named 清洗 be told apart in the console and in bug reports.
+    """
+    title = str((node or {}).get('title') or '').strip()
+    if title and title != nid:
+        return f'{title} #{nid}'
+    return nid
+
+
 class WorkflowEngine:
     """Parses DAG from workflow definition and schedules execution."""
 
@@ -138,44 +152,47 @@ class WorkflowEngine:
         for nid, node in self.nodes.items():
             ntype = node.get('type')
             params = node.get('params', {})
+            # Console references lead with the node's (possibly renamed) title
+            # so "node-7" never has to be decoded against the canvas.
+            label = node_label(node, nid)
             if ntype == 'source':
                 platform = node.get('platform') or params.get('platform')
                 if not platform:
-                    errors.append(t('engine.source_no_platform', nid=nid))
+                    errors.append(t('engine.source_no_platform', nid=label))
                 elif platform == 'wechat':
                     # WeChat scrapes article URLs; a keyword would do nothing.
                     if not str(params.get('urls') or '').strip():
-                        errors.append(t('engine.source_no_urls', nid=nid))
+                        errors.append(t('engine.source_no_urls', nid=label))
                 elif not str(params.get('keyword') or '').strip():
-                    errors.append(t('engine.source_no_keyword', nid=nid))
+                    errors.append(t('engine.source_no_keyword', nid=label))
             if ntype == 'upload' and not params.get('dataset_id'):
-                errors.append(t('engine.upload_no_file', nid=nid))
+                errors.append(t('engine.upload_no_file', nid=label))
             if ntype == 'comment' and not str(params.get('urls') or '').strip():
-                errors.append(t('engine.comment_no_urls', nid=nid))
+                errors.append(t('engine.comment_no_urls', nid=label))
             if ntype == 'process' and not node.get('operation'):
-                errors.append(t('engine.process_no_op', nid=nid))
+                errors.append(t('engine.process_no_op', nid=label))
             if ntype == 'output' and not node.get('operation'):
-                errors.append(t('engine.output_no_op', nid=nid))
+                errors.append(t('engine.output_no_op', nid=label))
             if ntype == 'analysis' and not (params.get('steps') or params.get('operation')):
-                errors.append(t('engine.analysis_no_op', nid=nid))
+                errors.append(t('engine.analysis_no_op', nid=label))
             if ntype == 'tokenize' and not params.get('text_column'):
-                errors.append(t('engine.tokenize_no_column', nid=nid))
+                errors.append(t('engine.tokenize_no_column', nid=label))
             if ntype == 'visualize':
                 if not params.get('chart_type'):
-                    errors.append(t('engine.visualize_no_chart', nid=nid))
+                    errors.append(t('engine.visualize_no_chart', nid=label))
                 if not params.get('x_field'):
-                    errors.append(t('engine.visualize_no_x', nid=nid))
+                    errors.append(t('engine.visualize_no_x', nid=label))
             if ntype == 'name':
                 # The name node is pure metadata: it carries no data, so it
                 # must sit at the head (nothing feeds into it), wire into a
                 # real node, and carry a non-empty label — that label is what
                 # groups the run in the Execution History panel.
                 if not str(params.get('workflow_name') or '').strip():
-                    errors.append(t('engine.name_no_label', nid=nid))
+                    errors.append(t('engine.name_no_label', nid=label))
                 if any(c.get('to') == nid for c in self.connections):
-                    errors.append(t('engine.name_not_head', nid=nid))
+                    errors.append(t('engine.name_not_head', nid=label))
                 if not any(c.get('from') == nid for c in self.connections):
-                    errors.append(t('engine.name_no_downstream', nid=nid))
+                    errors.append(t('engine.name_no_downstream', nid=label))
         try:
             self.topological_sort()
         except ValueError as e:

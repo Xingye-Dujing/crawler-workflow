@@ -35,7 +35,7 @@ from config import Config
 from crawlers import get_crawler
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
-from engine.workflow import WorkflowEngine
+from engine.workflow import WorkflowEngine, node_label
 from i18n import audit, normalize, set_lang, t
 from services import StatsService
 from services.cookie_manager import CookieManager
@@ -948,6 +948,9 @@ def execute_workflow():
         for conn in wf_engine.connections:
             upstream_of.setdefault(conn['to'], []).append(conn['from'])
 
+        def _node_of(nid: str) -> dict:
+            return wf_engine.nodes.get(nid) or {}
+
         def _inputs_for(nid: str):
             """→ (rows of the first incoming connection, [(parent_id, result), …]).
 
@@ -960,7 +963,15 @@ def execute_workflow():
                 # A source (crawler or upload) has nothing upstream.
                 return [], []
             if len(parents) > 1:
-                add_log(t('wf.multi_input', nid=nid, up=parents[0], n=len(parents)), wf_idx=wf_idx)
+                add_log(
+                    t(
+                        'wf.multi_input',
+                        nid=node_label(_node_of(nid), nid),
+                        up=node_label(_node_of(parents[0]), parents[0]),
+                        n=len(parents),
+                    ),
+                    wf_idx=wf_idx,
+                )
             pairs = [(pid, results.get(pid)) for pid in parents]
             primary = pairs[0][1]
             # A chart spec (dict) is not tabular input; neither is a node that
@@ -974,8 +985,9 @@ def execute_workflow():
                 if not execution_state['running']:
                     break
                 node = wf_engine.nodes[nid]
+                label = node_label(node, nid)
                 add_log(
-                    t('wf.executing_node', i=wf_idx, nid=nid, ntype=node.get('type', '?')),
+                    t('wf.executing_node', i=wf_idx, nid=label, ntype=node.get('type', '?')),
                     wf_idx=wf_idx,
                 )
                 primary, upstream = _inputs_for(nid)
@@ -988,7 +1000,7 @@ def execute_workflow():
                     t(
                         'wf.node_completed',
                         i=wf_idx + 1,
-                        nid=nid,
+                        nid=label,
                         done=execution_state['completed_nodes'],
                         total=execution_state['total_nodes'],
                     ),
@@ -1257,7 +1269,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         saved = ctx['store'].load_rows(ctx['run_id'], nid)
         if saved:
             crawler.seed(saved)
-            add_log(t('run.resume_crawl', nid=nid, have=len(saved)))
+            add_log(t('run.resume_crawl', nid=node_label(node, nid), have=len(saved)))
             if writer is not None and not writer.has_parts:
                 # Rows paid for before batching was switched on (or before any
                 # part survived): the merged file should hold the whole table,
@@ -1930,6 +1942,7 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
     fingerprint = (ctx.get('fingerprints') or {}).get(nid, '')
     stored = (ctx.get('statuses') or {}).get(nid) or {}
     title = str(node.get('title') or node.get('name') or '')
+    label = node_label(node, nid)
 
     reusable = (
         ctx.get('resume')
@@ -1947,7 +1960,7 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
     if reusable:
         rows = store.load_rows(run_id, nid)
         store.finish_node(run_id, nid, NODE_RESTORED)
-        add_log(t('run.restored', nid=nid, n=len(rows)), wf_idx=wf_idx)
+        add_log(t('run.restored', nid=label, n=len(rows)), wf_idx=wf_idx)
         return rows, NODE_RESTORED
 
     if upstream and ntype not in _NON_INPUT_NODES and not any(isinstance(res, list) and res for _pid, res in upstream):
@@ -1956,7 +1969,7 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         # Types that ignore their inputs entirely are exempt: an empty
         # upstream says nothing about whether *they* can produce rows.
         store.finish_node(run_id, nid, NODE_SKIPPED)
-        add_log(t('run.skipped_empty', nid=nid), wf_idx=wf_idx)
+        add_log(t('run.skipped_empty', nid=label), wf_idx=wf_idx)
         return [], NODE_SKIPPED
 
     try:
@@ -1972,11 +1985,11 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
             rows = store.load_rows(run_id, nid)
         status = NODE_PARTIAL if rows else NODE_FAILED
         store.finish_node(run_id, nid, status, error=str(e))
-        add_log(t('wf.node_failed', i=wf_idx, nid=nid, err=e), wf_idx=wf_idx)
+        add_log(t('wf.node_failed', i=wf_idx, nid=label, err=e), wf_idx=wf_idx)
         if rows:
-            add_log(t('run.partial_down', nid=nid, n=len(rows)), wf_idx=wf_idx)
+            add_log(t('run.partial_down', nid=label, n=len(rows)), wf_idx=wf_idx)
         else:
-            add_log(t('run.failed_down', nid=nid), wf_idx=wf_idx)
+            add_log(t('run.failed_down', nid=label), wf_idx=wf_idx)
         return rows, status
 
     if isinstance(result, list) and ntype != 'source':

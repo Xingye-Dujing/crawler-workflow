@@ -91,6 +91,12 @@ const workflow = {
             var id = 'node-' + (canvas.nextId - 1);
             if (canvas.nodes[id]) {
                 canvas.nodes[id].params = n.params || {};
+                // A renamed node must come back renamed (see canvas.restoreState).
+                if (n.title) {
+                    canvas.nodes[id].title = n.title;
+                    var titleEl = canvas.nodes[id].el && canvas.nodes[id].el.querySelector('.node-title');
+                    if (titleEl) titleEl.textContent = n.title;
+                }
                 canvas.updateNodeDisplay(id);
             }
         });

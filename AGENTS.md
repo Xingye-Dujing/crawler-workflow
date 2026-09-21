@@ -76,6 +76,14 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   RUN becomes `failed` → appears in the resume banner → fresh-cookie 继续 continues from the stored
   cursor/ledger. Never downgrade this to "node completed with fewer rows" — that hides the gap
   forever. Comment nodes raise when any article was BLOCKED for the same reason.
+- Console/validation messages must reference nodes through
+  `engine.workflow.node_label(node, nid)` (→ `title #nid`) — never a bare `nid` —
+  so a renamed node speaks with the user's name. Store keys, results dict and
+  resume plumbing still use the raw `nid`; only display strings change. The
+  frontend keeps `node.title` in `getState`/`toWorkflowJSON`, and BOTH restore
+  paths (`canvas.restoreState`, `WorkflowManager.loadFromJSON`) must re-apply
+  title + element text BEFORE `updateNodeDisplay`, whose re-stamp guard reads
+  the element.
 - Run-gating UX lives in `workflow.js execute()`: `_confirmCookieBeforeRun` (dialog, skippable via
   the `cookie_confirm_before_run` setting, auto-pass for resume runs); new settings keys need the
   bool branch in `settings_store.save_settings` + both app.js catalogs + `AppSettings` wiring.

@@ -170,6 +170,7 @@ const canvas = {
             this._contextMenuPos = { x: e.clientX, y: e.clientY };
             const ctxMenu = document.getElementById('context-menu');
             document.getElementById('ctx-edit').style.display = node ? 'block' : 'none';
+            document.getElementById('ctx-rename').style.display = node ? 'block' : 'none';
             document.getElementById('ctx-copy').style.display = node ? 'block' : 'none';
             document.getElementById('ctx-delete-node').style.display = node ? 'block' : 'none';
             const foldItem = document.getElementById('ctx-fold-node');
@@ -220,6 +221,9 @@ const canvas = {
                 }
                 case 'ctxEdit':
                     if (this._contextNode) this.editNode(this._contextNode);
+                    break;
+                case 'ctxRename':
+                    if (this._contextNode) this.renameNode(this._contextNode);
                     break;
                 case 'ctxCopy':
                     if (this._contextNode) {
@@ -367,7 +371,7 @@ const canvas = {
         const params = this.getDefaultParams(type);
         el.innerHTML = [
             '<div class="node-header">',
-            '  <span class="node-title">' + title + '</span>',
+            '  <span class="node-title" ondblclick="event.stopPropagation(); canvas.renameNode(\'' + id + '\')">' + title + '</span>',
             '  <div class="node-actions">',
             '    <button class="node-action-btn" title="' + I18n.t('ctx.edit') + '" onclick="canvas.editNode(\'' + id + '\')">' + NODE_ICON.settings + '</button>',
             '    <button class="node-action-btn del" title="' + I18n.t('ctx.delete') + '" onclick="canvas.deleteNode(\'' + id + '\')">' + NODE_ICON.del + '</button>',
@@ -532,6 +536,29 @@ const canvas = {
         this._settingsNodeId = id;
         const node = this.nodes[id];
         if (node) openSettings(id);
+    },
+
+    async renameNode(id) {
+        /* The console reads nodes as "name #node-3" — this name is the user's.
+           An empty box clears the custom name back to the type's label, and
+           updateNodeDisplay's re-stamp logic then lets language switches
+           rename it again (a name the user typed is never touched). */
+        const node = this.nodes[id];
+        if (!node) return;
+        const name = await showDialog({
+            message: I18n.t('dialog.renameNode'),
+            input: { value: node.title || '', placeholder: I18n.t('node.' + node.type) },
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('dialog.confirm'), primary: true },
+            ],
+        });
+        if (name === null || name === undefined) return;
+        const title = String(name).trim() || I18n.t('node.' + node.type);
+        node.title = title;
+        const titleEl = node.el ? node.el.querySelector('.node-title') : null;
+        if (titleEl) titleEl.textContent = title;
+        this.saveState();
     },
 
     /* Undo/redo and workflow loads can drop nodes wholesale — the settings panel
@@ -746,6 +773,16 @@ const canvas = {
             var id = 'node-' + (canvas.nextId - 1);
             if (canvas.nodes[id]) {
                 canvas.nodes[id].params = n.params;
+                /* The renamed title must travel back BEFORE the display update
+                   — which re-stamps only titles that are still a type default —
+                   and into the ELEMENT too, because that is what the re-stamp
+                   reads; otherwise a reload (or undo/redo) erases every name
+                   the user chose. */
+                if (n.title) {
+                    canvas.nodes[id].title = n.title;
+                    const titleEl = canvas.nodes[id].el && canvas.nodes[id].el.querySelector('.node-title');
+                    if (titleEl) titleEl.textContent = n.title;
+                }
                 canvas.updateNodeDisplay(id);
             }
         });
@@ -816,6 +853,7 @@ const canvas = {
            that type's default labels, so a renamed node keeps its name. */
         const titleEl = el.querySelector('.node-title');
         if (titleEl) {
+            titleEl.title = I18n.t('ctx.renameHint');
             const defaults = Object.keys(I18n.dict).map(function (lang) {
                 return I18n.dict[lang]['node.' + node.type];
             });
