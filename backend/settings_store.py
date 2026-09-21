@@ -36,6 +36,10 @@ DEFAULTS = {
     'element_timeout': 15,
     # Local Ollama daemon (was OLLAMA_HOST env-only, with no UI).
     'ollama_host': Config.OLLAMA_HOST,
+    # Ask "is the cookie still fresh?" before every run that contains a
+    # crawler node. Long crawls can outlive a cookie; the prompt points the
+    # user at refresh + resume BEFORE burning time, and can be turned off.
+    'cookie_confirm_before_run': True,
 }
 
 _values = None
@@ -127,6 +131,17 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                     warnings.append(t('set.badOllamaHost'))
                 else:
                     vals[key] = v or DEFAULTS[key]
+            elif key == 'cookie_confirm_before_run':
+                # The browser may send a real bool or the 'true'/'false' string
+                # the checkbox helpers historically produced; anything else
+                # falls back to the default rather than guessing.
+                if isinstance(raw, bool):
+                    vals[key] = raw
+                elif str(raw).strip().lower() in ('true', 'false'):
+                    vals[key] = str(raw).strip().lower() == 'true'
+                else:
+                    vals[key] = DEFAULTS[key]
+                    warnings.append(t('set.badFlag', setting=key))
         tmp = _PATH + '.tmp'
         try:
             with open(tmp, 'w', encoding='utf-8') as f:

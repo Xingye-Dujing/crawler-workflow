@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~1030 cases)**:
+- **Automated tests (pytest, ~1050 cases)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
     `.venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"`
@@ -70,6 +70,15 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
 - Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens
   a visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
   outcome the message catalog already explains — don't "fix" it by loosening assertions.
+- **Cookie death mid-crawl is a designed path**: crawler `login_wall` + under-target rows →
+  `_execute_source_node` sets `execution_state['cookie_expired']` (rides on `/api/workflow/status`
+  for the browser toast), logs `run.cookieExpired`, and RAISES so the node settles `partial`, the
+  RUN becomes `failed` → appears in the resume banner → fresh-cookie 继续 continues from the stored
+  cursor/ledger. Never downgrade this to "node completed with fewer rows" — that hides the gap
+  forever. Comment nodes raise when any article was BLOCKED for the same reason.
+- Run-gating UX lives in `workflow.js execute()`: `_confirmCookieBeforeRun` (dialog, skippable via
+  the `cookie_confirm_before_run` setting, auto-pass for resume runs); new settings keys need the
+  bool branch in `settings_store.save_settings` + both app.js catalogs + `AppSettings` wiring.
 
 ## Change workflow (MANDATORY — run the full loop on every change)
 

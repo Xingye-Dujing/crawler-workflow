@@ -110,6 +110,29 @@ class TestSettingsWrite:
         assert body['settings']['window_size'] == '900x900'
 
     @pytest.mark.parametrize(
+        ('sent', 'expected'),
+        [
+            (False, False),
+            (True, True),
+            ('false', False),  # the checkbox's historical string form
+            ('true', True),
+            ('maybe', True),  # garbage → the advertised default, with a warning
+        ],
+    )
+    def test_cookie_confirm_flag_round_trips_as_a_bool(self, client, sent, expected):
+        body = client.post('/api/settings', json={'cookie_confirm_before_run': sent}).get_json()
+        assert body['settings']['cookie_confirm_before_run'] is expected
+        # A GET sees the same value the POST settled on (persisted, not echoed).
+        assert client.get('/api/settings').get_json()['settings']['cookie_confirm_before_run'] is expected
+        if sent == 'maybe':
+            assert any('cookie_confirm_before_run' in w for w in body['warnings'])
+
+    def test_cookie_confirm_defaults_to_on(self, client):
+        # The prompt protects every unassuming first run; opting out is the
+        # explicit act, not the default.
+        assert client.get('/api/settings').get_json()['settings']['cookie_confirm_before_run'] is True
+
+    @pytest.mark.parametrize(
         ('patch', 'key', 'expected', 'warning'),
         [
             ({'window_size': 'big'}, 'window_size', '1920x1080', 'WIDTHxHEIGHT'),

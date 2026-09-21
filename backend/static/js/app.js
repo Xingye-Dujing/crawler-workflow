@@ -120,6 +120,10 @@ const I18n = {
             'dialog.selectWorkflow': 'Enter workflow name to load:',
             'dialog.cancel': 'Cancel',
             'dialog.confirm': 'Confirm',
+            'dialog.cookieConfirm': 'This run crawls live sites. Have the cookies gone a while without refresh? You can exit, update them under Settings → Cookie, and resume from the checkpoint — or run now.',
+            'dialog.cookieGoOn': 'Run anyway',
+            'dialog.cookieExit': 'Exit & refresh Cookie',
+            'toast.cookieExpired': 'Login wall hit — the cookie likely expired mid-run. Collected data is saved: refresh it under Settings → Cookie, then resume this run.',
             'settings.nodeType': 'Node Type',
             'settings.platform': 'Platform',
             'settings.keyword': 'Keyword',
@@ -352,6 +356,8 @@ const I18n = {
             'set.pageLoad': 'Page load timeout (s)',
             'set.elementWait': 'Element wait timeout (s)',
             'set.ollamaHost': 'Ollama server address',
+            'set.cookieConfirm': 'Confirm Cookie before run',
+            'set.cookieConfirmInline': 'Ask every time a run contains a crawler node',
             'set.save': 'Save settings',
             'set.note':
                 'Machine-local settings, previously hardcoded in the backend. Saved to ' +
@@ -573,6 +579,10 @@ const I18n = {
             'dialog.selectWorkflow': '输入要加载的工作流名称:',
             'dialog.cancel': '取消',
             'dialog.confirm': '确认',
+            'dialog.cookieConfirm': '本次运行会真实爬取站点。COOKIE 是否已长时间未更新？可先退出，到「设置 → Cookie」更新后续跑；也可直接继续运行。',
+            'dialog.cookieGoOn': '继续执行',
+            'dialog.cookieExit': '退出更新 Cookie',
+            'toast.cookieExpired': '检测到登录墙——COOKIE 可能已在爬取中途失效。已采集数据不会丢失：请到「设置 → Cookie」更新后断点续跑。',
             'settings.nodeType': '节点类型',
             'settings.platform': '平台',
             'settings.keyword': '关键词',
@@ -800,6 +810,8 @@ const I18n = {
             'set.pageLoad': '页面加载超时(秒)',
             'set.elementWait': '元素等待超时(秒)',
             'set.ollamaHost': 'Ollama 服务地址',
+            'set.cookieConfirm': '执行前确认 Cookie',
+            'set.cookieConfirmInline': '每次含采集节点的运行前都弹确认框',
             'set.save': '保存设置',
             'set.note':
                 '这些是本机相关设置（以前写死在后端代码里）。保存后写入服务器 ' +
@@ -1322,6 +1334,7 @@ const AppSettings = {
         page_load_timeout: 'set-pageload',
         element_timeout: 'set-elementwait',
         ollama_host: 'set-ollamahost',
+        cookie_confirm_before_run: 'set-cookie-confirm',
     },
     _values: null,
     _draft: {},
@@ -1347,7 +1360,11 @@ const AppSettings = {
         const v = this._values || {};
         Object.keys(this._inputMap).forEach((key) => {
             const el = document.getElementById(this._inputMap[key]);
-            if (el) el.value = v[key] !== undefined && v[key] !== null ? v[key] : '';
+            if (!el) return;
+            // A checkbox answers to .checked; writing .value would silently
+            // do nothing and the panel would show a stale box.
+            if (el.type === 'checkbox') el.checked = !!v[key];
+            else el.value = v[key] !== undefined && v[key] !== null ? v[key] : '';
         });
         /* The AI panel shows the Ollama address read-only, and it is fetched
            asynchronously — mirror it now that the values have arrived. */

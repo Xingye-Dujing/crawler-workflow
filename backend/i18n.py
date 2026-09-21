@@ -368,6 +368,7 @@ _ZH = {
     'set.badNumber': '{setting} 不是数字，已恢复默认 {value}',
     'set.outOfRange': '{setting} 超出范围 {lo}-{hi}，已恢复默认 {value}',
     'set.badOllamaHost': 'Ollama 地址需以 http:// 或 https:// 开头，已恢复默认',
+    'set.badFlag': '{setting} 需要 true/false 值，已恢复默认',
     'set.saveFailed': '设置未能写入磁盘（本次会话内仍生效）：{err}',
     # ── 断点续跑（durable run state） ────────────────────────
     'run.row_limit': '节点 {nid} 已达到保存上限 {limit} 行，超出部分不再落库',
@@ -382,6 +383,11 @@ _ZH = {
     'run.progress_file': '分批导出：{file}（{rows} 行，共 {parts} 个分批文件）',
     'run.live_export': '实时导出：{file}（每处理完一批刷新一次，运行结束后保留）',
     'run.live_export_failed': '实时导出写入失败：{err}',
+    'run.cookieExpired': (
+        '登录态疑似失效：{platform} 的抓取被挡回登录页（COOKIE 可能过期）。'
+        '已采集的数据全部保留——请到 设置→Cookie 更新后，用断点续跑从上次中断处继续'
+    ),
+    'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
     'run.partial_down': '节点 {nid} 中断：已把 {n} 行已完成的结果交给下游',
     'run.failed_down': '节点 {nid} 失败且没有可用数据，下游按空表继续',
     'run.skipped_empty': '节点 {nid} 跳过：上游没有数据',
@@ -732,6 +738,7 @@ _EN = {
     'set.badNumber': '{setting} is not a number — restored the default {value}',
     'set.outOfRange': '{setting} is outside {lo}-{hi} — restored the default {value}',
     'set.badOllamaHost': 'The Ollama address must start with http:// or https:// — restored the default',
+    'set.badFlag': '{setting} needs a true/false value — restored the default',
     'set.saveFailed': 'Settings could not be written to disk (still active for this session): {err}',
     # ── resumable runs ────────────────────────────────────────
     'run.row_limit': 'Node {nid} hit its {limit}-row safety cap — further rows are not stored',
@@ -748,6 +755,14 @@ _EN = {
     'run.progress_file': 'progress export: {file} ({rows} rows in {parts} part files)',
     'run.live_export': 'live export: {file} (rewritten after every batch; kept when the run ends)',
     'run.live_export_failed': 'live export write failed: {err}',
+    'run.cookieExpired': (
+        'login session looks expired: the {platform} crawl was bounced to a login page '
+        '(the cookie may have gone stale). Everything collected so far is kept — refresh '
+        'the cookie under Settings -> Cookie, then resume the run from its checkpoint'
+    ),
+    'run.cookieExpiredOk': (
+        'note: {platform} hit the login wall only after the target was met — the data is complete, nothing to resume'
+    ),
     'run.partial_down': 'Node {nid} interrupted — its {n} finished rows are handed downstream',
     'run.failed_down': 'Node {nid} failed with nothing usable — downstream sees an empty table',
     'run.skipped_empty': 'Node {nid} skipped: no data arrived from upstream',

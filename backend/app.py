@@ -352,6 +352,10 @@ execution_state = {
     # workflow's rows count as "this node's".
     'workflow_name': '',
     'fingerprint': '',
+    # Set when a crawl is bounced to a login wall mid-run (the cookie likely
+    # expired). Surfaced to the browser through /api/workflow/status so it can
+    # toast "refresh the cookie and resume" — the partial data is already safe.
+    'cookie_expired': False,
 }
 _completed_lock = threading.Lock()
 _execute_lock = threading.Lock()  # serializes the guard-and-claim of a new run
@@ -909,6 +913,7 @@ def execute_workflow():
             execution_state['_wf_log_total'] = {}
             execution_state['total_nodes'] = 0
             execution_state['completed_nodes'] = 0
+            execution_state['cookie_expired'] = False
             execution_state['_mode'] = mode
             execution_state['executor'] = TaskExecutor(max_workers=max_workers, mode=mode)
             started = True
@@ -1278,6 +1283,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
             # Incremental dedupe made visible: a re-run that already knows
             # every item would otherwise end as '0 results' with no reason.
             add_log(t('run.dedupe_skipped', n=skipped))
+    wall = bool(getattr(crawler, 'login_wall', False))
     if writer is not None:
         if ctx is None:
             # One-shot path without a run context: nothing flowed through the
@@ -1292,6 +1298,23 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
                 parts=info['parts'],
             )
         )
+    if wall:
+        if len(rows) < target_count:
+            # A long crawl can outlive its cookie: the platform bounces the
+            # browser to a login page mid-run. The rows collected before the
+            # wall are safe in the store — surface the flag for the toast and
+            # say so in the console.
+            execution_state['cookie_expired'] = True
+            add_log(t('run.cookieExpired', platform=platform))
+            # Under-target is not a finished crawl, so the node must not look
+            # like one. Failing it keeps every stored row, marks the RUN failed
+            # (the resume banner's trigger), and lets 继续 resume pick the crawl
+            # up at the cursor the wall stopped on — refresh the cookie, click
+            # continue, get the rest. Marking it done would hide the gap.
+            raise ValueError(t('run.cookieExpired', platform=platform))
+        # Wall met exactly as the target was reached: the session died at the
+        # finish line, so there is nothing missing — do not raise a false alarm.
+        add_log(t('run.cookieExpiredOk', platform=platform))
     return rows
 
 
@@ -1757,6 +1780,12 @@ def _execute_comment_node(node: dict, ctx: dict = None):
 
     writers = {}
     rows_out = []
+    if ctx is not None and ctx.get('resume'):
+        # A re-run of this node pays for the missing articles only — but the
+        # table it hands downstream must be the WHOLE comment set, so the rows
+        # an earlier attempt stored come back into the result list up front.
+        # (The ledger refuses them as duplicates, so nothing double-stores.)
+        rows_out = list(ctx['store'].load_rows(ctx['run_id'], nid))
     counts = {OK: 0, BLOCKED: 0, DEAD: 0}
     sessions = {}
 
@@ -1802,6 +1831,13 @@ def _execute_comment_node(node: dict, ctx: dict = None):
             _close_login_browser(crawler)
 
     files = [writer.finish() for writer in writers.values()]
+    blocked_seen = bool(counts.get(BLOCKED))
+    if blocked_seen:
+        # Same story as the source crawler: a blocked article means the saved
+        # cookie likely died — the collected comments are already merged to
+        # disk and stored; refresh the cookie and resume for the rest.
+        execution_state['cookie_expired'] = True
+        add_log(t('run.cookieExpired', platform='zhihu/weibo/xiaohongshu'))
     add_log(
         t(
             'comment.done',
@@ -1813,6 +1849,10 @@ def _execute_comment_node(node: dict, ctx: dict = None):
             files=len(files),
         )
     )
+    if blocked_seen:
+        # Failed (not done) → the run lands in the resume banner and 继续
+        # retries exactly the articles the wall refused.
+        raise ValueError(t('run.cookieExpired', platform='zhihu/weibo/xiaohongshu'))
     return rows_out
 
 
@@ -2084,6 +2124,7 @@ def workflow_status():
             'total_nodes': execution_state['total_nodes'],
             'completed_nodes': execution_state['completed_nodes'],
             'chart_results': chart_results,
+            'cookie_expired': bool(execution_state.get('cookie_expired')),
         }
     )
 

@@ -130,6 +130,30 @@ const workflow = {
         showToast(I18n.t('toast.newWorkflow'));
     },
 
+    async _confirmCookieBeforeRun(opts) {
+        /* Returns true when the run may proceed (no crawler nodes, the prompt
+           disabled, a resume — the user is already mid "refresh cookie and
+           continue" loop, asking twice would be cruelty —, or the user chose
+           继续执行), false when the user chose to exit and refresh. */
+        if (opts && opts.resumeRunId) return true;
+        var hasCrawler = Object.keys(canvas.nodes).some(function (id) {
+            var t = canvas.nodes[id].type;
+            return t === 'source' || t === 'comment';
+        });
+        if (!hasCrawler) return true;
+        if (window.AppSettings) await AppSettings.pull();
+        var values = (window.AppSettings && AppSettings._values) || {};
+        if (!values.cookie_confirm_before_run) return true;
+        var choice = await showDialog({
+            message: I18n.t('dialog.cookieConfirm'),
+            buttons: [
+                { label: I18n.t('dialog.cookieGoOn'), value: 'go' },
+                { label: I18n.t('dialog.cookieExit'), value: 'exit', primary: true },
+            ],
+        });
+        return choice === 'go';
+    },
+
     async execute(opts) {
         opts = opts || {};
         /* Validate before running */
@@ -154,6 +178,12 @@ const workflow = {
             validationErrors.forEach(function (err) { showToast(err); });
             return;
         }
+        /* A long crawl can outlive its cookie and die at the login wall an hour
+           in. When the setting is on, ask up front "refresh the cookie first?"
+           — the user can bail here instead of wasting a run. Off means run
+           straight away, exactly as before. Only fires when the workflow really
+           contains a crawler (source/comment) node. */
+        if (!(await this._confirmCookieBeforeRun(opts))) return;
         RunState.setRunning(true);
         var statusText = document.getElementById('status-text');
         statusText.textContent = I18n.t('status.running');
@@ -253,10 +283,17 @@ const workflow = {
             return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
         }
         var lastLogIdx = 0;
+        /* The expiry toast is once-per-run: the flag stays set for the rest of
+           the crawl, and polling every second would otherwise shout forever. */
+        var cookieWarned = false;
         var interval = setInterval(async function () {
             try {
                 var resp = await fetch('/api/workflow/status');
                 var result = await resp.json();
+                if (result.cookie_expired && !cookieWarned) {
+                    cookieWarned = true;
+                    showToast(I18n.t('toast.cookieExpired'));
+                }
                 if (result.logs) {
                     var lastLog = result.logs[result.logs.length - 1];
                     document.getElementById('status-text').textContent = lastLog || I18n.t('status.running');
