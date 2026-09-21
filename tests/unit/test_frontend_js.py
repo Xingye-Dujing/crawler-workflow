@@ -365,3 +365,82 @@ class TestI18nRuntime:
         r = popup_results['i18n-runtime']
         assert r['fallback'] == r['enUpload']
         assert r['echo'] == 'totally.missing.key'
+
+
+RUNSMGR_HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_runsmgr.mjs'
+
+
+@pytest.fixture(scope='module')
+def runsmgr(tmp_path_factory):
+    runs = {
+        'runs': [
+            {
+                'run_id': 'abc123',
+                'workflow_name': '获取微博<script>',
+                'status': 'interrupted',
+                'resumable': True,
+                'node_done': 2,
+                'node_total': 3,
+                'rows_kept': 17,
+                'started_at': '2026-09-01 10:00',
+            },
+            {
+                'run_id': 'def456',
+                'workflow_name': '',
+                'status': 'completed',
+                'resumable': False,
+                'node_done': 3,
+                'node_total': 3,
+                'rows_kept': 5,
+                'started_at': '',
+            },
+        ],
+    }
+    tmp = tmp_path_factory.mktemp('js-runsmgr')
+    sc = tmp / 'runs.json'
+    sc.write_text(json.dumps(runs, ensure_ascii=False), encoding='utf-8')
+    proc = subprocess.run(
+        ['node', str(RUNSMGR_HARNESS), str(JS_DIR / 'workflow.js'), str(sc)],
+        capture_output=True,
+        text=True,
+        encoding='utf-8',
+        timeout=60,
+    )
+    assert proc.returncode == 0, f'runsmgr harness failed: {proc.stderr}'
+    return json.loads(proc.stdout)
+
+
+class TestRunRecordsPanel:
+    """The 运行记录 table is the resume funnel: wrong buttons here either
+    discard paid-for data or pretend a dead run is alive."""
+
+    def test_resumable_run_offers_continue_and_restart(self, runsmgr):
+        html = runsmgr['html']
+        assert "runsManager.continueRun('abc123')" in html
+        assert "runsManager.restart('abc123')" in html
+
+    def test_a_finished_run_offers_neither(self, runsmgr):
+        # Split rows so the assertions can't borrow each other's buttons.
+        rows = runsmgr['html'].split('<tr>')
+        finished = next(r for r in rows if 'def456' in r)
+        assert 'continueRun' not in finished
+        assert 'restart' not in finished
+
+    def test_progress_and_row_counts_read_honestly(self, runsmgr):
+        rows = runsmgr['html'].split('<tr>')
+        interrupted = next(r for r in rows if 'abc123' in r)
+        assert '2/3' in interrupted, 'node progress must be done/total'
+        assert '>17<' in interrupted, 'kept rows must show'
+
+    def test_status_labels_map_every_known_state(self, runsmgr):
+        assert 'interrupted' in runsmgr['html']
+        assert 'completed' in runsmgr['html']
+
+    def test_a_workflow_name_is_escaped_not_executed(self, runsmgr):
+        # The name is user data straight from runs.db — markup must not live.
+        assert '<script>' not in runsmgr['html']
+        assert '&lt;script&gt;' in runsmgr['html']
+
+    def test_an_unnamed_run_still_has_a_label_and_empty_count_hidden(self, runsmgr):
+        assert runsmgr['count'] == '(2)'
+        assert 'unnamed' in runsmgr['html'], 'a blank name must fall back to a label'
