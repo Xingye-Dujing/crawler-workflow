@@ -2100,7 +2100,7 @@ function processesPoll() {
                 else { typeLabel = t.daemon ? '<span class="proc-tag proc-tag-daemon">daemon</span>' : ''; }
                 var canKill = t.name !== 'MainThread' && t.name !== 'run' && t.alive;
                 html += '<tr>' +
-                    '<td>' + t.name + '</td>' +
+                    '<td>' + escapeHtml(t.name) + '</td>' +
                     '<td>' + typeLabel + '</td>' +
                     '<td>' + (t.alive ? '<span class="proc-ok">alive</span>' : '<span class="proc-err">dead</span>') + '</td>' +
                     '<td>' + (canKill ? '<button class="proc-kill-btn" data-ident="' + t.ident + '" onclick="killProcess(this)">' + I18n.t('processes.kill') + '</button>' : '') + '</td>' +

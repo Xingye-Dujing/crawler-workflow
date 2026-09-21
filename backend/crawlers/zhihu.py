@@ -95,13 +95,14 @@ class ZhihuCrawler(Crawler):
             self.check_login_wall(url)
             if self.login_wall:
                 raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
-        if self._card_count() == 0:
-            # Nothing after the fallback either. Zhihu answers common keywords
-            # with a blank page day-by-day (headless risk control) — a legit
-            # outcome, but never one to 'succeed' silently: the catalog's own
-            # line tells the user the actionable choice (visible window, or
-            # retry later; collected data stays safe).
-            raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
+            if self._card_count() == 0 and not self._deep_link_came_up_empty():
+                # The retry produced a DEFINITE no-results plate (not an
+                # unfetched shell): zhihu answered with nothing, which the
+                # catalog treats as risk control and tells the user to go
+                # visible/retry. A still-empty shell instead falls through to
+                # the scroll loop and returns 0 rows — the documented, legit
+                # headless risk-control outcome we must not turn into a crash.
+                raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
         logger.info(t('crawl.zhihu.loaded'))
 
         # ``scanned`` is how far the card walk has got; a resume reads only the

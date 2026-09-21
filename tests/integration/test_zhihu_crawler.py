@@ -362,23 +362,24 @@ class TestZeroCardSearch:
     """A search page that loads no cards is zhihu's day-by-day headless risk
     control — and, historically, the one branch that crashed with an
     AttributeError because its fallback helpers were never implemented.
-    Zero cards must speak with the catalog's actionable line, never a
-    traceback, and the shell/no-result distinction must actually branch."""
+    Every zero-card shape must now end honestly: recover, return the
+    documented 0-row outcome, or raise the catalog's actionable line."""
 
-    def test_a_silent_zero_page_raises_the_actionable_message(self, make_crawler):
+    def test_the_unfetchable_shell_ends_in_zero_rows_not_a_crash(self, make_crawler):
+        # No cards, no plate, no search box: nothing can be fetched. The run
+        # returns the legitimate 0 rows (AGENTS: never pretend, never crash).
         crawler, _ = make_crawler([])
-        with pytest.raises(RuntimeError) as exc:
-            crawler.search('三亚', target_count=3)
-        assert '风控' in str(exc.value) or 'risk control' in str(exc.value)
+        rows = crawler.search('三亚', target_count=3)
+        assert rows == []
 
-    def test_a_definite_no_result_plate_does_not_burn_the_fallback(self, make_crawler, monkeypatch):
+    def test_a_definite_no_result_plate_returns_zero_rows_without_retry(self, make_crawler, monkeypatch):
         crawler, driver = make_crawler([])
         driver._body = '未搜索到相关内容'  # the page already ANSWERED: zero is real
         tried = []
         monkeypatch.setattr(crawler, '_search_via_input', lambda kw: tried.append(kw) or True)
-        with pytest.raises(RuntimeError):
-            crawler.search('三亚', target_count=3)
-        assert tried == [], 'a definitive no-results plate must not trigger a retry'
+        rows = crawler.search('三亚', target_count=3)
+        assert rows == []
+        assert tried == [], 'a definitive plate must not trigger a retry'
 
     def test_the_shell_page_retries_once_through_the_search_box(self, make_crawler, monkeypatch):
         crawler, driver = make_crawler([])
@@ -393,9 +394,22 @@ class TestZeroCardSearch:
         rows = crawler.search('三亚', target_count=1)
         assert len(rows) == 1
 
+    def test_a_retry_that_lands_on_the_no_result_plate_raises_the_actionable_line(
+        self, make_crawler, monkeypatch
+    ):
+        crawler, driver = make_crawler([])
+
+        def fake_input(kw):
+            driver._body = '没有找到相关内容'  # the retry got a DEFINITE answer
+            return True
+
+        monkeypatch.setattr(crawler, '_search_via_input', fake_input)
+        with pytest.raises(RuntimeError) as exc:
+            crawler.search('三亚', target_count=3)
+        assert '风控' in str(exc.value) or 'risk control' in str(exc.value)
+
     def test_the_fallback_gives_up_quietly_when_the_box_moved(self, make_crawler):
-        # No 'body'/'PromptInput'/input in the fake driver at all except body
-        # (empty text): the real _search_via_input finds no box and must say
-        # so with False, not an exception.
+        # FakeDriver answers no box selectors at all: the real
+        # _search_via_input must report False instead of throwing.
         crawler, _ = make_crawler([])
         assert crawler._search_via_input('三亚') is False
