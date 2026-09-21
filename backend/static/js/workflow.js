@@ -430,6 +430,53 @@ function openSettings(nodeId) {
                 '<input class="settings-input" value="' + (p.end_time || '') + '" placeholder="2026-12-31" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'end_time\',this.value)"></div>';
         }
+        /* 分批输出: with part_size>0 every kept row also lands in a numbered
+           part file WHILE the crawl runs, and the parts merge into one file at
+           the end — results are openable before the node finishes. 0 = off. */
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.partSize') + '</label>' +
+            '<input class="settings-input" type="number" min="0" value="' + (p.part_size != null ? p.part_size : 0) + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'part_size\',parseInt(this.value)||0)">' +
+            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.sourcePartSizeHint') + '</div></div>' +
+            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.format') + '</label>' +
+            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'format\',this.value)">' +
+            ['csv', 'json'].map(function (f) {
+                return '<option value="' + f + '"' + ((p.format || 'csv') === f ? ' selected' : '') + '>' + I18n.t('format.' + f) + '</option>';
+            }).join('') +
+            '</select></div>' +
+            '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
+            '<input type="checkbox" ' + (p.keep_parts ? 'checked' : '') + ' ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'keep_parts\',this.checked)">' + I18n.t('settings.keepParts') + '</label></div>';
+    } else if (node.type === 'comment') {
+        /* Source-like crawler: article links go in, comment rows come out. The
+           panel mirrors the WeChat source block (a multi-line textarea) and the
+           recrawl checkbox markup, because zhihu comment pages refuse headless
+           sessions — so the hint has to warn that a visible window opens. */
+        var p = node.params;
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentUrls') + '</label>' +
+            '<textarea class="settings-input" rows="5" placeholder="https://www.zhihu.com/... https://weibo.com/... https://www.xiaohongshu.com/..." ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
+            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentUrlsHint') + '</div></div>' +
+            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentLimit') + '</label>' +
+            '<input class="settings-input" type="number" min="0" value="' + (p.comment_limit != null ? p.comment_limit : 0) + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'comment_limit\',parseInt(this.value)||0)">' +
+            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentLimitHint') + '</div></div>' +
+            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.partSize') + '</label>' +
+            '<input class="settings-input" type="number" min="0" value="' + (p.part_size != null ? p.part_size : 50) + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'part_size\',parseInt(this.value)||0)">' +
+            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.partSizeHint') + '</div></div>' +
+            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.format') + '</label>' +
+            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'format\',this.value)">' +
+            ['csv', 'json'].map(function (f) {
+                return '<option value="' + f + '"' + ((p.format || 'csv') === f ? ' selected' : '') + '>' + I18n.t('format.' + f) + '</option>';
+            }).join('') +
+            '</select></div>' +
+            '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
+            '<input type="checkbox" ' + (p.per_article_file ? 'checked' : '') + ' ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'per_article_file\',this.checked)">' + I18n.t('settings.perArticleFile') + '</label></div>' +
+            '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
+            '<input type="checkbox" ' + (p.keep_parts ? 'checked' : '') + ' ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'keep_parts\',this.checked)">' + I18n.t('settings.keepParts') + '</label></div>' +
+            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentHint') + '</div>';
     } else if (node.type === 'upload') {
         /* The single place a file enters a workflow: pick a CSV / JSON / TXT
            and this node publishes its rows to whatever is connected below. */
@@ -516,6 +563,18 @@ function openSettings(nodeId) {
             html += renderParamSelect(nodeId, p, 'corr_method', 'settings.corrMethod', 'pearson',
                 [{ v: 'pearson', l: 'Pearson' }, { v: 'spearman', l: 'Spearman' }, { v: 'kendall', l: 'Kendall' }]);
             html += renderParamInput(nodeId, p, 'min_abs', 'settings.minAbs', 'number', 0.0);
+        }
+
+        /* AI 调用实时导出: the LLM ops rewrite a {stem}.live.{ext} snapshot
+           after every settled batch — watch the enriched rows grow without
+           waiting for the node (or the run) to finish. */
+        var isLlmOp = p.operation === 'clean' ||
+            ((p.operation === 'emotion' || p.operation === 'tendency') && p.mode !== 'ml');
+        if (isLlmOp) {
+            html += '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
+                '<input type="checkbox" ' + (p.live_export ? 'checked' : '') + ' ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'live_export\',this.checked)">' + I18n.t('settings.liveExport') + '</label>' +
+                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.liveExportHint') + '</div></div>';
         }
 
         html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
@@ -2688,7 +2747,7 @@ workflow.validate = function () {
     });
 
     var hasUpstream = Object.keys(nodes).some(function (id) {
-        return ['source', 'upload', 'process', 'analysis', 'tokenize', 'resume'].indexOf(nodes[id].type) >= 0;
+        return ['source', 'upload', 'process', 'analysis', 'tokenize', 'resume', 'comment'].indexOf(nodes[id].type) >= 0;
     });
     if (hasUpstream) {
         var hasTerminal = Object.keys(nodes).some(function (id) {

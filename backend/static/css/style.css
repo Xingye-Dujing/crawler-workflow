@@ -51,6 +51,7 @@
   --accent-output: #6f7f8a;
   --accent-resume: #7a6a8a;
   --accent-name: #3a4a5a;
+  --accent-comment: #b0567a;
 
   /* ── canvas ── */
   --node-bg: rgba(255, 255, 255, 0.96);
@@ -896,6 +897,9 @@ input[type="range"]::-moz-range-thumb {
 .node-type-resume .node-header {
   border-left: 3px solid var(--accent-resume);
 }
+.node-type-comment .node-header {
+  border-left: 3px solid var(--accent-comment);
+}
 .node-type-source.selected {
   border-color: var(--accent-source);
 }
@@ -916,6 +920,9 @@ input[type="range"]::-moz-range-thumb {
 }
 .node-type-resume.selected {
   border-color: var(--accent-resume);
+}
+.node-type-comment.selected {
+  border-color: var(--accent-comment);
 }
 .node-type-output.selected {
   border-color: var(--accent-output);
@@ -1519,6 +1526,7 @@ table.history-runs-table tr:hover td {
 .rm-node.nt-output { border-left-color: var(--accent-output); }
 .rm-node.nt-resume { border-left-color: var(--accent-resume); }
 .rm-node.nt-name { border-left-color: var(--accent-name); }
+.rm-node.nt-comment { border-left-color: var(--accent-comment); }
 .runs-mgr-status.st-skipped {
   background: rgba(26, 26, 26, 0.05);
   color: var(--text-faint);

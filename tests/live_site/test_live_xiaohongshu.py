@@ -1,12 +1,14 @@
-"""Live Xiaohongshu search crawl — real Chrome with the user's saved cookies."""
+"""Live Xiaohongshu search crawl — real Chrome with the user's saved cookies,
+in both browser modes (headless + visible window)."""
 
 import pytest
 
 pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
 
 
-def test_search_returns_note_cards(live_crawler):
-    crawler = live_crawler('xiaohongshu')
+@pytest.mark.parametrize('headless', [True, False], ids=['headless', 'visible'])
+def test_search_returns_note_cards(live_crawler, headless):
+    crawler = live_crawler('xiaohongshu', headless=headless)
     try:
         rows = crawler.search('三亚', target_count=3)
     finally:

@@ -28,12 +28,13 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~980 cases)**:
+- **Automated tests (pytest, ~1030 cases)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
     `.venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"`
-  - Live-site tier (REAL crawls of zhihu/weibo/xiaohongshu + 3 real WeChat articles using saved
-    cookies; per-platform skip when a cookie is absent): `.venv/Scripts/python.exe -m pytest -q -m live_site`
+  - Live-site tier (REAL crawls — every platform runs in BOTH browser modes, headless and visible
+    window, plus the comment node across zhihu/weibo/xiaohongshu and 3 real WeChat articles;
+    per-platform skip when a cookie is absent): `.venv/Scripts/python.exe -m pytest -q -m live_site`
   - Coverage: append `--cov=backend --cov-report=term` (total target ≥70%).
   - Layout: `tests/unit` (pure logic), `tests/api` (Flask test_client, fully tmp-isolated),
     `tests/integration` (LLM boundary mocks run by default; real-Chrome/Ollama are marked).
@@ -62,6 +63,13 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   answers persist so interrupted runs resume rather than re-crawl/re-pay. Change executor/run-store
   code carefully so resumed runs stay compatible with existing `runs.db` state.
 - UI text supports zh/en via `backend/i18n.py` message catalog — add new user-facing strings there.
+- **Weibo serves a fake login wall**: a search first flashes the passport QR page, then bounces the
+  logged-in session back to the feed. Never judge the wall from the URL right after `get()` —
+  `WeiboCrawler._await_search_page` waits for a terminal state (cards / no-result plate / persistent
+  passport page). Keep that ordering in any refactor.
+- Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens
+  a visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
+  outcome the message catalog already explains — don't "fix" it by loosening assertions.
 
 ## Change workflow (MANDATORY — run the full loop on every change)
 

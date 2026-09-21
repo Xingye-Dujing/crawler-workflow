@@ -150,6 +150,8 @@ class WorkflowEngine:
                     errors.append(t('engine.source_no_keyword', nid=nid))
             if ntype == 'upload' and not params.get('dataset_id'):
                 errors.append(t('engine.upload_no_file', nid=nid))
+            if ntype == 'comment' and not str(params.get('urls') or '').strip():
+                errors.append(t('engine.comment_no_urls', nid=nid))
             if ntype == 'process' and not node.get('operation'):
                 errors.append(t('engine.process_no_op', nid=nid))
             if ntype == 'output' and not node.get('operation'):

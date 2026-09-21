@@ -33,7 +33,9 @@ class XiaohongshuCrawler(Crawler):
     """
 
     domain = 'www.xiaohongshu.com'
-    login_url = 'https://www.xiaohongshu.com/login'
+    # explore (not /login): with valid cookies it renders content immediately for a
+    # cookie refresh; expired sessions get xiaohongshu's own login prompt there.
+    login_url = 'https://www.xiaohongshu.com/explore'
 
     CARD_SELECTOR = 'section.note-item, .note-item'
     LINK_SELECTORS = ('a.cover', '.footer .title a', 'a[href*="/search_result/"]')

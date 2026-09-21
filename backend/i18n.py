@@ -118,6 +118,11 @@ _ZH = {
     'label.tendency': '倾向性分析',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': '开始搜索知乎关键词: "{kw}"，目标获取 {n} 条结果',
+    'crawl.zhihu.fallbackSearch': '知乎深链搜索返回空壳，改用搜索框重新提交关键词',
+    'crawl.zhihu.emptyOrBlocked': (
+        '知乎搜索页未返回任何结果（触发风控/登录墙或页面失效）：'
+        '请在执行设置中关闭无头模式，或稍后重试；已采集的数据不受影响'
+    ),
     'crawl.cookiesSeeded': 'Cookie 预置：{host} 接受 {n}/{total} 条',
     'crawl.loginWall': '登录墙：{platform} 的 {where} 被重定向到登录页，已停止本次抓取（仅返回已拿到的数据）',
     'crawl.zhihu.url': '搜索URL: {url}',
@@ -316,6 +321,16 @@ _ZH = {
     'engine.source_no_keyword': '节点 {nid}：数据源节点缺少关键词',
     'engine.source_no_urls': '节点 {nid}：微信数据源需要至少一个文章链接',
     'engine.upload_no_file': '节点 {nid}：上传节点还没有选择文件',
+    'engine.comment_no_urls': '节点 {nid}：评论节点还没有填写文章链接',
+    'comment.no_urls': '评论节点没有可抓取的链接（支持知乎/微博/小红书链接）',
+    'comment.unsupported': '评论节点忽略了 {n} 个不支持的链接（仅支持知乎/微博/小红书）',
+    'comment.article': '评论：{url} 新增 {n} 条（{status}）',
+    'comment.done': (
+        '评论采集完成：{urls} 个链接（正常 {ok}、拦截 {blocked}、失效 {dead}），共 {rows} 条评论，输出 {files} 个文件'
+    ),
+    'comment.status.ok': '正常',
+    'comment.status.blocked': '被登录墙/风控拦截',
+    'comment.status.dead': '链接不可读',
     'engine.process_no_op': '节点 {nid}：处理节点没有选择操作',
     'engine.output_no_op': '节点 {nid}：输出节点没有选择操作',
     'engine.analysis_no_op': '节点 {nid}：分析节点没有配置操作或步骤',
@@ -364,6 +379,9 @@ _ZH = {
     'run.resume_crawl': '节点 {nid} 从上次中断处继续抓取（已有 {have} 行）',
     'run.recrawl': '重新采集：已释放 {n} 条历史去重记录，本节点将重新抓取',
     'run.dedupe_skipped': '增量采集：{n} 条结果此前已采集，本次被跳过（如需重抓请在采集节点开启「重新采集」）',
+    'run.progress_file': '分批导出：{file}（{rows} 行，共 {parts} 个分批文件）',
+    'run.live_export': '实时导出：{file}（每处理完一批刷新一次，运行结束后保留）',
+    'run.live_export_failed': '实时导出写入失败：{err}',
     'run.partial_down': '节点 {nid} 中断：已把 {n} 行已完成的结果交给下游',
     'run.failed_down': '节点 {nid} 失败且没有可用数据，下游按空表继续',
     'run.skipped_empty': '节点 {nid} 跳过：上游没有数据',
@@ -442,8 +460,7 @@ _EN = {
     'the checkpoint and only refills the rest.',
     'llm.node_done': '[{label}] Node finished {done}/{total} rows',
     'llm.missing_column': (
-        'DataFrame is missing the required column "{col}" — the {label} node failed;'
-        ' check its text-column setting'
+        'DataFrame is missing the required column "{col}" — the {label} node failed; check its text-column setting'
     ),
     'llm.no_rows': '[{label}] Nothing to process (column "{col}" is empty).',
     'llm.start': '[{label}] {total} rows queued via {transport} (one request per row — longer text costs more tokens)',
@@ -461,6 +478,13 @@ _EN = {
     'label.tendency': 'Tendency',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': 'Searching Zhihu for "{kw}", target {n} results',
+    'crawl.zhihu.fallbackSearch': (
+        'Deep-linked search rendered an empty shell; resubmitting the keyword through the search box'
+    ),
+    'crawl.zhihu.emptyOrBlocked': (
+        'Zhihu search returned nothing (risk control, login wall, or dead page): '
+        'turn off headless mode in the run settings, or retry later; collected data is safe'
+    ),
     'crawl.cookiesSeeded': 'Cookies seeded: {host} accepted {n}/{total}',
     'crawl.loginWall': (
         'Login wall: {platform} redirected {where} to a login page; the crawl stopped'
@@ -660,6 +684,17 @@ _EN = {
     'engine.source_no_keyword': 'Node {nid}: source node has no keyword',
     'engine.source_no_urls': 'Node {nid}: a WeChat source needs at least one article URL',
     'engine.upload_no_file': 'Node {nid}: upload node has no file selected',
+    'engine.comment_no_urls': 'Node {nid}: comment node has no article URLs yet',
+    'comment.no_urls': 'comment node has no crawlable URLs (zhihu/weibo/xiaohongshu links only)',
+    'comment.unsupported': 'comment node ignored {n} unsupported link(s) (zhihu/weibo/xiaohongshu only)',
+    'comment.article': 'comments: {url} added {n} ({status})',
+    'comment.done': (
+        'comment crawl finished: {urls} links (ok {ok}, blocked {blocked}, '
+        'dead {dead}), {rows} comments, {files} file(s)'
+    ),
+    'comment.status.ok': 'ok',
+    'comment.status.blocked': 'login/risk-control wall',
+    'comment.status.dead': 'link unreadable',
     'engine.process_no_op': 'Node {nid}: process node has no operation',
     'engine.output_no_op': 'Node {nid}: output node has no operation',
     'engine.analysis_no_op': 'Node {nid}: analysis node has no operation/steps configured',
@@ -708,9 +743,11 @@ _EN = {
     'run.resume_crawl': 'Node {nid} continues crawling from where it stopped ({have} rows already saved)',
     'run.recrawl': 'Re-crawl: released {n} dedupe records; this node will collect again',
     'run.dedupe_skipped': (
-        'Incremental: {n} already-collected items were skipped (enable Recrawl on the'
-        ' source node to re-collect)'
+        'Incremental: {n} already-collected items were skipped (enable Recrawl on the source node to re-collect)'
     ),
+    'run.progress_file': 'progress export: {file} ({rows} rows in {parts} part files)',
+    'run.live_export': 'live export: {file} (rewritten after every batch; kept when the run ends)',
+    'run.live_export_failed': 'live export write failed: {err}',
     'run.partial_down': 'Node {nid} interrupted — its {n} finished rows are handed downstream',
     'run.failed_down': 'Node {nid} failed with nothing usable — downstream sees an empty table',
     'run.skipped_empty': 'Node {nid} skipped: no data arrived from upstream',

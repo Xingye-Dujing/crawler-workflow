@@ -17,8 +17,9 @@ ARTICLE_URLS = [
 ]
 
 
-def test_three_real_articles_parse_into_full_rows(live_crawler):
-    crawler = live_crawler('wechat')
+@pytest.mark.parametrize('headless', [True, False], ids=['headless', 'visible'])
+def test_three_real_articles_parse_into_full_rows(live_crawler, headless):
+    crawler = live_crawler('wechat', headless=headless)
     rows = crawler.search(urls=list(ARTICLE_URLS))
     assert len(rows) == 3, 'every supplied article must yield exactly one row'
     links = [r['链接'] for r in rows]

@@ -28,7 +28,7 @@ _WALL_MARKERS = (
     '/signin',
     'accounts.google.com',
 )
-_WALL_TEXTS = ('扫描二维码登录', '手机号登录', '请先登录', '登录后查看', '扫码登录')
+_WALL_TEXTS = ('扫描二维码登录', '手机号登录', '请先登录', '登录后查看', '扫码登录', '暂时限制', '当前请求存在异常')
 
 
 def looks_like_login_page(url: str, body_text: str = '') -> bool:
@@ -187,7 +187,11 @@ class Crawler(ABC):
         # settings store, editable in the frontend 设置 panel.
         opts.add_argument(f'--window-size={get_setting("window_size")}')
         opts.add_argument('--lang=zh-CN')
-        opts.add_experimental_option('excludeSwitches', ['enable-logging'])
+        # Sites' risk control treats navigator.webdriver as proof of a bot and
+        # hard-blocks content pages (search keeps working, which is why the block
+        # looked selective). Hide the automation flag on both surfaces.
+        opts.add_argument('--disable-blink-features=AutomationControlled')
+        opts.add_experimental_option('excludeSwitches', ['enable-logging', 'automation'])
         browser_binary = str(get_setting('browser_binary') or '').strip()
         if browser_binary:
             opts.binary_location = browser_binary

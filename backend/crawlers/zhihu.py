@@ -30,7 +30,9 @@ class ZhihuCrawler(Crawler):
     """
 
     domain = 'www.zhihu.com'
-    login_url = 'https://www.zhihu.com/signin'
+    # Same reasoning as weibo: /signin is a QR wall even when logged in; the
+    # home page shows the wall only when the session is actually dead.
+    login_url = 'https://www.zhihu.com/'
 
     # Every result kind, not just articles: the list is ~80 % answers, and
     # pinning the walk to ``PostItem`` made the crawler scroll for cards it had
@@ -81,6 +83,20 @@ class ZhihuCrawler(Crawler):
         self.driver.get(url)
         self.wait_for_element(self.CARD_SELECTOR)
         self.check_login_wall(url)
+        if self.login_wall:
+            # Risk control answered instead of results: fail loudly with the
+            # one actionable instruction, never a silent zero-row 'success'.
+            raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
+        if self._card_count() == 0 and self._deep_link_came_up_empty():
+            # The deep-linked SPA sometimes shows its empty shell; typing into
+            # the real search box issues the request the app itself expects.
+            logger.info(t('crawl.zhihu.fallbackSearch'))
+            self._search_via_input(keyword)
+            self.check_login_wall(url)
+            if self.login_wall:
+                raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
+            if self._card_count() == 0 and not self._deep_link_came_up_empty():
+                raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
         logger.info(t('crawl.zhihu.loaded'))
 
         # ``scanned`` is how far the card walk has got; a resume reads only the

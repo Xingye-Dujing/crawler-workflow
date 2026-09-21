@@ -473,10 +473,30 @@ def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
         cancel_event=execution_state.get('cancel_event'),
     )
     node_id = node.get('id', '')
+    # ── live snapshot (AI 调用实时导出) ──
+    # A long LLM pass enriches rows in batches; the honest artifact there is
+    # 'the table as it stands', so every settled batch rewrites the whole
+    # snapshot (atomic tmp+replace — an opened file is never half-written).
+    live_writer = None
+    if bool((node.get('params') or {}).get('live_export')):
+        from services.part_writer import SnapshotWriter, safe_stem
+
+        stem = safe_stem(f'{execution_state.get("workflow_name") or "llm"}-{node_id}')
+        lfmt = 'json' if str((node.get('params') or {}).get('format') or 'csv') == 'json' else 'csv'
+        live_writer = SnapshotWriter(Config.EXPORT_DIR, stem, lfmt)
+        add_log(t('run.live_export', file=os.path.basename(live_writer.path)))
 
     def publish(df):
+        records = df.to_dict('records')
         with _completed_lock:
-            execution_state['results'][node_id] = df.to_dict('records')
+            execution_state['results'][node_id] = records
+        if live_writer is not None:
+            try:
+                live_writer.write(records)
+            except Exception as e:
+                # run_llm_rows swallows publish errors; say it out loud here
+                # so a read-only export dir does not silently kill the feature.
+                add_log(t('run.live_export_failed', err=e))
 
     run_ctx = {
         'client': client,
@@ -1192,6 +1212,19 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     crawler = get_crawler(platform, headless=headless, cookie_dir=Config.COOKIE_DIR)
     resume = {}
     nid = str(node.get('id') or '')
+    # ── progressive part files (分批输出) ──
+    # With part_size>0 every kept row also lands in a numbered part file while
+    # the crawl is still running, and the parts merge into one file at the end
+    # — the results are openable before the node finishes.
+    part_size = _safe_int(params.get('part_size'), 0, minimum=0)
+    keep_parts = bool(params.get('keep_parts', False))
+    pfmt = 'json' if str(params.get('format') or 'csv') == 'json' else 'csv'
+    writer = None
+    if part_size > 0:
+        from services.part_writer import PartWriter, safe_stem
+
+        stem = safe_stem(f'{execution_state.get("workflow_name") or platform}-src-{nid}')
+        writer = PartWriter(Config.EXPORT_DIR, stem, pfmt, part_size, keep_parts)
     if ctx is not None:
         scope = _item_scope(ctx, node)
         if params.get('recrawl') and not ctx.get('resume'):
@@ -1201,6 +1234,15 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
             # there the ledger is precisely its dedupe machinery.
             add_log(t('run.recrawl', n=ctx['store'].forget_items(scope)))
         row_sink, cursor_sink = _source_stream(ctx, nid, scope)
+        if writer is not None:
+            base_sink = row_sink
+
+            def row_sink(item, _base=base_sink, _w=writer):
+                kept = _base(item)
+                if kept:
+                    _w.add([item])
+                return kept
+
         crawler.set_sink(row_sink)
         crawler.set_cursor_sink(cursor_sink)
         if ctx.get('resume'):
@@ -1211,6 +1253,11 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         if saved:
             crawler.seed(saved)
             add_log(t('run.resume_crawl', nid=nid, have=len(saved)))
+            if writer is not None and not writer.has_parts:
+                # Rows paid for before batching was switched on (or before any
+                # part survived): the merged file should hold the whole table,
+                # not only what comes after the switch.
+                writer.add(saved)
     execution_state['active_crawlers'].add(crawler)
     try:
         if platform == 'wechat':
@@ -1231,6 +1278,20 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
             # Incremental dedupe made visible: a re-run that already knows
             # every item would otherwise end as '0 results' with no reason.
             add_log(t('run.dedupe_skipped', n=skipped))
+    if writer is not None:
+        if ctx is None:
+            # One-shot path without a run context: nothing flowed through the
+            # tee'd sink, so hand the rows to the writer directly.
+            writer.add(rows)
+        info = writer.finish()
+        add_log(
+            t(
+                'run.progress_file',
+                file=os.path.basename(str(info['path'])),
+                rows=info['rows'],
+                parts=info['parts'],
+            )
+        )
     return rows
 
 
@@ -1653,6 +1714,108 @@ def _execute_visualize_node(node: dict, current_input: list):
     return spec
 
 
+def _execute_comment_node(node: dict, ctx: dict = None):
+    """Comment crawler: article links in, comment rows out, batch by batch.
+
+    Built on the same durable legs as the source crawler — the row ledger
+    (already-collected comments are skipped, never re-fetched), the row store
+    (resume restores position), and PartWriter (every settled batch hits disk
+    as a readable file while the run is still going; a resumed writer adopts
+    the parts the crashed run left behind, so kept-elsewhere rows are exactly
+    the rows already in those files). zhihu content pages reject headless
+    sessions, so this node always drives a visible browser.
+    """
+    from crawlers.comments import BLOCKED, DEAD, OK, CommentSession, platform_for
+    from services.part_writer import PartWriter, safe_stem
+
+    params = node.get('params') or {}
+    all_urls = [u for u in _split_urls(params.get('urls')) if u]
+    urls, dropped = [], []
+    for u in all_urls:
+        (urls if platform_for(u) else dropped).append(u)
+    if dropped:
+        add_log(t('comment.unsupported', n=len(dropped)))
+    if not urls:
+        raise ValueError(t('comment.no_urls'))
+
+    limit = _safe_int(params.get('comment_limit'), 0, minimum=0)  # 0 = every comment
+    part_size = _safe_int(params.get('part_size'), 0, minimum=0)  # 0 = single final file only
+    per_article = bool(params.get('per_article_file'))
+    keep_parts = bool(params.get('keep_parts', True))
+    fmt = 'json' if str(params.get('format') or 'csv') == 'json' else 'csv'
+    nid = str(node.get('id') or '')
+    stem_base = safe_stem(f'{execution_state.get("workflow_name") or "comments"}-{nid}')
+
+    row_sink = cursor_sink = None
+    resumed_index = 0
+    if ctx is not None:
+        row_sink, cursor_sink = _source_stream(ctx, nid, _item_scope(ctx, node))
+        if ctx.get('resume'):
+            from crawlers.base import as_index
+
+            resumed_index = as_index((ctx['store'].get_cursor(ctx['run_id'], nid) or {}).get('url_index'))
+
+    writers = {}
+    rows_out = []
+    counts = {OK: 0, BLOCKED: 0, DEAD: 0}
+    sessions = {}
+
+    def _writer_for(idx: int, url: str) -> PartWriter:
+        stem = f'{stem_base}-{idx:02d}' if per_article else stem_base
+        if stem not in writers:
+            writers[stem] = PartWriter(Config.EXPORT_DIR, stem, fmt, part_size, keep_parts)
+        return writers[stem]
+
+    try:
+        for idx, url in enumerate(urls, 1):
+            if not execution_state['running']:
+                break
+            if idx <= resumed_index:
+                continue
+            kind = platform_for(url)
+            if kind not in sessions:
+                crawler = get_crawler(kind, headless=False, cookie_dir=Config.COOKIE_DIR)
+                sessions[kind] = (crawler, CommentSession(crawler.driver, log=lambda m: add_log(f'[comment] {m}')))
+            _crawler, session = sessions[kind]
+            if cursor_sink is not None:
+                cursor_sink({'url_index': idx - 1, 'url_total': len(urls)})
+            if kind == 'weibo':
+                rows, status = session.crawl_weibo(url, limit)
+            elif kind == 'xiaohongshu':
+                rows, status = session.crawl_xiaohongshu(url, limit)
+            else:
+                rows, status = session.crawl_zhihu(url, limit)
+            counts[status] = counts.get(status, 0) + 1
+            writer = _writer_for(idx, url)
+            fresh = []
+            for row in rows:
+                if row_sink is not None:
+                    if row_sink(row):  # ledger said new: store it AND publish it
+                        fresh.append(row)
+                else:
+                    fresh.append(row)
+            writer.add(fresh)
+            rows_out.extend(fresh)
+            add_log(t('comment.article', url=url, n=len(fresh), status=t(f'comment.status.{status}')))
+    finally:
+        for crawler, _session in sessions.values():
+            _close_login_browser(crawler)
+
+    files = [writer.finish() for writer in writers.values()]
+    add_log(
+        t(
+            'comment.done',
+            urls=len(urls),
+            ok=counts.get(OK, 0),
+            blocked=counts.get(BLOCKED, 0),
+            dead=counts.get(DEAD, 0),
+            rows=len(rows_out),
+            files=len(files),
+        )
+    )
+    return rows_out
+
+
 def _execute_resume_node(node: dict, ctx: dict):
     """Adopt a stored node output from an earlier run as this node's rows.
 
@@ -1703,7 +1866,7 @@ def _execute_resume_node(node: dict, ctx: dict):
 # run store, or (for `name`) nowhere at all. The "upstream came up empty →
 # skip" rule below must not apply to them, or a whole chain hanging off a
 # name node gets silently skipped: the name node produces no rows by design.
-_NON_INPUT_NODES = frozenset({'source', 'upload', 'resume', 'name'})
+_NON_INPUT_NODES = frozenset({'source', 'upload', 'resume', 'name', 'comment'})
 
 
 def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upstream: list, wf_idx: int):
@@ -1815,6 +1978,8 @@ def _execute_node(
     ntype = node.get('type')
     if ntype == 'name':
         return _execute_name_node(node)
+    if ntype == 'comment':
+        return _execute_comment_node(node, ctx=ctx)
     if ntype == 'source':
         return _execute_source_node(node, headless, ctx=ctx)
     if ntype == 'upload':

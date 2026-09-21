@@ -1,12 +1,11 @@
 import logging
 import re
+import time
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as ec
-from selenium.webdriver.support.ui import WebDriverWait
 
 from i18n import t
 
@@ -30,13 +29,16 @@ class WeiboCrawler(Crawler):
     - The saved cookies are exported from ``weibo.com``, but the feed is served
       by ``s.weibo.com`` and needs to be planted there too (see
       :meth:`Crawler._load_cookies` and :attr:`cookie_domains`).
-    - **Re-requesting the first page is what produces the QR wall.** The feed is
-      already loaded by the search URL itself; the crawler used to walk it again
-      as ``…&page=1`` and then every page above it. Those repeat search loads
-      are what s.weibo.com answers with ``passport.weibo.com/sso/signin``
-      ("扫描二维码登录") — even for a session holding a valid ``SUB`` cookie. So:
-      scrape what is on screen first, and only ask for ``page=2`` and deeper when
-      the target genuinely still needs rows.
+    - **The QR screen on entry is a staged illusion.** s.weibo.com first answers
+      a search request with a ``passport.weibo.com/sso/signin`` frame
+      ("扫描二维码登录"), and a session that holds a valid ``SUB`` cookie is
+      bounced back to the logged-in feed a moment later. A wall test taken at
+      the instant ``get()`` returns catches that intermediate frame and aborts a
+      crawl that was about to produce rows — so :meth:`_await_search_page`
+      waits for a terminal state (cards, the
+      no-result plate, or a *persistent* passport page) before judging. The
+      same lesson applies to paging: scrape what is on screen first, and only
+      ask for ``page=2`` and deeper when the target genuinely still needs rows.
     - The feed is server-rendered: scrolling fetches nothing new, so "more data"
       means a deeper page or a narrower time window — and each extra request
       costs wall risk. Hence the target cutoff, the page ceiling and the
@@ -48,7 +50,11 @@ class WeiboCrawler(Crawler):
     # ``.weibo.com`` is accepted on weibo.com and simply not offered to
     # s.weibo.com until the browser has been there once.
     cookie_domains = ('s.weibo.com',)
-    login_url = 'https://passport.weibo.com/sso/signin?entry=miniblog'
+    # Open the site itself, not the sign-in page: with saved cookies this lands
+    # on the logged-in feed (cookies refresh = press Done immediately), while an
+    # expired session is redirected to the passport wall by weibo itself. The old
+    # passport URL showed a QR wall even with a perfectly valid cookie.
+    login_url = 'https://weibo.com/'
 
     CARD_SELECTOR = '.card-wrap'
     # Rows per feed page is ~9-10, so this ceiling is what a keyword crawl can
@@ -180,21 +186,8 @@ class WeiboCrawler(Crawler):
         try:
             logger.info(t('crawl.weibo.visiting', url=base_url))
             logger.info(t('crawl.weibo.waiting'))
-            self.driver.get(base_url)
-            if self.check_login_wall(base_url):
+            if not self._await_search_page(base_url):
                 return scraped
-            if self._element_or_none('.card-no-result') is not None:
-                logger.info(t('crawl.weibo.no_result'))
-                return scraped
-            try:
-                WebDriverWait(self.driver, int(self.PAGE_WAIT * 3)).until(
-                    ec.presence_of_element_located((By.CSS_SELECTOR, self.CARD_SELECTOR))
-                )
-            except TimeoutException:
-                logger.warning(t('crawl.weibo.page_timeout'))
-                return scraped
-            logger.info(t('crawl.weibo.page_loaded'))
-
             scraped.extend(self._harvest(target))
             if self.collected() >= target or not self._may_page(base_url):
                 return scraped
@@ -210,15 +203,7 @@ class WeiboCrawler(Crawler):
                 # s.weibo.com's rate limiter, so the pause is the fix.
                 self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
                 logger.info(t('crawl.weibo.page_crawling', i=page_num, total=total_pages))
-                self.driver.get(f'{page_url}{page_num}')
-                if self.check_login_wall(f'{page_url}{page_num}'):
-                    break
-                try:
-                    WebDriverWait(self.driver, 3).until(
-                        ec.presence_of_element_located((By.CSS_SELECTOR, self.CARD_SELECTOR))
-                    )
-                except TimeoutException:
-                    logger.warning(t('crawl.weibo.page_timeout'))
+                if not self._await_search_page(f'{page_url}{page_num}'):
                     break
                 self.mark_position(page_index=page_num, card_index=0)
                 before = self.collected()
@@ -232,6 +217,41 @@ class WeiboCrawler(Crawler):
         except Exception as e:
             logger.error(t('crawl.weibo.link_error', err=e), exc_info=True)
             return scraped
+
+    def _await_search_page(self, url: str) -> bool:
+        """Navigate to a search URL and wait for s.weibo.com to settle.
+
+        The platform answers a fresh search request with a passport QR screen
+        first, then — when the session really holds a valid cookie — bounces the
+        browser back to the logged-in feed a moment later. That bounce is an
+        illusion the site stages, not a wall: a URL read taken the instant
+        ``get()`` returns lands on the intermediate frame and kills a crawl that
+        was about to produce rows. So poll for one of the *terminal* states
+        before judging anything:
+
+        - feed cards present → crawlable, return True;
+        - the explicit "no result" plate → a genuine empty window, False;
+        - timeout with cards never arriving → only now consult the login wall
+          (a truly dead session parks on passport forever), False either way.
+
+        Works identically headless and visible; both modes show the same DOM
+        transition, the visible one just lets the user watch it happen.
+        """
+        self.driver.get(url)
+        poll = 0.5
+        rounds = max(1, int(self.PAGE_WAIT * 3 / poll))
+        for _ in range(rounds):
+            if self._element_or_none(self.CARD_SELECTOR) is not None:
+                logger.info(t('crawl.weibo.page_loaded'))
+                return True
+            if self._element_or_none('.card-no-result') is not None:
+                logger.info(t('crawl.weibo.no_result'))
+                return False
+            time.sleep(poll)
+        if self.check_login_wall(url):
+            return False
+        logger.warning(t('crawl.weibo.page_timeout'))
+        return False
 
     def _may_page(self, base_url: str) -> bool:
         """Paging exists only on an open keyword feed.

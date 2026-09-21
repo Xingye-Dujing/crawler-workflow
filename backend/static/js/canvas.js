@@ -356,6 +356,7 @@ const canvas = {
             tokenize: I18n.t('node.tokenize'),
             output: I18n.t('node.output'),
             resume: I18n.t('node.resume'),
+            comment: I18n.t('node.comment'),
         };
         const title = labels[type] || 'Node';
         const el = document.createElement('div');
@@ -414,15 +415,16 @@ const canvas = {
         /* The name node carries the workflow's label for the Execution History
            panel — it is metadata, not data, so its params are just the name. */
         if (type === 'name') return { workflow_name: '' };
-        if (type === 'source') return { platform: 'zhihu', keyword: '', urls: '', target_count: 50, headless: true };
+        if (type === 'source') return { platform: 'zhihu', keyword: '', urls: '', target_count: 50, headless: true, part_size: 0, keep_parts: false, format: 'csv' };
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
-        if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '' };
+        if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '', live_export: false, format: 'csv' };
         if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };
         if (type === 'visualize') return { chart_type: 'bar', x_field: '', y_field: '', value_field: '', agg: 'sum', engine: 'echarts', title: '', tokenize: false };
         if (type === 'tokenize') return { text_column: '', top_n: '', output_mode: 'word_freq' };
         /* Empty run ids mean "auto": pick the newest interrupted run, and
            inside it whichever node holds the most rows. */
         if (type === 'resume') return { resume_run_id: '', resume_node_id: '', resume_limit: 0 };
+        if (type === 'comment') return { urls: '', comment_limit: 0, part_size: 50, per_article_file: true, keep_parts: false, format: 'csv' };
         if (type === 'output') return { operation: 'save', format: 'csv', filename: 'export.csv' };
         return {};
     },
@@ -476,6 +478,13 @@ const canvas = {
             var runPart = params.resume_run_id || I18n.t('resume.autoNode');
             return I18n.t('settings.operation') + ': ' + runPart +
                 (params.resume_node_id ? '\n' + params.resume_node_id : '');
+        }
+        if (type === 'comment') {
+            /* Source-like crawler: the only thing worth reading off the node is
+               how many article links it will visit and in what format. */
+            var cUrls = String(params.urls || '').split('\n').filter(function (u) { return u.trim(); }).length;
+            return I18n.t('settings.commentUrls') + ': ' + cUrls +
+                '\n' + I18n.t('settings.format') + ': ' + (params.format || 'csv');
         }
         if (type === 'output') {
             var op = params.operation || '';

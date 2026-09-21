@@ -362,3 +362,118 @@ class TestWorkflowExecute:
         # Nothing extra was stored: the same six rows, reused in place.
         assert app_module._RUN_STORE.row_count(run_id, 'node-1') == 6
         assert app_module._RUN_STORE.stats()['runs'] == 1
+
+
+class FakeSinkCrawler:
+    """A crawler stand-in that streams through the REAL sink plumbing: every
+    row passes the tee in _execute_source_node (ledger + PartWriter), so the
+    part-file behaviour under test is the production one."""
+
+    def __init__(self, rows):
+        self.rows = rows
+        self.driver = None
+        self._sink = None
+
+    def set_sink(self, sink):
+        self._sink = sink
+
+    def set_cursor_sink(self, sink):
+        pass
+
+    def seed(self, saved):
+        pass
+
+    def close(self):
+        pass
+
+    def search(self, keyword=None, target_count=None, **kw):
+        kept = []
+        for row in self.rows:
+            if self._sink is None or self._sink(row):
+                kept.append(row)
+        return kept
+
+
+class TestProgressiveOutput:
+    """分批输出 (source part files) and 实时导出 (LLM live snapshot)."""
+
+    @pytest.mark.serial
+    @pytest.mark.parametrize(
+        ('keep_parts', 'expect_parts'),
+        [(False, 0), (True, 2)],
+        ids=['parts-removed', 'parts-kept'],
+    )
+    def test_source_node_writes_part_files_and_merges(
+        self, client, app_module, monkeypatch, data_root, keep_parts, expect_parts
+    ):
+        rows = [{'作者': f'a{i}', '正文': f'body {i}'} for i in range(5)]
+        monkeypatch.setattr(
+            app_module,
+            'get_crawler',
+            lambda platform, headless=True, cookie_dir=None: FakeSinkCrawler(rows),
+        )
+        workflow = _workflow(
+            [
+                _node(
+                    'node-1',
+                    'source',
+                    params={
+                        'platform': 'zhihu',
+                        'keyword': '测试',
+                        'target_count': 5,
+                        'part_size': 2,
+                        'keep_parts': keep_parts,
+                    },
+                )
+            ],
+            [],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'parts-test'})
+        run_id = started.get_json()['run_id']
+        assert _wait_for_worker(app_module)
+        assert app_module._RUN_STORE.row_count(run_id, 'node-1') == 5
+
+        exports = data_root / 'data' / 'exports'
+        final = exports / 'parts-test-src-node-1.csv'
+        assert final.exists(), 'the merged file must exist whatever the keep-parts choice'
+        frame = pd.read_csv(final, encoding='utf-8-sig')
+        assert frame['正文'].tolist() == [f'body {i}' for i in range(5)]
+        parts = sorted(p.name for p in exports.glob('parts-test-src-node-1.part*.csv'))
+        assert len(parts) == expect_parts, '5 rows at part_size=2 flush exactly two settled parts'
+
+    def test_llm_live_snapshot_is_rewritten_on_every_publish(self, client, app_module, data_root):
+        node = _node('p1', 'process', operation='clean', params={'text_column': '正文', 'live_export': True})
+        run_ctx = app_module._llm_run_ctx(node, 'clean', None)
+        assert callable(run_ctx['publish'])
+
+        df = pd.DataFrame([{'正文': '甲'}, {'正文': '乙'}])
+        run_ctx['publish'](df)
+        from services.part_writer import safe_stem
+
+        stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p1')
+        live = data_root / 'data' / 'exports' / f'{stem}.live.csv'
+        assert live.exists()
+        assert pd.read_csv(live, encoding='utf-8-sig')['正文'].tolist() == ['甲', '乙']
+
+        # A later batch adds a column: the snapshot grows in place, the tmp
+        # file never survives the swap, and no stale rows linger.
+        df['清洗后'] = ['a', 'b']
+        run_ctx['publish'](df)
+        frame = pd.read_csv(live, encoding='utf-8-sig')
+        assert list(frame.columns) == ['正文', '清洗后']
+        assert list(frame['清洗后']) == ['a', 'b']
+        assert not list(live.parent.glob('*.tmp'))
+        # The state snapshot still travels too (the preview panel reads it).
+        assert app_module.execution_state['results']['p1'] == df.to_dict('records')
+
+    def test_llm_live_export_off_by_default(self, client, app_module, data_root):
+        node = _node('p2', 'process', operation='clean', params={'text_column': '正文'})
+        run_ctx = app_module._llm_run_ctx(node, 'clean', None)
+        df = pd.DataFrame([{'正文': '甲'}])
+        run_ctx['publish'](df)
+        # No {this node}.live file: the export directory is session-scoped, so
+        # only a p2-named snapshot would prove the feature fired.
+        from services.part_writer import safe_stem
+
+        stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p2')
+        assert not list((data_root / 'data' / 'exports').glob(f'{stem}.live.*'))
