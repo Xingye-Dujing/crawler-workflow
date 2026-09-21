@@ -892,7 +892,7 @@ def execute_workflow():
             execution_state['lang'] = normalize(data.get('lang') or request.headers.get('X-Lang') or 'zh')
 
             llm_cfg = data.get('llm') or {}
-            execution_state['llm'] = {
+            llm = {
                 'provider': llm_cfg.get('provider') or 'ollama',
                 'model': (llm_cfg.get('model') or '').strip(),
                 'api_key': (llm_cfg.get('api_key') or '').strip(),
@@ -901,16 +901,17 @@ def execute_workflow():
                 'max_chars': _safe_int(llm_cfg.get('max_chars'), 600, minimum=0, maximum=20000),
                 'workers': _safe_int(llm_cfg.get('workers'), 3, minimum=1, maximum=8),
             }
+            execution_state['llm'] = llm
             # Per-provider requirements: the key belongs to OpenRouter, the pulled tag
             # to the local daemon — and neither is demanded by a run that never calls
             # a model.
             if _workflow_needs_llm(workflow):
-                if execution_state['llm']['provider'] == 'openrouter':
-                    if not execution_state['llm']['api_key']:
+                if llm['provider'] == 'openrouter':
+                    if not llm['api_key']:
                         return jsonify({'ok': False, 'error': t('api.needApiKey')}), 400
-                    if not execution_state['llm']['model']:
+                    if not llm['model']:
                         return jsonify({'ok': False, 'error': t('api.needModel')}), 400
-                elif not execution_state['llm']['model']:
+                elif not llm['model']:
                     return jsonify({'ok': False, 'error': t('api.needOllamaModel')}), 400
 
             cancel_event = threading.Event()
@@ -1314,11 +1315,13 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         if writer is not None:
             base_sink = row_sink
 
-            def row_sink(item, _base=base_sink, _w=writer):
+            def tee_sink(item, _base=base_sink, _w=writer):
                 kept = _base(item)
                 if kept:
                     _w.add([item])
                 return kept
+
+            row_sink = tee_sink
 
         crawler.set_sink(row_sink)
         crawler.set_cursor_sink(cursor_sink)
