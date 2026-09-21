@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import re
 import time
@@ -16,174 +17,243 @@ logger = logging.getLogger(__name__)
 
 
 class XiaohongshuCrawler(Crawler):
+    """Scrapes xiaohongshu's search results and the notes behind them.
+
+    The search grid is an infinite scroll of ``section.note-item`` cards, and
+    every card already carries the note link, title, author and like count. The
+    note *body* only exists on the detail page, and a detail page costs a
+    navigation — so the crawl harvests cards as they render, and reads the
+    detail in a **throwaway tab**: the search page keeps its scroll offset, the
+    crawl emits a row per note as soon as that note is done, and it stops the
+    moment the target is met instead of pre-collecting a link list.
+
+    A note link is only openable with its ``xsec_token`` (without it the site
+    answers 安全限制 / 404), so the tokenised URL is kept as ``笔记链接`` and the
+    session-independent note id goes into ``笔记ID`` for cross-run comparison.
+    """
+
     domain = 'www.xiaohongshu.com'
     login_url = 'https://www.xiaohongshu.com/login'
+
+    CARD_SELECTOR = 'section.note-item, .note-item'
+    LINK_SELECTORS = ('a.cover', '.footer .title a', 'a[href*="/search_result/"]')
+    NOTE_WAIT = 2.5
+    CARD_WAIT = 1.5
+    SCROLL_STEPS = 3
+    MAX_SCROLL_ROUNDS = 40
+    STUCK_ROUNDS = 3
+    POLITE_BASE = 0.9
+    POLITE_SPREAD = 0.3
 
     def search(self, keyword: str, target_count: int = 50, **_kwargs):
         resume = self.resume_of(_kwargs)
         have = self.collected()
         if have:
-            # Notes fetched before the interruption are already in hand; only
-            # the shortfall is left to fetch.
             logger.info(t('crawl.resume_have', n=have))
         if have >= target_count:
             logger.info(t('crawl.xhs.target_reached', n=target_count))
             return self.results()
 
+        encoded = quote(keyword)
+        url = f'https://www.xiaohongshu.com/search_result?keyword={encoded}&source=web_explore_feed&type=51'
+        logger.info(t('crawl.xhs.start', kw=keyword, n=target_count))
+        self.driver.get(url)
+        logger.info(t('crawl.xhs.url', url=url))
+        # Adaptive: the grid renders as soon as the API answers, so a fixed
+        # 15 s block is pure loss on a warm session.
+        found = self._wait_for_count(self._card_count, 1, timeout=self.NOTE_WAIT * 4)
+        if not found and self.check_login_wall(url):
+            return self.results()
+        logger.info(t('crawl.xhs.page_ready') if found else t('crawl.xhs.page_timeout'))
+
+        # Notes already handed over by an earlier attempt. The link (token and
+        # all) is the identity, so a resume never re-reads one.
         stored = resume.get('links')
-        links = [str(u) for u in stored] if isinstance(stored, list) and resume.get('keyword') == keyword else []
-        if len(links) < target_count:
-            # The link list is fetched when it is missing or short. On a resume
-            # with a full list this whole stage is skipped — the detail pages
-            # are the expensive part, and those are what the cursor protects.
-            if links:
-                logger.info(t('crawl.resume_links', n=len(links)))
-            self._open_search(keyword, target_count)
-            fresh = self._collect_links(target_count)
-            known = set(links)
-            links.extend(u for u in fresh if u not in known)
-        logger.info(t('crawl.xhs.links', n=len(links)))
+        seen = {str(u) for u in stored if u} if isinstance(stored, list) else set()
+        cursor = {'scanned': as_index(resume.get('scanned')), 'total': self._card_count()}
+        self.mark_position(keyword=keyword, links=sorted(seen), scanned=cursor['scanned'], done=have)
+        logger.info(t('crawl.xhs.links', n=len(seen)))
 
-        start_index = as_index(resume.get('link_index'))
-        self.mark_position(keyword=keyword, links=links, link_index=start_index, done=have)
+        rounds = 0
+        stuck = 0
+        while rounds < self.MAX_SCROLL_ROUNDS and self.collected() < target_count:
+            before = cursor['total']
+            harvested = self._harvest_cards(seen, target_count)
+            cursor['total'] = self._card_count()
+            if harvested and self.collected() >= target_count:
+                logger.info(t('crawl.xhs.target_reached', n=target_count))
+                break
+            if rounds >= self.MAX_SCROLL_ROUNDS - 1:
+                break
 
-        for idx, link in enumerate(links, start=1):
-            if idx <= start_index:
-                continue
+            rounds += 1
+            logger.info(t('crawl.xhs.scroll_round', i=rounds, total=self.MAX_SCROLL_ROUNDS))
+            self.scroll_down(steps=self.SCROLL_STEPS)
+            cursor['total'] = self._wait_for_count(self._card_count, before + 1, timeout=self.CARD_WAIT)
+            logger.info(t('crawl.xhs.cards', n=cursor['total']))
+            self._harvest_cards(seen, target_count)
+            cursor['total'] = self._card_count()
+
             if self.collected() >= target_count:
                 logger.info(t('crawl.xhs.target_reached', n=target_count))
                 break
-            logger.info(t('crawl.xhs.note_processing', i=idx, total=len(links), url=link))
-            try:
-                data = self._scrape_note(link)
-                if data:
-                    if self.emit(data):
-                        title_preview = data['标题'][:30] if data['标题'] else t('crawl.xhs.untitled')
-                        logger.info(t('crawl.xhs.note_ok', title=title_preview))
-                    else:
-                        logger.debug(t('crawl.xhs.note_dup', url=link))
-                else:
-                    logger.warning(t('crawl.xhs.note_fail', url=link))
-            except Exception as e:
-                logger.error(t('crawl.xhs.note_error', err=e), exc_info=True)
-            # Index and item advance together, so a resumed crawl goes straight
-            # to the first note it has not fetched.
-            self.mark_position(link_index=idx, done=self.collected())
-            time.sleep(0.1)
+            if cursor['total'] <= before:
+                stuck += 1
+                if stuck >= self.STUCK_ROUNDS:
+                    logger.info(t('crawl.xhs.exhausted'))
+                    break
+                logger.info(t('crawl.xhs.no_growth'))
+                self.scroll_down(steps=self.SCROLL_STEPS)
+                cursor['total'] = self._wait_for_count(self._card_count, before + 1, timeout=self.CARD_WAIT)
+                self._harvest_cards(seen, target_count)
+                cursor['total'] = self._card_count()
+                if self.collected() >= target_count or cursor['total'] <= before:
+                    logger.info(t('crawl.xhs.exhausted'))
+                    break
+            else:
+                stuck = 0
+            if self.login_wall:
+                logger.info(t('crawl.xhs.collect_done', n=self.collected()))
+                break
+            # Politeness between scroll rounds — the grid only ever asks for one
+            # more page of results, so this is the request rate that matters.
+            self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
 
+        logger.info(t('crawl.xhs.collect_done', n=len(seen)))
         logger.info(t('crawl.xhs.finished', n=self.collected()))
         return self.results()
 
-    def _open_search(self, keyword: str, target_count: int):
-        logger.info(t('crawl.xhs.start', kw=keyword, n=target_count))
-        encoded = quote(keyword)
-        url = f'https://www.xiaohongshu.com/search_result?keyword={encoded}&source=web_explore_feed&type=51'
-        self.driver.get(url)
-        logger.info(t('crawl.xhs.url', url=url))
-        try:
-            WebDriverWait(self.driver, 15).until(ec.presence_of_element_located((By.CSS_SELECTOR, '.note-item')))
-            logger.info(t('crawl.xhs.page_ready'))
-        except TimeoutException:
-            logger.warning(t('crawl.xhs.page_timeout'))
+    # ─── card harvest (interleaved with the scroll) ──────────────────
 
-    def _collect_links(self, target_count: int, max_scrolls: int = 100):
-        logger.info(t('crawl.xhs.collect_start', n=target_count))
-        all_links = set()
-        last_count = 0
+    def _card_count(self) -> int:
+        return len(self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR))
 
-        for scroll_iter in range(max_scrolls):
-            logger.info(t('crawl.xhs.scroll_round', i=scroll_iter + 1, total=max_scrolls))
-            self.scroll_to_bottom()
+    def _harvest_cards(self, seen: set, target_count: int) -> int:
+        """Scrape + emit every card past the cursor. Returns how many were read.
 
-            # (The old code wrapped a log call in try/except NoSuchElementException
-            # and then broke unconditionally, so only the first screenful was ever
-            # collected and target_count was ignored. End-of-list is detected by
-            # the "no growth" branch below instead.)
-            cards = self.driver.find_elements(By.CSS_SELECTOR, '.note-item')
-            current_count = len(cards)
-            logger.info(t('crawl.xhs.cards', n=current_count))
-
-            for card in cards:
-                try:
-                    a = card.find_element(By.CSS_SELECTOR, '.cover.mask, .title a')
-                    h = a.get_attribute('href')
-                    if h:
-                        all_links.add(urljoin('https://www.xiaohongshu.com', h))
-                except NoSuchElementException:
-                    pass
-
-            logger.info(t('crawl.xhs.collected', n=len(all_links)))
-
-            if len(all_links) >= target_count:
+        ``seen`` carries the note links already handed to the sink, which is
+        both the resume memory and the within-crawl dedupe (the grid repeats a
+        promoted card on nearly every page).
+        """
+        cards = self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR)
+        start = min(as_index(self.position.get('scanned')), len(cards))
+        read = 0
+        for idx, card in enumerate(cards[start:], start + 1):
+            if self.collected() >= target_count:
                 logger.info(t('crawl.xhs.target_reached', n=target_count))
                 break
+            read += 1
+            try:
+                link = self._card_link(card)
+                if not link or link in seen:
+                    self.mark_position(scanned=idx)
+                    continue
+                item = self._scrape_card(card, link)
+                detail = self._read_note(link, keep_page=True)
+                if detail:
+                    item.update({k: v for k, v in detail.items() if v not in ('', 0, None, [])})
+                seen.add(link)
+                if self.emit(item):
+                    title_preview = item['标题'][:30] if item['标题'] else t('crawl.xhs.untitled')
+                    logger.info(t('crawl.xhs.note_ok', title=title_preview))
+                else:
+                    logger.debug(t('crawl.xhs.note_dup', url=link))
+            except Exception as e:
+                logger.error(t('crawl.xhs.note_error', err=e), exc_info=True)
+            # Index, link memory and item count advance together, so a resumed
+            # crawl goes straight to the first card it has not read.
+            self.mark_position(scanned=idx, links=sorted(seen), done=self.collected())
+        return read
 
-            if current_count == last_count:
-                logger.info(t('crawl.xhs.no_growth'))
-                time.sleep(0.1)
-                self.scroll_to_bottom()
-                cur = len(self.driver.find_elements(By.CSS_SELECTOR, '.note-item'))
-                if cur == last_count:
-                    logger.info(t('crawl.xhs.exhausted'))
-                    break
+    def _card_link(self, card) -> str:
+        for sel in self.LINK_SELECTORS:
+            try:
+                href = card.find_element(By.CSS_SELECTOR, sel).get_attribute('href')
+            except Exception:
+                continue
+            if href:
+                return urljoin(f'https://{self.domain}', href)
+        return ''
 
-            last_count = current_count
+    def _scrape_card(self, card, link: str) -> dict:
+        return {
+            '笔记链接': link,
+            '笔记ID': self._note_id(link),
+            '标题': self._text_of(card, '.footer .title') or self._text_of(card, '.title'),
+            '作者': self._text_of(card, '.author .name') or self._text_of(card, '.name'),
+            '点赞数': self._number_in(self._text_of(card, '.like-wrapper .count')),
+            '正文': '',
+            '发布时间': '',
+            '收藏数': 0,
+            '评论数': 0,
+            '评论列表': [],
+        }
 
-        result = list(all_links)[:target_count]
-        logger.info(t('crawl.xhs.collect_done', n=len(result)))
-        return result
+    @staticmethod
+    def _note_id(link: str) -> str:
+        m = re.search(r'/(?:search_result|explore|item)/([0-9a-f]{16,})', link or '')
+        return m.group(1) if m else ''
+
+    # ─── note detail ─────────────────────────────────────────────────
+
+    def _read_note(self, url: str, keep_page: bool = False) -> dict | None:
+        """Scrape one note. With *keep_page* the search tab survives.
+
+        Opening the note in a second tab is what lets the crawl emit while the
+        grid is still scrolling: the search page never reloads, so its virtualised
+        card list and scroll offset are intact when the tab is closed again.
+        """
+        logger.info(t('crawl.xhs.detail_visit', url=url))
+        search_handle = self.driver.current_window_handle if keep_page else None
+        opened_tab = False
+        if keep_page:
+            try:
+                self.driver.switch_to.new_window('tab')
+                opened_tab = True
+            except Exception as e:
+                logger.debug(t('crawl.xhs.note_error', err=e))
+                search_handle = None
+        try:
+            return self._scrape_note(url)
+        finally:
+            if opened_tab:
+                with contextlib.suppress(Exception):
+                    self.driver.close()
+                    self.driver.switch_to.window(search_handle)
 
     def _scrape_note(self, url: str) -> dict | None:
-        logger.info(t('crawl.xhs.detail_visit', url=url))
         self.driver.get(url)
         try:
-            WebDriverWait(self.driver, 15).until(
+            WebDriverWait(self.driver, int(self.NOTE_WAIT * 6)).until(
                 ec.presence_of_element_located((By.CSS_SELECTOR, '.title, #detail-title'))
             )
             logger.info(t('crawl.xhs.detail_ready'))
         except TimeoutException:
+            if self.check_login_wall(url):
+                return None
             logger.warning(t('crawl.xhs.detail_timeout'))
             return None
-        time.sleep(0.1)
 
-        title = ''
-        try:
-            el = self.driver.find_element(By.CSS_SELECTOR, '#detail-title, .title')
-            title = el.text.strip()
-            preview = title[:40] + '...' if len(title) > 40 else title
-            logger.info(t('crawl.xhs.title', title=preview))
-        except NoSuchElementException:
+        title = self._wait_for_text('#detail-title, .note-content .title, .title')
+        if not title:
             logger.debug(t('crawl.debug.title_missing'))
+        content = self._wait_for_text('#detail-desc .note-text, .desc .note-text, #detail-desc')
+        logger.info(t('crawl.xhs.content_len', n=len(content)))
 
-        content = ''
-        try:
-            el = self.driver.find_element(By.CSS_SELECTOR, '#detail-desc .note-text, .desc .note-text')
-            content = self.driver.execute_script(
-                "return arguments[0].innerText || arguments[0].textContent || ''", el
-            ).strip()
-            logger.info(t('crawl.xhs.content_len', n=len(content)))
-        except NoSuchElementException:
-            logger.debug(t('crawl.debug.content_missing'))
-
-        author = ''
-        try:
-            el = self.driver.find_element(By.CSS_SELECTOR, '.author-container .name, .author .name')
-            author = el.text.strip()
-            logger.info(t('crawl.xhs.author', author=author))
-        except NoSuchElementException:
+        author = self._wait_for_text('.author-container .name, .author-wrapper .name, .username')
+        if not author:
             logger.debug(t('crawl.debug.author_missing'))
+        logger.info(t('crawl.xhs.author', author=author))
 
-        pub_time = ''
-        try:
-            el = self.driver.find_element(By.CSS_SELECTOR, '.date, .publish-time')
-            pub_time = el.text.strip()
-            logger.info(t('crawl.xhs.pub_time', time=pub_time))
-        except NoSuchElementException:
-            logger.debug(t('crawl.debug.time_missing'))
+        raw_time = self._text_of(self.driver, '.date')
+        publish_time, region = self._split_date_location(raw_time)
+        logger.info(t('crawl.xhs.pub_time', time=publish_time))
 
-        like_count = self._extract_count('.like-wrapper .count, .engage-bar .like-wrapper .count')
-        collect_count = self._extract_count('.collect-wrapper .count, .engage-bar .collect-wrapper .count')
-        comment_count = self._extract_count('.chat-wrapper .count, .engage-bar .chat-wrapper .count')
+        # The engage bar is the note's own counters; a bare .like-wrapper also
+        # matches every comment's like button, which used to report '1'.
+        like_count = self._engage_count('like-wrapper')
+        collect_count = self._engage_count('collect-wrapper')
+        comment_count = self._engage_count('chat-wrapper')
         logger.info(t('crawl.xhs.metrics', likes=like_count, favs=collect_count, comments=comment_count))
 
         comments = self.extract_comments(max_comments=5)
@@ -191,23 +261,100 @@ class XiaohongshuCrawler(Crawler):
 
         return {
             '笔记链接': url,
+            '笔记ID': self._note_id(url),
             '标题': title,
             '正文': content,
             '作者': author,
-            '发布时间': pub_time,
+            '作者链接': self._first_href('.author-container a, .author-wrapper a'),
+            '发布时间': publish_time,
+            '发布地区': region,
             '点赞数': like_count,
             '收藏数': collect_count,
             '评论数': comment_count,
+            '图片数': len(self.driver.find_elements(By.CSS_SELECTOR, '.media-container img, .note-slider img')),
+            '话题': ' | '.join(self._topics(content)),
             '评论列表': comments,
         }
 
-    def _extract_count(self, selector: str) -> int:
+    def _wait_for_text(self, selector: str, polls: int = 6) -> str:
+        """Poll a field until it has text — the note body hydrates piecewise.
+
+        The author name in particular renders after the title, so reading it
+        once right after the title appeared used to return ''. Poll-counted
+        rather than clock-based, so a fake driver costs nothing.
+        """
+        text = self._text_of(self.driver, selector)
+        for _ in range(max(0, polls - 1)):
+            if text:
+                break
+            time.sleep(0.2)
+            text = self._text_of(self.driver, selector)
+        return text
+
+    def _engage_count(self, wrapper: str) -> int:
+        """One number out of the note's own engage bar.
+
+        Scoped from the tightest container outwards: ``.like-wrapper .count``
+        on its own also matches every comment's like button, and reading the
+        first of those reported a comment's '1' as the note's like count.
+        """
+        for scope in ('.engage-bar .buttons .left', '.engage-bar', '.interactions'):
+            try:
+                roots = self.driver.find_elements(By.CSS_SELECTOR, scope)
+            except NoSuchElementException:
+                roots = []
+            for root in roots:
+                text = self._text_of(root, f'.{wrapper} .count')
+                if text:
+                    return self._number_in(text)
+        return self._count_in(f'.{wrapper} .count')
+
+    def _count_in(self, selector: str) -> int:
         try:
-            el = self.driver.find_element(By.CSS_SELECTOR, selector)
-            text = el.text.strip()
-            return self._extract_count_from_text(text)
+            els = self.driver.find_elements(By.CSS_SELECTOR, selector)
         except NoSuchElementException:
             return 0
+        for el in els:
+            text = self._node_text(el)
+            if text:
+                return self._number_in(text)
+        return 0
+
+    def _first_href(self, selector: str) -> str:
+        try:
+            els = self.driver.find_elements(By.CSS_SELECTOR, selector)
+        except NoSuchElementException:
+            return ''
+        for el in els:
+            href = el.get_attribute('href') or ''
+            if href:
+                return href
+        return ''
+
+    @staticmethod
+    def _split_date_location(raw: str) -> tuple[str, str]:
+        """'09-10 辽宁' → ('09-10', '辽宁'); '编辑于 3天前 海南' likewise.
+
+        The site appends the IP region to the same node, which used to land in
+        the date column and made every downstream time filter useless.
+        """
+        text = (raw or '').strip()
+        if not text:
+            return '', ''
+        m = re.search(r'((?:编辑于\s*)?(?:\d{4}-)?\d{1,2}-\d{1,2}|\d+\s*(?:分钟|小时|天)前|昨天|今天)', text)
+        if not m:
+            return text, ''
+        publish = m.group(1).strip()
+        region = text[m.end() :].strip()
+        return publish, region
+
+    @staticmethod
+    def _topics(content: str) -> list:
+        """'#tag' tokens of the note body, in order, without the leading #."""
+        return list(dict.fromkeys(re.findall(r'#([^#\s\[\]]{1,40})', content or '')))
+
+    def _extract_count(self, selector: str) -> int:
+        return self._count_in(selector)
 
     @staticmethod
     def _extract_count_from_text(text: str) -> int:
@@ -240,43 +387,10 @@ class XiaohongshuCrawler(Crawler):
 
         for idx, item in enumerate(comment_items[:max_comments]):
             try:
-                comment_author = ''
-                try:
-                    author_elem = item.find_element(By.CSS_SELECTOR, '.name')
-                    comment_author = author_elem.text.strip()
-                except NoSuchElementException:
-                    pass
-
-                comment_content = ''
-                try:
-                    content_elem = item.find_element(By.CSS_SELECTOR, '.content .note-text')
-                    comment_content = self.driver.execute_script(
-                        "return arguments[0].innerText || arguments[0].textContent || ''",
-                        content_elem,
-                    ).strip()
-                except NoSuchElementException:
-                    try:
-                        content_elem = item.find_element(By.CSS_SELECTOR, '.content')
-                        comment_content = self.driver.execute_script(
-                            "return arguments[0].innerText || arguments[0].textContent || ''",
-                            content_elem,
-                        ).strip()
-                    except NoSuchElementException:
-                        pass
-
-                like_count = 0
-                try:
-                    like_elem = item.find_element(By.CSS_SELECTOR, '.like .count')
-                    like_count = self._extract_count_from_text(like_elem.text)
-                except NoSuchElementException:
-                    pass
-
-                comment_time = ''
-                try:
-                    time_elem = item.find_element(By.CSS_SELECTOR, '.date')
-                    comment_time = time_elem.text.strip()
-                except NoSuchElementException:
-                    pass
+                comment_author = self._text_of(item, '.name')
+                comment_content = self._text_of(item, '.content .note-text') or self._text_of(item, '.content')
+                like_count = self._number_in(self._text_of(item, '.like .count, .like-wrapper .count'))
+                comment_time = self._text_of(item, '.date')
 
                 if comment_content:
                     comments.append(

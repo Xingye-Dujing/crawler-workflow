@@ -4,6 +4,7 @@ These four functions are used by the crawler parsers and by every download /
 export path, so their edges are the interesting parts: a scraped title becomes
 a file name, and a scraped counter arrives as '1,234' or '3.5万' of text.
 """
+
 import io
 
 import pandas as pd
@@ -19,19 +20,22 @@ class TestSanitizeFilename:
     def test_reserved_characters_become_underscores(self, char):
         assert sanitize_filename(f'名字{char}后缀') == '名字_后缀'
 
-    @pytest.mark.parametrize('code', [0x00, 0x0a, 0x1f])
+    @pytest.mark.parametrize('code', [0x00, 0x0A, 0x1F])
     def test_control_characters_are_neutralised(self, code):
         assert sanitize_filename(f'a{chr(code)}b') == 'a_b'
 
-    @pytest.mark.parametrize('raw, expected', [
-        ('..name..', 'name'),
-        ('  spaced  ', 'spaced'),
-        ('.', ''),
-        ('...', ''),
-        ('', ''),
-        (None, ''),
-        ('正常中文名', '正常中文名'),
-    ])
+    @pytest.mark.parametrize(
+        'raw, expected',
+        [
+            ('..name..', 'name'),
+            ('  spaced  ', 'spaced'),
+            ('.', ''),
+            ('...', ''),
+            ('', ''),
+            (None, ''),
+            ('正常中文名', '正常中文名'),
+        ],
+    )
     def test_edge_shapes(self, raw, expected):
         assert sanitize_filename(raw) == expected
 
@@ -55,16 +59,19 @@ class TestSanitizeFilename:
 
 
 class TestExtractNumber:
-    @pytest.mark.parametrize('text, expected', [
-        ('1234', 1234),
-        ('1,234', 1234),
-        ('1,234,567', 1234567),
-        ('点赞 42 次', 42),
-        ('0', 0),
-        ('无数字', 0),
-        ('', 0),
-        (None, 0),
-    ])
+    @pytest.mark.parametrize(
+        'text, expected',
+        [
+            ('1234', 1234),
+            ('1,234', 1234),
+            ('1,234,567', 1234567),
+            ('点赞 42 次', 42),
+            ('0', 0),
+            ('无数字', 0),
+            ('', 0),
+            (None, 0),
+        ],
+    )
     def test_the_first_integer_wins(self, text, expected):
         assert extract_number(text) == expected
 

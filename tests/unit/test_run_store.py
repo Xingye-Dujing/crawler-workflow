@@ -11,6 +11,7 @@ properties the resume feature silently depends on:
 - dedupe + caps (a resumed crawl never double-collects; a runaway cannot fill
   the disk).
 """
+
 import threading
 
 import pytest
@@ -302,7 +303,7 @@ class TestRows:
         _start(store)
         store.append_rows('r1', 'n1', sample_rows[:1])
         store._execute(
-            "INSERT INTO node_rows (run_id, node_id, seq, row_key, payload, created_at) "
+            'INSERT INTO node_rows (run_id, node_id, seq, row_key, payload, created_at) '
             "VALUES ('r1','n1',99,'k','{nope','x')"
         )
         rows = store.load_rows('r1', 'n1')

@@ -4,9 +4,14 @@ OpenRouter must never be really called from tests (user requirement), so every
 HTTP path goes through monkeypatched ``requests``; the local-Ollama path is
 exercised against a fake ``ollama.Client``. The contracts pinned here are the
 ones the row-runner and the UI depend on: provider routing, error *kinds*
-(auth/quota/model/rate_limit/…), retry behaviour, payload shapes, and the
+(auth/quota/model/rate_limit/…), retry behaviour, payload shapes, how fast a
+Stop lands between attempts, and the
 model-list endpoints' filtering — all without a byte leaving the machine.
 """
+
+import threading
+import time
+
 import pytest
 
 import analyzers.llm_client as lc
@@ -113,6 +118,7 @@ class TestOpenRouter:
                 client.chat('p')
             assert err.value.kind == kind
             assert len(sent['calls']) == 1
+
     def test_transitive_5xx_retries_then_raises_network(self, monkeypatch, no_sleep):
         sent = self._post(monkeypatch, FakeResponse(503, text='down'))
         client = LLMClient(provider='openrouter', model='m', api_key='k')
@@ -251,6 +257,102 @@ class TestOllamaTransport:
         with pytest.raises(LLMError) as err:
             LLMClient(provider='ollama', model='').chat('p')
         assert err.value.kind == 'model'
+
+
+# ─── interruptible retry backoff (Stop latency) ─────────────────────────
+
+
+class TestInterruptibleBackoff:
+    """A stopped run must stop *now*, not after the backoff it was mid-way through.
+
+    Both transports used to call ``time.sleep`` between attempts: with a
+    300 s daemon timeout, exponential backoff and a ``Retry-After`` on top, the
+    Stop button could take minutes to land. The client now naps on the run's
+    cancel event instead, so these tests are timing tests — generously bounded,
+    but far below the seconds the sleeps would otherwise cost.
+    """
+
+    def test_client_accepts_the_cancel_event_by_that_name(self):
+        # app.py constructs the client with this exact keyword — a rename here
+        # breaks every LLM run with a TypeError, not just these tests.
+        ev = threading.Event()
+        assert LLMClient(cancel_event=ev)._cancel is ev
+        assert LLMClient()._cancel is None
+
+    def test_sleep_uses_the_clock_when_nothing_can_cancel_it(self, monkeypatch):
+        slept = []
+        monkeypatch.setattr(lc.time, 'sleep', lambda s: slept.append(s))
+        LLMClient()._sleep(1.25)
+        assert slept == [1.25]
+
+    def test_sleep_returns_at_once_when_the_flag_is_already_up(self):
+        ev = threading.Event()
+        ev.set()
+        started = time.monotonic()
+        LLMClient(cancel_event=ev)._sleep(3600)
+        assert time.monotonic() - started < 1.0
+
+    def test_sleep_wakes_when_the_flag_is_raised_mid_flight(self):
+        ev = threading.Event()
+        threading.Timer(0.05, ev.set).start()
+        started = time.monotonic()
+        LLMClient(cancel_event=ev)._sleep(3600)
+        assert ev.is_set()
+        assert time.monotonic() - started < 5.0
+
+    def test_openrouter_backoff_does_not_outlive_a_stop(self, monkeypatch):
+        def raise_conn(*a, **k):
+            raise lc.requests.RequestException('refused')
+
+        monkeypatch.setattr(lc.requests, 'post', raise_conn)
+        ev = threading.Event()
+        ev.set()
+        client = LLMClient(provider='openrouter', model='m', api_key='k', cancel_event=ev)
+        started = time.monotonic()
+        with pytest.raises(LLMError) as err:
+            client.chat('p', max_retries=4)  # would sleep 2 + 4 + 8 + 16 s
+        assert err.value.kind == 'network'
+        assert time.monotonic() - started < 2.0
+
+    def test_one_blip_still_retries_and_answers(self, monkeypatch):
+        # A raised Stop flag shortens the nap; it must not skip the retry itself.
+        calls = []
+
+        def flaky(*a, **k):
+            calls.append(1)
+            if len(calls) == 1:
+                raise lc.requests.RequestException('transient blip')
+            return FakeResponse(200, chat_payload('Emotion: pos'))
+
+        monkeypatch.setattr(lc.requests, 'post', flaky)
+        ev = threading.Event()
+        ev.set()
+        client = LLMClient(provider='openrouter', model='m', api_key='k', cancel_event=ev)
+        started = time.monotonic()
+        assert client.chat('p', max_retries=2) == 'Emotion: pos'
+        assert len(calls) == 2
+        assert time.monotonic() - started < 2.0
+
+    def test_ollama_backoff_does_not_outlive_a_stop(self, fake_ollama, monkeypatch):
+        import ollama
+
+        monkeypatch.setattr(lc, '_CHAT_KWARGS', frozenset())
+
+        class Dead(fake_ollama):
+            def chat(self, **kwargs):
+                self.calls.append(kwargs)
+                raise ConnectionRefusedError('connection refused')
+
+        monkeypatch.setattr(ollama, 'Client', Dead)
+        ev = threading.Event()
+        ev.set()
+        client = LLMClient(provider='ollama', model='m', host='http://127.0.0.1:9', cancel_event=ev)
+        started = time.monotonic()
+        with pytest.raises(LLMError) as err:
+            client.chat('p', max_retries=4)  # would sleep 0.5 + 1 + 1.5 + 2 s
+        assert err.value.kind == 'network'
+        assert len(Dead.instances[0].calls) == 4  # retries still happen
+        assert time.monotonic() - started < 2.0
 
 
 class TestBaseUrl:

@@ -6,6 +6,7 @@ green. Kept deliberately tiny: one short prompt per scenario — the point is
 that the transport, the daemon's answer shape, and the error classification
 work together against the real thing, not benchmark quality.
 """
+
 import time
 
 import pytest

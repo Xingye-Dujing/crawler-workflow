@@ -102,7 +102,7 @@ _ZH = {
     'llm.circuit_break': '连续 {f} 行调用失败——疑似网络断开 / Key 失效 / 模型不可用，本节点已中止。'
     '已完成 {done}/{total} 行并全部保存，恢复后重新执行会自动从断点续跑。',
     'llm.node_done': '[{label}] 节点完成 {done}/{total} 行',
-    'llm.missing_column': 'DataFrame 缺少必需的列“{col}”。跳过 {label}。',
+    'llm.missing_column': 'DataFrame 缺少必需的列“{col}”——{label} 节点失败，请检查文本列配置',
     'llm.no_rows': '[{label}] 没有需要处理的行（“{col}”列为空）。',
     'llm.start': '[{label}] 共 {total} 行待处理，调用方式：{transport}（每条数据一次询问，文本越长越耗 token）',
     'llm.aborted': '[{label}] 中止：{err}（已完成 {done} 行的结果已保存）',
@@ -118,6 +118,8 @@ _ZH = {
     'label.tendency': '倾向性分析',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': '开始搜索知乎关键词: "{kw}"，目标获取 {n} 条结果',
+    'crawl.cookiesSeeded': 'Cookie 预置：{host} 接受 {n}/{total} 条',
+    'crawl.loginWall': '登录墙：{platform} 的 {where} 被重定向到登录页，已停止本次抓取（仅返回已拿到的数据）',
     'crawl.zhihu.url': '搜索URL: {url}',
     'crawl.zhihu.loaded': '搜索页面已加载，开始滚动加载更多内容...',
     'crawl.zhihu.cards': '滚动加载完成，共获取到 {n} 个卡片元素',
@@ -238,6 +240,18 @@ _ZH = {
     'ml.emotion_done': '[ML] 情感分类完成，共处理 {n} 行，模式: ML',
     'ml.tendency_done': '[ML] 倾向性分析完成，共处理 {n} 行，模式: ML',
     'cookie.saved': '已保存 {platform} 的 Cookie',
+    'cookie.started': '已启动登录浏览器，请在弹出的窗口完成登录，然后点「已完成登录」',
+    'cookie.jobCancelled': '{platform} 登录已取消',
+    'cookie.windowClosed': '登录窗口被关闭，未捕获 Cookie；请重新发起登录',
+    'cookie.noCookies': '等待结束仍未获得 Cookie——若登录未完成，请重试',
+    'api.cookieBusy': '已有 {platform} 的登录窗口打开中——请先完成或取消它',
+    'api.bodyNotObject': '请求体必须是 JSON 对象',
+    'api.paramInvalid': '参数 {name} 无效',
+    'api.payloadTooLarge': '请求体超过上限 {limit} MB，请分割后重试',
+    'api.workflowNameRequired': '缺少有效的工作流名称',
+    'api.fieldTypeInvalid': '字段 {name} 类型不正确',
+    'api.stepsMustBeObjects': 'steps 必须是对象列表，每项含 "op" 与可选 "params"',
+    'api.noCookieJob': '当前没有进行中的登录窗口',
     'cookie.deleted': '已删除 {platform} 的 Cookie',
     'store.workflow_saved': '工作流已保存：{path}',
     'store.dataset_saved': '文件已持久化：{name}（{rows} 行，id {did}）',
@@ -348,6 +362,8 @@ _ZH = {
     'run.resume_from': '续跑模式：接着 {at} 那次往下跑，此前已保存 {rows} 行',
     'run.restored': '节点 {nid} 沿用上次结果（{n} 行），不再重跑',
     'run.resume_crawl': '节点 {nid} 从上次中断处继续抓取（已有 {have} 行）',
+    'run.recrawl': '重新采集：已释放 {n} 条历史去重记录，本节点将重新抓取',
+    'run.dedupe_skipped': '增量采集：{n} 条结果此前已采集，本次被跳过（如需重抓请在采集节点开启「重新采集」）',
     'run.partial_down': '节点 {nid} 中断：已把 {n} 行已完成的结果交给下游',
     'run.failed_down': '节点 {nid} 失败且没有可用数据，下游按空表继续',
     'run.skipped_empty': '节点 {nid} 跳过：上游没有数据',
@@ -425,7 +441,10 @@ _EN = {
     'This node is aborted. {done}/{total} rows are finished and saved; re-running resumes from '
     'the checkpoint and only refills the rest.',
     'llm.node_done': '[{label}] Node finished {done}/{total} rows',
-    'llm.missing_column': 'DataFrame is missing the required column "{col}". Skipping {label}.',
+    'llm.missing_column': (
+        'DataFrame is missing the required column "{col}" — the {label} node failed;'
+        ' check its text-column setting'
+    ),
     'llm.no_rows': '[{label}] Nothing to process (column "{col}" is empty).',
     'llm.start': '[{label}] {total} rows queued via {transport} (one request per row — longer text costs more tokens)',
     'llm.aborted': '[{label}] Aborted: {err} ({done} finished rows are saved)',
@@ -442,6 +461,11 @@ _EN = {
     'label.tendency': 'Tendency',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': 'Searching Zhihu for "{kw}", target {n} results',
+    'crawl.cookiesSeeded': 'Cookies seeded: {host} accepted {n}/{total}',
+    'crawl.loginWall': (
+        'Login wall: {platform} redirected {where} to a login page; the crawl stopped'
+        ' early (data collected so far is kept)'
+    ),
     'crawl.zhihu.url': 'Search URL: {url}',
     'crawl.zhihu.loaded': 'Search page loaded, scrolling for more content...',
     'crawl.zhihu.cards': 'Scrolling done, {n} card elements collected',
@@ -562,6 +586,18 @@ _EN = {
     'ml.emotion_done': '[ML] Emotion classification done, {n} rows, mode: ML',
     'ml.tendency_done': '[ML] Tendency analysis done, {n} rows, mode: ML',
     'cookie.saved': 'Cookies saved for {platform}',
+    'cookie.started': 'Login browser opened — finish the login in that window, then press Done',
+    'cookie.jobCancelled': '{platform} login cancelled',
+    'cookie.windowClosed': 'The login window was closed before cookies could be captured; start again',
+    'cookie.noCookies': 'No cookies captured before the wait ended — retry if the login was unfinished',
+    'api.cookieBusy': 'A {platform} login window is already open — finish or cancel it first',
+    'api.bodyNotObject': 'request body must be a JSON object',
+    'api.paramInvalid': 'parameter {name} is invalid',
+    'api.payloadTooLarge': 'request body exceeds the {limit} MB ceiling — split it up',
+    'api.workflowNameRequired': 'a valid workflow name is required',
+    'api.fieldTypeInvalid': 'field {name} has the wrong type',
+    'api.stepsMustBeObjects': 'steps must be a list of objects, each with an "op" and optional "params"',
+    'api.noCookieJob': 'No cookie login is currently active',
     'cookie.deleted': 'Cookies deleted for {platform}',
     'store.workflow_saved': 'Workflow saved: {path}',
     'store.dataset_saved': 'File stored: {name} ({rows} rows, id {did})',
@@ -670,6 +706,11 @@ _EN = {
     'run.resume_from': 'Resuming the run interrupted at {at} — {rows} rows already stored',
     'run.restored': 'Node {nid} reuses its previous result ({n} rows) instead of running again',
     'run.resume_crawl': 'Node {nid} continues crawling from where it stopped ({have} rows already saved)',
+    'run.recrawl': 'Re-crawl: released {n} dedupe records; this node will collect again',
+    'run.dedupe_skipped': (
+        'Incremental: {n} already-collected items were skipped (enable Recrawl on the'
+        ' source node to re-collect)'
+    ),
     'run.partial_down': 'Node {nid} interrupted — its {n} finished rows are handed downstream',
     'run.failed_down': 'Node {nid} failed with nothing usable — downstream sees an empty table',
     'run.skipped_empty': 'Node {nid} skipped: no data arrived from upstream',

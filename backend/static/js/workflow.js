@@ -416,7 +416,11 @@ function openSettings(nodeId) {
                 'onchange="updateParam(\'' + nodeId + '\',\'keyword\',this.value)"></div>' +
                 '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.targetCount') + '</label>' +
                 '<input class="settings-input" type="number" value="' + (p.target_count || 50) + '" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'target_count\',parseInt(this.value)||50)"></div>';
+                'onchange="updateParam(\'' + nodeId + '\',\'target_count\',parseInt(this.value)||50)"></div>' +
+                '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
+                '<input type="checkbox" ' + (p.recrawl ? 'checked' : '') + ' ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'recrawl\',this.checked)">' + I18n.t('settings.recrawl') + '</label>' +
+                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.recrawlHint') + '</div></div>';
         }
         if (p.platform === 'weibo') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.startTime') + '</label>' +
@@ -2045,28 +2049,123 @@ function showDialog(opts) {
     });
 }
 
-/* Cookie Configuration */
-function openCookieDialog() {
-    var dialog = document.getElementById('cookie-dialog');
-    dialog.classList.toggle('open');
-    if (dialog.classList.contains('open')) {
-        /* Refresh cookie status */
-        fetch('/api/cookies/status')
-            .then(function (r) { return r.json(); })
-            .then(function (result) {
-                var statusEl = document.getElementById('cookie-status');
-                if (result.ok) {
-                    var lines = [];
-                    Object.keys(result.cookies).forEach(function (p) {
-                        lines.push(p + ': ' + (result.cookies[p] ? 'Configured' : 'Not set'));
-                    });
-                    statusEl.textContent = lines.join(' | ');
-                }
-            }).catch(function () { });
+/* Every cookie-panel call shares one guard: a refused connection (the debug
+   server restarting) or an HTML error page used to surface as
+   'Uncaught (in promise) TypeError: Failed to fetch' in the console and
+   nothing on screen. This always resolves to a plain {ok, error} object —
+   callers only render. */
+function fetchJSON(url, options) {
+    return fetch(url, options)
+        .then(function (r) {
+            return r.text().then(function (txt) {
+                var body = null;
+                try { body = txt ? JSON.parse(txt) : null; } catch (e) { body = null; }
+                if (body && typeof body === 'object') return body;
+                return { ok: false, error: 'HTTP ' + r.status };
+            });
+        })
+        .catch(function (e) {
+            return { ok: false, error: (e && e.message) || String(e), unreachable: true };
+        });
+}
+
+/* Cookie Configuration — driven by the server-side single-flight login job.
+   The browser opens server-side and the job lives in app state; this dialog
+   polls its status, offers Done/Cancel, and REFUSES to close while a login is
+   waiting: the dialog's buttons are the only way to finish or abort that
+   browser, and closing it used to leave the login window orphaned. */
+var cookieJob = { active: false, known: false, timer: null, platform: '' };
+
+function refreshCookieStatus() {
+    fetchJSON('/api/cookies/status').then(function (result) {
+        var statusEl = document.getElementById('cookie-status');
+        if (!statusEl || cookieJob.active) return;
+        if (result.ok) {
+            var lines = [];
+            Object.keys(result.cookies).forEach(function (p) {
+                lines.push(p + ': ' + (result.cookies[p] ? 'OK' : '-'));
+            });
+            statusEl.textContent = lines.join('  |  ');
+        } else {
+            statusEl.textContent = I18n.t('cookie.unreachable');
+        }
+    });
+}
+
+function setCookieJobUI(on) {
+    var actions = document.getElementById('cookie-job-actions');
+    if (actions) actions.style.display = on ? 'flex' : 'none';
+    ['cookie-platform', 'cookie-wait', 'cookie-json'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.disabled = !!on;
+    });
+    var buttons = document.querySelectorAll('#cookie-content button');
+    for (var i = 0; i < buttons.length; i++) {
+        if (!buttons[i].closest('#cookie-job-actions')) buttons[i].disabled = !!on;
     }
 }
 
+function pollCookieJob() {
+    fetchJSON('/api/cookies/generate/status').then(function (s) {
+        if (!s.ok) return;
+        var statusEl = document.getElementById('cookie-status');
+        if (s.active) {
+            cookieJob.active = true;
+            cookieJob.known = true;
+            cookieJob.platform = s.platform;
+            setCookieJobUI(true);
+            if (statusEl) statusEl.textContent = I18n.t('cookie.waiting').replace('{platform}', s.platform);
+            return;
+        }
+        clearInterval(cookieJob.timer);
+        cookieJob.timer = null;
+        if (!cookieJob.known) {
+            cookieJob.active = false;
+            setCookieJobUI(false);
+            return;
+        }
+        cookieJob.active = false;
+        cookieJob.known = false;
+        setCookieJobUI(false);
+        if (!statusEl) return;
+        if (s.phase === 'saved') {
+            statusEl.textContent = I18n.t('cookie.savedN').replace('{platform}', s.platform).replace('{n}', s.count);
+            showToast(I18n.t('toast.cookiesSaved') + ' - ' + s.platform);
+            refreshCookieStatus();
+        } else if (s.phase === 'cancelled') {
+            statusEl.textContent = I18n.t('cookie.cancelledMsg').replace('{platform}', s.platform);
+        } else if (s.phase === 'error') {
+            statusEl.textContent = I18n.t('cookie.failed').replace('{err}', s.error || '');
+        }
+    });
+}
+
+function openCookieDialog() {
+    var dialog = document.getElementById('cookie-dialog');
+    dialog.classList.toggle('open');
+    if (!dialog.classList.contains('open')) return;
+    /* Adopt a job that is already running (started before the dialog was
+       closed/reopened, or from another tab of this page). */
+    fetchJSON('/api/cookies/generate/status').then(function (s) {
+        if (s.ok && s.active) {
+            cookieJob.active = true;
+            cookieJob.known = true;
+            cookieJob.platform = s.platform;
+            setCookieJobUI(true);
+            if (!cookieJob.timer) cookieJob.timer = setInterval(pollCookieJob, 1000);
+        }
+    });
+    refreshCookieStatus();
+}
+
 function closeCookieDialog() {
+    if (cookieJob.active) {
+        /* While a login browser waits, this dialog's Done/Cancel buttons are
+           the only way to resolve it — closing here would orphan that browser
+           (and its driver process) with nobody watching. */
+        showToast(I18n.t('cookie.mustStay'));
+        return;
+    }
     document.getElementById('cookie-dialog').classList.remove('open');
 }
 
@@ -2079,12 +2178,11 @@ function saveCookieConfig() {
     }
     try {
         var cookies = JSON.parse(jsonStr);
-        fetch('/api/cookies/save', {
+        fetchJSON('/api/cookies/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ platform: platform, cookies: cookies }),
         })
-            .then(function (r) { return r.json(); })
             .then(function (result) {
                 if (result.ok) {
                     showToast(I18n.t('toast.cookiesSaved') + ' - ' + platform);
@@ -2099,26 +2197,56 @@ function saveCookieConfig() {
 }
 
 function generateCookie() {
+    if (cookieJob.active) return;  // single-flight: one login browser at a time
     var platform = document.getElementById('cookie-platform').value;
     var waitSeconds = parseInt(document.getElementById('cookie-wait').value) || 120;
     var statusEl = document.getElementById('cookie-status');
     statusEl.textContent = I18n.t('cookie.opening')
         .replace('{platform}', platform)
         .replace('{s}', waitSeconds);
-    fetch('/api/cookies/generate', {
+    fetchJSON('/api/cookies/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platform: platform, wait_seconds: waitSeconds }),
     })
-        .then(function (r) { return r.json(); })
         .then(function (result) {
             if (result.ok) {
-                statusEl.textContent = I18n.t('cookie.generated').replace('{platform}', platform);
-                showToast(I18n.t('toast.cookiesSaved') + ' - ' + platform);
+                cookieJob.active = true;
+                cookieJob.known = true;
+                cookieJob.platform = platform;
+                setCookieJobUI(true);
+                cookieJob.timer = setInterval(pollCookieJob, 1000);
             } else {
                 statusEl.textContent = I18n.t('cookie.failed').replace('{err}', result.error || '');
+                if (result.busy) {
+                    /* Another login is in flight (this tab or an earlier one):
+                       adopt it so its Done/Cancel buttons appear here. */
+                    cookieJob.active = true;
+                    cookieJob.known = true;
+                    setCookieJobUI(true);
+                    if (!cookieJob.timer) cookieJob.timer = setInterval(pollCookieJob, 1000);
+                }
             }
         });
+}
+
+function confirmCookieLogin() {
+    fetchJSON('/api/cookies/generate/confirm', { method: 'POST' }).then(function (result) {
+        var statusEl = document.getElementById('cookie-status');
+        if (!result.ok && statusEl) {
+            statusEl.textContent = I18n.t('cookie.failed').replace('{err}', result.error || '');
+        }
+        /* Otherwise the 1s poll picks up the capture and settles the dialog. */
+    });
+}
+
+function cancelCookieLogin() {
+    fetchJSON('/api/cookies/generate/cancel', { method: 'POST' }).then(function (result) {
+        var statusEl = document.getElementById('cookie-status');
+        if (!result.ok && statusEl) {
+            statusEl.textContent = I18n.t('cookie.failed').replace('{err}', result.error || '');
+        }
+    });
 }
 
 /* ── Resume banner ─────────────────────────────────────────────

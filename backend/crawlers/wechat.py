@@ -2,7 +2,7 @@ import logging
 import re
 import time
 
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
@@ -22,6 +22,10 @@ class WechatCrawler(Crawler):
     """
 
     domain = 'mp.weixin.qq.com'
+    # Real URLS: they can be used during the test.
+    # https://mp.weixin.qq.com/s/cAx1zGfT2MzqpwnhULmSQA
+    # https://mp.weixin.qq.com/s/q59mL_dHixC97p19RpcfVQ
+    # https://mp.weixin.qq.com/s/f_2nB7u7pQApgIoPsBKMQg
     login_url = 'https://mp.weixin.qq.com/'
 
     # ------------------------------------------------------------------
@@ -90,7 +94,9 @@ class WechatCrawler(Crawler):
 
             if idx < total:
                 logger.info(t('crawl.wechat.wait'))
-                time.sleep(0.1)
+                # The log above promises a second, and a batch of articles is
+                # exactly where WeChat's rate limiter bites — keep the promise.
+                self._polite_pause(1.0, 0.3)
 
         logger.info('')
         logger.info('=' * 70)
@@ -112,13 +118,14 @@ class WechatCrawler(Crawler):
             WebDriverWait(self.driver, 15).until(ec.presence_of_element_located((By.CSS_SELECTOR, '#activity-name')))
             logger.info(t('crawl.wechat.loaded'))
         except TimeoutException:
+            if self.check_login_wall(url):
+                return None
             logger.warning(t('crawl.wechat.timeout', url=url))
             return None
 
         # Scroll to bottom to trigger lazy-loaded elements (read counts, etc.)
         logger.info(t('crawl.wechat.scroll'))
-        self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-        time.sleep(0.1)
+        self.scroll_down(steps=2, wait=0.2)
         logger.info(t('crawl.wechat.scroll_done'))
 
         # ---- Extract fields ----
@@ -132,6 +139,8 @@ class WechatCrawler(Crawler):
 
         pub_time = self.get_publish_time()
         logger.info(t('crawl.wechat.pub_time', time=pub_time or '(empty)'))
+
+        region = self.get_ip_region()
 
         content = self.get_content()
         logger.info(t('crawl.wechat.content_len', n=len(content)))
@@ -155,7 +164,10 @@ class WechatCrawler(Crawler):
             '标题': title,
             '公众号': author,
             '发布时间': pub_time,
+            '发布地区': region,
+            '是否原创': '是' if self.is_original() else '',
             '正文': content[:5000] + ('...' if len(content) > 5000 else ''),
+            '正文图片数': self.get_image_count(),
             '阅读数': read_num,
             '在看数': like_num,
             '赞赏数': reward_num,
@@ -177,80 +189,116 @@ class WechatCrawler(Crawler):
         Returns:
             Stripped text or default.
         """
-        try:
-            sub = element.find_element(By.CSS_SELECTOR, selector)
-            return sub.text.strip()
-        except NoSuchElementException:
-            return default
+        return self._text_of(element, selector, default) or default
 
     def get_article_title(self) -> str:
         """Extract article title from #activity-name."""
-        try:
-            el = self.driver.find_element(By.CSS_SELECTOR, '#activity-name')
-            return el.text.strip()
-        except NoSuchElementException:
+        title = self._text_of(self.driver, '#activity-name')
+        if not title:
             logger.debug(t('crawl.debug.title_missing'))
-            return ''
+        return ' '.join(title.split())
 
     def get_author(self) -> str:
         """Extract the official account name (公众号)."""
-        selectors = ['#js_name', '#profileBt a', '.rich_media_meta_nickname a']
+        selectors = ['#js_name', '#profileBt a', '.rich_media_meta_nickname a', '#js_author_name']
         for sel in selectors:
             try:
                 els = self.driver.find_elements(By.CSS_SELECTOR, sel)
-                if els:
-                    text = els[0].text.strip()
-                    if text:
-                        return text
             except Exception:
                 continue
+            for el in els:
+                text = ' '.join(self._node_text(el).split())
+                if text:
+                    return text
         logger.debug(t('crawl.debug.author_missing'))
         return ''
 
     def get_publish_time(self) -> str:
-        """Extract the article publish time."""
+        """Extract the article publish time.
+
+        The page renders a Chinese date ('2026年9月15日 13:08'), not the ISO form
+        the local fixture uses, so both spellings have to be recognised — the
+        old ``\\d{4}-\\d{1,2}-\\d{1,2}`` test matched neither and the column came
+        back empty on every real article.
+        """
         selectors = ['#publish_time', '#meta_content .rich_media_meta_text']
         for sel in selectors:
             try:
                 els = self.driver.find_elements(By.CSS_SELECTOR, sel)
-                for el in els:
-                    text = el.text.strip()
-                    # Only return text that looks like a date
-                    if re.search(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}', text):
-                        return text
             except Exception:
                 continue
+            for el in els:
+                text = self._node_text(el)
+                if self._DATE_RE.search(text):
+                    return text
         logger.debug(t('crawl.debug.time_missing'))
         return ''
 
+    _DATE_RE = re.compile(r'\d{4}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2}|\d{1,2}\s*小时前|\d{1,2}\s*分钟前')
+
+    def get_ip_region(self) -> str:
+        """The province the article was published from (发布地区).
+
+        ``#js_ip_wording`` is that node on a live page. The fallback walks the
+        ``.rich_media_meta_text`` spans — which also hold the date and, on some
+        templates, the account name — so anything already used for another
+        column is rejected rather than copied into this one.
+        """
+        direct = self._text_of(self.driver, '#js_ip_wording, .rich_media_meta_ip_wording')
+        if direct:
+            return direct
+        try:
+            els = self.driver.find_elements(By.CSS_SELECTOR, '.rich_media_meta_text')
+        except Exception:
+            return ''
+        taken = {self.get_publish_time(), self.get_author()}
+        for el in els:
+            text = ' '.join(self._node_text(el).split())
+            if not text or text in taken or self._DATE_RE.search(text):
+                continue
+            if re.fullmatch(r'[\u4e00-\u9fa5]{2,8}', text):
+                return text
+        return ''
+
+    def is_original(self) -> bool:
+        """Whether the article carries WeChat's 原创 mark."""
+        try:
+            meta = self._node_text(self.driver.find_element(By.CSS_SELECTOR, '#meta_content'))
+        except Exception:
+            return False
+        return '原创' in meta
+
+    def get_image_count(self) -> int:
+        """How many pictures the body holds (正文图片数)."""
+        try:
+            return len(self.driver.find_elements(By.CSS_SELECTOR, '#js_content img, .rich_media_content img'))
+        except Exception:
+            return 0
+
     def get_content(self) -> str:
         """Extract the article body text from .rich_media_content."""
-        try:
-            el = self.driver.find_element(By.CSS_SELECTOR, '.rich_media_content')
-            text = self.driver.execute_script(
-                "return arguments[0].innerText || arguments[0].textContent || ''",
-                el,
-            ).strip()
-            text = re.sub(r'\n\s*\n', '\n', text)
-            if text:
-                return text
-        except NoSuchElementException:
-            logger.debug(t('crawl.debug.content_missing'))
+        text = re.sub(r'\n\s*\n', '\n', self._node_text(self._content_node()))
+        if text:
+            return text
 
         # Retry once after a short wait
         logger.debug(t('crawl.debug.content_retry'))
         time.sleep(0.1)
-        try:
-            el = self.driver.find_element(By.CSS_SELECTOR, '.rich_media_content')
-            text = self.driver.execute_script(
-                "return arguments[0].innerText || arguments[0].textContent || ''",
-                el,
-            ).strip()
-            text = re.sub(r'\n\s*\n', '\n', text)
-            return text
-        except NoSuchElementException:
+        text = re.sub(r'\n\s*\n', '\n', self._node_text(self._content_node()))
+        if not text:
             logger.warning(t('crawl.wechat.no_content'))
-            return ''
+        return text
+
+    def _content_node(self):
+        """#js_content is the real body container; .rich_media_content is the
+        older spelling — both appear on live pages, in that order of trust."""
+        for sel in ('#js_content', '.rich_media_content'):
+            try:
+                return self.driver.find_element(By.CSS_SELECTOR, sel)
+            except Exception:
+                continue
+        logger.debug(t('crawl.debug.content_missing'))
+        return None
 
     def get_read_count(self) -> int:
         """Extract the read count (阅读数)."""
@@ -299,11 +347,15 @@ class WechatCrawler(Crawler):
         for sel in selectors:
             try:
                 els = self.driver.find_elements(By.CSS_SELECTOR, sel)
-                if els:
-                    text = els[0].text.strip()
-                    match = re.search(r'(\d+)', text.replace(',', ''))
-                    if match:
-                        return int(match.group(1))
             except Exception:
                 continue
+            for el in els:
+                text = self._node_text(el)
+                match = re.search(r'(\d+(?:\.\d+)?)(万|w)?', text.replace(',', ''))
+                if not match:
+                    continue
+                value = float(match.group(1))
+                if match.group(2):
+                    value *= 10000
+                return int(value)
         return 0

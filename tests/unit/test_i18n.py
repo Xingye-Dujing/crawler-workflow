@@ -12,6 +12,7 @@ is maintained by hand, so the tests double as the CI guard for it:
 Language is thread-local and workflow runs live in worker threads, so that
 boundary is pinned too.
 """
+
 import threading
 
 import pytest
@@ -42,11 +43,23 @@ def zh_by_default(restore_lang):
 
 
 class TestNormalize:
-    @pytest.mark.parametrize('value, expected', [
-        ('zh', 'zh'), ('en', 'en'), ('zh-CN', 'zh'), ('en_US', 'en'), ('ZH-HANS', 'zh'),
-        ('  en  ', 'en'), ('English', 'zh'), ('fr', 'zh'), ('en-GB', 'en'), ('', 'zh'),
-        (None, 'zh'), (123, 'zh'),
-    ])
+    @pytest.mark.parametrize(
+        'value, expected',
+        [
+            ('zh', 'zh'),
+            ('en', 'en'),
+            ('zh-CN', 'zh'),
+            ('en_US', 'en'),
+            ('ZH-HANS', 'zh'),
+            ('  en  ', 'en'),
+            ('English', 'zh'),
+            ('fr', 'zh'),
+            ('en-GB', 'en'),
+            ('', 'zh'),
+            (None, 'zh'),
+            (123, 'zh'),
+        ],
+    )
     def test_any_spelling_maps_onto_a_catalogue(self, value, expected):
         assert normalize(value) == expected
 
@@ -178,10 +191,21 @@ class TestCatalogueHealth:
             assert all(isinstance(value, str) and value.strip() for value in table.values())
 
     def test_engine_messages_exist_for_every_validated_node_type(self):
-        for suffix in ('source_no_platform', 'source_no_keyword', 'source_no_urls', 'upload_no_file',
-                       'process_no_op', 'output_no_op', 'analysis_no_op', 'tokenize_no_column',
-                       'visualize_no_chart', 'visualize_no_x', 'name_no_label', 'name_not_head',
-                       'name_no_downstream'):
+        for suffix in (
+            'source_no_platform',
+            'source_no_keyword',
+            'source_no_urls',
+            'upload_no_file',
+            'process_no_op',
+            'output_no_op',
+            'analysis_no_op',
+            'tokenize_no_column',
+            'visualize_no_chart',
+            'visualize_no_x',
+            'name_no_label',
+            'name_not_head',
+            'name_no_downstream',
+        ):
             key = f'engine.{suffix}'
             assert key in i18n._ZH and key in i18n._EN
 

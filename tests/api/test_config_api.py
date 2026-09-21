@@ -11,6 +11,7 @@ Two read/write surfaces live here and neither one should surprise the frontend:
   because the platform name becomes a path component. ``/api/cookies/generate``
   is deliberately untouched here: it drives a real browser and sleeps.
 """
+
 import pytest
 
 from config import Config

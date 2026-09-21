@@ -13,6 +13,7 @@ belongs in a test that has to run offline.
 The polling tests carry ``@pytest.mark.serial`` because the worker installs a
 ``_LogTee`` over ``sys.stdout`` for the duration of the run.
 """
+
 import os
 import time
 
@@ -324,8 +325,11 @@ class TestWorkflowExecute:
         assert nodes['node-1']['row_count'] == 0
         # Empty upstream is reported as skipped, never as a node that ran.
         assert nodes['node-2']['status'] == 'skipped'
-        # The run itself finished: a dead branch is contained, not fatal.
-        assert run['status'] == 'completed'
+        # The dead branch is contained (downstream skipped, rows kept), but
+        # the RUN must not claim 'completed' with a failed node inside — a
+        # completed run never appears in the resume banner, and the gap would
+        # be silent forever.
+        assert run['status'] == 'failed'
         assert run['node_done'] == 1, 'a skipped node must not count as done'
 
     @pytest.mark.serial

@@ -12,6 +12,7 @@ The session harness points it at the tmp dir, and the first test here is the
 guard that proves it, because ``ExecutionHistoryService`` builds its path at
 import time from ``Config.DATA_DIR``.
 """
+
 from pathlib import Path
 
 import pytest

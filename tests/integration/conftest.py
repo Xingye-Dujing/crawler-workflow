@@ -4,6 +4,7 @@ Everything in this directory additionally opts into network via pytest-socket's
 ``enable_socket`` marker (set per-file), because the root pytest.ini runs the
 fast suite with sockets disabled.
 """
+
 from pathlib import Path
 
 import pytest

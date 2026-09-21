@@ -10,6 +10,7 @@ ECharts option as raw JSON, so the contracts that matter are:
 - the matplotlib renderer refuses chart types it has no equivalent for,
   instead of drawing something misleading.
 """
+
 import base64
 import json
 
@@ -41,12 +42,14 @@ LABELS = ['丙', '乙', '甲']
 
 @pytest.fixture
 def df():
-    return pd.DataFrame({
-        '作者': ['甲', '乙', '甲', '丙'],
-        '平台': ['知乎', '微博', '知乎', '小红书'],
-        '点赞': [10.0, 25.0, 5.0, 40.0],
-        '阅读': [100, 200, 300, 400],
-    })
+    return pd.DataFrame(
+        {
+            '作者': ['甲', '乙', '甲', '丙'],
+            '平台': ['知乎', '微博', '知乎', '小红书'],
+            '点赞': [10.0, 25.0, 5.0, 40.0],
+            '阅读': [100, 200, 300, 400],
+        }
+    )
 
 
 # ─── catalogue ─────────────────────────────────────────────────────────
@@ -115,8 +118,15 @@ class TestAggregation:
     def test_counting_mode_when_no_value_field_is_given(self, df):
         assert V.to_echarts_option(df, 'bar', x='作者')['series'][0]['data'] == [1, 1, 2]
 
-    @pytest.mark.parametrize('agg, expected', [('mean', [40.0, 25.0, 7.5]), ('max', [40.0, 25.0, 10.0]),
-                                              ('min', [40.0, 25.0, 5.0]), ('count', [1.0, 1.0, 2.0])])
+    @pytest.mark.parametrize(
+        'agg, expected',
+        [
+            ('mean', [40.0, 25.0, 7.5]),
+            ('max', [40.0, 25.0, 10.0]),
+            ('min', [40.0, 25.0, 5.0]),
+            ('count', [1.0, 1.0, 2.0]),
+        ],
+    )
     def test_alternative_aggregations(self, df, agg, expected):
         assert V.to_echarts_option(df, 'line', x='作者', y='点赞', agg=agg)['series'][0]['data'] == expected
 
@@ -217,19 +227,22 @@ class TestConfigErrors:
         with pytest.raises(ChartConfigError, match='Unsupported chart type: donut'):
             V.to_echarts_option(df, 'donut', x='作者')
 
-    @pytest.mark.parametrize('chart_type, kwargs, needle', [
-        ('bar', {}, 'bar chart requires a category field'),
-        ('line', {}, 'line chart requires a category field'),
-        ('pie', {}, 'Pie chart requires a category field'),
-        ('scatter', {'x': '点赞'}, 'Scatter chart requires both x and y fields'),
-        ('histogram', {}, 'Histogram requires a numeric field'),
-        ('heatmap', {'x': '作者'}, 'Heatmap requires two category fields'),
-        ('sankey', {'x': '作者'}, 'Sankey diagram requires a source field'),
-        ('wordcloud', {}, 'Word cloud requires a text/category field'),
-        ('map', {}, 'Map chart requires a region-name field'),
-        ('box', {}, 'Box plot requires a category field'),
-        ('box', {'y': '点赞'}, 'Box plot requires a category field'),
-    ])
+    @pytest.mark.parametrize(
+        'chart_type, kwargs, needle',
+        [
+            ('bar', {}, 'bar chart requires a category field'),
+            ('line', {}, 'line chart requires a category field'),
+            ('pie', {}, 'Pie chart requires a category field'),
+            ('scatter', {'x': '点赞'}, 'Scatter chart requires both x and y fields'),
+            ('histogram', {}, 'Histogram requires a numeric field'),
+            ('heatmap', {'x': '作者'}, 'Heatmap requires two category fields'),
+            ('sankey', {'x': '作者'}, 'Sankey diagram requires a source field'),
+            ('wordcloud', {}, 'Word cloud requires a text/category field'),
+            ('map', {}, 'Map chart requires a region-name field'),
+            ('box', {}, 'Box plot requires a category field'),
+            ('box', {'y': '点赞'}, 'Box plot requires a category field'),
+        ],
+    )
     def test_specs_missing_required_fields_name_the_gap(self, df, chart_type, kwargs, needle):
         with pytest.raises(ChartConfigError) as excinfo:
             V.to_echarts_option(df, chart_type, **kwargs)
@@ -274,11 +287,14 @@ class TestRenderImage:
         with pytest.raises(ChartConfigError, match='Unsupported chart type'):
             V.render_image(df, 'donut', x='作者')
 
-    @pytest.mark.parametrize('chart_type, kwargs, needle', [
-        ('bar', {}, 'requires a field (x)'),
-        ('scatter', {'x': '点赞'}, 'requires both x and y fields'),
-        ('heatmap', {'y': '平台'}, 'requires both x and y fields'),
-    ])
+    @pytest.mark.parametrize(
+        'chart_type, kwargs, needle',
+        [
+            ('bar', {}, 'requires a field (x)'),
+            ('scatter', {'x': '点赞'}, 'requires both x and y fields'),
+            ('heatmap', {'y': '平台'}, 'requires both x and y fields'),
+        ],
+    )
     def test_missing_fields_use_the_same_message_shape(self, df, chart_type, kwargs, needle):
         with pytest.raises(ChartConfigError) as excinfo:
             V.render_image(df, chart_type, **kwargs)

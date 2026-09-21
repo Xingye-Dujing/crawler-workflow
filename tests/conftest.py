@@ -16,6 +16,7 @@ Two facts about this codebase drive everything here:
 
 Real ``data/`` and ``logs/`` must never gain a byte from a test run.
 """
+
 import contextlib
 import sys
 from pathlib import Path
@@ -173,16 +174,35 @@ def sample_rows():
     """Five crawled-row dicts, with rows 0 and 3 sharing a URL on purpose —
     dedupe and item-fingerprint tests get their duplicate for free."""
     return [
-        {'标题': '三亚旅游攻略', '作者': '旅人甲', '点赞': 12,
-         '正文': '三亚的海非常蓝，适合冬天度假。', '链接': 'https://example.com/a1'},
-        {'标题': '海口美食推荐', '作者': '吃货乙', '点赞': 30,
-         '正文': '海南粉的汤底非常鲜美。', '链接': 'https://example.com/a2'},
-        {'标题': '三亚潜水体验', '作者': '旅人甲', '点赞': 7,
-         '正文': '水下能见度很高，珊瑚很多。', '链接': 'https://example.com/a3'},
-        {'标题': '三亚旅游攻略（重发）', '作者': '旅人甲', '点赞': 15,
-         '正文': '三亚的海非常蓝，适合冬天度假！', '链接': 'https://example.com/a1'},
-        {'标题': '博鳌论坛小镇', '作者': '记者丙', '点赞': 3,
-         '正文': '小镇非常安静，适合散步。', '链接': ''},
+        {
+            '标题': '三亚旅游攻略',
+            '作者': '旅人甲',
+            '点赞': 12,
+            '正文': '三亚的海非常蓝，适合冬天度假。',
+            '链接': 'https://example.com/a1',
+        },
+        {
+            '标题': '海口美食推荐',
+            '作者': '吃货乙',
+            '点赞': 30,
+            '正文': '海南粉的汤底非常鲜美。',
+            '链接': 'https://example.com/a2',
+        },
+        {
+            '标题': '三亚潜水体验',
+            '作者': '旅人甲',
+            '点赞': 7,
+            '正文': '水下能见度很高，珊瑚很多。',
+            '链接': 'https://example.com/a3',
+        },
+        {
+            '标题': '三亚旅游攻略（重发）',
+            '作者': '旅人甲',
+            '点赞': 15,
+            '正文': '三亚的海非常蓝，适合冬天度假！',
+            '链接': 'https://example.com/a1',
+        },
+        {'标题': '博鳌论坛小镇', '作者': '记者丙', '点赞': 3, '正文': '小镇非常安静，适合散步。', '链接': ''},
     ]
 
 

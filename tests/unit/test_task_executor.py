@@ -9,6 +9,7 @@ stop/resume handshake rather than about speed:
 - a single-task group never pays for a pool,
 - ``stop()`` short-circuits both paths and ``reset()`` lets the next run work.
 """
+
 import threading
 import time
 

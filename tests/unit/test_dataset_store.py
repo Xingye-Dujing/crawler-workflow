@@ -8,6 +8,7 @@ The store's two load-bearing ideas get the most attention:
   whose id was lost is findable again by name (and row count), which is what
   lets a workflow opened tomorrow still find its inputs.
 """
+
 import pytest
 
 from config import Config

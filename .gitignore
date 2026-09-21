@@ -11,3 +11,4 @@ backend/test_*.py
 .coverage
 htmlcov/
 
+scratchpad/

@@ -28,10 +28,12 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~860 cases)**:
+- **Automated tests (pytest, ~980 cases)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
     `.venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"`
+  - Live-site tier (REAL crawls of zhihu/weibo/xiaohongshu + 3 real WeChat articles using saved
+    cookies; per-platform skip when a cookie is absent): `.venv/Scripts/python.exe -m pytest -q -m live_site`
   - Coverage: append `--cov=backend --cov-report=term` (total target ≥70%).
   - Layout: `tests/unit` (pure logic), `tests/api` (Flask test_client, fully tmp-isolated),
     `tests/integration` (LLM boundary mocks run by default; real-Chrome/Ollama are marked).

@@ -8,6 +8,7 @@ concentrate on the two failure modes that would mislead a user:
 - the same input must give the same answer, because the result is stored as a
   checkpoint and re-read after a resume.
 """
+
 import io
 
 import pandas as pd

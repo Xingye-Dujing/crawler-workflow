@@ -900,50 +900,55 @@ class VisualizationService:
         cls._require_columns(df, x, y)
 
         fig, ax = plt.subplots(figsize=(7, 4.2), dpi=130)
+        try:
+            if chart_type == 'pie':
+                labels, values = cls._aggregate(df, x, y, agg)
+                ax.pie(values, labels=labels, autopct='%1.1f%%', textprops={'fontsize': 8})
+            elif chart_type == 'scatter':
+                ax.scatter(pd.to_numeric(df[x], errors='coerce'), pd.to_numeric(df[y], errors='coerce'), s=18)
+                ax.set_xlabel(x)
+                ax.set_ylabel(y)
+            elif chart_type == 'histogram':
+                ax.hist(pd.to_numeric(df[x], errors='coerce').dropna(), bins=20)
+                ax.set_xlabel(x)
+                ax.set_ylabel(t('chart.count'))
+            elif chart_type == 'box':
+                if y:
+                    groups = [pd.to_numeric(group[y], errors='coerce').dropna().values for _, group in df.groupby(x)]
+                    grp_labels = [str(name) for name in df.groupby(x).groups]
+                    _boxplot(ax, groups, grp_labels)
+                    ax.set_xlabel(str(x))
+                else:
+                    _boxplot(ax, pd.to_numeric(df[x], errors='coerce').dropna(), [x])
+            elif chart_type == 'heatmap':
+                xcats, ycats, matrix = cls._pivot(df, x, y, value_field, agg if value_field else 'count')
+                im = ax.imshow(matrix, cmap='YlOrRd', aspect='auto')
+                ax.set_xticks(range(len(xcats)))
+                ax.set_xticklabels(xcats, rotation=45, ha='right', fontsize=8)
+                ax.set_yticks(range(len(ycats)))
+                ax.set_yticklabels(ycats, fontsize=8)
+                fig.colorbar(im, ax=ax)
+            elif chart_type == 'line':
+                labels, values = cls._aggregate(df, x, y, agg)
+                ax.plot(labels, values, marker='o')
+                ax.tick_params(axis='x', rotation=45)
+            else:  # bar
+                labels, values = cls._aggregate(df, x, y, agg)
+                ax.bar(labels, values)
+                ax.tick_params(axis='x', rotation=45)
 
-        if chart_type == 'pie':
-            labels, values = cls._aggregate(df, x, y, agg)
-            ax.pie(values, labels=labels, autopct='%1.1f%%', textprops={'fontsize': 8})
-        elif chart_type == 'scatter':
-            ax.scatter(pd.to_numeric(df[x], errors='coerce'), pd.to_numeric(df[y], errors='coerce'), s=18)
-            ax.set_xlabel(x)
-            ax.set_ylabel(y)
-        elif chart_type == 'histogram':
-            ax.hist(pd.to_numeric(df[x], errors='coerce').dropna(), bins=20)
-            ax.set_xlabel(x)
-            ax.set_ylabel(t('chart.count'))
-        elif chart_type == 'box':
-            if y:
-                groups = [pd.to_numeric(group[y], errors='coerce').dropna().values for _, group in df.groupby(x)]
-                grp_labels = [str(name) for name in df.groupby(x).groups]
-                _boxplot(ax, groups, grp_labels)
-                ax.set_xlabel(str(x))
-            else:
-                _boxplot(ax, pd.to_numeric(df[x], errors='coerce').dropna(), [x])
-        elif chart_type == 'heatmap':
-            xcats, ycats, matrix = cls._pivot(df, x, y, value_field, agg if value_field else 'count')
-            im = ax.imshow(matrix, cmap='YlOrRd', aspect='auto')
-            ax.set_xticks(range(len(xcats)))
-            ax.set_xticklabels(xcats, rotation=45, ha='right', fontsize=8)
-            ax.set_yticks(range(len(ycats)))
-            ax.set_yticklabels(ycats, fontsize=8)
-            fig.colorbar(im, ax=ax)
-        elif chart_type == 'line':
-            labels, values = cls._aggregate(df, x, y, agg)
-            ax.plot(labels, values, marker='o')
-            ax.tick_params(axis='x', rotation=45)
-        else:  # bar
-            labels, values = cls._aggregate(df, x, y, agg)
-            ax.bar(labels, values)
-            ax.tick_params(axis='x', rotation=45)
+            if title:
+                ax.set_title(title)
+            fig.tight_layout()
 
-        if title:
-            ax.set_title(title)
-        fig.tight_layout()
-
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', transparent=True)
-        plt.close(fig)
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', transparent=True)
+        finally:
+            # Nearly every step above can raise — a pie of negative values, a
+            # groupby over all-null data, matplotlib refusing to lay out a tick.
+            # Closing only on the success path leaked one open figure per failed
+            # render into matplotlib's registry, and the UI retries charts.
+            plt.close(fig)
         buf.seek(0)
         encoded = base64.b64encode(buf.read()).decode('ascii')
         return f'data:image/png;base64,{encoded}'

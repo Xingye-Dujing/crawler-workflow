@@ -12,6 +12,7 @@ Two properties are worth pinning:
 monkeypatches it into its own tmp directory (the harness deliberately does not
 own this path).
 """
+
 import os
 import re
 
@@ -27,8 +28,14 @@ from analyzers.ml_base import MLClassifier, build_tfidf_pipeline, build_training
 pytestmark = pytest.mark.unit
 
 TEXTS = [
-    '三亚的海非常蓝，适合冬天度假', '海南粉的汤底非常鲜美', '海口骑楼老街很漂亮', '三亚潜水体验很好',
-    '糟糕的体验，非常差劲', '垃圾产品，不推荐购买', '服务太差，不会再来', '难用死了，太失望',
+    '三亚的海非常蓝，适合冬天度假',
+    '海南粉的汤底非常鲜美',
+    '海口骑楼老街很漂亮',
+    '三亚潜水体验很好',
+    '糟糕的体验，非常差劲',
+    '垃圾产品，不推荐购买',
+    '服务太差，不会再来',
+    '难用死了，太失望',
 ]
 LABELS = ['pos', 'pos', 'pos', 'pos', 'neg', 'neg', 'neg', 'neg']
 
@@ -57,10 +64,12 @@ def _picklable_pipeline():
     cannot serialise; supplying a pipeline is the only way ``fit`` can persist
     today (see the xfail below).
     """
-    return Pipeline([
-        ('tfidf', TfidfVectorizer(token_pattern=r'\S+', ngram_range=(1, 2), max_features=5000)),
-        ('clf', LogisticRegression(max_iter=1000)),
-    ])
+    return Pipeline(
+        [
+            ('tfidf', TfidfVectorizer(token_pattern=r'\S+', ngram_range=(1, 2), max_features=5000)),
+            ('clf', LogisticRegression(max_iter=1000)),
+        ]
+    )
 
 
 # ─── graceful degradation ──────────────────────────────────────────────
@@ -105,7 +114,7 @@ class TestTrainingGuards:
     def test_the_default_pipeline_can_be_saved(self, model_dir):
         classifier = MLClassifier(model_name=_unique_name('default-pipeline'))
         classifier.fit(TEXTS, LABELS)
-        assert os.path.exists(os.path.join(model_dir, f"{_unique_name('default-pipeline')}.pkl"))
+        assert os.path.exists(os.path.join(model_dir, f'{_unique_name("default-pipeline")}.pkl'))
         assert classifier.predict(['很好'])[0][0] in ('pos', 'neg')
 
 

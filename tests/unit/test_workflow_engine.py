@@ -9,6 +9,7 @@ contracts pinned here are the ones the executor silently relies on:
 - ``validate()`` returns ready-to-print translated text, never a key, and says
   nothing about node types the engine does not own (``resume`` and friends).
 """
+
 import pytest
 
 from engine.workflow import WorkflowEngine
@@ -100,8 +101,11 @@ class TestOrdering:
         assert [n for level in levels for n in level] == WorkflowEngine(_chain()).topological_sort()
 
     def test_group_by_level_rejects_a_cycle(self):
-        conns = [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-3'},
-                 {'from': 'node-3', 'to': 'node-1'}]
+        conns = [
+            {'from': 'node-1', 'to': 'node-2'},
+            {'from': 'node-2', 'to': 'node-3'},
+            {'from': 'node-3', 'to': 'node-1'},
+        ]
         nodes = [_node('node-1'), _node('node-2', 'analysis'), _node('node-3', 'output')]
         with pytest.raises(ValueError, match='Workflow contains a cycle!'):
             WorkflowEngine(_wf(nodes, conns)).group_by_level()
@@ -112,10 +116,17 @@ class TestOrdering:
 
 class TestSubworkflows:
     def _two_workflows(self):
-        nodes = [_node('node-1'), _node('node-2', 'output', operation='save'),
-                 _node('node-7'), _node('node-8', 'analysis')]
-        conns = [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-7', 'to': 'node-8'},
-                 {'from': 'node-8', 'to': 'node-1'}]
+        nodes = [
+            _node('node-1'),
+            _node('node-2', 'output', operation='save'),
+            _node('node-7'),
+            _node('node-8', 'analysis'),
+        ]
+        conns = [
+            {'from': 'node-1', 'to': 'node-2'},
+            {'from': 'node-7', 'to': 'node-8'},
+            {'from': 'node-8', 'to': 'node-1'},
+        ]
         return _wf(nodes, conns)
 
     def test_find_workflows_uses_undirected_connectivity(self):
@@ -128,8 +139,10 @@ class TestSubworkflows:
 
     def test_find_workflows_follows_edges_backwards(self):
         # A -> B, C -> B: one component, even though B has no outbound edge.
-        wf = _wf([_node('node-1'), _node('node-2', 'output', operation='s'), _node('node-3')],
-                 [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-3', 'to': 'node-2'}])
+        wf = _wf(
+            [_node('node-1'), _node('node-2', 'output', operation='s'), _node('node-3')],
+            [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-3', 'to': 'node-2'}],
+        )
         assert WorkflowEngine(wf).find_workflows() == [{'node-1', 'node-2', 'node-3'}]
 
     def test_sort_workflows_orders_by_lowest_node_index(self):
@@ -145,10 +158,14 @@ class TestSubworkflows:
         assert WorkflowEngine.sort_workflows([]) == []
 
     def test_extract_subworkflow_keeps_only_internal_edges_and_settings(self):
-        engine = WorkflowEngine(_wf([_node('node-1', platform='zhihu'), _node('node-2', 'output', operation='s'),
-                                     _node('node-7')],
-                                    [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-7', 'to': 'node-1'}],
-                                    settings={'parallel': True}), executor='exec')
+        engine = WorkflowEngine(
+            _wf(
+                [_node('node-1', platform='zhihu'), _node('node-2', 'output', operation='s'), _node('node-7')],
+                [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-7', 'to': 'node-1'}],
+                settings={'parallel': True},
+            ),
+            executor='exec',
+        )
         sub = engine.extract_subworkflow({'node-1', 'node-2'})
         assert isinstance(sub, WorkflowEngine)
         assert sorted(sub.nodes) == ['node-1', 'node-2']
@@ -169,9 +186,14 @@ class TestSubworkflows:
 
 class TestValidate:
     def test_a_wired_workflow_is_accepted(self):
-        wf = _wf([_node('node-1', platform='zhihu'), _node('node-2', 'analysis', params={'operation': 'emotion'}),
-                  _node('node-3', 'output', operation='csv')],
-                 [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-3'}])
+        wf = _wf(
+            [
+                _node('node-1', platform='zhihu'),
+                _node('node-2', 'analysis', params={'operation': 'emotion'}),
+                _node('node-3', 'output', operation='csv'),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-3'}],
+        )
         assert WorkflowEngine(wf).validate() == []
 
     def test_blank_keyword_counts_as_missing(self, en):
@@ -189,8 +211,10 @@ class TestValidate:
         assert errors == ['Workflow contains a cycle!']
 
     def test_name_node_must_lead_and_have_a_downstream(self, en):
-        wf = _wf([_node('node-1', 'name', params={'workflow_name': '周报'}), _node('node-2', 'output', operation='s')],
-                 [{'from': 'node-2', 'to': 'node-1'}])
+        wf = _wf(
+            [_node('node-1', 'name', params={'workflow_name': '周报'}), _node('node-2', 'output', operation='s')],
+            [{'from': 'node-2', 'to': 'node-1'}],
+        )
         errors = WorkflowEngine(wf).validate()
         assert any('name node must lead' in e for e in errors)
         assert any('must connect to a downstream node' in e for e in errors)
@@ -235,8 +259,11 @@ class TestValidate:
         assert WorkflowEngine(_wf([node], [])).validate() == []
 
     def test_every_node_is_checked(self, en):
-        nodes = [_node('node-1', params={}), _node('node-2', 'upload', params={}),
-                 _node('node-3', 'process', operation='')]
+        nodes = [
+            _node('node-1', params={}),
+            _node('node-2', 'upload', params={}),
+            _node('node-3', 'process', operation=''),
+        ]
         errors = WorkflowEngine(_wf(nodes, [])).validate()
         assert len(errors) == 3
         assert sorted(e.split(':')[0] for e in errors) == ['Node node-1', 'Node node-2', 'Node node-3']

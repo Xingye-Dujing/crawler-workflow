@@ -5,6 +5,7 @@ labels positionally (labels[i] with values[i]), so both properties matter: the
 pairing must hold, and a row the LLM answered nothing for must not invent a
 bucket.
 """
+
 import pytest
 
 from services.stats import StatsService as S
@@ -31,13 +32,16 @@ class TestEmotionDistribution:
         dist = S.emotion_distribution(LABELLED_ROWS)
         assert dict(zip(dist['labels'], dist['values'], strict=True)) == {'Joy': 3, 'Sadness': 1, 'Neutral': 1}
 
-    @pytest.mark.parametrize('rows', [
-        [],
-        [{'emotion': ''}],
-        [{'emotion': None}],
-        [{'emotion': 0}],
-        [{'标题': 'no emotion column'}],
-    ])
+    @pytest.mark.parametrize(
+        'rows',
+        [
+            [],
+            [{'emotion': ''}],
+            [{'emotion': None}],
+            [{'emotion': 0}],
+            [{'标题': 'no emotion column'}],
+        ],
+    )
     def test_rows_without_an_answer_are_ignored(self, rows):
         assert S.emotion_distribution(rows) == {'labels': [], 'values': []}
 
@@ -64,5 +68,8 @@ class TestTendencyDistribution:
         assert S.tendency_distribution([]) == {'labels': [], 'values': []}
 
     def test_both_distributions_share_a_shape(self):
-        assert set(S.emotion_distribution(LABELLED_ROWS)) == set(S.tendency_distribution(LABELLED_ROWS)) == {
-            'labels', 'values'}
+        assert (
+            set(S.emotion_distribution(LABELLED_ROWS))
+            == set(S.tendency_distribution(LABELLED_ROWS))
+            == {'labels', 'values'}
+        )

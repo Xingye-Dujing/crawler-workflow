@@ -20,6 +20,13 @@ work: ``RowCheckpoint`` (every processed row appended to a JSONL file, keyed by
 the *content* of the dataset so a re-crawled table never reuses stale marks)
 and ``run_llm_rows`` (batched execution with cancel checks, a consecutive-
 failure circuit breaker, and incremental publishing of partial results).
+
+Answers are replayed from a cache, and a cache can lie: an answer fetched under
+the old prompt template, the old truncation cap or the old daemon is not an
+answer to today's question. ``prompt_version()`` digests the builder's own
+source and ``run_llm_dataframe`` folds it — with provider, model, column,
+``max_chars``, host and topic — into the durable ``RowCache`` scope, so any of
+those changing starts a fresh cache instead of quietly reusing stale rows.
 """
 
 import contextlib
@@ -144,6 +151,7 @@ class LLMClient:
         max_chars: int = 600,
         timeout: int = 180,
         host: str = '',
+        cancel_event=None,
     ):
         self.provider = provider if provider in ('ollama', 'openrouter') else 'ollama'
         self.model = (model or '').strip()
@@ -158,6 +166,10 @@ class LLMClient:
         # Only used by the ollama transport — OpenRouter carries its address in
         # the URL, so the two providers no longer share any connection setting.
         self.host = (host or '').strip()
+        # The run's Stop flag. Retry backoff naps on it instead of on the clock,
+        # so stopping lands between attempts rather than after a whole
+        # backoff + Retry-After sequence (which used to cost minutes).
+        self._cancel = cancel_event
 
     @property
     def label(self) -> str:
@@ -167,6 +179,17 @@ class LLMClient:
         if self.max_chars and len(text) > self.max_chars:
             return text[: self.max_chars] + '…'
         return text
+
+    def _sleep(self, seconds: float) -> None:
+        """Wait between retry attempts — interruptibly when a Stop event exists.
+
+        ``Event.wait`` returns the moment the flag is set, so a cancelled run
+        stops at once instead of finishing the backoff it was in the middle of.
+        """
+        if self._cancel is None:
+            time.sleep(seconds)
+            return
+        self._cancel.wait(seconds)
 
     def chat(self, prompt: str, max_retries: int = 2) -> str:
         """One user message in, the model's plain text out. Raises LLMError."""
@@ -227,7 +250,7 @@ class LLMClient:
                 if last.kind == 'model':
                     # Missing model / bad tag: deterministic, retrying is noise.
                     raise LLMError(t('llm.ollama_failed', model=self.model, err=last), last.kind) from e
-            time.sleep(0.5 * attempt)
+            self._sleep(0.5 * attempt)
         kind = last.kind if isinstance(last, LLMError) else 'network'
         if kind == 'network':
             # "Connection refused" alone is unactionable — name the address,
@@ -264,7 +287,7 @@ class LLMClient:
             except requests.RequestException as e:
                 last = LLMError(t('llm.net_error', err=e), 'network')
                 logger.warning(t('llm.or_net_exception', i=attempt, n=max_retries, err=e))
-                time.sleep(delay)
+                self._sleep(delay)
                 delay *= 2
                 continue
 
@@ -289,18 +312,18 @@ class LLMClient:
                     wait = 2.0
                 last = LLMError(t('llm.or_429'), 'rate_limit')
                 logger.warning(t('llm.or_429_wait', i=attempt, n=max_retries, wait=f'{wait:.1f}'))
-                time.sleep(wait)
+                self._sleep(wait)
                 continue
             elif 500 <= resp.status_code < 600:
                 last = LLMError(t('llm.or_5xx', code=resp.status_code), 'network')
                 logger.warning(t('llm.or_5xx_attempt', code=resp.status_code, i=attempt, n=max_retries))
-                time.sleep(delay)
+                self._sleep(delay)
                 delay *= 2
                 continue
             else:
                 raise LLMError(t('llm.or_http_fail', code=resp.status_code, body=resp.text[:200]), 'error')
 
-            time.sleep(delay)
+            self._sleep(delay)
             delay *= 2
 
         raise last if last is not None else LLMError(t('llm.or_failed'), 'network')
@@ -352,6 +375,83 @@ def content_key(texts) -> str:
 
 def text_hash(text) -> str:
     return hashlib.sha1(str(text).encode('utf-8')).hexdigest()[:16]
+
+
+# ─── Prompt version ─────────────────────────────────────────────
+
+# Reading a function's source is file I/O (linecache), far too slow to redo per
+# row, so the digests are memoed. The key is the *code object*: every closure
+# built from the same ``lambda`` line shares one, which is what keeps the cache
+# warm across runs, while a reloaded or genuinely different template has a
+# different code object and therefore gets its own entry.
+_PROMPT_VERSIONS: dict[object, str] = {}
+
+
+def _name_fallback(builder) -> str:
+    """Identity for a builder whose source cannot be read at all."""
+    module = getattr(builder, '__module__', '') or ''
+    name = getattr(builder, '__qualname__', None) or getattr(builder, '__name__', None)
+    if not name:  # a callable object, not a function
+        name = f'{type(builder).__module__}.{type(builder).__qualname__}'
+    return f'qualname:{module}.{name}'
+
+
+def prompt_version(builder) -> str:
+    """A digest of the prompt builder's own source — its version for cache keys.
+
+    The templates the analyzers send live in ``backend/analyzers/*.py``, so
+    editing one is a code change the answer cache cannot see any other way: an
+    answer fetched under yesterday's instructions is not an answer to today's
+    question. Hashing the source makes any edit — wording, categories, output
+    format — invalidate exactly the cached rows built with the old one.
+    """
+    target = getattr(builder, '__func__', builder)  # a bound method hashes as its function
+    code = getattr(target, '__code__', None)
+    if code is not None:
+        hit = _PROMPT_VERSIONS.get(code)
+        if hit is not None:
+            return hit
+    try:
+        source = inspect.getsource(target)
+    except (OSError, TypeError):
+        # Compiled away, defined in a string, or not a function at all: the
+        # name is the only identity left. Deterministic, just less sensitive.
+        version = _name_fallback(target)
+    else:
+        version = hashlib.sha1(source.encode('utf-8')).hexdigest()[:16]
+    if code is not None:
+        _PROMPT_VERSIONS[code] = version
+    return version
+
+
+def answer_scope(op: str, client, text_column: str, extra_key: str, build_prompt) -> str:
+    """The cache key prefix for one analyzer's answers.
+
+    Everything that changes what an answer *means* has to be in here, or the
+    durable cache keeps serving rows produced under a different question:
+
+    op / provider / model / text_column — whose answer this is;
+    client.max_chars                    — truncating to another length hands the
+                                          model a different text;
+    client.host                         — two daemons, two models behind one tag;
+    extra_key                           — the analyzer's own extra scope, e.g. the
+                                          cleaner's topic, which the prompt
+                                          builder only sees as a closure value;
+    prompt_version(build_prompt)        — the template itself.
+    """
+    return '|'.join(
+        str(part)
+        for part in (
+            op,
+            client.provider,
+            client.model,
+            text_column,
+            client.max_chars,
+            client.host,
+            extra_key,
+            prompt_version(build_prompt),
+        )
+    )
 
 
 class RowCheckpoint:
@@ -567,7 +667,11 @@ def run_llm_rows(
                 except Exception as e:
                     # One row failing is never fatal by itself — count it and
                     # keep going (the circuit breaker handles a real outage).
-                    failures += 1
+                    # The counting itself belongs to ``_finish`` below: adding to
+                    # ``failures`` here as well made every crashing row cost two
+                    # of the three breaker slots, so the serial path tripped at
+                    # half the configured threshold while the parallel one (where
+                    # no ``_finish`` follows) counted once.
                     logger.warning(t('llm.row_exception', label=label, err=e))
                     parsed = None
                 _complete(idx, thash, parsed)
@@ -625,26 +729,34 @@ def run_llm_dataframe(
     the three analyzers share.
 
     ctx (built by app.py) may carry: client, node_id, batch_size, workers,
-    publish(df), cancel_event, checkpoint_dir. Without a ctx everything falls
-    back to the plain local Ollama default — the original behaviour.
+    publish(df), cancel_event, checkpoint_dir, store_for_cache (a RunStore:
+    answers then persist in runs.db under ``answer_scope``), or cache (an
+    already-built checkpoint object, which wins). Without a ctx everything
+    falls back to the plain local Ollama default — the original behaviour.
 
     Rows the model could not classify keep the analyzer's fail_value (same as
     before). Rows never reached — user stop, or the circuit breaker tripping —
     are marked ``未处理`` instead of silently faking a result, and the
     checkpoint file lets the next identical run pick up exactly where this one
-    died. Re-raises LLMError for circuit_break / transport errors so the
+    died. A ``text_column`` the frame does not have raises immediately (a
+    misconfigured node must fail loudly, not report an empty success). Otherwise
+    this re-raises LLMError for circuit_break / transport errors so the
     workflow branch stops; a user cancel is absorbed (the global stop flag
     halts the rest of the workflow anyway).
     """
     cfg = ctx or {}
     client = cfg.get('client') or LLMClient(provider='ollama', model=default_model, host=_settings_host())
 
+    if text_column not in df.columns:
+        # Used to log and hand back a blank-filled frame, which the executor
+        # then stored as a DONE node: a typo in the column setting looked
+        # exactly like a successful run that found nothing. Raising makes the
+        # node fail with the column named, and resume retries it once fixed —
+        # and the frame is left untouched, since nothing was decided about it.
+        raise LLMError(t('llm.missing_column', col=text_column, label=label), 'error')
+
     for col, val in zip(result_columns, blank, strict=True):
         df[col] = val
-
-    if text_column not in df.columns:
-        logger.error(t('llm.missing_column', col=text_column, label=label))
-        return df
 
     mask = df[text_column].notna() & (df[text_column].astype(str).str.strip() != '')
     process_indices = df[mask].index.tolist()
@@ -671,10 +783,22 @@ def run_llm_dataframe(
 
     checkpoint_dir = cfg.get('checkpoint_dir')
     # Two interchangeable back-ends, same three calls: get(idx, thash) ->
-    # {'r': [...]}, add(idx, thash, result), discard(). `cache` (the durable
-    # database) wins because its answers outlive both the dataset ordering
-    # and the process; the JSONL file remains for callers without one.
+    # {'r': [...]}, add(idx, thash, result), discard(). The durable cache wins
+    # because its answers outlive both the dataset ordering and the process;
+    # the JSONL file remains for callers without one. ``cache`` is the explicit
+    # object a caller already built (it may carry a scope of its own) and beats
+    # everything; ``store_for_cache`` is the raw RunStore app.py lends, whose
+    # scope is assembled here because this is the one place that knows the
+    # prompt builder, the truncation cap and the daemon address.
     checkpoint = cfg.get('cache')
+    store = cfg.get('store_for_cache')
+    if checkpoint is None and store is not None:
+        # Imported inside the function: services.run_store is reached by the
+        # workflow executor, which imports the analyzers, which import this
+        # module — a module-level import here would close that cycle.
+        from services.run_store import RowCache
+
+        checkpoint = RowCache(store, answer_scope(op, client, text_column, extra_key, build_prompt))
     if checkpoint is None and checkpoint_dir:
         # Keyed by node + operation + transport + the dataset's own content:
         # a different table, model or column starts a fresh file, the same one

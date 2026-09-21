@@ -1,6 +1,5 @@
 import logging
 import re
-import time
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
@@ -15,15 +14,58 @@ from .base import Crawler, as_index
 
 logger = logging.getLogger(__name__)
 
+# Log strings this crawler needs that the catalog does not have yet.
+# ``backend/i18n.py`` is outside this change's ownership, so the wanted keys are
+# reported alongside the literal:
+#   crawl.weibo.target_reached  {n}
+_LOG_TARGET = '已达到目标数量 {n} 条，停止翻页'
+
 
 class WeiboCrawler(Crawler):
+    """Scrapes the s.weibo.com keyword search.
+
+    Three facts about this platform shaped the crawler, all of them measured
+    against the live site rather than assumed:
+
+    - The saved cookies are exported from ``weibo.com``, but the feed is served
+      by ``s.weibo.com`` and needs to be planted there too (see
+      :meth:`Crawler._load_cookies` and :attr:`cookie_domains`).
+    - **Re-requesting the first page is what produces the QR wall.** The feed is
+      already loaded by the search URL itself; the crawler used to walk it again
+      as ``…&page=1`` and then every page above it. Those repeat search loads
+      are what s.weibo.com answers with ``passport.weibo.com/sso/signin``
+      ("扫描二维码登录") — even for a session holding a valid ``SUB`` cookie. So:
+      scrape what is on screen first, and only ask for ``page=2`` and deeper when
+      the target genuinely still needs rows.
+    - The feed is server-rendered: scrolling fetches nothing new, so "more data"
+      means a deeper page or a narrower time window — and each extra request
+      costs wall risk. Hence the target cutoff, the page ceiling and the
+      jittered pauses between requests.
+    """
+
     domain = 'weibo.com'
+    # The search host gets its own cookie pass: a cookie scoped to
+    # ``.weibo.com`` is accepted on weibo.com and simply not offered to
+    # s.weibo.com until the browser has been there once.
+    cookie_domains = ('s.weibo.com',)
     login_url = 'https://passport.weibo.com/sso/signin?entry=miniblog'
+
+    CARD_SELECTOR = '.card-wrap'
+    # Rows per feed page is ~9-10, so this ceiling is what a keyword crawl can
+    # reach before the wall becomes the likely answer.
+    MAX_PAGES_PER_WINDOW = 5
+    # Paging is meaningless inside a time window: the window is already narrow.
+    PAGE_WAIT = 3.0
+    POLITE_BASE = 1.0
+    POLITE_SPREAD = 0.35
 
     # An hourly-window crawl loads one page per hour of the range, so two years
     # would be ~17 500 page loads — a run that never ends. Past this many
     # windows the range is refused instead of started.
     MAX_HOURLY_WINDOWS = 720
+
+    # A date-range crawl without a target wants every window it was given.
+    DEFAULT_TARGET = 10**9
 
     @staticmethod
     def _parse_date(value: str) -> datetime:
@@ -34,7 +76,7 @@ class WeiboCrawler(Crawler):
             # node with a bare strptime error.
             raise ValueError(t('crawl.weibo.bad_date', value=value)) from e
 
-    def search(self, keyword: str, start_time: str = None, end_time: str = None, **_kwargs):
+    def search(self, keyword: str, start_time: str = None, end_time: str = None, target_count=None, **_kwargs):
         resume = self.resume_of(_kwargs)
         stored = resume.get('urls')
         # This crawl is a walk over a URL list, so the list plus the index into
@@ -49,6 +91,7 @@ class WeiboCrawler(Crawler):
         have = self.collected()
         if have:
             logger.info(t('crawl.resume_have', n=have))
+        target = self.DEFAULT_TARGET if not target_count else int(target_count)
 
         start_index = as_index(resume.get('url_index'))
         total_urls = len(urls)
@@ -57,21 +100,33 @@ class WeiboCrawler(Crawler):
         for idx, url in enumerate(urls, start=1):
             if idx <= start_index:
                 continue
+            if self.collected() >= target:
+                logger.info(_LOG_TARGET.format(n=target))
+                break
             logger.info('')
             logger.info('=' * 80)
             logger.info(t('crawl.weibo.processing', i=idx, total=total_urls))
             logger.info(t('crawl.weibo.url', url=url))
             logger.info('=' * 80)
 
-            page_data = self._scrape_single_search(url)
+            # The card/page cursor restarts per window: it only means anything
+            # against the page that is loaded right now.
+            self.mark_position(url_index=idx, card_index=0, page_index=0, done=self.collected())
+            page_data = self._scrape_single_search(url, target)
             logger.info(t('crawl.weibo.link_done', i=idx, n=len(page_data)))
             logger.info(t('crawl.weibo.accumulated', n=self.collected()))
             # Position after each window: a kill here costs at most the window
             # in flight, never the windows already walked.
             self.mark_position(url_index=idx, done=self.collected())
 
-            if idx < total_urls:
-                time.sleep(0.5)
+            if self.login_wall:
+                # Every further window would meet the same wall; stopping is
+                # both faster and kinder to the session than walking into it
+                # another hundred times.
+                break
+
+            if idx < total_urls and self.collected() < target:
+                self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
 
         return self.results()
 
@@ -111,184 +166,297 @@ class WeiboCrawler(Crawler):
             cur = nxt
         return urls
 
-    def _scrape_single_search(self, base_url: str):
+    # ─── one search window ────────────────────────────────────────────
+
+    def _scrape_single_search(self, base_url: str, target: int) -> list:
+        """Harvest one search window: the feed that is already loaded first.
+
+        Returns the rows this window produced. The page walk is a fallback for
+        a keyword feed that has not reached the target yet, never the first
+        thing the crawl does — re-reading the loaded page as ``page=1`` is the
+        request that gets the session thrown at the login wall.
+        """
+        scraped = []
         try:
-            self.driver.get(base_url)
             logger.info(t('crawl.weibo.visiting', url=base_url))
-
-            try:
-                no_result = self.driver.find_element(By.CSS_SELECTOR, '.card-no-result')
-                if no_result:
-                    logger.info(t('crawl.weibo.no_result'))
-                    return []
-            except NoSuchElementException:
-                pass
-
             logger.info(t('crawl.weibo.waiting'))
-            WebDriverWait(self.driver, 10).until(ec.presence_of_element_located((By.CSS_SELECTOR, '.card-wrap')))
+            self.driver.get(base_url)
+            if self.check_login_wall(base_url):
+                return scraped
+            if self._element_or_none('.card-no-result') is not None:
+                logger.info(t('crawl.weibo.no_result'))
+                return scraped
+            try:
+                WebDriverWait(self.driver, int(self.PAGE_WAIT * 3)).until(
+                    ec.presence_of_element_located((By.CSS_SELECTOR, self.CARD_SELECTOR))
+                )
+            except TimeoutException:
+                logger.warning(t('crawl.weibo.page_timeout'))
+                return scraped
             logger.info(t('crawl.weibo.page_loaded'))
 
-            total_pages = self._get_total_pages()
+            scraped.extend(self._harvest(target))
+            if self.collected() >= target or not self._may_page(base_url):
+                return scraped
+
+            total_pages = min(self._get_total_pages(), self.MAX_PAGES_PER_WINDOW)
             logger.info(t('crawl.weibo.total_pages', n=total_pages))
-
-            url_pattern = re.sub(r'[?&]page=\d+', '', base_url)
-            sep = '&' if '?' in url_pattern else '?'
-            url_pattern = f'{url_pattern}{sep}page='
-
-            all_data = []
-            for page_num in range(1, total_pages + 1):
-                page_url = f'{url_pattern}{page_num}'
+            page_url = self._page_url(base_url)
+            for page_num in range(2, total_pages + 1):
+                if self.collected() >= target:
+                    logger.info(_LOG_TARGET.format(n=target))
+                    break
+                # Politeness *between* requests: this is the path that reaches
+                # s.weibo.com's rate limiter, so the pause is the fix.
+                self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
                 logger.info(t('crawl.weibo.page_crawling', i=page_num, total=total_pages))
-                page_data = self._scrape_page_by_url(page_url)
-                if not page_data:
+                self.driver.get(f'{page_url}{page_num}')
+                if self.check_login_wall(f'{page_url}{page_num}'):
+                    break
+                try:
+                    WebDriverWait(self.driver, 3).until(
+                        ec.presence_of_element_located((By.CSS_SELECTOR, self.CARD_SELECTOR))
+                    )
+                except TimeoutException:
+                    logger.warning(t('crawl.weibo.page_timeout'))
+                    break
+                self.mark_position(page_index=page_num, card_index=0)
+                before = self.collected()
+                found = self._harvest(target)
+                scraped.extend(found)
+                if self.collected() == before:
                     logger.warning(t('crawl.weibo.page_empty', i=page_num))
-                    continue
-                all_data.extend(page_data)
-                logger.info(t('crawl.weibo.page_done', i=page_num, n=len(page_data), total=len(all_data)))
-                time.sleep(0.3)
-
-            return all_data
-
+                    break
+                logger.info(t('crawl.weibo.page_done', i=page_num, n=len(found), total=self.collected()))
+            return scraped
         except Exception as e:
             logger.error(t('crawl.weibo.link_error', err=e), exc_info=True)
-            return []
+            return scraped
 
-    def _scrape_page_by_url(self, page_url: str):
-        self.driver.get(page_url)
-        logger.info(t('crawl.weibo.page_visit', url=page_url))
+    def _may_page(self, base_url: str) -> bool:
+        """Paging exists only on an open keyword feed.
+
+        A ``timescope`` window is already narrow — everything it holds is on the
+        page it renders — so a deeper request there buys nothing and spends wall
+        risk for nothing.
+        """
+        return 'timescope=' not in base_url
+
+    @staticmethod
+    def _page_url(base_url: str) -> str:
+        cleaned = re.sub(r'[?&]page=\d+', '', base_url)
+        return f'{cleaned}{"&" if "?" in cleaned else "?"}page='
+
+    def _element_or_none(self, selector: str):
         try:
-            WebDriverWait(self.driver, 10).until(ec.presence_of_element_located((By.CSS_SELECTOR, '.card-wrap')))
-        except TimeoutException:
-            logger.warning(t('crawl.weibo.page_timeout'))
-            return []
-        self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-        time.sleep(0.3)
-        return self._scrape_page()
+            return self.driver.find_element(By.CSS_SELECTOR, selector)
+        except Exception:
+            return None
 
-    def _get_total_pages(self):
-        try:
-            page_more_btn = WebDriverWait(self.driver, 1).until(
-                ec.presence_of_element_located((By.CSS_SELECTOR, 'a[action-type="feed_list_page_more"]'))
-            )
-            self.driver.execute_script('arguments[0].scrollIntoView();', page_more_btn)
-            time.sleep(0.3)
-            page_more_btn.click()
-            time.sleep(0.5)
+    # ─── card harvest ─────────────────────────────────────────────────
 
-            page_list = self.driver.find_elements(By.CSS_SELECTOR, 'ul[node-type="feed_list_page_morelist"] li a')
-            if not page_list:
-                logger.debug(t('crawl.debug.page_list_missing'))
-                return 1
+    def _harvest(self, target: int) -> list:
+        """Scrape and emit the cards of whichever page is loaded right now.
 
-            max_page = 1
-            for link in page_list:
-                href = link.get_attribute('href')
-                if href and 'page=' in href:
-                    try:
-                        p = int(href.split('page=')[-1].split('&')[0])
-                        max_page = max(max_page, p)
-                    except ValueError:
-                        pass
-            page_more_btn.click()
-            logger.info(t('crawl.weibo.max_page', n=max_page))
-            return max_page
-        except TimeoutException:
-            logger.debug(t('crawl.debug.pager_missing'))
-            return 1
-        except Exception as e:
-            logger.error(t('crawl.weibo.pages_fail', err=e))
-            return 1
-
-    def _scrape_page(self):
-        cards = self.driver.find_elements(By.CSS_SELECTOR, '.card-wrap')
+        Rows go to the sink per card, so they are on disk before the next card
+        is looked at, and the window's card cursor lets a kill inside a window
+        resume at the card it died on.
+        """
+        cards = self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR)
         logger.info(t('crawl.weibo.page_cards', n=len(cards)))
-        page_data = []
-        for idx, card in enumerate(cards, start=1):
+        start = min(as_index(self.position.get('card_index')), len(cards))
+        kept = []
+        for idx, card in enumerate(cards[start:], start + 1):
+            if self.collected() >= target:
+                logger.info(_LOG_TARGET.format(n=target))
+                break
             try:
-                author = self._extract_text(card, '.name')
-                if not author:
-                    logger.debug(t('crawl.debug.card_skip', i=idx))
-                    continue
-                logger.debug(t('crawl.debug.card_author', i=idx, v=author))
-
-                publish_time = self._get_publish_time(card)
-                logger.debug(t('crawl.debug.card_time', i=idx, v=publish_time))
-
-                text = self._get_full_text(card)
-                logger.debug(t('crawl.debug.card_len', i=idx, v=len(text)))
-
-                forward = self._extract_number(self._extract_text(card, '[action-type="feed_list_forward"]'))
-                comment = self._extract_number(self._extract_text(card, '[action-type="feed_list_comment"]'))
-                like = self._extract_number(self._extract_text(card, '.woo-like-count'))
-                logger.debug(t('crawl.debug.card_metrics', i=idx, f=forward, c=comment, l=like))
-
-                images = self._get_images(card)
-                logger.debug(t('crawl.debug.card_images', i=idx, n=len(images.split(' | ')) if images else 0))
-
-                item = {
-                    '发布者': author,
-                    '发布时间': publish_time,
-                    '正文': text,
-                    '转发数': forward,
-                    '评论数': comment,
-                    '点赞数': like,
-                    '图片链接': images,
-                }
-                page_data.append(item)
-                # Handed over the moment it is scraped: this page's items are on
-                # disk before the next card is even looked at.
-                self.emit(item)
+                item = self._scrape_card(card, idx)
             except Exception:
                 logger.warning(t('crawl.weibo.card_error', i=idx), exc_info=True)
+                self.mark_position(card_index=idx, done=self.collected())
                 continue
-        return page_data
+            if item is not None and self.emit(item):
+                kept.append(item)
+            self.mark_position(card_index=idx, done=self.collected())
+        return kept
 
-    def _extract_text(self, el, sel, default=''):
+    def _scrape_card(self, card, idx: int) -> dict | None:
+        author = self._text_of(card, '.name')
+        if not author:
+            logger.debug(t('crawl.debug.card_skip', i=idx))
+            return None
+        publish_time, source, post_link = self._get_from_line(card)
+        text = self._get_full_text(card)
+        forward = self._number_in(self._text_of(card, '[action-type="feed_list_forward"]'))
+        comment = self._number_in(self._text_of(card, '[action-type="feed_list_comment"]'))
+        like = self._number_in(self._text_of(card, '.woo-like-count'))
+        images = self._get_images(card)
+        mid = card.get_attribute('mid') or ''
+        logger.debug(t('crawl.debug.card_author', i=idx, v=author))
+        logger.debug(t('crawl.debug.card_time', i=idx, v=publish_time))
+        logger.debug(t('crawl.debug.card_len', i=idx, v=len(text)))
+        logger.debug(t('crawl.debug.card_metrics', i=idx, f=forward, c=comment, l=like))
+        logger.debug(t('crawl.debug.card_images', i=idx, n=len(images)))
+        return {
+            '发布者': author,
+            '发布时间': publish_time,
+            '发布来源': source,
+            '正文': text,
+            '转发数': forward,
+            '评论数': comment,
+            '点赞数': like,
+            '图片链接': ' | '.join(images),
+            '图片数': len(images),
+            '话题': ' | '.join(self._get_topics(card)),
+            '视频数': self._count(card, '.media-video-a'),
+            '用户链接': self._abs_url(self._attr(card, '.name', 'href')),
+            # The post's own permalink (``//weibo.com/<uid>/<bid>``), tracking
+            # query stripped — the row's strongest identity. ``微博ID`` keeps the
+            # numeric mid for callers that want to key off it.
+            '链接': post_link or (f'https://weibo.com/detail/{mid}' if mid else ''),
+            '微博ID': mid,
+        }
+
+    def _get_from_line(self, card) -> tuple[str, str, str]:
+        """(发布时间, 客户端来源, 该条微博的固定链接).
+
+        ``.from``'s first anchor carries both the timestamp and the canonical
+        permalink; the text after it names the client the post was made from.
+        """
         try:
-            return el.find_element(By.CSS_SELECTOR, sel).text.strip()
-        except Exception:
-            return default
+            anchors = card.find_elements(By.CSS_SELECTOR, '.from a')
+        except NoSuchElementException:
+            return '', '', ''
+        if not anchors:
+            return '', '', ''
+        publish_time = self._node_text(anchors[0])
+        post_link = self._abs_url(anchors[0].get_attribute('href') or '').split('?')[0]
+        whole = self._text_of(card, '.from') or publish_time
+        source = whole.replace(publish_time, ' ').strip(' \n\u00a0')
+        for prefix in ('来自', 'From', 'from'):
+            source = source.replace(prefix, ' ').strip()
+        source = re.sub(r'\s+', ' ', source)
+        return publish_time, source, post_link
 
-    def _extract_number(self, text):
-        if not text:
+    def _get_topics(self, card) -> list:
+        """The post's hashtags, in DOM order.
+
+        The plain body already contains them, but an anchor into ``weibo?q=#``
+        is what proves a token is a topic rather than a stray ``#`` in prose.
+        """
+        try:
+            anchors = card.find_elements(By.CSS_SELECTOR, 'a[href*="weibo?q=%23"]')
+        except NoSuchElementException:
+            return []
+        topics = []
+        for anchor in anchors:
+            text = self._node_text(anchor).strip('# \n\t')
+            if text and text not in topics:
+                topics.append(text)
+        return topics
+
+    def _count(self, card, selector: str) -> int:
+        try:
+            return len(card.find_elements(By.CSS_SELECTOR, selector))
+        except NoSuchElementException:
             return 0
-        m = re.search(r'(\d+(?:,\d+)*)', text.replace(',', ''))
-        return int(m.group(1)) if m else 0
 
-    def _get_publish_time(self, card):
+    @staticmethod
+    def _attr(card, selector: str, name: str) -> str:
         try:
-            return card.find_element(By.CSS_SELECTOR, '.from a').text.strip()
+            return card.find_element(By.CSS_SELECTOR, selector).get_attribute(name) or ''
         except Exception:
             return ''
 
     def _get_full_text(self, card):
-        for sel in ['[node-type="feed_list_content_full"]', '[node-type="feed_list_content"]']:
+        # The collapsed preview and the expanded body are both in the DOM and
+        # the expanded one wins. Neither is ever clicked: ``展开`` folds the card
+        # back and detaches the element handles the walk still needs.
+        for sel in ('[node-type="feed_list_content_full"]', '[node-type="feed_list_content"]', '.content p.txt'):
             try:
                 els = card.find_elements(By.CSS_SELECTOR, sel)
-                if els:
-                    t = self.driver.execute_script(
-                        'return arguments[0].innerText || arguments[0].textContent || ""',
-                        els[0],
-                    ).strip()
-                    if t:
-                        return t
             except Exception:
                 continue
-        try:
-            return card.find_element(By.CSS_SELECTOR, '.content > div').text.strip()
-        except Exception:
-            return ''
+            for el in els:
+                text = self._node_text(el)
+                text = re.sub(r'\s*(展开|收起)\s*$', '', text).strip()
+                if text:
+                    return text
+        return ''
 
-    def _get_images(self, card):
+    def _get_images(self, card) -> list:
+        """Image URLs of the post, deduplicated.
+
+        ``src`` is preferred over a background-image style so a lazy-load
+        placeholder never counts as a picture, and a data: URI is never a URL
+        worth handing downstream.
+        """
         urls = []
         try:
-            for img in card.find_elements(By.CSS_SELECTOR, '.media-piclist img'):
-                src = img.get_attribute('src')
-                if src:
-                    urls.append(src)
+            imgs = card.find_elements(By.CSS_SELECTOR, '.media-piclist img, [action-type="fl_pics"] img')
         except Exception:
-            pass
-        return ' | '.join(urls)
+            return urls
+        for img in imgs:
+            src = (img.get_attribute('src') or '').strip()
+            if src and not src.startswith('data:') and src not in urls:
+                urls.append(src)
+        return urls
+
+    # ─── pager ────────────────────────────────────────────────────────
+
+    def _get_total_pages(self):
+        """How deep this keyword feed goes — read from the pager, never clicked.
+
+        The old implementation waited for ``a[action-type="feed_list_page_more"]``
+        and clicked it twice. That control no longer exists on the search page
+        (0 matches on a live run), so every crawl concluded "one page" after
+        burning a click; the page count is now read out of the pager text
+        ("共50页/500条"), and reaching a page never needs a click because the URL
+        carries it.
+        """
+        info = self._element_or_none('.page-info')
+        if info is not None:
+            m = re.search(r'共\s*(\d+)\s*页', self._node_text(info))
+            if m:
+                total = max(1, int(m.group(1)))
+                logger.info(t('crawl.weibo.max_page', n=total))
+                return total
+        else:
+            logger.debug(t('crawl.debug.pager_missing'))
+        try:
+            links = self.driver.find_elements(By.CSS_SELECTOR, 'ul.page-list li a, .m-page2 a')
+        except Exception as e:
+            logger.error(t('crawl.weibo.pages_fail', err=e))
+            return 1
+        max_page = 1
+        for link in links:
+            href = link.get_attribute('href') or ''
+            m = re.search(r'page=(\d+)', href)
+            if not m:
+                continue
+            try:
+                max_page = max(max_page, int(m.group(1)))
+            except ValueError:
+                continue
+        if max_page > 1:
+            logger.info(t('crawl.weibo.max_page', n=max_page))
+        return max_page
+
+    # ─── compatibility shims (kept for callers outside this module) ───
+
+    def _extract_text(self, el, sel, default=''):
+        return self._text_of(el, sel, default) or default
+
+    def _extract_number(self, text):
+        return self._number_in(text)
+
+    def _get_publish_time(self, card):
+        return self._text_of(card, '.from a')
+
+    def _scrape_page(self):
+        """Scrape every card of the page that is loaded right now."""
+        return self._harvest(self.DEFAULT_TARGET)
 
     def get_detail(self, url: str) -> dict | None:
         return None

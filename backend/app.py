@@ -3,6 +3,7 @@ import contextlib
 import ctypes
 import json
 import logging
+import math
 import os
 import re
 import subprocess
@@ -29,7 +30,7 @@ from analyzers import (
     build_training_data,
     get_classifier,
 )
-from analyzers.llm_client import LLMClient, LLMError, list_free_models, list_ollama_models
+from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
 from crawlers import get_crawler
 from engine.executor import TaskExecutor
@@ -51,7 +52,7 @@ from services.run_store import (
     RUN_COMPLETED,
     RUN_FAILED,
     RUN_INTERRUPTED,
-    RowCache,
+    RUN_RUNNING,
     RunStore,
     fingerprints_for_workflow,
     workflow_fingerprint,
@@ -64,6 +65,32 @@ from utils.helpers import sanitize_filename
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
 CORS(app)
+
+
+def _upload_limit_mb(default: int = 64) -> int:
+    """Read MAX_UPLOAD_MB as a sane number of megabytes (clamped to 1 … 10 GiB).
+
+    The ceiling has to be configurable — a big dataset stays uploadable by
+    raising it — but a typo in the environment must not *disable* it, so an
+    unparseable, infinite or non-positive value falls back to the default.
+    """
+    raw = str(os.environ.get('MAX_UPLOAD_MB', '') or '').strip()
+    try:
+        value = int(float(raw)) if raw else default
+    except (TypeError, ValueError, OverflowError):
+        value = default
+    if not math.isfinite(value):
+        value = default
+    return min(max(1, value), 10 * 1024)
+
+
+# Werkzeug parses a POST body into RAM *before* any handler runs, so without a
+# ceiling one request of whatever size the client liked (an upload, a giant
+# paste) was enough to exhaust the process. Flask rejects an over-long body
+# while it streams in, which is also why the 413 handler below exists: the
+# default answer is HTML and every caller here parses JSON.
+UPLOAD_LIMIT_MB = _upload_limit_mb()
+app.config['MAX_CONTENT_LENGTH'] = UPLOAD_LIMIT_MB * 1024 * 1024
 
 logger = setup_logger(Config.LOG_DIR)
 
@@ -95,18 +122,21 @@ def _push_log(line: str, wf_idx: int = None):
     status endpoint ships only the tail, so without a running total the browser
     cannot work out the delta and the console silently freezes at 200 lines.
     """
-    logs = execution_state['logs']
-    logs.append(line)
-    if len(logs) > LOG_KEEP:
-        del logs[:-LOG_KEEP]
-    execution_state['_log_total'] += 1
     idx = wf_idx if wf_idx is not None else getattr(_wf_local, 'idx', None)
-    if idx is not None:
-        buf = execution_state['_wf_logs'].setdefault(idx, [])
-        buf.append(line)
-        if len(buf) > LOG_KEEP:
-            del buf[:-LOG_KEEP]
-        execution_state['_wf_log_total'][idx] = execution_state['_wf_log_total'].get(idx, 0) + 1
+    # _completed_lock now guards every reader of the console buffers (status
+    # endpoint snapshots them), so the writers hold it too.
+    with _completed_lock:
+        logs = execution_state['logs']
+        logs.append(line)
+        if len(logs) > LOG_KEEP:
+            del logs[:-LOG_KEEP]
+        execution_state['_log_total'] += 1
+        if idx is not None:
+            buf = execution_state['_wf_logs'].setdefault(idx, [])
+            buf.append(line)
+            if len(buf) > LOG_KEEP:
+                del buf[:-LOG_KEEP]
+            execution_state['_wf_log_total'][idx] = execution_state['_wf_log_total'].get(idx, 0) + 1
 
 
 class LogBufferHandler(logging.Handler):
@@ -324,6 +354,22 @@ execution_state = {
     'fingerprint': '',
 }
 _completed_lock = threading.Lock()
+_execute_lock = threading.Lock()  # serializes the guard-and-claim of a new run
+
+
+def _results_snapshot() -> dict:
+    """A private copy of ``execution_state['results']``, taken under its lock.
+
+    The run publishes a node's rows the moment that node finishes (see the
+    ``publish`` callback in ``_llm_run_ctx``), so any read-only endpoint that
+    *iterated* the live dict — ``.items()``, ``.keys()`` — could be stepping
+    through it while that thread added the next node. Python then aborts the
+    request with "RuntimeError: dictionary changed size during iteration".
+    Copying under the same lock the writer holds is the cheap fix: the endpoint
+    walks a stable snapshot and the run never has to wait for a status poll.
+    """
+    with _completed_lock:
+        return dict(execution_state['results'])
 
 
 # ─── Durable run state ──────────────────────────────────────────
@@ -367,20 +413,6 @@ def _item_scope(ctx: dict, node: dict) -> str:
     return 'item:' + str((ctx.get('fingerprints') or {}).get(node.get('id') or '', ''))
 
 
-def _llm_scope(cfg: dict, op: str, text_column: str) -> str:
-    """Namespace for model answers: same operation, model and column → the same
-    answer is reusable, whatever row it arrived in and whatever run asked."""
-    return '|'.join(
-        str(part)
-        for part in (
-            op,
-            cfg.get('provider') or 'ollama',
-            cfg.get('model') or '',
-            text_column,
-        )
-    )
-
-
 def _workflow_needs_llm(workflow: dict) -> bool:
     """True when any process node in the payload will actually call a model.
 
@@ -415,7 +447,9 @@ def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     after a re-crawl — where nothing sits at the same index any more — still
     gets those answers free instead of paying the model twice for the same
     sentence. The JSONL checkpoint stays as the fallback for callers with no
-    store.
+    store. The cache SCOPE is assembled by the row runner itself: it is the
+    one place that genuinely knows the prompt builder, the truncation cap and
+    the daemon address, all of which change what an answer means.
     """
     cfg = execution_state.get('llm') or {}
     provider = cfg.get('provider') or 'ollama'
@@ -432,6 +466,11 @@ def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
         # so a settings save mid-run cannot split one run across two hosts.
         # OpenRouter's address is its endpoint, not a setting.
         host=(cfg.get('ollama_host') or '') if provider == 'ollama' else '',
+        # Retries sleep between attempts; Stop used to wait them out in full
+        # (backoff + Retry-After + a 300 s daemon timeout could mean minutes).
+        # The client now naps on this event instead, so Stop lands between
+        # attempts rather than after them.
+        cancel_event=execution_state.get('cancel_event'),
     )
     node_id = node.get('id', '')
 
@@ -451,8 +490,9 @@ def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
         'checkpoint_dir': Config.LLM_CHECKPOINT_DIR,
     }
     if ctx is not None:
-        text_column = str((node.get('params') or {}).get('text_column') or 'content')
-        run_ctx['cache'] = RowCache(ctx['store'], _llm_scope(cfg, op, text_column))
+        # Only the store is lent — see the docstring on why the row runner
+        # builds the cache scope itself.
+        run_ctx['store_for_cache'] = ctx['store']
     return run_ctx
 
 
@@ -533,6 +573,70 @@ def index():
     return send_from_directory(app.static_folder, 'index.html')
 
 
+# ─── Request validation helpers ────────────────────────────────
+
+
+def _json_body() -> dict | None:
+    """The request's JSON body as an object, or ``None`` when it is unusable.
+
+    Every POST handler here used to open with ``request.get_json()`` (optionally
+    ``or {}``). A body that is *valid JSON but not an object* — ``null``,
+    ``[1, 2]``, ``"abc"`` — then reached ``data.get(...)`` and raised
+    AttributeError, i.e. an HTML 500 for what is a client mistake; and the
+    ``silent=True`` variants hid the same mistake behind an empty dict, so the
+    handler answered as if the user had sent nothing.
+
+    A request with no body at all keeps meaning "no fields" (``{}``), which is
+    what ``or {}`` did and what the frontend relies on for its optional
+    payloads. Only a body that *is* there but is not an object is refused.
+    """
+    data = request.get_json(silent=True)
+    if isinstance(data, dict):
+        return data
+    # ``get_json`` answers None both for "nothing to parse" and for the literal
+    # ``null``, so the raw bytes tell those two apart.
+    if not request.is_json or not request.get_data().strip():
+        return {}
+    return None
+
+
+def _bad_body():
+    """The 400 every route returns for a body :func:`_json_body` refused."""
+    return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
+
+
+def _bad_param(name: str):
+    """The 400 for one body field whose type a handler cannot work with."""
+    return jsonify({'ok': False, 'error': t('api.paramInvalid', name=name)}), 400
+
+
+def _resolve_payload_dataframe(data: dict):
+    """``(df, None)`` for a usable payload, or ``(None, response)`` for its 400.
+
+    :func:`_resolve_dataframe` reports an unknown reference as a KeyError, which
+    every route here already turned into a 400 — but a reference of the wrong
+    *shape* (``{"data": 42}``) dies in the pandas constructor with a
+    ValueError/TypeError instead, and that escaped as an HTML 500. Both are the
+    caller's mistake, so both answer the same way, with the reason.
+    """
+    try:
+        return _resolve_dataframe(data), None
+    except (KeyError, TypeError, ValueError) as e:
+        return None, (jsonify({'ok': False, 'error': str(e)}), 400)
+
+
+@app.errorhandler(413)
+def _payload_too_large(error):
+    """Answer the request-size ceiling in JSON, not with Werkzeug's HTML page.
+
+    ``request.json()`` in the browser throws before the status is ever looked
+    at, which turned a clear "too big" into an unparseable response.
+    """
+    limit_bytes = int(app.config.get('MAX_CONTENT_LENGTH') or 0)
+    mb = round(limit_bytes / (1024 * 1024), 2) if limit_bytes > 0 else UPLOAD_LIMIT_MB
+    return jsonify({'ok': False, 'error': t('api.payloadTooLarge', limit=mb)}), 413
+
+
 # ─── Workflow API ──────────────────────────────────────────────
 
 
@@ -606,11 +710,39 @@ def _restore_workflow_datasets(name: str, workflow: dict) -> list:
     return report
 
 
+def _request_workflow_name(raw) -> str | None:
+    """Validate the workflow name a *load* or *delete* request asks for.
+
+    ``WorkflowManager.clean_name`` deliberately falls back to ``'untitled'`` for
+    anything that cleans down to nothing — right for **save**, where a blank name
+    field just labels the file, and wrong for the two routes that address an
+    existing file: ``''`` and ``'..'`` both resolved to *untitled*, so a delete
+    with an unset name in the browser removed an unrelated workflow (and a load
+    opened it). Those two now have to name something that survives cleaning on
+    its own merits; the returned stem is what the store is called with.
+    """
+    if not isinstance(raw, str):
+        return None
+    name = raw.strip()
+    if not name:
+        return None
+    clean = workflow_manager.clean_name(name)
+    if clean == WorkflowManager.DEFAULT_NAME and name != WorkflowManager.DEFAULT_NAME:
+        # The name cleaned down to nothing, so the fallback would point at
+        # somebody else's file.
+        return None
+    return clean
+
+
 @app.route('/api/workflow/save', methods=['POST'])
 def save_workflow():
-    data = request.get_json()
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     name = data.get('name', 'untitled')
     workflow = data.get('workflow', {})
+    if not isinstance(workflow, dict):
+        return jsonify({'ok': False, 'error': t('api.paramInvalid', name='workflow')}), 400
     try:
         path = workflow_manager.save(name, workflow)
     except OSError as e:
@@ -627,13 +759,15 @@ def save_workflow():
 
 @app.route('/api/workflow/load', methods=['GET'])
 def load_workflow():
-    name = request.args.get('name', '')
+    name = _request_workflow_name(request.args.get('name'))
+    if name is None:
+        return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
     workflow = workflow_manager.load(name)
     if not workflow:
         return jsonify({'ok': False, 'error': 'Not found'}), 404
     # Reconnect the nodes with their files *before* the canvas draws them, so
     # the workflow it returns is the runnable one.
-    datasets = _restore_workflow_datasets(workflow_manager.clean_name(name), workflow)
+    datasets = _restore_workflow_datasets(name, workflow)
     execution_state['workflow_name'] = str(workflow.get('name') or name or '')
     execution_state['fingerprint'] = workflow_fingerprint(workflow)
     return jsonify({'ok': True, 'workflow': workflow, 'datasets': datasets})
@@ -646,12 +780,17 @@ def list_workflows():
 
 @app.route('/api/workflow/delete', methods=['POST'])
 def delete_workflow():
-    name = request.get_json().get('name', '')
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    name = _request_workflow_name(data.get('name', ''))
+    if name is None:
+        return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
     workflow_manager.delete(name)
     # The files stay: another workflow may well read the same one, and an
     # orphan is cleaned up later rather than on a deletion the user may undo
     # by saving something else with the same name.
-    get_dataset_store().unbind(workflow_manager.clean_name(name))
+    get_dataset_store().unbind(name)
     return jsonify({'ok': True})
 
 
@@ -660,88 +799,104 @@ def delete_workflow():
 
 @app.route('/api/workflow/execute', methods=['POST'])
 def execute_workflow():
-    running_thread = execution_state['thread']
-    # The previous run's thread may still be unwinding after a Stop (it clears
-    # `running` first), so check liveness too — otherwise a quick Stop → Run
-    # leaves two threads appending to the same console and results.
-    if execution_state['running'] or (running_thread is not None and running_thread.is_alive()):
-        return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
+    # Guard and claim are one critical section. They used to be ~70 lines
+    # apart: two concurrent POSTs both passed the check, both started a run
+    # thread, and interleaved writes into one console, one store, one crawl.
+    with _execute_lock:
+        running_thread = execution_state['thread']
+        # The previous run's thread may still be unwinding after a Stop (it clears
+        # `running` first), so check liveness too — otherwise a quick Stop → Run
+        # leaves two threads appending to the same console and results.
+        if execution_state['running'] or (running_thread is not None and running_thread.is_alive()):
+            return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
 
-    data = request.get_json(silent=True) or {}
-    workflow = data.get('workflow', {})
-    settings = workflow.get('settings', {})
-    mode = settings.get('mode', 'parallel')
-    headless = settings.get('headless', True)
-    max_workers = _safe_int(settings.get('max_workers'), Config.DEFAULT_MAX_WORKERS, minimum=1, maximum=16)
-    # Recorded with the run so the history panel can group by workflow rather
-    # than showing every run as "untitled".
-    # ── Resumable run identity ─────────────────────────────────
-    # Continuing an interrupted run reuses its id, which is what makes the
-    # stored rows of the old attempt the rows of the new one: same node rows,
-    # same cursor, accumulating instead of duplicated.
-    resume_run_id = str(data.get('resume_run_id') or '').strip()
-    run_id = resume_run_id or uuid.uuid4().hex[:12]
-    execution_state['run_id'] = run_id
-    execution_state['resume'] = bool(resume_run_id)
-    workflow_name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
-    # A name node on the canvas overrides whatever the browser sent: its label
-    # is the user-facing category for this run in the Execution History panel.
-    # First name node wins; the engine's validate() guarantees the label is
-    # non-empty before a run is allowed to start.
-    for _node in workflow.get('nodes') or []:
-        if _node.get('type') == 'name':
-            _label = str((_node.get('params') or {}).get('workflow_name') or '').strip()
-            if _label:
-                workflow_name = _label
-            break
-    # Recorded so a preview can find this workflow's rows in the store once the
-    # live results are gone (a refresh, a restart) rather than guessing from a
-    # node id alone — "node-2" exists in every workflow.
-    execution_state['workflow_name'] = workflow_name
-    execution_state['fingerprint'] = workflow_fingerprint(workflow)
+        # Claim under the same lock that reads it — no second request can slip
+        # through while this one is still validating.
+        execution_state['running'] = True
+        started = False
+        try:
+            data = request.get_json(silent=True) or {}
+            if not isinstance(data, dict):
+                return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
+            workflow = data.get('workflow', {})
+            settings = workflow.get('settings', {})
+            mode = settings.get('mode', 'parallel')
+            headless = settings.get('headless', True)
+            max_workers = _safe_int(settings.get('max_workers'), Config.DEFAULT_MAX_WORKERS, minimum=1, maximum=16)
+            # Recorded with the run so the history panel can group by workflow rather
+            # than showing every run as "untitled".
+            # ── Resumable run identity ─────────────────────────────────
+            # Continuing an interrupted run reuses its id, which is what makes the
+            # stored rows of the old attempt the rows of the new one: same node rows,
+            # same cursor, accumulating instead of duplicated.
+            resume_run_id = str(data.get('resume_run_id') or '').strip()
+            run_id = resume_run_id or uuid.uuid4().hex[:12]
+            execution_state['run_id'] = run_id
+            execution_state['resume'] = bool(resume_run_id)
+            workflow_name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
+            # A name node on the canvas overrides whatever the browser sent: its label
+            # is the user-facing category for this run in the Execution History panel.
+            # First name node wins; the engine's validate() guarantees the label is
+            # non-empty before a run is allowed to start.
+            for _node in workflow.get('nodes') or []:
+                if _node.get('type') == 'name':
+                    _label = str((_node.get('params') or {}).get('workflow_name') or '').strip()
+                    if _label:
+                        workflow_name = _label
+                    break
+            # Recorded so a preview can find this workflow's rows in the store once the
+            # live results are gone (a refresh, a restart) rather than guessing from a
+            # node id alone — "node-2" exists in every workflow.
+            execution_state['workflow_name'] = workflow_name
+            execution_state['fingerprint'] = workflow_fingerprint(workflow)
 
-    # AI transport chosen in the settings panel: 'ollama' (local daemon) or
-    # 'openrouter' (API). The key only ever lives in the browser's
-    # localStorage; it travels with this request and is kept in memory.
-    # Console language for this run. The UI sends it explicitly because the
-    # run outlives the request that started it — and thread-locals are not
-    # inherited by the worker threads below, so each one re-applies it.
-    execution_state['lang'] = normalize(data.get('lang') or request.headers.get('X-Lang') or 'zh')
+            # AI transport chosen in the settings panel: 'ollama' (local daemon) or
+            # 'openrouter' (API). The key only ever lives in the browser's
+            # localStorage; it travels with this request and is kept in memory.
+            # Console language for this run. The UI sends it explicitly because the
+            # run outlives the request that started it — and thread-locals are not
+            # inherited by the worker threads below, so each one re-applies it.
+            execution_state['lang'] = normalize(data.get('lang') or request.headers.get('X-Lang') or 'zh')
 
-    llm_cfg = data.get('llm') or {}
-    execution_state['llm'] = {
-        'provider': llm_cfg.get('provider') or 'ollama',
-        'model': (llm_cfg.get('model') or '').strip(),
-        'api_key': (llm_cfg.get('api_key') or '').strip(),
-        'ollama_host': str(get_setting('ollama_host') or ''),
-        'batch_size': _safe_int(llm_cfg.get('batch_size'), 10, minimum=1, maximum=100),
-        'max_chars': _safe_int(llm_cfg.get('max_chars'), 600, minimum=0, maximum=20000),
-        'workers': _safe_int(llm_cfg.get('workers'), 3, minimum=1, maximum=8),
-    }
-    # Per-provider requirements: the key belongs to OpenRouter, the pulled tag
-    # to the local daemon — and neither is demanded by a run that never calls
-    # a model.
-    if _workflow_needs_llm(workflow):
-        if execution_state['llm']['provider'] == 'openrouter':
-            if not execution_state['llm']['api_key']:
-                return jsonify({'ok': False, 'error': t('api.needApiKey')}), 400
-            if not execution_state['llm']['model']:
-                return jsonify({'ok': False, 'error': t('api.needModel')}), 400
-        elif not execution_state['llm']['model']:
-            return jsonify({'ok': False, 'error': t('api.needOllamaModel')}), 400
+            llm_cfg = data.get('llm') or {}
+            execution_state['llm'] = {
+                'provider': llm_cfg.get('provider') or 'ollama',
+                'model': (llm_cfg.get('model') or '').strip(),
+                'api_key': (llm_cfg.get('api_key') or '').strip(),
+                'ollama_host': str(get_setting('ollama_host') or ''),
+                'batch_size': _safe_int(llm_cfg.get('batch_size'), 10, minimum=1, maximum=100),
+                'max_chars': _safe_int(llm_cfg.get('max_chars'), 600, minimum=0, maximum=20000),
+                'workers': _safe_int(llm_cfg.get('workers'), 3, minimum=1, maximum=8),
+            }
+            # Per-provider requirements: the key belongs to OpenRouter, the pulled tag
+            # to the local daemon — and neither is demanded by a run that never calls
+            # a model.
+            if _workflow_needs_llm(workflow):
+                if execution_state['llm']['provider'] == 'openrouter':
+                    if not execution_state['llm']['api_key']:
+                        return jsonify({'ok': False, 'error': t('api.needApiKey')}), 400
+                    if not execution_state['llm']['model']:
+                        return jsonify({'ok': False, 'error': t('api.needModel')}), 400
+                elif not execution_state['llm']['model']:
+                    return jsonify({'ok': False, 'error': t('api.needOllamaModel')}), 400
 
-    cancel_event = threading.Event()
-    execution_state['cancel_event'] = cancel_event
-    execution_state['running'] = True
-    execution_state['results'] = {}
-    execution_state['logs'] = []
-    execution_state['_log_total'] = 0
-    execution_state['_wf_logs'] = {}
-    execution_state['_wf_log_total'] = {}
-    execution_state['total_nodes'] = 0
-    execution_state['completed_nodes'] = 0
-    execution_state['_mode'] = mode
-    execution_state['executor'] = TaskExecutor(max_workers=max_workers, mode=mode)
+            cancel_event = threading.Event()
+            execution_state['cancel_event'] = cancel_event
+            execution_state['results'] = {}
+            execution_state['logs'] = []
+            execution_state['_log_total'] = 0
+            execution_state['_wf_logs'] = {}
+            execution_state['_wf_log_total'] = {}
+            execution_state['total_nodes'] = 0
+            execution_state['completed_nodes'] = 0
+            execution_state['_mode'] = mode
+            execution_state['executor'] = TaskExecutor(max_workers=max_workers, mode=mode)
+            started = True
+        finally:
+            if not started:
+                # A rejection (already-configured checks, malformed body) gives
+                # the claim back — the guard must not lock out every later Run.
+                execution_state['running'] = False
 
     def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict):
         """Execute one workflow (single connected component) level by level,
@@ -833,7 +988,14 @@ def execute_workflow():
             'resume': bool(resume_run_id),
             'fingerprints': fingerprints_for_workflow(workflow),
             'statuses': {},
+            # The resume-node's "newest unfinished run" fallback must pick from
+            # THIS workflow's shape only — node ids repeat across workflows.
+            'wf_fp': wf_fp,
+            # {node_id: count} of items the incremental ledger refused; the
+            # status endpoint mirrors it (shared dict, written by row sinks).
+            'skipped_seen': {},
         }
+        execution_state['skipped_seen'] = ctx['skipped_seen']
         outcome = RUN_FAILED
         try:
             engine = WorkflowEngine(workflow, execution_state['executor'])
@@ -886,7 +1048,9 @@ def execute_workflow():
                     all_results.update(results)
                 # update(), not replace(): a branch that died halfway already
                 # published its partial rows, and they must survive the merge.
-                execution_state['results'].update(all_results)
+                # Under the readers' lock — /api/stats/* iterates this dict.
+                with _completed_lock:
+                    execution_state['results'].update(all_results)
                 if execution_state['running']:
                     add_log(t('wf.completed'))
             else:
@@ -922,7 +1086,7 @@ def execute_workflow():
                 # Merged whether or not the run finished: update() keeps partial
                 # rows from branches that stopped mid-way (a Stop, or a dieing
                 # LLM) instead of throwing away what they already produced.
-                with wf_lock:
+                with wf_lock, _completed_lock:
                     execution_state['results'].update(all_results)
                 if execution_state['running']:
                     add_log(t('wf.all_completed'))
@@ -941,9 +1105,21 @@ def execute_workflow():
                 # the history panel as separate named workflows, not all
                 # under whichever name node happens to come first.
                 for se in sub_engines:
-                    sub_results = {nid: res for nid, res in execution_state['results'].items() if nid in se.nodes}
+                    snapshot = _results_snapshot()
+                    sub_results = {nid: res for nid, res in snapshot.items() if nid in se.nodes}
                     _record_execution_history(None, se, sub_results, _component_name(se) or workflow_name)
-            outcome = RUN_COMPLETED if still_running else RUN_INTERRUPTED
+            if not still_running:
+                outcome = RUN_INTERRUPTED
+            else:
+                # 'completed' must mean every node really finished. A node that
+                # failed or stopped half-way leaves gaps; marking the run
+                # complete hid it from the resume banner forever and the 未处理
+                # rows were never filled — the opposite of what checkpoints are
+                # for. One broken node downgrades the whole run to 'failed'.
+                broken = sum(
+                    1 for s in store.node_statuses(run_id).values() if s.get('status') in (NODE_FAILED, NODE_PARTIAL)
+                )
+                outcome = RUN_FAILED if broken else RUN_COMPLETED
 
         except Exception:
             logger.exception(t('wf.exec_exception'))
@@ -978,11 +1154,17 @@ def _source_stream(ctx: dict, nid: str, scope: str):
     """
     store = ctx['store']
     run_id = ctx['run_id']
+    # Per-node tally of items the incremental ledger refused ("already
+    # collected under this node fingerprint") — surfaced in the console and in
+    # /api/workflow/status so an all-seen re-run is loud, not silent.
+    tally = ctx.setdefault('skipped_seen', {})
 
     def row_sink(item):
         # A sink answers "was this new?" — the crawler drops duplicates itself,
         # which is how a resumed crawl re-reading the same page stays honest.
         kept, _dropped = store.append_rows(run_id, nid, [item], dedupe_scope=scope)
+        if not kept:
+            tally[nid] = tally.get(nid, 0) + 1
         return bool(kept)
 
     def cursor_sink(position):
@@ -1011,7 +1193,14 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     resume = {}
     nid = str(node.get('id') or '')
     if ctx is not None:
-        row_sink, cursor_sink = _source_stream(ctx, nid, _item_scope(ctx, node))
+        scope = _item_scope(ctx, node)
+        if params.get('recrawl') and not ctx.get('resume'):
+            # 重新采集 (node setting): release this node's 'already collected'
+            # ledger so the same items are collected again — the incremental
+            # default would skip every one of them. Never on a resumed run:
+            # there the ledger is precisely its dedupe machinery.
+            add_log(t('run.recrawl', n=ctx['store'].forget_items(scope)))
+        row_sink, cursor_sink = _source_stream(ctx, nid, scope)
         crawler.set_sink(row_sink)
         crawler.set_cursor_sink(cursor_sink)
         if ctx.get('resume'):
@@ -1026,15 +1215,23 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     try:
         if platform == 'wechat':
             # WeChat scrapes a list of article URLs, not a keyword.
-            return crawler.search(urls=_split_urls(params.get('urls')), resume=resume)
-        if platform == 'weibo' and (start_time or end_time):
+            rows = crawler.search(urls=_split_urls(params.get('urls')), resume=resume)
+        elif platform == 'weibo' and (start_time or end_time):
             # Both bounds are required: the crawler raises a readable error
             # otherwise instead of silently searching something else.
-            return crawler.search(keyword, start_time=start_time, end_time=end_time, resume=resume)
-        return crawler.search(keyword, target_count=target_count, resume=resume)
+            rows = crawler.search(keyword, start_time=start_time, end_time=end_time, resume=resume)
+        else:
+            rows = crawler.search(keyword, target_count=target_count, resume=resume)
     finally:
-        crawler.close()
+        _close_login_browser(crawler)  # bounded quit + PID-targeted reap, never a global taskkill
         execution_state['active_crawlers'].discard(crawler)
+    if ctx is not None:
+        skipped = (ctx.get('skipped_seen') or {}).get(nid)
+        if skipped:
+            # Incremental dedupe made visible: a re-run that already knows
+            # every item would otherwise end as '0 results' with no reason.
+            add_log(t('run.dedupe_skipped', n=skipped))
+    return rows
 
 
 def _execute_upload_node(node: dict, headless: bool = True):
@@ -1088,7 +1285,9 @@ def _execute_upload_node(node: dict, headless: bool = True):
 def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
     params = node.get('params', {})
     op = node.get('operation', params.get('operation', ''))
-    text_column = params.get('text_column', 'content')
+    # Default matches the frontend canvas default and every crawler's output
+    # column; the old 'content' silently mismatched real crawl data.
+    text_column = params.get('text_column', '正文')
     if not current_input:
         return []
 
@@ -1203,11 +1402,20 @@ def _safe_int(value, default: int = 0, minimum: int = None, maximum: int = None)
     Every settings field arrives as a string, so "abc" used to raise a bare
     ValueError from inside a request handler (HTTP 500) or from a node (opaque
     node failure). A malformed value now falls back to the default.
+
+    ``inf`` / ``nan`` are the same class of mistake and used to escape it:
+    ``float('inf')`` parses fine and only ``int()`` then refuses it with an
+    OverflowError, which no ``except (TypeError, ValueError)`` catches — so
+    ``/api/history/runs?limit=inf`` answered 500. Anything not finite is
+    rejected up front, exactly like unparseable text.
     """
     try:
-        result = int(float(value))
+        number = float(value)
     except (TypeError, ValueError):
         return default
+    if not math.isfinite(number):
+        return default
+    result = int(number)
     if minimum is not None:
         result = max(minimum, result)
     if maximum is not None:
@@ -1217,20 +1425,26 @@ def _safe_int(value, default: int = 0, minimum: int = None, maximum: int = None)
 
 def _safe_float(value, default: float = 0.0) -> float:
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError):
         return default
+    # inf/nan poison every pandas call downstream instead of failing here, so
+    # they are not usable numbers any more than "abc" is.
+    return number if math.isfinite(number) else default
 
 
 def _optional_int(value):
-    """Like _safe_int, but blank or unparseable means "not configured" (None)."""
+    """Like :func:`_safe_int`, but blank or unparseable means "not configured" (None)."""
     raw = str(value or '').strip()
     if not raw:
         return None
     try:
-        return int(float(raw))
+        number = float(raw)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(number):
+        return None
+    return int(number)
 
 
 def _optional_float(value):
@@ -1238,9 +1452,12 @@ def _optional_float(value):
     if not raw:
         return None
     try:
-        return float(raw)
+        number = float(raw)
     except (TypeError, ValueError):
         return None
+    # ``frac=inf`` reached df.sample as a ValueError, ``frac=nan`` as a silent
+    # no-op; both mean "no fraction configured" here.
+    return number if math.isfinite(number) else None
 
 
 def _split_columns(value) -> list:
@@ -1451,9 +1668,15 @@ def _execute_resume_node(node: dict, ctx: dict):
     limit = _safe_int(params.get('resume_limit'), 0, minimum=0)
 
     if not run_id:
-        # Nothing picked yet: fall back to the newest unfinished run, i.e. the
-        # one the banner would have offered.
-        candidates = store.list_resumable(limit=5)
+        # Nothing picked yet: fall back to the newest unfinished run of THIS
+        # workflow's shape. Without the fingerprint filter a 'node-2' from an
+        # unrelated workflow — the id repeats in every canvas — would be
+        # adopted wholesale; and the run currently writing must not feed itself.
+        candidates = [
+            r
+            for r in store.list_resumable(str(ctx.get('wf_fp') or '') or None, limit=5)
+            if r.get('run_id') != ctx.get('run_id') and r.get('status') != RUN_RUNNING
+        ]
         if not candidates:
             add_log(t('resume.no_run'))
             return []
@@ -1557,6 +1780,15 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         # Source rows are already in the store — the sink put every item there
         # as it was scraped, and re-writing them here would only renumber.
         store.replace_rows(run_id, nid, result)
+    if isinstance(result, list) and any(
+        isinstance(r, dict) and any(v == ABORT_MARK for v in r.values()) for r in result
+    ):
+        # A cancelled LLM node returns what it managed to answer; recording it
+        # DONE would let resume restore it and the 未处理 gaps would stay
+        # forever. PARTIAL keeps the rows but marks the node for a re-run,
+        # where the answer cache makes only the missing rows cost anything.
+        store.finish_node(run_id, nid, NODE_PARTIAL)
+        return result, NODE_PARTIAL
     store.finish_node(run_id, nid, NODE_DONE)
     return result, NODE_DONE
 
@@ -1603,16 +1835,17 @@ def _execute_node(
     return []
 
 
-def _kill_orphaned_chromedrivers():
-    """Force-kill any chromedriver.exe processes still alive. Safe because
-    chromedriver is only used by Selenium in this app."""
-    with contextlib.suppress(Exception):
-        subprocess.run(
-            ['taskkill', '/F', '/IM', 'chromedriver.exe'],
-            capture_output=True,
-            timeout=5,
-            check=False,
-        )
+def _close_active_crawlers():
+    """Close the login/crawl browsers of live sessions, one at a time.
+
+    Used to run `taskkill /F /IM chromedriver.exe` — which killed every
+    chromedriver on the machine, taking down unrelated Selenium apps and test
+    runs. Each registered crawler is now quit with a bounded grace, and only a
+    driver that ignores it is force-killed — by PID, tree included, so the
+    chrome children of *this* session die with it.
+    """
+    for crawler in list(execution_state['active_crawlers']):
+        _close_login_browser(crawler, quit_timeout=3.0)
 
 
 # ─── Stop / Status API ─────────────────────────────────────────
@@ -1641,7 +1874,7 @@ def stop_workflow():
     execution_state['completed_nodes'] = 0
     execution_state.pop('current_input', None)
     execution_state['executor'] = None
-    _kill_orphaned_chromedrivers()
+    _close_active_crawlers()
     return jsonify({'ok': True})
 
 
@@ -1650,7 +1883,8 @@ def workflow_status():
     # Build per-workflow progress lists from _wf_logs keys
     wf_list = []
     mode = execution_state.get('_mode', 'serial')
-    wf_keys = sorted(execution_state['_wf_logs'].keys())
+    with _completed_lock:
+        wf_keys = sorted(execution_state['_wf_logs'].keys())
     for wk in wf_keys:
         wf_logs = execution_state['_wf_logs'][wk]
         wf_list.append(
@@ -1664,8 +1898,13 @@ def workflow_status():
         )
 
     chart_results = {}
+    # One snapshot for both loops below: the run publishes node rows as they
+    # finish, and iterating the live dict alongside that raised
+    # "dictionary changed size during iteration" (an HTML 500 in the middle of a
+    # status poll).
+    results = _results_snapshot()
     if not execution_state['running']:
-        for nid, data in execution_state['results'].items():
+        for nid, data in results.items():
             if isinstance(data, dict) and 'engine' in data:
                 chart_results[nid] = data
 
@@ -1676,7 +1915,7 @@ def workflow_status():
             'log_total': execution_state['_log_total'],
             'workflows': wf_list,
             'mode': mode,
-            'results': list(execution_state['results'].keys()),
+            'results': list(results.keys()),
             'total_nodes': execution_state['total_nodes'],
             'completed_nodes': execution_state['completed_nodes'],
             'chart_results': chart_results,
@@ -1714,7 +1953,9 @@ def workflow_processes():
 @app.route('/api/workflow/processes/kill', methods=['POST'])
 def kill_process():
     """Force-kill a thread by its ident. MainThread and 'run' thread are protected."""
-    data = request.get_json()
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     ident = data.get('ident')
     if ident is None:
         return jsonify({'ok': False, 'error': 'Missing thread ident'}), 400
@@ -1836,10 +2077,12 @@ def dataset_delete(dataset_id: str):
 @app.route('/api/data/paste', methods=['POST'])
 def paste_dataset():
     """Register hand-typed/pasted JSON records (array of objects) as a dataset."""
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     records = data.get('data')
     if not isinstance(records, list):
-        return jsonify({'ok': False, 'error': t('api.badRequest', what='data must be a list of records')}), 400
+        return jsonify({'ok': False, 'error': t('api.fieldTypeInvalid', name='data')}), 400
     df = pd.DataFrame(records)
     try:
         dataset_id = _register_dataset(df, name=data.get('name', 'pasted'), source=SOURCE_PASTE)
@@ -1860,11 +2103,12 @@ def paste_dataset():
 @app.route('/api/data/inspect', methods=['POST'])
 def inspect_dataset():
     """Return null counts / dtypes / duplicate counts for a dataset."""
-    data = request.get_json(silent=True) or {}
-    try:
-        df = _resolve_dataframe(data)
-    except KeyError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    df, error = _resolve_payload_dataframe(data)
+    if error is not None:
+        return error
     return jsonify({'ok': True, 'report': DataAnalysisService.inspect(df)})
 
 
@@ -1873,11 +2117,12 @@ def preview_dataset():
     """Paginated tabular preview of any dataset (uploaded, pasted, a
     workflow node's result, or inline data) — backs the generic Data
     Preview panel so users can inspect real rows instead of only JSON/charts."""
-    data = request.get_json(silent=True) or {}
-    try:
-        df = _resolve_dataframe(data)
-    except KeyError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    df, error = _resolve_payload_dataframe(data)
+    if error is not None:
+        return error
 
     limit = _safe_int(data.get('limit'), 50, minimum=1, maximum=500)
     offset = _safe_int(data.get('offset'), 0, minimum=0)
@@ -1899,13 +2144,20 @@ def preview_dataset():
 def run_analysis():
     """Run a cleaning pipeline against a dataset (uploaded, pasted, or a
     workflow node's result) without needing to execute a full workflow."""
-    data = request.get_json(silent=True) or {}
-    try:
-        df = _resolve_dataframe(data)
-    except KeyError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    df, error = _resolve_payload_dataframe(data)
+    if error is not None:
+        return error
 
     steps = data.get('steps', [])
+    # run_pipeline walks the list and calls ``step.get('op')`` on every element,
+    # so a string ("abc" → its characters) or a list holding a bare number is an
+    # AttributeError that no ValueError/TypeError wrapper can catch. Shape first,
+    # with the reason, because "steps" is the one field the caller cannot guess.
+    if not isinstance(steps, list) or any(not isinstance(step, dict) for step in steps):
+        return jsonify({'ok': False, 'error': t('api.stepsMustBeObjects')}), 400
     try:
         cleaned, report = DataAnalysisService.run_pipeline(df, steps)
     except (ValueError, TypeError) as e:
@@ -1936,11 +2188,12 @@ def train_ml_model():
     LLM-labeled data. Uses the text and label columns specified to fit a
     TF-IDF + LogisticRegression pipeline, then saves the model to disk so
     subsequent runs can use ``mode='ml'`` for fast batch inference."""
-    data = request.get_json(silent=True) or {}
-    try:
-        df = _resolve_dataframe(data)
-    except KeyError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    df, error = _resolve_payload_dataframe(data)
+    if error is not None:
+        return error
 
     model_type = data.get('model_type', 'emotion')
     text_column = data.get('text_column', '正文')
@@ -1979,11 +2232,12 @@ def train_ml_model():
 def render_visualization():
     """Render a chart from any registered dataset / workflow result / inline
     data. Works for arbitrary tabular data, not just crawler output."""
-    data = request.get_json(silent=True) or {}
-    try:
-        df = _resolve_dataframe(data)
-    except KeyError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    df, error = _resolve_payload_dataframe(data)
+    if error is not None:
+        return error
 
     chart_type = data.get('chart_type', 'bar')
     engine = data.get('engine', 'echarts')
@@ -2029,19 +2283,36 @@ def render_visualization():
 def export_dataset():
     """Save any dataset (uploaded, pasted, cleaned, or a workflow result)
     to disk in the requested format — independent of a workflow's Save node."""
-    data = request.get_json(silent=True) or {}
-    try:
-        df = _resolve_dataframe(data)
-    except KeyError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    df, error = _resolve_payload_dataframe(data)
+    if error is not None:
+        return error
 
-    filename = data.get('filename', 'export.csv')
-    fmt = data.get('format') or DataExporter.infer_format(filename)
-    filename = DataExporter.normalize_filename(sanitize_filename(filename), fmt)
+    # The exporter calls ``fmt.lower()`` and ``os.path.splitext(filename)`` on
+    # what it is handed, so a number in either field raised AttributeError — a
+    # 500 for a value the caller could simply have left out. The name is cleaned
+    # *before* the format is inferred from its extension, so both calls below see
+    # a real string.
+    raw_format = data.get('format')
+    if raw_format is not None and not isinstance(raw_format, str):
+        return _bad_param('format')
+    filename = sanitize_filename(data.get('filename', 'export.csv'))
+    fmt = raw_format.strip() if isinstance(raw_format, str) else ''
+    fmt = fmt or DataExporter.infer_format(filename)
+    filename = DataExporter.normalize_filename(filename, fmt)
     filepath = os.path.join(Config.EXPORT_DIR, filename)
     try:
-        result = DataExporter.save(df, filepath, fmt=fmt, text_column=data.get('text_column'))
+        text_column = data.get('text_column')
+        result = DataExporter.save(
+            df, filepath, fmt=fmt, text_column=text_column if isinstance(text_column, str) else None
+        )
     except UnsupportedFormatError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    except (TypeError, ValueError) as e:
+        # A writer that cannot handle the frame's contents (an unhashable cell in
+        # a json export) is still a request the caller can fix.
         return jsonify({'ok': False, 'error': str(e)}), 400
     except OSError as e:
         logger.exception(t('misc.export_failed'))
@@ -2055,7 +2326,10 @@ def export_dataset():
 @app.route('/api/stats/emotion', methods=['GET'])
 def emotion_stats():
     all_data = []
-    for _nid, data in execution_state['results'].items():
+    # The snapshot is the point: these three routes can be polled *during* a run,
+    # and iterating the live results dict while the worker publishes the next
+    # node aborted the request with "dictionary changed size during iteration".
+    for _nid, data in _results_snapshot().items():
         if isinstance(data, list):
             for item in data:
                 if 'emotion' in item:
@@ -2067,7 +2341,7 @@ def emotion_stats():
 @app.route('/api/stats/tendency', methods=['GET'])
 def tendency_stats():
     all_data = []
-    for _nid, data in execution_state['results'].items():
+    for _nid, data in _results_snapshot().items():
         if isinstance(data, list):
             for item in data:
                 if 'tendency' in item:
@@ -2079,7 +2353,7 @@ def tendency_stats():
 @app.route('/api/stats/summary', methods=['GET'])
 def platform_summary():
     summary = {}
-    for nid, data in execution_state['results'].items():
+    for nid, data in _results_snapshot().items():
         if isinstance(data, list) and data:
             summary[nid] = {'count': len(data), 'sample_keys': list(data[0].keys()) if data else []}
     return jsonify({'ok': True, 'summary': summary})
@@ -2097,7 +2371,9 @@ def cookie_status():
 
 @app.route('/api/cookies/save', methods=['POST'])
 def save_cookies():
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     platform = data.get('platform', '')
     cookies = data.get('cookies', [])
     if not platform:
@@ -2109,51 +2385,185 @@ def save_cookies():
         return jsonify({'ok': False, 'error': t('api.cookiesRequired')}), 400
     try:
         cookie_manager.save(platform, cookies)
+        # Console mirror: cookie setup should be traceable like every other
+        # state change the panel makes.
+        add_log(t('cookie.saved', platform=platform))
         return jsonify({'ok': True, 'message': t('cookie.saved', platform=platform)})
     except (OSError, ValueError) as e:
         logger.exception(t('misc.cookie_save_failed'))
+        add_log(f'{t("misc.cookie_save_failed")}: {str(e)[:120]}')
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
-@app.route('/api/cookies/generate', methods=['POST'])
-def generate_cookies():
-    data = request.get_json(silent=True) or {}
-    platform = data.get('platform', '')
-    if not platform:
-        return jsonify({'ok': False, 'error': t('api.platformRequired')}), 400
-    if not cookie_manager.is_supported(platform):
-        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
-    # Bounded on purpose: this handler sleeps for the whole login wait, in a
-    # request thread. An unbounded value would hold that thread hostage.
-    wait_seconds = _safe_int(data.get('wait_seconds'), 120, minimum=10, maximum=600)
+_COOKIE_JOB_LOCK = threading.Lock()
+_COOKIE_JOB = {
+    'active': False,
+    'platform': '',
+    'phase': '',  # starting → waiting → saved | cancelled | error
+    'error': '',
+    'count': 0,
+    'cancel': threading.Event(),
+    'confirm': threading.Event(),
+}
 
+
+def _close_login_browser(crawler, quit_timeout: float = 5.0):
+    """Close the login browser of THIS session, whatever state it is in.
+
+    Two older behaviours were wrong: quit() was trusted to finish (a window the
+    user closed by hand leaves it hanging, keeping the chromedriver process
+    alive forever), and /api/workflow/stop answered such cases with a GLOBAL
+    `taskkill /IM chromedriver.exe` that also murdered unrelated Selenium
+    sessions on the machine. quit() now gets a bounded grace on a side thread;
+    if it does not return, exactly this session's driver process tree — the
+    chrome children included — is killed.
+    """
+    if crawler is None:
+        return
+    pid = None
+    with contextlib.suppress(Exception):
+        pid = crawler.driver.service.process.pid
+    waiter = threading.Thread(target=crawler.close, daemon=True)
+    waiter.start()
+    waiter.join(quit_timeout)
+    if waiter.is_alive() and pid:
+        with contextlib.suppress(Exception):
+            subprocess.run(
+                ['taskkill', '/F', '/T', '/PID', str(pid)],
+                capture_output=True,
+                timeout=8,
+                check=False,
+            )
+
+
+def _cookie_login_worker(platform: str, wait_seconds: int):
+    """Drive one login window from the request thread to its own daemon.
+
+    The request thread used to sleep for the whole wait (up to 600 s), so any
+    proxy or tab timeout turned a perfectly good login into a broken fetch and
+    an orphaned browser. Progress lives in _COOKIE_JOB now; the panel polls it.
+    """
+    job = _COOKIE_JOB
     crawler = None
     try:
         crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR)
         url = crawler.login_url
         if not url:
-            return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+            raise ValueError(t('api.unsupportedPlatform', platform=platform))
         crawler.driver.get(url)
         add_log(t('wf.browser_opened', platform=platform, n=wait_seconds))
-        time.sleep(wait_seconds)
+        job['phase'] = 'waiting'
+        deadline = time.time() + wait_seconds
+        while time.time() < deadline:
+            if job['cancel'].is_set():
+                job['phase'] = 'cancelled'
+                add_log(t('cookie.jobCancelled', platform=platform))
+                return
+            if job['confirm'].is_set():
+                break
+            try:
+                # Cheap liveness probe: the moment the user closes the window
+                # every call raises, and waiting on would just burn the rest
+                # of the deadline pretending a login can still happen.
+                _ = crawler.driver.window_handles
+            except Exception:
+                job['phase'] = 'error'
+                job['error'] = t('cookie.windowClosed')
+                add_log(t('cookie.windowClosed'))
+                return
+            time.sleep(1.0)
+        # Confirmed early, or the deadline passed: capture best-effort either
+        # way — people log in and simply forget to press the button.
         cookies = crawler.driver.get_cookies()
+        if not cookies:
+            job['phase'] = 'error'
+            job['error'] = t('cookie.noCookies')
+            add_log(t('cookie.noCookies'))
+            return
         cookie_manager.save(platform, cookies)
+        job['count'] = len(cookies)
+        job['phase'] = 'saved'
         add_log(t('wf.cookies_generated', platform=platform, n=len(cookies)))
-        return jsonify(
-            {
-                'ok': True,
-                'message': t('wf.cookies_generated', platform=platform, n=len(cookies)),
-                'count': len(cookies),
-            }
-        )
     except Exception as e:
-        # Selenium failures (no browser, no driver, network) are not OSErrors;
-        # without this they escaped as an HTML 500 the panel could not read.
         logger.exception(t('misc.cookie_gen_failed'))
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        job['phase'] = 'error'
+        job['error'] = str(e)[:300]
+        add_log(f'{t("misc.cookie_gen_failed")}: {str(e)[:120]}')
     finally:
-        if crawler is not None:
-            crawler.close()
+        _close_login_browser(crawler)
+        with _COOKIE_JOB_LOCK:
+            job['active'] = False
+
+
+@app.route('/api/cookies/generate', methods=['POST'])
+def generate_cookies():
+    """Open a login browser as a single-flight background job.
+
+    One login at a time, machine-wide: two windows racing on the same profile
+    (or on the user's attention) saved half-cookies and confusion. A second
+    request is refused with the platform of the live one.
+    """
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
+    platform = str(data.get('platform', ''))
+    if not platform:
+        return jsonify({'ok': False, 'error': t('api.platformRequired')}), 400
+    if not cookie_manager.is_supported(platform):
+        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+    wait_seconds = _safe_int(data.get('wait_seconds'), 120, minimum=10, maximum=600)
+
+    with _COOKIE_JOB_LOCK:
+        if _COOKIE_JOB['active']:
+            return (
+                jsonify(
+                    {
+                        'ok': False,
+                        'busy': True,
+                        'platform': _COOKIE_JOB['platform'],
+                        'error': t('api.cookieBusy', platform=_COOKIE_JOB['platform']),
+                    }
+                ),
+                409,
+            )
+        _COOKIE_JOB.update(active=True, platform=platform, phase='starting', error='', count=0)
+        _COOKIE_JOB['cancel'].clear()
+        _COOKIE_JOB['confirm'].clear()
+    threading.Thread(target=_cookie_login_worker, args=(platform, wait_seconds), daemon=True).start()
+    return jsonify({'ok': True, 'message': t('cookie.started')}), 202
+
+
+@app.route('/api/cookies/generate/status', methods=['GET'])
+def cookie_generate_status():
+    return jsonify(
+        {
+            'ok': True,
+            'active': _COOKIE_JOB['active'],
+            'platform': _COOKIE_JOB['platform'],
+            'phase': _COOKIE_JOB['phase'],
+            'error': _COOKIE_JOB['error'],
+            'count': _COOKIE_JOB['count'],
+        }
+    )
+
+
+@app.route('/api/cookies/generate/confirm', methods=['POST'])
+def cookie_generate_confirm():
+    """'I finished logging in' — capture and save the cookies now."""
+    with _COOKIE_JOB_LOCK:
+        if not _COOKIE_JOB['active']:
+            return jsonify({'ok': False, 'error': t('api.noCookieJob')}), 400
+        _COOKIE_JOB['confirm'].set()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/cookies/generate/cancel', methods=['POST'])
+def cookie_generate_cancel():
+    with _COOKIE_JOB_LOCK:
+        if not _COOKIE_JOB['active']:
+            return jsonify({'ok': False, 'error': t('api.noCookieJob')}), 400
+        _COOKIE_JOB['cancel'].set()
+    return jsonify({'ok': True})
 
 
 # ─── Config API ────────────────────────────────────────────────
@@ -2185,7 +2595,9 @@ def get_runtime_settings():
 
 @app.route('/api/settings', methods=['POST'])
 def set_runtime_settings():
-    data = request.get_json() or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     patch = data.get('settings') if isinstance(data.get('settings'), dict) else data
     values, warnings = save_settings(patch or {})
     return jsonify({'ok': True, 'settings': values, 'warnings': warnings})
@@ -2237,7 +2649,9 @@ def llm_ollama_models():
 def llm_test():
     """Tiny round-trip so the user can validate provider/model/key before
     committing to a long row-by-row run."""
-    data = request.get_json() or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     provider = data.get('provider') or 'ollama'
     client = LLMClient(
         provider=provider,
@@ -2285,7 +2699,9 @@ def clear_datasets():
     case of wanting a clean slate.
     """
     store = get_dataset_store()
-    payload = request.get_json(silent=True) or {}
+    payload = _json_body()
+    if payload is None:
+        return _bad_body()
     wipe = str(payload.get('all') or request.args.get('all') or '') in ('1', 'true', 'yes')
     if wipe:
         removed = store.clear()
@@ -2316,7 +2732,7 @@ def _first_tabular_result():
     """Return (node_id, DataFrame) for the first node that produced a tabular
     result, or (None, None). Used as a fallback so the Chart Studio still gets
     data when the user picked a node that has not produced output yet."""
-    for node_id, result in execution_state['results'].items():
+    for node_id, result in _results_snapshot().items():
         if isinstance(result, list) and result:
             return node_id, pd.DataFrame(result)
     return None, None
@@ -2479,7 +2895,9 @@ def studio_dataset():
     whichever node does have data and say so via `fallback`; a merged load never
     does that silently — it reports each source instead.
     """
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     sources = data.get('sources')
     if isinstance(sources, list) and sources:
         if len(sources) > 1:
@@ -2604,7 +3022,9 @@ def studio_sources():
 
     Body: {"candidates": [{"node_id": str, "payload": {...} | null}]}
     """
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     candidates = data.get('candidates')
     if not isinstance(candidates, list):
         return jsonify({'ok': False, 'error': t('api.badRequest', what='candidates list')}), 400
@@ -2628,7 +3048,9 @@ def studio_sources():
 @app.route('/api/studio/save-image', methods=['POST'])
 def studio_save_image():
     """Persist a chart rendered in the studio (PNG data URL) into EXPORT_DIR."""
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     image = data.get('image') or ''
     match = re.match(r'^data:image/(png|jpeg|jpg|webp);base64,(.+)$', image, re.DOTALL)
     if not match:
@@ -2701,12 +3123,18 @@ def runs_resumable():
     workflow. The browser also gets the per-node breakdown it needs to say what
     is already paid for.
     """
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     workflow = data.get('workflow') or {}
     if not isinstance(workflow, dict) or not workflow.get('nodes'):
         return jsonify({'ok': True, 'runs': []})
     limit = _safe_int(data.get('limit'), 10, minimum=1, maximum=100)
-    runs = get_run_store().list_resumable(workflow_fingerprint(workflow), limit=limit)
+    found = get_run_store().list_resumable(workflow_fingerprint(workflow), limit=limit)
+    # A *live* run is never resumable — offering it invites 重新开始 to discard
+    # the run that is still writing right now. Leftover 'running' rows from a
+    # dead process were already promoted to 'interrupted' at startup.
+    runs = [r for r in found if r.get('status') != RUN_RUNNING]
     return jsonify({'ok': True, 'runs': runs})
 
 
@@ -2742,11 +3170,21 @@ def runs_stats():
     return jsonify({'ok': True, 'stats': get_run_store().stats()})
 
 
+def _reject_live_run(run_id: str):
+    """True when run_id names the run a live thread is still writing.
+
+    Discarding or deleting it mid-flight would pull the rows and cursor out
+    from under the writer — the UI's 丢弃/删除 must go through Stop first.
+    """
+    return bool(run_id) and execution_state['running'] and run_id == str(execution_state.get('run_id') or '')
+
+
 @app.route('/api/runs/purge', methods=['POST'])
 def runs_purge():
     """Housekeeping. Interrupted runs are the last to go — they are the ones
-    somebody may still want to continue."""
-    removed = get_run_store().purge()
+    somebody may still want to continue. The live run, if any, is exempt."""
+    exclude = str(execution_state.get('run_id') or '') if execution_state['running'] else ''
+    removed = get_run_store().purge(exclude_run_id=exclude)
     return jsonify({'ok': True, 'removed': removed})
 
 
@@ -2758,13 +3196,17 @@ def runs_discard():
     over would silently return fewer rows than asked for, because every item
     the discarded attempt fetched still counts as seen.
     """
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     run_id = str(data.get('run_id') or '').strip()
     if not run_id:
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid='-')}), 400
     store = get_run_store()
     if store.get_run(run_id) is None:
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid=run_id)}), 404
+    if _reject_live_run(run_id):
+        return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
     removed = store.delete_run(run_id)
     removed['item_claims'] = store.forget_run_items(run_id)
     return jsonify({'ok': True, 'removed': removed})
@@ -2775,10 +3217,14 @@ def runs_delete():
     """Drop a finished run's copy of the data. Kept separate from discard:
     deleting an old run must not resurrect items as "unseen" for a crawl
     that is still being continued."""
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     run_id = str(data.get('run_id') or '').strip()
     if not run_id:
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid='-')}), 400
+    if _reject_live_run(run_id):
+        return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
     removed = get_run_store().delete_run(run_id)
     return jsonify({'ok': True, 'removed': removed})
 
@@ -2806,15 +3252,29 @@ def _open_browser(url: str):
         logger.warning(t('misc.browser_open_failed', err=e))
 
 
+def _debug_enabled() -> bool:
+    """FLASK_DEBUG as a plain yes/no (anything else, unset included, is no)."""
+    return str(os.environ.get('FLASK_DEBUG', '')).strip().lower() in ('1', 'true', 'yes')
+
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    url = f'http://127.0.0.1:{port}'
-    # debug=True runs the werkzeug reloader: this module executes twice — once
-    # in the watcher (WERKZEUG_RUN_MAIN unset) and once in the serving child
-    # (set to 'true'). Opening from the watcher means exactly one tab, and the
-    # child's restarts on code changes don't spawn new ones. The 1.5s delay
-    # lets the child bind the port before the browser arrives.
-    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
-        threading.Timer(1.5, _open_browser, args=(url,)).start()
+    # Local by default: this server drives a browser, holds crawl cookies and can
+    # run arbitrary code through the debugger, so it must not reach the LAN unless
+    # somebody asks for it with HOST. Debug is off for the same reason — the
+    # Werkzeug debugger is a remote code execution path and the reloader runs this
+    # module twice — and is opt-in via FLASK_DEBUG.
+    port = _safe_int(os.environ.get('PORT'), 5000, minimum=1, maximum=65535)
+    host = str(os.environ.get('HOST') or '127.0.0.1')
+    debug = _debug_enabled()
+    # A wildcard bind is not a URL to visit, so the browser gets the loopback.
+    browse_host = '127.0.0.1' if host in ('0.0.0.0', '::') else host
+    # Opening the browser is a development convenience only: a server started for
+    # real use (debug off) must not spawn a tab on the machine it runs on.
+    # With the reloader on, this module runs twice — once in the watcher
+    # (WERKZEUG_RUN_MAIN unset) and once in the serving child — so the watcher is
+    # the one that opens, which means exactly one tab. The 1.5s delay lets the
+    # child bind the port before the browser arrives.
+    if debug and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        threading.Timer(1.5, _open_browser, args=(f'http://{browse_host}:{port}',)).start()
     logger.info(t('misc.server_starting', port=port))
-    app.run(host='0.0.0.0', port=port, debug=True, threaded=True)
+    app.run(host=host, port=port, debug=debug, threaded=True, use_reloader=debug)

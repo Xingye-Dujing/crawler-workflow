@@ -1,3 +1,4 @@
+import hashlib
 import logging
 
 import pandas as pd
@@ -9,6 +10,36 @@ logger = logging.getLogger(__name__)
 # Values that mean false when a text column is converted to bool. Without this
 # map ``astype(bool)`` turns the *string* 'False' — and '0' — into True.
 _FALSEY_TEXT = {'', '0', '0.0', 'false', 'no', 'n', 'off', 'none', 'null', 'nan', '假', '否', '不'}
+
+
+def _stable_seed(df: pd.DataFrame) -> int:
+    """A sampling seed that repeats for one input and differs between inputs.
+
+    ``df.sample`` without ``random_state`` draws from the process-wide RNG, so any
+    pipeline containing a sample step answered differently on every run of *the
+    same* data — which breaks the promise the whole engine is built on (a
+    repeated or resumed run reproduces the previous result, so re-running never
+    silently changes the rows a paid-for downstream step was computed from).
+
+    The seed is therefore derived from the frame itself: its shape, its column
+    names and the row hashes of its first and last row. Deterministic (pandas
+    hashes with a fixed key), cheap enough to pay per step, and still spread
+    across the seed space so two datasets do not sample the same rows.
+    """
+    digest = hashlib.sha1()
+    digest.update(f'{df.shape[0]}x{df.shape[1]}|'.encode())
+    digest.update(repr([str(c) for c in df.columns]).encode('utf-8', 'replace'))
+    edges = pd.concat([df.head(1), df.tail(1)]) if len(df) else df.iloc[0:0]
+    try:
+        # uint64 row hashes, not the values themselves: this stays cheap on a
+        # wide text frame and never trips over the encoding of a cell.
+        digest.update(pd.util.hash_pandas_object(edges, index=True).to_numpy().tobytes())
+    except (TypeError, ValueError):
+        # Unhashable cells (a column of dicts or lists) — fall back to a textual
+        # dump, which is still the same bytes for the same rows.
+        digest.update(repr(edges.values.tolist()).encode('utf-8', 'replace'))
+    # 4 bytes: numpy's legacy RandomState only accepts a seed in 0 … 2**32 - 1.
+    return int.from_bytes(digest.digest()[:4], 'big')
 
 
 def _to_bool(value) -> bool:
@@ -175,16 +206,22 @@ class DataAnalysisService:
         # threw away every other row. Ask for nothing, change nothing.
         if n is None and frac is None:
             return df
+        # An explicit seed is authoritative; a blank one (the settings panel
+        # stores every field as a string, so '' is "left empty") is treated as
+        # absent. Without either, the frame's own hash decides — see
+        # ``_stable_seed``: the sample stays reproducible for the same input.
+        raw_seed = str(seed).strip() if seed is not None else ''
+        state = int(float(raw_seed)) if raw_seed else _stable_seed(df)
         # Both configured: an explicit row count is the more specific request.
         if n is not None:
             n = max(0, int(n))
             if n >= len(df):
                 return df
-            return df.sample(n=n, random_state=seed).reset_index(drop=True)
+            return df.sample(n=n, random_state=state).reset_index(drop=True)
         frac = min(max(float(frac), 0.0), 1.0)
         if frac >= 1.0:
             return df
-        return df.sample(frac=frac, random_state=seed).reset_index(drop=True)
+        return df.sample(frac=frac, random_state=state).reset_index(drop=True)
 
     @staticmethod
     def groupby_agg(df: pd.DataFrame, group_col: str, agg_col: str, agg_func: str = 'sum') -> pd.DataFrame:

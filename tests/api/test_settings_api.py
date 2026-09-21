@@ -11,6 +11,7 @@ are the only routes in this file that would talk to the network, so every one
 of them is exercised with the HTTP boundary in ``analyzers.llm_client``
 stubbed; nothing here can reach Ollama or OpenRouter.
 """
+
 import json
 
 import pytest

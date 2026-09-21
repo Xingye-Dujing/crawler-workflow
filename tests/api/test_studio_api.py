@@ -15,6 +15,7 @@ safely*:
 
 Nothing here touches the crawler, a model, or the network.
 """
+
 import base64
 
 import pytest

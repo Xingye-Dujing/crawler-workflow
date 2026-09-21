@@ -80,7 +80,10 @@ _BODY_FIELDS = ('正文', '内容', '摘要', 'body', 'content')
 
 
 def _dumps(value) -> str:
-    return json.dumps(_clean(value), ensure_ascii=False)
+    # sort_keys=True is a correctness property, not cosmetics: this output
+    # feeds node fingerprints, and dict key order coming from a different
+    # client (or a re-save) must not read as a changed node definition.
+    return json.dumps(_clean(value), ensure_ascii=False, sort_keys=True)
 
 
 def _clean(value):
@@ -478,9 +481,11 @@ class RunStore:
         cur = self._execute('DELETE FROM item_seen WHERE first_run_id = ?', (run_id,))
         return cur.rowcount
 
-    def purge(self, keep_per_workflow: int = None, keep_days: int = None) -> dict:
+    def purge(self, keep_per_workflow: int = None, keep_days: int = None, exclude_run_id: str = '') -> dict:
         """Age out old runs. Finished runs go before interrupted ones, and the
-        most recent ``keep_per_workflow`` per workflow always stay."""
+        most recent ``keep_per_workflow`` per workflow always stay.
+        ``exclude_run_id`` is the run a live thread is still writing — deleting
+        its rows mid-run would silently destroy the very state being built."""
         keep = Config.RUN_KEEP_PER_WORKFLOW if keep_per_workflow is None else int(keep_per_workflow)
         days = Config.RUN_KEEP_DAYS if keep_days is None else int(keep_days)
         cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - max(0, days) * 86400))
@@ -500,6 +505,7 @@ class RunStore:
             finished = [r for r in ordered if r['status'] != RUN_INTERRUPTED]
             keep_ids = {r['run_id'] for r in (interrupted + finished)[: max(0, keep)]}
             doomed.update(r['run_id'] for r in ordered if r['run_id'] not in keep_ids)
+        doomed.discard(exclude_run_id)
 
         removed = 0
         for run_id in doomed:

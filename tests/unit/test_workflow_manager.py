@@ -5,6 +5,7 @@ contracts are the safety ones: one file per name (overwrite, never a pile of
 variants), the name is carried *inside* the payload (the run reports it to the
 execution history), and nothing a user types can walk out of the directory.
 """
+
 import json
 import os
 
@@ -27,16 +28,19 @@ class TestNameCleaning:
         assert WorkflowManager.MAX_NAME_LENGTH == 60
         assert len(manager.clean_name('长' * 200)) == 60
 
-    @pytest.mark.parametrize('raw, expected', [
-        ('  带空格  ', '带空格'),
-        ('../escape', '_escape'),
-        ('a/b/c', 'a_b_c'),
-        ('windows\\path', 'windows_path'),
-        ('bad:chars*?"<>|', 'bad_chars______'),
-        ('...', 'untitled'),
-        ('', 'untitled'),
-        ('   ', 'untitled'),
-    ])
+    @pytest.mark.parametrize(
+        'raw, expected',
+        [
+            ('  带空格  ', '带空格'),
+            ('../escape', '_escape'),
+            ('a/b/c', 'a_b_c'),
+            ('windows\\path', 'windows_path'),
+            ('bad:chars*?"<>|', 'bad_chars______'),
+            ('...', 'untitled'),
+            ('', 'untitled'),
+            ('   ', 'untitled'),
+        ],
+    )
     def test_names_become_single_path_components(self, manager, raw, expected):
         clean = manager.clean_name(raw)
         assert clean == expected

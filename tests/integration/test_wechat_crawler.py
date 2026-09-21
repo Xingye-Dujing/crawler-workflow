@@ -7,6 +7,7 @@ that proves the whole Selenium chain — driver creation with the configured
 chromedriver, page load, waits, scroll, CSS-selector extraction — actually
 works on this machine. Selected only with ``-m integration``.
 """
+
 import pytest
 
 from crawlers.wechat import WechatCrawler

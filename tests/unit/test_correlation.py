@@ -5,6 +5,7 @@ shape has to hold even when nothing can be computed (fewer than two numeric
 columns). Ordering is part of the contract too: the UI shows the top pairs
 first, so absolute strength must be descending.
 """
+
 import pandas as pd
 import pytest
 
@@ -17,13 +18,15 @@ COLUMNS = ['col1', 'col2', 'method', 'correlation', 'abs_correlation']
 
 @pytest.fixture
 def df():
-    return pd.DataFrame({
-        '点赞': [1, 2, 3, 4, 5, 6, 7, 8],
-        '收藏': [2, 4, 6, 8, 10, 12, 14, 16],
-        '差评': [8, 7, 6, 5, 4, 3, 2, 1],
-        '评论': [5, 3, 8, 1, 9, 2, 7, 4],
-        '标题': ['文'] * 8,
-    })
+    return pd.DataFrame(
+        {
+            '点赞': [1, 2, 3, 4, 5, 6, 7, 8],
+            '收藏': [2, 4, 6, 8, 10, 12, 14, 16],
+            '差评': [8, 7, 6, 5, 4, 3, 2, 1],
+            '评论': [5, 3, 8, 1, 9, 2, 7, 4],
+            '标题': ['文'] * 8,
+        }
+    )
 
 
 class TestShape:
@@ -43,12 +46,15 @@ class TestShape:
         values = CorrelationAnalyzer.analyze_dataframe(df)['abs_correlation'].tolist()
         assert values == sorted(values, reverse=True)
 
-    @pytest.mark.parametrize('frame', [
-        pd.DataFrame({'a': [1, 2, 3]}),
-        pd.DataFrame({'t': ['x', 'y']}),
-        pd.DataFrame({'a': [1], 'b': ['x']}),
-        pd.DataFrame(columns=['a', 'b']),
-    ])
+    @pytest.mark.parametrize(
+        'frame',
+        [
+            pd.DataFrame({'a': [1, 2, 3]}),
+            pd.DataFrame({'t': ['x', 'y']}),
+            pd.DataFrame({'a': [1], 'b': ['x']}),
+            pd.DataFrame(columns=['a', 'b']),
+        ],
+    )
     def test_without_two_numeric_columns_the_table_is_empty_but_well_shaped(self, frame):
         result = CorrelationAnalyzer.analyze_dataframe(frame)
         assert list(result.columns) == COLUMNS
@@ -88,7 +94,9 @@ class TestDetection:
         assert set(result['method']) == {method}
         perfect = result[result['abs_correlation'] == 1.0]
         assert {frozenset(row) for row in perfect[['col1', 'col2']].values.tolist()} >= {
-            frozenset(('点赞', '收藏')), frozenset(('点赞', '差评'))}
+            frozenset(('点赞', '收藏')),
+            frozenset(('点赞', '差评')),
+        }
 
     def test_an_unknown_method_is_pandas_business(self, df):
         with pytest.raises(ValueError):

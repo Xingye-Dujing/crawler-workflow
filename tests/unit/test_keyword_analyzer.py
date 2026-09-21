@@ -5,6 +5,7 @@ downstream nodes and charts depend on: two output layouts (one aggregate table
 vs. one row per hit per source row) and the rule that a text too short to carry
 statistics yields nothing rather than noise.
 """
+
 import math
 
 import pandas as pd
@@ -23,10 +24,12 @@ SHORT_TEXT = '三亚'
 
 @pytest.fixture
 def df():
-    return pd.DataFrame({
-        '正文': ['三亚的海非常蓝，适合冬天度假', '海南粉的汤底非常鲜美，很好吃', '潜水体验很好，珊瑚很多'],
-        '标题': ['攻略', '美食', '潜水'],
-    })
+    return pd.DataFrame(
+        {
+            '正文': ['三亚的海非常蓝，适合冬天度假', '海南粉的汤底非常鲜美，很好吃', '潜水体验很好，珊瑚很多'],
+            '标题': ['攻略', '美食', '潜水'],
+        }
+    )
 
 
 @pytest.fixture
@@ -51,19 +54,21 @@ class TestSingleTextExtraction:
     def test_topk_is_a_hard_cap(self, method):
         assert len(getattr(KeywordExtractor, method)(LONG_TEXT, topk=2)) == 2
 
-    @pytest.mark.parametrize('method, text', [
-        ('extract_tfidf', SHORT_TEXT),
-        ('extract_textrank', SHORT_TEXT),
-        ('extract_tfidf', ''),
-        ('extract_tfidf', '   '),
-        ('extract_tfidf', None),
-    ])
+    @pytest.mark.parametrize(
+        'method, text',
+        [
+            ('extract_tfidf', SHORT_TEXT),
+            ('extract_textrank', SHORT_TEXT),
+            ('extract_tfidf', ''),
+            ('extract_tfidf', '   '),
+            ('extract_tfidf', None),
+        ],
+    )
     def test_a_text_too_short_to_score_yields_nothing(self, method, text):
         assert getattr(KeywordExtractor, method)(text) == []
 
     def test_extraction_is_repeatable(self):
-        assert KeywordExtractor.extract_tfidf(LONG_TEXT, topk=5) == KeywordExtractor.extract_tfidf(
-            LONG_TEXT, topk=5)
+        assert KeywordExtractor.extract_tfidf(LONG_TEXT, topk=5) == KeywordExtractor.extract_tfidf(LONG_TEXT, topk=5)
 
 
 class TestDataframeMode:

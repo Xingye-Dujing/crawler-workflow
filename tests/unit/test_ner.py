@@ -6,6 +6,7 @@ columns (even when nothing was found), one row per hit, and offsets that point
 back into the source text exactly. The offset invariant catches a whole class
 of group-index mistakes in the regexes.
 """
+
 import pandas as pd
 import pytest
 

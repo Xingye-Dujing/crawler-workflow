@@ -1,6 +1,8 @@
 import contextlib
 import json
 import logging
+import random
+import re
 import time
 from abc import ABC, abstractmethod
 
@@ -14,6 +16,36 @@ from i18n import t
 from settings_store import get_setting
 
 logger = logging.getLogger(__name__)
+
+# Where a crawler has been pushed into a login page instead of the content it
+# asked for. Every platform parks its QR wall on ``passport``/``login`` hosts,
+# so one shared detector beats three platform-specific guesses at "why is this
+# page empty?".
+_WALL_MARKERS = (
+    'passport.weibo.com/sso',
+    'passport.zhihu.com',
+    '/login?',
+    '/signin',
+    'accounts.google.com',
+)
+_WALL_TEXTS = ('扫描二维码登录', '手机号登录', '请先登录', '登录后查看', '扫码登录')
+
+
+def looks_like_login_page(url: str, body_text: str = '') -> bool:
+    """True when a page is a login wall rather than the requested content.
+
+    Crawlers used to read such a page as "no results" and log an empty crawl,
+    which sent the user off to re-save cookies that were fine all along.
+    """
+    lowered = (url or '').lower()
+    if any(marker in lowered for marker in _WALL_MARKERS):
+        return True
+    text = body_text or ''
+    # Only the head of the page is examined: the marker strings are short and
+    # a wall puts them at the top, while an article that merely mentions
+    # "登录" in its body must not read as a wall.
+    head = text[:400]
+    return sum(1 for marker in _WALL_TEXTS if marker in head) >= 2
 
 
 def as_index(value, default: int = 0) -> int:
@@ -46,6 +78,11 @@ class Crawler(ABC):
 
     domain = ''
     login_url = ''
+    # Extra hosts the saved cookies must be planted on before the crawl starts.
+    # ``domain`` alone is not enough when a platform serves the crawlable pages
+    # from a subdomain that never appears in the saved cookie list (weibo's
+    # search lives on s.weibo.com, the cookies on .weibo.com).
+    cookie_domains: tuple[str, ...] = ()
 
     def __init__(self, headless: bool = True, cookie_path: str | None = None):
         self.headless = headless
@@ -55,6 +92,11 @@ class Crawler(ABC):
         self._cursor_sink = None
         self._collected = []
         self._cursor = {}
+        # Set when a page turned out to be a login wall; the platform crawlers
+        # stop their scroll/page walk on it and say so instead of reporting an
+        # empty crawl.
+        self.login_wall = False
+        self.cookies_loaded = 0
         self._create_driver()
 
     # ── streaming hooks (installed by the runner) ───────────────
@@ -132,6 +174,15 @@ class Crawler(ABC):
         opts.add_argument('--no-sandbox')
         opts.add_argument('--disable-dev-shm-usage')
         opts.add_argument('--disable-gpu')
+        # A background or occluded window must behave exactly like a visible
+        # one. Chrome's default backgrounding throttles timers and freezes
+        # rendering of occluded windows, which makes virtualised/lazy pages
+        # stop loading — the crawl then reads an empty page that is only empty
+        # because the browser decided to nap. (Headless is unaffected either
+        # way; this covers the login browser and headless=False crawls.)
+        opts.add_argument('--disable-backgrounding-occluded-windows')
+        opts.add_argument('--disable-background-timer-throttling')
+        opts.add_argument('--disable-renderer-backgrounding')
         # Machine-local choices (driver / browser / window) come from the
         # settings store, editable in the frontend 设置 panel.
         opts.add_argument(f'--window-size={get_setting("window_size")}')
@@ -150,6 +201,13 @@ class Crawler(ABC):
             self._load_cookies()
 
     def _load_cookies(self):
+        """Plant the saved cookies on every host the crawl will visit.
+
+        One host is not enough: a cookie exported from ``weibo.com`` is accepted
+        there and silently rejected on the search host, which is where the wall
+        actually appears. Each host is visited in turn and the whole list is
+        offered to it — the entries that do not belong raise and are skipped.
+        """
         try:
             with open(self.cookie_path, encoding='utf-8') as f:
                 cookies = json.load(f)
@@ -157,18 +215,157 @@ class Crawler(ABC):
             return
         if not isinstance(cookies, list) or not cookies:
             return
-        try:
-            self.driver.get(f'https://{self.domain}')
-            for c in cookies:
+        hosts = [self.domain, *[d for d in self.cookie_domains if d and d != self.domain]]
+        for host in [h for h in hosts if h]:
+            try:
+                self.driver.get(f'https://{host}')
+            except Exception as e:
+                # A slow / blocked landing page must not kill the session before
+                # the crawl even starts — the next host may still take cookies.
+                logger.warning(t('crawl.cookies_failed', platform=host, err=e))
+                continue
+            applied = 0
+            for raw in cookies:
+                payload = self._cookie_payload(raw)
+                if not payload:
+                    continue
                 # A cookie for another domain (or an expired one the driver
                 # refuses) must not abort the rest of the list.
                 with contextlib.suppress(Exception):
-                    self.driver.add_cookie(c)
-        except Exception as e:
-            # A slow / blocked landing page must not kill the session before
-            # the crawl even starts — but it is worth saying out loud, since
-            # the run that follows may come back empty for lack of login.
-            logger.warning(t('crawl.cookies_failed', platform=self.domain, err=e))
+                    self.driver.add_cookie(payload)
+                    applied += 1
+            self.cookies_loaded = max(self.cookies_loaded, applied)
+            logger.info(t('crawl.cookiesSeeded', host=host, n=applied, total=len(cookies)))
+
+    @staticmethod
+    def _cookie_payload(raw):
+        """The saveable subset of a stored cookie, or None if it has no name.
+
+        ``save_cookies`` writes whatever the driver reported, including fields
+        ``add_cookie`` refuses (``expiry`` as a float, an unparsable
+        ``sameSite``), which used to make the whole reload silently no-op.
+        """
+        if not isinstance(raw, dict):
+            return None
+        name = str(raw.get('name') or '')
+        if not name:
+            return None
+        payload = {'name': name, 'value': str(raw.get('value', ''))}
+        for key in ('domain', 'path', 'secure', 'httpOnly'):
+            if raw.get(key) is not None:
+                payload[key] = raw[key]
+        if raw.get('sameSite') in ('Strict', 'Lax', 'None'):
+            payload['sameSite'] = raw['sameSite']
+        try:
+            if raw.get('expiry') is not None:
+                payload['expiry'] = int(float(raw['expiry']))
+        except (TypeError, ValueError):
+            pass
+        return payload
+
+    # ── DOM / timing helpers shared by the platform crawlers ───────────
+
+    def _text_of(self, element, selector: str, default: str = '') -> str:
+        """innerText of a child, falling back to textContent.
+
+        innerText is empty for nodes the virtualised lists have not laid out
+        yet — precisely the cards a fast scroll leaves off-screen — so the
+        text is there, the crawler just could not see it.
+        """
+        try:
+            el = element.find_element('css selector', selector)
+        except Exception:
+            return default
+        return self._node_text(el, default)
+
+    def _node_text(self, element, default: str = '') -> str:
+        script = 'return arguments[0].innerText || arguments[0].textContent || ""'
+        try:
+            text = self.driver.execute_script(script, element)
+        except Exception:
+            try:
+                text = element.text
+            except Exception:
+                return default
+        text = (text or '').strip()
+        return text if text else default
+
+    def _body_text(self, limit: int = 400) -> str:
+        """Visible text at the top of the page, used for login-wall detection."""
+        try:
+            return self._node_text(self.driver.find_element('css selector', 'body'))[:limit]
+        except Exception:
+            return ''
+
+    def check_login_wall(self, where: str = '') -> bool:
+        """Flag (once) that the browser was bounced to a login page.
+
+        Defensive by design: a driver that cannot answer ``current_url`` (a
+        dead session, a test double) must read as "no wall" rather than abort a
+        crawl that is otherwise producing rows.
+        """
+        try:
+            url = self.driver.current_url or ''
+        except Exception:
+            return False
+        if not looks_like_login_page(url, self._body_text()):
+            return False
+        if not self.login_wall:
+            self.login_wall = True
+            logger.warning(t('crawl.loginWall', platform=self.domain, where=where or url))
+        return True
+
+    def _wait_for_count(self, count_fn, target: int, timeout: float = 1.5, tick: float = 0.3) -> int:
+        """Poll ``count_fn`` until it reaches ``target`` or ``timeout`` runs out.
+
+        Replaces the fixed two-second sleep after a scroll: content that is
+        already there costs one poll, content that is slow still gets its wait.
+        Bounded by poll count rather than a clock so the wait stays a pure
+        function of the page (and stays instant under a fake driver).
+        """
+        seen = count_fn()
+        for _ in range(max(1, int(timeout / tick))):
+            if seen >= target:
+                break
+            time.sleep(tick)
+            seen = count_fn()
+        return seen
+
+    @staticmethod
+    def _polite_pause(base: float = 1.0, spread: float = 0.4):
+        """Jittered pause between rounds that hit the network.
+
+        Anti-bot caution is a requirement, not a leftover: the jitter is what
+        keeps a run of crawls from looking like a metronome.
+        """
+        time.sleep(max(0.2, base + random.uniform(-spread, spread)))
+
+    @staticmethod
+    def _as_text(value) -> str:
+        return '' if value is None else str(value).strip()
+
+    @staticmethod
+    def _abs_url(base_href: str, prefix: str = 'https:') -> str:
+        href = (base_href or '').strip()
+        if href.startswith('//'):
+            return prefix + href
+        return href
+
+    @staticmethod
+    def _number_in(text: str) -> int:
+        """First integer in a label, honouring the Chinese units 万/千."""
+        if not text:
+            return 0
+        cleaned = str(text).replace(',', '').replace(' ', '')
+        m = re.search(r'(\d+(?:\.\d+)?)(万|千)?', cleaned)
+        if not m:
+            return 0
+        value = float(m.group(1))
+        if m.group(2) == '万':
+            value *= 10000
+        elif m.group(2) == '千':
+            value *= 1000
+        return int(value)
 
     def save_cookies(self, path: str) -> int:
         """Write the session cookies to *path*; returns how many were saved."""
@@ -191,6 +388,19 @@ class Crawler(ABC):
         for _ in range(times):
             self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
             time.sleep(wait)
+
+    def scroll_down(self, steps: int = 3, wait: float = 0.12):
+        """Walk the page down in viewport-sized steps, then land at the bottom.
+
+        A single jump to ``scrollHeight`` skips the intersection observers hung
+        off the intermediate sections of an infinite list, so nothing new is
+        requested and the round is wasted; stepping feeds them.
+        """
+        for _ in range(max(1, steps)):
+            self.driver.execute_script('window.scrollBy(0, Math.max(400, window.innerHeight * 0.9));')
+            time.sleep(wait)
+        self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
+        time.sleep(wait)
 
     @abstractmethod
     def search(self, keyword: str, **_kwargs):

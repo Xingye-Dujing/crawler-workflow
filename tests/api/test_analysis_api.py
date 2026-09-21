@@ -10,10 +10,14 @@ services:
 * a chart spec is always JSON-safe: one bare ``NaN`` token would make the
   browser's ``JSON.parse`` reject the whole response,
 * a bad spec or an unknown format is a 400 with a readable reason, never a
-  traceback,
+  traceback, and a render that fails still releases its matplotlib figure,
+* a pipeline containing a sample step answers the same rows for the same input,
+  so a repeated or resumed run cannot quietly change what downstream work was
+  computed from,
 * ML training only ever reports data problems — it never reaches a model
   server, so no transport stubbing is needed here.
 """
+
 import json
 from pathlib import Path
 
@@ -65,7 +69,7 @@ class TestAnalysisRun:
         ]
         assert [row['title'] for row in body['preview']] == ['sanya', 'haikou', 'xinglong']
 
-        detail = client.get(f"/api/data/datasets/{body['dataset_id']}").get_json()['dataset']
+        detail = client.get(f'/api/data/datasets/{body["dataset_id"]}').get_json()['dataset']
         assert detail['source'] == 'analysis'
         assert detail['name'] == 'cleaned'
         assert detail['row_count'] == 3
@@ -129,6 +133,73 @@ class TestAnalysisRun:
         assert preview['total_rows'] == 3
         inspect = client.post('/api/data/inspect', json={'dataset_id': cleaned['dataset_id']}).get_json()['report']
         assert inspect['duplicate_rows'] == 0
+
+
+class TestSampleStepIsReproducible:
+    """A sample step used to ride the process-wide RNG, so two runs of one input
+    disagreed — the one thing the engine promises it never does (a resumed run
+    re-reads rows an expensive downstream step was already paid for). The seed is
+    now derived from the frame, and an explicit one still wins.
+    """
+
+    SAMPLE_STEPS = [{'op': 'sample_rows', 'params': {'n': 6}}]
+    SEEDABLE_STEPS = [{'op': 'sample_rows', 'params': {'n': 6, 'seed': 11}}]
+    FRAC_STEPS = [{'op': 'sample_rows', 'params': {'frac': 0.5}}]
+
+    @staticmethod
+    def _many_records(count: int = 40) -> list:
+        # Every title is distinct, so a different sample is visible as a
+        # different list rather than hiding behind repeated values.
+        return [{'title': f'row-{i}', 'score': i % 7} for i in range(count)]
+
+    @pytest.mark.parametrize(
+        'steps', [SAMPLE_STEPS, SEEDABLE_STEPS, FRAC_STEPS], ids=['derived seed', 'explicit seed', 'frac']
+    )
+    def test_two_runs_of_one_input_answer_the_same_rows(self, client, paste, steps):
+        records = self._many_records()
+        dataset_id = paste(records, name='sample-me.csv')
+        payload = {'dataset_id': dataset_id, 'steps': steps}
+        first = client.post('/api/analysis/run', json=payload).get_json()
+        second = client.post('/api/analysis/run', json=payload).get_json()
+        assert first['ok'] is True and second['ok'] is True
+        assert first['row_count'] == second['row_count'] == (6 if steps[0]['params'].get('n') else 20)
+        titles = [row['title'] for row in second['preview']]
+        assert titles == [row['title'] for row in first['preview']]
+        # A sample really happened: it is neither the head nor the whole input.
+        assert titles != [record['title'] for record in records[: len(titles)]]
+
+    def test_the_pipeline_itself_is_deterministic_for_the_same_frame(self):
+        """run_pipeline is pure — the same goes for the seed it derives."""
+        import pandas as pd
+
+        from services.data_analysis import DataAnalysisService, _stable_seed
+
+        records = self._many_records()
+        df = pd.DataFrame(records)
+        first, _ = DataAnalysisService.run_pipeline(df, self.SAMPLE_STEPS)
+        second, _ = DataAnalysisService.run_pipeline(df, self.SAMPLE_STEPS)
+        assert first.equals(second)
+        # Copying the frame must not change the answer: the seed describes the
+        # data, not the object identity or the order the tests happened to run in.
+        copied, _ = DataAnalysisService.run_pipeline(df.copy(), self.SAMPLE_STEPS)
+        assert copied.equals(first)
+        # And it is *derived from* the data, so another input lands elsewhere in
+        # the seed space instead of every frame sharing one fixed draw.
+        other = pd.DataFrame(records[::-1])
+        assert _stable_seed(other) != _stable_seed(df)
+
+    def test_an_explicit_seed_overrides_the_derived_one(self):
+        import pandas as pd
+
+        from services.data_analysis import DataAnalysisService
+
+        df = pd.DataFrame(self._many_records())
+        derived, _ = DataAnalysisService.run_pipeline(df, self.SAMPLE_STEPS)
+        seeded, _ = DataAnalysisService.run_pipeline(df, self.SEEDABLE_STEPS)
+        assert seeded['title'].tolist() != derived['title'].tolist()
+        # Same seed, same rows — that is the whole point of exposing it.
+        again, _ = DataAnalysisService.run_pipeline(df, self.SEEDABLE_STEPS)
+        assert again.equals(seeded)
 
 
 class TestVisualizeRender:
@@ -206,6 +277,29 @@ class TestVisualizeRender:
         assert body['engine'] == 'matplotlib'
         assert body['image'].startswith('data:image/png;base64,')
         assert len(body['image']) > 1000
+
+    def test_a_failed_render_does_not_leave_its_figure_open(self, client, paste):
+        """matplotlib holds every figure it opens until something closes it, so
+        a chart that failed *after* creating one used to leak it — and the UI
+        retries charts, so the leak grew with every click. The renderer now
+        closes in a ``finally``, the error path included.
+        """
+        import matplotlib.pyplot as plt
+
+        # A pie cannot be drawn over a negative sum, which is exactly the
+        # failure that arrives after plt.subplots() has opened the figure.
+        negative = [{'city': 'Sanya', 'likes': -5}, {'city': 'Haikou', 'likes': 7}]
+        dataset_id = paste(negative, name='negative.csv')
+        base = {'dataset_id': dataset_id, 'engine': 'matplotlib', 'x_field': 'city', 'y_field': 'likes'}
+        open_before = set(plt.get_fignums())
+
+        for _ in range(3):
+            response = client.post('/api/visualize/render', json={**base, 'chart_type': 'pie'})
+            assert response.status_code == 400, response.get_json()
+            assert set(plt.get_fignums()) == open_before, 'a failed render leaked its figure'
+
+        assert client.post('/api/visualize/render', json={**base, 'chart_type': 'bar'}).get_json()['ok'] is True
+        assert set(plt.get_fignums()) == open_before, 'a successful render leaked its figure'
 
 
 class TestExportSave:

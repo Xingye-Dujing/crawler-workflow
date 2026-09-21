@@ -6,6 +6,7 @@ cluster instead of vanishing mid-pipeline. Beyond that, the guards are about
 settings a user can type into the node (``n_clusters=0``, an unknown method,
 punctuation-only text) not blowing up the run.
 """
+
 import pandas as pd
 import pytest
 
@@ -14,8 +15,12 @@ from analyzers.clustering import TextCluster
 pytestmark = pytest.mark.unit
 
 TEXTS = [
-    '三亚的海非常蓝，适合冬天度假潜水', '海南粉的汤底非常鲜美，海口美食', '糟糕的体验，服务很差劲不推荐',
-    '垃圾产品，难用死了太失望', '潜水看珊瑚，海水清澈见底', '小镇非常安静，适合散步发呆',
+    '三亚的海非常蓝，适合冬天度假潜水',
+    '海南粉的汤底非常鲜美，海口美食',
+    '糟糕的体验，服务很差劲不推荐',
+    '垃圾产品，难用死了太失望',
+    '潜水看珊瑚，海水清澈见底',
+    '小镇非常安静，适合散步发呆',
 ]
 
 

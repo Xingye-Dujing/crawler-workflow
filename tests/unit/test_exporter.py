@@ -9,6 +9,7 @@ contracts are about the file that lands on disk:
   JSON export must contain no bare ``NaN`` token,
 - the returned metadata (path/format/rows) matches the file that was written.
 """
+
 import json
 from pathlib import Path
 
@@ -34,19 +35,38 @@ def df():
     return pd.DataFrame({'标题': ['三亚攻略', '海口美食'], '点赞': [12, 30]})
 
 
-@pytest.mark.parametrize('fmt, ext', [
-    ('csv', '.csv'), ('json', '.json'), ('excel', '.xlsx'), ('xlsx', '.xlsx'), ('txt', '.txt'),
-    ('html', '.html'), ('markdown', '.md'),
-])
+@pytest.mark.parametrize(
+    'fmt, ext',
+    [
+        ('csv', '.csv'),
+        ('json', '.json'),
+        ('excel', '.xlsx'),
+        ('xlsx', '.xlsx'),
+        ('txt', '.txt'),
+        ('html', '.html'),
+        ('markdown', '.md'),
+    ],
+)
 def test_extension_matches_the_format(fmt, ext):
     assert E.EXTENSIONS[fmt] == ext
 
 
 class TestFormatSelection:
-    @pytest.mark.parametrize('filename, expected', [
-        ('a.csv', 'csv'), ('a.JSON', 'json'), ('x.xlsx', 'excel'), ('y.xls', 'excel'), ('z.md', 'markdown'),
-        ('w.html', 'html'), ('t.txt', 'txt'), ('no-extension', 'csv'), ('', 'csv'), ('.csv', 'csv'),
-    ])
+    @pytest.mark.parametrize(
+        'filename, expected',
+        [
+            ('a.csv', 'csv'),
+            ('a.JSON', 'json'),
+            ('x.xlsx', 'excel'),
+            ('y.xls', 'excel'),
+            ('z.md', 'markdown'),
+            ('w.html', 'html'),
+            ('t.txt', 'txt'),
+            ('no-extension', 'csv'),
+            ('', 'csv'),
+            ('.csv', 'csv'),
+        ],
+    )
     def test_format_is_inferred_from_the_name(self, filename, expected):
         assert E.infer_format(filename) == expected
 
@@ -69,19 +89,22 @@ class TestFormatSelection:
 
 
 class TestNormalizeFilename:
-    @pytest.mark.parametrize('filename, fmt, expected', [
-        ('report', 'csv', 'report.csv'),
-        ('report.txt', 'csv', 'report.txt'),
-        ('report.csv', 'csv', 'report.csv'),
-        ('a.JSON', 'json', 'a.JSON'),
-        ('report', 'excel', 'report.xlsx'),
-        ('report', 'markdown', 'report.md'),
-        ('', 'csv', 'export.csv'),
-        ('   ', 'json', 'export.json'),
-        ('.', 'csv', 'export.csv'),
-        ('...', 'html', 'export.html'),
-        ('deep/nested', 'csv', 'deep/nested.csv'),
-    ])
+    @pytest.mark.parametrize(
+        'filename, fmt, expected',
+        [
+            ('report', 'csv', 'report.csv'),
+            ('report.txt', 'csv', 'report.txt'),
+            ('report.csv', 'csv', 'report.csv'),
+            ('a.JSON', 'json', 'a.JSON'),
+            ('report', 'excel', 'report.xlsx'),
+            ('report', 'markdown', 'report.md'),
+            ('', 'csv', 'export.csv'),
+            ('   ', 'json', 'export.json'),
+            ('.', 'csv', 'export.csv'),
+            ('...', 'html', 'export.html'),
+            ('deep/nested', 'csv', 'deep/nested.csv'),
+        ],
+    )
     def test_stems_get_the_right_extension(self, filename, fmt, expected):
         assert E.normalize_filename(filename, fmt) == expected
 

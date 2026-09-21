@@ -2,23 +2,33 @@
 
 This is the machinery that decides whether a half-finished LLM run survives:
 per-row checkpointing, replay-on-resume, the circuit breaker, cancellation,
-and the 未处理 marker for rows that never landed. Everything here runs against
-a scripted client (``chat`` overridden) — no sockets, no daemon, by design.
+the 未处理 marker for rows that never landed, and the *scope* of the durable
+answer cache (an answer produced under another prompt, topic, truncation cap or
+daemon must never be replayed). Everything here runs against a scripted client
+(``chat`` overridden) — no sockets, no daemon, by design. The answer cache is
+exercised over a real RunStore on a throwaway database, because the keying rules
+that matter are the ones the store actually receives.
 """
+
 import contextlib
 
 import pytest
 
+import analyzers.llm_client as lc
+import services.run_store
 from analyzers.llm_client import (
     ABORT_MARK,
     LLMClient,
     LLMError,
     RowCheckpoint,
+    answer_scope,
     content_key,
+    prompt_version,
     run_llm_dataframe,
     run_llm_rows,
     text_hash,
 )
+from services.run_store import RowCache, RunStore
 
 pytestmark = pytest.mark.unit
 
@@ -41,6 +51,12 @@ def parse_emotion(content):
 
 def build_prompt(text):
     return f'classify sentiment: {text}'
+
+
+def build_prompt_reworded(text):
+    """Same rows, different question — an answer cached under the template above
+    must never be replayed for this one (prompt editing used to be invisible)."""
+    return f'classify sentiment, weighing implied sarcasm: {text}'
 
 
 class ScriptedClient(LLMClient):
@@ -162,9 +178,47 @@ class TestRunRows:
         with pytest.raises(LLMError) as err:
             run_simple(jobs=[(i, f'text {i}') for i in range(8)], client=client, max_consecutive_failures=3)
         assert err.value.kind == 'circuit_break'
-        # Each failing row double-counts (exception + failed result); the trip
-        # happens at the next row's check, so exactly 2 rows were attempted.
-        assert len(client.prompts) == 2
+        # A crashing row counts as exactly one failure — the except branch used to
+        # add one and ``_finish`` another, tripping a 3-strike breaker after two
+        # rows. The trip happens at the *next* row's check, so the threshold many
+        # rows are attempted.
+        assert len(client.prompts) == 3
+
+    def test_serial_and_parallel_breakers_agree_on_the_row_count(self):
+        # The two paths used to disagree by a factor of two: only the serial one
+        # double-counted a crashing row. With one row per batch both drain and
+        # re-check between every row, so the same threshold must cost the same
+        # number of attempts.
+        serial = ScriptedClient(exc=RuntimeError)
+        with pytest.raises(LLMError):
+            run_simple(jobs=[(i, f'text {i}') for i in range(8)], client=serial, max_consecutive_failures=3)
+        parallel = ScriptedClient(exc=RuntimeError)
+        with pytest.raises(LLMError):
+            run_simple(
+                jobs=[(i, f'text {i}') for i in range(8)],
+                client=parallel,
+                workers=2,
+                batch_size=1,
+                max_consecutive_failures=3,
+            )
+        assert len(serial.prompts) == 3
+        assert len(parallel.prompts) == 3
+
+    def test_success_between_failures_resets_the_counter(self):
+        class Flaky(ScriptedClient):
+            def chat(self, prompt, max_retries=2):
+                if 'bad' in prompt:
+                    self.prompts.append(prompt)
+                    raise RuntimeError('transient row crash')
+                return super().chat(prompt, max_retries)
+
+        client = Flaky()
+        jobs = [(0, 'bad first'), (1, 'good one'), (2, 'bad second'), (3, 'good two'), (4, 'bad third')]
+        results = run_simple(jobs=jobs, client=client, max_consecutive_failures=3)
+        # The breaker counts *consecutive* failures: one crash, one success, and
+        # so on, never reaches three in a row, so every row is still attempted.
+        assert set(results) == {1, 3}
+        assert len(client.prompts) == 5
 
     def test_transport_error_propagates_and_publishes_partial(self):
         publishes = []
@@ -222,13 +276,18 @@ def df_for_llm():
 
     return pd.DataFrame(
         {
-            '正文': ['三亚的海非常蓝，适合冬天度假', '小镇安静', '', '海南粉的汤底非常鲜美适合夏天',
-                    '博鳌的小镇非常安静适合散步'],
+            '正文': [
+                '三亚的海非常蓝，适合冬天度假',
+                '小镇安静',
+                '',
+                '海南粉的汤底非常鲜美适合夏天',
+                '博鳌的小镇非常安静适合散步',
+            ],
         }
     )
 
 
-def run_df(df, client=None, **ctx):
+def run_df(df, client=None, prompt=build_prompt, op='emotion', text_column='正文', extra_key='', **ctx):
     base = {
         'result_columns': ['情感', '置信度'],
         'blank': ['', 0.0],
@@ -236,9 +295,10 @@ def run_df(df, client=None, **ctx):
         'fail_value': ['失败', 0.0],
     }
     kwargs = {
-        'text_column': '正文',
-        'op': 'emotion',
-        'build_prompt': build_prompt,
+        'text_column': text_column,
+        'op': op,
+        'build_prompt': prompt,
+        'extra_key': extra_key,
         'parse': parse_emotion,
         'ctx': {'client': client or ScriptedClient(), **ctx},
         **base,
@@ -281,22 +341,18 @@ class TestDataframeRunner:
             assert df.loc[idx, '情感'] == ABORT_MARK
         assert df.loc[1, '情感'] == '跳过'
 
-    def test_missing_text_column_returns_blank_filled_frame(self, df_for_llm):
+    def test_missing_text_column_raises_instead_of_an_empty_success(self, df_for_llm):
+        # Returning a blank-filled frame used to make a misconfigured column look
+        # like a DONE node whose answers happened to be empty; the executor now
+        # sees a failure it can report and retry.
         client = ScriptedClient()
-        df = run_llm_dataframe(
-            df_for_llm,
-            text_column='不存在',
-            op='emotion',
-            result_columns=['情感', '置信度'],
-            blank=['', 0.0],
-            skip_value=('跳过', 0.0),
-            fail_value=('失败', 0.0),
-            build_prompt=build_prompt,
-            parse=parse_emotion,
-            ctx={'client': client},
-        )
+        with pytest.raises(LLMError) as err:
+            run_df(df_for_llm, client=client, text_column='不存在')
+        assert err.value.kind == 'error'
+        assert '不存在' in str(err.value)
         assert client.prompts == []
-        assert (df['情感'] == '').all()
+        # Deciding nothing about the data is the point: no result columns added.
+        assert list(df_for_llm.columns) == ['正文']
 
     def test_durable_cache_wins_over_jsonl(self, df_for_llm, tmp_path):
         # cfg['cache'] (the RowCache adapter over runs.db) must suppress the
@@ -323,3 +379,179 @@ class TestDataframeRunner:
         # raise, and the run must complete.
         assert getattr(spy, 'discarded', False) is True
         assert (df.loc[0, '情感'], df.loc[4, '情感']) == ('pos', 'pos')
+
+
+# ─── prompt version + answer scope (what an answer is still valid for) ───
+
+
+class TestPromptVersion:
+    def test_digest_follows_the_template_source(self):
+        assert prompt_version(build_prompt) == prompt_version(build_prompt)
+        assert prompt_version(build_prompt) != prompt_version(build_prompt_reworded)
+
+    def test_digest_is_memoed_on_the_code_object(self):
+        # Reading source is file I/O; the row loop must not pay for it per row.
+        version = prompt_version(build_prompt)
+        assert lc._PROMPT_VERSIONS[build_prompt.__code__] == version
+        assert prompt_version(build_prompt) == version
+
+    def test_bound_methods_digest_as_their_function(self):
+        class Template:
+            def build(self, text):
+                return f'classify: {text}'
+
+        # Two analyzer instances share one template — and therefore one cache.
+        assert prompt_version(Template().build) == prompt_version(Template().build)
+
+    def test_closures_from_one_definition_share_a_digest(self):
+        # cleaner.py hands the runner a fresh lambda per run, whose body does not
+        # contain the topic: that is exactly why the topic travels separately as
+        # ``extra_key`` instead of hiding inside the prompt version.
+        def make(topic):
+            return lambda text: f'{topic} :: {text}'
+
+        assert prompt_version(make('三亚')) == prompt_version(make('海口'))
+
+    def test_builder_without_source_falls_back_to_its_name(self):
+        namespace = {}
+        exec(compile('builder = lambda text: text', '<generated-template>', 'exec'), namespace)
+        builder = namespace['builder']
+        version = prompt_version(builder)
+        assert version.startswith('qualname:')
+        assert prompt_version(builder) == version  # memoed like any other
+
+
+class TestAnswerScope:
+    def test_scope_lists_every_answer_changing_input_in_order(self):
+        client = LLMClient(provider='openrouter', model='a/b:free', api_key='k', max_chars=321, host='http://d:1')
+        assert answer_scope('emotion', client, '正文', 'topic-a', build_prompt) == '|'.join(
+            [
+                'emotion',
+                'openrouter',
+                'a/b:free',
+                '正文',
+                '321',
+                'http://d:1',
+                'topic-a',
+                prompt_version(build_prompt),
+            ]
+        )
+
+    def test_a_reworded_prompt_gives_a_different_scope(self):
+        client = LLMClient(model='m')
+        assert answer_scope('emotion', client, '正文', '', build_prompt) != answer_scope(
+            'emotion', client, '正文', '', build_prompt_reworded
+        )
+
+
+# ─── durable answer cache behind ctx['store_for_cache'] ─────────────────
+
+
+@pytest.fixture
+def run_store(tmp_path):
+    store = RunStore(str(tmp_path / 'runs.db'))
+    yield store
+    store._conn.close()
+
+
+def cached_scopes(store):
+    """The cache scopes that actually landed answers in runs.db."""
+    return {row['scope'] for row in store._query('SELECT DISTINCT scope FROM llm_cache')}
+
+
+def replay(store, df, client=None, **kwargs):
+    """One run against the lent store, with a fresh client so chats stay countable."""
+    client = client or ScriptedClient()
+    run_df(df, client=client, store_for_cache=store, **kwargs)
+    return client
+
+
+class TestDurableAnswerCache:
+    def test_store_for_cache_builds_a_rowcache_with_the_answer_scope(self, run_store, df_for_llm, monkeypatch):
+        # The row runner — not app.py — owns the key: it is the only place that
+        # holds the prompt builder, the truncation cap and the daemon host at once.
+        class RecordingRowCache(RowCache):
+            built = []
+
+            def __init__(self, store, scope):
+                super().__init__(store, scope)
+                RecordingRowCache.built.append(self)
+
+        monkeypatch.setattr(services.run_store, 'RowCache', RecordingRowCache)
+        client = ScriptedClient()
+        replay(run_store, df_for_llm, client=client)
+        assert len(RecordingRowCache.built) == 1
+        cache = RecordingRowCache.built[0]
+        assert cache._store is run_store
+        assert cache._scope == answer_scope('emotion', client, '正文', '', build_prompt)
+        assert cache._scope.split('|')[:6] == ['emotion', 'openrouter', 'scripted', '正文', '600', '']
+
+    def test_unchanged_rerun_is_served_without_a_second_chat(self, run_store, df_for_llm):
+        assert len(replay(run_store, df_for_llm).prompts) == 3
+        second = replay(run_store, df_for_llm)
+        assert second.prompts == []  # every answer came back from runs.db
+        # The frame is blanked at the start of each run, so these landed from the
+        # cache rather than being left over from the first pass.
+        assert [df_for_llm.loc[i, '情感'] for i in (0, 3, 4)] == ['pos', 'pos', 'pos']
+
+    def test_edited_prompt_template_invalidates_the_answers(self, run_store, df_for_llm):
+        replay(run_store, df_for_llm)
+        assert len(replay(run_store, df_for_llm, prompt=build_prompt_reworded).prompts) == 3
+
+    def test_changed_topic_invalidates_the_answers(self, run_store, df_for_llm):
+        replay(run_store, df_for_llm)
+        assert len(replay(run_store, df_for_llm, extra_key='三亚旅游').prompts) == 3
+
+    def test_changed_truncation_invalidates_the_answers(self, run_store, df_for_llm):
+        replay(run_store, df_for_llm)
+        shorter = ScriptedClient(max_chars=12)
+        assert len(replay(run_store, df_for_llm, client=shorter).prompts) == 3
+
+    def test_changed_daemon_host_invalidates_the_answers(self, run_store, df_for_llm):
+        replay(run_store, df_for_llm)
+        other_host = ScriptedClient(host='http://10.0.0.8:11434')
+        assert len(replay(run_store, df_for_llm, client=other_host).prompts) == 3
+
+    def test_scopes_coexist_and_stay_independent(self, run_store, df_for_llm):
+        replay(run_store, df_for_llm)
+        replay(run_store, df_for_llm, prompt=build_prompt_reworded)
+        assert len(cached_scopes(run_store)) == 2
+        # Neither scope was evicted by the other's run: both are still free.
+        assert replay(run_store, df_for_llm).prompts == []
+        assert replay(run_store, df_for_llm, prompt=build_prompt_reworded).prompts == []
+
+    def test_answers_go_to_the_store_and_not_to_a_jsonl_file(self, run_store, df_for_llm, tmp_path):
+        # app.py passes both; the durable one wins, so a recorded run leaves no
+        # checkpoint litter behind.
+        replay(run_store, df_for_llm, checkpoint_dir=str(tmp_path))
+        assert list(tmp_path.glob('*.jsonl')) == []
+        rows = run_store._query('SELECT cache_key, value FROM llm_cache')
+        assert len(rows) == 3
+        assert all('"pos"' in row['value'] for row in rows)
+        # Keyed by the text itself, not by its row number — that is what lets a
+        # re-crawled table reuse these answers.
+        expected = {text_hash(str(df_for_llm.loc[i, '正文']).strip()) for i in (0, 3, 4)}
+        assert {row['cache_key'] for row in rows} == expected
+
+    def test_explicit_cache_still_beats_the_lent_store(self, run_store, df_for_llm):
+        # Backward compatibility with the older ctx shape (and with the existing
+        # caller-supplied adapters): the runner must not build a second cache.
+        class SpyCache:
+            def __init__(self):
+                self.added = []
+                self.discarded = False
+
+            def get(self, idx, thash):
+                return None
+
+            def add(self, idx, thash, result):
+                self.added.append(idx)
+
+            def discard(self):
+                self.discarded = True
+
+        spy = SpyCache()
+        replay(run_store, df_for_llm, cache=spy)
+        assert spy.added == [0, 3, 4]
+        assert spy.discarded is True
+        assert cached_scopes(run_store) == set()  # the store was never written to

@@ -9,6 +9,7 @@ needing a migration.
 Every test gets its own SQLite file: the default path is the real
 ``data/history.db``.
 """
+
 import pytest
 
 from services.execution_history import ExecutionHistoryService as History
@@ -29,13 +30,15 @@ def history(tmp_path):
 
 @pytest.fixture
 def recorded(history):
-    history.record_many([
-        _row('r1', '周报', 'node-1', 'emotion', 'Joy', 3.0, '2024-05-01T10:00:00'),
-        _row('r1', '周报', 'node-1', 'emotion', 'Sadness', 1.0, '2024-05-01T10:00:00'),
-        _row('r1', '周报', 'node-2', 'rows', '', 12.0, '2024-05-01T10:05:00', node_type='output'),
-        _row('r2', '周报', 'node-1', 'emotion', 'Joy', 5.0, '2024-05-08T09:00:00'),
-        _row('r3', '月报', 'node-1', 'tendency', 'Positive', 2.0, '2024-05-09T09:00:00'),
-    ])
+    history.record_many(
+        [
+            _row('r1', '周报', 'node-1', 'emotion', 'Joy', 3.0, '2024-05-01T10:00:00'),
+            _row('r1', '周报', 'node-1', 'emotion', 'Sadness', 1.0, '2024-05-01T10:00:00'),
+            _row('r1', '周报', 'node-2', 'rows', '', 12.0, '2024-05-01T10:05:00', node_type='output'),
+            _row('r2', '周报', 'node-1', 'emotion', 'Joy', 5.0, '2024-05-08T09:00:00'),
+            _row('r3', '月报', 'node-1', 'tendency', 'Positive', 2.0, '2024-05-09T09:00:00'),
+        ]
+    )
     return history
 
 
@@ -48,7 +51,12 @@ class TestRecording:
         history.record_many([_row('rA', 'wf', 'n1', 'emotion', 'Joy', 2.0, '2024-01-01T00:00:00')])
         row = history.series().iloc[0]
         assert (row['run_id'], row['workflow_name'], row['metric'], row['label'], row['value']) == (
-            'rA', 'wf', 'emotion', 'Joy', 2.0)
+            'rA',
+            'wf',
+            'emotion',
+            'Joy',
+            2.0,
+        )
 
     def test_an_empty_batch_is_a_no_op(self, history):
         history.record_many([])
@@ -70,10 +78,12 @@ class TestListingRuns:
         assert len(recorded.list_runs(limit=2)) == 2
 
     def test_the_same_run_under_two_names_stays_distinct(self, history):
-        history.record_many([
-            _row('r1', 'wf-a', 'n1', 'rows', '', 1.0, '2024-01-01T00:00:00'),
-            _row('r1', 'wf-b', 'n1', 'rows', '', 2.0, '2024-01-01T00:00:00'),
-        ])
+        history.record_many(
+            [
+                _row('r1', 'wf-a', 'n1', 'rows', '', 1.0, '2024-01-01T00:00:00'),
+                _row('r1', 'wf-b', 'n1', 'rows', '', 2.0, '2024-01-01T00:00:00'),
+            ]
+        )
         assert len(history.list_runs()) == 2
 
     def test_workflow_names_are_distinct_and_sorted(self, recorded):
@@ -90,14 +100,17 @@ class TestSeries:
         points = recorded.series(metric='emotion')['timestamp'].tolist()
         assert points == sorted(points)
 
-    @pytest.mark.parametrize('kwargs, expected', [
-        ({'workflow_name': '周报'}, 4),
-        ({'metric': 'emotion'}, 3),
-        ({'node_id': 'node-2'}, 1),
-        ({'workflow_name': '周报', 'metric': 'emotion'}, 3),
-        ({'metric': 'nope'}, 0),
-        ({'workflow_name': 'nope'}, 0),
-    ])
+    @pytest.mark.parametrize(
+        'kwargs, expected',
+        [
+            ({'workflow_name': '周报'}, 4),
+            ({'metric': 'emotion'}, 3),
+            ({'node_id': 'node-2'}, 1),
+            ({'workflow_name': '周报', 'metric': 'emotion'}, 3),
+            ({'metric': 'nope'}, 0),
+            ({'workflow_name': 'nope'}, 0),
+        ],
+    )
     def test_filters_narrow_the_series(self, recorded, kwargs, expected):
         assert len(recorded.series(**kwargs)) == expected
 
@@ -110,10 +123,12 @@ class TestSeries:
         assert len(history.series()) == 1
 
     def test_genuinely_different_points_are_kept(self, history):
-        history.record_many([
-            _row('r1', 'wf', 'n1', 'emotion', 'Joy', 3.0, '2024-03-01T00:00:00'),
-            _row('r1', 'wf', 'n1', 'emotion', 'Joy', 4.0, '2024-03-01T00:00:00'),
-        ])
+        history.record_many(
+            [
+                _row('r1', 'wf', 'n1', 'emotion', 'Joy', 3.0, '2024-03-01T00:00:00'),
+                _row('r1', 'wf', 'n1', 'emotion', 'Joy', 4.0, '2024-03-01T00:00:00'),
+            ]
+        )
         assert len(history.series()) == 2
 
     def test_node_identity_survives_a_filter(self, recorded):

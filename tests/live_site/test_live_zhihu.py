@@ -1,0 +1,44 @@
+"""Live Zhihu search crawl — real Chrome, real cookies, real zhihu.com.
+
+Small volume on purpose (target 3): this pins that the 2026-layout parser
+still extracts full rows against the live DOM, that 链接 identity feeds the
+dedupe ledger, and — in the non-headless variant — that a *visible* browser
+window (the Cookie-login mode) crawls just as correctly, background occlusion
+flags included.
+"""
+
+import pytest
+
+pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+
+
+def _assert_rows(rows, minimum=2):
+    assert len(rows) >= minimum, f'expected at least {minimum} rows, got {len(rows)}'
+    links = [r.get('链接') or '' for r in rows]
+    unique = {link for link in links if link}
+    for row in rows:
+        assert (row.get('正文') or '').strip() or (row.get('标题') or '').strip(), f'empty row: {row}'
+    assert len(unique) >= minimum - 1, 'rows should carry distinct article links (dedupe identity)'
+
+
+def test_headless_search_returns_full_rows(live_crawler):
+    crawler = live_crawler('zhihu')
+    try:
+        rows = crawler.search('三亚', target_count=3)
+    finally:
+        crawler.close()
+    _assert_rows(rows)
+    # Time column regression: the 2026 layout moved it to .SearchItem-time.
+    assert any((r.get('发布时间') or '').strip() for r in rows), 'publish time should parse on live DOM'
+
+
+def test_visible_window_search_works_too(live_crawler):
+    """headless=False — the login-browser mode: occluded/background protection
+    flags are on, and the same parser must still deliver."""
+    crawler = live_crawler('zhihu', headless=False)
+    try:
+        rows = crawler.search('海口', target_count=2)
+    finally:
+        crawler.close()
+    _assert_rows(rows, minimum=1)
+    assert rows, 'visible-window crawl must yield at least one row'

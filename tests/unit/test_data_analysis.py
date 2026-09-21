@@ -10,6 +10,7 @@ on the two things a workflow author cannot debug by eye:
 - *what the report claims must be what happened* (rows_before / rows_after /
   rows_removed for every step, in order).
 """
+
 import pandas as pd
 import pytest
 
@@ -20,19 +21,32 @@ pytestmark = pytest.mark.unit
 
 
 OPERATIONS = [
-    'drop_null', 'fill_null', 'drop_duplicates', 'filter_rows', 'select_columns', 'rename_columns',
-    'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables',
-    'column_calc', 'bin_column',
+    'drop_null',
+    'fill_null',
+    'drop_duplicates',
+    'filter_rows',
+    'select_columns',
+    'rename_columns',
+    'strip_whitespace',
+    'convert_type',
+    'sort_rows',
+    'sample_rows',
+    'groupby_agg',
+    'join_tables',
+    'column_calc',
+    'bin_column',
 ]
 
 
 @pytest.fixture
 def df():
-    return pd.DataFrame({
-        '名称': ['  三亚攻略  ', '海口美食', '三亚潜水', None],
-        '点赞': ['12', '30', None, '3'],
-        '作者': ['甲', '乙', '甲', '乙'],
-    })
+    return pd.DataFrame(
+        {
+            '名称': ['  三亚攻略  ', '海口美食', '三亚潜水', None],
+            '点赞': ['12', '30', None, '3'],
+            '作者': ['甲', '乙', '甲', '乙'],
+        }
+    )
 
 
 # ─── registry / pipeline ───────────────────────────────────────────────
@@ -50,23 +64,33 @@ class TestRegistry:
             assert params[0] == 'df', name
             assert callable(func), name
 
-    @pytest.mark.parametrize('op, params', [
-        ('drop_null', {}),
-        ('fill_null', {'value': 'x'}),
-        ('drop_duplicates', {}),
-        ('filter_rows', {'column': '作者', 'op': 'eq', 'value': '甲'}),
-        ('select_columns', {'columns': ['作者']}),
-        ('rename_columns', {'mapping': {'作者': 'who'}}),
-        ('strip_whitespace', {}),
-        ('convert_type', {'column': '点赞', 'dtype': 'str'}),
-        ('sort_rows', {'column': '点赞'}),
-        ('sample_rows', {'n': 2}),
-        ('groupby_agg', {'group_col': '作者', 'agg_col': '点赞', 'agg_func': 'count'}),
-        ('join_tables', {'other_df': pd.DataFrame({'作者': ['甲'], '城市': ['海口']}),
-                         'left_on': '作者', 'right_on': '作者', 'how': 'left'}),
-        ('column_calc', {'new_col': 'twice', 'expr': '点赞 * 2'}),
-        ('bin_column', {'column': '点赞', 'bins': [0, 5, 10]}),
-    ])
+    @pytest.mark.parametrize(
+        'op, params',
+        [
+            ('drop_null', {}),
+            ('fill_null', {'value': 'x'}),
+            ('drop_duplicates', {}),
+            ('filter_rows', {'column': '作者', 'op': 'eq', 'value': '甲'}),
+            ('select_columns', {'columns': ['作者']}),
+            ('rename_columns', {'mapping': {'作者': 'who'}}),
+            ('strip_whitespace', {}),
+            ('convert_type', {'column': '点赞', 'dtype': 'str'}),
+            ('sort_rows', {'column': '点赞'}),
+            ('sample_rows', {'n': 2}),
+            ('groupby_agg', {'group_col': '作者', 'agg_col': '点赞', 'agg_func': 'count'}),
+            (
+                'join_tables',
+                {
+                    'other_df': pd.DataFrame({'作者': ['甲'], '城市': ['海口']}),
+                    'left_on': '作者',
+                    'right_on': '作者',
+                    'how': 'left',
+                },
+            ),
+            ('column_calc', {'new_col': 'twice', 'expr': '点赞 * 2'}),
+            ('bin_column', {'column': '点赞', 'bins': [0, 5, 10]}),
+        ],
+    )
     def test_every_registered_operation_is_reachable_from_the_pipeline(self, op, params):
         frame = pd.DataFrame({'点赞': [1, 2, 3], '作者': ['甲', '甲', '乙']})
         result, report = D.run_pipeline(frame, [{'op': op, 'params': params}])
@@ -159,24 +183,30 @@ class TestRows:
         frame = pd.DataFrame({'a': ['x', 'x', 'y'], 'b': [1, 2, 3]})
         assert D.drop_duplicates(frame, columns=['a'], keep='last')['b'].tolist() == [2, 3]
 
-    @pytest.mark.parametrize('column, op, value, expected', [
-        ('作者', 'eq', '甲', ['甲', '甲']),
-        ('作者', 'ne', '甲', ['乙', '乙']),
-        ('名称', 'contains', '三亚', ['甲', '甲']),
-        ('名称', 'not_contains', '三亚', ['乙', '乙']),
-        ('名称', 'is_null', None, ['乙']),
-        ('名称', 'not_null', None, ['甲', '乙', '甲']),
-    ])
+    @pytest.mark.parametrize(
+        'column, op, value, expected',
+        [
+            ('作者', 'eq', '甲', ['甲', '甲']),
+            ('作者', 'ne', '甲', ['乙', '乙']),
+            ('名称', 'contains', '三亚', ['甲', '甲']),
+            ('名称', 'not_contains', '三亚', ['乙', '乙']),
+            ('名称', 'is_null', None, ['乙']),
+            ('名称', 'not_null', None, ['甲', '乙', '甲']),
+        ],
+    )
     def test_filter_text_operators(self, column, op, value, expected):
         frame = pd.DataFrame({'名称': ['三亚攻略', '海口', None, '三亚潜水'], '作者': ['甲', '乙', '乙', '甲']})
         assert D.filter_rows(frame, column, op, value)['作者'].tolist() == expected
 
-    @pytest.mark.parametrize('op, bound, expected', [
-        ('gt', '5', ['12', '30']),
-        ('gte', '12', ['12', '30']),
-        ('lt', '5', ['3']),
-        ('lte', '3', ['3']),
-    ])
+    @pytest.mark.parametrize(
+        'op, bound, expected',
+        [
+            ('gt', '5', ['12', '30']),
+            ('gte', '12', ['12', '30']),
+            ('lt', '5', ['3']),
+            ('lte', '3', ['3']),
+        ],
+    )
     def test_filter_numeric_operators_compare_as_numbers(self, op, bound, expected, df):
         assert D.filter_rows(df, '点赞', op, bound)['点赞'].tolist() == expected
 
@@ -242,9 +272,17 @@ class TestColumns:
         assert out['d'].iloc[0].year == 2024
         assert pd.isna(out['d'].iloc[1])
 
-    @pytest.mark.parametrize('raw, expected', [
-        ('False', False), ('0', False), ('', False), ('否', False), ('True', True), ('1', True),
-    ])
+    @pytest.mark.parametrize(
+        'raw, expected',
+        [
+            ('False', False),
+            ('0', False),
+            ('', False),
+            ('否', False),
+            ('True', True),
+            ('1', True),
+        ],
+    )
     def test_convert_type_bool_uses_text_semantics(self, raw, expected):
         frame = pd.DataFrame({'v': [raw]}, dtype=object)
         assert D.convert_type(frame, 'v', 'bool')['v'].tolist() == [expected]
@@ -334,10 +372,13 @@ class TestReshaping:
         out = D.join_tables(left, right, how='left', left_on='k', right_on='k')
         assert len(out) == 2 and pd.isna(out['b'].iloc[1])
 
-    @pytest.mark.parametrize('other, left_on, right_on', [
-        (None, 'k', 'k'),
-        (pd.DataFrame(columns=['k']), 'k', 'k'),
-    ])
+    @pytest.mark.parametrize(
+        'other, left_on, right_on',
+        [
+            (None, 'k', 'k'),
+            (pd.DataFrame(columns=['k']), 'k', 'k'),
+        ],
+    )
     def test_join_tables_without_a_right_table_raises(self, other, left_on, right_on):
         with pytest.raises(UnknownOperationError):
             D.join_tables(pd.DataFrame({'k': [1]}), other, left_on=left_on, right_on=right_on)

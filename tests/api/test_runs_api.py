@@ -16,6 +16,7 @@ value here is in the *decisions* they encode:
 Runs are seeded straight into the store the ``client`` fixture provisioned, so
 no crawler has to die to produce a half-finished run.
 """
+
 import pytest
 
 from services.run_store import (
