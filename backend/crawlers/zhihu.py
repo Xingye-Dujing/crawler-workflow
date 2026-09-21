@@ -127,43 +127,50 @@ class ZhihuCrawler(Crawler):
         return cards
 
     def _scrape_card(self, card):
-        self._expand_full_text(card)
+        # NB: never click 展开全文/阅读全文 here. On the 2026 search layout the
+        # button navigates column articles to their own page, which detaches
+        # every remaining card and used to turn whole crawls into 0 rows.
+        # The collapsed preview already carries author + content, which is all
+        # downstream analysis consumes from a search page.
+        content = self._get_content(card)
         return {
-            '作者': self._get_author(card),
+            '作者': self._get_author(content),
             '标题': self._get_title(card),
-            '正文': self._get_content(card),
+            '正文': content,
             '赞同数': self._get_vote_count(card),
             '评论数': self._get_comment_count(card),
             '发布时间': self._get_publish_time(card),
         }
 
-    def _expand_full_text(self, card):
-        try:
-            btn = card.find_element(By.CSS_SELECTOR, 'button.ContentItem-more')
-            self.driver.execute_script('arguments[0].scrollIntoView({block: "center"});', btn)
-            btn.click()
-            time.sleep(1)
-        except NoSuchElementException:
-            pass
+    # The current card DOM has no author element at all — the account name is
+    # inlined at the head of the preview ("作者名：正文…"). Bounded and strict
+    # on purpose: a ≤12-char prefix before the colon, no spaces or sentence
+    # punctuation, so ordinary openers like "注意：…" stay content.
+    _AUTHOR_PREFIX = re.compile(r'^([\u4e00-\u9fa5A-Za-z0-9_·\-]{1,12})[:：](?=[^\s])')
 
-    def _get_author(self, card):
-        for sel in ['.AuthorInfo-name .UserLink-link', '.AuthorInfo-name']:
+    def _get_author(self, content: str) -> str:
+        m = self._AUTHOR_PREFIX.match(content or '')
+        return m.group(1) if m else ''
+
+    def _get_title(self, card):
+        for sel in ('.ContentItem-title a', '.ContentItem-title'):
             try:
                 return card.find_element(By.CSS_SELECTOR, sel).text.strip()
             except NoSuchElementException:
                 pass
         return ''
 
-    def _get_title(self, card):
-        try:
-            return card.find_element(By.CSS_SELECTOR, '.ContentItem-title a').text.strip()
-        except NoSuchElementException:
-            return ''
-
     def _get_content(self, card):
+        # textContent fallback: innerText is empty for cards the virtualised
+        # list has not rendered yet — exactly the rows a fast scroll leaves
+        # off-screen — and textContent still carries the text.
         try:
             el = card.find_element(By.CSS_SELECTOR, '.RichContent-inner .RichText')
-            return self.driver.execute_script('return arguments[0].innerText', el).strip()
+            text = self.driver.execute_script(
+                "return arguments[0].innerText || arguments[0].textContent || ''",
+                el,
+            )
+            return (text or '').strip()
         except NoSuchElementException:
             return ''
 
@@ -180,20 +187,31 @@ class ZhihuCrawler(Crawler):
         return 0
 
     def _get_comment_count(self, card):
+        """The action bar labels the button '添加评论' at zero and 'N条评论'
+        otherwise; aria-label no longer mentions comments at all."""
         try:
-            label_text = card.find_element(By.CSS_SELECTOR, 'button[aria-label*="评论"]').text.strip()
-            if '条评论' in label_text:
-                m = re.search(r'(\d+(?:,\d+)*)', label_text.replace(',', ''))
-                return int(m.group(1)) if m else 0
+            buttons = card.find_elements(By.CSS_SELECTOR, '.ContentItem-actions button, .ContentItem-actions a')
         except NoSuchElementException:
-            pass
+            return 0
+        for btn in buttons:
+            try:
+                label = btn.text.strip()
+            except Exception:
+                continue
+            if '评论' not in label:
+                continue
+            m = re.search(r'(\d+)', label)
+            return int(m.group(1)) if m else 0
         return 0
 
     def _get_publish_time(self, card):
-        try:
-            return card.find_element(By.CSS_SELECTOR, '.ContentItem-time a, .ContentItem-time div').text.strip()
-        except NoSuchElementException:
-            return ''
+        # 2026 layout moved the date from .ContentItem-time to .SearchItem-time.
+        for sel in ('.SearchItem-time', '.ContentItem-time a, .ContentItem-time div'):
+            try:
+                return card.find_element(By.CSS_SELECTOR, sel).text.strip()
+            except NoSuchElementException:
+                pass
+        return ''
 
     def get_detail(self, url: str) -> dict | None:
         self.driver.get(url)

@@ -19,10 +19,11 @@ pytestmark = pytest.mark.unit
 class FakeElement:
     def __init__(self, text=''):
         self.text = text
-        self.clicks = 0
 
     def click(self):
-        self.clicks += 1
+        # The 2026 layout made 阅读全文 a NAVIGATION on column cards — clicking
+        # it used to detach every remaining card. It must never be clicked.
+        raise AssertionError(f'crawler clicked an expand button (text={self.text!r}) — regression')
 
 
 class FakeCard:
@@ -30,15 +31,18 @@ class FakeCard:
     same NoSuchElementException the real driver raises, which is what the
     crawler's per-field fallbacks are written against."""
 
-    def __init__(self, texts):
+    def __init__(self, texts, buttons=()):
         self._texts = texts
+        self._buttons = list(buttons)
 
     def find_element(self, by, selector):
         if selector in self._texts:
             return FakeElement(self._texts[selector])
         raise NoSuchElementException(selector)
 
-    def find_elements(self, by, selector):  # pragma: no cover - not used by zhihu card parsing
+    def find_elements(self, by, selector):
+        if selector.startswith('.ContentItem-actions') and self._buttons:
+            return [FakeElement(t) for t in self._buttons]
         return []
 
 
@@ -73,14 +77,18 @@ class FakeDriver:
 
 
 CARD_1 = {
-    '.AuthorInfo-name .UserLink-link': '张三',
+    # The 2026 card carries no author element at all — the name is inlined as
+    # a '作者名：正文' prefix inside the preview. 阅读全文 is present and MUST
+    # NOT be clicked (FakeElement.click raises).
     '.ContentItem-title a': '三亚的冬天可以下海',
-    '.RichContent-inner .RichText': '海水温度非常舒适适合游泳。',
-    '.VoteButton': '128 赞同',
-    'button[aria-label*="评论"]': '12条评论',
-    '.ContentItem-time a, .ContentItem-time div': '发布于 2026-01-01 09:00',
+    '.RichContent-inner .RichText': '张三：海水温度非常舒适适合游泳。',
+    'button.ContentItem-more': '阅读全文',
+    '.VoteButton': '赞同 128',
+    '.SearchItem-time': '09-06',
 }
-CARD_2 = dict(CARD_1, **{'.AuthorInfo-name .UserLink-link': '李四', '.ContentItem-title a': '海口美食清单'})
+CARD_1_BUTTONS = ['赞同 128', '12条评论']
+CARD_2 = dict(CARD_1, **{'.ContentItem-title a': '海口美食清单', '.RichContent-inner .RichText': '李四：清补凉必吃。'})
+CARD_2_BUTTONS = ['赞同 9', '添加评论']
 CARD_EMPTY = {}  # neither author nor body → the keep-filter must drop it
 
 
@@ -106,32 +114,42 @@ def make_crawler(monkeypatch):
 
 class TestZhihuSearch:
     def test_search_url_carries_the_encoded_keyword(self, make_crawler):
-        crawler, driver = make_crawler([FakeCard(CARD_1)])
+        crawler, driver = make_crawler([FakeCard(CARD_1, CARD_1_BUTTONS)])
         crawler.search('三亚', target_count=1)
         url = driver.visited[0]
         assert url.startswith('https://www.zhihu.com/search?q=')
         assert '%E4%B8%89%E4%BA%9A' in url and 'type=content' in url
 
     def test_cards_parse_into_full_rows(self, make_crawler):
-        crawler, _ = make_crawler([FakeCard(CARD_1), FakeCard(CARD_2)])
+        # FakeElement.click raises, so this test ALSO proves 阅读全文 is never
+        # clicked — the navigation that used to detach every card after it.
+        crawler, _ = make_crawler([FakeCard(CARD_1, CARD_1_BUTTONS), FakeCard(CARD_2, CARD_2_BUTTONS)])
         rows = crawler.search('三亚', target_count=5)
         assert len(rows) == 2
         first = rows[0]
-        assert first['作者'] == '张三'
+        assert first['作者'] == '张三'  # parsed from the '作者名：' content prefix
         assert first['标题'] == '三亚的冬天可以下海'
-        assert first['正文'].startswith('海水温度')
+        assert first['正文'] == '张三：海水温度非常舒适适合游泳。'
         assert first['赞同数'] == 128
         assert first['评论数'] == 12
-        assert '2026' in first['发布时间']
+        assert first['发布时间'] == '09-06'
+        assert rows[1]['作者'] == '李四' and rows[1]['评论数'] == 0  # '添加评论' == zero
+
+    def test_content_without_author_prefix_keeps_the_row(self, make_crawler):
+        no_author = dict(CARD_1)
+        no_author['.RichContent-inner .RichText'] = '海水温度非常舒适适合游泳。'
+        crawler, _ = make_crawler([FakeCard(no_author)])
+        rows = crawler.search('三亚', target_count=5)
+        assert len(rows) == 1 and rows[0]['作者'] == ''
 
     def test_card_without_author_and_body_is_dropped(self, make_crawler):
-        crawler, _ = make_crawler([FakeCard(CARD_EMPTY), FakeCard(CARD_1)])
+        crawler, _ = make_crawler([FakeCard(CARD_EMPTY), FakeCard(CARD_1, CARD_1_BUTTONS)])
         rows = crawler.search('三亚', target_count=5)
         assert len(rows) == 1 and rows[0]['作者'] == '张三'
         assert crawler.position['scanned'] == 2  # the skip was still recorded
 
     def test_sink_rejections_drop_rows_but_keep_position(self, make_crawler):
-        crawler, _ = make_crawler([FakeCard(CARD_1), FakeCard(CARD_2)])
+        crawler, _ = make_crawler([FakeCard(CARD_1, CARD_1_BUTTONS), FakeCard(CARD_2, CARD_2_BUTTONS)])
         seen = []
 
         def sink(item):
@@ -144,14 +162,14 @@ class TestZhihuSearch:
         assert crawler.position['done'] == 1
 
     def test_target_reached_before_navigating_when_seeded(self, make_crawler):
-        crawler, driver = make_crawler([FakeCard(CARD_1)])
+        crawler, driver = make_crawler([FakeCard(CARD_1, CARD_1_BUTTONS)])
         crawler.seed([{'作者': '甲'}, {'作者': '乙'}])
         rows = crawler.search('三亚', target_count=2)
         assert driver.visited == []  # resume: nothing left to fetch
         assert len(rows) == 2
 
     def test_target_count_truncates_mid_card_run(self, make_crawler):
-        crawler, _ = make_crawler([FakeCard(CARD_1), FakeCard(CARD_2)])
+        crawler, _ = make_crawler([FakeCard(CARD_1, CARD_1_BUTTONS), FakeCard(CARD_2, CARD_2_BUTTONS)])
         rows = crawler.search('三亚', target_count=1)
         assert len(rows) == 1
         # '没有更多了' / stuck detection are scroll-loop exits; the card cap must
@@ -159,7 +177,7 @@ class TestZhihuSearch:
         assert crawler.position['done'] == 1
 
     def test_missing_more_marker_ends_the_scroll_loop(self, make_crawler):
-        crawler, driver = make_crawler([FakeCard(CARD_1)] * 2)
+        crawler, driver = make_crawler([FakeCard(CARD_1, CARD_1_BUTTONS)] * 2)
         driver._no_more = '亲，没有更多了~'
         rows = crawler.search('三亚', target_count=50)
         assert len(rows) == 2  # loop broke at the marker, not at 150 scrolls
