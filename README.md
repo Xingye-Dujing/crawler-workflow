@@ -1,54 +1,96 @@
-# 采析绘（数据的采集分析和可视化）
+# 采析绘（数据的采集、分析与可视化）
 
-一个基于 Flask + Selenium + Ollama + scikit-learn 的多平台数据采集、数据清洗、情感分析、通用数据分析与可视化工作流系统。
+一个基于 Flask + Selenium + LLM (Ollama / OpenRouter) + scikit-learn 的多平台数据采集、数据清洗、
+情感分析、通用数据分析与可视化工作流系统，内置**断点续跑**与运行记录管理：任务中断后可从检查点继续，
+已花费的采集与 LLM 成本不会重复支付。
 
 ## 功能特性
 
+### 数据采集
 - **多平台爬虫**：支持知乎、微博、小红书、微信公众号的数据采集
-- **情感分析（双模式）**：LLM（Ollama）逐行深度分析，或传统 ML（sklearn TF-IDF + 逻辑回归）批量高速推理，可在节点设置中随时切换
+- **Cookie 管理**：持久化登录状态，避免重复扫码；支持交互式扫码生成 Cookie
+- **运行时浏览器设置**：chromedriver 路径、浏览器二进制、窗口尺寸、超时等可在设置面板修改，
+  写入 `data/settings.json`，下次运行即生效，无需改代码重启
+
+### AI 分析
+- **双 AI 提供方**：本地 Ollama 或 OpenRouter API（免费模型列表一键拉取、连接测试），
+  模型选择、批量保存行数、截断长度均可在 AI 面板配置；OpenRouter Key 仅存浏览器 localStorage，不落服务器
+- **情感分析（双模式）**：LLM 逐行深度分析，或传统 ML（sklearn TF-IDF + 逻辑回归）批量高速推理，随时切换
 - **倾向性分析（双模式）**：同上，LLM 或 ML 可选
 - **语义数据清洗**：自动过滤广告、无关内容与低质量数据（LLM 判定）
-- **通用数据分析节点**：去空值、去重、条件筛选、重命名列、类型转换、排序、采样、分组聚合、表关联、列计算、数值分箱等确定性清洗，可独立于爬虫使用，直接处理任意上传的表格数据
-- **关键词提取**：TF-IDF / TextRank 关键词抽取（依赖 jieba）
+- **关键词提取**：TF-IDF / TextRank（依赖 jieba）
 - **文本聚类**：K-Means / DBSCAN 自动发现文本分组
 - **命名实体识别**：正则规则式中文 NER（人名/机构/地名/日期，零依赖）
 - **异常检测**：Isolation Forest 自动标记数值异常行
 - **相关性分析**：Pearson / Spearman / Kendall 相关系数矩阵
+- **模型训练**：从已有 LLM 标注数据一键训练传统 ML 模型，后续推理无需 Ollama
+
+### 数据处理
+- **通用数据分析节点**：去空值、去重、条件筛选、重命名列、类型转换、排序、采样、分组聚合、
+  表关联、列计算、数值分箱等确定性清洗，可独立于爬虫直接处理任意表格数据
+- **分词节点**：jieba 对任意文本列分词，输出词频对，供导出或词云使用
+- **文件持久化**：上传/粘贴的文件注册为数据集（内容哈希寻址、zlib 压缩存库），
+  保存的工作流随时可重新加载自己的输入文件；无引用且长期未用的文件自动清理
 - **通用导出节点**：一个节点支持导出 CSV / JSON / Excel / TXT / HTML / Markdown 六种格式
-- **通用可视化节点**：柱状图 / 折线图 / 饼图 / 散点图 / 直方图 / 箱线图 / 热力图 / 桑基图 / 词云（支持中文分词）/ 中国地图，支持 ECharts（前端渲染）与 Matplotlib（服务端渲染）两种引擎
+
+### 可视化
+- **通用可视化节点**：柱状图 / 折线图 / 饼图 / 散点图 / 直方图 / 箱线图 / 热力图 / 桑基图 /
+  词云（支持中文分词）/ 中国地图，支持 ECharts（前端渲染）与 Matplotlib（服务端渲染）两种引擎
+- **Chart Studio 图表工作台**：画布内嵌 ZENVIZ 工作台，可对任意节点/数据集的完整表格做自由图表创作，
+  支持多数据源合并，成品 PNG 可保存回导出目录
 - **数据预览面板**：任意数据集都能以可翻页的表格形式查看真实数据行
 - **仪表盘看板**：把画布上所有 Visualize 节点的图表拼在一个网格里一起查看
-- **执行历史与趋势对比**：自动记录情感/倾向性分布与各节点行数，可按工作流和指标画出时间序列
-- **工作流画布**：拖拽式节点编辑，可视化配置数据采集/清洗/分析/可视化全流程
+- **实时统计**：ECharts 图表展示情感/倾向性分布与执行汇总
+
+### 工作流引擎
+- **工作流画布**：拖拽式节点编辑，可视化配置采集/清洗/分析/可视化全流程
+- **工作流命名**：保存时可命名（画布 Name 节点即工作流名），历史与运行记录按名称归组
+- **多线程执行**：支持并行/串行执行模式，可随时停止；进程管理面板可强杀残留浏览器进程
 - **撤销/重做**：Ctrl+Z / Ctrl+Y 支持 50 步历史回退，菜单和右键菜单均有入口
 - **节点折叠**：选中节点按 F 键或右键折叠，节省画布空间
 - **自动布局**：按 DAG 层级 BFS 自动排列所有节点
-- **节点颜色编码**：每种节点类型有独立颜色标识（蓝/红/黄/绿/紫）
-- **模型训练**：从已有 LLM 标注数据一键训练传统 ML 模型，后续推理无需 Ollama
-- **多线程执行**：支持并行/串行执行模式
-- **实时统计**：ECharts 图表展示情感分布与倾向性统计
-- **Cookie 管理**：持久化登录状态，避免重复扫码
-- **极简界面**：极客风格黑白主题，网格背景画布
+- **节点颜色编码**：9 种节点类型各有独立颜色与标识（NAM/SRC/UPL/PRC/ANL/VIZ/TKN/OUT/RSM）
+
+### 断点续跑与运行记录
+- **节点级检查点**：每步输出行持久化到 `data/runs.db`，工作流结构指纹 + 节点指纹决定哪些结果
+  可复用、哪些因参数改动而失效重算
+- **LLM 答案缓存**：按 操作+模型+列+文本 缓存回答，重跑或续跑不再为同一行付费
+- **采集去重指纹**：已抓到的条目指纹入库，续跑时自动跳过
+- **中断自动识别**：服务重启后遗留的"运行中"记录自动标记为"已中断"，画布顶部出现续跑横幅，
+  一键「继续」或「重新开始」
+- **Resume 节点**：直接收养历史运行的节点输出作为数据源——原始平台已登出/被封/已花过成本时使用
+- **运行记录面板**：列出各工作流的运行历史、节点状态、行数统计，支持丢弃、删除与按保留策略清理
+- **执行历史与趋势对比**：自动记录情感/倾向性分布与各节点行数，可按工作流和指标画出时间序列
+- **保留策略**：每工作流默认保留最近 20 次运行、30 天内的记录；干净完成的先清理，
+  中断的最后清理（还可能被续跑）；单节点行数与单文件行数均有硬上限防止撑爆磁盘
+
+### 界面
+- **中英双语**：前后端消息全套 i18n 目录，界面一键切换语言，日志按请求语言输出
+- **亮色主题**：设计系统化的浅色界面，网格背景画布，主题色/圆角可调
 
 ## 快速开始
 
 ### 1. 环境要求
 
-- Python 3.11+ (`zip(..., strict=True)`)
-- Chrome 浏览器 (Selenium 驱动)
-- [Ollama](https://ollama.ai/) (本地大模型)
+- Python 3.11+（使用 `zip(..., strict=True)`）
+- Chrome 浏览器（Selenium 驱动，驱动路径可在设置面板修改）
+- [Ollama](https://ollama.ai/) 本地大模型，或 OpenRouter API Key（二选一即可）
 - 如需 Matplotlib 引擎渲染中文图表，服务器需安装中文字体
   （如 `fonts-wqy-microhei` / SimHei / Microsoft YaHei 任一即可，
   Linux 下可 `apt install fonts-wqy-microhei`）
 
-### 2. 安装依赖
+### 2. 创建虚拟环境并安装依赖
+
+> 所有运行与安装一律在项目虚拟环境 `.venv/` 中进行，勿使用系统 Python。
 
 ```bash
 cd crawler_workflow
+python -m venv .venv
+source .venv/Scripts/activate        # Windows Git Bash；cmd 下用 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. 下载 Ollama 模型
+### 3. 下载 Ollama 模型（可选，用 OpenRouter 可跳过）
 
 ```bash
 ollama pull qwen3.5:9b
@@ -61,15 +103,17 @@ cd backend
 python app.py
 ```
 
-访问 http://localhost:5000
+访问 http://localhost:5000（端口通过环境变量 `PORT` 修改），浏览器会自动打开。
 
 ## 项目结构
 
 ```
 crawler_workflow/
 ├── backend/
-│   ├── app.py                    # Flask 主入口
-│   ├── config.py                 # 配置
+│   ├── app.py                    # Flask 主入口（路由 + 执行编排）
+│   ├── config.py                 # 配置与数据路径
+│   ├── i18n.py                   # zh/en 消息目录（X-Lang 请求头切换）
+│   ├── settings_store.py         # 运行时可改设置（data/settings.json）
 │   ├── crawlers/                 # 爬虫模块
 │   │   ├── base.py               # 爬虫基类
 │   │   ├── zhihu.py              # 知乎爬虫
@@ -78,6 +122,7 @@ crawler_workflow/
 │   │   └── wechat.py             # 微信公众号爬虫
 │   ├── analyzers/                # 分析模块（LLM + ML 双模式）
 │   │   ├── ml_base.py            # 传统 ML 底座（TF-IDF + 分类器）
+│   │   ├── llm_client.py         # Ollama / OpenRouter 客户端
 │   │   ├── cleaner.py            # 广告/噪声语义清洗（LLM）
 │   │   ├── emotion.py            # 情感分类（LLM + ML 可选）
 │   │   ├── tendency.py           # 倾向性分析（LLM + ML 可选）
@@ -87,31 +132,43 @@ crawler_workflow/
 │   │   ├── anomaly.py            # 异常检测（Isolation Forest）
 │   │   └── correlation.py        # 相关性分析（Pearson / Spearman / Kendall）
 │   ├── engine/                   # 工作流引擎
-│   │   ├── workflow.py           # DAG 解析、调度与节点校验
+│   │   ├── workflow.py           # DAG 解析、调度、节点校验与指纹
 │   │   ├── executor.py           # 线程池执行器
 │   │   └── logger.py             # 日志管理
 │   ├── services/                 # 服务模块
+│   │   ├── run_store.py          # 断点续跑核心：运行/节点/行/指纹/LLM缓存（runs.db）
+│   │   ├── dataset_store.py      # 上传文件持久化与工作流引用（datasets.db）
 │   │   ├── stats.py              # 情感/倾向性统计服务
 │   │   ├── cookie_manager.py     # Cookie 管理
 │   │   ├── workflow_manager.py   # 工作流持久化
-│   │   ├── exporter.py           # 通用多格式导出服务（Save 节点）
+│   │   ├── exporter.py           # 通用多格式导出服务（Output 节点）
 │   │   ├── data_analysis.py      # 通用数据清洗服务（Analysis 节点）
 │   │   ├── visualizer.py         # 通用可视化服务（Visualize 节点）
-│   │   └── execution_history.py  # 执行历史记录（SQLite）
+│   │   └── execution_history.py  # 执行历史记录（history.db）
 │   ├── utils/
 │   │   └── helpers.py            # 工具函数
 │   └── static/                   # 前端静态文件
 │       ├── index.html
 │       ├── css/style.css
 │       └── js/
-│           ├── app.js
-│           ├── canvas.js
-│           ├── workflow.js
-│           └── stats.js
-├── data/
+│           ├── app.js            # 入口（i18n fetch 注入、节点库）
+│           ├── canvas.js         # 画布与节点渲染
+│           ├── workflow.js       # 执行、文件管理、全部对话框
+│           ├── menu.js           # 顶栏菜单状态
+│           ├── stats.js          # 情感/倾向性 ECharts 统计
+│           ├── custom-select.js  # 主题化下拉组件
+│           ├── zenviz.js         # 内嵌 Chart Studio 图表库
+│           └── zenviz-bridge.js  # Studio 与画布的数据桥接
+├── data/                         # 运行时数据（gitignore）
+│   ├── runs.db                   # 断点续跑状态（节点行/指纹/LLM缓存）
+│   ├── datasets.db               # 持久化的上传数据集与引用
+│   ├── history.db                # 执行历史与趋势
+│   ├── settings.json             # 运行时设置（驱动路径等）
 │   ├── cookies/                  # 平台 Cookie
 │   ├── exports/                  # 导出数据
-│   └── workflows/                # 工作流配置
+│   ├── workflows/                # 工作流配置
+│   ├── checkpoints/              # LLM 逐行检查点（runs.db 不可用时的兜底）
+│   └── models/                   # 训练好的 ML 模型
 ├── logs/
 ├── requirements.txt
 └── README.md
@@ -119,13 +176,17 @@ crawler_workflow/
 
 ## 节点类型
 
-| 节点 | 说明 | 能否独立运行 |
-|------|------|------|
-| Data Source（数据源） | 从知乎/微博/小红书/微信采集数据 | 否，需要平台+关键词 |
-| Process（处理） | LLM 语义清洗 / 情感分类(LLM/ML) / 倾向性分析(LLM/ML) / 关键词提取 / 文本聚类 / NER / 异常检测 / 相关性分析 | 否，需要上游文本数据 |
-| **Analysis（分析）** | 确定性数据清洗：去空/去重/筛选/改名/类型转换/排序/采样/分组聚合/表关联/列计算/分箱 | **是**，可直接处理上传的数据集 |
-| **Visualize（可视化）** | 柱状/折线/饼图/散点/直方/箱线/热力/桑基/词云/地图，ECharts 或 Matplotlib 渲染 | **是**，可直接处理上传的数据集 |
-| Output（保存） | 导出为 CSV / JSON / Excel / TXT / HTML / Markdown | 否，需要上游数据 |
+| 节点 | 标识 | 说明 | 能否独立运行 |
+|------|------|------|------|
+| Name（命名） | NAM | 工作流元数据，其标签作为工作流名供历史/运行记录归组 | 是（纯元数据） |
+| Data Source（数据源） | SRC | 从知乎/微博/小红书/微信采集数据 | 是，需平台+关键词 |
+| Upload（上传） | UPL | 从持久化数据集中读取 CSV/JSON 作为输入 | 是 |
+| Process（处理） | PRC | LLM 语义清洗 / 情感(LLM/ML) / 倾向(LLM/ML) / 关键词 / 聚类 / NER / 异常 / 相关性 | 否，需要上游文本数据 |
+| Analysis（分析） | ANL | 确定性数据清洗：去空/去重/筛选/改名/类型转换/排序/采样/分组聚合/表关联/列计算/分箱 | **是**，可直接处理数据集 |
+| Visualize（可视化） | VIZ | 柱状/折线/饼图/散点/直方/箱线/热力/桑基/词云/地图，ECharts 或 Matplotlib | **是**，可直接处理数据集 |
+| Tokenize（分词） | TKN | jieba 分词输出词频，供导出或词云使用 | 否，需要上游数据 |
+| Output（保存） | OUT | 导出为 CSV / JSON / Excel / TXT / HTML / Markdown | 否，需要上游数据 |
+| Resume（续跑） | RSM | 收养历史运行的节点输出作为数据源（原上游不可用/已付费时） | 是 |
 
 ## API 参考
 
@@ -133,37 +194,80 @@ crawler_workflow/
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/workflow/save` | POST | 保存工作流配置 |
-| `/api/workflow/load` | GET | 加载工作流 |
-| `/api/workflow/list` | GET | 列出所有工作流 |
+| `/api/workflow/save` | POST | 保存工作流配置（含命名） |
+| `/api/workflow/load` | GET | 加载指定工作流 |
+| `/api/workflow/list` | GET | 列出所有已保存工作流 |
+| `/api/workflow/delete` | POST | 删除工作流 |
 | `/api/workflow/execute` | POST | 执行工作流 |
 | `/api/workflow/stop` | POST | 停止执行 |
 | `/api/workflow/status` | GET | 获取执行状态 |
+| `/api/workflow/processes` | GET | 列出执行器/浏览器子进程 |
+| `/api/workflow/processes/kill` | POST | 强杀残留进程 |
 
-### 数据 / 分析 / 可视化 / 导出（独立于工作流，可单独调用）
+### 运行记录 / 断点续跑
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/data/upload` | POST | 上传 CSV/JSON 文件，注册为数据集 |
+| `/api/runs/resumable` | POST | 查询指定工作流最近一次可续跑的中断运行 |
+| `/api/runs/list` | GET | 分页列出运行记录 |
+| `/api/runs/status` | GET | 单条运行的节点级状态 |
+| `/api/runs/stats` | GET | 全局运行统计 |
+| `/api/runs/purge` | POST | 按保留策略清理旧运行（中断的最后清理） |
+| `/api/runs/discard` | POST | 丢弃一次中断运行（不再提供续跑） |
+| `/api/runs/delete` | POST | 删除指定运行 |
+| `/api/runs/<run_id>` | GET | 运行详情（含节点行数据摘要） |
+
+### 数据与数据集
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/data/upload` | POST | 上传 CSV/JSON 文件，注册为持久化数据集 |
 | `/api/data/paste` | POST | 将粘贴的 JSON 数组注册为数据集 |
+| `/api/data/datasets` | GET | 列出已注册数据集 |
+| `/api/data/datasets/<id>` | GET / DELETE | 查看 / 删除单个数据集 |
 | `/api/data/inspect` | POST | 查看数据集的空值/类型/重复行统计 |
-| `/api/data/preview` | POST | 分页查看数据集的原始表格（供"数据预览"面板使用） |
+| `/api/data/preview` | POST | 分页查看数据集的原始表格（数据预览面板） |
 | `/api/data/clear` | POST | 清空内存中的数据集缓存 |
-| `/api/history/runs` | GET | 列出所有已记录的工作流执行 |
-| `/api/history/series` | GET | 按工作流/指标查询时间序列数据（供"执行历史"面板画趋势图） |
-| `/api/history/clear` | POST | 清空执行历史记录 |
-| `/api/analysis/run` | POST | 对数据集执行清洗流水线，返回清洗后数据集 id 及报告 |
+
+### 分析 / 可视化 / 导出（独立于工作流，可单独调用）
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/analysis/run` | POST | 对数据集执行清洗流水线，返回新数据集 id 及报告 |
 | `/api/analysis/train` | POST | 从已有 LLM 标注数据集训练传统 ML 模型（情感/倾向） |
 | `/api/visualize/render` | POST | 对数据集渲染图表，返回 ECharts option 或 Matplotlib 图片 |
 | `/api/export/save` | POST | 将数据集导出为指定格式文件 |
 
-### 统计 / 其它
+### Chart Studio
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/studio/dataset` | POST | 把画布任意节点/数据集的完整表格交给 Studio（支持多源合并） |
+| `/api/studio/sources` | POST | 预检哪些节点当前有可用的表格数据 |
+| `/api/studio/save-image` | POST | 把 Studio 成品图保存为 PNG 到导出目录 |
+
+### 统计与历史
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
 | `/api/stats/emotion` | GET | 情感统计 |
 | `/api/stats/tendency` | GET | 倾向性统计 |
-| `/api/cookies/status` | GET | Cookie 状态 |
+| `/api/stats/summary` | GET | 执行汇总统计 |
+| `/api/history/runs` | GET | 列出所有已记录的工作流执行 |
+| `/api/history/series` | GET | 按工作流/指标查询时间序列（执行历史面板趋势图） |
+| `/api/history/clear` | POST | 清空执行历史记录 |
+
+### AI / Cookie / 系统
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/llm/models` | GET | 拉取 OpenRouter 免费模型列表 |
+| `/api/llm/ollama/models` | GET | 列出本地 Ollama 已拉取模型 |
+| `/api/llm/test` | POST | 测试所选提供方的连通性 |
+| `/api/cookies/status` | GET | 各平台 Cookie 是否存在 |
+| `/api/cookies/save` | POST | 保存指定平台 Cookie |
+| `/api/cookies/generate` | POST | 打开浏览器引导扫码登录并捕获 Cookie |
+| `/api/settings` | GET / POST | 读取 / 修改运行时设置（data/settings.json） |
 | `/api/config` | GET | 系统配置 |
 
 ## 使用示例
@@ -172,11 +276,11 @@ crawler_workflow/
 
 1. 从左侧节点库拖拽 "Data Source" 到画布
 2. 双击节点打开设置面板，选择平台和关键词
-3. 添加 Process 节点 (Clean / Emotion / Tendency)
+3. 添加 Process 节点 (Clean / Emotion / Tendency)，在 AI 面板选好提供方与模型
 4. 添加 Analysis 节点做进一步的确定性清洗（如去空值、去重）
-5. 添加 Output 节点，选择导出格式 (CSV / JSON / Excel / ...)
-6. 添加 Visualize 节点查看数据分布（可选，与 Output 并列挂在同一上游节点后）
-7. 拖拽连线连接节点
+5. 添加 Tokenize 节点产出词频（可选，供词云/导出使用）
+6. 添加 Output 节点选择导出格式，并添加 Visualize 节点查看分布
+7. 拖拽连线连接节点，加一个 Name 节点命名工作流
 8. 点击菜单 "Execute" 运行
 
 ### 2. 独立使用 Analysis / Visualize 节点（不采集，只处理已有数据）
@@ -184,26 +288,52 @@ crawler_workflow/
 1. 直接在画布上拖一个 Visualize（或 Analysis）节点，不连任何上游节点
 2. 打开节点设置，把 "Data Source" 改成 "Upload File"，上传一份 CSV/JSON
 3. 配置图表类型 / X、Y 字段后点击 "Preview Chart" 即可在右侧预览面板看到结果，
-   不需要跑整个工作流
+   不需要跑整个工作流；上传的文件会持久化，下次打开这个工作流还能用
 
-### 3. 加载示例工作流
+### 3. 中断后续跑（断点续跑）
 
-```bash
-cp data/workflows/sanya_crawl.json data/workflows/
-```
+1. 执行中点击 Stop、直接关服务、或爬虫/LLM 中途失败——都没关系，
+   已完成的节点和已处理的行都记录在 `data/runs.db`
+2. 重新打开该工作流，画布顶部出现"检测到中断的运行"横幅
+3. 点「继续」：未变化的节点直接复用检查点（LLM 结果走缓存不重付费），
+   只重跑缺失部分；改了某节点参数则该节点及其下游自动失效重算
+4. 点「重新开始」则忽略检查点全量重跑；不想要这次续跑可在运行记录面板「丢弃」
 
-在画布中点击 File → Load，输入 `sanya_crawl`。
+### 4. 用 Resume 节点接管旧运行的数据
+
+原平台已登出/风控、或那批数据已经花过 LLM 成本时：拖入 Resume 节点，
+选择某次历史运行及其节点，它的输出行就直接成为当前工作流的输入。
 
 ## 配置
 
-通过 `backend/config.py` 或环境变量配置：
+### 环境变量
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `OLLAMA_MODEL` | Ollama 模型名 | `qwen3.5:9b` |
 | `OLLAMA_HOST` | Ollama 服务地址 | `http://localhost:11434` |
-| `DEFAULT_HEADLESS` | 默认无头模式 | `True` |
-| `DEFAULT_MAX_WORKERS` | 最大线程数 | `4` |
+| `SECRET_KEY` | Flask 会话密钥 | `crawler-workflow-secret-key` |
+| `PORT` | 服务端口 | `5000` |
+
+### 运行时设置（UI 设置面板 → `data/settings.json`）
+
+| 键 | 说明 |
+|------|------|
+| `driver_path` | chromedriver 路径（覆盖 config.py 默认值） |
+| `browser_binary` | Chrome 二进制路径 |
+| `window_size` | 浏览器窗口尺寸 |
+| `page_load_timeout` / `element_timeout` | 页面/元素超时（秒） |
+| `ollama_host` | Ollama 地址（覆盖环境变量） |
+
+### 保留策略常量（`backend/config.py`）
+
+| 常量 | 说明 | 默认值 |
+|------|------|--------|
+| `RUN_KEEP_PER_WORKFLOW` | 每个工作流保留最近 N 次运行 | `20` |
+| `RUN_KEEP_DAYS` | 运行记录最长保留天数 | `30` |
+| `RUN_MAX_ROWS_PER_NODE` | 单节点持久化行数硬上限 | `500000` |
+| `DATASET_MAX_ROWS` | 单个上传文件行数上限 | `300000` |
+| `DATASET_KEEP_DAYS` | 无引用文件的清理天数 | `90` |
 
 ## 训练传统 ML 模型
 
@@ -213,6 +343,13 @@ cp data/workflows/sanya_crawl.json data/workflows/
 2. 连接上游数据源，执行工作流
 3. 完成后，将 Process 节点的模式切换为 `ml`，点击「训练 ML 模型」
 4. 系统自动从上游节点结果中提取文本列和标签列训练模型
-5. 训练完成后，后续执行将使用 ML 模式批量推理（无需 Ollama）
+5. 训练完成后，后续执行将使用 ML 模式批量推理（无需 Ollama / 不耗 token）
 
 ML 模型保存在 `data/models/` 目录下，训练一次后持久可用。
+
+## 开发与验证
+
+- 依赖安装、lint（ruff + pylint）与启动均使用项目虚拟环境 `.venv/`
+- 代码风格由 `ruff.toml` 约束（行宽 120、单引号），提交前必须通过
+  `ruff check` 与 `ruff format --check`，且只允许真正修复，禁止 `# noqa` 式忽略
+- 改动后建议运行完整的冒烟验证（起服务 + 关键端点探测），详见 `AGENTS.md`

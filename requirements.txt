@@ -9,5 +9,6 @@ tabulate
 ollama
 webdriver-manager
 ruff
+pylint
 jieba
 scikit-learn
