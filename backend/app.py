@@ -1487,12 +1487,16 @@ def _begin_run(data: dict, lang_header: str) -> dict:
 # ─── Node execution helpers ────────────────────────────────────
 
 
-def _source_stream(ctx: dict, nid: str, scope: str):
+def _source_stream(ctx: dict, nid: str, scope: str, label: str = ''):
     """Row sink + cursor sink for one source node.
 
     Every scraped item goes straight into the database as it is scraped, so a
     kill at item 900 of 1000 still owns those 900 rows; the position goes with
     it so the next attempt can continue instead of starting over.
+
+    *label* is the node's user-facing name, handed down to the store's row-cap
+    warning: whoever reads the console named that box, and ``node-7`` is not
+    what they called it.
     """
     store = ctx['store']
     run_id = ctx['run_id']
@@ -1504,7 +1508,7 @@ def _source_stream(ctx: dict, nid: str, scope: str):
     def row_sink(item):
         # A sink answers "was this new?" — the crawler drops duplicates itself,
         # which is how a resumed crawl re-reading the same page stays honest.
-        kept, _dropped = store.append_rows(run_id, nid, [item], dedupe_scope=scope)
+        kept, _dropped = store.append_rows(run_id, nid, [item], dedupe_scope=scope, label=label)
         if not kept:
             tally[nid] = tally.get(nid, 0) + 1
         return bool(kept)
@@ -1584,7 +1588,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
                 # default would skip every one of them. Never on a resumed run:
                 # there the ledger is precisely its dedupe machinery.
                 add_log(t('run.recrawl', n=ctx['store'].forget_items(scope)))
-            row_sink, cursor_sink = _source_stream(ctx, nid, scope)
+            row_sink, cursor_sink = _source_stream(ctx, nid, scope, node_label(node, nid))
             if writer is not None:
                 base_sink = row_sink
 
@@ -2178,7 +2182,7 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     row_sink = cursor_sink = None
     resumed_index = 0
     if ctx is not None:
-        row_sink, cursor_sink = _source_stream(ctx, nid, _item_scope(ctx, node))
+        row_sink, cursor_sink = _source_stream(ctx, nid, _item_scope(ctx, node), node_label(node, nid))
         if ctx.get('resume'):
             from crawlers.base import as_index
 
@@ -2387,7 +2391,7 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         published = execution_state['results'].get(nid)
         rows = published if isinstance(published, list) else []
         if rows and store.row_count(run_id, nid) == 0:
-            store.append_rows(run_id, nid, rows)
+            store.append_rows(run_id, nid, rows, label=label)
         if not rows:
             rows = store.load_rows(run_id, nid)
         status = NODE_PARTIAL if rows else NODE_FAILED
@@ -2431,7 +2435,7 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
     if isinstance(result, list) and ntype != 'source':
         # Source rows are already in the store — the sink put every item there
         # as it was scraped, and re-writing them here would only renumber.
-        store.replace_rows(run_id, nid, result)
+        store.replace_rows(run_id, nid, result, label=label)
     if isinstance(result, list) and any(
         isinstance(r, dict) and any(v == ABORT_MARK for v in r.values()) for r in result
     ):

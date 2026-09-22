@@ -114,6 +114,21 @@ class TestColumnSelection:
     def test_selecting_one_of_two_columns_leaves_nothing_to_compare(self, df):
         assert CorrelationAnalyzer.analyze_dataframe(df, columns=['点赞']).empty
 
+    def test_naming_only_text_columns_is_refused_by_name(self, df):
+        """ "No pairs" is an answer about the data; "you pointed at text" is an
+        answer about the setting, and the two must not look alike."""
+        with pytest.raises(ValueError) as caught:
+            CorrelationAnalyzer.analyze_dataframe(df, columns=['标题'])
+        assert '标题' in str(caught.value)
+
+    def test_a_mixed_selection_computes_and_names_what_it_skipped(self, df, caplog):
+        with caplog.at_level('WARNING'):
+            result = CorrelationAnalyzer.analyze_dataframe(df, columns=['点赞', '收藏', '标题'])
+        assert result[['col1', 'col2']].values.tolist() == [['点赞', '收藏']], 'the usable pair still scored'
+        assert '标题' in caplog.text
+        assert result[['col1', 'col2']].values.tolist() == [['点赞', '收藏']]
+        assert '标题' in caplog.text
+
     def test_a_constant_column_produces_no_pairs(self):
         frame = pd.DataFrame({'a': [1, 2, 3, 4], 'b': [7, 7, 7, 7], 'c': [4, 3, 2, 1]})
         result = CorrelationAnalyzer.analyze_dataframe(frame)

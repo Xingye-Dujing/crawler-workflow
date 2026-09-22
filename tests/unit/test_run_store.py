@@ -286,6 +286,19 @@ class TestRows:
         assert kept == 3
         assert store.row_count('r1', 'n1') == 3
 
+    def test_the_cap_warning_names_the_node_as_the_user_named_it(self, store, sample_rows, monkeypatch, caplog):
+        """The store only holds the id, so the caller hands down the label — and
+        a console saying ``node-7`` is no use to whoever renamed that box."""
+        monkeypatch.setattr(Config, 'RUN_MAX_ROWS_PER_NODE', 2)
+        _start(store)
+        with caplog.at_level('WARNING'):
+            store.append_rows('r1', 'n1', sample_rows, label='周报 #n1')
+        assert '周报 #n1' in caplog.text
+        caplog.clear()
+        with caplog.at_level('WARNING'):
+            store.replace_rows('r1', 'n2', sample_rows)
+        assert 'n2' in caplog.text, 'without a label the id still has to appear'
+
     def test_replace_rows_swaps_content_and_keeps_order(self, store, sample_rows):
         _start(store)
         store.append_rows('r1', 'n1', sample_rows)

@@ -3,8 +3,9 @@
 The node is decorative when it works and confusing when it lies, so the tests
 concentrate on the two failure modes that would mislead a user:
 
-- a table too small (or with no numbers at all) must say "nothing is anomalous"
-  instead of fitting a model on three points,
+- a table too small (or with no numbers at all, or with only the columns the
+  user named ruled out) must RAISE: an added column of 0.0 scores reads as "the
+  table was checked and is clean", which is a conclusion the node did not earn,
 - the same input must give the same answer, because the result is stored as a
   checkpoint and re-read after a resume.
 """
@@ -46,21 +47,35 @@ class TestOutputContract:
 
 
 class TestGuards:
-    @pytest.mark.parametrize('rows', [1, 3, 4])
-    def test_tiny_tables_are_never_fitted(self, rows):
+    """Each of these used to answer with a full table of 0.0 scores — a clean
+    bill of health from a node that computed nothing."""
+
+    @pytest.mark.parametrize('rows', [0, 1, 3, 4])
+    def test_a_table_too_small_to_score_is_refused(self, rows):
         frame = pd.DataFrame({'v': [9999] * rows})
-        result = AnomalyDetector.analyze_dataframe(frame)
-        assert result['is_anomaly'].tolist() == [0] * rows
-        assert result['anomaly_score'].tolist() == [0.0] * rows
+        with pytest.raises(ValueError) as caught:
+            AnomalyDetector.analyze_dataframe(frame)
+        assert str(rows) in str(caught.value), 'the message must say how few rows there were'
+        assert str(AnomalyDetector.MIN_ROWS) in str(caught.value)
 
-    def test_a_table_without_numbers_is_answered_with_zeros(self):
+    def test_a_table_without_numbers_is_refused(self):
         frame = pd.DataFrame({'标题': ['甲'] * 10, '正文': ['乙'] * 10})
-        result = AnomalyDetector.analyze_dataframe(frame)
-        assert result['is_anomaly'].tolist() == [0] * 10
+        with pytest.raises(ValueError):
+            AnomalyDetector.analyze_dataframe(frame)
 
-    def test_a_text_column_selection_is_not_a_crash(self, df):
-        result = AnomalyDetector.analyze_dataframe(df, columns=['标题'])
-        assert set(result['is_anomaly']) == {0}
+    def test_naming_only_text_columns_is_refused_by_name(self, df):
+        """A wrong setting has to be told apart from an empty result set — and it
+        has to name the column the user should fix."""
+        with pytest.raises(ValueError) as caught:
+            AnomalyDetector.analyze_dataframe(df, columns=['标题'])
+        assert '标题' in str(caught.value)
+
+    def test_a_mixed_selection_scores_the_usable_part_and_says_what_it_dropped(self, df, caplog):
+        with caplog.at_level('WARNING'):
+            result = AnomalyDetector.analyze_dataframe(df, columns=['点赞', '标题'])
+        assert len(result) == len(df)
+        assert result.loc[result['is_anomaly'] == 1, '点赞'].tolist() == [500], 'the numeric column still scored'
+        assert '标题' in caplog.text, 'the dropped column must be named, not silently discarded'
 
     def test_missing_values_are_treated_as_zero_not_as_errors(self):
         frame = pd.DataFrame({'v': [1.0, 2.0, None, 3.0, 2.0, 1.0, 2.0, None]})

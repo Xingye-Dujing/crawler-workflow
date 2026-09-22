@@ -15,7 +15,17 @@ class AnomalyDetector:
     Works best on numeric columns — categorical / text columns are ignored.
     Returns the original DataFrame with ``anomaly_score`` and ``is_anomaly``
     columns added.
+
+    When it cannot answer, it says so rather than answering: a row of
+    ``anomaly_score=0.0, is_anomaly=0`` reads as "this table was checked and is
+    clean", which is a conclusion this node did not earn. There is no visible
+    difference in an exported file between "no anomalies" and "nothing could be
+    scored", so the second case raises and the node settles FAILED.
     """
+
+    #: Below this many rows Isolation Forest separates an outlier from noise by
+    #: accident, so a flag would be a coin toss with a number on it.
+    MIN_ROWS = 5
 
     @staticmethod
     def analyze_dataframe(
@@ -28,21 +38,23 @@ class AnomalyDetector:
 
         numeric_cols = work.select_dtypes(include=[np.number]).columns.tolist()
         if columns:
-            numeric_cols = [c for c in columns if c in numeric_cols]
+            wanted = [str(c) for c in columns]
+            unusable = [c for c in wanted if c not in numeric_cols]
+            numeric_cols = [c for c in wanted if c in numeric_cols]
+            if not numeric_cols:
+                # The user named columns to score and none of them hold numbers:
+                # that is a wrong setting, not an empty result set.
+                raise ValueError(t('anomaly.no_usable_columns', columns=', '.join(unusable)))
+            if unusable:
+                logger.warning(t('anomaly.ignored_columns', columns=', '.join(unusable)))
 
         if not numeric_cols:
-            logger.warning(t('anomaly.no_numeric'))
-            work['anomaly_score'] = 0.0
-            work['is_anomaly'] = 0
-            return work
+            raise ValueError(t('anomaly.no_numeric'))
+
+        if len(work) < AnomalyDetector.MIN_ROWS:
+            raise ValueError(t('anomaly.too_few', n=len(work), min=AnomalyDetector.MIN_ROWS))
 
         x_mat = work[numeric_cols].fillna(0)
-
-        if len(x_mat) < 5:
-            logger.warning(t('anomaly.too_few', n=len(x_mat)))
-            work['anomaly_score'] = 0.0
-            work['is_anomaly'] = 0
-            return work
 
         model = IsolationForest(
             contamination=contamination,

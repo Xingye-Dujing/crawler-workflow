@@ -623,13 +623,17 @@ class RunStore:
 
     # ── rows ────────────────────────────────────────────────────
 
-    def append_rows(self, run_id: str, node_id: str, rows: list, dedupe_scope: str = None) -> tuple:
+    def append_rows(self, run_id: str, node_id: str, rows: list, dedupe_scope: str = None, label: str = '') -> tuple:
         """Append rows as they are produced. Returns (kept, dropped).
 
         With ``dedupe_scope`` set, a row whose fingerprint was already collected
         under that scope is dropped — that is what stops a resumed crawl from
         re-adding posts it already has, and what makes the same item arriving
         from two pages count once.
+
+        ``label`` is the node's user-facing name (`title #id`): the storage layer
+        knows only the id, and a cap warning that says ``node-7`` is no use to
+        whoever named that box. The caller resolves it, so this stays one rule.
         """
         if not rows:
             return 0, 0
@@ -646,7 +650,7 @@ class RunStore:
             seen_batch = set()
             for row in rows:
                 if existing + kept >= limit:
-                    logger.warning(t('run.row_limit', nid=node_id, limit=limit))
+                    logger.warning(t('run.row_limit', nid=label or node_id, limit=limit))
                     break
                 key = item_key(row)
                 if key in seen_batch:
@@ -667,7 +671,7 @@ class RunStore:
             self._conn.commit()
         return kept, dropped
 
-    def replace_rows(self, run_id: str, node_id: str, rows: list):
+    def replace_rows(self, run_id: str, node_id: str, rows: list, label: str = ''):
         """Store a node's complete output at once. Atomic nodes (pandas
         transforms, charts, exports) have no meaningful intermediate state, so
         their durable form is simply "the result"."""
@@ -676,7 +680,7 @@ class RunStore:
             self._conn.commit()
         limit = Config.RUN_MAX_ROWS_PER_NODE
         if len(rows) > limit:
-            logger.warning(t('run.row_limit', nid=node_id, limit=limit))
+            logger.warning(t('run.row_limit', nid=label or node_id, limit=limit))
             rows = rows[:limit]
         stamp = self.now()
         payload = [(run_id, node_id, i, item_key(row), _dumps(row), stamp) for i, row in enumerate(rows)]

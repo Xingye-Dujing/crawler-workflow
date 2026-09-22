@@ -167,6 +167,75 @@ class TestVisualizeNode:
         assert run['status'] == 'failed', 'a run with a failed node is not completed'
 
 
+class TestAnomalyNode:
+    """An anomaly node that cannot score must fail, not publish a clean bill of
+    health: 0.0 scores on every row are indistinguishable, in an export, from a
+    table that was checked and found free of outliers."""
+
+    def test_a_text_only_table_fails_the_node_with_the_reason(self, client, app_module, paste):
+        ds = paste([{'标题': '甲', '正文': '乙'}] * 6, name='text-only.csv')
+        workflow = _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 6}),
+                _node('node-2', 'process', {'operation': 'anomaly'}, 'anomaly'),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'anom'})
+        run_id = started.get_json()['run_id']
+        assert _wait(app_module)
+        statuses = app_module._RUN_STORE.node_statuses(run_id)
+        assert statuses['node-2']['status'] == 'failed', statuses['node-2'].get('error')
+        assert '数值列' in statuses['node-2']['error'] or 'numeric' in statuses['node-2']['error'].lower()
+        assert app_module._RUN_STORE.load_rows(run_id, 'node-2') == [], 'no fabricated scores may be stored'
+        logs = ' '.join(app_module.execution_state['logs'])
+        assert 'anomaly' in logs.lower() or '异常' in logs, 'the console must carry the refusal'
+
+    def test_a_numeric_table_still_scores_end_to_end(self, client, app_module, paste):
+        ds = paste(
+            [{'点赞': v, '标题': f'文{i}'} for i, v in enumerate([10, 12, 11, 13, 12, 11, 10, 12, 13, 900])],
+            name='numbers.csv',
+        )
+        workflow = _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 10}),
+                _node('node-2', 'process', {'operation': 'anomaly'}, 'anomaly'),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'anom-ok'})
+        run_id = started.get_json()['run_id']
+        assert _wait(app_module)
+        rows = app_module._RUN_STORE.load_rows(run_id, 'node-2')
+        assert len(rows) == 10
+        assert 'anomaly_score' in rows[0] and 'is_anomaly' in rows[0]
+        assert app_module._RUN_STORE.node_statuses(run_id)['node-2']['status'] == 'done'
+
+
+class TestRowCapWarning:
+    def test_the_console_names_the_node_by_its_title(self, client, app_module, paste, monkeypatch, caplog):
+        """The cap lives in the storage layer, which only knows ids; the label
+        has to ride along or the console blames a box nobody called that."""
+        from config import Config
+
+        monkeypatch.setattr(Config, 'RUN_MAX_ROWS_PER_NODE', 2)
+        ds = paste(RECORDS, name='cap.csv')
+        upload = _node('node-1', 'upload', {'dataset_id': ds, 'row_count': len(RECORDS)})
+        upload['title'] = '导入的样本'
+        workflow = _wf(
+            [upload, _node('node-2', 'tokenize', {'text_column': '正文', 'output_mode': 'word_freq'})],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'cap'})
+        run_id = started.get_json()['run_id']
+        with caplog.at_level('WARNING'):
+            assert _wait(app_module)
+        assert app_module._RUN_STORE.row_count(run_id, 'node-1') == 2, 'the cap still caps'
+        warnings = [rec.getMessage() for rec in caplog.records if rec.levelname == 'WARNING']
+        assert any('导入的样本' in msg for msg in warnings), f'no warning named the node: {warnings}'
+        assert not any('#node-1' in msg and '导入的样本' not in msg for msg in warnings), 'never a bare id'
+
+
 class TestOutputFormats:
     @pytest.mark.parametrize(
         'fmt,ext',
@@ -368,6 +437,7 @@ class TestStopAndKill:
         user had been watching — the record of what the run did, deleted by the
         act of stopping it.
         """
+
         class _Slow:
             def __init__(self, *a, **k):
                 self._s = None

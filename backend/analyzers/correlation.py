@@ -28,7 +28,16 @@ class CorrelationAnalyzer:
     ) -> pd.DataFrame:
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         if columns:
-            numeric_cols = [c for c in columns if c in numeric_cols]
+            wanted = [str(c) for c in columns]
+            unusable = [c for c in wanted if c not in numeric_cols]
+            numeric_cols = [c for c in wanted if c in numeric_cols]
+            if not numeric_cols:
+                # Nothing the user pointed at holds numbers: an empty table would
+                # read as "these columns are unrelated" when the real answer is
+                # "text cannot be correlated".
+                raise ValueError(t('corr.no_usable_columns', columns=', '.join(unusable)))
+            if unusable:
+                logger.warning(t('corr.ignored_columns', columns=', '.join(unusable)))
 
         if len(numeric_cols) < 2:
             logger.warning(t('corr.need_cols'))
