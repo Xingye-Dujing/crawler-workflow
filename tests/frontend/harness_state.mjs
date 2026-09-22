@@ -105,11 +105,14 @@ for (const sc of scenarios) {
     }
     if (sc.copy) useNodeMenu(sc.copy, 'ctxCopy');
     for (let i = 0; i < (sc.paste || 0); i++) useNodeMenu(null, 'ctxPasteNode');
+    /* Before the undo/redo steps: a scenario that deletes and then rewinds is
+       testing what the rewind restores, and applying the delete afterwards would
+       silently test the shape of a one-node history instead. */
+    if (sc.deleteNode) canvas.deleteNode(sc.deleteNode);
     if (sc.undo) canvas.undo();
     if (sc.redo) canvas.redo();
     if (sc.setLang) I18n.lang = sc.setLang;
     for (const id of sc.refresh || []) canvas.updateNodeDisplay(id);
-    if (sc.deleteNode) canvas.deleteNode(sc.deleteNode);
 
     out[sc.id] = {
         nodes: Object.values(canvas.nodes).map((n) => ({

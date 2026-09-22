@@ -158,6 +158,13 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   forever. Queues are in-memory (a restart drops them) and `tests/conftest.py` clears
   `_RUN_QUEUE` per test, or a parked request would start inside an unrelated test.
   The Execute button is therefore never disabled — it relabels 排队运行 while running.
+- **A node id is a storage key — never re-mint one on restore.** Run records, resume
+  cursors, LLM answer caches and `workflow_fingerprint` all key on node ids, so
+  renumbering a canvas detaches it from its own interrupted run. `canvas.addNode(type, x, y,
+  nodeId)` adopts the stored id and `canvas.reserveId` keeps `nextId` past whatever was
+  adopted (a later drag must not collide); both restore paths (`canvas.restoreState` for
+  undo/redo and the draft, `WorkflowManager.loadFromJSON` for opening a file) pass the
+  file's ids straight through — pinned by `tests/frontend/harness_state.mjs`.
 - **Recorded rows are addressed by workflow, never by bare node id.** `_durable_node_rows`
   (app.py) answers a preview/chart/export/studio probe after a refresh or restart from
   `runs.db`; node ids like `node-2` repeat on every canvas, so with no identity it returns

@@ -98,6 +98,23 @@ def state(tmp_path_factory):
         },
         {'id': 'paste_without_copy', 'add': ['source'], 'paste': 1},
         {
+            'id': 'undo_keeps_ids',
+            'add': ['source', 'source', 'source'],
+            'deleteNode': 'node-2',
+            'undo': True,
+        },
+        {
+            'id': 'restore_then_add',
+            'restore': {
+                'nodes': {
+                    'node-1': {'id': 'node-1', 'type': 'source', 'title': '一号', 'params': {}, 'x': 1, 'y': 1},
+                    'node-5': {'id': 'node-5', 'type': 'output', 'title': '五号', 'params': {}, 'x': 2, 'y': 2},
+                },
+                'connections': [{'from': 'node-1', 'to': 'node-5'}],
+            },
+            'add': ['output'],
+        },
+        {
             'id': 'restamp',
             'restore': {
                 'nodes': {
@@ -163,6 +180,21 @@ class TestCanvasState:
         assert [n['id'] for n in state['undo_last']['nodes']] == ['node-1']
         ids = [n['id'] for n in state['undo_redo']['nodes']]
         assert ids == ['node-1', 'node-2']
+
+    def test_an_undo_keeps_every_node_under_its_own_id(self, state):
+        """Ids are storage keys: runs, resume cursors and cached answers are all
+        filed under them, and the workflow fingerprint hashes them. Re-minting
+        them on Ctrl+Z used to detach the canvas from its own interrupted run."""
+        r = state['undo_keeps_ids']
+        assert [n['id'] for n in r['nodes']] == ['node-1', 'node-2', 'node-3']
+        assert [n['title'] for n in r['nodes']] == ['Data Source', 'Data Source', 'Data Source']
+
+    def test_a_restored_canvas_continues_the_numbering_past_its_ids(self, state):
+        """A canvas restored from a sparse/foreign numbering must still be able
+        to add a node without colliding with one already on the board."""
+        r = state['restore_then_add']
+        assert [n['id'] for n in r['nodes']] == ['node-1', 'node-5', 'node-6']
+        assert r['connections'] == [{'from': 'node-1', 'to': 'node-5'}], 'the new node is not wired to anything'
 
     def test_language_flip_restamps_only_default_labels(self, state):
         nodes = {n['id']: n for n in state['restamp']['nodes']}
@@ -232,12 +264,15 @@ def life(tmp_path_factory):
 
 
 class TestFileLifecycle:
-    def test_load_rebuilds_nodes_titles_and_remaps_connections(self, life):
+    def test_load_rebuilds_nodes_titles_and_keeps_their_ids(self, life):
         r = life['load_open']
         titles = [n['title'] for n in r['nodes']]
         assert titles == ['抓取微博', '清洗', 'Output']
-        # File ids (nA/nB/nC) must land on the freshly built node-1..3 ids.
-        assert r['connections'] == [{'from': 'node-1', 'to': 'node-3'}, {'from': 'node-2', 'to': 'node-3'}]
+        # The file's own ids come back unchanged. They used to be re-minted to
+        # node-1..3, which silently detached the canvas from every run record,
+        # resume cursor and cached answer filed under the original ids.
+        assert [n['id'] for n in r['nodes']] == ['nA', 'nB', 'nC']
+        assert r['connections'] == [{'from': 'nA', 'to': 'nC'}, {'from': 'nB', 'to': 'nC'}]
 
     def test_load_applies_the_stored_run_settings(self, life):
         r = dict(life['load_open']['runState'])

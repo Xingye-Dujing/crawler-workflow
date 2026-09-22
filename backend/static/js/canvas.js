@@ -365,8 +365,21 @@ const canvas = {
         });
     },
 
-    addNode(type, x, y) {
-        const id = 'node-' + (this.nextId++);
+    /* Node ids are keys, not labels: run records, resume cursors and the LLM
+       answer cache are all filed under them, and the workflow fingerprint hashes
+       them. Re-minting them on restore therefore breaks the resume banner for a
+       canvas the user only pressed Ctrl+Z on. So a restored or opened node keeps
+       the id it was stored with, and this keeps the counter clear of it — a
+       later drag-and-drop must not mint an id that is already on the board. */
+    reserveId(id) {
+        const match = /(\d+)\s*$/.exec(String(id || ''));
+        if (match) this.nextId = Math.max(this.nextId, parseInt(match[1], 10) + 1);
+    },
+
+    addNode(type, x, y, nodeId) {
+        const wanted = String(nodeId || '').trim();
+        const id = wanted && !this.nodes[wanted] ? wanted : 'node-' + this.nextId++;
+        this.reserveId(id);
         const labels = {
             name: I18n.t('node.name'),
             source: I18n.t('node.source'),
@@ -786,13 +799,19 @@ const canvas = {
 
     restoreState(state) {
         this.nextId = 1;
-        /* Sort nodes by numeric ID to ensure consistent order */
+        /* Sort by the trailing number in the id so a rebuild lands in the same
+           order it was drawn in. parseInt on a split('-') was the old way and
+           returned NaN for ids a file authored (n1, nA) — an arbitrary order
+           then fed the index-based connection remap below. */
+        const ordinal = (id) => {
+            const match = /(\d+)\s*$/.exec(String(id || ''));
+            return match ? parseInt(match[1], 10) : 0;
+        };
         var nodeList = Object.values(state.nodes || {}).sort(function (a, b) {
-            return (parseInt(a.id.split('-')[1]) || 0) - (parseInt(b.id.split('-')[1]) || 0);
+            return ordinal(a.id) - ordinal(b.id);
         });
         nodeList.forEach(function (n) {
-            canvas.addNode(n.type, n.x, n.y);
-            var id = 'node-' + (canvas.nextId - 1);
+            const id = canvas.addNode(n.type, n.x, n.y, n.id);
             if (canvas.nodes[id]) {
                 canvas.nodes[id].params = n.params;
                 /* The renamed title must travel back BEFORE the display update

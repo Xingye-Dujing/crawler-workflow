@@ -87,8 +87,11 @@ const workflow = {
         canvas.connections = [];
         canvas.nextId = 1;
         workflowData.nodes.forEach(function (n) {
-            canvas.addNode(n.type, n.x, n.y);
-            var id = 'node-' + (canvas.nextId - 1);
+            /* The file's own ids come back unchanged: run records and resume
+               cursors are filed under them, so a re-mint on open would leave
+               the interrupted run unreachable from the canvas it belongs to
+               (see canvas.addNode's nodeId). */
+            var id = canvas.addNode(n.type, n.x, n.y, n.id);
             if (canvas.nodes[id]) {
                 canvas.nodes[id].params = n.params || {};
                 // A renamed node must come back renamed (see canvas.restoreState).
@@ -115,8 +118,7 @@ const workflow = {
         /* The nodes we just built may point at files the server still has —
            check each one instead of assuming it must be re-uploaded. */
         dataNodes.reconcileDatasets();
-        /* Node ids are reassigned on load, so any panel on screen now belongs to
-           a workflow that is no longer open. */
+        /* The panel may still be showing a node from whatever was open before. */
         if (canvas._settingsNodeId) closeSettings();
         var settings = workflowData.settings || {};
         if (settings.mode === 'serial') RunState.set('parallel', false);
