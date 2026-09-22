@@ -1,4 +1,4 @@
-"""Comment crawling for zhihu / xiaohongshu / weibo article links.
+"""Comment crawling for zhihu / xiaohongshu / weibo / bilibili article links.
 
 Design notes that the code cannot shout later:
 
@@ -10,9 +10,10 @@ Design notes that the code cannot shout later:
 * One article can fail for different reasons and they must not blur:
   ``ok`` (rows, maybe zero — zero means 无评论), ``blocked`` (risk-control or
   login wall answered instead of content), ``dead`` (link unreadable/404).
-* weibo reads through its own site's JSON endpoints fetched *in page*
-  (same-origin, cookie-authenticated) — the desktop DOM is a maze of hashed
-  class names, and the ajax path is what the probes proved stable.
+* weibo and bilibili read through their own site's JSON endpoints fetched *in
+  page* (same session, cookie-authenticated) — the desktop DOM is a maze of
+  hashed class names, and for bilibili's comment panel there is no DOM at all:
+  ``.reply-item`` renders nothing, so the endpoint is the only path.
 * zhihu blocks headless sessions on content pages (answer/question), so the
   caller must give this platform a visible window; that requirement is
   declared here as ``NEVER_HEADLESS`` and honoured by the node handler.
@@ -23,11 +24,27 @@ import json
 import re
 import time
 
+from i18n import t
+
 OK = 'ok'
 BLOCKED = 'blocked'
 DEAD = 'dead'
 
 _BLOCK_MARKS = ('暂时限制', '40362', '扫码登录', '登录后查看', '当前请求存在异常')
+
+
+def _json_or_none(raw):
+    """Parse an endpoint answer, treating anything unparseable as no answer.
+
+    An HTML risk-control page served where JSON was expected is a refusal, not
+    malformed data — the caller decides between ``blocked`` and ``dead``.
+    """
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
 
 # platform_for (the article-link → adapter router) lives in utils.helpers:
 # the engine validator needs the same table without importing any crawler.
@@ -99,6 +116,77 @@ def parse_zhihu_comments(items) -> list:
     ]
 
 
+def parse_bilibili_comments(items, article_url: str, floor: int = 0) -> list:
+    """``x/v2/reply/main`` rows → comment rows, sub-replies flattened in place.
+
+    ``floor`` continues the numbering across pages, so 楼层 stays a position in
+    the article's comment set rather than in one page's payload.
+
+    A carried ``replies`` list is NOT the whole thread: measured on a hot page,
+    a comment with ``rcount=11`` carries 2 sub-replies. They are stored with
+    their parent's id so a reader can tell a reply-from-a-reply from a top-level
+    comment, and ``子回复数`` keeps the unexpanded remainder visible instead of
+    letting the count read as "this thread has 2 replies".
+    """
+    rows = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        floor += 1
+        rows.append(_bili_comment_row(item, article_url, floor, parent=''))
+        for sub in item.get('replies') or []:
+            if isinstance(sub, dict):
+                floor += 1
+                rows.append(_bili_comment_row(sub, article_url, floor, parent=str(item.get('rpid') or '')))
+    return rows
+
+
+def _bili_comment_row(item: dict, article_url: str, floor: int, parent: str) -> dict:
+    member = item.get('member') if isinstance(item.get('member'), dict) else {}
+    content = item.get('content') if isinstance(item.get('content'), dict) else {}
+    mid = str(member.get('mid') or '')
+    level = (
+        (member.get('level_info') or {}).get('current_level') if isinstance(member.get('level_info'), dict) else None
+    )
+    return {
+        '平台': 'bilibili',
+        '文章URL': article_url,
+        '评论者': str(member.get('uname') or ''),
+        '评论者主页': f'https://space.bilibili.com/{mid}' if mid else '',
+        '用户等级': int(level or 0),
+        '评论内容': str(content.get('message') or ''),
+        '评论时间': _stamp(item.get('ctime')),
+        '点赞数': int(item.get('like') or 0),
+        '楼层': floor,
+        '评论ID': str(item.get('rpid') or ''),
+        '父评论ID': parent or str(item.get('root') or ''),
+        '子回复数': int(item.get('rcount') or 0),
+        '回复数': int(item.get('count') or 0),
+        'UP主态': '点赞' if _bili_up_liked(item) else '',
+    }
+
+
+def _bili_up_liked(item: dict) -> bool:
+    """Whether the video's UP主 liked this comment (the card_label badge).
+
+    It is the one signal in the payload that says "the author read this", and
+    an analyst sorting a comment table by it is sorting by author engagement —
+    which is why it is kept and why a missing label must read as plain ''.
+    """
+    for label in item.get('card_label') or []:
+        if isinstance(label, dict) and 'UP主' in str(label.get('text_content') or ''):
+            return True
+    return bool((item.get('up_action') or {}).get('like')) if isinstance(item.get('up_action'), dict) else False
+
+
+def _stamp(value) -> str:
+    try:
+        seconds = int(value or 0)
+    except (TypeError, ValueError):
+        return ''
+    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(seconds)) if seconds else ''
+
+
 def page_is_blocked(body_head: str) -> bool:
     return any(mark in (body_head or '') for mark in _BLOCK_MARKS)
 
@@ -121,6 +209,20 @@ def weibo_comments_js(mid: str, max_id: int = 0, count: int = 20) -> str:
         'https://weibo.com/ajax/statuses/buildComments?is_reload=1&id='
         f'{mid}&is_show_bulletin=2&is_mix=0&count={count}&flow=0&fetch_level=0&max_id={max_id}'
     )
+
+
+def bilibili_view_js(bvid: str) -> str:
+    return f'https://api.bilibili.com/x/web-interface/view?bvid={bvid}'
+
+
+def bilibili_reply_js(aid, next_cursor: int = 0, size: int = 20) -> str:
+    """One page of the hot-sorted comment list.
+
+    ``mode=3`` is what the video page itself requests and the only mode measured
+    to page coherently: ``mode=2`` (by time) jumped its own cursor to 1435 and
+    then reported ``is_end`` after a single row.
+    """
+    return f'https://api.bilibili.com/x/v2/reply/main?type=1&oid={aid}&mode=3&next={next_cursor}&ps={size}'
 
 
 # ---------------------------------------------------------------------------
@@ -307,3 +409,60 @@ class CommentSession:
                 if name:
                     return name, a.get_attribute('href') or ''
         return '', ''
+
+    # -- bilibili -------------------------------------------------------------
+
+    def crawl_bilibili(self, url: str, limit: int) -> tuple:
+        """One video's comments, walked through ``x/v2/reply/main``.
+
+        Paging follows the server's cursor rather than a counter, because the
+        counter is a trap that this project measured the hard way: ``next=0``
+        answers and reports ``cursor.next=2``, and a request for ``next=1``
+        replays page 0 identically. Incrementing would therefore store the first
+        19 comments over and over and still claim to have reached the limit, so
+        the walk stops on a page that carries no new ``rpid`` — which is also
+        what makes a repeating server-side cursor harmless.
+        """
+        from .video import CODE_GONE, bilibili_bvid
+
+        self.driver.get(url)
+        self.nap(3)
+        if page_is_blocked(self._body_head()):
+            return [], BLOCKED
+        bvid = bilibili_bvid(url)
+        if not bvid:
+            return [], DEAD
+        view = _json_or_none(self._in_page_fetch(bilibili_view_js(bvid)))
+        if not view or view.get('code') != 0:
+            return [], (DEAD if (view or {}).get('code') == CODE_GONE else BLOCKED)
+        data = view.get('data') or {}
+        aid = data.get('aid')
+        if not aid:
+            return [], DEAD
+        if not int((data.get('stat') or {}).get('reply') or 0):
+            # The author closed the comment section: that is an answer, not a
+            # failure, and it has to read as 无评论 rather than as a dead link.
+            self.log(t('comment.biliClosed', url=url))
+            return [], OK
+        rows, cursor, seen, guard = [], 0, set(), 0
+        while guard < 200:
+            guard += 1
+            payload = _json_or_none(self._in_page_fetch(bilibili_reply_js(aid, cursor)))
+            if not payload or payload.get('code') != 0:
+                if rows:
+                    break  # a later page failing still keeps what we collected
+                self.log(t('comment.biliBadAnswer', url=url, code=(payload or {}).get('code')))
+                return [], BLOCKED
+            page = payload.get('data') or {}
+            items = [r for r in (page.get('replies') or []) if str(r.get('rpid')) not in seen]
+            if not items:
+                break
+            for item in page.get('replies') or []:
+                seen.add(str(item.get('rpid')))
+            rows.extend(parse_bilibili_comments(items, url, floor=len(rows)))
+            info = page.get('cursor') or {}
+            if info.get('is_end') or (limit and len(rows) >= limit):
+                break
+            cursor = int(info.get('next') or (cursor + 1))
+            self.nap(0.8)  # polite page interval on the comment API
+        return (rows[:limit] if limit else rows), OK

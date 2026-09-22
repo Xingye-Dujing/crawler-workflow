@@ -32,7 +32,7 @@ from analyzers import (
 )
 from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
-from crawlers import cookie_hosts, crawler_class, get_crawler
+from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, node_label
@@ -1319,6 +1319,12 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     """
     params = node.get('params', {})
     platform = node.get('platform', params.get('platform', ''))
+    if not is_crawlable(platform):
+        # Cookie capture and crawling are different capabilities: bilibili and
+        # douyin were added to the Cookie panel first, so a saved session exists
+        # for a platform nothing can crawl. Refusing here by name beats the
+        # alternative — an empty table that looks like an empty search.
+        raise ValueError(t('run.notCrawlable', label=node_label(node, str(node.get('id') or '')), platform=platform))
     if str(params.get('collect') or 'posts') == 'comments' and platform != 'wechat':
         # 评论采集 is a mode of the Data Source (they share the 数据输入 category):
         # links go in, comment rows come out. Same engine as the standalone
@@ -1946,6 +1952,8 @@ def _execute_comment_node(node: dict, ctx: dict = None):
                 rows, status = session.crawl_weibo(url, limit)
             elif kind == 'xiaohongshu':
                 rows, status = session.crawl_xiaohongshu(url, limit)
+            elif kind == 'bilibili':
+                rows, status = session.crawl_bilibili(url, limit)
             else:
                 rows, status = session.crawl_zhihu(url, limit)
             counts[status] = counts.get(status, 0) + 1
@@ -1971,7 +1979,7 @@ def _execute_comment_node(node: dict, ctx: dict = None):
         # cookie likely died — the collected comments are already merged to
         # disk and stored; refresh the cookie and resume for the rest.
         execution_state['cookie_expired'] = True
-        add_log(t('run.cookieExpired', platform=want or 'zhihu/weibo/xiaohongshu'))
+        add_log(t('run.cookieExpired', platform=want or 'zhihu/weibo/xiaohongshu/bilibili'))
     add_log(
         t(
             'comment.done',
@@ -1986,7 +1994,7 @@ def _execute_comment_node(node: dict, ctx: dict = None):
     if blocked_seen:
         # Failed (not done) → the run lands in the resume banner and 继续
         # retries exactly the articles the wall refused.
-        raise ValueError(t('run.cookieExpired', platform=want or 'zhihu/weibo/xiaohongshu'))
+        raise ValueError(t('run.cookieExpired', platform=want or 'zhihu/weibo/xiaohongshu/bilibili'))
     return rows_out
 
 

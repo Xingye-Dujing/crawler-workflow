@@ -836,3 +836,57 @@ class TestConsoleSemantics:
         blob = '\n'.join(status['logs'])
         assert '[命名测试]' in blob or '命名测试' in blob
         assert 'WF1' not in blob and 'WF0' not in blob
+
+
+class TestCrawlableGuard:
+    """A platform can hold a cookie and still have no crawler — and the two
+    capabilities must not be confused at run time.
+
+    Douyin is the live case: the Cookie panel logs it in, nothing scrapes it.
+    The refusal has to happen before a browser is bought and must name the node,
+    because '0 rows' from a platform that was never going to answer reads to the
+    user as a failed search rather than an unimplemented one.
+    """
+
+    @staticmethod
+    def _node(platform, nid='src-1', title='抖音源'):
+        return {'id': nid, 'type': 'source', 'title': title, 'platform': platform, 'params': {'keyword': 'ai'}}
+
+    def test_a_cookie_only_platform_is_refused_before_any_browser_boots(self, monkeypatch):
+        import app as app_module
+
+        from i18n import t
+
+        def _no_browser(*args, **kwargs):
+            raise AssertionError('the guard must run before get_crawler')
+
+        monkeypatch.setattr(app_module, 'get_crawler', _no_browser)
+        with pytest.raises(ValueError) as err:
+            app_module._execute_source_node(self._node('douyin'), headless=True)
+        message = str(err.value)
+        assert t('run.notCrawlable', label='抖音源 #src-1', platform='douyin') in message
+        assert 'src-1' in message, 'the refusal must speak with the user\u2019s node name'
+
+    def test_a_platform_whose_crawl_landed_passes_the_guard(self, monkeypatch):
+        import app as app_module
+
+        seen = {}
+
+        class _One:
+            def set_sink(self, sink):
+                pass
+
+            def set_cursor_sink(self, sink):
+                pass
+
+            def search(self, keyword, **kwargs):
+                seen['keyword'] = keyword
+                seen['target'] = kwargs.get('target_count')
+                return [{'标题': 'x', '链接': 'https://www.bilibili.com/video/BV1a/'}]
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _One())
+        rows = app_module._execute_source_node(self._node('bilibili'), headless=True)
+        assert rows and seen['keyword'] == 'ai' and seen['target'] == 50

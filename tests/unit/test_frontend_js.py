@@ -259,7 +259,12 @@ class TestUrlRoutingContract:
             assert js_platform == platform_for(url), f'routing disagreement on {url}'
 
     def test_placeholder_shows_only_the_selected_platform(self, results):
-        marker = {'zhihu': 'zhihu.com', 'weibo': 'weibo.com', 'xiaohongshu': 'xiaohongshu.com'}
+        marker = {
+            'zhihu': 'zhihu.com',
+            'weibo': 'weibo.com',
+            'xiaohongshu': 'xiaohongshu.com',
+            'bilibili': 'bilibili.com',
+        }
         for platform, domain in marker.items():
             ph = results['placeholder'][platform]
             assert domain in ph, f'{platform} placeholder must show its own domain'

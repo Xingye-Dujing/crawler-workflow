@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~1215 cases)**:
+- **Automated tests (pytest, ~1253 cases)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -78,6 +78,24 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
 - Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens
   a visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
   outcome the message catalog already explains — don't "fix" it by loosening assertions.
+- **Bilibili's two paging contracts are measured, not guessed — keep them exactly.**
+  The search list does *not* infinite-scroll (8 scroll rounds = 42 cards / 34 videos,
+  unchanged); the row budget is `&page=N`, and **`page=1` renders zero cards**, so page
+  one must be requested as the bare `all?keyword=` URL (a crawler that slept on `page=1`
+  would report an exhausted search). Card numbers are a rounded 万-label only: every count
+  comes from `x/web-interface/view?bvid=`, which answers `code=0` unsigned, cross-origin
+  from the search page, for the cookie the panel saved. Comments have **no DOM at all**
+  (`.reply-item` renders nothing), so `x/v2/reply/main` is the only path — and its `next`
+  is a cursor, not a page counter: `next=0` reports `cursor.next=2` while `next=1` replays
+  page 0 byte for byte. Walk by the server's value and stop on a page with no new `rpid`;
+  an incrementing loop would store the same 19 comments forever. `code=-404` is one
+  withdrawn video (skip); any other non-zero code is the session/risk engine talking
+  (stop, and refuse the run if nothing was collected).
+- **Cookie capture and crawling are different capabilities.** `CookieManager.PLATFORMS`
+  (6) is who the panel can log in; `crawlers.is_crawlable()` (5) is who has a crawler.
+  Douyin sits in the first and not the second, so `_execute_source_node` refuses it by
+  node label (`run.notCrawlable`) *before* buying a browser — never let a not-yet-built
+  platform fall through to an empty table, which reads as "this keyword found nothing".
 - **WeChat is intentionally body-only.** No comments, likes, forwards (and usually no read
   counts) — measured, not assumed: a real browser gets `show_comment=0`, zero `elected_comment`
   bytes in ~3.4 MB of article HTML, and an HTML 验证 page ("请在微信客户端打开链接") from

@@ -127,13 +127,15 @@ for (const u of [
     'http://xhslink.com/abc',
     'https://weibo.com/123/AbCdEf',
     'https://m.weibo.cn/detail/9',
+    'https://www.bilibili.com/video/BV1xx411c7mD',
+    'https://search.bilibili.com/all?keyword=ai',
     'https://mp.weixin.qq.com/s/xyz',
     'https://example.com/x',
     '',
 ]) {
     out.url.push([u, urlPlatform(u)]);
 }
-for (const p of ['zhihu', 'weibo', 'xiaohongshu', 'wechat', '']) {
+for (const p of ['zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'wechat', '']) {
     out.placeholder[p] = commentUrlPlaceholder(p);
 }
 

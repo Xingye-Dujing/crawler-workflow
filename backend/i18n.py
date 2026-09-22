@@ -275,6 +275,19 @@ _ZH = {
         '3. 回到本面板点「我已登录，保存」\n'
         '提示：抖音网页版对自动化浏览器较敏感，若窗口里出现滑块验证，请在窗口内手动完成后再保存。'
     ),
+    'crawl.bili.start': '[哔哩哔哩搜索] 开始搜索关键词: "{kw}"，目标获取 {n} 条结果',
+    'crawl.bili.url': '[哔哩哔哩搜索] 搜索URL: {url}',
+    'crawl.bili.page': '[哔哩哔哩搜索] 第 {page} 页：{n} 个视频（新 {fresh} 个，已收录 {done} 条）',
+    'crawl.bili.empty_page': '[哔哩哔哩搜索] 第 {page} 页没有视频卡片，停止翻页',
+    'crawl.bili.no_more': '[哔哩哔哩搜索] 连续两页都是已抓过的视频，列表已到末尾（第 {page} 页）',
+    'crawl.bili.processed': '[哔哩哔哩搜索] 已收录 {i}，当前有效数据: {n} 条',
+    'crawl.bili.duplicate': '[哔哩哔哩搜索] {i} 已存在于本次运行，跳过',
+    'crawl.bili.target_reached': '[哔哩哔哩搜索] 已达到目标数量 {n} 条，停止翻页',
+    'crawl.bili.finished': '[哔哩哔哩搜索] 搜索完成，共获取 {n} 条有效结果（目标 {total} 条）',
+    'crawl.bili.blocked': (
+        '[哔哩哔哩] 接口拒绝返回数据（code={code}）：Cookie 可能已失效或触发了风控，'
+        '请在 Cookie 面板重新登录并保存后继续运行'
+    ),
     'crawl.platformNotCrawlable': '该平台目前只支持保存登录 Cookie，还不支持采集（{platform}）——'
     '请先改用已支持的平台，或等待该平台的抓取实现完成',
     'cookie.xiaohongshu.purpose': '解锁小红书搜索、笔记正文与评论；未登录会撞登录墙且只给首屏。',
@@ -379,8 +392,10 @@ _ZH = {
     'engine.source_comments_mismatch': '节点 {nid}：{n} 个链接与所选平台（{platform}）不符',
     'engine.upload_no_file': '节点 {nid}：上传节点还没有选择文件',
     'engine.comment_no_urls': '节点 {nid}：评论节点还没有填写文章链接',
-    'comment.no_urls': '评论节点没有可抓取的链接（支持知乎/微博/小红书链接）',
-    'comment.unsupported': '评论节点忽略了 {n} 个不支持的链接（仅支持知乎/微博/小红书）',
+    'comment.no_urls': '评论节点没有可抓取的链接（支持知乎/微博/小红书/哔哩哔哩链接）',
+    'comment.unsupported': '评论节点忽略了 {n} 个不支持的链接（仅支持知乎/微博/小红书/哔哩哔哩）',
+    'comment.biliClosed': '该视频未开放评论区（或未产生评论）：{url}',
+    'comment.biliBadAnswer': '哔哩哔哩评论接口未返回数据（code={code}）：{url}',
     'comment.platformMismatch': '已忽略 {n} 个与所选平台（{platform}）不符的链接',
     'comment.allMismatched': '所有链接都与所选平台（{platform}）不符，请检查文章链接',
     'comment.article': '评论：{url} 新增 {n} 条（{status}）',
@@ -450,6 +465,10 @@ _ZH = {
         '已采集的数据全部保留——请到 设置→Cookie 更新后，用断点续跑从上次中断处继续'
     ),
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
+    'run.notCrawlable': (
+        '「{label}」所在的平台（{platform}）目前只能保存登录 Cookie，还没有采集实现，'
+        '因此不能作为数据源运行——请改用已支持的平台，或等该平台的抓取落地'
+    ),
     'run.partial_down': '节点 {nid} 中断：已把 {n} 行已完成的结果交给下游',
     'run.failed_down': '节点 {nid} 失败且没有可用数据，下游按空表继续',
     'run.skipped_empty': '节点 {nid} 跳过：上游没有数据',
@@ -718,6 +737,19 @@ _EN = {
         'Note: Douyin is quick to raise a slider captcha for automated browsers \u2014 finish it in that '
         'window before saving.'
     ),
+    'crawl.bili.start': '[Bilibili search] keyword "{kw}", target {n} results',
+    'crawl.bili.url': '[Bilibili search] URL: {url}',
+    'crawl.bili.page': '[Bilibili search] page {page}: {n} videos ({fresh} new, {done} collected)',
+    'crawl.bili.empty_page': '[Bilibili search] page {page} has no video cards, stop paging',
+    'crawl.bili.no_more': '[Bilibili search] two pages in a row held nothing new, list exhausted (page {page})',
+    'crawl.bili.processed': '[Bilibili search] stored {i}, {n} valid rows so far',
+    'crawl.bili.duplicate': '[Bilibili search] {i} already in this run, skipped',
+    'crawl.bili.target_reached': '[Bilibili search] target of {n} rows reached, stop paging',
+    'crawl.bili.finished': '[Bilibili search] done, {n} valid rows (target {total})',
+    'crawl.bili.blocked': (
+        '[Bilibili] the endpoint refused to answer (code={code}): the cookie likely died or risk control '
+        'kicked in — re-save the cookie in the Cookie panel, then resume this run'
+    ),
     'crawl.platformNotCrawlable': 'This platform only supports storing a login cookie so far, not crawling '
     '({platform}) \u2014 use a supported platform, or wait for its crawler to land',
     'cookie.xiaohongshu.purpose': 'Unlocks Xiaohongshu search, note bodies and comments; logged out you hit the '
@@ -824,8 +856,10 @@ _EN = {
     'engine.source_comments_mismatch': 'Node {nid}: {n} link(s) do not match the selected platform ({platform})',
     'engine.upload_no_file': 'Node {nid}: upload node has no file selected',
     'engine.comment_no_urls': 'Node {nid}: comment node has no article URLs yet',
-    'comment.no_urls': 'comment node has no crawlable URLs (zhihu/weibo/xiaohongshu links only)',
-    'comment.unsupported': 'comment node ignored {n} unsupported link(s) (zhihu/weibo/xiaohongshu only)',
+    'comment.no_urls': 'comment node has no crawlable URLs (zhihu/weibo/xiaohongshu/bilibili links only)',
+    'comment.unsupported': 'comment node ignored {n} unsupported link(s) (zhihu/weibo/xiaohongshu/bilibili only)',
+    'comment.biliClosed': 'this video has no open comment section (or none yet): {url}',
+    'comment.biliBadAnswer': 'bilibili comment endpoint returned no data (code={code}): {url}',
     'comment.platformMismatch': 'skipped {n} link(s) that do not match the selected platform ({platform})',
     'comment.allMismatched': 'every link conflicts with the selected platform ({platform}) — check the article URLs',
     'comment.article': 'comments: {url} added {n} ({status})',
@@ -901,6 +935,10 @@ _EN = {
     ),
     'run.cookieExpiredOk': (
         'note: {platform} hit the login wall only after the target was met — the data is complete, nothing to resume'
+    ),
+    'run.notCrawlable': (
+        'the platform behind "{label}" ({platform}) can store a login cookie but has no crawler yet, so it cannot '
+        'run as a data source — pick a supported platform, or wait for this one to land'
     ),
     'run.partial_down': 'Node {nid} interrupted — its {n} finished rows are handed downstream',
     'run.failed_down': 'Node {nid} failed with nothing usable — downstream sees an empty table',

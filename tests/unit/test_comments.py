@@ -17,7 +17,10 @@ from crawlers.comments import (
     DEAD,
     OK,
     CommentSession,
+    bilibili_reply_js,
+    bilibili_view_js,
     page_is_blocked,
+    parse_bilibili_comments,
     parse_weibo_comments,
     weibo_bid,
 )
@@ -255,6 +258,185 @@ class TestZhihuAdapter:
         session = CommentSession(driver, nap=lambda s: None)
         rows, status = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 1)
         assert status == OK and len(rows) == 1
+
+
+# ─── bilibili adapter (in-page ajax, server-owned cursor) ───────────────
+
+
+def _bili_view(aid=113332711333508, reply_total=40, code=0):
+    data = {
+        'aid': aid,
+        'bvid': 'BV1atCRYsE7x',
+        'title': '90分钟！清华博士带你一口气搞懂人工智能',
+        'stat': {
+            'view': 1405449,
+            'like': 85667,
+            'coin': 79485,
+            'favorite': 130552,
+            'share': 24794,
+            'reply': reply_total,
+        },
+    }
+    return json.dumps({'code': code, 'message': 'OK', 'data': data})
+
+
+def _bili_reply(rpid, uname='甲', msg='讲得很透彻', like=1001, ctime=1729339402, subs=(), rcount=0):
+    item = {
+        'rpid': rpid,
+        'ctime': ctime,
+        'like': like,
+        'rcount': rcount,
+        'count': rcount,
+        'member': {'mid': '343586650', 'uname': uname, 'level_info': {'current_level': 5}},
+        'content': {'message': msg},
+        'card_label': [],
+    }
+    if subs:
+        item['replies'] = [
+            {
+                'rpid': sub_rpid,
+                'ctime': ctime + 10,
+                'like': 3,
+                'member': {'mid': '7', 'uname': sub_name, 'level_info': {'current_level': 2}},
+                'content': {'message': sub_msg},
+                'root': rpid,
+            }
+            for sub_rpid, sub_name, sub_msg in subs
+        ]
+    return item
+
+
+def _bili_page(rows, next_cursor=None, is_end=False, code=0):
+    cursor = {
+        'all_count': len(rows),
+        'is_end': is_end,
+        'next': rows and next_cursor if next_cursor is not None else 0,
+    }
+    return json.dumps({'code': code, 'data': {'replies': rows, 'cursor': cursor}})
+
+
+class TestBilibiliAdapter:
+    def _session(self, queue):
+        driver = FakeDriver(fetch_queue=queue)
+        return CommentSession(driver, nap=lambda s: None), driver
+
+    def test_the_walk_follows_the_servers_cursor_not_a_counter(self):
+        """Measured: ``next=0`` answers and reports ``cursor.next=2``, and asking
+        for ``next=1`` replays page 0 byte for byte. Incrementing would store the
+        same 19 comments forever, so the request URL is the assertion here."""
+        first = _bili_reply('100', '甲', '第一条')
+        second = _bili_reply('200', '乙', '第二条')
+        session, driver = self._session(
+            [
+                _bili_view(),
+                _bili_page([first], next_cursor=2),
+                _bili_page([second], next_cursor=3),
+                _bili_page([_bili_reply('300', '丙', '第三条')], is_end=True),
+            ]
+        )
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        assert status == OK and [r['评论内容'] for r in rows] == ['第一条', '第二条', '第三条']
+        comment_calls = [u for u in driver.fetched if 'reply/main' in u]
+        assert [u.split('next=')[1].split('&')[0] for u in comment_calls] == ['0', '2', '3']
+        assert 'oid=113332711333508' in comment_calls[0] and 'mode=3' in comment_calls[0]
+
+    def test_a_replaying_page_ends_the_walk_instead_of_looping(self):
+        row = _bili_reply('100', '甲', '只有一条')
+        session, driver = self._session(
+            [
+                _bili_view(),
+                _bili_page([row], next_cursor=2),
+                _bili_page([row], next_cursor=3),
+                _bili_page([row], next_cursor=4),
+            ]
+        )
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        assert status == OK and len(rows) == 1
+        assert len([u for u in driver.fetched if 'reply/main' in u]) == 2, 'must stop once nothing is new'
+
+    def test_sub_replies_land_under_their_parent_with_continued_floors(self):
+        thread = _bili_reply('100', '甲', '主题', rcount=11, subs=[('101', '乙', ' +1'), ('102', '丙', '同问')])
+        session, _driver = self._session([_bili_view(), _bili_page([thread], is_end=True)])
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        assert status == OK
+        assert [r['评论者'] for r in rows] == ['甲', '乙', '丙']
+        assert [r['楼层'] for r in rows] == [1, 2, 3]
+        assert rows[1]['父评论ID'] == '100' and rows[0]['父评论ID'] == ''
+        # The unexpanded remainder stays visible: 11 replies exist, 2 were carried.
+        assert rows[0]['子回复数'] == 11
+
+    def test_closed_comment_section_is_an_answer_not_a_failure(self):
+        session, driver = self._session([_bili_view(reply_total=0)])
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        assert rows == [] and status == OK
+        assert not [u for u in driver.fetched if 'reply/main' in u], 'nothing to page once reply=0'
+
+    def test_a_withdrawn_video_is_dead_and_a_refusal_is_blocked(self):
+        session, _driver = self._session([_bili_view(code=-404)])
+        assert session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0) == ([], DEAD)
+        session, _driver = self._session([_bili_view(code=-412)])
+        assert session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0) == ([], BLOCKED)
+
+    def test_a_risk_control_page_never_reaches_the_api(self):
+        driver = FakeDriver(body='当前请求存在异常，暂时限制访问', fetch_queue=[])
+        session = CommentSession(driver, nap=lambda s: None)
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        assert rows == [] and status == BLOCKED and driver.fetched == []
+
+    def test_a_link_without_a_bv_id_is_dead(self):
+        session, driver = self._session([_bili_view()])
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/', 0)
+        assert rows == [] and status == DEAD and driver.fetched == []
+
+    def test_limit_caps_the_table_not_the_pages(self):
+        page1 = [_bili_reply(str(i), '甲', f'第{i}条') for i in range(20)]
+        session, _driver = self._session(
+            [_bili_view(), _bili_page(page1, next_cursor=2), _bili_page(page1[:19], next_cursor=3, is_end=True)]
+        )
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 5)
+        assert status == OK and len(rows) == 5
+
+    def test_first_page_refusal_is_blocked_and_keeps_nothing(self):
+        session, _driver = self._session([_bili_view(), json.dumps({'code': -509, 'data': None})])
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        assert rows == [] and status == BLOCKED
+
+    def test_later_page_failure_keeps_the_earlier_rows(self):
+        session, _driver = self._session(
+            [_bili_view(), _bili_page([_bili_reply('100', '甲', '留着')], next_cursor=2), 'not json at all']
+        )
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        assert status == OK and len(rows) == 1
+
+
+class TestBilibiliParser:
+    def test_endpoint_urls_carry_the_measured_shape(self):
+        assert bilibili_view_js('BV1x') == 'https://api.bilibili.com/x/web-interface/view?bvid=BV1x'
+        assert bilibili_reply_js(99, 2) == 'https://api.bilibili.com/x/v2/reply/main?type=1&oid=99&mode=3&next=2&ps=20'
+
+    def test_column_names_stay_outside_the_dedupe_identity_fields(self):
+        """'文章URL'/'评论者'/'评论内容' are deliberate near-misses of the ledger's
+        field lists; a comment that borrowed '链接' would hash every row of one
+        video to the same key and drop all but the first."""
+        from services.run_store import _AUTHOR_FIELDS, _BODY_FIELDS, _URL_FIELDS
+
+        rows = parse_bilibili_comments([_bili_reply('100', '甲', '好')], 'https://www.bilibili.com/video/BV1x/')
+        for name in rows[0]:
+            assert name not in _URL_FIELDS + _AUTHOR_FIELDS + _BODY_FIELDS, name
+
+    def test_up_liked_badge_is_read_from_the_card_label(self):
+        item = _bili_reply('100', '甲', '好')
+        item['card_label'] = [{'text_content': 'UP主觉得很赞'}]
+        assert parse_bilibili_comments([item], 'u')[0]['UP主态'] == '点赞'
+        assert parse_bilibili_comments([_bili_reply('101', '乙', '一般')], 'u')[0]['UP主态'] == ''
+
+    def test_malformed_items_are_skipped_not_raised(self):
+        rows = parse_bilibili_comments(['not-a-dict', None, _bili_reply('100', '甲', '好')], 'u')
+        assert [r['评论者'] for r in rows] == ['甲']
+
+    def test_bilibili_links_route_to_the_bilibili_adapter(self):
+        assert platform_for('https://www.bilibili.com/video/BV1atCRYsE7x/') == 'bilibili'
+        assert platform_for('https://m.bilibili.com/video/BV1atCRYsE7x') == 'bilibili'
 
 
 # ─── engine validation + row identity ───────────────────────────────────

@@ -25,8 +25,8 @@ def manager(tmp_path):
 
 class TestPlatformWhitelist:
     def test_the_cookie_whitelist_is_the_platform_list(self):
-        """Six platforms hold a cookie file: four crawlable ones plus Bilibili and
-        Douyin, whose login is captured now and whose crawl lands later."""
+        """Six platforms hold a cookie file: five crawlable ones plus Douyin,
+        whose login is captured now and whose crawl lands later."""
         assert CookieManager.PLATFORMS == ('zhihu', 'weibo', 'xiaohongshu', 'wechat', 'bilibili', 'douyin')
         assert all(CookieManager.is_supported(p) for p in CookieManager.PLATFORMS)
 
@@ -36,8 +36,8 @@ class TestPlatformWhitelist:
         from crawlers import CRAWLERS, is_crawlable
 
         assert set(CRAWLERS) == set(CookieManager.PLATFORMS)
-        assert [p for p in CRAWLERS if not is_crawlable(p)] == ['bilibili', 'douyin']
-        assert all(is_crawlable(p) for p in ('zhihu', 'weibo', 'xiaohongshu', 'wechat'))
+        assert [p for p in CRAWLERS if not is_crawlable(p)] == ['douyin']
+        assert all(is_crawlable(p) for p in ('zhihu', 'weibo', 'xiaohongshu', 'wechat', 'bilibili'))
 
     @pytest.mark.parametrize('platform', ['ZHIHU', 'zhihu ', '', None, 'kuaishou', 'zh'])
     def test_anything_else_is_unsupported(self, platform):

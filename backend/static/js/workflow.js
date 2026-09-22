@@ -451,6 +451,7 @@ function openSettings(nodeId) {
             '<option value="weibo"' + (p.platform === 'weibo' ? ' selected' : '') + '>' + I18n.t('platform.weibo') + '</option>' +
             '<option value="xiaohongshu"' + (p.platform === 'xiaohongshu' ? ' selected' : '') + '>' + I18n.t('platform.xiaohongshu') + '</option>' +
             '<option value="wechat"' + (p.platform === 'wechat' ? ' selected' : '') + '>' + I18n.t('platform.wechat') + '</option>' +
+            '<option value="bilibili"' + (p.platform === 'bilibili' ? ' selected' : '') + '>' + I18n.t('platform.bilibili') + '</option>' +
             '</select></div>';
         if (!isWechat) {
             /* 评论采集 lives here as a mode of the Data Source (same 数据输入
@@ -1885,6 +1886,7 @@ function urlPlatform(url) {
     if (u.indexOf('zhihu.com') !== -1) return 'zhihu';
     if (u.indexOf('xiaohongshu.com') !== -1 || u.indexOf('xhslink.com') !== -1) return 'xiaohongshu';
     if (u.indexOf('weibo.com') !== -1 || u.indexOf('weibo.cn') !== -1) return 'weibo';
+    if (u.indexOf('bilibili.com') !== -1) return 'bilibili';
     return '';
 }
 
@@ -1893,6 +1895,7 @@ function urlPlatform(url) {
 function commentUrlPlaceholder(platform) {
     if (platform === 'weibo') return 'https://weibo.com/...';
     if (platform === 'xiaohongshu') return 'https://www.xiaohongshu.com/explore/...';
+    if (platform === 'bilibili') return 'https://www.bilibili.com/video/BV...';
     return 'https://www.zhihu.com/question/...';
 }
 
