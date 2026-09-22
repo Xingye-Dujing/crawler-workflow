@@ -19,14 +19,15 @@ Real ``data/`` and ``logs/`` must never gain a byte from a test run.
 
 import contextlib
 import sys
-import time
 from itertools import count
 from pathlib import Path
 
 import pytest
+from run_wait import describe_state, wait_until_quiet
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = REPO_ROOT / 'backend'
+TESTS_DIR = REPO_ROOT / 'tests'
 
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
@@ -124,20 +125,17 @@ def clean_globals():
 
 
 def _wait_for_quiet_server(module, timeout: float = 30.0) -> None:
-    """Block until no run is in flight and the last worker thread is gone.
+    """Block until no run is in flight, no worker thread is left, and nothing is
+    still waiting to start.
 
-    The thread is checked as well as the flag: a run clears ``running`` at the
-    top of its ``finally`` and still has to close the store, restore stdout and
-    drain the queue below it, so the flag alone says 'free' too early.
+    The rules live in ``run_wait`` because every test that posts a run needs the
+    same one; see that module for why "the thread I saw is gone" is not it.
     """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        thread = module.execution_state.get('thread')
-        if not module.execution_state.get('running') and (thread is None or not thread.is_alive()):
-            return
-        time.sleep(0.05)
+    if wait_until_quiet(module, timeout):
+        return
     raise AssertionError(
-        f'the previous run never finished within {timeout}s — every later execute test would be queued behind it'
+        f'the previous run never finished within {timeout}s ({describe_state(module)}) '
+        '— every later execute test would be queued behind it'
     )
 
 

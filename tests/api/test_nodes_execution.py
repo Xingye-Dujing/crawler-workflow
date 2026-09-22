@@ -15,6 +15,7 @@ import time
 
 import pandas as pd
 import pytest
+from run_wait import run_finished
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
@@ -38,14 +39,8 @@ def _wf(nodes, conns, settings=None):
 
 
 def _wait(app_module, timeout=30.0):
-    thread = app_module.execution_state.get('thread')
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if thread is not None and not thread.is_alive():
-            time.sleep(0.05)  # the finally-block still settles the run record
-            return True
-        time.sleep(0.02)
-    return False
+    """The run this test started has settled (see tests/run_wait.py)."""
+    return run_finished(app_module, timeout)
 
 
 def _upload(client, paste):

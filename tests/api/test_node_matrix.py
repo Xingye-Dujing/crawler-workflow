@@ -14,9 +14,8 @@ hands the analyzer, which is exactly the plumbing under test. Everything here is
 offline: OpenRouter and Ollama are never contacted.
 """
 
-import time
-
 import pytest
+from run_wait import run_finished
 
 from services.exporter import DataExporter
 
@@ -61,14 +60,8 @@ def _wf(nodes, conns):
 
 
 def _wait(app_module, timeout=30.0):
-    thread = app_module.execution_state.get('thread')
-    end = time.monotonic() + timeout
-    while time.monotonic() < end:
-        if thread is not None and not thread.is_alive():
-            time.sleep(0.05)
-            return True
-        time.sleep(0.02)
-    return False
+    """The run this test started has settled (see tests/run_wait.py)."""
+    return run_finished(app_module, timeout)
 
 
 def _run_node(

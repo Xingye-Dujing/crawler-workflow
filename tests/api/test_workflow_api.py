@@ -16,10 +16,10 @@ The polling tests carry ``@pytest.mark.serial`` because the worker installs a
 """
 
 import os
-import time
 
 import pandas as pd
 import pytest
+from run_wait import run_finished
 
 pytestmark = pytest.mark.api
 
@@ -71,14 +71,7 @@ def _wait_for_worker(app_module, timeout: float = 30.0) -> bool:
     record is still being closed out below it — so the death of the thread is
     the only observation that guarantees the store is complete.
     """
-    thread = app_module.execution_state.get('thread')
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        alive = thread is not None and thread.is_alive()
-        if not app_module.execution_state['running'] and not alive:
-            return True
-        time.sleep(0.1)
-    return False
+    return run_finished(app_module, timeout)
 
 
 class TestWorkflowCrud:
