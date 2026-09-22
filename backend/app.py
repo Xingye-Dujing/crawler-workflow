@@ -1051,9 +1051,9 @@ def _start_next_queued() -> None:
 @app.route('/api/workflow/execute', methods=['POST'])
 def execute_workflow():
     """Start a run — or queue the request when a run is already going."""
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     answer = _begin_run(data, request.headers.get('X-Lang') or '')
     return jsonify(answer['body']), answer['status']
 
@@ -3512,9 +3512,9 @@ def generate_cookies():
     (or on the user's attention) saved half-cookies and confusion. A second
     request is refused with the platform of the live one.
     """
-    data = request.get_json(silent=True) or {}
-    if not isinstance(data, dict):
-        return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     platform = str(data.get('platform', ''))
     if not platform:
         return jsonify({'ok': False, 'error': t('api.platformRequired')}), 400
@@ -3630,9 +3630,9 @@ def verify_cookies():
     Refused outright when no cookie is stored: opening a browser to discover
     that would only produce a wall that looks like a failed check.
     """
-    data = request.get_json(silent=True) or {}
-    if not isinstance(data, dict):
-        return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
+    data = _json_body()
+    if data is None:
+        return _bad_body()
     platform = str(data.get('platform', ''))
     if not cookie_manager.is_supported(platform):
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400

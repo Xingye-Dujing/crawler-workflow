@@ -17,6 +17,9 @@ frontend parses, with a 4xx status. The last group pins the read-only helpers
 those routes are built on, so a new caller cannot regress them unnoticed.
 """
 
+import re
+from pathlib import Path
+
 import pytest
 
 pytestmark = pytest.mark.api
@@ -24,19 +27,104 @@ pytestmark = pytest.mark.api
 RECORDS = [{'title': 'sanya', 'score': 3}, {'title': 'haikou', 'score': 5}]
 # Routes whose only job on this input is to refuse it: none of them may reach
 # the store, the filesystem or a model with a body that is not an object.
+# Every POST handler that reads a field belongs here — `TestBodyPolicy` below
+# fails if this list and app.py drift apart.
 BODY_ROUTES = [
-    '/api/workflow/save',
-    '/api/workflow/delete',
-    '/api/workflow/processes/kill',
-    '/api/settings',
-    '/api/llm/test',
-    '/api/data/paste',
-    '/api/data/inspect',
     '/api/analysis/run',
+    '/api/analysis/train',
+    '/api/cookies/generate',
+    '/api/cookies/save',
+    '/api/cookies/verify',
+    '/api/data/clear',
+    '/api/data/datasets/<dataset_id>/rename',
+    '/api/data/inspect',
+    '/api/data/paste',
+    '/api/data/preview',
     '/api/export/save',
+    '/api/exports/delete',
+    '/api/llm/test',
+    '/api/report/generate',
+    '/api/runs/delete',
     '/api/runs/discard',
+    '/api/runs/resumable',
+    '/api/settings',
+    '/api/studio/dataset',
+    '/api/studio/save-image',
+    '/api/studio/sources',
+    '/api/visualize/render',
+    '/api/workflow/delete',
+    '/api/workflow/execute',
+    '/api/workflow/processes/kill',
+    '/api/workflow/queue/cancel',
+    '/api/workflow/save',
 ]
 NON_OBJECT_BODIES = ['null', '[1, 2]', '"abc"', '123']
+# POST routes that read no field at all. A malformed body is not their error to
+# report — `stop` stops, `purge` trims to policy, `upload` answers from a
+# multipart file, the two cookie job doors only signal. Declared, so that
+# "ignores the body" stays a decision and not something a later route inherits by
+# accident (and so adding one here means saying what it is).
+BODYLESS_POSTS = {
+    '/api/cookies/generate/cancel': 'signals the login window to close',
+    '/api/cookies/generate/confirm': 'signals the login window that the user is done',
+    '/api/data/upload': 'multipart form field, not a JSON body',
+    '/api/history/clear': 'empties the history table',
+    '/api/runs/purge': 'applies the retention policy, which lives in settings',
+    '/api/workflow/queue/clear': 'drops every parked request',
+    '/api/workflow/stop': 'sets the stop flag',
+}
+
+
+def _post_route_policies() -> dict:
+    """{path: 'helper' | 'inline' | 'none'} for every POST route in app.py.
+
+    Read from the source and not from Flask's URL map because the thing under
+    test is which helper a handler calls, which the route table cannot show.
+    """
+    source = (Path(__file__).resolve().parents[2] / 'backend' / 'app.py').read_text(encoding='utf-8')
+    lines = source.splitlines()
+    starts = []
+    for index, line in enumerate(lines):
+        match = re.search(r"@app\.route\('([^']+)',\s*methods=\[([^\]]+)\]", line)
+        if match and 'POST' in match.group(2):
+            starts.append((index, match.group(1)))
+    policies = {}
+    for position, (index, path) in enumerate(starts):
+        end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
+        body = '\n'.join(lines[index:end])
+        if '_json_body()' in body:
+            policies[path] = 'helper'
+        elif 'request.get_json(' in body:
+            policies[path] = 'inline'
+        else:
+            policies[path] = 'none'
+    return policies
+
+
+class TestBodyPolicy:
+    """One body rule, in one place, for every route that reads a field.
+
+    Three handlers used to spell the rule out inline — ``get_json(silent=True)
+    or {}`` followed by an ``isinstance`` check — which read the same bytes as
+    ``_json_body`` differently: the literal body ``null`` became ``{}``, so the
+    answer was "platform is required" for what was a malformed request.
+    """
+
+    def test_no_post_route_reads_the_raw_request_body_any_more(self):
+        inline = sorted(path for path, how in _post_route_policies().items() if how == 'inline')
+        assert inline == [], f'these routes duplicate the body rule instead of calling _json_body(): {inline}'
+
+    def test_every_route_that_reads_a_body_is_in_the_refusal_matrix(self):
+        helpers = {path for path, how in _post_route_policies().items() if how == 'helper'}
+        listed = set(BODY_ROUTES)
+        assert helpers == listed, (
+            f'missing from the matrix: {sorted(helpers - listed)}, not in app.py: {sorted(listed - helpers)}'
+        )
+
+    def test_every_post_route_that_reads_no_body_is_declared_and_explained(self):
+        silent = {path for path, how in _post_route_policies().items() if how == 'none'}
+        assert silent == set(BODYLESS_POSTS), f'undecided routes: {sorted(silent ^ set(BODYLESS_POSTS))}'
+        assert all(BODYLESS_POSTS[path] for path in silent), 'each exemption needs a reason, not just a name'
 
 
 class TestMalformedBodies:
