@@ -219,7 +219,7 @@ class WorkflowEngine:
                 errors.append(t('engine.process_no_op', nid=label))
             if ntype == 'output' and not operation:
                 errors.append(t('engine.output_no_op', nid=label))
-            if ntype == 'analysis' and not (params.get('steps') or params.get('operation')):
+            if ntype == 'analysis' and not (params.get('steps') or operation):
                 errors.append(t('engine.analysis_no_op', nid=label))
             if ntype == 'tokenize' and not params.get('text_column'):
                 errors.append(t('engine.tokenize_no_column', nid=label))

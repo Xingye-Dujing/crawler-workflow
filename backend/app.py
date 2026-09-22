@@ -2138,8 +2138,14 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
     try:
         cleaned, report = DataAnalysisService.run_pipeline(df, steps)
     except UnknownOperationError as e:
+        # The reason goes to the console *and* the node settles failed. Returning
+        # an empty list here used to make a mistyped filter value look like "the
+        # data was already clean": the run went green, the export wrote a header
+        # row and nothing else, and downstream nodes reported "no upstream data"
+        # for a table that was really refused. Same contract as `/api/analysis/clean`,
+        # which answers these with a 400 and this exact message.
         add_log(t('wf.analysis_failed', err=e))
-        return []
+        raise
 
     for step in report:
         line = t('wf.analysis_step', op=step['op'], before=step['rows_before'], after=step['rows_after'])

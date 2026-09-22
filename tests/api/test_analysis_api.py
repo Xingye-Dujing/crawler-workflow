@@ -301,6 +301,111 @@ class TestVisualizeRender:
         assert client.post('/api/visualize/render', json={**base, 'chart_type': 'bar'}).get_json()['ok'] is True
         assert set(plt.get_fignums()) == open_before, 'a successful render leaked its figure'
 
+    # The five chart types below had never been answered by a test. Each one has
+    # its own required-field rule and its own series shape, so "the panel offers
+    # it" and "it renders" were separate claims until now.
+    RICH_RECORDS = [
+        {'city': '三亚', 'district': '海棠区', 'likes': 10, 'text': '三亚的海滩很美'},
+        {'city': '三亚', 'district': '天涯区', 'likes': 4, 'text': '海风和阳光都不错'},
+        {'city': '海口', 'district': '海棠区', 'likes': 7, 'text': '骑楼老街值得逛'},
+        {'city': '海口', 'district': '龙华区', 'likes': 2, 'text': '海口早茶很好吃'},
+    ]
+
+    @pytest.mark.parametrize(
+        'spec, series_type',
+        [
+            ({'chart_type': 'box', 'x_field': 'city', 'y_field': 'likes'}, 'boxplot'),
+            (
+                {'chart_type': 'heatmap', 'x_field': 'city', 'y_field': 'district', 'value_field': 'likes'},
+                'heatmap',
+            ),
+            (
+                {'chart_type': 'sankey', 'x_field': 'city', 'y_field': 'district', 'value_field': 'likes'},
+                'sankey',
+            ),
+            ({'chart_type': 'map', 'x_field': 'city', 'value_field': 'likes'}, 'map'),
+            ({'chart_type': 'wordcloud', 'x_field': 'city', 'value_field': 'likes'}, 'wordCloud'),
+        ],
+    )
+    def test_each_chart_type_builds_its_own_series(self, client, paste, spec, series_type):
+        dataset_id = paste(self.RICH_RECORDS, name='rich.csv')
+        body = client.post('/api/visualize/render', json={'dataset_id': dataset_id, **spec}).get_json()
+        assert body['ok'] is True, body
+        assert body['option']['series'][0]['type'] == series_type
+
+    def test_a_word_cloud_can_segment_the_text_instead_of_counting_labels(self, client, paste):
+        dataset_id = paste(self.RICH_RECORDS, name='rich.csv')
+        plain = client.post(
+            '/api/visualize/render',
+            json={'dataset_id': dataset_id, 'chart_type': 'wordcloud', 'x_field': 'city', 'value_field': 'likes'},
+        ).get_json()
+        segmented = client.post(
+            '/api/visualize/render',
+            json={'dataset_id': dataset_id, 'chart_type': 'wordcloud', 'x_field': 'text', 'tokenize': True},
+        ).get_json()
+        assert plain['ok'] is True and segmented['ok'] is True
+        # Without jieba the vocabulary is the four city labels; with it, words
+        # that exist only inside the sentences appear.
+        assert {entry['name'] for entry in plain['option']['series'][0]['data']} == {'三亚', '海口'}
+        names = {entry['name'] for entry in segmented['option']['series'][0]['data']}
+        assert '海滩' in names or '骑楼' in names, names
+
+    def test_wordcloud_style_only_changes_the_text_style(self, client, paste):
+        dataset_id = paste(self.RICH_RECORDS, name='rich.csv')
+        base = {'dataset_id': dataset_id, 'chart_type': 'wordcloud', 'x_field': 'text', 'tokenize': True}
+        vibrant = client.post('/api/visualize/render', json={**base, 'wordcloud_style': 'vibrant'}).get_json()
+        assert vibrant['ok'] is True
+        # An unknown style name must not lose the chart: it falls back.
+        fallback = client.post('/api/visualize/render', json={**base, 'wordcloud_style': 'not-a-style'}).get_json()
+        assert fallback['ok'] is True
+        assert len(fallback['option']['series'][0]['data']) == len(vibrant['option']['series'][0]['data'])
+
+    def test_a_heatmap_aggregates_the_value_field_per_cell(self, client, paste):
+        dataset_id = paste(self.RICH_RECORDS, name='rich.csv')
+        body = client.post(
+            '/api/visualize/render',
+            json={
+                'dataset_id': dataset_id,
+                'chart_type': 'heatmap',
+                'x_field': 'city',
+                'y_field': 'district',
+                'value_field': 'likes',
+                'agg': 'sum',
+            },
+        ).get_json()
+        assert body['ok'] is True
+        option = body['option']
+        assert option['xAxis']['data'] == ['三亚', '海口']
+        # An empty combination is stored as 0, not as a hole, so the colour scale
+        # spans 0..the real maximum.
+        cells = {tuple(entry[:2]): entry[2] for entry in option['series'][0]['data']}
+        assert [option['visualMap']['min'], option['visualMap']['max']] == [0, 10]
+        assert 10 in cells.values(), cells
+        assert 0 in cells.values(), 'city x district pairs with no row still get a cell'
+
+    def test_a_map_needs_only_a_region_column(self, client, paste):
+        dataset_id = paste(self.RICH_RECORDS, name='rich.csv')
+        body = client.post(
+            '/api/visualize/render',
+            json={'dataset_id': dataset_id, 'chart_type': 'map', 'x_field': 'city', 'value_field': 'likes'},
+        ).get_json()
+        assert body['ok'] is True
+        assert {entry['name'] for entry in body['option']['series'][0]['data']} == {'三亚', '海口'}
+
+    def test_unrenderable_specs_for_the_new_types_are_readable_400s(self, client, paste):
+        dataset_id = paste(self.RICH_RECORDS, name='rich.csv')
+        cases = {
+            'box': 'Box plot requires',
+            'heatmap': 'Heatmap requires two category fields',
+            'sankey': 'Sankey diagram requires',
+            'map': 'Map chart requires',
+            'wordcloud': 'Word cloud requires',
+        }
+        for chart_type, expected in cases.items():
+            response = client.post('/api/visualize/render', json={'dataset_id': dataset_id, 'chart_type': chart_type})
+            assert response.status_code == 400, (chart_type, response.get_json())
+            assert expected in response.get_json()['error'], (chart_type, response.get_json())
+
 
 class TestExportSave:
     def test_csv_export_lands_in_the_isolated_export_dir(self, client, paste, data_root):

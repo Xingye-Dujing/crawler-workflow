@@ -285,6 +285,14 @@ class TestValidate:
         output = {'id': 'node-2', 'type': 'output', 'params': {'operation': 'save', 'filename': 'a.csv'}}
         assert WorkflowEngine(_wf([process, output], [])).validate() == []
 
+    def test_an_operation_written_only_on_the_node_is_still_a_configured_analysis(self, en):
+        """The mirror case, and the one the analysis branch missed: its executor
+        reads `node['operation']` first, so a file carrying only that field runs —
+        refusing it there while accepting it for process and output was an
+        inconsistency in the gate, not a guard."""
+        analysis = {'id': 'node-1', 'type': 'analysis', 'operation': 'select_columns', 'params': {'columns': 'a'}}
+        assert WorkflowEngine(_wf([analysis], [])).validate() == []
+
     def test_analysis_accepts_a_step_list(self, en):
         node = _node('node-1', 'analysis', params={'steps': [{'op': 'drop_null'}]})
         assert WorkflowEngine(_wf([node], [])).validate() == []
