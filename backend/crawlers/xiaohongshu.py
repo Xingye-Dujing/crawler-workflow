@@ -46,8 +46,15 @@ class XiaohongshuCrawler(Crawler):
     STUCK_ROUNDS = 3
     POLITE_BASE = 0.9
     POLITE_SPREAD = 0.3
+    #: How many of a note's comments a search row carries as a preview. It was a
+    #: literal 5 buried in the scraper; the node parameter overrides it, because
+    #: 0 is a legitimate choice (skip the panel entirely, which is also the
+    #: fastest crawl) and a large one is what "I want the comments in the table"
+    #: means. The note's own 评论数 is a different thing and is always kept.
+    DEFAULT_COMMENT_PREVIEW = 5
 
     def search(self, keyword: str, target_count: int = 50, **_kwargs):
+        self.comment_preview = self._comment_preview_of(_kwargs)
         resume = self.resume_of(_kwargs)
         have = self.collected()
         if have:
@@ -191,8 +198,24 @@ class XiaohongshuCrawler(Crawler):
             '评论列表': [],
         }
 
+    @classmethod
+    def _comment_preview_of(cls, kwargs: dict) -> int:
+        """The node's 评论预览数, defensively: the panel sends a string, and a
+        negative or nonsense value means "use the default", never "open the
+        whole panel" and never a crash inside the crawl."""
+        raw = (kwargs or {}).get('comment_preview')
+        if raw is None or str(raw).strip() == '':
+            return cls.DEFAULT_COMMENT_PREVIEW
+        try:
+            value = int(float(str(raw).strip()))
+        except (TypeError, ValueError):
+            return cls.DEFAULT_COMMENT_PREVIEW
+        return value if value >= 0 else cls.DEFAULT_COMMENT_PREVIEW
+
     @staticmethod
     def _note_id(link: str) -> str:
+        m = re.search(r'/(?:search_result|explore|item)/([0-9a-f]{16,})', link or '')
+        return m.group(1) if m else ''
         m = re.search(r'/(?:search_result|explore|item)/([0-9a-f]{16,})', link or '')
         return m.group(1) if m else ''
 
@@ -258,7 +281,7 @@ class XiaohongshuCrawler(Crawler):
         comment_count = self._engage_count('chat-wrapper')
         logger.info(t('crawl.xhs.metrics', likes=like_count, favs=collect_count, comments=comment_count))
 
-        comments = self.extract_comments(max_comments=5)
+        comments = self.extract_comments(max_comments=getattr(self, 'comment_preview', self.DEFAULT_COMMENT_PREVIEW))
         logger.info(t('crawl.xhs.comment_count', n=len(comments)))
 
         return {
@@ -376,6 +399,12 @@ class XiaohongshuCrawler(Crawler):
         return int(m.group(1)) if m else 0
 
     def extract_comments(self, max_comments: int = 5):
+        if max_comments <= 0:
+            # Asking for no comments must cost nothing. Left as it was, a
+            # preview of 0 still waited 10 s per note for a panel nobody would
+            # read, so the fastest crawl setting was the slowest one.
+            logger.debug(t('crawl.xhs.comment_skip'))
+            return []
         logger.info(t('crawl.xhs.comment_start', n=max_comments))
         comments = []
         try:

@@ -67,5 +67,10 @@ class Config:
     PAGE_LOAD_TIMEOUT = 15
     SCROLL_WAIT = 2.5
 
+    #: How much of a 公众号 article body a row keeps. A long post runs past ten
+    #: thousand characters, and the crawler used to cut it at a hardcoded 5000 —
+    #: which silently dropped the ending of every analysis input. 0 keeps it all.
+    WECHAT_BODY_MAX_CHARS = 5000
+
     for d in [COOKIE_DIR, EXPORT_DIR, WORKFLOW_DIR, LOG_DIR, LLM_CHECKPOINT_DIR]:
         os.makedirs(d, exist_ok=True)

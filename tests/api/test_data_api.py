@@ -18,6 +18,21 @@ import pytest
 
 pytestmark = pytest.mark.api
 
+
+def _xlsx_bytes() -> bytes:
+    """A real workbook in memory — the importer must read the format, not text.
+
+    A hand-made byte string would only prove the branch was reached; a file
+    openpyxl actually wrote proves a user's spreadsheet round-trips.
+    """
+    import pandas as pd
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        pd.DataFrame({'title': ['sanya', 'haikou'], 'score': [3, 5]}).to_excel(writer, index=False)
+    return buffer.getvalue()
+
+
 CSV_BYTES = b'title,score,city\nsanya,3,Sanya\nhaikou,5,Haikou\nsanya,2,Sanya\n'
 JSON_BYTES = b'[{"title": "sanya", "score": 3}, {"title": "haikou", "score": 5}]'
 TXT_BYTES = '三亚的海非常蓝。\n第二行正文\n'.encode()
@@ -68,6 +83,39 @@ class TestUpload:
         detail = client.get(f'/api/data/datasets/{body["dataset_id"]}').get_json()['dataset']
         assert detail['row_count'] == 1
         assert '三亚' in detail['preview'][0]['content']
+
+    def test_an_excel_workbook_imports_as_a_table(self, client):
+        """The format non-technical users actually have their data in.
+
+        Before this branch an .xlsx fell through to ``read_csv`` and came back
+        as one garbled column with a 200 — an import that looked successful and
+        was nonsense, which is worse than a refusal.
+        """
+        body = _upload(client, 'sheet.xlsx', _xlsx_bytes()).get_json()
+        assert body['ok'] is True
+        assert body['columns'] == ['title', 'score']
+        assert body['row_count'] == 2
+        assert {row['title'] for row in body['preview']} == {'sanya', 'haikou'}
+
+    def test_a_tsv_is_split_on_tabs(self, client):
+        body = _upload(client, 'rows.tsv', b'title\tscore\nsanya\t3\n').get_json()
+        assert body['columns'] == ['title', 'score'] and body['row_count'] == 1
+
+    def test_a_comma_file_with_a_tab_inside_a_cell_stays_comma_split(self, client):
+        """The regression the ``sep=None`` sniffing version introduced: one
+        quoted cell containing a tab re-shaped the whole table."""
+        tricky = b'title,score\n"sanya\tbeach",3\n'
+        body = _upload(client, 'tricky.csv', tricky).get_json()
+        assert body['columns'] == ['title', 'score']
+        assert body['preview'][0]['title'] == 'sanya\tbeach'
+
+    @pytest.mark.parametrize('filename', ['data.parquet', 'report.pdf', 'noextension', 'archive.zip'])
+    def test_an_unknown_extension_is_refused_not_guessed(self, client, tmp_path, filename):
+        """Refusing is honest; "parsed" as CSV is a plausible-looking wrong
+        table that the rest of the workflow then analyses seriously."""
+        response = _upload(client, filename, b'\x01\x02parquet-ish bytes\nnot,a,csv\n')
+        assert response.status_code == 400
+        assert 'csv' in response.get_json()['error'] or '.csv' in response.get_json()['error']
 
     def test_re_uploading_the_same_rows_reuses_one_copy(self, client):
         first = _upload(client, 'same.csv', CSV_BYTES).get_json()

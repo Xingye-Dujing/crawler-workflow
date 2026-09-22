@@ -505,6 +505,17 @@ function openSettings(nodeId) {
                 'onchange="updateParam(\'' + nodeId + '\',\'recrawl\',this.checked)">' + I18n.t('settings.recrawl') + '</label>' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.recrawlHint') + '</div></div>';
         }
+        if (p.platform === 'xiaohongshu') {
+            /* 每篇笔记随行走带回的评论预览数。0 是有意义的选择（跳过评论面板，
+               也是最快的抓法），不是"没填"，所以后端按字符串解析而不是取真值。 */
+            html += '<div class="settings-group"><label class="settings-label">' +
+                I18n.t('settings.commentPreview') + '</label>' +
+                '<input class="settings-input" type="number" min="0" value="' +
+                (p.comment_preview != null ? p.comment_preview : 5) + '" ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'comment_preview\',this.value)">' +
+                '<div style="font-size:11px;color:var(--text-dim);">' +
+                I18n.t('settings.commentPreviewHint') + '</div></div>';
+        }
         if (p.platform === 'weibo' && collect !== 'comments') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.startTime') + '</label>' +
                 '<input class="settings-input" value="' + (p.start_time || '') + '" placeholder="2026-01-01" ' +

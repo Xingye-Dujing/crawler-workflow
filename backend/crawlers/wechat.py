@@ -7,6 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
+from config import Config
 from i18n import t
 
 from .base import Crawler, as_index
@@ -168,10 +169,24 @@ class WechatCrawler(Crawler):
             '发布时间': pub_time,
             '发布地区': region,
             '是否原创': '是' if self.is_original() else '',
-            '正文': content[:5000] + ('...' if len(content) > 5000 else ''),
+            '正文': self._clip(content),
             '正文图片数': self.get_image_count(),
             '链接': url,
         }
+
+    @staticmethod
+    def _clip(content: str) -> str:
+        """Apply the configured body ceiling, marking a cut instead of hiding it.
+
+        The cap exists because one article can be longer than every row a run
+        stores, but a silent cut is the real hazard: the text downstream reads
+        would look complete. The trailing ``…`` is what says otherwise.
+        """
+        limit = int(getattr(Config, 'WECHAT_BODY_MAX_CHARS', 0) or 0)
+        text = content or ''
+        if not limit or len(text) <= limit:
+            return text
+        return text[:limit] + '…'
 
     # ------------------------------------------------------------------
     # Field extraction helpers

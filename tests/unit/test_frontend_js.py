@@ -151,6 +151,8 @@ def results(tmp_path_factory):
                     {'platform': 'wechat', 'collect': 'comments', 'urls': 'https://mp.weixin.qq.com/s/x'},
                 ),
                 ('panel_zhihu_posts', 'source', {'platform': 'zhihu', 'collect': 'posts', 'keyword': 'k'}),
+                ('panel_xhs_posts', 'source', {'platform': 'xiaohongshu', 'collect': 'posts', 'keyword': 'k'}),
+                ('panel_weibo_posts', 'source', {'platform': 'weibo', 'collect': 'posts', 'keyword': 'k'}),
                 ('panel_legacy_comment', 'comment', {'urls': ''}),
                 # Analysis ops: the panel is the only place these params are set,
                 # so a field missing here is a parameter the user cannot reach.
@@ -278,6 +280,19 @@ class TestSettingsPanel:
         assert "updateParam('n1','bins'" in html, 'a bin count/edge list cannot be set without this field'
         assert "updateParam('n1','bin_labels'" in html
         assert 'settings.binEdges' in html and 'settings.binLabels' in html
+
+    def test_xiaohongshu_offers_a_comment_preview_count(self, results):
+        """Only XHS carries per-note comments in its search rows, so only its
+        panel may offer the knob — and the value travels as a string because 0
+        is a real choice ("skip the panel"), not an empty field."""
+        html = results['settings']['panel_xhs_posts']
+        assert "updateParam('n1','comment_preview',this.value)" in html
+        assert 'settings.commentPreview' in html and 'settings.commentPreviewHint' in html
+        assert 'type="number" min="0"' in html
+
+    def test_other_platforms_do_not_offer_it(self, results):
+        for panel in ('panel_zhihu_posts', 'panel_weibo_posts'):
+            assert 'comment_preview' not in results['settings'][panel], f'{panel} has no comment preview to set'
 
 
 class TestUrlRoutingContract:

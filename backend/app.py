@@ -1408,7 +1408,14 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
             # otherwise instead of silently searching something else.
             rows = crawler.search(keyword, start_time=start_time, end_time=end_time, resume=resume)
         else:
-            rows = crawler.search(keyword, target_count=target_count, resume=resume)
+            rows = crawler.search(
+                keyword,
+                target_count=target_count,
+                resume=resume,
+                # 小红书：每篇笔记随行走带的评论预览数。0 是合法值（跳过评论面板，
+                # 也最快），所以不能按"假值"处理掉。
+                comment_preview=params.get('comment_preview'),
+            )
     finally:
         _close_login_browser(crawler)  # bounded quit + PID-targeted reap, never a global taskkill
         execution_state['active_crawlers'].discard(crawler)
@@ -2403,7 +2410,7 @@ def kill_process():
 
 @app.route('/api/data/upload', methods=['POST'])
 def upload_dataset():
-    """Upload a CSV, JSON, or TXT file and register it for analysis/visualization."""
+    """Upload a CSV, JSON, TXT or Excel file and register it for analysis/visualization."""
     file = request.files.get('file')
     if not file:
         return jsonify({'ok': False, 'error': t('api.badRequest', what='missing file')}), 400
@@ -2415,10 +2422,27 @@ def upload_dataset():
         elif name_lower.endswith('.txt'):
             text = file.stream.read().decode('utf-8', errors='replace')
             df = pd.DataFrame({'content': [text]})
+        elif name_lower.endswith(('.xlsx', '.xls', '.xlsm')):
+            # Spreadsheets are the format a non-technical user's data actually
+            # arrives in. Without this branch the file fell through to
+            # ``read_csv`` and came back as one column of mojibake — a
+            # "successful" import of nonsense.
+            df = pd.read_excel(file.stream)
+        elif name_lower.endswith(('.csv', '.tsv')):
+            # ``sep=None`` would make pandas *sniff* the delimiter, which turns a
+            # comma file with a stray tab inside a quoted cell into a different
+            # table. Only .tsv asks for a tab; .csv keeps the comma contract the
+            # exporter writes.
+            df = pd.read_csv(file.stream, sep='\t' if name_lower.endswith('.tsv') else ',')
         else:
-            df = pd.read_csv(file.stream)
-    except (ValueError, OSError, UnicodeDecodeError, pd.errors.ParserError) as e:
+            # An extension nobody recognises is refused, not guessed at: reading
+            # a Parquet or a PDF as CSV produces a table that is technically
+            # valid and completely wrong.
+            return jsonify({'ok': False, 'error': t('api.unsupportedUpload', name=filename)}), 400
+    except (ValueError, OSError, UnicodeDecodeError, pd.errors.ParserError, ImportError) as e:
         # A corrupt or mis-encoded file is a user-input problem, not a crash.
+        # ImportError belongs here too: reading .xlsx needs openpyxl, and a
+        # missing engine is a fixable environment gap, not a 500.
         return jsonify({'ok': False, 'error': t('api.parseFailed', err=e)}), 400
 
     is_txt = name_lower.endswith('.txt')
