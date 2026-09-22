@@ -10,6 +10,8 @@ Every test gets its own SQLite file: the default path is the real
 ``data/history.db``.
 """
 
+import os
+
 import pytest
 
 from services.execution_history import ExecutionHistoryService as History
@@ -149,3 +151,30 @@ class TestClearing:
     def test_now_is_a_sortable_timestamp(self, history):
         stamp = history.now()
         assert len(stamp) == 19 and stamp[4] == '-' and stamp[10] == 'T'
+
+
+class TestTheFileMayBeDeleted:
+    """``history.db`` is a file the user is entitled to remove.
+
+    The schema used to be created once, when the module was imported, so deleting
+    it left every history endpoint raising ``no such table: execution_history``
+    for the rest of the process — a permanently broken 历史 panel with no
+    explanation, curable only by restarting the server.
+    """
+
+    def test_a_deleted_database_is_recreated_on_the_next_read(self, history, tmp_path):
+        history.record_many([_row('r1', 'wf', 'n1', 'rows', '', 5.0, '2024-01-01T00:00:00')])
+        assert len(history.list_runs()) == 1
+        os.remove(history.db_path)
+        assert len(history.list_runs()) == 0
+        assert len(history.series()) == 0
+        assert history.list_workflow_names() == []
+
+    def test_a_deleted_database_still_accepts_writes(self, history):
+        os.remove(history.db_path)
+        history.record_many([_row('r2', 'wf', 'n1', 'rows', '', 7.0, '2024-01-02T00:00:00')])
+        assert len(history.list_runs()) == 1
+
+    def test_a_never_seen_database_answers_rather_than_raising(self, tmp_path):
+        fresh = History(db_path=str(tmp_path / 'brand-new' / 'history.db'))
+        assert len(fresh.list_runs()) == 0 and len(fresh.series()) == 0

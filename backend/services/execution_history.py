@@ -37,10 +37,35 @@ class ExecutionHistoryService:
         self._ensure_table()
 
     def _conn(self):
-        return sqlite3.connect(self.db_path)
+        """A connection with the schema present.
+
+        The table is created *per connection* rather than once at import, because
+        ``history.db`` is a file a user is entitled to delete: cleaning ``data/``
+        is a normal thing to do, and a test suite that recycles temp directories
+        hits the same path. When the file was gone, every ``/api/history/*``
+        endpoint answered 500 with ``no such table: execution_history`` for the
+        rest of the process — the console's history panel was dead until a
+        restart, and a restart only re-created the table if the file happened to
+        still be missing at import time. ``CREATE TABLE IF NOT EXISTS`` on an
+        existing schema is cheap and idempotent.
+        """
+        conn = sqlite3.connect(self.db_path)
+        self._create_schema(conn)
+        return conn
 
     def _ensure_table(self):
-        conn = self._conn()
+        conn = sqlite3.connect(self.db_path)
+        self._create_schema(conn)
+        conn.commit()
+        conn.close()
+
+    def _create_schema(self, conn):
+        """Create the table and indexes on *conn* — the caller keeps ownership.
+
+        It must not commit or close: :meth:`_conn` calls this on the connection it
+        is about to hand to a write, and a schema helper that closed it turned every
+        insert into ``Cannot operate on a closed database``.
+        """
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS execution_history (
@@ -59,8 +84,6 @@ class ExecutionHistoryService:
         conn.execute('CREATE INDEX IF NOT EXISTS idx_history_run ON execution_history(run_id)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_history_wf ON execution_history(workflow_name)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_history_metric ON execution_history(metric)')
-        conn.commit()
-        conn.close()
 
     @staticmethod
     def now() -> str:
