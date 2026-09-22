@@ -917,7 +917,7 @@
             placeholder='[{"name":"...","value":"...","domain":"..."}]'
           ></textarea>
         </div>
-        <div class="settings-group" style="display: flex; gap: 8px">
+        <div class="settings-group cookie-actions">
           <button
             class="menu-btn toggle-on"
             onclick="saveCookieConfig()"
@@ -943,7 +943,7 @@
         <!-- Login-job actions: only visible while a login browser is open.
              The dialog refuses to close while they wait — closing it used to
              orphan the browser with nobody watching the QR page. -->
-        <div class="settings-group" id="cookie-job-actions" style="display: none; gap: 8px">
+        <div class="settings-group cookie-actions" id="cookie-job-actions" style="display: none">
           <button
             class="menu-btn toggle-on"
             onclick="confirmCookieLogin()"

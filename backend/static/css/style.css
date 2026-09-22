@@ -2329,6 +2329,16 @@ input:-webkit-autofill:focus {
 }
 
 /* ── Cookie dialog ──────────────────────────────────────────────────────── */
+/* The cookie dialog's button rows. .menu-btn is white-space: nowrap, so in
+   English "Save Cookies / Generate via Browser / Verify cookie" measures 363px
+   inside a 339px dialog — the row could neither shrink nor wrap, and the panel
+   grew a horizontal scrollbar that hid the third button's edge. Chinese labels
+   are shorter, which is exactly why the defect only showed up in English. */
+.cookie-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 #cookie-dialog {
   position: fixed;
   right: -360px;
