@@ -394,6 +394,18 @@ export function dispatchDocument(handlers, type, ev = {}) {
     return event;
 }
 
+/** Fire an event through every captured *window* listener.
+ *
+ * `window.addEventListener('resize', …)` lands in a different table from both the
+ * document's and any element's, so a harness that only has the other two cannot
+ * reach a resize handler at all.
+ */
+export function dispatchWindow(handlers, type, ev = {}) {
+    const event = { type, preventDefault() {}, stopPropagation() {}, ...ev };
+    (handlers.window[type] || []).forEach((fn) => fn(event));
+    return event;
+}
+
 /** Fire an event on one stub element, the way a real click lands on it. */
 export function dispatchOn(el, type, ev = {}) {
     const event = { type, preventDefault() {}, stopPropagation() {}, target: { closest: () => null }, ...ev };
@@ -493,7 +505,26 @@ export function baseSandbox() {
         alert: () => {},
         confirm: () => true,
         prompt: () => null,
-        getComputedStyle: () => ({ getPropertyValue: () => '' }),
+        /* A computed style that always answers '' would make every
+           `getComputedStyle(…).getPropertyValue('--radius')` read as "unset", so a
+           setting the page writes through style.setProperty could never be read
+           back. Falling through to the element's own declarations keeps that loop
+           honest; `__computed` lets a scenario pin a stylesheet value the stub has
+           no way to know. */
+        getComputedStyle: (el) => {
+            const own = (el && el.style) || {};
+            const pinned = sandbox.__computed || {};
+            return {
+                getPropertyValue: (name) => {
+                    const value = pinned[name] !== undefined ? pinned[name] : own[name];
+                    return value === undefined || value === null ? '' : String(value);
+                },
+                getPropertyValueName: () => '',
+                right: pinned.right !== undefined ? pinned.right : own.right || 'auto',
+                top: own.top || 'auto',
+                transform: own.transform || 'none',
+            };
+        },
         ResizeObserver: undefined,
         matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
         URLSearchParams,
