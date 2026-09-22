@@ -510,3 +510,16 @@ class TestRunRecordsPanel:
     def test_an_unnamed_run_still_has_a_label_and_empty_count_hidden(self, runsmgr):
         assert runsmgr['count'] == '(2)'
         assert 'unnamed' in runsmgr['html'], 'a blank name must fall back to a label'
+
+    def test_every_recorded_run_can_be_turned_into_a_report(self, runsmgr):
+        """A stored run is reportable whether or not it finished: the tables the
+        node settled are there either way, and a partial run is exactly when a
+        written account of what was collected has value."""
+        assert runsmgr['reports'] == 2
+        assert "runsManager.report('abc123')" in runsmgr['html']
+        assert "runsManager.report('def456')" in runsmgr['html']
+
+    def test_a_workflow_name_never_travels_inside_an_onclick(self, runsmgr):
+        # The name is user text; the button carries only the run id and looks the
+        # name up from the rows the panel is holding.
+        assert runsmgr['nameInHandler'] is False

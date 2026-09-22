@@ -34,6 +34,7 @@ I18N_USERS = ['app.js', 'canvas.js', 'workflow.js', 'menu.js', 'stats.js']
 
 _KEY_REF = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*\)""")
 _DICT_KEY = re.compile(r"""['"]([A-Za-z][\w.]*)['"]\s*:\s*['"]""")
+_DATA_I18N = re.compile(r'data-i18n="([A-Za-z][\w.]*)"')
 
 
 def _catalog_keys():
@@ -148,6 +149,28 @@ class TestFrontendCatalog:
                     if key not in table:
                         missing.append(f'{name}: {key} missing from {lang}')
         assert not missing, '\n'.join(missing)
+
+    def test_every_static_label_in_the_page_exists_in_both_languages(self):
+        """``data-i18n`` is how the HTML gets re-worded when the language flips.
+
+        A key that exists in no catalogue is invisible until someone switches to
+        the other language and finds a button still wearing the first one's text
+        — the failure the English cookie dialog once shipped as a horizontal
+        scrollbar. Buttons added to index.html are covered here, not in JS.
+        """
+        catalogs = _catalog_keys()
+        html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
+        missing = []
+        for key in _DATA_I18N.findall(html):
+            for lang, table in catalogs.items():
+                if key not in table:
+                    missing.append(f'index.html: {key} missing from {lang}')
+        assert not missing, '\n'.join(sorted(set(missing)))
+
+    def test_the_page_actually_uses_the_attribute_it_is_checked_for(self):
+        # A regex that matches nothing would make the check above pass forever.
+        html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
+        assert len(_DATA_I18N.findall(html)) > 50
 
 
 class TestPaletteContract:

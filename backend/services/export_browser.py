@@ -42,7 +42,33 @@ KINDS = {
     '.txt': 'text',
     '.md': 'markdown',
     '.png': 'image',
+    '.html': 'report',
+    '.htm': 'report',
 }
+
+#: The report writer's own prefix. A name outside it is not a report, whatever
+#: its extension claims — see :func:`resolve_report_path`.
+REPORT_PREFIX = 'report-'
+
+
+def resolve_report_path(export_dir: str, name: str) -> str:
+    """One generated report's resolved path, or '' when it is not one.
+
+    ``.html`` is on the refused-to-download list on purpose: a file the browser
+    renders in this app's origin can read this app's pages. A report is still
+    worth showing, so it gets its own door instead of the general one — only a
+    name this product's own writer produces resolves, and the route that serves
+    it sends a Content-Security-Policy that forbids script. Anything else — a
+    stray page dropped into the folder, another user's file — answers as it would
+    for a path outside the directory: nothing found.
+    """
+    cleaned = sanitize_filename(name)
+    if not cleaned.startswith(REPORT_PREFIX):
+        return ''
+    if os.path.splitext(cleaned)[1].lower() not in ('.html', '.htm'):
+        return ''
+    path = resolve_export_file(export_dir, cleaned)
+    return path if os.path.splitext(path)[1].lower() in ('.html', '.htm') else ''
 
 
 def list_exports(export_dir: str, limit: int = MAX_ENTRIES) -> list:

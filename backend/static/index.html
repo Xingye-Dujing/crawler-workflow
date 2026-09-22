@@ -651,6 +651,13 @@
         <div class="console-actions">
           <button
             class="panel-close"
+            onclick="exportsManager.report()"
+            data-i18n="exportsMgr.report"
+          >
+            Report
+          </button>
+          <button
+            class="panel-close"
             onclick="exportsManager.refresh()"
             data-i18n="btn.refresh"
           >
@@ -745,6 +752,14 @@
         data-i18n="exportsMgr.header"
       >
         Export Files
+      </button>
+      <button
+        class="status-btn"
+        id="btn-report"
+        onclick="exportsManager.report()"
+        data-i18n="exportsMgr.report"
+      >
+        Report
       </button>
       <button
         class="status-btn"

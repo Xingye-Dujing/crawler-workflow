@@ -73,6 +73,11 @@
 - **文件持久化**：上传/粘贴的文件注册为数据集（内容哈希寻址、zlib 压缩存库），
   保存的工作流随时可重新加载自己的输入文件；无引用且长期未用的文件自动清理
 - **通用导出节点**：一个节点支持导出 CSV / JSON / Excel / TXT / HTML / Markdown 六种格式
+- **一键运行报告**：工具栏「生成报告」把本次运行（或运行记录里任选一条历史运行）的每张表格与服务端
+  渲染的图表拼成**一个自包含 HTML**——样式与图片全部内联，离线能看、能打印、能发给别人；
+  文件仍落在导出目录，由「导出产物」面板统一查看与删除。可选「附 AI 结论」，只根据统计数字让模型写一段话，
+  结论失败仅少一段文字而不影响报告本身。因为内容来自互联网抓取的文本，报告页只经 `/api/report/view`
+  提供，并带禁止脚本的 CSP 策略
 
 ### 可视化
 - **通用可视化节点**：柱状图 / 折线图 / 饼图 / 散点图 / 直方图 / 箱线图 / 热力图 / 桑基图 /
@@ -211,6 +216,10 @@ crawler_workflow/
 │   │   ├── cookie_flow.py        # 各平台 Cookie 的用途/获取步骤/入口链接白名单
 │   │   ├── workflow_manager.py   # 工作流持久化
 │   │   ├── exporter.py           # 通用多格式导出服务（Output 节点）
+│   │   ├── export_browser.py     # 导出目录的读取侧：列表/下载/删除与路径安全
+│   │   ├── report_service.py     # 一键自包含 HTML 运行报告
+│   │   ├── part_writer.py        # 分批落盘与实时快照（断点安全写）
+│   │   ├── housekeeping.py       # 运行记录/孤立文件/缓存的自动清理
 │   │   ├── data_analysis.py      # 通用数据清洗服务（Analysis 节点）
 │   │   ├── visualizer.py         # 通用可视化服务（Visualize 节点）
 │   │   └── execution_history.py  # 执行历史记录（history.db）
@@ -310,6 +319,8 @@ crawler_workflow/
 | `/api/exports/list` | GET | 按时间倒序列出导出文件（名称/类型/大小/可下载标记）与目录合计 |
 | `/api/exports/download` | GET | 按**文件名**下载某个导出文件（越界名→404，脚本类扩展名→404） |
 | `/api/exports/delete` | POST | 删除单个导出文件（不接受路径、前缀或递归） |
+| `/api/report/generate` | POST | 生成自包含 HTML 运行报告（本次运行的表格，或按 `run_id` 读历史运行；可选 AI 结论） |
+| `/api/report/view` | GET | 按名查看报告：仅接受 `report-` 前缀的 `.html`，响应带禁脚本 CSP |
 
 ### Chart Studio
 
@@ -434,7 +445,7 @@ ML 模型保存在 `data/models/` 目录下，训练一次后持久可用。
 - 代码风格由 `ruff.toml` 约束（行宽 120、单引号），提交前必须通过
   `ruff check` 与 `ruff format --check`，且只允许真正修复，禁止 `# noqa` 式忽略
 
-### 自动化测试（pytest，约 1388 用例）
+### 自动化测试（pytest，约 1569 用例）
 
 测试体系分五层，位于 `tests/` 目录：所有写入都落在临时目录（绝不触碰真实 `data/`）；
 `live_site` 层会真实读取 `data/cookies/` 里的登录态去访问目标站点：

@@ -25,7 +25,7 @@ const I18n = {
             'runsMgr.restart': 'Restart', 'runsMgr.remove': 'Delete', 'runsMgr.detail': 'Detail',
             'runsMgr.empty': 'empty', 'name.unnamed': 'unnamed', 'runsMgr.colWorkflow': 'wf',
             'runsMgr.colStatus': 'st', 'runsMgr.colNodes': 'nodes', 'runsMgr.colRows': 'rows',
-            'runsMgr.colStarted': 'started',
+            'runsMgr.colStarted': 'started', 'runsMgr.report': 'Report',
         },
         zh: {},
     },
@@ -43,12 +43,17 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 vm.runInContext(src + '\n;globalThis.__wf = { runsManager };', sandbox);
-
 sandbox.__byId('runs-mgr-body').innerHTML = '';
 sandbox.__wf.runsManager.render(runs.runs);
+const html = sandbox.__byId('runs-mgr-body').innerHTML;
+/* The report button may name the run only by id: a workflow name is user text,
+   and one double quote in it would close the onclick attribute and let whatever
+   follows become markup. */
 process.stdout.write(
     JSON.stringify({
-        html: sandbox.__byId('runs-mgr-body').innerHTML,
+        html,
         count: sandbox.__byId('runs-mgr-count').textContent,
+        reports: (html.match(/runsManager\.report\(/g) || []).length,
+        nameInHandler: /onclick="[^"]*获取微博/.test(html),
     }),
 );

@@ -2847,8 +2847,156 @@ def exports_delete():
     return jsonify({'ok': gone, 'deleted': gone, 'name': os.path.basename(name.strip())})
 
 
-# ─── Stats API ─────────────────────────────────────────────────
+# ─── One-click report ──────────────────────────────────────────
 
+
+def _report_nodes(data: dict) -> tuple:
+    """The tables a report may describe, as ``(nodes, meta)``.
+
+    Two sources, one shape. With a ``run_id`` the tables come out of the run
+    store, so a report can be written for a run that finished hours ago (the
+    titles are stored with it). Without one, the last run in this process is
+    used and the browser supplies the node titles it has on the canvas — the
+    store is not the only thing worth reporting on, and a user who just watched
+    a run should not have to find its record first.
+    """
+    run_id = str(data.get('run_id') or '').strip()
+    if run_id:
+        store = get_run_store()
+        run = store.get_run(run_id)
+        if not run:
+            return None, t('api.runNotFound', rid=run_id)
+        nodes = [
+            {
+                'id': entry.get('node_id', ''),
+                'title': str(entry.get('title') or entry.get('node_id') or ''),
+                'rows': store.load_rows(run_id, str(entry.get('node_id') or '')),
+            }
+            for entry in run.get('nodes') or []
+        ]
+        meta = {
+            'workflow_name': run.get('workflow_name') or '',
+            'run_id': run_id,
+            'status': run.get('status') or '',
+            'started_at': run.get('started_at') or '',
+            'finished_at': run.get('finished_at') or '',
+        }
+        return nodes, meta
+
+    titles = {}
+    for entry in data.get('nodes') or []:
+        if isinstance(entry, dict) and entry.get('id'):
+            titles[str(entry['id'])] = str(entry.get('title') or entry.get('id'))
+    nodes = [
+        {'id': nid, 'title': titles.get(nid, nid), 'rows': rows}
+        for nid, rows in sorted(_results_snapshot().items())
+        if isinstance(rows, list)
+    ]
+    meta = {
+        'workflow_name': str(execution_state.get('workflow_name') or ''),
+        'run_id': str(execution_state.get('run_id') or ''),
+        'status': 'in-memory',
+    }
+    return nodes, meta
+
+
+@app.route('/api/report/generate', methods=['POST'])
+def report_generate():
+    """Write a self-contained HTML report of a run into the export directory.
+
+    It lands there and nowhere else, which is what makes the export panel's
+    download and delete buttons work on it without a second set of routes.
+    """
+    from services.report_service import ReportService, build_conclusion_prompt, summarize
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    title = data.get('title')
+    if title is not None and not isinstance(title, str):
+        return _bad_param('title')
+    include_conclusion = bool(data.get('include_conclusion'))
+
+    nodes, meta = _report_nodes(data)
+    if nodes is None:
+        return jsonify({'ok': False, 'error': meta}), 404
+    if not any(node['rows'] for node in nodes):
+        return jsonify({'ok': False, 'error': t('api.reportNoData')}), 400
+
+    conclusion = ''
+    if include_conclusion:
+        cfg = data.get('llm') or {}
+        if not isinstance(cfg, dict):
+            return _bad_param('llm')
+        provider = str(cfg.get('provider') or 'ollama')
+        try:
+            client = LLMClient(
+                provider=provider,
+                model=str(cfg.get('model') or ''),
+                api_key=str(cfg.get('api_key') or ''),
+                max_tokens=600,
+                # A report request is its own call: it must not inherit the stop
+                # flag of a run that ended (or is running) in this process.
+                cancel_event=None,
+                host=(str(cfg.get('ollama_host') or '') if provider == 'ollama' else ''),
+            )
+            conclusion = client.chat(build_conclusion_prompt(summarize(nodes), normalize(data.get('lang'))))
+        except Exception as e:
+            # The report is the deliverable; a missing paragraph is a note in it.
+            add_log(t('run.reportConclusionFailed', err=e))
+            conclusion = ''
+
+    workflow_name = meta.get('workflow_name') or 'workflow'
+    report = ReportService(Config.EXPORT_DIR)
+    name = (title or '').strip() or workflow_name
+    markup = report.build(
+        (title or '').strip() or t('report.default_title', name=workflow_name),
+        nodes,
+        meta,
+        conclusion=conclusion,
+    )
+    try:
+        saved = report.save(markup, name)
+    except OSError as e:
+        add_log(t('run.reportFailed', err=e))
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    add_log(t('run.reportSaved', name=saved['name'], size=saved['bytes']))
+    return jsonify({'ok': True, **saved, 'charts': markup.count('<figure>')})
+
+
+@app.route('/api/report/view', methods=['GET'])
+def report_view():
+    """Show one generated report in the browser, without letting it execute.
+
+    A report is built out of text crawled off the internet, and ``.html`` is on
+    the export panel's refuse-to-download list precisely because a page served
+    from this app's origin can read this app's pages. So it gets its own door:
+    only a name carrying the report prefix resolves, and the response forbids
+    script and any external resource — the inline styles and the base64 pictures
+    the writer itself produced are all that can render.
+    """
+    from flask import send_file
+
+    from services.export_browser import resolve_report_path
+
+    name = request.args.get('name', '')
+    path = resolve_report_path(Config.EXPORT_DIR, name)
+    if not path:
+        return jsonify({'ok': False, 'error': t('api.exportNotFound', name=name)}), 404
+    response = send_file(path, mimetype='text/html', download_name=os.path.basename(path))
+    # ``as_attachment`` stays False: the point is to read it here. Handing the
+    # name to send_file rather than writing the header by hand is what makes a
+    # Chinese report title survivable — Flask encodes it (filename*=UTF-8''…),
+    # while a raw non-ASCII header value stops the response halfway and leaves
+    # the browser waiting for a document that never arrives.
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
+    )
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
+
+
+# ─── Stats API ─────────────────────────────────────────────────
 
 @app.route('/api/stats/emotion', methods=['GET'])
 def emotion_stats():

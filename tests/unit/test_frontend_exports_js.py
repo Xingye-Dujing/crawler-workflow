@@ -8,10 +8,14 @@ is a request for a different file.
 Pinned:
 * a non-downloadable entry (a ``.py`` in the export folder) gets NO download
   button, so the UI rule and ``/api/exports/download`` agree;
+* a generated report gets 查看 instead, because ``/api/report/view`` is the only
+  door an HTML file in that folder can come through;
 * a name with a quote or a backslash survives both the HTML attribute and the JS
   string literal the panel embeds it in;
 * sizes read as B/KB/MB and the header total is directory-wide, not page-wide;
-* an empty folder renders the empty state, not an error.
+* an empty folder renders the empty state, not an error;
+* the 生成报告 dialog's three outcomes build two different payloads and, when
+  cancelled, send nothing at all.
 """
 
 import json
@@ -35,6 +39,7 @@ PAYLOAD = {
         {'name': "it's.csv", 'kind': 'csv', 'size': 2048, 'mtime': 1700000000, 'downloadable': True},
         {'name': 'back\\slash.json', 'kind': 'json', 'size': 512, 'mtime': 1700000100, 'downloadable': True},
         {'name': 'script.py', 'kind': 'other', 'size': 4096, 'mtime': 1700000200, 'downloadable': False},
+        {'name': 'report-季度.html', 'kind': 'report', 'size': 9000, 'mtime': 1700000300, 'downloadable': False},
     ],
 }
 
@@ -55,7 +60,7 @@ class TestExportRows:
 
     def test_a_non_downloadable_file_gets_no_download_button(self, results):
         assert results['downloads'] == 2, 'only the two downloadable rows may offer a download'
-        assert results['deletes'] == 3, 'every row may still be deleted'
+        assert results['deletes'] == 4, 'every row may still be deleted'
         assert 'script.py' in results['html']
 
     def test_a_filename_is_escaped_for_display(self, results):
@@ -83,3 +88,53 @@ class TestExportRows:
 
     def test_the_download_link_url_encodes_the_name(self, results):
         assert results['dlHref'] == "/api/exports/download?name=ENC(it's.csv)"
+
+
+class TestReportRow:
+    def test_a_report_is_offered_as_a_view_and_never_as_a_download(self, results):
+        """The file is .html, and the download route refuses that extension on
+        purpose — so a download button on this row would be a dead end the panel
+        made with its own hands."""
+        assert results['views'] == 1
+        assert "exportsManager.view('report-季度.html')" in results['html']
+        assert "exportsManager.download('report-季度.html')" not in results['html']
+
+
+class TestReportButton:
+    def test_the_dialog_offers_three_outcomes_and_remembers_the_typed_title(self, results):
+        first = results['dialogs'][0]
+        assert first['hasInput'] is True
+        # Cancel throws its answer away; the two creating buttons must not, or
+        # the title the user typed would be lost to the choice they made.
+        assert first['buttons'] == [['CANCEL', None, False], ['CREATE-AI', 'ai', True], ['CREATE', 'go', True]]
+
+    def test_creating_from_the_page_sends_the_canvas_titles_and_no_run_id(self, results):
+        body = results['posts'][0]['body']
+        assert body['title'] == '季度报告', 'the typed title must be trimmed and sent'
+        assert body['include_conclusion'] is True
+        assert 'run_id' not in body
+        # A node with no title of its own travels as its id, which is the only
+        # name the backend has for it.
+        assert body['nodes'] == [{'id': 'node-1', 'title': '数据源'}, {'id': 'node-2', 'title': 'node-2'}]
+
+    def test_creating_from_a_stored_run_sends_the_run_id_instead(self, results):
+        body = results['posts'][1]['body']
+        assert body['run_id'] == 'run-7'
+        assert 'nodes' not in body, 'a stored run must not be described by this canvas'
+        assert body['include_conclusion'] is False
+        assert body['title'] == '', 'an empty title lets the server name it after the workflow'
+
+    def test_the_request_language_travels_twice_as_every_other_call_does(self, results):
+        for post in results['posts']:
+            assert post['url'] == '/api/report/generate'
+            assert post['method'] == 'POST'
+            assert post['lang'] == 'en'
+            assert post['body']['lang'] == 'en'
+
+    def test_cancel_requests_nothing(self, results):
+        assert len(results['posts']) == 2, 'the cancelled dialog must not have POSTed'
+        assert len(results['dialogs']) == 3
+
+    def test_a_written_report_is_opened_and_the_panel_refreshed(self, results):
+        assert results['opens'] == ['/api/report/view?name=ENC(report-x.html)'] * 2
+        assert results['toasts'] == ['DONE', 'DONE']

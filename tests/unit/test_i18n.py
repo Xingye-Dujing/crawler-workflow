@@ -244,18 +244,42 @@ class TestKeyReachability:
         files += list((root / 'tests').rglob('*.py'))
         return '\n'.join(f.read_text(encoding='utf-8', errors='replace') for f in files if f.name != 'i18n.py')
 
+    @staticmethod
+    def _referenced(key: str, sources: str) -> bool:
+        """Either quote style counts as a reference.
+
+        A message used inside an f-string has to be written with double quotes
+        (the string it lives in is single-quoted), and the rule this check
+        enforces is about the *name* being spelled somewhere, not about which
+        character the call site happened to use.
+        """
+        return f"'{key}'" in sources or f'"{key}"' in sources
+
     def _unreachable(self):
         sources = self._sources()
         dead = []
         for key in i18n._ZH:
             if key.startswith(self.DYNAMIC_PREFIXES):
                 continue
-            if f"'{key}'" not in sources:
+            if not self._referenced(key, sources):
                 dead.append(key)
         return dead
 
     def test_every_static_key_is_referenced_somewhere(self):
         assert self._unreachable() == []
+
+    def test_the_quote_inspection_is_actually_needed(self):
+        """If no call site ever needs the double-quoted form, drop that branch
+        rather than keep a widening of the rule nobody uses."""
+        sources = self._sources()
+        single_only = [key for key in i18n._ZH if f"'{key}'" in sources]
+        double_only = [
+            key
+            for key in i18n._ZH
+            if f'"{key}"' in sources and f"'{key}'" not in sources and not key.startswith(self.DYNAMIC_PREFIXES)
+        ]
+        assert single_only, 'no key is referenced in single quotes at all'
+        assert double_only, 'nothing needs the double-quoted form any more'
 
     def test_the_dynamic_allowlist_is_still_needed(self):
         """If a dynamic family ever stops being built at runtime, it must be

@@ -7,6 +7,10 @@
  * attribute and the JS string literal it is embedded in, sizes must be human
  * readable, and an empty folder must read as empty rather than as an error.
  *
+ * The 生成报告 button is driven here too, because what it decides is what gets
+ * POSTed: the dialog's three outcomes (create / create with the AI paragraph /
+ * cancel) have to produce two different payloads and one request fewer.
+ *
  * Usage: node harness_exports.mjs <workflow.js> <exports.json>
  */
 import fs from 'node:fs';
@@ -28,8 +32,17 @@ const I18n = {
             'exportsMgr.colSize': 'Size',
             'exportsMgr.colModified': 'Modified',
             'exportsMgr.download': 'Download',
+            'exportsMgr.view': 'VIEW',
+            'exportsMgr.report': 'REPORT',
+            'exportsMgr.reportHint': 'HINT',
+            'exportsMgr.reportPlaceholder': 'PLACEHOLDER',
+            'exportsMgr.reportGo': 'CREATE',
+            'exportsMgr.reportAi': 'CREATE-AI',
+            'exportsMgr.reportDone': 'DONE',
+            'exportsMgr.reportFailed': 'FAILED',
             'exportsMgr.remove': 'Delete',
             'exportsMgr.loadFailed': 'LOADFAILED',
+            'dialog.cancel': 'CANCEL',
         },
         zh: {},
     },
@@ -38,19 +51,49 @@ const I18n = {
     },
 };
 
-const sandbox = {
-    ...baseSandbox(),
+/* Everything the report button touches that is not workflow.js's own logic.
+   The dialog answer is set per scenario, because the same method has to be
+   proven to distinguish "create", "create with the AI paragraph" and "cancel". */
+const captured = { dialogs: [], posts: [], opens: [], toasts: [] };
+const dialogAnswer = { value: null };
+
+const sandbox = baseSandbox();
+/* In this DOM stub ``window`` *is* the sandbox object, so the globals the report
+   button reaches for have to be assigned onto that same object — spreading it
+   into a new one would leave ``window`` pointing at the original and
+   ``window.open`` would be undefined inside the script. */
+Object.assign(sandbox, {
     I18n,
     canvas: { nodes: {}, connections: [] },
     RunState: { running: false },
-    showToast: () => {},
-    fetch: () => Promise.resolve({ json: () => Promise.resolve(payload) }),
+    fetch: (url, options) => {
+        const body = options && options.body ? JSON.parse(options.body) : null;
+        if (body) {
+            captured.posts.push({ url, method: options.method, lang: options.headers['X-Lang'], body });
+        }
+        const answer =
+            body
+                ? { ok: true, name: 'report-x.html' }
+                : { ok: true, exports: payload.exports, files: payload.files, bytes: payload.bytes };
+        return Promise.resolve({ json: () => Promise.resolve(answer) });
+    },
     setTimeout: () => {},
     encodeURIComponent: (value) => `ENC(${value})`,
-};
+    open: (url) => captured.opens.push(url),
+    confirm: () => true,
+    LLMSettings: { payload: () => ({ provider: 'ollama', model: 'm', api_key: '' }) },
+});
 vm.createContext(sandbox);
 vm.runInContext(src + '\n;globalThis.__ex = { exportsManager };', sandbox);
 const { exportsManager } = sandbox.__ex;
+/* Assigned after the script ran: workflow.js declares showToast and showDialog
+   itself, and a function declaration in the script wins over anything seeded
+   into the context beforehand. The two are what this harness observes. */
+sandbox.showToast = (msg) => captured.toasts.push(String(msg));
+sandbox.showDialog = (opts) => {
+    captured.dialogs.push(opts);
+    return Promise.resolve(dialogAnswer.value);
+};
 
 exportsManager._last = payload.exports;
 exportsManager._totals = { files: payload.files, bytes: payload.bytes };
@@ -80,4 +123,30 @@ exportsManager._last = [];
 exportsManager.render();
 out.empty = sandbox.__byId('exports-mgr-body').innerHTML;
 out.dlHref = '/api/exports/download?name=' + sandbox.encodeURIComponent("it's.csv");
+/* A report row offers 查看 and not 下载: the file is .html and the download
+   route refuses that extension, so a download button here would be a dead end. */
+out.views = (html.match(/exportsManager\.view\(/g) || []).length;
+
+/* ── the report button ─────────────────────────────────────────
+   Three different outcomes of one dialog: create, create-with-AI, cancel. The
+   first two must send different payloads; the third must send nothing at all. */
+sandbox.canvas.nodes = {
+    'node-1': { id: 'node-1', type: 'source', title: '数据源', params: {} },
+    'node-2': { id: 'node-2', type: 'output', title: '', params: {} },
+};
+
+dialogAnswer.value = { value: 'ai', input: '  季度报告  ' };
+await exportsManager.report();
+dialogAnswer.value = { value: 'go', input: '' };
+await exportsManager.report('run-7', 'stored name');
+dialogAnswer.value = null;
+await exportsManager.report();
+
+out.dialogs = captured.dialogs.map((opts) => ({
+    buttons: (opts.buttons || []).map((b) => [b.label, b.value, !!b.withInput]),
+    hasInput: !!opts.input,
+}));
+out.posts = captured.posts;
+out.opens = captured.opens;
+out.toasts = captured.toasts;
 process.stdout.write(JSON.stringify(out));

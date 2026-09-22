@@ -2278,6 +2278,15 @@ function showDialog(opts) {
                 btn.textContent = b.label;
                 btn.addEventListener('click', function () {
                     overlay.classList.remove('open');
+                    /* A dialog that asks for a text AND offers two ways to use it
+                       (the report: plain, or with an AI conclusion) would
+                       otherwise lose one of them — resolving a declared `value`
+                       throws the typed text away, and resolving the text loses
+                       which button was pressed. `withInput` returns both. */
+                    if (b.withInput && opts.input) {
+                        resolve({ value: b.value, input: inputEl.value });
+                        return;
+                    }
                     resolve(b.value !== undefined ? b.value : (opts.input ? inputEl.value : true));
                 });
                 actionsEl.appendChild(btn);
@@ -2743,6 +2752,9 @@ var runsManager = {
     },
 
     render(runs) {
+        /* Remembered so a button can ask "which workflow is this row?" without
+           the answer having to be woven into its onclick attribute. */
+        this._shown = runs || [];
         var body = document.getElementById('runs-mgr-body');
         var count = document.getElementById('runs-mgr-count');
         if (!body) return;
@@ -2760,6 +2772,11 @@ var runsManager = {
             }
             ops += '<button class="runs-mgr-btn del" onclick="runsManager.remove(\'' + r.run_id + '\', ' + (resumable ? 'true' : 'false') + ')">' + I18n.t('runsMgr.remove') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="runsManager.detail(\'' + r.run_id + '\', this)">' + I18n.t('runsMgr.detail') + '</button>';
+            /* The stored tables are what a report needs, so a run from last week
+               is reportable from here. Only the run id travels into the handler:
+               a workflow name is user text, and a quote in it would close this
+               attribute and start a new one. */
+            ops += '<button class="runs-mgr-btn" onclick="runsManager.report(\'' + r.run_id + '\')">' + I18n.t('runsMgr.report') + '</button>';
             return '<tr>' +
                 '<td class="runs-mgr-wf">' + escapeHtml(r.workflow_name || I18n.t('name.unnamed')) + '</td>' +
                 '<td class="runs-mgr-id">' + escapeHtml(r.run_id) + '</td>' +
@@ -2788,6 +2805,17 @@ var runsManager = {
             return true;
         }
         return false;
+    },
+
+    /* A report for this stored run. The name is read back out of the rows the
+       panel is already holding, because it is only the dialog's starting
+       suggestion — it must not have to survive a trip through an inline
+       handler, where one quote in a workflow name would close the attribute. */
+    report(runId) {
+        var row = (this._shown || []).filter(function (r) {
+            return r.run_id === runId;
+        })[0] || {};
+        exportsManager.report(runId, row.workflow_name || '');
     },
 
     continueRun(runId) {
@@ -3171,6 +3199,11 @@ var exportsManager = {
             if (row.downloadable) {
                 ops += '<button class="runs-mgr-btn" onclick="exportsManager.download(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.download') + '</button>';
             }
+            if (row.kind === 'report') {
+                /* No download button on purpose — .html is refused there. A
+                   report opens through its own route, script-free. */
+                ops += '<button class="runs-mgr-btn" onclick="exportsManager.view(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.view') + '</button>';
+            }
             ops += '<button class="runs-mgr-btn del" onclick="exportsManager.remove(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.remove') + '</button>';
             return '<tr>' +
                 '<td class="runs-mgr-wf">' + name + '</td>' +
@@ -3216,6 +3249,58 @@ var exportsManager = {
         frame.src = '/api/exports/download?name=' + encodeURIComponent(name);
         document.body.appendChild(frame);
         setTimeout(function () { document.body.removeChild(frame); }, 60000);
+    },
+
+    view(name) {
+        /* The report is text crawled from other people's pages, so it is served
+           by a route that sends a Content-Security-Policy with no script in it —
+           which is also why this is not the download button. */
+        window.open('/api/report/view?name=' + encodeURIComponent(name), '_blank');
+    },
+
+    /* One click, one HTML file. With a run id the tables are read back out of
+       the run store, so yesterday's run can be reported on from the 运行记录
+       panel; without one the run this page is holding is used, and the canvas
+       lends the node titles (the store is not the only thing worth a report). */
+    async report(runId, suggestedTitle) {
+        var answer = await showDialog({
+            message: I18n.t('exportsMgr.reportHint'),
+            input: { value: suggestedTitle || '', placeholder: I18n.t('exportsMgr.reportPlaceholder') },
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('exportsMgr.reportAi'), value: 'ai', withInput: true },
+                { label: I18n.t('exportsMgr.reportGo'), value: 'go', withInput: true, primary: true },
+            ],
+        });
+        if (!answer) return;
+        var payload = {
+            title: String(answer.input || '').trim(),
+            include_conclusion: answer.value === 'ai',
+            lang: I18n.lang || 'zh',
+            llm: LLMSettings.payload(),
+        };
+        if (runId) {
+            payload.run_id = runId;
+        } else {
+            payload.nodes = Object.keys(canvas.nodes || {}).map(function (id) {
+                var node = canvas.nodes[id];
+                return { id: id, title: node.title || id };
+            });
+        }
+        try {
+            var resp = await fetch('/api/report/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+                body: JSON.stringify(payload),
+            });
+            var result = await resp.json();
+            if (!result.ok) throw new Error(result.error || 'report failed');
+            showToast(I18n.t('exportsMgr.reportDone'));
+            this.view(result.name);
+            this.refresh();
+        } catch (e) {
+            showToast(I18n.t('exportsMgr.reportFailed') + ': ' + (e.message || e));
+        }
     },
 
     async remove(name) {
