@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox } from './harness_dom.mjs';
+import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
 const workflowSrc = fs.readFileSync(process.argv[2], 'utf8');
 const appSrc = fs.readFileSync(process.argv[3], 'utf8');
@@ -28,6 +28,7 @@ const sandbox = {
     localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
 };
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 vm.runInContext(workflowSrc, sandbox);
 /* app.js is an IIFE-ish sibling of workflow.js in the browser: same global. */
 vm.runInContext(appSrc, sandbox);

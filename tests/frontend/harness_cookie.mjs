@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox } from './harness_dom.mjs';
+import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
 const wfPath = process.argv[2];
 const src = fs.readFileSync(wfPath, 'utf8');
@@ -29,6 +29,7 @@ const sandbox = {
     __responses: {},
 };
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 vm.runInContext(src, sandbox);
 
 /* workflow.js declares its own fetchJSON, and a function declaration overwrites

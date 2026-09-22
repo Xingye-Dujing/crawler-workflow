@@ -11,6 +11,8 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
+import { fixWindow } from './harness_dom.mjs';
+
 const src = fs.readFileSync(process.argv[2], 'utf8');
 
 const fakeEl = null; // getElementById: no element anywhere — toWorkflowJSON must cope
@@ -30,6 +32,7 @@ const sandbox = {
     showToast: () => {},
 };
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 vm.runInContext(src + '\n;globalThis.__canvas = canvas;', sandbox);
 
 const canvas = sandbox.__canvas;

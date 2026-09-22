@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox } from './harness_dom.mjs';
+import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
 const [canvasPath, wfPath, scPath] = process.argv.slice(2);
 const scenarios = JSON.parse(fs.readFileSync(scPath, 'utf8'));
@@ -47,6 +47,7 @@ const sandbox = {
     resumeBar: { refresh: () => {} },
 };
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 sandbox.window.Settings = { save: () => {} };
 
 // Recording fetch installed INSIDE the context so the async code sees it.

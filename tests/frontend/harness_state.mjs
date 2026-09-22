@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox, dispatchOn } from './harness_dom.mjs';
+import { baseSandbox, dispatchOn, fixWindow } from './harness_dom.mjs';
 
 const src = fs.readFileSync(process.argv[2], 'utf8');
 const scenarios = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
@@ -48,6 +48,7 @@ const sandbox = {
     showToast: (msg) => toasts.push(msg),
 };
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 vm.runInContext(src + '\n;globalThis.__canvas = canvas;', sandbox);
 
 const canvas = sandbox.__canvas;

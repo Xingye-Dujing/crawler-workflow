@@ -23,7 +23,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox } from './harness_dom.mjs';
+import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
 const wfPath = process.argv[2];
 const scenarioPath = process.argv[3];
@@ -78,6 +78,7 @@ const sandbox = {
     escapeHtml: undefined,
 };
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 /* `const workflow` is lexically scoped to its own script — append a capture
    line (same trick as harness_canvas.mjs) to reach it from the host. */
 vm.runInContext(

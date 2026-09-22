@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox } from './harness_dom.mjs';
+import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
 const src = fs.readFileSync(process.argv[2], 'utf8');
 const runs = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
@@ -57,6 +57,7 @@ const sandbox = {
     makeDraggable: () => {},
 };
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 vm.runInContext(src + '\n;globalThis.__wf = { runsManager, workflow, dataNodes };', sandbox);
 /* Assigned after the script ran: workflow.js declares showToast itself, and a
    function declaration in the script wins over anything seeded before it. */

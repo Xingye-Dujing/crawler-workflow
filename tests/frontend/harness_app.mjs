@@ -16,13 +16,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 
-import { baseSandbox, makeTarget } from './harness_dom.mjs';
+import { baseSandbox, fixWindow, makeTarget } from './harness_dom.mjs';
 
 const jsDir = process.argv[2];
 const scenarios = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
 
 const sandbox = baseSandbox();
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 
 /* Load order mirrors index.html: workflow.js defines closeSettings/showToast
    that app.js's click-away handlers call; app.js defines the I18n catalog

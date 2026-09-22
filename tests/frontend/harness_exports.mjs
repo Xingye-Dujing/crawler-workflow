@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox } from './harness_dom.mjs';
+import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
 const src = fs.readFileSync(process.argv[2], 'utf8');
 const payload = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
@@ -84,6 +84,7 @@ Object.assign(sandbox, {
     LLMSettings: { payload: () => ({ provider: 'ollama', model: 'm', api_key: '' }) },
 });
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 vm.runInContext(src + '\n;globalThis.__ex = { exportsManager };', sandbox);
 const { exportsManager } = sandbox.__ex;
 /* Assigned after the script ran: workflow.js declares showToast and showDialog
