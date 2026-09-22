@@ -1333,7 +1333,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # node (saved before the panel normalized it) must not reroute its
         # article URLs into the comment engine — they would ALL be dropped as
         # unsupported. For wechat it still simply means "crawl these URLs".
-        return _execute_comment_node(dict(node, type='comment'), ctx=ctx)
+        return _execute_comment_node(dict(node, type='comment'), headless=headless, ctx=ctx)
     keyword = params.get('keyword', '')
     target_count = _safe_int(params.get('target_count'), 50, minimum=1)
     start_time = params.get('start_time')
@@ -1899,7 +1899,7 @@ def _execute_visualize_node(node: dict, current_input: list):
     return spec
 
 
-def _execute_comment_node(node: dict, ctx: dict = None):
+def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     """Comment crawler: article links in, comment rows out, batch by batch.
 
     Built on the same durable legs as the source crawler — the row ledger
@@ -1908,7 +1908,9 @@ def _execute_comment_node(node: dict, ctx: dict = None):
     as a readable file while the run is still going; a resumed writer adopts
     the parts the crashed run left behind, so kept-elsewhere rows are exactly
     the rows already in those files). zhihu content pages reject headless
-    sessions, so this node always drives a visible browser.
+    sessions, so this node always drives a visible browser — and says so when
+    the run was started in 无头 mode, because a window appearing mid-run with no
+    explanation reads as the setting having been ignored.
     """
     from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
     from services.part_writer import PartWriter, safe_stem
@@ -1964,6 +1966,9 @@ def _execute_comment_node(node: dict, ctx: dict = None):
         rows_out = list(ctx['store'].load_rows(ctx['run_id'], nid))
     counts = {OK: 0, BLOCKED: 0, DEAD: 0}
     sessions = {}
+    if headless:
+        # This node never crawls headless, whatever the run asked for.
+        add_log(t('run.forcedVisibleComment', label=node_label(node, nid)))
 
     def _writer_for(idx: int, url: str) -> PartWriter:
         stem = f'{stem_base}-{idx:02d}' if per_article else stem_base
@@ -2208,7 +2213,7 @@ def _execute_node(
     if ntype == 'name':
         return _execute_name_node(node)
     if ntype == 'comment':
-        return _execute_comment_node(node, ctx=ctx)
+        return _execute_comment_node(node, headless=headless, ctx=ctx)
     if ntype == 'source':
         return _execute_source_node(node, headless, ctx=ctx)
     if ntype == 'upload':

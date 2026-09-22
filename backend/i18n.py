@@ -464,6 +464,7 @@ _ZH = {
     ),
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
     'run.forcedVisible': '「{label}」：{platform} 会拦截无头浏览器，本次已自动改用可见窗口运行',
+    'run.forcedVisibleComment': '「{label}」：评论采集一律使用可见窗口（知乎等内容页会拒绝无头会话），已忽略无头设置',
     'run.notCrawlable': (
         '「{label}」所在的平台（{platform}）目前只能保存登录 Cookie，还没有采集实现，'
         '因此不能作为数据源运行——请改用已支持的平台，或等该平台的抓取落地'
@@ -932,6 +933,10 @@ _EN = {
         'note: {platform} hit the login wall only after the target was met — the data is complete, nothing to resume'
     ),
     'run.forcedVisible': '"{label}": {platform} blocks headless browsers, so this run was switched to a visible window',
+    'run.forcedVisibleComment': (
+        '"{label}": comment crawling always uses a visible window (zhihu and friends refuse headless '
+        'content pages), so the headless setting was ignored here'
+    ),
     'run.notCrawlable': (
         'the platform behind "{label}" ({platform}) can store a login cookie but has no crawler yet, so it cannot '
         'run as a data source — pick a supported platform, or wait for this one to land'

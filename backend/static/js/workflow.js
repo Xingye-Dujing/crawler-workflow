@@ -194,10 +194,10 @@ const workflow = {
         var statusText = document.getElementById('status-text');
         statusText.textContent = I18n.t('status.running');
         /* Open console and clear previous output */
+        /* One bottom slot for console / run records / export artefacts. */
+        closeDockedPanels('console-panel');
         document.getElementById('console-panel').classList.add('open');
         document.getElementById('console-output').innerHTML = '';
-        /* The run-records panel shares the console's bottom slot. */
-        if (window.runsManager) runsManager.close();
         var workflowData = canvas.toWorkflowJSON();
         /* AI transport check — fail fast instead of dying 200 rows into a run. */
         var llm = LLMSettings.payload();
@@ -2012,6 +2012,12 @@ function showToast(msg) {
 /* Console Panel */
 function toggleConsole() {
     var panel = document.getElementById('console-panel');
+    if (!panel.classList.contains('open')) {
+        /* Opening the console from the button must clear the other two docked
+           panels; only run-records was cleared before, so 导出产物 stayed open
+           underneath and the two overlapped. */
+        closeDockedPanels('console-panel');
+    }
     if (panel.classList.contains('popout')) {
         toggleConsolePopout(); /* Dock first, then close */
         panel.classList.remove('open');
@@ -2652,10 +2658,9 @@ var runsManager = {
         var panel = this.panel();
         if (!panel) return;
         var opening = !panel.classList.contains('open');
-        /* Same bottom slot as the console — the two cannot stack. */
+        /* Same bottom slot as the console and the export list — none stack. */
         if (opening) {
-            var consolePanel = document.getElementById('console-panel');
-            if (consolePanel) consolePanel.classList.remove('open');
+            closeDockedPanels('runs-panel');
             panel.classList.add('open');
             this.refresh();
         } else {
@@ -3030,6 +3035,25 @@ workflow.validate = function () {
     return errors;
 };
 
+/* ─── Three docked panels share one slot ─────────────────────────
+   Console, 运行记录 and 导出产物 are all bottom-docked, and each writes an inline
+   height when its resize handle is dragged. That inline height beats the CSS
+   `height: 0` which hides a panel, so closing one by dropping `.open` alone
+   leaves it visually expanded — two panels then overlap in the same slot. All
+   three toggles live in this file, so the helper is called directly rather than
+   reached for through `window`. */
+var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel'];
+
+function closeDockedPanels(exceptId) {
+    DOCKED_PANELS.forEach(function (id) {
+        if (id === exceptId) return;
+        var other = document.getElementById(id);
+        if (!other) return;
+        other.classList.remove('open');
+        other.style.height = '';
+    });
+}
+
 /* ─── Export artefacts panel ────────────────────────────────────
    The read side of data/exports. Rows arrive with a name the server already
    resolved once, so the download link and the delete button both send that
@@ -3051,11 +3075,7 @@ var exportsManager = {
             this.close();
             return;
         }
-        /* One bottom slot: the console and the run records cannot stack. */
-        ['console-panel', 'runs-panel'].forEach(function (id) {
-            var other = document.getElementById(id);
-            if (other) other.classList.remove('open');
-        });
+        closeDockedPanels('exports-panel');
         panel.classList.add('open');
         this.refresh();
     },

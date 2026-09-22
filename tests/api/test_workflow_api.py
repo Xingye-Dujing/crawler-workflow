@@ -838,6 +838,20 @@ class TestConsoleSemantics:
         assert 'WF1' not in blob and 'WF0' not in blob
 
 
+def _capture(cls, seen):
+    """A get_crawler stand-in that records the headless flag it was given.
+
+    The argument is what two tests below assert on, and spelling it out per
+    test turned into a lambda too long to read.
+    """
+
+    def _make(platform, headless=True, **kwargs):
+        seen['headless'] = headless
+        return cls()
+
+    return _make
+
+
 class TestCrawlableGuard:
     """A platform can hold a cookie and still have no crawler — and the two
     capabilities must not be confused at run time.
@@ -926,9 +940,7 @@ class TestCrawlableGuard:
                 pass
 
         assert DouyinCrawler.never_headless is True
-        monkeypatch.setattr(
-            app_module, 'get_crawler', lambda platform, headless=True, **k: seen.update(headless=headless) or _One()
-        )
+        monkeypatch.setattr(app_module, 'get_crawler', _capture(_One, seen))
         monkeypatch.setattr(app_module, 'add_log', lambda msg: logs.append(msg))
         from i18n import t
 
@@ -936,3 +948,74 @@ class TestCrawlableGuard:
         assert rows
         assert seen['headless'] is False, 'the crawler must be built with a visible window'
         assert t('run.forcedVisible', label='某平台源 #src-1', platform='douyin') in logs
+
+
+class TestHeadlessIsNeverSilentlyIgnored:
+    """Two crawl paths override the run's 无头 choice, and an unexplained browser
+    appearing mid-run reads as the setting having been broken.
+
+    Douyin refuses a headless browser on every navigation, and comment crawling
+    drives a visible window for all platforms (zhihu content pages reject
+    headless). Both now say so in the console; a user who sees no such line is
+    looking at a crawl that really did run headless.
+    """
+
+    @staticmethod
+    def _node(nid='src-1', title='源', platform='douyin'):
+        return {'id': nid, 'type': 'source', 'title': title, 'platform': platform, 'params': {'keyword': 'ai'}}
+
+    def test_the_source_node_announces_the_switch(self, monkeypatch):
+        import app as app_module
+
+        from i18n import t
+
+        seen = {}
+
+        class _One:
+            def set_sink(self, sink):
+                pass
+
+            def set_cursor_sink(self, sink):
+                pass
+
+            def search(self, keyword, **kwargs):
+                return [{'标题': 'x', '链接': 'https://www.douyin.com/video/1'}]
+
+            def close(self):
+                pass
+
+        logs = []
+        monkeypatch.setattr(app_module, 'get_crawler', _capture(_One, seen))
+        monkeypatch.setattr(app_module, 'add_log', lambda m: logs.append(m))
+        app_module._execute_source_node(self._node(), headless=True)
+        assert seen['headless'] is False
+        assert t('run.forcedVisible', label='源 #src-1', platform='douyin') in logs
+
+    def test_the_comment_node_announces_it_only_when_headless_was_asked(self, monkeypatch):
+        """The notice is the whole point: the node drives a visible window for
+        every platform, and a browser appearing mid-"headless" run with no
+        explanation reads as the setting having been ignored."""
+        import app as app_module
+
+        from i18n import t
+
+        class _Session:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def crawl_zhihu(self, url, limit):
+                return [], 'ok'
+
+        logged = []
+        monkeypatch.setattr('crawlers.comments.CommentSession', _Session)
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: None)
+        monkeypatch.setattr(app_module, 'add_log', lambda m: logged.append(m))
+        node = {'id': 'c-1', 'type': 'comment', 'title': '评论', 'params': {'urls': 'https://www.zhihu.com/question/1'}}
+
+        assert app_module._execute_comment_node(node, headless=True) == []
+        assert t('run.forcedVisibleComment', label='评论 #c-1') in logged
+
+        logged.clear()
+        assert app_module._execute_comment_node(node, headless=False) == []
+        notice = t('run.forcedVisibleComment', label='评论 #c-1')
+        assert notice not in logged, 'a run that already wanted a visible window must not claim it was switched'

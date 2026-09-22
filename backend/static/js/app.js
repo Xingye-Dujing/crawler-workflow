@@ -1812,6 +1812,39 @@ function toggleConsolePopout() {
     });
 })();
 
+/* ── Export-artefacts panel height resize (dock mode) ── */
+
+(function initExportsResize() {
+    const handle = document.getElementById('exports-resize-handle');
+    if (!handle) return;
+    let cs = {};
+
+    handle.addEventListener('mousedown', (e) => {
+        const panel = document.getElementById('exports-panel');
+        if (!panel || !panel.classList.contains('open')) return;
+        e.preventDefault();
+        cs.panel = panel;
+        cs.startY = e.clientY;
+        cs.startH = panel.offsetHeight;
+        cs.active = true;
+        handle.classList.add('active');
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!cs.active) return;
+        const newH = Math.max(80, Math.min(window.innerHeight - 100, cs.startH + (cs.startY - e.clientY)));
+        cs.panel.style.height = newH + 'px';
+        cs.panel.classList.add('open'); /* keep open while resizing */
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (cs.active) {
+            cs.active = false;
+            handle.classList.remove('active');
+        }
+    });
+})();
+
 /* ── Cookie dialog: close on outside click ──
    The platform dropdown is a CustomSelect: its menu is rendered into <body>,
    OUTSIDE the dialog's DOM. Clicking a row there must count as an interaction
@@ -1889,7 +1922,16 @@ window.openCookieDialog = function () {
     if (dialog.classList.contains('open') && !dialog.dataset._uiInit) {
         dialog.dataset._uiInit = '1';
         makeDraggable(dialog, '.settings-header');
-        makeResizable(dialog, { minW: 300, minH: 250, maxW: 500, maxH: 500 });
+        /* Viewport-relative bounds, not fixed pixels: this dialog carries six
+           platforms' worth of translated guidance plus two textareas, so a
+           maxH of 500 clipped it to about a third of its content and the
+           remainder could not be reached at any window size. */
+        makeResizable(dialog, {
+            minW: 320,
+            minH: 260,
+            maxW: Math.min(760, window.innerWidth - 40),
+            maxH: window.innerHeight - 40,
+        });
     }
 };
 
@@ -1900,7 +1942,15 @@ window.openSettings = function (nodeId) {
     if (!panel.dataset._uiInit) {
         panel.dataset._uiInit = '1';
         makeDraggable(panel, '.settings-header');
-        makeResizable(panel, { minW: 280, minH: 200, maxW: 500, maxH: 800 });
+        /* Same reasoning as the cookie dialog: the node panel grows with the node
+           (a source node in comments mode, an analysis op with five fields), and a
+           fixed 800px ceiling left fields unreachable on a tall window. */
+        makeResizable(panel, {
+            minW: 300,
+            minH: 240,
+            maxW: Math.min(680, window.innerWidth - 40),
+            maxH: window.innerHeight - 40,
+        });
     }
     _origOpenSettings(nodeId);
 };
