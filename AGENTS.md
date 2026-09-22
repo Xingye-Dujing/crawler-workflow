@@ -122,9 +122,15 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   **Do not add client impersonation or session replay to get around it, and do not re-add those
   columns** — in a browser "no comments" and "not allowed to look" are indistinguishable, so an
   empty table would be plausible-looking false data. WeChat's 数据源 node therefore offers no
-  comments mode, and `explainWechatLimits()` (workflow.js) + `cookie.verify.wechatNoComments`
-  (i18n) state why. 公众号后台 login (`mp_logged_in`, detected via the `token=` redirect) is only
-  ever about article *search*.
+  comments mode, and `explainWechatLimits()` (workflow.js) + `settings.wechatLimits*` (app.js)
+  state why.
+  **WeChat has no cookie row at all.** Keyword search via the 公众号后台 was measured to be the
+  only thing its session unlocked, and it was deleted rather than shipped unverifiable:
+  `appmsg?action=list_ex` answered `ret=200013 freq control` for three accounts, three endpoint
+  spellings and every retry after a 15-minute cooldown, so the article-item field shape was never
+  observed once. Article *bodies* need no login. Do not re-add `mp_logged_in`, a
+  `WechatCrawler.diagnose` override, `cookie.wechat.*` text or `MULTI_PURPOSE` — and do not
+  implement keyword search again by guessing field names.
 - **Cookie death mid-crawl is a designed path**: crawler `login_wall` + under-target rows →
   `_execute_source_node` sets `execution_state['cookie_expired']` (rides on `/api/workflow/status`
   for the browser toast), logs `run.cookieExpired`, and RAISES so the node settles `partial`, the
