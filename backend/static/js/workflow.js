@@ -87,7 +87,10 @@ const workflow = {
             var resp = await fetch('/api/workflow/load?name=' + encodeURIComponent(name));
             var result = await resp.json();
             if (result.ok) {
-                this.loadFromJSON(result.workflow);
+                /* A file that opens is a file that loads. `loadFromJSON` refuses a
+                   body without a node list, and remembering the name anyway would
+                   make the next Save overwrite a workflow the screen never showed. */
+                if (!this.loadFromJSON(result.workflow)) return;
                 this.currentFile = name;
                 showToast(I18n.t('toast.workflowLoaded') + ': ' + name);
                 /* The workflow we just opened may have an unfinished run filed
@@ -103,6 +106,14 @@ const workflow = {
     },
 
     loadFromJSON(workflowData) {
+        /* Checked BEFORE anything is torn down: the old order cleared the canvas,
+           then died on `workflowData.nodes.forEach` for a file without a node
+           list, so opening a foreign or half-written JSON cost the user the
+           workflow they had on screen and told them only 'load failed'. */
+        if (!workflowData || typeof workflowData !== 'object' || !Array.isArray(workflowData.nodes)) {
+            showToast(I18n.t('toast.workflowFileInvalid'));
+            return false;
+        }
         document.getElementById('nodes-container').innerHTML = '';
         canvas.nodes = {};
         canvas.connections = [];
@@ -144,6 +155,7 @@ const workflow = {
         var settings = workflowData.settings || {};
         if (settings.mode === 'serial') RunState.set('parallel', false);
         if (settings.headless === false) RunState.set('headless', false);
+        return true;
     },
 
     newFile() {

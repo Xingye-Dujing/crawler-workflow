@@ -54,6 +54,20 @@ vm.runInContext(src + '\n;globalThis.__canvas = canvas;', sandbox);
 const canvas = sandbox.__canvas;
 canvas.nodesContainer = sandbox.__byId('nodes-container');
 canvas.workspace = sandbox.__byId('workspace');
+
+/* Spies for the wired handlers: canvas.js calls these through `this.…`, so
+   replacing the methods records exactly what a user click would have done. */
+let renamed = '';
+let edited = '';
+let wiring = {};
+/* Spies: canvas.js calls these through `this.…`, so replacing the methods records
+   exactly what a user click would have done. */
+canvas.renameNode = (id) => {
+    renamed = id;
+};
+canvas.editNode = (id) => {
+    edited = id;
+};
 /* Copy and paste are context-menu items living in a document click listener, so
    the only way to test them faithfully is to register the real handlers and fire
    the same events a right-click produces. */
@@ -92,6 +106,9 @@ for (const sc of scenarios) {
     canvas._historyIdx = -1;
     canvas._clipboardData = null;
     toasts.length = 0;
+    renamed = '';
+    edited = '';
+    wiring = {};
     I18n.lang = sc.lang || 'en';
 
     if (sc.restore) canvas.restoreState(sc.restore);
@@ -110,6 +127,22 @@ for (const sc of scenarios) {
        testing what the rewind restores, and applying the delete afterwards would
        silently test the shape of a one-node history instead. */
     if (sc.deleteNode) canvas.deleteNode(sc.deleteNode);
+    if (sc.wire) {
+        /* The title and the two buttons are wired with addEventListener now
+           (they used to be `ondblclick="…('id')"` strings built from the id), so
+           firing the events is the only proof the node still does its job. */
+        const node = canvas.nodes[sc.wire];
+        const btns = node.el.querySelectorAll('.node-action-btn');
+        /* Captured before the delete click, which removes the node — the markup is
+           the evidence that nothing handler-shaped was built. */
+        wiring.markup = node.el.innerHTML;
+        dispatchOn(node.el.querySelector('.node-title'), 'dblclick', { stopPropagation() {} });
+        wiring.rename = renamed;
+        dispatchOn(btns[0], 'click', {});
+        wiring.edit = edited;
+        dispatchOn(btns[1], 'click', {});
+        wiring.left = Object.keys(canvas.nodes);
+    }
     if (sc.undo) canvas.undo();
     if (sc.redo) canvas.redo();
     if (sc.setLang) I18n.lang = sc.setLang;
@@ -121,6 +154,9 @@ for (const sc of scenarios) {
             type: n.type,
             title: n.title,
             params: n.params,
+            /* The markup a node was built from is what an injected id or summary
+               would have to hide in, so it is part of the reported state. */
+            html: n.el ? n.el.innerHTML : '',
             elTitle: n.el ? n.el.querySelector('.node-title').textContent : null,
         })),
         connections: canvas.connections,
@@ -129,6 +165,7 @@ for (const sc of scenarios) {
         historyLen: canvas._history.length,
         clipboard: canvas._clipboardData,
         toasts: toasts.slice(),
+        wiring: wiring,
     };
 }
 process.stdout.write(JSON.stringify(out));

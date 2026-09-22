@@ -378,7 +378,12 @@ const canvas = {
 
     addNode(type, x, y, nodeId) {
         const wanted = String(nodeId || '').trim();
-        const id = wanted && !this.nodes[wanted] ? wanted : 'node-' + this.nextId++;
+        /* A node id is a DOM id, a run-record key and part of the workflow
+           fingerprint, so a file-authored id has to be shaped like one. Anything
+           else (quotes, brackets, whitespace) comes from a hand-edited JSON and
+           gets a fresh id minted rather than a place in this document. */
+        const usable = /^[\w.-]{1,64}$/.test(wanted) && !this.nodes[wanted];
+        const id = usable ? wanted : 'node-' + this.nextId++;
         this.reserveId(id);
         const labels = {
             name: I18n.t('node.name'),
@@ -399,18 +404,39 @@ const canvas = {
         el.style.left = (x || 100 + Math.random() * 200) + 'px';
         el.style.top = (y || 100 + Math.random() * 200) + 'px';
         const params = this.getDefaultParams(type);
+        /* Markup and behaviour are kept apart on purpose. This template used to
+           splice the id and the node summary into `onclick="canvas.editNode('<id>')"`
+           and `innerHTML`, so an id or a keyword containing a quote escaped its
+           string literal and ran as code — a workflow JSON is a file the user can
+           edit, and every restore path hands it straight back to this function.
+           Icons are trusted constants, so they are the only thing interpolated. */
         el.innerHTML = [
             '<div class="node-header">',
-            '  <span class="node-title" ondblclick="event.stopPropagation(); canvas.renameNode(\'' + id + '\')">' + title + '</span>',
+            '  <span class="node-title"></span>',
             '  <div class="node-actions">',
-            '    <button class="node-action-btn" title="' + I18n.t('ctx.edit') + '" onclick="canvas.editNode(\'' + id + '\')">' + NODE_ICON.settings + '</button>',
-            '    <button class="node-action-btn del" title="' + I18n.t('ctx.delete') + '" onclick="canvas.deleteNode(\'' + id + '\')">' + NODE_ICON.del + '</button>',
+            '    <button class="node-action-btn" type="button">' + NODE_ICON.settings + '</button>',
+            '    <button class="node-action-btn del" type="button">' + NODE_ICON.del + '</button>',
             '  </div>',
             '</div>',
-            '<div class="node-content">' + this.getNodeSummary(type, params) + '</div>',
-            '<div class="node-port node-port-in" data-node="' + id + '" data-port="in"></div>',
-            '<div class="node-port node-port-out" data-node="' + id + '" data-port="out"></div>',
+            '<div class="node-content"></div>',
+            '<div class="node-port node-port-in" data-port="in"></div>',
+            '<div class="node-port node-port-out" data-port="out"></div>',
         ].join('');
+        const titleEl = el.querySelector('.node-title');
+        titleEl.textContent = title;
+        titleEl.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            this.renameNode(id);
+        });
+        const actionBtns = el.querySelectorAll('.node-action-btn');
+        actionBtns[0].title = I18n.t('ctx.edit');
+        actionBtns[0].addEventListener('click', () => this.editNode(id));
+        actionBtns[1].title = I18n.t('ctx.delete');
+        actionBtns[1].addEventListener('click', () => this.deleteNode(id));
+        el.querySelector('.node-content').textContent = this.getNodeSummary(type, params);
+        el.querySelectorAll('.node-port').forEach((port) => {
+            port.dataset.node = id;
+        });
         this.nodesContainer.appendChild(el);
         this.nodes[id] = { id: id, type: type, title: title, el: el, params: params, x: el.offsetLeft, y: el.offsetTop };
 

@@ -77,7 +77,16 @@ export function makeEl(tag = 'div', id = '') {
         }
         return el._subs[sel];
     };
-    el._subsets = () => [];
+    /* Selectors whose product code reads more than one child back. A single stub
+       would collapse the pair (and canvas.js wires the edit and delete buttons by
+       index), so those selectors get distinct children; the FIRST is still the one
+       `querySelector(sel)` answers with, which keeps every existing assertion
+       pointing at the same element. */
+    const MULTIPLICITY = { '.node-action-btn': 2, '.node-port': 2 };
+    el._subsets = (sel) => {
+        const count = MULTIPLICITY[sel] || 1;
+        return Array.from({ length: count }, (_, index) => el.querySelector(count === 1 ? sel : `${sel}\u0000${index}`));
+    };
     /* Listeners are kept, not dropped: some handlers (the canvas right-click
        menu) hang off a specific element rather than the document, and a harness
        that cannot fire them would have to fake the surrounding logic by hand. */

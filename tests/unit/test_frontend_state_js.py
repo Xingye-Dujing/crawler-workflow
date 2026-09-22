@@ -71,6 +71,27 @@ def state(tmp_path_factory):
         {'id': 'undo_last', 'add': ['source', 'output'], 'undo': True},
         {'id': 'undo_redo', 'add': ['source', 'output'], 'undo': True, 'redo': True},
         {
+            'id': 'wired_node',
+            'add': ['source'],
+            'wire': 'node-1',
+        },
+        {
+            'id': 'hostile_id',
+            'restore': {
+                'nodes': {
+                    "x' onmouseover='alert(1)": {
+                        'id': "x' onmouseover='alert(1)",
+                        'type': 'source',
+                        'title': "evil' onclick='alert(2)",
+                        'params': {'platform': 'weibo', 'keyword': "k'); alert(3); //"},
+                        'x': 10,
+                        'y': 20,
+                    }
+                },
+                'connections': [],
+            },
+        },
+        {
             'id': 'copy_paste_named',
             'restore': {
                 'nodes': {
@@ -212,6 +233,48 @@ class TestCanvasState:
         assert {'resume_run_id', 'resume_node_id'} <= set(by_type['resume'])
 
 
+class TestNodeWiringAndMarkup:
+    """A node's handlers are attached, not spelled into its markup.
+
+    The header used to be built as `ondblclick="canvas.renameNode('<id>')"` and
+    `onclick="canvas.editNode('<id>')"` strings with the id spliced in — and the
+    id, the title and the params all come out of a workflow JSON file the user can
+    open in an editor. One quote in any of them ended the string literal and the
+    rest ran as code on every load of that file.
+    """
+
+    def test_the_title_and_both_buttons_still_do_their_job(self, state):
+        r = state['wired_node']
+        assert r['wiring']['rename'] == 'node-1', 'double-clicking the title must open the rename prompt'
+        assert r['wiring']['edit'] == 'node-1', 'the pencil button must open the settings panel'
+        assert r['wiring']['left'] == [], 'the cross button must delete the node it belongs to'
+
+    def test_a_built_node_carries_no_inline_handler_at_all(self, state):
+        html = state['wired_node']['wiring']['markup']
+        assert html, 'the harness must report the markup it built'
+        for gone in ('onclick', 'ondblclick', 'onmouseover', 'javascript:'):
+            assert gone not in html, f'{gone} is back in the node markup'
+
+    def test_an_id_that_is_not_id_shaped_gets_a_fresh_one(self, state):
+        """The hostile file asks to be identified by
+        ``x' onmouseover='alert(1)`` — the node is built anyway (the workflow is
+        still usable) but under a minted id, so the string never reaches markup."""
+        node = state['hostile_id']['nodes'][0]
+        assert node['id'] == 'node-1'
+        assert node['params']['platform'] == 'weibo', 'refusing the id must not throw the node away'
+        assert node['elTitle'] == "evil' onclick='alert(2)", 'and the chosen name still shows'
+        html = node['html']
+        for never in ('alert(', 'onmouseover', "onclick='x"):
+            assert never not in html, f'{never} reached the markup'
+
+    def test_user_text_reaches_the_node_only_as_text(self, state):
+        """The summary line is built from params (a keyword, a filename): it goes in
+        through textContent, so a quote or a tag inside it stays visible text."""
+        node = state['hostile_id']['nodes'][0]
+        assert '); alert(3); //' in node['params']['keyword']
+        assert '<script' not in node['html'] and 'alert(3)' not in node['html']
+
+
 @pytest.fixture(scope='module')
 def life(tmp_path_factory):
     tmp = tmp_path_factory.mktemp('js-life')
@@ -258,6 +321,13 @@ def life(tmp_path_factory):
             'add': ['source'],
             'loadByName': 'nope',
             'loadResponse': {'ok': False, 'error': 'missing file'},
+        },
+        {
+            'id': 'open_file_without_nodes',
+            'currentFile': 'good-name',
+            'add': ['source'],
+            'loadByName': 'junk',
+            'loadResponse': {'ok': True, 'workflow': {'settings': {}}},
         },
     ]
     return _run('harness_lifecycle.mjs', [JS_DIR / 'canvas.js', JS_DIR / 'workflow.js'], scenarios, tmp)
@@ -319,3 +389,12 @@ class TestFileLifecycle:
         assert r['currentFile'] == 'old-name', 'a failed open must not forget what is on screen'
         assert len(r['nodes']) == 1, 'the pre-existing canvas must survive untouched'
         assert any('loadfail' in msg for msg in r['toasts'])
+
+    def test_opening_a_file_without_a_node_list_changes_nothing(self, life):
+        """The server answered ok for a JSON file that is not a workflow. Loading
+        used to clear the canvas FIRST and then die on the missing node list, so a
+        stray file cost the user their unsaved work and said only 'load failed'."""
+        r = life['open_file_without_nodes']
+        assert len(r['nodes']) == 1, 'the canvas on screen must survive the bad file'
+        assert r['currentFile'] == 'good-name', 'the next Save must not overwrite the junk file as if it were loaded'
+        assert any('toast.workflowFileInvalid' in msg for msg in r['toasts']), r['toasts']
