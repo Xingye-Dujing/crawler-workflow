@@ -59,7 +59,6 @@ _ZH = {
     'wf.analysis_step': '[分析] {op}：{before} → {after} 行（-{removed}）',
     'wf.tokenize_no_column': '分词失败：未配置 text_column',
     'wf.tokenize_no_input': '分词失败：没有上游数据，请连接数据源或文件上传节点',
-    'wf.tokenize_failed': '分词失败：{err}',
     'wf.tokenize_no_col': '分词失败：列“{col}”不在 {cols} 中',
     'wf.tokenize_done': '[分词] {mode} 已切分 {col} → {n} 行',
     'wf.visualize_failed': '可视化失败：{err}',
@@ -138,7 +137,6 @@ _ZH = {
     'crawl.loginWall': '登录墙：{platform} 的 {where} 被重定向到登录页，已停止本次抓取（仅返回已拿到的数据）',
     'crawl.zhihu.url': '搜索URL: {url}',
     'crawl.zhihu.loaded': '搜索页面已加载，开始滚动加载更多内容...',
-    'crawl.zhihu.cards': '滚动加载完成，共获取到 {n} 个卡片元素',
     'crawl.zhihu.processed': '已处理第 {i} 条结果，当前有效数据: {n} 条',
     'crawl.zhihu.skipped': '第 {i} 条结果无有效内容，已跳过',
     'crawl.zhihu.process_error': '处理第 {i} 条结果时出错: {err}',
@@ -169,7 +167,6 @@ _ZH = {
     'crawl.weibo.page_empty': '  第 {i} 页无有效卡片，跳过',
     'crawl.weibo.page_done': '  第 {i} 页爬取完成，共 {n} 条，累计 {total} 条',
     'crawl.weibo.link_error': '处理搜索链接时出错: {err}',
-    'crawl.weibo.page_visit': '    访问分页: {url}',
     'crawl.weibo.page_timeout': '    页面加载超时，可能无内容',
     'crawl.weibo.max_page': '最大页码: {n}',
     'crawl.weibo.pages_fail': '获取总页数失败: {err}',
@@ -205,15 +202,11 @@ _ZH = {
     'crawl.xhs.page_ready': '[小红书搜索] 初始搜索结果页加载完成',
     'crawl.xhs.page_timeout': '[小红书搜索] 初始内容加载超时，可能没有搜索结果，将继续尝试滚动',
     'crawl.xhs.links': '[小红书搜索] 共收集到 {n} 条笔记链接',
-    'crawl.xhs.note_processing': '[小红书搜索] 正在处理第 {i}/{total} 条笔记: {url}',
     'crawl.xhs.note_ok': '[小红书搜索] 成功提取: {title}...',
-    'crawl.xhs.note_fail': '[小红书搜索] 提取失败: {url}',
     'crawl.xhs.note_error': '[小红书搜索] 处理笔记时出错: {err}',
     'crawl.xhs.finished': '[小红书搜索] 搜索完成，共获取 {n} 条有效笔记数据',
-    'crawl.xhs.collect_start': '[收集链接] 开始滚动收集笔记链接，目标: {n} 条',
     'crawl.xhs.scroll_round': '[收集链接] 第 {i}/{total} 次滚动',
     'crawl.xhs.cards': '[收集链接] 滚动后卡片数量: {n}',
-    'crawl.xhs.collected': '[收集链接] 当前已收集链接数: {n}',
     'crawl.xhs.target_reached': '[收集链接] 已达到目标数量 {n}，停止加载',
     'crawl.xhs.no_growth': '[收集链接] 卡片数量未增加，尝试再次滚动...',
     'crawl.xhs.exhausted': '[收集链接] 页面已无更多内容，停止加载',
@@ -221,7 +214,6 @@ _ZH = {
     'crawl.xhs.detail_visit': '[爬取详情] 正在访问详情页: {url}',
     'crawl.xhs.detail_ready': '[爬取详情] 详情页加载完成',
     'crawl.xhs.detail_timeout': '[爬取详情] 详情页加载超时',
-    'crawl.xhs.title': '[爬取详情] 标题: {title}',
     'crawl.xhs.content_len': '[爬取详情] 正文长度: {n} 字',
     'crawl.xhs.author': '[爬取详情] 作者: {author}',
     'crawl.xhs.pub_time': '[爬取详情] 发布时间: {time}',
@@ -301,12 +293,10 @@ _ZH = {
         '本项目不伪装微信客户端去绕过它；而且在浏览器里「这篇没有评论」与「这次没被允许查看」无法区分，'
         '所以宁可不做，也不给你一份看起来正常的空数据。'
     ),
-    'cookie.entryUrl': '登录入口链接（可留空：默认打开该平台登录页；也可粘贴你想为其保存 Cookie 的页面）',
     'cookie.openedEntry': '登录浏览器已打开：{url}',
     'cookie.entryRejected': (
         '该链接不属于 {platform} 的域名，已改用平台登录页（不允许把别的站点的 Cookie 存进本平台的 Cookie 文件）'
     ),
-    'cookie.verifyBtn': '验证 Cookie',
     'cookie.verifying': '正在用已保存的 Cookie 试探该平台…',
     'cookie.verifyFailed': '验证失败：{err}',
     'cookie.verify.ok': '{platform} 的 Cookie 可用',
@@ -332,7 +322,6 @@ _ZH = {
     'store.workflow_saved': '工作流已保存：{path}',
     'store.dataset_saved': '文件已持久化：{name}（{rows} 行，id {did}）',
     'store.datasets_bound': '工作流 {wf} 已绑定 {n} 个上传文件',
-    'ds.tooManyRows': '文件有 {n} 行，超过单文件上限 {limit} 行',
     'ds.corrupt': '数据集 {did} 读不出来（记录已损坏），请重新上传',
     'ds.purged': '已清理 {days} 天未使用且无工作流引用的文件：{n} 个',
     'ds.purge_result': '清理孤立文件 {n} 个，保留 {kept} 个仍在使用的文件',
@@ -372,7 +361,6 @@ _ZH = {
     'crawl.debug.card_len': '卡片 {i}：正文长度={v}',
     'crawl.debug.card_metrics': '卡片 {i}：转发={f} 评论={c} 点赞={l}',
     'crawl.debug.card_images': '卡片 {i}：图片={n} 张',
-    'crawl.debug.page_list_missing': '未找到页码列表，可能只有一页',
     'crawl.debug.pager_missing': '未检测到分页按钮，只有一页',
     'crawl.debug.content_retry': '正文未提取到，稍后重试一次',
     # ── 参数校验 / 接口错误（会直接显示在提示条里） ────────────
@@ -429,7 +417,6 @@ _ZH = {
     'api.columnMissing': '数据里没有这一列：{column}',
     'api.needLabeledRows': '至少需要 10 行带标签的数据，当前只有 {n} 行',
     'api.noSourceTable': '所选节点都没有可用的数据表',
-    'api.badNumber': '参数 {name} 不是有效数字：{value}',
     'api.badRequest': '请求格式不对：{what}',
     # ── 运行时设置校验 ────────────────────────────────────────
     'set.driverMissing': '驱动文件不存在：{path}',
@@ -471,7 +458,6 @@ _ZH = {
     'resume.empty': '续跑节点：运行 {rid} 的节点 {nid} 没有可读取的数据行',
     'resume.loaded': '续跑节点：载入运行 {rid} 中节点 {nid} 的 {n} 行',
     'api.runNotFound': '找不到运行记录：{rid}',
-    'api.resumeNoNode': '这次运行里没有可续跑的节点输出',
     # ── 自动清理（housekeeping） ──────────────────────────────
     'housekeeping.done': (
         '自动清理：删除 {runs} 条过期运行记录、{files} 个孤立文件（另回收 {cache} 条模型缓存、{seen} 条去重记录）'
@@ -502,7 +488,6 @@ _EN = {
     'wf.analysis_step': '[Analysis] {op}: {before} -> {after} rows (-{removed})',
     'wf.tokenize_no_column': 'Tokenize failed: text_column not configured',
     'wf.tokenize_no_input': 'Tokenize failed: no upstream data — connect a data source or an upload node',
-    'wf.tokenize_failed': 'Tokenize failed: {err}',
     'wf.tokenize_no_col': 'Tokenize failed: column "{col}" not found in {cols}',
     'wf.tokenize_done': '[Tokenize] {mode} segmented {col} -> {n} rows',
     'wf.visualize_failed': 'Visualize failed: {err}',
@@ -590,7 +575,6 @@ _EN = {
     ),
     'crawl.zhihu.url': 'Search URL: {url}',
     'crawl.zhihu.loaded': 'Search page loaded, scrolling for more content...',
-    'crawl.zhihu.cards': 'Scrolling done, {n} card elements collected',
     'crawl.zhihu.processed': 'Processed result {i}, valid so far: {n}',
     'crawl.zhihu.skipped': 'Result {i} has no usable content, skipped',
     'crawl.zhihu.process_error': 'Error processing result {i}: {err}',
@@ -621,7 +605,6 @@ _EN = {
     'crawl.weibo.page_empty': '  Page {i} has no usable cards, skipping',
     'crawl.weibo.page_done': '  Page {i} done: {n} rows, {total} accumulated',
     'crawl.weibo.link_error': 'Error processing search link: {err}',
-    'crawl.weibo.page_visit': '    Visiting page: {url}',
     'crawl.weibo.page_timeout': '    Page load timed out, possibly empty',
     'crawl.weibo.max_page': 'Max page number: {n}',
     'crawl.weibo.pages_fail': 'Could not determine page count: {err}',
@@ -657,15 +640,11 @@ _EN = {
     'crawl.xhs.page_ready': '[XHS search] Initial results page loaded',
     'crawl.xhs.page_timeout': '[XHS search] Initial content timed out — may be no results, still scrolling',
     'crawl.xhs.links': '[XHS search] Collected {n} note links',
-    'crawl.xhs.note_processing': '[XHS search] Processing note {i}/{total}: {url}',
     'crawl.xhs.note_ok': '[XHS search] Extracted: {title}...',
-    'crawl.xhs.note_fail': '[XHS search] Extraction failed: {url}',
     'crawl.xhs.note_error': '[XHS search] Error processing note: {err}',
     'crawl.xhs.finished': '[XHS search] Done, {n} valid notes collected',
-    'crawl.xhs.collect_start': '[Collect links] Scrolling for note links, target {n}',
     'crawl.xhs.scroll_round': '[Collect links] Scroll {i}/{total}',
     'crawl.xhs.cards': '[Collect links] Cards after scroll: {n}',
-    'crawl.xhs.collected': '[Collect links] Links collected so far: {n}',
     'crawl.xhs.target_reached': '[Collect links] Target of {n} reached, stopping',
     'crawl.xhs.no_growth': '[Collect links] Card count did not grow, scrolling again...',
     'crawl.xhs.exhausted': '[Collect links] No more content on the page, stopping',
@@ -673,7 +652,6 @@ _EN = {
     'crawl.xhs.detail_visit': '[Note detail] Opening detail page: {url}',
     'crawl.xhs.detail_ready': '[Note detail] Detail page loaded',
     'crawl.xhs.detail_timeout': '[Note detail] Detail page timed out',
-    'crawl.xhs.title': '[Note detail] Title: {title}',
     'crawl.xhs.content_len': '[Note detail] Content length: {n} characters',
     'crawl.xhs.author': '[Note detail] Author: {author}',
     'crawl.xhs.pub_time': '[Note detail] Publish time: {time}',
@@ -762,12 +740,9 @@ _EN = {
         'indistinguishable from "this visit was not allowed to look", so an empty-looking dataset would be worse '
         'than no dataset.'
     ),
-    'cookie.entryUrl': 'Custom login entry (optional: empty opens the platform login page; paste any page you want '
-    'the cookie captured for)',
     'cookie.openedEntry': 'Login browser opened at: {url}',
     'cookie.entryRejected': 'That link is not on a {platform} domain, so the platform login page was used instead '
     '(another site\u2019s cookies must never be stored in this platform\u2019s cookie file)',
-    'cookie.verifyBtn': 'Verify cookie',
     'cookie.verifying': 'Probing this platform with the stored cookie\u2026',
     'cookie.verifyFailed': 'Verification failed: {err}',
     'cookie.verify.ok': 'The stored {platform} cookie works',
@@ -794,7 +769,6 @@ _EN = {
     'store.workflow_saved': 'Workflow saved: {path}',
     'store.dataset_saved': 'File stored: {name} ({rows} rows, id {did})',
     'store.datasets_bound': 'Workflow {wf} bound to {n} uploaded file(s)',
-    'ds.tooManyRows': 'That file has {n} rows, over the per-file limit of {limit}',
     'ds.corrupt': 'Dataset {did} could not be read (its records are damaged) — upload it again',
     'ds.purged': 'Removed {n} file(s) unused for {days} days and referenced by no workflow',
     'ds.purge_result': 'Removed {n} orphaned file(s), kept {kept} still in use',
@@ -832,7 +806,6 @@ _EN = {
     'crawl.debug.card_len': 'card {i}: text length={v}',
     'crawl.debug.card_metrics': 'card {i}: reposts={f} comments={c} likes={l}',
     'crawl.debug.card_images': 'card {i}: images={n}',
-    'crawl.debug.page_list_missing': 'No page list found — probably a single page',
     'crawl.debug.pager_missing': 'No pager button found — single page',
     'crawl.debug.content_retry': 'Content not extracted yet — retrying once',
     # ── argument validation / API errors (surfaced in toasts) ──
@@ -890,7 +863,6 @@ _EN = {
     'api.columnMissing': 'No such column in the data: {column}',
     'api.needLabeledRows': 'At least 10 labelled rows are needed, this data has {n}',
     'api.noSourceTable': 'None of the selected nodes could supply a table',
-    'api.badNumber': 'Parameter {name} is not a number: {value}',
     'api.badRequest': 'Malformed request: {what}',
     # ── runtime settings validation ───────────────────────────
     'set.driverMissing': 'Driver file does not exist: {path}',
@@ -938,7 +910,6 @@ _EN = {
     'resume.empty': 'Resume node: node {nid} of run {rid} has no stored rows',
     'resume.loaded': 'Resume node: loaded {n} rows from node {nid} of run {rid}',
     'api.runNotFound': 'No such run: {rid}',
-    'api.resumeNoNode': 'That run has no node output to resume from',
     # ── housekeeping ──────────────────────────────────────────
     'housekeeping.done': (
         'Housekeeping: dropped {runs} expired run record(s) and {files} orphaned file(s) '

@@ -217,3 +217,48 @@ class TestCatalogueHealth:
         finally:
             del i18n._EN['temp.audit']
             assert audit() == []
+
+
+class TestKeyReachability:
+    """A message nobody can reach is a bug report that will never be written.
+
+    zh/en parity (``audit``) only proves both languages hold the same keys, so a
+    key left behind by a removed feature — or a typo that no call site ever
+    matches — passes that check forever. Twelve such keys survived here until the
+    WeChat comment code was deleted, which is why this direction is now tested
+    too.
+    """
+
+    # Keys assembled at runtime cannot appear as a literal in any source file.
+    DYNAMIC_PREFIXES = (
+        'cookie.',  # services/cookie_flow.py: t(f'cookie.{platform}.purpose')
+        'comment.status.',  # app.py: t(f'comment.status.{status}')
+    )
+
+    @staticmethod
+    def _sources():
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        files = list((root / 'backend').rglob('*.py')) + list((root / 'backend' / 'static').rglob('*.js'))
+        files += list((root / 'tests').rglob('*.py'))
+        return '\n'.join(f.read_text(encoding='utf-8', errors='replace') for f in files if f.name != 'i18n.py')
+
+    def _unreachable(self):
+        sources = self._sources()
+        dead = []
+        for key in i18n._ZH:
+            if key.startswith(self.DYNAMIC_PREFIXES):
+                continue
+            if f"'{key}'" not in sources:
+                dead.append(key)
+        return dead
+
+    def test_every_static_key_is_referenced_somewhere(self):
+        assert self._unreachable() == []
+
+    def test_the_dynamic_allowlist_is_still_needed(self):
+        """If a dynamic family ever stops being built at runtime, it must be
+        checked literally like everything else rather than hide in the allowlist."""
+        sources = self._sources()
+        assert "f'cookie." in sources and "f'comment.status." in sources
