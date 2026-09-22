@@ -62,16 +62,32 @@ class El:
 class FakeDriver:
     """Serves the search page and the video page from fixed fixture maps."""
 
-    def __init__(self, cards, facts=None, body='为你找到以下结果', video_body=INFO_TEXT, missing_box=False):
+    def __init__(
+        self,
+        cards,
+        facts=None,
+        body='为你找到以下结果',
+        video_body=INFO_TEXT,
+        missing_box=False,
+        comment_items=None,
+        comment_count='2099',
+    ):
         self.cards = cards
         self.facts = facts if facts is not None else _default_facts()
         self.body = body
         self.video_body = video_body
         self.missing_box = missing_box
+        # The rows the comment panel holds. A rendered list PERSISTS — every read
+        # returns the same rows until a scroll brings more — so the crawler has
+        # to stop on "nothing new came back". An empty list here models a video
+        # whose panel never filled, which is a failed read, not an empty video.
+        self.comment_items = (
+            comment_items if comment_items is not None else [El(COMMENT_BLOCK), El('路人\n第二条评论\n3天前·广东\n1')]
+        )
+        self.comment_count = comment_count
         self.visited = []
         self.current_url = 'https://www.douyin.com/'
         self.scrolls = 0
-        self.comment_rounds = 0
 
     def get(self, url):
         self.visited.append(url)
@@ -86,6 +102,8 @@ class FakeDriver:
             return El('')
         if selector == '[data-e2e="comment-list"]':
             return El('')
+        if selector == '[data-e2e="feed-comment-icon"]':
+            return El(self.comment_count)
         raise RuntimeError(f'no element {selector}')
 
     def find_elements(self, by, selector):
@@ -94,10 +112,7 @@ class FakeDriver:
         if selector == DouyinCrawler.SEARCH_BUTTON:
             return [El('')]
         if selector == '[data-e2e="comment-item"]':
-            self.comment_rounds += 1
-            # Two rows the first time, the same two plus nothing after: the walk
-            # must stop on "no new rows", not on the round budget.
-            return [El(COMMENT_BLOCK), El('路人\n第二条评论\n3天前·广东\n1')] if self.comment_rounds == 1 else []
+            return list(self.comment_items)
         return []
 
     def execute_script(self, script, *args):
@@ -297,6 +312,31 @@ class TestComments:
         rows, status = session.crawl_douyin('https://www.douyin.com/jingxuan', 5)
         assert rows == [] and status == DEAD
         assert driver.visited == []
+
+    def test_a_panel_that_never_shows_items_is_not_reported_as_success(self, make_crawler):
+        """Measured on the live site: the list container mounts before its first
+        comment renders. Reading zero rows right then used to return ``ok`` with
+        an empty table for a video reporting 6 295 comments — the exact shape of
+        false data this project refuses.
+        """
+        crawler, driver = make_crawler(cards=[], comment_items=[])
+        session = self._session(driver)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 40)
+        assert rows == []
+        assert status == BLOCKED, 'a video with a non-zero counter and no readable list is a failed read'
+
+    def test_a_video_that_really_has_no_comments_is_an_answer(self, make_crawler):
+        crawler, driver = make_crawler(cards=[], comment_items=[], comment_count='0')
+        session = self._session(driver)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 40)
+        assert rows == [] and status == OK
+
+    def test_items_that_yield_no_readable_text_are_a_failure_too(self, make_crawler):
+        # The panel is full of nodes; not one of them carries comment text.
+        crawler, driver = make_crawler(cards=[], comment_items=[El(''), El('   ')])
+        session = self._session(driver)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 40)
+        assert rows == [] and status == BLOCKED
 
     def test_a_blocked_page_never_becomes_an_empty_table(self, make_crawler):
         crawler, driver = make_crawler(cards=[], video_body='当前请求存在异常，暂时限制访问')

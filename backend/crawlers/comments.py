@@ -551,17 +551,20 @@ class CommentSession:
         if page_is_blocked(self._body_head()):
             return [], BLOCKED
         reported = self._node_text('[data-e2e="feed-comment-icon"]')
-        if not mounted and not reported:
-            # Neither a panel nor the counter that would explain its absence:
-            # that is not "no comments", and reporting it as one would hide a
-            # dead session behind an empty table.
-            self.log(t('comment.dyNoPanel', url=target))
-            return [], BLOCKED
         if not mounted:
-            # The panel stayed closed but the video says how many comments it
-            # has — zero means the author turned them off, which is an answer.
+            if not reported:
+                # Neither a panel nor the counter that would explain its absence:
+                # that is not "no comments", and reporting it as one would hide a
+                # dead session behind an empty table.
+                self.log(t('comment.dyNoPanel', url=target))
+                return [], BLOCKED
             self.log(t('comment.dyNone', url=target, n=cn_count(reported)))
-            return [], OK
+            if cn_count(reported) == 0:
+                # The counter says none exist: an answer, not a failed read.
+                return [], OK
+            # The video says it has comments and the list never opened — a page
+            # we could not read, which must never arrive as an empty table.
+            return [], BLOCKED
         seen, rows = set(), []
         for _round in range(40):
             found = []
@@ -580,19 +583,23 @@ class CommentSession:
             if not self._scroll_douyin_panel():
                 break
             self.nap(1.5)
+        if not rows:
+            # A panel of items that produced nothing is a parser or page problem,
+            # never a fact about the video.
+            self.log(t('comment.dyNoPanel', url=target))
+            return [], BLOCKED
         return (rows[:limit] if limit else rows), OK
 
     def _wait_for_douyin_panel(self, timeout: float = 24.0) -> bool:
-        """Poll for the comment panel instead of sleeping a fixed amount.
+        """Poll until the comment list actually holds items.
 
-        Measured: the panel is not there at t=4s and is at t≈11s on a cold
-        route. A fixed sleep would make every crawl either slow or blind, and a
-        caller-suppressed nap (tests) must not turn a wait into a miss.
+        Measured: the ``[data-e2e="comment-list"]`` container mounts on the route
+        *before* its first comment is rendered, so treating the container as
+        "mounted" let a crawl read an empty list, break out of the loop on the
+        first pass and return zero rows as a success. The item is the evidence.
         """
         ticks = max(1, int(timeout / 2.0))
         for _ in range(ticks):
-            if self._element_or_none('[data-e2e="comment-list"]') is not None:
-                return True
             if self.driver.find_elements('css selector', '[data-e2e="comment-item"]'):
                 return True
             time.sleep(2.0)
