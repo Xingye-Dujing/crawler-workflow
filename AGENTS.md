@@ -165,6 +165,13 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   adopted (a later drag must not collide); both restore paths (`canvas.restoreState` for
   undo/redo and the draft, `WorkflowManager.loadFromJSON` for opening a file) pass the
   file's ids straight through — pinned by `tests/frontend/harness_state.mjs`.
+- **One server at a time, by design (local single-user tool).** `RunStore.__init__` calls
+  `promote_stale_runs()`, which marks every run still `running` as interrupted — it assumes
+  that state was left behind by a dead process. Booting a second instance against the same
+  `data/` therefore interrupts the first one's live run, and the two processes then write
+  the same node rows/cursors. This is documented in README (启动应用) and is the reason
+  `/smoke-verify`'s 5057 boot is only safe when the user's own server is stopped — ask
+  before booting a second one, and never work around it by killing a process on 5000.
 - **Recorded rows are addressed by workflow, never by bare node id.** `_durable_node_rows`
   (app.py) answers a preview/chart/export/studio probe after a refresh or restart from
   `runs.db`; node ids like `node-2` repeat on every canvas, so with no identity it returns
