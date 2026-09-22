@@ -795,6 +795,10 @@ input[type="range"]::-moz-range-thumb {
 .node {
   position: absolute;
   min-width: 220px;
+  /* A node's summary carries user text — a keyword, a filename, a column list —
+     and with no ceiling a long one grew the box past the viewport. min-width alone
+     never bounded it, so a single wide node made the whole page scroll sideways. */
+  max-width: 340px;
   min-height: 80px;
   background: var(--node-bg);
   border: 1px solid var(--line);
@@ -842,6 +846,12 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text-dim);
   text-transform: uppercase;
   font-weight: 500;
+  /* A flex item's default min-width is its content's, so without this the title
+     pushes the action buttons out of the header instead of truncating. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .node-actions {
   display: flex;
@@ -882,8 +892,13 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text-dim);
   line-height: 1.6;
   white-space: pre-wrap;
+  /* pre-wrap still keeps an unbroken run of characters together — a URL, a long
+     filename, a keyword with no spaces in it — and that run widened the node past
+     the viewport. Breaking anywhere costs nothing visually and bounds the box. */
+  overflow-wrap: anywhere;
   overflow-y: auto;
   flex: 1;
+  min-width: 0;
 }
 
 /* Node accents — muted editorial hues, applied as a left rule on the header */
@@ -1630,6 +1645,12 @@ table.history-runs-table tr:hover td {
   align-items: center;
   cursor: pointer;
   user-select: none;
+  /* As a flex item its default min-width is its content's, so a long option label
+     grew the control past the panel instead of letting the value's ellipsis do its
+     job — which reads to the user as a horizontal bar, not as a long name. */
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 /* the real control stays in the DOM for value/change, just never seen */
 .cselect > select {
