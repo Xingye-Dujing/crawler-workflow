@@ -158,6 +158,13 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   forever. Queues are in-memory (a restart drops them) and `tests/conftest.py` clears
   `_RUN_QUEUE` per test, or a parked request would start inside an unrelated test.
   The Execute button is therefore never disabled — it relabels 排队运行 while running.
+- **Recorded rows are addressed by workflow, never by bare node id.** `_durable_node_rows`
+  (app.py) answers a preview/chart/export/studio probe after a refresh or restart from
+  `runs.db`; node ids like `node-2` repeat on every canvas, so with no identity it returns
+  nothing rather than guessing (a stranger's table under the user's own node name is false
+  data with a plausible face). The browser therefore sends `workflow_name` — computed by
+  `workflow.runName()`, which mirrors the backend's precedence: name-node label, then the
+  saved file name.
 - Run-gating UX lives in `workflow.js execute()`: `_confirmCookieBeforeRun` (dialog, skippable via
   the `cookie_confirm_before_run` setting, auto-pass for resume runs); new settings keys need the
   bool branch in `settings_store.save_settings` + both app.js catalogs + `AppSettings` wiring.

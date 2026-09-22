@@ -46,20 +46,26 @@ const sandbox = {
         connections: [],
         getState: () => ({ nodes: {}, connections: [] }),
         toWorkflowJSON: () => ({ nodes: {}, connections: [], settings: {} }),
+        getUpstreamNodeId: (id) => (id === 'node-2' ? 'node-1' : null),
         saveState: () => {},
     },
     RunState: { running: false, setRunning(v) { this.running = v; } },
     /* Lives in app.js; execute() reads the transport choice off it before POSTing. */
     LLMSettings: { payload: () => ({ provider: 'ollama', model: 'qwen3.5:9b', api_key: '' }) },
+    /* Also app.js: the preview panel makes itself draggable on open, which is
+       not what is under test here. */
+    makeDraggable: () => {},
 };
 vm.createContext(sandbox);
-vm.runInContext(src + '\n;globalThis.__wf = { runsManager, workflow };', sandbox);
+vm.runInContext(src + '\n;globalThis.__wf = { runsManager, workflow, dataNodes };', sandbox);
 /* Assigned after the script ran: workflow.js declares showToast itself, and a
    function declaration in the script wins over anything seeded before it. */
 sandbox.showToast = (msg) => captured.toasts.push(String(msg));
 sandbox.fetch = (url, options) => {
     captured.posts.push({ url, body: options && options.body ? JSON.parse(options.body) : null });
-    return Promise.resolve({ json: () => Promise.resolve({ ok: true, removed: true, run_id: 'r-new' }) });
+    return Promise.resolve({
+        json: () => Promise.resolve({ ok: true, removed: true, run_id: 'r-new', rows: [], columns: [], total_rows: 0 }),
+    });
 };
 sandbox.__byId('runs-mgr-body').innerHTML = '';
 const manager = sandbox.__wf.runsManager;
@@ -93,12 +99,28 @@ sandbox.canvas.toWorkflowJSON = () => ({
     connections: sandbox.canvas.connections,
     settings: { mode: 'serial' },
 });
+wf.currentFile = '夜间增量';
 const before = captured.posts.length;
 await wf.execute({ resumeRunId: 'r-int' });
 const resumePost = captured.posts.slice(before).find((p) => p.url === '/api/workflow/execute');
 const beforePlain = captured.posts.length;
 await wf.execute({});
 const plainPost = captured.posts.slice(beforePlain).find((p) => p.url === '/api/workflow/execute');
+
+/* A preview of a node that has not run in this process is answered from the run
+   store, so the request has to carry which workflow the canvas is showing. */
+const beforePreview = captured.posts.length;
+await sandbox.__wf.dataNodes.previewData('node-2');
+const previewPost = captured.posts.slice(beforePreview).find((p) => p.url === '/api/data/preview');
+
+/* The name a run is filed under: a name node's label beats the saved file name,
+   which beats nothing. */
+sandbox.canvas.nodes.n9 = { id: 'n9', type: 'name', params: { workflow_name: '周报表' } };
+const nameFromNode = wf.runName();
+delete sandbox.canvas.nodes.n9;
+const nameFromFile = wf.runName();
+wf.currentFile = '';
+const nameWithoutEither = wf.runName();
 
 /* The report button may name the run only by id: a workflow name is user text,
    and one double quote in it would close the onclick attribute and let whatever
@@ -114,6 +136,8 @@ process.stdout.write(
         toasts: cancelToasts,
         resumeBody: resumePost ? resumePost.body : null,
         plainBody: plainPost ? plainPost.body : null,
+        previewBody: previewPost ? previewPost.body : null,
+        runName: { fromNode: nameFromNode, fromFile: nameFromFile, none: nameWithoutEither },
         // Whatever the two execute() calls said — a refused preflight shows here
         // rather than as a missing POST with no reason attached.
         executeToasts: captured.toasts.slice(cancelToasts.length),

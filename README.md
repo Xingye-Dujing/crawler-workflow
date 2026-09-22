@@ -314,7 +314,7 @@ crawler_workflow/
 | `/api/data/datasets` | GET | 列出已注册数据集 |
 | `/api/data/datasets/<id>` | GET / DELETE | 查看 / 删除单个数据集 |
 | `/api/data/inspect` | POST | 查看数据集的空值/类型/重复行统计 |
-| `/api/data/preview` | POST | 分页查看数据集的原始表格（数据预览面板） |
+| `/api/data/preview` | POST | 分页查看数据集的原始表格（数据预览面板）；按 `node_id` 取历史行时须带 `workflow_name`——`node-2` 在每个画布上都存在，只凭 id 不猜（重启后没有身份就明确回答"无记录"） |
 | `/api/data/clear` | POST | 清空内存中的数据集缓存 |
 
 ### 分析 / 可视化 / 导出（独立于工作流，可单独调用）
@@ -336,7 +336,7 @@ crawler_workflow/
 | 端点 | 方法 | 描述 |
 |------|------|------|
 | `/api/studio/dataset` | POST | 把画布任意节点/数据集的完整表格交给 Studio（支持多源合并） |
-| `/api/studio/sources` | POST | 预检哪些节点当前有可用的表格数据 |
+| `/api/studio/sources` | POST | 预检哪些节点当前有可用的表格数据（与预览同一套取行规则：带 `workflow_name`，不按裸 id 猜） |
 | `/api/studio/save-image` | POST | 把 Studio 成品图保存为 PNG 到导出目录 |
 
 ### 统计与历史

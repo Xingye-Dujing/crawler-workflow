@@ -556,3 +556,19 @@ class TestRunRecordsPanel:
         body = runsmgr['plainBody']
         assert body['resume_run_id'] == ''
         assert body['queue'] is True, 'the queue is for ordinary presses only'
+
+    def test_every_request_that_needs_rows_names_its_workflow(self, runsmgr):
+        """A recorded run is looked up by workflow name after a restart, and
+        ``node-2`` exists on every canvas — an unnamed request would have to be
+        answered by guessing."""
+        assert runsmgr['resumeBody']['workflow_name'] == '夜间增量'
+        assert runsmgr['plainBody']['workflow_name'] == '夜间增量'
+        preview = runsmgr['previewBody']
+        assert preview['node_id'] == 'node-1', 'the preview reads the node it sits downstream of'
+        assert preview['workflow_name'] == '夜间增量'
+
+    def test_the_name_node_label_decides_what_a_run_is_called(self, runsmgr):
+        """Same precedence the backend applies when it records the run: label,
+        then the saved file name. Anything else and the two sides file the same
+        work under two different names."""
+        assert runsmgr['runName'] == {'fromNode': '周报表', 'fromFile': '夜间增量', 'none': ''}

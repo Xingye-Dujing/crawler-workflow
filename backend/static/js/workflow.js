@@ -136,6 +136,22 @@ const workflow = {
         showToast(I18n.t('toast.newWorkflow'));
     },
 
+    /* The name this canvas's runs are filed under: a name node's label wins,
+       then the saved file name — the same precedence the backend applies when
+       it records a run. Preview and the studio must ask for rows by the name
+       the run was STORED under, or a reopened canvas asks for nothing and the
+       server would have to guess by node id (which repeats on every canvas). */
+    runName() {
+        var nodes = canvas.nodes || {};
+        for (var id in nodes) {
+            if (!Object.prototype.hasOwnProperty.call(nodes, id)) continue;
+            if (nodes[id].type !== 'name') continue;
+            var label = String((nodes[id].params || {}).workflow_name || '').trim();
+            if (label) return label;
+        }
+        return this.currentFile || '';
+    },
+
     async _confirmCookieBeforeRun(opts) {
         /* Returns true when the run may proceed (no crawler nodes, the prompt
            disabled, a resume — the user is already mid "refresh cookie and
@@ -235,7 +251,7 @@ const workflow = {
                     workflow: workflowData,
                     llm: llm,
                     lang: I18n.lang,
-                    workflow_name: this.currentFile || '',
+                    workflow_name: this.runName(),
                     /* The resume banner's "continue" passes the interrupted
                        run's id here: the backend reuses that run (same node
                        rows, same crawler cursors) instead of starting a fresh
@@ -1302,6 +1318,11 @@ var dataNodes = {
             if (node.type === 'output' && node.params.format) {
                 payload.preview_format = node.params.format;
             }
+        }
+        if (payload.node_id) {
+            /* Which workflow's rows this is: recorded rows are looked up by name
+               once the live results are gone (a refresh, a server restart). */
+            payload.workflow_name = workflow.runName();
         }
         await dataPreview.open(payload);
     },

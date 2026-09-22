@@ -501,12 +501,21 @@ var chartStudio = {
             return node.params && node.params.dataset_id ? { dataset_id: node.params.dataset_id } : null;
         }
         if (['source', 'process', 'analysis', 'tokenize'].indexOf(node.type) >= 0) {
-            return { node_id: nodeId };
+            return this._withName({ node_id: nodeId });
         }
 
         var upstream = canvas.getUpstreamNodeId(nodeId);
         if (!upstream) return null;
-        return { node_id: upstream };
+        return this._withName({ node_id: upstream });
+    },
+
+    /* Recorded rows are looked up by workflow name once the live results are
+       gone, so the studio asks with the same identity the preview does. */
+    _withName(payload) {
+        if (typeof workflow !== 'undefined' && workflow.runName) {
+            payload.workflow_name = workflow.runName();
+        }
+        return payload;
     },
 
     /* ── Hand a dataset to the studio ────────────────────────────────────── */

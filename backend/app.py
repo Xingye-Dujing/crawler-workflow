@@ -280,19 +280,31 @@ def _json_safe_records(df: pd.DataFrame, limit: int = None) -> list:
     return page.astype(object).where(pd.notna(page), None).to_dict('records')
 
 
-def _durable_node_rows(node_id: str) -> list:
+def _durable_node_rows(node_id: str, workflow_name: str = '') -> list:
     """Rows this node produced in an earlier run, newest first — or [].
 
     Previews, charts and exports all resolve a node by id, and
     execution_state['results'] only exists while the process has been running
     without a refresh. Everything since then is in the run store, so asking
     there is what keeps a reopened workflow inspectable instead of blank.
+
+    Asking by id alone is the trap: ``node-2`` exists on every canvas ever
+    drawn, so a lookup with no workflow attached to it would happily return a
+    stranger's rows — a table that looks correct and belongs to another
+    workflow. So an identity is required: the request's own workflow name (what
+    the browser is showing, which beats what this process happened to run last),
+    or the fingerprint/name the last run recorded. With neither, the answer is
+    empty, and the panel says there is nothing recorded.
     """
-    return get_run_store().latest_rows(
-        node_id,
-        fingerprint=execution_state.get('fingerprint') or '',
-        workflow_name=execution_state.get('workflow_name') or '',
-    )[1]
+    store = get_run_store()
+    requested = str(workflow_name or '').strip()
+    if requested:
+        return store.latest_rows(node_id, workflow_name=requested)[1]
+    fingerprint = execution_state.get('fingerprint') or ''
+    ambient = execution_state.get('workflow_name') or ''
+    if not fingerprint and not ambient:
+        return []
+    return store.latest_rows(node_id, fingerprint=fingerprint, workflow_name=ambient)[1]
 
 
 def _resolve_dataframe(payload: dict) -> pd.DataFrame:
@@ -313,7 +325,7 @@ def _resolve_dataframe(payload: dict) -> pd.DataFrame:
             return pd.DataFrame(result)
         # Nothing live: fall back to the rows this node last filed away, which
         # is also the only copy left after a restart.
-        rows = _durable_node_rows(node_id)
+        rows = _durable_node_rows(node_id, payload.get('workflow_name') or '')
         if rows:
             return pd.DataFrame(rows)
         raise KeyError(f'No tabular result available for node: {node_id}')
@@ -4105,7 +4117,7 @@ def _probe_source(payload: dict | None) -> tuple[bool, int, str, list]:
 
     # Nothing live: fall back to the rows the node last stored, so a probe right
     # after a page refresh answers instead of reporting "no data".
-    stored = _durable_node_rows(node_id)
+    stored = _durable_node_rows(node_id, payload.get('workflow_name') or '')
     if stored:
         cols = list(stored[0].keys()) if isinstance(stored[0], dict) else []
         return True, len(stored), '', [str(c) for c in cols[:PROBE_MAX_COLUMNS]]

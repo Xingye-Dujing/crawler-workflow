@@ -253,6 +253,54 @@ class TestInspectAndPreview:
         assert response.get_json()['ok'] is False
 
 
+class TestRecordedRowsIdentity:
+    """A preview of a node that is not live any more reads the rows that run
+    filed away — by workflow, never by node id alone.
+
+    ``node-2`` exists on every canvas ever drawn. After a restart the in-memory
+    results are gone, and the only thing left to ask with is the name the run was
+    recorded under; guessing on a bare id has shown one workflow's table inside
+    another one's node.
+    """
+
+    @pytest.fixture
+    def two_runs(self, app_module):
+        store = app_module._RUN_STORE
+        for run_id, name, value in (('runA', '甲流程', '来自甲'), ('runB', '乙流程', '来自乙')):
+            store.start_run(run_id, name, f'fp-{run_id}')
+            store.begin_node(run_id, 'node-2', 'process', title='处理', fingerprint=f'n2-{run_id}')
+            store.replace_rows(run_id, 'node-2', [{'值': value}])
+            store.finish_run(run_id, 'completed')
+        return store
+
+    def test_a_bare_node_id_is_not_an_identity_after_a_restart(self, client, app_module, two_runs):
+        assert app_module.execution_state['fingerprint'] == ''
+        body = client.post('/api/data/preview', json={'node_id': 'node-2'}).get_json()
+        assert body['ok'] is False, "no guess may be presented as this node's data"
+        assert 'node-2' in body['error']
+
+    def test_the_named_workflow_is_the_one_whose_rows_come_back(self, client, two_runs):
+        rows = client.post('/api/data/preview', json={'node_id': 'node-2', 'workflow_name': '乙流程'}).get_json()
+        assert rows['ok'] is True
+        assert [r['值'] for r in rows['rows']] == ['来自乙']
+
+    def test_the_last_run_of_this_process_still_answers_unnamed(self, client, app_module, two_runs):
+        """The ambient identity is enough while the server has just run it — the
+        canvas that pressed Run does not have to repeat itself."""
+        app_module.execution_state['fingerprint'] = 'fp-runA'
+        app_module.execution_state['workflow_name'] = '甲流程'
+        rows = client.post('/api/data/preview', json={'node_id': 'node-2'}).get_json()
+        assert [r['值'] for r in rows['rows']] == ['来自甲']
+
+    def test_a_requested_name_beats_whatever_was_run_last(self, client, app_module, two_runs):
+        """Open 乙 and preview while 甲 is still the last run of this process:
+        the answer must follow the canvas on screen, not the older one."""
+        app_module.execution_state['fingerprint'] = 'fp-runA'
+        app_module.execution_state['workflow_name'] = '甲流程'
+        rows = client.post('/api/data/preview', json={'node_id': 'node-2', 'workflow_name': '乙流程'}).get_json()
+        assert [r['值'] for r in rows['rows']] == ['来自乙']
+
+
 class TestClear:
     def test_clear_drops_orphans_but_keeps_files_a_workflow_still_reads(self, client, app_module, paste):
         orphan = paste([{'a': 1}], name='orphan.csv')
