@@ -404,7 +404,18 @@ const workflow = {
                             document.getElementById('status-text').textContent = I18n.t('status.completed');
                         }
                         document.getElementById('status-nodes').textContent = I18n.t('status.nodes') + Object.keys(canvas.nodes).length;
-                        showToast(I18n.t('toast.workflowCompleted'));
+                        /* 'Completed' has to mean completed. A run that was
+                           stopped, or one where a node failed, used to toast the
+                           same word in the same second the resume banner
+                           appeared — the screen promising a result it had just
+                           admitted was unfinished. */
+                        var doneNodes = Number(result.completed_nodes) || 0;
+                        var plannedNodes = Number(result.total_nodes) || 0;
+                        showToast(
+                            plannedNodes > 0 && doneNodes >= plannedNodes
+                                ? I18n.t('toast.workflowCompleted')
+                                : I18n.t('toast.workflowEnded').replace('{done}', doneNodes).replace('{total}', plannedNodes)
+                        );
                         I18n.apply();
                         stats.refresh();
                         /* Whatever left nodes unfinished is now worth offering

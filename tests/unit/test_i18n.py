@@ -13,6 +13,7 @@ Language is thread-local and workflow runs live in worker threads, so that
 boundary is pinned too.
 """
 
+import re
 import threading
 
 import pytest
@@ -286,3 +287,71 @@ class TestKeyReachability:
         checked literally like everything else rather than hide in the allowlist."""
         sources = self._sources()
         assert "f'cookie." in sources and "f'comment.status." in sources
+
+    #: A hand-written ``t('key')`` whose key the catalogue does not hold.
+    _CALL = re.compile(r"\bt\(\s*['\"]([A-Za-z][A-Za-z0-9_.]*)['\"]")
+
+    def test_every_called_key_exists_in_the_catalogue(self):
+        """The other direction of the same mistake — and the louder one.
+
+        ``t()`` answers an unknown key by printing the key, so a typo is not a
+        crash but a console line the user reads as gibberish. Seven call sites
+        shipped that way (``crawl.resume_have`` on every resumed crawl,
+        ``ds.too_many_rows`` as an error message, three dedupe notes) because
+        parity and reachability are both silent about a key that is *missing*.
+        """
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        missing = []
+        for path in sorted((root / 'backend').rglob('*.py')):
+            if path.name == 'i18n.py':
+                continue
+            for number, line in enumerate(path.read_text(encoding='utf-8', errors='replace').splitlines(), 1):
+                for key in self._CALL.findall(line):
+                    if key not in i18n._ZH:
+                        missing.append(f'{path.name}:{number} {key}')
+        assert missing == [], 'unknown message keys: ' + ', '.join(missing)
+
+    def test_the_missing_key_check_would_actually_fire(self):
+        """A guard that cannot fail is not a guard."""
+        assert self._CALL.findall("logger.info(t('no.such.key', n=1))") == ['no.such.key']
+        # ``get(``/``dict(``/``format(`` all end in t( — the word boundary is what
+        # keeps this check from drowning in false positives.
+        assert self._CALL.findall("data.get('workflow'); out.format('x'); d=dict(y)") == []
+
+
+class TestNoDuplicateKeys:
+    """A key written twice in one catalogue silently keeps the last spelling.
+
+    Parity cannot see it (both languages can hold the same duplicate and still
+    match each other), and the first message becomes unreachable text that no
+    call site will ever print — the exact accident of editing this file: a
+    rename landed as a new line next to the old one, and the run kept printing
+    the stale wording.
+    """
+
+    @staticmethod
+    def _key_lists():
+        import ast
+        from pathlib import Path
+
+        source = (Path(__file__).resolve().parents[2] / 'backend' / 'i18n.py').read_text(encoding='utf-8')
+        found = {}
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.Assign) and getattr(node.targets[0], 'id', '') in ('_ZH', '_EN'):
+                found[node.targets[0].id] = [key.value for key in node.value.keys]
+        return found
+
+    def test_neither_catalogue_defines_a_key_twice(self):
+        lists = self._key_lists()
+        assert set(lists) == {'_ZH', '_EN'}, 'the guard stopped finding the catalogues'
+        for name, keys in lists.items():
+            seen = {key for key in keys if keys.count(key) > 1}
+            assert not seen, f'{name} declares duplicated keys: {sorted(seen)}'
+
+    def test_the_two_catalogues_hold_the_same_multiset_of_keys(self):
+        lists = self._key_lists()
+        # Not just the same *set*: the same count, so a duplicate on one side
+        # only cannot pass as parity.
+        assert sorted(lists['_ZH']) == sorted(lists['_EN'])

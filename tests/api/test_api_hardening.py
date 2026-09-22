@@ -235,3 +235,82 @@ class TestResultSnapshot:
         assert client.get('/api/stats/summary').get_json()['summary'] == {
             'node-1': {'count': 1, 'sample_keys': ['title']}
         }
+
+
+class TestRunPayloadShape:
+    """A workflow the engine cannot walk is the caller's mistake, in JSON.
+
+    ``WorkflowEngine`` iterates ``nodes`` expecting dicts, so a list of strings
+    or a numeric ``settings`` died with an AttributeError inside the worker
+    thread — which the browser received as an HTML error page, and a *queued*
+    request would have died minutes later in a thread nobody was watching.
+    """
+
+    @pytest.mark.parametrize(
+        'workflow',
+        [
+            [],
+            'not-a-workflow',
+            {'nodes': 'node-1'},
+            {'nodes': ['node-1']},
+            {'nodes': [{'id': 'node-1'}], 'settings': 5},
+        ],
+    )
+    def test_a_workflow_that_cannot_be_walked_is_a_400(self, client, workflow):
+        response = client.post('/api/workflow/execute', json={'workflow': workflow})
+        assert response.status_code == 400, response.get_json()
+        payload = response.get_json()
+        assert payload['ok'] is False and payload['error']
+        assert response.mimetype == 'application/json'
+
+    def test_the_same_payload_is_refused_at_the_door_when_a_run_is_busy(self, client, app_module):
+        """Queueing must not become a way to smuggle a broken request past the
+        check and fail later as a mystery."""
+        app_module.execution_state['running'] = True
+        response = client.post('/api/workflow/execute', json={'workflow': [{'id': 'node-1'}]})
+        assert response.status_code == 400
+        assert app_module.queue_snapshot() == [], 'a request that cannot run must not enter the queue'
+
+    def test_a_broken_queued_request_cannot_strand_the_ones_behind_it(self, client, app_module, monkeypatch):
+        """Drain-time defence: an entry that dies is skipped, the next still runs.
+
+        Without the guard the exception escaped the finishing run's ``finally``,
+        so one malformed request took the whole queue down with it — after the
+        browser had been told its run was parked and would start.
+        """
+        attempts = []
+
+        def pretend_to_begin(data, lang):
+            name = data.get('workflow_name', '')
+            attempts.append(name)
+            if name == 'broken':
+                raise RuntimeError('boom')
+            return {'status': 200, 'body': {'ok': True, 'run_id': 'r-' + name}}
+
+        monkeypatch.setattr(app_module, '_begin_run', pretend_to_begin)
+        app_module._RUN_QUEUE.extend(
+            [
+                {'id': 'a', 'workflow_name': 'broken', 'data': {'workflow_name': 'broken'}, 'lang': 'zh'},
+                {'id': 'b', 'workflow_name': 'next', 'data': {'workflow_name': 'next'}, 'lang': 'zh'},
+            ]
+        )
+        app_module._start_next_queued()
+        assert attempts == ['broken', 'next'], 'the second request must not be stranded by the first'
+        assert app_module.queue_snapshot() == []
+
+
+class TestNumericSettingsFields:
+    def test_infinity_in_a_timeout_is_a_warning_not_a_crash(self, client):
+        # float('inf') parses fine and int() refuses it — OverflowError, which is
+        # neither TypeError nor ValueError and escaped as an HTML 500.
+        for value in ('inf', '1e400', 'nan'):
+            response = client.post('/api/settings', json={'page_load_timeout': value})
+            assert response.status_code == 200, f'{value} answered {response.status_code}'
+            assert response.get_json()['ok'] is True
+        assert client.get('/api/settings').get_json()['settings']['page_load_timeout'] == 40
+
+    def test_the_studio_answers_a_malformed_reference_in_json(self, client):
+        response = client.post('/api/studio/dataset', json={'data': 42})
+        assert response.status_code == 200, 'the picker reads code/error from the body, not the status'
+        payload = response.get_json()
+        assert payload['ok'] is False and payload['code'] == 'no_result'

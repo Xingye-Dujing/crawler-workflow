@@ -141,6 +141,31 @@ class TestVisualizeNode:
         assert 'node-2' not in status['chart_results']
         assert any('Visualize failed' in line for line in status['logs'])
 
+    def test_a_refused_node_never_settles_as_done(self, client, app_module, paste):
+        """The node's own answer is a dict with 'error' — and that must not read
+        as a completed node, let alone a completed run.
+
+        The output and visualize nodes report a refusal instead of raising so
+        their downstream keeps the table; the durable runner used to settle any
+        non-list result DONE, which turned "the file you asked for was never
+        written" into a green run.
+        """
+        ds = _upload(client, paste)
+        workflow = _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 4}),
+                _node('node-2', 'visualize', {'chart_type': 'bar', 'x_field': 'nope', 'y_field': 'nope2'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'viz-failed'})
+        assert _wait(app_module)
+        run = app_module._RUN_STORE.get_run(started.get_json()['run_id'])
+        node = next(entry for entry in run['nodes'] if entry['node_id'] == 'node-2')
+        assert node['status'] == 'failed', f"a refused chart settled as '{node['status']}'"
+        assert 'nope' in (node['error'] or '')
+        assert run['status'] == 'failed', 'a run with a failed node is not completed'
+
 
 class TestOutputFormats:
     @pytest.mark.parametrize(
@@ -334,6 +359,46 @@ class TestStopAndKill:
         run = app_module._RUN_STORE.get_run(run_id)
         assert run['status'] == 'interrupted', 'a stopped run must be resumable, not completed'
         assert run['nodes'][0]['row_count'] > 0, 'everything the stopped crawl kept must stay stored'
+
+    def test_stopping_keeps_the_console_that_explains_it(self, client, app_module, monkeypatch):
+        """Stop used to wipe the console and zero the node counters.
+
+        The consequence was a summary line that read "运行结束（0/0 个节点完成）"
+        for a run that had just finished two nodes, printed into a console the
+        user had been watching — the record of what the run did, deleted by the
+        act of stopping it.
+        """
+        class _Slow:
+            def __init__(self, *a, **k):
+                self._s = None
+
+            def set_sink(self, s):
+                self._s = s
+
+            def search(self, *a, **k):
+                for i in range(500):
+                    if self._s:
+                        self._s({'标题': f'row {i}', '链接': f'https://www.zhihu.com/question/{i}'})
+                    time.sleep(0.01)
+                return []
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _Slow())
+        workflow = _wf([_node('node-1', 'source', {'platform': 'zhihu', 'keyword': 'k', 'target_count': 99999})], [])
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'slow-console'})
+        for _ in range(200):
+            if app_module.execution_state['logs']:
+                break
+            time.sleep(0.05)
+        before = list(client.get('/api/workflow/status').get_json()['logs'])
+        client.post('/api/workflow/stop')
+        assert _wait(app_module)
+        after = client.get('/api/workflow/status').get_json()['logs']
+        assert after, 'stopping must not erase the console the user was reading'
+        assert before and after[: len(before)] == before, 'the lines already earned must survive in order'
+        assert app_module.execution_state['total_nodes'] > 0, 'the summary must still know the run had nodes'
 
     def test_kill_protects_the_main_thread_and_answers_honestly(self, client):
         import threading

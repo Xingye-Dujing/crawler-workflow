@@ -115,7 +115,9 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 # one — a warning quoting the restored default tells nothing.
                 try:
                     v = int(float(raw))
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, OverflowError):
+                    # OverflowError is 'inf'/'1e400': float() accepts them and
+                    # int() refuses — the same trap _safe_int documents.
                     warnings.append(t('set.badNumber', setting=key, value=raw))
                     v = DEFAULTS[key]
                 else:

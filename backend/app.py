@@ -892,8 +892,39 @@ _RUN_QUEUE: list = []
 _queue_lock = threading.Lock()
 
 
+def _workflow_shape_error(data: dict) -> str:
+    """Why this payload cannot become a run, or '' when it can.
+
+    Checked before the slot is claimed, in both the live and the queued path:
+    ``WorkflowEngine`` walks ``nodes`` expecting dicts, so a list of strings or a
+    ``settings`` that is a number raises AttributeError deep inside the worker —
+    which the browser then reads as an HTML error page, and a queued one would
+    fail minutes later in a thread nobody is watching.
+    """
+    workflow = data.get('workflow')
+    if workflow is None or workflow == {}:
+        return ''  # an empty payload is refused by validate(), with a real message
+    if not isinstance(workflow, dict):
+        return t('api.workflowShapeInvalid')
+    nodes = workflow.get('nodes')
+    if nodes is not None and (not isinstance(nodes, list) or any(not isinstance(node, dict) for node in nodes)):
+        return t('api.workflowShapeInvalid')
+    settings = workflow.get('settings')
+    if settings is not None and not isinstance(settings, dict):
+        return t('api.workflowShapeInvalid')
+    return ''
+
+
 def _enqueue_run(data: dict, lang_header: str) -> dict:
-    """Park a request until the running one finishes."""
+    """Park a request until the running one finishes.
+
+    The payload is checked here, at the moment the user pressed the button, and
+    not at drain time: a request that cannot become a run must be refused to the
+    browser that sent it, where someone can fix it. Discovered minutes later, in
+    another thread, it would only be a missing run.
+    """
+    if _workflow_shape_error(data):
+        return {'status': 400, 'body': {'ok': False, 'error': _workflow_shape_error(data)}}
     workflow = data.get('workflow') or {}
     name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
     with _queue_lock:
@@ -959,7 +990,13 @@ def _start_next_queued() -> None:
         entry = _RUN_QUEUE.pop(0) if _RUN_QUEUE else None
     if entry is None:
         return
-    answer = _begin_run(entry['data'], entry['lang'])
+    try:
+        answer = _begin_run(entry['data'], entry['lang'])
+    except Exception as e:  # a broken request must not strand the ones behind it
+        logger.exception('queued run failed to start')
+        add_log(t('run.queue_broken', name=entry['workflow_name'] or entry['id'], err=e))
+        _start_next_queued()
+        return
     body = answer.get('body') or {}
     if answer.get('status') == 200 and body.get('ok') and not body.get('queued'):
         add_log(t('run.queue_started', name=entry['workflow_name'] or entry['id'], rid=body.get('run_id', '')))
@@ -1016,6 +1053,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
     Answers ``{'status': int, 'body': dict}`` instead of a Flask response,
     because the caller is not always a request.
     """
+    shape_error = _workflow_shape_error(data)
+    if shape_error:
+        # Refused before the slot is claimed: a payload the engine cannot walk
+        # must not become a failed run record, let alone a queued one that dies
+        # in a thread nobody is watching.
+        return {'status': 400, 'body': {'ok': False, 'error': shape_error}}
     # Guard and claim are one critical section. They used to be ~70 lines
     # apart: two concurrent POSTs both passed the check, both started a run
     # thread, and interleaved writes into one console, one store, one crawl.
@@ -1254,24 +1297,32 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         # Everything below is recorded against one run row, so whatever leaves
         # this thread early — Stop, an exception, the process dying — leaves
         # behind enough state to continue instead of starting over.
-        store = get_run_store()
-        wf_fp = workflow_fingerprint(workflow)
-        ctx = {
-            'store': store,
-            'run_id': run_id,
-            'resume': bool(resume_run_id),
-            'fingerprints': fingerprints_for_workflow(workflow),
-            'statuses': {},
-            # The resume-node's "newest unfinished run" fallback must pick from
-            # THIS workflow's shape only — node ids repeat across workflows.
-            'wf_fp': wf_fp,
-            # {node_id: count} of items the incremental ledger refused; the
-            # status endpoint mirrors it (shared dict, written by row sinks).
-            'skipped_seen': {},
-        }
-        execution_state['skipped_seen'] = ctx['skipped_seen']
+        #
+        # Opening the store is INSIDE the try on purpose. runs.db can refuse
+        # (disk full, a file that is not a database, a locked connection), and a
+        # thread that died before its ``finally`` would leave the application
+        # believing a run is still in flight: ``running`` stuck True, the console
+        # tee installed over every later request's stdout, and every subsequent
+        # Run parked in a queue behind a run that can never finish.
+        ctx = None
         outcome = RUN_FAILED
         try:
+            store = get_run_store()
+            wf_fp = workflow_fingerprint(workflow)
+            ctx = {
+                'store': store,
+                'run_id': run_id,
+                'resume': bool(resume_run_id),
+                'fingerprints': fingerprints_for_workflow(workflow),
+                'statuses': {},
+                # The resume-node's "newest unfinished run" fallback must pick from
+                # THIS workflow's shape only — node ids repeat across workflows.
+                'wf_fp': wf_fp,
+                # {node_id: count} of items the incremental ledger refused; the
+                # status endpoint mirrors it (shared dict, written by row sinks).
+                'skipped_seen': {},
+            }
+            execution_state['skipped_seen'] = ctx['skipped_seen']
             engine = WorkflowEngine(workflow, execution_state['executor'])
             errors = engine.validate()
             if errors:
@@ -1341,8 +1392,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                         with wf_lock:
                             all_results.update(results)
                     except Exception:
+                        # One console line per dead workflow. The log handler
+                        # forwards every logger call to the console as well, so
+                        # logging *and* add_log printed the same sentence twice —
+                        # and the logger form is the one that also carries the
+                        # traceback to the log file.
                         logger.exception(t('wf.wf_exception', wf=_wf_display_name(wf_engine, wf_idx)))
-                        add_log(t('wf.wf_failed', wf=_wf_display_name(wf_engine, wf_idx)), wf_idx=wf_idx)
 
                 pool = ThreadPoolExecutor(max_workers=min(wf_count, max_workers))
                 futures = [pool.submit(_run_workflow_wrapper, se, i) for i, se in enumerate(sub_engines)]
@@ -1396,14 +1451,20 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 outcome = RUN_FAILED if broken else RUN_COMPLETED
 
         except Exception:
+            # See the parallel branch above: the logger line already reaches the
+            # console, so a second add_log was the same sentence twice.
             logger.exception(t('wf.exec_exception'))
-            add_log(t('wf.exec_failed'))
             outcome = RUN_INTERRUPTED if not execution_state['running'] else RUN_FAILED
         finally:
             execution_state['running'] = False
             # Whatever is left claiming to be running was killed, not finished;
-            # the rows it published are what the next attempt resumes from.
-            _close_run(ctx, outcome)
+            # the rows it published are what the next attempt resumes from. With
+            # no context the store never opened at all, so there is no run row to
+            # close — the console line is then the only record that this happened.
+            if ctx is None:
+                add_log(t('run.store_unavailable'))
+            else:
+                _close_run(ctx, outcome)
             # Retention is only real if something applies it. A finished run is
             # the natural moment: the databases are open, no writer is active and
             # the user just proved the machine is in use.
@@ -1496,58 +1557,62 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         add_log(t('run.forcedVisible', label=node_label(node, str(node.get('id') or '')), platform=platform))
 
     crawler = get_crawler(platform, headless=headless, cookie_dir=Config.COOKIE_DIR)
+    # Registered and guarded from here on: everything between buying a browser
+    # and using it can still fail — a read-only or missing export directory, a
+    # locked runs.db, a cursor that will not parse — and a Chrome that Stop does
+    # not know about is a process left on the user's machine forever.
+    execution_state['active_crawlers'].add(crawler)
     resume = {}
     nid = str(node.get('id') or '')
-    # ── progressive part files (分批输出) ──
-    # With part_size>0 every kept row also lands in a numbered part file while
-    # the crawl is still running, and the parts merge into one file at the end
-    # — the results are openable before the node finishes.
-    part_size = _safe_int(params.get('part_size'), 0, minimum=0)
-    keep_parts = bool(params.get('keep_parts', False))
-    pfmt = 'json' if str(params.get('format') or 'csv') == 'json' else 'csv'
-    writer = None
-    if part_size > 0:
-        from services.part_writer import PartWriter, safe_stem
-
-        stem = safe_stem(f'{execution_state.get("workflow_name") or platform}-src-{nid}')
-        writer = PartWriter(Config.EXPORT_DIR, stem, pfmt, part_size, keep_parts)
-    if ctx is not None:
-        scope = _item_scope(ctx, node)
-        if params.get('recrawl') and not ctx.get('resume'):
-            # 重新采集 (node setting): release this node's 'already collected'
-            # ledger so the same items are collected again — the incremental
-            # default would skip every one of them. Never on a resumed run:
-            # there the ledger is precisely its dedupe machinery.
-            add_log(t('run.recrawl', n=ctx['store'].forget_items(scope)))
-        row_sink, cursor_sink = _source_stream(ctx, nid, scope)
-        if writer is not None:
-            base_sink = row_sink
-
-            def tee_sink(item, _base=base_sink, _w=writer):
-                kept = _base(item)
-                if kept:
-                    _w.add([item])
-                return kept
-
-            row_sink = tee_sink
-
-        crawler.set_sink(row_sink)
-        crawler.set_cursor_sink(cursor_sink)
-        if ctx.get('resume'):
-            resume = ctx['store'].get_cursor(ctx['run_id'], nid) or {}
-        # Rows saved by an earlier attempt, handed back so `collected()` starts
-        # honest: targeting 200 with 180 already saved asks the page for 20.
-        saved = ctx['store'].load_rows(ctx['run_id'], nid)
-        if saved:
-            crawler.seed(saved)
-            add_log(t('run.resume_crawl', nid=node_label(node, nid), have=len(saved)))
-            if writer is not None and not writer.has_parts:
-                # Rows paid for before batching was switched on (or before any
-                # part survived): the merged file should hold the whole table,
-                # not only what comes after the switch.
-                writer.add(saved)
-    execution_state['active_crawlers'].add(crawler)
     try:
+        # ── progressive part files (分批输出) ──
+        # With part_size>0 every kept row also lands in a numbered part file while
+        # the crawl is still running, and the parts merge into one file at the end
+        # — the results are openable before the node finishes.
+        part_size = _safe_int(params.get('part_size'), 0, minimum=0)
+        keep_parts = bool(params.get('keep_parts', False))
+        pfmt = 'json' if str(params.get('format') or 'csv') == 'json' else 'csv'
+        writer = None
+        if part_size > 0:
+            from services.part_writer import PartWriter, safe_stem
+
+            stem = safe_stem(f'{execution_state.get("workflow_name") or platform}-src-{nid}')
+            writer = PartWriter(Config.EXPORT_DIR, stem, pfmt, part_size, keep_parts)
+        if ctx is not None:
+            scope = _item_scope(ctx, node)
+            if params.get('recrawl') and not ctx.get('resume'):
+                # 重新采集 (node setting): release this node's 'already collected'
+                # ledger so the same items are collected again — the incremental
+                # default would skip every one of them. Never on a resumed run:
+                # there the ledger is precisely its dedupe machinery.
+                add_log(t('run.recrawl', n=ctx['store'].forget_items(scope)))
+            row_sink, cursor_sink = _source_stream(ctx, nid, scope)
+            if writer is not None:
+                base_sink = row_sink
+
+                def tee_sink(item, _base=base_sink, _w=writer):
+                    kept = _base(item)
+                    if kept:
+                        _w.add([item])
+                    return kept
+
+                row_sink = tee_sink
+
+            crawler.set_sink(row_sink)
+            crawler.set_cursor_sink(cursor_sink)
+            if ctx.get('resume'):
+                resume = ctx['store'].get_cursor(ctx['run_id'], nid) or {}
+            # Rows saved by an earlier attempt, handed back so `collected()` starts
+            # honest: targeting 200 with 180 already saved asks the page for 20.
+            saved = ctx['store'].load_rows(ctx['run_id'], nid)
+            if saved:
+                crawler.seed(saved)
+                add_log(t('run.resume_crawl', nid=node_label(node, nid), have=len(saved)))
+                if writer is not None and not writer.has_parts:
+                    # Rows paid for before batching was switched on (or before any
+                    # part survived): the merged file should hold the whole table,
+                    # not only what comes after the switch.
+                    writer.add(saved)
         if platform == 'wechat':
             # WeChat scrapes a list of article URLs, not a keyword.
             rows = crawler.search(urls=split_urls(params.get('urls')), resume=resume)
@@ -1600,12 +1665,15 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
             # wall are safe in the store — surface the flag for the toast and
             # say so in the console.
             execution_state['cookie_expired'] = True
-            add_log(t('run.cookieExpired', platform=platform))
             # Under-target is not a finished crawl, so the node must not look
             # like one. Failing it keeps every stored row, marks the RUN failed
             # (the resume banner's trigger), and lets 继续 resume pick the crawl
             # up at the cursor the wall stopped on — refresh the cookie, click
             # continue, get the rest. Marking it done would hide the gap.
+            #
+            # The message is raised, not also logged here: the executor prints
+            # every failure as '节点 X 执行失败：…', which names the node. Both
+            # calls made the same sentence appear twice, once without the node.
             raise ValueError(t('run.cookieExpired', platform=platform))
         # Wall met exactly as the target was reached: the session died at the
         # finish line, so there is nothing missing — do not raise a false alarm.
@@ -2182,9 +2250,10 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     if blocked_seen:
         # Same story as the source crawler: a blocked article means the saved
         # cookie likely died — the collected comments are already merged to
-        # disk and stored; refresh the cookie and resume for the rest.
+        # disk and stored; refresh the cookie and resume for the rest. The
+        # line above (comment.done) already reported how many were blocked, so
+        # this only raises: the executor prints it once, with the node's name.
         execution_state['cookie_expired'] = True
-        add_log(t('run.cookieExpired', platform=want or 'zhihu/weibo/xiaohongshu/bilibili'))
     add_log(
         t(
             'comment.done',
@@ -2335,6 +2404,27 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
             add_log(t('run.failed_down', nid=label), wf_idx=wf_idx)
         return rows, status
 
+    if isinstance(result, dict) and result.get('error'):
+        # The output and visualize nodes answer a refused export with
+        # ``{'error': …}`` instead of raising, because their downstream must
+        # still receive the table. Settling such a node DONE made the run read
+        # "completed" while the file or chart the user asked for was never made;
+        # FAILED keeps the data flowing and marks the truth.
+        message = str(result['error'])
+        store.finish_node(run_id, nid, NODE_FAILED, error=message)
+        add_log(
+            t(
+                'wf.node_failed',
+                wf=execution_state['_wf_names'].get(wf_idx) or t('wf.unnamed', i=wf_idx + 1),
+                nid=label,
+                err=message,
+            ),
+            wf_idx=wf_idx,
+        )
+        # FAILED keeps the truth in the run record while the node's own answer —
+        # the reason, not a half-built spec — stays what the browser reads.
+        return result, NODE_FAILED
+
     if isinstance(result, list) and ntype != 'source':
         # Source rows are already in the store — the sink put every item there
         # as it was scraped, and re-writing them here would only renumber.
@@ -2427,13 +2517,14 @@ def stop_workflow():
             c.close()
     # Clear the console but NOT the results: a stopped run keeps everything it
     # already produced (rows, tables, exports) so nothing paid for is lost.
-    execution_state['logs'] = []
-    execution_state['_log_total'] = 0
-    execution_state['_wf_logs'] = {}
-    execution_state['_wf_log_total'] = {}
-    execution_state['_wf_names'] = {}
-    execution_state['total_nodes'] = 0
-    execution_state['completed_nodes'] = 0
+    #
+    # The console is not cleared either, and neither are the node counters.
+    # Stopping is the moment someone most wants to read what the run did before
+    # it was cut short, and the worker's own finally writes the summary line
+    # under those counters — zeroing them here turned every stopped run into
+    # "运行结束（0/0 个节点完成）" and wiped the log that explained it. The next
+    # run resets both when it claims the slot (_begin_run), which is where a
+    # fresh slate belongs.
     execution_state.pop('current_input', None)
     execution_state['executor'] = None
     _close_active_crawlers()
@@ -3882,7 +3973,12 @@ def studio_dataset():
     fallback_note = None
     try:
         df = _resolve_dataframe(data)
-    except KeyError as e:
+    except (KeyError, TypeError, ValueError) as e:
+        # KeyError is a reference to a node whose result is gone — the case the
+        # fallback below exists for. TypeError/ValueError are a payload of the
+        # wrong *shape* (``{"data": 42}``), which used to escape the pandas
+        # constructor as an HTML 500 the browser could not parse; both answer
+        # with the same ok:false + code the picker already localises.
         fb_id, fb_df = _first_tabular_result()
         if fb_df is None or fb_df.empty:
             return jsonify({'ok': False, 'code': 'no_result', 'error': str(e)})

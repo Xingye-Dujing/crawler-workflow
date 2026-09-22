@@ -48,11 +48,12 @@ _ZH = {
     'wf.found': '发现 {n} 条工作流',
     'wf.starting': '--- 开始执行工作流「{wf}」（{i}/{n}）---',
     'wf.completed': '工作流执行完成',
-    'wf.wf_failed': '工作流「{wf}」执行失败',
     'wf.all_completed': '全部工作流执行完成',
-    'wf.exec_failed': '执行失败，详见服务端日志',
-    'wf.exec_exception': '执行失败',
-    'wf.wf_exception': '工作流「{wf}」执行失败',
+    # One line per failure, and it says where the detail is: the log handler
+    # forwards every logger call to the console, so the pair of messages this
+    # replaced printed the same sentence twice.
+    'wf.exec_exception': '执行失败，完整堆栈见服务端日志',
+    'wf.wf_exception': '工作流「{wf}」执行失败，完整堆栈见服务端日志',
     'wf.save_failed': '保存失败：{err}',
     'wf.data_saved': '数据已保存至 {path}（{fmt}）',
     'wf.analysis_failed': '分析失败：{err}',
@@ -176,6 +177,14 @@ _ZH = {
     'crawl.weibo.card_error': '    卡片 {i}: 处理出错，已跳过',
     # ── crawlers: wechat ──────────────────────────────────────
     'crawl.wechat.no_urls': '未提供 URL，返回空结果。',
+    # ── 断点续跑与去重（爬虫侧） ──────────────────────────────
+    'crawl.resume_have': '断点续跑：已采集 {n} 条，接着往下采而不是重来',
+    'crawl.resume_urls': '断点续跑：沿用上次生成的 {n} 个链接，不重新翻页',
+    'crawl.sink_failed': '增量落盘失败（这条仍然在本次结果里，但可能没进库）：{err}',
+    'crawl.wechat.duplicate': '跳过重复的推文链接：{url}',
+    'crawl.xhs.note_dup': '跳过重复的笔记：{url}',
+    'crawl.zhihu.duplicate': '跳过重复的第 {i} 条回答',
+    'ds.too_many_rows': '文件共 {n} 行，超过数据集上限 {limit} 行，无法保存',
     'crawl.wechat.batch_start': '开始批量抓取 {n} 篇微信公众号文章',
     'crawl.wechat.processing': '--- 正在处理第 {i} / {total} 篇文章 ---',
     'crawl.wechat.url': 'URL: {url}',
@@ -509,6 +518,9 @@ _ZH = {
     'run.queued': '已排队（第 {at} 位）：{name}',
     'run.queue_started': '队列接续：{name} 开始运行（{rid}）',
     'run.queue_waited': '队列接续失败（已有运行在跑），{name} 重新排队',
+    'run.queue_broken': '队列里的 {name} 无法启动，已跳过并继续下一个：{err}',
+    'api.workflowShapeInvalid': '工作流内容无法理解：需要带 nodes 列表的对象',
+    'run.store_unavailable': '本次运行无法开始：运行记录库打不开（磁盘满、文件损坏或被占用），未产生任何记录',
     'run.reportSaved': '报告已生成：{name}（{size} 字节）',
     'run.reportFailed': '报告生成失败：{err}',
     'run.reportConclusionFailed': '结论生成失败，报告已省略结论：{err}',
@@ -531,11 +543,12 @@ _EN = {
     'wf.found': 'Found {n} workflow(s)',
     'wf.starting': '--- Starting workflow "{wf}" ({i}/{n}) ---',
     'wf.completed': 'Workflow execution completed',
-    'wf.wf_failed': 'Workflow "{wf}" failed',
     'wf.all_completed': 'All workflows completed',
-    'wf.exec_failed': 'Execution failed - see server logs',
-    'wf.exec_exception': 'Execution failed',
-    'wf.wf_exception': 'Workflow "{wf}" failed',
+    # One line per failure, and it says where the detail is: the log handler
+    # forwards every logger call to the console, so the pair of messages this
+    # replaced printed the same sentence twice.
+    'wf.exec_exception': 'Execution failed — the traceback is in the server log',
+    'wf.wf_exception': 'Workflow "{wf}" failed — the traceback is in the server log',
     'wf.save_failed': 'Save failed: {err}',
     'wf.data_saved': 'Data saved to {path} ({fmt})',
     'wf.analysis_failed': 'Analysis failed: {err}',
@@ -668,6 +681,14 @@ _EN = {
     'crawl.weibo.card_error': '    Card {i}: error while processing, skipped',
     # ── crawlers: wechat ──────────────────────────────────────
     'crawl.wechat.no_urls': 'No URLs provided, returning empty results.',
+    # ── resume and dedupe (crawler side) ────────────────────────
+    'crawl.resume_have': 'Resuming: {n} item(s) already collected, continuing instead of starting over',
+    'crawl.resume_urls': 'Resuming: reusing the {n} link(s) of the last attempt, no re-paging',
+    'crawl.sink_failed': 'Incremental save failed (this row is still in the results, but may not be stored): {err}',
+    'crawl.wechat.duplicate': 'Skipping a duplicate article link: {url}',
+    'crawl.xhs.note_dup': 'Skipping a duplicate note: {url}',
+    'crawl.zhihu.duplicate': 'Skipping duplicate answer #{i}',
+    'ds.too_many_rows': 'the file has {n} rows, over the dataset limit of {limit} — it cannot be stored',
     'crawl.wechat.batch_start': 'Starting batch scrape of {n} WeChat article(s)',
     'crawl.wechat.processing': '--- Processing article {i} / {total} ---',
     'crawl.wechat.url': 'URL: {url}',
@@ -1015,6 +1036,10 @@ _EN = {
     'run.queued': 'Queued (position {at}): {name}',
     'run.queue_started': 'Queue: {name} started ({rid})',
     'run.queue_waited': 'Queue could not start {name} (a run is active), it waits again',
+    'run.queue_broken': 'the queued request {name} could not start; skipped, the next one continues: {err}',
+    'api.workflowShapeInvalid': 'the workflow could not be read: an object with a nodes list is required',
+    'run.store_unavailable': 'this run could not begin: the run record store would not open (disk full, corrupt or '
+                             'locked file) — nothing was recorded',
     'run.reportSaved': 'Report written: {name} ({size} bytes)',
     'run.reportFailed': 'Report failed: {err}',
     'run.reportConclusionFailed': 'The conclusion could not be generated, so the report omits it: {err}',
