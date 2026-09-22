@@ -2973,11 +2973,6 @@ def _verify_lines(platform: str, facts: dict) -> list:
         if 'comment_key' in facts:
             key = 'cookie.verify.commentKeyYes' if facts.get('comment_key') else 'cookie.verify.commentKeyNo'
             lines.append(t('cookie.verify.commentKey', state=t(key)))
-            if facts.get('show_comment') is not None:
-                # The server's own switch, reported as a fact: it says whether
-                # this session may render the area, which is a different claim
-                # from "this article has comments".
-                lines.append(t('cookie.verify.showComment', v=facts.get('show_comment') or '?'))
             lines.append(t('cookie.verify.commentCount', n=int(facts.get('comment_visible') or 0)))
         return lines
     lines.append(

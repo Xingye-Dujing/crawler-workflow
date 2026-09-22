@@ -78,22 +78,20 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
 - Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens
   a visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
   outcome the message catalog already explains — don't "fix" it by loosening assertions.
-- **WeChat: two cookie purposes on one host, and 留言 is gated per session.** Measured on this
-  machine: article *search* from a browser only exists via the 公众号 admin
-  (`mp.weixin.qq.com` login redirect carries `token=`), because Sogou WeChat search answers
-  `antispider/` captcha to a scripted browser. For 留言 the server issues its credential and
-  `show_comment=1` only to a recognised client session; a plain browser gets `show_comment=0`,
-  zero `elected_comment` bytes in 3.4 MB of HTML, and a 2034-byte 验证 page ("请在微信客户端打开链接")
-  from `mp/appmsg_comment` — verified on an article that does have comments. MicroMessenger/XWEB
-  user agents, client-style URL params and replaying the client's own decrypted
-  `mp.weixin.qq.com` cookies (incl. `pass_ticket`, `appmsg_token`) change nothing, because the
-  discriminator is that per-session credential, not the request shape.
-  **Do not build client impersonation / session replay to get around this** — it is circumventing
-  another service's access control, and it is also why "just spoof it" cannot work. The product
-  rule instead: comments found → OK; empty area **and** visible 阅读/赞/在看 counts → "该文无留言"
-  (OK, zero rows); neither → `blocked` with 没有正确进入. An empty result must never be written
-  out as usable data. Keep this classification in `crawl_wechat` and
-  `tests/unit/test_wechat_comments.py::TestCrawl` aligned.
+- **WeChat has two cookie purposes on one host, and comments are NOT reachable from a browser.**
+  Measured on this machine (real Chrome, real articles): 文章搜索 only exists inside the 公众号
+  后台 (`mp.weixin.qq.com` admin login; its logged-in redirect carries `token=`), because Sogou
+  WeChat search answers `weixin.sogou.com/antispider/` captcha to a scripted browser. For 留言:
+  a plain browser GET renders the article but `wx_getext_config` is absent and `discuss_list` is
+  empty; a `MicroMessenger` UA, client-style query params (`scene`/`devicetype`/`version`) and the
+  `sharer_shareinfo` link shape all change nothing; the page's own `mp/appmsg_comment` endpoint —
+  asked with its own real `__biz`/`mid`/`idx`/`comment_id` — replies with an HTML 验证 page saying
+  请在微信客户端打开链接. Replaying the client's own session does NOT work either: modern 复制链接
+  carries no `pass_ticket` (it is a cookie, not a URL param), and planting the decrypted
+  `mp.weixin.qq.com` cookies from the client's Chromium profile via CDP still gets the same refusal.
+  So `crawl_wechat` must keep reporting that refusal as `blocked` (never `ok` with 0 rows, which
+  would read as "the article has no comments") — see `tests/live_site/test_live_wechat.py::TestCommentRefusal`,
+  which pins the invariant. A page with no 留言 module at all is `dead`, and that difference is the point.
 - **Cookie death mid-crawl is a designed path**: crawler `login_wall` + under-target rows →
   `_execute_source_node` sets `execution_state['cookie_expired']` (rides on `/api/workflow/status`
   for the browser toast), logs `run.cookieExpired`, and RAISES so the node settles `partial`, the
