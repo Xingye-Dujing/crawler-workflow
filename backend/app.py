@@ -2717,7 +2717,9 @@ def platform_summary():
 
 # One list, so a platform can never be half-wired: status, flows, generation and
 # verification all walk the same tuple, which is the crawler registry's order.
-COOKIE_PLATFORMS = ('zhihu', 'weibo', 'xiaohongshu', 'wechat')
+# Derived from the cookie store's own list, so a platform added there cannot be
+# left out of the panel, the flows or the status endpoint.
+COOKIE_PLATFORMS = CookieManager.PLATFORMS
 
 
 @app.route('/api/cookies/status', methods=['GET'])
@@ -2905,6 +2907,8 @@ def generate_cookies():
     if not cookie_manager.is_supported(platform):
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
     wait_seconds = _safe_int(data.get('wait_seconds'), 120, minimum=10, maximum=600)
+    # A cookie-only platform still needs a real login page; anything without one
+    # would open a browser at about:blank and capture nothing.
     # A link the user pasted, if any. It has to belong to this platform: the
     # browser is driven with their real session, and cookies are saved per
     # platform file — opening some other site here would store that site's

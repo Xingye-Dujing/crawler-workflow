@@ -24,11 +24,22 @@ def manager(tmp_path):
 
 
 class TestPlatformWhitelist:
-    def test_only_crawlable_platforms_are_supported(self):
-        assert CookieManager.PLATFORMS == ('zhihu', 'weibo', 'xiaohongshu', 'wechat')
+    def test_the_cookie_whitelist_is_the_platform_list(self):
+        """Six platforms hold a cookie file: four crawlable ones plus Bilibili and
+        Douyin, whose login is captured now and whose crawl lands later."""
+        assert CookieManager.PLATFORMS == ('zhihu', 'weibo', 'xiaohongshu', 'wechat', 'bilibili', 'douyin')
         assert all(CookieManager.is_supported(p) for p in CookieManager.PLATFORMS)
 
-    @pytest.mark.parametrize('platform', ['ZHIHU', 'zhihu ', '', None, 'douyin', 'zh'])
+    def test_cookie_support_and_crawl_support_are_different_things(self):
+        """The distinction that keeps a half-built platform out of the canvas: a
+        platform may be loggable in while still refusing to be a data source."""
+        from crawlers import CRAWLERS, is_crawlable
+
+        assert set(CRAWLERS) == set(CookieManager.PLATFORMS)
+        assert [p for p in CRAWLERS if not is_crawlable(p)] == ['bilibili', 'douyin']
+        assert all(is_crawlable(p) for p in ('zhihu', 'weibo', 'xiaohongshu', 'wechat'))
+
+    @pytest.mark.parametrize('platform', ['ZHIHU', 'zhihu ', '', None, 'kuaishou', 'zh'])
     def test_anything_else_is_unsupported(self, platform):
         assert CookieManager.is_supported(platform) is False
 

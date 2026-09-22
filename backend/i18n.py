@@ -270,6 +270,21 @@ _ZH = {
         '2. 手动搜一次关键词，能看到微博列表即可\n'
         '3. 回到本面板点「我已登录，保存」'
     ),
+    'cookie.bilibili.purpose': '解锁 B 站搜索、视频详情与评论区；未登录时搜索会被折叠，评论只给前几条。',
+    'cookie.bilibili.steps': (
+        '1. 点「浏览器登录」，在弹出的 Chrome 窗口里登录哔哩哔哩（扫码或手机号）\n'
+        '2. 打开任意视频并滚到评论区，能看到评论列表即可\n'
+        '3. 回到本面板点「我已登录，保存」'
+    ),
+    'cookie.douyin.purpose': '解锁抖音网页版搜索、视频文案与评论区；未登录常常只给首屏且看不到评论。',
+    'cookie.douyin.steps': (
+        '1. 点「浏览器登录」，在弹出的 Chrome 窗口里登录抖音网页版（扫码或手机号）\n'
+        '2. 打开任意视频，右侧能看到评论区即可\n'
+        '3. 回到本面板点「我已登录，保存」\n'
+        '提示：抖音网页版对自动化浏览器较敏感，若窗口里出现滑块验证，请在窗口内手动完成后再保存。'
+    ),
+    'crawl.platformNotCrawlable': '该平台目前只支持保存登录 Cookie，还不支持采集（{platform}）——'
+    '请先改用已支持的平台，或等待该平台的抓取实现完成',
     'cookie.xiaohongshu.purpose': '解锁小红书搜索、笔记正文与评论；未登录会撞登录墙且只给首屏。',
     'cookie.xiaohongshu.steps': (
         '1. 点「浏览器登录」，在窗口里登录小红书\n'
@@ -709,6 +724,24 @@ _EN = {
         '2. Search one keyword and confirm the post list renders\n'
         '3. Come back here and press "Done — I logged in"'
     ),
+    'cookie.bilibili.purpose': 'Unlocks Bilibili search, video metadata and comments; logged out, search is '
+    'collapsed and only the first few comments show.',
+    'cookie.bilibili.steps': (
+        '1. Press "Login via browser" and sign in to Bilibili in the Chrome window (QR or phone)\n'
+        '2. Open any video and scroll to the comment area until the list renders\n'
+        '3. Come back here and press "Done \u2014 I logged in"'
+    ),
+    'cookie.douyin.purpose': 'Unlocks Douyin web search, video captions and comments; logged out you usually '
+    'get only the first screen and no comments.',
+    'cookie.douyin.steps': (
+        '1. Press "Login via browser" and sign in to Douyin web in that window (QR or phone)\n'
+        '2. Open any video until the comment panel on the right renders\n'
+        '3. Come back here and press "Done \u2014 I logged in"\n'
+        'Note: Douyin is quick to raise a slider captcha for automated browsers \u2014 finish it in that '
+        'window before saving.'
+    ),
+    'crawl.platformNotCrawlable': 'This platform only supports storing a login cookie so far, not crawling '
+    '({platform}) \u2014 use a supported platform, or wait for its crawler to land',
     'cookie.xiaohongshu.purpose': 'Unlocks Xiaohongshu search, note bodies and comments; logged out you hit the '
     'login wall and only the first screen shows.',
     'cookie.xiaohongshu.steps': (

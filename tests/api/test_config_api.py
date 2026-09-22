@@ -15,11 +15,14 @@ Two read/write surfaces live here and neither one should surprise the frontend:
 import pytest
 
 from config import Config
+from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.api
 
 CONFIG_KEYS = {'ollama_model', 'default_headless', 'max_workers'}
-COOKIE_PLATFORMS = {'zhihu', 'weibo', 'xiaohongshu', 'wechat'}
+# The cookie panel's platform set is the manager's own list — mirroring it here
+# would only ever record the last time someone forgot the other side.
+COOKIE_PLATFORMS = set(CookieManager.PLATFORMS)
 
 
 class TestConfigEndpoint:

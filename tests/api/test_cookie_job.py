@@ -12,6 +12,8 @@ import time
 
 import pytest
 
+from crawlers import CRAWLERS
+
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
 
@@ -153,7 +155,7 @@ class TestCookieFlow:
     """The panel's guidance is served, not hard-coded, so the translated steps
     and the host allowlist can never disagree with the crawler."""
 
-    @pytest.mark.parametrize('platform', ['zhihu', 'weibo', 'xiaohongshu', 'wechat'])
+    @pytest.mark.parametrize('platform', list(CRAWLERS))
     def test_every_crawlable_platform_is_described(self, client, platform):
         flows = client.get('/api/cookies/flow').get_json()['flows']
         by_name = {flow['platform']: flow for flow in flows}

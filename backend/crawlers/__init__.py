@@ -1,3 +1,4 @@
+from crawlers.video import BilibiliCrawler, DouyinCrawler
 from crawlers.wechat import WechatCrawler
 from crawlers.weibo import WeiboCrawler
 from crawlers.xiaohongshu import XiaohongshuCrawler
@@ -11,7 +12,17 @@ CRAWLERS = {
     'weibo': WeiboCrawler,
     'xiaohongshu': XiaohongshuCrawler,
     'wechat': WechatCrawler,
+    # Cookie capture exists for these two; their crawl does not yet, so the
+    # canvas and the execute endpoint refuse them (see crawlers/video.py).
+    'bilibili': BilibiliCrawler,
+    'douyin': DouyinCrawler,
 }
+
+
+def is_crawlable(platform: str) -> bool:
+    """Whether *platform* can be used as a data source (not just logged into)."""
+    cls = crawler_class(platform)
+    return bool(cls) and bool(getattr(cls, 'supports_crawl', True))
 
 
 def crawler_class(platform: str):
