@@ -2215,7 +2215,12 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             kind = platform_for(url)
             if kind not in sessions:
                 crawler = get_crawler(kind, headless=False, cookie_dir=Config.COOKIE_DIR)
-                sessions[kind] = (crawler, CommentSession(crawler.driver, log=lambda m: add_log(f'[comment] {m}')))
+                sessions[kind] = (
+                    crawler,
+                    # The comment engine reports per-URL facts; prefix them so a
+                    # line in the shared console says which node it came from.
+                    CommentSession(crawler.driver, log=lambda m: add_log(f'{t("comment.prefix")} {m}')),
+                )
             _crawler, session = sessions[kind]
             if cursor_sink is not None:
                 cursor_sink({'url_index': idx - 1, 'url_total': len(urls)})

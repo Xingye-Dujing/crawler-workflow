@@ -67,8 +67,18 @@ class WorkflowEngine:
                 if in_deg[nb] == 0:
                     queue.append(nb)
         if len(order) != len(self.nodes):
-            raise ValueError('Workflow contains a cycle!')
+            raise ValueError(self._cycle_error(set(self.nodes) - set(order)))
         return order
+
+    def _cycle_error(self, stuck) -> str:
+        """Name the nodes the ordering could not place, in the console's own form.
+
+        A bare English 'Workflow contains a cycle!' said nothing about *which*
+        two nodes were wired back into each other, and the loop is drawn right in
+        front of the user — the one message in this file that must point at it.
+        """
+        labels = ', '.join(node_label(self.nodes[nid], str(nid)) for nid in sorted(stuck))
+        return t('engine.cycle', nodes=labels)
 
     def group_by_level(self) -> list[list[str]]:
         """Group nodes by BFS level for parallel execution."""
@@ -81,7 +91,7 @@ class WorkflowEngine:
         while remaining:
             current = [n for n in remaining if in_deg[n] == 0]
             if not current:
-                raise ValueError('Workflow contains a cycle!')
+                raise ValueError(self._cycle_error(remaining))
             levels.append(current)
             for n in current:
                 for nb in self._adj[n]:
@@ -160,9 +170,10 @@ class WorkflowEngine:
 
         Messages go through i18n (the engine is loaded by the app, which has the
         catalogues) so a validation failure reads in the console's language
-        instead of as a stray English line. The one exception is the cycle
-        check below: that is a ValueError from the topological sort, i.e. a
-        malformed workflow rather than a configuration mistake.
+        instead of as a stray English line. The cycle check below is no
+        exception: it raises a ValueError whose text is catalogued too, because a
+        malformed workflow is still something the user has to fix from the
+        console's words.
         """
         errors = []
         for nid, node in self.nodes.items():

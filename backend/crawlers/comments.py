@@ -338,7 +338,7 @@ class CommentSession:
             raw = self._in_page_fetch(weibo_show_js(bid))
             show = json.loads(raw)
         except Exception:
-            self.log(f'weibo show failed for {url}')
+            self.log(t('comment.weiboShowFailed', url=url))
             return [], DEAD
         mid = str(show.get('id') or show.get('mid') or '')
         if not mid:
@@ -433,7 +433,7 @@ class CommentSession:
         if not opened and rows == []:
             # No comment button at all: either 评论已关闭 or the page never
             # rendered the answers — treat as ok-with-nothing, but say so.
-            self.log(f'zhihu no comment panels on {url}')
+            self.log(t('comment.zhihuNoPanels', url=url))
         return (rows[:limit] if limit else rows), OK
 
     def _drain_comment_panel(self, url: str, limit: int) -> list:

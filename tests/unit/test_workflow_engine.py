@@ -3,7 +3,8 @@
 The engine is the piece that turns the canvas into an execution order, so the
 contracts pinned here are the ones the executor silently relies on:
 
-- a cycle is *always* fatal for both orderings, with one shared message,
+- a cycle is *always* fatal for both orderings, with one shared message, and
+  that message is translated and names the nodes in the loop,
 - an isolated node still gets scheduled (it is a workflow of its own),
 - several disconnected sub-workflows are split, ordered by creation index,
 - ``validate()`` returns ready-to-print translated text, never a key, and says
@@ -85,10 +86,13 @@ class TestOrdering:
         wf = _wf([_node('node-1'), _node('node-2')], [])
         assert sorted(WorkflowEngine(wf).topological_sort()) == ['node-1', 'node-2']
 
-    def test_topological_sort_rejects_a_cycle(self):
+    def test_topological_sort_rejects_a_cycle(self, en):
         conns = [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-1'}]
-        with pytest.raises(ValueError, match='Workflow contains a cycle!'):
+        with pytest.raises(ValueError, match='cycle') as err:
             WorkflowEngine(_wf([_node('node-1'), _node('node-2')], conns)).topological_sort()
+        # The message has to name the nodes in the loop: the canvas shows the
+        # cycle on screen, and an English exclamation pointed at nothing.
+        assert 'node-1' in str(err.value) and 'node-2' in str(err.value)
 
     def test_group_by_level_bundles_independent_nodes(self):
         nodes = [_node('node-1'), _node('node-2', 'analysis'), _node('node-3', 'analysis')]
@@ -100,15 +104,16 @@ class TestOrdering:
         levels = WorkflowEngine(_chain()).group_by_level()
         assert [n for level in levels for n in level] == WorkflowEngine(_chain()).topological_sort()
 
-    def test_group_by_level_rejects_a_cycle(self):
+    def test_group_by_level_rejects_a_cycle(self, en):
         conns = [
             {'from': 'node-1', 'to': 'node-2'},
             {'from': 'node-2', 'to': 'node-3'},
             {'from': 'node-3', 'to': 'node-1'},
         ]
         nodes = [_node('node-1'), _node('node-2', 'analysis'), _node('node-3', 'output')]
-        with pytest.raises(ValueError, match='Workflow contains a cycle!'):
+        with pytest.raises(ValueError, match='cycle') as err:
             WorkflowEngine(_wf(nodes, conns)).group_by_level()
+        assert 'node-1' in str(err.value) and 'node-3' in str(err.value)
 
 
 # ─── sub-workflows ─────────────────────────────────────────────────────
@@ -226,11 +231,16 @@ class TestValidate:
         wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw'})], [])
         assert WorkflowEngine(wf).validate() == []
 
-    def test_cycle_is_reported_verbatim_and_untranslated(self, en):
+    def test_a_cycle_is_fatal_and_names_the_nodes_in_it(self, en):
         conns = [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-1'}]
         nodes = [_node('node-1', platform='zhihu'), _node('node-2', 'output', operation='csv')]
         errors = WorkflowEngine(_wf(nodes, conns)).validate()
-        assert errors == ['Workflow contains a cycle!']
+        assert len(errors) == 1
+        # Used to be one untranslated English exclamation with no node in it,
+        # while every other validation message named its node in the console's
+        # language — the loop is drawn on the canvas, so the message can point.
+        assert 'cycle' in errors[0]
+        assert 'Data Source #node-1' in errors[0] and 'Output #node-2' in errors[0]
 
     def test_name_node_must_lead_and_have_a_downstream(self, en):
         wf = _wf(
