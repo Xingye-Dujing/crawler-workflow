@@ -19,6 +19,7 @@ Real ``data/`` and ``logs/`` must never gain a byte from a test run.
 
 import contextlib
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -121,6 +122,24 @@ def clean_globals():
 # ─── Flask test client ──────────────────────────────────────────────────
 
 
+def _wait_for_quiet_server(module, timeout: float = 30.0) -> None:
+    """Block until no run is in flight and the last worker thread is gone.
+
+    The thread is checked as well as the flag: a run clears ``running`` at the
+    top of its ``finally`` and still has to close the store, restore stdout and
+    drain the queue below it, so the flag alone says 'free' too early.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        thread = module.execution_state.get('thread')
+        if not module.execution_state.get('running') and (thread is None or not thread.is_alive()):
+            return
+        time.sleep(0.05)
+    raise AssertionError(
+        f'the previous run never finished within {timeout}s — every later execute test would be queued behind it'
+    )
+
+
 def _snapshot_state(state: dict) -> dict:
     backup = {}
     for key, value in state.items():
@@ -145,9 +164,13 @@ def client(app_module, data_root, request):
     from services.dataset_store import DatasetStore
     from services.run_store import RunStore
 
-    marker = request.node.get_closest_marker('serial')
-    if marker is not None and app_module.execution_state.get('running'):
-        pytest.skip('another serial execute test is still finishing')
+    # A serial test needs a genuinely quiet server before it presses Run.
+    # This used to ``pytest.skip`` on a busy slot, which turned one slow run
+    # into a test that silently never happened; and since a busy server now
+    # *queues* the request, a test that posted anyway would read a console that
+    # its own run had not written to yet — a failure with no cause in it.
+    if request.node.get_closest_marker('serial') is not None:
+        _wait_for_quiet_server(app_module)
 
     module = app_module
     state_backup = _snapshot_state(module.execution_state)
