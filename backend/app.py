@@ -3063,19 +3063,8 @@ def cookie_generate_status():
 
 
 def _verify_lines(platform: str, facts: dict) -> list:
-    """Turn one diagnosis into the lines the panel shows.
-
-    WeChat answers one question there — is the 公众号 admin session alive, which
-    is what makes keyword search work — and is told outright that 留言/点赞/转发
-    are not obtainable from a browser, so a user cannot read an empty result as a
-    cookie problem.
-    """
+    """Turn one diagnosis into the lines the panel shows."""
     lines = [t('cookie.verify.checkedUrl', url=str(facts.get('url') or ''))]
-    if platform == 'wechat':
-        admin = 'cookie.verify.mpLoggedInYes' if facts.get('mp_logged_in') else 'cookie.verify.mpLoggedInNo'
-        lines.append(t('cookie.verify.mpLoggedIn', state=t(admin)))
-        lines.append(t('cookie.verify.wechatNoComments'))
-        return lines
     lines.append(
         t('cookie.verify.loginWall', platform=platform)
         if facts.get('login_wall')

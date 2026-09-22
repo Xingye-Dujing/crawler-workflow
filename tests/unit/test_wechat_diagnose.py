@@ -1,9 +1,16 @@
-"""WeChat cookie diagnosis — the two capabilities, checked separately.
+"""What the WeChat crawler must NOT claim.
 
-No browser here: ``Crawler._create_driver`` is swapped for a scripted fake, so
-what is under test is which facts the crawler reports and how it reads them.
-The live question — does a browser session ever get a comment credential — is
-covered by ``tests/live_site/test_live_wechat.py`` instead.
+Two capabilities have been removed from this platform, and both removals are
+pinned here because a leftover is worse than an absence:
+
+* 留言/点赞/转发 were never obtainable from a browser (measured), so no comment
+  helper, comment fact or comment column may reappear;
+* keyword search via the 公众号后台 was deleted once WeChat's ``freq control``
+  window made its article-list endpoint impossible to verify — so the crawler
+  must not carry an admin-session diagnosis either, and the cookie panel must
+  not offer a 微信 row that unlocks nothing (article bodies need no login).
+
+No browser here: ``Crawler._create_driver`` is swapped for a scripted fake.
 """
 
 import pytest
@@ -23,12 +30,8 @@ class FakeElement:
 
 
 class FakeDriver:
-    """Answers with a fixed script: URL per page, credential object, comment rows."""
-
-    def __init__(self, url_map=None, credentials=None, comment_rows=0, body_text=''):
+    def __init__(self, url_map=None, body_text=''):
         self.url_map = url_map or {}
-        self.credentials = credentials if credentials is not None else {}
-        self.comment_rows = comment_rows
         self.body_text = body_text
         self.visited = []
         self._current = ''
@@ -42,25 +45,22 @@ class FakeDriver:
         return self._current
 
     def execute_script(self, _script, *_args):
-        return dict(self.credentials)
+        return {}
 
     def find_element(self, by, selector):
         if selector == 'body':
             return FakeElement(self.body_text)
-        if selector == '#rich_media_content, .rich_media_content':
-            return FakeElement('正文')
         raise KeyError(selector)
 
     def find_elements(self, by, selector):
-        if selector == '.discuss_list .item':
-            return [FakeElement() for _ in range(self.comment_rows)]
         return []
+
+
+ARTICLE = 'https://mp.weixin.qq.com/s/cAx1zGfT2MzqpwnhULmSQA'
 
 
 @pytest.fixture
 def make_crawler(monkeypatch):
-    """Build a WechatCrawler over a scripted fake driver."""
-
     def _make(**driver_kwargs):
         def fake_create_driver(self):
             self.driver = FakeDriver(**driver_kwargs)
@@ -73,58 +73,28 @@ def make_crawler(monkeypatch):
     return _make
 
 
-ADMIN = 'https://mp.weixin.qq.com/'
-ADMIN_LOGGED_IN = 'https://mp.weixin.qq.com/cgi-bin/home?t=home/index&token=987654321'
-ARTICLE = 'https://mp.weixin.qq.com/s/cAx1zGfT2MzqpwnhULmSQA'
-CLIENT_ARTICLE = (
-    'https://mp.weixin.qq.com/s?__biz=MzA3Mjc3NjkxNg%3D%3D&mid=265&idx=1&sn=abc123&pass_ticket=Pt%2Fxyz&chksm=8d0#rd'
-)
+class TestNoCommentApparatus:
+    """A half-removed capability still lets the UI report on what no code can read."""
 
+    def test_the_crawler_exposes_no_comment_helpers(self):
+        for gone in ('article_credentials', 'rendered_comment_count', 'get_like_count', 'get_reward_count'):
+            assert not hasattr(WechatCrawler, gone), f'{gone} survived the removal'
 
-class TestAdminSession:
-    def test_a_redirect_carrying_a_token_is_a_logged_in_admin(self, make_crawler):
-        crawler = make_crawler(url_map={ADMIN: ADMIN_LOGGED_IN})
-        facts = crawler.diagnose()
-        assert facts['mp_logged_in'] is True
-        assert facts['login_wall'] is False
-
-    def test_staying_on_the_login_page_is_not_logged_in(self, make_crawler):
-        crawler = make_crawler()
-        facts = crawler.diagnose()
-        assert facts['mp_logged_in'] is False
-        assert facts['login_wall'] is True
-
-    def test_the_admin_check_runs_even_when_an_article_was_supplied(self, make_crawler):
-        """Two capabilities, one panel action: search readiness and comment
-        access are answered together rather than forcing a second round trip."""
-        crawler = make_crawler(url_map={ADMIN: ADMIN_LOGGED_IN})
-        facts = crawler.diagnose(ARTICLE)
-        assert crawler.driver.visited[0] == ADMIN
-        assert facts['mp_logged_in'] is True
-
-
-class TestNoCommentDiagnostics:
-    """The comment apparatus is gone, so the diagnosis must not claim any of it.
-
-    A half-removed capability is worse than an absent one: a leftover
-    ``comment_key`` fact would let the panel keep reporting on something no code
-    can read.
-    """
-
-    def test_no_comment_facts_are_ever_reported(self, make_crawler):
+    def test_diagnose_reports_only_generic_facts(self, make_crawler):
         facts = make_crawler().diagnose(ARTICLE)
-        for gone in ('comment_key', 'comment_id', 'comment_visible', 'has_pass_ticket', 'body_readable'):
+        for gone in ('comment_key', 'comment_id', 'comment_visible', 'has_pass_ticket', 'mp_logged_in'):
             assert gone not in facts, f'{gone} survived the removal'
 
     def test_an_article_url_changes_nothing_about_the_verdict(self, make_crawler):
-        crawler = make_crawler(url_map={ADMIN: ADMIN_LOGGED_IN})
-        assert crawler.diagnose(ARTICLE)['mp_logged_in'] is True
-        assert crawler.diagnose()['mp_logged_in'] is True
+        """Diagnosis is the shared base-class behaviour now: it visits the login
+        page and reports a wall or not — nothing WeChat-specific."""
+        crawler = make_crawler()
+        facts = crawler.diagnose(ARTICLE)
+        assert facts['platform'] == 'mp.weixin.qq.com'
+        assert set(facts) == {'platform', 'url', 'login_wall'}
 
-    def test_the_crawler_exposes_no_comment_helpers(self):
-        for gone in ('article_credentials', 'rendered_comment_count'):
-            assert not hasattr(WechatCrawler, gone), f'{gone} still reachable'
 
+class TestNoSearchLeftovers:
     def test_wechat_is_not_a_comment_platform_for_the_router(self):
         """utils.helpers routes article links to adapters; WeChat has none, so a
         pasted 微信 link in comments mode must be refused rather than silently
@@ -133,3 +103,23 @@ class TestNoCommentDiagnostics:
 
         assert platform_for('https://mp.weixin.qq.com/s/abc') == ''
         assert platform_for('https://www.zhihu.com/question/1') == 'zhihu'
+
+    def test_the_crawler_takes_urls_because_a_keyword_would_lie(self, make_crawler):
+        """Keyword search is gone, so the only WeChat crawl is "these links".
+
+        An empty keyword list returns empty without opening a page — which is the
+        behaviour a saved workflow with an empty textarea depends on, and the
+        reason a keyword argument can never silently become a search again.
+        """
+        crawler = make_crawler()
+        assert crawler.search(keyword='人工智能', urls=[]) == []
+        assert crawler.search(urls=None) == []
+        assert crawler.driver.visited == [], 'nothing may be fetched when no link was given'
+
+    def test_no_module_builds_an_admin_request(self):
+        """searchbiz/appmsg were the search channel; nothing may assemble them."""
+        import inspect
+
+        source = inspect.getsource(WechatCrawler)
+        for gone in ('searchbiz', 'appmsg', 'list_ex', 'fakeid'):
+            assert gone not in source, f'{gone} survived the removal'

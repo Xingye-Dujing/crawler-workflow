@@ -1,7 +1,6 @@
 import logging
 import re
 import time
-from urllib.parse import parse_qs, urlparse
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -13,23 +12,6 @@ from i18n import t
 from .base import Crawler, as_index
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_current_url(driver) -> str:
-    """``current_url`` that never raises on a dead or test double driver."""
-    try:
-        return str(driver.current_url or '')
-    except Exception:
-        return ''
-
-
-def _url_params(url: str) -> dict:
-    """Query parameters of an article URL. A repeated key keeps all its values,
-    because the comment tokens WeChat hands out are not always single-valued."""
-    try:
-        return parse_qs(urlparse(str(url or '')).query)
-    except ValueError:
-        return {}
 
 
 class WechatCrawler(Crawler):
@@ -189,32 +171,6 @@ class WechatCrawler(Crawler):
             '正文': content[:5000] + ('...' if len(content) > 5000 else ''),
             '正文图片数': self.get_image_count(),
             '链接': url,
-        }
-
-    # ------------------------------------------------------------------
-    # Cookie diagnosis
-    # ------------------------------------------------------------------
-
-    def diagnose(self, url: str = '') -> dict:
-        """What the stored WeChat cookie actually unlocks.
-
-        Only one thing is answerable, and it is the thing the panel can act on:
-        whether a 公众号 admin session is alive, which is what makes keyword
-        search work. 留言/点赞/转发 are deliberately absent — see the class
-        docstring — so there is nothing to diagnose there and nothing to pretend
-        about.
-        """
-        self.driver.get(self.login_url)
-        admin_url = _safe_current_url(self.driver)
-        logged_in = 'token=' in admin_url
-        return {
-            'platform': self.domain,
-            'url': admin_url,
-            'mp_logged_in': logged_in,
-            # A recognised admin session is the only wall this platform has here;
-            # the generic login-wall flag keeps the verdict line uniform.
-            'login_wall': not logged_in,
-            'comments_supported': False,
         }
 
     # ------------------------------------------------------------------

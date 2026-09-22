@@ -2,7 +2,11 @@
 
 import pytest
 
+#: The catalogue itself, for the one assertion that has to read the message table
+#: rather than the rendered flow (a key must be *absent*, not merely unwritten).
+from i18n import _ZH as _ZH_MESSAGES
 from services.cookie_flow import flow_for, normalize_entry_url
+from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.unit
 
@@ -76,46 +80,39 @@ class TestFlow:
 
     def test_login_url_and_hosts_are_carried_for_the_panel(self, monkeypatch):
         monkeypatch.setattr('services.cookie_flow.t', lambda key, **kw: 'x')
-        flow = flow_for('wechat', allowed_hosts=HOSTS, login_url='https://mp.weixin.qq.com/')
-        assert flow['login_url'] == 'https://mp.weixin.qq.com/'
-        assert flow['allowed_hosts'] == ['mp.weixin.qq.com']
+        flow = flow_for('zhihu', allowed_hosts=('www.zhihu.com',), login_url='https://www.zhihu.com/')
+        assert flow['login_url'] == 'https://www.zhihu.com/'
+        assert flow['allowed_hosts'] == ['www.zhihu.com']
         assert flow['accepts_custom_url'] is True
 
     def test_a_platform_with_no_hosts_cannot_be_steered_to_a_custom_page(self, monkeypatch):
         monkeypatch.setattr('services.cookie_flow.t', lambda key, **kw: 'x')
         assert flow_for('zhihu', allowed_hosts=())['accepts_custom_url'] is False
 
-    def test_only_wechat_advertises_two_purposes(self, monkeypatch):
-        """WeChat is the platform whose cookie file serves two features that need
-        two different links; claiming that elsewhere would be a lie to the user."""
-        monkeypatch.setattr('services.cookie_flow.t', lambda key, **kw: 'x')
-        assert flow_for('wechat')['multi_purpose'] is True
-        assert flow_for('xiaohongshu')['multi_purpose'] is False
-
 
 class TestCatalogue:
     """The panel renders whatever the catalogue says, so the real text is the
     contract — an empty or unwritten entry would silently produce an empty box."""
 
-    @pytest.mark.parametrize('platform', ['zhihu', 'weibo', 'xiaohongshu', 'wechat'])
+    @pytest.mark.parametrize('platform', list(CookieManager.PLATFORMS))
     def test_every_platform_has_a_real_purpose_and_at_least_one_step(self, platform):
         flow = flow_for(platform)
         assert flow['purpose'] and not flow['purpose'].startswith('cookie.')
         assert len(flow['steps']) >= 1
 
-    def test_wechat_explains_the_admin_login_and_refuses_to_guess(self):
-        steps = '\n'.join(flow_for('wechat')['steps'])
-        assert 'mp.weixin.qq.com' in steps
-        # the measured reason, not a promise that a copied link would help
-        assert 'show_comment=0' in steps
-        assert '不伪装' in steps
+    def test_no_platform_advertises_a_wechat_cookie(self):
+        """WeChat article bodies need no login, and the keyword-search route that
+        did was removed — a cookie row for it would be guidance to log in for
+        nothing. The platform list, not the prose, is what proves it."""
+        assert 'wechat' not in CookieManager.PLATFORMS
+        assert 'cookie.wechat.purpose' not in _ZH_MESSAGES
 
     def test_no_platform_step_promises_a_wechat_comment_route(self):
         """The removed capability must not survive in guidance either."""
-        for platform in ('zhihu', 'weibo', 'xiaohongshu', 'wechat'):
+        for platform in CookieManager.PLATFORMS:
             assert 'pass_ticket' not in '\n'.join(flow_for(platform)['steps'])
 
-    @pytest.mark.parametrize('platform', ['zhihu', 'weibo', 'xiaohongshu', 'wechat'])
+    @pytest.mark.parametrize('platform', list(CookieManager.PLATFORMS))
     def test_the_english_catalogue_answers_too(self, platform):
         from i18n import set_lang
 
@@ -123,6 +120,6 @@ class TestCatalogue:
         try:
             flow = flow_for(platform)
             assert flow['purpose'] and len(flow['steps']) >= 1
-            assert 'mp.weixin.qq.com' in '\n'.join(flow_for('wechat')['steps'])
+            assert not flow['purpose'].startswith('cookie.'), f'{platform} has no English text'
         finally:
             set_lang('zh')

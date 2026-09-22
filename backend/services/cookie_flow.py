@@ -1,18 +1,12 @@
 """What each platform's cookie is *for*, and how to obtain it.
 
 The cookie panel used to offer one generic action — "open a browser and log in"
-— which is unhelpful exactly where the platforms differ most:
+— which is unhelpful exactly where the platforms differ most: some need a
+keyword search login, some a note page, and the pasteable entry link has to be
+restricted to hosts the crawler will actually plant cookies on.
 
-- WeChat article **search** is not offered to a browser at all; the only
-  Chrome-reachable entry is the 公众号后台's own article picker, so that cookie
-  comes from a 公众平台 login, not from an article page.
-- WeChat **comments** need the opposite: the article must be opened through the
-  link copied out of the PC client, because only that request carries
-  ``pass_ticket`` and thus gets the comment credential back.
-
-Both purposes live on the same host and the same cookie file, so the panel has
-to say which link to paste. The guidance is data here, the enforcement of the
-link is the validation below, and neither is duplicated in the frontend.
+The guidance is data here, the enforcement of the link is the validation below,
+and neither is duplicated in the frontend.
 """
 
 import logging
@@ -21,10 +15,6 @@ from urllib.parse import urlparse
 from i18n import t
 
 logger = logging.getLogger(__name__)
-
-# Platforms whose cookie unlocks more than one capability, and the cookie file
-# cannot tell them apart.
-MULTI_PURPOSE = ('wechat',)
 
 
 def flow_for(platform: str, allowed_hosts: tuple = (), login_url: str = '') -> dict:
@@ -42,7 +32,6 @@ def flow_for(platform: str, allowed_hosts: tuple = (), login_url: str = '') -> d
         'login_url': login_url,
         'accepts_custom_url': bool(allowed_hosts),
         'allowed_hosts': list(allowed_hosts),
-        'multi_purpose': platform in MULTI_PURPOSE,
     }
 
 

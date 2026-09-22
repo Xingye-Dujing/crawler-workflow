@@ -38,12 +38,15 @@ class TestCookieDiagnosis:
     """What a real browser session is actually allowed to see — measured here so
     the panel's verdict is pinned to the site's behaviour, not to a theory."""
 
-    def test_the_admin_verdict_agrees_with_the_address_shown(self, live_crawler):
-        """Logged into the 公众平台, the login page redirects to a URL carrying a
-        ``token``; that redirect IS the check, so the two answers cannot disagree."""
+    def test_the_generic_diagnosis_carries_no_wechat_special_case(self, live_crawler):
+        """WeChat has no cookie row in the panel any more (bodies are served to
+        anyone, and the keyword-search channel was removed), so the diagnosis is
+        the plain generic one: an address and a wall flag."""
         crawler = live_crawler('wechat', headless=False)
         facts = crawler.diagnose()
-        assert facts['mp_logged_in'] == ('token=' in facts['url'])
+        assert set(facts) == {'platform', 'url', 'login_wall'}
+        assert facts['platform'] == 'mp.weixin.qq.com'
+        assert facts['url'].startswith('https://mp.weixin.qq.com/')
 
     def test_the_diagnosis_reports_no_comment_state_at_all(self, live_crawler):
         """WeChat comments are not a capability here, so the diagnosis must not
@@ -51,8 +54,15 @@ class TestCookieDiagnosis:
         talking about something no code can read."""
         crawler = live_crawler('wechat', headless=False)
         facts = crawler.diagnose(ARTICLE_URLS[0])
-        assert facts['comments_supported'] is False
-        for gone in ('comment_key', 'comment_visible', 'has_pass_ticket', 'body_readable', 'comment_id'):
+        for gone in (
+            'comments_supported',
+            'comment_key',
+            'comment_visible',
+            'has_pass_ticket',
+            'body_readable',
+            'comment_id',
+            'mp_logged_in',
+        ):
             assert gone not in facts, f'{gone} survived the removal'
         # The article body is still public, which is what WeChat crawling does offer.
         assert crawler.driver.current_url.startswith('https://mp.weixin.qq.com/')

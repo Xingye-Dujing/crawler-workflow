@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from crawlers import CRAWLERS
+from services.cookie_manager import CookieManager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
@@ -155,8 +155,8 @@ class TestCookieFlow:
     """The panel's guidance is served, not hard-coded, so the translated steps
     and the host allowlist can never disagree with the crawler."""
 
-    @pytest.mark.parametrize('platform', list(CRAWLERS))
-    def test_every_crawlable_platform_is_described(self, client, platform):
+    @pytest.mark.parametrize('platform', list(CookieManager.PLATFORMS))
+    def test_every_cookie_platform_is_described(self, client, platform):
         flows = client.get('/api/cookies/flow').get_json()['flows']
         by_name = {flow['platform']: flow for flow in flows}
         assert platform in by_name
@@ -167,8 +167,9 @@ class TestCookieFlow:
         from crawlers import cookie_hosts
 
         by_name = {flow['platform']: flow for flow in client.get('/api/cookies/flow').get_json()['flows']}
-        assert by_name['wechat']['allowed_hosts'] == list(cookie_hosts('wechat'))
-        assert by_name['wechat']['login_url'] == 'https://mp.weixin.qq.com/'
+        for platform in by_name:
+            assert by_name[platform]['allowed_hosts'] == list(cookie_hosts(platform))
+        assert by_name['zhihu']['login_url'] == 'https://www.zhihu.com/'
 
     def test_the_registry_and_the_panel_never_drift_apart(self, client):
         """A platform added to the crawler registry but not to the cookie panel
@@ -177,19 +178,23 @@ class TestCookieFlow:
 
         from crawlers import CRAWLERS
 
-        assert set(app_module.COOKIE_PLATFORMS) == set(CRAWLERS)
+        # Cookie capture is a subset of crawling: WeChat is crawled from public
+        # article pages and needs no session, so it must not appear in the panel.
+        assert set(app_module.COOKIE_PLATFORMS) < set(CRAWLERS)
+        assert 'wechat' not in app_module.COOKIE_PLATFORMS
 
 
 class TestEntryLink:
-    """WeChat comments need the session to start at the link copied out of the
-    client; anything else must be refused rather than silently captured."""
+    """A pasted link becomes the page the login browser opens, so it has to be
+    restricted to the platform's own hosts — anything else would store another
+    site's cookies in this platform's file."""
 
     def test_an_allowed_link_is_what_the_browser_is_sent_to(self, client, job, monkeypatch):
-        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('mp.weixin.qq.com',))
-        article = 'https://mp.weixin.qq.com/s?__biz=B&pass_ticket=P#rd'
+        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        article = 'https://www.zhihu.com/question/1/answer/2'
         assert (
             client.post(
-                '/api/cookies/generate', json={'platform': 'wechat', 'wait_seconds': 10, 'url': article}
+                '/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10, 'url': article}
             ).status_code
             == 202
         )
@@ -200,9 +205,9 @@ class TestEntryLink:
         assert _await_idle(client)
 
     def test_a_foreign_link_is_rejected_and_says_so_instead_of_landing_elsewhere(self, client, job, monkeypatch):
-        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('mp.weixin.qq.com',))
+        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
         r = client.post(
-            '/api/cookies/generate', json={'platform': 'wechat', 'wait_seconds': 10, 'url': 'https://evil.test/x'}
+            '/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10, 'url': 'https://evil.test/x'}
         )
         assert r.status_code == 202
         body = r.get_json()
@@ -225,22 +230,18 @@ class TestCookieVerify:
         assert body['facts']['login_wall'] is True
         assert any('login' in line.lower() or '登录' in line for line in body['lines'])
 
-    def test_wechat_verdict_says_what_wechat_cannot_do(self, client, job, app_module):
-        """The one platform with a permanent gap must state it in the verdict, so
-        an empty result is never read as a cookie problem."""
-        app_module.cookie_manager.save('wechat', [{'name': 'slave_sid', 'value': 'x'}])
-        job['state']['facts'] = {
-            'platform': 'mp.weixin.qq.com',
-            'url': 'https://mp.weixin.qq.com/cgi-bin/home?token=1',
-            'mp_logged_in': True,
-            'login_wall': False,
-            'comments_supported': False,
-        }
-        assert client.post('/api/cookies/verify', json={'platform': 'wechat'}).status_code == 202
+    def test_a_verify_answers_with_the_generic_two_lines(self, client, job, app_module):
+        """Every platform answers the same question now — wall or no wall.
+
+        The WeChat-specific third line went with the keyword-search feature; a
+        leftover would have the panel reporting on a capability no code has.
+        """
+        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        job['state']['facts'] = {'platform': 'www.zhihu.com', 'url': 'https://www.zhihu.com/', 'login_wall': False}
+        assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
         body = _await_phase(client, 'verified')
-        assert len(body['lines']) == 3
-        joined = '\n'.join(body['lines'])
-        assert '留言' in joined and '伪装' in joined
+        assert len(body['lines']) == 2, 'a verdict is the checked URL plus one wall answer'
+        assert not any('公众号' in line or 'MP admin' in line for line in body['lines'])
 
     def test_verifying_without_a_stored_cookie_is_refused_before_any_browser(self, client, job, app_module):
         app_module.cookie_manager.delete('weibo')
@@ -250,9 +251,9 @@ class TestCookieVerify:
         assert job['made'] == []
 
     def test_a_link_outside_the_platform_is_refused(self, client, job, app_module, monkeypatch):
-        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('mp.weixin.qq.com',))
-        app_module.cookie_manager.save('wechat', [{'name': 'x', 'value': 'y'}])
-        r = client.post('/api/cookies/verify', json={'platform': 'wechat', 'url': 'https://evil.test/'})
+        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        app_module.cookie_manager.save('zhihu', [{'name': 'x', 'value': 'y'}])
+        r = client.post('/api/cookies/verify', json={'platform': 'zhihu', 'url': 'https://evil.test/'})
         assert r.status_code == 400
         assert job['made'] == []
 

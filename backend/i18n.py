@@ -308,16 +308,6 @@ _ZH = {
         '2. 打开任意一篇笔记，能看到评论区即可\n'
         '3. 回到本面板点「我已登录，保存」'
     ),
-    'cookie.wechat.purpose': '让浏览器能按关键词搜索公众号文章——需要登录你自己的公众号后台。',
-    'cookie.wechat.steps': (
-        '【搜索公众号文章】点「浏览器登录」（入口 https://mp.weixin.qq.com/），扫码登录你自己的公众号后台，'
-        '然后点「我已登录，保存」。没有公众号账号就无法按关键词搜索。\n'
-        '【抓取文章正文】不需要登录：把推文链接粘到数据源节点即可。\n'
-        '【微信不采集留言、点赞数、转发数】微信把这几项放在只下发给客户端会话的凭证之后，'
-        '浏览器取不到：实测页面 show_comment=0、HTML 里没有任何留言数据，留言接口回「请在微信客户端打开链接」。'
-        '本项目不伪装微信客户端去绕过它；而且在浏览器里「这篇没有评论」与「这次没被允许查看」无法区分，'
-        '所以宁可不做，也不给你一份看起来正常的空数据。'
-    ),
     'cookie.openedEntry': '登录浏览器已打开：{url}',
     'cookie.entryRejected': (
         '该链接不属于 {platform} 的域名，已改用平台登录页（不允许把别的站点的 Cookie 存进本平台的 Cookie 文件）'
@@ -327,13 +317,6 @@ _ZH = {
     'cookie.verify.ok': '{platform} 的 Cookie 可用',
     'cookie.verify.loginWall': '{platform} 仍被挡在登录页：请重新登录并保存',
     'cookie.verify.noCookie': '{platform} 还没有 Cookie：请先登录保存',
-    'cookie.verify.mpLoggedIn': '公众号后台登录态：{state}',
-    'cookie.verify.mpLoggedInYes': '已登录（可搜索文章）',
-    'cookie.verify.mpLoggedInNo': '未登录（无法搜索文章，请在浏览器里扫码登录公众号后台）',
-    'cookie.verify.wechatNoComments': (
-        '留言/点赞/转发：微信不提供浏览器采集——这些只随客户端会话下发，'
-        '且「无数据」与「未被允许查看」无法区分，故本项目不采集、也不伪装客户端'
-    ),
     'cookie.verify.checkedUrl': '验证地址：{url}',
     'api.cookieBusy': '已有 {platform} 的登录窗口打开中——请先完成或取消它',
     'api.bodyNotObject': '请求体必须是 JSON 对象',
@@ -789,19 +772,6 @@ _EN = {
         '2. Open any note and confirm the comment area renders\n'
         '3. Come back here and press "Done — I logged in"'
     ),
-    'cookie.wechat.purpose': 'Lets the browser search official-account articles by keyword — needs a login to your '
-    'own 公众号 (MP admin).',
-    'cookie.wechat.steps': (
-        '[Search articles] Press "Login via browser" (entry https://mp.weixin.qq.com/), scan to log into your own '
-        'MP admin, then press "Done — I logged in". Without an official account there is no keyword search.\n'
-        '[Crawl article bodies] No login needed: paste the article links into the source node.\n'
-        '[WeChat comments, likes and forwards are not collected] WeChat serves those behind a credential it mints '
-        'only for a client session, so a browser cannot read them — measured: the page sets show_comment=0, carries '
-        'no comment data at all, and the comment endpoint answers 请在微信客户端打开链接. This project does not '
-        'impersonate the WeChat client to get around that; and in a browser "this article has no comments" is '
-        'indistinguishable from "this visit was not allowed to look", so an empty-looking dataset would be worse '
-        'than no dataset.'
-    ),
     'cookie.openedEntry': 'Login browser opened at: {url}',
     'cookie.entryRejected': 'That link is not on a {platform} domain, so the platform login page was used instead '
     '(another site\u2019s cookies must never be stored in this platform\u2019s cookie file)',
@@ -810,14 +780,6 @@ _EN = {
     'cookie.verify.ok': 'The stored {platform} cookie works',
     'cookie.verify.loginWall': '{platform} still redirects to a login page: log in again and save',
     'cookie.verify.noCookie': 'No {platform} cookie stored yet: log in and save first',
-    'cookie.verify.mpLoggedIn': 'MP admin session: {state}',
-    'cookie.verify.mpLoggedInYes': 'logged in (article search available)',
-    'cookie.verify.mpLoggedInNo': 'not logged in',
-    'cookie.verify.wechatNoComments': (
-        'Comments / likes / forwards: not collected for WeChat. The site serves them only to a client session, and '
-        '"no data" cannot be told apart from "not allowed to look" \u2014 so this project neither scrapes them nor '
-        'impersonates the client'
-    ),
     'cookie.verify.checkedUrl': 'Verified against: {url}',
     'api.cookieBusy': 'A {platform} login window is already open — finish or cancel it first',
     'api.bodyNotObject': 'request body must be a JSON object',

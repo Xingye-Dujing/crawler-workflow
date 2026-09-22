@@ -15,7 +15,7 @@ class CookieManager:
     refused instead of turning into ``../../x_cookies.json``.
     """
 
-    PLATFORMS = ('zhihu', 'weibo', 'xiaohongshu', 'wechat', 'bilibili', 'douyin')
+    PLATFORMS = ('zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin')
 
     def __init__(self, cookie_dir: str):
         self.cookie_dir = cookie_dir

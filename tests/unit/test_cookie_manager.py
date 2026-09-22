@@ -25,14 +25,18 @@ def manager(tmp_path):
 
 class TestPlatformWhitelist:
     def test_the_cookie_whitelist_is_the_platform_list(self):
-        """Six platforms hold a cookie file: five crawlable ones plus Douyin,
-        whose login is captured now and whose crawl lands later."""
-        assert CookieManager.PLATFORMS == ('zhihu', 'weibo', 'xiaohongshu', 'wechat', 'bilibili', 'douyin')
+        """Five platforms hold a cookie file. WeChat is deliberately not one of
+        them: its article bodies are served to anyone, and the keyword search that
+        did need a login was removed — a cookie row would be advice to log in for
+        nothing."""
+        assert CookieManager.PLATFORMS == ('zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin')
         assert all(CookieManager.is_supported(p) for p in CookieManager.PLATFORMS)
+        assert CookieManager.is_supported('wechat') is False
 
     def test_cookie_support_and_crawl_support_are_different_things(self):
         """The distinction that keeps a half-built platform out of the canvas: a
-        platform may be loggable in while still refusing to be a data source.
+        platform may be loggable in while still refusing to be a data source —
+        and, as WeChat shows, the other way round too.
 
         Pinned on the *mechanism*, not on which platform happens to be
         unimplemented today — that roster changes every time a crawl lands, and a
@@ -40,7 +44,8 @@ class TestPlatformWhitelist:
         """
         from crawlers import CRAWLERS, is_crawlable
 
-        assert set(CRAWLERS) == set(CookieManager.PLATFORMS)
+        # Every loggable platform is crawlable; the converse need not hold.
+        assert set(CookieManager.PLATFORMS) < set(CRAWLERS)
         assert all(is_crawlable(p) for p in CRAWLERS)
         assert is_crawlable('kuaishou') is False  # nobody logs into it, nobody crawls it
 
@@ -74,8 +79,8 @@ class TestRoundTrip:
         assert manager.load('zhihu') == COOKIES
 
     def test_save_writes_readable_json(self, manager):
-        manager.save('wechat', COOKIES)
-        with open(manager._path_for('wechat'), encoding='utf-8') as handle:
+        manager.save('bilibili', COOKIES)
+        with open(manager._path_for('bilibili'), encoding='utf-8') as handle:
             assert json.load(handle) == COOKIES
 
     @pytest.mark.parametrize('platform', CookieManager.PLATFORMS)
