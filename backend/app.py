@@ -32,12 +32,13 @@ from analyzers import (
 )
 from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
-from crawlers import get_crawler
+from crawlers import cookie_hosts, crawler_class, get_crawler
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, node_label
 from i18n import audit, normalize, set_lang, t
 from services import StatsService
+from services.cookie_flow import flow_for, normalize_entry_url
 from services.cookie_manager import CookieManager
 from services.data_analysis import DataAnalysisService, UnknownOperationError
 from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD, DatasetStore
@@ -2714,12 +2715,38 @@ def platform_summary():
 
 # ─── Cookie API ────────────────────────────────────────────────
 
+# One list, so a platform can never be half-wired: status, flows, generation and
+# verification all walk the same tuple, which is the crawler registry's order.
+COOKIE_PLATFORMS = ('zhihu', 'weibo', 'xiaohongshu', 'wechat')
+
 
 @app.route('/api/cookies/status', methods=['GET'])
 def cookie_status():
-    platforms = ['zhihu', 'weibo', 'xiaohongshu', 'wechat']
-    status = {p: cookie_manager.exists(p) for p in platforms}
+    status = {platform: cookie_manager.exists(platform) for platform in COOKIE_PLATFORMS}
     return jsonify({'ok': True, 'cookies': status})
+
+
+@app.route('/api/cookies/flow', methods=['GET'])
+def cookie_flow():
+    """What each cookie is for and how to get it, for the panel to render.
+
+    The guidance lives in the message catalogue and the host list on the
+    crawler, never in the frontend: a translated panel and a per-platform
+    "which page do I log in on" answer are the same feature, and both used to
+    be missing for WeChat — whose two capabilities are unlocked by two
+    different links on one host.
+    """
+    flows = []
+    for platform in COOKIE_PLATFORMS:
+        cls = crawler_class(platform)
+        flows.append(
+            flow_for(
+                platform,
+                allowed_hosts=cookie_hosts(platform),
+                login_url=getattr(cls, 'login_url', '') if cls else '',
+            )
+        )
+    return jsonify({'ok': True, 'flows': flows})
 
 
 @app.route('/api/cookies/save', methods=['POST'])
@@ -2751,10 +2778,17 @@ def save_cookies():
 _COOKIE_JOB_LOCK = threading.Lock()
 _COOKIE_JOB = {
     'active': False,
+    # Which single-flight action owns the browser: a login (waits for the user
+    # to press Done) or a verification (runs to completion by itself). The panel
+    # shows its "Done — I logged in" button only for the first.
+    'kind': '',
     'platform': '',
-    'phase': '',  # starting → waiting → saved | cancelled | error
+    'phase': '',  # login: starting → waiting → saved | cancelled | error; verify: verifying → verified | error
     'error': '',
     'count': 0,
+    'entry': '',  # the URL the browser was actually sent to
+    'facts': {},  # verify: what the stored cookie unlocked
+    'lines': [],  # verify: those facts, already in the user's language
     'cancel': threading.Event(),
     'confirm': threading.Event(),
 }
@@ -2789,22 +2823,28 @@ def _close_login_browser(crawler, quit_timeout: float = 5.0):
             )
 
 
-def _cookie_login_worker(platform: str, wait_seconds: int):
+def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = ''):
     """Drive one login window from the request thread to its own daemon.
 
     The request thread used to sleep for the whole wait (up to 600 s), so any
     proxy or tab timeout turned a perfectly good login into a broken fetch and
     an orphaned browser. Progress lives in _COOKIE_JOB now; the panel polls it.
+
+    *entry_url* overrides which page opens — the whole point for WeChat, whose
+    comment scraping needs the session to start from the link copied out of the
+    client rather than from the platform's login page.
     """
     job = _COOKIE_JOB
     crawler = None
     try:
         crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR)
-        url = crawler.login_url
+        url = entry_url or crawler.login_url
         if not url:
             raise ValueError(t('api.unsupportedPlatform', platform=platform))
         crawler.driver.get(url)
+        job['entry'] = url
         add_log(t('wf.browser_opened', platform=platform, n=wait_seconds))
+        add_log(t('cookie.openedEntry', url=url))
         job['phase'] = 'waiting'
         deadline = time.time() + wait_seconds
         while time.time() < deadline:
@@ -2865,6 +2905,13 @@ def generate_cookies():
     if not cookie_manager.is_supported(platform):
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
     wait_seconds = _safe_int(data.get('wait_seconds'), 120, minimum=10, maximum=600)
+    # A link the user pasted, if any. It has to belong to this platform: the
+    # browser is driven with their real session, and cookies are saved per
+    # platform file — opening some other site here would store that site's
+    # session under, say, "zhihu" and the crawl would carry it to Zhihu.
+    requested = str(data.get('url') or '').strip()
+    entry_url = normalize_entry_url(requested, cookie_hosts(platform))
+    entry_rejected = bool(requested) and not entry_url
 
     with _COOKIE_JOB_LOCK:
         if _COOKIE_JOB['active']:
@@ -2879,11 +2926,21 @@ def generate_cookies():
                 ),
                 409,
             )
-        _COOKIE_JOB.update(active=True, platform=platform, phase='starting', error='', count=0)
+        _COOKIE_JOB.update(active=True, kind='login', platform=platform, phase='starting', error='', count=0)
+        _COOKIE_JOB['entry'] = ''
+        _COOKIE_JOB['facts'] = {}
+        _COOKIE_JOB['lines'] = []
         _COOKIE_JOB['cancel'].clear()
         _COOKIE_JOB['confirm'].clear()
-    threading.Thread(target=_cookie_login_worker, args=(platform, wait_seconds), daemon=True).start()
-    return jsonify({'ok': True, 'message': t('cookie.started')}), 202
+    threading.Thread(target=_cookie_login_worker, args=(platform, wait_seconds, entry_url), daemon=True).start()
+    payload = {'ok': True, 'message': t('cookie.started'), 'entry': entry_url or ''}
+    if entry_rejected:
+        # Say so instead of quietly opening somewhere else: the user believes
+        # they are logging in for one purpose and the browser shows another.
+        payload['entry_rejected'] = True
+        payload['entry_note'] = t('cookie.entryRejected', platform=platform)
+        add_log(payload['entry_note'])
+    return jsonify(payload), 202
 
 
 @app.route('/api/cookies/generate/status', methods=['GET'])
@@ -2892,19 +2949,123 @@ def cookie_generate_status():
         {
             'ok': True,
             'active': _COOKIE_JOB['active'],
+            'kind': _COOKIE_JOB['kind'],
             'platform': _COOKIE_JOB['platform'],
             'phase': _COOKIE_JOB['phase'],
             'error': _COOKIE_JOB['error'],
             'count': _COOKIE_JOB['count'],
+            'entry': _COOKIE_JOB['entry'],
+            'facts': _COOKIE_JOB['facts'],
+            'lines': _COOKIE_JOB['lines'],
         }
     )
+
+
+def _verify_lines(platform: str, facts: dict) -> list:
+    """Turn one diagnosis into the lines the panel shows.
+
+    WeChat answers two independent questions there (is the 公众号 admin session
+    alive? does this article carry a comment credential?) because one cookie
+    file covers both and users routinely have only one of them.
+    """
+    lines = [t('cookie.verify.checkedUrl', url=str(facts.get('url') or ''))]
+    if platform == 'wechat':
+        admin = 'cookie.verify.mpLoggedInYes' if facts.get('mp_logged_in') else 'cookie.verify.mpLoggedInNo'
+        lines.append(t('cookie.verify.mpLoggedIn', state=t(admin)))
+        if 'comment_key' in facts:
+            key = 'cookie.verify.commentKeyYes' if facts.get('comment_key') else 'cookie.verify.commentKeyNo'
+            lines.append(t('cookie.verify.commentKey', state=t(key)))
+            lines.append(t('cookie.verify.commentCount', n=int(facts.get('comment_visible') or 0)))
+        return lines
+    lines.append(
+        t('cookie.verify.loginWall', platform=platform)
+        if facts.get('login_wall')
+        else t('cookie.verify.ok', platform=platform)
+    )
+    return lines
+
+
+def _cookie_verify_worker(platform: str, url: str):
+    """Probe the stored cookie against the live site and report what it unlocks.
+
+    Visible by design: this machine's risk control treats a headless content
+    page differently from a real window (Zhihu in particular), and a diagnosis
+    that blamed the cookie for a headless block would send the user to log in
+    again for nothing.
+    """
+    job = _COOKIE_JOB
+    crawler = None
+    try:
+        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR)
+        facts = crawler.diagnose(url)
+        lines = _verify_lines(platform, facts)
+        with _COOKIE_JOB_LOCK:
+            job['facts'] = facts
+            job['lines'] = lines
+            job['entry'] = str(facts.get('url') or '')
+            job['phase'] = 'verified'
+        for line in lines:
+            add_log(line)
+    except Exception as e:
+        logger.exception(t('misc.cookie_gen_failed'))
+        with _COOKIE_JOB_LOCK:
+            job['phase'] = 'error'
+            job['error'] = str(e)[:300]
+        add_log(t('cookie.verifyFailed', err=str(e)[:120]))
+    finally:
+        _close_login_browser(crawler)
+        with _COOKIE_JOB_LOCK:
+            job['active'] = False
+
+
+@app.route('/api/cookies/verify', methods=['POST'])
+def verify_cookies():
+    """Ask the platform, with the saved cookie, whether it still lets us in.
+
+    Refused outright when no cookie is stored: opening a browser to discover
+    that would only produce a wall that looks like a failed check.
+    """
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
+    platform = str(data.get('platform', ''))
+    if not cookie_manager.is_supported(platform):
+        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+    if not cookie_manager.exists(platform):
+        return jsonify({'ok': False, 'error': t('cookie.verify.noCookie', platform=platform)}), 400
+    requested = str(data.get('url') or '').strip()
+    target = normalize_entry_url(requested, cookie_hosts(platform))
+    if requested and not target:
+        return jsonify({'ok': False, 'error': t('cookie.entryRejected', platform=platform)}), 400
+
+    with _COOKIE_JOB_LOCK:
+        if _COOKIE_JOB['active']:
+            return (
+                jsonify(
+                    {
+                        'ok': False,
+                        'busy': True,
+                        'platform': _COOKIE_JOB['platform'],
+                        'error': t('api.cookieBusy', platform=_COOKIE_JOB['platform']),
+                    }
+                ),
+                409,
+            )
+        _COOKIE_JOB.update(active=True, kind='verify', platform=platform, phase='verifying', error='', count=0)
+        _COOKIE_JOB['entry'] = ''
+        _COOKIE_JOB['facts'] = {}
+        _COOKIE_JOB['lines'] = []
+        _COOKIE_JOB['cancel'].clear()
+        _COOKIE_JOB['confirm'].clear()
+    threading.Thread(target=_cookie_verify_worker, args=(platform, target), daemon=True).start()
+    return jsonify({'ok': True, 'message': t('cookie.verifying')}), 202
 
 
 @app.route('/api/cookies/generate/confirm', methods=['POST'])
 def cookie_generate_confirm():
     """'I finished logging in' — capture and save the cookies now."""
     with _COOKIE_JOB_LOCK:
-        if not _COOKIE_JOB['active']:
+        if not _COOKIE_JOB['active'] or _COOKIE_JOB['kind'] != 'login':
             return jsonify({'ok': False, 'error': t('api.noCookieJob')}), 400
         _COOKIE_JOB['confirm'].set()
     return jsonify({'ok': True})
@@ -2913,7 +3074,7 @@ def cookie_generate_confirm():
 @app.route('/api/cookies/generate/cancel', methods=['POST'])
 def cookie_generate_cancel():
     with _COOKIE_JOB_LOCK:
-        if not _COOKIE_JOB['active']:
+        if not _COOKIE_JOB['active'] or _COOKIE_JOB['kind'] != 'login':
             return jsonify({'ok': False, 'error': t('api.noCookieJob')}), 400
         _COOKIE_JOB['cancel'].set()
     return jsonify({'ok': True})

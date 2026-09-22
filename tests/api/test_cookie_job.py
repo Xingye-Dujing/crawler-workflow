@@ -40,16 +40,27 @@ class FakeDriver:
 
 
 class FakeCrawler:
-    def __init__(self, login_block=None):
+    def __init__(self, login_block=None, facts=None, hold=None):
         self.domain = 'example.com'
         self.login_url = 'https://example.com/login'
         self.driver = FakeDriver(self)
         self.dead = False
         self.closed = False
         self._block = login_block  # optional Event to stall driver.get
+        self.diagnosed = []
+        self._facts = facts if facts is not None else {'login_wall': False, 'url': 'https://example.com/feed'}
+        # A probe that answers instantly is never caught mid-flight by a poller,
+        # so a test that wants to act *during* one holds it here.
+        self._hold = hold
 
     def close(self):
         self.closed = True
+
+    def diagnose(self, url=''):
+        self.diagnosed.append(url)
+        if self._hold is not None:
+            self._hold.wait(5)
+        return dict(self._facts)
 
 
 @pytest.fixture
@@ -58,22 +69,34 @@ def job(monkeypatch, app_module):
     made = []
     block = threading.Event()
     block.set()
+    state = {'facts': None, 'hold': None}
 
     def fake_get_crawler(platform, headless=True, cookie_dir=None):
-        crawler = FakeCrawler(login_block=block)
+        crawler = FakeCrawler(login_block=block, facts=state['facts'], hold=state['hold'])
         made.append(crawler)
         return crawler
 
     monkeypatch.setattr(app_module, 'get_crawler', fake_get_crawler)
-    with app_module._COOKIE_JOB_LOCK:
-        app_module._COOKIE_JOB.update(active=False, platform='', phase='', error='', count=0)
-        app_module._COOKIE_JOB['cancel'].clear()
-        app_module._COOKIE_JOB['confirm'].clear()
-    yield {'made': made, 'block': block}
-    with app_module._COOKIE_JOB_LOCK:
-        app_module._COOKIE_JOB.update(active=False, platform='', phase='', error='', count=0)
-        app_module._COOKIE_JOB['cancel'].clear()
-        app_module._COOKIE_JOB['confirm'].clear()
+
+    def reset():
+        with app_module._COOKIE_JOB_LOCK:
+            app_module._COOKIE_JOB.update(
+                active=False,
+                kind='',
+                platform='',
+                phase='',
+                error='',
+                count=0,
+                entry='',
+                facts={},
+                lines=[],
+            )
+            app_module._COOKIE_JOB['cancel'].clear()
+            app_module._COOKIE_JOB['confirm'].clear()
+
+    reset()
+    yield {'made': made, 'block': block, 'state': state}
+    reset()
 
 
 def _await_idle(client, timeout=6.0):
@@ -126,10 +149,159 @@ class TestCookieJob:
         assert client.post('/api/cookies/generate', json='null').status_code in (400,)
 
 
+class TestCookieFlow:
+    """The panel's guidance is served, not hard-coded, so the translated steps
+    and the host allowlist can never disagree with the crawler."""
+
+    @pytest.mark.parametrize('platform', ['zhihu', 'weibo', 'xiaohongshu', 'wechat'])
+    def test_every_crawlable_platform_is_described(self, client, platform):
+        flows = client.get('/api/cookies/flow').get_json()['flows']
+        by_name = {flow['platform']: flow for flow in flows}
+        assert platform in by_name
+        assert by_name[platform]['purpose']
+        assert by_name[platform]['steps']
+
+    def test_hosts_come_from_the_crawler_that_will_use_them(self, client):
+        from crawlers import cookie_hosts
+
+        by_name = {flow['platform']: flow for flow in client.get('/api/cookies/flow').get_json()['flows']}
+        assert by_name['wechat']['allowed_hosts'] == list(cookie_hosts('wechat'))
+        assert by_name['wechat']['login_url'] == 'https://mp.weixin.qq.com/'
+
+    def test_the_registry_and_the_panel_never_drift_apart(self, client):
+        """A platform added to the crawler registry but not to the cookie panel
+        would save a cookie file nobody reads."""
+        import app as app_module
+
+        from crawlers import CRAWLERS
+
+        assert set(app_module.COOKIE_PLATFORMS) == set(CRAWLERS)
+
+
+class TestEntryLink:
+    """WeChat comments need the session to start at the link copied out of the
+    client; anything else must be refused rather than silently captured."""
+
+    def test_an_allowed_link_is_what_the_browser_is_sent_to(self, client, job, monkeypatch):
+        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('mp.weixin.qq.com',))
+        article = 'https://mp.weixin.qq.com/s?__biz=B&pass_ticket=P#rd'
+        assert (
+            client.post(
+                '/api/cookies/generate', json={'platform': 'wechat', 'wait_seconds': 10, 'url': article}
+            ).status_code
+            == 202
+        )
+        _await_phase(client, 'waiting')
+        assert job['made'][0].driver.visited[0] == article
+        assert client.get('/api/cookies/generate/status').get_json()['entry'] == article
+        client.post('/api/cookies/generate/cancel')
+        assert _await_idle(client)
+
+    def test_a_foreign_link_is_rejected_and_says_so_instead_of_landing_elsewhere(self, client, job, monkeypatch):
+        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('mp.weixin.qq.com',))
+        r = client.post(
+            '/api/cookies/generate', json={'platform': 'wechat', 'wait_seconds': 10, 'url': 'https://evil.test/x'}
+        )
+        assert r.status_code == 202
+        body = r.get_json()
+        assert body['entry_rejected'] is True and body['entry_note']
+        _await_phase(client, 'waiting')
+        # The login page, not the pasted link, is what opened.
+        assert job['made'][0].driver.visited == ['https://example.com/login']
+        client.post('/api/cookies/generate/cancel')
+        assert _await_idle(client)
+
+
+class TestCookieVerify:
+    def test_a_stored_cookie_is_probed_and_the_verdict_comes_back_as_lines(self, client, job, app_module):
+        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        job['state']['facts'] = {'platform': 'zhihu.com', 'url': 'https://www.zhihu.com/signin', 'login_wall': True}
+        assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
+        assert _await_phase(client, 'verified')
+        body = client.get('/api/cookies/generate/status').get_json()
+        assert body['kind'] == 'verify'
+        assert body['facts']['login_wall'] is True
+        assert any('login' in line.lower() or '登录' in line for line in body['lines'])
+
+    def test_wechat_reports_search_access_and_comment_access_separately(self, client, job, app_module):
+        app_module.cookie_manager.save('wechat', [{'name': 'slave_sid', 'value': 'x'}])
+        job['state']['facts'] = {
+            'platform': 'mp.weixin.qq.com',
+            'url': 'https://mp.weixin.qq.com/s/abc',
+            'login_wall': False,
+            'mp_logged_in': False,
+            'comment_key': '',
+            'comment_visible': 0,
+            'has_pass_ticket': False,
+        }
+        article = 'https://mp.weixin.qq.com/s/abc'
+        assert client.post('/api/cookies/verify', json={'platform': 'wechat', 'url': article}).status_code == 202
+        assert _await_phase(client, 'verified')
+        lines = client.get('/api/cookies/generate/status').get_json()['lines']
+        assert len(lines) == 4  # address, admin session, credential, visible count
+        assert any('公众号' in line or 'MP admin' in line for line in lines)
+
+    def test_verifying_without_a_stored_cookie_is_refused_before_any_browser(self, client, job, app_module):
+        app_module.cookie_manager.delete('weibo')
+        r = client.post('/api/cookies/verify', json={'platform': 'weibo'})
+        assert r.status_code == 400
+        assert 'COOKIE' in r.get_json()['error'] or 'cookie' in r.get_json()['error']
+        assert job['made'] == []
+
+    def test_a_link_outside_the_platform_is_refused(self, client, job, app_module, monkeypatch):
+        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('mp.weixin.qq.com',))
+        app_module.cookie_manager.save('wechat', [{'name': 'x', 'value': 'y'}])
+        r = client.post('/api/cookies/verify', json={'platform': 'wechat', 'url': 'https://evil.test/'})
+        assert r.status_code == 400
+        assert job['made'] == []
+
+    def test_the_login_buttons_do_not_answer_a_verification(self, client, job, app_module):
+        """Done/Cancel belong to a login window. Pressing them while a probe
+        runs would claim to confirm a login that never happened."""
+        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        hold = threading.Event()
+        job['state']['hold'] = hold
+        try:
+            assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
+            _await_phase(client, 'verifying')
+            assert client.post('/api/cookies/generate/confirm').status_code == 400
+            assert client.post('/api/cookies/generate/cancel').status_code == 400
+        finally:
+            hold.set()
+        assert _await_phase(client, 'verified')
+        # The buttons never resolved the probe, so the job finished on its own.
+        assert job['made'][0].closed is True
+
+    def test_a_crashing_probe_settles_as_error_not_a_hanging_dialog(self, client, job, app_module, monkeypatch):
+        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+
+        def explode(*_args, **_kwargs):
+            raise RuntimeError('chromedriver vanished')
+
+        monkeypatch.setattr(app_module, 'get_crawler', explode)
+        assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
+        assert _await_phase(client, 'error')
+        assert 'chromedriver' in client.get('/api/cookies/generate/status').get_json()['error']
+
+    def test_verification_never_shares_the_window_with_a_login(self, client, job, app_module):
+        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        assert client.post('/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10}).status_code == 202
+        _await_phase(client, 'waiting')
+        assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 409
+        client.post('/api/cookies/generate/cancel')
+        assert _await_idle(client)
+
+
 def _await_phase(client, phase, timeout=6.0):
+    """Wait for one phase, then hand back the whole status body.
+
+    Returning it makes ``assert _await_phase(...)`` mean "the job reached this
+    phase" instead of "the helper happened to return None".
+    """
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if client.get('/api/cookies/generate/status').get_json()['phase'] == phase:
-            return
+        body = client.get('/api/cookies/generate/status').get_json()
+        if body['phase'] == phase:
+            return body
         time.sleep(0.05)
     raise AssertionError(f'cookie job never reached phase {phase!r}')

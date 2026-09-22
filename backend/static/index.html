@@ -844,12 +844,34 @@
           <label class="settings-label" data-i18n="cookies.platform"
             >Platform</label
           >
-          <select id="cookie-platform" class="settings-select">
+          <select
+            id="cookie-platform"
+            class="settings-select"
+            onchange="renderCookieGuide()"
+          >
             <option value="zhihu" data-i18n="platform.zhihu">Zhihu</option>
             <option value="weibo" data-i18n="platform.weibo">Weibo</option>
             <option value="xiaohongshu" data-i18n="platform.xiaohongshu">Xiaohongshu</option>
             <option value="wechat" data-i18n="platform.wechat">WeChat</option>
           </select>
+        </div>
+        <!-- Filled from /api/cookies/flow: which page to log in on and why.
+             Server-side text on purpose — WeChat's two capabilities need two
+             different entry links, and that guidance must be translated and
+             kept next to the code that enforces it. -->
+        <div class="settings-group" id="cookie-guide">
+          <div id="cookie-guide-body" class="cookie-guide"></div>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label" data-i18n="cookies.entryUrl"
+            >Login entry link</label
+          >
+          <input
+            id="cookie-entry"
+            class="settings-input"
+            type="text"
+            placeholder="https://…"
+          />
         </div>
         <div class="settings-group">
           <label class="settings-label" data-i18n="cookies.paste"
@@ -876,6 +898,13 @@
             data-i18n="cookies.generate"
           >
             Generate via Browser
+          </button>
+          <button
+            class="menu-btn"
+            onclick="verifyCookie()"
+            data-i18n="cookies.verify"
+          >
+            Verify cookie
           </button>
         </div>
         <!-- Login-job actions: only visible while a login browser is open.

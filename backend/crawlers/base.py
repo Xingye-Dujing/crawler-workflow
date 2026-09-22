@@ -309,6 +309,29 @@ class Crawler(ABC):
         except Exception:
             return ''
 
+    # ─── cookie diagnostics ────────────────────────────────────
+
+    def diagnose(self, url: str = '') -> dict:
+        """Report what the stored cookie actually unlocks, as bare facts.
+
+        A cookie file's existence proves nothing — the question is whether the
+        platform still lets this session past its wall, and (WeChat especially)
+        whether it hands out the credential a feature needs. Only facts come
+        back from here: the cookie endpoint turns the keys into console and
+        panel text, so every user-facing string stays in the message catalog.
+        """
+        target = str(url or '') or self.login_url
+        facts = {'platform': self.domain, 'url': '', 'login_wall': False}
+        if not target:
+            return facts
+        self.driver.get(target)
+        try:
+            facts['url'] = self.driver.current_url or ''
+        except Exception:
+            facts['url'] = target
+        facts['login_wall'] = self.check_login_wall(target)
+        return facts
+
     def check_login_wall(self, where: str = '') -> bool:
         """Flag (once) that the browser was bounced to a login page.
 

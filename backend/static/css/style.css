@@ -2349,6 +2349,30 @@ input:-webkit-autofill:focus {
   font-size: 11px;
   font-family: var(--font);
 }
+/* Per-platform cookie guidance: full sentences that must wrap instead of
+   pushing a horizontal scrollbar into the panel (a long WeChat explanation is
+   the widest text this dialog ever holds). */
+#cookie-guide-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 168px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  background: var(--hover);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* Verification results arrive as several sentences joined by newlines. */
+#cookie-status {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 
 /* ── Toast ──────────────────────────────────────────────────────────────── */
 #toast {

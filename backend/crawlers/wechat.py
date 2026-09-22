@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+from urllib.parse import parse_qs, urlparse
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
@@ -12,6 +13,23 @@ from i18n import t
 from .base import Crawler, as_index
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_current_url(driver) -> str:
+    """``current_url`` that never raises on a dead or test double driver."""
+    try:
+        return str(driver.current_url or '')
+    except Exception:
+        return ''
+
+
+def _url_params(url: str) -> dict:
+    """Query parameters of an article URL. A repeated key keeps all its values,
+    because the comment tokens WeChat hands out are not always single-valued."""
+    try:
+        return parse_qs(urlparse(str(url or '')).query)
+    except ValueError:
+        return {}
 
 
 class WechatCrawler(Crawler):
@@ -173,6 +191,115 @@ class WechatCrawler(Crawler):
             '赞赏数': reward_num,
             '链接': url,
         }
+
+    # ------------------------------------------------------------------
+    # Comment credentials (and why a browser usually has none)
+    # ------------------------------------------------------------------
+
+    #: The page's own comment-call parameters. ``k`` is the one that matters:
+    #: the server only embeds it when the request came from a WeChat client
+    #: session, which in practice means the article URL was copied out of the
+    #: PC client and still carries ``pass_ticket``. Without it the comment list
+    #: stays empty — not "this article has no comments", but "this session was
+    #: never allowed to see them".
+    _CREDENTIAL_SCRIPT = """
+        var out = {};
+        var cfg = null;
+        try { cfg = window.wx_getext_config || null; } catch (e) { cfg = null; }
+        var cid = (cfg && (cfg.comment_id || cfg.appmsgcommentid)) || '';
+        out.key = (cfg && cfg.k) ? String(cfg.k) : '';
+        out.comment_id = cid ? String(cid) : '';
+        out.appmsg_token = (cfg && cfg.appmsg_token) ? String(cfg.appmsg_token)
+            : ((typeof appmsg_token !== 'undefined' && appmsg_token) ? String(appmsg_token) : '');
+        out.biz = (typeof biz !== 'undefined' && biz) ? String(biz) : '';
+        out.mid = (typeof mid !== 'undefined' && mid) ? String(mid) : '';
+        out.idx = (typeof idx !== 'undefined' && idx) ? String(idx) : '';
+        out.sn = (typeof sn !== 'undefined' && sn) ? String(sn) : '';
+        out.pass_ticket = (typeof pass_ticket !== 'undefined' && pass_ticket) ? String(pass_ticket) : '';
+        out.uin = (typeof uin !== 'undefined' && uin) ? String(uin) : '';
+        return out;
+        """
+
+    def article_credentials(self) -> dict:
+        """Read the comment-call parameters the current page exposes.
+
+        Never raises: a page that cannot answer (still loading, verification
+        interstitial, dead session) simply yields empty credentials, which the
+        caller reports as "credential absent" rather than as a scrape error.
+        """
+        try:
+            raw = self.driver.execute_script(self._CREDENTIAL_SCRIPT) or {}
+        except Exception:
+            raw = {}
+        creds = {
+            key: str(raw.get(key) or '')
+            for key in (
+                'key',
+                'comment_id',
+                'appmsg_token',
+                'biz',
+                'mid',
+                'idx',
+                'sn',
+                'pass_ticket',
+                'uin',
+            )
+        }
+        # The URL carries the same tokens when the link came from the client, and
+        # the page globals are not always defined on every article template.
+        params = _url_params(_safe_current_url(self.driver))
+        for field, param in (
+            ('__biz', 'biz'),
+            ('mid', 'mid'),
+            ('idx', 'idx'),
+            ('sn', 'sn'),
+            ('pass_ticket', 'pass_ticket'),
+        ):
+            if not creds[param] and params.get(field):
+                creds[param] = str(params[field][0])
+        return creds
+
+    def rendered_comment_count(self) -> int:
+        """How many comments this session can already see in the page.
+
+        ``.discuss_list`` is the container WeChat fills; an empty one under
+        ``discuss_data_empty`` is the shape of "not permitted", which has to be
+        distinguishable from "the author turned comments off".
+        """
+        best = 0
+        for selector in ('.discuss_list .item', '#js_cmt_area .appmsg_comment', '.discuss_list > li'):
+            try:
+                best = max(best, len(self.driver.find_elements(By.CSS_SELECTOR, selector)))
+            except Exception:
+                continue
+        return best
+
+    def diagnose(self, url: str = '') -> dict:
+        """Two WeChat capabilities, checked separately, because they are gated
+        by two different things: 文章搜索 needs an MP-admin session, 评论 needs a
+        client-copied article link. One cookie file serves both, so the panel has
+        to be able to say which of the two the user actually has.
+        """
+        facts = {'platform': self.domain, 'url': '', 'login_wall': False}
+        # 1. The 公众平台 admin session: logged in, the login page redirects to
+        # /cgi-bin/home with a token; logged out it stays on the QR page.
+        self.driver.get(self.login_url)
+        admin_url = _safe_current_url(self.driver)
+        facts['mp_logged_in'] = 'token=' in admin_url
+        facts['url'] = admin_url
+        facts['login_wall'] = not facts['mp_logged_in']
+        # 2. The article's comment credential, if an article link was supplied.
+        article = str(url or '').strip()
+        if article:
+            self.driver.get(article)
+            creds = self.article_credentials()
+            facts['url'] = _safe_current_url(self.driver) or article
+            facts['has_pass_ticket'] = bool(creds['pass_ticket'])
+            facts['comment_key'] = creds['key']
+            facts['comment_id'] = creds['comment_id']
+            facts['comment_visible'] = self.rendered_comment_count()
+            facts['body_readable'] = self._element_or_none('#rich_media_content, .rich_media_content') is not None
+        return facts
 
     # ------------------------------------------------------------------
     # Field extraction helpers

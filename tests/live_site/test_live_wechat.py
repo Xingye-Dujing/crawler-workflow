@@ -33,6 +33,47 @@ def test_three_real_articles_parse_into_full_rows(live_crawler, headless):
         assert isinstance(row['阅读数'], int) and row['阅读数'] >= 0
 
 
+class TestCookieDiagnosis:
+    """What a real browser session is actually allowed to see — measured here so
+    the panel's verdict is pinned to the site's behaviour, not to a theory."""
+
+    def test_both_capabilities_are_answered_without_raising(self, live_crawler):
+        crawler = live_crawler('wechat', headless=False)
+        facts = crawler.diagnose(ARTICLE_URLS[0])
+        assert set(facts) >= {
+            'platform',
+            'url',
+            'login_wall',
+            'mp_logged_in',
+            'comment_key',
+            'comment_visible',
+            'has_pass_ticket',
+            'body_readable',
+        }
+        # An article page is public: if the body does not render, the crawl of
+        # this site is broken for a reason the diagnosis must surface.
+        assert facts['body_readable'] is True, f'正文 did not render: {facts["url"]}'
+
+    def test_a_plain_web_link_gets_no_comment_credential(self, live_crawler):
+        """Measured on every supplied article: the comment container exists but
+        the server hands out no ``key``, so the list stays empty. This is the
+        fact behind "评论区在浏览器里不可见" — if WeChat ever starts granting it
+        to browsers, this test failing is the news, and the panel can be relaxed."""
+        crawler = live_crawler('wechat', headless=False)
+        for url in ARTICLE_URLS:
+            facts = crawler.diagnose(url)
+            assert facts['comment_key'] == '', f'a credential appeared for {url}'
+            assert facts['has_pass_ticket'] is False, f'pass_ticket appeared for {url}'
+            assert facts['comment_visible'] == 0, f'the comment list filled in for {url}'
+
+    def test_the_admin_verdict_agrees_with_the_address_shown(self, live_crawler):
+        """Logged into the 公众平台, the login page redirects to a URL carrying a
+        ``token``; that redirect IS the check, so the two answers cannot disagree."""
+        crawler = live_crawler('wechat', headless=False)
+        facts = crawler.diagnose()
+        assert facts['mp_logged_in'] == ('token=' in facts['url'])
+
+
 def test_reread_of_same_url_is_deduped_by_the_ledger(live_crawler):
     """The streaming contract on the real store path: a second sighting of an
     already-collected item is refused by the sink, not duplicated."""

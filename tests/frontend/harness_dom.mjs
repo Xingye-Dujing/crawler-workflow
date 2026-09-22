@@ -17,7 +17,6 @@ export function makeEl(tag = 'div', id = '') {
         children: [],
         value: '',
         checked: false,
-        textContent: '',
         innerHTML: '',
         title: '',
         placeholder: '',
@@ -30,7 +29,20 @@ export function makeEl(tag = 'div', id = '') {
         scrollHeight: 0,
         clientHeight: 600,
         _classes: new Set(),
+        _text: '',
     };
+    /* Assigning textContent replaces every descendant in a real browser — which
+       is exactly how the panel clears a list before rebuilding it. A plain field
+       would let the stub keep stale children and report a duplicate-render bug
+       that does not exist (and hide a real one that does). */
+    Object.defineProperty(el, 'textContent', {
+        get: () => el._text,
+        set: (v) => {
+            el._text = v === null || v === undefined ? '' : String(v);
+            el.children = [];
+        },
+        configurable: true,
+    });
     el.classList = {
         add: (...cs) => cs.forEach((c) => el._classes.add(c)),
         remove: (...cs) => cs.forEach((c) => el._classes.delete(c)),

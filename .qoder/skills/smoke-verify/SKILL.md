@@ -44,7 +44,7 @@ cd backend && PORT=5057 ../.venv/Scripts/python.exe -c "from app import app; app
 ## 4. Smoke-test endpoints
 
 ```bash
-for ep in / /api/config /api/settings /api/workflow/list /api/data/datasets /api/runs/list /api/stats/summary; do
+for ep in / /api/config /api/settings /api/workflow/list /api/data/datasets /api/runs/list /api/stats/summary /api/cookies/flow; do
   code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:5057$ep")
   echo "$code $ep"
 done

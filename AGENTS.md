@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~1150 cases)**:
+- **Automated tests (pytest, ~1215 cases)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -78,6 +78,13 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
 - Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens
   a visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
   outcome the message catalog already explains — don't "fix" it by loosening assertions.
+- **WeChat has TWO cookie purposes on one host** (measured, not theorized): keyword *search* only
+  exists inside the 公众平台 admin (`mp.weixin.qq.com` login redirect carries `token=`) because Sogou
+  WeChat search bounces straight to `antispider/`; *comments* only render when the article was opened
+  from a link copied out of the PC client (that URL carries `pass_ticket`, which is what makes the
+  server emit `wx_getext_config.k`). A plain web link always shows an empty `discuss_list` — that is
+  "not permitted", never "article has no comments", and `MicroMessenger` UA alone does not help.
+  Keep both checks separate in code and messages (`WechatCrawler.diagnose`, `services/cookie_flow.py`).
 - **Cookie death mid-crawl is a designed path**: crawler `login_wall` + under-target rows →
   `_execute_source_node` sets `execution_state['cookie_expired']` (rides on `/api/workflow/status`
   for the browser toast), logs `run.cookieExpired`, and RAISES so the node settles `partial`, the

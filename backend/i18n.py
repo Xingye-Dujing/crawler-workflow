@@ -260,6 +260,52 @@ _ZH = {
     'cookie.jobCancelled': '{platform} 登录已取消',
     'cookie.windowClosed': '登录窗口被关闭，未捕获 Cookie；请重新发起登录',
     'cookie.noCookies': '等待结束仍未获得 Cookie——若登录未完成，请重试',
+    # ── Cookie 用途与获取步骤（面板直接把这些讲给用户） ──────────
+    'cookie.zhihu.purpose': '解锁知乎搜索结果与回答、评论正文；未登录时知乎常常只回一个登录引导页。',
+    'cookie.zhihu.steps': (
+        '1. 点「浏览器登录」，在弹出的 Chrome 窗口里登录知乎（扫码或手机号）\n'
+        '2. 随便翻一页，确认右上角已是你的头像\n'
+        '3. 回到本面板点「我已登录，保存」'
+    ),
+    'cookie.weibo.purpose': '解锁微博搜索（s.weibo.com）与评论 JSON 接口；未登录会被跳回 passport 二维码页。',
+    'cookie.weibo.steps': (
+        '1. 点「浏览器登录」，在窗口里登录微博\n'
+        '2. 手动搜一次关键词，能看到微博列表即可\n'
+        '3. 回到本面板点「我已登录，保存」'
+    ),
+    'cookie.xiaohongshu.purpose': '解锁小红书搜索、笔记正文与评论；未登录会撞登录墙且只给首屏。',
+    'cookie.xiaohongshu.steps': (
+        '1. 点「浏览器登录」，在窗口里登录小红书\n'
+        '2. 打开任意一篇笔记，能看到评论区即可\n'
+        '3. 回到本面板点「我已登录，保存」'
+    ),
+    'cookie.wechat.purpose': '两个用途各要一次：搜索文章用公众号后台登录；抓评论用「微信里复制的文章链接」。',
+    'cookie.wechat.steps': (
+        '【搜索公众号文章】点「浏览器登录」（入口 https://mp.weixin.qq.com/），扫码登录你自己的公众号后台，'
+        '然后点「我已登录，保存」。没有公众号账号就无法按关键词搜索。\n'
+        '【抓取推文评论】在 PC 微信里打开那篇推文 → 右上角「…」→ 复制链接，把得到的链接填进下方'
+        '「登录入口链接」，再点「浏览器登录」，窗口里能看到正文后点「我已登录，保存」。\n'
+        '注意：只有微信客户端复制出来的链接（带 pass_ticket）才会下发评论凭证；普通网页链接在浏览器里评论区必为空。'
+    ),
+    'cookie.entryUrl': '登录入口链接（可留空；微信抓评论时请粘贴「微信里复制的链接」）',
+    'cookie.openedEntry': '登录浏览器已打开：{url}',
+    'cookie.entryRejected': (
+        '该链接不属于 {platform} 的域名，已改用平台登录页（不允许把别的站点的 Cookie 存进本平台的 Cookie 文件）'
+    ),
+    'cookie.verifyBtn': '验证 Cookie',
+    'cookie.verifying': '正在用已保存的 Cookie 试探该平台…',
+    'cookie.verifyFailed': '验证失败：{err}',
+    'cookie.verify.ok': '{platform} 的 Cookie 可用',
+    'cookie.verify.loginWall': '{platform} 仍被挡在登录页：请重新登录并保存',
+    'cookie.verify.noCookie': '{platform} 还没有 Cookie：请先登录保存',
+    'cookie.verify.mpLoggedIn': '公众号后台登录态：{state}',
+    'cookie.verify.mpLoggedInYes': '已登录（可搜索文章）',
+    'cookie.verify.mpLoggedInNo': '未登录（无法搜索文章，请在浏览器里扫码登录公众号后台）',
+    'cookie.verify.commentKey': '评论区凭证：{state}',
+    'cookie.verify.commentKeyYes': '已取得（该文章的留言可以抓取）',
+    'cookie.verify.commentKeyNo': '未取得（该链接不是微信客户端复制出来的，或缺 pass_ticket；浏览器里评论区为空）',
+    'cookie.verify.commentCount': '该文章在浏览器里可见的留言数：{n}',
+    'cookie.verify.checkedUrl': '验证地址：{url}',
     'api.cookieBusy': '已有 {platform} 的登录窗口打开中——请先完成或取消它',
     'api.bodyNotObject': '请求体必须是 JSON 对象',
     'api.paramInvalid': '参数 {name} 无效',
@@ -656,6 +702,59 @@ _EN = {
     'cookie.jobCancelled': '{platform} login cancelled',
     'cookie.windowClosed': 'The login window was closed before cookies could be captured; start again',
     'cookie.noCookies': 'No cookies captured before the wait ended — retry if the login was unfinished',
+    # ── cookie purposes and how to obtain them (shown in the panel) ──
+    'cookie.zhihu.purpose': 'Unlocks Zhihu search plus answer and comment bodies; logged out, Zhihu often '
+    'returns nothing but a login prompt.',
+    'cookie.zhihu.steps': (
+        '1. Press "Login via browser" and sign in to Zhihu in the Chrome window that opens (QR or phone)\n'
+        '2. Browse one page and confirm your own avatar is in the top-right\n'
+        '3. Come back here and press "Done — I logged in"'
+    ),
+    'cookie.weibo.purpose': 'Unlocks Weibo search (s.weibo.com) and the comment JSON API; logged out you are '
+    'bounced back to the passport QR page.',
+    'cookie.weibo.steps': (
+        '1. Press "Login via browser" and sign in to Weibo in that window\n'
+        '2. Search one keyword and confirm the post list renders\n'
+        '3. Come back here and press "Done — I logged in"'
+    ),
+    'cookie.xiaohongshu.purpose': 'Unlocks Xiaohongshu search, note bodies and comments; logged out you hit the '
+    'login wall and only the first screen shows.',
+    'cookie.xiaohongshu.steps': (
+        '1. Press "Login via browser" and sign in to Xiaohongshu in that window\n'
+        '2. Open any note and confirm the comment area renders\n'
+        '3. Come back here and press "Done — I logged in"'
+    ),
+    'cookie.wechat.purpose': 'Two purposes, one cookie file each time: article search needs a 公众号 (MP admin) '
+    'login; comments need the article link copied out of the WeChat client.',
+    'cookie.wechat.steps': (
+        '[Search official-account articles] Press "Login via browser" (entry https://mp.weixin.qq.com/), scan to '
+        'log into your own MP admin, then press "Done — I logged in". Without an official account there is no '
+        'keyword search.\n'
+        '[Crawl article comments] Open the article in the PC WeChat client → "…" → Copy Link, paste that link into '
+        'the "Custom login entry" field below, press "Login via browser", and once the article body is visible '
+        'press "Done — I logged in".\n'
+        'Note: only a link copied out of the client carries pass_ticket, which is what makes the server hand back '
+        'the comment credential. A plain web link always shows an empty comment area in a browser.'
+    ),
+    'cookie.entryUrl': 'Custom login entry (leave empty; for WeChat comments paste the link copied out of WeChat)',
+    'cookie.openedEntry': 'Login browser opened at: {url}',
+    'cookie.entryRejected': 'That link is not on a {platform} domain, so the platform login page was used instead '
+    '(another site\u2019s cookies must never be stored in this platform\u2019s cookie file)',
+    'cookie.verifyBtn': 'Verify cookie',
+    'cookie.verifying': 'Probing this platform with the stored cookie\u2026',
+    'cookie.verifyFailed': 'Verification failed: {err}',
+    'cookie.verify.ok': 'The stored {platform} cookie works',
+    'cookie.verify.loginWall': '{platform} still redirects to a login page: log in again and save',
+    'cookie.verify.noCookie': 'No {platform} cookie stored yet: log in and save first',
+    'cookie.verify.mpLoggedIn': 'MP admin session: {state}',
+    'cookie.verify.mpLoggedInYes': 'logged in (article search available)',
+    'cookie.verify.mpLoggedInNo': 'not logged in',
+    'cookie.verify.commentKey': 'Comment credential: {state}',
+    'cookie.verify.commentKeyYes': 'present (this article\u2019s comments can be crawled)',
+    'cookie.verify.commentKeyNo': 'absent \u2014 this link did not come from the WeChat client, or lacks pass_ticket; '
+    'the comment area stays empty in a browser',
+    'cookie.verify.commentCount': 'Comments visible to this browser session: {n}',
+    'cookie.verify.checkedUrl': 'Verified against: {url}',
     'api.cookieBusy': 'A {platform} login window is already open — finish or cancel it first',
     'api.bodyNotObject': 'request body must be a JSON object',
     'api.paramInvalid': 'parameter {name} is invalid',
