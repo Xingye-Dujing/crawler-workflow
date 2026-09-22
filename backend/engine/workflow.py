@@ -128,13 +128,20 @@ class WorkflowEngine:
         (the numeric suffix of node IDs like 'node-1', 'node-2').
 
         This determines which workflow runs first in serial mode.
+
+        A canvas always mints ``node-N`` ids, but a workflow opened from a file
+        someone edited by hand can name its nodes anything — and reading the
+        suffix with ``int()`` used to raise on 'n1', which took the whole run
+        down with an unhandled ValueError before a single node executed. An id
+        without a numeric suffix now sorts last, tie-broken by its own text, so
+        the order stays deterministic without assuming how nodes are named.
         """
 
-        def _key(comp):
-            nums = [int(nid.split('-')[-1]) for nid in comp]
-            return min(nums)
+        def _index(nid: str) -> tuple:
+            tail = str(nid).rsplit('-', 1)[-1]
+            return (0, int(tail), '') if tail.isdigit() else (1, 0, str(nid))
 
-        return sorted(components, key=_key)
+        return sorted(components, key=lambda comp: min(_index(nid) for nid in comp))
 
     def extract_subworkflow(self, component: set[str]) -> 'WorkflowEngine':
         """Create a new WorkflowEngine containing only the nodes and

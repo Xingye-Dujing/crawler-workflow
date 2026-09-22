@@ -270,6 +270,36 @@ class TestWorkflowExecute:
         assert response.status_code == 400
         assert 'already running' in response.get_json()['error']
 
+    @pytest.mark.serial
+    def test_a_workflow_whose_nodes_are_named_freely_still_runs(self, client, app_module, paste):
+        """Node ids are data, not a format the executor may assume.
+
+        The canvas mints ``node-N``, but a workflow saved as JSON and edited by
+        hand can call its nodes anything. ``sort_workflows`` used to read the
+        suffix with ``int()`` and raise, so such a file could never run at all —
+        and the failure looked like a server bug, not like a name.
+        """
+        dataset_id = paste(E2E_RECORDS, name='freely-named.csv')
+        workflow = _workflow(
+            [
+                _node(
+                    'alpha',
+                    'upload',
+                    params={'dataset_id': dataset_id, 'dataset_name': 'freely-named.csv', 'row_count': 6},
+                ),
+                _node('beta', 'analysis', params={'steps': E2E_STEPS}),
+            ],
+            [{'from': 'alpha', 'to': 'beta'}],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'free-names'})
+        assert started.status_code == 200
+        assert _wait_for_worker(app_module), 'the execute thread did not finish in time'
+        rows = app_module.execution_state['results']['beta']
+        assert [row['title'] for row in rows] == E2E_SURVIVORS
+        # The run is recorded under the ids the file used, so 继续 finds them.
+        statuses = app_module.get_run_store().node_statuses(started.get_json()['run_id'])
+        assert sorted(statuses) == ['alpha', 'beta']
+
     def test_execute_refuses_an_llm_workflow_without_a_model(self, client, app_module):
         """A run that would call a model must say so up front. That a run which
         will not call one is allowed through model-less is proven by the

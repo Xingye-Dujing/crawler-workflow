@@ -157,6 +157,24 @@ class TestSubworkflows:
     def test_sort_workflows_of_nothing_is_nothing(self):
         assert WorkflowEngine.sort_workflows([]) == []
 
+    def test_a_workflow_with_otherly_named_nodes_still_orders(self):
+        """A hand-edited workflow file is allowed to name its nodes anything.
+
+        Reading the id suffix with ``int()`` used to raise ValueError on 'n1',
+        and because nothing between ``sort_workflows`` and the HTTP handler
+        caught it, the entire run died before any node executed — a file that
+        could have been run in a strange order instead ran not at all.
+        """
+        ordered = WorkflowEngine.sort_workflows([{'n1', 'n2'}, {'node-1', 'node-2'}, {'beta'}])
+        # Numbered ids first, in their creation order; the rest by name, which
+        # is the only order left to them.
+        assert ordered == [{'node-1', 'node-2'}, {'beta'}, {'n1', 'n2'}]
+
+    def test_ids_without_any_number_are_ordered_by_name(self):
+        # Deterministic, whatever the set iteration order of the run.
+        first = WorkflowEngine.sort_workflows([{'zeta'}, {'alpha'}, {'mid-3'}])
+        assert [sorted(c)[0] for c in first] == ['mid-3', 'alpha', 'zeta']
+
     def test_extract_subworkflow_keeps_only_internal_edges_and_settings(self):
         engine = WorkflowEngine(
             _wf(
