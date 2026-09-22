@@ -133,6 +133,8 @@ const workflow = {
                     if (titleEl) titleEl.textContent = n.title;
                 }
                 canvas.updateNodeDisplay(id);
+                // After the display update, which rewrites the content it hides.
+                if (n.folded) canvas._setFolded(id, true);
             }
         });
         var ids = Object.keys(canvas.nodes);

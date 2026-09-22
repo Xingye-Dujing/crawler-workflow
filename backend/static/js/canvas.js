@@ -818,6 +818,10 @@ const canvas = {
                 id: id, type: n.type, title: n.title, params: n.params,
                 x: el ? parseInt(el.style.left) : n.x,
                 y: el ? parseInt(el.style.top) : n.y,
+                /* A folded node is a layout the user chose, and toggleFold already
+                   pays for a save — which used to write a draft with no fold in it,
+                   so a reload quietly unfolded everything. */
+                folded: el ? el.classList.contains('node-folded') : false,
             };
         });
         return { nodes: nodes, connections: this.connections, nextId: this.nextId };
@@ -850,7 +854,10 @@ const canvas = {
                     const titleEl = canvas.nodes[id].el && canvas.nodes[id].el.querySelector('.node-title');
                     if (titleEl) titleEl.textContent = n.title;
                 }
+                /* After the display update, which rewrites `.node-content`'s text:
+                   hiding it first would only be undone by the stamp. */
                 canvas.updateNodeDisplay(id);
+                if (n.folded) canvas._setFolded(id, true);
             }
         });
         var ids = Object.keys(canvas.nodes);
@@ -948,15 +955,24 @@ const canvas = {
     },
 
     /* ── Node fold / unfold ── */
-    toggleFold(id) {
+    /* Shared with restoreState: a fold is two style writes plus a class, and a
+       second copy would drift the moment one of the three changed. */
+    _setFolded(id, folded) {
         const el = document.getElementById(id);
-        if (!el) return;
-        el.classList.toggle('node-folded');
-        const folded = el.classList.contains('node-folded');
+        if (!el) return false;
+        el.classList.toggle('node-folded', !!folded);
         const content = el.querySelector('.node-content');
         const actions = el.querySelector('.node-actions');
         if (content) content.style.display = folded ? 'none' : '';
         if (actions) actions.style.display = folded ? 'none' : '';
+        return true;
+    },
+
+    toggleFold(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const folded = !el.classList.contains('node-folded');
+        if (!this._setFolded(id, folded)) return;
         this.scheduleRender();
         this.saveState();
     },
@@ -1117,6 +1133,8 @@ const canvas = {
                 operation: n.params.operation,
                 x: el ? parseInt(el.style.left) : 0,
                 y: el ? parseInt(el.style.top) : 0,
+                // Positions survive a save, and so must the fold they were arranged with.
+                folded: el ? el.classList.contains('node-folded') : false,
             });
         });
         return {
