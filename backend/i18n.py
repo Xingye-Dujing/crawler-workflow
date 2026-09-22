@@ -46,18 +46,20 @@ _ZH = {
     'wf.multi_input': '节点 {nid} 有 {n} 条上游连线，主输入取第一条（来自 {up}）；合并表用第二条当右表',
     'wf.validation_error': '校验错误：{err}',
     'wf.found': '发现 {n} 条工作流',
-    'wf.starting': '--- 开始执行工作流「{wf}」（{i}/{n}）---',
-    'wf.completed': '工作流执行完成',
-    'wf.all_completed': '全部工作流执行完成',
+    'wf.starting': '开始执行工作流「{name}」',
+    'wf.component_indexed': '{name}（第 {i}/{n} 条）',
+    # No 'wf.completed' / 'wf.all_completed': `run.finished` says how the run
+    # ended and carries the node counts, so a second sentence could only disagree.
     # One line per failure, and it says where the detail is: the log handler
     # forwards every logger call to the console, so the pair of messages this
     # replaced printed the same sentence twice.
     'wf.exec_exception': '执行失败，完整堆栈见服务端日志',
     'wf.wf_exception': '工作流「{wf}」执行失败，完整堆栈见服务端日志',
     'wf.save_failed': '保存失败：{err}',
-    'wf.data_saved': '数据已保存至 {path}（{fmt}）',
     'wf.analysis_failed': '分析失败：{err}',
-    'wf.analysis_step': '[分析] {op}：{before} → {after} 行（-{removed}）',
+    'wf.analysis_step': '[分析] {op}：{before} → {after} 行',
+    'wf.analysis_step_removed': '（-{removed}）',
+    'wf.analysis_step_nochange': '（无变化）',
     'wf.tokenize_no_column': '分词失败：未配置 text_column',
     'wf.tokenize_no_input': '分词失败：没有上游数据，请连接数据源或文件上传节点',
     'wf.tokenize_no_col': '分词失败：列“{col}”不在 {cols} 中',
@@ -356,7 +358,7 @@ _ZH = {
     'api.datasetNameInvalid': '这个名称不能用作数据集名（去掉路径字符后为空）：{name}',
     'api.datasetInUse': '这些已保存的工作流仍在引用该文件，删除后它们会变成空数据源：{workflows}',
     'api.datasetTooBig': '文件太大没法存：{err}',
-    'history.recorded': '已记录 {n} 条历史指标',
+    'history.recorded': '「{wf}」已记录 {n} 条历史指标',
     'executor.task_failed': '任务失败：{err}',
     # ── misc ──────────────────────────────────────────────────
     'misc.history_failed': '记录执行历史失败（不影响流程）',
@@ -505,7 +507,8 @@ _ZH = {
     'run.finished.failed': '，{n} 个失败',
     'run.rejected': '未运行：工作流有 {n} 处问题，见上方提示',
     'resume.no_run': '续跑节点：没有选择运行记录，也没找到可续跑的记录',
-    'resume.empty': '续跑节点：运行 {rid} 的节点 {nid} 没有可读取的数据行',
+    'resume.empty': '续跑节点：运行 {rid} 中「{nid}」没有可读取的数据行',
+    'resume.unpicked': '未指定节点',
     'resume.loaded': '续跑节点：载入运行 {rid} 中节点 {nid} 的 {n} 行',
     'api.runNotFound': '找不到运行记录：{rid}',
     'api.exportNotFound': '导出文件不存在（或不允许下载）：{name}',
@@ -561,18 +564,19 @@ _EN = {
     'wf.multi_input': 'Node {nid} has {n} incoming connections — the first (from {up}) is the primary input',
     'wf.validation_error': 'Validation error: {err}',
     'wf.found': 'Found {n} workflow(s)',
-    'wf.starting': '--- Starting workflow "{wf}" ({i}/{n}) ---',
-    'wf.completed': 'Workflow execution completed',
-    'wf.all_completed': 'All workflows completed',
+    'wf.starting': 'Starting workflow "{name}"',
+    'wf.component_indexed': '{name} (component {i} of {n})',
+    # No 'wf.completed' / 'wf.all_completed' here either: see the zh block.
     # One line per failure, and it says where the detail is: the log handler
     # forwards every logger call to the console, so the pair of messages this
     # replaced printed the same sentence twice.
     'wf.exec_exception': 'Execution failed — the traceback is in the server log',
     'wf.wf_exception': 'Workflow "{wf}" failed — the traceback is in the server log',
     'wf.save_failed': 'Save failed: {err}',
-    'wf.data_saved': 'Data saved to {path} ({fmt})',
     'wf.analysis_failed': 'Analysis failed: {err}',
-    'wf.analysis_step': '[Analysis] {op}: {before} -> {after} rows (-{removed})',
+    'wf.analysis_step': '[Analysis] {op}: {before} -> {after} rows',
+    'wf.analysis_step_removed': ' (-{removed})',
+    'wf.analysis_step_nochange': ' (no change)',
     'wf.tokenize_no_column': 'Tokenize failed: text_column not configured',
     'wf.tokenize_no_input': 'Tokenize failed: no upstream data — connect a data source or an upload node',
     'wf.tokenize_no_col': 'Tokenize failed: column "{col}" not found in {cols}',
@@ -886,7 +890,7 @@ _EN = {
     'api.datasetNameInvalid': 'that name cannot label a dataset (nothing left after cleaning): {name}',
     'api.datasetInUse': 'saved workflows still read this file, and deleting it would leave them empty: {workflows}',
     'api.datasetTooBig': 'That file is too big to store: {err}',
-    'history.recorded': 'Recorded {n} history metric(s)',
+    'history.recorded': 'Recorded {n} history metric(s) for "{wf}"',
     'executor.task_failed': 'Task failed: {err}',
     # ── misc ──────────────────────────────────────────────────
     'misc.history_failed': 'Failed to record execution history (non-fatal)',
@@ -1040,7 +1044,8 @@ _EN = {
     'run.finished.failed': ', {n} failed',
     'run.rejected': 'Nothing ran: the workflow has {n} problem(s), see the messages above',
     'resume.no_run': 'Resume node: no run selected, and no resumable run was found',
-    'resume.empty': 'Resume node: node {nid} of run {rid} has no stored rows',
+    'resume.empty': 'Resume node: "{nid}" of run {rid} has no stored rows',
+    'resume.unpicked': 'no node picked',
     'resume.loaded': 'Resume node: loaded {n} rows from node {nid} of run {rid}',
     'api.runNotFound': 'No such run: {rid}',
     'api.exportNotFound': 'export file not found (or not downloadable): {name}',

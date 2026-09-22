@@ -89,8 +89,14 @@ class ExecutionHistoryService:
     def now() -> str:
         return time.strftime('%Y-%m-%dT%H:%M:%S')
 
-    def record_many(self, rows: list):
-        """rows: list of (run_id, workflow_name, node_id, node_type, metric, label, value, timestamp)."""
+    def record_many(self, rows: list, log_label: str = ''):
+        """rows: list of (run_id, workflow_name, node_id, node_type, metric, label, value, timestamp).
+
+        ``log_label`` is for the console line only: a multi-component canvas
+        records one entry per component, and two byte-identical "recorded N
+        metrics" lines read like a printing bug. The stored name stays the run's
+        own, so the history panel's grouping is untouched.
+        """
         if not rows:
             return
         conn = self._conn()
@@ -102,7 +108,7 @@ class ExecutionHistoryService:
         )
         conn.commit()
         conn.close()
-        logger.info(t('history.recorded', n=len(rows)))
+        logger.info(t('history.recorded', n=len(rows), wf=log_label or rows[0][1] or ''))
 
     def list_runs(self, limit: int = 50) -> pd.DataFrame:
         conn = self._conn()

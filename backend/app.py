@@ -617,7 +617,9 @@ def _component_name(sub_engine) -> str:
     return ''
 
 
-def _record_execution_history(workflow: dict, engine: WorkflowEngine, results: dict, workflow_name: str = ''):
+def _record_execution_history(
+    workflow: dict, engine: WorkflowEngine, results: dict, workflow_name: str = '', log_label: str = ''
+):
     """After a run completes, snapshot per-node metrics (row counts, and
     emotion/tendency distributions where present) into execution_history so
     /api/history/* can chart trends across runs over time. Best-effort: a
@@ -660,7 +662,7 @@ def _record_execution_history(workflow: dict, engine: WorkflowEngine, results: d
                     seen_metrics.add(('tendency', label))
                     rows.append((run_id, workflow_name, nid, ntype, 'tendency', label, float(value), ts))
 
-        history_service.record_many(rows)
+        history_service.record_many(rows, log_label=log_label)
     except Exception:
         logger.exception(t('misc.history_failed'))
 
@@ -1222,11 +1224,22 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         """Console name of one component: the user's 工作流命名 label when the
         canvas carries one, else the workflow name the browser sent with the
         run, else a localized placeholder. Never the old positional 'WF1' —
-        an index the user cannot map back to a canvas is noise."""
+        an index the user cannot map back to a canvas is noise.
+
+        A canvas holding two components and no name node has to be told apart
+        somehow: both used to announce themselves with the same single name, so
+        the console said the same workflow started twice, and the two console tabs
+        carried identical labels. The index is appended only in that case, and
+        only while the name is still the fallback.
+        """
+        named = _component_name(wf_engine)
+        if named:
+            return named
+        fallback = str(execution_state.get('workflow_name') or '').strip() or t('wf.unnamed', i=wf_idx + 1)
         return (
-            _component_name(wf_engine)
-            or str(execution_state.get('workflow_name') or '').strip()
-            or t('wf.unnamed', i=wf_idx + 1)
+            t('wf.component_indexed', name=fallback, i=wf_idx + 1, n=execution_state.get('wf_count') or 1)
+            if (execution_state.get('wf_count') or 1) > 1
+            else fallback
         )
 
     def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict):
@@ -1391,6 +1404,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             sub_engines = [engine.extract_subworkflow(c) for c in components]
 
             wf_count = len(sub_engines)
+            execution_state['wf_count'] = wf_count
             execution_state['total_nodes'] = sum(len(se.nodes) for se in sub_engines)
             add_log(t('wf.found', n=wf_count))
 
@@ -1420,7 +1434,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 for wf_idx, se in enumerate(sub_engines):
                     if not execution_state['running']:
                         break
-                    add_log(t('wf.starting', wf=_wf_display_name(se, wf_idx), i=wf_idx + 1, n=wf_count))
+                    add_log(t('wf.starting', name=_wf_display_name(se, wf_idx)))
                     results = _run_single_workflow(se, wf_idx, ctx)
                     all_results.update(results)
                 # update(), not replace(): a branch that died halfway already
@@ -1428,8 +1442,10 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 # Under the readers' lock — /api/stats/* iterates this dict.
                 with _completed_lock:
                     execution_state['results'].update(all_results)
-                if execution_state['running']:
-                    add_log(t('wf.completed'))
+                # No "workflow completed" line here: `run.finished` below says the
+                # same thing with numbers attached, and two sentences for one fact
+                # is two chances for them to disagree (they used to: a stopped run
+                # still got told it had completed).
             else:
                 # ── Parallel: one thread per workflow ──
 
@@ -1469,8 +1485,8 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 # LLM) instead of throwing away what they already produced.
                 with wf_lock, _completed_lock:
                     execution_state['results'].update(all_results)
-                if execution_state['running']:
-                    add_log(t('wf.all_completed'))
+                # No "all workflows completed" line: `run.finished` below is the
+                # one sentence that says how the run ended, with its numbers.
 
             still_running = execution_state['running']
             # Read the settled node states BEFORE announcing the run: the finish
@@ -1501,10 +1517,16 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 # OWN name-node label — a multi-workflow canvas must land in
                 # the history panel as separate named workflows, not all
                 # under whichever name node happens to come first.
-                for se in sub_engines:
+                for index, se in enumerate(sub_engines):
                     snapshot = _results_snapshot()
                     sub_results = {nid: res for nid, res in snapshot.items() if nid in se.nodes}
-                    _record_execution_history(None, se, sub_results, _component_name(se) or workflow_name)
+                    _record_execution_history(
+                        None,
+                        se,
+                        sub_results,
+                        _component_name(se) or workflow_name,
+                        log_label=_wf_display_name(se, index),
+                    )
             # 'completed' must mean every node really finished. A node that failed
             # or stopped half-way leaves gaps; marking the run complete hid it from
             # the resume banner forever and the 未处理 rows were never filled — the
@@ -1919,11 +1941,13 @@ def _execute_output_node(node: dict, current_input: list):
         filename = DataExporter.normalize_filename(sanitize_filename(filename), fmt)
         filepath = os.path.join(Config.EXPORT_DIR, filename)
         try:
-            result = DataExporter.save(df, filepath, fmt=fmt, text_column=params.get('text_column'))
+            DataExporter.save(df, filepath, fmt=fmt, text_column=params.get('text_column'))
         except UnsupportedFormatError as e:
             add_log(t('wf.save_failed', err=e))
             return {'error': str(e)}
-        add_log(t('wf.data_saved', path=result['path'], fmt=result['format']))
+        # No "data saved to <path>" line: the exporter has already announced
+        # "exported N rows to <path> (fmt)" one line above, and saying the same
+        # fact twice in two wordings is two chances to word them differently.
 
     return current_input
 
@@ -2118,15 +2142,15 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
         return []
 
     for step in report:
-        add_log(
-            t(
-                'wf.analysis_step',
-                op=step['op'],
-                before=step['rows_before'],
-                after=step['rows_after'],
-                removed=step['rows_removed'],
-            )
+        line = t('wf.analysis_step', op=step['op'], before=step['rows_before'], after=step['rows_after'])
+        # A step that dropped nothing deserves saying so; printing "(-0)" looked
+        # like a truncated number rather than an outcome.
+        line += (
+            t('wf.analysis_step_removed', removed=step['rows_removed'])
+            if step['rows_removed']
+            else t('wf.analysis_step_nochange')
         )
+        add_log(line)
     return cleaned.to_dict('records')
 
 
@@ -2392,7 +2416,7 @@ def _execute_resume_node(node: dict, ctx: dict):
             node_id = str(best.get('node_id') or '')
             rows = store.load_rows(run_id, node_id)
     if not rows:
-        add_log(t('resume.empty', rid=run_id, nid=node_id or '?'))
+        add_log(t('resume.empty', rid=run_id, nid=node_id or t('resume.unpicked')))
         return []
     if limit and len(rows) > limit:
         rows = rows[:limit]

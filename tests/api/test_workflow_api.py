@@ -244,7 +244,11 @@ class TestWorkflowExecute:
         assert status['total_nodes'] == 3 and status['completed_nodes'] == 3
         assert sorted(status['results']) == ['node-1', 'node-2', 'node-3']
         assert any('drop_duplicates' in line for line in status['logs'])
-        assert any('Data saved to' in line for line in status['logs'])
+        # The saved file is announced ONCE. Both the exporter and the save node
+        # used to name the same path, in two different sentences, every run.
+        saved = [line for line in status['logs'] if 'workflow-e2e.csv' in line and 'Exported' in line]
+        assert len(saved) == 1, status['logs']
+        assert not any('Data saved to' in line for line in status['logs']), 'the duplicate line is back'
 
         # ── and the history panel saw it (metrics, not rows) ──────────
         history = client.get('/api/history/runs', query_string={'limit': 50}).get_json()
@@ -511,6 +515,81 @@ def _run_e2e(client, app_module, paste, name: str) -> dict:
     assert started.status_code == 200
     assert _wait_for_worker(app_module), 'the execute thread did not finish in time'
     return client.get('/api/workflow/status').get_json()
+
+
+class TestConsoleSaysEachThingOnce:
+    """The console is read line by line, so a fact printed twice is a fact the
+    reader has to reconcile — and the pairs below did not even agree with each
+    other. These assertions hold the transcript down: one line per event, no
+    decoration, and a name per component when one canvas holds two workflows."""
+
+    @pytest.mark.serial
+    def test_a_finished_run_prints_one_verdict(self, client, app_module, paste):
+        body = _run_e2e(client, app_module, paste, 'once-verdict')
+        finished = [line for line in body['logs'] if 'Run finished' in line]
+        assert len(finished) == 1
+        assert not any('completed' in line.lower() and 'node' not in line.lower() for line in body['logs']), (
+            'a second completion sentence is a second chance to disagree'
+        )
+
+    @pytest.mark.serial
+    def test_a_step_that_removed_rows_shows_the_count(self, client, app_module, paste):
+        body = _run_e2e(client, app_module, paste, 'once-step')
+        steps = [line for line in body['logs'] if 'drop_duplicates' in line]
+        assert len(steps) == 1, steps
+        assert '(-1)' in steps[0], 'a real removal must be visible, not implied by two numbers'
+
+    @pytest.mark.serial
+    def test_a_step_that_removed_nothing_prints_no_fake_zero(self, client, app_module, paste):
+        """'(-0)' read as a truncated number rather than as "nothing happened"."""
+        dataset_id = paste(E2E_RECORDS, name='noop-step.csv')
+        workflow = _workflow(
+            [
+                _node('node-1', 'upload', params={'dataset_id': dataset_id, 'row_count': len(E2E_RECORDS)}),
+                _node(
+                    'node-2', 'analysis', params={'steps': [{'op': 'select_columns', 'params': {'columns': ['title']}}]}
+                ),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'noop-step'})
+        assert _wait_for_worker(app_module)
+        steps = [line for line in client.get('/api/workflow/status').get_json()['logs'] if 'select_columns' in line]
+        assert len(steps) == 1, steps
+        assert '-0' not in steps[0] and 'no change' in steps[0].lower(), steps[0]
+
+    @pytest.mark.serial
+    def test_no_console_line_is_decorated_with_rule_characters(self, client, app_module, paste):
+        body = _run_e2e(client, app_module, paste, 'once-plain')
+        assert not [line for line in body['logs'] if '---' in line or line.endswith('===')], body['logs']
+
+    @pytest.mark.serial
+    def test_two_components_on_one_canvas_are_told_apart(self, client, app_module, monkeypatch):
+        """Both used to announce themselves with the run's name, so the console
+        said the same workflow started twice and the two console tabs got
+        identical labels."""
+
+        class Rows(_ScriptedCrawler):
+            rows = [{'发布者': 'a', '正文': 'hello', '链接': 'https://weibo.com/1'}]
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: Rows())
+        workflow = _workflow(
+            [
+                _node('a-1', 'source', params={'platform': 'weibo', 'keyword': 'k1', 'target_count': 2}),
+                _node('a-2', 'output', operation='save', params={'format': 'csv', 'filename': 'ca'}),
+                _node('b-1', 'source', params={'platform': 'weibo', 'keyword': 'k2', 'target_count': 2}),
+                _node('b-2', 'output', operation='save', params={'format': 'csv', 'filename': 'cb'}),
+            ],
+            [{'from': 'a-1', 'to': 'a-2'}, {'from': 'b-1', 'to': 'b-2'}],
+        )
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': '两条', 'lang': 'zh'})
+        assert _wait_for_worker(app_module)
+        body = client.get('/api/workflow/status').get_json()
+        starts = [line for line in body['logs'] if '开始执行工作流' in line]
+        assert len(starts) == 2 and starts[0] != starts[1], starts
+        # The per-workflow console tabs are labelled from the same names.
+        names = [wf['name'] for wf in body['workflows']]
+        assert len(names) == len(set(names)) == 2, names
 
 
 class _ScriptedCrawler:
