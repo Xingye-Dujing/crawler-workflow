@@ -14,6 +14,11 @@ class Config:
     EXPORT_DIR = os.path.join(DATA_DIR, 'exports')
     WORKFLOW_DIR = os.path.join(DATA_DIR, 'workflows')
     LOG_DIR = os.path.join(BASE_DIR, 'logs')
+    # The run log is written by every crawl, so it rotates instead of growing
+    # without limit: app.log rolls at LOG_MAX_BYTES and the previous
+    # LOG_BACKUP_COUNT rolls are kept as app.log.1 … app.log.N.
+    LOG_MAX_BYTES = 5 * 1024 * 1024
+    LOG_BACKUP_COUNT = 5
     # Per-row LLM checkpoints: every finished row of a cleaning / emotion /
     # tendency run is appended here, so an interrupted run resumes instead of
     # paying for the same rows twice. Used only when the run-state store is
@@ -34,6 +39,10 @@ class Config:
     # ones a user may still want to continue.
     RUN_KEEP_PER_WORKFLOW = 20
     RUN_KEEP_DAYS = 30
+    # How often the retention settings above are actually applied without
+    # anybody asking (see services/housekeeping.py). Startup, then at most once
+    # per this many minutes.
+    HOUSEKEEPING_INTERVAL_MINUTES = 60
     # Hard ceiling on rows persisted per node: a runaway crawl must not fill
     # the disk. Hitting it is reported in the console rather than silently
     # truncating the data handed downstream.

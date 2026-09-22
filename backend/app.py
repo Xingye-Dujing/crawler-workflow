@@ -43,6 +43,7 @@ from services.data_analysis import DataAnalysisService, UnknownOperationError
 from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD, DatasetStore
 from services.execution_history import ExecutionHistoryService
 from services.exporter import DataExporter, UnsupportedFormatError
+from services.housekeeping import Housekeeping
 from services.run_store import (
     NODE_DONE,
     NODE_FAILED,
@@ -92,7 +93,11 @@ def _upload_limit_mb(default: int = 64) -> int:
 UPLOAD_LIMIT_MB = _upload_limit_mb()
 app.config['MAX_CONTENT_LENGTH'] = UPLOAD_LIMIT_MB * 1024 * 1024
 
-logger = setup_logger(Config.LOG_DIR)
+logger = setup_logger(
+    Config.LOG_DIR,
+    max_bytes=Config.LOG_MAX_BYTES,
+    backup_count=Config.LOG_BACKUP_COUNT,
+)
 
 # Catalogue self-check. A message template carrying a printf placeholder never
 # raises — it just prints as a literal "%s" in the console — so surface it here,
@@ -404,6 +409,42 @@ def get_run_store() -> RunStore:
             if _RUN_STORE is None:
                 _RUN_STORE = RunStore()
     return _RUN_STORE
+
+
+_HOUSEKEEPER = None
+_HOUSEKEEPER_LOCK = threading.Lock()
+
+
+def get_housekeeper() -> Housekeeping:
+    """Retention sweep for run records and orphaned stored files.
+
+    Lazy for the same reason the stores are: it holds a handle on both, and
+    merely importing this module must not open a database.
+    """
+    global _HOUSEKEEPER
+    if _HOUSEKEEPER is None:
+        with _HOUSEKEEPER_LOCK:
+            if _HOUSEKEEPER is None:
+                _HOUSEKEEPER = Housekeeping(
+                    get_run_store(),
+                    get_dataset_store(),
+                    interval_seconds=max(0, int(Config.HOUSEKEEPING_INTERVAL_MINUTES)) * 60,
+                )
+    return _HOUSEKEEPER
+
+
+def _housekeep(exclude_run_id: str = '', force: bool = False):
+    """Apply the retention settings, containing every failure.
+
+    A cleanup problem must never be what makes a run look failed, so nothing
+    here propagates. ``exclude_run_id`` protects the record the caller is still
+    writing — dropping its rows mid-run would destroy live state.
+    """
+    with contextlib.suppress(Exception):
+        if force:
+            get_housekeeper().run_now(exclude_run_id=exclude_run_id)
+        else:
+            get_housekeeper().maybe_run(exclude_run_id=exclude_run_id)
 
 
 def _close_run(ctx: dict, outcome: str):
@@ -1219,6 +1260,10 @@ def execute_workflow():
             # Whatever is left claiming to be running was killed, not finished;
             # the rows it published are what the next attempt resumes from.
             _close_run(ctx, outcome)
+            # Retention is only real if something applies it. A finished run is
+            # the natural moment: the databases are open, no writer is active and
+            # the user just proved the machine is in use.
+            _housekeep(exclude_run_id=run_id)
             # The tee exists to catch the analyzers' print() output *during* a
             # run; leaving it installed meant every later print — from any
             # request — also showed up in the console panel.
@@ -3585,4 +3630,7 @@ if __name__ == '__main__':
     if debug and os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
         threading.Timer(1.5, _open_browser, args=(f'http://{browse_host}:{port}',)).start()
     logger.info(t('misc.server_starting', port=port))
+    # Retention is applied on its own, not only when somebody remembers to
+    # click: startup is the other moment nothing is writing.
+    _housekeep(force=True)
     app.run(host=host, port=port, debug=debug, threaded=True, use_reloader=debug)

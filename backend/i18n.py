@@ -416,6 +416,12 @@ _ZH = {
     'resume.loaded': '续跑节点：载入运行 {rid} 中节点 {nid} 的 {n} 行',
     'api.runNotFound': '找不到运行记录：{rid}',
     'api.resumeNoNode': '这次运行里没有可续跑的节点输出',
+    # ── 自动清理（housekeeping） ──────────────────────────────
+    'housekeeping.done': (
+        '自动清理：删除 {runs} 条过期运行记录、{files} 个孤立文件（另回收 {cache} 条模型缓存、{seen} 条去重记录）'
+    ),
+    'housekeeping.runStoreFailed': '运行记录自动清理失败（不影响本次运行）',
+    'housekeeping.datasetStoreFailed': '孤立文件自动清理失败（不影响本次运行）',
 }
 
 _EN = {
@@ -811,6 +817,13 @@ _EN = {
     'resume.loaded': 'Resume node: loaded {n} rows from node {nid} of run {rid}',
     'api.runNotFound': 'No such run: {rid}',
     'api.resumeNoNode': 'That run has no node output to resume from',
+    # ── housekeeping ──────────────────────────────────────────
+    'housekeeping.done': (
+        'Housekeeping: dropped {runs} expired run record(s) and {files} orphaned file(s) '
+        '(plus {cache} cached model answer(s) and {seen} stale dedupe key(s))'
+    ),
+    'housekeeping.runStoreFailed': 'Automatic run-record cleanup failed (the run itself is unaffected)',
+    'housekeeping.datasetStoreFailed': 'Automatic orphan-file cleanup failed (the run itself is unaffected)',
 }
 
 MESSAGES = {'zh': _ZH, 'en': _EN}

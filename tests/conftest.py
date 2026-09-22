@@ -138,6 +138,9 @@ def client(app_module, data_root, request):
     dataset_store = DatasetStore(str(data_root / f'api-datasets-{seq}.db'))
     module._RUN_STORE = run_store
     module._DATASET_STORE = dataset_store
+    # The housekeeper caches both store handles, so it has to be rebuilt
+    # alongside them or a later test would sweep an already-closed database.
+    module._HOUSEKEEPER = None
     module._dataset_cache.clear()
     stdout_backup = sys.stdout
     # Default every request to English so message assertions don't track the
