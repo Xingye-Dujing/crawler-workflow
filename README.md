@@ -77,6 +77,10 @@
 ### 可视化
 - **通用可视化节点**：柱状图 / 折线图 / 饼图 / 散点图 / 直方图 / 箱线图 / 热力图 / 桑基图 /
   词云（支持中文分词）/ 中国地图，支持 ECharts（前端渲染）与 Matplotlib（服务端渲染）两种引擎
+- **采集深度可调**：微信正文长度上限由 `Config.WECHAT_BODY_MAX_CHARS` 决定（默认 5000，
+  填 0 完整保留；被截断时行尾带 `…` 标记，免得"半篇"看起来像"写完的短文"）；
+  小红书数据源节点新增**每篇评论预览数**，填 `0` 真的跳过评论面板（以前即便只要 0 条，
+  每篇仍会等满 10 秒，最快的设置反而是最慢的）
 - **Chart Studio 图表工作台**：画布内嵌 ZENVIZ 工作台，可对任意节点/数据集的完整表格做自由图表创作，
   支持多数据源合并，成品 PNG 可保存回导出目录
 - **数据预览面板**：任意数据集都能以可翻页的表格形式查看真实数据行
@@ -245,7 +249,7 @@ crawler_workflow/
 |------|------|------|------|
 | Name（命名） | NAM | 工作流元数据，其标签作为工作流名供历史/运行记录归组 | 是（纯元数据） |
 | Data Source（数据源） | SRC | 从知乎/微博/小红书/哔哩哔哩/抖音按关键词采集，微信按粘贴的推文链接采集正文；「采集内容」切到**评论**即变为评论采集器 | 是，需平台+关键词（或评论/推文链接） |
-| Upload（上传） | UPL | 从持久化数据集中读取 CSV/JSON 作为输入 | 是 |
+| Upload（上传） | UPL | 从持久化数据集中读取 CSV/TSV/JSON/TXT/Excel 作为输入 | 是 |
 | Process（处理） | PRC | LLM 语义清洗 / 情感(LLM/ML) / 倾向(LLM/ML) / 关键词 / 聚类 / NER / 异常 / 相关性 | 否，需要上游文本数据 |
 | Analysis（分析） | ANL | 确定性数据清洗：去空/去重/筛选/改名/类型转换/排序/采样/分组聚合/表关联/列计算/分箱 | **是**，可直接处理数据集 |
 | Visualize（可视化） | VIZ | 柱状/折线/饼图/散点/直方/箱线/热力/桑基/词云/地图，ECharts 或 Matplotlib | **是**，可直接处理数据集 |
@@ -287,7 +291,7 @@ crawler_workflow/
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/data/upload` | POST | 上传 CSV/JSON 文件，注册为持久化数据集 |
+| `/api/data/upload` | POST | 上传 CSV/TSV/JSON/TXT/.xlsx/.xls 文件并注册为持久化数据集（未知扩展名→400，不再当 CSV 猜） |
 | `/api/data/paste` | POST | 将粘贴的 JSON 数组注册为数据集 |
 | `/api/data/datasets` | GET | 列出已注册数据集 |
 | `/api/data/datasets/<id>` | GET / DELETE | 查看 / 删除单个数据集 |
@@ -357,7 +361,7 @@ crawler_workflow/
 ### 2. 独立使用 Analysis / Visualize 节点（不采集，只处理已有数据）
 
 1. 直接在画布上拖一个 Visualize（或 Analysis）节点，不连任何上游节点
-2. 打开节点设置，把 "Data Source" 改成 "Upload File"，上传一份 CSV/JSON
+2. 打开节点设置，把 "Data Source" 改成 "Upload File"，上传一份 CSV/TSV/JSON/TXT/Excel
 3. 配置图表类型 / X、Y 字段后点击 "Preview Chart" 即可在右侧预览面板看到结果，
    不需要跑整个工作流；上传的文件会持久化，下次打开这个工作流还能用
 
@@ -430,7 +434,7 @@ ML 模型保存在 `data/models/` 目录下，训练一次后持久可用。
 - 代码风格由 `ruff.toml` 约束（行宽 120、单引号），提交前必须通过
   `ruff check` 与 `ruff format --check`，且只允许真正修复，禁止 `# noqa` 式忽略
 
-### 自动化测试（pytest，约 1361 用例）
+### 自动化测试（pytest，约 1388 用例）
 
 测试体系分五层，位于 `tests/` 目录：所有写入都落在临时目录（绝不触碰真实 `data/`）；
 `live_site` 层会真实读取 `data/cookies/` 里的登录态去访问目标站点：
