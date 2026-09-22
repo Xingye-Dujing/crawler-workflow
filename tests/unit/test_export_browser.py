@@ -8,6 +8,8 @@ the alternative — one open spreadsheet emptying the whole panel — is worse.
 """
 
 import os
+import subprocess
+import sys
 import time
 
 import pytest
@@ -122,16 +124,37 @@ class TestResolution:
         assert resolve_export_file(exports, '.') == ''
         assert resolve_export_file(exports, '..') == ''
 
-    def test_a_symlink_out_is_refused(self, exports, tmp_path):
+    def test_a_link_pointing_outside_is_refused(self, exports, tmp_path):
         """``realpath`` is what catches this: the link lives inside the
-        directory and its target does not."""
-        target = tmp_path / 'outside.csv'
-        link = os.path.join(exports, 'link.csv')
+        directory and its target does not.
+
+        A POSIX-style symlink needs developer mode on Windows, so the same escape
+        is built with a junction when the platform supports that instead — the
+        code under test resolves both the same way. Only a machine that supports
+        neither has any right to skip this.
+        """
+        outside = tmp_path / 'outside'
+        outside.mkdir()
+        (outside / 'secret.csv').write_text('secret\n', encoding='utf-8')
+        link = os.path.join(exports, 'link')
+        made = False
         try:
-            os.symlink(str(target), link)
+            os.symlink(str(outside), link, target_is_directory=True)
+            made = True
         except (OSError, NotImplementedError):
-            pytest.skip('symlinks need developer mode on Windows')
-        assert resolve_export_file(exports, 'link.csv') == ''
+            pass
+        if not made and sys.platform == 'win32':
+            made = (
+                subprocess.run(['cmd', '/c', 'mklink', '/J', link, str(outside)], capture_output=True).returncode == 0
+            )
+        if not made:
+            pytest.skip('this machine can create neither a symlink nor a junction')
+        # Through the link, the outside file looks reachable by name.
+        assert os.path.exists(os.path.join(link, 'secret.csv'))
+        assert resolve_export_file(exports, 'link/secret.csv') == ''
+        assert resolve_export_file(exports, os.path.join('link', 'secret.csv')) == ''
+        assert delete_export_file(exports, 'link/secret.csv') is False
+        assert (outside / 'secret.csv').exists()
 
 
 class TestDownloadRule:

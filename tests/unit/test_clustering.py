@@ -9,6 +9,7 @@ punctuation-only text) not blowing up the run.
 
 import pandas as pd
 import pytest
+from sklearn.exceptions import ConvergenceWarning
 
 from analyzers.clustering import TextCluster
 
@@ -43,8 +44,16 @@ class TestKmeans:
         assert -1.0 <= result['silhouette'].iloc[0] <= 1.0
 
     def test_identical_texts_cannot_be_split(self, cluster):
+        """One distinct text IS one cluster, however many were asked for.
+
+        sklearn says this out loud (ConvergenceWarning: found fewer clusters than
+        n_clusters) and the analyzer must not swallow it, because a run that
+        silently returns one group where the user asked for five looks like a
+        result. The warning is asserted rather than left to leak into the report.
+        """
         frame = pd.DataFrame({'正文': ['三亚的海非常蓝适合度假'] * 3})
-        result = cluster.analyze_dataframe(frame, n_clusters=2)
+        with pytest.warns(ConvergenceWarning, match='Number of distinct clusters'):
+            result = cluster.analyze_dataframe(frame, n_clusters=2)
         assert set(result['cluster']) == {0}
 
     def test_the_cluster_count_never_exceeds_what_was_asked_for(self, cluster, df):

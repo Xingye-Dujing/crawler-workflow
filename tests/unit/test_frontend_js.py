@@ -12,10 +12,10 @@ Requirements: plain `node` on PATH (already needed for the canvas harness).
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+from node_runner import run_node
 
 from utils.helpers import platform_for
 
@@ -40,13 +40,7 @@ def _parse(msg: str) -> tuple:
 def _run_validate(tmp_path: Path, scenarios: list) -> dict:
     sc_path = tmp_path / 'scenarios.json'
     sc_path.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
-    proc = subprocess.run(
-        ['node', str(HARNESS), str(JS_DIR / 'workflow.js'), str(sc_path)],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        timeout=60,
-    )
+    proc = run_node(str(HARNESS), str(JS_DIR / 'workflow.js'), str(sc_path))
     assert proc.returncode == 0, f'harness failed: {proc.stderr}'
     return json.loads(proc.stdout)
 
@@ -371,13 +365,7 @@ def popup_results(tmp_path_factory):
     tmp = tmp_path_factory.mktemp('js-popup')
     sc_path = tmp / 'scenarios.json'
     sc_path.write_text(json.dumps(_POPUP_SCENARIOS, ensure_ascii=False), encoding='utf-8')
-    proc = subprocess.run(
-        ['node', str(APP_HARNESS), str(JS_DIR), str(sc_path)],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        timeout=60,
-    )
+    proc = run_node(str(APP_HARNESS), str(JS_DIR), str(sc_path))
     assert proc.returncode == 0, f'popup harness failed: {proc.stderr}'
     return json.loads(proc.stdout)
 
@@ -449,13 +437,7 @@ def runsmgr(tmp_path_factory):
     tmp = tmp_path_factory.mktemp('js-runsmgr')
     sc = tmp / 'runs.json'
     sc.write_text(json.dumps(runs, ensure_ascii=False), encoding='utf-8')
-    proc = subprocess.run(
-        ['node', str(RUNSMGR_HARNESS), str(JS_DIR / 'workflow.js'), str(sc)],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        timeout=60,
-    )
+    proc = run_node(str(RUNSMGR_HARNESS), str(JS_DIR / 'workflow.js'), str(sc))
     assert proc.returncode == 0, f'runsmgr harness failed: {proc.stderr}'
     return json.loads(proc.stdout)
 

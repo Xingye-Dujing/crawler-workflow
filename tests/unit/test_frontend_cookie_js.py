@@ -11,10 +11,10 @@ Skipped when node is not on PATH, like every other frontend harness.
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+from node_runner import run_node  # noqa: E402  (tests/ is on sys.path via conftest)
 
 pytestmark = pytest.mark.unit
 
@@ -26,14 +26,8 @@ HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_cookie.mjs
 def panel():
     if shutil.which('node') is None:
         pytest.skip('node not on PATH')
-    proc = subprocess.run(
-        ['node', str(HARNESS), str(JS_DIR / 'workflow.js')],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        timeout=60,
-    )
-    assert proc.returncode == 0, f'harness failed: {proc.stderr[-2000:]}'
+    proc = run_node(HARNESS, JS_DIR / 'workflow.js')
+    assert proc.returncode == 0, f'harness failed: {proc.stdout[-2000:]}'
     return json.loads(proc.stdout)
 
 

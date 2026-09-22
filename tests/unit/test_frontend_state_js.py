@@ -17,10 +17,10 @@ Everything here runs the untouched canvas.js/workflow.js inside node
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+from node_runner import run_node
 
 pytestmark = [
     pytest.mark.unit,
@@ -35,13 +35,7 @@ FRONT = REPO / 'tests' / 'frontend'
 def _run(harness: str, args: list, scenarios: list, tmp_path: Path) -> dict:
     sc = tmp_path / f'{harness}.json'
     sc.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
-    proc = subprocess.run(
-        ['node', str(FRONT / harness), *[str(a) for a in args], str(sc)],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        timeout=60,
-    )
+    proc = run_node(str(FRONT / harness), *[str(a) for a in args], str(sc))
     assert proc.returncode == 0, f'{harness} failed: {proc.stderr}'
     return json.loads(proc.stdout)
 

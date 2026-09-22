@@ -19,6 +19,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from node_runner import run_node  # noqa: E402  (tests/ is on sys.path via conftest)
 
 pytestmark = pytest.mark.unit
 
@@ -52,16 +53,8 @@ class TestCanvasSerialization:
         node = shutil.which('node')
         if not node:
             pytest.skip('node not available')
-        import subprocess
 
-        proc = subprocess.run(
-            [node, str(HARNESS), str(CANVAS_JS)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            # Windows would decode this UTF-8 JSON with the GBK locale default.
-            encoding='utf-8',
-        )
+        proc = run_node(HARNESS, CANVAS_JS)
         assert proc.returncode == 0, proc.stderr
         return json.loads(proc.stdout)
 

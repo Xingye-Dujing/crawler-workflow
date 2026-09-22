@@ -16,10 +16,10 @@ Pinned:
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+from node_runner import run_node
 
 REPO = Path(__file__).resolve().parents[2]
 HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_exports.mjs'
@@ -43,12 +43,7 @@ PAYLOAD = {
 def results(tmp_path_factory):
     tmp = tmp_path_factory.mktemp('exports')
     (tmp / 'payload.json').write_text(json.dumps(PAYLOAD), encoding='utf-8')
-    proc = subprocess.run(
-        ['node', str(HARNESS), str(WORKFLOW_JS), str(tmp / 'payload.json')],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-    )
+    proc = run_node(str(HARNESS), str(WORKFLOW_JS), str(tmp / 'payload.json'))
     assert proc.returncode == 0, proc.stderr
     return json.loads(proc.stdout)
 

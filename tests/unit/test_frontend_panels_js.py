@@ -15,10 +15,10 @@ Loads the real workflow.js + app.js in node and drives their toggles. Pinned:
 """
 
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+from node_runner import run_node
 
 REPO = Path(__file__).resolve().parents[2]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
@@ -29,12 +29,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None,
 
 @pytest.fixture(scope='module')
 def results():
-    proc = subprocess.run(
-        ['node', str(HARNESS), str(JS_DIR / 'workflow.js'), str(JS_DIR / 'app.js')],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-    )
+    proc = run_node(str(HARNESS), str(JS_DIR / 'workflow.js'), str(JS_DIR / 'app.js'))
     assert proc.returncode == 0, proc.stderr
     return proc.stdout
 
