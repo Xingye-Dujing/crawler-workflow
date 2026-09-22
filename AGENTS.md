@@ -78,13 +78,18 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
 - Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens
   a visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
   outcome the message catalog already explains — don't "fix" it by loosening assertions.
-- **WeChat has TWO cookie purposes on one host** (measured, not theorized): keyword *search* only
-  exists inside the 公众平台 admin (`mp.weixin.qq.com` login redirect carries `token=`) because Sogou
-  WeChat search bounces straight to `antispider/`; *comments* only render when the article was opened
-  from a link copied out of the PC client (that URL carries `pass_ticket`, which is what makes the
-  server emit `wx_getext_config.k`). A plain web link always shows an empty `discuss_list` — that is
-  "not permitted", never "article has no comments", and `MicroMessenger` UA alone does not help.
-  Keep both checks separate in code and messages (`WechatCrawler.diagnose`, `services/cookie_flow.py`).
+- **WeChat is intentionally body-only.** No comments, likes, forwards (and usually no read
+  counts) — measured, not assumed: a real browser gets `show_comment=0`, zero `elected_comment`
+  bytes in ~3.4 MB of article HTML, and an HTML 验证 page ("请在微信客户端打开链接") from
+  `mp/appmsg_comment`; a `MicroMessenger`/`XWEB` UA, client-shaped URL params and replaying the
+  client's own decrypted `mp.weixin.qq.com` cookies (`pass_ticket`, `appmsg_token`) change nothing,
+  because the gate is a per-session credential the server mints only for a real client session.
+  **Do not add client impersonation or session replay to get around it, and do not re-add those
+  columns** — in a browser "no comments" and "not allowed to look" are indistinguishable, so an
+  empty table would be plausible-looking false data. WeChat's 数据源 node therefore offers no
+  comments mode, and `explainWechatLimits()` (workflow.js) + `cookie.verify.wechatNoComments`
+  (i18n) state why. 公众号后台 login (`mp_logged_in`, detected via the `token=` redirect) is only
+  ever about article *search*.
 - **Cookie death mid-crawl is a designed path**: crawler `login_wall` + under-target rows →
   `_execute_source_node` sets `execution_state['cookie_expired']` (rides on `/api/workflow/status`
   for the browser toast), logs `run.cookieExpired`, and RAISES so the node settles `partial`, the

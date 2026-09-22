@@ -35,8 +35,22 @@ def _url_params(url: str) -> dict:
 class WechatCrawler(Crawler):
     """WeChat official account article crawler.
 
-    Scrapes public WeChat article pages for title, author, publish time,
-    content, read count, like count, and reward count.
+    Scrapes public article pages for title, account, publish time, region,
+    original marker, body text and image count.
+
+    What this platform deliberately does NOT collect, and why: 留言、点赞数、转发数
+    (and 阅读数 for most sessions). WeChat serves those from a per-article
+    credential that its server mints only for a recognised client session, so a
+    browser — including this one — receives the article body and nothing else.
+    Measured on real articles rather than assumed: the page reports
+    ``show_comment=0``, carries no ``elected_comment`` data at all, and the
+    comment endpoint answers an HTML page saying 请在微信客户端打开链接. Forging the
+    client to defeat that gate is out of scope: it is circumventing another
+    service's access control, and the credential is per-session anyway, so the
+    shapes that could be faked (user agent, URL parameters, even a replayed
+    cookie) are not the ones that are checked. An article genuinely without
+    comments and a visit that was never allowed to see them are indistinguishable
+    from a browser, which is exactly why nothing is reported as "0 comments".
     """
 
     domain = 'mp.weixin.qq.com'
@@ -96,9 +110,6 @@ class WechatCrawler(Crawler):
                             total=total,
                             title=data.get('标题', '?'),
                             author=data.get('公众号', '?'),
-                            reads=data.get('阅读数', '?'),
-                            likes=data.get('在看数', '?'),
-                            rewards=data.get('赞赏数', '?'),
                         )
                     )
                 else:
@@ -163,15 +174,6 @@ class WechatCrawler(Crawler):
         content = self.get_content()
         logger.info(t('crawl.wechat.content_len', n=len(content)))
 
-        read_num = self.get_read_count()
-        logger.info(t('crawl.wechat.reads', n=read_num))
-
-        like_num = self.get_like_count()
-        logger.info(t('crawl.wechat.likes', n=like_num))
-
-        reward_num = self.get_reward_count()
-        logger.info(t('crawl.wechat.rewards', n=reward_num))
-
         # Summarise extracted content (first 120 chars)
         content_preview = content[:120].replace('\n', ' ').strip()
         if len(content) > 120:
@@ -186,120 +188,34 @@ class WechatCrawler(Crawler):
             '是否原创': '是' if self.is_original() else '',
             '正文': content[:5000] + ('...' if len(content) > 5000 else ''),
             '正文图片数': self.get_image_count(),
-            '阅读数': read_num,
-            '在看数': like_num,
-            '赞赏数': reward_num,
             '链接': url,
         }
 
     # ------------------------------------------------------------------
-    # Comment credentials (and why a browser usually has none)
+    # Cookie diagnosis
     # ------------------------------------------------------------------
 
-    #: The page's own comment-call parameters. ``k`` is the one that matters:
-    #: the server only embeds it when the request came from a WeChat client
-    #: session, which in practice means the article URL was copied out of the
-    #: PC client and still carries ``pass_ticket``. Without it the comment list
-    #: stays empty — not "this article has no comments", but "this session was
-    #: never allowed to see them".
-    _CREDENTIAL_SCRIPT = """
-        var out = {};
-        var cfg = null;
-        try { cfg = window.wx_getext_config || null; } catch (e) { cfg = null; }
-        var cid = (cfg && (cfg.comment_id || cfg.appmsgcommentid)) || '';
-        out.key = (cfg && cfg.k) ? String(cfg.k) : '';
-        out.comment_id = cid ? String(cid) : '';
-        out.appmsg_token = (cfg && cfg.appmsg_token) ? String(cfg.appmsg_token)
-            : ((typeof appmsg_token !== 'undefined' && appmsg_token) ? String(appmsg_token) : '');
-        out.biz = (typeof biz !== 'undefined' && biz) ? String(biz) : '';
-        out.mid = (typeof mid !== 'undefined' && mid) ? String(mid) : '';
-        out.idx = (typeof idx !== 'undefined' && idx) ? String(idx) : '';
-        out.sn = (typeof sn !== 'undefined' && sn) ? String(sn) : '';
-        out.pass_ticket = (typeof pass_ticket !== 'undefined' && pass_ticket) ? String(pass_ticket) : '';
-        out.uin = (typeof uin !== 'undefined' && uin) ? String(uin) : '';
-        return out;
-        """
-
-    def article_credentials(self) -> dict:
-        """Read the comment-call parameters the current page exposes.
-
-        Never raises: a page that cannot answer (still loading, verification
-        interstitial, dead session) simply yields empty credentials, which the
-        caller reports as "credential absent" rather than as a scrape error.
-        """
-        try:
-            raw = self.driver.execute_script(self._CREDENTIAL_SCRIPT) or {}
-        except Exception:
-            raw = {}
-        creds = {
-            key: str(raw.get(key) or '')
-            for key in (
-                'key',
-                'comment_id',
-                'appmsg_token',
-                'biz',
-                'mid',
-                'idx',
-                'sn',
-                'pass_ticket',
-                'uin',
-            )
-        }
-        # The URL carries the same tokens when the link came from the client, and
-        # the page globals are not always defined on every article template.
-        params = _url_params(_safe_current_url(self.driver))
-        for field, param in (
-            ('__biz', 'biz'),
-            ('mid', 'mid'),
-            ('idx', 'idx'),
-            ('sn', 'sn'),
-            ('pass_ticket', 'pass_ticket'),
-        ):
-            if not creds[param] and params.get(field):
-                creds[param] = str(params[field][0])
-        return creds
-
-    def rendered_comment_count(self) -> int:
-        """How many comments this session can already see in the page.
-
-        ``.discuss_list`` is the container WeChat fills; an empty one under
-        ``discuss_data_empty`` is the shape of "not permitted", which has to be
-        distinguishable from "the author turned comments off".
-        """
-        best = 0
-        for selector in ('.discuss_list .item', '#js_cmt_area .appmsg_comment', '.discuss_list > li'):
-            try:
-                best = max(best, len(self.driver.find_elements(By.CSS_SELECTOR, selector)))
-            except Exception:
-                continue
-        return best
-
     def diagnose(self, url: str = '') -> dict:
-        """Two WeChat capabilities, checked separately, because they are gated
-        by two different things: 文章搜索 needs an MP-admin session, 评论 needs a
-        client-copied article link. One cookie file serves both, so the panel has
-        to be able to say which of the two the user actually has.
+        """What the stored WeChat cookie actually unlocks.
+
+        Only one thing is answerable, and it is the thing the panel can act on:
+        whether a 公众号 admin session is alive, which is what makes keyword
+        search work. 留言/点赞/转发 are deliberately absent — see the class
+        docstring — so there is nothing to diagnose there and nothing to pretend
+        about.
         """
-        facts = {'platform': self.domain, 'url': '', 'login_wall': False}
-        # 1. The 公众平台 admin session: logged in, the login page redirects to
-        # /cgi-bin/home with a token; logged out it stays on the QR page.
         self.driver.get(self.login_url)
         admin_url = _safe_current_url(self.driver)
-        facts['mp_logged_in'] = 'token=' in admin_url
-        facts['url'] = admin_url
-        facts['login_wall'] = not facts['mp_logged_in']
-        # 2. The article's comment credential, if an article link was supplied.
-        article = str(url or '').strip()
-        if article:
-            self.driver.get(article)
-            creds = self.article_credentials()
-            facts['url'] = _safe_current_url(self.driver) or article
-            facts['has_pass_ticket'] = bool(creds['pass_ticket'])
-            facts['comment_key'] = creds['key']
-            facts['comment_id'] = creds['comment_id']
-            facts['comment_visible'] = self.rendered_comment_count()
-            facts['body_readable'] = self._element_or_none('#rich_media_content, .rich_media_content') is not None
-        return facts
+        logged_in = 'token=' in admin_url
+        return {
+            'platform': self.domain,
+            'url': admin_url,
+            'mp_logged_in': logged_in,
+            # A recognised admin session is the only wall this platform has here;
+            # the generic login-wall flag keeps the verdict line uniform.
+            'login_wall': not logged_in,
+            'comments_supported': False,
+        }
 
     # ------------------------------------------------------------------
     # Field extraction helpers
@@ -426,63 +342,3 @@ class WechatCrawler(Crawler):
                 continue
         logger.debug(t('crawl.debug.content_missing'))
         return None
-
-    def get_read_count(self) -> int:
-        """Extract the read count (阅读数)."""
-        selectors = ['#read_num', '.read_num', 'span[class*="read"]']
-        count = self._extract_number(selectors)
-        if count > 0:
-            return count
-
-        # Fallback: try clicking a "read more" button to reveal hidden stats
-        try:
-            read_btn = self.driver.find_element(By.CSS_SELECTOR, '.read_more')
-            logger.debug(t('crawl.debug.read_more'))
-            self.driver.execute_script('arguments[0].scrollIntoView();', read_btn)
-            read_btn.click()
-            time.sleep(0.1)
-            count = self._extract_number(selectors)
-            if count > 0:
-                return count
-        except Exception:
-            pass
-
-        logger.debug(t('crawl.debug.reads_missing'))
-        return 0
-
-    def get_like_count(self) -> int:
-        """Extract the like / 在看 count."""
-        selectors = ['#like_num', '.like_num', 'span[class*="like"]']
-        count = self._extract_number(selectors)
-        if count == 0:
-            logger.debug(t('crawl.debug.likes_missing'))
-        return count
-
-    def get_reward_count(self) -> int:
-        """Extract the reward / tip count (赞赏数)."""
-        count = self._extract_number(['.reward_num'])
-        if count == 0:
-            logger.debug(t('crawl.debug.rewards_missing'))
-        return count
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _extract_number(self, selectors) -> int:
-        """Search for a numeric value using the provided list of CSS selectors."""
-        for sel in selectors:
-            try:
-                els = self.driver.find_elements(By.CSS_SELECTOR, sel)
-            except Exception:
-                continue
-            for el in els:
-                text = self._node_text(el)
-                match = re.search(r'(\d+(?:\.\d+)?)(万|w)?', text.replace(',', ''))
-                if not match:
-                    continue
-                value = float(match.group(1))
-                if match.group(2):
-                    value *= 10000
-                return int(value)
-        return 0

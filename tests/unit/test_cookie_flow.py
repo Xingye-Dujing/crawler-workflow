@@ -103,10 +103,17 @@ class TestCatalogue:
         assert flow['purpose'] and not flow['purpose'].startswith('cookie.')
         assert len(flow['steps']) >= 1
 
-    def test_wechat_explains_both_the_admin_login_and_the_client_copied_link(self):
+    def test_wechat_explains_the_admin_login_and_refuses_to_guess(self):
         steps = '\n'.join(flow_for('wechat')['steps'])
         assert 'mp.weixin.qq.com' in steps
-        assert 'pass_ticket' in steps
+        # the measured reason, not a promise that a copied link would help
+        assert 'show_comment=0' in steps
+        assert '不伪装' in steps
+
+    def test_no_platform_step_promises_a_wechat_comment_route(self):
+        """The removed capability must not survive in guidance either."""
+        for platform in ('zhihu', 'weibo', 'xiaohongshu', 'wechat'):
+            assert 'pass_ticket' not in '\n'.join(flow_for(platform)['steps'])
 
     @pytest.mark.parametrize('platform', ['zhihu', 'weibo', 'xiaohongshu', 'wechat'])
     def test_the_english_catalogue_answers_too(self, platform):

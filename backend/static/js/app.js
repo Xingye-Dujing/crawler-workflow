@@ -417,6 +417,21 @@ const I18n = {
             'settings.urlsHint': 'One URL per line — WeChat crawls these articles',
             'settings.commentUrls': 'Article Links',
             'settings.commentUrlsHintPlat': 'One article link per line — must match the selected platform ({plat})',
+            'settings.wechatLimitsNote': 'WeChat: comments / likes / forwards cannot be collected — see why',
+            'settings.wechatLimitsBtn': 'Why not WeChat comments / likes / forwards?',
+            'settings.wechatLimitsBody':
+                'WeChat delivers the article body to anyone, but keeps 留言 (comments), 点赞数 (likes) and ' +
+                '转发数 (forwards) — and usually 阅读数 too — behind a credential its server mints only for a ' +
+                'recognised WeChat client session.\n\n' +
+                'Measured against real articles in a real browser: the page sets show_comment=0 and carries no ' +
+                'comment data at all, while the comment endpoint replies with an HTML page saying ' +
+                '请在微信客户端打开链接. Changing the user agent, reshaping the URL or replaying the client’s own ' +
+                'cookies does not change that answer, and this project will not impersonate the WeChat client to ' +
+                'get around the site’s access control.\n\n' +
+                'The decisive reason for not guessing: in a browser, “this article has no comments” and “this visit ' +
+                'was not allowed to see them” look exactly the same. Returning an empty table would hand you ' +
+                'plausible-looking data that is really a failure, so WeChat is limited to what it genuinely ' +
+                'serves — the article text — and comments are offered for 知乎 / 微博 / 小红书 instead.',
             'settings.commentUrlsHintMixed': 'One link per line; Zhihu / Weibo / Xiaohongshu may be mixed — each link is routed by its own domain',
             'settings.commentLimit': 'Comments Limit',
             'settings.commentLimitHint': '0 = every comment',
@@ -888,6 +903,18 @@ const I18n = {
             'settings.urlsHint': '每行一个链接，微信按这些文章逐个抓取',
             'settings.commentUrls': '文章链接',
             'settings.commentUrlsHintPlat': '每行一个文章链接，须与所选平台（{plat}）一致',
+            'settings.wechatLimitsNote': '微信：留言 / 点赞数 / 转发数 无法采集——点击查看原因',
+            'settings.wechatLimitsBtn': '为什么微信不能采集评论、点赞、转发？',
+            'settings.wechatLimitsBody':
+                '微信把文章正文开放给任何人，但把「留言」「点赞数」「转发数」（多数情况下还有「阅读数」）' +
+                '放在只发给微信客户端会话的凭证之后。\n\n' +
+                '在真实浏览器里对真实文章的实测结果：页面 show_comment=0，HTML 里不含任何留言数据；' +
+                '直接调用留言接口返回一段 HTML 验证页，内容是「请在微信客户端打开链接」。' +
+                '更换 User-Agent、改写链接参数、甚至重放微信客户端自己的 Cookie，都改变不了这个结果；' +
+                '本项目也不会伪装成微信客户端去绕过站点的访问控制。\n\n' +
+                '更关键的原因是：在浏览器里，「这篇文章没有评论」与「这次访问不被允许查看」看起来完全一样。' +
+                '如果返回一张空表，你拿到的就是一份看着正常、实则是失败的数据。' +
+                '因此微信只采集它真正开放的内容（文章正文），评论采集请使用 知乎 / 微博 / 小红书。',
             'settings.commentUrlsHintMixed': '每行一个文章链接，可混合知乎 / 微博 / 小红书，每个链接按域名自动识别平台',
             'settings.commentLimit': '评论条数上限',
             'settings.commentLimitHint': '0 表示采集全部评论',

@@ -223,23 +223,22 @@ class TestCookieVerify:
         assert body['facts']['login_wall'] is True
         assert any('login' in line.lower() or '登录' in line for line in body['lines'])
 
-    def test_wechat_reports_search_access_and_comment_access_separately(self, client, job, app_module):
+    def test_wechat_verdict_says_what_wechat_cannot_do(self, client, job, app_module):
+        """The one platform with a permanent gap must state it in the verdict, so
+        an empty result is never read as a cookie problem."""
         app_module.cookie_manager.save('wechat', [{'name': 'slave_sid', 'value': 'x'}])
         job['state']['facts'] = {
             'platform': 'mp.weixin.qq.com',
-            'url': 'https://mp.weixin.qq.com/s/abc',
+            'url': 'https://mp.weixin.qq.com/cgi-bin/home?token=1',
+            'mp_logged_in': True,
             'login_wall': False,
-            'mp_logged_in': False,
-            'comment_key': '',
-            'comment_visible': 0,
-            'has_pass_ticket': False,
+            'comments_supported': False,
         }
-        article = 'https://mp.weixin.qq.com/s/abc'
-        assert client.post('/api/cookies/verify', json={'platform': 'wechat', 'url': article}).status_code == 202
-        assert _await_phase(client, 'verified')
-        lines = client.get('/api/cookies/generate/status').get_json()['lines']
-        assert len(lines) == 4  # address, admin session, credential, visible count
-        assert any('公众号' in line or 'MP admin' in line for line in lines)
+        assert client.post('/api/cookies/verify', json={'platform': 'wechat'}).status_code == 202
+        body = _await_phase(client, 'verified')
+        assert len(body['lines']) == 3
+        joined = '\n'.join(body['lines'])
+        assert '留言' in joined and '伪装' in joined
 
     def test_verifying_without_a_stored_cookie_is_refused_before_any_browser(self, client, job, app_module):
         app_module.cookie_manager.delete('weibo')

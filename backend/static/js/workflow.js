@@ -466,6 +466,14 @@ function openSettings(nodeId) {
                 '<textarea class="settings-input" rows="5" placeholder="https://mp.weixin.qq.com/s/..." ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.urlsHint') + '</div></div>';
+            /* WeChat is the one platform that cannot give 评论/点赞/转发 to a
+               browser, and a silent absence reads as a bug. Say what is missing
+               and why, in one click. */
+            html += '<div class="settings-group">' +
+                '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">' +
+                I18n.t('settings.wechatLimitsNote') + '</div>' +
+                '<button class="menu-btn" type="button" onclick="explainWechatLimits()">' +
+                I18n.t('settings.wechatLimitsBtn') + '</button></div>';
         } else if (collect === 'comments') {
             /* The selected platform pins what a valid link looks like — the
                placeholder must show ONE example shape, not all three at once
@@ -2490,6 +2498,16 @@ function verifyCookie() {
         cookieJob.kind = 'login';
         statusEl.textContent = result.error || I18n.t('cookie.failed').replace('{err}', '');
         if (result.busy) startCookiePolling();
+    });
+}
+
+/* Why WeChat stops at the article body. Kept as one dialog rather than a
+   disabled control with no reason: the platform's limit is a fact about the
+   site, and the honest answer is shorter than the confusion of an empty box. */
+function explainWechatLimits() {
+    showDialog({
+        message: I18n.t('settings.wechatLimitsBody'),
+        buttons: [{ label: I18n.t('settings.close'), value: 'ok', primary: true }],
     });
 }
 

@@ -103,88 +103,33 @@ class TestAdminSession:
         assert facts['mp_logged_in'] is True
 
 
-class TestArticleCredentials:
-    def test_the_credential_page_yields_a_usable_comment_key(self, make_crawler):
-        crawler = make_crawler(
-            credentials={
-                'key': 'K-123',
-                'comment_id': 'C-9',
-                'appmsg_token': 'T-1',
-                'biz': 'B',
-                'mid': 'M',
-                'idx': '1',
-                'sn': 'S',
-                'pass_ticket': 'P',
-            },
-            comment_rows=7,
-        )
-        facts = crawler.diagnose(CLIENT_ARTICLE)
-        assert facts['comment_key'] == 'K-123'
-        assert facts['comment_id'] == 'C-9'
-        assert facts['has_pass_ticket'] is True
-        assert facts['comment_visible'] == 7
-        assert facts['body_readable'] is True
+class TestNoCommentDiagnostics:
+    """The comment apparatus is gone, so the diagnosis must not claim any of it.
 
-    def test_a_plain_web_link_has_no_credential_and_shows_no_comments(self, make_crawler):
-        """This is the shape the user meets every day — the comment area is
-        present but empty. It must read as "not permitted", never as "the
-        article has no comments"."""
-        crawler = make_crawler(credentials={}, comment_rows=0)
-        facts = crawler.diagnose(ARTICLE)
-        assert facts['comment_key'] == ''
-        assert facts['has_pass_ticket'] is False
-        assert facts['comment_visible'] == 0
+    A half-removed capability is worse than an absent one: a leftover
+    ``comment_key`` fact would let the panel keep reporting on something no code
+    can read.
+    """
 
-    def test_url_tokens_backfill_what_the_page_globals_do_not_provide(self, make_crawler):
-        """Older article templates do not define the globals but always carry the
-        tokens in the address — percent-decoded, which is the form the comment
-        endpoint expects."""
-        crawler = make_crawler(url_map={CLIENT_ARTICLE: CLIENT_ARTICLE})
-        crawler.driver.get(CLIENT_ARTICLE)
-        creds = crawler.article_credentials()
-        assert creds['pass_ticket'] == 'Pt/xyz'
-        assert creds['biz'] == 'MzA3Mjc3NjkxNg=='
-        assert creds['sn'] == 'abc123'
+    def test_no_comment_facts_are_ever_reported(self, make_crawler):
+        facts = make_crawler().diagnose(ARTICLE)
+        for gone in ('comment_key', 'comment_id', 'comment_visible', 'has_pass_ticket', 'body_readable'):
+            assert gone not in facts, f'{gone} survived the removal'
 
-    def test_a_script_that_raises_yields_empty_credentials_not_a_crash(self, make_crawler):
-        crawler = make_crawler()
+    def test_an_article_url_changes_nothing_about_the_verdict(self, make_crawler):
+        crawler = make_crawler(url_map={ADMIN: ADMIN_LOGGED_IN})
+        assert crawler.diagnose(ARTICLE)['mp_logged_in'] is True
+        assert crawler.diagnose()['mp_logged_in'] is True
 
-        def boom(_script, *_args):
-            raise RuntimeError('page navigated away')
+    def test_the_crawler_exposes_no_comment_helpers(self):
+        for gone in ('article_credentials', 'rendered_comment_count'):
+            assert not hasattr(WechatCrawler, gone), f'{gone} still reachable'
 
-        crawler.driver.execute_script = boom
-        assert set(crawler.article_credentials()) == {
-            'key',
-            'comment_id',
-            'appmsg_token',
-            'biz',
-            'mid',
-            'idx',
-            'sn',
-            'pass_ticket',
-            'uin',
-        }
-        assert crawler.article_credentials()['key'] == ''
+    def test_wechat_is_not_a_comment_platform_for_the_router(self):
+        """utils.helpers routes article links to adapters; WeChat has none, so a
+        pasted 微信 link in comments mode must be refused rather than silently
+        producing zero rows."""
+        from utils.helpers import platform_for
 
-    def test_no_article_requested_reports_no_comment_facts_at_all(self, make_crawler):
-        """Absent is not the same as empty: the panel only shows the comment
-        verdict when an article was actually probed."""
-        facts = make_crawler().diagnose()
-        assert 'comment_key' not in facts
-        assert 'has_pass_ticket' not in facts
-
-
-class TestRenderedCommentCount:
-    def test_the_widest_of_the_known_list_shapes_wins(self, make_crawler):
-        crawler = make_crawler(comment_rows=3)
-        crawler.driver.find_elements = lambda by, selector: [object()] * 5 if selector == '.discuss_list > li' else []
-        assert crawler.rendered_comment_count() == 5
-
-    def test_a_driver_that_cannot_answer_reads_as_no_comments(self, make_crawler):
-        crawler = make_crawler()
-
-        def boom(by, selector):
-            raise RuntimeError('no such element')
-
-        crawler.driver.find_elements = boom
-        assert crawler.rendered_comment_count() == 0
+        assert platform_for('https://mp.weixin.qq.com/s/abc') == ''
+        assert platform_for('https://www.zhihu.com/question/1') == 'zhihu'

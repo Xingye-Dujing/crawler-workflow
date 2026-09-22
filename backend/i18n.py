@@ -197,9 +197,6 @@ _ZH = {
     'crawl.wechat.author': '  作者（公众号）: {author}',
     'crawl.wechat.pub_time': '  发布时间: {time}',
     'crawl.wechat.content_len': '  正文长度: {n} 字',
-    'crawl.wechat.reads': '  阅读数: {n}',
-    'crawl.wechat.likes': '  点赞数: {n}',
-    'crawl.wechat.rewards': '  打赏数: {n}',
     'crawl.wechat.preview': '  正文预览: {preview}',
     'crawl.wechat.no_content': '重试后仍未找到正文元素。',
     # ── crawlers: xiaohongshu ─────────────────────────────────
@@ -279,15 +276,17 @@ _ZH = {
         '2. 打开任意一篇笔记，能看到评论区即可\n'
         '3. 回到本面板点「我已登录，保存」'
     ),
-    'cookie.wechat.purpose': '两个用途各要一次：搜索文章用公众号后台登录；抓评论用「微信里复制的文章链接」。',
+    'cookie.wechat.purpose': '让浏览器能按关键词搜索公众号文章——需要登录你自己的公众号后台。',
     'cookie.wechat.steps': (
         '【搜索公众号文章】点「浏览器登录」（入口 https://mp.weixin.qq.com/），扫码登录你自己的公众号后台，'
         '然后点「我已登录，保存」。没有公众号账号就无法按关键词搜索。\n'
-        '【抓取推文评论】在 PC 微信里打开那篇推文 → 右上角「…」→ 复制链接，把得到的链接填进下方'
-        '「登录入口链接」，再点「浏览器登录」，窗口里能看到正文后点「我已登录，保存」。\n'
-        '注意：只有微信客户端复制出来的链接（带 pass_ticket）才会下发评论凭证；普通网页链接在浏览器里评论区必为空。'
+        '【抓取文章正文】不需要登录：把推文链接粘到数据源节点即可。\n'
+        '【微信不采集留言、点赞数、转发数】微信把这几项放在只下发给客户端会话的凭证之后，'
+        '浏览器取不到：实测页面 show_comment=0、HTML 里没有任何留言数据，留言接口回「请在微信客户端打开链接」。'
+        '本项目不伪装微信客户端去绕过它；而且在浏览器里「这篇没有评论」与「这次没被允许查看」无法区分，'
+        '所以宁可不做，也不给你一份看起来正常的空数据。'
     ),
-    'cookie.entryUrl': '登录入口链接（可留空；微信抓评论时请粘贴「微信里复制的链接」）',
+    'cookie.entryUrl': '登录入口链接（可留空：默认打开该平台登录页；也可粘贴你想为其保存 Cookie 的页面）',
     'cookie.openedEntry': '登录浏览器已打开：{url}',
     'cookie.entryRejected': (
         '该链接不属于 {platform} 的域名，已改用平台登录页（不允许把别的站点的 Cookie 存进本平台的 Cookie 文件）'
@@ -301,10 +300,10 @@ _ZH = {
     'cookie.verify.mpLoggedIn': '公众号后台登录态：{state}',
     'cookie.verify.mpLoggedInYes': '已登录（可搜索文章）',
     'cookie.verify.mpLoggedInNo': '未登录（无法搜索文章，请在浏览器里扫码登录公众号后台）',
-    'cookie.verify.commentKey': '评论区凭证：{state}',
-    'cookie.verify.commentKeyYes': '已取得（该文章的留言可以抓取）',
-    'cookie.verify.commentKeyNo': '未取得（该链接不是微信客户端复制出来的，或缺 pass_ticket；浏览器里评论区为空）',
-    'cookie.verify.commentCount': '该文章在浏览器里可见的留言数：{n}',
+    'cookie.verify.wechatNoComments': (
+        '留言/点赞/转发：微信不提供浏览器采集——这些只随客户端会话下发，'
+        '且「无数据」与「未被允许查看」无法区分，故本项目不采集、也不伪装客户端'
+    ),
     'cookie.verify.checkedUrl': '验证地址：{url}',
     'api.cookieBusy': '已有 {platform} 的登录窗口打开中——请先完成或取消它',
     'api.bodyNotObject': '请求体必须是 JSON 对象',
@@ -361,10 +360,6 @@ _ZH = {
     'crawl.debug.page_list_missing': '未找到页码列表，可能只有一页',
     'crawl.debug.pager_missing': '未检测到分页按钮，只有一页',
     'crawl.debug.content_retry': '正文未提取到，稍后重试一次',
-    'crawl.debug.read_more': '点击 .read_more 展开阅读数',
-    'crawl.debug.reads_missing': '未找到阅读数',
-    'crawl.debug.likes_missing': '未找到在看数',
-    'crawl.debug.rewards_missing': '未找到赞赏数',
     # ── 参数校验 / 接口错误（会直接显示在提示条里） ────────────
     'crawl.weibo.bad_date': '日期格式不对：{value}（应为 YYYY-MM-DD）',
     'crawl.weibo.need_both_dates': '开始时间与结束时间必须同时填写（只填一个会被忽略，搜索范围会完全不同）',
@@ -639,9 +634,6 @@ _EN = {
     'crawl.wechat.author': '  Author (official account): {author}',
     'crawl.wechat.pub_time': '  Publish time: {time}',
     'crawl.wechat.content_len': '  Content length: {n} characters',
-    'crawl.wechat.reads': '  Read count: {n}',
-    'crawl.wechat.likes': '  Like count: {n}',
-    'crawl.wechat.rewards': '  Reward count: {n}',
     'crawl.wechat.preview': '  Content preview: {preview}',
     'crawl.wechat.no_content': 'Content element not found after retry.',
     # ── crawlers: xiaohongshu ─────────────────────────────────
@@ -724,19 +716,21 @@ _EN = {
         '2. Open any note and confirm the comment area renders\n'
         '3. Come back here and press "Done — I logged in"'
     ),
-    'cookie.wechat.purpose': 'Two purposes, one cookie file each time: article search needs a 公众号 (MP admin) '
-    'login; comments need the article link copied out of the WeChat client.',
+    'cookie.wechat.purpose': 'Lets the browser search official-account articles by keyword — needs a login to your '
+    'own 公众号 (MP admin).',
     'cookie.wechat.steps': (
-        '[Search official-account articles] Press "Login via browser" (entry https://mp.weixin.qq.com/), scan to '
-        'log into your own MP admin, then press "Done — I logged in". Without an official account there is no '
-        'keyword search.\n'
-        '[Crawl article comments] Open the article in the PC WeChat client → "…" → Copy Link, paste that link into '
-        'the "Custom login entry" field below, press "Login via browser", and once the article body is visible '
-        'press "Done — I logged in".\n'
-        'Note: only a link copied out of the client carries pass_ticket, which is what makes the server hand back '
-        'the comment credential. A plain web link always shows an empty comment area in a browser.'
+        '[Search articles] Press "Login via browser" (entry https://mp.weixin.qq.com/), scan to log into your own '
+        'MP admin, then press "Done — I logged in". Without an official account there is no keyword search.\n'
+        '[Crawl article bodies] No login needed: paste the article links into the source node.\n'
+        '[WeChat comments, likes and forwards are not collected] WeChat serves those behind a credential it mints '
+        'only for a client session, so a browser cannot read them — measured: the page sets show_comment=0, carries '
+        'no comment data at all, and the comment endpoint answers 请在微信客户端打开链接. This project does not '
+        'impersonate the WeChat client to get around that; and in a browser "this article has no comments" is '
+        'indistinguishable from "this visit was not allowed to look", so an empty-looking dataset would be worse '
+        'than no dataset.'
     ),
-    'cookie.entryUrl': 'Custom login entry (leave empty; for WeChat comments paste the link copied out of WeChat)',
+    'cookie.entryUrl': 'Custom login entry (optional: empty opens the platform login page; paste any page you want '
+    'the cookie captured for)',
     'cookie.openedEntry': 'Login browser opened at: {url}',
     'cookie.entryRejected': 'That link is not on a {platform} domain, so the platform login page was used instead '
     '(another site\u2019s cookies must never be stored in this platform\u2019s cookie file)',
@@ -749,11 +743,11 @@ _EN = {
     'cookie.verify.mpLoggedIn': 'MP admin session: {state}',
     'cookie.verify.mpLoggedInYes': 'logged in (article search available)',
     'cookie.verify.mpLoggedInNo': 'not logged in',
-    'cookie.verify.commentKey': 'Comment credential: {state}',
-    'cookie.verify.commentKeyYes': 'present (this article\u2019s comments can be crawled)',
-    'cookie.verify.commentKeyNo': 'absent \u2014 this link did not come from the WeChat client, or lacks pass_ticket; '
-    'the comment area stays empty in a browser',
-    'cookie.verify.commentCount': 'Comments visible to this browser session: {n}',
+    'cookie.verify.wechatNoComments': (
+        'Comments / likes / forwards: not collected for WeChat. The site serves them only to a client session, and '
+        '"no data" cannot be told apart from "not allowed to look" \u2014 so this project neither scrapes them nor '
+        'impersonates the client'
+    ),
     'cookie.verify.checkedUrl': 'Verified against: {url}',
     'api.cookieBusy': 'A {platform} login window is already open — finish or cancel it first',
     'api.bodyNotObject': 'request body must be a JSON object',
@@ -808,10 +802,6 @@ _EN = {
     'crawl.debug.page_list_missing': 'No page list found — probably a single page',
     'crawl.debug.pager_missing': 'No pager button found — single page',
     'crawl.debug.content_retry': 'Content not extracted yet — retrying once',
-    'crawl.debug.read_more': 'Clicking .read_more to reveal the read count',
-    'crawl.debug.reads_missing': 'Read count not found',
-    'crawl.debug.likes_missing': 'Like count not found',
-    'crawl.debug.rewards_missing': 'Reward count not found',
     # ── argument validation / API errors (surfaced in toasts) ──
     'crawl.weibo.bad_date': 'Bad date format: {value} (expected YYYY-MM-DD)',
     'crawl.weibo.need_both_dates': 'Set both a start and an end date — a single one searches a different range',

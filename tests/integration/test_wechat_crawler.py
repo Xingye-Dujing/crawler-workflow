@@ -39,10 +39,12 @@ def test_fixture_is_a_shaped_wechat_page(crawler, wechat_article_url):
     assert data['公众号'] == '旅行实验室'
     assert '2026' in data['发布时间']
     assert '亚龙湾' in data['正文']
-    assert data['阅读数'] == 12345
-    assert data['在看数'] == 67
-    assert data['赞赏数'] == 8
     assert data['链接'] == wechat_article_url
+    # The fixture DOES show 阅读/在看/赞赏 numbers, and the crawler still must not
+    # emit those columns: WeChat serves them from the privileged path, so a row
+    # carrying them would be a row full of browser-side zeros pretending to be data.
+    for gone in ('阅读数', '在看数', '赞赏数', '留言', '评论'):
+        assert gone not in data, f'{gone} came back from a browser page'
 
 
 def test_search_streams_items_through_the_sink(crawler, wechat_article_url):
