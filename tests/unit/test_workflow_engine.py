@@ -356,10 +356,10 @@ class TestValidateUsesLabels:
         errors = WorkflowEngine(_wf([node], [])).validate()
         assert any('2 link(s) do not match the selected platform (zhihu)' in e for e in errors)
 
-    def test_wechat_node_reads_a_stale_comments_flag_as_article_crawl(self, en):
-        # WeChat has no comment adapter. The panel now clears collect when
-        # wechat is picked, but files saved before that keep the flag: it must
-        # validate (and execute) as the URL-driven crawl it really is.
+    def test_wechat_comments_mode_is_validated_as_comments(self, en):
+        # WeChat has a comment adapter now, so a comments node is judged by the
+        # comments rule (links in) exactly like the other platforms — not by the
+        # old "read it as an article crawl" special case.
         node = {
             'id': 'node-1',
             'type': 'source',
@@ -372,5 +372,11 @@ class TestValidateUsesLabels:
             'params': {'platform': 'wechat', 'collect': 'comments', 'urls': ''},
         }
         errors = WorkflowEngine(_wf([empty], [])).validate()
-        assert any('WeChat source needs' in e for e in errors)
-        assert not any('comments mode' in e for e in errors)
+        assert any('comments mode needs at least one article URL' in err for err in errors)
+        # posts mode keeps its own wording, so the two are never confused.
+        posts = {
+            'id': 'node-1',
+            'type': 'source',
+            'params': {'platform': 'wechat', 'collect': 'posts', 'urls': ''},
+        }
+        assert any('WeChat source needs' in err for err in WorkflowEngine(_wf([posts], [])).validate())

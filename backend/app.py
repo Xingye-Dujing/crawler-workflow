@@ -1319,14 +1319,10 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     """
     params = node.get('params', {})
     platform = node.get('platform', params.get('platform', ''))
-    if str(params.get('collect') or 'posts') == 'comments' and platform != 'wechat':
+    if str(params.get('collect') or 'posts') == 'comments':
         # 评论采集 is a mode of the Data Source (they share the 数据输入 category):
         # links go in, comment rows come out. Same engine as the standalone
-        # Comment node — which remains valid for older canvases. WeChat has no
-        # comment adapter, so a stale collect='comments' flag left on a wechat
-        # node (saved before the panel normalized it) must not reroute its
-        # article URLs into the comment engine — they would ALL be dropped as
-        # unsupported. For wechat it still simply means "crawl these URLs".
+        # Comment node — which remains valid for older canvases.
         return _execute_comment_node(dict(node, type='comment'), ctx=ctx)
     keyword = params.get('keyword', '')
     target_count = _safe_int(params.get('target_count'), 50, minimum=1)
@@ -1946,6 +1942,8 @@ def _execute_comment_node(node: dict, ctx: dict = None):
                 rows, status = session.crawl_weibo(url, limit)
             elif kind == 'xiaohongshu':
                 rows, status = session.crawl_xiaohongshu(url, limit)
+            elif kind == 'wechat':
+                rows, status = session.crawl_wechat(url, limit)
             else:
                 rows, status = session.crawl_zhihu(url, limit)
             counts[status] = counts.get(status, 0) + 1
