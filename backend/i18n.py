@@ -493,6 +493,7 @@ _ZH = {
     'resume.empty': '续跑节点：运行 {rid} 的节点 {nid} 没有可读取的数据行',
     'resume.loaded': '续跑节点：载入运行 {rid} 中节点 {nid} 的 {n} 行',
     'api.runNotFound': '找不到运行记录：{rid}',
+    'api.exportNotFound': '导出文件不存在（或不允许下载）：{name}',
     # ── 自动清理（housekeeping） ──────────────────────────────
     'housekeeping.done': (
         '自动清理：删除 {runs} 条过期运行记录、{files} 个孤立文件（另回收 {cache} 条模型缓存、{seen} 条去重记录）'
@@ -981,6 +982,7 @@ _EN = {
     'resume.empty': 'Resume node: node {nid} of run {rid} has no stored rows',
     'resume.loaded': 'Resume node: loaded {n} rows from node {nid} of run {rid}',
     'api.runNotFound': 'No such run: {rid}',
+    'api.exportNotFound': 'export file not found (or not downloadable): {name}',
     # ── housekeeping ──────────────────────────────────────────
     'housekeeping.done': (
         'Housekeeping: dropped {runs} expired run record(s) and {files} orphaned file(s) '

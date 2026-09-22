@@ -643,6 +643,31 @@
       <div id="runs-mgr-body" class="data-preview-table-wrap"></div>
     </div>
 
+    <!-- Export Artefacts Panel — the read side of data/exports -->
+    <div id="exports-panel">
+      <div id="exports-resize-handle"></div>
+      <div class="console-header">
+        <span data-i18n="exportsMgr.header">Export Files</span>
+        <div class="console-actions">
+          <button
+            class="panel-close"
+            onclick="exportsManager.refresh()"
+            data-i18n="btn.refresh"
+          >
+            Refresh
+          </button>
+          <button
+            class="panel-close"
+            onclick="toggleExportsPanel()"
+            data-i18n="stats.close"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <div id="exports-mgr-body" class="data-preview-table-wrap"></div>
+    </div>
+
     <!-- Processes Panel -->
     <div id="processes-panel">
       <div class="console-header">
@@ -687,6 +712,14 @@
         data-i18n="runsMgr.header"
       >
         Run Records
+      </button>
+      <button
+        class="status-btn"
+        id="btn-exports"
+        onclick="toggleExportsPanel()"
+        data-i18n="exportsMgr.header"
+      >
+        Export Files
       </button>
       <span id="status-zoom">100%</span>
     </div>

@@ -1999,6 +1999,7 @@ function setLang(nextLang) {
        if the panel is open, redraw it in the new language right away instead
        of only after the next open. */
     if (window.runsManager) runsManager.onLanguageChange();
+    if (window.exportsManager) exportsManager.onLanguageChange();
 }
 
 function showToast(msg) {
@@ -3027,4 +3028,153 @@ workflow.validate = function () {
     }
 
     return errors;
+};
+
+/* ─── Export artefacts panel ────────────────────────────────────
+   The read side of data/exports. Rows arrive with a name the server already
+   resolved once, so the download link and the delete button both send that
+   name back unchanged — the browser never assembles a path, and a hand-edited
+   `../../etc/passwd` is answered with a 404 like any other missing file. */
+function toggleExportsPanel() {
+    exportsManager.toggle();
+}
+
+var exportsManager = {
+    panel() {
+        return document.getElementById('exports-panel');
+    },
+
+    toggle() {
+        var panel = this.panel();
+        if (!panel) return;
+        if (panel.classList.contains('open')) {
+            this.close();
+            return;
+        }
+        /* One bottom slot: the console and the run records cannot stack. */
+        ['console-panel', 'runs-panel'].forEach(function (id) {
+            var other = document.getElementById(id);
+            if (other) other.classList.remove('open');
+        });
+        panel.classList.add('open');
+        this.refresh();
+    },
+
+    close() {
+        var panel = this.panel();
+        if (!panel) return;
+        panel.classList.remove('open');
+        /* The resize handle leaves an inline height behind, and an inline
+           height overrides the CSS `height: 0`. */
+        panel.style.height = '';
+    },
+
+    async refresh() {
+        var body = document.getElementById('exports-mgr-body');
+        if (!body) return;
+        try {
+            var resp = await fetch('/api/exports/list?limit=200');
+            var result = await resp.json();
+            if (!result.ok) throw new Error('list failed');
+            this._last = result.exports || [];
+            this._totals = { files: result.files || 0, bytes: result.bytes || 0 };
+            this.render();
+        } catch (e) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('exportsMgr.loadFailed') + '</div>';
+        }
+    },
+
+    /* Language switch: the table text is JS-built, so an open panel must be
+       redrawn from the cached rows rather than refetched. */
+    onLanguageChange() {
+        var panel = this.panel();
+        if (!panel || !panel.classList.contains('open')) return;
+        if (this._last) this.render();
+        else this.refresh();
+    },
+
+    size(bytes) {
+        var value = Number(bytes) || 0;
+        if (value < 1024) return value + ' B';
+        if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KB';
+        return (value / (1024 * 1024)).toFixed(1) + ' MB';
+    },
+
+    render() {
+        var body = document.getElementById('exports-mgr-body');
+        if (!body) return;
+        var rows = this._last || [];
+        if (!rows.length) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('exportsMgr.empty') + '</div>';
+            return;
+        }
+        var self = this;
+        var html = rows.map(function (row) {
+            var name = escapeHtml(row.name);
+            var ops = '';
+            if (row.downloadable) {
+                ops += '<button class="runs-mgr-btn" onclick="exportsManager.download(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.download') + '</button>';
+            }
+            ops += '<button class="runs-mgr-btn del" onclick="exportsManager.remove(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.remove') + '</button>';
+            return '<tr>' +
+                '<td class="runs-mgr-wf">' + name + '</td>' +
+                '<td>' + escapeHtml(row.kind || '') + '</td>' +
+                '<td>' + self.size(row.size) + '</td>' +
+                '<td class="runs-mgr-time">' + self._when(row.mtime) + '</td>' +
+                '<td class="runs-mgr-ops">' + ops + '</td>' +
+                '</tr>';
+        }).join('');
+        var totals = this._totals || {};
+        body.innerHTML =
+            '<div class="runs-mgr-empty">' +
+            I18n.t('exportsMgr.summary').replace('{files}', totals.files || 0).replace('{size}', this.size(totals.bytes || 0)) +
+            '</div>' +
+            '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
+            '<th>' + I18n.t('exportsMgr.colName') + '</th>' +
+            '<th>' + I18n.t('exportsMgr.colKind') + '</th>' +
+            '<th>' + I18n.t('exportsMgr.colSize') + '</th>' +
+            '<th>' + I18n.t('exportsMgr.colModified') + '</th>' +
+            '<th></th>' +
+            '</tr></thead><tbody>' + html + '</tbody></table>';
+    },
+
+    _when(epoch) {
+        var stamp = Number(epoch) || 0;
+        if (!stamp) return '';
+        var d = new Date(stamp * 1000);
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+            ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    },
+
+    /* Filenames carry quotes and backslashes; an inline onclick is built by
+       string concatenation, so the value has to survive both the JS literal and
+       the HTML attribute. */
+    _quote(name) {
+        return String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    },
+
+    download(name) {
+        var frame = document.createElement('iframe');
+        frame.style.display = 'none';
+        frame.src = '/api/exports/download?name=' + encodeURIComponent(name);
+        document.body.appendChild(frame);
+        setTimeout(function () { document.body.removeChild(frame); }, 60000);
+    },
+
+    async remove(name) {
+        if (!window.confirm(I18n.t('exportsMgr.confirmRemove'))) return;
+        try {
+            var resp = await fetch('/api/exports/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+                body: JSON.stringify({ name: name }),
+            });
+            var result = await resp.json();
+            showToast(result.ok ? I18n.t('exportsMgr.removeDone') : I18n.t('exportsMgr.removeFailed'));
+        } catch (e) {
+            showToast(I18n.t('exportsMgr.removeFailed'));
+        }
+        this.refresh();
+    },
 };

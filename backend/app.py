@@ -2720,6 +2720,57 @@ def export_dataset():
     return jsonify({'ok': True, **result})
 
 
+# ─── Export artefacts (read side) ──────────────────────────────
+
+# ``EXPORT_DIR`` was write-only: a run left files on disk and the only way to
+# find them again was a file manager. These three routes are the reader, and all
+# three resolve a *name* through export_browser, so no request can name a path.
+
+
+@app.route('/api/exports/list', methods=['GET'])
+def exports_list():
+    """Every export file, newest first, with the totals for the panel header."""
+    from services.export_browser import export_usage, list_exports
+
+    limit = _safe_int(request.args.get('limit'), 200, minimum=1, maximum=500)
+    rows = list_exports(Config.EXPORT_DIR, limit=limit)
+    usage = export_usage(Config.EXPORT_DIR)
+    return jsonify({'ok': True, 'exports': rows, 'directory': Config.EXPORT_DIR, **usage})
+
+
+@app.route('/api/exports/download', methods=['GET'])
+def exports_download():
+    """Send one export file by name — never by path.
+
+    An unresolvable name answers 404 the same way whether it was traversal or
+    simply absent, because distinguishing them would turn this route into an
+    oracle for what exists outside the export directory.
+    """
+    from flask import send_file
+
+    from services.export_browser import resolve_download_path
+
+    path = resolve_download_path(Config.EXPORT_DIR, request.args.get('name', ''))
+    if not path:
+        return jsonify({'ok': False, 'error': t('api.exportNotFound', name=request.args.get('name', ''))}), 404
+    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+
+
+@app.route('/api/exports/delete', methods=['POST'])
+def exports_delete():
+    """Delete exactly one export file. No prefixes, no recursion."""
+    from services.export_browser import delete_export_file
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    name = data.get('name')
+    if not isinstance(name, str) or not name.strip():
+        return _bad_param('name')
+    gone = delete_export_file(Config.EXPORT_DIR, name)
+    return jsonify({'ok': gone, 'deleted': gone, 'name': os.path.basename(name.strip())})
+
+
 # ─── Stats API ─────────────────────────────────────────────────
 
 
