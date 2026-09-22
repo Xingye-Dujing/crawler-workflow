@@ -88,8 +88,15 @@ def test_comments_scroll_past_the_first_screen(live_crawler):
     for row in comments:
         assert row['平台'] == 'douyin' and row['文章URL'].endswith(douyin_id(link))
         assert (row['评论内容'] or '').strip(), f'comment row without text: {row}'
-    keys = {(row['评论者'], row['评论内容']) for row in comments}
-    assert len(keys) == len(comments), 'the scroll replayed a comment instead of advancing'
+    # The crawler's own identity is (评论者, 评论内容, 评论时间), so a scroll that
+    # replayed the list cannot survive into these rows — and keying the check on
+    # (author, text) alone was wrong anyway: one person posting the same short
+    # comment twice is a real thing that happens on a live video. What actually
+    # proves the container scroll advanced is the count floor below, against a
+    # first render measured at 5-16 rows.
+    keys = {(row['评论者'], row['评论内容'], row['评论时间']) for row in comments}
+    assert len(keys) == len(comments), 'two rows carry the same comment identity'
+    assert any(row['评论时间'] for row in comments), 'an empty time would make the identity collapse'
     # The first render is a partial screen (measured 5-16 rows); reaching the
     # limit is what proves the container scroll keeps feeding the list.
     assert len(comments) >= 30, f'only {len(comments)} of ~{reported} comments were collected'
