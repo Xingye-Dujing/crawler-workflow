@@ -266,6 +266,15 @@ class TestValidate:
         node = _node('node-1', platform='wechat', params={'urls': 'https://mp.weixin.qq.com/s/abc'})
         assert WorkflowEngine(_wf([node], [])).validate() == []
 
+    def test_an_operation_written_only_in_params_is_still_a_configured_node(self, en):
+        """The canvas writes ``operation`` twice — on the node and in its params —
+        and every executor reads either. Validation that looked only at the node
+        refused a hand-edited file the runner would have executed fine, so the
+        strictness had no counterpart in the behaviour it was guarding."""
+        process = {'id': 'node-1', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}}
+        output = {'id': 'node-2', 'type': 'output', 'params': {'operation': 'save', 'filename': 'a.csv'}}
+        assert WorkflowEngine(_wf([process, output], [])).validate() == []
+
     def test_analysis_accepts_a_step_list(self, en):
         node = _node('node-1', 'analysis', params={'steps': [{'op': 'drop_null'}]})
         assert WorkflowEngine(_wf([node], [])).validate() == []

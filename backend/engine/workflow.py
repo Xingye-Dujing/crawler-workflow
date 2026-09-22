@@ -199,9 +199,14 @@ class WorkflowEngine:
                 errors.append(t('engine.upload_no_file', nid=label))
             if ntype == 'comment' and not str(params.get('urls') or '').strip():
                 errors.append(t('engine.comment_no_urls', nid=label))
-            if ntype == 'process' and not node.get('operation'):
+            # The canvas writes ``operation`` on the node *and* in its params, and
+            # every executor reads either. Validation has to accept the same pair,
+            # or a hand-edited file that would run perfectly is refused as
+            # misconfigured — the strictness has no counterpart in the runner.
+            operation = node.get('operation') or params.get('operation')
+            if ntype == 'process' and not operation:
                 errors.append(t('engine.process_no_op', nid=label))
-            if ntype == 'output' and not node.get('operation'):
+            if ntype == 'output' and not operation:
                 errors.append(t('engine.output_no_op', nid=label))
             if ntype == 'analysis' and not (params.get('steps') or params.get('operation')):
                 errors.append(t('engine.analysis_no_op', nid=label))
