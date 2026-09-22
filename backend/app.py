@@ -956,9 +956,7 @@ def _enqueue_run(data: dict, lang_header: str) -> dict:
 def queue_snapshot() -> list:
     """The waiting requests, oldest first — without their payloads."""
     with _queue_lock:
-        return [
-            {key: entry[key] for key in ('id', 'workflow_name', 'nodes', 'queued_at')} for entry in _RUN_QUEUE
-        ]
+        return [{key: entry[key] for key in ('id', 'workflow_name', 'nodes', 'queued_at')} for entry in _RUN_QUEUE]
 
 
 def cancel_queued(queue_id: str) -> bool:
@@ -3240,6 +3238,7 @@ def report_view():
 
 # ─── Stats API ─────────────────────────────────────────────────
 
+
 @app.route('/api/stats/emotion', methods=['GET'])
 def emotion_stats():
     all_data = []
@@ -3297,9 +3296,9 @@ def cookie_flow():
 
     The guidance lives in the message catalogue and the host list on the
     crawler, never in the frontend: a translated panel and a per-platform
-    "which page do I log in on" answer are the same feature, and both used to
-    be missing for WeChat — whose two capabilities are unlocked by two
-    different links on one host.
+    "which page do I log in on" answer are the same feature. Only the platforms
+    in ``CookieManager.PLATFORMS`` appear here — WeChat is not one of them,
+    because its article bodies are served without a session.
     """
     flows = []
     for platform in COOKIE_PLATFORMS:
@@ -3395,9 +3394,10 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = ''):
     proxy or tab timeout turned a perfectly good login into a broken fetch and
     an orphaned browser. Progress lives in _COOKIE_JOB now; the panel polls it.
 
-    *entry_url* overrides which page opens — the whole point for WeChat, whose
-    comment scraping needs the session to start from the link copied out of the
-    client rather than from the platform's login page.
+    *entry_url* overrides which page opens: some platforms only plant the
+    cookies the crawler needs while sitting on a page the user picks (a note or
+    video link), so the panel lets that link be pasted in — validated against
+    the crawler's own host list before it is ever opened.
     """
     job = _COOKIE_JOB
     crawler = None

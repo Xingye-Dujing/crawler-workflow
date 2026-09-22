@@ -3,6 +3,12 @@
 The URLs were supplied by the user as stable test pages. Read counts, like counts and
 rewards are not columns at all: an anonymous viewer's DOM never carries them,
 and a zero read from nothing would be indistinguishable from real data.
+
+Nothing here logs in or visits 微信公众平台: WeChat bodies need no session, so the
+platform has no cookie row at all. "The diagnosis object carries no WeChat key"
+is a question about field shapes, not about the live site, and it is answered in
+tests/unit/test_wechat_diagnose.py against a scripted driver — no browser is
+spent here for a capability this platform does not have.
 """
 
 import pytest
@@ -32,40 +38,6 @@ def test_three_real_articles_parse_into_full_rows(live_crawler, headless):
         # 阅读/在看/赞赏/留言 are never obtainable in a browser — see the
         # WechatCrawler docstring — so a live row must not carry them at all.
         assert '阅读数' not in row and '在看数' not in row and '赞赏数' not in row
-
-
-class TestCookieDiagnosis:
-    """What a real browser session is actually allowed to see — measured here so
-    the panel's verdict is pinned to the site's behaviour, not to a theory."""
-
-    def test_the_generic_diagnosis_carries_no_wechat_special_case(self, live_crawler):
-        """WeChat has no cookie row in the panel any more (bodies are served to
-        anyone, and the keyword-search channel was removed), so the diagnosis is
-        the plain generic one: an address and a wall flag."""
-        crawler = live_crawler('wechat', headless=False)
-        facts = crawler.diagnose()
-        assert set(facts) == {'platform', 'url', 'login_wall'}
-        assert facts['platform'] == 'mp.weixin.qq.com'
-        assert facts['url'].startswith('https://mp.weixin.qq.com/')
-
-    def test_the_diagnosis_reports_no_comment_state_at_all(self, live_crawler):
-        """WeChat comments are not a capability here, so the diagnosis must not
-        even have a field for them — a leftover key would let the panel keep
-        talking about something no code can read."""
-        crawler = live_crawler('wechat', headless=False)
-        facts = crawler.diagnose(ARTICLE_URLS[0])
-        for gone in (
-            'comments_supported',
-            'comment_key',
-            'comment_visible',
-            'has_pass_ticket',
-            'body_readable',
-            'comment_id',
-            'mp_logged_in',
-        ):
-            assert gone not in facts, f'{gone} survived the removal'
-        # The article body is still public, which is what WeChat crawling does offer.
-        assert crawler.driver.current_url.startswith('https://mp.weixin.qq.com/')
 
 
 def test_reread_of_same_url_is_deduped_by_the_ledger(live_crawler):

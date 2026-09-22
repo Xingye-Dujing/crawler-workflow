@@ -315,10 +315,12 @@ class Crawler(ABC):
         """Report what the stored cookie actually unlocks, as bare facts.
 
         A cookie file's existence proves nothing — the question is whether the
-        platform still lets this session past its wall, and (WeChat especially)
-        whether it hands out the credential a feature needs. Only facts come
-        back from here: the cookie endpoint turns the keys into console and
-        panel text, so every user-facing string stays in the message catalog.
+        platform still lets this session past its wall. Only facts come back
+        from here: the cookie endpoint turns the keys into console and panel
+        text, so every user-facing string stays in the message catalog. A
+        platform with no login page (``login_url`` empty) reports no wall and
+        visits nothing, which is how WeChat — crawled without any session —
+        answers.
         """
         target = str(url or '') or self.login_url
         facts = {'platform': self.domain, 'url': '', 'login_wall': False}

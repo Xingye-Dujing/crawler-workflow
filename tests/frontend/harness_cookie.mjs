@@ -1,9 +1,9 @@
 /* Runs the REAL cookie panel (backend/static/js/workflow.js) in node.
  *
- * The panel is the only place a user learns *which page to log in on* — the
- * thing that made WeChat unusable (its two capabilities need two different
- * links). That behaviour lives in JS: fetch the flow, render the steps, carry
- * the pasted entry link into the generate/verify request, and keep the login
+ * The panel is the only place a user learns *which page to log in on*, and for
+ * a few platforms the answer is "the page you paste in", not "the home page".
+ * That behaviour lives in JS: fetch the flow, render the steps, carry the
+ * pasted entry link into the generate/verify request, and keep the login
  * buttons out of a verification. A Python test cannot see any of it, so this
  * harness loads the untouched file and reports what the panel did.
  *
@@ -49,17 +49,20 @@ const flush = async () => {
 };
 
 const doc = sandbox.document;
+/* Two REAL cookie platforms, chosen for the one thing that differentiates them
+   in the panel: bilibili accepts a pasted entry link (its cookies are planted
+   while sitting on a video page), zhihu does not. WeChat is deliberately absent
+   — it has no cookie row, because its article bodies need no session. */
 const FLOW_BODY = {
     ok: true,
     flows: [
         {
-            platform: 'wechat',
-            purpose: 'PURPOSE-WECHAT',
+            platform: 'bilibili',
+            purpose: 'PURPOSE-BILIBILI',
             steps: ['STEP-ONE', 'STEP-TWO'],
-            login_url: 'https://mp.weixin.qq.com/',
+            login_url: 'https://www.bilibili.com/',
             accepts_custom_url: true,
-            allowed_hosts: ['mp.weixin.qq.com'],
-            multi_purpose: true,
+            allowed_hosts: ['bilibili.com', 'www.bilibili.com'],
         },
         {
             platform: 'zhihu',
@@ -68,7 +71,6 @@ const FLOW_BODY = {
             login_url: 'https://www.zhihu.com/',
             accepts_custom_url: false,
             allowed_hosts: [],
-            multi_purpose: false,
         },
     ],
 };
@@ -108,14 +110,14 @@ const out = {};
 out.label = 'cookie panel behaviour';
 
 sandbox.__responses['/api/cookies/flow'] = FLOW_BODY;
-setPlatform('wechat');
+setPlatform('bilibili');
 sandbox.renderCookieGuide();
 await flush();
-out.guideWechatFirstCall = report();
+out.guideBilibiliFirstCall = report();
 
 sandbox.renderCookieGuide();
 await flush();
-out.guideWechatSecondCall = report();
+out.guideBilibiliSecondCall = report();
 
 setPlatform('zhihu');
 sandbox.renderCookieGuide();
@@ -124,17 +126,17 @@ out.guideZhihu = report();
 
 /* ── 2. generate carries the pasted entry link, and a rejection is spoken ─ */
 for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
-doc.getElementById('cookie-entry').value = 'https://mp.weixin.qq.com/s?pass_ticket=P#rd';
+doc.getElementById('cookie-entry').value = 'https://www.bilibili.com/video/BV1xx411c7mD';
 doc.getElementById('cookie-wait').value = '45';
 sandbox.__responses['/api/cookies/generate'] = {
     ok: true,
     message: 'started',
-    entry: 'https://mp.weixin.qq.com/s?pass_ticket=P#rd',
+    entry: 'https://www.bilibili.com/video/BV1xx411c7mD',
     entry_rejected: true,
     entry_note: 'ENTRY-REJECTED',
 };
 sandbox.__responses['/api/cookies/generate/status'] = { ok: true, active: false, phase: '', kind: 'login' };
-setPlatform('wechat');
+setPlatform('bilibili');
 sandbox.generateCookie();
 await flush();
 out.generate = report();
@@ -148,7 +150,7 @@ sandbox.__responses['/api/cookies/generate/status'] = {
     ok: true,
     active: true,
     kind: 'verify',
-    platform: 'wechat',
+    platform: 'bilibili',
     phase: 'verifying',
     lines: [],
 };
@@ -160,9 +162,12 @@ sandbox.__responses['/api/cookies/generate/status'] = {
     ok: true,
     active: false,
     kind: 'verify',
-    platform: 'wechat',
+    platform: 'bilibili',
     phase: 'verified',
-    facts: { mp_logged_in: true },
+    // The three keys the generic diagnosis is allowed to produce — a stale one
+    // (an old WeChat admin-session field, say) would keep the panel talking
+    // about something no code can read.
+    facts: { platform: 'bilibili.com', url: 'https://www.bilibili.com/', login_wall: false },
     lines: ['LINE-ONE', 'LINE-TWO'],
 };
 sandbox.pollCookieJob();
@@ -201,7 +206,7 @@ sandbox.__responses['/api/cookies/generate/status'] = {
     platform: 'zhihu',
     phase: 'verifying',
 };
-sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: { zhihu: true, wechat: false } };
+sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: { zhihu: true, bilibili: false } };
 doc.getElementById('cookie-dialog').classList.remove('open');
 sandbox.openCookieDialog();
 await flush();

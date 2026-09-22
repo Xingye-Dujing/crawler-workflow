@@ -129,8 +129,11 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   `appmsg?action=list_ex` answered `ret=200013 freq control` for three accounts, three endpoint
   spellings and every retry after a 15-minute cooldown, so the article-item field shape was never
   observed once. Article *bodies* need no login. Do not re-add `mp_logged_in`, a
-  `WechatCrawler.diagnose` override, `cookie.wechat.*` text or `MULTI_PURPOSE` — and do not
-  implement keyword search again by guessing field names.
+  `WechatCrawler.diagnose` override, `WechatCrawler.login_url`, `cookie.wechat.*` text or
+  `MULTI_PURPOSE` — and do not implement keyword search again by guessing field names.
+  Because there is no login, nothing may *behave* as if there were one: the `live_site`
+  WeChat file crawls article URLs only (no 公众平台 visit, no cookie wait/skip), and the
+  cookie-panel node harness samples real login platforms (bilibili/zhihu), never `wechat`.
 - **Cookie death mid-crawl is a designed path**: crawler `login_wall` + under-target rows →
   `_execute_source_node` sets `execution_state['cookie_expired']` (rides on `/api/workflow/status`
   for the browser toast), logs `run.cookieExpired`, and RAISES so the node settles `partial`, the

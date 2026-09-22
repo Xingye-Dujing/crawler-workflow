@@ -1,11 +1,13 @@
 """Behaviour tests for the real cookie panel (workflow.js) under node.
 
-The panel is where "which page do I log in on?" gets answered, and which
-platforms appear there is a product decision (WeChat's article search was
-measured unusable and removed, so its row must not come back). Its logic —
-fetch the flow, render it per selected platform, carry the pasted entry link
-into the request, keep the login buttons out of a verification — is JS, so the
-Python suite cannot see it. This module runs the untouched file.
+The panel answers "which page do I log in on?", and which platforms appear
+there is a product decision: only ``CookieManager.PLATFORMS`` has a row, so the
+samples below are real login platforms (bilibili takes a pasted entry link,
+zhihu does not). WeChat is not among them — its article bodies are served to
+anyone — and the guard for that absence lives in tests/unit/test_wechat_diagnose.py.
+Its logic — fetch the flow, render it per selected platform, carry the pasted
+entry link into the request, keep the login buttons out of a verification — is
+JS, so the Python suite cannot see it. This module runs the untouched file.
 
 Skipped when node is not on PATH, like every other frontend harness.
 """
@@ -45,24 +47,24 @@ def _body(report, url):
 
 class TestGuide:
     def test_the_selected_platforms_steps_are_rendered_in_order(self, panel):
-        report = panel['guideWechatFirstCall']
-        assert report['guideLines'] == ['PURPOSE-WECHAT', 'STEP-ONE', 'STEP-TWO']
+        report = panel['guideBilibiliFirstCall']
+        assert report['guideLines'] == ['PURPOSE-BILIBILI', 'STEP-ONE', 'STEP-TWO']
 
     def test_the_flow_is_fetched_once_and_then_served_from_cache(self, panel):
-        assert _urls(panel['guideWechatFirstCall']) == ['/api/cookies/flow']
-        assert _urls(panel['guideWechatSecondCall']) == ['/api/cookies/flow']
+        assert _urls(panel['guideBilibiliFirstCall']) == ['/api/cookies/flow']
+        assert _urls(panel['guideBilibiliSecondCall']) == ['/api/cookies/flow']
 
     def test_re_rendering_replaces_the_list_instead_of_appending(self, panel):
         """A panel that grew a second copy of the steps on every platform switch
         would be unreadable — and the bug only shows in a browser-faithful DOM."""
-        assert panel['guideWechatSecondCall']['guideLines'] == ['PURPOSE-WECHAT', 'STEP-ONE', 'STEP-TWO']
+        assert panel['guideBilibiliSecondCall']['guideLines'] == ['PURPOSE-BILIBILI', 'STEP-ONE', 'STEP-TWO']
 
     def test_switching_platform_switches_the_whole_explanation(self, panel):
         report = panel['guideZhihu']
         assert report['guideLines'] == ['PURPOSE-ZHIHU', 'Z-STEP']
 
     def test_the_entry_field_is_prefilled_with_that_platforms_login_page(self, panel):
-        assert panel['guideWechatFirstCall']['entryPlaceholder'] == 'https://mp.weixin.qq.com/'
+        assert panel['guideBilibiliFirstCall']['entryPlaceholder'] == 'https://www.bilibili.com/'
         assert panel['guideZhihu']['entryPlaceholder'] == 'https://www.zhihu.com/'
 
 
@@ -70,9 +72,9 @@ class TestGenerate:
     def test_the_pasted_link_is_sent_along_with_the_wait_time(self, panel):
         body = _body(panel['generate'], '/api/cookies/generate')
         assert body == {
-            'platform': 'wechat',
+            'platform': 'bilibili',
             'wait_seconds': 45,
-            'url': 'https://mp.weixin.qq.com/s?pass_ticket=P#rd',
+            'url': 'https://www.bilibili.com/video/BV1xx411c7mD',
         }
 
     def test_a_rejected_link_is_toasted_not_swallowed(self, panel):
@@ -89,8 +91,8 @@ class TestGenerate:
 class TestVerify:
     def test_verification_sends_the_same_entry_link(self, panel):
         body = _body(panel['verifyRunning'], '/api/cookies/verify')
-        assert body['url'] == 'https://mp.weixin.qq.com/s?pass_ticket=P#rd'
-        assert body['platform'] == 'wechat'
+        assert body['url'] == 'https://www.bilibili.com/video/BV1xx411c7mD'
+        assert body['platform'] == 'bilibili'
 
     def test_a_running_verification_hides_the_login_buttons(self, panel):
         """Done/Cancel resolve a login window. Showing them over a probe invites

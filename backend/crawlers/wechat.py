@@ -19,7 +19,9 @@ class WechatCrawler(Crawler):
     """WeChat official account article crawler.
 
     Scrapes public article pages for title, account, publish time, region,
-    original marker, body text and image count.
+    original marker, body text and image count. Needs no login and no cookie:
+    the article page is served to anyone, which is why WeChat has no row in the
+    cookie panel at all.
 
     What this platform deliberately does NOT collect, and why: 留言、点赞数、转发数
     (and 阅读数 for most sessions). WeChat serves those from a per-article
@@ -37,11 +39,14 @@ class WechatCrawler(Crawler):
     """
 
     domain = 'mp.weixin.qq.com'
-    # Real URLS: they can be used during the test.
+    # No login_url on purpose: an article body is served to anyone, so this
+    # platform has no cookie row in the panel and nothing here may claim a page
+    # to sign in on. (The 公众号 backend was measured to unlock keyword search
+    # only, and that feature was removed rather than shipped unverifiable.)
+    # Real article URLs, usable by the live tests:
     # https://mp.weixin.qq.com/s/cAx1zGfT2MzqpwnhULmSQA
     # https://mp.weixin.qq.com/s/q59mL_dHixC97p19RpcfVQ
     # https://mp.weixin.qq.com/s/f_2nB7u7pQApgIoPsBKMQg
-    login_url = 'https://mp.weixin.qq.com/'
 
     # ------------------------------------------------------------------
     # Search / batch scrape

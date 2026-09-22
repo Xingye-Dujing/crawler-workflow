@@ -7,8 +7,9 @@ pinned here because a leftover is worse than an absence:
   helper, comment fact or comment column may reappear;
 * keyword search via the 公众号后台 was deleted once WeChat's ``freq control``
   window made its article-list endpoint impossible to verify — so the crawler
-  must not carry an admin-session diagnosis either, and the cookie panel must
-  not offer a 微信 row that unlocks nothing (article bodies need no login).
+  must not carry an admin-session diagnosis either, must not name a page to log
+  in on (article bodies need no session), and the cookie panel must not offer a
+  微信 row that unlocks nothing.
 
 No browser here: ``Crawler._create_driver`` is swapped for a scripted fake.
 """
@@ -86,12 +87,37 @@ class TestNoCommentApparatus:
             assert gone not in facts, f'{gone} survived the removal'
 
     def test_an_article_url_changes_nothing_about_the_verdict(self, make_crawler):
-        """Diagnosis is the shared base-class behaviour now: it visits the login
-        page and reports a wall or not — nothing WeChat-specific."""
+        """Diagnosis is the shared base-class behaviour now: it opens whatever it
+        is handed and reports a wall or not — nothing WeChat-specific."""
         crawler = make_crawler()
         facts = crawler.diagnose(ARTICLE)
         assert facts['platform'] == 'mp.weixin.qq.com'
         assert set(facts) == {'platform', 'url', 'login_wall'}
+
+    def test_wechat_offers_no_login_page_at_all(self):
+        """The residue this pins: a ``login_url`` on this class means some code
+        will drive a browser to 公众平台 to sign in — for a platform whose one
+        capability (article bodies) is served to anyone. The base class default
+        is empty, so an empty answer here is the correct one, not a missing field.
+        """
+        assert 'login_url' not in WechatCrawler.__dict__, 'WeChat must not name a page to log in on'
+        assert WechatCrawler.login_url == ''
+
+    def test_diagnosis_without_a_url_opens_nothing(self, make_crawler):
+        """With no login page to fall back on, the generic diagnosis must say so
+        by visiting nothing — rather than guessing a host and reporting on a page
+        the user never asked about."""
+        crawler = make_crawler()
+        facts = crawler.diagnose()
+        assert facts == {'platform': 'mp.weixin.qq.com', 'url': '', 'login_wall': False}
+        assert crawler.driver.visited == []
+
+    def test_the_cookie_panel_has_no_wechat_row(self):
+        """``CookieManager.PLATFORMS`` is who the panel can log in; WeChat sits
+        out of it, so no flow, status entry or generate job can be built for it."""
+        from services.cookie_manager import CookieManager
+
+        assert 'wechat' not in CookieManager.PLATFORMS
 
 
 class TestNoSearchLeftovers:
