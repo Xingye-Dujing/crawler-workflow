@@ -1,4 +1,25 @@
 /* Workflow Execution & File Management */
+
+/* How far the browser has read in the run console, per view.
+ *
+ * The status endpoint ships the last 200 lines plus the true total, and "which
+ * lines are new" is derived from that pair. Two things can strand the console: a
+ * run that passes 200 lines (the total solves it), and the server restarting its
+ * buffer when the NEXT run begins — the total then drops BELOW the index already
+ * consumed, and a plain slice returns nothing for the rest of the run, which is
+ * how the console used to freeze after a second Run. `takeLines` is the single
+ * place that reads both cases, and the cursor lives out here so clearing the
+ * console or switching workflow tabs can move it. */
+var consoleCursor = { all: 0, wf: {} };
+
+function takeLines(lines, total, seen) {
+    var held = lines || [];
+    var count = total === undefined || total === null ? held.length : total;
+    var seenAt = count < seen ? 0 : seen;
+    var dropped = Math.max(0, count - held.length);
+    return held.slice(Math.max(0, seenAt - dropped));
+}
+
 const workflow = {
     currentFile: null,
 
@@ -308,15 +329,6 @@ const workflow = {
     },
 
     pollStatus: function () {
-        /* The status endpoint ships only the last 200 console lines, but also
-           reports how many exist in total. Deriving the delta from that total is
-           what keeps the console alive past 200 lines: indexing the truncated
-           array alone silently froze it (once the log passed 200 lines the
-           browser believed it had already seen everything). */
-        function freshLines(lines, total, seen) {
-            var dropped = Math.max(0, (total || lines.length) - lines.length);
-            return lines.slice(Math.max(0, seen - dropped));
-        }
         /* Stick-to-bottom, not force-to-bottom. Measure BEFORE appending: if
            the user is already near the bottom they are "following" the stream,
            so keep doing it; if they scrolled up to read history, leave their
@@ -327,7 +339,6 @@ const workflow = {
         function consoleWantsFollow(el) {
             return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
         }
-        var lastLogIdx = 0;
         /* The expiry toast is once-per-run: the flag stays set for the rest of
            the crawl, and polling every second would otherwise shout forever. */
         var cookieWarned = false;
@@ -370,7 +381,7 @@ const workflow = {
 
                         /* Render the active tab's logs */
                         if (activeTab === 'all') {
-                            var newLogs = freshLines(result.logs, result.log_total, lastLogIdx);
+                            var newLogs = takeLines(result.logs, result.log_total, consoleCursor.all);
                             var follow = newLogs.length > 0 && consoleWantsFollow(consoleOut);
                             newLogs.forEach(function (log) {
                                 var line = document.createElement('div');
@@ -381,14 +392,13 @@ const workflow = {
                             if (follow) {
                                 consoleOut.scrollTop = consoleOut.scrollHeight;
                             }
-                            lastLogIdx = result.log_total || result.logs.length;
+                            consoleCursor.all = result.log_total || result.logs.length;
                         } else {
                             var wfData = null;
                             result.workflows.forEach(function (w) { if (w.id === activeTab) wfData = w; });
                             if (wfData) {
-                                if (typeof _wfLastIdx === 'undefined') _wfLastIdx = {};
-                                if (_wfLastIdx[activeTab] === undefined) _wfLastIdx[activeTab] = 0;
-                                var newWfLogs = freshLines(wfData.logs, wfData.total, _wfLastIdx[activeTab]);
+                                if (consoleCursor.wf[activeTab] === undefined) consoleCursor.wf[activeTab] = 0;
+                                var newWfLogs = takeLines(wfData.logs, wfData.total, consoleCursor.wf[activeTab]);
                                 var followWf = newWfLogs.length > 0 && consoleWantsFollow(consoleOut);
                                 newWfLogs.forEach(function (log) {
                                     var line = document.createElement('div');
@@ -399,14 +409,14 @@ const workflow = {
                                 if (followWf) {
                                     consoleOut.scrollTop = consoleOut.scrollHeight;
                                 }
-                                _wfLastIdx[activeTab] = wfData.total || wfData.logs.length;
+                                consoleCursor.wf[activeTab] = wfData.total || wfData.logs.length;
                             }
                         }
                     } else {
                         /* Single workflow — original behavior */
                         consoleTabs.style.display = 'none';
                         consoleTabs.innerHTML = '';
-                        var newLogs = freshLines(result.logs, result.log_total, lastLogIdx);
+                        var newLogs = takeLines(result.logs, result.log_total, consoleCursor.all);
                         var followSingle = newLogs.length > 0 && consoleWantsFollow(consoleOut);
                         newLogs.forEach(function (log) {
                             var line = document.createElement('div');
@@ -417,7 +427,7 @@ const workflow = {
                         if (followSingle) {
                             consoleOut.scrollTop = consoleOut.scrollHeight;
                         }
-                        lastLogIdx = result.log_total || result.logs.length;
+                        consoleCursor.all = result.log_total || result.logs.length;
                     }
 
                     /* Status bar update */
@@ -2134,23 +2144,25 @@ function toggleRunsPanel() {
 
 function clearConsole() {
     document.getElementById('console-output').innerHTML = '';
-    /* Reset tab state so next poll starts fresh */
-    _wfLastIdx = {};
+    /* Leave the cursor alone: "clear" means the user wants the NEXT line, not a
+       replay of the up-to-200 the server still holds. It is reset by a run
+       starting (the total restarts below it — see takeLines) or by switching tab. */
     _wfActiveTab = 'all';
 }
 
 /* Workflow tab switching for parallel mode */
 var _wfActiveTab = 'all';
-var _wfLastIdx = {};
 function switchWfTab(wfId) {
     _wfActiveTab = wfId;
-    /* Clear output and re-fetch will fill it on next poll */
+    /* Clearing the DOM and re-rendering from the server's held tail is the only
+       way a tab switch can show what that tab already contains, so the view
+       being entered loses its cursor — both here and per-workflow, which used to
+       reset while 'all' reset nothing and left an empty `if` behind. */
     document.getElementById('console-output').innerHTML = '';
-    /* Reset log index for this tab so all logs re-render */
     if (wfId === 'all') {
-        /* Will use lastLogIdx from pollStatus closure — just force re-render */
+        consoleCursor.all = 0;
     } else {
-        _wfLastIdx[wfId] = 0;
+        consoleCursor.wf[wfId] = 0;
     }
     /* Update active tab styling */
     document.querySelectorAll('#console-tabs .console-tab').forEach(function (tab) {
