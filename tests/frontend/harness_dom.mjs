@@ -221,6 +221,12 @@ export function makeEl(tag = 'div', id = '') {
             return want;
         },
     };
+    /* `Array.from(element.classList)` is how the app reads the body's classes back
+       out when it saves the background, so an non-iterable stub silently reported
+       "no bg class" and the draft captured the fallback instead of the truth. */
+    el.classList[Symbol.iterator] = function* () {
+        yield* el._classes;
+    };
     Object.defineProperty(el, 'className', {
         get: () => Array.from(el._classes).join(' '),
         set: (v) => {
@@ -313,7 +319,14 @@ export function makeDocument() {
             if (doomed.has(world[i])) world.splice(i, 1);
         }
     };
+    /* Ids a scenario has decided do NOT exist. Auto-creation is what lets a
+       scenario skip building the whole page, but it also makes "is this element
+       already there?" unanswerable — and code branches on exactly that (the run
+       detail row toggles by testing for its own id). Listing an id here restores
+       the browser's real answer for it. */
+    const absent = new Set();
     const byId = (id) => {
+        if (absent.has(id)) return null;
         if (!registry.has(id)) registry.set(id, register(makeEl('div', id)));
         return registry.get(id);
     };
@@ -325,6 +338,7 @@ export function makeDocument() {
         documentElement: makeEl('html'),
         registry,
         world,
+        absent,
         getElementById: byId,
         /* Empty the page without replacing the document object.
          *
@@ -337,6 +351,7 @@ export function makeDocument() {
         __reset() {
             world.length = 0;
             registry.clear();
+            absent.clear();
             for (const key of Object.keys(handlers.document)) delete handlers.document[key];
             for (const key of Object.keys(handlers.window)) delete handlers.window[key];
             body.children = [];

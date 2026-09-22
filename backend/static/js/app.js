@@ -163,6 +163,11 @@ const I18n = {
             'nodeType.resume': 'Resume Run', 'nodeType.name': 'Workflow Name',
             'nodeType.output': 'Output',
             'nodeType.comment': 'Comments',
+            /* The run-detail card falls back to this for a node type this build
+               does not know — one stored by a newer version, or hand-edited in.
+               A computed key never reaches the i18n audit, so the fallback has to
+               exist here or the panel prints the raw key and logs a warning. */
+            'nodeType.misc': 'Node',
             'op.clean': 'Clean',
             'op.emotion': 'Emotion',
             'op.tendency': 'Tendency',
@@ -720,6 +725,7 @@ const I18n = {
             'nodeType.resume': '断点续跑', 'nodeType.name': '工作流命名',
             'nodeType.output': '输出',
             'nodeType.comment': '评论采集',
+            'nodeType.misc': '节点',
             'op.clean': '清洗',
             'op.emotion': '情感分析',
             'op.tendency': '倾向分析',

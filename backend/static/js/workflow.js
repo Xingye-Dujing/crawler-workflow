@@ -2715,7 +2715,13 @@ var resumeBar = {
     async refresh() {
         const banner = document.getElementById('resume-banner');
         if (!banner) return null;
-        if (!window.canvas || !Object.keys(canvas.nodes || {}).length) {
+        /* The guard has to name the binding that exists. `canvas` is a top-level
+           `const`, which never becomes a property of `window`, so `window.canvas`
+           read as undefined forever and this function hid the banner and returned
+           before asking the server — 断点续跑 had no entry point in the UI at all.
+           What the check is for is an empty canvas: with nothing on it there is no
+           workflow shape to match a stored run against. */
+        if (!canvas || !Object.keys(canvas.nodes || {}).length) {
             this.candidate = null;
             banner.classList.add('hidden');
             return null;
@@ -2954,7 +2960,13 @@ var runsManager = {
     },
 
     _busy() {
-        if (window.RunState && RunState.running) {
+        /* Same trap as resumeBar.refresh(): RunState is a `const` in app.js, so
+           `window.RunState` was undefined and this returned false even mid-run —
+           继续/重新开始 would close the panel and start a second attempt at the same
+           data instead of saying "wait". `typeof` keeps the degradation the guard
+           was written for (app.js missing) without pretending to read a property
+           that does not exist. */
+        if (typeof RunState !== 'undefined' && RunState.running) {
             showToast(I18n.t('runsMgr.busy'));
             return true;
         }

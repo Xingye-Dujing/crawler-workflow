@@ -163,7 +163,8 @@ class TestSettingsDraft:
         assert saved['headless'] is False
         assert saved['menuPinned'] is True
         assert saved['zoom'] == 2.5
-        assert saved['bg'] == 'bg-grid'
+        # The background is read off the body, not written by the caller.
+        assert saved['bg'] == 'bg-dots'
 
     def test_applying_a_draft_restores_every_setting_it_covers(self, st):
         applied = st['settings_applied']
