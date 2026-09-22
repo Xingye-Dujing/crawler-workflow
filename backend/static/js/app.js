@@ -1229,9 +1229,20 @@ const Settings = {
         localStorage.setItem(this._key, JSON.stringify(data));
     },
     load() {
+        /* The draft is user-editable and survives every upgrade, so a broken one is
+           expected input rather than a crash: apply() runs from DOMContentLoaded, and
+           an exception here stopped the rest of start-up — canvas.init() never ran,
+           so the page stayed blank with nothing in the console the user could read.
+           Same fallback LLMSettings.load() already gives its own draft. */
         const raw = localStorage.getItem(this._key);
-        const data = raw ? Object.assign({}, this.defaults, JSON.parse(raw)) : this.defaults;
-        return data;
+        if (!raw) return Object.assign({}, this.defaults);
+        try {
+            const stored = JSON.parse(raw);
+            if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return Object.assign({}, this.defaults);
+            return Object.assign({}, this.defaults, stored);
+        } catch (e) {
+            return Object.assign({}, this.defaults);
+        }
     },
     apply() {
         const s = this.load();

@@ -164,6 +164,18 @@ export function makeEl(tag = 'div', id = '') {
         _classes: new Set(),
         _text: '',
     };
+    /* A style object that only stores plain assignments breaks the moment product
+       code reaches for the CSS custom-property API — which is how the corner
+       radius setting is applied (`setProperty('--radius', …)`). */
+    el.style.getPropertyValue = function (name) {
+        return this[name] === undefined ? '' : String(this[name]);
+    };
+    el.style.setProperty = function (name, value) {
+        this[name] = value;
+    };
+    el.style.removeProperty = function (name) {
+        delete this[name];
+    };
     /* Assigning innerHTML rebuilds the subtree, exactly as a browser does, so the
        selectors the product uses afterwards resolve against what it just wrote.
        Attributes become plain fields — an `onclick="…"` in a template is stored as
