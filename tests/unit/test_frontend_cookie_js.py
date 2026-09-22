@@ -1,7 +1,8 @@
 """Behaviour tests for the real cookie panel (workflow.js) under node.
 
-The panel is where "which page do I log in on?" gets answered, and for WeChat
-that answer is the difference between crawling comments and not. Its logic —
+The panel is where "which page do I log in on?" gets answered, and which
+platforms appear there is a product decision (WeChat's article search was
+measured unusable and removed, so its row must not come back). Its logic —
 fetch the flow, render it per selected platform, carry the pasted entry link
 into the request, keep the login buttons out of a verification — is JS, so the
 Python suite cannot see it. This module runs the untouched file.
@@ -14,7 +15,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from node_runner import run_node  # noqa: E402  (tests/ is on sys.path via conftest)
+from node_runner import run_node
 
 pytestmark = pytest.mark.unit
 

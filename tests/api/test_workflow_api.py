@@ -7,8 +7,9 @@ run store. The execute test in the middle is the plan's end-to-end invariant —
 file in, cleaned rows out, and a durable record that says exactly what each
 node produced — so it deliberately uses only non-crawling, non-LLM nodes:
 ``upload`` → ``analysis`` → ``output``. A ``source`` node would start Selenium
-and a ``process`` node with an LLM operation would need a daemon, and neither
-belongs in a test that has to run offline.
+and does not belong in a test that has to run offline. Where a test here does
+run an LLM node (``TestEntityNode``), the transport itself is patched, so no
+daemon and no API are ever asked.
 
 The polling tests carry ``@pytest.mark.serial`` because the worker installs a
 ``_LogTee`` over ``sys.stdout`` for the duration of the run.
@@ -479,6 +480,89 @@ class TestProgressiveOutput:
 
         stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p2')
         assert not list((data_root / 'data' / 'exports').glob(f'{stem}.live.*'))
+
+
+class TestEntityNode:
+    """The entity node end to end, through /api/workflow/execute.
+
+    Two fields decide this node — ``mode`` (rules or model) and ``entity_types``
+    (which of the four categories) — and both are set only by the panel, so a
+    parameter that stops travelling shows up here as a table that disagrees with
+    what the user asked for.
+    """
+
+    RECORDS = [{'正文': '张伟前往上海参加峰会', 'title': 'summit'}]
+
+    def _flow(self, dataset_id, name, params):
+        return _workflow(
+            [
+                _node('node-1', 'upload', params={'dataset_id': dataset_id, 'dataset_name': name, 'row_count': 1}),
+                _node('node-2', 'process', operation='ner', params=params),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+
+    @pytest.mark.serial
+    def test_the_rules_run_without_any_model_settings(self, client, app_module, paste):
+        dataset_id = paste(self.RECORDS, name='ner-rules.csv')
+        workflow = self._flow(dataset_id, 'ner-rules.csv', {'text_column': '正文'})
+        # No llm payload in the request at all: a rules run must not be gated on
+        # a model, an API key or a daemon. And these rules find nothing in this
+        # text, which is the honest empty table rather than a failure.
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'ner-rules'})
+        assert started.status_code == 200, started.get_json()
+        assert _wait_for_worker(app_module)
+        assert app_module.execution_state['results']['node-2'] == []
+
+    @pytest.mark.serial
+    def test_the_category_filter_reaches_the_table(self, client, app_module, paste):
+        records = [{'正文': '张先生在北京大学毕业', 'title': 'a'}]
+        dataset_id = paste(records, name='ner-filter.csv')
+        workflow = self._flow(dataset_id, 'ner-filter.csv', {'text_column': '正文', 'entity_types': 'person'})
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'ner-filter'})
+        assert _wait_for_worker(app_module)
+        rows = app_module.execution_state['results']['node-2']
+        assert [(row['text'], row['label']) for row in rows] == [('张先生', 'PERSON')]
+
+    @pytest.mark.serial
+    def test_the_model_mode_uses_the_transport_the_request_named(self, client, app_module, paste, monkeypatch):
+        asked = {}
+
+        def fake_chat(self, prompt, max_retries=2):
+            asked['prompt'] = prompt
+            asked['provider'] = self.provider
+            return '张伟|PERSON'
+
+        monkeypatch.setattr(app_module.LLMClient, 'chat', fake_chat)
+        dataset_id = paste(self.RECORDS, name='ner-llm.csv')
+        workflow = self._flow(
+            dataset_id, 'ner-llm.csv', {'text_column': '正文', 'mode': 'llm', 'entity_types': 'person'}
+        )
+        client.post(
+            '/api/workflow/execute',
+            json={
+                'workflow': workflow,
+                'workflow_name': 'ner-llm',
+                'llm': {'provider': 'openrouter', 'api_key': 'test-key', 'model': 'test/model'},
+            },
+        )
+        assert _wait_for_worker(app_module)
+        assert asked['provider'] == 'openrouter', 'the node ignored the transport the request carried'
+        # Only the asked-for category is offered, and the answer becomes a row
+        # whose offsets point back into the crawled text.
+        assert 'only: PERSON.' in asked['prompt'] and 'ORG:' not in asked['prompt']
+        rows = app_module.execution_state['results']['node-2']
+        assert [(row['text'], row['label']) for row in rows] == [('张伟', 'PERSON')]
+        assert self.RECORDS[0]['正文'][rows[0]['start'] : rows[0]['end']] == '张伟'
+
+    def test_the_model_mode_is_gated_like_every_other_llm_op(self, client, app_module):
+        workflow = _workflow(
+            [_node('node-1', 'process', operation='ner', params={'text_column': '正文', 'mode': 'llm'})],
+            [],
+        )
+        body = client.post('/api/workflow/execute', json={'workflow': workflow}).get_json()
+        assert 'No Ollama model selected' in body['error']
+        assert app_module.execution_state['running'] is False
 
 
 class _FakeCommentSession:

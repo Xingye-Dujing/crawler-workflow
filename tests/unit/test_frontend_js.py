@@ -157,6 +157,16 @@ def results(tmp_path_factory):
                     'analysis',
                     {'operation': 'bin_column', 'column': 'score', 'bins': '0, 60, 100'},
                 ),
+                # Process ops: same rule — a parameter the backend reads must
+                # have a field here, or it is unreachable.
+                ('panel_ner_default', 'process', {'operation': 'ner'}),
+                (
+                    'panel_ner_llm',
+                    'process',
+                    {'operation': 'ner', 'mode': 'llm', 'entity_types': 'PERSON,DATE'},
+                ),
+                ('panel_emotion_ml', 'process', {'operation': 'emotion', 'mode': 'ml'}),
+                ('panel_keyword', 'process', {'operation': 'keyword', 'topk': '5'}),
             )
         ),
     ]
@@ -287,6 +297,30 @@ class TestSettingsPanel:
     def test_other_platforms_do_not_offer_it(self, results):
         for panel in ('panel_zhihu_posts', 'panel_weibo_posts'):
             assert 'comment_preview' not in results['settings'][panel], f'{panel} has no comment preview to set'
+
+    def test_ner_panel_offers_a_model_switch_and_the_category_filter(self, results):
+        """Both fields are the only route to what the backend reads, and the
+        default must stay on the rules: a workflow saved before the selector
+        exists has no ``mode`` and must not start paying for a model."""
+        default = results['settings']['panel_ner_default']
+        assert "updateParam('n1','mode'" in default
+        assert "updateParam('n1','entity_types'" in default
+        assert 'settings.entityTypes' in default and 'settings.entityTypesHint' in default
+        assert 'mode.regex' in default
+        # An absent mode renders the rules option selected, not the model.
+        assert '<option value="regex" selected>' in default
+        assert '<option value="llm" selected>' not in default
+
+    def test_ner_panel_shows_the_stored_choices(self, results):
+        html = results['settings']['panel_ner_llm']
+        assert '<option value="llm" selected>' in html
+        assert 'value="PERSON,DATE"' in html
+
+    def test_a_process_node_with_no_param_field_for_an_op_stays_honest(self, results):
+        # keyword/cluster/emotion already had their fields; NER is the check that
+        # an op with no parameters at all renders no leftovers.
+        assert 'entity_types' not in results['settings']['panel_keyword']
+        assert 'entity_types' not in results['settings']['panel_emotion_ml']
 
 
 class TestUrlRoutingContract:

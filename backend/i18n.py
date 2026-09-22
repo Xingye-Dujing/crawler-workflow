@@ -115,6 +115,8 @@ _ZH = {
     'label.clean': '清洗',
     'label.emotion': '情感分析',
     'label.tendency': '倾向性分析',
+    'label.ner': '实体识别',
+    'ner.dropped': '实体识别：{n} 条模型答案未在原文中出现，已丢弃（不记录推测出的实体）',
     # ── node type labels (console fallbacks; mirror frontend app.js) ──
     'node.name': '工作流命名',
     'node.source': '数据源',
@@ -572,6 +574,8 @@ _EN = {
     'label.clean': 'Clean',
     'label.emotion': 'Emotion',
     'label.tendency': 'Tendency',
+    'label.ner': 'Entities',
+    'ner.dropped': 'NER: dropped {n} model answer(s) that do not appear in the source text (nothing is guessed)',
     # ── node type labels (console fallbacks; mirror frontend app.js) ──
     'node.name': 'Workflow Name',
     'node.source': 'Data Source',

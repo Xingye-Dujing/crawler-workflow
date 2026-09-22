@@ -13,6 +13,12 @@
  *                      "nodes": [{id,type,title,params}...],
  *                      "connections": [{from,to}...] } ]
  * Prints {id: [keys...]} to stdout.
+ *
+ * Two extra scenario shapes ride along, because they belong to the same file:
+ *   {"node": {...}}        → render that node's settings panel, return its HTML
+ *   {"needsLlm": {...}}    → answer nodeNeedsLlm(params, nodeOperation), which is
+ *                            the browser's half of the "does this run need a
+ *                            model?" gate (backend/app.py holds the other half)
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -75,7 +81,9 @@ vm.createContext(sandbox);
 /* `const workflow` is lexically scoped to its own script — append a capture
    line (same trick as harness_canvas.mjs) to reach it from the host. */
 vm.runInContext(
-    src + '\n;globalThis.__wf = { workflow, urlPlatform, commentUrlPlaceholder, selectSourcePlatform, openSettings };',
+    src +
+        '\n;globalThis.__wf = {' +
+        ' workflow, urlPlatform, commentUrlPlaceholder, selectSourcePlatform, openSettings, nodeNeedsLlm };',
     sandbox,
 );
 
@@ -84,13 +92,21 @@ const urlPlatform = sandbox.__wf.urlPlatform;
 const commentUrlPlaceholder = sandbox.__wf.commentUrlPlaceholder;
 const selectSourcePlatform = sandbox.__wf.selectSourcePlatform;
 const openSettings = sandbox.__wf.openSettings;
+const nodeNeedsLlm = sandbox.__wf.nodeNeedsLlm;
 
-const out = { validate: {}, url: [], placeholder: {}, settings: {} };
+const out = { validate: {}, url: [], placeholder: {}, settings: {}, needsLlm: {} };
 
 for (const sc of scenarios) {
     I18n.lang = sc.lang || 'en';
     sandbox.canvas.nodes = {};
     sandbox.canvas._settingsNodeId = null;
+    if (sc.needsLlm !== undefined) {
+        // One params dict (+ the node-level operation the wire also carries) in,
+        // one boolean out — the Python side compares the same table against
+        // backend/app.py::_workflow_needs_llm.
+        out.needsLlm[sc.id] = nodeNeedsLlm(sc.needsLlm, sc.operation);
+        continue;
+    }
     if (sc.node) {
         // Settings-panel render: capture the exact HTML the user would see.
         const n = sc.node;

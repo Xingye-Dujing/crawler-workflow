@@ -30,6 +30,24 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 
+def _warm_http_stack() -> bool:
+    """Spend urllib3's import-time IPv6 probe before the network guard exists.
+
+    ``urllib3.util.connection`` opens an AF_INET6 socket once, on import, to ask
+    the OS what it supports. Under ``--disable-socket`` that probe — a library's
+    capability check, not a test reaching the network — surfaces as a
+    "A test tried to use socket.socket" warning attached to whichever test
+    happens to import ``requests`` first. Importing it here, while conftest is
+    still being read, keeps the guard's warnings about the thing it is for.
+    """
+    from urllib3.util.connection import HAS_IPV6
+
+    return bool(HAS_IPV6)
+
+
+_warm_http_stack()
+
+
 # ─── path isolation ─────────────────────────────────────────────────────
 
 

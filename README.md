@@ -57,7 +57,7 @@
 - **语义数据清洗**：自动过滤广告、无关内容与低质量数据（LLM 判定）
 - **关键词提取**：TF-IDF / TextRank（依赖 jieba）
 - **文本聚类**：K-Means / DBSCAN 自动发现文本分组
-- **命名实体识别**：正则规则式中文 NER（人名/机构/地名/日期，零依赖）
+- **命名实体识别（双模式）**：正则规则（人名/机构/地名/日期，零依赖），或改用大模型抽取；可只保留四类中的某几类
 - **异常检测**：Isolation Forest 自动标记数值异常行
 - **相关性分析**：Pearson / Spearman / Kendall 相关系数矩阵
 - **模型训练**：从已有 LLM 标注数据一键训练传统 ML 模型，后续推理无需 Ollama
@@ -196,7 +196,7 @@ crawler_workflow/
 │   │   ├── tendency.py           # 倾向性分析（LLM + ML 可选）
 │   │   ├── keyword.py            # 关键词提取（TF-IDF / TextRank）
 │   │   ├── clustering.py         # 文本聚类（K-Means / DBSCAN）
-│   │   ├── ner.py                # 命名实体识别（正则规则）
+│   │   ├── ner.py                # 命名实体识别（正则规则 + LLM 双模式）
 │   │   ├── anomaly.py            # 异常检测（Isolation Forest）
 │   │   └── correlation.py        # 相关性分析（Pearson / Spearman / Kendall）
 │   ├── engine/                   # 工作流引擎
@@ -250,7 +250,7 @@ crawler_workflow/
 | Name（命名） | NAM | 工作流元数据，其标签作为工作流名供历史/运行记录归组 | 是（纯元数据） |
 | Data Source（数据源） | SRC | 从知乎/微博/小红书/哔哩哔哩/抖音按关键词采集，微信按粘贴的推文链接采集正文；「采集内容」切到**评论**即变为评论采集器 | 是，需平台+关键词（或评论/推文链接） |
 | Upload（上传） | UPL | 从持久化数据集中读取 CSV/TSV/JSON/TXT/Excel 作为输入 | 是 |
-| Process（处理） | PRC | LLM 语义清洗 / 情感(LLM/ML) / 倾向(LLM/ML) / 关键词 / 聚类 / NER / 异常 / 相关性 | 否，需要上游文本数据 |
+| Process（处理） | PRC | LLM 语义清洗 / 情感(LLM/ML) / 倾向(LLM/ML) / 关键词 / 聚类 / NER(规则/LLM，可指定实体类型) / 异常 / 相关性 | 否，需要上游文本数据 |
 | Analysis（分析） | ANL | 确定性数据清洗：去空/去重/筛选/改名/类型转换/排序/采样/分组聚合/表关联/列计算/分箱 | **是**，可直接处理数据集 |
 | Visualize（可视化） | VIZ | 柱状/折线/饼图/散点/直方/箱线/热力/桑基/词云/地图，ECharts 或 Matplotlib | **是**，可直接处理数据集 |
 | Tokenize（分词） | TKN | jieba 分词输出词频，供导出或词云使用 | 否，需要上游数据 |

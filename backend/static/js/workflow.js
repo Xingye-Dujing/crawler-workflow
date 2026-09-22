@@ -203,9 +203,7 @@ const workflow = {
         var llm = LLMSettings.payload();
         if (canvas.nodes && Object.keys(canvas.nodes).some(function (id) {
             var n = canvas.nodes[id];
-            return n.type === 'process' &&
-                (n.params.operation === 'clean' ||
-                    ((n.params.operation === 'emotion' || n.params.operation === 'tendency') && n.params.mode !== 'ml'));
+            return n.type === 'process' && nodeNeedsLlm(n.params, n.operation);
         })) {
             /* Each transport has its own prerequisite: OpenRouter needs a key
                *and* a catalog model, the local daemon needs a tag it has pulled.
@@ -643,9 +641,19 @@ function openSettings(nodeId) {
             html += renderParamInput(nodeId, p, 'min_samples', 'settings.minSamples', 'number', 2);
         }
 
-        /* NER (regex only) */
+        /* Named entities. The rules need no model and stay the default; the
+           model is for texts that name people and places without any of the
+           surface cues the regexes look for. The category filter applies to
+           both, so asking for persons only costs persons only. */
         if (p.operation === 'ner') {
-            /* NER uses regex-based entity extraction — no external model needed */
+            html += renderParamSelect(nodeId, p, 'mode', 'settings.mode', 'regex',
+                [{ v: 'regex', l: I18n.t('mode.regex') }, { v: 'llm', l: I18n.t('mode.llm') }]);
+            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.entityTypes') +
+                '</label><input class="settings-input" value="' + escapeHtml(p.entity_types || '') + '" placeholder="' +
+                I18n.t('settings.entityTypesPlaceholder') + '" ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'entity_types\',this.value)">' +
+                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.entityTypesHint') +
+                '</div></div>';
         }
 
         /* Anomaly detection */
@@ -665,8 +673,7 @@ function openSettings(nodeId) {
         /* AI 调用实时导出: the LLM ops rewrite a {stem}.live.{ext} snapshot
            after every settled batch — watch the enriched rows grow without
            waiting for the node (or the run) to finish. */
-        var isLlmOp = p.operation === 'clean' ||
-            ((p.operation === 'emotion' || p.operation === 'tendency') && p.mode !== 'ml');
+        var isLlmOp = nodeNeedsLlm(p, node.operation);
         if (isLlmOp) {
             html += '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
                 '<input type="checkbox" ' + (p.live_export ? 'checked' : '') + ' ' +
@@ -818,6 +825,24 @@ function onOutputFormatChange(nodeId, fmt) {
     canvas.updateNodeDisplay(nodeId);
     canvas.saveState();
     openSettings(nodeId);
+}
+
+/* ── Which process nodes really call a model ──
+ * The run-gate and the AI 实时导出 checkbox used to spell this rule out
+ * separately, and the two had already begun to drift. backend/app.py
+ * (_workflow_needs_llm) keeps the same list, because a workflow that never
+ * reaches a model must not be blocked by a missing API key or an unpicked
+ * Ollama tag. Note the opposite defaults: emotion/tendency ask the model
+ * unless told not to, NER uses its rules unless told otherwise. The second
+ * argument is the node's own ``operation``, which toWorkflowJSON also carries:
+ * the backend reads that one first, so this has to as well. */
+function nodeNeedsLlm(params, nodeOperation) {
+    var p = params || {};
+    var op = p.operation || nodeOperation || '';
+    if (op === 'clean') return true;
+    if (op === 'emotion' || op === 'tendency') return p.mode !== 'ml';
+    if (op === 'ner') return p.mode === 'llm';
+    return false;
 }
 
 /* ── Shared settings UI helpers ── */

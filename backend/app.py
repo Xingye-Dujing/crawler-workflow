@@ -472,9 +472,11 @@ def _workflow_needs_llm(workflow: dict) -> bool:
     """True when any process node in the payload will actually call a model.
 
     Cleaner always does; the two classifiers only when they are not running the
-    locally trained scikit-learn model. A crawl-and-save workflow must not be
-    blocked by a missing API key or an unpicked Ollama tag — the frontend makes
-    the same distinction before it opens the console.
+    locally trained scikit-learn model; entity recognition only when it was
+    switched over to the model, since its rules need nothing. A crawl-and-save
+    workflow must not be blocked by a missing API key or an unpicked Ollama tag —
+    the frontend makes the same distinction (``nodeNeedsLlm``) before it opens
+    the console.
     """
     for node in workflow.get('nodes') or []:
         if not isinstance(node, dict) or node.get('type') != 'process':
@@ -484,6 +486,9 @@ def _workflow_needs_llm(workflow: dict) -> bool:
         if op == 'clean':
             return True
         if op in ('emotion', 'tendency') and str(params.get('mode') or '') != 'ml':
+            return True
+        # NER is the opposite default: rules first, a model only when asked.
+        if op == 'ner' and str(params.get('mode') or '') == 'llm':
             return True
     return False
 
@@ -1566,8 +1571,15 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         return df.to_dict('records')
 
     if op == 'ner':
-        recognizer = NamedEntityRecognizer()
-        df = recognizer.analyze_dataframe(df, text_column=text_column)
+        # Its own mode default: the rules need no model, and a workflow saved
+        # before the mode selector existed must not start paying for one.
+        recognizer = NamedEntityRecognizer(mode=params.get('mode', 'regex'))
+        df = recognizer.analyze_dataframe(
+            df,
+            text_column=text_column,
+            entity_types=params.get('entity_types'),
+            ctx=run_ctx,
+        )
         return df.to_dict('records')
 
     if op == 'anomaly':

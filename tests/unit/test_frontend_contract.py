@@ -19,13 +19,14 @@ import shutil
 from pathlib import Path
 
 import pytest
-from node_runner import run_node  # noqa: E402  (tests/ is on sys.path via conftest)
+from node_runner import run_node
 
 pytestmark = pytest.mark.unit
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'static'
 JS_DIR = STATIC_DIR / 'js'
 HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_canvas.mjs'
+VALIDATE_HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_validate.mjs'
 CANVAS_JS = JS_DIR / 'canvas.js'
 
 # Files whose I18n.t('literal') calls are audited against the catalogues.
@@ -41,7 +42,10 @@ def _catalog_keys():
     en_start = src.index('dict: {')
     en_body = src[en_start : src.index('zh: {', en_start)]
     zh_body = src[src.index('zh: {', en_start) : src.index('_missing:')]
-    grab = lambda block: {m.group(1) for m in _DICT_KEY.finditer(block)}  # noqa: E731
+
+    def grab(block):
+        return {m.group(1) for m in _DICT_KEY.finditer(block)}
+
     return {'en': grab(en_body), 'zh': grab(zh_body)}
 
 
@@ -77,6 +81,59 @@ class TestCanvasSerialization:
     def test_connections_and_settings_shape(self, payload):
         assert payload['connections'] == [{'from': 'node-1', 'to': 'node-2'}]
         assert payload['settings']['mode'] in ('serial', 'parallel')
+
+
+class TestLlmGateParity:
+    """``nodeNeedsLlm`` (workflow.js) and ``_workflow_needs_llm`` (app.py) agree.
+
+    The browser refuses to open the console without a model when a node will
+    need one; the server refuses the same way before the worker starts. When the
+    two lists drift, either a rules-only crawl gets blocked for a missing API key
+    or a run starts and dies on its first row — both invisible to a suite that
+    only tests one side. Every process op is in the table, modes included.
+    """
+
+    CASES = [
+        ('clean', {'operation': 'clean'}, None),
+        ('emotion_default', {'operation': 'emotion'}, None),
+        ('emotion_llm', {'operation': 'emotion', 'mode': 'llm'}, None),
+        ('emotion_ml', {'operation': 'emotion', 'mode': 'ml'}, None),
+        ('tendency_llm', {'operation': 'tendency', 'mode': 'llm'}, None),
+        ('tendency_ml', {'operation': 'tendency', 'mode': 'ml'}, None),
+        ('ner_default', {'operation': 'ner'}, None),
+        ('ner_regex', {'operation': 'ner', 'mode': 'regex'}, None),
+        ('ner_llm', {'operation': 'ner', 'mode': 'llm'}, None),
+        ('ner_bogus_mode', {'operation': 'ner', 'mode': 'sklearn'}, None),
+        ('keyword', {'operation': 'keyword'}, None),
+        ('cluster', {'operation': 'cluster'}, None),
+        ('anomaly', {'operation': 'anomaly'}, None),
+        ('correlation', {'operation': 'correlation'}, None),
+        ('no_operation_at_all', {}, None),
+        # The wire carries ``operation`` on the node as well; the backend reads
+        # that one first, so the gate may not ignore it.
+        ('node_level_operation', {'text_column': '正文'}, 'clean'),
+        ('node_level_ner_llm', {'text_column': '正文'}, 'ner'),
+    ]
+
+    @pytest.fixture(scope='class')
+    def js_answers(self, tmp_path_factory):
+        if shutil.which('node') is None:
+            pytest.skip('node not available')
+        scenarios = [{'id': name, 'needsLlm': params, 'operation': operation} for name, params, operation in self.CASES]
+        path = tmp_path_factory.mktemp('gate') / 'scenarios.json'
+        path.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
+        proc = run_node(VALIDATE_HARNESS, JS_DIR / 'workflow.js', path)
+        assert proc.returncode == 0, proc.stderr
+        return json.loads(proc.stdout)['needsLlm']
+
+    @pytest.mark.parametrize('name, params, operation', CASES, ids=[case[0] for case in CASES])
+    def test_the_browser_and_the_server_ask_for_a_model_on_the_same_nodes(self, js_answers, name, params, operation):
+        from app import _workflow_needs_llm
+
+        node = {'type': 'process', 'params': params}
+        if operation:
+            node['operation'] = operation
+        assert js_answers[name] == _workflow_needs_llm({'nodes': [node]}), name
 
 
 class TestFrontendCatalog:
