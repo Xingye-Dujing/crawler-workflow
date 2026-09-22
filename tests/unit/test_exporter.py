@@ -11,6 +11,7 @@ contracts are about the file that lands on disk:
 """
 
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -41,7 +42,6 @@ def df():
         ('csv', '.csv'),
         ('json', '.json'),
         ('excel', '.xlsx'),
-        ('xlsx', '.xlsx'),
         ('txt', '.txt'),
         ('html', '.html'),
         ('markdown', '.md'),
@@ -49,6 +49,23 @@ def df():
 )
 def test_extension_matches_the_format(fmt, ext):
     assert E.EXTENSIONS[fmt] == ext
+
+
+def test_the_format_list_has_no_duplicate_entries():
+    """``xlsx`` used to sit in EXTENSIONS next to ``excel``, so the supported list
+    named one format twice while the panel showed the other name. An alias is not
+    a format."""
+    assert len(set(E.SUPPORTED_FORMATS)) == len(E.SUPPORTED_FORMATS)
+    assert 'xlsx' not in E.SUPPORTED_FORMATS and 'excel' in E.SUPPORTED_FORMATS
+    assert [E.resolve(name) for name in ('xlsx', 'XLSX', 'xls', 'excel')] == ['excel'] * 4
+    assert E.resolve('md') == 'markdown' and E.resolve('csv') == 'csv' and E.resolve('') == ''
+
+
+def test_an_aliased_format_still_writes_the_real_file(tmp_path):
+    """A saved workflow that says xlsx must keep working after the alias moved
+    out of EXTENSIONS — resolving is not the same as rejecting."""
+    result = E.save([{'a': 1}], str(tmp_path / 'aliased.xlsx'), fmt='xlsx')
+    assert result['format'] == 'excel' and os.path.exists(result['path'])
 
 
 class TestFormatSelection:
@@ -70,8 +87,32 @@ class TestFormatSelection:
     def test_format_is_inferred_from_the_name(self, filename, expected):
         assert E.infer_format(filename) == expected
 
-    def test_supported_formats_are_the_documented_seven(self):
-        assert E.SUPPORTED_FORMATS == ('csv', 'json', 'excel', 'xlsx', 'txt', 'html', 'markdown')
+    def test_supported_formats_match_the_panel_exactly(self):
+        """The output node's format dropdown and this list are the same six
+        names — a seventh entry the user can never pick (the old ``xlsx``
+        duplicate) is a format that exists in one place and not the other.
+
+        The source node legitimately offers a subset (csv/json), so every
+        literal in the file is collected and one of them has to be the whole
+        supported list; pinning "the first match" would test the wrong node.
+        """
+        import re
+        from pathlib import Path
+
+        assert E.SUPPORTED_FORMATS == ('csv', 'json', 'excel', 'txt', 'html', 'markdown')
+        source = (Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'workflow.js').read_text(
+            encoding='utf-8'
+        )
+        offered = [
+            tuple(re.findall(r"'([a-z]+)'", group)) for group in re.findall(r"\[('(?:[^']|'[^'])*')\]\.map", source)
+        ]
+        assert E.SUPPORTED_FORMATS in offered, f'no panel list matches the supported formats: {offered}'
+        # The same scan also catches unrelated dropdown literals (agg functions,
+        # chart types), so only the entries that name a format are checked: no
+        # format may be offered anywhere that the exporter would refuse.
+        naming_formats = [names for names in offered if set(names) & set(E.SUPPORTED_FORMATS)]
+        assert naming_formats, 'the scan found no format list at all'
+        assert all(set(names) <= set(E.SUPPORTED_FORMATS) for names in naming_formats), naming_formats
 
     def test_an_explicit_format_beats_the_extension(self, df, tmp_path):
         target = str(tmp_path / 'out.csv')

@@ -852,10 +852,21 @@ function renderAnalysisSettings(nodeId, p) {
             '<input class="settings-input" value="' + (p.columns || '') + '" placeholder="col1, col2 (empty = all)" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'columns\',this.value)"></div>';
     }
+    if (op === 'drop_null') {
+        /* 'any' drops a row with one empty cell, 'all' only when every selected
+           cell is empty — the two produce very different tables, so the choice
+           has to be on the panel and not buried in a default. */
+        html += renderParamSelect(nodeId, p, 'how', 'settings.dropHow', 'any',
+            [{ v: 'any', l: I18n.t('settings.dropHowAny') }, { v: 'all', l: I18n.t('settings.dropHowAll') }]);
+    }
     if (op === 'fill_null') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.value') + '</label>' +
             '<input class="settings-input" value="' + (p.value || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'value\',this.value)"></div>';
+        /* A method and a literal value are different operations; leaving method
+           empty means "fill with the value above". */
+        html += renderParamSelect(nodeId, p, 'method', 'settings.fillMethod', '',
+            [{ v: '', l: I18n.t('settings.fillMethodValue') }, { v: 'ffill', l: 'ffill' }, { v: 'bfill', l: 'bfill' }]);
     }
     if (op === 'filter_rows') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
@@ -918,6 +929,10 @@ function renderAnalysisSettings(nodeId, p) {
     if (op === 'bin_column') {
         html += renderParamInput(nodeId, p, 'column', 'settings.column', 'text', '');
         html += renderParamInput(nodeId, p, 'bin_new_col', 'settings.binNewCol', 'text', '');
+        /* One integer = that many equal-width buckets; a comma-separated list =
+           those exact edges. The backend tells the two apart by shape. */
+        html += renderParamInput(nodeId, p, 'bins', 'settings.binEdges', 'text', '4 或 0, 60, 80, 100');
+        html += renderParamInput(nodeId, p, 'bin_labels', 'settings.binLabels', 'text', 'low, mid, high');
     }
     html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
     return html;

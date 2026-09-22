@@ -152,6 +152,15 @@ def results(tmp_path_factory):
                 ),
                 ('panel_zhihu_posts', 'source', {'platform': 'zhihu', 'collect': 'posts', 'keyword': 'k'}),
                 ('panel_legacy_comment', 'comment', {'urls': ''}),
+                # Analysis ops: the panel is the only place these params are set,
+                # so a field missing here is a parameter the user cannot reach.
+                ('panel_drop_null', 'analysis', {'operation': 'drop_null', 'columns': 'a, b'}),
+                ('panel_fill_null', 'analysis', {'operation': 'fill_null', 'columns': 'a', 'value': '0'}),
+                (
+                    'panel_bin_column',
+                    'analysis',
+                    {'operation': 'bin_column', 'column': 'score', 'bins': '0, 60, 100'},
+                ),
             )
         ),
     ]
@@ -249,6 +258,26 @@ class TestSettingsPanel:
         html = results['settings']['panel_legacy_comment']
         assert 'settings.commentUrlsHintMixed' in html
         assert 'zhihu.com' in html and 'weibo.com' in html and 'xiaohongshu.com' in html
+
+    def test_drop_null_panel_offers_the_delete_condition(self, results):
+        """``how`` decides whether one empty cell drops a row or all of them do.
+        With no field for it the user's choice did not exist and every run used
+        the default — so the select itself is the thing under test."""
+        html = results['settings']['panel_drop_null']
+        assert "updateParam('n1','how'" in html
+        assert 'settings.dropHow' in html and 'settings.dropHowAny' in html and 'settings.dropHowAll' in html
+
+    def test_fill_null_panel_offers_method_as_well_as_value(self, results):
+        html = results['settings']['panel_fill_null']
+        assert "updateParam('n1','value'" in html
+        assert "updateParam('n1','method'" in html
+        assert 'settings.fillMethod' in html and 'settings.fillMethodValue' in html
+
+    def test_bin_column_panel_offers_edges_and_labels(self, results):
+        html = results['settings']['panel_bin_column']
+        assert "updateParam('n1','bins'" in html, 'a bin count/edge list cannot be set without this field'
+        assert "updateParam('n1','bin_labels'" in html
+        assert 'settings.binEdges' in html and 'settings.binLabels' in html
 
 
 class TestUrlRoutingContract:

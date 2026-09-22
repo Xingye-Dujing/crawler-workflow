@@ -1695,9 +1695,21 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
     comma-separated 'columns' field). Translate that into the exact kwargs
     each DataAnalysisService method expects."""
     if op in ('drop_null', 'strip_whitespace', 'select_columns'):
-        return {'columns': _split_columns(params.get('columns'))}
+        result = {'columns': _split_columns(params.get('columns'))}
+        if op == 'drop_null':
+            # ``how`` decides whether one empty cell drops a row or all of them
+            # do; the panel had no field for it and the normalizer dropped it, so
+            # every "any column is null" choice silently became "all columns".
+            result['how'] = params.get('how') or 'any'
+        return result
     if op == 'fill_null':
-        return {'columns': _split_columns(params.get('columns')), 'value': params.get('value')}
+        result = {'columns': _split_columns(params.get('columns')), 'value': params.get('value')}
+        method = str(params.get('method') or '').strip()
+        if method:
+            # Forward/backward fill and a literal value are different operations;
+            # an empty method means "use value", which the service already does.
+            result['method'] = method
+        return result
     if op == 'drop_duplicates':
         return {'columns': _split_columns(params.get('columns')) or None}
     if op == 'filter_rows':
@@ -1735,10 +1747,26 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             'expr': params.get('expr', ''),
         }
     if op == 'bin_column':
-        return {
+        result = {
             'column': params.get('column', ''),
             'new_col': params.get('bin_new_col', ''),
         }
+        # ``bins`` is overloaded the way pandas overloads it: a single integer
+        # means "this many equal-width buckets" and a comma-separated list means
+        # "these exact edges". Both are useful and only one parser can tell them
+        # apart, so the distinction lives here rather than in the panel.
+        edges = _split_columns(params.get('bins'))
+        if len(edges) > 1:
+            numbers = [_optional_float(edge) for edge in edges]
+            result['bins'] = [number for number in numbers if number is not None]
+        else:
+            count = _optional_int(params.get('bins'))
+            if count:
+                result['bins'] = count
+        labels = _split_columns(params.get('bin_labels'))
+        if labels:
+            result['labels'] = labels
+        return result
     return {}
 
 

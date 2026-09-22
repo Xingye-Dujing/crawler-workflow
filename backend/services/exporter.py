@@ -25,24 +25,36 @@ class DataExporter:
     """Saves a DataFrame (or list-of-dict records) to disk in various formats."""
 
     # Maps a format key to the file extension used when one isn't supplied.
+    # This is the canonical list: it is what the output node offers and what
+    # ``save`` dispatches on, so no format appears here twice.
     EXTENSIONS = {
         'csv': '.csv',
         'json': '.json',
         'excel': '.xlsx',
-        'xlsx': '.xlsx',
         'txt': '.txt',
         'html': '.html',
         'markdown': '.md',
     }
 
+    #: Accepted spellings that are not their own writer. ``xlsx`` used to sit in
+    #: EXTENSIONS next to ``excel``, which made the supported-format list carry
+    #: one format twice while the panel showed the other name. Aliasing keeps
+    #: saved workflows that say ``xlsx`` working without widening the list.
+    ALIASES = {'xlsx': 'excel', 'xls': 'excel', 'md': 'markdown'}
+
     SUPPORTED_FORMATS = tuple(EXTENSIONS.keys())
+
+    @classmethod
+    def resolve(cls, fmt: str) -> str:
+        """The canonical format key for *fmt* ('' when nothing was given)."""
+        key = str(fmt or '').strip().lower()
+        return cls.ALIASES.get(key, key)
 
     @classmethod
     def infer_format(cls, filename: str) -> str:
         """Guess the export format from a filename's extension."""
         ext = os.path.splitext(filename)[1].lower().lstrip('.')
-        mapping = {'xlsx': 'excel', 'xls': 'excel', 'md': 'markdown'}
-        return mapping.get(ext, ext or 'csv')
+        return cls.resolve(ext) or 'csv'
 
     @classmethod
     def normalize_filename(cls, filename: str, fmt: str) -> str:
@@ -53,7 +65,7 @@ class DataExporter:
         """
         stem = str(filename or '').strip()
         root, ext = os.path.splitext(stem)
-        wanted = cls.EXTENSIONS.get(fmt, '.csv')
+        wanted = cls.EXTENSIONS.get(cls.resolve(fmt), '.csv')
         if ext.lower() in ('.csv', '.json', '.xlsx', '.xls', '.txt', '.html', '.md'):
             return stem
         if not root.strip('. '):
@@ -89,13 +101,13 @@ class DataExporter:
         dict with keys: path, format, rows
         """
         df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data or [])
-        fmt = (fmt or cls.infer_format(filepath)).lower()
+        fmt = cls.resolve(fmt) or cls.infer_format(filepath)
         if fmt not in cls.SUPPORTED_FORMATS:
             raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
 
         os.makedirs(os.path.dirname(filepath) or '.', exist_ok=True)
 
-        if fmt in ('xlsx', 'excel'):
+        if fmt == 'excel':
             cls._write_excel(df, filepath, **kwargs)
         elif fmt == 'csv':
             cls._write_csv(df, filepath, **kwargs)

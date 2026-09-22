@@ -409,3 +409,70 @@ class TestMlTraining:
         )
         assert response.status_code == 400
         assert 'pos' in response.get_json()['error']
+
+
+class TestPanelParamsReachTheOperator:
+    """The Settings panel stores flat strings; the normalizer is the only bridge
+    to the operator's kwargs, and three of its fields used to fall off the edge
+    of that bridge. A dropped parameter is not a missing feature — it is the
+    operator silently doing the OTHER thing while the panel shows a choice.
+    """
+
+    @staticmethod
+    def _normalize(op, **params):
+        import app as app_module
+
+        return app_module._normalize_analysis_params(op, params)
+
+    def test_drop_null_how_survives(self):
+        assert self._normalize('drop_null', columns='a, b', how='all') == {'columns': ['a', 'b'], 'how': 'all'}
+        # An unset how stays the documented default instead of vanishing.
+        assert self._normalize('drop_null', columns='a')['how'] == 'any'
+
+    def test_fill_null_method_survives_and_blank_means_use_the_value(self):
+        filled = self._normalize('fill_null', columns='a', value='0', method='ffill')
+        assert filled == {'columns': ['a'], 'value': '0', 'method': 'ffill'}
+        assert 'method' not in self._normalize('fill_null', columns='a', value='0', method='  ')
+
+    def test_bins_is_a_count_or_a_list_of_edges(self):
+        counted = self._normalize('bin_column', column='score', bins='4')
+        assert counted['bins'] == 4 and 'labels' not in counted
+        edged = self._normalize('bin_column', column='score', bins='0, 60, 80, 100', bin_labels='低, 中, 高')
+        assert edged['bins'] == [0.0, 60.0, 80.0, 100.0]
+        assert edged['labels'] == ['低', '中', '高'] and edged['new_col'] == ''
+
+    def test_edges_with_junk_keep_the_numbers(self):
+        assert self._normalize('bin_column', column='s', bins='0, oops, 60')['bins'] == [0.0, 60.0]
+
+    def test_the_wired_params_actually_change_the_output(self):
+        """Normalizing into a kwarg nobody consumes would pass every test above,
+        so the effect is checked end to end through the real pipeline."""
+        import pandas as pd
+
+        from services.data_analysis import DataAnalysisService
+
+        rows = [{'a': 1, 'b': None}, {'a': None, 'b': 2}, {'a': 3, 'b': 4}]
+
+        def _drop(how):
+            params = self._normalize('drop_null', columns='a, b', how=how)
+            return DataAnalysisService.run_pipeline(pd.DataFrame(rows), [{'op': 'drop_null', 'params': params}])[0]
+
+        any_null, all_null = _drop('any'), _drop('all')
+        assert len(any_null) == 1 and len(all_null) == 3, 'how must decide whether one or every cell drops the row'
+
+        scored = pd.DataFrame([{'score': value} for value in (10, 55, 70, 95)])
+        binned = DataAnalysisService.run_pipeline(
+            scored,
+            [
+                {
+                    'op': 'bin_column',
+                    'params': dict(
+                        self._normalize('bin_column', column='score', bins='0, 60, 100', bin_labels='低, 高'),
+                        new_col='档',
+                    ),
+                }
+            ],
+        )[0]
+        # run_pipeline hands back a DataFrame, and iterating one yields column
+        # names — the values have to be read out of the column.
+        assert [str(value) for value in binned['档']] == ['低', '低', '高', '高']

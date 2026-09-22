@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~1275 cases)**:
+- **Automated tests (pytest, ~1284 cases)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
