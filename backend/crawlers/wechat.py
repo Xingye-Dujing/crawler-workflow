@@ -11,7 +11,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from i18n import t
 
 from .base import Crawler, as_index
-from .comments import WECHAT_CREDENTIAL_FIELDS, WECHAT_CREDENTIAL_SCRIPT
 
 logger = logging.getLogger(__name__)
 
@@ -197,13 +196,29 @@ class WechatCrawler(Crawler):
     # Comment credentials (and why a browser usually has none)
     # ------------------------------------------------------------------
 
-    #: The comment-call parameters the article page exposes. The script and its
-    #: field list live in ``crawlers.comments`` next to the adapter that uses
-    #: them, so the cookie diagnosis and the crawl can never disagree about what
-    #: "reachable" means. ``key`` is the one that matters: the server embeds it
-    #: only for a client-issued visit, and without it the comment list stays
-    #: empty — "not permitted", never "no comments".
-    _CREDENTIAL_SCRIPT = WECHAT_CREDENTIAL_SCRIPT
+    #: The page's own comment-call parameters. ``k`` is the one that matters:
+    #: the server only embeds it when the request came from a WeChat client
+    #: session, which in practice means the article URL was copied out of the
+    #: PC client and still carries ``pass_ticket``. Without it the comment list
+    #: stays empty — not "this article has no comments", but "this session was
+    #: never allowed to see them".
+    _CREDENTIAL_SCRIPT = """
+        var out = {};
+        var cfg = null;
+        try { cfg = window.wx_getext_config || null; } catch (e) { cfg = null; }
+        var cid = (cfg && (cfg.comment_id || cfg.appmsgcommentid)) || '';
+        out.key = (cfg && cfg.k) ? String(cfg.k) : '';
+        out.comment_id = cid ? String(cid) : '';
+        out.appmsg_token = (cfg && cfg.appmsg_token) ? String(cfg.appmsg_token)
+            : ((typeof appmsg_token !== 'undefined' && appmsg_token) ? String(appmsg_token) : '');
+        out.biz = (typeof biz !== 'undefined' && biz) ? String(biz) : '';
+        out.mid = (typeof mid !== 'undefined' && mid) ? String(mid) : '';
+        out.idx = (typeof idx !== 'undefined' && idx) ? String(idx) : '';
+        out.sn = (typeof sn !== 'undefined' && sn) ? String(sn) : '';
+        out.pass_ticket = (typeof pass_ticket !== 'undefined' && pass_ticket) ? String(pass_ticket) : '';
+        out.uin = (typeof uin !== 'undefined' && uin) ? String(uin) : '';
+        return out;
+        """
 
     def article_credentials(self) -> dict:
         """Read the comment-call parameters the current page exposes.
@@ -216,9 +231,22 @@ class WechatCrawler(Crawler):
             raw = self.driver.execute_script(self._CREDENTIAL_SCRIPT) or {}
         except Exception:
             raw = {}
-        creds = {key: str(raw.get(key) or '') for key in WECHAT_CREDENTIAL_FIELDS}
-        # Older article templates define none of those globals but always carry
-        # the same tokens in the address, so the URL is the fallback source.
+        creds = {
+            key: str(raw.get(key) or '')
+            for key in (
+                'key',
+                'comment_id',
+                'appmsg_token',
+                'biz',
+                'mid',
+                'idx',
+                'sn',
+                'pass_ticket',
+                'uin',
+            )
+        }
+        # The URL carries the same tokens when the link came from the client, and
+        # the page globals are not always defined on every article template.
         params = _url_params(_safe_current_url(self.driver))
         for field, param in (
             ('__biz', 'biz'),

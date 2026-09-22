@@ -441,6 +441,9 @@ function openSettings(nodeId) {
            itself on change. */
         var isWechat = p.platform === 'wechat';
         var collect = p.collect || 'posts';
+        /* WeChat has no comment adapter — a stale comments flag on a wechat
+           node still means "crawl these article URLs" (the backend agrees). */
+        if (isWechat) collect = 'posts';
         html += '<div class="settings-group">' +
             '<label class="settings-label">' + I18n.t('settings.platform') + '</label>' +
             '<select class="settings-select" onchange="selectSourcePlatform(\'' + nodeId + '\', this.value)">' +
@@ -449,16 +452,16 @@ function openSettings(nodeId) {
             '<option value="xiaohongshu"' + (p.platform === 'xiaohongshu' ? ' selected' : '') + '>' + I18n.t('platform.xiaohongshu') + '</option>' +
             '<option value="wechat"' + (p.platform === 'wechat' ? ' selected' : '') + '>' + I18n.t('platform.wechat') + '</option>' +
             '</select></div>';
-        /* 评论采集 lives here as a mode of the Data Source (same 数据输入
-           category as its own node): links in, comment rows out. Offered for
-           every platform — WeChat has an adapter too, and it reports honestly
-           when the site refuses a browser session. */
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.collect') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'collect\',this.value);openSettings(\'' + nodeId + '\')">' +
-            '<option value="posts"' + (collect !== 'comments' ? ' selected' : '') + '>' + I18n.t('settings.collectPosts') + '</option>' +
-            '<option value="comments"' + (collect === 'comments' ? ' selected' : '') + '>' + I18n.t('settings.collectComments') + '</option>' +
-            '</select></div>';
-        if (isWechat && collect !== 'comments') {
+        if (!isWechat) {
+            /* 评论采集 lives here as a mode of the Data Source (same 数据输入
+               category as its own node): links in, comment rows out. */
+            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.collect') + '</label>' +
+                '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'collect\',this.value);openSettings(\'' + nodeId + '\')">' +
+                '<option value="posts"' + (collect !== 'comments' ? ' selected' : '') + '>' + I18n.t('settings.collectPosts') + '</option>' +
+                '<option value="comments"' + (collect === 'comments' ? ' selected' : '') + '>' + I18n.t('settings.collectComments') + '</option>' +
+                '</select></div>';
+        }
+        if (isWechat) {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.urls') + '</label>' +
                 '<textarea class="settings-input" rows="5" placeholder="https://mp.weixin.qq.com/s/..." ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
@@ -1874,7 +1877,6 @@ function urlPlatform(url) {
     if (u.indexOf('zhihu.com') !== -1) return 'zhihu';
     if (u.indexOf('xiaohongshu.com') !== -1 || u.indexOf('xhslink.com') !== -1) return 'xiaohongshu';
     if (u.indexOf('weibo.com') !== -1 || u.indexOf('weibo.cn') !== -1) return 'weibo';
-    if (u.indexOf('mp.weixin.qq.com') !== -1) return 'wechat';
     return '';
 }
 
@@ -1883,17 +1885,18 @@ function urlPlatform(url) {
 function commentUrlPlaceholder(platform) {
     if (platform === 'weibo') return 'https://weibo.com/...';
     if (platform === 'xiaohongshu') return 'https://www.xiaohongshu.com/explore/...';
-    if (platform === 'wechat') return 'https://mp.weixin.qq.com/s/...';
     return 'https://www.zhihu.com/question/...';
 }
 
-/* updateParam re-opens the panel to re-render the platform-dependent fields. */
+/* updateParam re-opens the panel itself, so this only has to fix the state
+   the next render reads: WeChat has no comment adapter, and a stale
+   collect='comments' left over from another platform would otherwise sit in
+   the saved JSON (the backend normalizes it, but the canvas should not lie). */
 function selectSourcePlatform(nodeId, value) {
-    /* Switching platform re-renders the panel because the fields a source node
-       needs depend on it (WeChat has no keyword search, Weibo adds a time
-       window). 采集内容 is kept: every platform now has a comment adapter, so a
-       comments node that switches platform stays in comments mode and the
-       per-platform link rule catches mismatched links at validation time. */
+    var node = canvas.nodes[nodeId];
+    if (node && node.params && value === 'wechat' && node.params.collect === 'comments') {
+        node.params.collect = 'posts';
+    }
     updateParam(nodeId, 'platform', value);
 }
 
@@ -2852,7 +2855,7 @@ workflow.validate = function () {
         var label = node.title || I18n.t('node.' + type);
 
         if (type === 'source') {
-            var commentsMode = params.collect === 'comments';
+            var commentsMode = params.collect === 'comments' && params.platform !== 'wechat';
             if (commentsMode) {
                 /* Comments mode: links are the input — a keyword would be
                    silently ignored, exactly like WeChat's rule below. Each

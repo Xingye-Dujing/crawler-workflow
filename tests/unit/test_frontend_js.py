@@ -109,7 +109,7 @@ def results(tmp_path_factory):
             'connections': [{'from': 'n1', 'to': 'out-1'}],
         },
         {
-            'id': 'wechat_comments_mode',
+            'id': 'wechat_stale_comments',
             'nodes': [
                 _node(
                     'n1',
@@ -181,11 +181,10 @@ class TestValidateGate:
         key, fields = _parse(results['validate']['comments_empty'][0])
         assert key == 'validate.sourceCommentUrls'
 
-    def test_wechat_comments_mode_validates_like_the_other_platforms(self, results):
-        # WeChat has a comment adapter too, so comments mode is just another
-        # valid source shape here: one article link satisfies it, and whether
-        # the site then answers is a runtime matter the adapter reports.
-        assert results['validate']['wechat_comments_mode'] == []
+    def test_wechat_with_a_stale_comments_flag_validates_as_article_crawl(self, results):
+        # collect='comments' + wechat is the panel's old leak; both ends now
+        # read it as the URL-driven article crawl it is — no comments error.
+        assert results['validate']['wechat_stale_comments'] == []
 
     def test_an_unwired_source_is_reported_twice_reasonably(self, results):
         keys = [_parse(m)[0] for m in results['validate']['no_terminal']]
@@ -230,15 +229,13 @@ class TestSettingsPanel:
         assert 'zhihu.com' not in html
         assert 'weibo.com' not in html
 
-    def test_wechat_comments_panel_offers_the_mode_and_the_article_shape(self, results):
+    def test_wechat_ignores_a_stale_comments_flag_and_keeps_article_links(self, results):
         html = results['settings']['panel_wechat_stale']
-        # WeChat is selectable in comments mode like every other platform, and
-        # its example link is its own — never another site's URL shape.
-        assert 'settings.collect' in html
-        assert 'settings.commentUrls' in html
-        assert 'https://mp.weixin.qq.com/s/' in html
-        assert 'zhihu.com/question' not in html
-        assert 'weibo.com/' not in html
+        # no collect selector at all for WeChat, no comments textarea
+        assert 'settings.collect' not in html
+        assert 'settings.commentUrls' not in html
+        # and the WeChat article-URL block IS there
+        assert 'mp.weixin.qq.com/s/' in html
 
     def test_posts_mode_panel_offers_keyword_and_the_mode_selector(self, results):
         html = results['settings']['panel_zhihu_posts']
@@ -272,11 +269,10 @@ class TestUrlRoutingContract:
 
 
 class TestPlatformSwitch:
-    def test_moving_to_wechat_keeps_the_comments_mode(self, results):
-        # All four platforms have an adapter now, so switching platform must not
-        # silently drop the user out of comments mode; the per-platform link
-        # rule is what catches a mismatched paste instead.
-        assert results['platformSwitch']['zhihu_to_wechat'] == 'comments'
+    def test_moving_to_wechat_resets_the_comments_mode(self, results):
+        # WeChat has no comment adapter; leaving collect='comments' behind
+        # would route article links into the comment engine and drop them all.
+        assert results['platformSwitch']['zhihu_to_wechat'] == 'posts'
 
     def test_moving_between_crawl_platforms_keeps_the_mode(self, results):
         assert results['platformSwitch']['zhihu_to_weibo'] == 'comments'

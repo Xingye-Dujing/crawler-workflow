@@ -18,11 +18,6 @@ _COMMENT_DOMAINS = (
     ('zhihu', ('zhihu.com',)),
     ('xiaohongshu', ('xiaohongshu.com', 'xhslink.com')),
     ('weibo', ('weibo.com', 'weibo.cn')),
-    # WeChat's adapter reads the article's own comment endpoint, so the article
-    # link is both the input and the platform evidence. (The endpoint refuses a
-    # plain browser session — the adapter reports that refusal instead of
-    # returning zero rows, so routing the link here is still the right call.)
-    ('wechat', ('mp.weixin.qq.com',)),
 )
 
 

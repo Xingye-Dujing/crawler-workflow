@@ -74,40 +74,6 @@ class TestCookieDiagnosis:
         assert facts['mp_logged_in'] == ('token=' in facts['url'])
 
 
-class TestCommentRefusal:
-    """The measured answer to "can a browser read 推文留言": no.
-
-    Pinned as an invariant rather than one status, because the articles differ in
-    whether they even have a 留言 module (the three stable ones do not, so they
-    correctly read as ``dead``); what must never happen is a browser session
-    being told "0 comments" as if that were the article's answer.
-    """
-
-    #: An article whose page does carry a comment module (its HTML contains
-    #: ``comment_id``) — supplied by the user, measured 2026-09-22.
-    ARTICLE_WITH_MODULE = 'https://mp.weixin.qq.com/s/48ubXezOGo5GLqzwNk8AjQ'
-
-    def _crawl(self, live_crawler, url):
-        from crawlers.comments import CommentSession
-
-        crawler = live_crawler('wechat', headless=False)
-        session = CommentSession(crawler.driver, log=lambda msg: None, nap=lambda _s: None)
-        return session.crawl_wechat(url, 10)
-
-    @pytest.mark.parametrize('url', ARTICLE_URLS + [ARTICLE_WITH_MODULE])
-    def test_a_browser_session_never_returns_comment_rows(self, live_crawler, url):
-        rows, status = self._crawl(live_crawler, url)
-        assert rows == [], f'a browser was handed comments, which the site says it cannot see: {rows[:2]}'
-        assert status != 'ok', 'zero rows must not be reported as a clean "this article has no comments"'
-
-    def test_the_module_but_not_the_credential_reads_as_blocked(self, live_crawler):
-        """The refusal case exactly: the page exposes a comment id, the endpoint
-        still answers its 验证 page — the user must be told it is a permission
-        wall, not an empty article."""
-        rows, status = self._crawl(live_crawler, self.ARTICLE_WITH_MODULE)
-        assert (rows, status) == ([], 'blocked')
-
-
 def test_reread_of_same_url_is_deduped_by_the_ledger(live_crawler):
     """The streaming contract on the real store path: a second sighting of an
     already-collected item is refused by the sink, not duplicated."""

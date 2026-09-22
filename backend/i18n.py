@@ -279,25 +279,16 @@ _ZH = {
         '2. 打开任意一篇笔记，能看到评论区即可\n'
         '3. 回到本面板点「我已登录，保存」'
     ),
-    'cookie.wechat.purpose': '让浏览器能按关键词搜索公众号文章——需要登录你自己的公众号后台。',
+    'cookie.wechat.purpose': '两个用途各要一次：搜索文章用公众号后台登录；抓评论用「微信里复制的文章链接」。',
     'cookie.wechat.steps': (
         '【搜索公众号文章】点「浏览器登录」（入口 https://mp.weixin.qq.com/），扫码登录你自己的公众号后台，'
         '然后点「我已登录，保存」。没有公众号账号就无法按关键词搜索。\n'
-        '【抓取文章正文】不需要登录：把推文链接粘到数据源节点即可；这份 Cookie 只在偶发的环境校验时有用。\n'
-        '【关于推文留言】实测无法在浏览器中获取：留言接口只向微信客户端自己的会话下发凭证，'
-        '换 MicroMessenger UA、改链接参数、甚至重放客户端 Cookie 里带 pass_ticket 的那几条，'
-        '返回的都仍是「请在微信客户端打开链接」。'
-        '因此微信评论节点会明确报「被服务端拒绝」，不会假装那篇文章没有评论。'
+        '【抓取推文评论】在 PC 微信里打开那篇推文 → 右上角「…」→ 复制链接，把得到的链接填进下方'
+        '「登录入口链接」，再点「浏览器登录」，窗口里能看到正文后点「我已登录，保存」。\n'
+        '注意：只有微信客户端复制出来的链接（带 pass_ticket）才会下发评论凭证；普通网页链接在浏览器里评论区必为空。'
     ),
-    'cookie.entryUrl': '登录入口链接（可留空：默认打开该平台登录页；也可粘贴你想为其保存 Cookie 的页面）',
+    'cookie.entryUrl': '登录入口链接（可留空；微信抓评论时请粘贴「微信里复制的链接」）',
     'cookie.openedEntry': '登录浏览器已打开：{url}',
-    'comment.wechatRefused': (
-        '微信留言被服务端拒绝（返回验证页：{mark}）。留言凭证只在微信客户端自己的会话里下发，'
-        '浏览器带客户端 Cookie 也拿不到——已实测：重放客户端 mp.weixin.qq.com 的 pass_ticket/appmsg_token '
-        '后，留言接口仍回“请在微信客户端打开链接”。这不是本文无留言，而是本会话无权查看'
-    ),
-    'comment.wechatNoModule': '该页面没有留言模块（作者未开启留言，或链接不是文章页）：{url}',
-    'comment.wechatBadAnswer': '留言接口返回的不是 JSON：{url}',
     'cookie.entryRejected': (
         '该链接不属于 {platform} 的域名，已改用平台登录页（不允许把别的站点的 Cookie 存进本平台的 Cookie 文件）'
     ),
@@ -733,30 +724,20 @@ _EN = {
         '2. Open any note and confirm the comment area renders\n'
         '3. Come back here and press "Done — I logged in"'
     ),
-    'cookie.wechat.purpose': 'Lets the browser search official-account articles by keyword — needs a login to your '
-    'own 公众号 (MP admin).',
+    'cookie.wechat.purpose': 'Two purposes, one cookie file each time: article search needs a 公众号 (MP admin) '
+    'login; comments need the article link copied out of the WeChat client.',
     'cookie.wechat.steps': (
-        '[Search articles] Press "Login via browser" (entry https://mp.weixin.qq.com/), scan to log into your own '
-        'MP admin, then press "Done — I logged in". Without an official account there is no keyword search.\n'
-        '[Crawl article bodies] No login needed: paste the article links into the source node; this cookie only '
-        'helps when the occasional environment check appears.\n'
-        '[About comments] Measured impossible in a browser: the comment endpoint hands its credential only to the '
-        'WeChat client\u2019s own session — a MicroMessenger user agent, client-style URL parameters and even '
-        'replaying the client\u2019s pass_ticket-bearing cookies all still answer 请在微信客户端打开链接. '
-        'The WeChat comment node therefore reports "refused by the server" rather than pretending the article has '
-        'no comments.'
+        '[Search official-account articles] Press "Login via browser" (entry https://mp.weixin.qq.com/), scan to '
+        'log into your own MP admin, then press "Done — I logged in". Without an official account there is no '
+        'keyword search.\n'
+        '[Crawl article comments] Open the article in the PC WeChat client → "…" → Copy Link, paste that link into '
+        'the "Custom login entry" field below, press "Login via browser", and once the article body is visible '
+        'press "Done — I logged in".\n'
+        'Note: only a link copied out of the client carries pass_ticket, which is what makes the server hand back '
+        'the comment credential. A plain web link always shows an empty comment area in a browser.'
     ),
-    'cookie.entryUrl': 'Custom login entry (optional: empty opens the platform login page; paste any page you want '
-    'the cookie captured for)',
+    'cookie.entryUrl': 'Custom login entry (leave empty; for WeChat comments paste the link copied out of WeChat)',
     'cookie.openedEntry': 'Login browser opened at: {url}',
-    'comment.wechatRefused': (
-        'WeChat refused the comment request with its verification page ({mark}). The comment credential is only '
-        'issued to the WeChat client\u2019s own session \u2014 replaying the client\u2019s mp.weixin.qq.com cookies '
-        '(pass_ticket/appmsg_token) still gets 请在微信客户端打开链接, measured. This article may well have '
-        'comments; this browser session is simply not allowed to read them'
-    ),
-    'comment.wechatNoModule': 'This page has no comment module (comments off, or not an article page): {url}',
-    'comment.wechatBadAnswer': 'The comment endpoint did not answer with JSON: {url}',
     'cookie.entryRejected': 'That link is not on a {platform} domain, so the platform login page was used instead '
     '(another site\u2019s cookies must never be stored in this platform\u2019s cookie file)',
     'cookie.verifyBtn': 'Verify cookie',

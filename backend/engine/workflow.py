@@ -166,10 +166,11 @@ class WorkflowEngine:
             label = node_label(node, nid)
             if ntype == 'source':
                 platform = node.get('platform') or params.get('platform')
-                # Comments mode feeds on article links, not a keyword — on every
-                # platform that has an adapter (all four now; WeChat's reports
-                # honestly when the browser session is refused by the site).
-                if str(params.get('collect') or 'posts') == 'comments':
+                # WeChat has no comment adapter, so a stale collect='comments'
+                # on a wechat node is read exactly like the executor reads it —
+                # the plain article-URL crawl — rather than demanding links the
+                # comment engine could never use.
+                if str(params.get('collect') or 'posts') == 'comments' and platform != 'wechat':
                     # Comments mode feeds on article links, not a keyword.
                     urls = split_urls(params.get('urls'))
                     if not urls:
