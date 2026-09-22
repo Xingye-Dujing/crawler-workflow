@@ -528,6 +528,7 @@ _ZH = {
     'run.queue_waited': '队列接续失败（已有运行在跑），{name} 重新排队',
     'run.queue_broken': '队列里的 {name} 无法启动，已跳过并继续下一个：{err}',
     'api.workflowShapeInvalid': '工作流内容无法理解：需要带 nodes 列表的对象',
+    'api.resumeMissing': '无法继续：运行记录 {rid} 已被清理，继续会变成一次全新的从零采集，请改用「重新运行」',
     'run.store_unavailable': '本次运行无法开始：运行记录库打不开（磁盘满、文件损坏或被占用），未产生任何记录',
     'run.reportSaved': '报告已生成：{name}（{size} 字节）',
     'run.reportFailed': '报告生成失败：{err}',
@@ -1054,6 +1055,9 @@ _EN = {
     'run.queue_waited': 'Queue could not start {name} (a run is active), it waits again',
     'run.queue_broken': 'the queued request {name} could not start; skipped, the next one continues: {err}',
     'api.workflowShapeInvalid': 'the workflow could not be read: an object with a nodes list is required',
+    'api.resumeMissing': (
+        'cannot continue: run {rid} has been purged, so it would re-crawl everything — press Run instead'
+    ),
     'run.store_unavailable': 'this run could not begin: the run record store would not open (disk full, corrupt or '
     'locked file) — nothing was recorded',
     'run.reportSaved': 'Report written: {name} ({size} bytes)',

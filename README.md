@@ -283,7 +283,7 @@ crawler_workflow/
 | `/api/workflow/load` | GET | 加载指定工作流 |
 | `/api/workflow/list` | GET | 列出所有已保存工作流 |
 | `/api/workflow/delete` | POST | 删除工作流 |
-| `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝） |
+| `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝）。「继续」一定带 `queue:false`——排队期间它指向的运行记录可能被保留策略清掉，那时宁可立刻 400 说明原因，也不会悄悄变成一次从零重爬 |
 | `/api/workflow/stop` | POST | 停止执行 |
 | `/api/workflow/status` | GET | 获取执行状态（含 `queue` 等待列表） |
 | `/api/workflow/queue` | GET | 列出排队中的请求 |

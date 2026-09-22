@@ -915,6 +915,29 @@ def _workflow_shape_error(data: dict) -> str:
     return ''
 
 
+def _resume_refusal(data: dict) -> str:
+    """Why a 继续 request cannot continue, or '' when it can.
+
+    The run id a resume asks for is the whole point of the feature: it names the
+    rows and cursors already paid for. When retention (or the records panel) has
+    deleted that run in the meantime, reusing its id starts an *empty* run under
+    the same name — which looks exactly like a continue that found nothing, while
+    quietly re-crawling and re-paying for every item. So the request is refused
+    with the id in the message, and the banner can say so.
+    """
+    resume_run_id = str(data.get('resume_run_id') or '').strip()
+    if not resume_run_id:
+        return ''
+    try:
+        if get_run_store().get_run(resume_run_id):
+            return ''
+    except Exception:
+        # A store that cannot answer is not evidence that the run is gone; the
+        # run itself reports the real failure the moment it opens the database.
+        return ''
+    return t('api.resumeMissing', rid=resume_run_id)
+
+
 def _enqueue_run(data: dict, lang_header: str) -> dict:
     """Park a request until the running one finishes.
 
@@ -996,6 +1019,13 @@ def _start_next_queued() -> None:
         _start_next_queued()
         return
     body = answer.get('body') or {}
+    if answer.get('drop'):
+        # Refused at the moment of starting in a way a retry can never fix — the
+        # record a 继续 pointed at has been purged while it waited. Without this
+        # the entry would be pushed back and refused again after every run.
+        add_log(t('run.queue_broken', name=entry['workflow_name'] or entry['id'], err=body.get('error', '')))
+        _start_next_queued()
+        return
     if answer.get('status') == 200 and body.get('ok') and not body.get('queued'):
         add_log(t('run.queue_started', name=entry['workflow_name'] or entry['id'], rid=body.get('run_id', '')))
         return
@@ -1057,6 +1087,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         # must not become a failed run record, let alone a queued one that dies
         # in a thread nobody is watching.
         return {'status': 400, 'body': {'ok': False, 'error': shape_error}}
+    resume_error = _resume_refusal(data)
+    if resume_error:
+        # 'drop' tells the queue this entry can never start, so it is discarded
+        # rather than pushed back to wait for a run that no longer exists.
+        return {'status': 400, 'body': {'ok': False, 'error': resume_error}, 'drop': True}
     # Guard and claim are one critical section. They used to be ~70 lines
     # apart: two concurrent POSTs both passed the check, both started a run
     # thread, and interleaved writes into one console, one store, one crawl.

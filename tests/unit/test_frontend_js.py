@@ -544,3 +544,15 @@ class TestRunRecordsPanel:
         assert post['url'] == '/api/workflow/queue/cancel'
         assert post['body'] == {'id': 'q1'}
         assert runsmgr['toasts'] == ['REMOVED']
+
+    def test_a_continue_is_never_parked_behind_another_run(self, runsmgr):
+        """The banner names a record that retention can age out while it waits,
+        and a continue that starts late is a cold re-crawl with a friendly name."""
+        body = runsmgr['resumeBody']
+        assert body['resume_run_id'] == 'r-int'
+        assert body['queue'] is False, 'a 继续 must fail fast, not join the queue'
+
+    def test_an_ordinary_run_still_queues_when_the_server_is_busy(self, runsmgr):
+        body = runsmgr['plainBody']
+        assert body['resume_run_id'] == ''
+        assert body['queue'] is True, 'the queue is for ordinary presses only'

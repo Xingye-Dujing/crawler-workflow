@@ -237,6 +237,59 @@ class TestResultSnapshot:
         }
 
 
+class TestResumeOfPurgedRun:
+    """A 继续 whose run record is gone must be refused, never silently re-crawled.
+
+    Reusing the id of a deleted run opens an EMPTY run under the same name: the
+    console says 'continuing from 0 rows', the crawler goes out and pays for
+    every item again, and nothing tells the user that the rows they were trying
+    to keep had already been aged out.
+    """
+
+    def test_continuing_a_run_that_no_longer_exists_is_refused(self, client, app_module):
+        store = app_module._RUN_STORE
+        store.start_run('gone123', 'wf', 'fp')
+        store.delete_run('gone123')
+        response = client.post(
+            '/api/workflow/execute',
+            json={'workflow': {'nodes': [], 'connections': []}, 'resume_run_id': 'gone123'},
+        )
+        assert response.status_code == 400, response.get_json()
+        assert 'gone123' in response.get_json()['error'], 'the message must name the record that is missing'
+        assert store.get_run('gone123') is None, 'the refusal must not resurrect the run row'
+        assert app_module.execution_state['running'] is False, 'nothing may start'
+
+    def test_a_busy_server_refuses_it_at_the_door_instead_of_parking_it(self, client, app_module):
+        """The queue would re-check at drain time, but a request that can never
+        run should not be worth a '排队运行' label either."""
+        app_module.execution_state['running'] = True
+        response = client.post(
+            '/api/workflow/execute',
+            json={'workflow': {'nodes': [], 'connections': []}, 'resume_run_id': 'never-existed'},
+        )
+        assert response.status_code == 400
+        assert app_module.queue_snapshot() == [], 'an impossible continue must not enter the queue'
+        app_module.execution_state['running'] = False
+
+    def test_a_record_purged_while_the_request_waited_is_dropped_on_drain(self, client, app_module):
+        """The race the queue creates: retention deletes the interrupted run
+        between parking the 继续 and draining it. The entry must be discarded with
+        its reason in the console — pushing it back would refuse it after every
+        single run, forever."""
+        app_module._RUN_QUEUE.append(
+            {
+                'id': 'q1',
+                'workflow_name': '继续旧运行',
+                'data': {'workflow': {'nodes': [], 'connections': []}, 'resume_run_id': 'purged-later'},
+                'lang': 'zh',
+            }
+        )
+        app_module._start_next_queued()
+        assert app_module.queue_snapshot() == [], 'the impossible entry must not be re-queued'
+        assert app_module.execution_state['running'] is False
+        assert any('purged-later' in line for line in app_module.execution_state['logs']), 'the console says why'
+
+
 class TestRunPayloadShape:
     """A workflow the engine cannot walk is the caller's mistake, in JSON.
 

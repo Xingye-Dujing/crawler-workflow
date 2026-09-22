@@ -242,6 +242,12 @@ const workflow = {
                        one. Without it the backend mints a new id and every
                        cursor dies — the run silently degrades to a cold start. */
                     resume_run_id: opts.resumeRunId || '',
+                    /* A 继续 is never parked. While it waits, the record it points
+                       at can be aged out by retention, and a continue that starts
+                       minutes later is a different — worse — operation than the
+                       one the user asked for. Refuse it now, say why, let them
+                       press Run on purpose. */
+                    queue: !opts.resumeRunId,
                 }),
             });
             var result = await resp.json();
