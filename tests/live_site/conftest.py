@@ -14,6 +14,7 @@ rows) — the point is correctness of the pipeline, not scraping data.
 
 import contextlib
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -66,3 +67,41 @@ def live_crawler(cookie_dir_str):
     for crawler in made:
         with contextlib.suppress(Exception):
             crawler.close()
+
+
+@pytest.fixture
+def live_search(live_crawler):
+    """``live_search('zhihu', headless=False, keyword='三亚', count=3)`` → rows.
+
+    A live platform can answer a *valid* session with a login redirect once and
+    then serve the next request normally — measured, not assumed: an observed
+    xiaohongshu run returned nothing with the 登录墙 message logged, and the same
+    search passed seconds later with nothing changed. That is risk control, not a
+    dead cookie and not a removed capability, and the tier's job is to tell those
+    three apart rather than to fail on the first one.
+
+    So the attempt is repeated once, through a fresh crawler, and only when the
+    crawl itself reported the wall (`crawler.login_wall`). An empty result with no
+    wall is a genuine "this keyword found nothing" and is passed straight back for
+    the caller to assert on — the assertions in the tests stay exactly as strict as
+    they were, because a retry that ends in the same assertion cannot weaken one.
+    """
+
+    def _search(platform, *, headless, keyword=None, count=3, urls=None, attempts=2, **kwargs):
+        rows = []
+        for attempt in range(attempts):
+            crawler = live_crawler(platform, headless=headless)
+            try:
+                if urls is not None:
+                    rows = crawler.search(urls=urls, **kwargs)
+                else:
+                    rows = crawler.search(keyword, target_count=count, **kwargs)
+            finally:
+                crawler.close()
+            if rows or not getattr(crawler, 'login_wall', False) or attempt == attempts - 1:
+                return rows
+            # Let the platform's throttle window move before paying for a browser.
+            time.sleep(5)
+        return rows
+
+    return _search

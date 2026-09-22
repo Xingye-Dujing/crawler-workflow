@@ -21,31 +21,23 @@ def _assert_rows(rows, minimum=2):
     assert len(unique) >= minimum - 1, 'rows should carry distinct article links (dedupe identity)'
 
 
-def test_headless_search_returns_full_rows(live_crawler):
-    crawler = live_crawler('zhihu')
+def test_headless_search_returns_full_rows(live_search):
     try:
-        try:
-            rows = crawler.search('三亚', target_count=3)
-        except RuntimeError as e:
-            # Zhihu's day-by-day headless risk control is a DESIGNED refusal:
-            # the crawler raises the catalog's actionable message instead of
-            # pretending success. That is an environment state (retry later,
-            # or run the visible-window variant), not a code failure.
-            pytest.skip(f'zhihu refused the headless session this run: {e}')
-    finally:
-        crawler.close()
+        rows = live_search('zhihu', headless=True, keyword='三亚', count=3)
+    except RuntimeError as e:
+        # Zhihu's day-by-day headless risk control is a DESIGNED refusal: the
+        # crawler raises the catalog's actionable message instead of pretending
+        # success. That is an environment state (retry later, or run the
+        # visible-window variant), not a code failure.
+        pytest.skip(f'zhihu refused the headless session this run: {e}')
     _assert_rows(rows)
     # Time column regression: the 2026 layout moved it to .SearchItem-time.
     assert any((r.get('发布时间') or '').strip() for r in rows), 'publish time should parse on live DOM'
 
 
-def test_visible_window_search_works_too(live_crawler):
+def test_visible_window_search_works_too(live_search):
     """headless=False — the login-browser mode: occluded/background protection
     flags are on, and the same parser must still deliver."""
-    crawler = live_crawler('zhihu', headless=False)
-    try:
-        rows = crawler.search('海口', target_count=2)
-    finally:
-        crawler.close()
+    rows = live_search('zhihu', headless=False, keyword='海口', count=2)
     _assert_rows(rows, minimum=1)
     assert rows, 'visible-window crawl must yield at least one row'

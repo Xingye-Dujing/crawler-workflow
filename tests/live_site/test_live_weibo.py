@@ -15,19 +15,17 @@ pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
 
 
 @pytest.mark.parametrize('headless', [True, False], ids=['headless', 'visible'])
-def test_time_window_search_returns_capped_rows(live_crawler, headless):
-    crawler = live_crawler('weibo', headless=headless)
+def test_time_window_search_returns_capped_rows(live_search, headless):
     end = date.today()
     start = end - timedelta(days=7)
-    try:
-        rows = crawler.search(
-            '三亚',
-            start_time=start.strftime('%Y-%m-%d'),
-            end_time=end.strftime('%Y-%m-%d'),
-            target_count=3,
-        )
-    finally:
-        crawler.close()
+    rows = live_search(
+        'weibo',
+        headless=headless,
+        keyword='三亚',
+        count=3,
+        start_time=start.strftime('%Y-%m-%d'),
+        end_time=end.strftime('%Y-%m-%d'),
+    )
     assert rows, (
         'weibo returned nothing WITH saved cookies — the redirect facade was '
         'likely mis-read as a login wall, or the cookie is stale (Cookie→generate)'

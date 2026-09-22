@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~1799 fast-tier cases; 1841 across all tiers)**:
+- **Automated tests (pytest, ~2006 fast-tier cases; 2086 across all tiers)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -47,6 +47,21 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
     popup outside-click, catalog parity, undo/redo, the save/open/new lifecycle and the
     run-records table. Any JS change to result-affecting logic must sync a scenario there;
     `urlPlatform` (workflow.js) is contract-pinned against `utils.helpers.platform_for`.
+- **Two frontend rules that cost a feature each time they are forgotten.** (1) A guard written
+  `if (window.X)` cannot see a module declared as a top-level `const X` — `const` never becomes a
+  window property — so `resumeBar.refresh()` and `runsManager._busy()` were dead code forever
+  (the 断点续跑 banner never showed). Either guard on the binding itself (`typeof X !== 'undefined'`)
+  or export it: `window.X = X`, the way app.js already does for LLMSettings/AppSettings. (2) The
+  DOM stub in `tests/frontend/harness_dom.mjs` parses `innerHTML` into real children, matches
+  `.class`/`#id`/`[data-x="y"]`/`:not()`, walks `closest`, queues `requestAnimationFrame` until
+  `flushFrames()`, and treats an id listed in `document.absent` as truly missing. Do not reintroduce
+  "fabricate a child when a query finds nothing": it turned a removed connection path into a
+  phantom one and made every `getElementById(x) ? …` toggle look broken in the harness only.
+- **The `integration` UI tier performs no server writes** (uploading, saving a workflow, or
+  executing a run would leave rows in the user's real `data/` and `logs/` — the app has no
+  data-dir override), and the live-site tier retries a crawl once **only** when the crawler itself
+  reported `login_wall`, because a valid session can be answered a login redirect once by risk
+  control; an empty result without a wall is a real "found nothing" and still reaches the assertion.
 
 ## Style (differs from defaults)
 
