@@ -151,6 +151,11 @@ def client(app_module, data_root, request):
 
     module = app_module
     state_backup = _snapshot_state(module.execution_state)
+    # The run queue is module state, not execution_state: a request one test
+    # parked would otherwise be started by the next test's finishing run and
+    # write results into a state that test never asked for.
+    queue_backup = list(module._RUN_QUEUE)
+    module._RUN_QUEUE.clear()
     seq = id(request) % (10**6)
     run_store = RunStore(str(data_root / f'api-runs-{seq}.db'))
     dataset_store = DatasetStore(str(data_root / f'api-datasets-{seq}.db'))
@@ -171,6 +176,7 @@ def client(app_module, data_root, request):
     finally:
         sys.stdout = stdout_backup
         _restore_state(module.execution_state, state_backup)
+        module._RUN_QUEUE[:] = queue_backup
         module._dataset_cache.clear()
         for store in (run_store, dataset_store):
             with contextlib.suppress(Exception):

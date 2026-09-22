@@ -98,6 +98,10 @@
   并清掉它们残留的内联高度（只去掉 `.open` 时，拖拽写入的内联高度会盖住 CSS 的 `height:0`，
   于是两个面板叠在一起）；三个面板都可拖高
 - **工作流命名**：保存时可命名（画布 Name 节点即工作流名），历史与运行记录按名称归组
+- **运行队列**：一次只跑一个运行是这套设计的前提（控制台、浏览器、断点游标都只有一个写者），
+  但"忙"不再等于"白按一次"——运行中再按「执行」，按钮变成「排队运行」，请求被服务端存下，
+  当前运行结束后自动接着跑；排队列表显示在「运行记录」面板顶部，可逐条取消（最多 8 个，满了直接拒绝而不是无限堆）。
+  队列只在服务进程内存活（重启即清空），因为"没人确认的意图"不该假装被记住了
 - **多线程执行**：支持并行/串行执行模式，可随时停止；进程管理面板可强杀残留浏览器进程
 - **撤销/重做**：Ctrl+Z / Ctrl+Y 支持 50 步历史回退，菜单和右键菜单均有入口
 - **节点重命名**：双击节点标题（或右键→重命名）即可命名节点；控制台与校验信息以「名称 #节点号」
@@ -277,9 +281,12 @@ crawler_workflow/
 | `/api/workflow/load` | GET | 加载指定工作流 |
 | `/api/workflow/list` | GET | 列出所有已保存工作流 |
 | `/api/workflow/delete` | POST | 删除工作流 |
-| `/api/workflow/execute` | POST | 执行工作流 |
+| `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝） |
 | `/api/workflow/stop` | POST | 停止执行 |
-| `/api/workflow/status` | GET | 获取执行状态 |
+| `/api/workflow/status` | GET | 获取执行状态（含 `queue` 等待列表） |
+| `/api/workflow/queue` | GET | 列出排队中的请求 |
+| `/api/workflow/queue/cancel` | POST | 按 `id` 取消一个排队请求（绝不触碰正在跑的运行） |
+| `/api/workflow/queue/clear` | POST | 清空队列 |
 | `/api/workflow/processes` | GET | 列出执行器/浏览器子进程 |
 | `/api/workflow/processes/kill` | POST | 强杀残留进程 |
 

@@ -190,14 +190,16 @@ const workflow = {
            straight away, exactly as before. Only fires when the workflow really
            contains a crawler (source/comment) node. */
         if (!(await this._confirmCookieBeforeRun(opts))) return;
+        /* A second press while a run is in flight is no longer a dead end: the
+           server parks the request and starts it when the slot frees. So every
+           claim this function makes about the page state has to go back to what
+           it *was*, not to 'idle' — the run already in flight is still running,
+           and the console on screen still belongs to it. */
+        var wasRunning = RunState.running;
+        function restoreRunState() {
+            RunState.setRunning(wasRunning);
+        }
         RunState.setRunning(true);
-        var statusText = document.getElementById('status-text');
-        statusText.textContent = I18n.t('status.running');
-        /* Open console and clear previous output */
-        /* One bottom slot for console / run records / export artefacts. */
-        closeDockedPanels('console-panel');
-        document.getElementById('console-panel').classList.add('open');
-        document.getElementById('console-output').innerHTML = '';
         var workflowData = canvas.toWorkflowJSON();
         /* AI transport check — fail fast instead of dying 200 rows into a run. */
         var llm = LLMSettings.payload();
@@ -217,7 +219,7 @@ const workflow = {
             }
             if (missing) {
                 showToast(I18n.t(missing));
-                RunState.setRunning(false);
+                restoreRunState();
                 return;
             }
         }
@@ -243,16 +245,31 @@ const workflow = {
                 }),
             });
             var result = await resp.json();
+            if (result.ok && result.queued) {
+                /* Parked, not started: the console must keep showing the run
+                   that IS going, so nothing here is cleared. */
+                restoreRunState();
+                showToast(result.message || I18n.t('toast.queued'));
+                runsManager.refreshIfOpen();
+                return;
+            }
             if (result.ok) {
+                var statusText = document.getElementById('status-text');
+                statusText.textContent = I18n.t('status.running');
+                /* One bottom slot for console / run records / export artefacts.
+                   Cleared only now: until this answer there was no run of ours. */
+                closeDockedPanels('console-panel');
+                document.getElementById('console-panel').classList.add('open');
+                document.getElementById('console-output').innerHTML = '';
                 showToast(I18n.t('toast.workflowStarted'));
                 this.pollStatus();
             } else {
                 showToast(I18n.t('toast.executeFailed') + ': ' + (result.error || ''));
-                RunState.setRunning(false);
+                restoreRunState();
             }
         } catch (e) {
             showToast(I18n.t('toast.executeFailed') + ': ' + e.message);
-            RunState.setRunning(false);
+            restoreRunState();
         }
     },
 
@@ -2730,10 +2747,58 @@ var runsManager = {
             var resp = await fetch('/api/runs/list?limit=50');
             var result = await resp.json();
             this._lastRuns = (result.ok && result.runs) || [];
+            /* Waiting requests come back with the records: the panel that shows
+               what has run is where someone looks for what has not started. */
+            this._queue = (result.ok && result.queue) || [];
             this.render(this._lastRuns);
         } catch (e) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
         }
+    },
+
+    refreshIfOpen() {
+        var panel = this.panel();
+        if (panel && panel.classList.contains('open')) this.refresh();
+    },
+
+    /* The waiting list, drawn above the finished records. Each row can only be
+       cancelled — starting it sooner would break the one-writer rule the whole
+       checkpoint design rests on. */
+    _queueBlock() {
+        var queue = this._queue || [];
+        if (!queue.length) return '';
+        var rows = queue.map(function (entry, index) {
+            return '<tr>' +
+                '<td>' + (index + 1) + '</td>' +
+                '<td class="runs-mgr-wf">' + escapeHtml(entry.workflow_name || I18n.t('name.unnamed')) + '</td>' +
+                '<td>' + escapeHtml(String(entry.nodes || 0)) + '</td>' +
+                '<td class="runs-mgr-time">' + escapeHtml(entry.queued_at || '') + '</td>' +
+                '<td class="runs-mgr-ops"><button class="runs-mgr-btn del" onclick="runsManager.cancelQueued(\'' +
+                entry.id + '\')">' + I18n.t('runsMgr.queueCancel') + '</button></td>' +
+                '</tr>';
+        }).join('');
+        return '<div class="runs-mgr-empty">' +
+            I18n.t('runsMgr.queueHeader').replace('{n}', queue.length) +
+            '</div><table class="data-preview-table runs-mgr-table"><thead><tr>' +
+            '<th>#</th><th>' + I18n.t('runsMgr.colWorkflow') + '</th>' +
+            '<th>' + I18n.t('runsMgr.colNodes') + '</th>' +
+            '<th>' + I18n.t('runsMgr.colStarted') + '</th><th></th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table>';
+    },
+
+    async cancelQueued(queueId) {
+        try {
+            var resp = await fetch('/api/workflow/queue/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: queueId }),
+            });
+            var result = await resp.json();
+            showToast(result.removed ? I18n.t('runsMgr.queueCancelled') : I18n.t('runsMgr.queueGone'));
+        } catch (e) {
+            showToast(I18n.t('runsMgr.queueCancelFailed'));
+        }
+        this.refresh();
     },
 
     /* Language switch: the table text is JS-built, so an open panel must be
@@ -2759,8 +2824,12 @@ var runsManager = {
         var count = document.getElementById('runs-mgr-count');
         if (!body) return;
         if (count) count.textContent = runs.length ? '(' + runs.length + ')' : '';
+        /* Drawn first and kept in both branches: a queue can exist on a machine
+           that has no finished records at all, and hiding it there would hide
+           the one request the user is waiting for. */
+        var queue = this._queueBlock();
         if (!runs.length) {
-            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
+            body.innerHTML = queue + '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
             return;
         }
         var rows = runs.map(function (r) {
@@ -2788,6 +2857,7 @@ var runsManager = {
                 '</tr>';
         }).join('');
         body.innerHTML =
+            queue +
             '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
             '<th>' + I18n.t('runsMgr.colWorkflow') + '</th>' +
             '<th>run_id</th>' +

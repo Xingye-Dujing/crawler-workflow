@@ -18,8 +18,13 @@ var TopMenu = {
         var ex = document.getElementById('btn-execute');
         var st = document.getElementById('btn-stop');
         if (ex) {
-            ex.disabled = RunState.running;
-            ex.textContent = I18n.t(RunState.running ? 'btn.running' : 'btn.execute');
+            /* Pressing Run while something is running used to be impossible —
+               the button was greyed out and the request never left the page, so
+               a second workflow had to wait for someone to come back and press
+               it. The server now parks it in the queue, so the button stays live
+               and says what this press will do. */
+            ex.disabled = false;
+            ex.textContent = I18n.t(RunState.running ? 'btn.queue' : 'btn.execute');
         }
         if (st) st.disabled = !RunState.running;
 

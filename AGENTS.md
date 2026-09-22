@@ -145,6 +145,16 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   paths (`canvas.restoreState`, `WorkflowManager.loadFromJSON`) must re-apply
   title + element text BEFORE `updateNodeDisplay`, whose re-stamp guard reads
   the element.
+- **One run at a time is a design property, and a busy server now queues instead of
+  refusing.** `_begin_run()` (app.py) holds the whole start path — claim, validations,
+  `execution_state` setup, worker thread — so the queue drains by calling *that* function,
+  never a second weaker one. `/api/workflow/execute` with `queue:false` keeps the old 400
+  for callers that must fail fast (the resume banner). The hand-off lives in the worker's
+  `finally` and clears `execution_state['thread']` **first**: the claim also checks thread
+  liveness, so a still-alive unwinding thread would queue the next request behind itself
+  forever. Queues are in-memory (a restart drops them) and `tests/conftest.py` clears
+  `_RUN_QUEUE` per test, or a parked request would start inside an unrelated test.
+  The Execute button is therefore never disabled — it relabels 排队运行 while running.
 - Run-gating UX lives in `workflow.js execute()`: `_confirmCookieBeforeRun` (dialog, skippable via
   the `cookie_confirm_before_run` setting, auto-pass for resume runs); new settings keys need the
   bool branch in `settings_store.save_settings` + both app.js catalogs + `AppSettings` wiring.

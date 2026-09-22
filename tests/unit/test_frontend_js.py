@@ -467,6 +467,10 @@ def runsmgr(tmp_path_factory):
                 'started_at': '',
             },
         ],
+        'queue': [
+            {'id': 'q1', 'workflow_name': '夜间增量', 'nodes': 4, 'queued_at': '2026-09-22T18:00:00'},
+            {'id': 'q2', 'workflow_name': '', 'nodes': 2, 'queued_at': '2026-09-22T18:01:00'},
+        ],
     }
     tmp = tmp_path_factory.mktemp('js-runsmgr')
     sc = tmp / 'runs.json'
@@ -523,3 +527,20 @@ class TestRunRecordsPanel:
         # The name is user text; the button carries only the run id and looks the
         # name up from the rows the panel is holding.
         assert runsmgr['nameInHandler'] is False
+
+    def test_the_waiting_list_is_drawn_above_the_finished_records(self, runsmgr):
+        """Queue and history share one panel on purpose: 'what has not started'
+        and 'what has run' are the same question asked at different times."""
+        html = runsmgr['html']
+        assert 'WAITING(2)' in html
+        assert runsmgr['queueRows'] == 2
+        assert '夜间增量' in html
+        # An unnamed queued workflow still gets a row, with the fallback label —
+        # a blank cell reads as a rendering bug.
+        assert html.index('WAITING(2)') < html.index('abc123'), 'the queue must come first'
+
+    def test_cancelling_a_queued_run_posts_its_queue_id(self, runsmgr):
+        post = runsmgr['posts'][0]
+        assert post['url'] == '/api/workflow/queue/cancel'
+        assert post['body'] == {'id': 'q1'}
+        assert runsmgr['toasts'] == ['REMOVED']

@@ -26,6 +26,9 @@ const I18n = {
             'runsMgr.empty': 'empty', 'name.unnamed': 'unnamed', 'runsMgr.colWorkflow': 'wf',
             'runsMgr.colStatus': 'st', 'runsMgr.colNodes': 'nodes', 'runsMgr.colRows': 'rows',
             'runsMgr.colStarted': 'started', 'runsMgr.report': 'Report',
+            'runsMgr.queueHeader': 'WAITING({n})', 'runsMgr.queueCancel': 'CancelQueued',
+            'runsMgr.queueCancelled': 'REMOVED', 'runsMgr.queueGone': 'GONE',
+            'runsMgr.queueCancelFailed': 'FAILED',
         },
         zh: {},
     },
@@ -34,18 +37,29 @@ const I18n = {
     },
 };
 
+const captured = { posts: [], toasts: [] };
 const sandbox = {
     ...baseSandbox(),
     I18n,
     canvas: { nodes: {}, connections: [] },
     RunState: { running: false },
-    showToast: () => {},
 };
 vm.createContext(sandbox);
 vm.runInContext(src + '\n;globalThis.__wf = { runsManager };', sandbox);
+/* Assigned after the script ran: workflow.js declares showToast itself, and a
+   function declaration in the script wins over anything seeded before it. */
+sandbox.showToast = (msg) => captured.toasts.push(String(msg));
+sandbox.fetch = (url, options) => {
+    captured.posts.push({ url, body: options && options.body ? JSON.parse(options.body) : null });
+    return Promise.resolve({ json: () => Promise.resolve({ ok: true, removed: true }) });
+};
 sandbox.__byId('runs-mgr-body').innerHTML = '';
-sandbox.__wf.runsManager.render(runs.runs);
+const manager = sandbox.__wf.runsManager;
+manager._queue = runs.queue || [];
+manager.render(runs.runs);
 const html = sandbox.__byId('runs-mgr-body').innerHTML;
+/* Awaited: the toast lands after the response, and stdout is written now. */
+await manager.cancelQueued('q1');
 /* The report button may name the run only by id: a workflow name is user text,
    and one double quote in it would close the onclick attribute and let whatever
    follows become markup. */
@@ -55,5 +69,8 @@ process.stdout.write(
         count: sandbox.__byId('runs-mgr-count').textContent,
         reports: (html.match(/runsManager\.report\(/g) || []).length,
         nameInHandler: /onclick="[^"]*获取微博/.test(html),
+        queueRows: (html.match(/runsManager\.cancelQueued\(/g) || []).length,
+        posts: captured.posts,
+        toasts: captured.toasts,
     }),
 );

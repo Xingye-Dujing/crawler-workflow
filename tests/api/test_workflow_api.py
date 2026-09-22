@@ -264,11 +264,96 @@ class TestWorkflowExecute:
         assert len(series) == 3
 
     @pytest.mark.serial
-    def test_execute_rejects_a_second_run_while_one_is_running(self, client, app_module):
+    def test_a_second_run_waits_its_turn_instead_of_being_refused(self, client, app_module):
+        """Busy used to mean 'already running' and a dead end; now it means queued.
+
+        ``queue: false`` keeps the old refusal available, because the resume
+        banner's 继续 wants to fail fast rather than silently reorder runs.
+        """
         app_module.execution_state['running'] = True
-        response = client.post('/api/workflow/execute', json={'workflow': _e2e_workflow('anything')})
-        assert response.status_code == 400
-        assert 'already running' in response.get_json()['error']
+        workflow = _e2e_workflow('anything')
+        queued = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'anything'})
+        assert queued.status_code == 200
+        body = queued.get_json()
+        assert body['queued'] is True and body['position'] == 1
+        assert [entry['workflow_name'] for entry in app_module.queue_snapshot()] == ['anything']
+
+        refused = client.post('/api/workflow/execute', json={'workflow': workflow, 'queue': False})
+        assert refused.status_code == 400
+        assert 'already running' in refused.get_json()['error']
+        assert len(app_module.queue_snapshot()) == 1, 'a refusal must not park a second copy'
+
+        cancelled = client.post('/api/workflow/queue/cancel', json={'id': body['queue_id']}).get_json()
+        assert cancelled['ok'] is True and cancelled['removed'] is True
+        assert app_module.queue_snapshot() == []
+        assert app_module.execution_state['running'] is True, 'cancelling a wait must not stop the run'
+
+    @pytest.mark.serial
+    def test_the_queue_hands_over_when_the_running_run_finishes(self, client, app_module, paste):
+        """The whole point: press Run twice, both run, in order, one at a time."""
+        dataset_id = paste(E2E_RECORDS, name='queued.csv')
+
+        def _flow(name):
+            return _workflow(
+                [
+                    _node(
+                        'node-1',
+                        'upload',
+                        params={'dataset_id': dataset_id, 'dataset_name': 'queued.csv', 'row_count': 6},
+                    ),
+                    _node('node-2', 'analysis', params={'steps': E2E_STEPS, 'workflow_name': name}),
+                ],
+                [{'from': 'node-1', 'to': 'node-2'}],
+            )
+
+        first = client.post('/api/workflow/execute', json={'workflow': _flow('first'), 'workflow_name': 'first'})
+        assert first.status_code == 200
+        second = client.post('/api/workflow/execute', json={'workflow': _flow('second'), 'workflow_name': 'second'})
+        assert second.get_json().get('queued') is True
+
+        assert _wait_for_worker(app_module), 'the queued run never finished either'
+        store = app_module.get_run_store()
+        first_run = store.get_run(first.get_json()['run_id'])
+        seconds = [
+            run for run in store.list_resumable(limit=20, include_finished=True) if run['workflow_name'] == 'second'
+        ]
+        assert len(seconds) == 1, 'the queued run started twice, or not at all'
+        second_run = seconds[0]
+        assert first_run['status'] == 'completed' and second_run['status'] == 'completed'
+        # One writer at a time is the property the whole checkpoint design rests
+        # on: the queued run may not begin before the running one is over.
+        assert second_run['started_at'] >= first_run['finished_at'], 'the two runs overlapped'
+
+    def test_the_queue_is_reported_where_the_ui_already_looks(self, client, app_module):
+        app_module.execution_state['running'] = True
+        client.post('/api/workflow/execute', json={'workflow': _e2e_workflow('listed'), 'workflow_name': 'listed'})
+        app_module.execution_state['running'] = False
+
+        def names(url):
+            return [entry['workflow_name'] for entry in client.get(url).get_json()['queue']]
+
+        # Three doors, one list: the panel that polls status, the panel that
+        # fetches runs, and the queue endpoint itself must never disagree.
+        for url in ('/api/workflow/queue', '/api/workflow/status', '/api/runs/list'):
+            assert names(url) == ['listed'], url
+        assert client.post('/api/workflow/queue/clear', json={}).get_json()['cleared'] == 1
+        assert client.get('/api/workflow/queue').get_json()['queue'] == []
+
+    def test_a_full_queue_refuses_rather_than_parking_forever(self, client, app_module):
+        app_module.execution_state['running'] = True
+        for index in range(app_module.QUEUE_MAX):
+            payload = {'workflow': _e2e_workflow(f'wf-{index}'), 'workflow_name': f'wf-{index}'}
+            assert client.post('/api/workflow/execute', json=payload).status_code == 200
+        over = client.post('/api/workflow/execute', json={'workflow': _e2e_workflow('one-too-many')})
+        assert over.status_code == 409
+        assert str(app_module.QUEUE_MAX) in over.get_json()['error']
+        assert len(client.get('/api/workflow/queue').get_json()['queue']) == app_module.QUEUE_MAX
+        client.post('/api/workflow/queue/clear', json={})
+
+    def test_cancelling_an_unknown_queue_id_removes_nothing(self, client):
+        body = client.post('/api/workflow/queue/cancel', json={'id': 'nope'}).get_json()
+        assert body['ok'] is True and body['removed'] is False
+        assert client.post('/api/workflow/queue/cancel', json={'id': 5}).status_code == 400
 
     @pytest.mark.serial
     def test_a_workflow_whose_nodes_are_named_freely_still_runs(self, client, app_module, paste):

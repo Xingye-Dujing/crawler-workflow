@@ -877,8 +877,145 @@ def delete_workflow():
 # ─── Execution API ─────────────────────────────────────────────
 
 
+# ─── Run queue ────────────────────────────────────────────────
+# One run at a time is a property of this product, not an accident: the console,
+# the crawl browsers, the checkpoint store and the resume cursor all assume a
+# single writer. What was missing is somewhere to put the next request while one
+# is busy — it used to be refused outright, and the user had to press Run again
+# at the right moment.
+
+#: Queued requests live in memory only. A restart drops them, which is the
+#: honest behaviour for a list of intentions nobody is here to confirm.
+QUEUE_MAX = 8
+
+_RUN_QUEUE: list = []
+_queue_lock = threading.Lock()
+
+
+def _enqueue_run(data: dict, lang_header: str) -> dict:
+    """Park a request until the running one finishes."""
+    workflow = data.get('workflow') or {}
+    name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
+    with _queue_lock:
+        if len(_RUN_QUEUE) >= QUEUE_MAX:
+            return {'status': 409, 'body': {'ok': False, 'error': t('api.queueFull', n=QUEUE_MAX)}}
+        entry = {
+            'id': uuid.uuid4().hex[:12],
+            'workflow_name': name,
+            'nodes': len(workflow.get('nodes') or []),
+            'data': data,
+            'lang': lang_header or '',
+            'queued_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
+        }
+        _RUN_QUEUE.append(entry)
+        position = len(_RUN_QUEUE)
+    add_log(t('run.queued', name=name or t('wf.unnamed', i=position), at=position))
+    return {
+        'status': 200,
+        'body': {
+            'ok': True,
+            'queued': True,
+            'queue_id': entry['id'],
+            'position': position,
+            'message': t('api.queued', at=position),
+        },
+    }
+
+
+def queue_snapshot() -> list:
+    """The waiting requests, oldest first — without their payloads."""
+    with _queue_lock:
+        return [
+            {key: entry[key] for key in ('id', 'workflow_name', 'nodes', 'queued_at')} for entry in _RUN_QUEUE
+        ]
+
+
+def cancel_queued(queue_id: str) -> bool:
+    """Drop one waiting request by its queue id. True when it is gone."""
+    with _queue_lock:
+        for position, entry in enumerate(_RUN_QUEUE):
+            if entry['id'] == queue_id:
+                del _RUN_QUEUE[position]
+                return True
+    return False
+
+
+def clear_queue() -> int:
+    with _queue_lock:
+        count = len(_RUN_QUEUE)
+        del _RUN_QUEUE[:]
+    return count
+
+
+def _start_next_queued() -> None:
+    """Hand the slot to the oldest waiting request, at the end of a run.
+
+    Called from the finishing thread *after* it released the slot and cleared its
+    own handle: the claim also checks thread liveness, so a thread still alive
+    while it unwinds would make this call queue the next request behind itself —
+    and nothing would ever start it again.
+    """
+    with _queue_lock:
+        entry = _RUN_QUEUE.pop(0) if _RUN_QUEUE else None
+    if entry is None:
+        return
+    answer = _begin_run(entry['data'], entry['lang'])
+    body = answer.get('body') or {}
+    if answer.get('status') == 200 and body.get('ok') and not body.get('queued'):
+        add_log(t('run.queue_started', name=entry['workflow_name'] or entry['id'], rid=body.get('run_id', '')))
+        return
+    # Someone else took the slot in between (a manual Run press): put the
+    # request back at the front rather than drop what the user already asked for.
+    with _queue_lock:
+        _RUN_QUEUE.insert(0, entry)
+        add_log(t('run.queue_waited', name=entry['workflow_name'] or entry['id']))
+
+
 @app.route('/api/workflow/execute', methods=['POST'])
 def execute_workflow():
+    """Start a run — or queue the request when a run is already going."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
+    answer = _begin_run(data, request.headers.get('X-Lang') or '')
+    return jsonify(answer['body']), answer['status']
+
+
+@app.route('/api/workflow/queue', methods=['GET'])
+def workflow_queue():
+    """What is waiting, in the order it will start."""
+    return jsonify({'ok': True, 'queue': queue_snapshot(), 'max': QUEUE_MAX})
+
+
+@app.route('/api/workflow/queue/cancel', methods=['POST'])
+def workflow_queue_cancel():
+    """Drop one waiting request. The running one is never touched."""
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    queue_id = data.get('id')
+    if not isinstance(queue_id, str) or not queue_id.strip():
+        return _bad_param('id')
+    return jsonify({'ok': True, 'removed': cancel_queued(queue_id.strip())})
+
+
+@app.route('/api/workflow/queue/clear', methods=['POST'])
+def workflow_queue_clear():
+    """Empty the queue — 'do not start any of these', not 'stop the run'."""
+    return jsonify({'ok': True, 'cleared': clear_queue()})
+
+
+def _begin_run(data: dict, lang_header: str) -> dict:
+    """Claim the run slot and start the worker, or put this request in the queue.
+
+    Split out of the route because the queue drains by calling *this* function
+    from the finishing run's own thread: a queued request has to be started the
+    same way a live one is — same validations, same claim, same bookkeeping —
+    or the queue would be a second, weaker execution path.
+
+    Answers ``{'status': int, 'body': dict}`` instead of a Flask response,
+    because the caller is not always a request.
+    """
     # Guard and claim are one critical section. They used to be ~70 lines
     # apart: two concurrent POSTs both passed the check, both started a run
     # thread, and interleaved writes into one console, one store, one crawl.
@@ -888,16 +1025,17 @@ def execute_workflow():
         # `running` first), so check liveness too — otherwise a quick Stop → Run
         # leaves two threads appending to the same console and results.
         if execution_state['running'] or (running_thread is not None and running_thread.is_alive()):
-            return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
+            if data.get('queue') is False:
+                # The explicit "refuse instead of wait" door, kept because the
+                # banner's 继续 wants to fail fast, not silently reorder runs.
+                return {'status': 400, 'body': {'ok': False, 'error': t('api.alreadyRunning')}}
+            return _enqueue_run(data, lang_header)
 
         # Claim under the same lock that reads it — no second request can slip
         # through while this one is still validating.
         execution_state['running'] = True
         started = False
         try:
-            data = request.get_json(silent=True) or {}
-            if not isinstance(data, dict):
-                return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
             workflow = data.get('workflow', {})
             settings = workflow.get('settings', {})
             mode = settings.get('mode', 'parallel')
@@ -936,7 +1074,7 @@ def execute_workflow():
             # Console language for this run. The UI sends it explicitly because the
             # run outlives the request that started it — and thread-locals are not
             # inherited by the worker threads below, so each one re-applies it.
-            execution_state['lang'] = normalize(data.get('lang') or request.headers.get('X-Lang') or 'zh')
+            execution_state['lang'] = normalize(data.get('lang') or lang_header or 'zh')
 
             llm_cfg = data.get('llm') or {}
             llm = {
@@ -955,11 +1093,11 @@ def execute_workflow():
             if _workflow_needs_llm(workflow):
                 if llm['provider'] == 'openrouter':
                     if not llm['api_key']:
-                        return jsonify({'ok': False, 'error': t('api.needApiKey')}), 400
+                        return {'status': 400, 'body': {'ok': False, 'error': t('api.needApiKey')}}
                     if not llm['model']:
-                        return jsonify({'ok': False, 'error': t('api.needModel')}), 400
+                        return {'status': 400, 'body': {'ok': False, 'error': t('api.needModel')}}
                 elif not llm['model']:
-                    return jsonify({'ok': False, 'error': t('api.needOllamaModel')}), 400
+                    return {'status': 400, 'body': {'ok': False, 'error': t('api.needOllamaModel')}}
 
             cancel_event = threading.Event()
             execution_state['cancel_event'] = cancel_event
@@ -1275,11 +1413,16 @@ def execute_workflow():
             # request — also showed up in the console panel.
             if isinstance(sys.stdout, _LogTee):
                 sys.stdout = sys.stdout._original
+            # Release the handle this thread was recognised by, then let the
+            # queue have the slot. Both before anything else in this finally can
+            # be reordered: _start_next_queued checks liveness through it.
+            execution_state['thread'] = None
+            _start_next_queued()
 
     execution_state['thread'] = threading.Thread(target=run, daemon=True)
     execution_state['thread'].start()
 
-    return jsonify({'ok': True, 'message': 'Workflow started', 'run_id': run_id})
+    return {'status': 200, 'body': {'ok': True, 'message': 'Workflow started', 'run_id': run_id}}
 
 
 # ─── Node execution helpers ────────────────────────────────────
@@ -2343,6 +2486,9 @@ def workflow_status():
             'completed_nodes': execution_state['completed_nodes'],
             'chart_results': chart_results,
             'cookie_expired': bool(execution_state.get('cookie_expired')),
+            # The console polls this while a run is live, so the waiting list is
+            # shown from the same answer — no second request, no second clock.
+            'queue': queue_snapshot(),
         }
     )
 
@@ -3974,7 +4120,9 @@ def runs_list():
     """
     limit = _safe_int(request.args.get('limit'), 50, minimum=1, maximum=200)
     runs = get_run_store().list_resumable(limit=limit, include_finished=True)
-    return jsonify({'ok': True, 'runs': runs})
+    # The waiting list rides along: the panel that shows finished runs is where
+    # someone looks to see what has not started yet.
+    return jsonify({'ok': True, 'runs': runs, 'queue': queue_snapshot()})
 
 
 @app.route('/api/runs/status', methods=['GET'])
