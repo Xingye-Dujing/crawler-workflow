@@ -32,12 +32,28 @@ class TestPlatformWhitelist:
 
     def test_cookie_support_and_crawl_support_are_different_things(self):
         """The distinction that keeps a half-built platform out of the canvas: a
-        platform may be loggable in while still refusing to be a data source."""
+        platform may be loggable in while still refusing to be a data source.
+
+        Pinned on the *mechanism*, not on which platform happens to be
+        unimplemented today — that roster changes every time a crawl lands, and a
+        test that names a platform as the exception breaks for the wrong reason.
+        """
         from crawlers import CRAWLERS, is_crawlable
 
         assert set(CRAWLERS) == set(CookieManager.PLATFORMS)
-        assert [p for p in CRAWLERS if not is_crawlable(p)] == ['douyin']
-        assert all(is_crawlable(p) for p in ('zhihu', 'weibo', 'xiaohongshu', 'wechat', 'bilibili'))
+        assert all(is_crawlable(p) for p in CRAWLERS)
+        assert is_crawlable('kuaishou') is False  # nobody logs into it, nobody crawls it
+
+        class _CookieOnly:
+            supports_crawl = False
+
+        original = CRAWLERS.get('douyin')
+        CRAWLERS['douyin'] = _CookieOnly
+        try:
+            assert is_crawlable('douyin') is False
+        finally:
+            CRAWLERS['douyin'] = original
+        assert is_crawlable('douyin') is True, 'the registry is back to what it was'
 
     @pytest.mark.parametrize('platform', ['ZHIHU', 'zhihu ', '', None, 'kuaishou', 'zh'])
     def test_anything_else_is_unsupported(self, platform):

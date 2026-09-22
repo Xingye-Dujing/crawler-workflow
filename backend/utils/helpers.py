@@ -19,6 +19,7 @@ _COMMENT_DOMAINS = (
     ('xiaohongshu', ('xiaohongshu.com', 'xhslink.com')),
     ('weibo', ('weibo.com', 'weibo.cn')),
     ('bilibili', ('bilibili.com',)),
+    ('douyin', ('douyin.com', 'iesdouyin.com')),
 )
 
 

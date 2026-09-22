@@ -275,6 +275,18 @@ _ZH = {
         '3. 回到本面板点「我已登录，保存」\n'
         '提示：抖音网页版对自动化浏览器较敏感，若窗口里出现滑块验证，请在窗口内手动完成后再保存。'
     ),
+    'crawl.dy.start': '[抖音搜索] 开始搜索关键词: "{kw}"，目标 {n} 条（抖音只接受可见窗口，已自动改用可见窗口）',
+    'crawl.dy.target_reached': '[抖音搜索] 已达到目标数量 {n} 条，停止',
+    'crawl.dy.round': '[抖音搜索] 第 {i} 屏：{n} 张卡片（新 {fresh} 个，已收录 {done} 条）',
+    'crawl.dy.processed': '[抖音搜索] 已收录视频 {i}，当前有效数据: {n} 条',
+    'crawl.dy.finished': '[抖音搜索] 搜索完成，共获取 {n} 条有效结果（目标 {total} 条）',
+    'crawl.dy.wall': (
+        '[抖音] 浏览器被挡在「验证码中间页」：抖音网页版对无头浏览器与频繁请求都会弹验证。'
+        '请确认已在 Cookie 面板用「可见窗口」登录并保存，稍后再重试本关键词'
+    ),
+    'crawl.dy.noSearchBox': '[抖音] 页面没有可用的搜索框（登录态可能失效或页面结构已变），本次未采集',
+    'crawl.dy.detailEmpty': '[抖音] 视频 {i} 的详情页没有渲染出数据，已跳过该行',
+    'crawl.dy.noMount': '[抖音] 搜索已提交但结果卡片没有出现（可能是无结果，或页面结构已变），本次按 0 条处理',
     'crawl.bili.start': '[哔哩哔哩搜索] 开始搜索关键词: "{kw}"，目标获取 {n} 条结果',
     'crawl.bili.url': '[哔哩哔哩搜索] 搜索URL: {url}',
     'crawl.bili.page': '[哔哩哔哩搜索] 第 {page} 页：{n} 个视频（新 {fresh} 个，已收录 {done} 条）',
@@ -396,6 +408,9 @@ _ZH = {
     'comment.unsupported': '评论节点忽略了 {n} 个不支持的链接（仅支持知乎/微博/小红书/哔哩哔哩）',
     'comment.biliClosed': '该视频未开放评论区（或未产生评论）：{url}',
     'comment.biliBadAnswer': '哔哩哔哩评论接口未返回数据（code={code}）：{url}',
+    'comment.dyNoId': '链接里没有视频 ID，无法抓评论：{url}',
+    'comment.dyNoPanel': '评论区没有渲染出来（可能被折叠或需要登录）：{url}',
+    'comment.dyNone': '该视频计有 {n} 条评论，页面未展开评论列表：{url}',
     'comment.platformMismatch': '已忽略 {n} 个与所选平台（{platform}）不符的链接',
     'comment.allMismatched': '所有链接都与所选平台（{platform}）不符，请检查文章链接',
     'comment.article': '评论：{url} 新增 {n} 条（{status}）',
@@ -465,6 +480,7 @@ _ZH = {
         '已采集的数据全部保留——请到 设置→Cookie 更新后，用断点续跑从上次中断处继续'
     ),
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
+    'run.forcedVisible': '「{label}」：{platform} 会拦截无头浏览器，本次已自动改用可见窗口运行',
     'run.notCrawlable': (
         '「{label}」所在的平台（{platform}）目前只能保存登录 Cookie，还没有采集实现，'
         '因此不能作为数据源运行——请改用已支持的平台，或等该平台的抓取落地'
@@ -737,6 +753,19 @@ _EN = {
         'Note: Douyin is quick to raise a slider captcha for automated browsers \u2014 finish it in that '
         'window before saving.'
     ),
+    'crawl.dy.start': '[Douyin search] keyword "{kw}", target {n} rows (Douyin only answers a visible window)',
+    'crawl.dy.target_reached': '[Douyin search] target of {n} rows reached, stop',
+    'crawl.dy.round': '[Douyin search] screen {i}: {n} cards ({fresh} new, {done} collected)',
+    'crawl.dy.processed': '[Douyin search] stored video {i}, {n} valid rows so far',
+    'crawl.dy.finished': '[Douyin search] done, {n} valid rows (target {total})',
+    'crawl.dy.wall': (
+        '[Douyin] the browser was parked on the captcha interstitial: Douyin web serves it to headless '
+        'browsers and to bursty requests. Re-save the cookie through the Cookie panel (visible window) '
+        'and retry this keyword a little later'
+    ),
+    'crawl.dy.noSearchBox': '[Douyin] no usable search box on the page (dead session or changed DOM)',
+    'crawl.dy.detailEmpty': '[Douyin] video {i} rendered no detail data, row skipped',
+    'crawl.dy.noMount': '[Douyin] the app never drew result cards for this keyword — 0 rows (or retry it later)',
     'crawl.bili.start': '[Bilibili search] keyword "{kw}", target {n} results',
     'crawl.bili.url': '[Bilibili search] URL: {url}',
     'crawl.bili.page': '[Bilibili search] page {page}: {n} videos ({fresh} new, {done} collected)',
@@ -860,6 +889,9 @@ _EN = {
     'comment.unsupported': 'comment node ignored {n} unsupported link(s) (zhihu/weibo/xiaohongshu/bilibili only)',
     'comment.biliClosed': 'this video has no open comment section (or none yet): {url}',
     'comment.biliBadAnswer': 'bilibili comment endpoint returned no data (code={code}): {url}',
+    'comment.dyNoId': 'the link carries no video id, so comments cannot be fetched: {url}',
+    'comment.dyNoPanel': 'the comment panel never rendered (collapsed, or login required): {url}',
+    'comment.dyNone': 'this video reports {n} comments but the list did not open: {url}',
     'comment.platformMismatch': 'skipped {n} link(s) that do not match the selected platform ({platform})',
     'comment.allMismatched': 'every link conflicts with the selected platform ({platform}) — check the article URLs',
     'comment.article': 'comments: {url} added {n} ({status})',
@@ -936,6 +968,7 @@ _EN = {
     'run.cookieExpiredOk': (
         'note: {platform} hit the login wall only after the target was met — the data is complete, nothing to resume'
     ),
+    'run.forcedVisible': '"{label}": {platform} blocks headless browsers, so this run was switched to a visible window',
     'run.notCrawlable': (
         'the platform behind "{label}" ({platform}) can store a login cookie but has no crawler yet, so it cannot '
         'run as a data source — pick a supported platform, or wait for this one to land'

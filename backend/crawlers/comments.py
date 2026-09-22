@@ -1,4 +1,4 @@
-"""Comment crawling for zhihu / xiaohongshu / weibo / bilibili article links.
+"""Comment crawling for zhihu / xiaohongshu / weibo / bilibili / douyin links.
 
 Design notes that the code cannot shout later:
 
@@ -17,6 +17,11 @@ Design notes that the code cannot shout later:
 * zhihu blocks headless sessions on content pages (answer/question), so the
   caller must give this platform a visible window; that requirement is
   declared here as ``NEVER_HEADLESS`` and honoured by the node handler.
+* douyin is the mirror image of bilibili: its comment panel renders DOM but its
+  endpoint is signed (``a_bogus``), so the crawl scrolls a container that
+  ``window.scrollTo`` cannot move — and both the mount and every scroll settle
+  by polling here, never by sleeping on the caller's ``nap``. A stubbed nap once
+  turned a 2000-comment video into a 5-row crawl that looked like success.
 """
 
 import contextlib
@@ -113,6 +118,60 @@ def parse_zhihu_comments(items) -> list:
             '楼层': idx,
         }
         for idx, (url, author, author_href, text) in enumerate(items, 1)
+    ]
+
+
+# ``1周前·江苏`` / ``刚刚`` / ``2026-08-04`` — douyin puts the relative time and
+# the IP 地区 in one line, and it is the only line of the block that is neither a
+# name, the text itself, nor a number.
+_DOUYIN_WHEN_RE = re.compile(r'^(?:刚刚|\d+\s*(?:分钟|小时|天|周|月|年)前|\d{4}-\d{1,2}-\d{1,2})(?:·.+)?$')
+_DOUYIN_SUBS_RE = re.compile(r'展开\s*(\d+)\s*条回复')
+
+
+def douyin_comment_fields(text: str) -> tuple:
+    """One rendered comment block → (author, content, when, region, likes, subs).
+
+    The panel's line order is fixed but not dense: an author whose name is empty
+    collapses a line, so the fields are recognised by *shape* (a date-shaped line,
+    a bare number, a 展开N条回复 label) rather than by index. That is also what
+    keeps a truncated preview (``展开更多`` inserts a literal ``...`` line) from
+    becoming comment text.
+    """
+    lines = [line.strip() for line in str(text or '').split('\n') if line.strip() and line.strip() != '...']
+    author = lines[0] if lines else ''
+    content = lines[1] if len(lines) > 1 else ''
+    when, region, likes, subs = '', '', 0, 0
+    for line in lines[2:]:
+        match = _DOUYIN_SUBS_RE.search(line)
+        if match and not subs:
+            subs = int(match.group(1))
+            continue
+        if not when and _DOUYIN_WHEN_RE.match(line):
+            when, _, region = line.partition('·')
+            when = when.strip()
+            region = region.strip()
+            continue
+        if line.isdigit() and not likes:
+            likes = int(line)
+    return author, content, when, region, likes, subs
+
+
+def parse_douyin_comments(items) -> list:
+    """Takes [(url, author, content, when, region, likes, subs)] scraped per panel."""
+    return [
+        {
+            '平台': 'douyin',
+            '文章URL': url,
+            '评论者': author,
+            '评论者主页': '',
+            '评论内容': content,
+            '评论时间': when,
+            '评论地区': region,
+            '点赞数': likes,
+            '子回复数': subs,
+            '楼层': idx,
+        }
+        for idx, (url, author, content, when, region, likes, subs) in enumerate(items, 1)
     ]
 
 
@@ -466,3 +525,118 @@ class CommentSession:
             cursor = int(info.get('next') or (cursor + 1))
             self.nap(0.8)  # polite page interval on the comment API
         return (rows[:limit] if limit else rows), OK
+
+    # -- douyin ---------------------------------------------------------------
+
+    def crawl_douyin(self, url: str, limit: int) -> tuple:
+        """Scroll the rendered comment panel; douyin's API is signed.
+
+        Unlike bilibili, the comments ARE in the DOM (``[data-e2e="comment-item"]``)
+        and they grow by scrolling the app's own route container — measured 16 rows
+        becoming 56 — while ``window.scrollTo`` does nothing at all. The panel's
+        request carries ``a_bogus``/``msToken``, so there is no endpoint to call.
+
+        「展开N条回复」 is read as a count and never clicked: expanding a thread
+        rewrites the list under the next read, and the count is the fact the user
+        needs (this comment has N replies) either way.
+        """
+        from .video import cn_count, douyin_id
+
+        target = f'https://www.douyin.com/video/{douyin_id(url)}' if douyin_id(url) else url
+        if not douyin_id(url):
+            self.log(t('comment.dyNoId', url=url))
+            return [], DEAD
+        self.driver.get(target)
+        mounted = self._wait_for_douyin_panel()
+        if page_is_blocked(self._body_head()):
+            return [], BLOCKED
+        reported = self._node_text('[data-e2e="feed-comment-icon"]')
+        if not mounted and not reported:
+            # Neither a panel nor the counter that would explain its absence:
+            # that is not "no comments", and reporting it as one would hide a
+            # dead session behind an empty table.
+            self.log(t('comment.dyNoPanel', url=target))
+            return [], BLOCKED
+        if not mounted:
+            # The panel stayed closed but the video says how many comments it
+            # has — zero means the author turned them off, which is an answer.
+            self.log(t('comment.dyNone', url=target, n=cn_count(reported)))
+            return [], OK
+        seen, rows = set(), []
+        for _round in range(40):
+            found = []
+            for item in self.driver.find_elements('css selector', '[data-e2e="comment-item"]'):
+                author, content, when, region, likes, subs = douyin_comment_fields(self._safe_text(item))
+                key = (author, content, when)
+                if not content or key in seen:
+                    continue
+                seen.add(key)
+                found.append((target, author, content, when, region, likes, subs))
+            rows.extend(parse_douyin_comments(found))
+            if not found:
+                break
+            if limit and len(rows) >= limit:
+                break
+            if not self._scroll_douyin_panel():
+                break
+            self.nap(1.5)
+        return (rows[:limit] if limit else rows), OK
+
+    def _wait_for_douyin_panel(self, timeout: float = 24.0) -> bool:
+        """Poll for the comment panel instead of sleeping a fixed amount.
+
+        Measured: the panel is not there at t=4s and is at t≈11s on a cold
+        route. A fixed sleep would make every crawl either slow or blind, and a
+        caller-suppressed nap (tests) must not turn a wait into a miss.
+        """
+        ticks = max(1, int(timeout / 2.0))
+        for _ in range(ticks):
+            if self._element_or_none('[data-e2e="comment-list"]') is not None:
+                return True
+            if self.driver.find_elements('css selector', '[data-e2e="comment-item"]'):
+                return True
+            time.sleep(2.0)
+        return False
+
+    def _node_text(self, selector: str) -> str:
+        element = self._element_or_none(selector)
+        return self._safe_text(element) if element is not None else ''
+
+    def _scroll_douyin_panel(self) -> bool:
+        """Scroll whatever really scrolls on this page (the route container).
+
+        Returns whether the panel grew. The settle wait is polled here rather
+        than delegated to ``self.nap``: the rows mount asynchronously, so a
+        caller that stubs the nap (any test, and any caller that wants a fast
+        run) would read the pre-scroll count, conclude the list was exhausted
+        and stop after one screen — which is exactly how a 5-row crawl of a
+        2000-comment video once happened.
+        """
+        before = len(self.driver.find_elements('css selector', '[data-e2e="comment-item"]'))
+        script = """
+        var list = document.querySelector('[data-e2e="comment-list"]');
+        var host = list;
+        while (host && host.scrollHeight <= host.clientHeight + 50) { host = host.parentElement; }
+        if (host) { host.scrollTop = host.scrollHeight; return 'panel'; }
+        var best = null;
+        document.querySelectorAll('*').forEach(function (el) {
+          if (el.scrollHeight > el.clientHeight + 200 && el.clientHeight > 300
+              && (!best || el.scrollHeight > best.scrollHeight)) { best = el; }
+        });
+        if (best) { best.scrollTop = best.scrollHeight; return 'container'; }
+        window.scrollTo(0, document.body.scrollHeight);
+        return 'window';
+        """
+        with contextlib.suppress(Exception):
+            self.driver.execute_script(script)
+        for _tick in range(12):
+            time.sleep(0.5)
+            if len(self.driver.find_elements('css selector', '[data-e2e="comment-item"]')) > before:
+                return True
+        return False
+
+    def _element_or_none(self, selector: str):
+        try:
+            return self.driver.find_element('css selector', selector)
+        except Exception:
+            return None

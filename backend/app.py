@@ -1339,6 +1339,14 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     start_time = params.get('start_time')
     end_time = params.get('end_time')
 
+    if headless and getattr(crawler_class(platform), 'never_headless', False):
+        # Douyin answers a headless browser with 验证码中间页 on every
+        # navigation — measured, not assumed — so the run would end as a
+        # mysterious zero-row crawl. The platform declares the requirement on
+        # its class and the executor pays for the visible window instead.
+        headless = False
+        add_log(t('run.forcedVisible', label=node_label(node, str(node.get('id') or '')), platform=platform))
+
     crawler = get_crawler(platform, headless=headless, cookie_dir=Config.COOKIE_DIR)
     resume = {}
     nid = str(node.get('id') or '')
@@ -1954,6 +1962,8 @@ def _execute_comment_node(node: dict, ctx: dict = None):
                 rows, status = session.crawl_xiaohongshu(url, limit)
             elif kind == 'bilibili':
                 rows, status = session.crawl_bilibili(url, limit)
+            elif kind == 'douyin':
+                rows, status = session.crawl_douyin(url, limit)
             else:
                 rows, status = session.crawl_zhihu(url, limit)
             counts[status] = counts.get(status, 0) + 1

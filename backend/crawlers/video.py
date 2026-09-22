@@ -21,9 +21,26 @@ plausible-looking alternative here is wrong:
   0 byte for byte. Following the server's own value is the only walk that
   advances; a loop that incremented would store the same 19 comments forever.
 
-Douyin stays cookie-only: nothing above has been measured there, and a guessed
-selector produces a plausible table of nothing. ``supports_crawl`` stays False,
-which the execute endpoint refuses by name.
+Douyin is measured too (``backend/test_douyin_*.py``) and its constraints are
+the opposite of bilibili's in every respect that matters:
+
+* **Only a visible window gets through.** A headless one is answered with
+  验证码中间页 on every navigation, so ``never_headless`` is set and the executor
+  downgrades ``headless`` before the browser is bought.
+* **The search endpoint is signed** (``a_bogus``/``msToken``/``verifyFp`` on the
+  page's own ``general/search/single`` call), so there is no API to call and the
+  DOM is the only path — the reverse of bilibili.
+* **A deep link is an empty shell.** ``/search/<kw>`` renders three empty
+  ``[data-e2e="scroll-list"]`` lists; results mount only after the real search
+  bar and its button drive the app's own router, and they arrive on a *content*
+  signal (为你找到…) some ten seconds later, never on a fixed sleep.
+* **The web player never shows 播放数.** ``detail-video-info``'s second number is
+  the same 5.9万 as the 点赞 counter, so it is the like count — douyin rows
+  therefore carry no 播放数 column at all rather than a mislabelled one.
+* **Comments do have a DOM** (``[data-e2e="comment-item"]``), unlike bilibili, and
+  they grow by scrolling the route container (16 → 56 observed) — so the crawl is
+  scroll-and-dedupe, and 「展开N条回复」 is recorded as a count instead of being
+  clicked, because clicking rewrites the page under the next read.
 """
 
 import contextlib
@@ -289,8 +306,286 @@ class BilibiliCrawler(VideoCrawler):
 
 
 class DouyinCrawler(VideoCrawler):
-    """Douyin (抖音 web). Session capture only so far — see the module docstring."""
+    """Douyin (抖音 web): search-bar driven, one video page per row, visible window only."""
 
     domain = 'www.douyin.com'
     cookie_domains = ('douyin.com', 'www.iesdouyin.com')
     login_url = 'https://www.douyin.com/'
+    supports_crawl = True
+
+    #: Headless is answered by 验证码中间页 on every navigation — measured, not
+    #: assumed. The executor has to open a real window for this platform.
+    never_headless = True
+
+    #: Outcomes of the "reach the result list" step — kept as names because the
+    #: caller has to treat them differently (see ``_open_results``).
+    OK = 'ok'
+    NO_BOX = 'no_box'
+    NOT_MOUNTED = 'not_mounted'
+    CAPTCHA = 'captcha'
+
+    CARD_SELECTOR = 'div.discover-video-card-item[data-aweme-id]'
+    SEARCH_INPUT = '[data-e2e="searchbar-input"]'
+    SEARCH_BUTTON = '[data-e2e="searchbar-button"]'
+    #: The results are only *there* when the page says so; the deep link and a
+    #: cold SPA both look identical (and empty) before that.
+    MOUNTED_MARKS = ('为你找到', '搜索响应编号')
+    CAPTCHA_MARKS = ('验证码', '滑动验证')
+    MOUNT_WAIT = 40.0
+    MAX_ROUNDS = 6
+    POLITE_BASE = 1.0
+    POLITE_SPREAD = 0.4
+
+    def search(self, keyword: str, target_count: int = 50, **kwargs):
+        """Drive the site's own search box, then open each card.
+
+        The list is one screen (19–30 cards, and scrolling the route container
+        recycles the same count), so the row budget is not the pager — it is the
+        detail visit: every card is opened for the numbers the card itself never
+        carries. The cursor records which ids have been opened, so a resumed run
+        picks up mid-list instead of re-paying for the head of it.
+        """
+        resume = self.resume_of(kwargs)
+        opened = [str(v) for v in (resume.get('opened') or []) if str(v)]
+        done = set(opened)
+        if self.collected() >= target_count:
+            logger.info(t('crawl.dy.target_reached', n=target_count))
+            return self.results()
+        logger.info(t('crawl.dy.start', kw=keyword, n=target_count))
+        reached = self._open_results(keyword)
+        if reached in (self.NO_BOX, self.CAPTCHA):
+            raise RuntimeError(t('crawl.dy.wall') if reached == self.CAPTCHA else t('crawl.dy.noSearchBox'))
+        if reached != self.OK:
+            return self.results()
+        rounds = 0
+        while self.collected() < target_count and rounds < self.MAX_ROUNDS:
+            rounds += 1
+            ids = self._card_ids()
+            todo = [aweme_id for aweme_id in ids if aweme_id not in done]
+            logger.info(t('crawl.dy.round', i=rounds, n=len(ids), fresh=len(todo), done=self.collected()))
+            if not todo:
+                break
+            for aweme_id in todo:
+                if self.collected() >= target_count:
+                    break
+                done.add(aweme_id)
+                row = self._detail_row(aweme_id)
+                if row and self.emit(row):
+                    logger.info(t('crawl.dy.processed', i=aweme_id, n=self.collected()))
+                self.mark_position(page=rounds, done=self.collected(), opened=sorted(done)[-40:])
+                self._polite_pause(0.6, 0.2)
+            if not self._scroll_results():
+                break
+        logger.info(t('crawl.dy.finished', n=self.collected(), total=target_count))
+        return self.results()
+
+    # ─── reaching and reading the result list ─────────────────────────
+
+    def _title(self) -> str:
+        with contextlib.suppress(Exception):
+            return self.driver.title or ''
+        return ''
+
+    def _open_results(self, keyword: str) -> str:
+        """Drive the real search bar and report *how* the attempt ended.
+
+        Three non-success outcomes and they must not blur:
+
+        * ``nobox`` — the page handed over no search tool at all (dead session or
+          a changed DOM): an actionable failure, not an empty result;
+        * ``captcha`` — the interstitial, which douyin announces in the **title**
+          rather than in a URL pattern;
+        * ``not_mounted`` — the app accepted the query but never drew cards,
+          which is also what a genuinely empty keyword looks like from here, so
+          it is reported as zero rows rather than as a crash.
+
+        A deep link to ``/search/<kw>`` leaves three empty ``<ul>``s behind; only
+        the router's own path — focus, type, click 搜索 — mounts cards. The button
+        is covered by a transparent overlay on this build, so the Enter key is the
+        fallback rather than a stylistic choice.
+        """
+        self.driver.get(self.login_url)
+        self._polite_pause(1.2, 0.3)
+        box = self._element_or_none(self.SEARCH_INPUT)
+        if box is None:
+            self.check_login_wall(self.login_url)
+            logger.warning(t('crawl.dy.noSearchBox'))
+            return self.NO_BOX
+        with contextlib.suppress(Exception):
+            self.driver.execute_script('arguments[0].focus();', box)
+        box.send_keys(str(keyword or ''))
+        button = self._element_or_none(self.SEARCH_BUTTON)
+        submitted = False
+        if button is not None:
+            with contextlib.suppress(Exception):
+                button.click()
+                submitted = True
+        if not submitted:
+            with contextlib.suppress(Exception):
+                box.send_keys('\n')
+        if not self._wait_for_text(self.MOUNTED_MARKS, timeout=self.MOUNT_WAIT):
+            if any(mark in self._title() for mark in self.CAPTCHA_MARKS):
+                # The wall here is a page title; no _WALL_MARKERS URL matches it.
+                self.login_wall = True
+                logger.warning(t('crawl.loginWall', platform=self.domain, where=self._title()))
+                return self.CAPTCHA
+            logger.info(t('crawl.dy.noMount'))
+            return self.NOT_MOUNTED
+        return self.OK
+
+    def _wait_for_text(self, marks, timeout: float = 20.0) -> bool:
+        """Poll the rendered text for one of *marks* (bounded, clock-free)."""
+        ticks = max(1, int(timeout / 2.0))
+        for _ in range(ticks):
+            body = self._body_text(limit=4000)
+            if any(mark in body for mark in marks):
+                return True
+            if any(mark in self._title() for mark in self.CAPTCHA_MARKS):
+                return False
+            time.sleep(2.0)
+        return any(mark in self._body_text(limit=4000) for mark in marks)
+
+    def _card_ids(self) -> list:
+        out = []
+        for el in self.driver.find_elements('css selector', self.CARD_SELECTOR):
+            with contextlib.suppress(Exception):
+                aweme_id = str(el.get_attribute('data-aweme-id') or '')
+                if aweme_id and aweme_id not in out:
+                    out.append(aweme_id)
+        return out
+
+    def _scroll_results(self) -> bool:
+        """Scroll the app's own route container — the window never moves here.
+
+        Returns whether anything new appeared. Measured: the card count stays
+        fixed while scrolling (the list is virtualised), so this normally ends
+        the walk after one screen rather than pretending to find more.
+        """
+        before = len(self._card_ids())
+        script = """
+        var best = null;
+        document.querySelectorAll('*').forEach(function (el) {
+          if (el.scrollHeight > el.clientHeight + 200 && el.clientHeight > 300
+              && (!best || el.scrollHeight > best.scrollHeight)) { best = el; }
+        });
+        if (best) { best.scrollTop = best.scrollHeight; return true; }
+        window.scrollTo(0, document.body.scrollHeight);
+        return false;
+        """
+        with contextlib.suppress(Exception):
+            self.driver.execute_script(script)
+        time.sleep(2.0)
+        return len(self._card_ids()) > before
+
+    # ─── one video ────────────────────────────────────────────────────
+
+    def get_detail(self, url: str) -> dict | None:
+        aweme_id = douyin_id(url)
+        if not aweme_id:
+            return None
+        return self._detail_row(aweme_id)
+
+    def _detail_row(self, aweme_id: str) -> dict | None:
+        """Open one video page and read the counters that name themselves.
+
+        ``_ROUTER_DATA`` is undefined on this build and ``#RENDER_DATA`` holds
+        only ``{app}``, so the numbers come from the DOM — and only from the
+        ``data-e2e`` attributes that state what they count. The 播放数 column is
+        deliberately absent: ``detail-video-info``'s second number equals the 点赞
+        counter, so it *is* the like count, and publishing it as 播放数 would be a
+        wrong figure with a plausible column name.
+        """
+        self.driver.get(f'https://www.douyin.com/video/{aweme_id}')
+        if not self._wait_for_text(('发布时间', '评论'), timeout=15.0):
+            self.check_login_wall(f'https://www.douyin.com/video/{aweme_id}')
+            logger.warning(t('crawl.dy.detailEmpty', i=aweme_id))
+            return None
+        facts = self._driver_facts()
+        info_lines = [line.strip() for line in str(facts.get('info') or '').split('\n') if line.strip()]
+        text = info_lines[0] if info_lines else ''
+        publish = _clean_publish(facts.get('publish'))
+        author, followers, liked = _author_from_related(str(facts.get('related') or ''))
+        return {
+            '标题': (self._title().removesuffix(' - 抖音').strip() or text)[:120],
+            '正文': text,
+            '作者': author,
+            '粉丝数': followers,
+            '获赞数': liked,
+            '发布时间': publish,
+            '视频ID': str(aweme_id),
+            '点赞数': cn_count(facts.get('digg')),
+            '评论数': cn_count(facts.get('comment')),
+            '收藏数': cn_count(facts.get('collect')),
+            '转发数': cn_count(facts.get('share')),
+            '链接': f'https://www.douyin.com/video/{aweme_id}',
+        }
+
+    def _driver_facts(self) -> dict:
+        """Every self-describing counter on the open video page, in one pass."""
+        script = """
+        function txt(sel) {
+          var el = document.querySelector(sel);
+          return el ? (el.innerText || '').trim() : '';
+        }
+        return {
+          digg: txt('[data-e2e="video-player-digg"]'),
+          comment: txt('[data-e2e="feed-comment-icon"]'),
+          collect: txt('[data-e2e="video-player-collect"]'),
+          share: txt('[data-e2e="video-player-share"]'),
+          info: txt('[data-e2e="detail-video-info"]'),
+          publish: txt('[data-e2e="detail-video-publish-time"]'),
+          related: txt('[data-e2e="related-video"]')
+        };
+        """
+        with contextlib.suppress(Exception):
+            found = self.driver.execute_script(script)
+            if isinstance(found, dict):
+                return found
+        return {}
+
+
+def _clean_publish(value) -> str:
+    """「发布时间：2026-08-04 16:32」 → 「2026-08-04 16:32」."""
+    text = str(value or '')
+    return text.split('：')[-1].strip() if '：' in text else text.strip()
+
+
+def _author_from_related(related: str) -> tuple:
+    """Pull the author block out of the related-videos panel.
+
+    It is the only place the web player names the author with its follower
+    count, and the line is unpunctuated (``泫九粉丝167.0万获赞1157.5万关注``), so
+    the split is on the two labels rather than on positions that shift with the
+    episode list.
+    """
+    match = re.search(r'^(.*?)粉丝([\d.]+[万千]?)获赞([\d.]+[万千]?)', related.strip())
+    if not match:
+        return '', 0, 0
+    return match.group(1).strip(), cn_count(match.group(2)), cn_count(match.group(3))
+
+
+def cn_count(text) -> int:
+    """A douyin label → an integer, honouring 万/千 and ignoring bare words."""
+    if text is None:
+        return 0
+    if isinstance(text, (int, float)):
+        return int(text)
+    cleaned = str(text).replace(',', '').replace(' ', '').replace('\n', '')
+    match = re.search(r'(\d+(?:\.\d+)?)(万|千)?', cleaned)
+    if not match:
+        return 0
+    value = float(match.group(1))
+    if match.group(2) == '万':
+        value *= 10000
+    elif match.group(2) == '千':
+        value *= 1000
+    return int(value)
+
+
+def douyin_id(url: str) -> str:
+    """The aweme id from a video URL, a share link or a bare id."""
+    text = str(url or '').strip()
+    if re.fullmatch(r'\d{15,20}', text):
+        return text
+    match = re.search(r'/video/(\d{15,20})', text) or re.search(r'[?&]modal_id=(\d{15,20})', text)
+    return match.group(1) if match else ''

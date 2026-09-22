@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~1253 cases)**:
+- **Automated tests (pytest, ~1275 cases)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -78,6 +78,23 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
 - Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens
   a visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
   outcome the message catalog already explains — don't "fix" it by loosening assertions.
+- **Douyin is visible-window-only, DOM-only, and has no play count.** A headless
+  browser is answered by 验证码中间页 on *every* navigation (measured), so the class
+  sets ``never_headless = True`` and `_execute_source_node` downgrades to a visible
+  window before buying the browser — never let that flip back to headless "for
+  speed". Its search endpoint is signed (``a_bogus``/``msToken``/``verifyFp``), so
+  the DOM is the only path; results mount only after the real search bar plus its
+  button drive the app router (a ``/search/<kw>`` deep link leaves three empty
+  ``<ul>``s = a shell, not an empty result set) and are detected by the text
+  为你找到…, never by a fixed sleep. Cards are ``div.discover-video-card-item[data-aweme-id]``
+  with no anchors. Counters come only from self-describing ``data-e2e`` keys
+  (``video-player-digg``/``feed-comment-icon``/``video-player-collect``/
+  ``video-player-share``); ``detail-video-info``'s second number **is the like
+  count**, so a 播放数 column would be a wrong figure with a plausible name — don't
+  re-add it. Comments DO render (``[data-e2e="comment-item"]``) and grow only by
+  scrolling the route container; both the panel mount and each scroll settle by
+  *polling inside the crawler*, never via the caller's ``nap`` — a stubbed nap once
+  turned a 2000-comment video into an "exhausted" 5-row crawl.
 - **Bilibili's two paging contracts are measured, not guessed — keep them exactly.**
   The search list does *not* infinite-scroll (8 scroll rounds = 42 cards / 34 videos,
   unchanged); the row budget is `&page=N`, and **`page=1` renders zero cards**, so page

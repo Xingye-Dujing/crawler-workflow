@@ -264,6 +264,7 @@ class TestUrlRoutingContract:
             'weibo': 'weibo.com',
             'xiaohongshu': 'xiaohongshu.com',
             'bilibili': 'bilibili.com',
+            'douyin': 'douyin.com',
         }
         for platform, domain in marker.items():
             ph = results['placeholder'][platform]
