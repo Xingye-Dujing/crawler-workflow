@@ -13,8 +13,10 @@ Language is thread-local and workflow runs live in worker threads, so that
 boundary is pinned too.
 """
 
+import ast
 import re
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -22,6 +24,8 @@ import i18n
 from i18n import DEFAULT_LANG, LANGS, audit, get_lang, missing_keys, normalize, set_lang, t
 
 pytestmark = pytest.mark.unit
+
+REPO = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
@@ -355,3 +359,97 @@ class TestNoDuplicateKeys:
         # Not just the same *set*: the same count, so a duplicate on one side
         # only cannot pass as parity.
         assert sorted(lists['_ZH']) == sorted(lists['_EN'])
+
+
+CONSOLE_LEVELS = ('info', 'warning', 'error', 'exception')
+
+
+def _prose(value: str) -> bool:
+    """True when a literal reads like a sentence rather than punctuation."""
+    return len([word for word in value.split() if any(char.isalpha() for char in word)]) >= 2
+
+
+def _literals_in(node):
+    """Every string literal that could reach the console from this argument."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        if _prose(node.value):
+            yield node.value
+    elif isinstance(node, ast.JoinedStr):
+        for part in node.values:
+            if isinstance(part, ast.Constant) and isinstance(part.value, str) and _prose(part.value):
+                yield part.value
+    elif isinstance(node, ast.BinOp):
+        yield from _literals_in(node.left)
+        yield from _literals_in(node.right)
+
+
+class TestNoHardcodedConsoleText:
+    """Anything the run console can print has to come from the catalogue.
+
+    A sentence typed into Python or JS is English no matter what language the
+    rest of the screen speaks, and it also escapes the parity check above, so the
+    two catalogues can drift with nobody noticing. ``logger.debug`` is exempt:
+    the console handler's level is INFO, so those lines reach the file log only,
+    where English is what a developer searching the log wants.
+    """
+
+    @staticmethod
+    def _scan(source: str, label: str) -> list:
+        """Offending console/print calls in one parsed module."""
+        offenders = []
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Call) or not node.args:
+                continue
+            func = node.func
+            from_logger = (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id in ('logger', 'logging')
+                and func.attr in CONSOLE_LEVELS
+            )
+            to_console = isinstance(func, ast.Name) and func.id == 'add_log'
+            if not (from_logger or to_console):
+                continue
+            for text in _literals_in(node.args[0]):
+                offenders.append(f'{label}:{node.lineno}: {text[:60]!r}')
+        return offenders
+
+    @classmethod
+    def _python_offenders(cls) -> list:
+        found = []
+        for path in sorted((REPO / 'backend').rglob('*.py')):
+            found.extend(cls._scan(path.read_text(encoding='utf-8'), str(path.relative_to(REPO))))
+        return found
+
+    @staticmethod
+    def _javascript_offenders() -> list:
+        offenders = []
+        # Only a literal held DIRECTLY by the call is hardcoded prose:
+        # `showToast(I18n.t('x') + ': ' + err)` composes a catalogued sentence and
+        # must not be flagged with it.
+        pattern = re.compile(r"(?:showToast|alert)\s*\(\s*'([^']{4,})'")
+        for path in sorted((REPO / 'backend' / 'static' / 'js').glob('*.js')):
+            for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                match = pattern.search(line)
+                if match and _prose(match.group(1)):
+                    offenders.append(f'{path.relative_to(REPO)}:{number}: {match.group(1)[:60]!r}')
+        return offenders
+
+    def test_no_python_line_reaches_the_console_untranslated(self):
+        assert self._python_offenders() == []
+
+    def test_no_javascript_toast_is_untranslated(self):
+        assert self._javascript_offenders() == []
+
+    def test_the_scan_catches_the_shape_it_bans(self):
+        """A guard that matches nothing proves nothing; feed it the exact
+        violation, plus the two forms that must stay allowed."""
+        banned = 'import logging\nlogger = logging.getLogger(__name__)\nlogger.warning("could not read the file")\n'
+        assert len(self._scan(banned, 'sample.py')) == 1
+        allowed = (
+            'import logging\nfrom i18n import t\nlogger = logging.getLogger(__name__)\n'
+            "logger.debug('developer-only note: %s', t)\n"
+            "logger.warning(t('misc.save_workflow_failed'))\n"
+            'add_log(f\'{t("misc.cookie_save_failed")}: {str(err)[:120]}\')\n'
+        )
+        assert self._scan(allowed, 'sample.py') == []

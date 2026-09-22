@@ -2202,11 +2202,11 @@ function killProcess(btn) {
             if (result.ok) {
                 showToast(result.message);
             } else {
-                showToast('Kill failed: ' + (result.error || ''));
+                showToast(I18n.t('toast.killFailed') + ': ' + (result.error || ''));
             }
         })
         .catch(function (err) {
-            showToast('Kill failed: ' + err.message);
+            showToast(I18n.t('toast.killFailed') + ': ' + err.message);
         });
 }
 

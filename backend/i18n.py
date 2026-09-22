@@ -361,6 +361,8 @@ _ZH = {
     # ── misc ──────────────────────────────────────────────────
     'misc.history_failed': '记录执行历史失败（不影响流程）',
     'misc.save_workflow_failed': '保存工作流失败',
+    'misc.i18nAudit': '文本目录有问题（不影响运行，但请修复）：{issue}',
+    'misc.exportDeleteFailed': '无法删除导出文件 {name}：{err}',
     'misc.cookie_save_failed': '保存 Cookie 失败',
     'misc.cookie_gen_failed': '生成 Cookie 失败',
     'misc.studio_source_failed': '图表工坊合并载入：来源读取失败',
@@ -517,6 +519,7 @@ _ZH = {
     'report.conclusion': '结论',
     'report.no_charts': '这些数据还不足以出图。',
     'report.chart_failed': '图表生成失败：{err}',
+    'report.chartsFailed': '报告中的图表生成失败，正文与表格照常输出',
     'report.no_rows': '这个节点没有产出任何行。',
     'report.more_rows': '以上为前 {shown} 行，共 {total} 行；完整数据请用导出节点另存 CSV。',
     'report.row_count': '{n} 行 · {cols} 列',
@@ -533,6 +536,8 @@ _ZH = {
     'run.queue_started': '队列接续：{name} 开始运行（{rid}）',
     'run.queue_waited': '队列接续失败（已有运行在跑），{name} 重新排队',
     'run.queue_broken': '队列里的 {name} 无法启动，已跳过并继续下一个：{err}',
+    'run.queueStartFailed': '排队的运行无法启动',
+    'history.cleared': '执行历史已清空',
     'api.workflowShapeInvalid': '工作流内容无法理解：需要带 nodes 列表的对象',
     'api.resumeMissing': '无法继续：运行记录 {rid} 已被清理，继续会变成一次全新的从零采集，请改用「重新运行」',
     'run.store_unavailable': '本次运行无法开始：运行记录库打不开（磁盘满、文件损坏或被占用），未产生任何记录',
@@ -886,6 +891,8 @@ _EN = {
     # ── misc ──────────────────────────────────────────────────
     'misc.history_failed': 'Failed to record execution history (non-fatal)',
     'misc.save_workflow_failed': 'Failed to save workflow',
+    'misc.i18nAudit': 'the message catalogue has a problem (harmless to run, please fix): {issue}',
+    'misc.exportDeleteFailed': 'could not delete the exported file {name}: {err}',
     'misc.cookie_save_failed': 'Failed to save cookies',
     'misc.cookie_gen_failed': 'Failed to generate cookies',
     'misc.studio_source_failed': 'Merged studio load: source failed',
@@ -1047,6 +1054,7 @@ _EN = {
     'report.conclusion': 'Conclusion',
     'report.no_charts': 'Nothing in these tables was chartable yet.',
     'report.chart_failed': 'Chart rendering failed: {err}',
+    'report.chartsFailed': 'the report charts failed; its text and tables still came out',
     'report.no_rows': 'this node produced no rows',
     'report.more_rows': 'First {shown} of {total} rows shown; export the table as CSV for the rest.',
     'report.row_count': '{n} rows · {cols} columns',
@@ -1063,6 +1071,8 @@ _EN = {
     'run.queue_started': 'Queue: {name} started ({rid})',
     'run.queue_waited': 'Queue could not start {name} (a run is active), it waits again',
     'run.queue_broken': 'the queued request {name} could not start; skipped, the next one continues: {err}',
+    'run.queueStartFailed': 'a queued run could not be started',
+    'history.cleared': 'Execution history cleared',
     'api.workflowShapeInvalid': 'the workflow could not be read: an object with a nodes list is required',
     'api.resumeMissing': (
         'cannot continue: run {rid} has been purged, so it would re-crawl everything — press Run instead'

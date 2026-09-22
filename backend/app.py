@@ -104,7 +104,7 @@ logger = setup_logger(
 # raises — it just prints as a literal "%s" in the console — so surface it here,
 # where the offending key is named, instead of leaving it to be spotted later.
 for _issue in audit():
-    logger.warning(f'i18n: {_issue}')
+    logger.warning(t('misc.i18nAudit', issue=_issue))
 
 # Thread-local storage: tracks which workflow index the current thread belongs to.
 # Used by LogBufferHandler, _LogTee, and add_log to route log lines into the
@@ -1034,7 +1034,7 @@ def _start_next_queued() -> None:
     try:
         answer = _begin_run(entry['data'], entry['lang'])
     except Exception as e:  # a broken request must not strand the ones behind it
-        logger.exception('queued run failed to start')
+        logger.exception(t('run.queueStartFailed'))
         add_log(t('run.queue_broken', name=entry['workflow_name'] or entry['id'], err=e))
         _start_next_queued()
         return
@@ -4281,7 +4281,7 @@ def history_series():
 @app.route('/api/history/clear', methods=['POST'])
 def history_clear():
     history_service.clear()
-    return jsonify({'ok': True, 'message': 'History cleared'})
+    return jsonify({'ok': True, 'message': t('history.cleared')})
 
 
 # ─── Resumable runs ────────────────────────────────────────────

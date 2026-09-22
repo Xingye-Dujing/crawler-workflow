@@ -201,7 +201,7 @@ class ReportService:
         try:
             charts = self._charts(frames)
         except Exception as e:  # a chart must never take the report down
-            logger.exception('report charts failed')
+            logger.exception(t('report.chartsFailed'))
             return f'<p class="warn">{html.escape(t("report.chart_failed", err=_text(e)))}</p>'
         for title, uri in charts:
             block = f'<figure><img src="{uri}" alt="" loading="lazy"><figcaption>{_cell(title)}</figcaption></figure>'

@@ -141,7 +141,10 @@ class TestHistoryEndpoints:
     def test_clear_empties_the_history_panel(self, client, recorded):
         name = recorded('hist-clear', [('node-1', 'upload', 'rows', 'count', 1)])
         assert client.get('/api/history/runs').get_json()['runs'] != []
-        assert client.post('/api/history/clear').get_json() == {'ok': True, 'message': 'History cleared'}
+        # The client fixture sends X-Lang: en, so the catalogue's English text is
+        # what comes back — the point of the assertion is that the message is
+        # catalogued at all, not an English literal written into the handler.
+        assert client.post('/api/history/clear').get_json() == {'ok': True, 'message': 'Execution history cleared'}
         body = client.get('/api/history/runs').get_json()
         assert body['runs'] == []
         assert body['workflow_names'] == []

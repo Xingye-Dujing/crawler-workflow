@@ -21,6 +21,7 @@ keep.
 import logging
 import os
 
+from i18n import t
 from utils.helpers import sanitize_filename
 
 logger = logging.getLogger(__name__)
@@ -155,7 +156,7 @@ def delete_export_file(export_dir: str, name: str) -> bool:
     try:
         os.remove(path)
     except OSError as e:
-        logger.warning('could not delete export %s: %s', name, e)
+        logger.warning(t('misc.exportDeleteFailed', name=name, err=e))
         return not os.path.exists(path)
     return not os.path.exists(path)
 
