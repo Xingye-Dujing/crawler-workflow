@@ -40,6 +40,7 @@ import pandas as pd
 
 from config import Config
 from i18n import t
+from utils.helpers import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +280,13 @@ class DatasetStore:
             out.setdefault(row['dataset_id'], []).append(row['workflow_name'])
         return out
 
+    def referenced_by(self, dataset_id: str) -> list:
+        """Which saved workflows point at this file. The delete endpoint refuses
+        on a non-empty answer, so the check has to be a public question rather
+        than a caller reaching into ``_ref_counts``."""
+        rows = self._query('SELECT DISTINCT workflow_name FROM dataset_refs WHERE dataset_id = ?', (str(dataset_id),))
+        return sorted({str(row['workflow_name']) for row in rows if row['workflow_name']})
+
     def find_replacement(self, name: str, row_count: int = None) -> str | None:
         """A file that matches this one by name (and row count, when known).
 
@@ -302,6 +310,22 @@ class DatasetStore:
         cur = self._execute('DELETE FROM datasets WHERE dataset_id = ?', (str(dataset_id),))
         self._execute('DELETE FROM dataset_refs WHERE dataset_id = ?', (str(dataset_id),))
         return bool(cur.rowcount)
+
+    def rename(self, dataset_id: str, name: str) -> str | None:
+        """Label a stored file. Returns the stored name, or None when refused.
+
+        The name is the only thing a user can recognise in the dataset list — the
+        id is a content hash — and the Upload node titles itself with it, so a
+        file that cannot be renamed is a file that can only be recognised by
+        counting rows. It is a label, not an identity: two files may carry the
+        same one, and `find_replacement` resolves that by newest-use, which is
+        how it already behaves for a re-upload.
+        """
+        clean = sanitize_filename(str(name or '').strip())
+        if not clean or not self.exists(dataset_id):
+            return None
+        self._execute('UPDATE datasets SET name = ? WHERE dataset_id = ?', (clean, str(dataset_id)))
+        return clean
 
     def clear(self) -> int:
         cur = self._execute('DELETE FROM datasets')

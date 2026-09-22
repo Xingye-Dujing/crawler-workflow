@@ -668,6 +668,31 @@
       <div id="exports-mgr-body" class="data-preview-table-wrap"></div>
     </div>
 
+    <!-- Dataset Manager Panel — the stored files behind Upload nodes -->
+    <div id="dataset-panel">
+      <div id="dataset-resize-handle"></div>
+      <div class="console-header">
+        <span data-i18n="datasetMgr.header">Datasets</span>
+        <div class="console-actions">
+          <button
+            class="panel-close"
+            onclick="datasetManager.refresh()"
+            data-i18n="btn.refresh"
+          >
+            Refresh
+          </button>
+          <button
+            class="panel-close"
+            onclick="toggleDatasetPanel()"
+            data-i18n="stats.close"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <div id="dataset-mgr-body" class="data-preview-table-wrap"></div>
+    </div>
+
     <!-- Processes Panel -->
     <div id="processes-panel">
       <div class="console-header">
@@ -720,6 +745,14 @@
         data-i18n="exportsMgr.header"
       >
         Export Files
+      </button>
+      <button
+        class="status-btn"
+        id="btn-datasets"
+        onclick="toggleDatasetPanel()"
+        data-i18n="datasetMgr.header"
+      >
+        Datasets
       </button>
       <span id="status-zoom">100%</span>
     </div>

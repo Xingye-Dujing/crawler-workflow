@@ -32,7 +32,7 @@ vm.runInContext(workflowSrc, sandbox);
 /* app.js is an IIFE-ish sibling of workflow.js in the browser: same global. */
 vm.runInContext(appSrc, sandbox);
 
-const ids = ['console-panel', 'runs-panel', 'exports-panel'];
+const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel'];
 
 function state() {
     const out = {};
@@ -51,11 +51,13 @@ for (const target of ids) {
         el.classList.add('open');
         el.style.height = '300px';
     }
-    const toggler = target === 'console-panel'
-        ? 'toggleConsole()'
-        : target === 'runs-panel'
-            ? 'runsManager.toggle()'
-            : 'exportsManager.toggle()';
+    const togglers = {
+        'console-panel': 'toggleConsole()',
+        'runs-panel': 'runsManager.toggle()',
+        'exports-panel': 'exportsManager.toggle()',
+        'dataset-panel': 'datasetManager.toggle()',
+    };
+    const toggler = togglers[target];
     sandbox.__byId(target).classList.remove('open');
     try {
         vm.runInContext(toggler, sandbox);

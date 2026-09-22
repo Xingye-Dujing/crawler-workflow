@@ -500,6 +500,25 @@ const I18n = {
             'exportsMgr.confirmRemove': 'Delete this export file? It cannot be undone.',
             'exportsMgr.removeDone': 'Export file deleted',
             'exportsMgr.removeFailed': 'Delete failed',
+            'datasetMgr.header': 'Datasets',
+            'datasetMgr.empty': 'No stored files yet — upload or paste some data',
+            'datasetMgr.loading': 'Loading the dataset list…',
+            'datasetMgr.loadFailed': 'Could not read the dataset list',
+            'datasetMgr.colName': 'Name',
+            'datasetMgr.colSource': 'Source',
+            'datasetMgr.colRows': 'Rows',
+            'datasetMgr.colSize': 'Size',
+            'datasetMgr.colUsedBy': 'Used by',
+            'datasetMgr.rename': 'Rename',
+            'datasetMgr.renamePrompt': 'New name for this dataset',
+            'datasetMgr.renamePlaceholder': 'e.g. 三亚攻略-9月',
+            'datasetMgr.renameDone': 'Dataset renamed',
+            'datasetMgr.renameFailed': 'Rename failed',
+            'datasetMgr.remove': 'Delete',
+            'datasetMgr.confirmRemove': 'Delete dataset {name}? Saved workflows that read it would come up empty.',
+            'datasetMgr.stillUsed': 'A saved workflow still reads this file — remove that node first',
+            'datasetMgr.removeDone': 'Dataset deleted',
+            'datasetMgr.removeFailed': 'Delete failed',
             'runsMgr.empty': 'No runs recorded yet',
             'runsMgr.colWorkflow': 'Workflow',
             'runsMgr.colStatus': 'Status',
@@ -1007,6 +1026,25 @@ const I18n = {
             'exportsMgr.confirmRemove': '删除这个导出文件？删除后无法恢复。',
             'exportsMgr.removeDone': '导出文件已删除',
             'exportsMgr.removeFailed': '删除失败',
+            'datasetMgr.header': '数据集',
+            'datasetMgr.empty': '还没有已保存的数据集——先上传或粘贴一份数据',
+            'datasetMgr.loading': '正在读取数据集列表…',
+            'datasetMgr.loadFailed': '数据集列表读取失败',
+            'datasetMgr.colName': '名称',
+            'datasetMgr.colSource': '来源',
+            'datasetMgr.colRows': '行数',
+            'datasetMgr.colSize': '大小',
+            'datasetMgr.colUsedBy': '被引用',
+            'datasetMgr.rename': '重命名',
+            'datasetMgr.renamePrompt': '给这个数据集起个新名字',
+            'datasetMgr.renamePlaceholder': '例如：三亚攻略-9月',
+            'datasetMgr.renameDone': '数据集已重命名',
+            'datasetMgr.renameFailed': '重命名失败',
+            'datasetMgr.remove': '删除',
+            'datasetMgr.confirmRemove': '删除数据集 {name}？引用它的工作流下次打开会变空。',
+            'datasetMgr.stillUsed': '有已保存的工作流正在引用这个文件——请先移除那个节点',
+            'datasetMgr.removeDone': '数据集已删除',
+            'datasetMgr.removeFailed': '删除失败',
             'runsMgr.empty': '还没有运行记录',
             'runsMgr.colWorkflow': '工作流',
             'runsMgr.colStatus': '状态',
@@ -1783,48 +1821,18 @@ function toggleConsolePopout() {
     });
 })();
 
-/* ── Run-records panel height resize (dock mode) ── */
-
-(function initRunsResize() {
-    const handle = document.getElementById('runs-resize-handle');
+/* ─── Docked panel height resize ────────────────────────────────
+   Four panels share this behaviour, so one function drives all of them.
+   Measured from mousedown (not from a stored value) because each panel can be
+   resized again after a drag, and the second drag has to start from where the
+   first left off. */
+function initDockResize(handleId, panelId) {
+    const handle = document.getElementById(handleId);
     if (!handle) return;
     let cs = {};
 
     handle.addEventListener('mousedown', (e) => {
-        const panel = document.getElementById('runs-panel');
-        if (!panel.classList.contains('open')) return;
-        e.preventDefault();
-        cs.panel = panel;
-        cs.startY = e.clientY;
-        cs.startH = panel.offsetHeight;
-        cs.active = true;
-        handle.classList.add('active');
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!cs.active) return;
-        const newH = Math.max(80, Math.min(window.innerHeight - 100, cs.startH + (cs.startY - e.clientY)));
-        cs.panel.style.height = newH + 'px';
-        cs.panel.classList.add('open'); /* keep open while resizing */
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (cs.active) {
-            cs.active = false;
-            handle.classList.remove('active');
-        }
-    });
-})();
-
-/* ── Export-artefacts panel height resize (dock mode) ── */
-
-(function initExportsResize() {
-    const handle = document.getElementById('exports-resize-handle');
-    if (!handle) return;
-    let cs = {};
-
-    handle.addEventListener('mousedown', (e) => {
-        const panel = document.getElementById('exports-panel');
+        const panel = document.getElementById(panelId);
         if (!panel || !panel.classList.contains('open')) return;
         e.preventDefault();
         cs.panel = panel;
@@ -1847,7 +1855,11 @@ function toggleConsolePopout() {
             handle.classList.remove('active');
         }
     });
-})();
+}
+
+initDockResize('runs-resize-handle', 'runs-panel');
+initDockResize('exports-resize-handle', 'exports-panel');
+initDockResize('dataset-resize-handle', 'dataset-panel');
 
 /* ── Cookie dialog: close on outside click ──
    The platform dropdown is a CustomSelect: its menu is rendered into <body>,

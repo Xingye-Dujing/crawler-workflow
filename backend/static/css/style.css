@@ -2094,7 +2094,8 @@ input:-webkit-autofill:focus {
 
 /* ── Run records panel (docked at the bottom, console-style) ────────────── */
 #runs-panel,
-#exports-panel {
+#exports-panel,
+#dataset-panel {
   position: fixed;
   bottom: var(--barH);
   left: 0;
@@ -2109,14 +2110,16 @@ input:-webkit-autofill:focus {
   overflow: hidden;
 }
 #runs-panel.open,
-#exports-panel.open {
+#exports-panel.open,
+#dataset-panel.open {
   height: 240px;
 }
 #runs-panel.open ~ #status-bar {
   border-top-color: var(--line);
 }
 #runs-resize-handle,
-#exports-resize-handle {
+#exports-resize-handle,
+#dataset-resize-handle {
   position: absolute;
   top: 0;
   left: 0;
@@ -2129,18 +2132,22 @@ input:-webkit-autofill:focus {
 #runs-resize-handle:hover,
 #runs-resize-handle.active,
 #exports-resize-handle:hover,
-#exports-resize-handle.active {
+#exports-resize-handle.active,
+#dataset-resize-handle:hover,
+#dataset-resize-handle.active {
   background: var(--line);
 }
 #runs-mgr-body,
-#exports-mgr-body {
+#exports-mgr-body,
+#dataset-mgr-body {
   flex: 1;
   overflow: auto;
   padding: 0 8px 8px;
 }
 @media (max-width: 768px) {
   #runs-panel.open,
-  #exports-panel.open {
+  #exports-panel.open,
+  #dataset-panel.open {
     height: 140px;
   }
 }

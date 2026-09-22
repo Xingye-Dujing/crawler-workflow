@@ -283,3 +283,110 @@ class TestClear:
             'orphans': 0,
         }
         assert app_module._DATASET_STORE.stats() == {'datasets': 0, 'rows': 0, 'bytes': 0, 'refs': 0}
+
+
+class TestDatasetRename:
+    """The name is the only thing in a dataset list a user can recognise — the
+    id is a content hash — so relabelling is the difference between a file being
+    findable and being identifiable by row count.
+    """
+
+    def test_renaming_updates_the_list_and_keeps_the_id(self, client):
+        did = _upload(client, 'orders.csv', CSV_BYTES).get_json()['dataset_id']
+        body = client.post(f'/api/data/datasets/{did}/rename', json={'name': '三亚订单-9月'}).get_json()
+        assert body['ok'] is True and body['name'] == '三亚订单-9月'
+        listed = client.get('/api/data/datasets').get_json()['datasets']
+        assert [item['name'] for item in listed if item['dataset_id'] == did] == ['三亚订单-9月']
+        # The rows are untouched: a rename is a label, not a re-hash.
+        detail = client.get(f'/api/data/datasets/{did}').get_json()['dataset']
+        assert detail['row_count'] == 3
+
+    def test_a_name_with_path_characters_is_cleaned_not_stored_raw(self, client):
+        did = _upload(client, 'orders.csv', CSV_BYTES).get_json()['dataset_id']
+        body = client.post(f'/api/data/datasets/{did}/rename', json={'name': '../../etc/passwd'}).get_json()
+        assert body['ok'] is True
+        assert body['name'] and '\\' not in body['name'] and '/' not in body['name']
+
+    def test_a_name_that_reduces_to_nothing_is_refused(self, client):
+        """A nameless row cannot be clicked or found, so this is a 400 — not a
+        silent success that leaves the list with a blank line."""
+        did = _upload(client, 'orders.csv', CSV_BYTES).get_json()['dataset_id']
+        for bad in ('', '   ', '...', '..'):
+            response = client.post(f'/api/data/datasets/{did}/rename', json={'name': bad})
+            assert response.status_code == 400, bad
+            assert response.get_json()['ok'] is False
+        for bad in (7, None, {'a': 1}):
+            assert client.post(f'/api/data/datasets/{did}/rename', json={'name': bad}).status_code == 400
+        # A separator is not refused but replaced: '/' sanitises to '_', which is
+        # an ugly-but-usable label rather than an empty row.
+        assert client.post(f'/api/data/datasets/{did}/rename', json={'name': '/'}).status_code == 200
+        assert client.get('/api/data/datasets').get_json()['datasets'][0]['name'] == '_'
+
+    def test_renaming_a_missing_dataset_is_a_404(self, client):
+        assert client.post('/api/data/datasets/nope000/rename', json={'name': 'x'}).status_code == 404
+
+    def test_two_files_can_share_a_label(self, client):
+        """Identity is content, so a name is not a key.
+
+        Refusing a duplicate label would make renaming feel broken for no
+        protective reason; the list still separates the two rows by id, and each
+        keeps its own rows.
+        """
+        kept = _upload(client, 'first.csv', CSV_BYTES).get_json()['dataset_id']
+        other = _upload(client, 'other.tsv', b'title\tscore\nsanya\t3\n').get_json()['dataset_id']
+        assert kept != other
+        for did in (kept, other):
+            assert client.post(f'/api/data/datasets/{did}/rename', json={'name': '同一个名字'}).status_code == 200
+        listed = client.get('/api/data/datasets').get_json()['datasets']
+        named = [item for item in listed if item['name'] == '同一个名字']
+        assert {item['dataset_id'] for item in named} == {kept, other}
+        assert {item['row_count'] for item in named} == {3, 1}
+
+    def test_renaming_survives_a_reload_of_the_workflow_that_reads_it(self, client):
+        """A workflow's Upload node remembers the file by id, and shows it by
+        name — after a rename the id must be unchanged and the label updated,
+        or the rename would have silently broken the binding it displays."""
+        did = _upload(client, 'orders.csv', CSV_BYTES).get_json()['dataset_id']
+        workflow = {'nodes': [{'id': 'u1', 'type': 'upload', 'params': {'dataset_id': did}}], 'connections': []}
+        client.post('/api/workflow/save', json={'name': 'reader', 'workflow': workflow})
+        client.get('/api/workflow/load', query_string={'name': 'reader'})
+        client.post(f'/api/data/datasets/{did}/rename', json={'name': '九月订单'})
+        entry = client.get('/api/workflow/load', query_string={'name': 'reader'}).get_json()['datasets'][0]
+        assert entry['dataset_id'] == did and entry['missing'] is False
+        assert client.get(f'/api/data/datasets/{did}').get_json()['dataset']['name'] == '九月订单'
+
+
+class TestDatasetDeletionGuards:
+    def test_a_file_a_saved_workflow_reads_is_not_deleted_quietly(self, client):
+        did = _upload(client, 'orders.csv', CSV_BYTES).get_json()['dataset_id']
+        workflow = {'nodes': [{'id': 'u1', 'type': 'upload', 'params': {'dataset_id': did}}], 'connections': []}
+        client.post('/api/workflow/save', json={'name': 'reader', 'workflow': workflow})
+        client.get('/api/workflow/load', query_string={'name': 'reader'})
+
+        response = client.delete(f'/api/data/datasets/{did}')
+        assert response.status_code == 409
+        body = response.get_json()
+        assert body['ok'] is False and body['workflows'] == ['reader']
+        assert 'reader' in body['error'], 'the refusal must name the workflow at fault'
+        assert client.get(f'/api/data/datasets/{did}').get_json()['dataset']
+
+    def test_force_overrides_the_guard_because_the_user_asked_twice(self, client):
+        did = _upload(client, 'orders.csv', CSV_BYTES).get_json()['dataset_id']
+        client.post(
+            '/api/workflow/save',
+            json={
+                'name': 'reader',
+                'workflow': {
+                    'nodes': [{'id': 'u1', 'type': 'upload', 'params': {'dataset_id': did}}],
+                    'connections': [],
+                },
+            },
+        )
+        client.get('/api/workflow/load', query_string={'name': 'reader'})
+        assert client.delete(f'/api/data/datasets/{did}').status_code == 409
+        assert client.delete(f'/api/data/datasets/{did}?force=1').get_json()['ok'] is True
+
+    def test_an_unreferenced_file_deletes_normally(self, client):
+        did = _upload(client, 'loose.csv', CSV_BYTES).get_json()['dataset_id']
+        assert client.delete(f'/api/data/datasets/{did}').get_json()['ok'] is True
+        assert client.get(f'/api/data/datasets/{did}').status_code == 404

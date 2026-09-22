@@ -160,8 +160,10 @@ class TestWorkflowCrud:
         assert params['dataset_name'] == 'orders.csv' and params['row_count'] == 6
 
         # Lose the file and the same node reports it as missing, with the id
-        # cleared so the UI asks for the file instead of pretending.
-        assert client.delete(f'/api/data/datasets/{dataset_id}').get_json()['ok'] is True
+        # cleared so the UI asks for the file instead of pretending. Forced:
+        # this workflow still references it, and an ordinary delete now refuses
+        # to strand the node (see TestDatasetDeletionGuards).
+        assert client.delete(f'/api/data/datasets/{dataset_id}?force=1').get_json()['ok'] is True
         entry, params = _report()
         assert entry['missing'] is True and entry['restored'] is False
         assert params['dataset_id'] == ''

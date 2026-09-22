@@ -2495,12 +2495,47 @@ def dataset_detail(dataset_id: str):
 
 @app.route('/api/data/datasets/<dataset_id>', methods=['DELETE'])
 def dataset_delete(dataset_id: str):
-    """Forget one file and every pointer to it."""
-    removed = get_dataset_store().delete(dataset_id)
+    """Forget one file and every pointer to it.
+
+    Refused while a saved workflow still reads it: the delete would succeed and
+    the workflow would only discover the gap on its next open, as an Upload node
+    with no rows and a run that quietly returns 0 results. The panel shows the
+    referencing workflows for the same reason.
+    """
+    store = get_dataset_store()
+    refs = store.referenced_by(dataset_id) if store.exists(dataset_id) else []
+    force = str(request.args.get('force') or '') in ('1', 'true', 'yes')
+    if refs and not force:
+        return jsonify({'ok': False, 'error': t('api.datasetInUse', workflows=', '.join(refs)), 'workflows': refs}), 409
+    removed = store.delete(dataset_id)
     _dataset_cache.pop(dataset_id, None)
     if not removed:
         return jsonify({'ok': False, 'error': t('api.datasetMissing', did=dataset_id)}), 404
     return jsonify({'ok': True, 'dataset_id': dataset_id})
+
+
+@app.route('/api/data/datasets/<dataset_id>/rename', methods=['POST'])
+def dataset_rename(dataset_id: str):
+    """Relabel a stored file. The name is what the list and the Upload node show.
+
+    A rename is not a re-hash: the id is content, so the dataset keeps its
+    identity, every workflow pointer stays valid, and no rows are rewritten.
+    """
+    body = _json_body()
+    if body is None:
+        return _bad_body()
+    raw = body.get('name')
+    if not isinstance(raw, str):
+        return _bad_param('name')
+    store = get_dataset_store()
+    renamed = store.rename(dataset_id, raw)
+    if renamed is None:
+        if not store.exists(dataset_id):
+            return jsonify({'ok': False, 'error': t('api.datasetMissing', did=dataset_id)}), 404
+        # An empty or fully-unusable label is refused rather than stored, because
+        # a nameless row in the list is unclickable and unfindable.
+        return jsonify({'ok': False, 'error': t('api.datasetNameInvalid', name=raw)}), 400
+    return jsonify({'ok': True, 'dataset_id': dataset_id, 'name': renamed})
 
 
 @app.route('/api/data/paste', methods=['POST'])

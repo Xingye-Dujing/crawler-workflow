@@ -50,6 +50,9 @@ def live_crawler(cookie_dir_str):
     made = []
 
     def _make(platform, headless=True):
+        # WeChat is the one platform crawled without a session: its article bodies
+        # are public, and it has no cookie row in the panel at all. Requiring one
+        # here would skip the only tier that proves that crawl still works.
         if platform != 'wechat' and not has_cookie(platform):
             pytest.skip(f'no saved cookies for {platform}')
         try:

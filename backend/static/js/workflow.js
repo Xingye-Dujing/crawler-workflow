@@ -3053,7 +3053,7 @@ workflow.validate = function () {
    leaves it visually expanded — two panels then overlap in the same slot. All
    three toggles live in this file, so the helper is called directly rather than
    reached for through `window`. */
-var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel'];
+var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel'];
 
 function closeDockedPanels(exceptId) {
     DOCKED_PANELS.forEach(function (id) {
@@ -3209,3 +3209,155 @@ var exportsManager = {
         this.refresh();
     },
 };
+
+/* ─── Dataset manager ───────────────────────────────────────────
+   Uploaded/pasted files outlive a run, and until now the only way to see them
+   was the Upload node's own picker. A user who re-uploads the same table twice
+   gets one copy (identity is content), so the practical questions are "what is
+   stored, which workflow reads it, what is it called, and may I delete it".
+   The delete button refuses a file a saved workflow still points at: dropping it
+   would turn that workflow into an empty Upload node on its next open, and the
+   user would only find out when a run returned 0 rows. */
+var datasetManager = {
+    panel() {
+        return document.getElementById('dataset-panel');
+    },
+
+    toggle() {
+        var panel = this.panel();
+        if (!panel) return;
+        if (panel.classList.contains('open')) {
+            this.close();
+            return;
+        }
+        closeDockedPanels('dataset-panel');
+        panel.classList.add('open');
+        this.refresh();
+    },
+
+    close() {
+        var panel = this.panel();
+        if (!panel) return;
+        panel.classList.remove('open');
+        panel.style.height = '';
+    },
+
+    async refresh() {
+        var body = document.getElementById('dataset-mgr-body');
+        if (!body) return;
+        body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('datasetMgr.loading') + '</div>';
+        var result = await fetchJSON('/api/data/datasets?limit=200').catch(function () { return null; });
+        if (!result || !result.ok) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('datasetMgr.loadFailed') + '</div>';
+            return;
+        }
+        this._last = result.datasets || [];
+        this.render();
+    },
+
+    onLanguageChange() {
+        var panel = this.panel();
+        if (!panel || !panel.classList.contains('open')) return;
+        if (this._last) this.render();
+        else this.refresh();
+    },
+
+    size(bytes) {
+        var value = Number(bytes) || 0;
+        if (value < 1024) return value + ' B';
+        if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KB';
+        return (value / (1024 * 1024)).toFixed(1) + ' MB';
+    },
+
+    render() {
+        var body = document.getElementById('dataset-mgr-body');
+        if (!body) return;
+        var rows = this._last || [];
+        if (!rows.length) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('datasetMgr.empty') + '</div>';
+            return;
+        }
+        var self = this;
+        var html = rows.map(function (row) {
+            var id = String(row.dataset_id || '');
+            /* A file a saved workflow reads is not the user's to delete quietly —
+               the reference list is shown and the button refuses server-side too. */
+            var refs = row.workflows || [];
+            var ops = '<button class="runs-mgr-btn" onclick="datasetManager.rename(\'' + self._quote(id) + '\', \'' +
+                self._quote(row.name || '') + '\')">' + I18n.t('datasetMgr.rename') + '</button>';
+            ops += '<button class="runs-mgr-btn del" onclick="datasetManager.remove(\'' + self._quote(id) +
+                '\', \'' + self._quote(row.name || '') + '\', ' + (refs.length ? 'true' : 'false') + ')">' +
+                I18n.t('datasetMgr.remove') + '</button>';
+            return '<tr>' +
+                '<td class="runs-mgr-wf">' + escapeHtml(row.name || I18n.t('name.unnamed')) + '</td>' +
+                '<td>' + escapeHtml(row.source || '') + '</td>' +
+                '<td>' + (row.row_count || 0) + '</td>' +
+                '<td>' + self.size(row.byte_size) + '</td>' +
+                '<td class="runs-mgr-id">' + escapeHtml(id.slice(0, 12)) + '</td>' +
+                '<td>' + escapeHtml(refs.join(', ')) + '</td>' +
+                '<td class="runs-mgr-ops">' + ops + '</td>' +
+                '</tr>';
+        }).join('');
+        body.innerHTML =
+            '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
+            '<th>' + I18n.t('datasetMgr.colName') + '</th>' +
+            '<th>' + I18n.t('datasetMgr.colSource') + '</th>' +
+            '<th>' + I18n.t('datasetMgr.colRows') + '</th>' +
+            '<th>' + I18n.t('datasetMgr.colSize') + '</th>' +
+            '<th>id</th>' +
+            '<th>' + I18n.t('datasetMgr.colUsedBy') + '</th>' +
+            '<th></th>' +
+            '</tr></thead><tbody>' + html + '</tbody></table>';
+    },
+
+    _quote(value) {
+        return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    },
+
+    async rename(id, current) {
+        var answer = await showDialog({
+            message: I18n.t('datasetMgr.renamePrompt'),
+            input: { value: current, placeholder: I18n.t('datasetMgr.renamePlaceholder') },
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('datasetMgr.rename'), value: 'ok', primary: true },
+            ],
+        });
+        if (!answer) return;
+        var result = await fetchJSON('/api/data/datasets/' + encodeURIComponent(id) + '/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ name: answer }),
+        });
+        if (result && result.ok) {
+            showToast(I18n.t('datasetMgr.renameDone'));
+            this.refresh();
+        } else {
+            showToast((result && result.error) || I18n.t('datasetMgr.renameFailed'));
+        }
+    },
+
+    async remove(id, name, referenced) {
+        if (referenced) {
+            /* Same answer as the server's: a workflow would keep pointing at a
+               file that is gone. */
+            showToast(I18n.t('datasetMgr.stillUsed'));
+            return;
+        }
+        var ok = await showDialog({
+            message: I18n.t('datasetMgr.confirmRemove').replace('{name}', name || id),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: false },
+                { label: I18n.t('datasetMgr.remove'), value: true, primary: true },
+            ],
+        });
+        if (!ok) return;
+        var result = await fetchJSON('/api/data/datasets/' + encodeURIComponent(id), { method: 'DELETE' });
+        showToast(result && result.ok ? I18n.t('datasetMgr.removeDone') : I18n.t('datasetMgr.removeFailed'));
+        this.refresh();
+    },
+};
+
+function toggleDatasetPanel() {
+    datasetManager.toggle();
+}
