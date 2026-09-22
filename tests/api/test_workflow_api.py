@@ -491,6 +491,11 @@ STATUS_FIELDS = {
     'results',
     'total_nodes',
     'completed_nodes',
+    # Added by the progress fix: the run's own verdict, so the browser stops
+    # inferring "unfinished, offer a continue" from completed < total.
+    'skipped_nodes',
+    'failed_nodes',
+    'outcome',
     'chart_results',
     'cookie_expired',
     'queue',
@@ -506,6 +511,142 @@ def _run_e2e(client, app_module, paste, name: str) -> dict:
     assert started.status_code == 200
     assert _wait_for_worker(app_module), 'the execute thread did not finish in time'
     return client.get('/api/workflow/status').get_json()
+
+
+class _ScriptedCrawler:
+    """A crawler that returns what the test says, or dies saying nothing."""
+
+    rows: list = []
+    boom = False
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def set_sink(self, sink):
+        self._sink = sink
+
+    def set_cursor_sink(self, sink):
+        pass
+
+    def seed(self, saved):
+        pass
+
+    def close(self):
+        pass
+
+    def search(self, *args, **kwargs):
+        if type(self).boom:
+            raise RuntimeError('driver exploded')
+        kept = []
+        for item in type(self).rows:
+            if self._sink is None or self._sink(item):
+                kept.append(item)
+        return kept
+
+
+class TestProgressAccounting:
+    """What a finished run says about itself, in numbers and in one sentence.
+
+    Progress used to be one ratio, and the browser read whatever it liked into
+    it: a node starved by a dead upstream subtracted from the count exactly like
+    a node that failed, so a clean run announced 'ended, continue is available'
+    with nothing left to continue, and a refused definition announced '0/0'.
+    """
+
+    @pytest.mark.serial
+    def test_a_clean_run_reports_no_extra_counts(self, client, app_module, paste):
+        body = _run_e2e(client, app_module, paste, 'progress-clean')
+        assert body['outcome'] == 'completed'
+        assert (body['skipped_nodes'], body['failed_nodes']) == (0, 0)
+        finished = [line for line in body['logs'] if 'Run finished' in line]
+        assert len(finished) == 1, 'one run, one closing sentence'
+        # Drop the [HH:MM:SS] prefix the console handler adds.
+        assert finished[0].split('] ', 1)[1] == 'Run finished (3/3 nodes)', (
+            'a clean run must not carry skip/failure fragments'
+        )
+
+    @pytest.mark.serial
+    def test_a_starved_node_is_reported_as_skipped_not_as_missing_progress(
+        self, client, app_module, paste, monkeypatch
+    ):
+        """The case the old wording got wrong twice over: nothing failed, the run
+        completed, and yet 'completed 1/2 (continue available)' was a promise the
+        screen could not keep."""
+
+        class Empty(_ScriptedCrawler):
+            rows = []
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: Empty())
+        workflow = _workflow(
+            [
+                _node('node-1', 'source', params={'platform': 'weibo', 'keyword': 'k', 'target_count': 2}),
+                _node('node-2', 'process', operation='keyword', params={'operation': 'keyword'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'starved'})
+        assert _wait_for_worker(app_module)
+        body = client.get('/api/workflow/status').get_json()
+        assert body['outcome'] == 'completed', 'a run nothing failed is not a run to continue'
+        assert (body['completed_nodes'], body['skipped_nodes'], body['failed_nodes']) == (1, 1, 0)
+        sentence = [line for line in body['logs'] if 'Run finished' in line][0]
+        assert '1 skipped' in sentence and 'failed' not in sentence, sentence
+
+    @pytest.mark.serial
+    def test_a_failed_node_is_counted_and_named(self, client, app_module, monkeypatch):
+        class Boom(_ScriptedCrawler):
+            boom = True
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: Boom())
+        workflow = _workflow(
+            [
+                _node('node-1', 'source', params={'platform': 'weibo', 'keyword': 'k', 'target_count': 2}),
+                _node('node-2', 'process', operation='keyword', params={'operation': 'keyword'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'boom'})
+        assert _wait_for_worker(app_module)
+        body = client.get('/api/workflow/status').get_json()
+        assert body['outcome'] == 'failed'
+        assert body['failed_nodes'] == 1
+        assert '1 failed' in [line for line in body['logs'] if 'Run finished' in line][0]
+
+    @pytest.mark.serial
+    def test_a_refused_definition_never_reports_zero_percent_of_a_run(self, client, app_module):
+        """Validation errors stop the run before a node exists. The old answer was
+        silence plus '0/0', which the browser read as a finished run."""
+        workflow = _workflow([_node('node-1', 'output', params={})], [])
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'refused'})
+        assert _wait_for_worker(app_module)
+        body = client.get('/api/workflow/status').get_json()
+        assert body['outcome'] == 'rejected'
+        assert body['total_nodes'] == 0 and body['completed_nodes'] == 0
+        rejected = [line for line in body['logs'] if 'Nothing ran' in line]
+        assert rejected and '1' in rejected[0], 'the line must say how many problems there are'
+        assert not any('Run finished' in line for line in body['logs']), 'nothing ran, so nothing finished'
+
+    @pytest.mark.serial
+    def test_a_node_that_never_ran_is_not_announced_as_starting(self, client, app_module, monkeypatch):
+        """'Executing node X' used to be printed before the executor decided
+        anything, so the line right after it could say X was restored or skipped."""
+
+        class Empty(_ScriptedCrawler):
+            rows = []
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: Empty())
+        workflow = _workflow(
+            [
+                _node('node-1', 'source', params={'platform': 'weibo', 'keyword': 'k', 'target_count': 2}),
+                _node('node-2', 'process', operation='keyword', params={'operation': 'keyword'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'no-contradiction'})
+        assert _wait_for_worker(app_module)
+        logs = client.get('/api/workflow/status').get_json()['logs']
+        executing = [line for line in logs if 'Executing node' in line]
+        assert all('node-1' in line for line in executing), f'a skipped node was announced as starting: {executing}'
 
 
 class TestStatusPayloadContract:

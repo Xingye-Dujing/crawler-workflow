@@ -156,6 +156,18 @@ export function dispatchOn(el, type, ev = {}) {
     ((el && el._events && el._events[type]) || []).forEach((fn) => fn({ type, ...ev }));
 }
 
+/** Make `window` the script's own global, once the context exists.
+ *
+ * In a browser `window === globalThis`, so `var resumeBar = {…}` is reachable as
+ * `window.resumeBar` and every `if (window.X)` guard behaves. Pointing
+ * `sandbox.window` at the host object instead leaves those lookups blind to the
+ * script's own bindings, so a guard that is true in the browser read as false
+ * here — the harness then tested a branch no user ever sees.
+ */
+export function fixWindow(vm, sandbox) {
+    vm.runInContext('globalThis.window = globalThis;', sandbox);
+}
+
 /**
  * Event target with an explicit ancestry: closest(sel) answers for every
  * comma-separated part of sel, so "#dashboard-panel, #history-panel" matches

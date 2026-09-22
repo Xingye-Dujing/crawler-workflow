@@ -68,10 +68,30 @@ class TestRunEndReporting:
         console it is supposed to draw attention to."""
         assert console['expiryToasts'] == ['COOKIE-EXPIRED']
 
-    def test_a_run_that_left_nodes_unfinished_does_not_claim_completion(self, console):
-        toasts = console['endToastPartial']
-        assert toasts == ['WORKFLOW-ENDED 2/3'], toasts
-        assert 'WORKFLOW-COMPLETED' not in toasts
+    def test_a_run_that_left_nodes_broken_says_so_and_offers_the_continue(self, console):
+        assert console['endedFailed']['toasts'] == ['WORKFLOW-ENDED 2/3']
+        assert console['endedFailed']['resumeRefreshed'] is True
+
+    def test_a_clean_completion_claims_itself_and_promises_nothing_more(self, console):
+        assert console['endedCompleted']['toasts'] == ['WORKFLOW-COMPLETED']
+        assert console['endedCompleted']['resumeRefreshed'] is False, 'there is nothing to continue'
+
+    def test_a_refused_definition_is_not_reported_as_a_finished_run(self, console):
+        assert console['endedRejected']['toasts'] == ['WORKFLOW-REJECTED']
+        assert console['endedRejected']['statusNodes'] == 'progress 0/0'
+        assert console['endedRejected']['resumeRefreshed'] is False
+
+    def test_a_stopped_run_says_stopped(self, console):
+        assert console['endedInterrupted']['toasts'] == ['WORKFLOW-STOPPED']
+        assert console['endedInterrupted']['resumeRefreshed'] is True, 'a stopped run is exactly what to continue'
+
+    def test_the_status_bar_keeps_the_progress_ratio_and_drops_the_clock(self, console):
+        """The bar used to show the canvas node count at the exact moment the
+        reader wanted the finished/planned ratio, and copied the last console line
+        including its [HH:MM:SS] prefix — the same sentence twice on one screen."""
+        bar = console['statusBarDuringRun']
+        assert bar['nodes'] == 'progress 1/3'
+        assert bar['text'] == 'Executing node: 抓取 #node-1'
 
     def test_the_parallel_view_offers_one_tab_per_workflow(self, console):
         assert console['tabCount'] == 3, 'all + the two workflows'

@@ -20,7 +20,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox } from './harness_dom.mjs';
+import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
 /* Two files, not one: the run's last poll refreshes the stats panel through the
    real `stats` object, which lives in stats.js. */
@@ -35,6 +35,8 @@ const KEYS = {
     'toast.cookieExpired': 'COOKIE-EXPIRED',
     'toast.workflowCompleted': 'WORKFLOW-COMPLETED',
     'toast.workflowEnded': 'WORKFLOW-ENDED {done}/{total}',
+    'toast.workflowRejected': 'WORKFLOW-REJECTED',
+    'toast.workflowStopped': 'WORKFLOW-STOPPED',
     'name.unnamed': 'unnamed',
 };
 const I18n = { lang: 'en', dict: { en: KEYS, zh: {} }, t(k) { return KEYS[k] || k; }, apply() {} };
@@ -49,6 +51,7 @@ const sandbox = {
     escapeHtml: (s) => String(s),
 };
 vm.createContext(sandbox);
+fixWindow(vm, sandbox);
 vm.runInContext(src + '\n;globalThis.__wf = { workflow, clearConsole, switchWfTab, consoleCursor };', sandbox);
 /* Assigned after the load: workflow.js declares showToast itself, and a function
    declaration inside the script wins over anything seeded before it. */
@@ -151,11 +154,50 @@ out.tabCount = (sandbox.__byId('console-tabs').innerHTML.match(/console-tab/g) |
 switchWfTab(1);
 out.tabB = await answer(status(['shared'], 1, { workflows: [wfA, { id: 1, name: '乙', logs: ['b-only', 'b-two'] }], mode: 'parallel' }));
 
-/* ── 8. the end-of-run answer reports honestly ──────────────────────────── */
-toasts.length = 0;
-out.endToastPartial = null;
-await answer(status(['done'], 1, { running: false, completed_nodes: 2, total_nodes: 3 }));
-out.endToastPartial = toasts.slice();
-out.statusNodesAtEnd = sandbox.__byId('status-nodes').textContent;
+/* ── 8. how the run is announced when it stops ─────────────────────────── */
+/* `var resumeBar` is a global binding, so replacing it here is what the poller
+   will call. Whether it is asked to refresh IS the assertion: a continue banner
+   that appears after a clean completion promises a resume with nothing behind it. */
+let resumeRefreshes = 0;
+sandbox.resumeBar = { refresh: () => { resumeRefreshes++; } };
+
+async function finishCase(name, payload) {
+    toasts.length = 0;
+    resumeRefreshes = 0;
+    tick = null; // the previous case ended the interval, as in the browser
+    wf.pollStatus();
+    await answer(payload);
+    out[name] = {
+        toasts: toasts.slice(),
+        statusNodes: sandbox.__byId('status-nodes').textContent,
+        statusText: sandbox.__byId('status-text').textContent,
+        resumeRefreshed: resumeRefreshes > 0,
+    };
+}
+
+await finishCase('endedFailed', status(['done'], 4, { running: false, completed_nodes: 2, total_nodes: 3, outcome: 'failed' }));
+await finishCase(
+    'endedCompleted',
+    status(['done'], 4, { running: false, completed_nodes: 3, total_nodes: 3, outcome: 'completed' })
+);
+await finishCase(
+    'endedRejected',
+    status(['done'], 4, { running: false, completed_nodes: 0, total_nodes: 0, outcome: 'rejected' })
+);
+await finishCase(
+    'endedInterrupted',
+    status(['done'], 4, { running: false, completed_nodes: 1, total_nodes: 3, outcome: 'interrupted' })
+);
+
+/* The status bar carries the activity without the console's clock, and keeps the
+   progress ratio rather than overwriting it with a different statistic. */
+out.statusBarDuringRun = null;
+tick = null;
+wf.pollStatus();
+await answer(status(['[12:00:01] Executing node: 抓取 #node-1'], 5, { completed_nodes: 1, total_nodes: 3 }));
+out.statusBarDuringRun = {
+    text: sandbox.__byId('status-text').textContent,
+    nodes: sandbox.__byId('status-nodes').textContent,
+};
 
 process.stdout.write(JSON.stringify(out));

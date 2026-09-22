@@ -496,6 +496,12 @@ _ZH = {
     'run.failed_down': '节点 {nid} 失败且没有可用数据，下游按空表继续',
     'run.skipped_empty': '节点 {nid} 跳过：上游没有数据',
     'run.finished': '运行结束（{done}/{total} 个节点完成）',
+    # Fragments appended to the line above, only when they are true: a run whose
+    # numbers are all clean reads as one clean sentence rather than a table of
+    # zeroes, while a run that starved or lost a node cannot be mistaken for one.
+    'run.finished.skipped': '，{n} 个跳过',
+    'run.finished.failed': '，{n} 个失败',
+    'run.rejected': '未运行：工作流有 {n} 处问题，见上方提示',
     'resume.no_run': '续跑节点：没有选择运行记录，也没找到可续跑的记录',
     'resume.empty': '续跑节点：运行 {rid} 的节点 {nid} 没有可读取的数据行',
     'resume.loaded': '续跑节点：载入运行 {rid} 中节点 {nid} 的 {n} 行',
@@ -1023,6 +1029,9 @@ _EN = {
     'run.failed_down': 'Node {nid} failed with nothing usable — downstream sees an empty table',
     'run.skipped_empty': 'Node {nid} skipped: no data arrived from upstream',
     'run.finished': 'Run finished ({done}/{total} nodes)',
+    'run.finished.skipped': ', {n} skipped',
+    'run.finished.failed': ', {n} failed',
+    'run.rejected': 'Nothing ran: the workflow has {n} problem(s), see the messages above',
     'resume.no_run': 'Resume node: no run selected, and no resumable run was found',
     'resume.empty': 'Resume node: node {nid} of run {rid} has no stored rows',
     'resume.loaded': 'Resume node: loaded {n} rows from node {nid} of run {rid}',

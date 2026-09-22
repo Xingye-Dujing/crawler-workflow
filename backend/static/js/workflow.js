@@ -352,7 +352,12 @@ const workflow = {
                 }
                 if (result.logs) {
                     var lastLog = result.logs[result.logs.length - 1];
-                    document.getElementById('status-text').textContent = lastLog || I18n.t('status.running');
+                    /* The bar carries the activity, without the console's clock:
+                       copying the whole line in — '[12:04:11] …' included — put
+                       the same sentence on screen twice, in two formats. */
+                    document.getElementById('status-text').textContent = lastLog
+                        ? lastLog.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '')
+                        : I18n.t('status.running');
                     var statusNodes = document.getElementById('status-nodes');
                     if (result.total_nodes > 0) {
                         statusNodes.textContent = I18n.t('status.progress')
@@ -437,24 +442,37 @@ const workflow = {
                         if (result.logs && result.logs.length) {
                             document.getElementById('status-text').textContent = I18n.t('status.completed');
                         }
-                        document.getElementById('status-nodes').textContent = I18n.t('status.nodes') + Object.keys(canvas.nodes).length;
-                        /* 'Completed' has to mean completed. A run that was
-                           stopped, or one where a node failed, used to toast the
-                           same word in the same second the resume banner
-                           appeared — the screen promising a result it had just
-                           admitted was unfinished. */
+                        /* The run reports its own verdict. Inferring
+                           'unfinished, worth a continue' from completed<total
+                           announced a resume for a run that had merely starved
+                           one node, and inferred '0/0' for a definition that was
+                           refused before anything ran. */
                         var doneNodes = Number(result.completed_nodes) || 0;
                         var plannedNodes = Number(result.total_nodes) || 0;
-                        showToast(
-                            plannedNodes > 0 && doneNodes >= plannedNodes
-                                ? I18n.t('toast.workflowCompleted')
-                                : I18n.t('toast.workflowEnded').replace('{done}', doneNodes).replace('{total}', plannedNodes)
-                        );
+                        var outcome = result.outcome
+                            || (plannedNodes > 0 && doneNodes >= plannedNodes ? 'completed' : 'failed');
+                        /* The progress ratio stays on screen. Overwriting it with
+                           the canvas node count was a different statistic wearing
+                           the same label, printed at the exact moment the reader
+                           wants to know how much of the run finished. */
+                        document.getElementById('status-nodes').textContent = I18n.t('status.progress')
+                            .replace('{done}', doneNodes)
+                            .replace('{total}', plannedNodes);
+                        if (outcome === 'completed') {
+                            showToast(I18n.t('toast.workflowCompleted'));
+                        } else if (outcome === 'rejected') {
+                            showToast(I18n.t('toast.workflowRejected'));
+                        } else if (outcome === 'interrupted') {
+                            showToast(I18n.t('toast.workflowStopped'));
+                        } else {
+                            showToast(I18n.t('toast.workflowEnded').replace('{done}', doneNodes).replace('{total}', plannedNodes));
+                        }
                         I18n.apply();
                         stats.refresh();
-                        /* Whatever left nodes unfinished is now worth offering
-                           to continue — including a run someone stopped. */
-                        if (window.resumeBar) resumeBar.refresh();
+                        /* Only a run that left work behind is worth offering to
+                           continue — a clean completion and a refused definition
+                           both have nothing to resume. */
+                        if (window.resumeBar && (outcome === 'failed' || outcome === 'interrupted')) resumeBar.refresh();
                         /* Auto-display charts for visualize nodes */
                         if (result.chart_results) {
                             var vizNodes = Object.keys(result.chart_results);

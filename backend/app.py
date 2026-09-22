@@ -367,6 +367,14 @@ execution_state = {
     '_log_total': 0,  # lines ever produced (the list itself is capped)
     'total_nodes': 0,
     'completed_nodes': 0,
+    # A run is not a binary. Nodes a dead upstream starved (`skipped`) and nodes
+    # that died (`failed_nodes`) are neither done nor nothing, and the browser
+    # used to guess the difference from `completed < total` — which called a
+    # clean run with one skipped node "ended, can continue". `outcome` is the
+    # worker's own verdict, published once the run stops.
+    'skipped_nodes': 0,
+    'failed_nodes': 0,
+    'outcome': '',
     'active_crawlers': set(),
     '_wf_logs': {},  # {wf_idx: [log lines]} per-workflow logs for parallel mode
     '_wf_log_total': {},  # {wf_idx: lines ever produced} — see _push_log
@@ -1197,6 +1205,9 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             execution_state['_wf_names'] = {}
             execution_state['total_nodes'] = 0
             execution_state['completed_nodes'] = 0
+            execution_state['skipped_nodes'] = 0
+            execution_state['failed_nodes'] = 0
+            execution_state['outcome'] = ''
             execution_state['cookie_expired'] = False
             execution_state['_mode'] = mode
             execution_state['executor'] = TaskExecutor(max_workers=max_workers, mode=mode)
@@ -1287,22 +1298,15 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     break
                 node = wf_engine.nodes[nid]
                 label = node_label(node, nid)
-                ntype = str(node.get('type') or '')
-                # '（source）' in a Chinese console reads like a stack trace; the
-                # type labels are catalogued, so show the reader's own words.
-                ntype_label = t(f'node.{ntype}')
-                if ntype_label.startswith('node.'):
-                    ntype_label = ntype
-                add_log(
-                    t('wf.executing_node', wf=wf_name, nid=label, ntype=ntype_label),
-                    wf_idx=wf_idx,
-                )
                 primary, upstream = _inputs_for(nid)
                 result, status = _run_node_durable(ctx, node, headless, primary, upstream, wf_idx)
                 results[nid] = result
                 if status == NODE_SKIPPED:
-                    # The skip was already announced (with its reason) by
-                    # _run_node_durable — a 'completed' line on top of it lied.
+                    # Neither done nor failed: it never got input to work on. The
+                    # reason was announced by _run_node_durable; counting it as
+                    # done would lie the other way.
+                    with _completed_lock:
+                        execution_state['skipped_nodes'] += 1
                     continue
                 if status == NODE_RESTORED:
                     # 'run.restored' already announced this node in its own
@@ -1319,16 +1323,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     # and the partial-rows line.
                     if status not in (NODE_FAILED, NODE_PARTIAL):
                         execution_state['completed_nodes'] += 1
+                    done = execution_state['completed_nodes']
+                    planned = execution_state['total_nodes']
                 if status in (NODE_FAILED, NODE_PARTIAL):
                     continue
                 add_log(
-                    t(
-                        'wf.node_completed',
-                        wf=wf_name,
-                        nid=label,
-                        done=execution_state['completed_nodes'],
-                        total=execution_state['total_nodes'],
-                    ),
+                    t('wf.node_completed', wf=wf_name, nid=label, done=done, total=planned),
                     wf_idx=wf_idx,
                 )
         return results
@@ -1375,7 +1375,14 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     add_log(t('wf.validation_error', err=e))
                 execution_state['running'] = False
                 # Mistakes in the definition, not something to continue later.
+                # Announced as its own outcome: nothing ran, so a progress line
+                # reading "0/N, can continue" would describe a run that never was.
                 outcome = RUN_FAILED
+                with _completed_lock:
+                    execution_state['outcome'] = 'rejected'
+                    execution_state['total_nodes'] = 0
+                    execution_state['completed_nodes'] = 0
+                add_log(t('run.rejected', n=len(errors)))
                 return
 
             # Split into per-workflow connected components
@@ -1466,13 +1473,29 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     add_log(t('wf.all_completed'))
 
             still_running = execution_state['running']
-            add_log(
-                t(
-                    'run.finished',
-                    done=execution_state['completed_nodes'],
-                    total=execution_state['total_nodes'],
-                )
+            # Read the settled node states BEFORE announcing the run: the finish
+            # line, the stored outcome and the browser's toast all have to agree,
+            # and the broken count used to be computed after the line was printed.
+            broken = sum(
+                1 for s in store.node_statuses(run_id).values() if s.get('status') in (NODE_FAILED, NODE_PARTIAL)
             )
+            with _completed_lock:
+                execution_state['failed_nodes'] = broken
+                execution_state['outcome'] = (
+                    'interrupted' if not still_running else ('failed' if broken else 'completed')
+                )
+            finish_line = t(
+                'run.finished',
+                done=execution_state['completed_nodes'],
+                total=execution_state['total_nodes'],
+            )
+            # Starved and lost nodes are named in the same sentence instead of
+            # quietly subtracting from a ratio the reader cannot interpret.
+            if execution_state['skipped_nodes']:
+                finish_line += t('run.finished.skipped', n=execution_state['skipped_nodes'])
+            if broken:
+                finish_line += t('run.finished.failed', n=broken)
+            add_log(finish_line)
             if still_running:
                 # One history entry per connected component, each under its
                 # OWN name-node label — a multi-workflow canvas must land in
@@ -1482,24 +1505,22 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     snapshot = _results_snapshot()
                     sub_results = {nid: res for nid, res in snapshot.items() if nid in se.nodes}
                     _record_execution_history(None, se, sub_results, _component_name(se) or workflow_name)
+            # 'completed' must mean every node really finished. A node that failed
+            # or stopped half-way leaves gaps; marking the run complete hid it from
+            # the resume banner forever and the 未处理 rows were never filled — the
+            # opposite of what checkpoints are for. One broken node downgrades the
+            # whole run to 'failed'.
+            outcome = RUN_FAILED if broken else RUN_COMPLETED
             if not still_running:
                 outcome = RUN_INTERRUPTED
-            else:
-                # 'completed' must mean every node really finished. A node that
-                # failed or stopped half-way leaves gaps; marking the run
-                # complete hid it from the resume banner forever and the 未处理
-                # rows were never filled — the opposite of what checkpoints are
-                # for. One broken node downgrades the whole run to 'failed'.
-                broken = sum(
-                    1 for s in store.node_statuses(run_id).values() if s.get('status') in (NODE_FAILED, NODE_PARTIAL)
-                )
-                outcome = RUN_FAILED if broken else RUN_COMPLETED
 
         except Exception:
             # See the parallel branch above: the logger line already reaches the
             # console, so a second add_log was the same sentence twice.
             logger.exception(t('wf.exec_exception'))
             outcome = RUN_INTERRUPTED if not execution_state['running'] else RUN_FAILED
+            with _completed_lock:
+                execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
         finally:
             execution_state['running'] = False
             # Whatever is left claiming to be running was killed, not finished;
@@ -1508,8 +1529,16 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # close — the console line is then the only record that this happened.
             if ctx is None:
                 add_log(t('run.store_unavailable'))
+                with _completed_lock:
+                    execution_state['outcome'] = 'failed'
             else:
                 _close_run(ctx, outcome)
+            with _completed_lock:
+                # Every exit must leave a verdict: the browser stops guessing from
+                # `completed < total` and reads this instead, and an empty string
+                # would leave the last run's answer standing on screen.
+                if not execution_state['outcome']:
+                    execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
             # Retention is only real if something applies it. A finished run is
             # the natural moment: the databases are open, no writer is active and
             # the user just proved the machine is in use.
@@ -2431,6 +2460,19 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         return [], NODE_SKIPPED
 
     try:
+        # Announced HERE, after the reuse and empty-upstream decisions above: it
+        # used to be printed by the caller before this function decided anything,
+        # so a restored or skipped node read "Executing node …" and then, one line
+        # later, "restored from the last attempt" / "skipped". '（source）' in a
+        # Chinese console reads like a stack trace, so the type speaks in the
+        # reader's own words.
+        ntype_label = t(f'node.{ntype}')
+        if ntype_label.startswith('node.'):
+            ntype_label = ntype
+        add_log(
+            t('wf.executing_node', wf=execution_state['_wf_names'].get(wf_idx) or '', nid=label, ntype=ntype_label),
+            wf_idx=wf_idx,
+        )
         result = _execute_node(node, headless, primary, upstream=upstream, ctx=ctx)
     except Exception as e:
         # What the node already produced: process nodes publish finished rows
@@ -2629,6 +2671,13 @@ def workflow_status():
             'results': list(results.keys()),
             'total_nodes': execution_state['total_nodes'],
             'completed_nodes': execution_state['completed_nodes'],
+            # What the run decided about itself. The browser used to infer
+            # "unfinished, offer a continue" from completed < total, which is
+            # wrong for a run that skipped a starved node and right for nothing
+            # else, and wrong for a definition that never started at all.
+            'skipped_nodes': execution_state['skipped_nodes'],
+            'failed_nodes': execution_state['failed_nodes'],
+            'outcome': execution_state['outcome'],
             'chart_results': chart_results,
             'cookie_expired': bool(execution_state.get('cookie_expired')),
             # The console polls this while a run is live, so the waiting list is
