@@ -19,12 +19,15 @@ pytestmark = pytest.mark.unit
 
 
 class FakeDriver:
-    """Answers the credential script, the in-page fetch, and the body text."""
+    """Answers the credential script, the entry-count script, the DOM query and
+    the in-page fetch, each by which script was asked for."""
 
-    def __init__(self, creds=None, answers=None, body=''):
+    def __init__(self, creds=None, answers=None, body='', counts=None, rendered=()):
         self.creds = creds or {}
         self.answers = list(answers or [])
         self.body = body
+        self.counts = counts or {}
+        self.rendered = list(rendered)
         self.visited = []
         self.fetched = []
         self._current = 'https://mp.weixin.qq.com/s/abc'
@@ -39,18 +42,26 @@ class FakeDriver:
     def set_script_timeout(self, _seconds):
         pass
 
-    def execute_script(self, _script, *_args):
+    def execute_script(self, script, *_args):
+        if 'labels' in script:  # the 阅读/赞/在看 probe
+            return dict(self.counts)
         return dict(self.creds)
+
+    def find_elements(self, by, selector):
+        if selector == '.discuss_list .item':
+            return [type('E', (), {'text': text})() for text in self.rendered]
+        return []
+
+    def find_element(self, by, selector):
+        if selector == 'body':
+            return type('E', (), {'text': self.body})()
+        raise KeyError(selector)
 
     def execute_async_script(self, _script):
         self.fetched.append(_script)
         if not self.answers:
             raise AssertionError('the adapter asked the endpoint more times than scripted')
         return self.answers.pop(0)
-
-    def find_element(self, by, selector):
-        assert selector == 'body'
-        return type('E', (), {'text': self.body})()
 
 
 CREDS = {
@@ -173,29 +184,48 @@ class TestParser:
 
 
 class TestCrawl:
-    def test_a_refusal_page_is_blocked_not_reported_as_an_empty_article(self):
-        session, logs = _session(creds=CREDS, answers=[REFUSAL])
-        rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 20)
-        assert (rows, status) == ([], BLOCKED)
-        assert any('请在微信客户端打开链接' in line or '验证' in line for line in logs)
+    """The classification the site owner's rule demands.
 
-    def test_a_json_answer_pages_until_the_limit_is_reached(self):
-        first = json.dumps(PAYLOAD)
-        second = json.dumps({'comment_count': 4, 'elected_comment': [{'author': '丁', 'content': '第四条'}]})
-        session, _logs = _session(creds=CREDS, answers=[first, second])
-        rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 3)
+    An article that has no comments and a visit that never got in look identical
+    (empty area, no counts) except when counts prove the visit worked. Reporting
+    the ambiguous case as "0 comments" would quietly turn a failed crawl into
+    usable-looking data, so it is reported as not-entered.
+    """
+
+    def test_elected_comments_from_the_endpoint_are_returned(self):
+        session, _logs = _session(creds=CREDS, answers=[json.dumps(PAYLOAD)])
+        rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 0)
         assert status == OK
-        assert [row['评论内容'] for row in rows] == ['写得很清楚收藏了', '谢谢支持', '同问']
+        assert [row['评论内容'] for row in rows] == ['写得很清楚收藏了', '谢谢支持', '同问', '第二条评论']
 
-    def test_an_answer_without_credentials_still_asks_once_then_reports(self):
-        """The ask IS the diagnosis: the refusal text is what the user needs, and
-        staying silent because key was empty would hide it."""
-        session, _logs = _session(creds={'biz': 'B', 'comment_id': '9'}, answers=[REFUSAL])
+    def test_the_row_limit_is_respected_on_the_api_path(self):
+        session, _logs = _session(creds=CREDS, answers=[json.dumps(PAYLOAD)])
+        rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 2)
+        assert status == OK and len(rows) == 2
+
+    def test_comments_rendered_in_the_dom_are_read_without_the_endpoint(self):
+        session, _logs = _session(creds=CREDS, answers=[], rendered=['读者丁: 第四条'])
+        rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 5)
+        assert status == OK
+        assert rows[0]['评论内容'] == '读者丁: 第四条'
+        assert session.driver.fetched == []
+
+    def test_empty_area_and_visible_counts_means_the_article_has_no_comments(self):
+        session, logs = _session(creds=CREDS, answers=[REFUSAL], counts={'阅读': '1.2万', '赞': '88'})
+        rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 5)
+        assert (rows, status) == ([], OK)
+        assert any('无留言' in line for line in logs)
+
+    def test_empty_area_and_no_counts_is_not_entered_rather_than_empty(self):
+        """The trap this guards: a refused visit also yields "no comments", and
+        writing that into a dataset would look like a real, clean result."""
+        session, logs = _session(creds=CREDS, answers=[REFUSAL], counts={})
         rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 5)
         assert (rows, status) == ([], BLOCKED)
+        assert any('没有正确进入' in line for line in logs)
 
-    def test_a_page_without_a_comment_module_is_dead(self):
-        session, _logs = _session(creds={'biz': '', 'comment_id': ''})
+    def test_a_deleted_or_revoked_article_is_dead(self):
+        session, _logs = _session(creds=CREDS, body='该内容已被发布者删除', counts={'阅读': '5'})
         rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 5)
         assert (rows, status) == ([], DEAD)
 
@@ -205,16 +235,12 @@ class TestCrawl:
         assert (rows, status) == ([], BLOCKED)
         assert session.driver.fetched == []
 
-    def test_a_second_page_that_breaks_keeps_the_first_pages_rows(self):
-        answers = [json.dumps(PAYLOAD), 'truncated']
-        session, _logs = _session(creds=CREDS, answers=answers)
-        rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 0)
-        assert status == OK
-        assert len(rows) == 4
-
-    def test_an_unparsable_first_answer_is_blocked_not_dead(self):
-        """DEAD would tell the user the link is wrong; the link is fine, the
-        answer just was not — that is a refusal to read, not a dead page."""
-        session, _logs = _session(creds=CREDS, answers=['<html>no json</html>'])
-        rows, status = session.crawl_wechat('https://mp.weixin.qq.com/s/x', 5)
-        assert (rows, status) == ([], BLOCKED)
+    def test_no_comment_id_skips_the_endpoint_but_still_judges_entry(self):
+        """Without an id there is nothing to ask for, yet the visit still has to
+        be classified: counts visible → genuinely no comments; none → not entered."""
+        bare = {'biz': 'B', 'comment_id': '', 'key': '', 'show_comment': '0'}
+        with_counts, _logs = _session(creds=bare, counts={'在看': '3'})
+        assert with_counts.crawl_wechat('https://mp.weixin.qq.com/s/x', 5)[1] == OK
+        assert with_counts.driver.fetched == []
+        blind, _logs2 = _session(creds=bare, counts={})
+        assert blind.crawl_wechat('https://mp.weixin.qq.com/s/x', 5)[1] == BLOCKED

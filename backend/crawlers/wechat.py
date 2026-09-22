@@ -267,6 +267,7 @@ class WechatCrawler(Crawler):
             creds = self.article_credentials()
             facts['url'] = _safe_current_url(self.driver) or article
             facts['has_pass_ticket'] = bool(creds['pass_ticket'])
+            facts['show_comment'] = creds['show_comment']
             facts['comment_key'] = creds['key']
             facts['comment_id'] = creds['comment_id']
             facts['comment_visible'] = self.rendered_comment_count()

@@ -83,29 +83,37 @@ class TestCommentRefusal:
     being told "0 comments" as if that were the article's answer.
     """
 
-    #: An article whose page does carry a comment module (its HTML contains
-    #: ``comment_id``) — supplied by the user, measured 2026-09-22.
-    ARTICLE_WITH_MODULE = 'https://mp.weixin.qq.com/s/48ubXezOGo5GLqzwNk8AjQ'
+    #: An article that provably HAS 留言 in the WeChat client (one comment,
+    #: confirmed by the user on 2026-09-22) — the only kind of article that can
+    #: distinguish "the site hides comments from browsers" from "this article has
+    #: no comments". The three stable URLs above have none, so they prove nothing
+    #: on their own.
+    ARTICLE_WITH_COMMENTS = 'https://mp.weixin.qq.com/s/oErxI--zmd7HkEWtF8BiHQ'
 
     def _crawl(self, live_crawler, url):
         from crawlers.comments import CommentSession
 
         crawler = live_crawler('wechat', headless=False)
         session = CommentSession(crawler.driver, log=lambda msg: None, nap=lambda _s: None)
-        return session.crawl_wechat(url, 10)
+        return crawler, session.crawl_wechat(url, 20)
 
-    @pytest.mark.parametrize('url', ARTICLE_URLS + [ARTICLE_WITH_MODULE])
+    def test_an_article_with_comments_is_refused_not_reported_as_empty(self, live_crawler):
+        """The decisive case: the client shows 1 条留言, a browser session gets
+        ``show_comment=0``, no ``elected_comment`` in 3.4 MB of HTML, no credential,
+        and the endpoint answers its 验证 page. That must surface as ``blocked``."""
+        crawler, (rows, status) = self._crawl(live_crawler, self.ARTICLE_WITH_COMMENTS)
+        assert (rows, status) == ([], 'blocked'), f'the endpoint answered a browser: {rows[:2]}'
+        creds = crawler.article_credentials()
+        assert creds['comment_id'], 'the page must still expose its comment id, else DEAD would be the wrong answer'
+        assert not creds['key'], 'a key appeared — the site now issues comment credentials to browsers'
+        assert creds['show_comment'] == '0', 'the server stopped hiding the area from this session'
+        assert crawler.rendered_comment_count() == 0
+
+    @pytest.mark.parametrize('url', ARTICLE_URLS + [ARTICLE_WITH_COMMENTS])
     def test_a_browser_session_never_returns_comment_rows(self, live_crawler, url):
-        rows, status = self._crawl(live_crawler, url)
+        _crawler, (rows, status) = self._crawl(live_crawler, url)
         assert rows == [], f'a browser was handed comments, which the site says it cannot see: {rows[:2]}'
         assert status != 'ok', 'zero rows must not be reported as a clean "this article has no comments"'
-
-    def test_the_module_but_not_the_credential_reads_as_blocked(self, live_crawler):
-        """The refusal case exactly: the page exposes a comment id, the endpoint
-        still answers its 验证 page — the user must be told it is a permission
-        wall, not an empty article."""
-        rows, status = self._crawl(live_crawler, self.ARTICLE_WITH_MODULE)
-        assert (rows, status) == ([], 'blocked')
 
 
 def test_reread_of_same_url_is_deduped_by_the_ledger(live_crawler):

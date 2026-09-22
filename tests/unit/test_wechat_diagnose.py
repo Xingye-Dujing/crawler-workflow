@@ -155,6 +155,7 @@ class TestArticleCredentials:
         crawler.driver.execute_script = boom
         assert set(crawler.article_credentials()) == {
             'key',
+            'show_comment',
             'comment_id',
             'appmsg_token',
             'biz',

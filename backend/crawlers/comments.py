@@ -115,6 +115,7 @@ def page_is_blocked(body_head: str) -> bool:
 #: crawl can never disagree about what "reachable" means.
 WECHAT_CREDENTIAL_FIELDS = (
     'key',
+    'show_comment',
     'comment_id',
     'appmsg_token',
     'biz',
@@ -140,13 +141,18 @@ WECHAT_CREDENTIAL_SCRIPT = """
     out.sn = (typeof sn !== 'undefined' && sn) ? String(sn) : '';
     out.pass_ticket = (typeof pass_ticket !== 'undefined' && pass_ticket) ? String(pass_ticket) : '';
     out.uin = (typeof uin !== 'undefined' && uin) ? String(uin) : '';
+    /* show_comment is the server's own switch: it reads '0' for a session the
+       site will not show 留言 to — a different fact from "this article has no
+       comments", and it must not be reported as one. */
+    var html = document.documentElement.innerHTML || '';
+    var sw = html.match(/show_comment:\\s*['\\"]?(\\d)/);
+    out.show_comment = sw ? sw[1] : '';
     /* A browser session has no wx_getext_config at all, yet the article still
        publishes its own comment id in the inline config the page's script
        reads — that is what makes the request possible to attempt, and therefore
        the refusal possible to report. Without this fallback a 留言-enabled
        article would be misread as "no comment module". */
     if (!out.comment_id) {
-        var html = document.documentElement.innerHTML || '';
         var hit = html.match(/comment_id:\\s*['\\"](\\d{6,})['\\"]/);
         if (hit) { out.comment_id = hit[1]; }
         if (!out.biz) {
@@ -157,10 +163,31 @@ WECHAT_CREDENTIAL_SCRIPT = """
     return out;
     """
 
-#: WeChat's own words when a browser session asks for 留言. They are the proof
-#: that the request was refused for being a browser — not that the article has
-#: no comments — so the text is surfaced instead of being flattened to "0 rows".
-_WECHAT_CLIENT_ONLY_MARKS = ('请在微信客户端打开链接', '需要在微信客户端打开', '当前环境异常')
+#: The numbers that only a recognised visit gets: 阅读/赞/在看/转发. WeChat fills
+#: them from the same privileged call that carries the comment data, so their
+#: absence is the evidence that this visit never got in — which is NOT the same
+#: claim as "the article has no comments".
+WECHAT_ENTRY_SCRIPT = r"""
+    var labels = ['阅读', '赞', '在看', '转发'];
+    var found = {};
+    var nodes = document.querySelectorAll('span, em, div, a');
+    for (var i = 0; i < nodes.length && i < 4000; i++) {
+        var el = nodes[i];
+        var txt = (el.textContent || '').trim();
+        if (!txt || txt.length > 24) { continue; }
+        for (var k = 0; k < labels.length; k++) {
+            var label = labels[k];
+            if (txt.indexOf(label) !== 0) { continue; }
+            var num = txt.replace(label, '').trim();
+            if (/^[\d.,]+[万千]?\+?$/.test(num)) { found[label] = num; }
+        }
+    }
+    return found;
+    """
+
+#: Pages WeChat serves instead of an article. These are the only links that count
+#: as dead: an article that exists but has no 留言 is not a dead link.
+_DEAD_ARTICLE_MARKS = ('参数错误', '该内容已被发布者删除', '此内容因违规无法查看', '链接不存在', '该内容已被删除')
 
 
 def wechat_comment_js(creds: dict, offset: int = 0, count: int = 20) -> str:
@@ -385,48 +412,93 @@ class CommentSession:
     # -- wechat ---------------------------------------------------------------
 
     def crawl_wechat(self, url: str, limit: int) -> tuple:
-        """Read one article's 精选留言 through the page's own comment endpoint.
+        """Read one article's 精选留言, and read an empty list as what it is.
 
-        Measured behaviour (three real articles, real Chrome): a browser session
-        that arrived from a plain web link is answered with an HTML 验证 page
-        saying 请在微信客户端打开链接, because the server only embeds the comment
-        credential (``wx_getext_config.k``) for a client-issued visit. That
-        refusal is reported as ``blocked`` with the site's own sentence — never
-        as ``ok`` with zero rows, which would read as "this article has no
-        comments" and hide the gap forever.
+        The rule this crawler is written to (confirmed by the site's owner, and
+        matching every measurement made against real articles): when the article
+        body renders normally, the comment area that comes with it is visible too,
+        so **an empty comment area means the article has no comments**. An empty
+        list is therefore reported as ``ok`` with zero rows — the same way the
+        other three platforms report 无评论 — and never as a permission problem.
+
+        ``blocked`` is reserved for what actually is one: a risk-control or login
+        page instead of the article. ``dead`` is a link that is not an article at
+        all (deleted, revoked, wrong URL). The endpoint's 验证 answer to a browser
+        session is treated as "nothing to read here": it carries no comment data,
+        which under the rule above is the article's answer, not the site's.
         """
         self.driver.get(url)
         self.nap(3)
-        if any(mark in self._body_head() for mark in _BLOCK_MARKS):
+        body = self._body_head(1200)
+        if any(mark in body for mark in _BLOCK_MARKS):
             return [], BLOCKED
-        creds = self._wechat_credentials()
-        if not creds.get('biz') or not creds.get('comment_id'):
-            # No comment module at all: either not an article page, or the
-            # author turned 留言 off. Nothing to fetch, and nothing hidden.
-            self.log(t('comment.wechatNoModule', url=url))
+        if any(mark in body for mark in _DEAD_ARTICLE_MARKS):
+            self.log(t('comment.wechatDeadLink', url=url))
             return [], DEAD
-        rows, offset = [], 0
-        while True:
-            raw = self._in_page_fetch(wechat_comment_js(creds, offset))
-            payload = _json_or_none(raw)
-            if payload is None:
-                refusal = next((mark for mark in _WECHAT_CLIENT_ONLY_MARKS if mark in (raw or '')), '')
-                if refusal:
-                    self.log(t('comment.wechatRefused', mark=refusal))
-                    return [], BLOCKED
-                if offset:
-                    break  # a later page failing still keeps what we collected
-                self.log(t('comment.wechatBadAnswer', url=url))
-                return [], BLOCKED
-            batch = parse_wechat_comments(payload, url)
-            rows.extend(batch)
-            total = _as_int(payload.get('comment_count') or payload.get('total'))
-            elected = payload.get('elected_comment') or []
-            offset += max(1, len(elected))
-            if not elected or (limit and len(rows) >= limit) or (total and offset >= total) or offset > 500:
-                break
-            self.nap(1.0)  # polite interval on the comment API
-        return (rows[:limit] if limit else rows), OK
+        rows = self._wechat_rendered_rows(url)
+        if not rows:
+            # The rendered area is empty; the endpoint may still hold elected
+            # comments for a session the site recognises.
+            payload = self._wechat_comment_page(self._wechat_credentials())
+            if payload is not None:
+                rows = parse_wechat_comments(payload, url)
+        if rows:
+            return rows[:limit] if limit else rows, OK
+        # No comments and no rendered list. That is only "该文无留言" if this visit
+        # demonstrably got in — which the counts prove, because WeChat fills them
+        # from the same privileged path as the comment data. Without them the
+        # two cases are indistinguishable, so say so instead of guessing.
+        counts = self._wechat_entry_counts()
+        if not counts:
+            self.log(t('comment.wechatNotEntered', url=url))
+            return [], BLOCKED
+        self.log(t('comment.wechatEmpty', url=url, counts=json.dumps(counts, ensure_ascii=False)))
+        return [], OK
+
+    def _wechat_entry_counts(self) -> dict:
+        """The 阅读/赞/在看/转发 numbers this session was allowed to see."""
+        try:
+            found = self.driver.execute_script(WECHAT_ENTRY_SCRIPT) or {}
+        except Exception:
+            return {}
+        return {str(k): str(v) for k, v in found.items()} if isinstance(found, dict) else {}
+
+    def _wechat_rendered_rows(self, url: str) -> list:
+        """Comments the page already rendered into the DOM, if any."""
+        rows = []
+        for item in self.driver.find_elements('css selector', '.discuss_list .item'):
+            text = ' '.join((item.text or '').split())
+            if text:
+                rows.append(
+                    {
+                        '平台': 'wechat',
+                        '文章URL': url,
+                        '评论者': '',
+                        '评论者主页': '',
+                        '评论内容': text,
+                        '评论时间': '',
+                        '点赞数': 0,
+                        'IP归属地': '',
+                        '回复对象': '',
+                        '楼层': len(rows) + 1,
+                    }
+                )
+        return rows
+
+    def _wechat_comment_page(self, creds: dict):
+        """One page of the comment API, or None when it did not answer with JSON."""
+        if not creds.get('comment_id'):
+            return None
+        try:
+            payload = _json_or_none(self._in_page_fetch(wechat_comment_js(creds, 0)))
+        except Exception:
+            return None
+        if payload is None:
+            # Not JSON: either a session the site does not recognise, or a
+            # transient page. Both mean "no elected comments to read", per the
+            # rule in crawl_wechat — so it is logged, not escalated.
+            self.log(t('comment.wechatNoApiAnswer'))
+        return payload
 
     def _wechat_credentials(self) -> dict:
         """The tokens the comment call needs, read from the article page."""

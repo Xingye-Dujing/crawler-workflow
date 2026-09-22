@@ -291,13 +291,13 @@ _ZH = {
     ),
     'cookie.entryUrl': '登录入口链接（可留空：默认打开该平台登录页；也可粘贴你想为其保存 Cookie 的页面）',
     'cookie.openedEntry': '登录浏览器已打开：{url}',
-    'comment.wechatRefused': (
-        '微信留言被服务端拒绝（返回验证页：{mark}）。留言凭证只在微信客户端自己的会话里下发，'
-        '浏览器带客户端 Cookie 也拿不到——已实测：重放客户端 mp.weixin.qq.com 的 pass_ticket/appmsg_token '
-        '后，留言接口仍回“请在微信客户端打开链接”。这不是本文无留言，而是本会话无权查看'
+    'comment.wechatDeadLink': '该链接不是一篇可读取的文章（已删除、违规或地址不对）：{url}',
+    'comment.wechatNotEntered': (
+        '没有正确进入这篇文章：既取不到留言，点赞数/转发数也不可见。'
+        '两者都缺就无法区分“这篇没有数据”和“这次没进去”，因此按未进入报错而不是当成 0 条留言：{url}'
     ),
-    'comment.wechatNoModule': '该页面没有留言模块（作者未开启留言，或链接不是文章页）：{url}',
-    'comment.wechatBadAnswer': '留言接口返回的不是 JSON：{url}',
+    'comment.wechatEmpty': '该文无留言（已确认进入成功：{counts}，留言区为空）：{url}',
+    'comment.wechatNoApiAnswer': '留言接口未返回 JSON，继续用页面已渲染的内容判断是否进入成功',
     'cookie.entryRejected': (
         '该链接不属于 {platform} 的域名，已改用平台登录页（不允许把别的站点的 Cookie 存进本平台的 Cookie 文件）'
     ),
@@ -312,7 +312,8 @@ _ZH = {
     'cookie.verify.mpLoggedInNo': '未登录（无法搜索文章，请在浏览器里扫码登录公众号后台）',
     'cookie.verify.commentKey': '评论区凭证：{state}',
     'cookie.verify.commentKeyYes': '已取得（该文章的留言可以抓取）',
-    'cookie.verify.commentKeyNo': '未取得（该链接不是微信客户端复制出来的，或缺 pass_ticket；浏览器里评论区为空）',
+    'cookie.verify.commentKeyNo': '未取得（本次访问未被认作客户端会话，评论区对本会话为空）',
+    'cookie.verify.showComment': '服务端对本会话的留言区开关：show_comment={v}',
     'cookie.verify.commentCount': '该文章在浏览器里可见的留言数：{n}',
     'cookie.verify.checkedUrl': '验证地址：{url}',
     'api.cookieBusy': '已有 {platform} 的登录窗口打开中——请先完成或取消它',
@@ -749,14 +750,15 @@ _EN = {
     'cookie.entryUrl': 'Custom login entry (optional: empty opens the platform login page; paste any page you want '
     'the cookie captured for)',
     'cookie.openedEntry': 'Login browser opened at: {url}',
-    'comment.wechatRefused': (
-        'WeChat refused the comment request with its verification page ({mark}). The comment credential is only '
-        'issued to the WeChat client\u2019s own session \u2014 replaying the client\u2019s mp.weixin.qq.com cookies '
-        '(pass_ticket/appmsg_token) still gets 请在微信客户端打开链接, measured. This article may well have '
-        'comments; this browser session is simply not allowed to read them'
+    'comment.wechatDeadLink': 'That link is not a readable article (deleted, revoked, or the wrong URL): {url}',
+    'comment.wechatNotEntered': (
+        'The article was not properly entered: neither comments nor the like/forward counts are visible. '
+        'With both missing there is no way to tell "this article has no data" from "this visit never got in", '
+        'so it is reported as not entered rather than as zero comments: {url}'
     ),
-    'comment.wechatNoModule': 'This page has no comment module (comments off, or not an article page): {url}',
-    'comment.wechatBadAnswer': 'The comment endpoint did not answer with JSON: {url}',
+    'comment.wechatEmpty': 'This article has no comments (entry confirmed: {counts}; comment area empty): {url}',
+    'comment.wechatNoApiAnswer': 'The comment endpoint returned no JSON; falling back to what the page rendered '
+    'to decide whether the article was entered',
     'cookie.entryRejected': 'That link is not on a {platform} domain, so the platform login page was used instead '
     '(another site\u2019s cookies must never be stored in this platform\u2019s cookie file)',
     'cookie.verifyBtn': 'Verify cookie',
@@ -770,8 +772,9 @@ _EN = {
     'cookie.verify.mpLoggedInNo': 'not logged in',
     'cookie.verify.commentKey': 'Comment credential: {state}',
     'cookie.verify.commentKeyYes': 'present (this article\u2019s comments can be crawled)',
-    'cookie.verify.commentKeyNo': 'absent \u2014 this link did not come from the WeChat client, or lacks pass_ticket; '
-    'the comment area stays empty in a browser',
+    'cookie.verify.commentKeyNo': 'absent — this visit was not recognised as a client session, so the '
+    'comment area is empty for it',
+    'cookie.verify.showComment': 'The server’s own comment switch for this session: show_comment={v}',
     'cookie.verify.commentCount': 'Comments visible to this browser session: {n}',
     'cookie.verify.checkedUrl': 'Verified against: {url}',
     'api.cookieBusy': 'A {platform} login window is already open — finish or cancel it first',
