@@ -482,6 +482,93 @@ class TestWorkflowExecute:
         assert app_module._RUN_STORE.stats()['runs'] == 1
 
 
+STATUS_FIELDS = {
+    'running',
+    'logs',
+    'log_total',
+    'workflows',
+    'mode',
+    'results',
+    'total_nodes',
+    'completed_nodes',
+    'chart_results',
+    'cookie_expired',
+    'queue',
+}
+
+
+def _run_e2e(client, app_module, paste, name: str) -> dict:
+    """One offline run, waited for, answered as the status payload."""
+    dataset_id = paste(E2E_RECORDS, name=f'{name}.csv')
+    started = client.post(
+        '/api/workflow/execute', json={'workflow': _e2e_workflow(dataset_id, name), 'workflow_name': name}
+    )
+    assert started.status_code == 200
+    assert _wait_for_worker(app_module), 'the execute thread did not finish in time'
+    return client.get('/api/workflow/status').get_json()
+
+
+class TestStatusPayloadContract:
+    """The console, the progress bar and the queue panel are driven by ONE answer.
+
+    Its shape is written down here while today's behaviour is still the reference,
+    so the two changes that will touch it (the console-freeze fix and the progress
+    counting fix) can be reviewed as a deliberate delta rather than as drift.
+    """
+
+    @pytest.mark.serial
+    def test_a_finished_run_answers_the_whole_console_contract(self, client, app_module, paste):
+        body = _run_e2e(client, app_module, paste, 'status-contract')
+        assert set(body) == STATUS_FIELDS, (
+            'the browser reads these keys by name; adding or renaming one is a contract change'
+        )
+        assert body['running'] is False
+        # The browser works out "which lines are new" from total minus the tail it
+        # was handed, so the two must stay consistent — an inconsistent pair silently
+        # stops the console updating while the run keeps producing.
+        assert body['log_total'] >= len(body['logs'])
+        assert set(body['results']) == {'node-1', 'node-2', 'node-3'}
+        assert (body['total_nodes'], body['completed_nodes']) == (3, 3)
+        assert body['cookie_expired'] is False
+        assert body['queue'] == []
+        assert body['mode'] in ('serial', 'parallel')
+        assert body['workflows'], 'a run must be addressable per workflow, not only as one global tail'
+        for wf in body['workflows']:
+            assert set(wf) == {'id', 'name', 'logs', 'total'}
+            assert wf['total'] >= len(wf['logs'])
+            assert isinstance(wf['id'], int)
+
+    @pytest.mark.serial
+    def test_the_tail_is_capped_but_the_total_keeps_counting(self, client, app_module, paste):
+        """The answer ships the last 200 lines and the true total; both halves of
+        that pair are load-bearing, so pin them together."""
+        body = _run_e2e(client, app_module, paste, 'status-cap')
+        assert len(body['logs']) <= 200
+        assert body['log_total'] == len(body['logs']) or body['log_total'] > len(body['logs'])
+
+    @pytest.mark.serial
+    def test_a_second_run_restarts_the_console_instead_of_accumulating(self, client, app_module, paste):
+        """Pins the server half of the console freeze.
+
+        `_begin_run` clears the buffers, so the second run's `log_total` starts
+        from a number SMALLER than what the browser last saw. A poller that keeps
+        its own high-water index then slices past the end of the array and renders
+        nothing for the rest of the run. The fix belongs in the browser (make that
+        index observable and resettable), and this test records why it has to be.
+        """
+        first = _run_e2e(client, app_module, paste, 'status-first')
+        second = _run_e2e(client, app_module, paste, 'status-second')
+        assert first['log_total'] > 0
+        assert second['log_total'] <= first['log_total'], 'the total must not accumulate across runs'
+        # Per-line prefixes are what proves a reset: both runs share one stored
+        # dataset here (identical rows are content-addressed, so the file keeps the
+        # name it was first filed under), which makes the file name a useless marker.
+        second_console = '\n'.join(second['logs'])
+        assert '[status-first]' not in second_console, 'the previous run console is gone, not hidden'
+        assert '[status-second]' in second_console
+        assert (second['total_nodes'], second['completed_nodes']) == (3, 3), 'while progress still counts correctly'
+
+
 class FakeSinkCrawler:
     """A crawler stand-in that streams through the REAL sink plumbing: every
     row passes the tee in _execute_source_node (ledger + PartWriter), so the
@@ -852,36 +939,32 @@ class TestConsoleReadabilityRegression:
     """
 
     def test_saved_titleless_workflow_still_reads_with_names(self, client, app_module, monkeypatch):
-        import json
-        from pathlib import Path
+        """The shape the user's real workflow had: a name node, a source and an
+        output, with every ``title`` dropped by the pre-fix frontend.
 
-        repo = Path(__file__).resolve().parents[2]
-        wf_path = repo / 'data' / 'workflows' / '微博-ChatGPT.json'
-        if wf_path.exists():  # the user's actual reported workflow, if present
-            doc = json.loads(wf_path.read_text(encoding='utf-8'))
-            workflow = doc.get('workflow') or doc
-        else:
-            # Same shape reconstructed: name + source(weibo) + output.
-            source = {
-                'id': 'node-1',
-                'type': 'source',
-                'params': {'platform': 'weibo', 'keyword': 'ChatGPT', 'target_count': 2},
-            }
-            workflow = _workflow(
-                [
-                    {'id': 'node-2', 'type': 'name', 'params': {'workflow_name': '获取微博'}},
-                    source,
-                    {
-                        'id': 'node-3',
-                        'type': 'output',
-                        'operation': 'save',
-                        'params': {'format': 'csv', 'filename': 'probe'},
-                    },
-                ],
-                [{'from': 'node-2', 'to': 'node-1'}, {'from': 'node-1', 'to': 'node-3'}],
-            )
-        # Drop titles to mirror the pre-fix payload even if the file has them.
-        for n in workflow.get('nodes', []):
+        This used to read ``data/workflows/微博-ChatGPT.json`` when that file
+        existed and a reconstruction otherwise, so the suite silently tested two
+        different things on two machines (and reached into real user data while
+        doing it). The reconstruction IS the shape, so it is now the only input.
+        """
+        workflow = _workflow(
+            [
+                {'id': 'node-2', 'type': 'name', 'params': {'workflow_name': '获取微博'}},
+                {
+                    'id': 'node-1',
+                    'type': 'source',
+                    'params': {'platform': 'weibo', 'keyword': 'ChatGPT', 'target_count': 2},
+                },
+                {
+                    'id': 'node-3',
+                    'type': 'output',
+                    'operation': 'save',
+                    'params': {'format': 'csv', 'filename': 'probe'},
+                },
+            ],
+            [{'from': 'node-2', 'to': 'node-1'}, {'from': 'node-1', 'to': 'node-3'}],
+        )
+        for n in workflow['nodes']:
             n['title'] = None
 
         rows = [{'发布者': 'a', '正文': 'hello', '链接': 'https://weibo.com/1'}]
