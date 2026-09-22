@@ -71,6 +71,33 @@ def state(tmp_path_factory):
         {'id': 'undo_last', 'add': ['source', 'output'], 'undo': True},
         {'id': 'undo_redo', 'add': ['source', 'output'], 'undo': True, 'redo': True},
         {
+            'id': 'copy_paste_named',
+            'restore': {
+                'nodes': {
+                    'node-1': {
+                        'id': 'node-1',
+                        'type': 'source',
+                        'title': '我的抓取',
+                        'params': {'platform': 'zhihu', 'keyword': 'AI'},
+                        'x': 12,
+                        'y': 34,
+                    }
+                },
+                'connections': [],
+            },
+            'copy': 'node-1',
+            'paste': 2,
+        },
+        {
+            'id': 'copy_paste_default_label',
+            'add': ['source'],
+            'copy': 'node-1',
+            'paste': 1,
+            'setLang': 'zh',
+            'refresh': ['node-2'],
+        },
+        {'id': 'paste_without_copy', 'add': ['source'], 'paste': 1},
+        {
             'id': 'restamp',
             'restore': {
                 'nodes': {
@@ -110,6 +137,27 @@ class TestCanvasState:
     def test_a_titleless_node_becomes_the_type_label_not_null(self, state):
         n2 = state['restore_titles']['nodes'][1]
         assert n2['title'] == 'Output'
+
+    def test_copying_a_named_node_pastes_the_name_too(self, state):
+        nodes = state['copy_paste_named']['nodes']
+        assert [n['title'] for n in nodes] == ['我的抓取', '我的抓取', '我的抓取']
+        pasted = nodes[1]
+        assert pasted['elTitle'] == '我的抓取', 'the element text is what the user reads on the canvas'
+        assert state['copy_paste_named']['clipboard']['title'] == '我的抓取'
+        for n in nodes[1:]:
+            assert n['params'] == nodes[0]['params'], 'the settings must travel with the name'
+            assert n['id'] != nodes[0]['id'], 'a paste is a new node, not a second label on the old one'
+        assert any(msg == 'toast.nodeCopied' for msg in state['copy_paste_named']['toasts'])
+
+    def test_a_pasted_default_label_still_translates_with_the_language(self, state):
+        nodes = {n['id']: n for n in state['copy_paste_default_label']['nodes']}
+        assert nodes['node-1']['title'] == 'Data Source'
+        assert nodes['node-2']['title'] == '数据源', 'nothing was named, so there is nothing to keep'
+
+    def test_pasting_with_nothing_copied_adds_no_node(self, state):
+        r = state['paste_without_copy']
+        assert [n['id'] for n in r['nodes']] == ['node-1']
+        assert not any(msg == 'toast.nodePasted' for msg in r['toasts'])
 
     def test_undo_removes_the_last_add_and_redo_brings_it_back(self, state):
         assert [n['id'] for n in state['undo_last']['nodes']] == ['node-1']

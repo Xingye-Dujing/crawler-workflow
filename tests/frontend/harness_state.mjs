@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox } from './harness_dom.mjs';
+import { baseSandbox, dispatchOn } from './harness_dom.mjs';
 
 const src = fs.readFileSync(process.argv[2], 'utf8');
 const scenarios = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
@@ -39,13 +39,47 @@ const I18n = {
     },
 };
 
-const sandbox = { ...baseSandbox(), I18n, RunState: { parallel: false, headless: true }, Settings: { save: () => {} } };
+const toasts = [];
+const sandbox = {
+    ...baseSandbox(),
+    I18n,
+    RunState: { parallel: false, headless: true },
+    Settings: { save: () => {} },
+    showToast: (msg) => toasts.push(msg),
+};
 vm.createContext(sandbox);
 vm.runInContext(src + '\n;globalThis.__canvas = canvas;', sandbox);
 
 const canvas = sandbox.__canvas;
 canvas.nodesContainer = sandbox.__byId('nodes-container');
 canvas.workspace = sandbox.__byId('workspace');
+/* Copy and paste are context-menu items living in a document click listener, so
+   the only way to test them faithfully is to register the real handlers and fire
+   the same events a right-click produces. */
+canvas.setupEvents();
+
+/** Fire an event through every captured document listener. */
+function fire(type, target, extra = {}) {
+    const ev = { type, target, preventDefault() {}, stopPropagation() {}, clientX: 300, clientY: 220, ...extra };
+    (sandbox.__handlers.document[type] || []).forEach((fn) => fn(ev));
+}
+
+/** Right-click `nodeId` (or empty canvas when null), then pick a menu item. */
+function useNodeMenu(nodeId, action) {
+    const noNode = { closest: () => null };
+    const onNode = { closest: (sel) => (sel === '.node' ? { id: nodeId } : null) };
+    const item = { dataset: { action } };
+    const menuTarget = { closest: (sel) => (sel === '#context-menu' || sel === '[data-action]' ? item : null) };
+    dispatchOn(canvas.workspace, 'contextmenu', {
+        button: 2,
+        clientX: 300,
+        clientY: 220,
+        target: nodeId ? onNode : noNode,
+        preventDefault() {},
+        stopPropagation() {},
+    });
+    fire('click', menuTarget);
+}
 
 const out = {};
 for (const sc of scenarios) {
@@ -55,6 +89,8 @@ for (const sc of scenarios) {
     canvas.nextId = 1;
     canvas._history = [];
     canvas._historyIdx = -1;
+    canvas._clipboardData = null;
+    toasts.length = 0;
     I18n.lang = sc.lang || 'en';
 
     if (sc.restore) canvas.restoreState(sc.restore);
@@ -67,6 +103,8 @@ for (const sc of scenarios) {
             canvas.updateNodeDisplay(id);
         }
     }
+    if (sc.copy) useNodeMenu(sc.copy, 'ctxCopy');
+    for (let i = 0; i < (sc.paste || 0); i++) useNodeMenu(null, 'ctxPasteNode');
     if (sc.undo) canvas.undo();
     if (sc.redo) canvas.redo();
     if (sc.setLang) I18n.lang = sc.setLang;
@@ -85,6 +123,8 @@ for (const sc of scenarios) {
         serialized: canvas.toWorkflowJSON(),
         historyIdx: canvas._historyIdx,
         historyLen: canvas._history.length,
+        clipboard: canvas._clipboardData,
+        toasts: toasts.slice(),
     };
 }
 process.stdout.write(JSON.stringify(out));

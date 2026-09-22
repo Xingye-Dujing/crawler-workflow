@@ -78,8 +78,16 @@ export function makeEl(tag = 'div', id = '') {
         return el._subs[sel];
     };
     el._subsets = () => [];
-    el.addEventListener = () => {};
-    el.removeEventListener = () => {};
+    /* Listeners are kept, not dropped: some handlers (the canvas right-click
+       menu) hang off a specific element rather than the document, and a harness
+       that cannot fire them would have to fake the surrounding logic by hand. */
+    el._events = {};
+    el.addEventListener = (type, fn) => {
+        (el._events[type] ||= []).push(fn);
+    };
+    el.removeEventListener = (type, fn) => {
+        el._events[type] = (el._events[type] || []).filter((f) => f !== fn);
+    };
     el.insertAdjacentHTML = () => {};
     el.setAttribute = (k, v) => {
         el[k] = v;
@@ -141,6 +149,11 @@ export function makeDocument() {
 /** Fire a mousedown through every captured document listener. */
 export function dispatchMousedown(handlers, target) {
     (handlers.document.mousedown || []).forEach((fn) => fn({ type: 'mousedown', target, preventDefault() {}, stopPropagation() {} }));
+}
+
+/** Fire an event on one stub element, the way a real click bubbles to it. */
+export function dispatchOn(el, type, ev = {}) {
+    ((el && el._events && el._events[type]) || []).forEach((fn) => fn({ type, ...ev }));
 }
 
 /**

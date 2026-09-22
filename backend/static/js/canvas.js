@@ -229,7 +229,15 @@ const canvas = {
                     if (this._contextNode) {
                         const n = this.nodes[this._contextNode];
                         if (n) {
-                            this._clipboardData = { type: n.type, params: JSON.parse(JSON.stringify(n.params)) };
+                            /* The title belongs in the clipboard next to the type and
+                               params: a node the user bothered to name is copied to be
+                               edited again, and a paste that came back labelled
+                               "Data Source" threw the name away for no reason. */
+                            this._clipboardData = {
+                                type: n.type,
+                                title: n.title || '',
+                                params: JSON.parse(JSON.stringify(n.params)),
+                            };
                             showToast(I18n.t('toast.nodeCopied'));
                         }
                     }
@@ -242,6 +250,15 @@ const canvas = {
                         const id = this.addNode(this._clipboardData.type, pp.x, pp.y);
                         if (this.nodes[id]) {
                             this.nodes[id].params = JSON.parse(JSON.stringify(this._clipboardData.params));
+                            /* Same order restoreState needs: updateNodeDisplay only keeps
+                               a name that is already on both the node AND its element, so
+                               stamping it afterwards would let the re-stamp overwrite the
+                               copied name with the type's default label. */
+                            if (this._clipboardData.title) {
+                                this.nodes[id].title = this._clipboardData.title;
+                                const titleEl = this.nodes[id].el && this.nodes[id].el.querySelector('.node-title');
+                                if (titleEl) titleEl.textContent = this._clipboardData.title;
+                            }
                             this.updateNodeDisplay(id);
                         }
                         showToast(I18n.t('toast.nodePasted'));

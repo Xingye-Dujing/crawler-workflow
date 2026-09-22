@@ -20,6 +20,7 @@ Real ``data/`` and ``logs/`` must never gain a byte from a test run.
 import contextlib
 import sys
 import time
+from itertools import count
 from pathlib import Path
 
 import pytest
@@ -152,6 +153,10 @@ def _snapshot_state(state: dict) -> dict:
     return backup
 
 
+# Hands each client fixture its own store files. See the note in `client`.
+_CLIENT_SEQ = count(1)
+
+
 @pytest.fixture
 def client(app_module, data_root, request):
     """Per-test client with fresh durable stores of its own.
@@ -179,9 +184,17 @@ def client(app_module, data_root, request):
     # write results into a state that test never asked for.
     queue_backup = list(module._RUN_QUEUE)
     module._RUN_QUEUE.clear()
-    seq = id(request) % (10**6)
+    # A monotonic counter, NOT an id()-derived number: Request objects are freed
+    # and their addresses reused, so two tests could land on the same .db file and
+    # read each other's rows (a purge that removed one file too many, a registry
+    # with a stranger in it). Every test needs a file no other test ever had.
+    seq = next(_CLIENT_SEQ)
     run_store = RunStore(str(data_root / f'api-runs-{seq}.db'))
     dataset_store = DatasetStore(str(data_root / f'api-datasets-{seq}.db'))
+    # Tripwire for that class of bug: a store built for this test holds nothing
+    # but its own schema, so anything already in it means the file was shared.
+    assert dataset_store.stats()['datasets'] == 0, f'{dataset_store.db_path} is not a fresh store'
+    assert run_store.stats()['runs'] == 0, f'{run_store.db_path} is not a fresh store'
     module._RUN_STORE = run_store
     module._DATASET_STORE = dataset_store
     # The housekeeper caches both store handles, so it has to be rebuilt
