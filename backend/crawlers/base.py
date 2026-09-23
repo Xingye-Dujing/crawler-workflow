@@ -2,7 +2,6 @@ import contextlib
 import json
 import logging
 import random
-import re
 import time
 from abc import ABC, abstractmethod
 
@@ -15,44 +14,14 @@ from selenium.webdriver.support.ui import WebDriverWait
 from i18n import t
 from settings_store import get_setting
 
+from .engine import feed, popup
+from .engine.wall import bounced_to_root, classify
+
 logger = logging.getLogger(__name__)
 
 # Where a crawler has been pushed into a login page instead of the content it
-# asked for. Every platform parks its QR wall on ``passport``/``login`` hosts,
-# so one shared detector beats three platform-specific guesses at "why is this
-# page empty?".
-_WALL_MARKERS = (
-    'passport.weibo.com/sso',
-    'passport.zhihu.com',
-    '/login?',
-    '/signin',
-    'accounts.google.com',
-    # X and Instagram park a logged-out visitor somewhere the earlier markers do
-    # not see: X uses a path segment with no query string (``/i/flow/login``) and
-    # Instagram uses a trailing slash (``/accounts/login/``). Without these, a
-    # dead session answered "Cookie 可用" by "验证 Cookie", which is worse than no
-    # check at all.
-    '/flow/login',
-    '/accounts/login/',
-)
-_WALL_TEXTS = ('扫描二维码登录', '手机号登录', '请先登录', '登录后查看', '扫码登录', '暂时限制', '当前请求存在异常')
-
-
-def looks_like_login_page(url: str, body_text: str = '') -> bool:
-    """True when a page is a login wall rather than the requested content.
-
-    Crawlers used to read such a page as "no results" and log an empty crawl,
-    which sent the user off to re-save cookies that were fine all along.
-    """
-    lowered = (url or '').lower()
-    if any(marker in lowered for marker in _WALL_MARKERS):
-        return True
-    text = body_text or ''
-    # Only the head of the page is examined: the marker strings are short and
-    # a wall puts them at the top, while an article that merely mentions
-    # "登录" in its body must not read as a wall.
-    head = text[:400]
-    return sum(1 for marker in _WALL_TEXTS if marker in head) >= 2
+# asked for is decided once, in :mod:`crawlers.engine.wall`; see that module for
+# the measured shape of every platform's wall.
 
 
 def as_index(value, default: int = 0) -> int:
@@ -91,6 +60,16 @@ class Crawler(ABC):
     # search lives on s.weibo.com, the cookies on .weibo.com).
     cookie_domains: tuple[str, ...] = ()
 
+    # First-run dialogs this site shows. Empty for most platforms; a platform
+    # that has one names it, so the wait for its auto-dismiss is never paid.
+    prompts: tuple = ()
+
+    # Whether the crawl needs images to actually load. Reading a URL out of an
+    # ``img`` attribute does not, and blocking them is the largest per-navigation
+    # saving available on a media-heavy site — so the default is off and a
+    # platform that measures a real need opts in.
+    needs_images = False
+
     def __init__(self, headless: bool = True, cookie_path: str | None = None):
         self.headless = headless
         self.cookie_path = cookie_path
@@ -103,6 +82,10 @@ class Crawler(ABC):
         # stop their scroll/page walk on it and say so instead of reporting an
         # empty crawl.
         self.login_wall = False
+        # Risk control answered, not a login problem: the session may be perfect
+        # and the fix is to back off. Kept apart from ``login_wall`` so the
+        # console never tells the user to re-save a cookie that is fine.
+        self.risk_blocked = False
         self.cookies_loaded = 0
         self._create_driver()
 
@@ -199,6 +182,14 @@ class Crawler(ABC):
         # looked selective). Hide the automation flag on both surfaces.
         opts.add_argument('--disable-blink-features=AutomationControlled')
         opts.add_experimental_option('excludeSwitches', ['enable-logging', 'automation'])
+        # ``eager`` returns as soon as the DOM is parseable instead of waiting
+        # for every image, font and analytics beacon. A crawler reads text and
+        # attributes, so the wait buys nothing — and on douyin the full ``load``
+        # event was measured to never arrive at all (a 40 s TimeoutException on
+        # the very first navigation), which no amount of timeout tuning fixes.
+        opts.page_load_strategy = 'eager'
+        if not self.needs_images:
+            opts.add_experimental_option('prefs', {'profile.managed_default_content_settings': {'images': 2}})
         browser_binary = str(get_setting('browser_binary') or '').strip()
         if browser_binary:
             opts.binary_location = browser_binary
@@ -211,13 +202,52 @@ class Crawler(ABC):
         if self.cookie_path:
             self._load_cookies()
 
-    def _load_cookies(self):
-        """Plant the saved cookies on every host the crawl will visit.
+    # ─── navigation ─────────────────────────────────────────────
 
-        One host is not enough: a cookie exported from ``weibo.com`` is accepted
-        there and silently rejected on the search host, which is where the wall
-        actually appears. Each host is visited in turn and the whole list is
-        offered to it — the entries that do not belong raise and are skipped.
+    def open(self, url: str) -> bool:
+        """Navigate to *url*, clear any first-run dialog, and report a wall.
+
+        Every platform's entry point goes through here so the three things that
+        must happen on arrival happen once: the dialog that intercepts the next
+        click is dismissed, the redirect target is judged (login wall, risk
+        control, or the router dropping the request at the site root), and a slow
+        renderer is survived. A timeout is not fatal — the document keeps
+        building, and the caller's own poll is what decides whether the page is
+        ready — but it must be *seen*, because "zero cards" after a timeout reads
+        to the user as an empty search.
+        """
+        timed_out = False
+        try:
+            self.driver.get(url)
+        except Exception as e:
+            timed_out = True
+            logger.debug('navigation did not settle for %s: %s', url, e)
+        if self.prompts:
+            self._dismiss_prompts()
+        self.check_intercept(url, request_url=url)
+        return not timed_out
+
+    def _dismiss_prompts(self):
+        """Click the site's own first-run dialog away, and say what was clicked."""
+        for outcome in popup.dismiss(self.driver, self.prompts):
+            if outcome.get('clicked'):
+                logger.info(t('crawl.promptDismissed', label=self.domain, button=outcome['clicked']))
+            elif outcome.get('matched'):
+                # Recognised but no label matched: the site re-skinned itself and
+                # the answer is in the table, not in a longer sleep.
+                buttons = ', '.join(str(s) for s in outcome.get('seen') or [])
+                logger.info(t('crawl.promptUnmatched', label=self.domain, buttons=buttons))
+
+    def _load_cookies(self):
+        """Plant the saved cookies on the hosts that need them.
+
+        One host is enough when every stored cookie is written for a domain the
+        first visit accepts (a ``.douyin.com`` cookie is valid on every subdomain),
+        and each extra host costs a full page load — measured at 2.3 s apiece on
+        douyin, one of which was a pure redirect. So the loop keeps going only for
+        the cookies the current host *refused*, which is the weibo case the
+        original code was written for (a cookie bound to one host is rejected on
+        another) and is still covered.
         """
         try:
             with open(self.cookie_path, encoding='utf-8') as f:
@@ -227,7 +257,10 @@ class Crawler(ABC):
         if not isinstance(cookies, list) or not cookies:
             return
         hosts = [self.domain, *[d for d in self.cookie_domains if d and d != self.domain]]
+        outstanding = list(cookies)
         for host in [h for h in hosts if h]:
+            if not outstanding:
+                break
             try:
                 self.driver.get(f'https://{host}')
             except Exception as e:
@@ -235,18 +268,31 @@ class Crawler(ABC):
                 # the crawl even starts — the next host may still take cookies.
                 logger.warning(t('crawl.cookies_failed', platform=host, err=e))
                 continue
-            applied = 0
-            for raw in cookies:
-                payload = self._cookie_payload(raw)
-                if not payload:
-                    continue
-                # A cookie for another domain (or an expired one the driver
-                # refuses) must not abort the rest of the list.
-                with contextlib.suppress(Exception):
-                    self.driver.add_cookie(payload)
-                    applied += 1
+            applied, rejected = self._plant(outstanding)
             self.cookies_loaded = max(self.cookies_loaded, applied)
             logger.info(t('crawl.cookiesSeeded', host=host, n=applied, total=len(cookies)))
+            outstanding = rejected
+
+    def _plant(self, cookies: list) -> tuple:
+        """Offer *cookies* to the page that is open; return (accepted, refused).
+
+        A cookie whose domain does not match the current document raises, and an
+        expired one raises too — both are kept for the next host rather than
+        dropped, and neither aborts the rest of the list.
+        """
+        applied = 0
+        rejected = []
+        for raw in cookies:
+            payload = self._cookie_payload(raw)
+            if not payload:
+                continue
+            try:
+                self.driver.add_cookie(payload)
+            except Exception:
+                rejected.append(raw)
+                continue
+            applied += 1
+        return applied, rejected
 
     @staticmethod
     def _cookie_payload(raw):
@@ -348,16 +394,36 @@ class Crawler(ABC):
         dead session, a test double) must read as "no wall" rather than abort a
         crawl that is otherwise producing rows.
         """
+        return self.check_intercept(where) == 'login'
+
+    def check_intercept(self, where: str = '', request_url: str = '') -> str:
+        """Classify the page the browser is actually on: ``login`` / ``blocked`` / ``ok``.
+
+        Two different refusals, because the user's next step differs — one needs
+        a fresh cookie, the other needs to wait. ``blocked`` is recorded on
+        :attr:`risk_blocked` and deliberately does *not* set ``login_wall``: a
+        headless zhihu search answered by risk control (code 40362) is a real
+        outcome of that mode, and calling it a dead cookie would send the user to
+        re-save a session that is fine.
+
+        ``request_url`` enables the bounce test: a profile URL that comes back at
+        the site root with no content is a refusal even though nothing on the
+        page says "login".
+        """
         try:
             url = self.driver.current_url or ''
         except Exception:
-            return False
-        if not looks_like_login_page(url, self._body_text()):
-            return False
-        if not self.login_wall:
+            return 'ok'
+        verdict = classify(url, self._body_text())
+        if verdict == 'ok' and request_url and bounced_to_root(request_url, url, self.login_url):
+            verdict = 'login'
+        if verdict == 'login' and not self.login_wall:
             self.login_wall = True
             logger.warning(t('crawl.loginWall', platform=self.domain, where=where or url))
-        return True
+        if verdict == 'blocked' and not self.risk_blocked:
+            self.risk_blocked = True
+            logger.warning(t('crawl.riskBlocked', platform=self.domain, where=where or url))
+        return verdict
 
     def _wait_for_count(self, count_fn, target: int, timeout: float = 1.5, tick: float = 0.3) -> int:
         """Poll ``count_fn`` until it reaches ``target`` or ``timeout`` runs out.
@@ -367,13 +433,7 @@ class Crawler(ABC):
         Bounded by poll count rather than a clock so the wait stays a pure
         function of the page (and stays instant under a fake driver).
         """
-        seen = count_fn()
-        for _ in range(max(1, int(timeout / tick))):
-            if seen >= target:
-                break
-            time.sleep(tick)
-            seen = count_fn()
-        return seen
+        return feed.wait_for(count_fn, target, timeout=timeout, tick=tick)
 
     @staticmethod
     def _polite_pause(base: float = 1.0, spread: float = 0.4):
@@ -394,22 +454,6 @@ class Crawler(ABC):
         if href.startswith('//'):
             return prefix + href
         return href
-
-    @staticmethod
-    def _number_in(text: str) -> int:
-        """First integer in a label, honouring the Chinese units 万/千."""
-        if not text:
-            return 0
-        cleaned = str(text).replace(',', '').replace(' ', '')
-        m = re.search(r'(\d+(?:\.\d+)?)(万|千)?', cleaned)
-        if not m:
-            return 0
-        value = float(m.group(1))
-        if m.group(2) == '万':
-            value *= 10000
-        elif m.group(2) == '千':
-            value *= 1000
-        return int(value)
 
     def save_cookies(self, path: str) -> int:
         """Write the session cookies to *path*; returns how many were saved."""

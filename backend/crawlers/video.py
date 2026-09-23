@@ -53,6 +53,8 @@ from urllib.parse import quote
 from i18n import t
 
 from .base import Crawler, as_index
+from .engine import feed, popup
+from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +197,7 @@ class BilibiliCrawler(VideoCrawler):
             url = bilibili_search_url(keyword, page)
             if page == 1:
                 logger.info(t('crawl.bili.url', url=url))
-            self.driver.get(url)
+            self.open(url)
             bvids = self._wait_bvids()
             self.check_login_wall(url)
             if self.login_wall:
@@ -311,11 +313,25 @@ class DouyinCrawler(VideoCrawler):
     domain = 'www.douyin.com'
     cookie_domains = ('douyin.com', 'www.iesdouyin.com')
     login_url = 'https://www.douyin.com/'
+    #: The crawl's own starting point. ``https://www.douyin.com/`` answers with a
+    #: redirect to ``/jingxuan`` (measured: 2.3 s for the pair, and the search box
+    #: is only on the target document), so the hop is entered at its end instead
+    #: of being followed. It also removes one page refresh — which is what was
+    #: wiping the 「保存登录信息」 mask mid start-up and making that failure look
+    #: intermittent. The cookie panel still uses ``login_url``, where a login
+    #: actually begins.
+    crawl_entry = 'https://www.douyin.com/jingxuan'
     supports_crawl = True
 
     #: Headless is answered by 验证码中间页 on every navigation — measured, not
     #: assumed. The executor has to open a real window for this platform.
     never_headless = True
+
+    #: The 「保存登录信息超过5天」 mask covers the search button (measured: the
+    #: click is intercepted by ``.trust-login-dialog-mask``). Only 取消 is ever
+    #: pressed: the user reports that 保存 leads to a phone-verification step, so
+    #: declining is both the safe answer and the one that keeps the session alone.
+    prompts = (popup.DOUYIN_TRUST_LOGIN,)
 
     #: Outcomes of the "reach the result list" step — kept as names because the
     #: caller has to treat them differently (see ``_open_results``).
@@ -323,10 +339,29 @@ class DouyinCrawler(VideoCrawler):
     NO_BOX = 'no_box'
     NOT_MOUNTED = 'not_mounted'
     CAPTCHA = 'captcha'
+    #: The words never made it into the search box (or never reached the router),
+    #: so nothing was actually searched. Not the same claim as "0 results".
+    QUERY_LOST = 'query_lost'
 
     CARD_SELECTOR = 'div.discover-video-card-item[data-aweme-id]'
     SEARCH_INPUT = '[data-e2e="searchbar-input"]'
     SEARCH_BUTTON = '[data-e2e="searchbar-button"]'
+    #: The result route carries the keyword in its path (measured:
+    #: ``/jingxuan/search/人工智能?…``), which is the only proof that the query the
+    #: user asked for is the query the app actually ran.
+    #: Douyin's box is a controlled input: while the 「保存登录信息」 mask is up, a
+    #: whole phrase arriving in one event is wiped by the site's own handler, so
+    #: the query is submitted empty. Bulk writing is the fast path (measured: a
+    #: fraction of a second) and per-character typing is the repair (~15 s on a
+    #: busy page), which is why the order is bulk → verify → character by
+    #: character → verify, never character-by-character by default.
+    TYPE_DELAY = 0.12
+    SUBMIT_ATTEMPTS = 2
+    #: How long to wait for the address to carry the keyword after a click. The
+    #: router answers in well under a second once the header is wired up; the wait
+    #: is there for the case where it is not, and it is bounded so a wasted
+    #: attempt costs seconds rather than the whole mount budget.
+    LAND_WAIT = 5.0
     #: The results are only *there* when the page says so; the deep link and a
     #: cold SPA both look identical (and empty) before that.
     MOUNTED_MARKS = ('为你找到', '搜索响应编号')
@@ -353,8 +388,14 @@ class DouyinCrawler(VideoCrawler):
             return self.results()
         logger.info(t('crawl.dy.start', kw=keyword, n=target_count))
         reached = self._open_results(keyword)
-        if reached in (self.NO_BOX, self.CAPTCHA):
-            raise RuntimeError(t('crawl.dy.wall') if reached == self.CAPTCHA else t('crawl.dy.noSearchBox'))
+        if reached == self.CAPTCHA:
+            raise RuntimeError(t('crawl.dy.wall'))
+        if reached == self.NO_BOX:
+            raise RuntimeError(t('crawl.dy.noSearchBox'))
+        if reached == self.QUERY_LOST:
+            # Nothing was searched, so "0 results" would be a lie about the
+            # keyword: say the words never got in, and let the user retry.
+            raise RuntimeError(t('crawl.dy.queryFailed', kw=keyword))
         if reached != self.OK:
             return self.results()
         rounds = 0
@@ -389,49 +430,177 @@ class DouyinCrawler(VideoCrawler):
     def _open_results(self, keyword: str) -> str:
         """Drive the real search bar and report *how* the attempt ended.
 
-        Three non-success outcomes and they must not blur:
+        Four non-success outcomes and they must not blur:
 
         * ``nobox`` — the page handed over no search tool at all (dead session or
           a changed DOM): an actionable failure, not an empty result;
+        * ``query_lost`` — the words never got into the box, or never reached the
+          router: also not an empty result, and the retry is a re-type, not a
+          longer wait;
         * ``captcha`` — the interstitial, which douyin announces in the **title**
           rather than in a URL pattern;
         * ``not_mounted`` — the app accepted the query but never drew cards,
-          which is also what a genuinely empty keyword looks like from here, so
-          it is reported as zero rows rather than as a crash.
+          which is what a genuinely empty keyword looks like from here, so it is
+          reported as zero rows rather than as a crash.
 
         A deep link to ``/search/<kw>`` leaves three empty ``<ul>``s behind; only
         the router's own path — focus, type, click 搜索 — mounts cards. The button
         is covered by a transparent overlay on this build, so the Enter key is the
         fallback rather than a stylistic choice.
         """
-        self.driver.get(self.login_url)
+        self.open(self.crawl_entry)
         self._polite_pause(1.2, 0.3)
+        # The dialog can mount during that pause, so look once more before the box
+        # is touched: a mask over the page steals the focus the typing needs.
+        self._dismiss_prompts()
         box = self._element_or_none(self.SEARCH_INPUT)
         if box is None:
-            self.check_login_wall(self.login_url)
+            self.check_login_wall(self.crawl_entry)
             logger.warning(t('crawl.dy.noSearchBox'))
             return self.NO_BOX
+        landed = False
+        for attempt in range(1, self.SUBMIT_ATTEMPTS + 1):
+            # The router is the only witness that counts: when the URL carries the
+            # keyword, the search happened, whatever the input reported. Reading
+            # the box back is used only to decide whether the retry needs to type
+            # slowly — the node itself is replaced by the app when the header
+            # re-renders, and a stale handle makes the value unreadable, which is
+            # not the same as the words being missing (watched: the box held the
+            # phrase, the search ran, and a value-gated loop kept clearing and
+            # retyping until it gave up).
+            self._type_query(box, keyword, per_character=attempt > 1)
+            self._submit(box, keyword)
+            landed = self._query_landed(keyword, timeout=self.LAND_WAIT)
+            if landed:
+                if self._wait_mounted():
+                    return self.OK
+                if any(mark in self._title() for mark in self.CAPTCHA_MARKS):
+                    # The wall here is a page title; no _WALL_MARKERS URL matches it.
+                    self.login_wall = True
+                    logger.warning(t('crawl.loginWall', platform=self.domain, where=self._title()))
+                    return self.CAPTCHA
+            else:
+                logger.info(t('crawl.dy.queryDropped', kw=keyword, url=self._current_url()))
+                box = self._element_or_none(self.SEARCH_INPUT) or box
+        if self.login_wall:
+            return self.CAPTCHA
+        if not landed:
+            # The route never took the words, so no search was run: reporting zero
+            # rows would be a claim about the keyword rather than about us.
+            return self.QUERY_LOST
+        logger.info(t('crawl.dy.noMount', url=self._current_url()))
+        return self.NOT_MOUNTED
+
+    def _type_query(self, box, keyword: str, per_character: bool = False) -> bool:
+        """Write *keyword* into the search box; report whether it reads back.
+
+        Bulk first (measured: a fraction of a second), character by character when
+        asked for — that path costs ~15 s on a busy page, so it is a repair and not
+        the default. The return value is advisory: ``_open_results`` judges the
+        attempt by the resulting URL.
+        """
+        text = str(keyword or '')
+        self._clear_box(box)
         with contextlib.suppress(Exception):
             self.driver.execute_script('arguments[0].focus();', box)
-        box.send_keys(str(keyword or ''))
+        if per_character:
+            for ch in text:
+                with contextlib.suppress(Exception):
+                    box.send_keys(ch)
+                time.sleep(self.TYPE_DELAY)
+        else:
+            with contextlib.suppress(Exception):
+                box.send_keys(text)
+        return self._box_value(box) == text
+
+    def _clear_box(self, box):
+        """Empty the box before a (re)type, so a retry cannot append to leftovers."""
+        script = """
+        var el = arguments[0];
+        el.value = '';
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        """
+        with contextlib.suppress(Exception):
+            self.driver.execute_script(script, box)
+
+    def _box_value(self, box) -> str:
+        """What the input holds, read as a *property*.
+
+        The HTML attribute is never updated by the site's own framework, so
+        reading it would report an empty box on a page that is showing the words
+        — the mistake this method used to make. Unreadable (a stale node) reads as
+        empty, which is safe because the caller judges the attempt by the URL.
+        """
+        try:
+            return str(self.driver.execute_script('return arguments[0].value;', box) or '')
+        except Exception:
+            return ''
+
+    def _submit(self, box, keyword: str = ''):
+        """Press 搜索 on a page that is actually ready to take it.
+
+        Three things happen here in this order, and each one is a measured
+        observation rather than defensive noise:
+
+        * the dialog is cleared **first** — it mounts some six seconds after the
+          page, so a mask can appear between typing and clicking, and pressing
+          搜索 behind it wipes the box (watched: the click closed the dialog and
+          took the words with it, which threw the whole attempt away);
+        * the box is then re-checked and refilled if the words are gone, because
+          that is exactly what the dialog just did;
+        * the click is retried once if the overlay intercepts it, with Enter as the
+          fallback — the button sits under a transparent layer on this build.
+        """
+        self._dismiss_prompts()
+        if keyword and self._box_value(box) != str(keyword):
+            self._type_query(box, keyword)
         button = self._element_or_none(self.SEARCH_BUTTON)
-        submitted = False
         if button is not None:
-            with contextlib.suppress(Exception):
+            try:
                 button.click()
-                submitted = True
-        if not submitted:
-            with contextlib.suppress(Exception):
-                box.send_keys('\n')
-        if not self._wait_for_text(self.MOUNTED_MARKS, timeout=self.MOUNT_WAIT):
-            if any(mark in self._title() for mark in self.CAPTCHA_MARKS):
-                # The wall here is a page title; no _WALL_MARKERS URL matches it.
-                self.login_wall = True
-                logger.warning(t('crawl.loginWall', platform=self.domain, where=self._title()))
-                return self.CAPTCHA
-            logger.info(t('crawl.dy.noMount'))
-            return self.NOT_MOUNTED
-        return self.OK
+                return
+            except Exception:
+                self._dismiss_prompts()
+                with contextlib.suppress(Exception):
+                    button.click()
+                    return
+        with contextlib.suppress(Exception):
+            box.send_keys('\n')
+
+    def _query_landed(self, keyword: str, timeout: float = 10.0) -> bool:
+        """Poll until the router carries *keyword* in the address.
+
+        The click is not the event that matters: the header is interactive a
+        moment after the page is, and a submit issued before its handler is
+        attached does nothing at all (measured — two immediate clicks left the
+        address on ``/jingxuan``). Waiting on the address is what makes the
+        difference between "the search ran" and "this keyword found nothing"
+        decidable without retrying the whole page.
+
+        Checked in both the decoded and percent-encoded spelling, because the
+        driver reports one or the other depending on the build.
+        """
+        text = str(keyword or '')
+        encoded = quote(text)
+
+        def hit() -> int:
+            try:
+                url = self.driver.current_url or ''
+            except Exception:
+                return 0
+            return 1 if (text in url or encoded in url) else 0
+
+        return feed.wait_for(hit, 1, timeout=timeout, tick=0.5) == 1
+
+    def _wait_mounted(self) -> bool:
+        """Wait for the result page to say it found something."""
+        return self._wait_for_text(self.MOUNTED_MARKS, timeout=self.MOUNT_WAIT)
+
+    def _current_url(self) -> str:
+        try:
+            return self.driver.current_url or ''
+        except Exception:
+            return ''
 
     def _wait_for_text(self, marks, timeout: float = 20.0) -> bool:
         """Poll the rendered text for one of *marks* (bounded, clock-free)."""
@@ -495,7 +664,7 @@ class DouyinCrawler(VideoCrawler):
         counter, so it *is* the like count, and publishing it as 播放数 would be a
         wrong figure with a plausible column name.
         """
-        self.driver.get(f'https://www.douyin.com/video/{aweme_id}')
+        self.open(f'https://www.douyin.com/video/{aweme_id}')
         if not self._wait_for_text(('发布时间', '评论'), timeout=15.0):
             self.check_login_wall(f'https://www.douyin.com/video/{aweme_id}')
             logger.warning(t('crawl.dy.detailEmpty', i=aweme_id))
@@ -513,10 +682,10 @@ class DouyinCrawler(VideoCrawler):
             '获赞数': liked,
             '发布时间': publish,
             '视频ID': str(aweme_id),
-            '点赞数': cn_count(facts.get('digg')),
-            '评论数': cn_count(facts.get('comment')),
-            '收藏数': cn_count(facts.get('collect')),
-            '转发数': cn_count(facts.get('share')),
+            '点赞数': parse_count(facts.get('digg')),
+            '评论数': parse_count(facts.get('comment')),
+            '收藏数': parse_count(facts.get('collect')),
+            '转发数': parse_count(facts.get('share')),
             '链接': f'https://www.douyin.com/video/{aweme_id}',
         }
 
@@ -561,25 +730,7 @@ def _author_from_related(related: str) -> tuple:
     match = re.search(r'^(.*?)粉丝([\d.]+[万千]?)获赞([\d.]+[万千]?)', related.strip())
     if not match:
         return '', 0, 0
-    return match.group(1).strip(), cn_count(match.group(2)), cn_count(match.group(3))
-
-
-def cn_count(text) -> int:
-    """A douyin label → an integer, honouring 万/千 and ignoring bare words."""
-    if text is None:
-        return 0
-    if isinstance(text, (int, float)):
-        return int(text)
-    cleaned = str(text).replace(',', '').replace(' ', '').replace('\n', '')
-    match = re.search(r'(\d+(?:\.\d+)?)(万|千)?', cleaned)
-    if not match:
-        return 0
-    value = float(match.group(1))
-    if match.group(2) == '万':
-        value *= 10000
-    elif match.group(2) == '千':
-        value *= 1000
-    return int(value)
+    return match.group(1).strip(), parse_count(match.group(2)), parse_count(match.group(3))
 
 
 def douyin_id(url: str) -> str:

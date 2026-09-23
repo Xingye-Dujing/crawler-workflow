@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~2052 fast-tier cases; 2132 across all tiers)**:
+- **Automated tests (pytest, ~2185 fast-tier cases; 2277 across all tiers)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -93,6 +93,23 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   answers persist so interrupted runs resume rather than re-crawl/re-pay. Change executor/run-store
   code carefully so resumed runs stay compatible with existing `runs.db` state.
 - UI text supports zh/en via `backend/i18n.py` message catalog — add new user-facing strings there.
+- **Crawler layering: `crawlers/engine/` is mechanics, a platform module is the site.**
+  Counters (`engine.counters.parse_count` — one parser for 万/千/亿/K/M/B, `1,027,710次观看`,
+  `97 views`), interception (`engine.wall`: login / risk-control / root-bounce), first-run
+  dialogs (`engine.popup.Prompt` + a platform's `prompts`), the infinite-list walk
+  (`engine.feed.walk_feed`, `engine.feed.wait_for`), cursor paging that follows the server's
+  own value (`engine.pager.walk_pages`) and reading a page's embedded JSON
+  (`engine.jsonpath`) all live in the engine and know nothing about any platform. A platform
+  module declares only its selectors, endpoints and column names. New crawl logic goes
+  through these helpers — a second copy of a scroll loop or a 万-parser is exactly what this
+  rule exists to prevent. `Crawler.open(url)` is the only navigation entry point: it survives
+  a renderer timeout, clears the dialog, and classifies the page.
+- **Cookie planting visits a host only when a cookie needs it** (`base.Crawler._load_cookies`
+  keeps the entries the current host rejected and stops when nothing is left): every extra
+  host is a real page load, measured at ~2.3 s on douyin — and one of the three was a pure
+  redirect. The driver runs with `page_load_strategy='eager'` and image loading blocked
+  unless a class sets `needs_images = True`, because a crawler reads text and attributes,
+  never pixels.
 - **Weibo serves a fake login wall**: a search first flashes the passport QR page, then bounces the
   logged-in session back to the feed. Never judge the wall from the URL right after `get()` —
   `WeiboCrawler._await_search_page` waits for a terminal state (cards / no-result plate / persistent
@@ -117,6 +134,29 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   scrolling the route container; both the panel mount and each scroll settle by
   *polling inside the crawler*, never via the caller's ``nap`` — a stubbed nap once
   turned a 2000-comment video into an "exhausted" 5-row crawl.
+- **Douyin's search submit is a three-step dance, and the URL is the only witness.**
+  Re-measured 2026-09: (1) the ``/search/<kw>`` deep link is still a shell — five URL
+  spellings all render 0 cards and 3 empty ``[data-e2e="scroll-list"]`` containers, so
+  the search bar must be driven; (2) entering at the site root costs a redirect to
+  ``/jingxuan`` that used to wipe the 「是否保存登录信息超过5天」 mask, which is why the
+  crawler now enters at ``crawl_entry = /jingxuan`` — but that also means **the mask
+  survives** and it mounts ~6 s after the page, so a click issued at 1.5 s lands while
+  the header's own handler is not attached yet (two immediate clicks left the address on
+  ``/jingxuan``, i.e. no search ran at all); (3) clicking 搜索 **while the mask is up
+  closes the mask and empties the box**, so `_submit` clears the dialog and re-checks the
+  box *before* the click instead of after a failed attempt. Judge success by polling the
+  address for the keyword (`_query_landed`, bounded), never by the input's value: the
+  node is replaced on re-render so a stale-handle read returns empty, and a value-gated
+  loop was watched clearing and retyping several times over a search that had already
+  succeeded. Read the value as the **property** — React never updates the HTML attribute.
+  Never let this become a 0-row success: `QUERY_LOST` is a distinct outcome from
+  `NOT_MOUNTED`, and only the latter may report zero rows.
+- **Do not block image loading on douyin** (measured the wrong way first): the class
+  sets no `needs_images`, the base default blocks images for speed, and that is fine for
+  every other platform — but re-tested with the dialog handled, images-on vs images-off
+  produced identical screens (22-24 vs 23-24 cards), so the earlier "blocking images
+  breaks the grid" reading was the mask all along. `Crawler.needs_images` exists for the
+  case where a site really does need it; record the measurement next to the flag.
 - **Bilibili's two paging contracts are measured, not guessed — keep them exactly.**
   The search list does *not* infinite-scroll (8 scroll rounds = 42 cards / 34 videos,
   unchanged); the row budget is `&page=N`, and **`page=1` renders zero cards**, so page

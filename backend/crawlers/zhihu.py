@@ -10,6 +10,7 @@ from selenium.webdriver.common.by import By
 from i18n import t
 
 from .base import Crawler, as_index
+from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
 
@@ -341,7 +342,7 @@ class ZhihuCrawler(Crawler):
             return 0
         # Only a 赞同 label carries the vote count; a bare number is the like
         # button on a video card.
-        return self._number_in(label) if '赞同' in label else 0
+        return parse_count(label) if '赞同' in label else 0
 
     def _get_comment_count(self, card):
         """Two labels are current at once: the action-bar button reads
@@ -356,12 +357,12 @@ class ZhihuCrawler(Crawler):
             label = self._node_text(btn)
             if '评论' not in label and '回答' not in label:
                 continue
-            return self._number_in(label)
+            return parse_count(label)
         try:
             aria = card.find_element(By.CSS_SELECTOR, '[aria-label*="评论"], [aria-label*="回答"]')
         except NoSuchElementException:
             return 0
-        return self._number_in(aria.get_attribute('aria-label') or '')
+        return parse_count(aria.get_attribute('aria-label') or '')
 
     def _get_publish_time(self, card):
         # 2026 layout moved the date from .ContentItem-time to .SearchItem-time.

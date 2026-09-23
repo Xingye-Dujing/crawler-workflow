@@ -10,6 +10,7 @@ from selenium.webdriver.common.by import By
 from i18n import t
 
 from .base import Crawler, as_index
+from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
 
@@ -302,9 +303,9 @@ class WeiboCrawler(Crawler):
             return None
         publish_time, source, post_link = self._get_from_line(card)
         text = self._get_full_text(card)
-        forward = self._number_in(self._text_of(card, '[action-type="feed_list_forward"]'))
-        comment = self._number_in(self._text_of(card, '[action-type="feed_list_comment"]'))
-        like = self._number_in(self._text_of(card, '.woo-like-count'))
+        forward = parse_count(self._text_of(card, '[action-type="feed_list_forward"]'))
+        comment = parse_count(self._text_of(card, '[action-type="feed_list_comment"]'))
+        like = parse_count(self._text_of(card, '.woo-like-count'))
         images = self._get_images(card)
         mid = card.get_attribute('mid') or ''
         logger.debug(t('crawl.debug.card_author', i=idx, v=author))
@@ -463,7 +464,7 @@ class WeiboCrawler(Crawler):
         return self._text_of(el, sel, default) or default
 
     def _extract_number(self, text):
-        return self._number_in(text)
+        return parse_count(text)
 
     def _get_publish_time(self, card):
         return self._text_of(card, '.from a')

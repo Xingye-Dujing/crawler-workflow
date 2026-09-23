@@ -19,11 +19,11 @@ from crawlers.comments import (
     CommentSession,
     bilibili_reply_js,
     bilibili_view_js,
-    page_is_blocked,
     parse_bilibili_comments,
     parse_weibo_comments,
     weibo_bid,
 )
+from crawlers.engine.wall import looks_blocked, looks_like_login_page
 from engine.workflow import WorkflowEngine
 from utils.helpers import platform_for
 
@@ -108,9 +108,12 @@ class TestHelpers:
         assert weibo_bid('nonsense') == ''
 
     def test_block_detection(self):
-        assert page_is_blocked('…暂时限制本次访问…')
-        assert page_is_blocked('扫码登录 手机号登录')
-        assert not page_is_blocked('正常内容 三亚攻略')
+        # Risk control and a login wall are different answers now (the user's fix
+        # differs: wait, or re-save the cookie), so the two detectors are asserted
+        # apart rather than through one helper that accepted either.
+        assert looks_blocked('…暂时限制本次访问…')
+        assert looks_like_login_page('', '扫码登录 手机号登录')
+        assert not looks_blocked('正常内容 三亚攻略')
 
     def test_weibo_parser_strips_tags_and_counts(self):
         payload = {

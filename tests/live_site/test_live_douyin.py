@@ -45,40 +45,52 @@ def test_visible_search_resolves_each_video(live_crawler):
     assert any((row['发布时间'] or '').startswith('20') for row in rows), 'no row carried a publish time'
 
 
-def test_a_headless_attempt_refuses_instead_of_filing_zeros(live_crawler):
-    """The measured environment fact, pinned: headless gets the captcha page.
+def test_a_headless_attempt_never_files_a_silent_empty_success(live_crawler):
+    """Measured environment fact: headless douyin gets the captcha page.
 
-    If douyin ever lets a headless session through, this skips — the contract
-    that must not break is "no silent empty success", not the refusal itself.
+    The contract is not "a refusal happens" — it is "a headless run never returns
+    an empty table as if it had succeeded". So both live outcomes are asserted
+    here and neither is skipped: refused, it must name the wall or the missing
+    search box; allowed through, it must actually deliver rows. Zero rows without
+    a refusal is the one shape that would mislead a user, and it fails.
     """
     crawler = live_crawler('douyin', headless=True)
     try:
-        with pytest.raises((RuntimeError, ValueError)) as err:
-            crawler.search(KEYWORD, target_count=2)
-        message = str(err.value)
-        assert '验证' in message or '搜索框' in message, f'unexpected refusal text: {message}'
-    except pytest.fail.Exception:
-        pytest.skip('douyin answered a headless session this run — the wall moved, not the code')
+        try:
+            rows = crawler.search(KEYWORD, target_count=2)
+        except (RuntimeError, ValueError) as refused:
+            message = str(refused)
+            assert '验证' in message or '搜索框' in message, f'unexpected refusal text: {message}'
+            return
+        assert rows, (
+            'a headless session returned 0 rows without refusing: that reads as '
+            '"this keyword has no videos", which is the false answer this test exists to catch'
+        )
+        _assert_real_rows(rows, minimum=1)
     finally:
         crawler.close()
 
 
 def test_comments_scroll_past_the_first_screen(live_crawler):
-    """Paging proof, sized to the video that is actually on screen.
+    """Paging proof, sized by the video the search actually returned.
 
-    The crawler picks which video to comment-crawl from what the live search
-    returned, so the threshold has to come from that video's own reported count:
-    a 6-comment video cannot demonstrate a scroll walk, and asserting 15+ from it
-    would fail for a reason that has nothing to do with the code.
+    The threshold comes from the platform's own reported number rather than from a
+    constant, and the sample is widened to eight videos so "no video here has
+    enough comments to demonstrate a scroll walk" is a finding about the crawl,
+    not a reason to skip: a hot douyin keyword that returns only dead videos, or
+    a 评论数 column that stopped being read, is exactly what this test should fail
+    on. Nothing here is skipped, and nothing here is satisfied by an empty table.
     """
     crawler = live_crawler('douyin', headless=False)
     try:
-        rows = crawler.search(KEYWORD, target_count=4)
+        rows = crawler.search(KEYWORD, target_count=8)
         assert rows, 'no video to comment on was found live'
         best = max(rows, key=lambda row: int(row['评论数'] or 0))
         link, reported = best['链接'], int(best['评论数'] or 0)
-        if reported < 30:
-            pytest.skip(f'none of the {len(rows)} live videos had enough comments to page (max {reported})')
+        assert reported >= 30, (
+            f'none of the {len(rows)} live videos reported enough comments to page (max {reported}): '
+            'either the keyword stopped returning live videos or 评论数 is no longer being read'
+        )
         session = CommentSession(crawler.driver, log=print, nap=lambda s: None)
         comments, status = session.crawl_douyin(link, limit=40)
     finally:

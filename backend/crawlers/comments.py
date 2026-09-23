@@ -31,11 +31,12 @@ import time
 
 from i18n import t
 
+from .engine.counters import parse_count
+from .engine.wall import looks_blocked
+
 OK = 'ok'
 BLOCKED = 'blocked'
 DEAD = 'dead'
-
-_BLOCK_MARKS = ('暂时限制', '40362', '扫码登录', '登录后查看', '当前请求存在异常')
 
 
 def _json_or_none(raw):
@@ -246,10 +247,6 @@ def _stamp(value) -> str:
     return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(seconds)) if seconds else ''
 
 
-def page_is_blocked(body_head: str) -> bool:
-    return any(mark in (body_head or '') for mark in _BLOCK_MARKS)
-
-
 def weibo_bid(url: str) -> str:
     """Extract the weibo id — /detail/<mid> or weibo.com/<uid>/<bid>."""
     m = re.search(r'/detail/(\d+)', url or '')
@@ -363,7 +360,7 @@ class CommentSession:
     def crawl_xiaohongshu(self, url: str, limit: int) -> tuple:
         self.driver.get(url)
         self.nap(5)
-        if page_is_blocked(self._body_head()):
+        if looks_blocked(self._body_head()):
             return [], BLOCKED
         seen, rows = set(), []
         for _round in range(12):
@@ -413,7 +410,7 @@ class CommentSession:
         self.driver.get(url)
         self.nap(6)
         head = self._body_head()
-        if page_is_blocked(head):
+        if looks_blocked(head):
             return [], BLOCKED
         opened = 0
         rows = []
@@ -486,7 +483,7 @@ class CommentSession:
 
         self.driver.get(url)
         self.nap(3)
-        if page_is_blocked(self._body_head()):
+        if looks_blocked(self._body_head()):
             return [], BLOCKED
         bvid = bilibili_bvid(url)
         if not bvid:
@@ -540,7 +537,7 @@ class CommentSession:
         rewrites the list under the next read, and the count is the fact the user
         needs (this comment has N replies) either way.
         """
-        from .video import cn_count, douyin_id
+        from .video import douyin_id
 
         target = f'https://www.douyin.com/video/{douyin_id(url)}' if douyin_id(url) else url
         if not douyin_id(url):
@@ -548,7 +545,7 @@ class CommentSession:
             return [], DEAD
         self.driver.get(target)
         mounted = self._wait_for_douyin_panel()
-        if page_is_blocked(self._body_head()):
+        if looks_blocked(self._body_head()):
             return [], BLOCKED
         reported = self._node_text('[data-e2e="feed-comment-icon"]')
         if not mounted:
@@ -558,8 +555,8 @@ class CommentSession:
                 # dead session behind an empty table.
                 self.log(t('comment.dyNoPanel', url=target))
                 return [], BLOCKED
-            self.log(t('comment.dyNone', url=target, n=cn_count(reported)))
-            if cn_count(reported) == 0:
+            self.log(t('comment.dyNone', url=target, n=parse_count(reported)))
+            if parse_count(reported) == 0:
                 # The counter says none exist: an answer, not a failed read.
                 return [], OK
             # The video says it has comments and the list never opened — a page

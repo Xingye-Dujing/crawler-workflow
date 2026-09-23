@@ -15,16 +15,18 @@ every change:
 * comments are DOM-scrolled (douyin's endpoint is signed with ``a_bogus``).
 """
 
+import json
+
 import pytest
 
 import crawlers.base as base_module
 from crawlers.base import Crawler
 from crawlers.comments import BLOCKED, DEAD, OK, CommentSession, douyin_comment_fields, parse_douyin_comments
+from crawlers.engine.counters import parse_count
 from crawlers.video import (
     DouyinCrawler,
     _author_from_related,
     _clean_publish,
-    cn_count,
     douyin_id,
 )
 from utils.helpers import platform_for
@@ -59,6 +61,59 @@ class El:
         self.clicked = True
 
 
+class SearchBox(El):
+    """Douyin's search input is a *controlled* component.
+
+    Measured on the live site: a whole phrase arriving in one ``send_keys`` makes
+    its own handler re-route the page, and the text is gone before 搜索 is
+    pressed — the crawl then submits an empty query and reports 0 rows for a
+    keyword with thousands of videos. Typing one character per event is what the
+    widget accepts, so this fake wipes the value on a bulk write and keeps it on
+    per-character writes. That is what makes the product's typing loop testable.
+    """
+
+    def __init__(self, wipes_on_bulk=True, driver=None):
+        super().__init__('')
+        self.value = ''
+        self.wipes_on_bulk = wipes_on_bulk
+        self.driver = driver
+
+    def send_keys(self, text):
+        super().send_keys(text)
+        if text == '\n':
+            # Enter is a real submit path here (the button sits under an overlay).
+            if self.driver is not None:
+                self.driver.submit_query(self.value)
+            return
+        if self.wipes_on_bulk and len(text) > 1:
+            self.value = ''
+            return
+        self.value += text
+
+
+class SubmitButton(El):
+    """Pressing 搜索 hands whatever the box holds to the app's own router.
+
+    With the 「保存登录信息」 dialog still up, the click does something else — it
+    closes the dialog, takes the words out of the box, and the route never
+    changes. That is the observed sequence this fake has to reproduce, because it
+    is why the crawler clears the dialog *before* clicking rather than after a
+    failed attempt.
+    """
+
+    def __init__(self, driver):
+        super().__init__('')
+        self.driver = driver
+
+    def click(self):
+        self.driver.route_attempts += 1
+        if self.driver.dialog:
+            self.driver.dialog = False
+            self.driver.box.value = ''
+            return
+        self.driver.submit_query(self.driver.box.value)
+
+
 class FakeDriver:
     """Serves the search page and the video page from fixed fixture maps."""
 
@@ -71,12 +126,22 @@ class FakeDriver:
         missing_box=False,
         comment_items=None,
         comment_count='2099',
+        wipes_on_bulk=True,
+        router_takes_query=True,
+        dialog=False,
     ):
         self.cards = cards
         self.facts = facts if facts is not None else _default_facts()
         self.body = body
         self.video_body = video_body
         self.missing_box = missing_box
+        self.wipes_on_bulk = wipes_on_bulk
+        self.router_takes_query = router_takes_query
+        # Is the 「保存登录信息」 dialog up? The click behaves differently when it is.
+        self.dialog = dialog
+        self.route_attempts = 0
+        self.dismissals = 0
+        self.box = SearchBox(wipes_on_bulk=wipes_on_bulk, driver=self)
         # The rows the comment panel holds. A rendered list PERSISTS — every read
         # returns the same rows until a scroll brings more — so the crawler has
         # to stop on "nothing new came back". An empty list here models a video
@@ -93,13 +158,25 @@ class FakeDriver:
         self.visited.append(url)
         self.current_url = url
 
+    def submit_query(self, query: str):
+        """The app's own router: a non-empty query moves to ``/search/<kw>``.
+
+        ``router_takes_query=False`` models the other half of the measured failure
+        — the words are in the box but the route never changes.
+        """
+        if query and self.router_takes_query:
+            self.current_url = f'https://www.douyin.com/jingxuan/search/{query}?type=general'
+            self.visited.append(self.current_url)
+
     def find_element(self, by, selector):
         if selector == 'body':
             return El(self.video_body if '/video/' in self.current_url else self.body)
         if selector == DouyinCrawler.SEARCH_INPUT:
             if self.missing_box:
                 raise RuntimeError('no such element')
-            return El('')
+            return self.box
+        if selector == DouyinCrawler.SEARCH_BUTTON:
+            return SubmitButton(self)
         if selector == '[data-e2e="comment-list"]':
             return El('')
         if selector == '[data-e2e="feed-comment-icon"]':
@@ -110,12 +187,18 @@ class FakeDriver:
         if selector == DouyinCrawler.CARD_SELECTOR:
             return [El('', {'data-aweme-id': aweme_id}) for aweme_id in self.cards]
         if selector == DouyinCrawler.SEARCH_BUTTON:
-            return [El('')]
+            return [SubmitButton(self)]
         if selector == '[data-e2e="comment-item"]':
             return list(self.comment_items)
         return []
 
     def execute_script(self, script, *args):
+        if 'arguments[0].value' in script:
+            return getattr(args[0], 'value', '') if args else ''
+        if "el.value = ''" in script:
+            if args:
+                args[0].value = ''
+            return None
         if 'innerText' in script and args:
             return getattr(args[0], 'text', '')
         if 'arguments[0].focus' in script:
@@ -126,6 +209,15 @@ class FakeDriver:
         if 'video-player-digg' in script:
             return dict(self.facts)
         return None
+
+    def execute_async_script(self, script, *args):
+        # The prompt-dismissal script: it reports 取消 when the dialog is up, and
+        # nothing at all when it is not — which is the cheap case.
+        if self.dialog:
+            self.dialog = False
+            self.dismissals += 1
+            return json.dumps({'clicked': '取消', 'matched': '是否保存登录信息超过5天', 'seen': ['取消', '保存']})
+        return json.dumps({'clicked': None, 'matched': None, 'seen': []})
 
     def set_script_timeout(self, seconds):
         pass
@@ -172,9 +264,12 @@ class TestPureHelpers:
         assert douyin_id('') == ''
 
     def test_counts_honour_the_chinese_units(self):
-        assert cn_count('5.9万') == 59000 and cn_count('1.8万') == 18000
-        assert cn_count('2099') == 2099 and cn_count('1千') == 1000
-        assert cn_count('分享') == 0 and cn_count('') == 0 and cn_count(None) == 0 and cn_count(12) == 12
+        # The parser itself lives in ``crawlers.engine.counters`` (every platform
+        # shares it now); these are douyin's own label shapes, kept here so a
+        # change to the shared parser that breaks douyin still fails loudly here.
+        assert parse_count('5.9万') == 59000 and parse_count('1.8万') == 18000
+        assert parse_count('2099') == 2099 and parse_count('1千') == 1000
+        assert parse_count('分享') == 0 and parse_count('') == 0 and parse_count(None) == 0 and parse_count(12) == 12
 
     def test_publish_label_is_stripped(self):
         assert _clean_publish('发布时间：2026-08-04 16:32') == '2026-08-04 16:32'
@@ -206,13 +301,36 @@ class TestSearch:
         crawler, driver = make_crawler(cards=[ID])
         rows = crawler.search('人工智能', target_count=1)
         assert rows and rows[0]['视频ID'] == ID
-        assert driver.visited[0] == 'https://www.douyin.com/'
+        # The crawl enters at the page the site would have redirected to: the root
+        # costs a full extra SPA render to arrive at /jingxuan anyway.
+        assert driver.visited[0] == DouyinCrawler.crawl_entry == 'https://www.douyin.com/jingxuan'
+
+    def test_the_query_is_written_in_one_go_when_the_box_keeps_it(self, make_crawler):
+        """The fast path: one write, then proof it landed. Character-by-character
+        typing measured ~15 s on a busy page, so it must not be the default."""
+        crawler, driver = make_crawler(cards=[ID], wipes_on_bulk=False)
+        crawler.search('人工智能', target_count=1)
+        assert driver.box.sent == ['人工智能']
+
+    def test_a_wiped_box_is_retyped_and_the_search_still_lands(self, make_crawler):
+        """The repair path, and the reason the write is checked at all.
+
+        Douyin's box is a controlled input: with the 「保存登录信息」 mask up, the
+        bulk write is wiped by the site's own handler. Reading the value back is
+        what turns that from a silent empty query into a retype — the crawl must
+        still come back with rows.
+        """
+        crawler, driver = make_crawler(cards=[ID], wipes_on_bulk=True)
+        rows = crawler.search('人工智能', target_count=1)
+        assert rows, 'the retry must still deliver rows, not a 0-row crawl'
+        assert '人工智能' in driver.box.sent, 'bulk is tried first, every time'
+        assert any(len(s) == 1 for s in driver.box.sent), 'then it falls back to per-character'
+        assert driver.route_attempts >= 2, 'the click that carried nothing is retried, not accepted'
 
     def test_an_intercepted_button_falls_back_to_enter(self, make_crawler, monkeypatch):
         """The 搜索 button sits under a transparent overlay on this build, so the
         Enter key is a live path — and the keyword must still reach the box."""
         crawler, driver = make_crawler(cards=[ID])
-        pressed = {}
 
         class _RefusingButton(El):
             def click(self):
@@ -223,15 +341,65 @@ class TestSearch:
         def _find(by, selector):
             if selector == DouyinCrawler.SEARCH_BUTTON:
                 return _RefusingButton('')
-            if selector == DouyinCrawler.SEARCH_INPUT:
-                box = El('')
-                pressed['box'] = box
-                return box
             return original(by, selector)
 
         monkeypatch.setattr(driver, 'find_element', _find)
         assert crawler.search('人工智能', target_count=1)
-        assert pressed['box'].sent == ['人工智能', '\n'], 'Enter must carry the submit after the click fails'
+        assert driver.box.sent[-1] == '\n', 'Enter must carry the submit after the click fails'
+        assert any('/search/人工智能' in url for url in driver.visited)
+
+    def test_the_dialog_is_cleared_before_the_click_so_no_attempt_is_wasted(self, make_crawler):
+        """Watched live: typing worked, then the mask appeared, then the 搜索 click
+        closed the mask **and emptied the box**, so the first attempt was always
+        thrown away and only the second one searched.
+
+        Clearing the dialog before the click — and refilling if the box came back
+        empty — makes the first submit count. ``route_attempts`` is the proof: one
+        click that worked, instead of two where the first hit a dead page.
+        """
+        crawler, driver = make_crawler(cards=[ID], dialog=True, wipes_on_bulk=False)
+        rows = crawler.search('人工智能', target_count=1)
+        assert rows
+        assert driver.route_attempts == 1, 'the first submit should have taken'
+        assert driver.dismissals == 1, 'the dialog is cleared by us, before the click'
+
+    def test_a_stale_box_read_does_not_stop_a_search_the_router_accepted(self, make_crawler, monkeypatch):
+        """The watched failure: the words were in the box, the search ran, and a
+        loop that trusted the *read-back* kept clearing and retyping until it gave
+        up. The app replaces the header node, which makes the value unreadable —
+        that is a read problem, not a missing query, so the URL decides."""
+        crawler, driver = make_crawler(cards=[ID], wipes_on_bulk=False)
+        monkeypatch.setattr(crawler, '_box_value', lambda box: '')
+        rows = crawler.search('人工智能', target_count=1)
+        assert rows, 'an unreadable input must not abort a search that landed'
+        assert driver.route_attempts == 1, 'no click may be wasted on the way'
+        assert driver.box.value == '人工智能'
+
+    def test_a_bulk_write_would_lose_the_query_and_says_so_instead_of_zero_rows(self, make_crawler, monkeypatch):
+        """The regression guard for the loop above.
+
+        With the old one-shot ``send_keys`` the box wipes itself, so this asserts
+        the *reporting* half of the fix: a query that never got in must fail the
+        node loudly, because "0 results" would be a claim about the keyword
+        rather than about the page.
+        """
+        crawler, driver = make_crawler(cards=[ID])
+
+        def bulk_typing(box, keyword, per_character=False):
+            box.send_keys(str(keyword))
+            return box.value == keyword
+
+        monkeypatch.setattr(crawler, '_type_query', bulk_typing)
+        with pytest.raises(RuntimeError) as err:
+            crawler.search('人工智能', target_count=2)
+        assert '人工智能' in str(err.value)
+        assert driver.box.value == ''
+
+    def test_a_query_the_router_never_took_is_not_an_empty_search(self, make_crawler):
+        crawler, driver = make_crawler(cards=[ID], router_takes_query=False)
+        with pytest.raises(RuntimeError):
+            crawler.search('人工智能', target_count=2)
+        assert driver.box.value == '人工智能', 'the box kept the words; the route is what failed'
 
     def test_a_page_that_never_mounts_results_collects_nothing(self, make_crawler):
         crawler, _driver = make_crawler(cards=[ID], body='精选 | 推荐 | 直播')

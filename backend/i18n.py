@@ -140,6 +140,11 @@ _ZH = {
     ),
     'crawl.cookiesSeeded': 'Cookie 预置：{host} 接受 {n}/{total} 条',
     'crawl.loginWall': '登录墙：{platform} 的 {where} 被重定向到登录页，已停止本次抓取（仅返回已拿到的数据）',
+    'crawl.riskBlocked': (
+        '风控拦截：{platform} 的 {where} 返回了安全验证而非内容，已停止本次抓取（会话未必失效，稍后重试）'
+    ),
+    'crawl.promptDismissed': '{label} 的首屏弹窗已自动点掉：「{button}」',
+    'crawl.promptUnmatched': '{label} 的首屏弹窗无法对应按钮（页面提供：{buttons}），本次可能需等待其自动消失',
     'crawl.zhihu.url': '搜索URL: {url}',
     'crawl.zhihu.loaded': '搜索页面已加载，开始滚动加载更多内容...',
     'crawl.zhihu.processed': '已处理第 {i} 条结果，当前有效数据: {n} 条',
@@ -306,7 +311,11 @@ _ZH = {
     ),
     'crawl.dy.noSearchBox': '[抖音] 页面没有可用的搜索框（登录态可能失效或页面结构已变），本次未采集',
     'crawl.dy.detailEmpty': '[抖音] 视频 {i} 的详情页没有渲染出数据，已跳过该行',
-    'crawl.dy.noMount': '[抖音] 搜索已提交但结果卡片没有出现（可能是无结果，或页面结构已变），本次按 0 条处理',
+    'crawl.dy.noMount': (
+        '[抖音] 搜索已提交但结果卡片没有出现（可能是无结果，或页面结构已变），按 0 条处理；当前地址：{url}'
+    ),
+    'crawl.dy.queryDropped': '[抖音] 关键词「{kw}」未进入结果页地址，已重新提交；当前地址：{url}',
+    'crawl.dy.queryFailed': '[抖音] 关键词「{kw}」始终未能输入搜索框，本次未执行搜索（不是该关键词无结果，请稍候重试）',
     'crawl.bili.start': '[哔哩哔哩搜索] 开始搜索关键词: "{kw}"，目标获取 {n} 条结果',
     'crawl.bili.url': '[哔哩哔哩搜索] 搜索URL: {url}',
     'crawl.bili.page': '[哔哩哔哩搜索] 第 {page} 页：{n} 个视频（新 {fresh} 个，已收录 {done} 条）',
@@ -691,6 +700,15 @@ _EN = {
         'Login wall: {platform} redirected {where} to a login page; the crawl stopped'
         ' early (data collected so far is kept)'
     ),
+    'crawl.riskBlocked': (
+        'Risk control: {platform} answered {where} with a security check instead of content;'
+        ' the crawl stopped (the session may be fine — retry a little later)'
+    ),
+    'crawl.promptDismissed': '{label}: dismissed the first-run dialog by pressing "{button}"',
+    'crawl.promptUnmatched': (
+        '{label}: the first-run dialog matched no known button (the page offers: {buttons}),'
+        ' this run may wait for it to clear on its own'
+    ),
     'crawl.zhihu.url': 'Search URL: {url}',
     'crawl.zhihu.loaded': 'Search page loaded, scrolling for more content...',
     'crawl.zhihu.processed': 'Processed result {i}, valid so far: {n}',
@@ -869,7 +887,14 @@ _EN = {
     ),
     'crawl.dy.noSearchBox': '[Douyin] no usable search box on the page (dead session or changed DOM)',
     'crawl.dy.detailEmpty': '[Douyin] video {i} rendered no detail data, row skipped',
-    'crawl.dy.noMount': '[Douyin] the app never drew result cards for this keyword — 0 rows (or retry it later)',
+    'crawl.dy.noMount': '[Douyin] the app never drew result cards for this keyword — 0 rows; current URL: {url}',
+    'crawl.dy.queryDropped': (
+        '[Douyin] keyword "{kw}" never reached the result URL, submitting again; current URL: {url}'
+    ),
+    'crawl.dy.queryFailed': (
+        '[Douyin] keyword "{kw}" could not be entered into the search box, so no search ran'
+        ' (this is not "no results" — retry a little later)'
+    ),
     'crawl.bili.start': '[Bilibili search] keyword "{kw}", target {n} results',
     'crawl.bili.url': '[Bilibili search] URL: {url}',
     'crawl.bili.page': '[Bilibili search] page {page}: {n} videos ({fresh} new, {done} collected)',

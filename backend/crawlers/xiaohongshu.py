@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from i18n import t
 
 from .base import Crawler, as_index
+from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ class XiaohongshuCrawler(Crawler):
             '笔记ID': self._note_id(link),
             '标题': self._text_of(card, '.footer .title') or self._text_of(card, '.title'),
             '作者': self._text_of(card, '.author .name') or self._text_of(card, '.name'),
-            '点赞数': self._number_in(self._text_of(card, '.like-wrapper .count')),
+            '点赞数': parse_count(self._text_of(card, '.like-wrapper .count')),
             '正文': '',
             '发布时间': '',
             '收藏数': 0,
@@ -331,7 +332,7 @@ class XiaohongshuCrawler(Crawler):
             for root in roots:
                 text = self._text_of(root, f'.{wrapper} .count')
                 if text:
-                    return self._number_in(text)
+                    return parse_count(text)
         return self._count_in(f'.{wrapper} .count')
 
     def _count_in(self, selector: str) -> int:
@@ -342,7 +343,7 @@ class XiaohongshuCrawler(Crawler):
         for el in els:
             text = self._node_text(el)
             if text:
-                return self._number_in(text)
+                return parse_count(text)
         return 0
 
     def _first_href(self, selector: str) -> str:
@@ -381,23 +382,6 @@ class XiaohongshuCrawler(Crawler):
     def _extract_count(self, selector: str) -> int:
         return self._count_in(selector)
 
-    @staticmethod
-    def _extract_count_from_text(text: str) -> int:
-        if not text:
-            return 0
-        text = text.strip()
-        m = re.match(r'([\d.]+)(万|千)?', text)
-        if m:
-            num = float(m.group(1))
-            unit = m.group(2)
-            if unit == '万':
-                num *= 10000
-            elif unit == '千':
-                num *= 1000
-            return int(num)
-        m = re.search(r'(\d+)', text)
-        return int(m.group(1)) if m else 0
-
     def extract_comments(self, max_comments: int = 5):
         if max_comments <= 0:
             # Asking for no comments must cost nothing. Left as it was, a
@@ -420,7 +404,7 @@ class XiaohongshuCrawler(Crawler):
             try:
                 comment_author = self._text_of(item, '.name')
                 comment_content = self._text_of(item, '.content .note-text') or self._text_of(item, '.content')
-                like_count = self._number_in(self._text_of(item, '.like .count, .like-wrapper .count'))
+                like_count = parse_count(self._text_of(item, '.like .count, .like-wrapper .count'))
                 comment_time = self._text_of(item, '.date')
 
                 if comment_content:
