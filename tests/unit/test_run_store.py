@@ -121,23 +121,21 @@ class TestFingerprints:
         for every item it had already collected, over a canvas whose only edit was
         a word the crawler never reads.
         """
-        before = fingerprints_for_workflow(
-            _wf([_node('node-1', 'name', params={'workflow_name': '热门榜'}), _node('node-2', params={'keyword': '三亚'})], [{'from': 'node-1', 'to': 'node-2'}])
-        )
-        after = fingerprints_for_workflow(
-            _wf([_node('node-1', 'name', params={'workflow_name': '周排行榜'}), _node('node-2', params={'keyword': '三亚'})], [{'from': 'node-1', 'to': 'node-2'}])
-        )
-        assert before == after, 'the whole chain moved because a label did'
-        # The label still cannot hide a real change of what is crawled.
-        moved = fingerprints_for_workflow(
-            _wf(
+
+        def _labeled(label, keyword):
+            return _wf(
                 [
-                    _node('node-1', 'name', params={'workflow_name': '周排行榜'}),
-                    _node('node-2', params={'keyword': '海口'}),
+                    _node('node-1', 'name', params={'workflow_name': label}),
+                    _node('node-2', params={'keyword': keyword}),
                 ],
                 [{'from': 'node-1', 'to': 'node-2'}],
             )
-        )
+
+        before = fingerprints_for_workflow(_labeled('热门榜', '三亚'))
+        after = fingerprints_for_workflow(_labeled('周排行榜', '三亚'))
+        assert before == after, 'the whole chain moved because a label did'
+        # The label still cannot hide a real change of what is crawled.
+        moved = fingerprints_for_workflow(_labeled('周排行榜', '海口'))
         assert moved['node-2'] != after['node-2']
 
     def test_stable_params_drops_only_volatile_keys(self):

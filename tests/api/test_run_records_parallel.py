@@ -173,7 +173,7 @@ class TestRowLookupStillWorks:
         def _labeled(flow, *labels):
             named = [node for node in flow['nodes'] if node['type'] == 'name']
             assert len(named) == len(labels), f'{len(labels)} labels for {len(named)} name nodes'
-            for node, label in zip(named, labels):
+            for node, label in zip(named, labels, strict=True):
                 node['params']['workflow_name'] = label
             return flow
 
@@ -187,7 +187,7 @@ class TestRowLookupStillWorks:
 
         composed = client.post('/api/data/preview', json={'node_id': 'out-1', 'workflow_name': '节奏 + BPM'}).get_json()
         assert composed['ok'] is True, composed
-        assert len(composed['rows']) == 2, 'the composed run must read its own 2 rows, not the newer run\'s 4'
+        assert len(composed['rows']) == 2, "the composed run must read its own 2 rows, not the newer run's 4"
         alone = client.post('/api/data/preview', json={'node_id': 'out-1', 'workflow_name': '节奏'}).get_json()
         assert alone['ok'] is True and len(alone['rows']) == 4, alone
 
