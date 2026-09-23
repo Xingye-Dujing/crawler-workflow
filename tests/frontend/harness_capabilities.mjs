@@ -64,9 +64,27 @@ for (const sc of scenarios) {
     out[sc.id] = {
         html: sandbox.__byId('settings-content').innerHTML,
         defaults: canvas.getDefaultParams('source'),
+        /* The node card, in the same world as the panel that edits it: the panel
+           was tested against the matrix for a year and the card never was, which
+           is how every mode except 关键词 and 评论 kept printing a keyword the
+           crawl never used. */
+        summary: canvas.getNodeSummary(sc.type || 'source', sc.params || {}),
         ready: sandbox.Capabilities.ready(),
         modes: sandbox.Capabilities.modes((sc.params || {}).platform || 'zhihu').map((m) => m.key),
     };
+    if (sc.refresh) {
+        /* The matrix arrives after a restored draft has drawn its nodes, so the
+           redraw on load is what turns "平台: 哔哩哔哩" into the board it is set to.
+           Counted, because a method that stamps the wrong node types passes any
+           test that only reads one card. */
+        let restamped = [];
+        canvas.updateNodeDisplay = (id) => restamped.push(id);
+        canvas.nodes.a_source = { id: 'a_source', type: 'source', params: { platform: 'zhihu' } };
+        canvas.nodes.b_process = { id: 'b_process', type: 'process', params: {} };
+        canvas.nodes.c_source = { id: 'c_source', type: 'source', params: { platform: 'weibo' } };
+        canvas.refreshSourceSummaries();
+        out[sc.id].restamped = restamped;
+    }
 }
 
 process.stdout.write(JSON.stringify(out));

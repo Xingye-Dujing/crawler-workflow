@@ -507,6 +507,26 @@ const canvas = {
         return {};
     },
 
+    sourceSummaryLine(f, value) {
+        /* One line of a data-source card, shaped by the widget the matrix declares:
+           a link list reads as a count (the paste is long and the number is the
+           useful part), a choice reads as its label, and text reads as itself. */
+        var label = I18n.t(f.labelKey);
+        if (f.coerce === 'urls') {
+            var count = String(value || '').split('\n').filter(function (u) { return u.trim(); }).length;
+            return label + ': ' + count;
+        }
+        if (f.control === 'select') {
+            var options = f.options || [];
+            var chosen = (value === undefined || value === null || value === '') ? f.default : value;
+            for (var i = 0; i < options.length; i++) {
+                if (String(options[i].value) === String(chosen)) return label + ': ' + I18n.t(options[i].labelKey);
+            }
+            return label + ': ' + (chosen || '—');
+        }
+        return label + ': ' + (String(value || '').trim() || '—');
+    },
+
     getNodeSummary(type, params) {
         if (type === 'name') {
             var n = String(params.workflow_name || '').trim();
@@ -515,18 +535,28 @@ const canvas = {
         if (type === 'source') {
             var plat = params.platform || '';
             var head = I18n.t('settings.platform') + ': ' + (plat ? I18n.t('platform.' + plat) : '?');
-            if ((params.collect || 'posts') === 'comments') {
-                // Comments mode feeds on links, like WeChat — show the count.
-                var cUrls = String(params.urls || '').split('\n').filter(function (u) { return u.trim(); }).length;
-                return head + ' · ' + I18n.t('node.comment') + '\n' + I18n.t('settings.commentUrls') + ': ' + cUrls;
+            /* Read what the platform actually offers from the crawl matrix. This
+               used to be two hard-coded branches (comments, wechat) plus a default
+               of "关键词", so a node collecting one creator's uploads — or a hot
+               board, which has no keyword at all — printed a keyword it never used,
+               and the user watched the card promise a crawl the run did not do. */
+            if (!plat || typeof Capabilities === 'undefined' || !Capabilities.ready()) {
+                /* No matrix yet (a cold page renders its restored nodes before the
+                   fetch answers) says only what is in the node. Guessing 关键词 here
+                   would be the bug above wearing a different hat. */
+                return head;
             }
-            if (plat === 'wechat') {
-                /* WeChat runs on pasted article URLs — show how many are set,
-                   the way the other platforms show their keyword. */
-                var urls = String(params.urls || '').split('\n').filter(function (u) { return u.trim(); }).length;
-                return head + '\n' + I18n.t('settings.urls') + ': ' + urls;
+            var mode = Capabilities.mode(plat, params.collect || params.mode);
+            if (!mode) {
+                return head;
             }
-            return head + '\n' + I18n.t('settings.keyword') + ': ' + (params.keyword || '—');
+            var lines = [head + ' · ' + I18n.t(mode.labelKey)];
+            var canvas = this;
+            (mode.fields || []).forEach(function (f) {
+                if (f.control === 'number' || f.control === 'checkbox' || !f.required && f.control !== 'select') return;
+                lines.push(canvas.sourceSummaryLine(f, params[f.key]));
+            });
+            return lines.join('\n');
         }
         if (type === 'upload') {
             var name = params.dataset_name || '';
@@ -930,6 +960,16 @@ const canvas = {
         this._historySaving = false;
         /* An undo/redo may have removed the node the settings panel is showing. */
         this.closeSettingsIfStale();
+    },
+
+    refreshSourceSummaries() {
+        /* A data-source card is written from the crawl matrix, which arrives
+           asynchronously — so the nodes a draft restored before it landed are
+           showing the platform line alone until this runs. */
+        var self = this;
+        Object.keys(this.nodes).forEach(function (id) {
+            if (self.nodes[id].type === 'source') self.updateNodeDisplay(id);
+        });
     },
 
     updateNodeDisplay(id) {

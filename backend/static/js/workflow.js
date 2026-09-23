@@ -536,6 +536,14 @@ const Capabilities = {
             .then(function (payload) {
                 self.data = payload && Array.isArray(payload.platforms) && payload.platforms.length ? payload : null;
                 self.error = self.data ? '' : 'malformed';
+                /* The data-source card is written from this payload, and the nodes a
+                   draft restored on a cold page were drawn before it arrived. Redraw
+                   them here rather than at each caller, so no entry point (startup,
+                   the retry button, a later refresh) can forget it. `canvas` is a
+                   top-level const in canvas.js — `window.canvas` would never exist. */
+                if (self.data && typeof canvas !== 'undefined' && canvas && canvas.refreshSourceSummaries) {
+                    canvas.refreshSourceSummaries();
+                }
                 return self.data;
             })
             .catch(function (e) {
