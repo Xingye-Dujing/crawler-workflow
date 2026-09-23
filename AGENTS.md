@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~2323 fast-tier cases; 2424 across all tiers)**:
+- **Automated tests (pytest, ~2393 fast-tier cases; 2499 across all tiers)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -205,17 +205,37 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   withdrawn video (skip); any other non-zero code is the session/risk engine talking
   (stop, and refuse the run if nothing was collected).
 - **Cookie capture and crawling are different capabilities.** `CookieManager.PLATFORMS`
-  (8) is who the panel can log in; `crawlers.is_crawlable()` (7) is who has a crawler.
-  X and Instagram sit in the first and not the second (`overseas.py` registers them with
-  `supports_crawl = False`), so `_execute_source_node` refuses them by node label
-  (`run.notCrawlable`) and validation refuses them earlier still (`engine.source_unknown_platform`,
-  because they are not in the matrix at all) — never let a not-yet-built platform fall through to
+  (8) is who the panel can log in; `crawlers.is_crawlable()` (8: zhihu, weibo,
+  xiaohongshu, wechat, bilibili, douyin, youtube, twitter) is who has a crawler.
+  **Instagram is the one capture-only platform** (`overseas.py` registers it with
+  `supports_crawl = False`), so `_execute_source_node` refuses it by node label
+  (`run.notCrawlable`) and validation refuses it earlier still (`engine.source_unknown_platform`,
+  because it is not in the matrix at all) — never let a not-yet-built platform fall through to
   an empty table, which reads as "this keyword found nothing".
   A capture-only platform must still carry `domain` + `login_url` (the panel needs both), stay OUT of
   `crawl_capabilities.CAPABILITIES` (that tuple *is* the Data Source's platform list now — the browser
   renders the select from `/api/capabilities`, so there is no JS list to keep in step), and clear the
   parity guards in `test_frontend_contract.py::TestCookiePanelParity` plus
   `test_crawl_capabilities.py::TestPlatformOrder`.
+- **X (twitter) is visible-window, virtualized, and slow to paint — three measured facts, each one
+  a line of code.** A headless browser gets the sign-up sheet on `/search` and a flat
+  "Access to x.com was denied … HTTP ERROR 403" on a profile, so the class sets
+  `never_headless = True` (like douyin, for the opposite reason: douyin blocks the *mode*,
+  X blocks the *window type*). `article[data-testid="tweet"]` holds **13-21 nodes however far the
+  page is scrolled** while 139 distinct tweets passed through eight scrolls, so progress is
+  measured by rows kept and the settle wait watches `window_key()` — the set of status ids on
+  screen — through `feed.walk_feed(window=…)`; a card-count watcher declares an exhausted
+  timeline after one screen. Resume identity is the **status-id set**, never a list index.
+  The first screen measured **0 cards at 9.9 s and 11 at 11.9 s**, so the mount poll is
+  `MOUNT_WAIT` (22 s) — an 8-second wait reported "this keyword found nothing" on a search that
+  was about to succeed. All five counters come from one `[role="group"]` aria-label sentence
+  ("1887 replies, …, 1.1M views") through the shared 万/K/M parser, the per-button labels are only
+  the fallback, and **浏览数 exists in no other place**; a live keyword stream really does read
+  "0 Likes. Like" on almost every row, so do not assert engagement on `f=live` — assert 浏览数.
+  A card node can be detached between listing and reading it (`StaleElementReferenceException`,
+  observed), so the read is guarded and the tweet stays unseen for a later round. One
+  `execute_script` per card, never per-field `find_element` — `tests/integration/test_twitter_crawler.py`
+  counts both.
 - **Captured cookies are filtered to their own platform** (`cookie_flow.retain_for_platform`),
   because a login detours through an identity provider (Google behind YouTube, Facebook behind
   Instagram) and `driver.get_cookies()` reads only the *current* page: the worker therefore

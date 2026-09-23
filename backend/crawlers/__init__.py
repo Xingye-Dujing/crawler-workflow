@@ -1,4 +1,5 @@
-from crawlers.overseas import InstagramCrawler, TwitterCrawler
+from crawlers.overseas import InstagramCrawler
+from crawlers.twitter import TwitterCrawler
 from crawlers.video import BilibiliCrawler, DouyinCrawler
 from crawlers.wechat import WechatCrawler
 from crawlers.weibo import WeiboCrawler
@@ -16,12 +17,13 @@ CRAWLERS = {
     'wechat': WechatCrawler,
     'bilibili': BilibiliCrawler,
     'douyin': DouyinCrawler,
-    # Cookie capture only: the panel can save a login session for these three
-    # while their crawl is not built yet, so the canvas and the execute endpoint
-    # refuse them (see crawlers/overseas.py).
-    'twitter': TwitterCrawler,
-    'instagram': InstagramCrawler,
     'youtube': YouTubeCrawler,
+    'twitter': TwitterCrawler,
+    # Cookie capture only: the panel can save a login session for this one while
+    # its crawl is not built yet, so the canvas and the execute endpoint refuse
+    # it (see crawlers/overseas.py) — and it stays out of the crawl matrix, which
+    # is what the refusal is read from.
+    'instagram': InstagramCrawler,
 }
 
 

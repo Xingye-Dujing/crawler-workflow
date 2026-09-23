@@ -2243,14 +2243,37 @@ function updateParam(nodeId, key, value) {
    designer must reject a wrong-platform link before the run, and the engine
    rejects it at crawl time — the two answers have to agree. The frontend
    contract test pins the table against the Python one. */
+/* The host of a link, the way the backend's _host_of does it: the domain table
+   below is matched against the authority, never against the whole URL. Matching
+   the whole string would route "https://example.com/weibo.com/x" to Weibo, and
+   'x.com' is a substring of 'max.com' — so a link could be crawled as the wrong
+   platform and land in the user's table wearing the wrong site's name. */
+function urlHost(url) {
+    var text = String(url || '').toLowerCase().trim();
+    if (!text) return '';
+    var tail = text.indexOf('://') !== -1 ? text.split('://')[1] : text;
+    tail = tail.split('/')[0].split('?')[0].split(':')[0];
+    return tail.trim();
+}
+
 function urlPlatform(url) {
-    var u = String(url || '').toLowerCase();
-    if (u.indexOf('zhihu.com') !== -1) return 'zhihu';
-    if (u.indexOf('xiaohongshu.com') !== -1 || u.indexOf('xhslink.com') !== -1) return 'xiaohongshu';
-    if (u.indexOf('weibo.com') !== -1 || u.indexOf('weibo.cn') !== -1) return 'weibo';
-    if (u.indexOf('bilibili.com') !== -1) return 'bilibili';
-    if (u.indexOf('douyin.com') !== -1 || u.indexOf('iesdouyin.com') !== -1) return 'douyin';
-    if (u.indexOf('youtube.com') !== -1 || u.indexOf('youtu.be') !== -1) return 'youtube';
+    var host = urlHost(url);
+    if (!host) return '';
+    var TABLE = [
+        ['zhihu', ['zhihu.com']],
+        ['xiaohongshu', ['xiaohongshu.com', 'xhslink.com']],
+        ['weibo', ['weibo.com', 'weibo.cn']],
+        ['bilibili', ['bilibili.com']],
+        ['douyin', ['douyin.com', 'iesdouyin.com']],
+        ['youtube', ['youtube.com', 'youtu.be']],
+        ['twitter', ['x.com', 'twitter.com', 'fxtwitter.com', 'vxtwitter.com']],
+    ];
+    for (var i = 0; i < TABLE.length; i++) {
+        for (var j = 0; j < TABLE[i][1].length; j++) {
+            var domain = TABLE[i][1][j];
+            if (host === domain || host.slice(-domain.length - 1) === '.' + domain) return TABLE[i][0];
+        }
+    }
     return '';
 }
 

@@ -1,14 +1,18 @@
-"""Cookie capture for the overseas platforms that still have no crawl.
+"""Cookie capture for the overseas platform that still has no crawl.
 
-X (twitter) and Instagram are registered here so the Cookie panel can log a
-session in and store it *before* any crawl exists for them — the shape Bilibili
-and Douyin had while only their capture was built. ``supports_crawl`` stays
-False, so the canvas and ``/api/workflow/execute`` refuse them by node label
-(``engine.source_unknown_platform``) instead of handing back an empty table that
+Instagram is registered here so the Cookie panel can log a session in and store it
+*before* a crawl exists for it — the shape Bilibili, Douyin, YouTube and X had
+before theirs landed. ``supports_crawl`` stays False **and** it is absent from
+``crawl_capabilities.CAPABILITIES``, so the canvas never offers it, validation
+refuses it by node label (``engine.source_unknown_platform``) and the executor
+again by name (``run.notCrawlable``) — instead of handing back an empty table that
 would read as "this keyword found nothing".
 
-YouTube left this file for ``crawlers/youtube.py`` when its crawl landed; the
-same split applies to whichever of these two is next.
+Its crawl is blocked on a measurement, not on effort: the live probe found a
+profile that renders its header (name, 104M followers, bio) and **zero** post
+tiles, in a visible window with a valid session, headless, and logged out alike,
+while a hashtag redirects to ``/accounts/login/``. Until a real post list is
+observed, anything written against it would be a guess.
 
 What each class carries is only the two facts the panel needs and cannot know on
 its own: the hosts its cookies are valid on (which is also the allowlist a pasted

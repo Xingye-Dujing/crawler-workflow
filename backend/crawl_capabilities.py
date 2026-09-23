@@ -205,7 +205,7 @@ _AUTHOR = Field(
     name_key='field.author',
     required=True,
     hint_key='settings.authorHint',
-    placeholder='@nasa',
+    placeholder='@handle',
 )
 #: The per-row detail call, offered rather than assumed: on YouTube and X one
 #: extra request per row is what buys 点赞数 and the exact publish time, and a
@@ -352,6 +352,14 @@ CAPABILITIES: tuple[Capability, ...] = (
             _posts_mode(_WITH_FACTS),
             _author_mode(_WITH_FACTS),
             _comment_mode('youtube', 'https://www.youtube.com/watch?v=...'),
+        ),
+    ),
+    Capability(
+        platform='twitter',
+        modes=(
+            _posts_mode(),
+            _author_mode(),
+            _comment_mode('twitter', 'https://x.com/.../status/...'),
         ),
     ),
 )

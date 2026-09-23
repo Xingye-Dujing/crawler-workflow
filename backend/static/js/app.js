@@ -148,7 +148,7 @@ const I18n = {
             'settings.collectComments': 'Comments',
             'settings.collectAuthor': "A creator's posts",
             'settings.author': 'Creator',
-            'settings.authorHint': 'A handle (@nasa), a channel link or the UC… id — not a display name to search for',
+            'settings.authorHint': 'An @handle or a link to that author — not a display name to search for (YouTube also accepts a UC… channel id)',
             'settings.withFacts': 'Fetch exact figures per row',
             'settings.withFactsHint': 'One extra request per row (~0.3 s) for likes, the full text and the real publish time. Off = keep the list figures.',
             'settings.articleUrls': 'Article bodies',

@@ -454,6 +454,7 @@ _ZH = {
     'comment.noAdapter': '{platform} 还没有评论抓取实现，该链接无法处理：{url}',
     'comment.commentsClosed': '该内容未开放评论区（或未产生评论）：{url}',
     'comment.ytNoPage': 'YouTube 页面没有加载成视频页（可能需要登录或被拦截）：{url}',
+    'comment.xNoList': '[X 评论] 这条推文页面没有渲染出任何内容（链接失效、被删或被拦截）：{url}',
     # YouTube is crawled as JSON from inside its own page, so its console lines
     # talk about rounds and answers, not about scrolling a list.
     'crawl.yt.noContext': '[YouTube] 页面未提供 innertube 配置（被拦截或结构已变）：{url}',
@@ -473,6 +474,16 @@ _ZH = {
     'crawl.yt.replay': '[YouTube] 第 {page} 轮没有新增，判定列表已耗尽',
     'crawl.yt.noResults': '[YouTube] 关键词「{kw}」没有匹配的公开视频（或本次会话被限制）',
     'crawl.yt.finished': '[YouTube] 本次共采集 {n} 条',
+    # X（推特）只渲染一个虚拟列表：卡片数不增长而推文一直换血，所以它的日志说
+    # 「留住了多少」，不说「页面上有几张卡」。
+    'crawl.x.start': '[X] 关键词「{kw}」，目标 {n} 条（最新优先）',
+    'crawl.x.target_reached': '[X] 已达目标 {n} 条，停止滚动',
+    'crawl.x.authorStart': '[X] 作者「{author}」的推文，目标 {n} 条',
+    'crawl.x.authorEmpty': '[X] 没有填写作者（@handle 或主页链接）：{author}',
+    'crawl.x.wall': '[X] 被拒绝访问（登录墙或 403）：{url}',
+    'crawl.x.loadSlow': '[X] 页面未在预期时间内加载完，已按当前 DOM 继续：{url}',
+    'crawl.x.no_cards': '[X] 时间线里一条推文都没有渲染出来（被拦截、关键词过窄或账号无推文）：{url}',
+    'crawl.x.finished': '[X] 共保留 {n} 条（结束原因：{reason}）',
     'comment.biliBadAnswer': '哔哩哔哩评论接口未返回数据（code={code}）：{url}',
     'comment.dyNoId': '链接里没有视频 ID，无法抓评论：{url}',
     'comment.dyNoPanel': '评论区没有渲染出来（可能被折叠或需要登录）：{url}',
@@ -1055,6 +1066,7 @@ _EN = {
     'comment.noAdapter': '{platform} has no comment crawler, so this link cannot be handled: {url}',
     'comment.commentsClosed': 'this content has no open comment section (or none yet): {url}',
     'comment.ytNoPage': 'the YouTube page never loaded as a video page (login or interception?): {url}',
+    'comment.xNoList': '[X comments] the post page rendered nothing at all (dead, deleted, or blocked link): {url}',
     # YouTube is crawled as JSON from inside its own page, so these lines talk
     # about rounds and answers rather than about scrolling a list.
     'crawl.yt.noContext': '[YouTube] the page exposed no innertube config (intercepted, or the DOM changed): {url}',
@@ -1074,6 +1086,16 @@ _EN = {
     'crawl.yt.replay': '[YouTube] round {page} added nothing new, list treated as exhausted',
     'crawl.yt.noResults': '[YouTube] no public video matches "{kw}" (or this session is throttled)',
     'crawl.yt.finished': '[YouTube] collected {n} rows in this run',
+    # X renders a virtualized timeline: the card count never grows while tweets
+    # stream through it, so its log lines speak of rows kept, not cards on screen.
+    'crawl.x.start': '[X] keyword "{kw}", target {n} posts (latest first)',
+    'crawl.x.target_reached': '[X] target of {n} rows reached, stop scrolling',
+    'crawl.x.authorStart': '[X] author "{author}" posts, target {n} posts',
+    'crawl.x.authorEmpty': '[X] no author given (@handle or profile link): {author}',
+    'crawl.x.wall': '[X] access was refused (login wall or 403): {url}',
+    'crawl.x.loadSlow': '[X] the page did not finish loading in time; continuing with what rendered: {url}',
+    'crawl.x.no_cards': '[X] no tweet rendered at all (blocked, too narrow, or an empty account): {url}',
+    'crawl.x.finished': '[X] kept {n} posts (stopped because: {reason})',
     'comment.biliBadAnswer': 'bilibili comment endpoint returned no data (code={code}): {url}',
     'comment.dyNoId': 'the link carries no video id, so comments cannot be fetched: {url}',
     'comment.dyNoPanel': 'the comment panel never rendered (collapsed, or login required): {url}',

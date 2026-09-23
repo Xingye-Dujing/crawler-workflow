@@ -24,14 +24,38 @@ _COMMENT_DOMAINS = (
     # ``https://youtu.be/<id>`` far more often than the watch URL, and dropping it
     # would read as "this link is unsupported".
     ('youtube', ('youtube.com', 'youtu.be')),
+    ('twitter', ('x.com', 'twitter.com', 'fxtwitter.com', 'vxtwitter.com')),
 )
+
+
+def _host_of(url: str) -> str:
+    """The authority part of a link, lowercased and port-stripped.
+
+    Matching a comment link by ``mark in url`` was wrong in both directions: a
+    path like ``/weibo.com/…`` on any other host routed as Weibo, and — worse for
+    X — ``x.com`` is a substring of ``max.com``, so an unrelated site could be
+    handed to the wrong crawler and come back as data with the wrong platform on
+    it. So the host is parsed out first, and a link that will not parse is simply
+    unsupported rather than guessed at.
+    """
+    text = str(url or '').strip().lower()
+    if not text:
+        return ''
+    tail = text.split('://', 1)[-1] if '://' in text else text
+    return tail.split('/', 1)[0].split('?', 1)[0].split(':', 1)[0].strip()
+
+
+def _host_matches(host: str, domain: str) -> bool:
+    return bool(host) and (host == domain or host.endswith('.' + domain))
 
 
 def platform_for(url: str) -> str:
     """Which comment adapter handles this article link ('' = unsupported)."""
-    u = str(url or '').strip().lower()
+    host = _host_of(url)
+    if not host:
+        return ''
     for platform, marks in _COMMENT_DOMAINS:
-        if any(mark in u for mark in marks):
+        if any(_host_matches(host, domain) for domain in marks):
             return platform
     return ''
 

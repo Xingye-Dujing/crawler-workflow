@@ -54,6 +54,17 @@ LOGIN_TEXTS = (
     '扫码登录',
     '创建新账户',
     '忘记密码',
+    # X and Instagram answer a logged-out (or refused) request with their own
+    # English form. Measured: X's ``/search`` for a headless browser renders
+    # "See what's happening / Continue with phone / Forgot password?" and zero
+    # tweets, and Instagram redirects a hashtag to ``/accounts/login/`` whose
+    # inputs match no ``name="username"`` selector — so the *words* are the only
+    # reliable signal on either site.
+    'create new account',
+    'forgot password?',
+    'continue with phone',
+    'log into instagram',
+    "see what's happening",
 )
 
 #: Risk-control refusals. Not a login problem: the session may be perfect.
@@ -73,6 +84,12 @@ BLOCK_TEXTS = (
     '安全验证',
     '扫码登录',
     '登录后查看',
+    # X answers a browser it does not like with a bare Cloudflare-style 403
+    # page — measured in headless mode on ``/OpenAI``: "Access to x.com was
+    # denied … HTTP ERROR 403". It is not a login wall (no form, no redirect),
+    # and calling it one would send the user to re-save a cookie that is fine.
+    'access to x.com was denied',
+    'http error 403',
 )
 
 #: A tab title that says the platform's own captcha page (douyin, measured).
@@ -91,18 +108,21 @@ def looks_like_login_page(url: str, body_text: str = '') -> bool:
     text = body_text or ''
     # Only the head is examined: a wall puts its phrases at the top, while an
     # article that merely mentions 登录 in its body must not read as a wall.
-    head = text[:400]
+    # Casefolded, because the English phrases a Western-language session is
+    # served ("Forgot password?") start with a capital and are sentences, not
+    # keys — comparing them case-sensitively would miss every one of them.
+    head = text[:400].casefold()
     return sum(1 for phrase in LOGIN_TEXTS if phrase in head) >= 2
 
 
 def looks_blocked(body_text: str = '', url: str = '', title: str = '') -> bool:
     """True on a risk-control refusal (which may carry no login wording at all)."""
-    head = (body_text or '')[:1200]
+    head = (body_text or '')[:1200].casefold()
+    tab = (title or '').casefold()
     if any(phrase in head for phrase in BLOCK_TEXTS):
         return True
-    if any(phrase in (url or '') for phrase in BLOCK_TEXTS):
+    if any(phrase in (url or '').casefold() for phrase in BLOCK_TEXTS):
         return True
-    tab = title or ''
     return any(phrase in tab for phrase in CAPTCHA_TITLES)
 
 
