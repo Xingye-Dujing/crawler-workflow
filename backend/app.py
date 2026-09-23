@@ -1152,6 +1152,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             mode = settings.get('mode', 'parallel')
             headless = settings.get('headless', True)
             max_workers = _safe_int(settings.get('max_workers'), Config.DEFAULT_MAX_WORKERS, minimum=1, maximum=16)
+            # Per-run answer to "use the browser profile this time?" — None means the
+            # user was never asked (or the canvas has no same-platform collision), so
+            # the stored setting decides. Absence must not read as False: a browser
+            # that sends nothing would otherwise switch profiles off for everyone.
+            raw_profile = settings.get('use_profile')
+            use_profile = None if raw_profile is None else bool(raw_profile)
             # Recorded with the run so the history panel can group by workflow rather
             # than showing every run as "untitled".
             # ── Resumable run identity ─────────────────────────────────
@@ -1400,6 +1406,9 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 # {node_id: count} of items the incremental ledger refused; the
                 # status endpoint mirrors it (shared dict, written by row sinks).
                 'skipped_seen': {},
+                # None = follow the setting; True/False = what the user chose for
+                # this run when the canvas asked them (parallel + same platform).
+                'use_profile': use_profile,
             }
             execution_state['skipped_seen'] = ctx['skipped_seen']
             engine = WorkflowEngine(workflow, execution_state['executor'])
@@ -1449,6 +1458,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 add_log(t('run.resume_from', at=previous.get('started_at') or '?', rows=saved))
             else:
                 add_log(t('run.started', rid=run_id))
+            if use_profile is False:
+                # One line, because the alternative is the user reading a silent
+                # deviation: the setting says profiles are on, and this run is
+                # deliberately crawling in throwaway browsers instead.
+                add_log(t('run.profileOff'))
 
             if mode == 'serial' or wf_count <= 1:
                 # ── Serial: one workflow at a time ──
@@ -1690,7 +1704,12 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         headless = False
         add_log(t('run.forcedVisible', label=node_label(node, str(node.get('id') or '')), platform=platform))
 
-    crawler = get_crawler(platform, headless=headless, cookie_dir=Config.COOKIE_DIR)
+    crawler = get_crawler(
+        platform,
+        headless=headless,
+        cookie_dir=Config.COOKIE_DIR,
+        use_profile=(ctx or {}).get('use_profile'),
+    )
     # Registered and guarded from here on: everything between buying a browser
     # and using it can still fail — a read-only or missing export directory, a
     # locked runs.db, a cursor that will not parse — and a Chrome that Stop does
@@ -2344,7 +2363,9 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 continue
             kind = platform_for(url)
             if kind not in sessions:
-                crawler = get_crawler(kind, headless=False, cookie_dir=Config.COOKIE_DIR)
+                crawler = get_crawler(
+                    kind, headless=False, cookie_dir=Config.COOKIE_DIR, use_profile=(ctx or {}).get('use_profile')
+                )
                 sessions[kind] = (
                     crawler,
                     # The comment engine reports per-URL facts; prefix them so a

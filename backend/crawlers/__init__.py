@@ -52,19 +52,34 @@ def cookie_hosts(platform: str) -> tuple:
     return tuple(host for host in (cls.domain, *cls.cookie_domains) if host)
 
 
-def get_crawler(platform: str, headless: bool = True, cookie_dir: str = None, for_login: bool = False):
+def get_crawler(
+    platform: str,
+    headless: bool = True,
+    cookie_dir: str = None,
+    for_login: bool = False,
+    use_profile: bool = None,
+):
     """Build the crawler for *platform*, in that platform's own browser profile.
+
+    ``use_profile`` decides *this browser* only: None follows the user's setting,
+    False gives a throwaway profile. The choice travels with the run rather than
+    being written to settings because a parallel canvas pays a different price for
+    the same device than a single workflow does — one profile holds one browser, so
+    two workflows crawling the same platform either take turns or give up the shared
+    device. Only the user knows which of those they are buying this time, which is
+    why the browser asks before starting (see ``_confirmProfileChoiceBeforeRun``).
 
     The cookie file is imported **once**, the first time a profile is used. After
     that the profile owns its session, because planting an old snapshot over a live
     one is how a rotating credential gets thrown away — measured on weibo, where a
     logged-in page load re-issues ``SUB``/``SUBP`` and the saved pair stops being
-    accepted afterwards.
+    accepted afterwards. A browser with no profile has nothing to overwrite, so it
+    is planted from the saved file exactly as before the feature existed.
     """
     cls = crawler_class(platform)
     if not cls:
         raise ValueError(f'Unknown platform: {platform}')
-    profile = browser_profiles.profile_dir_for(platform)
+    profile = browser_profiles.profile_dir_for(platform, enabled=use_profile)
     planting = not profile or not browser_profiles.is_used(platform)
     cookie_path = f'{cookie_dir}/{platform}_cookies.json' if (cookie_dir and planting) else None
     crawler = cls(headless=headless, cookie_path=cookie_path, for_login=for_login, profile_dir=profile)

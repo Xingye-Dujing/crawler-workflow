@@ -434,6 +434,15 @@ const I18n = {
             'dialog.profileOff': 'This workflow crawls {n} platform(s) where a throwaway browser is known to fail (their session rotates, or a replayed one is refused within minutes). Switch on Settings → Persistent browser profile and log into that profile once through the Cookie panel. You can also run anyway.',
             'dialog.profileGoOn': 'Run anyway',
             'dialog.profileSetup': 'Open settings first',
+            'dialog.profileClash':
+                'This parallel canvas crawls {n} platform(s) — {platforms} — from more than one workflow, '
+                + 'and one browser profile can only hold one Chrome at a time. Choose what this run buys:\n'
+                + '· Keep the profile — the site sees one continuous device (what weibo/xiaohongshu punish a '
+                + 'throwaway browser for), but those crawls take turns, so parallelism is lost on them.\n'
+                + '· Skip the profile this time — the workflows really crawl side by side, but each starts as '
+                + 'a brand-new device on a planted cookie snapshot, which is the shape those sites refuse.',
+            'dialog.profileClashUse': 'Keep the profile (same-platform crawls queue)',
+            'dialog.profileClashSkip': 'No profile this run (true parallel)',
             'set.save': 'Save settings',
             'set.note':
                 'Machine-local settings. Saved to data/settings.json on the server ' +
@@ -1034,6 +1043,15 @@ const I18n = {
             'dialog.profileOff': '本次工作流包含 {n} 个已知会被"一次性浏览器"刁难的平台（它们的会话会换票，或重放的票几分钟内就被拒）。请到「设置」打开持久浏览器 Profile，并在 Cookie 面板里往那个 profile 登录一次；也可以直接继续运行。',
             'dialog.profileGoOn': '继续运行',
             'dialog.profileSetup': '先去设置',
+            'dialog.profileClash':
+                '这条并行画布里有 {n} 个平台（{platforms}）被两个以上的工作流同时采集，而一份 profile 同时只能开'
+                + '一个 Chrome。请选这次执行要换到什么：\n'
+                + '· 继续用 Profile —— 站点看到的是同一台连续设备（微博/小红书就是针对一次性浏览器的），'
+                + '但同平台的采集会一个跑完再跑下一个，这部分并行等于没有。\n'
+                + '· 本次不用 Profile —— 这些工作流真的同时爬，但每个都是全新设备 + 导入一份旧 Cookie 快照，'
+                + '而这正是那些站点会拒绝的形态。',
+            'dialog.profileClashUse': '继续用 Profile（同平台排队）',
+            'dialog.profileClashSkip': '本次不用 Profile（真并行）',
             'set.save': '保存设置',
             'set.note':
                 '这些是本机相关设置。保存后写入服务器 ' +

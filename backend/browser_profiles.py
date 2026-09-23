@@ -32,6 +32,7 @@ Two rules this module exists to keep honest:
 import contextlib
 import json
 import os
+import threading
 import time
 
 from config import Config
@@ -41,6 +42,66 @@ from settings_store import get_setting
 #: the whole difference between "import the saved cookie file" and "leave this
 #: profile's own session alone".
 MARKER = '.crawler-profile.json'
+
+# ─── one browser per profile ────────────────────────────────────
+#
+# chromedriver writes into ``<user-data-dir>/Default/Preferences`` *before* the
+# browser starts, so two sessions created in the same profile at the same moment
+# cannot both come up: one of them dies with ``session not created / failed to
+# write prefs file`` (measured 2026-09: 2 failures in 8 barrier-synchronised
+# attempts, and the failure is a race, not a schedule — it can pass ten times in a
+# row then take down a node). A parallel canvas is exactly where this bites,
+# because two workflows that crawl the same platform are started by the same
+# thread pool.
+#
+# The profile is what makes the run "the same device" to a site, so the answer is
+# not a second directory per consumer: it is one browser at a time per profile,
+# which is also what the user's own browser does. Different platforms keep running
+# in parallel — only the same profile serialises.
+
+_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def _dir_key(path: str) -> str:
+    return os.path.normcase(os.path.abspath(str(path or '')))
+
+
+def lock_for(path: str) -> threading.Lock:
+    """The lock that owns *path*, created on first use.
+
+    A plain ``Lock``, deliberately **not** an ``RLock``: the browser is closed from a
+    helper thread (``_close_login_browser`` gives ``quit()`` a bounded grace on a side
+    thread so a hand-closed window cannot hang the run), and an RLock can only be
+    released by the thread that took it — with one, every real crawl finished and left
+    its profile claimed, so the next crawl of that platform waited out the whole
+    timeout. The reentrancy an RLock would buy is not needed either: a workflow never
+    holds two browsers for one platform at a time.
+    """
+    key = _dir_key(path)
+    with _LOCKS_GUARD:
+        lock = _LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _LOCKS[key] = lock
+        return lock
+
+
+def acquire_profile(path: str, timeout: float = None):
+    """Take exclusive use of *path*; return the lock, or None if it stayed busy.
+
+    None is an answer the caller must not ignore: proceeding anyway is the crash
+    this prevents. The timeout exists because a browser that was killed without
+    closing would otherwise park every later run of that platform.
+    """
+    lock = lock_for(path)
+    return lock if lock.acquire(timeout=timeout if timeout is not None else Config.PROFILE_LOCK_TIMEOUT) else None
+
+
+def release_profile(lock) -> None:
+    if lock is not None:
+        with contextlib.suppress(RuntimeError):
+            lock.release()
 
 
 def root_dir() -> str:
@@ -57,14 +118,19 @@ def platform_dir(platform: str) -> str:
     return os.path.join(root_dir(), str(platform or '').strip())
 
 
-def profile_dir_for(platform: str) -> str | None:
+def profile_dir_for(platform: str, enabled: bool = None) -> str | None:
     """The directory *platform* should run in, or None when profiles are switched off.
+
+    ``enabled`` overrides the setting for one browser: a parallel canvas can be run
+    without profiles, on purpose, after the user was told what each side costs (see
+    the pre-run dialog in workflow.js). None means "ask the setting".
 
     Creating it here is deliberate: the panel's "is this platform set up?" question is
     answered from the filesystem, and a directory that exists but was never used is a
     different state from one that has the marker (see :func:`is_imported`).
     """
-    if not is_enabled() or not str(platform or '').strip():
+    active = is_enabled() if enabled is None else bool(enabled)
+    if not active or not str(platform or '').strip():
         return None
     path = platform_dir(platform)
     with contextlib.suppress(OSError):

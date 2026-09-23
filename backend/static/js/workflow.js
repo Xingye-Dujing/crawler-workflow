@@ -263,6 +263,43 @@ const workflow = {
         return choice === 'go';
     },
 
+    async _confirmProfileChoiceBeforeRun() {
+        /* Parallel + the same platform in two workflows is a genuine fork in the
+           road, and only the user can pick:
+
+             · 用 Profile — the site sees one continuous device (what weibo and
+               xiaohongshu punish a throwaway browser for), but one profile holds
+               one Chrome, so those crawls take turns and 并行 buys nothing there;
+             · 本次不用 — the workflows really do crawl side by side, and each one
+               starts as a brand-new device on a planted cookie snapshot.
+
+           Returns null when there is nothing to decide (profiles off, not
+           parallel, no shared platform) or true/false for the user's answer. A
+           cancelled dialog returns false *and* stops the run — see the caller. */
+        var json = canvas.toWorkflowJSON();
+        var settings = (json && json.settings) || {};
+        if (settings.mode !== 'parallel') return null;
+        if (window.AppSettings) await AppSettings.pull();
+        var values = (window.AppSettings && AppSettings._values) || {};
+        if (!values.use_browser_profile) return null;
+        var shared = profileCollisions(canvas.nodes, canvas.connections);
+        if (!shared.length) return null;
+        var message = I18n.t('dialog.profileClash')
+            .replace('{platforms}', shared.join('、'))
+            .replace('{n}', shared.length);
+        var choice = await showDialog({
+            message: message,
+            buttons: [
+                { label: I18n.t('dialog.profileClashUse'), value: 'use' },
+                { label: I18n.t('dialog.profileClashSkip'), value: 'skip', primary: true },
+                { label: I18n.t('dialog.cancel'), value: null },
+            ],
+        });
+        if (choice === 'use') return true;
+        if (choice === 'skip') return false;
+        return undefined; // cancelled — the caller must not start the run
+    },
+
     async _confirmCookieBeforeRun(opts) {
         /* Returns true when the run may proceed (no crawler nodes, the prompt
            disabled, a resume — the user is already mid "refresh cookie and
@@ -315,6 +352,12 @@ const workflow = {
            whose session rotates, a throwaway profile *is* the failure, and a run
            would only discover it an hour deep. */
         if (!(await this._confirmProfileBeforeRun())) return;
+        /* Parallel + a platform two workflows both want is the one case where
+           keeping the device and keeping the parallelism are mutually exclusive,
+           so the user decides which they are buying. ``undefined`` means they
+           closed the dialog; null means there was nothing to decide. */
+        var profileChoice = await this._confirmProfileChoiceBeforeRun();
+        if (profileChoice === undefined) return;
         /* A long crawl can outlive its cookie and die at the login wall an hour
            in. When the setting is on, ask up front "refresh the cookie first?"
            — the user can bail here instead of wasting a run. Off means run
@@ -332,6 +375,11 @@ const workflow = {
         }
         RunState.setRunning(true);
         var workflowData = canvas.toWorkflowJSON();
+        if (profileChoice !== null && workflowData && workflowData.settings) {
+            /* Only when the user actually answered: writing `false` for every run
+               would turn a per-run choice into a silent override of the setting. */
+            workflowData.settings.use_profile = profileChoice;
+        }
         /* AI transport check — fail fast instead of dying 200 rows into a run. */
         var llm = LLMSettings.payload();
         if (canvas.nodes && Object.keys(canvas.nodes).some(function (id) {
@@ -708,6 +756,67 @@ function profileNoticeCount(nodes, settings, matrix) {
         });
     });
     return Object.keys(wanted).length;
+}
+
+/* Which platforms two *different* workflows on this canvas both want to crawl.
+ *
+ * One browser profile holds one Chrome at a time (chromedriver pre-writes the
+ * profile's preferences file, and two sessions created in it together cannot both
+ * come up), so a parallel run whose components share a platform is not really two
+ * crawls at once — unless it runs without profiles. Returning the platforms rather
+ * than a boolean lets the dialog name what will queue.
+ *
+ * Grouping is by connected component, which is how the backend splits a canvas
+ * into workflows: two same-platform nodes inside one component crawl one after the
+ * other anyway, and asking the user about that would be a question with no choice
+ * behind it. Comment nodes count too — they buy a browser per platform as well.
+ */
+function profileCollisions(nodes, connections) {
+    var ids = Object.keys(nodes || {});
+    if (ids.length < 2) return [];
+    var parent = {};
+    ids.forEach(function (id) { parent[id] = id; });
+    function root(id) {
+        while (parent[id] !== id) {
+            parent[id] = parent[parent[id]];
+            id = parent[id];
+        }
+        return id;
+    }
+    (connections || []).forEach(function (conn) {
+        if (!conn || !parent.hasOwnProperty(conn.from) || !parent.hasOwnProperty(conn.to)) return;
+        var a = root(conn.from);
+        var b = root(conn.to);
+        if (a !== b) parent[b] = a;
+    });
+    var perComponent = {};
+    ids.forEach(function (id) {
+        var node = nodes[id] || {};
+        if (node.type !== 'source' && node.type !== 'comment') return;
+        var platforms = [];
+        if (node.type === 'source') {
+            if (node.params && node.params.platform) platforms.push(node.params.platform);
+        } else {
+            String((node.params && node.params.urls) || '')
+                .split(/\r?\n/)
+                .forEach(function (line) {
+                    var platform = line.trim() ? urlPlatform(line.trim()) : '';
+                    if (platform) platforms.push(platform);
+                });
+        }
+        var component = root(id);
+        platforms.forEach(function (platform) {
+            var seen = perComponent[component] || (perComponent[component] = {});
+            seen[platform] = true;
+        });
+    });
+    var counted = {};
+    Object.keys(perComponent).forEach(function (component) {
+        Object.keys(perComponent[component]).forEach(function (platform) {
+            counted[platform] = (counted[platform] || 0) + 1;
+        });
+    });
+    return Object.keys(counted).filter(function (platform) { return counted[platform] > 1; }).sort();
 }
 
 /* Every control the source panel builds writes exactly one node parameter, and

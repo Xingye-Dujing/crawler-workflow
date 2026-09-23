@@ -137,6 +137,26 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   through these helpers — a second copy of a scroll loop or a 万-parser is exactly what this
   rule exists to prevent. `Crawler.open(url)` is the only navigation entry point: it survives
   a renderer timeout, clears the dialog, and classifies the page.
+- **One profile is one browser, and a parallel canvas has to be told that.**
+  chromedriver pre-writes `<user-data-dir>/Default/Preferences` before launching Chrome, so
+  two sessions created in one directory at the same instant cannot both come up — measured
+  2026-09 with barrier-synchronised crawls: 2 of 8 attempts died with
+  `session not created: failed to write prefs file` / `Chrome failed to start: crashed`.
+  `browser_profiles.acquire_profile(dir)` (a plain, **non-reentrant** `Lock` keyed by
+  normalised path, held for the crawler's whole life and released in `close()`) is what
+  makes it impossible. Two consequences that are easy to get wrong:
+  (1) the lock must be releasable **from another thread**, because `_close_login_browser`
+  gives `quit()` a bounded grace on a side thread — an `RLock` there silently fails to
+  release and parks the platform for the rest of the process (this was the actual bug);
+  (2) waiting is not free, so the user decides per run: `profileCollisions()` in
+  workflow.js groups the canvas by connected component and names the platforms two
+  workflows both crawl, `_confirmProfileChoiceBeforeRun()` asks 用 Profile (those crawls
+  take turns) vs 本次不用 (true parallel, brand-new device each), and the answer travels
+  as `settings.use_profile` → `ctx['use_profile']` → `get_crawler(use_profile=…)` →
+  `profile_dir_for(enabled=…)`. Absence means *follow the setting* — never coerce
+  missing to `False`, or one dialog's answer becomes a global override.
+  `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node fails with the directory
+  named, never with a driver stack trace.
 - **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.**
   `browser_profiles.py` resolves `data/chrome_profile/<platform>` (or the user's absolute
   `browser_profile_dir`) and `get_crawler` passes it as `--user-data-dir`, so the login

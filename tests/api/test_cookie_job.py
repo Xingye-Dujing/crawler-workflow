@@ -79,7 +79,7 @@ def job(monkeypatch, app_module):
     block.set()
     state = {'facts': None, 'hold': None}
 
-    def fake_get_crawler(platform, headless=True, cookie_dir=None, for_login=False):
+    def fake_get_crawler(platform, headless=True, cookie_dir=None, for_login=False, use_profile=None):
         crawler = FakeCrawler(login_block=block, facts=state['facts'], hold=state['hold'])
         # What the window was built for, recorded so a test can assert it: a login
         # browser that does not ask for images cannot show a QR code.

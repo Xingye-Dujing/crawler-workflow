@@ -19,6 +19,8 @@ The rules worth pinning are the ones that are invisible when they break:
 """
 
 import json
+import threading
+import time
 
 import browser_profiles
 import pytest
@@ -176,3 +178,219 @@ class TestMatrixFlag:
         by_platform = {cap['platform']: cap['profileRecommended'] for cap in payload['platforms']}
         assert by_platform['weibo'] is True and by_platform['zhihu'] is False
         assert set(by_platform) == {cap.platform for cap in crawl_capabilities.CAPABILITIES}
+
+
+class TestOneBrowserPerProfile:
+    """A profile directory holds one Chrome at a time — and that has to be enforced.
+
+    chromedriver pre-writes ``<dir>/Default/Preferences`` before it launches the
+    browser, so two sessions created in one directory together cannot both come up:
+    measured 2026-09 with two barrier-synchronised crawls, 2 of 8 attempts died with
+    ``session not created: failed to write prefs file`` / ``Chrome failed to start:
+    crashed``. A parallel canvas is exactly that shape when two of its workflows
+    crawl the same platform.
+    """
+
+    def test_the_same_directory_shares_one_lock_and_different_ones_do_not(self, tmp_path):
+        a = str(tmp_path / 'bilibili')
+        assert browser_profiles.lock_for(a) is browser_profiles.lock_for(a)
+        assert browser_profiles.lock_for(a) is not browser_profiles.lock_for(str(tmp_path / 'zhihu'))
+        # Windows paths differ by case and separator while naming one directory.
+        assert browser_profiles.lock_for(a) is browser_profiles.lock_for(a.replace('/', '\\').upper().lower())
+
+    def test_a_second_thread_waits_for_the_first_to_finish(self, tmp_path):
+        path = str(tmp_path / 'weibo')
+        held = threading.Event()
+        release = threading.Event()
+        order = []
+
+        def holder():
+            lock = browser_profiles.acquire_profile(path, timeout=20)
+            assert lock is not None
+            held.set()
+            release.wait(20)
+            order.append('holder-finished')
+            browser_profiles.release_profile(lock)
+
+        def waiter():
+            held.wait(20)
+            lock = browser_profiles.acquire_profile(path, timeout=20)
+            order.append('waiter-entered' if lock is not None else 'waiter-refused')
+            browser_profiles.release_profile(lock)
+
+        threads = [threading.Thread(target=holder), threading.Thread(target=waiter)]
+        for t in threads:
+            t.start()
+        held.wait(20)
+        # The waiter is parked on the lock, so nothing has been appended by it yet.
+        time.sleep(0.3)
+        assert order == [], f'the second thread got in while the first held the profile: {order}'
+        release.set()
+        for t in threads:
+            t.join(30)
+        assert order == ['holder-finished', 'waiter-entered'], order
+
+    def test_a_claim_taken_on_one_thread_can_be_released_from_another(self, tmp_path):
+        """The browser is closed on a helper thread, so the lock has to survive that.
+
+        This is the shape every real crawl takes: ``_close_login_browser`` gives
+        ``quit()`` a bounded grace on a side thread — and if the primitive were an
+        RLock, the release there would raise, be swallowed, and leave the profile
+        claimed for the rest of the process.
+        """
+        path = str(tmp_path / 'zhihu')
+        results = {}
+        started = threading.Event()
+
+        def holder():
+            results['lock'] = browser_profiles.acquire_profile(path, timeout=5)
+            started.set()
+            time.sleep(0.2)
+            # Released by whoever the context leaves it to — here, the main thread.
+
+        worker = threading.Thread(target=holder)
+        worker.start()
+        assert started.wait(10)
+        browser_profiles.release_profile(results['lock'])
+        gained = browser_profiles.acquire_profile(path, timeout=1)
+        assert gained is not None, 'a claim made on another thread could not be handed over'
+        browser_profiles.release_profile(gained)
+        worker.join(10)
+
+    def test_a_directory_still_held_gives_up_rather_than_waiting_forever(self, tmp_path):
+        """The ceiling is what keeps a leaked browser from parking a platform: None is
+        the caller's signal to fail with a reason instead of queueing forever."""
+        path = str(tmp_path / 'douyin')
+        holder = browser_profiles.acquire_profile(path, timeout=5)
+        results = {}
+
+        def try_claim():
+            results['lock'] = browser_profiles.acquire_profile(path, timeout=0.2)
+
+        t = threading.Thread(target=try_claim)
+        t.start()
+        t.join(10)
+        assert not t.is_alive(), 'the bounded wait never let go'
+        assert results['lock'] is None, 'a busy profile must answer None so the caller can say why'
+        browser_profiles.release_profile(holder)
+        after = browser_profiles.acquire_profile(path, timeout=0.5)
+        assert after is not None, 'the directory stayed claimed after its holder released it'
+        browser_profiles.release_profile(after)
+
+    def test_releasing_something_unheld_is_not_an_error(self, tmp_path):
+        # `close()` runs in finally-blocks; a release that raises would replace the
+        # crawl's real outcome with a lock bookkeeping crash.
+        browser_profiles.release_profile(None)
+        browser_profiles.release_profile(browser_profiles.lock_for(str(tmp_path / 'x')))
+
+
+class TestCrawlerHoldsItsProfile:
+    """The browser owns the claim for its own lifetime, so no caller can forget it.
+
+    Every one of these is a `Crawler` subclass with the real profile plumbing and a
+    `_create_driver` that buys no Selenium session — the claim, not the browser, is
+    what is under test.
+    """
+
+    @staticmethod
+    def _probe_class(name, domain, driver_raises=False):
+        from crawlers.base import Crawler
+
+        namespace = {
+            'domain': domain,
+            'login_url': f'https://www.{domain}.com/',
+            'get_detail': lambda self, url: None,
+            'search': lambda self, **kw: [],
+        }
+        if driver_raises:
+
+            def _create(self):
+                raise RuntimeError('session not created')
+
+            namespace['_create_driver'] = _create
+        else:
+
+            def _create(self):
+                self.driver = None
+
+            namespace['_create_driver'] = _create
+        return type(name, (Crawler,), namespace)
+
+    @staticmethod
+    def _held_elsewhere(path):
+        """Claim *path* from another thread and hand back a releaser.
+
+        Another thread is the only shape that matters: the exclusion exists because a
+        parallel run starts two crawls of one platform in two pool threads, and a
+        same-thread re-claim is not something the product does.
+        """
+        acquired = threading.Event()
+        stop = threading.Event()
+        held = {'lock': None}
+
+        def hold():
+            held['lock'] = browser_profiles.acquire_profile(path, timeout=20)
+            acquired.set()
+            stop.wait(60)
+            browser_profiles.release_profile(held['lock'])
+
+        worker = threading.Thread(target=hold, daemon=True)
+        worker.start()
+        assert acquired.wait(20), 'the holder thread never claimed the profile'
+        assert held['lock'] is not None, 'the holder thread was refused a free profile'
+
+        def release():
+            stop.set()
+            worker.join(20)
+
+        return release
+
+    def test_close_gives_the_profile_back_to_the_next_crawl(self, tmp_path):
+        path = str(tmp_path / 'bilibili')
+        crawler = self._probe_class('Open', 'bilibili')(headless=True, profile_dir=path)
+        results = {}
+
+        def probe_free():
+            results['free'] = browser_profiles.acquire_profile(path, timeout=0.3)
+
+        watcher = threading.Thread(target=probe_free)
+        watcher.start()
+        watcher.join(10)
+        assert results['free'] is None, 'the running browser did not claim its profile, so two would fight over it'
+        crawler.close()
+        gained = browser_profiles.acquire_profile(path, timeout=0.3)
+        assert gained is not None, 'closing the browser did not give the profile back'
+        browser_profiles.release_profile(gained)
+
+    def test_a_browser_that_never_came_up_leaves_no_claim_behind(self, tmp_path):
+        """__init__ claims, then buys the driver. A chromedriver refusal has to walk
+        the claim back, or every later run of that platform waits out its timeout on a
+        directory nobody is using."""
+        path = str(tmp_path / 'weibo')
+        broken = self._probe_class('Broken', 'weibo', driver_raises=True)
+        with pytest.raises(RuntimeError, match='session not created'):
+            broken(headless=True, profile_dir=path)
+        gained = browser_profiles.acquire_profile(path, timeout=0.2)
+        assert gained is not None, 'a failed browser locked the profile for the rest of the process'
+        browser_profiles.release_profile(gained)
+
+    def test_a_profile_held_by_someone_else_fails_with_a_reason(self, tmp_path, monkeypatch):
+        """Not a silent hang and not a chromedriver stack trace: the node has to say
+        which directory it is waiting for and that a browser is holding it."""
+        from config import Config
+
+        path = str(tmp_path / 'douyin')
+        self._held_elsewhere(path)
+        monkeypatch.setattr(Config, 'PROFILE_LOCK_TIMEOUT', 0.2)
+        crawler_class = self._probe_class('Waiter', 'douyin')
+        with pytest.raises(RuntimeError) as raised:
+            crawler_class(headless=True, profile_dir=path)
+        assert path in str(raised.value), f'the message must name the directory that is busy: {raised.value}'
+
+    def test_a_throwaway_browser_claims_nothing(self, tmp_path):
+        """Profiles switched off (or declined for one run) is the old behaviour: every
+        crawl is its own device, and nothing may serialise them."""
+        crawler = self._probe_class('Ephemeral', 'zhihu')(headless=True, profile_dir=None)
+        assert crawler._profile_lock is None
+        crawler.close()
+        crawler.close()  # idempotent — callers close in a finally

@@ -592,6 +592,11 @@ _ZH = {
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
     'run.forcedVisible': '「{label}」：{platform} 会拦截无头浏览器，本次已自动改用可见窗口运行',
     'run.forcedVisibleComment': '「{label}」：评论采集一律使用可见窗口（知乎等内容页会拒绝无头会话），已忽略无头设置',
+    'crawl.profile_wait': '已排队 {seconds} 秒：这个 profile 同时只能开一个浏览器，{dir}',
+    'run.profileOff': '本次执行不使用浏览器 Profile：每次都是全新设备（为让同平台的工作流真并行），Cookie 快照照常导入',
+    'crawl.profile_stuck': (
+        '等待 profile 释放超时（{seconds} 秒）：{dir} —— 可能有浏览器没被关闭，请在进程面板结束残留的 Chrome 后重试'
+    ),
     'run.notCrawlable': (
         '「{label}」所在的平台（{platform}）目前只能保存登录 Cookie，还没有采集实现，'
         '因此不能作为数据源运行——请改用已支持的平台，或等该平台的抓取落地'
@@ -1242,6 +1247,15 @@ _EN = {
     'run.forcedVisibleComment': (
         '"{label}": comment crawling always uses a visible window (zhihu and friends refuse headless '
         'content pages), so the headless setting was ignored here'
+    ),
+    'crawl.profile_wait': 'queued {seconds} s: this profile runs one browser at a time — {dir}',
+    'run.profileOff': (
+        'this run uses no browser profile: every crawl is a brand-new device (so same-platform workflows '
+        'really do run side by side), and the saved cookie snapshot is planted as usual'
+    ),
+    'crawl.profile_stuck': (
+        'timed out waiting {seconds} s for the profile to free up: {dir} — a browser may have been left '
+        'open; end the stray Chrome in the process panel and try again'
     ),
     'run.notCrawlable': (
         'the platform behind "{label}" ({platform}) can store a login cookie but has no crawler yet, so it cannot '

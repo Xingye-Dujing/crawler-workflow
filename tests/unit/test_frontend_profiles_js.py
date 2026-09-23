@@ -32,6 +32,7 @@ from node_runner import run_node
 
 import crawl_capabilities
 import i18n
+from services.cookie_manager import CookieManager
 
 pytestmark = [
     pytest.mark.unit,
@@ -44,7 +45,6 @@ HARNESS = ROOT / 'tests' / 'frontend' / 'harness_profiles.mjs'
 INDEX = ROOT / 'backend' / 'static' / 'index.html'
 
 MATRIX = crawl_capabilities.as_dict()
-from services.cookie_manager import CookieManager  # noqa: E402
 
 #: The platforms the endpoint can answer for: the matrix, minus the one with no login
 #: at all. The scenario payload below is built from this, so the panel's contract is
@@ -63,6 +63,49 @@ def _nodes(*specs):
         ntype, platform = spec
         out[f'n{index}'] = {'id': f'n{index}', 'type': ntype, 'params': {'platform': platform}}
     return out
+
+
+def _crawl(node_id, platform, keyword=None):
+    """A source node that passes the canvas's own validation.
+
+    A node without a keyword is refused by ``validate()`` before any request is
+    built, which would hide the thing under test — the payload — behind a question
+    about something else entirely.
+    """
+    return {
+        node_id: {
+            'id': node_id,
+            'type': 'source',
+            'title': f'采集 {platform}',
+            'params': {
+                'platform': platform,
+                'collect': 'posts',
+                'keyword': keyword or f'kw-{node_id}',
+                'target_count': 5,
+            },
+        }
+    }
+
+
+def _output(node_id):
+    """An output node: validate() refuses a canvas that ends in nothing."""
+    params = {'operation': 'save', 'format': 'csv', 'filename': node_id}
+    return {node_id: {'id': node_id, 'type': 'output', 'title': '导出', 'operation': 'save', 'params': params}}
+
+
+def _two_crawls(*platforms):
+    """Two disconnected workflows — each crawl with its own export — on one canvas.
+
+    Disconnected is the point: that is what makes them two workflows to the backend,
+    and the only shape where two same-platform crawls want the profile at once.
+    """
+    nodes, conns = {}, []
+    for index, platform in enumerate(platforms):
+        crawl, sink = f'c{index}', f'o{index}'
+        nodes.update(_crawl(crawl, platform, keyword=f'kw{index}-{platform}'))
+        nodes.update(_output(sink))
+        conns.append({'from': crawl, 'to': sink})
+    return nodes, conns
 
 
 def _profiles_rows(enabled=True):
@@ -143,6 +186,100 @@ SCENARIOS = [
         'settings': {'use_browser_profile': True},
         'nodes': _nodes(('source', 'zhihu')),
         'profiles': {'ok': True, 'enabled': True, 'root': '/tmp', 'profiles': []},
+    },
+    # ── the parallel / same-platform fork ────────────────────────────────
+    # Two disconnected workflows crawling bilibili: one profile, two browsers.
+    {
+        'id': 'clash-parallel-same',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': _two_crawls('bilibili', 'bilibili')[0],
+        'connections': _two_crawls('bilibili', 'bilibili')[1],
+        'profiles': _profiles_rows(enabled=True),
+        'canvasSettings': {'mode': 'parallel'},
+        'clashChoice': 'skip',
+    },
+    # The same two nodes answered 继续用 Profile.
+    {
+        'id': 'clash-parallel-same-keep',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': _two_crawls('bilibili', 'bilibili')[0],
+        'connections': _two_crawls('bilibili', 'bilibili')[1],
+        'profiles': _profiles_rows(enabled=True),
+        'canvasSettings': {'mode': 'parallel'},
+        'clashChoice': 'use',
+    },
+    # The user closed the dialog instead of choosing.
+    {
+        'id': 'clash-parallel-same-cancel',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': _two_crawls('bilibili', 'bilibili')[0],
+        'connections': _two_crawls('bilibili', 'bilibili')[1],
+        'profiles': _profiles_rows(enabled=True),
+        'canvasSettings': {'mode': 'parallel'},
+        'clashChoice': None,
+    },
+    # Same platform twice, but inside ONE workflow: sequential anyway, so no question.
+    {
+        'id': 'clash-one-component',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': {**_crawl('c0', 'bilibili', keyword='k0'), **_crawl('c1', 'bilibili', keyword='k1'), **_output('o0')},
+        'connections': [{'from': 'c0', 'to': 'o0'}, {'from': 'c1', 'to': 'o0'}],
+        'profiles': _profiles_rows(enabled=True),
+        'canvasSettings': {'mode': 'parallel'},
+    },
+    # Two platforms: nothing contends, and asking would be noise.
+    {
+        'id': 'clash-different-platforms',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': _two_crawls('bilibili', 'zhihu')[0],
+        'connections': _two_crawls('bilibili', 'zhihu')[1],
+        'profiles': _profiles_rows(enabled=True),
+        'canvasSettings': {'mode': 'parallel'},
+    },
+    # Serial mode: one workflow at a time, so the fork does not exist.
+    {
+        'id': 'clash-serial',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': _two_crawls('bilibili', 'bilibili')[0],
+        'connections': _two_crawls('bilibili', 'bilibili')[1],
+        'profiles': _profiles_rows(enabled=True),
+        'canvasSettings': {'mode': 'serial'},
+    },
+    # Profiles off: there is no device to protect and no clash to avoid.
+    {
+        'id': 'clash-profiles-off',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': False},
+        'nodes': _two_crawls('bilibili', 'bilibili')[0],
+        'connections': _two_crawls('bilibili', 'bilibili')[1],
+        'profiles': _profiles_rows(enabled=False),
+        'canvasSettings': {'mode': 'parallel'},
+    },
+    # A comment node's URL names its platform too — it buys a browser as well.
+    {
+        'id': 'clash-comment-url',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': {
+            'cm0': {
+                'id': 'cm0',
+                'type': 'comment',
+                'params': {'urls': 'https://www.bilibili.com/video/BV1xx\nhttps://x.com/a/status/1'},
+            },
+            **_crawl('s0', 'bilibili', keyword='k'),
+            **_output('o0'),
+            **_output('o1'),
+        },
+        'connections': [{'from': 'cm0', 'to': 'o0'}, {'from': 's0', 'to': 'o1'}],
+        'profiles': _profiles_rows(enabled=True),
+        'canvasSettings': {'mode': 'parallel'},
+        'clashChoice': 'use',
     },
 ]
 
@@ -276,3 +413,65 @@ class TestStaticWiring:
         html = INDEX.read_text(encoding='utf-8')
         assert 'id="set-use-profile"' in html and 'id="set-profile-dir"' in html and 'id="profile-status"' in html
         assert "onSettingInput('use_browser_profile'" in html and "onSettingInput('browser_profile_dir'" in html
+
+
+class TestParallelProfileFork:
+    """One profile, two workflows: the fork only the user can call.
+
+    A persistent profile is what makes the site see one continuous device, and it
+    holds exactly one Chrome — so a parallel canvas that crawls the same platform
+    twice has to be *asked*, and the answer has to reach the server. Both halves are
+    pinned per combination, because a dialog that appears but is never sent, and a
+    choice sent for a canvas that never needed one, are equally wrong.
+    """
+
+    def test_two_workflows_on_one_platform_are_recognised(self, ui):
+        assert ui['clash-parallel-same']['collisions'] == ['bilibili']
+
+    def test_the_same_platform_inside_one_workflow_asks_nothing(self, ui):
+        """Two crawls in one workflow run one after the other anyway: a question with
+        no choice behind it is noise, not a decision point."""
+        case = ui['clash-one-component']
+        assert case['collisions'] == []
+        assert case['clash'] == 'not-asked'
+        assert case['clashDialog'] is None
+
+    def test_two_different_platforms_are_never_made_to_wait(self, ui):
+        """Separate directories contend with nothing, so a prompt here would give up
+        parallelism for no reason at all."""
+        case = ui['clash-different-platforms']
+        assert case['collisions'] == [] and case['clash'] == 'not-asked'
+        assert case['sentProfile'] == 'undefined', 'no answer, so no field: the setting stays in charge'
+
+    def test_serial_mode_does_not_ask(self, ui):
+        case = ui['clash-serial']
+        assert case['collisions'] == ['bilibili'], 'the collision is real — it just cannot happen serially'
+        assert case['clash'] == 'not-asked'
+
+    def test_a_canvas_without_profiles_is_not_asked(self, ui):
+        case = ui['clash-profiles-off']
+        assert case['clash'] == 'not-asked', 'there is no device to protect, so nothing to decide'
+
+    def test_declining_profiles_reaches_the_request_as_false(self, ui):
+        case = ui['clash-parallel-same']
+        assert case['clash'] is False and case['ran'] is True
+        assert case['sentProfile'] == 'false', 'the answer never travelled, so the server would re-decide it'
+        assert 'bilibili' in case['clashDialog']['message'], 'the question has to name what collides'
+        assert len(case['clashDialog']['labels']) == 3, 'both sides of the fork plus a way out'
+
+    def test_keeping_profiles_reaches_the_request_as_true(self, ui):
+        case = ui['clash-parallel-same-keep']
+        assert case['clash'] is True and case['sentProfile'] == 'true'
+        assert case['ran'] is True, 'answering the question must not cost the run'
+
+    def test_closing_the_dialog_starts_nothing(self, ui):
+        case = ui['clash-parallel-same-cancel']
+        assert case['clash'] == 'cancelled'
+        assert case['ran'] is False, 'an unanswered question may not be answered by running anyway'
+
+    def test_a_comment_node_counts_as_a_browser_buyer(self, ui):
+        """Its platform comes out of the pasted URLs rather than a select — and it
+        claims the very same profile a source node would."""
+        case = ui['clash-comment-url']
+        assert case['collisions'] == ['bilibili']
+        assert case['clash'] is True

@@ -5,12 +5,14 @@ import random
 import time
 from abc import ABC, abstractmethod
 
+import browser_profiles
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 
+from config import Config
 from i18n import t
 from settings_store import get_setting
 
@@ -109,7 +111,48 @@ class Crawler(ABC):
         # console never tells the user to re-save a cookie that is fine.
         self.risk_blocked = False
         self.cookies_loaded = 0
-        self._create_driver()
+        self._profile_lock = self._claim_profile()
+        try:
+            self._create_driver()
+        except Exception:
+            # A browser that never came up must not leave the profile claimed: the
+            # next run of this platform would wait out the timeout on a directory
+            # nobody is using.
+            self._release_profile()
+            raise
+
+    def _claim_profile(self):
+        """Take exclusive use of this platform's profile directory, if there is one.
+
+        chromedriver pre-writes the profile's ``Default/Preferences`` before Chrome
+        starts, so two sessions created in one directory at the same moment cannot
+        both come up — measured, and it surfaces as ``session not created: failed to
+        write prefs file`` on whichever node loses. One profile is one device, so the
+        answer is to wait for the other crawl rather than to hand out a second
+        directory and throw the device identity away.
+        """
+        if not self.profile_dir:
+            return None
+        started = time.monotonic()
+        lock = browser_profiles.acquire_profile(self.profile_dir)
+        if lock is None:
+            raise RuntimeError(
+                t(
+                    'crawl.profile_stuck',
+                    dir=self.profile_dir,
+                    seconds=round(Config.PROFILE_LOCK_TIMEOUT),
+                )
+            )
+        waited = time.monotonic() - started
+        if waited >= 0.2:
+            # Said once, before the wait it describes. No heartbeat: a crawl behind
+            # this line is already running and the console is not a progress bar.
+            logger.info(t('crawl.profile_wait', seconds=round(waited), dir=self.profile_dir))
+        return lock
+
+    def _release_profile(self):
+        lock, self._profile_lock = self._profile_lock, None
+        browser_profiles.release_profile(lock)
 
     # ── streaming hooks (installed by the runner) ───────────────
 
@@ -557,6 +600,9 @@ class Crawler(ABC):
             with contextlib.suppress(Exception):
                 self.driver.quit()
             self.driver = None
+        # Released after the browser is gone: the next crawl of this platform may
+        # not be able to write its profile while this one still owns Chrome.
+        self._release_profile()
 
     def __enter__(self):
         return self

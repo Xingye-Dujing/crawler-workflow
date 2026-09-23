@@ -15,6 +15,8 @@ alone. Local pages only: this tier performs no server writes and reaches no site
 
 import contextlib
 import os
+import threading
+import time
 
 import browser_profiles
 import pytest
@@ -64,6 +66,60 @@ def test_chrome_populates_the_directory_it_was_given(rooted, tmp_path):
         assert _chrome_files(target), f'--user-data-dir never reached the browser; {target} holds only our own files'
     finally:
         crawler.close()
+
+
+def test_two_workflows_on_one_profile_both_come_up_and_never_together(rooted, tmp_path):
+    """The failure this exists to prevent, reproduced the way the user met it.
+
+    A parallel canvas starts its workflows at the same instant, so two chromedrivers
+    pre-write the same profile's preferences file together and one of them dies with
+    ``session not created: failed to write prefs file`` — measured at 2 failures in 8
+    barrier-synchronised attempts, which is why a single attempt would be a weak test
+    and three of them are run here.
+
+    What has to be true afterwards: every browser came up, each inside the directory
+    it was assigned, and no two of them were alive at the same moment.
+    """
+    target = str(tmp_path / 'profiles' / 'bilibili')
+    lifetimes = []
+    record = threading.Lock()
+
+    def attempt(round_no):
+        barrier = threading.Barrier(2)
+        errors = []
+
+        def worker():
+            try:
+                barrier.wait(timeout=30)
+                crawler = get_crawler('bilibili', headless=True, cookie_dir=None)
+            except Exception as e:  # the clash we are hunting, if it still happens
+                errors.append(f'{type(e).__name__}: {str(e).splitlines()[0][:160]}')
+                return
+            started = time.monotonic()
+            try:
+                _booted(crawler.driver)
+            finally:
+                with record:
+                    lifetimes.append((round_no, started, time.monotonic()))
+                crawler.close()
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(90)
+        return errors
+
+    for round_no in range(3):
+        failures = attempt(round_no)
+        assert not failures, f'round {round_no}: two sessions in one profile still clash: {failures}'
+
+    assert len(lifetimes) == 6, lifetimes
+    clashing = [
+        (a, b) for index, a in enumerate(lifetimes) for b in lifetimes[index + 1 :] if a[1] < b[2] and b[1] < a[2]
+    ]
+    assert not clashing, f'one profile held two browsers at once: {clashing}'
+    assert _chrome_files(target), 'the browsers never touched the profile they were given'
 
 
 def test_a_second_crawler_reuses_the_directory_and_stops_planting(rooted, tmp_path, monkeypatch):

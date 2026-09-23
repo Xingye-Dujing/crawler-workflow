@@ -71,6 +71,15 @@ class Config:
     PAGE_LOAD_TIMEOUT = 15
     SCROLL_WAIT = 2.5
 
+    #: How long a crawl waits for its platform's browser profile to be free. A
+    #: parallel canvas starts its workflows together, so two nodes of one platform
+    #: reach for the same directory in the same instant — and a profile only carries
+    #: one browser at a time (see ``browser_profiles``). The ceiling is a whole
+    #: long crawl, because the honest alternative to waiting is failing a node that
+    #: would have succeeded seconds later; it is not infinite so a browser that was
+    #: killed without closing cannot park this platform forever.
+    PROFILE_LOCK_TIMEOUT = 900
+
     #: How much of a 公众号 article body a row keeps. A long post runs past ten
     #: thousand characters, and the crawler used to cut it at a hardcoded 5000 —
     #: which silently dropped the ending of every analysis input. 0 keeps it all.

@@ -49,6 +49,11 @@ function world(sc) {
         toggleSettingsMenu = function () { globalThis.__settingsOpened += 1; };`,
         sandbox
     );
+    /* Assigned after the load: workflow.js declares showToast itself, and a function
+       declaration inside the script wins over anything seeded before it. Without
+       this a refused run would report as a missing POST with no reason attached. */
+    sandbox.__toasts = [];
+    sandbox.showToast = (msg) => sandbox.__toasts.push(String(msg));
     return sandbox;
 }
 
@@ -122,6 +127,61 @@ for (const sc of scenarios) {
         );
         entry.panelHint = sandbox.__byId('settings-content').innerHTML;
     }
+    /* 5. the parallel/same-platform fork: what the canvas says collides, whether the
+       user was asked, and what the request body then carries. */
+    vm.runInContext(
+        `canvas.connections = ${JSON.stringify(sc.connections || [])};
+         canvas.settings = ${JSON.stringify(sc.canvasSettings || { mode: 'parallel' })};
+         canvas.toWorkflowJSON = function () {
+             return { nodes: Object.values(canvas.nodes), connections: canvas.connections, settings: canvas.settings };
+         };`,
+        sandbox
+    );
+    entry.collisions = vm.runInContext(`profileCollisions(canvas.nodes, canvas.connections)`, sandbox);
+    /* The answer to the fork has to be installed BEFORE the gate is called: a stub
+       still answering the previous scenario's choice would report the wrong branch,
+       and `undefined` (the user closed the dialog) simply vanishes through
+       JSON.stringify — so the sentinel is named here rather than left implicit. */
+    sandbox.__dialog = null;
+    vm.runInContext(
+        `showDialog = function (options) {
+            globalThis.__dialog = { message: options.message, labels: (options.buttons || []).map(function (b) { return b.label; }) };
+            return Promise.resolve(${JSON.stringify(sc.clashChoice === undefined ? null : sc.clashChoice)});
+        };`,
+        sandbox
+    );
+    const answered = await vm.runInContext(`workflow._confirmProfileChoiceBeforeRun()`, sandbox);
+    /* Three distinct outcomes, and the JSON has to tell them apart:
+       'not-asked' (null — nothing to decide), 'cancelled' (undefined — the user
+       closed it, so the run must not start), true / false (their answer). */
+    entry.clash = answered === undefined ? 'cancelled' : answered === null ? 'not-asked' : answered;
+    entry.clashDialog = sandbox.__dialog;
+    const posts = [];
+    sandbox.fetch = (url, opts) => {
+        posts.push({ url: String(url), body: opts && opts.body ? String(opts.body) : null });
+        const path = String(url).split('?')[0];
+        const payload =
+            path === '/api/cookies/status'
+                ? { ok: true, cookies: { bilibili: true, zhihu: true, weibo: true } }
+                : path === '/api/workflow/execute'
+                    ? { ok: true, run_id: 'r1' }
+                    : { ok: true, settings: {} };
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(payload), text: () => Promise.resolve('x') });
+    };
+    vm.runInContext(
+        `workflow.pollStatus = function () {};
+         RunState.running = false;
+         makeDraggable = function () {};`,
+        sandbox
+    );
+    await vm.runInContext(`workflow.execute({})`, sandbox);
+    const executed = posts.find((p) => p.url.indexOf('/api/workflow/execute') === 0);
+    entry.ran = Boolean(executed);
+    /* Named, not left implicit: an absent key and a key whose value is undefined
+       arrive at Python identically, and "no settings field" is a different fact from
+       "the field says true". */
+    entry.sentProfile = executed ? String(JSON.parse(executed.body).workflow.settings.use_profile) : 'no-request';
+    entry.runToasts = sandbox.__toasts.slice();
     report[sc.id] = entry;
 }
 
