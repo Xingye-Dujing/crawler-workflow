@@ -137,6 +137,20 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   through these helpers — a second copy of a scroll loop or a 万-parser is exactly what this
   rule exists to prevent. `Crawler.open(url)` is the only navigation entry point: it survives
   a renderer timeout, clears the dialog, and classifies the page.
+- **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.**
+  `browser_profiles.py` resolves `data/chrome_profile/<platform>` (or the user's absolute
+  `browser_profile_dir`) and `get_crawler` passes it as `--user-data-dir`, so the login
+  window and the crawl are the same device — which is the only defence against the two
+  measured failures: weibo re-issues `SUB`/`SUBP` on the first logged-in load (a saved
+  snapshot is stale the second time it is replayed), and xiaohongshu walls a replayed
+  session within minutes while the user's browser keeps working. The rule that follows
+  from that measurement: **the saved cookie file is imported once** (first use of the
+  directory, marked in its `.crawler-profile.json`), and **never planted again** —
+  overwriting a live profile with an old snapshot is the harm, not the fix. Writing the
+  browser's jar back is forbidden for the same reason (see the weibo note above).
+  `Capability.profile_recommended` is the single source for "this platform is known to
+  punish a throwaway browser": it drives the panel hint and the pre-run dialog, so a
+  second list of platforms anywhere else is a second opinion that can drift.
 - **Cookie planting visits a host only when a cookie needs it** (`base.Crawler._load_cookies`
   keeps the entries the current host rejected and stops when nothing is left): every extra
   host is a real page load, measured at ~2.3 s on douyin — and one of the three was a pure

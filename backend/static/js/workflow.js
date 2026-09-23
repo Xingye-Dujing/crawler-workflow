@@ -189,6 +189,27 @@ const workflow = {
         return this.currentFile || '';
     },
 
+    async _confirmProfileBeforeRun() {
+        /* Off-by-default is the point: a run that is about to be refused by a
+           rotating session cookie should say so while the user can still act —
+           one dialog, naming how many platforms are affected, with 继续运行 for
+           the case where they know it works anyway. */
+        if (window.AppSettings) await AppSettings.pull();
+        var values = (window.AppSettings && AppSettings._values) || {};
+        var wanted = profileNoticeCount(canvas.nodes, values, Capabilities.data);
+        if (!wanted) return true;
+        var message = I18n.t('dialog.profileOff').replace('{n}', wanted);
+        var choice = await showDialog({
+            message: message,
+            buttons: [
+                { label: I18n.t('dialog.profileGoOn'), value: 'go' },
+                { label: I18n.t('dialog.profileSetup'), value: 'setup', primary: true },
+            ],
+        });
+        if (choice !== 'go' && typeof toggleSettingsMenu === 'function') toggleSettingsMenu();
+        return choice === 'go';
+    },
+
     async _confirmCookieBeforeRun(opts) {
         /* Returns true when the run may proceed (no crawler nodes, the prompt
            disabled, a resume — the user is already mid "refresh cookie and
@@ -237,6 +258,10 @@ const workflow = {
             validationErrors.forEach(function (err) { showToast(err); });
             return;
         }
+        /* Ask about the browser before the browser is bought: on the platforms
+           whose session rotates, a throwaway profile *is* the failure, and a run
+           would only discover it an hour deep. */
+        if (!(await this._confirmProfileBeforeRun())) return;
         /* A long crawl can outlive its cookie and die at the login wall an hour
            in. When the setting is on, ask up front "refresh the cookie first?"
            — the user can bail here instead of wasting a run. Off means run
@@ -623,6 +648,30 @@ function reloadCapabilities() {
     });
 }
 
+/* How many platforms in this run want a persistent browser profile and are not
+   getting one. Pure on purpose (nodes, settings, matrix in; a count out) so the node
+   harness can drive every branch — a pre-run dialog that never appears because it
+   read `window.Capabilities` (a top-level const, so never a window property), or
+   that fires for an upload-only canvas, is otherwise invisible to tests.
+
+   Returns 0 when profiles are on, when the matrix has not loaded (no claim without
+   the facts), and when nothing in the run is flagged. */
+function profileNoticeCount(nodes, settings, matrix) {
+    if (!settings || settings.use_browser_profile) return 0;
+    if (!matrix || !Array.isArray(matrix.platforms)) return 0;
+    var wanted = {};
+    Object.keys(nodes || {}).forEach(function (id) {
+        var node = nodes[id] || {};
+        if (node.type !== 'source' && node.type !== 'comment') return;
+        var platform = (node.params || {}).platform;
+        if (!platform) return;
+        matrix.platforms.forEach(function (cap) {
+            if (cap.platform === platform && cap.profileRecommended) wanted[platform] = true;
+        });
+    });
+    return Object.keys(wanted).length;
+}
+
 /* Every control the source panel builds writes exactly one node parameter, and
    the parameter's *name* arrives over the network with the rest of the matrix.
    The handlers are written as inline JS, so a key has to look like an
@@ -709,6 +758,22 @@ function sourcePanelHtml(nodeId, p) {
     var fields = Capabilities.fields(platform, mode.key);
     for (var i = 0; i < fields.length; i++) {
         html += sourceFieldHtml(nodeId, fields[i], p[fields[i].key]);
+    }
+    /* Which platforms a throwaway browser actively fails on is a measured fact about
+       the site, so it comes from the matrix (`profileRecommended`) rather than a list
+       the panel keeps by hand. The wording depends on the user's own setting, because
+       "turn it on" and "it is on, now log into it" are different next steps. */
+    var capEntry = Capabilities.platform(platform);
+    if (capEntry && capEntry.profileRecommended) {
+        var values = (window.AppSettings && AppSettings._values) || {};
+        html +=
+            '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">' +
+            I18n.t(values.use_browser_profile ? 'settings.profileOnHint' : 'settings.profileOffHint') +
+            '</div>';
+        if (ID_SHAPE.test(String(nodeId))) {
+            html += '<button class="menu-btn" type="button" onclick="openSettings(\'' + nodeId + '\');toggleSettingsMenu()">' + I18n.t('settings.profileGo') + '</button>';
+        }
+        html += '</div>';
     }
     if (mode.noteKey) {
         html +=

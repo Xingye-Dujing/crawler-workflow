@@ -1,3 +1,5 @@
+import browser_profiles
+
 from crawlers.overseas import InstagramCrawler
 from crawlers.twitter import TwitterCrawler
 from crawlers.video import BilibiliCrawler, DouyinCrawler
@@ -51,8 +53,21 @@ def cookie_hosts(platform: str) -> tuple:
 
 
 def get_crawler(platform: str, headless: bool = True, cookie_dir: str = None, for_login: bool = False):
+    """Build the crawler for *platform*, in that platform's own browser profile.
+
+    The cookie file is imported **once**, the first time a profile is used. After
+    that the profile owns its session, because planting an old snapshot over a live
+    one is how a rotating credential gets thrown away — measured on weibo, where a
+    logged-in page load re-issues ``SUB``/``SUBP`` and the saved pair stops being
+    accepted afterwards.
+    """
     cls = crawler_class(platform)
     if not cls:
         raise ValueError(f'Unknown platform: {platform}')
-    cookie_path = f'{cookie_dir}/{platform}_cookies.json' if cookie_dir else None
-    return cls(headless=headless, cookie_path=cookie_path, for_login=for_login)
+    profile = browser_profiles.profile_dir_for(platform)
+    planting = not profile or not browser_profiles.is_used(platform)
+    cookie_path = f'{cookie_dir}/{platform}_cookies.json' if (cookie_dir and planting) else None
+    crawler = cls(headless=headless, cookie_path=cookie_path, for_login=for_login, profile_dir=profile)
+    if profile:
+        browser_profiles.mark_used(platform, imported=bool(cookie_path))
+    return crawler

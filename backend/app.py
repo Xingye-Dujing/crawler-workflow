@@ -13,6 +13,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+import browser_profiles
 import pandas as pd
 import requests
 from flask import Flask, jsonify, request, send_from_directory
@@ -3835,6 +3836,35 @@ def set_runtime_settings():
     patch = data.get('settings') if isinstance(data.get('settings'), dict) else data
     values, warnings = save_settings(patch or {})
     return jsonify({'ok': True, 'settings': values, 'warnings': warnings})
+
+
+# ─── Browser profiles API ──────────────────────────────────────
+
+
+@app.route('/api/browser/profiles', methods=['GET'])
+def get_browser_profiles():
+    """One row per platform: does it have its own browser profile, and is it in use?
+
+    The panel needs this to tell an enabled-but-unused profile from a working one.
+    ``imported`` is the state that matters to the user: false means the next run
+    imports the saved cookie file into a brand-new directory (so if they have never
+    logged in through *this* tool, that file is all the identity the platform will
+    see), true means the browser keeps whatever the site gave it last time — which is
+    the whole point of turning profiles on.
+    """
+    rows = {'ok': True, 'enabled': browser_profiles.is_enabled(), 'root': browser_profiles.root_dir()}
+    rows['profiles'] = []
+    for cap in capabilities.CAPABILITIES:
+        platform = cap.platform
+        saved = os.path.join(Config.COOKIE_DIR, f'{platform}_cookies.json')
+        rows['profiles'].append(
+            browser_profiles.status(
+                platform,
+                recommended=cap.profile_recommended,
+                has_cookie=os.path.isfile(saved),
+            )
+        )
+    return jsonify(rows)
 
 
 # ─── AI (LLM) API ──────────────────────────────────────────────

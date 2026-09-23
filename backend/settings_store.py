@@ -40,6 +40,14 @@ DEFAULTS = {
     # crawler node. Long crawls can outlive a cookie; the prompt points the
     # user at refresh + resume BEFORE burning time, and can be turned off.
     'cookie_confirm_before_run': True,
+    # Give every platform its own Chrome profile so the crawl browser stays the same
+    # device across runs. Off = the old behaviour (a blank profile plus a planted
+    # snapshot), which sites that rotate their session cookie punish.
+    'use_browser_profile': True,
+    # Empty = the app-managed ``data/chrome_profile``. A custom path is for a profile
+    # the user created *for this tool* — never their daily Chrome profile, which Chrome
+    # locks while it runs and encrypts against other processes (see browser_profiles).
+    'browser_profile_dir': '',
 }
 
 _values = None
@@ -133,7 +141,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                     warnings.append(t('set.badOllamaHost'))
                 else:
                     vals[key] = v or DEFAULTS[key]
-            elif key == 'cookie_confirm_before_run':
+            elif key in ('cookie_confirm_before_run', 'use_browser_profile'):
                 # The browser may send a real bool or the 'true'/'false' string
                 # the checkbox helpers historically produced; anything else
                 # falls back to the default rather than guessing.
@@ -144,6 +152,19 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 else:
                     vals[key] = DEFAULTS[key]
                     warnings.append(t('set.badFlag', setting=key))
+            elif key == 'browser_profile_dir':
+                # Empty means "use the app-managed directory". A path is accepted as
+                # written and created on first use (Chrome makes its own user-data-dir,
+                # so only an unusable *shape* is refused here — refusing a path whose
+                # parent exists but whose leaf does not would punish the normal case).
+                v = str(raw or '').strip().strip('"')
+                if not v:
+                    vals[key] = ''
+                elif not os.path.isabs(v):
+                    vals[key] = DEFAULTS[key]
+                    warnings.append(t('set.badProfileDir', value=v))
+                else:
+                    vals[key] = v
         tmp = _PATH + '.tmp'
         try:
             with open(tmp, 'w', encoding='utf-8') as f:

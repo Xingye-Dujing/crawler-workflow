@@ -89,6 +89,9 @@ def data_root(tmp_path_factory):
         ('EXPORT_DIR', 'data/exports'),
         ('WORKFLOW_DIR', 'data/workflows'),
         ('LLM_CHECKPOINT_DIR', 'data/checkpoints'),
+        # A crawler built by any test would otherwise drop a real Chrome profile
+        # into the user's data/ directory and keep reusing it across runs.
+        ('BROWSER_PROFILE_DIR', 'data/chrome_profile'),
         ('LOG_DIR', 'logs'),
     ):
         path = root / rel

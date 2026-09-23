@@ -152,6 +152,9 @@ const I18n = {
             'settings.hotBoardPopular': 'Popular feed',
             'settings.hotBoardRanking': 'Weekly ranking',
             'settings.author': 'Creator',
+            'settings.profileOffHint': 'This platform is known to refuse a throwaway browser: its session cookie rotates, or a replayed one is rejected within minutes. Turn on the persistent browser profile in Settings.',
+            'settings.profileOnHint': "Running in this platform's own browser profile. Log into it once through the Cookie panel so the profile holds the session itself.",
+            'settings.profileGo': 'Open settings',
             'settings.authorHint': 'An @handle or a link to that author — not a display name to search for (YouTube also accepts a UC… channel id)',
             'settings.authorHintZhihu': 'A profile link, or the id after /people/ — a Zhihu answer page carries no link to the author profile, so a display name cannot be resolved',
             'settings.authorHintBili': 'A space.bilibili.com link, or the numeric UID — the upload list is read from the page itself (its API needs a per-request signature), so the number is what addresses it',
@@ -410,6 +413,19 @@ const I18n = {
             'set.ollamaHost': 'Ollama server address',
             'set.cookieConfirm': 'Confirm Cookie before run',
             'set.cookieConfirmInline': 'Ask every time a run contains a crawler node',
+            'set.useProfile': 'Persistent browser profile',
+            'set.useProfileInline': 'One profile per platform, so the crawl and the cookie login are the same device',
+            'set.profileDir': 'Profile directory',
+            'set.profileStatus': 'Profiles by platform',
+            'set.profileUnavailable': 'Profile state is unavailable (the server did not answer)',
+            'set.profileSuggested': 'recommended here',
+            'set.profileOff': 'profiles are switched off',
+            'set.profileReady': 'in use — it keeps its own session',
+            'set.profileWillImport': 'will import the saved cookie on first use',
+            'set.profileNeedsLogin': 'not logged in yet — log in through the Cookie panel',
+            'dialog.profileOff': 'This workflow crawls {n} platform(s) where a throwaway browser is known to fail (their session rotates, or a replayed one is refused within minutes). Switch on Settings → Persistent browser profile and log into that profile once through the Cookie panel. You can also run anyway.',
+            'dialog.profileGoOn': 'Run anyway',
+            'dialog.profileSetup': 'Open settings first',
             'set.save': 'Save settings',
             'set.note':
                 'Machine-local settings. Saved to data/settings.json on the server ' +
@@ -734,6 +750,9 @@ const I18n = {
             'settings.hotBoardPopular': '热门榜',
             'settings.hotBoardRanking': '周排行榜',
             'settings.author': '作者',
+            'settings.profileOffHint': '这个平台已知会拒绝一次性浏览器：会话 Cookie 会换票，重放的旧票几分钟内就被拒。请在「设置」里打开持久浏览器 Profile。',
+            'settings.profileOnHint': '正在使用该平台自己的浏览器目录。请到 Cookie 面板往里登录一次，让会话留在它自己手里。',
+            'settings.profileGo': '打开设置',
             'settings.authorHint': '填 @handle、频道链接或 UC… ID；不是拿来搜索的显示名',
             'settings.authorHintZhihu': '填作者主页链接，或 /people/ 后面那段 id——知乎的回答页里没有指向主页的链接，按昵称找人不可行',
             'settings.authorHintBili': '填 space.bilibili.com 链接或数字 UID——投稿列表读的是页面本身（它的接口要按请求算签名），所以能用的是这个号码',
@@ -983,6 +1002,19 @@ const I18n = {
             'set.ollamaHost': 'Ollama 服务地址',
             'set.cookieConfirm': '执行前确认 Cookie',
             'set.cookieConfirmInline': '每次含采集节点的运行前都弹确认框',
+            'set.useProfile': '持久浏览器 Profile',
+            'set.useProfileInline': '每个平台用自己的浏览器目录，抓取与取 Cookie 是同一台设备',
+            'set.profileDir': 'Profile 目录',
+            'set.profileStatus': '各平台 Profile',
+            'set.profileUnavailable': '读不到 Profile 状态（服务未响应）',
+            'set.profileSuggested': '建议开启',
+            'set.profileOff': '功能已关闭',
+            'set.profileReady': '已在使用，会话由它自己保存',
+            'set.profileWillImport': '首次使用时导入已存 Cookie',
+            'set.profileNeedsLogin': '尚未在其中登录，请到 Cookie 面板登录一次',
+            'dialog.profileOff': '本次工作流包含 {n} 个已知会被"一次性浏览器"刁难的平台（它们的会话会换票，或重放的票几分钟内就被拒）。请到「设置」打开持久浏览器 Profile，并在 Cookie 面板里往那个 profile 登录一次；也可以直接继续运行。',
+            'dialog.profileGoOn': '继续运行',
+            'dialog.profileSetup': '先去设置',
             'set.save': '保存设置',
             'set.note':
                 '这些是本机相关设置。保存后写入服务器 ' +
@@ -1585,6 +1617,8 @@ const AppSettings = {
         element_timeout: 'set-elementwait',
         ollama_host: 'set-ollamahost',
         cookie_confirm_before_run: 'set-cookie-confirm',
+        use_browser_profile: 'set-use-profile',
+        browser_profile_dir: 'set-profile-dir',
     },
     _values: null,
     _draft: {},
@@ -1659,6 +1693,77 @@ const AppSettings = {
 function onSettingInput(field, value) {
     AppSettings._draft[field] = value;
 }
+
+/* Per-platform browser-profile state, so "启用" is not a blind switch: the panel
+   shows which platforms the crawl matrix flags as needing one and whether that
+   platform's directory has already been used (``imported``). A platform reading
+   需要登录 is the case the user has to act on — turning the setting on does nothing
+   by itself until they have logged into *that* profile once through the Cookie panel.
+
+   Built with textContent rather than innerHTML: the row carries a platform name and
+   a state sentence, and a list assembled by string concatenation is one future
+   server-side string away from being markup. */
+const BrowserProfiles = {
+    data: null,
+    _generation: 0,
+
+    _row(text, kind) {
+        const line = document.createElement('div');
+        line.className = 'ai-hint-note';
+        line.textContent = text;
+        if (kind) line.dataset.kind = kind;
+        return line;
+    },
+
+    _stateOf(entry) {
+        if (!entry.enabled) return I18n.t('set.profileOff');
+        if (entry.imported) return I18n.t('set.profileReady');
+        if (entry.has_saved_cookie) return I18n.t('set.profileWillImport');
+        return I18n.t('set.profileNeedsLogin');
+    },
+
+    async refresh() {
+        const box = document.getElementById('profile-status');
+        if (!box) return;
+        /* Opening the panel while a read is still in flight used to append both
+           answers to the same box (the harness caught it: 16 rows for 8 platforms).
+           A generation stamp makes an older answer leave the table alone. */
+        const generation = ++this._generation;
+        try {
+            const resp = await fetch('/api/browser/profiles');
+            const result = await resp.json();
+            this.data = result && Array.isArray(result.profiles) ? result : null;
+        } catch (e) {
+            this.data = null;
+        }
+        if (generation !== this._generation) return;
+        /* Assigning textContent is the documented way to empty a node here: it
+           replaces every descendant in a browser and in the DOM stub both, while a
+           `while (box.firstChild)` loop stops dead in the stub (no firstChild) and
+           would leave a re-render appending to the old rows. */
+        box.textContent = '';
+        /* An empty list is not "nothing to report": the endpoint answers one row per
+           matrix platform, so no rows means the table broke, and a blank box would
+           read as a clean bill of health. */
+        if (!this.data || !this.data.profiles.length) {
+            box.appendChild(this._row(I18n.t('set.profileUnavailable'), 'unavailable'));
+            return;
+        }
+        this.data.profiles.forEach(function (entry) {
+            const name = I18n.t('platform.' + entry.platform);
+            const flag = entry.recommended ? ' · ' + I18n.t('set.profileSuggested') : '';
+            const kind = entry.recommended ? 'suggested' : 'plain';
+            box.appendChild(BrowserProfiles._row(name + flag + '：' + BrowserProfiles._stateOf(entry), kind));
+        });
+    },
+};
+
+function renderBrowserProfiles() {
+    return BrowserProfiles.refresh();
+}
+
+window.BrowserProfiles = BrowserProfiles;
+window.renderBrowserProfiles = renderBrowserProfiles;
 
 async function saveAppSettings() {
     await AppSettings.save();

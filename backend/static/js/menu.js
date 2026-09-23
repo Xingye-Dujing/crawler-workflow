@@ -176,6 +176,9 @@ function toggleSettingsMenu(e) {
     closeStyleMenu();
     closeAiMenu();
     if (window.AppSettings) AppSettings.applyToPanel();
+    /* The profile table is server state, and it is only ever looked at here — so
+       it is read when the panel opens rather than on every page load. */
+    if (window.renderBrowserProfiles) renderBrowserProfiles();
     menu.classList.add('open');
     btn.classList.add('active');
     var r = btn.getBoundingClientRect();

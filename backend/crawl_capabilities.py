@@ -126,6 +126,11 @@ class Capability:
 
     platform: str
     modes: tuple
+    #: Running in a throwaway browser is measurably punished on this platform — its
+    #: session rotates or its risk control re-walls a replayed snapshot within
+    #: minutes, while the user's own browser keeps working. The panel and the pre-run
+    #: dialog read this; it is never a refusal, only a recommendation with evidence.
+    profile_recommended: bool = False
 
 
 # ─── The shared tail: how the rows leave the crawl ───────────────────────
@@ -325,6 +330,11 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     Capability(
         platform='weibo',
+        # Measured: a logged-in page load re-issues SUB/SUBP, so the saved pair is
+        # already stale the next time it is replayed, and the rotated pair replanted
+        # into a fresh browser is bounced to /newlogin. Only a browser that keeps its
+        # own jar stays in.
+        profile_recommended=True,
         modes=(
             _posts_mode(*_TIMES),
             _comment_mode('weibo', 'https://weibo.com/...'),
@@ -332,6 +342,10 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     Capability(
         platform='xiaohongshu',
+        # Measured twice in one hour: search answered fine, then the same saved
+        # session was redirected to the login page minutes later while the user's own
+        # browser was still logged in and working.
+        profile_recommended=True,
         modes=(
             _posts_mode(
                 Field(
@@ -568,6 +582,7 @@ def as_dict() -> dict:
             {
                 'platform': cap.platform,
                 'modes': [_mode_as_dict(m) for m in cap.modes],
+                'profileRecommended': bool(cap.profile_recommended),
             }
         )
     return {'platforms': platforms, 'fileFields': [_field_as_dict(f) for f in FILE_FIELDS]}

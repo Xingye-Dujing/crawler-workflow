@@ -24,6 +24,10 @@ class Config:
     # paying for the same rows twice. Used only when the run-state store is
     # unavailable (the DB cache in RUNS_DB is the primary one now).
     LLM_CHECKPOINT_DIR = os.path.join(DATA_DIR, 'checkpoints')
+    # Where one Chrome profile per platform lives, so the crawl browser is the same
+    # device twice in a row instead of a blank one replaying an old cookie snapshot
+    # (see services-free module ``browser_profiles`` for why this exists).
+    BROWSER_PROFILE_DIR = os.path.join(DATA_DIR, 'chrome_profile')
 
     # Durable run state: per-node output rows, crawl cursors, crawled-item
     # fingerprints and the LLM answer cache. This is what makes an interrupted
@@ -72,5 +76,5 @@ class Config:
     #: which silently dropped the ending of every analysis input. 0 keeps it all.
     WECHAT_BODY_MAX_CHARS = 5000
 
-    for d in [COOKIE_DIR, EXPORT_DIR, WORKFLOW_DIR, LOG_DIR, LLM_CHECKPOINT_DIR]:
+    for d in [COOKIE_DIR, EXPORT_DIR, WORKFLOW_DIR, LOG_DIR, LLM_CHECKPOINT_DIR, BROWSER_PROFILE_DIR]:
         os.makedirs(d, exist_ok=True)

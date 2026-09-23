@@ -1366,6 +1366,34 @@
           </label>
         </span>
       </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.useProfile">持久浏览器 Profile</span>
+        <span class="dd-ctrl">
+          <label class="settings-checkbox-label">
+            <input
+              type="checkbox"
+              id="set-use-profile"
+              onchange="onSettingInput('use_browser_profile', this.checked); renderBrowserProfiles();"
+            />
+            <span data-i18n="set.useProfileInline">每个平台用自己的浏览器目录，抓取与取 Cookie 是同一台设备</span>
+          </label>
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.profileDir">Profile 目录</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-profile-dir"
+            class="settings-input"
+            oninput="onSettingInput('browser_profile_dir', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.profileStatus">各平台 Profile</span>
+        <div class="dd-ctrl profile-status" id="profile-status"></div>
+      </div>
       <div class="dd-divider"></div>
       <div class="dd-item-row">
         <span></span>

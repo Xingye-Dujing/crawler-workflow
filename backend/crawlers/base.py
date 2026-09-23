@@ -70,9 +70,19 @@ class Crawler(ABC):
     # platform that measures a real need opts in.
     needs_images = False
 
-    def __init__(self, headless: bool = True, cookie_path: str | None = None, for_login: bool = False):
+    def __init__(
+        self,
+        headless: bool = True,
+        cookie_path: str | None = None,
+        for_login: bool = False,
+        profile_dir: str | None = None,
+    ):
         self.headless = headless
         self.cookie_path = cookie_path
+        # A directory that outlives this browser, so the next run of this platform is
+        # the same device to the site (see ``browser_profiles``). None is the old
+        # behaviour: a throwaway profile plus whatever cookie file we plant into it.
+        self.profile_dir = str(profile_dir or '') or None
         if for_login:
             # A window the user looks at is not a crawl. The login page's QR code is
             # an ``<img>``, so the content blocker that saves seconds on every
@@ -197,6 +207,10 @@ class Crawler(ABC):
         opts.add_argument('--disable-backgrounding-occluded-windows')
         opts.add_argument('--disable-background-timer-throttling')
         opts.add_argument('--disable-renderer-backgrounding')
+        if self.profile_dir:
+            # Chrome creates the user-data-dir itself, so a missing directory is the
+            # normal first run and not an error to handle here.
+            opts.add_argument(f'--user-data-dir={self.profile_dir}')
         # Machine-local choices (driver / browser / window) come from the
         # settings store, editable in the frontend 设置 panel.
         opts.add_argument(f'--window-size={get_setting("window_size")}')

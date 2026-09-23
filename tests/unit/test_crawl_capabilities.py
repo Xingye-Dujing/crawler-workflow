@@ -203,7 +203,11 @@ class TestPayloadShape:
         payload = json.loads(json.dumps(as_dict(), ensure_ascii=False))
         assert set(payload) == {'platforms', 'fileFields'}
         first = payload['platforms'][0]
-        assert set(first) == {'platform', 'modes'}
+        # `profileRecommended` travels with the platform, not the mode: running in a
+        # throwaway browser is punished per site (a rotating session cookie, a risk
+        # control that re-walls a replayed snapshot), and the pre-run notice is the
+        # user's only chance to hear about it before the crawl starts.
+        assert set(first) == {'platform', 'modes', 'profileRecommended'}
         mode = first['modes'][0]
         assert set(mode) == {'key', 'labelKey', 'handler', 'rows', 'noteKey', 'actionKey', 'actionJs', 'fields'}
         # `nameKey` is deliberately absent: that word names the field in the

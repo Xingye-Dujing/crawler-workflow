@@ -565,6 +565,7 @@ _ZH = {
     'set.outOfRange': '{setting} 超出范围 {lo}-{hi}，已恢复默认 {value}',
     'set.badOllamaHost': 'Ollama 地址需以 http:// 或 https:// 开头，已恢复默认',
     'set.badFlag': '{setting} 需要 true/false 值，已恢复默认',
+    'set.badProfileDir': '浏览器 Profile 目录必须填绝对路径（收到：{value}），已恢复为内置目录',
     'set.saveFailed': '设置未能写入磁盘（本次会话内仍生效）：{err}',
     # ── 断点续跑（durable run state） ────────────────────────
     'run.row_limit': '节点 {nid} 已达到保存上限 {limit} 行，超出部分不再落库',
@@ -1204,6 +1205,7 @@ _EN = {
     'set.outOfRange': '{setting} is outside {lo}-{hi} — restored the default {value}',
     'set.badOllamaHost': 'The Ollama address must start with http:// or https:// — restored the default',
     'set.badFlag': '{setting} needs a true/false value — restored the default',
+    'set.badProfileDir': 'The profile directory must be an absolute path (got: {value}) — restored the built-in one',
     'set.saveFailed': 'Settings could not be written to disk (still active for this session): {err}',
     # ── resumable runs ────────────────────────────────────────
     'run.row_limit': 'Node {nid} hit its {limit}-row safety cap — further rows are not stored',
