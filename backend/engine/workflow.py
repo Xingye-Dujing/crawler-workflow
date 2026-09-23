@@ -3,8 +3,9 @@
 import logging
 from collections import defaultdict, deque
 
+import crawl_capabilities as capabilities
 from i18n import t
-from utils.helpers import platform_for, split_urls
+from utils.helpers import platform_for
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,31 @@ class WorkflowEngine:
         }
         return WorkflowEngine(sub_workflow, self.executor)
 
+    @staticmethod
+    def _source_errors(node: dict, params: dict, platform, label: str) -> list[str]:
+        """Refuse a data source whose declared mode cannot run — using the matrix.
+
+        This used to be a hand-written copy of "which platform wants what", with
+        ``if platform == 'wechat'`` here and the same branches again in the
+        executor. Two descriptions of one rule is how a node passed validation
+        and then crawled something else, so there is now exactly one place that
+        knows: :mod:`crawlers.capabilities`.
+        """
+        if not platform:
+            return [t('engine.source_no_platform', nid=label)]
+        mode = capabilities.mode_of_node(node)
+        if mode is None:
+            return [t('engine.source_unknown_platform', nid=label, platform=platform)]
+        errors = []
+        for field in capabilities.required_missing(mode, params):
+            errors.append(t('engine.source_missing', nid=label, field=t(field.name_key)))
+        for field in capabilities.link_fields(mode):
+            urls = field.value_from(params)
+            bad = sum(1 for u in urls if platform_for(u) != field.links_of)
+            if bad:
+                errors.append(t('engine.source_link_mismatch', nid=label, n=bad, platform=field.links_of))
+        return errors
+
     def validate(self) -> list[str]:
         """Everything that would make a node produce nothing.
 
@@ -184,28 +210,7 @@ class WorkflowEngine:
             label = node_label(node, nid)
             if ntype == 'source':
                 platform = node.get('platform') or params.get('platform')
-                # WeChat has no comment adapter, so a stale collect='comments'
-                # on a wechat node is read exactly like the executor reads it —
-                # the plain article-URL crawl — rather than demanding links the
-                # comment engine could never use.
-                if str(params.get('collect') or 'posts') == 'comments' and platform != 'wechat':
-                    # Comments mode feeds on article links, not a keyword.
-                    urls = split_urls(params.get('urls'))
-                    if not urls:
-                        errors.append(t('engine.source_comments_urls', nid=label))
-                    elif platform:
-                        bad = sum(1 for u in urls if platform_for(u) != platform)
-                        if bad:
-                            errors.append(t('engine.source_comments_mismatch', nid=label, n=bad, platform=platform))
-                else:
-                    if not platform:
-                        errors.append(t('engine.source_no_platform', nid=label))
-                    elif platform == 'wechat':
-                        # WeChat scrapes article URLs; a keyword would do nothing.
-                        if not str(params.get('urls') or '').strip():
-                            errors.append(t('engine.source_no_urls', nid=label))
-                    elif not str(params.get('keyword') or '').strip():
-                        errors.append(t('engine.source_no_keyword', nid=label))
+                errors.extend(self._source_errors(node, params, platform, label))
             if ntype == 'upload' and not params.get('dataset_id'):
                 errors.append(t('engine.upload_no_file', nid=label))
             if ntype == 'comment' and not str(params.get('urls') or '').strip():

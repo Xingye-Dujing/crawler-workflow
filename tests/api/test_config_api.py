@@ -6,6 +6,9 @@ Two read/write surfaces live here and neither one should surprise the frontend:
   node forms with. What matters is that the payload is read from the live
   ``Config`` object on every request (a stale copy would make the settings
   panel a lie after an env change), not that any particular default is used.
+* ``GET /api/capabilities`` — the crawl matrix the Data Source panel builds
+  itself from. The endpoint is the only way the browser learns what a platform
+  can do, so the payload has to be the matrix and nothing else.
 * ``/api/cookies/*`` — credential bookkeeping. ``status`` only reports whether a
   file exists, and ``save`` refuses anything but the platforms
   ``CookieManager.PLATFORMS`` lists, because the platform name becomes a path
@@ -50,6 +53,54 @@ class TestConfigEndpoint:
 
     def test_config_is_read_only(self, client):
         assert client.post('/api/config', json={}).status_code == 405
+
+
+class TestCapabilitiesEndpoint:
+    """``/api/capabilities`` is the panel's whole vocabulary, so the two things
+    worth pinning are that it is the matrix (not a second list someone maintains)
+    and that it carries keys rather than sentences (the payload has no
+    language — the canvas translates it)."""
+
+    def test_the_endpoint_hands_out_the_matrix_itself(self, client):
+        import crawl_capabilities
+
+        body = client.get('/api/capabilities').get_json()
+        assert body == crawl_capabilities.as_dict()
+
+    def test_the_payload_names_the_platforms_the_crawlers_can_crawl(self, client):
+        from crawlers import CRAWLERS, is_crawlable
+
+        body = client.get('/api/capabilities').get_json()
+        assert [p['platform'] for p in body['platforms']] == [p for p in CRAWLERS if is_crawlable(p)]
+
+    def test_no_text_travels_to_the_browser(self, client):
+        """Every word the panel shows is a catalogue key.
+
+        The test is structural because a stray sentence would not break anything
+        until somebody switched language and found half a form still in the
+        other one.
+        """
+        body = client.get('/api/capabilities').get_json()
+        keys = []
+
+        def walk(node):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key.endswith('Key'):
+                        keys.append((key, value))
+                    walk(value)
+            elif isinstance(node, list):
+                for item in node:
+                    walk(item)
+
+        walk(body)
+        assert keys, 'the payload stopped carrying any catalogue keys at all'
+        # '' is how an absent label travels (not every field has a hint); a key
+        # that is neither empty nor dotted is a sentence shipped to the browser.
+        assert all(value == '' or '.' in value for _key, value in keys), keys
+
+    def test_it_is_read_only(self, client):
+        assert client.post('/api/capabilities', json={}).status_code == 405
 
 
 class TestCookieEndpoints:

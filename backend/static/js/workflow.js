@@ -509,6 +509,317 @@ const workflow = {
     },
 };
 
+/* ─── Crawl capabilities: the backend's matrix, rendered rather than re-listed ───
+   Which platforms exist, which of them take links instead of a keyword, and what
+   each mode asks for belongs to the executor. The panel used to keep its own
+   answer to those questions — a platform could be added in Python and stay
+   missing here, or appear here while the server still refused it. One fetch now
+   feeds one renderer, so the form is the matrix. Labels travel as catalogue keys
+   because the payload carries no language: the canvas translates it. */
+const Capabilities = {
+    data: null,
+    error: '',
+    loading: false,
+
+    load() {
+        /* One in-flight request, handed to whoever asks while it is running: a
+           second caller that got `null` back would render the failure note for a
+           list that was about to arrive, and a retry clicked twice would fire two
+           fetches whose answers race. */
+        if (this._pending) return this._pending;
+        this.loading = true;
+        var self = this;
+        this._pending = fetch('/api/capabilities')
+            .then(function (resp) {
+                return resp.json();
+            })
+            .then(function (payload) {
+                self.data = payload && Array.isArray(payload.platforms) && payload.platforms.length ? payload : null;
+                self.error = self.data ? '' : 'malformed';
+                return self.data;
+            })
+            .catch(function (e) {
+                self.data = null;
+                self.error = (e && e.message) || String(e);
+                return null;
+            })
+            .then(function (result) {
+                self.loading = false;
+                self._pending = null;
+                return result;
+            });
+        return this._pending;
+    },
+
+    ready() {
+        return !!this.data;
+    },
+
+    platforms() {
+        return this.data ? this.data.platforms : [];
+    },
+
+    platform(id) {
+        var list = this.platforms();
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].platform === id) return list[i];
+        }
+        return null;
+    },
+
+    modes(id) {
+        var entry = this.platform(id);
+        return entry ? entry.modes : [];
+    },
+
+    /* An unknown or missing mode key resolves to the platform's first mode —
+       the same fallback the backend applies, so the panel can never show a form
+       the run would not use, and an old canvas opens the mode it will execute. */
+    mode(id, key) {
+        var modes = this.modes(id);
+        for (var i = 0; i < modes.length; i++) {
+            if (modes[i].key === key) return modes[i];
+        }
+        return modes.length ? modes[0] : null;
+    },
+
+    fields(id, key) {
+        var mode = this.mode(id, key);
+        if (!mode) return [];
+        return mode.fields.concat((this.data && this.data.fileFields) || []);
+    },
+
+    defaults(id) {
+        var out = {};
+        if (!this.data) return out;
+        var modes = this.modes(id);
+        for (var i = 0; i < modes.length; i++) {
+            var fields = modes[i].fields.concat(this.data.fileFields || []);
+            for (var j = 0; j < fields.length; j++) {
+                if (!(fields[j].key in out)) out[fields[j].key] = fields[j].default;
+            }
+        }
+        return out;
+    },
+};
+window.Capabilities = Capabilities;
+
+function reloadCapabilities() {
+    Capabilities.load().then(function () {
+        /* Whoever is watching the panel has to be told the list came back: a
+           silent retry that leaves the same note on screen reads as a dead
+           button. `canvas` is a top-level const in canvas.js, so it is asked for
+           by name — `window.canvas` could never be truthy. */
+        if (typeof canvas !== 'undefined' && canvas._settingsNodeId) openSettings(canvas._settingsNodeId);
+        showToast(Capabilities.error ? I18n.t('settings.capFailed') : I18n.t('settings.capLoaded'));
+    });
+}
+
+/* Every control the source panel builds writes exactly one node parameter, and
+   the parameter's *name* arrives over the network with the rest of the matrix.
+   The handlers are written as inline JS, so a key has to look like an
+   identifier: the parity test pins the shape on the Python side, and the guard
+   here is what stops a payload that ever stops matching it from becoming a
+   script. Values never go through this — they are HTML-escaped where they are
+   printed. */
+var ID_SHAPE = /^[\w.-]{1,64}$/;
+
+function paramCall(nodeId, key, expr) {
+    if (!ID_SHAPE.test(String(nodeId)) || !ID_SHAPE.test(String(key))) return '';
+    return "updateParam('" + nodeId + "','" + key + "'," + expr + ')';
+}
+
+function numberCall(nodeId, key, fallback) {
+    /* The fallback travels as a number the panel itself showed, never as the
+       payload's own text: an empty box means "put that back", while a typed 0 is
+       a real choice (0 分片 = 不分片, 0 评论预览 = 跳过评论面板) and stays 0. */
+    if (!ID_SHAPE.test(String(nodeId)) || !ID_SHAPE.test(String(key))) return '';
+    var safe = typeof fallback === 'number' && isFinite(fallback) ? fallback : 0;
+    return (
+        "updateParam('" +
+        nodeId +
+        "','" +
+        key +
+        "',isNaN(parseInt(this.value,10)) ? " +
+        safe +
+        ' : parseInt(this.value,10))'
+    );
+}
+
+function reopenCall(nodeId) {
+    return ID_SHAPE.test(String(nodeId)) ? ";openSettings('" + nodeId + "')" : '';
+}
+
+function sourcePanelHtml(nodeId, p) {
+    if (!Capabilities.ready()) {
+        return (
+            '<div class="settings-group">' +
+            '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">' +
+            I18n.t('settings.capFailed') +
+            '</div>' +
+            '<button class="menu-btn" type="button" onclick="reloadCapabilities()">' +
+            I18n.t('btn.retry') +
+            '</button></div>'
+        );
+    }
+    var platform = String(p.platform || '');
+    var mode = Capabilities.mode(platform, p.collect || p.mode);
+    var pick = ID_SHAPE.test(String(nodeId)) ? "selectSourcePlatform('" + nodeId + "',this.value)" : '';
+    var html = sourceSelectHtml(
+        nodeId,
+        'settings.platform',
+        Capabilities.platforms().map(function (entry) {
+            return { value: entry.platform, labelKey: 'platform.' + entry.platform };
+        }),
+        platform,
+        pick
+    );
+    if (!mode) {
+        /* A platform the matrix does not describe cannot be crawled, and the
+           run would say so too — but saying it while the panel is open beats
+           letting the user fill a form and find out later. */
+        return (
+            html +
+            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.capNoMode') +
+            '</div>'
+        );
+    }
+    if (Capabilities.modes(platform).length > 1) {
+        /* One mode is not a choice: WeChat offers a single form, and a select
+           with one option only makes the panel look unfinished. */
+        html += sourceSelectHtml(
+            nodeId,
+            'settings.collect',
+            Capabilities.modes(platform).map(function (m) {
+                return { value: m.key, labelKey: m.labelKey };
+            }),
+            mode.key,
+            paramCall(nodeId, 'collect', 'this.value') + reopenCall(nodeId)
+        );
+    }
+    var fields = Capabilities.fields(platform, mode.key);
+    for (var i = 0; i < fields.length; i++) {
+        html += sourceFieldHtml(nodeId, fields[i], p[fields[i].key]);
+    }
+    if (mode.noteKey) {
+        html +=
+            '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">' +
+            I18n.t(mode.noteKey) +
+            '</div>';
+        /* A button the page cannot service is worse than no button, and the name
+           arrives over the network: it has to both look like a function name and
+           resolve to one before it is wired to a click. */
+        if (mode.actionKey && ID_SHAPE.test(String(mode.actionJs)) && typeof window[mode.actionJs] === 'function') {
+            html +=
+                '<button class="menu-btn" type="button" onclick="' +
+                escapeHtml(mode.actionJs) +
+                '()">' +
+                I18n.t(mode.actionKey) +
+                '</button>';
+        }
+        html += '</div>';
+    }
+    return html;
+}
+
+function sourceSelectHtml(nodeId, labelKey, options, value, onChange) {
+    if (!onChange) return '';
+    var html =
+        '<div class="settings-group"><label class="settings-label">' +
+        I18n.t(labelKey) +
+        '</label><select class="settings-select" onchange="' +
+        onChange +
+        '">';
+    for (var i = 0; i < options.length; i++) {
+        html +=
+            '<option value="' +
+            escapeHtml(options[i].value) +
+            '"' +
+            (options[i].value === value ? ' selected' : '') +
+            '>' +
+            I18n.t(options[i].labelKey) +
+            '</option>';
+    }
+    return html + '</select></div>';
+}
+
+function sourceFieldHtml(nodeId, f, value) {
+    if (!ID_SHAPE.test(String(f.key))) return '';
+    var v = value === undefined || value === null || value === '' ? f.default : value;
+    var hint = sourceFieldHint(f);
+    var tail = hint ? '<div style="font-size:11px;color:var(--text-dim);">' + hint + '</div>' : '';
+    if (f.control === 'checkbox') {
+        /* The label wraps the box on purpose: a 12px caption beside a checkbox is
+           a click target, and the panel's other toggles already work that way. */
+        return (
+            '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
+            '<input type="checkbox" ' +
+            (v ? 'checked' : '') +
+            ' onchange="' +
+            paramCall(nodeId, f.key, 'this.checked') +
+            '">' +
+            I18n.t(f.labelKey) +
+            '</label>' +
+            tail +
+            '</div>'
+        );
+    }
+    var label = '<label class="settings-label">' + I18n.t(f.labelKey) + '</label>';
+    var input;
+    if (f.control === 'textarea') {
+        input =
+            '<textarea class="settings-input" rows="5" placeholder="' +
+            escapeHtml(f.placeholder || '') +
+            '" onchange="' +
+            paramCall(nodeId, f.key, 'this.value') +
+            '">' +
+            escapeHtml(v) +
+            '</textarea>';
+    } else if (f.control === 'number') {
+        input =
+            '<input class="settings-input" type="number"' +
+            (f.minimum != null ? ' min="' + parseInt(f.minimum, 10) + '"' : '') +
+            (f.maximum != null ? ' max="' + parseInt(f.maximum, 10) + '"' : '') +
+            ' value="' +
+            escapeHtml(v) +
+            '" onchange="' +
+            numberCall(nodeId, f.key, f.default) +
+            '">';
+    } else if (f.control === 'select') {
+        var html = sourceSelectHtml(
+            nodeId,
+            f.labelKey,
+            f.options.map(function (o) {
+                return { value: o.value, labelKey: o.labelKey };
+            }),
+            String(v),
+            paramCall(nodeId, f.key, 'this.value')
+        );
+        return hint ? html + '<div class="settings-group">' + tail + '</div>' : html;
+    } else {
+        input =
+            '<input class="settings-input" value="' +
+            escapeHtml(v) +
+            '" placeholder="' +
+            escapeHtml(f.placeholder || '') +
+            '" onchange="' +
+            paramCall(nodeId, f.key, 'this.value') +
+            '">';
+    }
+    return '<div class="settings-group">' + label + input + tail + '</div>';
+}
+
+function sourceFieldHint(f) {
+    if (f.hintKey) return I18n.t(f.hintKey);
+    if (f.linksOf) {
+        /* The selected platform decides what a usable link looks like, so the
+           panel names it instead of listing every site's URL shape at once. */
+        return I18n.t('settings.commentUrlsHintPlat').replace('{plat}', I18n.t('platform.' + f.linksOf));
+    }
+    return '';
+}
+
 /* Settings Panel */
 function openSettings(nodeId) {
     var node = canvas.nodes[nodeId];
@@ -527,111 +838,11 @@ function openSettings(nodeId) {
         '<span style="font-size:12px;color:var(--text-dim);">' + I18n.t('nodeType.' + node.type) + '</span>' +
         '</div>';
     if (node.type === 'source') {
-        var p = node.params;
-        /* WeChat scrapes a list of article URLs, not a keyword — the panel has
-           to change shape with the platform, which is why the select re-opens
-           itself on change. */
-        var isWechat = p.platform === 'wechat';
-        var collect = p.collect || 'posts';
-        /* WeChat has no comment adapter — a stale comments flag on a wechat
-           node still means "crawl these article URLs" (the backend agrees). */
-        if (isWechat) collect = 'posts';
-        html += '<div class="settings-group">' +
-            '<label class="settings-label">' + I18n.t('settings.platform') + '</label>' +
-            '<select class="settings-select" onchange="selectSourcePlatform(\'' + nodeId + '\', this.value)">' +
-            '<option value="zhihu"' + (p.platform === 'zhihu' ? ' selected' : '') + '>' + I18n.t('platform.zhihu') + '</option>' +
-            '<option value="weibo"' + (p.platform === 'weibo' ? ' selected' : '') + '>' + I18n.t('platform.weibo') + '</option>' +
-            '<option value="xiaohongshu"' + (p.platform === 'xiaohongshu' ? ' selected' : '') + '>' + I18n.t('platform.xiaohongshu') + '</option>' +
-            '<option value="wechat"' + (p.platform === 'wechat' ? ' selected' : '') + '>' + I18n.t('platform.wechat') + '</option>' +
-            '<option value="bilibili"' + (p.platform === 'bilibili' ? ' selected' : '') + '>' + I18n.t('platform.bilibili') + '</option>' +
-            '<option value="douyin"' + (p.platform === 'douyin' ? ' selected' : '') + '>' + I18n.t('platform.douyin') + '</option>' +
-            '</select></div>';
-        if (!isWechat) {
-            /* 评论采集 lives here as a mode of the Data Source (same 数据输入
-               category as its own node): links in, comment rows out. */
-            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.collect') + '</label>' +
-                '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'collect\',this.value);openSettings(\'' + nodeId + '\')">' +
-                '<option value="posts"' + (collect !== 'comments' ? ' selected' : '') + '>' + I18n.t('settings.collectPosts') + '</option>' +
-                '<option value="comments"' + (collect === 'comments' ? ' selected' : '') + '>' + I18n.t('settings.collectComments') + '</option>' +
-                '</select></div>';
-        }
-        if (isWechat) {
-            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.urls') + '</label>' +
-                '<textarea class="settings-input" rows="5" placeholder="https://mp.weixin.qq.com/s/..." ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
-                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.urlsHint') + '</div></div>';
-            /* WeChat is the one platform that cannot give 评论/点赞/转发 to a
-               browser, and a silent absence reads as a bug. Say what is missing
-               and why, in one click. */
-            html += '<div class="settings-group">' +
-                '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">' +
-                I18n.t('settings.wechatLimitsNote') + '</div>' +
-                '<button class="menu-btn" type="button" onclick="explainWechatLimits()">' +
-                I18n.t('settings.wechatLimitsBtn') + '</button></div>';
-        } else if (collect === 'comments') {
-            /* The selected platform pins what a valid link looks like — the
-               placeholder must show ONE example shape, not all three at once
-               (and the engine now refuses links that contradict the choice). */
-            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentUrls') + '</label>' +
-                '<textarea class="settings-input" rows="5" placeholder="' + commentUrlPlaceholder(p.platform) + '" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
-                '<div style="font-size:11px;color:var(--text-dim);">' +
-                I18n.t('settings.commentUrlsHintPlat').replace('{plat}', I18n.t('platform.' + p.platform)) + '</div></div>' +
-                '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentLimit') + '</label>' +
-                '<input class="settings-input" type="number" min="0" value="' + (p.comment_limit != null ? p.comment_limit : 0) + '" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'comment_limit\',parseInt(this.value)||0)">' +
-                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentLimitHint') + '</div></div>' +
-                '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
-                '<input type="checkbox" ' + (p.per_article_file ? 'checked' : '') + ' ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'per_article_file\',this.checked)">' + I18n.t('settings.perArticleFile') + '</label></div>' +
-                '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentHint') + '</div>';
-        } else {
-            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.keyword') + '</label>' +
-                '<input class="settings-input" value="' + escapeHtml(p.keyword || '') + '" placeholder="keyword" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'keyword\',this.value)"></div>' +
-                '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.targetCount') + '</label>' +
-                '<input class="settings-input" type="number" value="' + (p.target_count || 50) + '" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'target_count\',parseInt(this.value)||50)"></div>' +
-                '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
-                '<input type="checkbox" ' + (p.recrawl ? 'checked' : '') + ' ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'recrawl\',this.checked)">' + I18n.t('settings.recrawl') + '</label>' +
-                '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.recrawlHint') + '</div></div>';
-        }
-        if (p.platform === 'xiaohongshu') {
-            /* 每篇笔记随行走带回的评论预览数。0 是有意义的选择（跳过评论面板，
-               也是最快的抓法），不是"没填"，所以后端按字符串解析而不是取真值。 */
-            html += '<div class="settings-group"><label class="settings-label">' +
-                I18n.t('settings.commentPreview') + '</label>' +
-                '<input class="settings-input" type="number" min="0" value="' +
-                (p.comment_preview != null ? p.comment_preview : 5) + '" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'comment_preview\',this.value)">' +
-                '<div style="font-size:11px;color:var(--text-dim);">' +
-                I18n.t('settings.commentPreviewHint') + '</div></div>';
-        }
-        if (p.platform === 'weibo' && collect !== 'comments') {
-            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.startTime') + '</label>' +
-                '<input class="settings-input" value="' + (p.start_time || '') + '" placeholder="2026-01-01" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'start_time\',this.value)"></div>' +
-                '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.endTime') + '</label>' +
-                '<input class="settings-input" value="' + (p.end_time || '') + '" placeholder="2026-12-31" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'end_time\',this.value)"></div>';
-        }
-        /* 分批输出: with part_size>0 every kept row also lands in a numbered
-           part file WHILE the crawl runs, and the parts merge into one file at
-           the end — results are openable before the node finishes. 0 = off. */
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.partSize') + '</label>' +
-            '<input class="settings-input" type="number" min="0" value="' + (p.part_size != null ? p.part_size : 0) + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'part_size\',parseInt(this.value)||0)">' +
-            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.sourcePartSizeHint') + '</div></div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.format') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'format\',this.value)">' +
-            ['csv', 'json'].map(function (f) {
-                return '<option value="' + f + '"' + ((p.format || 'csv') === f ? ' selected' : '') + '>' + I18n.t('format.' + f) + '</option>';
-            }).join('') +
-            '</select></div>' +
-            '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
-            '<input type="checkbox" ' + (p.keep_parts ? 'checked' : '') + ' ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'keep_parts\',this.checked)">' + I18n.t('settings.keepParts') + '</label></div>';
+        /* The form is the matrix: which platforms exist, which of them want
+           links instead of a keyword, and every field in between come from
+           /api/capabilities (see Capabilities above), so the panel and the
+           executor cannot disagree about what a platform offers. */
+        html += sourcePanelHtml(nodeId, node.params);
     } else if (node.type === 'comment') {
         /* Source-like crawler: article links go in, comment rows come out. The
            panel mirrors the WeChat source block (a multi-line textarea) and the
@@ -2044,22 +2255,15 @@ function urlPlatform(url) {
 
 /* One example shape per platform — the comments textarea must not suggest
    that links from the other sites are acceptable when a platform is chosen. */
-function commentUrlPlaceholder(platform) {
-    if (platform === 'weibo') return 'https://weibo.com/...';
-    if (platform === 'xiaohongshu') return 'https://www.xiaohongshu.com/explore/...';
-    if (platform === 'bilibili') return 'https://www.bilibili.com/video/BV...';
-    if (platform === 'douyin') return 'https://www.douyin.com/video/...';
-    return 'https://www.zhihu.com/question/...';
-}
-
-/* updateParam re-opens the panel itself, so this only has to fix the state
-   the next render reads: WeChat has no comment adapter, and a stale
-   collect='comments' left over from another platform would otherwise sit in
-   the saved JSON (the backend normalizes it, but the canvas should not lie). */
+/* Changing the site can drop the mode: the matrix decides what each platform
+   offers, so a comments flag carried over from a platform that has no comment
+   adapter is rewritten to the new platform's first mode rather than left to sit
+   in the saved JSON claiming a crawl that does not exist. updateParam re-opens
+   the panel by itself, so only the state has to be fixed here. */
 function selectSourcePlatform(nodeId, value) {
     var node = canvas.nodes[nodeId];
-    if (node && node.params && value === 'wechat' && node.params.collect === 'comments') {
-        node.params.collect = 'posts';
+    if (node && node.params && Capabilities.ready() && node.params.collect) {
+        node.params.collect = Capabilities.mode(value, node.params.collect).key;
     }
     updateParam(nodeId, 'platform', value);
 }

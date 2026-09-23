@@ -54,6 +54,25 @@ _warm_http_stack()
 # ─── path isolation ─────────────────────────────────────────────────────
 
 
+@pytest.fixture(scope='session')
+def capabilities_matrix(tmp_path_factory):
+    """The crawl matrix as a JSON file, for the JS harnesses that render a panel.
+
+    Dumped from ``crawl_capabilities.as_dict()`` at run time instead of checked
+    in: the Data Source panel is *generated* from this payload, so a harness has
+    to see what the server would actually send. A committed copy is precisely how
+    the panel and the executor drift back apart — it would keep passing while the
+    real endpoint said something else.
+    """
+    import json
+
+    import crawl_capabilities
+
+    path = tmp_path_factory.mktemp('capabilities') / 'capabilities.json'
+    path.write_text(json.dumps(crawl_capabilities.as_dict(), ensure_ascii=False), encoding='utf-8')
+    return path
+
+
 @pytest.fixture(scope='session', autouse=True)
 def data_root(tmp_path_factory):
     """Redirect every write path the backend knows about into a throwaway dir.

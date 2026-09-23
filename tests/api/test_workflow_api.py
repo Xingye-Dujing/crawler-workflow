@@ -1052,7 +1052,7 @@ class TestSourceCommentsMode:
         assert started.status_code == 200  # a validation failure is a logged outcome, not an HTTP error
         assert _wait_for_worker(app_module)
         status = client.get('/api/workflow/status').get_json()
-        assert any('comments mode needs at least one article URL' in line for line in status['logs'])
+        assert any('the required field article URLs is empty' in line for line in status['logs'])
 
     def test_foreign_platform_links_stop_the_run_before_any_browser(self, client, app_module, monkeypatch):
         # Selected platform zhihu + a weibo link: validate() must refuse the

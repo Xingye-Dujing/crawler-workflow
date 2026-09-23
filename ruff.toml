@@ -14,6 +14,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 known-first-party = [
     "analyzers",
     "config",
+    "crawl_capabilities",
     "crawlers",
     "engine",
     "i18n",

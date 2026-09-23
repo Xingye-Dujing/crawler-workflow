@@ -18,6 +18,7 @@ import requests
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
+import crawl_capabilities as capabilities
 from analyzers import (
     AnomalyDetector,
     ContentCleaner,
@@ -1634,19 +1635,25 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # for a platform nothing can crawl. Refusing here by name beats the
         # alternative — an empty table that looks like an empty search.
         raise ValueError(t('run.notCrawlable', label=node_label(node, str(node.get('id') or '')), platform=platform))
-    if str(params.get('collect') or 'posts') == 'comments' and platform != 'wechat':
-        # 评论采集 is a mode of the Data Source (they share the 数据输入 category):
-        # links go in, comment rows come out. Same engine as the standalone
-        # Comment node — which remains valid for older canvases. WeChat has no
-        # comment adapter, so a stale collect='comments' flag left on a wechat
-        # node (saved before the panel normalized it) must not reroute its
-        # article URLs into the comment engine — they would ALL be dropped as
-        # unsupported. For wechat it still simply means "crawl these URLs".
+    mode = capabilities.mode_of_node(node)
+    # The mode is the whole decision that used to be a chain of platform tests:
+    # 评论采集 routes to the shared comment engine, every other mode calls the
+    # crawler method the matrix names with the arguments the matrix declares.
+    # An unknown mode key reads as the platform's first mode (what the panel
+    # shows), so a stale canvas cannot ask for a crawl nothing describes.
+    if mode is None:
+        raise ValueError(
+            t('engine.source_unknown_platform', nid=node_label(node, str(node.get('id') or '')), platform=platform)
+        )
+    if mode.handler == 'comments':
+        # Same engine as the standalone Comment node — which stays valid for the
+        # canvases that used to own it.
         return _execute_comment_node(dict(node, type='comment'), headless=headless, ctx=ctx)
-    keyword = params.get('keyword', '')
-    target_count = _safe_int(params.get('target_count'), 50, minimum=1)
-    start_time = params.get('start_time')
-    end_time = params.get('end_time')
+    crawl_args = capabilities.crawl_kwargs(mode, params)
+    # A mode without a row budget (WeChat's article list) promised no number, so
+    # nothing can be missing from it: the cookie-wall check below reads zero as
+    # "this crawl ended where it was meant to" instead of inventing a target.
+    target_count = crawl_args.get('target_count') or 0
 
     if headless and getattr(crawler_class(platform), 'never_headless', False):
         # Douyin answers a headless browser with 验证码中间页 on every
@@ -1713,22 +1720,10 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
                     # part survived): the merged file should hold the whole table,
                     # not only what comes after the switch.
                     writer.add(saved)
-        if platform == 'wechat':
-            # WeChat scrapes a list of article URLs, not a keyword.
-            rows = crawler.search(urls=split_urls(params.get('urls')), resume=resume)
-        elif platform == 'weibo' and (start_time or end_time):
-            # Both bounds are required: the crawler raises a readable error
-            # otherwise instead of silently searching something else.
-            rows = crawler.search(keyword, start_time=start_time, end_time=end_time, resume=resume)
-        else:
-            rows = crawler.search(
-                keyword,
-                target_count=target_count,
-                resume=resume,
-                # 小红书：每篇笔记随行走带的评论预览数。0 是合法值（跳过评论面板，
-                # 也最快），所以不能按"假值"处理掉。
-                comment_preview=params.get('comment_preview'),
-            )
+        # The matrix decided what this crawl is called with; `resume` is the one
+        # argument that is not the user's — it is where this run stopped, handed
+        # over from the store.
+        rows = getattr(crawler, mode.handler)(**crawl_args, resume=resume)
     finally:
         _close_login_browser(crawler)  # bounded quit + PID-targeted reap, never a global taskkill
         execution_state['active_crawlers'].discard(crawler)
@@ -3791,6 +3786,19 @@ def get_config():
             'max_workers': Config.DEFAULT_MAX_WORKERS,
         }
     )
+
+
+@app.route('/api/capabilities', methods=['GET'])
+def get_capabilities():
+    """The crawl matrix, so the browser can build the Data Source panel from it.
+
+    The panel used to hard-code which platforms exist, which of them take links
+    instead of a keyword and which fields belong to which mode — a fourth copy of
+    a fact the executor already had to know. Labels travel as catalogue keys
+    because this payload has no language: the canvas translates it into whichever
+    one the user is reading.
+    """
+    return jsonify(capabilities.as_dict())
 
 
 # ─── Runtime settings API ──────────────────────────────────────

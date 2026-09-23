@@ -6,14 +6,14 @@
  * the server JSON to live canvas nodes runs untouched — and reports the result.
  * fetch is a recording stub, so save()'s request body is inspectable too.
  *
- * Usage: node harness_lifecycle.mjs <canvas.js> <workflow.js> <scenarios.json>
+ * Usage: node harness_lifecycle.mjs <canvas.js> <workflow.js> <scenarios.json> [matrix.json]
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { baseSandbox, fixWindow, readJson } from './harness_dom.mjs';
 
-const [canvasPath, wfPath, scPath] = process.argv.slice(2);
+const [canvasPath, wfPath, scPath, matrixPath] = process.argv.slice(2);
 const scenarios = JSON.parse(fs.readFileSync(scPath, 'utf8'));
 
 const LABELS = {
@@ -59,6 +59,13 @@ vm.runInContext(
              var r = globalThis.__loadResponse || { ok: false, error: 'no stub' };
              return Promise.resolve({ json: () => Promise.resolve(r) });
          }
+         /* The crawl matrix, answered with the payload the pytest driver dumped
+            from the backend: a new Data Source node seeds its numbers from it, so
+            pretending it is absent would test a browser that never boots. */
+         if (String(url).indexOf('/api/capabilities') === 0) {
+             var caps = globalThis.__capabilities || { ok: true };
+             return Promise.resolve({ json: () => Promise.resolve(caps) });
+         }
          var body = { ok: true, workflows: [], datasets: [] };
          return Promise.resolve({ json: () => Promise.resolve(body) });
      };`,
@@ -67,6 +74,15 @@ vm.runInContext(
 
 vm.runInContext(fs.readFileSync(canvasPath, 'utf8') + '\n;globalThis.__canvas = canvas;', sandbox);
 vm.runInContext(fs.readFileSync(wfPath, 'utf8') + '\n;globalThis.__workflow = workflow;', sandbox);
+/* Hand the matrix to the stubbed endpoint and let the browser's own loader run,
+   so the panel and the node defaults are built from the payload the server would
+   really have sent. Awaited before any scenario: a node dropped into an
+   unloaded world seeds differently, and that is a different test. */
+const matrix = readJson(matrixPath);
+if (matrix) {
+    sandbox.__capabilities = matrix;
+    await sandbox.Capabilities.load();
+}
 /* After the file load: workflow.js DECLARES showDialog/showToast, and function
    declarations overwrite the context globals — stubbing before would leave the
    real modal/toast code running instead of our canned answer. */

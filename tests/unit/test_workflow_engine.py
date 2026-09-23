@@ -223,7 +223,7 @@ class TestValidate:
         wf = _wf([_node('node-1', platform='zhihu', params={'keyword': '   '})], [])
         errors = WorkflowEngine(wf).validate()
         assert len(errors) == 1
-        assert 'source node has no keyword' in errors[0]
+        assert 'the required field keyword is empty' in errors[0]
         # The node is named by its type label + id, not a bare 'node-1'.
         assert 'Data Source #node-1' in errors[0]
 
@@ -256,8 +256,8 @@ class TestValidate:
         [
             (_node('node-1', params={}), 'source node has no platform'),
             (_node('node-1', params={'keyword': ''}), 'source node has no platform'),
-            (_node('node-1', platform='zhihu', params={}), 'source node has no keyword'),
-            (_node('node-1', platform='wechat', params={}), 'WeChat source needs at least one article URL'),
+            (_node('node-1', platform='zhihu', params={}), 'the required field keyword is empty'),
+            (_node('node-1', platform='wechat', params={}), 'the required field article URLs is empty'),
             (_node('node-1', 'upload', params={}), 'upload node has no file selected'),
             (_node('node-1', 'process', operation=''), 'process node has no operation'),
             (_node('node-1', 'output', operation=''), 'output node has no operation'),
@@ -373,7 +373,7 @@ class TestValidateUsesLabels:
             'params': {'platform': 'zhihu', 'collect': 'comments', 'urls': ''},
         }
         errors = WorkflowEngine(_wf([node], [])).validate()
-        assert any('comments mode needs at least one article URL' in e for e in errors)
+        assert any('the required field article URLs is empty' in e for e in errors)
         # A keyword must NOT be demanded once comments mode is chosen.
         assert not any('keyword' in e for e in errors)
 
@@ -402,9 +402,9 @@ class TestValidateUsesLabels:
         assert any('2 link(s) do not match the selected platform (zhihu)' in e for e in errors)
 
     def test_wechat_node_reads_a_stale_comments_flag_as_article_crawl(self, en):
-        # WeChat has no comment adapter. The panel now clears collect when
-        # wechat is picked, but files saved before that keep the flag: it must
-        # validate (and execute) as the URL-driven crawl it really is.
+        # WeChat has no comment adapter, so its entry in the matrix carries a
+        # single mode: a stale collect='comments' left in an old file resolves to
+        # that mode and validates as the URL-driven crawl it really is.
         node = {
             'id': 'node-1',
             'type': 'source',
@@ -417,5 +417,5 @@ class TestValidateUsesLabels:
             'params': {'platform': 'wechat', 'collect': 'comments', 'urls': ''},
         }
         errors = WorkflowEngine(_wf([empty], [])).validate()
-        assert any('WeChat source needs' in e for e in errors)
-        assert not any('comments mode' in e for e in errors)
+        assert any('the required field article URLs is empty' in e for e in errors)
+        assert not any('comments' in e for e in errors), 'wechat must not be routed through the comment engine'

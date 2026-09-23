@@ -32,10 +32,13 @@ JS_DIR = REPO / 'backend' / 'static' / 'js'
 FRONT = REPO / 'tests' / 'frontend'
 
 
-def _run(harness: str, args: list, scenarios: list, tmp_path: Path) -> dict:
+def _run(harness: str, args: list, scenarios: list, tmp_path: Path, extra: list | None = None) -> dict:
     sc = tmp_path / f'{harness}.json'
     sc.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
-    proc = run_node(str(FRONT / harness), *[str(a) for a in args], str(sc))
+    # Anything the harness reads after the scenario file (a dumped matrix, say)
+    # goes last, so the argument order in the harness header stays the real one.
+    tail = [str(item) for item in (extra or [])]
+    proc = run_node(str(FRONT / harness), *[str(a) for a in args], str(sc), *tail)
     assert proc.returncode == 0, f'{harness} failed: {proc.stderr}'
     return json.loads(proc.stdout)
 
@@ -224,7 +227,10 @@ class TestCanvasState:
 
     def test_every_palette_type_ships_its_default_params(self, state):
         by_type = {n['type']: n['params'] for n in state['defaults']['nodes']}
-        assert {'platform', 'keyword', 'collect', 'part_size', 'format', 'keep_parts'} <= set(by_type['source'])
+        # A source node seeds only its identity here: this world has no
+        # /api/capabilities to ask, and the figures a crawl needs have one owner
+        # (the matrix), which TestNewSourceNodeCarriesTheMatrix supplies below.
+        assert {'platform', 'collect'} <= set(by_type['source'])
         assert {'urls', 'comment_limit', 'part_size'} <= set(by_type['comment'])
         assert {'dataset_id'} <= set(by_type['upload'])
         assert {'operation'} <= set(by_type['analysis'])
@@ -276,7 +282,7 @@ class TestNodeWiringAndMarkup:
 
 
 @pytest.fixture(scope='module')
-def life(tmp_path_factory):
+def life(tmp_path_factory, capabilities_matrix):
     tmp = tmp_path_factory.mktemp('js-life')
     opened = {
         'nodes': [
@@ -329,8 +335,42 @@ def life(tmp_path_factory):
             'loadByName': 'junk',
             'loadResponse': {'ok': True, 'workflow': {'settings': {}}},
         },
+        {
+            # A node dragged out of the palette with nobody having touched its
+            # panel: the numbers it carries must be the server's, not a copy.
+            'id': 'matrix_defaults',
+            'add': ['source'],
+        },
     ]
-    return _run('harness_lifecycle.mjs', [JS_DIR / 'canvas.js', JS_DIR / 'workflow.js'], scenarios, tmp)
+    return _run(
+        'harness_lifecycle.mjs',
+        [JS_DIR / 'canvas.js', JS_DIR / 'workflow.js'],
+        scenarios,
+        tmp,
+        extra=[capabilities_matrix],
+    )
+
+
+class TestNewSourceNodeCarriesTheMatrix:
+    """canvas.js seeds a Data Source from the crawl matrix, in the one world where
+    both halves of the product are loaded together and the endpoint answers."""
+
+    def test_the_seeded_params_are_the_declared_defaults(self, life):
+        import crawl_capabilities
+
+        node = life['matrix_defaults']['nodes'][0]
+        assert node['type'] == 'source'
+        expected = crawl_capabilities.declared_defaults('zhihu')
+        expected['platform'] = 'zhihu'
+        expected['collect'] = 'posts'
+        assert node['params'] == expected, (
+            'a node that never opened its panel must crawl with exactly the figures its panel would have previewed'
+        )
+
+    def test_the_number_default_survives_the_round_trip_as_a_number(self, life):
+        params = life['matrix_defaults']['nodes'][0]['params']
+        assert params['target_count'] == 50 and params['part_size'] == 0
+        assert params['keep_parts'] is False and params['format'] == 'csv'
 
 
 class TestFileLifecycle:

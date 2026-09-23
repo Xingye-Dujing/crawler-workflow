@@ -471,11 +471,29 @@ const canvas = {
         return conn ? conn.from : null;
     },
 
+    _defaultSourceParams() {
+        /* A fresh Data Source node carries the matrix's own figures rather than a
+           copy of them typed in here, so the crawl a never-opened node performs is
+           the crawl its panel would have previewed. The executor also falls back to
+           those defaults when a stored file has no key, which is what keeps this
+           working before the fetch has answered: `Capabilities` is workflow.js
+           territory, and a top-level `const` never becomes a window property, so
+           the binding itself is what has to be asked. */
+        if (typeof Capabilities === 'undefined' || !Capabilities.ready()) {
+            return { platform: 'zhihu', collect: 'posts' };
+        }
+        const platform = 'zhihu';
+        const params = Capabilities.defaults(platform);
+        params.platform = platform;
+        params.collect = Capabilities.mode(platform, '').key;
+        return params;
+    },
+
     getDefaultParams(type) {
         /* The name node carries the workflow's label for the Execution History
            panel — it is metadata, not data, so its params are just the name. */
         if (type === 'name') return { workflow_name: '' };
-        if (type === 'source') return { platform: 'zhihu', keyword: '', urls: '', target_count: 50, headless: true, collect: 'posts', part_size: 0, keep_parts: false, format: 'csv' };
+        if (type === 'source') return this._defaultSourceParams();
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '', live_export: false, format: 'csv' };
         if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };

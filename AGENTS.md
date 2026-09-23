@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~2185 fast-tier cases; 2277 across all tiers)**:
+- **Automated tests (pytest, ~2244 fast-tier cases; 2336 across all tiers)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -93,6 +93,24 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   answers persist so interrupted runs resume rather than re-crawl/re-pay. Change executor/run-store
   code carefully so resumed runs stay compatible with existing `runs.db` state.
 - UI text supports zh/en via `backend/i18n.py` message catalog — add new user-facing strings there.
+- **The crawl matrix (`backend/crawl_capabilities.py`) is the only answer to "what can this
+  platform collect".**
+  It declares each platform's modes, the fields each mode needs (with its widget, default,
+  floor/ceiling and required-ness) and which crawler method runs. `app.py::_execute_source_node`
+  dispatches through it, `engine/workflow.py::validate` refuses through it, and
+  `GET /api/capabilities` hands the identical description to the browser, whose Data Source
+  panel is generated from it (`Capabilities` + `sourcePanelHtml` in workflow.js). So a new
+  platform or mode is **one matrix entry**, never an `if platform == '…'` branch in four
+  files — a branch reintroduced anywhere is a second opinion that can disagree with the crawl.
+  The module sits at the backend root (like `i18n.py`) because `engine/workflow.py` reads it and
+  must not import the crawler package. Field labels are *frontend* catalogue keys and
+  required-field names are *backend* ones (`field.*`), both pinned by
+  `test_frontend_contract.py::TestCrawlMatrixParity`; `target_count` stays 50 for every platform
+  because that is what the panel previews, whatever a crawler's signature says. A payload is a
+  network response and the renderer writes field names into inline handlers, so a name that is
+  not `/^[\w.-]{1,64}$/` is dropped whole — and a JS-generated panel is driven in tests by the
+  matrix dumped from Python (`tests/frontend/harness_capabilities.mjs`, fed by the
+  `capabilities_matrix` fixture), never by a copy checked into tests.
 - **Crawler layering: `crawlers/engine/` is mechanics, a platform module is the site.**
   Counters (`engine.counters.parse_count` — one parser for 万/千/亿/K/M/B, `1,027,710次观看`,
   `97 views`), interception (`engine.wall`: login / risk-control / root-bounce), first-run

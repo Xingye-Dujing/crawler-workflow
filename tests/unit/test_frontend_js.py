@@ -37,10 +37,13 @@ def _parse(msg: str) -> tuple:
     return head, out
 
 
-def _run_validate(tmp_path: Path, scenarios: list) -> dict:
+def _run_validate(tmp_path: Path, scenarios: list, matrix: Path | None = None) -> dict:
     sc_path = tmp_path / 'scenarios.json'
     sc_path.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
-    proc = run_node(str(HARNESS), str(JS_DIR / 'workflow.js'), str(sc_path))
+    args = [str(HARNESS), str(JS_DIR / 'workflow.js'), str(sc_path)]
+    if matrix is not None:
+        args.append(str(matrix))
+    proc = run_node(*args)
     assert proc.returncode == 0, f'harness failed: {proc.stderr}'
     return json.loads(proc.stdout)
 
@@ -54,7 +57,7 @@ def _save(nid='out-1', filename='f'):
 
 
 @pytest.fixture(scope='module')
-def results(tmp_path_factory):
+def results(tmp_path_factory, capabilities_matrix):
     tmp = tmp_path_factory.mktemp('js-validate')
     scenarios = [
         {
@@ -170,7 +173,7 @@ def results(tmp_path_factory):
             )
         ),
     ]
-    return _run_validate(tmp, scenarios)
+    return _run_validate(tmp, scenarios, capabilities_matrix)
 
 
 class TestValidateGate:
@@ -287,10 +290,13 @@ class TestSettingsPanel:
 
     def test_xiaohongshu_offers_a_comment_preview_count(self, results):
         """Only XHS carries per-note comments in its search rows, so only its
-        panel may offer the knob — and the value travels as a string because 0
-        is a real choice ("skip the panel"), not an empty field."""
+        panel may offer the knob — and clearing it must not mean 0: 0 is a real
+        choice ("skip the panel"), while an empty box means the panel's own
+        default, which is what the backend would have used anyway.
+        """
         html = results['settings']['panel_xhs_posts']
-        assert "updateParam('n1','comment_preview',this.value)" in html
+        handler = "updateParam('n1','comment_preview',isNaN(parseInt(this.value,10)) ? 5 : parseInt(this.value,10))"
+        assert handler in html
         assert 'settings.commentPreview' in html and 'settings.commentPreviewHint' in html
         assert 'type="number" min="0"' in html
 

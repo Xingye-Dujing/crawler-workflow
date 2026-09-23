@@ -198,8 +198,9 @@ class TestCatalogueHealth:
     def test_engine_messages_exist_for_every_validated_node_type(self):
         for suffix in (
             'source_no_platform',
-            'source_no_keyword',
-            'source_no_urls',
+            'source_unknown_platform',
+            'source_missing',
+            'source_link_mismatch',
             'upload_no_file',
             'process_no_op',
             'output_no_op',

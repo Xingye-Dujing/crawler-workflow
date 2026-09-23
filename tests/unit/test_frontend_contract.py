@@ -195,8 +195,13 @@ class TestPaletteContract:
         # new users reach 评论采集 through the Data Source's collect mode.
         assert 'comment' not in self._palette_types()
         canvas_src = CANVAS_JS.read_text(encoding='utf-8')
-        source_defaults = re.search(r"if \(type === 'source'\) return \{([^}]+)\}", canvas_src)
-        assert source_defaults and 'collect' in source_defaults.group(1)
+        assert "if (type === 'source') return this._defaultSourceParams();" in canvas_src, (
+            'the Data Source stopped seeding itself from the matrix'
+        )
+        seeder = canvas_src[canvas_src.index('_defaultSourceParams()') :]
+        assert "params.collect = Capabilities.mode(platform, '').key" in seeder, (
+            'a new node must arrive already naming the mode it will run, not leaving it blank'
+        )
 
 
 class TestCookiePanelParity:
@@ -221,17 +226,23 @@ class TestCookiePanelParity:
         assert len(offered) == len(set(offered)), f'a platform is listed twice: {offered}'
 
     def test_the_data_source_list_offers_exactly_the_platforms_that_really_crawl(self):
-        """The canvas and the Cookie panel look alike and answer different
-        questions: one is "can this be logged into", the other "can this be
-        crawled". A capture-only platform that leaked into the node would produce
-        a run that refuses on its first node."""
+        """The panel's platform list and the crawl registry are one fact now.
+
+        The Data Source select is generated from the matrix, so what can still go
+        wrong is the matrix itself: a platform it describes but nothing can crawl
+        offers a form whose run refuses to start, and a crawlable platform it
+        forgot opens a panel that can only say "no crawler yet". The second half
+        is the guard against the old shape coming back — a list typed into
+        workflow.js, which is exactly how the two drifted apart before.
+        """
+        import crawl_capabilities
+
+        assert set(crawl_capabilities.platform_ids()) == {p for p in CRAWLERS if is_crawlable(p)}, (
+            'the crawl matrix and the crawler registry disagree about which platforms exist'
+        )
         workflow_src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
-        offered = set()
-        for line in workflow_src.splitlines():
-            value = re.search(r'<option value="(\w+)"', line)
-            if value and f"I18n.t('platform.{value.group(1)}')" in line:
-                offered.add(value.group(1))
-        assert offered == {p for p in CRAWLERS if is_crawlable(p)}
+        hand_listed = [p for p in CRAWLERS if f"'platform.{p}'" in workflow_src]
+        assert not hand_listed, f'workflow.js names platforms by hand again: {hand_listed}'
 
     def test_the_steps_tell_the_user_to_press_buttons_that_are_actually_there(self):
         """Every platform's steps name two controls by their exact label. The panel
@@ -262,3 +273,72 @@ class TestCookiePanelParity:
     def _select_block(html: str) -> str:
         start = html.index('id="cookie-platform"')
         return html[start : html.index('</select>', start)]
+
+
+class TestCrawlMatrixParity:
+    """The Data Source panel is generated from the crawl matrix, so the matrix now
+    owns every word that panel says — and those words live in two catalogues: the
+    browser's in app.js, the console's in i18n.py. A key that exists in neither is
+    a panel printing its own key, which is what this file was written for.
+    """
+
+    @staticmethod
+    def _keys():
+        import crawl_capabilities
+
+        labels, hints, names = set(), set(), set()
+        for cap in crawl_capabilities.CAPABILITIES:
+            for mode in cap.modes:
+                labels.add(mode.label_key)
+                labels.add('settings.platform')
+                for field in mode.fields + crawl_capabilities.FILE_FIELDS:
+                    labels.add(field.label_key)
+                    if field.hint_key:
+                        hints.add(field.hint_key)
+                    if field.name_key:
+                        names.add(field.name_key)
+                if mode.note_key:
+                    labels.add(mode.note_key)
+                if mode.action_key:
+                    labels.add(mode.action_key)
+        # The link fields of a comments form get their hint from the platform
+        # rule, which the renderer assembles from these two keys.
+        hints.add('settings.commentUrlsHintPlat')
+        return labels, hints, names
+
+    def test_every_panel_word_the_matrix_names_exists_in_both_browser_languages(self):
+        catalogues = _catalog_keys()
+        labels, hints, _names = self._keys()
+        missing = [
+            f'{key} missing from {lang}'
+            for key in sorted(labels | hints)
+            for lang, table in catalogues.items()
+            if key not in table
+        ]
+        assert not missing, '\n'.join(missing)
+
+    def test_the_matrix_actually_names_something(self):
+        """A helper that returned empty sets would pass the test above forever."""
+        labels, hints, names = self._keys()
+        assert len(labels) >= 12 and len(hints) >= 5 and names, (labels, hints, names)
+
+    def test_every_console_field_name_exists_in_both_backend_languages(self):
+        _labels, _hints, names = self._keys()
+        missing = [
+            f'{key} missing from {lang}'
+            for key in sorted(names)
+            for lang, table in (('zh', i18n._ZH), ('en', i18n._EN))
+            if key not in table
+        ]
+        assert not missing, '\n'.join(missing)
+
+    def test_the_matrix_sends_the_browser_only_to_functions_that_exist(self):
+        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        import crawl_capabilities
+
+        for cap in crawl_capabilities.CAPABILITIES:
+            for mode in cap.modes:
+                if mode.action_js:
+                    assert f'function {mode.action_js}(' in source, (
+                        f'{cap.platform}/{mode.key} calls a missing {mode.action_js}'
+                    )

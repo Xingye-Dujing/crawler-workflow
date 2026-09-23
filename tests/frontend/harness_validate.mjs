@@ -23,10 +23,15 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { baseSandbox, fixWindow, readJson } from './harness_dom.mjs';
 
 const wfPath = process.argv[2];
 const scenarioPath = process.argv[3];
+/* Optional: the crawl matrix the pytest driver dumped from
+   crawl_capabilities.as_dict(). A settings panel for a Data Source is generated
+   from it, so rendering one without this answers "the list did not load" — which
+   is itself a scenario, and the reason the argument stays optional. */
+const matrixPath = process.argv[4];
 const src = fs.readFileSync(wfPath, 'utf8');
 const scenarios = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
 
@@ -79,18 +84,21 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
+const matrix = readJson(matrixPath);
+if (matrix) sandbox.__routes['/api/capabilities'] = matrix;
 /* `const workflow` is lexically scoped to its own script — append a capture
    line (same trick as harness_canvas.mjs) to reach it from the host. */
 vm.runInContext(
-    src +
-        '\n;globalThis.__wf = {' +
-        ' workflow, urlPlatform, commentUrlPlaceholder, selectSourcePlatform, openSettings, nodeNeedsLlm };',
+    src + '\n;globalThis.__wf = {' + ' workflow, urlPlatform, selectSourcePlatform, openSettings, nodeNeedsLlm };',
     sandbox,
 );
+/* The panel render below is a synchronous read of what the fetch produced, so
+   the matrix has to be in place first. No route → no data → the failure note,
+   which is the other branch and is asserted too. */
+await sandbox.Capabilities.load();
 
 const workflow = sandbox.__wf.workflow;
 const urlPlatform = sandbox.__wf.urlPlatform;
-const commentUrlPlaceholder = sandbox.__wf.commentUrlPlaceholder;
 const selectSourcePlatform = sandbox.__wf.selectSourcePlatform;
 const openSettings = sandbox.__wf.openSettings;
 const nodeNeedsLlm = sandbox.__wf.nodeNeedsLlm;
@@ -154,8 +162,15 @@ for (const u of [
 ]) {
     out.url.push([u, urlPlatform(u)]);
 }
+/* Which example link shape a platform's comments form shows is matrix data now
+   (ONE shape per platform, not three in a hardcoded helper), and whether a
+   platform has a comments mode at all is the same table's business. Read both
+   back from the payload the panel rendered; '' means "no such mode", which is
+   what WeChat is expected to answer. */
 for (const p of ['zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin', 'wechat', '']) {
-    out.placeholder[p] = commentUrlPlaceholder(p);
+    const mode = sandbox.Capabilities.mode(p, 'comments');
+    const urls = mode && mode.key === 'comments' ? mode.fields.filter((f) => f.key === 'urls')[0] : null;
+    out.placeholder[p] = urls ? urls.placeholder : '';
 }
 
 /* selectSourcePlatform must clear a stale comments flag when WeChat (no

@@ -33,6 +33,7 @@ const I18n = {
             'menu.style': 'Style', 'style.bg': 'Background', 'style.radius': 'Radius',
             'btn.zoomin': 'Zoom+', 'btn.zoomout': 'Zoom-', 'btn.fit': 'Fit',
             'menu.run': 'Run', 'btn.execute': 'Execute', 'btn.queue': 'Queue this run', 'btn.stop': 'Stop',
+            'btn.retry': 'Retry',
 
             'btn.parallel': 'Parallel', 'btn.headless': 'Headless',
             'menu.nodes': 'Nodes', 'btn.src': '+Src', 'btn.proc': '+Proc', 'btn.out': '+Out',
@@ -145,6 +146,10 @@ const I18n = {
             'settings.collect': 'Collect',
             'settings.collectPosts': 'Posts / articles',
             'settings.collectComments': 'Comments',
+            'settings.articleUrls': 'Article bodies',
+            'settings.capFailed': 'The crawl list could not be read from the server, and the Data Source form is built from it.',
+            'settings.capLoaded': 'Crawl list reloaded',
+            'settings.capNoMode': 'This platform has no crawl mode yet, so it cannot run as a data source.',
             'settings.keyword': 'Keyword',
             'settings.targetCount': 'Target Count',
             'settings.startTime': 'Start Time',
@@ -599,6 +604,7 @@ const I18n = {
             'menu.style': '样式', 'style.bg': '背景', 'style.radius': '圆角',
             'btn.zoomin': '放大', 'btn.zoomout': '缩小', 'btn.fit': '适应',
             'menu.run': '运行', 'btn.execute': '执行', 'btn.queue': '排队运行', 'btn.stop': '停止',
+            'btn.retry': '重试',
             'btn.parallel': '并行', 'btn.headless': '无头',
 
             'menu.nodes': '节点', 'btn.src': '+源', 'btn.proc': '+处理', 'btn.out': '+输出',
@@ -710,6 +716,10 @@ const I18n = {
             'settings.collect': '采集内容',
             'settings.collectPosts': '帖子 / 文章',
             'settings.collectComments': '评论',
+            'settings.articleUrls': '文章正文',
+            'settings.capFailed': '未能从服务器读取采集清单，而数据源表单正是由它生成的。',
+            'settings.capLoaded': '采集清单已重新载入',
+            'settings.capNoMode': '该平台还没有可用的采集模式，因此不能作为数据源运行。',
             'settings.keyword': '关键词',
             'settings.targetCount': '目标数量',
             'settings.startTime': '开始时间',
@@ -1675,6 +1685,12 @@ document.addEventListener('DOMContentLoaded', () => {
        with the themed equivalents. Runs last so it also catches anything the
        other modules rendered during init. */
     CustomSelect.init();
+
+    /* The Data Source panel is generated from the backend's crawl matrix, so the
+       browser has to have it before a source node can be configured. Fetched at
+       start-up rather than on first open: the first settings panel should show a
+       form, not a spinner, and a failure says so with a retry. */
+    Capabilities.load();
 
     /* Uploaded files are stored on the server, so the canvas restored from
        localStorage very likely still owns every file it referenced. Verify
