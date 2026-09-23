@@ -12,7 +12,9 @@ of a run disappears underneath it:
 * deleting or discarding the run a live thread is still writing;
 * retention that must exempt the live run, exercised by a real run rather than a
   hand-inserted row;
-* a run whose store never opened.
+* a run whose store never opened;
+* the file an Upload node reads going away between two runs — re-attached by name,
+  restored from rows already paid for, or failed loudly (never an empty table).
 
 The tests drive the real functions with `monkeypatch`, and every one of them
 waits for a quiet server before and after, because a stray worker thread would
@@ -25,11 +27,15 @@ import threading
 import pytest
 from run_wait import run_finished
 
+from i18n import t
 from services.run_store import RunStore
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
 RECORDS = [{'标题': f'文{i}', '正文': f'正文{i}', '点赞': i} for i in range(1, 5)]
+#: The same table with one figure corrected: still 4 rows, still the same file
+#: name, and a different content hash — which is what makes a re-upload a new id.
+RESAVED = [{'标题': f'文{i}', '正文': f'正文{i}', '点赞': i + 10} for i in range(1, 5)]
 
 
 def _wait(app_module, timeout=30.0):
@@ -591,3 +597,140 @@ class TestStopWithoutABrowser:
         assert _wait(app_module)
         assert app_module.execution_state['cancel_event'] is not cancelled, 'the next run gets a fresh flag'
         assert not app_module.execution_state['cancel_event'].is_set(), 'a Stop cannot cancel a later run'
+
+
+class TestUploadNodeLosesItsFile:
+    """The file an Upload node reads is not part of the run, and it can be deleted.
+
+    保留策略 clears old files and the 数据集 panel deletes one by force; either way
+    the workflow on disk still names the id it read. ``_execute_upload_node`` has
+    three designed answers and none of them is an empty table — an empty table reads
+    downstream as "this file had no rows", which is a claim about the user's data
+    rather than about what went missing:
+
+    * a file re-uploaded under a new id but the same name and row count is
+      **re-attached**, and the run proceeds;
+    * a node that already finished has its rows **restored** on 继续, so deleting
+      the file never costs the work that was paid for;
+    * anything else **fails the node loudly**, with the reason in the console.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _gated(self, app_module, monkeypatch):
+        _GatedCrawler.gate = threading.Event()
+        _GatedCrawler.release = threading.Event()
+        _GatedCrawler.emitted = 2
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _GatedCrawler(*a, **k))
+        yield
+        _GatedCrawler.release.set()
+
+    def _upload_only(self, dataset, name):
+        node = _node('node-1', 'upload', {'dataset_id': dataset, 'dataset_name': name, 'row_count': len(RECORDS)})
+        return _wf([node], [])
+
+    def _upload_then_crawl(self, dataset, name):
+        upload = _node('node-1', 'upload', {'dataset_id': dataset, 'dataset_name': name, 'row_count': len(RECORDS)})
+        source = _node('node-2', 'source', {'platform': 'zhihu', 'keyword': 'k', 'target_count': 9})
+        return _wf([upload, source], [{'from': 'node-1', 'to': 'node-2'}])
+
+    def _crawl_then_upload(self, dataset, name):
+        # Two disconnected components, ordered by node index: the crawl runs
+        # first, so stopping there leaves the Upload node genuinely unexecuted —
+        # which is the only way to test what 继续 does with a file that is gone.
+        source = _node('node-1', 'source', {'platform': 'zhihu', 'keyword': 'k', 'target_count': 9})
+        upload = _node('node-2', 'upload', {'dataset_id': dataset, 'dataset_name': name, 'row_count': len(RECORDS)})
+        return _wf([source, upload], [])
+
+    @staticmethod
+    def _console(client):
+        return '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
+
+    def test_a_deleted_file_fails_the_node_rather_than_publishing_nothing(self, client, app_module, paste):
+        dataset = paste(RECORDS, name='gone.csv')
+        workflow = self._upload_only(dataset, 'gone.csv')
+        assert _start(client, workflow, 'gone')[1]['ok'] is True
+        assert _wait(app_module)
+        assert client.delete(f'/api/data/datasets/{dataset}').status_code == 200
+
+        response, body = _start(client, workflow, 'gone')
+        assert response.status_code == 200, body
+        assert _wait(app_module)
+        record = app_module._RUN_STORE.get_run(body['run_id'])
+        assert record['status'] == 'failed', record
+        nodes = {node['node_id']: node for node in record['nodes']}
+        assert nodes['node-1']['status'] == 'failed'
+        assert nodes['node-1'].get('row_count') in (0, None), 'a failed node must not report rows'
+        assert t('upload.stale') in self._console(client)
+
+    def test_the_same_file_uploaded_again_is_reattached_by_name(self, client, app_module, paste):
+        dataset = paste(RECORDS, name='rebound.csv')
+        workflow = self._upload_only(dataset, 'rebound.csv')
+        assert _start(client, workflow, 'rebound')[1]['ok'] is True
+        assert _wait(app_module)
+        client.delete(f'/api/data/datasets/{dataset}')
+        # The user uploads the file again. The id is a content hash, so an
+        # identical table would come back under the id the workflow already names
+        # and prove nothing — this is the re-uploaded-with-one-edit case, which is
+        # a new id and the reason 按文件名重新接上 exists.
+        fresh = paste(RESAVED, name='rebound.csv')
+        assert fresh != dataset, 'a changed table is stored under a new id, which is the whole premise'
+
+        response, body = _start(client, workflow, 'rebound')
+        assert response.status_code == 200, body
+        assert _wait(app_module)
+        record = app_module._RUN_STORE.get_run(body['run_id'])
+        assert record['status'] == 'completed', record
+        assert app_module._RUN_STORE.row_count(body['run_id'], 'node-1') == len(RESAVED)
+        assert t('ds.rebound', name='rebound.csv', did=fresh) in self._console(client)
+
+    def test_a_finished_upload_survives_the_delete_of_its_file_on_continue(self, client, app_module, paste):
+        dataset = paste(RECORDS, name='paid.csv')
+        workflow = self._upload_then_crawl(dataset, 'paid.csv')
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'paid'})
+        run_id = started.get_json()['run_id']
+        assert _GatedCrawler.gate.wait(20), 'the crawl never started, so nothing was interrupted'
+        client.post('/api/workflow/stop')
+        _GatedCrawler.release.set()
+        assert _wait(app_module)
+        assert app_module._RUN_STORE.row_count(run_id, 'node-1') == len(RECORDS)
+        client.delete(f'/api/data/datasets/{dataset}')
+
+        # `release` is still set from the stop above, so the crawl 继续 re-runs
+        # finishes instead of parking on the gate.
+        continued = client.post(
+            '/api/workflow/execute',
+            json={'workflow': workflow, 'workflow_name': 'paid', 'resume_run_id': run_id},
+        )
+        assert continued.status_code == 200, continued.get_json()
+        assert _wait(app_module)
+        record = app_module._RUN_STORE.get_run(run_id)
+        assert record['status'] == 'completed', record
+        # The rows the first attempt paid for came back from the store: no node
+        # re-read a file that no longer exists, and nothing was re-published.
+        assert app_module._RUN_STORE.row_count(run_id, 'node-1') == len(RECORDS)
+        assert t('upload.stale') not in self._console(client)
+
+    def test_a_component_that_never_ran_reports_the_missing_file_on_continue(self, client, app_module, paste):
+        dataset = paste(RECORDS, name='never.csv')
+        workflow = self._crawl_then_upload(dataset, 'never.csv')
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'never'})
+        run_id = started.get_json()['run_id']
+        assert _GatedCrawler.gate.wait(20), 'the crawl never started, so nothing was interrupted'
+        client.post('/api/workflow/stop')
+        _GatedCrawler.release.set()
+        assert _wait(app_module)
+        client.delete(f'/api/data/datasets/{dataset}')
+
+        # `release` is still set from the stop above, so the crawl this attempt
+        # re-runs finishes on its own instead of parking on the gate.
+        continued = client.post(
+            '/api/workflow/execute',
+            json={'workflow': workflow, 'workflow_name': 'never', 'resume_run_id': run_id},
+        )
+        assert continued.status_code == 200, continued.get_json()
+        assert _wait(app_module)
+        record = app_module._RUN_STORE.get_run(run_id)
+        nodes = {node['node_id']: node for node in record['nodes']}
+        assert nodes['node-2']['status'] == 'failed', nodes
+        assert record['status'] == 'failed', 'a run that could not read its file is not "completed"'
+        assert t('upload.stale') in self._console(client)
