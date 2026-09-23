@@ -639,10 +639,19 @@ class RunStore:
             return 0, 0
         limit = Config.RUN_MAX_ROWS_PER_NODE
         with self._lock:
-            existing = self._conn.execute(
-                'SELECT COUNT(*) AS n FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id)
-            ).fetchone()['n']
-            seq = existing
+            # ``MAX(seq)+1`` and not ``COUNT(*)``: the primary key is
+            # (run_id, node_id, seq), so the maximum is a single index seek while a
+            # count visits every stored row — and this runs once per scraped row,
+            # which made a long crawl quadratic in the size of its own table (5,000
+            # rows meant ~12.5 million row visits just to find the next slot).
+            # The two answers agree because ``seq`` is dense: rows are only ever
+            # appended here or rewritten wholesale by ``replace_rows``, never
+            # deleted one at a time.
+            seq = self._conn.execute(
+                'SELECT COALESCE(MAX(seq), -1) + 1 FROM node_rows WHERE run_id = ? AND node_id = ?',
+                (run_id, node_id),
+            ).fetchone()[0]
+            existing = seq
             stamp = self.now()
             kept = 0
             dropped = 0

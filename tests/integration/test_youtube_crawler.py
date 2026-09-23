@@ -309,7 +309,7 @@ class TestSearchWalk:
         assert [row['视频ID'] for row in rows] == [VIDEO_C]
         assert not any('search:kw' in str(call) for call in driver.calls)
 
-    def test_the_cursor_records_the_token_and_the_ids(self, make_crawler):
+    def test_the_cursor_records_the_pager_token_but_not_a_copy_of_the_table(self, make_crawler):
         marked = []
         driver = FakeDriver(
             {
@@ -323,8 +323,11 @@ class TestSearchWalk:
         crawler.set_sink(lambda row: True)
         crawler.search('kw', target_count=5)
         assert marked[-1]['token'] == 'PAGE2'
-        assert marked[-1]['ids'] == [VIDEO_A]
         assert marked[-1]['done'] == 1
+        # The token is the one position a row cannot speak for. The collected ids
+        # are not: rewriting them per emitted row cost a serialisation of the whole
+        # result every time the crawl gained a video.
+        assert 'ids' not in marked[-1], 'the cursor is a position, not a copy of the result'
 
     def test_a_blocked_session_is_refused_rather_than_reported_as_no_results(self, make_crawler):
         driver = FakeDriver({}, refusal='Our systems have detected unusual traffic')

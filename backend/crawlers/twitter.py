@@ -322,34 +322,38 @@ class TwitterCrawler(Crawler):
         ``f=top`` is deliberately not offered as the default: it is a small
         curated set that stops growing after a screen, while 实时 gives an
         unbounded stream to walk.
+
+        ``resume=`` is accepted and ignored: on a virtualized list the position a
+        crawl died at is not the thing that says where to continue — the collected
+        rows are (see :meth:`_walk`).
         """
-        resume = self.resume_of(kwargs)
         encoded = quote(keyword)
         url = f'https://x.com/search?q={encoded}&f=live'
         logger.info(t('crawl.x.start', kw=keyword, n=target_count))
-        return self._walk(url, target_count, keyword=keyword, resume=resume)
+        return self._walk(url, target_count, keyword=keyword)
 
     def author(self, author: str, target_count: int = 50, **kwargs) -> list[dict]:
         """One account's own posts (the Posts tab, which is the default)."""
-        resume = self.resume_of(kwargs)
         handle = handle_of(author)
         if not handle:
             raise ValueError(t('crawl.x.authorEmpty', author=author))
         url = f'https://x.com/{handle}'
         logger.info(t('crawl.x.authorStart', author=handle, n=target_count))
-        return self._walk(url, target_count, author=handle, resume=resume)
+        return self._walk(url, target_count, author=handle)
 
     # ─── the walk ─────────────────────────────────────────────────────
 
-    def _walk(self, url: str, target_count: int, resume: dict, **position) -> list[dict]:
+    def _walk(self, url: str, target_count: int, **position) -> list[dict]:
         if self.collected() >= target_count:
             logger.info(t('crawl.x.target_reached', n=target_count))
             return self.results()
-        # The seen-id set, not a card index, is the resume point of a virtualized
-        # list: the rows already in hand say which cards to skip on the re-read
-        # page, and re-reading is certain because the list scrolls back.
-        stored = resume.get('ids')
-        seen: set[str] = {str(v) for v in stored if str(v)} if isinstance(stored, list) else set()
+        # The rows already in hand *are* the resume point: the executor seeds a
+        # resumed crawl with everything this node stored, and each row carries its
+        # status id. An earlier design also wrote the id set into the cursor, which
+        # meant re-serialising every id the crawl had ever collected once per card —
+        # a 5,000-row crawl rewrote ~5,000 ids about 5,000 times for information the
+        # database already had.
+        seen: set[str] = {str(row.get('推文ID')) for row in self.results() if row.get('推文ID')}
         if not self.open(url):
             logger.warning(t('crawl.x.loadSlow', url=self._current_url()))
         if self.login_wall or self.risk_blocked:
@@ -362,12 +366,11 @@ class TwitterCrawler(Crawler):
             return self.results()
 
         def mark(progress):
-            # The crawler's own position rides along: a cursor that only says
-            # "scanned 40" cannot tell a resume *which* search it was. The card
-            # index is kept too because it is what a *non*-virtualized list would
-            # resume by; here the id set does the work and the index just lets the
-            # cursor explain itself in runs.db.
-            self.mark_position(**position, **progress, ids=sorted(seen), done=self.collected())
+            # Which search this was, and how far it got. The card index is kept
+            # because it is what a *non*-virtualized list would resume by; here it
+            # only lets the cursor explain itself in runs.db, while the collected
+            # rows are what actually decide where the next attempt continues.
+            self.mark_position(**position, **progress, done=self.collected())
 
         result = feed.walk_feed(
             self._cards,

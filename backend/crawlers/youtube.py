@@ -338,7 +338,7 @@ class YouTubeCrawler(Crawler):
             raise RuntimeError(t('crawl.yt.noContext', url=self._current_url()))
         logger.info(t('crawl.yt.searchStart', kw=keyword, n=target_count))
         token = str(resume.get('token') or '')
-        seen: set[str] = {str(value) for value in (resume.get('ids') or []) if str(value)}
+        seen: set[str] = self._collected_ids()
         repeats = 0
         for round_no in range(1, MAX_ROUNDS + 1):
             payload = self._call('search', {'continuation': token} if token else {'query': keyword})
@@ -399,7 +399,7 @@ class YouTubeCrawler(Crawler):
             raise RuntimeError(t('crawl.yt.authorNotFound', author=author))
         name = runs_text(meta.get('title'))
         logger.info(t('crawl.yt.authorStart', author=author, n=target_count))
-        seen: set[str] = {str(value) for value in (resume.get('ids') or []) if str(value)}
+        seen: set[str] = self._collected_ids()
         # The tab the browser just loaded IS the first page: its 30 items are in
         # the document (measured), so asking ``browse`` for the tab again would
         # fetch a 3.7 MB channel HOME — worse than slow, because the home shelf
@@ -459,6 +459,18 @@ class YouTubeCrawler(Crawler):
 
     # ─── helpers ──────────────────────────────────────────────────────────
 
+    def _collected_ids(self) -> set:
+        """The video ids this crawl already holds, read off its own rows.
+
+        A resumed run is seeded with everything the node stored, so the rows *are*
+        the set of ids to skip. The cursor used to carry a copy of it, which meant
+        re-serialising the whole collected list on every emitted row — a 3,000-video
+        crawl rewrote 3,000 ids 3,000 times to tell the database what the database
+        already had. The pager **token** stays in the cursor: that is the one piece
+        of position no row can speak for.
+        """
+        return {str(row.get('视频ID')) for row in self.results() if row.get('视频ID')}
+
     def _harvest(self, rows, seen, target_count, position, with_facts):
         """Emit fresh rows, paying the extra round per row only if asked."""
         for row in rows:
@@ -472,7 +484,7 @@ class YouTubeCrawler(Crawler):
                 self._polite()
             if self.emit(row):
                 logger.info(t('crawl.yt.processed', i=self.collected(), title=str(row.get('标题', ''))[:40]))
-            self.mark_position(**position, ids=sorted(seen), done=self.collected())
+            self.mark_position(**position, done=self.collected())
 
     def _explain_zero(self, keyword: str):
         """Say why nothing came back, when the reason is not 'no results'."""

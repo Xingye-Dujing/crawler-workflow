@@ -286,6 +286,61 @@ class TestRows:
         assert kept == 3
         assert store.row_count('r1', 'n1') == 3
 
+    def test_the_cap_is_counted_across_appends_not_only_within_one(self, store, sample_rows, monkeypatch):
+        """The row budget is a property of the node, not of the call.
+
+        A streaming sink appends one row at a time, so a cap that only looked
+        inside the current batch would let a 5,000-row crawl through with the
+        limit set to 3.
+        """
+        monkeypatch.setattr(Config, 'RUN_MAX_ROWS_PER_NODE', 3)
+        _start(store)
+        assert store.append_rows('r1', 'n1', sample_rows[:2])[0] == 2
+        kept, _dropped = store.append_rows('r1', 'n1', sample_rows[2:5])
+        assert kept == 1, 'only the slot the cap leaves was taken'
+        assert store.row_count('r1', 'n1') == 3
+
+    def test_appending_never_counts_the_table_to_find_the_next_slot(self, store, monkeypatch):
+        """The next-slot lookup is an index seek, not a scan.
+
+        ``COUNT(*)`` per appended row made a long crawl quadratic in the size of
+        its own table — 5,000 rows cost about 12.5 million row visits just to find
+        where to write, on a sink the crawler calls once per scraped item. A
+        statement log is the only honest way to pin that without timing the suite.
+        """
+        statements = []
+
+        class Recorder:
+            """Delegates to the real connection, remembering every statement.
+
+            ``sqlite3.Connection`` refuses attribute assignment, so the seam has to
+            be the object the store holds rather than a method on it.
+            """
+
+            def __init__(self, inner):
+                self.inner = inner
+
+            def execute(self, sql, params=()):
+                statements.append(' '.join(sql.split()))
+                return self.inner.execute(sql, params)
+
+            def __getattr__(self, name):
+                return getattr(self.inner, name)
+
+        _start(store)
+        monkeypatch.setattr(store, '_conn', Recorder(store._conn))
+        for index in range(6):
+            store.append_rows('r1', 'n1', [{'标题': f'row{index}', '链接': f'https://x.test/{index}'}])
+        monkeypatch.undo()
+
+        counted = [line for line in statements if 'COUNT(*) FROM node_rows' in line]
+        assert not counted, f'the row sink counted the table once per append: {len(counted)} times'
+        rows = store.load_rows('r1', 'n1')
+        assert len(rows) == 6, 'and every row still has to land'
+        stored = store._query('SELECT seq FROM node_rows WHERE run_id = ? AND node_id = ? ORDER BY seq', ('r1', 'n1'))
+        seqs = [row[0] for row in stored]
+        assert seqs == list(range(6)), f'slots must stay dense for the cap to mean anything: {seqs}'
+
     def test_the_cap_warning_names_the_node_as_the_user_named_it(self, store, sample_rows, monkeypatch, caplog):
         """The store only holds the id, so the caller hands down the label — and
         a console saying ``node-7`` is no use to whoever renamed that box."""

@@ -175,23 +175,43 @@ class TestTimelineWalk:
         crawler = make_crawler(driver)
         assert len(crawler.search('openai', target_count=2)) == 2
 
-    def test_a_resumed_run_skips_the_ids_it_already_stored(self, make_crawler):
+    def test_a_resumed_run_does_not_recollect_what_its_stored_rows_already_hold(self, make_crawler):
+        """A resume is handed the rows the previous attempt stored, and that is the
+        whole resume point: the second screen re-shows 2102…537, which the crawl
+        must skip because it already *has* it — not because an id list said so."""
         driver = FakeDriver([screen(TWEET_A, TWEET_B), screen(TWEET_B, TWEET_C)])
         crawler = make_crawler(driver)
         saved = {'推文ID': TWEET_A, '链接': f'https://x.com/devtrotter_fr/status/{TWEET_A}', '正文': 'x'}
         crawler.seed([saved])
-        rows = crawler.search('openai', target_count=5, resume={'ids': [TWEET_A]})
+        rows = crawler.search('openai', target_count=5)
         assert [row['推文ID'] for row in rows] == [TWEET_A, TWEET_B, TWEET_C]
 
-    def test_the_cursor_records_the_ids_so_the_next_resume_works(self, make_crawler):
+    def test_an_old_cursor_holding_an_id_list_is_ignored_not_misread(self, make_crawler):
+        """Cursors written before this change carried ``ids``; a run resumed with
+        one must still dedupe by the rows it was given rather than by a list that
+        no longer reflects what is stored."""
+        driver = FakeDriver([screen(TWEET_A, TWEET_B), screen(TWEET_B, TWEET_C)])
+        crawler = make_crawler(driver)
+        saved = {'推文ID': TWEET_A, '链接': f'https://x.com/devtrotter_fr/status/{TWEET_A}', '正文': 'x'}
+        crawler.seed([saved])
+        rows = crawler.search('openai', target_count=5, resume={'ids': [TWEET_B]})
+        assert [row['推文ID'] for row in rows] == [TWEET_A, TWEET_B, TWEET_C]
+
+    def test_the_cursor_says_which_search_it_was_without_rewriting_the_collected_ids(self, make_crawler):
         marked = []
         driver = FakeDriver([screen(TWEET_A)])
         crawler = make_crawler(driver)
         crawler.set_cursor_sink(marked.append)
         crawler.set_sink(lambda row: True)
         crawler.search('openai', target_count=5)
-        assert marked[-1]['ids'] == [TWEET_A]
         assert marked[-1]['keyword'] == 'openai'
+        assert marked[-1]['done'] == 1
+        assert marked[-1]['scanned'] >= 1
+        # The payload the cursor carries must not grow with the crawl: writing the
+        # collected id list after every card cost one serialisation of the whole
+        # table per row, which is the quadratic cost the rows themselves make
+        # unnecessary.
+        assert 'ids' not in marked[-1], 'the cursor is a position, not a copy of the result'
 
     def test_a_login_sheet_is_refused_rather_than_reported_as_no_results(self, make_crawler):
         driver = FakeDriver([], body="See what's happening\nContinue with phone\nForgot password?")

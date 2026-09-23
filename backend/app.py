@@ -1600,6 +1600,12 @@ def _source_stream(ctx: dict, nid: str, scope: str, label: str = ''):
     *label* is the node's user-facing name, handed down to the store's row-cap
     warning: whoever reads the console named that box, and ``node-7`` is not
     what they called it.
+
+    This sink is deliberately **one write per row**. Buffering N rows per
+    transaction would be the obvious optimisation and would cost the feature its
+    purpose: with WAL + ``synchronous=NORMAL`` a commit is tens of microseconds,
+    while a Selenium page costs seconds, so batching buys nothing measurable and
+    throws away up to a batch of rows whenever the run is killed.
     """
     store = ctx['store']
     run_id = ctx['run_id']

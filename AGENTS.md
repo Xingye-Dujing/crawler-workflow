@@ -91,7 +91,15 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   Do not delete `data/` contents casually — saved workflows reference uploaded datasets there.
 - Interrupt/resume checkpointing (`backend/services/run_store.py`) is core: per-node outputs and LLM
   answers persist so interrupted runs resume rather than re-crawl/re-pay. Change executor/run-store
-  code carefully so resumed runs stay compatible with existing `runs.db` state.
+  code carefully so resumed runs stay compatible with existing `runs.db` state. Three rules that came
+  out of measuring this path, each pinned by a test: the streaming row sink writes **one transaction
+  per row** on purpose (WAL + `synchronous=NORMAL` makes a commit microseconds while a Selenium page
+  costs seconds, so batching would trade "killed at row 900 of 1000 still owns those 900 rows" for
+  nothing); the next free slot is found by `MAX(seq)+1`, **never `COUNT(*)`** — that query ran once per
+  scraped row and made a long crawl quadratic in the size of its own table; and a **cursor records
+  position, not content** — the collected ids come from the seeded rows (`Crawler.seed`), so an id list
+  must not go back into `mark_position` (X and YouTube both used to re-serialise the whole result every
+  time the crawl gained a row).
 - UI text supports zh/en via `backend/i18n.py` message catalog — add new user-facing strings there.
 - **The crawl matrix (`backend/crawl_capabilities.py`) is the only answer to "what can this
   platform collect".**
