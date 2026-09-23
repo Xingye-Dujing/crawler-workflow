@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~2553 fast-tier cases; 2678 across all tiers)**:
+- **Automated tests (pytest, ~2557 fast-tier cases; 2683 across all tiers)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -412,6 +412,20 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   Resume state stays **per workflow** even though the record is shared: reuse is decided per
   node id by `fingerprints_for_workflow` over the whole canvas, so a failure in component B
   restores A's finished nodes and editing A re-runs A alone (`tests/api/test_run_records_parallel.py`).
+- **The run console keeps its own history per view, because the server cannot give it back.**
+  `/api/workflow/status` ships only the last 200 lines of the *whole* run, so a tab switch that
+  blanks `#console-output` leaves it empty until the next line arrives — for a finished run that
+  is forever, and reads as "switching tabs deletes the console". `consoleViews` in workflow.js
+  therefore holds `{seen, lines}` per view (`'all'` plus each workflow id), **every** view is fed
+  on every poll (a hidden tab must have its lines when it is opened), and `switchWfTab` repaints
+  from that view's own history without moving its cursor. `clearConsole` empties the histories and
+  leaves the cursors alone. Cap is `CONSOLE_VIEW_CAP` lines per view; a trim repaints.
+- **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook.**
+  Those nodes get no "Executing node …" and no "Node … completed (n/N)" line, because they carry a
+  label and re-read a file. Everything that states a fact still prints: the upload's own
+  "Loaded uploaded file X: N rows", and any failure/skip/restore line (`node_label` included — a
+  silenced node that then fails is a run the user cannot diagnose). Progress counters still count
+  them.
 - Run-gating UX lives in `workflow.js execute()`: `_confirmCookieBeforeRun` (dialog, skippable via
   the `cookie_confirm_before_run` setting, auto-pass for resume runs); new settings keys need the
   bool branch in `settings_store.save_settings` + both app.js catalogs + `AppSettings` wiring.

@@ -503,3 +503,73 @@ class TestStopAndKill:
         assert resp.status_code == 200 and resp.get_json()['ok'] is True
         t.join(timeout=5)
         assert not t.is_alive(), 'the killed thread must actually die'
+
+
+class TestQuietNodesInConsole:
+    """A 工作流命名 or 上传文件 node has no work to announce.
+
+    Both are pure plumbing: one carries a label, the other re-reads a file the user
+    already pointed at. Printing "Executing node …" and "Node … completed (2/4)" for
+    each of them made the lines that do carry information — a crawl, a failure, a
+    restored node — the minority of the console on an otherwise quiet canvas. What
+    those nodes say *about themselves* (which file, how many rows) and anything that
+    went wrong still has to be printed.
+    """
+
+    def _flow(self, ds, steps=None):
+        nodes = [
+            _node('node-1', 'name', {'workflow_name': '城市统计'}),
+            _node('node-2', 'upload', {'dataset_id': ds, 'dataset_name': 'nodes.csv', 'row_count': 4}),
+            _node('node-3', 'analysis', {'steps': steps or [{'op': 'drop_duplicates', 'params': {}}]}),
+            _node('node-4', 'output', {'format': 'csv', 'filename': 'quiet'}, 'save'),
+        ]
+        conns = [
+            {'from': 'node-1', 'to': 'node-2'},
+            {'from': 'node-2', 'to': 'node-3'},
+            {'from': 'node-3', 'to': 'node-4'},
+        ]
+        return _wf(nodes, conns)
+
+    def _logs(self, client, app_module):
+        return '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
+
+    def test_a_clean_run_prints_nothing_for_the_plumbing_nodes(self, client, app_module, paste, data_root):
+        ds = paste(RECORDS, name='nodes.csv')
+        client.post('/api/workflow/execute', json={'workflow': self._flow(ds), 'workflow_name': 'quiet'})
+        assert _wait(app_module)
+        blob = self._logs(client, app_module)
+        # The two node types are named here and nowhere else in this run's lines.
+        for phrase in ('Executing node: name #node-1', 'Executing node: upload #node-2'):
+            assert phrase not in blob, f'{phrase!r} is chatter about a node that did nothing:\n{blob}'
+        assert 'name #node-1 completed' not in blob and 'upload #node-2 completed' not in blob, blob
+        # The nodes that do work still report themselves, and so does the progress.
+        assert 'analysis #node-3 completed' in blob, blob
+        assert 'output #node-4 completed' in blob, blob
+
+    def test_the_upload_still_says_what_it_loaded(self, client, app_module, paste, data_root):
+        """Quieting the generic chatter must not hide the one fact this node owns:
+        which file reached the run, and how many rows came out of it."""
+        ds = paste(RECORDS, name='nodes.csv')
+        client.post('/api/workflow/execute', json={'workflow': self._flow(ds), 'workflow_name': 'quiet'})
+        assert _wait(app_module)
+        blob = self._logs(client, app_module)
+        assert 'Loaded uploaded file nodes.csv: 4 rows' in blob, blob
+
+    def test_a_failing_plumbing_node_is_still_reported(self, client, app_module, paste, data_root):
+        """An upload whose file went missing is exactly the case the console exists
+        for — silencing a node's routine lines can never mean silencing its failure."""
+        ds = paste(RECORDS, name='nodes.csv')
+        flow = self._flow(ds)
+        assert client.post('/api/workflow/execute', json={'workflow': flow, 'workflow_name': 'q'}).status_code == 200
+        assert _wait(app_module)
+        client.delete(f'/api/data/datasets/{ds}')
+        second = client.post('/api/workflow/execute', json={'workflow': flow, 'workflow_name': 'q'}).get_json()
+        assert second['ok'] is True, second
+        assert _wait(app_module)
+        record = app_module.get_run_store().get_run(second['run_id'])
+        assert record['status'] == 'failed', record
+        nodes = {node['node_id']: node for node in record['nodes']}
+        assert nodes['node-2']['status'] == 'failed', nodes
+        assert nodes['node-2'].get('error'), 'the reason must be stored, not just the status'
+        blob = self._logs(client, app_module)
+        assert 'upload #node-2' in blob, f'the failing node was silenced along with its routine lines:\n{blob}'

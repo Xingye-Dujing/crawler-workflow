@@ -432,6 +432,69 @@ def test_a_parallel_record_shows_its_names_and_chips_in_the_browser(app_url, dri
     assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
 
 
+def test_switching_console_tabs_keeps_the_lines_already_shown(app_url, driver):
+    """The console is the one panel whose content cannot be rebuilt by asking.
+
+    ``/api/workflow/status`` ships only the tail of the run, so a tab switch that
+    blanks the box leaves it empty until the next line arrives — for a finished run
+    that is forever, which is what the user reported as "切换标签页就清空了". The
+    driver feeds the real poller scripted answers, then clicks between the 全部 tab
+    and a workflow tab and reads back what is on screen.
+
+    ``fetch`` is stubbed, so no run is started and nothing is written.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        const lines = ['第一行', '第二行', '第三行'];
+        let sent = 0;
+        window.__poll = { answer: null };
+        window.fetch = function (url) {
+            const payload = {
+                running: true, logs: lines, log_total: lines.length, mode: 'parallel',
+                workflows: [
+                    { id: 0, name: '甲', logs: ['甲的第一行', '甲的第二行'], total: 2 },
+                    { id: 1, name: '乙', logs: ['乙的第一行'], total: 1 }
+                ],
+                results: [], chart_results: {}, cookie_expired: false, queue: [],
+                total_nodes: 3, completed_nodes: sent
+            };
+            sent += 1;
+            return Promise.resolve({ json: () => Promise.resolve(payload), text: () => Promise.resolve('') });
+        };
+        document.getElementById('console-panel').classList.add('open');
+        // One tick of the real poller: capture the callback setInterval was given.
+        window.__tick = null;
+        const realInterval = window.setInterval;
+        window.setInterval = function (fn) { window.__tick = fn; return 1; };
+        workflow.pollStatus();
+        window.setInterval = realInterval;
+        return window.__tick();
+        """,
+        [],
+    )
+    seen = driver.execute_script(
+        """
+        const read = () => Array.from(document.querySelectorAll('#console-output .console-line'))
+            .map((el) => el.textContent);
+        const before = read();
+        switchWfTab(0);
+        const tabA = read();
+        switchWfTab(1);
+        const tabB = read();
+        switchWfTab('all');
+        return { before: before, tabA: tabA, tabB: tabB, backToAll: read() };
+        """,
+        [],
+    )
+    assert seen['before'] == ['第一行', '第二行', '第三行'], seen['before']
+    assert seen['tabA'] == ['甲的第一行', '甲的第二行'], f'the 甲 tab opened blank: {seen}'
+    assert seen['tabB'] == ['乙的第一行'], f'the 乙 tab did not show only its own lines: {seen}'
+    assert seen['backToAll'] == seen['before'], f'coming back to 全部 lost or duplicated lines: {seen}'
+
+
 def test_deleting_one_history_row_reaches_the_server_with_that_run_only(app_url, driver):
     """The button is delegated, so only a real click proves it works.
 

@@ -55,11 +55,22 @@ class TestConsoleCursor:
         # After a clear the user wants what comes next, not the held 200 again.
         assert console['afterClear'] == ['line-252']
 
-    def test_switching_tabs_re_renders_the_view_being_entered(self, console):
-        """The DOM is emptied on a tab switch, so the entered view has to be
-        re-rendered from what the server holds — 'all' used to reset nothing and
-        come back blank while a per-workflow tab re-rendered fine."""
-        assert console['afterTabSwitch'] == 1
+    def test_switching_away_and_back_keeps_what_the_view_had_shown(self, console):
+        """The user's complaint, stated as a rule: 切换工作流标签页 must not read as
+        "the console was cleared".
+
+        The server only ever ships the tail of the whole run, so a view cannot be
+        rebuilt from a later answer — the browser has to remember what it showed.
+        And the cursor must stay where it was: a switch that also reset it would
+        replay the entire held tail on the next poll.
+        """
+        switched = console['afterTabSwitch']
+        assert switched['kept'] == 1, switched
+        assert switched['same'] is True, 'the lines returned by the switch are not the ones that went in'
+        assert switched['next'] == ['only-one'], f'the next poll must append only the new line: {switched["next"]}'
+
+    def test_a_view_that_never_ran_opens_empty_rather_than_borrowing_another(self, console):
+        assert console['blankOnUnknownTab'] == 0, 'an unknown tab has no history to paint'
 
 
 class TestRunEndReporting:
@@ -97,4 +108,13 @@ class TestRunEndReporting:
         assert console['tabCount'] == 3, 'all + the two workflows'
 
     def test_a_workflow_tab_shows_only_its_own_lines(self, console):
-        assert console['tabB'] == ['b-only', 'b-two']
+        """Each tab keeps its own history, and no line is shown twice.
+
+        ``tabBOnOpen`` is the part a per-tab cursor alone cannot give: workflow 乙's
+        tab had never been visible when its lines arrived, and opening it must show
+        them rather than wait for the next line — which for a finished run is never.
+        """
+        assert console['parallelFirst'] == ['shared'], 'the 全部 tab shows the run as one stream'
+        assert console['tabBOnOpen'] == ['b-only'], 'a tab must not open blank on lines it already received'
+        assert console['tabB'] == ['b-two'], 'only the line new to that tab may be appended'
+        assert console['allAfterB'] == ['shared'], "乙's lines must not have leaked into 全部"

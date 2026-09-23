@@ -1360,10 +1360,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     planned = execution_state['total_nodes']
                 if status in (NODE_FAILED, NODE_PARTIAL):
                     continue
-                add_log(
-                    t('wf.node_completed', wf=wf_name, nid=label, done=done, total=planned),
-                    wf_idx=wf_idx,
-                )
+                if node.get('type') not in _QUIET_NODE_TYPES:
+                    add_log(
+                        t('wf.node_completed', wf=wf_name, nid=label, done=done, total=planned),
+                        wf_idx=wf_idx,
+                    )
         return results
 
     def run():
@@ -2457,6 +2458,16 @@ def _execute_resume_node(node: dict, ctx: dict):
 # name node gets silently skipped: the name node produces no rows by design.
 _NON_INPUT_NODES = frozenset({'source', 'upload', 'resume', 'name', 'comment'})
 
+#: Node types the console stays quiet about. A 工作流命名 node carries a label and
+#: computes nothing; an 上传文件 node re-reads a file the user already pointed at.
+#: Announcing "executing node …" and "node … done (2/4)" for those is two lines of
+#: noise per node that has no work to report, and on a canvas of mostly-plumbing
+#: nodes the lines that *do* matter — a crawl, a failure, a restored node — drowned
+#: in them. Only the generic per-node chatter is suppressed: what these nodes say
+#: about themselves (which file was loaded, how many rows) and anything that went
+#: wrong still reaches the console.
+_QUIET_NODE_TYPES = frozenset({'name', 'upload'})
+
 
 def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upstream: list, wf_idx: int):
     """Run one node with the run store underneath it. Returns (result, status).
@@ -2516,13 +2527,14 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         # later, "restored from the last attempt" / "skipped". '（source）' in a
         # Chinese console reads like a stack trace, so the type speaks in the
         # reader's own words.
-        ntype_label = t(f'node.{ntype}')
-        if ntype_label.startswith('node.'):
-            ntype_label = ntype
-        add_log(
-            t('wf.executing_node', wf=execution_state['_wf_names'].get(wf_idx) or '', nid=label, ntype=ntype_label),
-            wf_idx=wf_idx,
-        )
+        if ntype not in _QUIET_NODE_TYPES:
+            ntype_label = t(f'node.{ntype}')
+            if ntype_label.startswith('node.'):
+                ntype_label = ntype
+            add_log(
+                t('wf.executing_node', wf=execution_state['_wf_names'].get(wf_idx) or '', nid=label, ntype=ntype_label),
+                wf_idx=wf_idx,
+            )
         result = _execute_node(node, headless, primary, upstream=upstream, ctx=ctx)
     except Exception as e:
         # What the node already produced: process nodes publish finished rows

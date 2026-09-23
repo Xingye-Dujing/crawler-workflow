@@ -52,7 +52,7 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(src + '\n;globalThis.__wf = { workflow, clearConsole, switchWfTab, consoleCursor };', sandbox);
+vm.runInContext(src + '\n;globalThis.__wf = { workflow, clearConsole, switchWfTab, consoleViews };', sandbox);
 /* Assigned after the load: workflow.js declares showToast itself, and a function
    declaration inside the script wins over anything seeded before it. */
 sandbox.showToast = (msg) => toasts.push(String(msg));
@@ -109,6 +109,15 @@ function status(logs, total, extra) {
 
 const out = { label: 'console poller' };
 
+/** Forget everything the browser believes it has shown.
+ *
+ * Stands in for a fresh page: the state under test is what one poll does to the
+ * view history, so a scenario cannot inherit the previous one's cursors. */
+function resetViews() {
+    sandbox.__wf.consoleViews.all = { seen: 0, lines: [] };
+    sandbox.__wf.consoleViews.wf = {};
+}
+
 wf.pollStatus();
 
 /* ── 1. a growing first run ─────────────────────────────────────────────── */
@@ -120,7 +129,7 @@ out.afterRestart = await answer(status(['b1', 'b2'], 2));
 
 /* ── 3. past the 200-line cap the total is the only source of the delta ─── */
 clearConsole();
-sandbox.__wf.consoleCursor.all = 0;
+resetViews();
 const held = [];
 for (let i = 1; i <= 200; i++) held.push('line-' + i);
 out.cappedFirst = (await answer(status(held, 250))).length;
@@ -130,29 +139,45 @@ out.cappedDelta = await answer(status(held.slice(50).concat(['line-251']), 251))
 clearConsole();
 out.afterClear = await answer(status(held.slice(50).concat(['line-251', 'line-252']), 252));
 
-/* ── 5. switching to the all tab re-renders the held tail ───────────────── */
-sandbox.__wf.consoleCursor.all = 252;
+/* ── 5. a tab switch keeps what the view had already shown ──────────────── */
+/* The complaint this answers: switching 工作流标签页 used to blank the box, and
+   nothing came back until the next line was written — which for a finished run is
+   never. Leaving and returning must be a no-op on content. */
+const beforeSwitch = lines();
 switchWfTab(3);
+out.blankOnUnknownTab = lines().length;
 switchWfTab('all');
-out.afterTabSwitch = (await answer(status(['only-one'], 1))).length;
+out.afterTabSwitch = {
+    kept: lines().length,
+    same: JSON.stringify(lines()) === JSON.stringify(beforeSwitch),
+    // and the next poll still appends only what is new — no replay of the tail
+    next: await answer(status(['only-one'], beforeSwitch.length + 1)),
+};
 
 /* ── 6. the expiry toast shouts once ────────────────────────────────────── */
 toasts.length = 0;
-await answer(status(['c1'], 3, { cookie_expired: true }));
-await answer(status(['c1', 'c2'], 4, { cookie_expired: true }));
+await answer(status(['c1'], beforeSwitch.length + 2, { cookie_expired: true }));
+await answer(status(['c1', 'c2'], beforeSwitch.length + 3, { cookie_expired: true }));
 out.expiryToasts = toasts.slice();
 
-/* ── 7. parallel mode: one tab per workflow, each with its own cursor ───── */
+/* ── 7. parallel mode: one tab per workflow, each with its own history ──── */
 clearConsole();
-sandbox.__wf.consoleCursor.all = 0;
-sandbox.__wf.consoleCursor.wf = {};
+resetViews();
 switchWfTab('all');
 const wfA = { id: 0, name: '甲', logs: ['a-only'], total: 1 };
 const wfB = { id: 1, name: '乙', logs: ['b-only'], total: 1 };
-await answer(status(['shared'], 1, { workflows: [wfA, wfB], mode: 'parallel' }));
+out.parallelFirst = await answer(status(['shared'], 1, { workflows: [wfA, wfB], mode: 'parallel' }));
 out.tabCount = (sandbox.__byId('console-tabs').innerHTML.match(/console-tab/g) || []).length;
+/* B's tab has never been visible, yet its poll-fed history is what the click must
+   show — a tab that starts empty when opened is the same bug in a new place. */
 switchWfTab(1);
-out.tabB = await answer(status(['shared'], 1, { workflows: [wfA, { id: 1, name: '乙', logs: ['b-only', 'b-two'] }], mode: 'parallel' }));
+out.tabBOnOpen = lines();
+out.tabB = await answer(
+    status(['shared'], 1, { workflows: [wfA, { id: 1, name: '乙', logs: ['b-only', 'b-two'] }], mode: 'parallel' })
+);
+/* And the other tab did not absorb it on the way back. */
+switchWfTab('all');
+out.allAfterB = lines();
 
 /* ── 8. how the run is announced when it stops ─────────────────────────── */
 /* `var resumeBar` is a global binding, so replacing it here is what the poller

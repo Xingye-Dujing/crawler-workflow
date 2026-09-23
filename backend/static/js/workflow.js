@@ -1,6 +1,6 @@
 /* Workflow Execution & File Management */
 
-/* How far the browser has read in the run console, per view.
+/* How far the browser has read in the run console, and what each view has shown.
  *
  * The status endpoint ships the last 200 lines plus the true total, and "which
  * lines are new" is derived from that pair. Two things can strand the console: a
@@ -8,9 +8,21 @@
  * buffer when the NEXT run begins — the total then drops BELOW the index already
  * consumed, and a plain slice returns nothing for the rest of the run, which is
  * how the console used to freeze after a second Run. `takeLines` is the single
- * place that reads both cases, and the cursor lives out here so clearing the
- * console or switching workflow tabs can move it. */
-var consoleCursor = { all: 0, wf: {} };
+ * place that reads both cases.
+ *
+ * The second half of this state is the reason a tab switch stopped emptying the
+ * box: the server holds only the tail of the *whole* run, so a view cannot be
+ * rebuilt from a later response. Each view therefore keeps the lines it has
+ * already shown, which is what lets 切换工作流标签页 repaint the tab it enters
+ * instead of showing nothing until the next line arrives. */
+var CONSOLE_VIEW_CAP = 500;
+var consoleViews = { all: { seen: 0, lines: [] }, wf: {} };
+
+function consoleViewFor(key) {
+    if (key === 'all') return consoleViews.all;
+    if (!consoleViews.wf[key]) consoleViews.wf[key] = { seen: 0, lines: [] };
+    return consoleViews.wf[key];
+}
 
 function takeLines(lines, total, seen) {
     var held = lines || [];
@@ -18,6 +30,42 @@ function takeLines(lines, total, seen) {
     var seenAt = count < seen ? 0 : seen;
     var dropped = Math.max(0, count - held.length);
     return held.slice(Math.max(0, seenAt - dropped));
+}
+
+/** Advance one view over the answer it just received.
+ *
+ * Returns the lines that are new to this view and whether its history had to be
+ * trimmed. Every view is fed on every poll — including the tab nobody is looking
+ * at — because a tab that is only read when it becomes visible has nothing to
+ * show the moment the user clicks it. */
+function feedConsoleView(view, lines, total) {
+    var fresh = takeLines(lines, total, view.seen);
+    var held = lines || [];
+    view.seen = total === undefined || total === null ? held.length : total;
+    if (!fresh.length) return { fresh: fresh, trimmed: false };
+    view.lines = view.lines.concat(fresh);
+    var trimmed = false;
+    if (view.lines.length > CONSOLE_VIEW_CAP) {
+        view.lines = view.lines.slice(view.lines.length - CONSOLE_VIEW_CAP);
+        trimmed = true;
+    }
+    return { fresh: fresh, trimmed: trimmed };
+}
+
+function appendConsoleLines(out, lines) {
+    (lines || []).forEach(function (log) {
+        var line = document.createElement('div');
+        line.className = 'console-line';
+        line.textContent = log;
+        out.appendChild(line);
+    });
+}
+
+/** Rebuild the box from the view's own history (a tab switch, or a trim). */
+function repaintConsoleView(out, key) {
+    out.textContent = '';
+    appendConsoleLines(out, consoleViewFor(key).lines);
+    out.scrollTop = out.scrollHeight;
 }
 
 const workflow = {
@@ -428,55 +476,40 @@ const workflow = {
                         });
                         consoleTabs.innerHTML = tabHtml;
 
-                        /* Render the active tab's logs */
-                        if (activeTab === 'all') {
-                            var newLogs = takeLines(result.logs, result.log_total, consoleCursor.all);
-                            var follow = newLogs.length > 0 && consoleWantsFollow(consoleOut);
-                            newLogs.forEach(function (log) {
-                                var line = document.createElement('div');
-                                line.className = 'console-line';
-                                line.textContent = log;
-                                consoleOut.appendChild(line);
-                            });
-                            if (follow) {
-                                consoleOut.scrollTop = consoleOut.scrollHeight;
-                            }
-                            consoleCursor.all = result.log_total || result.logs.length;
-                        } else {
-                            var wfData = null;
-                            result.workflows.forEach(function (w) { if (w.id === activeTab) wfData = w; });
-                            if (wfData) {
-                                if (consoleCursor.wf[activeTab] === undefined) consoleCursor.wf[activeTab] = 0;
-                                var newWfLogs = takeLines(wfData.logs, wfData.total, consoleCursor.wf[activeTab]);
-                                var followWf = newWfLogs.length > 0 && consoleWantsFollow(consoleOut);
-                                newWfLogs.forEach(function (log) {
-                                    var line = document.createElement('div');
-                                    line.className = 'console-line';
-                                    line.textContent = log;
-                                    consoleOut.appendChild(line);
-                                });
-                                if (followWf) {
+                        /* Every view is read on every tick; only the visible one is
+                           written to the DOM. That is what keeps a tab the user is
+                           not looking at from losing its history. */
+                        var feedAll = feedConsoleView(consoleViews.all, result.logs, result.log_total);
+                        var feeds = {};
+                        (result.workflows || []).forEach(function (w) {
+                            feeds[w.id] = feedConsoleView(consoleViewFor(w.id), w.logs, w.total);
+                        });
+                        var shown = activeTab === 'all' ? feedAll : feeds[activeTab];
+                        if (shown) {
+                            var follow = shown.fresh.length > 0 && consoleWantsFollow(consoleOut);
+                            if (shown.trimmed) {
+                                repaintConsoleView(consoleOut, activeTab);
+                            } else {
+                                appendConsoleLines(consoleOut, shown.fresh);
+                                if (follow) {
                                     consoleOut.scrollTop = consoleOut.scrollHeight;
                                 }
-                                consoleCursor.wf[activeTab] = wfData.total || wfData.logs.length;
                             }
                         }
                     } else {
                         /* Single workflow — original behavior */
                         consoleTabs.style.display = 'none';
                         consoleTabs.innerHTML = '';
-                        var newLogs = takeLines(result.logs, result.log_total, consoleCursor.all);
-                        var followSingle = newLogs.length > 0 && consoleWantsFollow(consoleOut);
-                        newLogs.forEach(function (log) {
-                            var line = document.createElement('div');
-                            line.className = 'console-line';
-                            line.textContent = log;
-                            consoleOut.appendChild(line);
-                        });
-                        if (followSingle) {
-                            consoleOut.scrollTop = consoleOut.scrollHeight;
+                        var feedSingle = feedConsoleView(consoleViews.all, result.logs, result.log_total);
+                        var followSingle = feedSingle.fresh.length > 0 && consoleWantsFollow(consoleOut);
+                        if (feedSingle.trimmed) {
+                            repaintConsoleView(consoleOut, 'all');
+                        } else {
+                            appendConsoleLines(consoleOut, feedSingle.fresh);
+                            if (followSingle) {
+                                consoleOut.scrollTop = consoleOut.scrollHeight;
+                            }
                         }
-                        consoleCursor.all = result.log_total || result.logs.length;
                     }
 
                     /* Status bar update */
@@ -2533,9 +2566,14 @@ function toggleRunsPanel() {
 
 function clearConsole() {
     document.getElementById('console-output').innerHTML = '';
-    /* Leave the cursor alone: "clear" means the user wants the NEXT line, not a
-       replay of the up-to-200 the server still holds. It is reset by a run
-       starting (the total restarts below it — see takeLines) or by switching tab. */
+    /* Every view's history goes with it, and no cursor moves: "clear" means the
+       user wants the NEXT line, not a replay of the up-to-200 the server still
+       holds. Leaving one view's lines behind would have a tab switch repaint what
+       was just deleted, which is the opposite of clearing. */
+    consoleViews.all.lines = [];
+    Object.keys(consoleViews.wf).forEach(function (key) {
+        consoleViews.wf[key].lines = [];
+    });
     _wfActiveTab = 'all';
 }
 
@@ -2543,16 +2581,11 @@ function clearConsole() {
 var _wfActiveTab = 'all';
 function switchWfTab(wfId) {
     _wfActiveTab = wfId;
-    /* Clearing the DOM and re-rendering from the server's held tail is the only
-       way a tab switch can show what that tab already contains, so the view
-       being entered loses its cursor — both here and per-workflow, which used to
-       reset while 'all' reset nothing and left an empty `if` behind. */
-    document.getElementById('console-output').innerHTML = '';
-    if (wfId === 'all') {
-        consoleCursor.all = 0;
-    } else {
-        consoleCursor.wf[wfId] = 0;
-    }
+    /* Repainted from the view's own history rather than emptied: the server holds
+       only the tail of the whole run, so a blank box here read as "switching tabs
+       deletes the console". The cursor stays put, so the next poll appends only
+       what is genuinely new to this view. */
+    repaintConsoleView(document.getElementById('console-output'), wfId);
     /* Update active tab styling */
     document.querySelectorAll('#console-tabs .console-tab').forEach(function (tab) {
         tab.classList.toggle('active', String(tab.dataset.wf) === String(wfId));
