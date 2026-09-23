@@ -374,12 +374,8 @@ def test_every_panel_fits_itself_in_both_languages(app_url, driver, panel_id, la
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
-@pytest.mark.parametrize(
-    'mode,expected,wrong',
-    [('parallel', '并行', '串行'), ('serial', '串行', '并行')],
-    ids=['parallel', 'serial'],
-)
-def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, driver, lang, mode, expected, wrong):
+@pytest.mark.parametrize('mode', ['parallel', 'serial'], ids=['parallel', 'serial'])
+def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, driver, lang, mode):
     """The run-records row is where the user reads "did both workflows run, and did
     they run at the same time?".
 
@@ -390,8 +386,6 @@ def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, drive
     that claims a concurrency this run never had would all be invisible to the
     Python tier. Both languages, because the English label is the longer one.
     """
-    if lang == 'en':
-        expected, wrong = 'PARALLEL', 'SERIAL'
     driver.set_window_size(1366, 768)
     driver.get(app_url + '/')
     _kill_animations(driver)
@@ -417,10 +411,17 @@ def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, drive
         const chips = Array.from(cell.querySelectorAll('.runs-mgr-tag'));
         const table = document.querySelector('#runs-panel table');
         const window1366 = window.innerWidth;
+        const label = (key) => I18n.t(key).replace('{n}', 2);
         return {
             found: true,
             text: cell.textContent,
             chips: chips.map((c) => c.textContent),
+            // Both mode labels as this language really spells them. Hardcoding the
+            // wording is how this test came to demand 'PARALLEL' of a serial run:
+            // the catalog says 'parallel ×2' in lower case, so a copy of the string
+            // drifts from the thing it claims to check.
+            parallel: label('runsMgr.tagParallel'),
+            serial: label('runsMgr.tagSerial'),
             // A chip whose own glyphs are cut off reads as a shorter fact than it is.
             clippedChips: chips.filter((c) => c.scrollWidth - c.clientWidth > 1).length,
             tableOverflows: table ? table.scrollWidth - table.clientWidth > 1 : null,
@@ -433,13 +434,13 @@ def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, drive
     )
     assert facts['found'] is True, '#runs-panel .runs-mgr-wf rendered nothing, so the row was not measured'
     assert '热门榜' in facts['text'] and '周排行榜' in facts['text'], facts['text']
+    assert 'runsMgr.' not in facts['parallel'] + facts['serial'], f'the label fell back to its key: {facts}'
+    assert facts['parallel'] != facts['serial'], f'the two mode labels are the same string in {lang}: {facts}'
+    said = facts['parallel'] if mode == 'parallel' else facts['serial']
+    silent = facts['serial'] if mode == 'parallel' else facts['parallel']
     assert len(facts['chips']) == 2, f'expected a mode chip and a window chip, got {facts["chips"]}'
-    assert any(expected in chip for chip in facts['chips']), (
-        f'a {mode} run must be tagged {expected} ×2, chips were {facts["chips"]}'
-    )
-    assert not any(wrong in chip for chip in facts['chips']), (
-        f'the row claims {wrong}, which this run was not: {facts["chips"]}'
-    )
+    assert said in facts['chips'], f'a {mode} run must be tagged {said}, chips were {facts["chips"]}'
+    assert silent not in facts['chips'], f'the row claims {silent}, which this run was not: {facts["chips"]}'
     assert any('2' in chip for chip in facts['chips']), f'the chip must say how many workflows: {facts["chips"]}'
     assert facts['clippedChips'] == 0, f'a chip is silently cut off: {facts["chips"]}'
     assert facts['cellRight'] <= facts['windowWidth'] + 1, f'the name cell runs off the window: {facts}'
