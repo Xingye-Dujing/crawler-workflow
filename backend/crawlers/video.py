@@ -61,6 +61,13 @@ logger = logging.getLogger(__name__)
 # ─── bilibili endpoints and their codes ──────────────────────────────
 
 VIEW_API = 'https://api.bilibili.com/x/web-interface/view?bvid='
+#: The two boards of "what is hot right now", measured 2026-09 to answer
+#: ``code=0`` unsigned from inside a bilibili page — like ``view``, they need no
+#: signature and no cookie beyond what the panel saved. ``popular`` is a paged feed
+#: (20 items a page, page 2 a disjoint set); ``ranking`` answers the whole weekly
+#: list in one response (100 items), which is why it is walked as a single page.
+POPULAR_API = 'https://api.bilibili.com/x/web-interface/popular?ps=20&pn='
+RANKING_API = 'https://api.bilibili.com/x/web-interface/ranking/v2?rid=0&type=all'
 REPLY_API = 'https://api.bilibili.com/x/v2/reply/main'
 
 #: A withdrawn or private video answers ``-404 啥都木有``: that card is gone and
@@ -166,6 +173,9 @@ class VideoCrawler(Crawler):
             '.then(function (j) { done(j); })'
             '.catch(function (e) { done({err: String(e)}); });'
         )
+        # Counted alongside the navigations: "this board needs one request per page"
+        # is a claim about the in-page fetches, not about ``open()``.
+        self.requests.append(str(url))
         try:
             self.driver.set_script_timeout(25)
             payload = self.driver.execute_async_script(script)
@@ -328,6 +338,63 @@ class BilibiliCrawler(VideoCrawler):
             settle_wait=self.CARD_WAIT,
         )
         logger.info(t('crawl.bili.authorDone', n=self.collected(), reason=result.stopped_reason))
+        return self.results()
+
+    def hot(self, board: str = 'popular', target_count: int = 50, **kwargs):
+        """The site's own hot list: 热门 (a paged feed) or 排行榜 (one 100-item page).
+
+        This is the one bilibili walk that needs **no per-row request**: measured,
+        ``x/web-interface/popular`` and ``ranking/v2`` answer ``code=0`` unsigned and
+        each item already carries ``owner``/``stat``/``pubdate`` — the same shape
+        ``view`` returns for a single video. The search walk pays one request per row
+        only because a search *card* shows a rounded 万-label.
+
+        The row goes through :meth:`_row`, the same flattener the other two modes
+        use, so a hot-list row cannot disagree with a search row about what 播放数
+        means or where 链接 comes from.
+        """
+        single = str(board or '').strip() == 'ranking'
+        board_label = t('crawl.bili.boardRanking') if single else t('crawl.bili.boardPopular')
+        resume = self.resume_of(kwargs)
+        page = max(1, as_index(resume.get('page'), 1))
+        if self.collected() >= target_count:
+            logger.info(t('crawl.bili.target_reached', n=target_count))
+            return self.results()
+        logger.info(t('crawl.bili.hotStart', board=board_label, n=target_count))
+        # The endpoints are read from inside a bilibili page (same-origin, cookie
+        # carried), so one navigation buys the session a document to ask from.
+        self.open('https://www.bilibili.com/')
+        self.check_login_wall('https://www.bilibili.com/')
+        if self.login_wall:
+            raise RuntimeError(t('crawl.bili.blocked', code='login'))
+        seen: set[str] = {str(row.get('BV号') or '') for row in self.results() if row.get('BV号')}
+        while page <= self.MAX_PAGES and self.collected() < target_count:
+            payload = self._fetch_json(RANKING_API if single else f'{POPULAR_API}{page}')
+            code = payload.get('code')
+            if code != 0:
+                if self.collected():
+                    logger.warning(t('crawl.bili.blocked', code=str(code)))
+                    break
+                raise RuntimeError(t('crawl.bili.blocked', code=str(code)))
+            items = (payload.get('data') or {}).get('list') or []
+            fresh = [item for item in items if str(item.get('bvid') or '') not in seen]
+            logger.info(t('crawl.bili.hotPage', page=page, n=len(items), fresh=len(fresh), done=self.collected()))
+            if not items:
+                break
+            for item in fresh:
+                if self.collected() >= target_count:
+                    break
+                seen.add(str(item.get('bvid') or ''))
+                self.emit(self._row(item))
+                self.mark_position(page=page, board='ranking' if single else 'popular', done=self.collected())
+            if single:
+                # One answer *is* the whole board; asking for page two would replay it.
+                break
+            if not fresh:
+                break
+            page += 1
+            self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
+        logger.info(t('crawl.bili.hotDone', n=self.collected(), total=target_count))
         return self.results()
 
     # ─── pieces ────────────────────────────────────────────────────────

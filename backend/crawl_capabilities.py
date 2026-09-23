@@ -220,6 +220,32 @@ _WITH_FACTS = Field(
 )
 
 
+#: Which list of the moment to read. On bilibili the two boards answer the *same*
+#: item shape, so this is one mode with a choice inside it; two modes would be two
+#: names for one crawl and two entries in the panel for one thing.
+_BOARD = Field(
+    key='board',
+    control='select',
+    label_key='settings.hotBoard',
+    default='popular',
+    options=(('popular', 'settings.hotBoardPopular'), ('ranking', 'settings.hotBoardRanking')),
+)
+
+
+def _hot_mode(*extra: Field, target: int = 50) -> Mode:
+    """The site's own hot list — not a keyword's result page.
+
+    No required field: what a hot list is about is chosen by the site, so the only
+    choices offered are how many rows and which board.
+    """
+    return Mode(
+        key='hot',
+        label_key='settings.collectHot',
+        handler='hot',
+        fields=(replace(_TARGET, default=target), _BOARD, *extra, _RECOLLECT),
+    )
+
+
 def _comment_mode(platform: str, example: str) -> Mode:
     """The 评论 form, which is the same on every platform except the link shape.
 
@@ -353,6 +379,7 @@ CAPABILITIES: tuple[Capability, ...] = (
                 placeholder='https://space.bilibili.com/<UID>',
                 hint_key='settings.authorHintBili',
             ),
+            _hot_mode(),
             _comment_mode('bilibili', 'https://www.bilibili.com/video/BV...'),
         ),
     ),

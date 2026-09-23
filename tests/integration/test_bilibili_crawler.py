@@ -378,6 +378,97 @@ class TestSearch:
         assert len(rows) == 2
 
 
+class TestHot:
+    """The site's own boards: 热门 (paged) and 排行榜 (one answer), no per-row cost.
+
+    What makes this mode its own walk is the measurement: ``popular`` and ``ranking/v2``
+    answer ``code=0`` unsigned and **every item already carries owner/stat/pubdate**, so
+    the search mode's one-request-per-row is not needed here. A "hot list" implemented
+    with the search loop would spend 50 requests to produce what one request holds.
+    """
+
+    @staticmethod
+    def _board(*bvids, code=0):
+        items = []
+        for bvid in bvids:
+            data = _view(bvid)['data']
+            # A board item is the view payload's shape with a couple of extras; the
+            # flattener must not care which of the three endpoints produced it.
+            data.pop('ugc_season', None)
+            items.append(data)
+        return {'code': code, 'message': 'OK', 'data': {'list': items, 'no_more': False}}
+
+    def test_the_board_is_read_without_a_single_per_row_request(self, make_crawler):
+        crawler, driver = make_crawler([[]], [self._board(A, B), self._board(C, D)])
+        rows = crawler.hot('popular', target_count=3)
+        assert [row['BV号'] for row in rows] == [A, B, C]
+        assert len(driver.fetched) == 2, 'one request per board page, not one per video'
+        assert all('popular?ps=20' in url for url in driver.fetched), driver.fetched
+        assert driver.fetched[1].endswith('pn=2')
+
+    def test_a_board_row_is_the_same_row_a_search_row_is(self, make_crawler):
+        crawler, _driver = make_crawler([[]], [self._board(A)])
+        row = crawler.hot('popular', target_count=1)[0]
+        assert row['播放数'] == 1405449 and row['点赞数'] == 85667 and row['投币数'] == 79485
+        assert row['UP主'] == '漫士沉思录' and row['UP主ID'] == '266765166'
+        assert row['链接'] == f'https://www.bilibili.com/video/{A}/'
+        assert row['发布时间'] == '2024-10-19 14:59:31'
+        assert row['合集'] == '', 'the board carries no 合集, so the column stays empty rather than guessed'
+
+    def test_the_weekly_ranking_is_one_answer_and_is_not_paged(self, make_crawler):
+        """The ranking endpoint hands the whole board in one reply; walking it by page
+        would replay the same 100 items until the round ceiling."""
+        crawler, driver = make_crawler([[]], [self._board(A, B)])
+        rows = crawler.hot('ranking', target_count=50)
+        assert [row['BV号'] for row in rows] == [A, B]
+        assert len(driver.fetched) == 1 and 'ranking/v2' in driver.fetched[0]
+
+    def test_a_refused_board_with_nothing_collected_refuses_the_run(self, make_crawler):
+        crawler, _driver = make_crawler([[]], [{'code': -412, 'message': 'risk', 'data': {}}])
+        with pytest.raises(RuntimeError) as err:
+            crawler.hot('popular', target_count=5)
+        assert '-412' in str(err.value)
+
+    def test_a_refusal_midway_keeps_the_rows_it_earned(self, make_crawler):
+        crawler, _driver = make_crawler([[]], [self._board(A), {'code': -412, 'message': 'risk', 'data': {}}])
+        rows = crawler.hot('popular', target_count=50)
+        assert [row['BV号'] for row in rows] == [A]
+
+    def test_a_board_that_answers_nothing_is_an_empty_answer_not_an_error(self, make_crawler):
+        crawler, driver = make_crawler([[]], [{'code': 0, 'message': 'OK', 'data': {'list': []}}])
+        assert crawler.hot('popular', target_count=5) == []
+        assert len(driver.fetched) == 1, 'an empty board is not re-asked'
+
+    def test_a_second_page_of_nothing_new_ends_the_walk(self, make_crawler):
+        crawler, driver = make_crawler([[]], [self._board(A, B), self._board(A, B)])
+        rows = crawler.hot('popular', target_count=50)
+        assert [row['BV号'] for row in rows] == [A, B]
+        assert len(driver.fetched) == 2
+
+    def test_a_resumed_run_skips_the_videos_it_already_stored(self, make_crawler):
+        """Resume identity is the BV号 already on disk, so a board page that is read
+        again rebuilds nothing the dead run already paid for — and the budget counts
+        those rows, which is why a target of 2 with 1 stored stops at one page."""
+        crawler, driver = make_crawler([[]], [self._board(A, B)])
+        crawler.seed([BilibiliCrawler._row(_view(A)['data'])])
+        rows = crawler.hot('popular', target_count=2, resume={'page': 1})
+        assert [row['BV号'] for row in rows] == [A, B]
+        assert len(driver.fetched) == 1, 'the stored row counted toward the target, so no second page was asked'
+
+    def test_the_cursor_records_which_board_was_walked(self, make_crawler):
+        crawler, _driver = make_crawler([[]], [self._board(A)])
+        crawler.hot('popular', target_count=1)
+        assert crawler.position['board'] == 'popular' and crawler.position['page'] == 1
+
+    def test_a_login_wall_refuses_the_board(self, make_crawler):
+        crawler, driver = make_crawler([[]], [self._board(A)])
+        driver.wall = True
+        with pytest.raises(RuntimeError) as err:
+            crawler.hot('popular', target_count=5)
+        assert 'login' in str(err.value)
+        assert driver.fetched == [], 'nothing is worth asking behind a wall'
+
+
 class TestGetDetail:
     def test_one_video_by_url(self, make_crawler):
         crawler, _driver = make_crawler([], [_view(A)])

@@ -84,7 +84,13 @@ class Probe(Crawler):
 
 
 def bare(driver, **attrs):
-    """A crawler with no browser: the plumbing needs no Selenium to be tested."""
+    """A crawler with no browser: the plumbing needs no Selenium to be tested.
+
+    ``Crawler.__init__`` buys a real Chrome, so the instance is built with ``__new__``
+    and its state written out here. That means **this list has to be kept in step
+    with ``__init__``** every time the base class gains an attribute (it drifted once,
+    when ``requests`` arrived).
+    """
     crawler = Probe.__new__(Probe)
     crawler.driver = driver
     crawler.headless = True
@@ -96,6 +102,7 @@ def bare(driver, **attrs):
     crawler.login_wall = False
     crawler.risk_blocked = False
     crawler.cookies_loaded = 0
+    crawler.requests = []
     crawler._collected = []
     crawler._cursor = {}
     crawler._sink = None
@@ -167,6 +174,26 @@ class TestCookiePlanting:
 
 
 class TestNavigation:
+    def test_every_navigation_is_ledgered_in_order(self):
+        """``requests`` is what makes a crawl's cost model testable at all: a mode
+        that promises "one request per page" can only be held to it by counting, and
+        a timeout still reached the site — so it is recorded before the driver is
+        asked, not after it answers."""
+        crawler = bare(PlantDriver())
+        assert crawler.open('https://www.douyin.com/') is True
+        assert crawler.open('https://www.douyin.com/hot') is True
+        assert crawler.requests == ['https://www.douyin.com/', 'https://www.douyin.com/hot']
+
+        driver = PlantDriver()
+
+        def slow(url):
+            raise RuntimeError('Timed out receiving message from renderer')
+
+        driver.get = slow
+        walled = bare(driver)
+        assert walled.open('https://www.douyin.com/') is False
+        assert walled.requests == ['https://www.douyin.com/'], 'a slow navigation still happened'
+
     def test_a_renderer_timeout_is_survived_and_reported(self):
         """Douyin's root never fires ``load`` inside the timeout (measured ~40 s);
         the document still builds, so the crawl must continue and the platform's

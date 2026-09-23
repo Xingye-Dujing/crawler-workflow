@@ -85,6 +85,11 @@ class Crawler(ABC):
         self._cursor_sink = None
         self._collected = []
         self._cursor = {}
+        # URLs this session actually asked for, in order. Kept because the cost
+        # model of a crawl *is* its request count: a mode that promises "one request
+        # per page" has to be measurable promising it, and a test that only checks
+        # the resulting table cannot tell that from a per-row walk.
+        self.requests: list[str] = []
         # Set when a page turned out to be a login wall; the platform crawlers
         # stop their scroll/page walk on it and say so instead of reporting an
         # empty crawl.
@@ -237,6 +242,7 @@ class Crawler(ABC):
         to the user as an empty search.
         """
         timed_out = False
+        self.requests.append(str(url))
         try:
             self.driver.get(url)
         except Exception as e:

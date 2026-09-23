@@ -269,6 +269,18 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   still comes from the unsigned `x/web-interface/view` — so a row is identical across the two
   modes. `bilibili_mid()` takes digits or a space link and refuses anything else: opening a
   mistyped space would report "this UP posted nothing" about a page that is not theirs.
+  Its **hot boards need no per-row request**: `x/web-interface/popular` (20 a page, page 2
+  disjoint) and `x/web-interface/ranking/v2` (the whole 100-item board in one reply, so it
+  is walked as a single page) answer `code=0` unsigned for our session **with `owner`/
+  `stat`/`pubdate` inside each item** — the same shape `view` returns for one video, which
+  is why `hot()` reuses `_row()` and fetches nothing per row. Reaching for the search
+  loop's one-request-per-row here would produce the same table at 50× the cost.
+- **A crawl's cost is a testable property, because `Crawler.requests` counts every
+  navigation and every in-page fetch in order.** `open()` records the URL *before* asking
+  the driver, so a navigation that timed out still counts — it reached the site. Any mode
+  that promises "one request per page" must be pinned by asserting on that ledger
+  (`tests/live_site/test_live_bilibili_hot.py` asserts no `web-interface/view` call at all),
+  because a table alone cannot tell a batched walk from a per-row one.
 - **Cookie capture and crawling are different capabilities.** `CookieManager.PLATFORMS`
   (8) is who the panel can log in; `crawlers.is_crawlable()` (8: zhihu, weibo,
   xiaohongshu, wechat, bilibili, douyin, youtube, twitter) is who has a crawler.
