@@ -35,7 +35,13 @@ class FakeDriver:
     def get_cookies(self):
         if self._crawler.dead:
             raise RuntimeError('window gone')
-        return [{'name': 'SUB', 'value': 'x', 'domain': '.example.com'}]
+        # Two cookies, on purpose: the identity provider's own session rides along
+        # whenever a login ends on its page, and it must not be stored as this
+        # platform's cookie.
+        return [
+            {'name': 'SUB', 'value': 'x', 'domain': '.example.com'},
+            {'name': 'SID', 'value': 'g', 'domain': '.google.com'},
+        ]
 
     def quit(self):
         pass
@@ -124,6 +130,23 @@ class TestCookieJob:
         assert client.get('/api/cookies/status').get_json()['cookies']['zhihu'] is True
         # ...and the browser was closed through the bounded helper.
         assert job['made'][0].closed is True
+
+    def test_capture_is_read_on_the_platform_page_not_wherever_login_ended(self, client, job, app_module):
+        """A login that finishes on the identity provider's own page (Google behind
+        YouTube, Facebook behind Instagram) would otherwise be captured *there*:
+        the driver only sees the current page's cookies, so the file would hold
+        someone else's session and miss the one the crawl needs. So the browser is
+        pulled back to the platform before the read, and a foreign cookie that
+        still turns up is dropped rather than saved."""
+        assert client.post('/api/cookies/generate', json={'platform': 'youtube', 'wait_seconds': 10}).status_code == 202
+        _await_phase(client, 'waiting')
+        assert client.post('/api/cookies/generate/confirm').get_json()['ok'] is True
+        assert _await_idle(client)
+        crawler = job['made'][0]
+        assert crawler.driver.visited.count(crawler.login_url) == 2, 'opened, then re-opened to capture'
+        assert client.get('/api/cookies/generate/status').get_json()['phase'] == 'saved'
+        saved = app_module.cookie_manager.load('youtube')
+        assert [c['name'] for c in saved] == ['SUB'], 'the identity provider stayed out of this platform’s file'
 
     def test_second_generate_is_busy_409(self, client, job):
         assert client.post('/api/cookies/generate', json={'platform': 'weibo'}).status_code == 202

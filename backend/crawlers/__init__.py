@@ -1,3 +1,4 @@
+from crawlers.overseas import InstagramCrawler, TwitterCrawler, YouTubeCrawler
 from crawlers.video import BilibiliCrawler, DouyinCrawler
 from crawlers.wechat import WechatCrawler
 from crawlers.weibo import WeiboCrawler
@@ -12,10 +13,14 @@ CRAWLERS = {
     'weibo': WeiboCrawler,
     'xiaohongshu': XiaohongshuCrawler,
     'wechat': WechatCrawler,
-    # Cookie capture exists for these two; their crawl does not yet, so the
-    # canvas and the execute endpoint refuse them (see crawlers/video.py).
     'bilibili': BilibiliCrawler,
     'douyin': DouyinCrawler,
+    # Cookie capture only: the panel can save a login session for these three
+    # while their crawl is not built yet, so the canvas and the execute endpoint
+    # refuse them (see crawlers/overseas.py).
+    'twitter': TwitterCrawler,
+    'instagram': InstagramCrawler,
+    'youtube': YouTubeCrawler,
 }
 
 

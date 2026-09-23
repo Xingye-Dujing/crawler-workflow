@@ -27,6 +27,13 @@ _WALL_MARKERS = (
     '/login?',
     '/signin',
     'accounts.google.com',
+    # X and Instagram park a logged-out visitor somewhere the earlier markers do
+    # not see: X uses a path segment with no query string (``/i/flow/login``) and
+    # Instagram uses a trailing slash (``/accounts/login/``). Without these, a
+    # dead session answered "Cookie 可用" by "验证 Cookie", which is worse than no
+    # check at all.
+    '/flow/login',
+    '/accounts/login/',
 )
 _WALL_TEXTS = ('扫描二维码登录', '手机号登录', '请先登录', '登录后查看', '扫码登录', '暂时限制', '当前请求存在异常')
 

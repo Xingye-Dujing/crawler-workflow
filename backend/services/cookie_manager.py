@@ -10,12 +10,14 @@ logger = logging.getLogger(__name__)
 class CookieManager:
     """Manages cookie persistence for different platforms.
 
-    Only the four platforms the app can crawl get a cookie file: the platform
-    name arrives from the client and is part of a path, so an unknown one is
-    refused instead of turning into ``../../x_cookies.json``.
+    Only a listed platform gets a cookie file: the platform name arrives from
+    the client and is part of a path, so an unknown one is refused instead of
+    turning into ``../../x_cookies.json``. The list is who can *hold a session*,
+    which is wider than who can be crawled — the overseas trio below has capture
+    but no crawler yet, and WeChat is the reverse (crawled, needs no login).
     """
 
-    PLATFORMS = ('zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin')
+    PLATFORMS = ('zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin', 'twitter', 'instagram', 'youtube')
 
     def __init__(self, cookie_dir: str):
         self.cookie_dir = cookie_dir

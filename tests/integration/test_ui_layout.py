@@ -131,13 +131,21 @@ _AUDIT_JS = """
     const scope = document.getElementById(__SCOPE__) || document.body;
     const SCROLLABLE = {'auto': 1, 'scroll': 1, 'hidden': 1};
     const clipped = [], scrollers = [];
+    // Counted so an empty scope cannot pass as a clean one: a panel whose id was
+    // renamed, or whose body only fills in after a lazy load, holds nothing to
+    // measure and every assertion below would then be true of zero elements.
+    let measured = 0;
     scope.querySelectorAll('*').forEach((el) => {
         const cs = getComputedStyle(el);
         if (cs.display === 'none' || cs.visibility === 'hidden') return;
         if (!el.clientWidth && !el.clientHeight) return;
+        measured += 1;
         // A text control scrolls its own content by design: an input whose value is
         // longer than the box is not a clipped label, it is the widget working.
-        if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+        // ``option``/``optgroup`` join that exclusion for the same reason: their
+        // metrics are the native popup's, taken while it is closed, and a long
+        // option can neither clip the page nor grow a bar on it.
+        if (/^(INPUT|TEXTAREA|SELECT|OPTION|OPTGROUP)$/.test(el.tagName)) return;
         const over = el.scrollWidth - el.clientWidth;
         if (over <= 1) return;
         const record = {
@@ -167,7 +175,12 @@ _AUDIT_JS = """
     scope.style.transition = 'none';
     const rect = scope.getBoundingClientRect();
     return {
+        // The body fallback below is a convenience for the caller, not a verdict:
+        // measuring the whole page and reporting it as "#settings-panel is fine"
+        // is how a renamed id passed for a whole release. Say so explicitly.
+        scopeMissing: !document.getElementById(__SCOPE__),
         scopeScroll: [scope.scrollWidth, scope.clientWidth],
+        measured: measured,
         outsideViewport: Math.round(Math.max(0, rect.right - window.innerWidth, -rect.left)),
         clipped: clipped.slice(0, 8),
         scrollers: scrollers.filter((r) => r.clippedCells).slice(0, 8),
@@ -191,7 +204,12 @@ def _kill_animations(driver):
     )
 
 
-def _assert_contains_itself(result, label, may_be_wider_than_viewport=False):
+def _assert_contains_itself(result, label, may_be_wider_than_viewport=False, min_measured=1):
+    assert not result['scopeMissing'], f'{label}: that id is not in the page — the audit fell back to <body>'
+    assert result['measured'] >= min_measured, (
+        f'{label}: only {result["measured"]} visible element(s) were measured (floor {min_measured}) — '
+        'an empty scope makes every assertion below true of nothing, which is not a pass'
+    )
     clipped = result['clipped']
     assert not clipped, f'{label}: {len(clipped)} element(s) overflow without being scrollable: {clipped}'
     sw, cw = result['scopeScroll']
@@ -207,22 +225,71 @@ def _assert_contains_itself(result, label, may_be_wider_than_viewport=False):
     assert not silently_clipped, f'{label}: cells cut off inside a scroller with no ellipsis: {silently_clipped}'
 
 
+# Every container the page shows and hides, taken off ``index.html`` rather than
+# remembered: these are top-level elements addressed by id, with no shared class
+# (``class="panel"`` has never existed here, and a selector that matches nothing
+# turns a layout audit into a pass over zero elements).
 PANELS = [
-    'settings-panel',
+    'node-palette',
+    'stats-panel',
+    'chart-preview-panel',
+    'data-preview-panel',
+    'dashboard-panel',
+    'history-panel',
+    'studio-overlay',
     'node-settings',
     'console-panel',
     'runs-panel',
     'exports-panel',
     'dataset-panel',
-    'dashboard-panel',
-    'history-panel',
     'processes-panel',
-    'data-preview-panel',
+    'status-bar',
+    'context-menu',
+    'dialog-overlay',
     'cookie-dialog',
     'style-menu',
     'ai-menu',
     'settings-menu',
 ]
+
+# How many elements each panel actually puts on screen at 1366×768 with nothing
+# selected and no data loaded — measured in a real Chrome, per panel. The floor is
+# what stops this file from passing on an empty scope: a renamed id, a panel whose
+# markup was deleted, or a table that only fills in on a lazy load would otherwise
+# satisfy every overflow rule simply by having nothing to break them.
+#
+# A panel growing past its number is fine (these are minimums); one falling under
+# it has lost content, which is exactly what must be noticed.
+# How many elements each container actually puts on screen at 1366×768 with nothing
+# selected and no data loaded — counted in a real Chrome, per container, then
+# rounded down. The floor is what stops this file from passing on an empty scope: a
+# renamed id, a container whose markup was deleted, or a table that only fills in on
+# a lazy load would otherwise satisfy every overflow rule by having nothing to break.
+#
+# Growing past the number is fine (these are minimums); falling under it means the
+# container lost content.
+MIN_MEASURED = {
+    'node-palette': 16,
+    'stats-panel': 6,
+    'chart-preview-panel': 3,
+    'data-preview-panel': 6,
+    'dashboard-panel': 4,
+    'history-panel': 13,
+    'studio-overlay': 16,
+    'node-settings': 3,
+    'console-panel': 6,
+    'runs-panel': 5,
+    'exports-panel': 6,
+    'dataset-panel': 5,
+    'processes-panel': 4,
+    'status-bar': 7,
+    'context-menu': 13,
+    'dialog-overlay': 2,
+    'cookie-dialog': 20,
+    'style-menu': 10,
+    'ai-menu': 32,
+    'settings-menu': 26,
+}
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
@@ -236,6 +303,12 @@ def test_the_page_itself_never_grows_a_horizontal_bar(app_url, driver, lang):
     # around), so it is allowed to be wider than the window. What must not happen is
     # a node, a label or a panel overflowing its own box, or the window itself
     # growing a bar — which is what the rest of this check still asserts.
+    #
+    # No per-element floor here, deliberately: with every panel closed and no node
+    # on the canvas this scope holds three measured elements (measured, not assumed
+    # — see MIN_MEASURED for the panels). What this test owns is the page-level
+    # verdict in ``result['page']``/``['body']`` below, which is whole-document
+    # however empty the scope is; the per-panel floors are what prove content.
     _assert_contains_itself(result, f'closed page in {lang}', may_be_wider_than_viewport=True)
 
 
@@ -247,7 +320,7 @@ def test_every_panel_fits_itself_in_both_languages(app_url, driver, panel_id, la
     driver.set_window_size(1366, 768)
     driver.get(app_url + '/')
     _kill_animations(driver)
-    driver.execute_script(
+    opened = driver.execute_script(
         f"""
         document.body.dataset.lang = {lang!r};
         I18n.apply();
@@ -258,33 +331,49 @@ def test_every_panel_fits_itself_in_both_languages(app_url, driver, panel_id, la
         return 'ok';
         """
     )
+    # An id that no longer exists must not be allowed to fall through to the
+    # body-wide audit below — that would measure a hundred elements and call the
+    # panel checked.
+    assert opened == 'ok', f'#{panel_id} is not in the page, so nothing about it was measured'
     result = driver.execute_script(_audit_js(panel_id), [])
-    _assert_contains_itself(result, f'#{panel_id} in {lang}', may_be_wider_than_viewport=True)
+    _assert_contains_itself(
+        result, f'#{panel_id} in {lang}', may_be_wider_than_viewport=True, min_measured=MIN_MEASURED[panel_id]
+    )
 
 
 @pytest.mark.parametrize('width', [1024, 1280])
 def test_a_narrow_window_moves_the_floating_popups_inside_it(app_url, driver, width):
     """The dashboard and the history panel are positioned from their button; on a
     narrow window a right-anchored popup can hang off the edge, which is a page
-    scroll bar rather than a panel scroll bar."""
+    scroll bar rather than a panel scroll bar.
+
+    The containers are listed by id because the page has no shared class for them
+    — a ``.panel`` selector matches nothing here, and matched nothing for as long as
+    this test has existed, which is how it kept passing while checking zero elements.
+    """
     driver.set_window_size(width, 700)
     driver.get(app_url + '/')
-    driver.execute_script(
-        "document.getElementById('dashboard-panel').classList.add('open');"
-        "document.getElementById('history-panel').classList.add('open');"
-        "document.querySelectorAll('.panel').forEach(p => p.classList.add('open'));"
-    )
-    outside = driver.execute_script(
+    _kill_animations(driver)
+    shown, offenders = driver.execute_script(
         """
-        return Array.from(document.querySelectorAll('.panel'))
-            .filter(p => p.offsetParent !== null)
-            .map(p => { const r = p.getBoundingClientRect();
-                        return [p.id, Math.round(r.left), Math.round(r.right), window.innerWidth]; })
-            .filter(([id, left, right, w]) => left < -1 || right > w + 1);
+        const seen = [];
+        for (const id of arguments[0]) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            el.classList.add('open');
+            el.classList.remove('hidden');
+            const r = el.getBoundingClientRect();
+            // A container CSS keeps off screen until it is really opened (a
+            // dropdown anchored to a hidden button) has no layout to judge.
+            if (r.width <= 0 || r.height <= 0 || getComputedStyle(el).visibility === 'hidden') continue;
+            seen.push([id, Math.round(r.left), Math.round(r.right), window.innerWidth]);
+        }
+        return [seen, seen.filter(([id, left, right, w]) => left < -1 || right > w + 1)];
         """,
-        [],
+        PANELS,
     )
-    assert not outside, f'{width}px: panels outside the window: {outside}'
+    assert len(shown) >= 10, f'{width}px: only {len(shown)} of {len(PANELS)} containers had a box to measure: {shown}'
+    assert not offenders, f'{width}px: containers outside the window: {offenders}'
     page = driver.execute_script(
         'return [document.documentElement.scrollWidth, document.documentElement.clientWidth];', []
     )

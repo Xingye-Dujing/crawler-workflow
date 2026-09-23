@@ -25,11 +25,20 @@ def manager(tmp_path):
 
 class TestPlatformWhitelist:
     def test_the_cookie_whitelist_is_the_platform_list(self):
-        """Five platforms hold a cookie file. WeChat is deliberately not one of
+        """Eight platforms hold a cookie file. WeChat is deliberately not one of
         them: its article bodies are served to anyone, and the keyword search that
         did need a login was removed — a cookie row would be advice to log in for
         nothing."""
-        assert CookieManager.PLATFORMS == ('zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin')
+        assert CookieManager.PLATFORMS == (
+            'zhihu',
+            'weibo',
+            'xiaohongshu',
+            'bilibili',
+            'douyin',
+            'twitter',
+            'instagram',
+            'youtube',
+        )
         assert all(CookieManager.is_supported(p) for p in CookieManager.PLATFORMS)
         assert CookieManager.is_supported('wechat') is False
 
@@ -41,13 +50,27 @@ class TestPlatformWhitelist:
         Pinned on the *mechanism*, not on which platform happens to be
         unimplemented today — that roster changes every time a crawl lands, and a
         test that names a platform as the exception breaks for the wrong reason.
+        So the rule a capture-only platform must satisfy is spelled out: it says
+        where to log in, which hosts its cookie is valid on, and it RAISES instead
+        of returning an empty table (an empty table reads as "this keyword found
+        nothing", which is a lie with plausible manners).
         """
         from crawlers import CRAWLERS, is_crawlable
 
-        # Every loggable platform is crawlable; the converse need not hold.
+        # Every loggable platform has a class that knows its own hosts; the
+        # converse need not hold, and not every such class crawls yet.
         assert set(CookieManager.PLATFORMS) < set(CRAWLERS)
-        assert all(is_crawlable(p) for p in CRAWLERS)
         assert is_crawlable('kuaishou') is False  # nobody logs into it, nobody crawls it
+        for platform, cls in CRAWLERS.items():
+            if is_crawlable(platform):
+                continue
+            assert getattr(cls, 'login_url', ''), f'{platform} is loggable but has no login page to open'
+            assert getattr(cls, 'domain', ''), f'{platform} has no host its cookie belongs to'
+            crawler = cls.__new__(cls)  # no browser: the refusal must not need one
+            with pytest.raises(RuntimeError, match='Cookie'):
+                crawler.search('any keyword')
+            with pytest.raises(RuntimeError, match='Cookie'):
+                crawler.get_detail('https://example.com/1')
 
         class _CookieOnly:
             supports_crawl = False

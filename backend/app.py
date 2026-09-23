@@ -38,7 +38,7 @@ from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, node_label
 from i18n import audit, normalize, set_lang, t
 from services import StatsService
-from services.cookie_flow import flow_for, normalize_entry_url
+from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
 from services.data_analysis import DataAnalysisService, UnknownOperationError
 from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD, DatasetStore
@@ -3458,11 +3458,18 @@ def save_cookies():
     if not cookies:
         return jsonify({'ok': False, 'error': t('api.cookiesRequired')}), 400
     try:
-        cookie_manager.save(platform, cookies)
+        # The same rule the login browser follows: cookies from another site do
+        # not belong in this platform's file, however they were pasted in.
+        kept, dropped = retain_for_platform(cookies, cookie_hosts(platform))
+        if dropped:
+            add_log(t('cookie.droppedForeign', platform=platform, n=dropped))
+        if not kept:
+            return jsonify({'ok': False, 'error': t('cookie.allForeign', platform=platform)}), 400
+        cookie_manager.save(platform, kept)
         # Console mirror: cookie setup should be traceable like every other
         # state change the panel makes.
         add_log(t('cookie.saved', platform=platform))
-        return jsonify({'ok': True, 'message': t('cookie.saved', platform=platform)})
+        return jsonify({'ok': True, 'message': t('cookie.saved', platform=platform), 'count': len(kept)})
     except (OSError, ValueError) as e:
         logger.exception(t('misc.cookie_save_failed'))
         add_log(f'{t("misc.cookie_save_failed")}: {str(e)[:120]}')
@@ -3562,7 +3569,15 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = ''):
             time.sleep(1.0)
         # Confirmed early, or the deadline passed: capture best-effort either
         # way — people log in and simply forget to press the button.
-        cookies = crawler.driver.get_cookies()
+        # Pull the browser back to the platform's own page first. A login that
+        # ended on the identity provider (accounts.google.com, facebook.com)
+        # would otherwise be read *there*, which both misses the session the crawl
+        # needs and stores someone else's cookies under this platform's name. A
+        # dead window raises, which the outer handler reports as it always has.
+        crawler.driver.get(crawler.login_url or url)
+        cookies, dropped = retain_for_platform(crawler.driver.get_cookies(), crawler_hosts(crawler))
+        if dropped:
+            add_log(t('cookie.droppedForeign', platform=platform, n=dropped))
         if not cookies:
             job['phase'] = 'error'
             job['error'] = t('cookie.noCookies')

@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~2006 fast-tier cases; 2086 across all tiers)**:
+- **Automated tests (pytest, ~2052 fast-tier cases; 2132 across all tiers)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -57,6 +57,13 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
   `flushFrames()`, and treats an id listed in `document.absent` as truly missing. Do not reintroduce
   "fabricate a child when a query finds nothing": it turned a removed connection path into a
   phantom one and made every `getElementById(x) ? …` toggle look broken in the harness only.
+- **A browser-measured assertion must report how much it measured, or it is not an assertion.**
+  `tests/integration/test_ui_layout.py` audits containers by id (the page has no `.panel` class —
+  a selector matching zero elements kept that test green while checking nothing), never falls back
+  to `<body>` silently (an id that stopped existing measured the whole page and reported
+  "#settings-panel is fine"), and asserts a per-container floor on the element count it gathered
+  (counted in a real Chrome, not guessed). Add new containers to that list with their floor, and
+  when a JS-side check walks a subtree, return the population alongside the verdict.
 - **The `integration` UI tier performs no server writes** (uploading, saving a workflow, or
   executing a run would leave rows in the user's real `data/` and `logs/` — the app has no
   data-dir override), and the live-site tier retries a crawl once **only** when the crawler itself
@@ -124,10 +131,20 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   withdrawn video (skip); any other non-zero code is the session/risk engine talking
   (stop, and refuse the run if nothing was collected).
 - **Cookie capture and crawling are different capabilities.** `CookieManager.PLATFORMS`
-  (6) is who the panel can log in; `crawlers.is_crawlable()` (5) is who has a crawler.
-  Douyin sits in the first and not the second, so `_execute_source_node` refuses it by
+  (8) is who the panel can log in; `crawlers.is_crawlable()` (6) is who has a crawler.
+  X/Instagram/YouTube sit in the first and not the second (`overseas.py` registers them
+  with `supports_crawl = False`), so `_execute_source_node` refuses them by
   node label (`run.notCrawlable`) *before* buying a browser — never let a not-yet-built
   platform fall through to an empty table, which reads as "this keyword found nothing".
+  A capture-only platform must still carry `domain` + `login_url` (the panel needs both),
+  stay OUT of the Data Source's platform list in `workflow.js`, and clear the three
+  parity guards in `test_frontend_contract.py::TestCookiePanelParity`.
+- **Captured cookies are filtered to their own platform** (`cookie_flow.retain_for_platform`),
+  because a login detours through an identity provider (Google behind YouTube, Facebook behind
+  Instagram) and `driver.get_cookies()` reads only the *current* page: the worker therefore
+  pulls the browser back to the platform's own `login_url` before capturing, and anything still
+  foreign when a paste comes in is dropped. Never widen this to `.google.com` for YouTube —
+  those cookies open Gmail and Drive.
 - **WeChat is intentionally body-only.** No comments, likes, forwards (and usually no read
   counts) — measured, not assumed: a real browser gets `show_comment=0`, zero `elected_comment`
   bytes in ~3.4 MB of article HTML, and an HTML 验证 page ("请在微信客户端打开链接") from

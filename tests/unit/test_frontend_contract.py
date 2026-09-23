@@ -21,6 +21,10 @@ from pathlib import Path
 import pytest
 from node_runner import run_node
 
+import i18n
+from crawlers import CRAWLERS, is_crawlable
+from services.cookie_manager import CookieManager
+
 pytestmark = pytest.mark.unit
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'static'
@@ -193,3 +197,68 @@ class TestPaletteContract:
         canvas_src = CANVAS_JS.read_text(encoding='utf-8')
         source_defaults = re.search(r"if \(type === 'source'\) return \{([^}]+)\}", canvas_src)
         assert source_defaults and 'collect' in source_defaults.group(1)
+
+
+class TestCookiePanelParity:
+    """The Cookie panel is wired together from three files that nothing else
+    cross-checks: the platform list is HTML, its translation lives in app.js, the
+    guidance the panel renders lives in the backend catalogue, and the crawl
+    permission lives in the crawler registry. Any one of the four can change alone,
+    and each of those changes makes the panel lie."""
+
+    def _select_options(self, html: str, select_id: str) -> list[str]:
+        start = html.index(f'id="{select_id}"')
+        block = html[start : html.index('</select>', start)]
+        return re.findall(r'<option value="([\w]+)"', block)
+
+    def test_the_cookie_select_offers_exactly_the_platforms_that_can_hold_a_file(self):
+        html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
+        offered = self._select_options(html, 'cookie-platform')
+        assert set(offered) == set(CookieManager.PLATFORMS), (
+            'a platform the panel lists but the manager refuses saves nothing, and a platform with '
+            'a file but no row is a cookie nobody can refresh from the UI'
+        )
+        assert len(offered) == len(set(offered)), f'a platform is listed twice: {offered}'
+
+    def test_the_data_source_list_offers_exactly_the_platforms_that_really_crawl(self):
+        """The canvas and the Cookie panel look alike and answer different
+        questions: one is "can this be logged into", the other "can this be
+        crawled". A capture-only platform that leaked into the node would produce
+        a run that refuses on its first node."""
+        workflow_src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        offered = set()
+        for line in workflow_src.splitlines():
+            value = re.search(r'<option value="(\w+)"', line)
+            if value and f"I18n.t('platform.{value.group(1)}')" in line:
+                offered.add(value.group(1))
+        assert offered == {p for p in CRAWLERS if is_crawlable(p)}
+
+    def test_the_steps_tell_the_user_to_press_buttons_that_are_actually_there(self):
+        """Every platform's steps name two controls by their exact label. The panel
+        renamed both a while ago and nothing went red: the guidance quietly started
+        pointing at buttons no longer on screen, which no Python test can see unless
+        somebody asks it to."""
+        app_src = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        en_src = app_src[app_src.index('dict: {') : app_src.index('zh: {')]
+        zh_src = app_src[app_src.index('zh: {') : app_src.index('_missing:')]
+
+        def labels(block: str) -> dict:
+            found = dict(re.findall(r"'(cookies\.(?:generate|doneBtn))': '([^']*)'", block))
+            assert len(found) == 2, f'the panel labels moved, and this test cannot follow: {found}'
+            return found
+
+        for language, table, panel in (('zh', i18n._ZH, labels(zh_src)), ('en', i18n._EN, labels(en_src))):
+            for platform in CookieManager.PLATFORMS:
+                steps = table[f'cookie.{platform}.steps']
+                for key in ('cookies.generate', 'cookies.doneBtn'):
+                    assert panel[key] in steps, f'{platform}/{language}: steps never name the real "{key}" label'
+
+    def test_every_cookie_platform_is_spelled_in_both_panel_languages(self):
+        html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
+        keys = set(re.findall(r'data-i18n="(platform\.[\w]+)"', self._select_block(html)))
+        assert keys == {f'platform.{p}' for p in CookieManager.PLATFORMS}
+
+    @staticmethod
+    def _select_block(html: str) -> str:
+        start = html.index('id="cookie-platform"')
+        return html[start : html.index('</select>', start)]

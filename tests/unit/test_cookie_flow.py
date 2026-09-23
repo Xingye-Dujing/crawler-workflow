@@ -4,8 +4,9 @@ import pytest
 
 #: The catalogue itself, for the one assertion that has to read the message table
 #: rather than the rendered flow (a key must be *absent*, not merely unwritten).
+from crawlers import cookie_hosts
 from i18n import _ZH as _ZH_MESSAGES
-from services.cookie_flow import flow_for, normalize_entry_url
+from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.unit
@@ -123,3 +124,80 @@ class TestCatalogue:
             assert not flow['purpose'].startswith('cookie.'), f'{platform} has no English text'
         finally:
             set_lang('zh')
+
+
+class TestCookieOwnership:
+    """Which cookies belong in one platform's file.
+
+    The capture reads only the page the browser is on, and a login walks through
+    an identity provider to get there — YouTube behind a Google sign-in, Instagram
+    behind Facebook. Keeping ``.google.com`` out of ``youtube_cookies.json`` is not
+    tidiness: those rows open Gmail and Drive, and a file full of them would also
+    hide the fact that the session the crawl needs was never captured.
+    """
+
+    def test_the_platform_host_and_its_extra_planting_hosts_are_the_allowlist(self):
+        class _Crawler:
+            domain = 'www.youtube.com'
+            cookie_domains = ('youtube.com', 'm.youtube.com')
+
+        assert crawler_hosts(_Crawler()) == ('www.youtube.com', 'youtube.com', 'm.youtube.com')
+
+    def test_a_class_that_lists_no_extra_hosts_still_answers_with_its_own(self):
+        class _Crawler:
+            domain = 'x.com'
+
+        assert crawler_hosts(_Crawler()) == ('x.com',)
+
+    def test_an_empty_domain_is_not_turned_into_an_empty_string_entry(self):
+        class _Crawler:
+            domain = ''
+            cookie_domains = ('', 'twitter.com')
+
+        assert crawler_hosts(_Crawler()) == ('twitter.com',)
+
+    def test_the_saved_session_of_the_platform_itself_is_kept(self):
+        cookies = [
+            {'name': 'SID', 'domain': '.youtube.com'},
+            {'name': '__Secure-1PSID', 'domain': 'www.youtube.com'},
+        ]
+        kept, dropped = retain_for_platform(cookies, ('www.youtube.com',))
+        assert [c['name'] for c in kept] == ['SID', '__Secure-1PSID']
+        assert dropped == 0
+
+    def test_the_identity_provider_session_goes_back_to_the_provider(self):
+        cookies = [{'name': 'SID', 'domain': '.google.com'}, {'name': 'auth_token', 'domain': '.x.com'}]
+        kept, dropped = retain_for_platform(cookies, ('x.com', 'twitter.com'))
+        assert [c['name'] for c in kept] == ['auth_token']
+        assert dropped == 1
+
+    def test_a_lookalike_suffix_is_not_the_platform(self):
+        """``evilyoutube.com`` ends in the platform's name and in nothing else —
+        the same confusion the entry-link allowlist already refuses."""
+        kept, dropped = retain_for_platform([{'name': 'SID', 'domain': '.evilyoutube.com'}], ('www.youtube.com',))
+        assert kept == [] and dropped == 1
+
+    def test_a_paste_with_no_domain_to_judge_is_kept(self):
+        """Extensions and hand-written JSON routinely omit the domain. Refusing
+        those would block the panel's own 粘贴 Cookies JSON path, so an entry that
+        cannot be judged is accepted rather than guessed away."""
+        kept, dropped = retain_for_platform([{'name': 'SUB', 'value': 'x'}, {'name': 'A', 'domain': '  '}, 'junk'], ())
+        assert len(kept) == 3 and dropped == 0
+
+    def test_the_count_returned_is_the_count_dropped_not_the_count_kept(self):
+        cookies = [{'name': 'a', 'domain': '.example.com'}, {'name': 'b', 'domain': '.other.test'}]
+        kept, dropped = retain_for_platform(cookies, ('example.com',))
+        assert (len(kept), dropped) == (1, 1)
+
+    def test_nothing_at_all_is_an_answer_with_nothing_dropped(self):
+        assert retain_for_platform([], ('example.com',)) == ([], 0)
+        assert retain_for_platform(None, ('example.com',)) == ([], 0)
+
+    def test_a_cookie_host_that_the_platform_itself_lists_always_passes(self):
+        """The overseas platforms are the reason this filter exists, so their own
+        hosts must clear it — a false refusal here would empty a fresh login."""
+        for platform, hosts in (('twitter', ('x.com', 'twitter.com')), ('youtube', ('www.youtube.com',))):
+            cookies = [{'name': 'session', 'domain': f'.{host}'} for host in hosts]
+            kept, dropped = retain_for_platform(cookies, cookie_hosts(platform))
+            assert dropped == 0, f'{platform} rejected its own host'
+            assert len(kept) == len(hosts)

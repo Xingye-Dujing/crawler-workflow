@@ -935,6 +935,12 @@
             <option value="xiaohongshu" data-i18n="platform.xiaohongshu">Xiaohongshu</option>
             <option value="bilibili" data-i18n="platform.bilibili">Bilibili</option>
             <option value="douyin" data-i18n="platform.douyin">Douyin</option>
+            <!-- Cookie capture only for now: these three hold a saved login the
+                 panel can produce, while no crawler reads it yet. The data-source
+                 node list is separate and must not gain them until it does. -->
+            <option value="twitter" data-i18n="platform.twitter">X (Twitter)</option>
+            <option value="instagram" data-i18n="platform.instagram">Instagram</option>
+            <option value="youtube" data-i18n="platform.youtube">YouTube</option>
           </select>
         </div>
         <!-- Filled from /api/cookies/flow: which page to log in on and why.

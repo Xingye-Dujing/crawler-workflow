@@ -35,6 +35,40 @@ def flow_for(platform: str, allowed_hosts: tuple = (), login_url: str = '') -> d
     }
 
 
+def crawler_hosts(crawler) -> tuple:
+    """Every host *crawler* will plant its saved cookies on.
+
+    Read off the object that is about to be used, so the login browser that
+    captures a session and the crawl that replays it cannot disagree.
+    """
+    return tuple(host for host in (getattr(crawler, 'domain', ''), *getattr(crawler, 'cookie_domains', ())) if host)
+
+
+def retain_for_platform(cookies: list, allowed_hosts: tuple) -> tuple[list, int]:
+    """The cookies belonging to this platform, and how many were dropped.
+
+    A login walks through an identity provider (Google behind YouTube, Facebook
+    behind Instagram) and the capture reads whatever page the browser was left on
+    sitting there. Storing that provider's session in ``youtube_cookies.json``
+    would hand a Google-wide credential to a YouTube crawl and hide the fact that
+    the YouTube cookies themselves were missed, so a foreign domain goes.
+
+    An entry with no domain to judge is kept: hand-pasted JSON routinely omits it,
+    and refusing the whole paste would be a worse answer than accepting the guess.
+    """
+    hosts = tuple(allowed_hosts or ())
+    kept: list = []
+    dropped = 0
+    for raw in cookies or []:
+        domain = str(raw.get('domain') or '') if isinstance(raw, dict) else ''
+        domain = domain.strip().lstrip('.').lower()
+        if not domain or _host_allowed(domain, hosts):
+            kept.append(raw)
+        else:
+            dropped += 1
+    return kept, dropped
+
+
 def normalize_entry_url(candidate: str, allowed_hosts: tuple) -> str:
     """Return *candidate* as an https URL to open, or '' when it is not one.
 

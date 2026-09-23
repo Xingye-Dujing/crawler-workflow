@@ -267,30 +267,32 @@ _ZH = {
     'cookie.jobCancelled': '{platform} 登录已取消',
     'cookie.windowClosed': '登录窗口被关闭，未捕获 Cookie；请重新发起登录',
     'cookie.noCookies': '等待结束仍未获得 Cookie——若登录未完成，请重试',
+    'cookie.droppedForeign': (
+        '已忽略 {n} 条不属于 {platform} 的 Cookie：登录常会经过第三方站点，它们不进本平台的 Cookie 文件'
+    ),
+    'cookie.allForeign': '{platform} 的 Cookie 一条都没保存：粘贴的内容全属于其它站点，请粘贴该平台自身的 Cookie',
     # ── Cookie 用途与获取步骤（面板直接把这些讲给用户） ──────────
     'cookie.zhihu.purpose': '解锁知乎搜索结果与回答、评论正文；未登录时知乎常常只回一个登录引导页。',
     'cookie.zhihu.steps': (
-        '1. 点「浏览器登录」，在弹出的 Chrome 窗口里登录知乎（扫码或手机号）\n'
+        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录知乎（扫码或手机号）\n'
         '2. 随便翻一页，确认右上角已是你的头像\n'
-        '3. 回到本面板点「我已登录，保存」'
+        '3. 回到本面板点「已完成登录」'
     ),
     'cookie.weibo.purpose': '解锁微博搜索（s.weibo.com）与评论 JSON 接口；未登录会被跳回 passport 二维码页。',
     'cookie.weibo.steps': (
-        '1. 点「浏览器登录」，在窗口里登录微博\n'
-        '2. 手动搜一次关键词，能看到微博列表即可\n'
-        '3. 回到本面板点「我已登录，保存」'
+        '1. 点「浏览器生成」，在窗口里登录微博\n2. 手动搜一次关键词，能看到微博列表即可\n3. 回到本面板点「已完成登录」'
     ),
     'cookie.bilibili.purpose': '解锁 B 站搜索、视频详情与评论区；未登录时搜索会被折叠，评论只给前几条。',
     'cookie.bilibili.steps': (
-        '1. 点「浏览器登录」，在弹出的 Chrome 窗口里登录哔哩哔哩（扫码或手机号）\n'
+        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录哔哩哔哩（扫码或手机号）\n'
         '2. 打开任意视频并滚到评论区，能看到评论列表即可\n'
-        '3. 回到本面板点「我已登录，保存」'
+        '3. 回到本面板点「已完成登录」'
     ),
     'cookie.douyin.purpose': '解锁抖音网页版搜索、视频文案与评论区；未登录常常只给首屏且看不到评论。',
     'cookie.douyin.steps': (
-        '1. 点「浏览器登录」，在弹出的 Chrome 窗口里登录抖音网页版（扫码或手机号）\n'
+        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录抖音网页版（扫码或手机号）\n'
         '2. 打开任意视频，右侧能看到评论区即可\n'
-        '3. 回到本面板点「我已登录，保存」\n'
+        '3. 回到本面板点「已完成登录」\n'
         '提示：抖音网页版对自动化浏览器较敏感，若窗口里出现滑块验证，请在窗口内手动完成后再保存。'
     ),
     'crawl.dy.start': '[抖音搜索] 开始搜索关键词: "{kw}"，目标 {n} 条（抖音只接受可见窗口，已自动改用可见窗口）',
@@ -322,9 +324,32 @@ _ZH = {
     '请先改用已支持的平台，或等待该平台的抓取实现完成',
     'cookie.xiaohongshu.purpose': '解锁小红书搜索、笔记正文与评论；未登录会撞登录墙且只给首屏。',
     'cookie.xiaohongshu.steps': (
-        '1. 点「浏览器登录」，在窗口里登录小红书\n'
-        '2. 打开任意一篇笔记，能看到评论区即可\n'
-        '3. 回到本面板点「我已登录，保存」'
+        '1. 点「浏览器生成」，在窗口里登录小红书\n2. 打开任意一篇笔记，能看到评论区即可\n3. 回到本面板点「已完成登录」'
+    ),
+    'cookie.twitter.purpose': (
+        '解锁 X（推特）的搜索、用户时间线、推文正文与回复；未登录时这些页面基本只回一个登录引导页。'
+    ),
+    'cookie.twitter.steps': (
+        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录 x.com（账号密码或手机号+验证码）\n'
+        '2. 随便打开一条推文，确认回复区能加载出来（auth_token 与 ct0 两条 Cookie 缺一不可）\n'
+        '3. 回到本面板点「已完成登录」\n'
+        '提示：X 对新设备登录常会追加一次验证码，请在同一个窗口里做完再保存。'
+    ),
+    'cookie.instagram.purpose': '解锁 Instagram 的博主帖子、标签页与评论；未登录时页面只给登录墙，接口也会拒绝。',
+    'cookie.instagram.steps': (
+        '1. 点「浏览器生成」，在窗口里登录 instagram.com\n'
+        '2. 打开任意一个帖子页，能看到评论区即可\n'
+        '3. 回到本面板点「已完成登录」\n'
+        '提示：若登录被转到 Facebook，请等它回到 Instagram 之后再点保存。'
+    ),
+    'cookie.youtube.purpose': (
+        '解锁 YouTube 的订阅、播放列表、历史记录与评论；未登录也能看公开视频，但这些页面常被限流或折叠。'
+    ),
+    'cookie.youtube.steps': (
+        '1. 点「浏览器生成」，在弹出的 Chrome 窗口里登录 YouTube（Google 账号）\n'
+        '2. 回到 youtube.com 首页，确认右上角已是你的头像\n'
+        '3. 回到本面板点「已完成登录」——保存前浏览器会自动回到 YouTube 页面，'
+        'Google 账号自身的 Cookie 不会被写进本平台文件'
     ),
     'cookie.openedEntry': '登录浏览器已打开：{url}',
     'cookie.entryRejected': (
@@ -793,32 +818,40 @@ _EN = {
     'cookie.jobCancelled': '{platform} login cancelled',
     'cookie.windowClosed': 'The login window was closed before cookies could be captured; start again',
     'cookie.noCookies': 'No cookies captured before the wait ended — retry if the login was unfinished',
+    'cookie.droppedForeign': (
+        'Ignored {n} cookie(s) that do not belong to {platform}: a login usually passes through a '
+        'third-party site, and those cookies do not go into this platform’s file'
+    ),
+    'cookie.allForeign': (
+        'Nothing was saved for {platform}: every cookie in that paste belongs to another site — paste the '
+        'cookies of this platform itself'
+    ),
     # ── cookie purposes and how to obtain them (shown in the panel) ──
     'cookie.zhihu.purpose': 'Unlocks Zhihu search plus answer and comment bodies; logged out, Zhihu often '
     'returns nothing but a login prompt.',
     'cookie.zhihu.steps': (
-        '1. Press "Login via browser" and sign in to Zhihu in the Chrome window that opens (QR or phone)\n'
+        '1. Press "Generate via Browser" and sign in to Zhihu in the Chrome window that opens (QR or phone)\n'
         '2. Browse one page and confirm your own avatar is in the top-right\n'
         '3. Come back here and press "Done — I logged in"'
     ),
     'cookie.weibo.purpose': 'Unlocks Weibo search (s.weibo.com) and the comment JSON API; logged out you are '
     'bounced back to the passport QR page.',
     'cookie.weibo.steps': (
-        '1. Press "Login via browser" and sign in to Weibo in that window\n'
+        '1. Press "Generate via Browser" and sign in to Weibo in that window\n'
         '2. Search one keyword and confirm the post list renders\n'
         '3. Come back here and press "Done — I logged in"'
     ),
     'cookie.bilibili.purpose': 'Unlocks Bilibili search, video metadata and comments; logged out, search is '
     'collapsed and only the first few comments show.',
     'cookie.bilibili.steps': (
-        '1. Press "Login via browser" and sign in to Bilibili in the Chrome window (QR or phone)\n'
+        '1. Press "Generate via Browser" and sign in to Bilibili in the Chrome window (QR or phone)\n'
         '2. Open any video and scroll to the comment area until the list renders\n'
         '3. Come back here and press "Done \u2014 I logged in"'
     ),
     'cookie.douyin.purpose': 'Unlocks Douyin web search, video captions and comments; logged out you usually '
     'get only the first screen and no comments.',
     'cookie.douyin.steps': (
-        '1. Press "Login via browser" and sign in to Douyin web in that window (QR or phone)\n'
+        '1. Press "Generate via Browser" and sign in to Douyin web in that window (QR or phone)\n'
         '2. Open any video until the comment panel on the right renders\n'
         '3. Come back here and press "Done \u2014 I logged in"\n'
         'Note: Douyin is quick to raise a slider captcha for automated browsers \u2014 finish it in that '
@@ -855,9 +888,33 @@ _EN = {
     'cookie.xiaohongshu.purpose': 'Unlocks Xiaohongshu search, note bodies and comments; logged out you hit the '
     'login wall and only the first screen shows.',
     'cookie.xiaohongshu.steps': (
-        '1. Press "Login via browser" and sign in to Xiaohongshu in that window\n'
+        '1. Press "Generate via Browser" and sign in to Xiaohongshu in that window\n'
         '2. Open any note and confirm the comment area renders\n'
         '3. Come back here and press "Done — I logged in"'
+    ),
+    'cookie.twitter.purpose': 'Unlocks X (Twitter) search, user timelines, tweet bodies and replies; logged out '
+    'those pages answer with a login wall.',
+    'cookie.twitter.steps': (
+        '1. Press "Generate via Browser" and sign in to x.com in the Chrome window (password or phone code)\n'
+        '2. Open any tweet until the replies render — both auth_token and ct0 have to be present\n'
+        '3. Come back here and press "Done \u2014 I logged in"\n'
+        'Note: X often asks a new device for one more verification code — finish it in that window before saving.'
+    ),
+    'cookie.instagram.purpose': 'Unlocks Instagram profiles, hashtag grids and comments; logged out the page shows '
+    'a login wall and its endpoints refuse the request.',
+    'cookie.instagram.steps': (
+        '1. Press "Generate via Browser" and sign in to instagram.com in that window\n'
+        '2. Open any post until the comment area renders\n'
+        '3. Come back here and press "Done \u2014 I logged in"\n'
+        'Note: if the login detours through Facebook, wait until Instagram is back before saving.'
+    ),
+    'cookie.youtube.purpose': 'Unlocks YouTube subscriptions, playlists, history and comments; public videos play '
+    'without a login, but those pages are throttled or collapsed.',
+    'cookie.youtube.steps': (
+        '1. Press "Generate via Browser" and sign in to YouTube (a Google account) in the Chrome window\n'
+        '2. Return to the youtube.com home page and check your avatar is showing\n'
+        '3. Come back here and press "Done \u2014 I logged in" — the browser is pulled back to YouTube first, '
+        'so the Google account\u2019s own cookies never land in this platform\u2019s file'
     ),
     'cookie.openedEntry': 'Login browser opened at: {url}',
     'cookie.entryRejected': 'That link is not on a {platform} domain, so the platform login page was used instead '

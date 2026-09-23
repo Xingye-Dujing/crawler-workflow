@@ -7,9 +7,11 @@ Two read/write surfaces live here and neither one should surprise the frontend:
   ``Config`` object on every request (a stale copy would make the settings
   panel a lie after an env change), not that any particular default is used.
 * ``/api/cookies/*`` — credential bookkeeping. ``status`` only reports whether a
-  file exists, and ``save`` refuses anything but the four known platforms,
-  because the platform name becomes a path component. ``/api/cookies/generate``
-  is deliberately untouched here: it drives a real browser and sleeps.
+  file exists, and ``save`` refuses anything but the platforms
+  ``CookieManager.PLATFORMS`` lists, because the platform name becomes a path
+  component — and it drops cookies that belong to some other site.
+  ``/api/cookies/generate`` is deliberately untouched here: it drives a real
+  browser and sleeps.
 """
 
 import pytest
@@ -70,6 +72,41 @@ class TestCookieEndpoints:
         assert saved.exists()
         assert app_module.cookie_manager.load('weibo') == [{'name': 'SUB', 'value': 'x'}]
         assert client.get('/api/cookies/status').get_json()['cookies']['weibo'] is True
+
+    def test_pasted_cookies_from_another_site_never_enter_the_platform_file(self, client, app_module):
+        """An extension export carries whatever the browser held, and a YouTube
+        session is issued through a Google sign-in — so ``.google.com`` rows sit
+        in the same paste. Those open Gmail and Drive, and have no business in a
+        file named after YouTube. A lookalike suffix must not pass either, and an
+        entry with no domain is kept because pastes routinely omit it."""
+        payload = {
+            'platform': 'youtube',
+            'cookies': [
+                {'name': 'SID', 'value': 'a', 'domain': '.youtube.com'},
+                {'name': '__Secure-1PSID', 'value': 'b', 'domain': 'www.youtube.com'},
+                {'name': 'SID', 'value': 'c', 'domain': '.google.com'},
+                {'name': 'session', 'value': 'd', 'domain': '.evilyoutube.com'},
+                {'name': 'PREF', 'value': 'e'},
+            ],
+        }
+        response = client.post('/api/cookies/save', json=payload)
+        body = response.get_json()
+        assert response.status_code == 200
+        assert body['count'] == 3
+        assert [c['name'] for c in app_module.cookie_manager.load('youtube')] == ['SID', '__Secure-1PSID', 'PREF']
+
+    def test_a_paste_of_nobody_s_here_is_refused_instead_of_saved_empty(self, client, app_module):
+        """Writing an empty list would leave ``youtube_cookies.json`` behind, and
+        the panel's exists-flag would call that "cookie configured"."""
+        # The data dir is session-wide (the app has no per-test override), and the
+        # test above just saved a YouTube file into it — start from a known blank.
+        app_module.cookie_manager.delete('youtube')
+        response = client.post(
+            '/api/cookies/save', json={'platform': 'youtube', 'cookies': [{'name': 'SID', 'domain': '.google.com'}]}
+        )
+        assert response.status_code == 400
+        assert response.get_json()['ok'] is False
+        assert app_module.cookie_manager.exists('youtube') is False
 
     @pytest.mark.parametrize(
         ('payload', 'expected'),
