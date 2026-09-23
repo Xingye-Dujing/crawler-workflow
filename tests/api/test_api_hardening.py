@@ -42,6 +42,7 @@ BODY_ROUTES = [
     '/api/data/preview',
     '/api/export/save',
     '/api/exports/delete',
+    '/api/history/delete',
     '/api/llm/test',
     '/api/report/generate',
     '/api/runs/delete',

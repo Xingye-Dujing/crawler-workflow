@@ -52,7 +52,10 @@ vm.runInContext(
 
 /* Installed after the load so the real function bodies see them. */
 sandbox.showToast = (m) => toasts.push(String(m));
-sandbox.showDialog = async (spec) => (typeof answers.dialog === 'function' ? answers.dialog(spec) : answers.dialog);
+sandbox.showDialog = async (spec) => {
+    answers.spec = spec;
+    return typeof answers.dialog === 'function' ? answers.dialog(spec) : answers.dialog;
+};
 /* One answer for every URL would be a lie: `execute()` starts by probing the
  * cookie status, then the run-gate settings, then posts the run — a single shared
  * object would satisfy one of those three and silently abort the rest, and the
@@ -561,5 +564,83 @@ out.language_switched = {
 doc.body.dataset.lang = 'zh';
 pa.setLang('zh');
 out.language_back = { tag: doc.body.dataset.lang };
+
+/* ── execution history: delete one recorded run ─────────────────────────
+   The panel used to offer only 清空历史, so removing one bad run cost the
+   whole comparison chart. A row's button now decides: which id is sent, whether
+   a decline sends nothing, and what the toast says when the server reports
+   that the run was already gone. */
+const HISTORY_RUNS = {
+    ok: true,
+    runs: [
+        { run_id: 'r-keep', workflow_name: '甲流程', started_at: '2026-09-24T01:00:00', metric_count: 3 },
+        { run_id: 'r-del', workflow_name: '乙流程', started_at: '2026-09-24T02:00:00', metric_count: 2 },
+    ],
+    workflow_names: ['甲流程', '乙流程'],
+};
+fresh();
+route('/api/history/runs', HISTORY_RUNS);
+route('/api/history/series', { ok: true, rows: [] });
+pa.historyPanel._renderChart = () => {}; // the chart is stats.js, not this decision
+await pa.historyPanel._loadRuns();
+const wrap = id('history-runs-wrap');
+out.history_rows = {
+    buttons: (wrap.innerHTML.match(/history-del/g) || []).length,
+    // The id sits in an attribute built by string concatenation, so a quote in it
+    // would end the attribute and let the rest become markup.
+    ids: (wrap.innerHTML.match(/data-run-id="([^"]*)"/g) || []),
+    label: vm.runInContext("I18n.t('history.remove')", sandbox),
+    reloads: requests.length,
+};
+
+fresh();
+route('/api/history/runs', HISTORY_RUNS);
+route('/api/history/series', { ok: true, rows: [] });
+answers.dialog = false; // 「取消」
+await pa.historyPanel.deleteRun('r-del');
+out.history_declined = { requested: requests.length, toasts: toasts.slice() };
+
+fresh();
+route('/api/history/runs', HISTORY_RUNS);
+route('/api/history/series', { ok: true, rows: [] });
+route('/api/history/delete', { ok: true, deleted: 2, run_id: 'r-del' });
+answers.dialog = true;
+await pa.historyPanel.deleteRun('r-del');
+const delPost = requests.find((r) => r.url.indexOf('/api/history/delete') === 0);
+out.history_deleted = {
+    method: delPost ? delPost.method : null,
+    body: delPost ? JSON.parse(delPost.body) : null,
+    askedMessage: answers.spec ? answers.spec.message : null,
+    reloadedRuns: requests.filter((r) => r.url.indexOf('/api/history/runs') === 0).length,
+    reloadedSeries: requests.filter((r) => r.url.indexOf('/api/history/series') === 0).length,
+    toasts: toasts.slice(),
+};
+
+fresh();
+route('/api/history/runs', HISTORY_RUNS);
+route('/api/history/series', { ok: true, rows: [] });
+route('/api/history/delete', { ok: true, deleted: 0, run_id: 'r-aged' });
+answers.dialog = true;
+await pa.historyPanel.deleteRun('r-aged');
+out.history_already_gone = { toasts: toasts.slice() };
+
+fresh();
+route('/api/history/runs', HISTORY_RUNS);
+route('/api/history/series', { ok: true, rows: [] });
+route('/api/history/delete', { ok: false, error: 'no run id given' });
+answers.dialog = true;
+await pa.historyPanel.deleteRun('r-x');
+out.history_refused = {
+    toasts: toasts.slice(),
+    // A refusal must not leave the panel showing a row the server says is still there
+    // — but it also must not pretend to have refreshed anything.
+    reloaded: requests.filter((r) => r.url.indexOf('/api/history/runs') === 0).length,
+};
+
+fresh();
+answers.dialog = true;
+route('/api/history/delete', { ok: true, deleted: 1 });
+await pa.historyPanel.deleteRun('   ');
+out.history_blank_id = { requested: requests.length };
 
 process.stdout.write(JSON.stringify(out));

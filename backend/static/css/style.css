@@ -1369,6 +1369,29 @@ table.history-runs-table tr:hover td {
   background: var(--hover);
 }
 
+/* One delete button per recorded run. Square and narrow on purpose: the runs
+   table lives in a resizable panel, and a wide action column is a horizontal
+   scrollbar at the panel's minimum width. */
+table.history-runs-table td.history-ops {
+  text-align: right;
+  padding: 2px 4px;
+  white-space: normal;
+}
+button.history-del {
+  font-size: 11px;
+  font-family: var(--font);
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+button.history-del:hover {
+  color: var(--err);
+  border-color: var(--err);
+}
+
 /* ── Dashboard ──────────────────────────────────────────────────────────── */
 #dashboard-panel {
   position: fixed;

@@ -4404,6 +4404,26 @@ def history_clear():
     return jsonify({'ok': True, 'message': t('history.cleared')})
 
 
+@app.route('/api/history/delete', methods=['POST'])
+def history_delete():
+    """Forget one run's recorded metrics, leaving the rest of the history alone.
+
+    «清空历史» was the only door out, so one bad run meant losing the whole
+    comparison chart to get rid of it. The answer carries the deleted row count
+    because an id that matched nothing is a different truth from a deletion:
+    the panel is looking at a list it loaded a moment ago, and a run can have
+    been aged out by the retention policy in between.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    run_id = str(data.get('run_id') or '').strip()
+    if not run_id:
+        return jsonify({'ok': False, 'error': t('api.historyNoRunId')}), 400
+    deleted = history_service.delete_run(run_id)
+    return jsonify({'ok': True, 'deleted': deleted, 'run_id': run_id})
+
+
 # ─── Resumable runs ────────────────────────────────────────────
 
 

@@ -163,3 +163,43 @@ class TestHistoryEndpoints:
         assert [run['metric_count'] for run in stored if run['workflow_name'] == name] == [2]
         rows = client.get('/api/history/series', query_string={'workflow_name': name}).get_json()['rows']
         assert {row['node_id'] for row in rows} == {'node-2', 'node-3'}
+
+    def test_one_run_can_be_deleted_without_touching_the_others(self, client, recorded):
+        """The panel lists runs, so a run is the unit the user deletes. Before this
+        the only door was 清空历史, which meant losing the whole comparison chart to
+        get rid of one bad execution."""
+        kept = recorded('hist-keep', [('node-1', 'upload', 'rows', 'count', 7)])
+        gone = recorded(
+            'hist-gone', [('node-1', 'upload', 'rows', 'count', 3), ('node-2', 'analysis', 'rows', 'count', 3)]
+        )
+        body = client.post('/api/history/delete', json={'run_id': f'hist-{gone}'}).get_json()
+        assert body == {'ok': True, 'deleted': 2, 'run_id': f'hist-{gone}'}
+        listed = client.get('/api/history/runs', query_string={'limit': 50}).get_json()
+        names = [run['workflow_name'] for run in listed['runs']]
+        assert kept in names and gone not in names, f'the delete reached past its own run: {names}'
+        assert gone not in listed['workflow_names'], 'a name with no rows left must not stay in the filter list'
+        rows = client.get('/api/history/series', query_string={'workflow_name': gone}).get_json()['rows']
+        assert rows == []
+        assert client.get('/api/history/series', query_string={'workflow_name': kept}).get_json()['rows'], (
+            'the kept run lost its series'
+        )
+
+    def test_an_id_that_matches_nothing_says_so_instead_of_claiming_a_delete(self, client, recorded):
+        """The list on screen was loaded before the click, and the retention policy
+        can have aged the run out in between — "deleted 0" is the honest answer."""
+        name = recorded('hist-race', [('node-1', 'upload', 'rows', 'count', 1)])
+        body = client.post('/api/history/delete', json={'run_id': 'already-gone'}).get_json()
+        assert body['ok'] is True and body['deleted'] == 0
+        names = [run['workflow_name'] for run in client.get('/api/history/runs').get_json()['runs']]
+        assert name in names, 'a delete that found nothing must not have taken anything else either'
+
+    def test_a_request_naming_no_run_is_refused_with_a_reason(self, client, recorded):
+        name = recorded('hist-blank', [('node-1', 'upload', 'rows', 'count', 1)])
+        for payload in ({}, {'run_id': '   '}, {'run_id': None}):
+            response = client.post('/api/history/delete', json=payload)
+            # The text is catalogued, not a literal in the handler; the client sends
+            # X-Lang: en, so the English entry is what comes back.
+            assert response.status_code == 400, payload
+            assert response.get_json() == {'ok': False, 'error': 'no run id given, so no execution history was deleted'}
+        names = [run['workflow_name'] for run in client.get('/api/history/runs').get_json()['runs']]
+        assert name in names, 'a refused request must not have deleted anything'

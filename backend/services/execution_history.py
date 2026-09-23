@@ -166,3 +166,18 @@ class ExecutionHistoryService:
         conn.execute('DELETE FROM execution_history')
         conn.commit()
         conn.close()
+
+    def delete_run(self, run_id: str) -> int:
+        """Drop one run's recorded metrics; returns how many rows went.
+
+        The panel lists runs, so a run is the unit the user thinks they are
+        deleting. The count is the answer rather than a boolean because an id
+        that matches nothing must be reported as such — a row already aged out
+        by the retention policy is not a successful deletion.
+        """
+        conn = self._conn()
+        cur = conn.execute('DELETE FROM execution_history WHERE run_id = ?', (str(run_id),))
+        conn.commit()
+        conn.close()
+        logger.info(t('history.run_deleted', rid=run_id, n=cur.rowcount))
+        return int(cur.rowcount or 0)

@@ -418,6 +418,7 @@ _ZH = {
     'api.datasetInUse': '这些已保存的工作流仍在引用该文件，删除后它们会变成空数据源：{workflows}',
     'api.datasetTooBig': '文件太大没法存：{err}',
     'history.recorded': '「{wf}」已记录 {n} 条历史指标',
+    'history.run_deleted': '执行历史：删除运行 {rid} 的 {n} 条记录',
     'executor.task_failed': '任务失败：{err}',
     # ── misc ──────────────────────────────────────────────────
     'misc.history_failed': '记录执行历史失败（不影响流程）',
@@ -642,6 +643,7 @@ _ZH = {
     'history.cleared': '执行历史已清空',
     'api.workflowShapeInvalid': '工作流内容无法理解：需要带 nodes 列表的对象',
     'api.resumeMissing': '无法继续：运行记录 {rid} 已被清理，继续会变成一次全新的从零采集，请改用「重新运行」',
+    'api.historyNoRunId': '没有指定运行 ID，未删除任何执行历史',
     'run.store_unavailable': '本次运行无法开始：运行记录库打不开（磁盘满、文件损坏或被占用），未产生任何记录',
     'run.reportSaved': '报告已生成：{name}（{size} 字节）',
     'run.reportFailed': '报告生成失败：{err}',
@@ -1063,6 +1065,7 @@ _EN = {
     'api.datasetInUse': 'saved workflows still read this file, and deleting it would leave them empty: {workflows}',
     'api.datasetTooBig': 'That file is too big to store: {err}',
     'history.recorded': 'Recorded {n} history metric(s) for "{wf}"',
+    'history.run_deleted': 'Execution history: deleted {n} row(s) of run {rid}',
     'executor.task_failed': 'Task failed: {err}',
     # ── misc ──────────────────────────────────────────────────
     'misc.history_failed': 'Failed to record execution history (non-fatal)',
@@ -1290,6 +1293,7 @@ _EN = {
     'api.resumeMissing': (
         'cannot continue: run {rid} has been purged, so it would re-crawl everything — press Run instead'
     ),
+    'api.historyNoRunId': 'no run id given, so no execution history was deleted',
     'run.store_unavailable': 'this run could not begin: the run record store would not open (disk full, corrupt or '
     'locked file) — nothing was recorded',
     'run.reportSaved': 'Report written: {name} ({size} bytes)',

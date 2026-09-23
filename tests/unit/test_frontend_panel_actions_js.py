@@ -267,3 +267,47 @@ class TestTopBarWrites:
 
     def test_switching_back_restores_the_other_language(self, pa):
         assert pa['language_back']['tag'] == 'zh'
+
+
+class TestHistoryRowActions:
+    """One recorded run must be deletable on its own.
+
+    ``清空历史`` used to be the only door, so removing one bad run cost the whole
+    comparison chart. The row's button is now a decision of its own: what is sent,
+    what a decline sends, and what the toast claims when the server says the run
+    was already gone.
+    """
+
+    def test_every_listed_run_gets_its_own_button(self, pa):
+        rows = pa['history_rows']
+        assert rows['buttons'] == 2, 'one button per run, not one per metric or one per panel'
+        assert rows['ids'] == ['data-run-id="r-keep"', 'data-run-id="r-del"'], (
+            f'the id must survive as a plain attribute: {rows["ids"]}'
+        )
+        assert rows['label'] == '删除', 'the button says what it does, in the catalogue’s own words'
+
+    def test_declining_the_confirmation_sends_nothing(self, pa):
+        assert pa['history_declined'] == {'requested': 0, 'toasts': []}
+
+    def test_confirming_posts_the_id_and_redraws_both_halves_of_the_panel(self, pa):
+        deleted = pa['history_deleted']
+        assert deleted['method'] == 'POST'
+        assert deleted['body'] == {'run_id': 'r-del'}
+        assert 'r-del' in deleted['askedMessage'], 'the question has to name the run about to vanish'
+        assert deleted['reloadedRuns'] == 1 and deleted['reloadedSeries'] == 1, (
+            'the row disappears from the table AND from the chart, or the panel shows data the server no longer has'
+        )
+        assert deleted['toasts'] == ['该运行已从执行历史中删除']
+
+    def test_a_run_that_was_already_gone_is_reported_as_that(self, pa):
+        """``deleted: 0`` is not a deletion: the list on screen predates the click,
+        and the retention policy can have aged the run out in between."""
+        assert pa['history_already_gone']['toasts'] == ['这条运行已不在执行历史里（期间被自动清理）']
+
+    def test_a_refusal_is_shown_and_changes_nothing_on_screen(self, pa):
+        refused = pa['history_refused']
+        assert refused['reloaded'] == 0, 'a failed delete must not pretend to have refreshed'
+        assert refused['toasts'] and refused['toasts'][0].startswith('删除失败'), refused
+
+    def test_an_id_that_is_only_whitespace_does_not_open_a_dialog(self, pa):
+        assert pa['history_blank_id'] == {'requested': 0}

@@ -27,6 +27,7 @@ Marked ``integration`` so it runs with ``-m integration`` on a machine with Chro
 """
 
 import contextlib
+import json
 import os
 import socket
 import subprocess
@@ -429,6 +430,101 @@ def test_a_parallel_record_shows_its_names_and_chips_in_the_browser(app_url, dri
     assert facts['clippedChips'] == 0, f'a chip is silently cut off: {facts["chips"]}'
     assert facts['cellRight'] <= facts['windowWidth'] + 1, f'the name cell runs off the window: {facts}'
     assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
+
+
+def test_deleting_one_history_row_reaches_the_server_with_that_run_only(app_url, driver):
+    """The button is delegated, so only a real click proves it works.
+
+    The row list is re-rendered on every reload, which is exactly the shape a
+    per-row listener gets wrong (it would fire once per refresh). And the id has
+    to arrive as the clicked row's — a handler reading the wrong attribute deletes
+    somebody else's history.
+
+    ``fetch`` is stubbed for the whole test: this tier must not write, and a live
+    ``/api/history/delete`` would erase a record of the user's own runs.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        window.__calls = [];
+        window.fetch = function (url, opts) {
+            window.__calls.push({ url: String(url), body: opts && opts.body ? String(opts.body) : null });
+            const path = String(url).split('?')[0];
+            let payload = { ok: true };
+            if (path === '/api/history/runs') {
+                payload = { ok: true, workflow_names: ['甲', '乙'], runs: [
+                    { run_id: 'r-keep', workflow_name: '甲', started_at: '2026-09-24T01:00:00', metric_count: 3 },
+                    { run_id: 'r-del', workflow_name: '乙', started_at: '2026-09-24T02:00:00', metric_count: 2 },
+                ] };
+            } else if (path === '/api/history/series') {
+                payload = { ok: true, rows: [] };
+            } else if (path === '/api/history/delete') {
+                payload = { ok: true, deleted: 2, run_id: JSON.parse(opts.body).run_id };
+            }
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(payload),
+                text: () => Promise.resolve(JSON.stringify(payload)),
+            });
+        };
+        """,
+        [],
+    )
+    # The dialog is the app's own promise-based confirm; answer it without the
+    # user, and say yes.
+    driver.execute_script(
+        """
+        window.__dialogs = [];
+        window.showDialog = function (spec) {
+            window.__dialogs.push(spec && spec.message ? String(spec.message) : '');
+            return Promise.resolve(true);
+        };
+        """,
+        [],
+    )
+    # Opened through the real ``open()``: that is where the delegated listener for
+    # the row buttons is installed, so a test that only called ``_loadRuns()``
+    # would click a button nothing is listening to.
+    driver.execute_script('historyPanel._renderChart = function () {}; return historyPanel.open();', [])
+    clicked = driver.execute_script(
+        """
+        const buttons = document.querySelectorAll('#history-runs-wrap .history-del');
+        if (buttons.length !== 2) return { count: buttons.length };
+        const target = Array.from(buttons).find((b) => b.getAttribute('data-run-id') === 'r-del');
+        target.click();
+        return { count: buttons.length, found: !!target };
+        """,
+        [],
+    )
+    assert clicked['count'] == 2, f'one button per recorded run: {clicked}'
+    assert clicked['found'] is True, 'the clicked row is not addressable by its own run id'
+    deadline = time.monotonic() + 10
+    calls: list = []
+    while time.monotonic() < deadline:
+        calls = driver.execute_script('return window.__calls;', [])
+        if any(str(c['url']).split('?')[0] == '/api/history/delete' for c in calls):
+            break
+        time.sleep(0.2)
+    delete_calls = [c for c in calls if str(c['url']).split('?')[0] == '/api/history/delete']
+    assert delete_calls, f'the click never reached the server: {calls}'
+    assert json.loads(delete_calls[0]['body']) == {'run_id': 'r-del'}, delete_calls[0]['body']
+    asked = driver.execute_script('return window.__dialogs;', [])
+    assert asked and 'r-del' in asked[0], f'the confirmation must name the run about to vanish: {asked}'
+    layout = driver.execute_script(
+        """
+        const wrap = document.getElementById('history-runs-wrap');
+        const table = wrap.querySelector('table');
+        const buttons = Array.from(wrap.querySelectorAll('.history-del'));
+        return [document.documentElement.scrollWidth, document.documentElement.clientWidth,
+                table.scrollWidth - table.clientWidth,
+                buttons.filter((b) => b.scrollWidth - b.clientWidth > 1).length];
+        """,
+        [],
+    )
+    assert layout[0] <= layout[1] + 1, f'the extra column grew a page-level horizontal bar: {layout}'
+    assert layout[3] == 0, f'a delete button is cut off, so the user cannot read what it says: {layout}'
 
 
 @pytest.mark.parametrize('width', [1024, 1280])
