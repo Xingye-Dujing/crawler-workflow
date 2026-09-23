@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~2244 fast-tier cases; 2336 across all tiers)**:
+- **Automated tests (pytest, ~2323 fast-tier cases; 2424 across all tiers)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -135,6 +135,22 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
 - Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens
   a visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
   outcome the message catalog already explains — don't "fix" it by loosening assertions.
+- **YouTube is JSON-first, headless-safe, and its pagers are chosen by their list.** Measured 2026-09:
+  the crawler opens **one page** to read `ytcfg` (`INNERTUBE_API_KEY` + `INNERTUBE_CONTEXT`, never hardcoded —
+  they rotate) and then POSTs `youtubei/v1/{search,browse,next,player}` **from inside the page**
+  (`crawlers/engine/innertube.py`), which is same-origin, unsigned and cookie-carrying: search 0.68 s / 10 rows,
+  player 0.31 s / 11 KB, comments 0.32 s / 20 rows. Headless and visible returned identical rows and facts, so the
+  class sets **no** `never_headless`, and `page_load_strategy='eager'` + blocked images stay on (nothing is read from
+  pixels). Two rules that only measurement could establish, both in `innertube`:
+  **a channel's upload tab must be read off the loaded `/@handle/videos` document** — `browse(browseId, params=videos)`
+  answers the channel **HOME** (3.7 MB of shelves, other channels' videos mixed in), so the author mode navigates once
+  and pages from the document's own cursor; **a continuation token is picked by which list it is an element of**, not by
+  length or position — a comment round carries two 78-char sort-menu tokens that each replay page one (the ledger
+  swallows the duplicates, the walk reports success, and a 3000-comment video yields 20) plus one per reply-bearing
+  thread, while the list's own pager is its trailing element. `next(videoId)` is worse: six tokens, the comment one
+  78 chars on one video and 146 on another with 1412-char rail tokens beside it, so the first round *tries* candidates
+  until one answers with comments. `lockupViewModel` (the 2025+ view model) and `videoRenderer` coexist — search is the
+  former's absence, channel tabs the latter's — and a reader for one is silently empty on the other.
 - **Douyin is visible-window-only, DOM-only, and has no play count.** A headless
   browser is answered by 验证码中间页 on *every* navigation (measured), so the class
   sets ``never_headless = True`` and `_execute_source_node` downgrades to a visible
@@ -189,14 +205,17 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   withdrawn video (skip); any other non-zero code is the session/risk engine talking
   (stop, and refuse the run if nothing was collected).
 - **Cookie capture and crawling are different capabilities.** `CookieManager.PLATFORMS`
-  (8) is who the panel can log in; `crawlers.is_crawlable()` (6) is who has a crawler.
-  X/Instagram/YouTube sit in the first and not the second (`overseas.py` registers them
-  with `supports_crawl = False`), so `_execute_source_node` refuses them by
-  node label (`run.notCrawlable`) *before* buying a browser — never let a not-yet-built
-  platform fall through to an empty table, which reads as "this keyword found nothing".
-  A capture-only platform must still carry `domain` + `login_url` (the panel needs both),
-  stay OUT of the Data Source's platform list in `workflow.js`, and clear the three
-  parity guards in `test_frontend_contract.py::TestCookiePanelParity`.
+  (8) is who the panel can log in; `crawlers.is_crawlable()` (7) is who has a crawler.
+  X and Instagram sit in the first and not the second (`overseas.py` registers them with
+  `supports_crawl = False`), so `_execute_source_node` refuses them by node label
+  (`run.notCrawlable`) and validation refuses them earlier still (`engine.source_unknown_platform`,
+  because they are not in the matrix at all) — never let a not-yet-built platform fall through to
+  an empty table, which reads as "this keyword found nothing".
+  A capture-only platform must still carry `domain` + `login_url` (the panel needs both), stay OUT of
+  `crawl_capabilities.CAPABILITIES` (that tuple *is* the Data Source's platform list now — the browser
+  renders the select from `/api/capabilities`, so there is no JS list to keep in step), and clear the
+  parity guards in `test_frontend_contract.py::TestCookiePanelParity` plus
+  `test_crawl_capabilities.py::TestPlatformOrder`.
 - **Captured cookies are filtered to their own platform** (`cookie_flow.retain_for_platform`),
   because a login detours through an identity provider (Google behind YouTube, Facebook behind
   Instagram) and `driver.get_cookies()` reads only the *current* page: the worker therefore

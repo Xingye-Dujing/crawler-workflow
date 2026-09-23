@@ -76,19 +76,6 @@ def first_key(node, key: str, default=None):
     return found[0] if found else default
 
 
-def continuation_tokens(node, key: str = 'token') -> list:
-    """Every continuation token in a response tree, longest-first.
-
-    Sorting by length is what keeps paging sane: a continuation token is a few
-    hundred to a few thousand characters, while the short strings under the same
-    key are tracking or click params. Handing the crawler the longest first means
-    the "更多结果" token wins over a ``clickTrackingParams``-shaped string without
-    knowing either field's name.
-    """
-    found = [v for v in collect(node, key) if isinstance(v, str) and len(v) > 40]
-    return sorted(set(found), key=len, reverse=True)
-
-
 def runs_text(node) -> str:
     """Flatten a ``{runs: [{text}]}`` / ``{simpleText: ...}`` label to a string.
 

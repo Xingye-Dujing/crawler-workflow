@@ -20,6 +20,10 @@ _COMMENT_DOMAINS = (
     ('weibo', ('weibo.com', 'weibo.cn')),
     ('bilibili', ('bilibili.com',)),
     ('douyin', ('douyin.com', 'iesdouyin.com')),
+    # youtu.be is the share-link host: a person pasting a comment target gets
+    # ``https://youtu.be/<id>`` far more often than the watch URL, and dropping it
+    # would read as "this link is unsupported".
+    ('youtube', ('youtube.com', 'youtu.be')),
 )
 
 
@@ -30,6 +34,16 @@ def platform_for(url: str) -> str:
         if any(mark in u for mark in marks):
             return platform
     return ''
+
+
+def comment_platforms() -> tuple[str, ...]:
+    """The platforms the comment router can serve, in table order.
+
+    The console tells a user which links it accepts, and that sentence used to name
+    them by hand — so the fifth platform landed and two messages kept advertising
+    the old four. Read it from the table that actually decides.
+    """
+    return tuple(platform for platform, _marks in _COMMENT_DOMAINS)
 
 
 def split_urls(value) -> list[str]:

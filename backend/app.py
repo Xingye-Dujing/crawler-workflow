@@ -63,7 +63,11 @@ from services.run_store import (
 from services.visualizer import ChartConfigError, VisualizationService
 from services.workflow_manager import WorkflowManager
 from settings_store import all_settings, get_setting, save_settings
-from utils.helpers import platform_for, sanitize_filename, split_urls
+from utils.helpers import comment_platforms, platform_for, sanitize_filename, split_urls
+
+#: The comment router's supported platforms, spelled for the console. Read once
+#: because the table is a module constant; a test asserts it stays in step.
+_COMMENT_PLATFORMS = '/'.join(comment_platforms())
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
@@ -2264,13 +2268,13 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         else:
             urls.append(u)
     if dropped:
-        add_log(t('comment.unsupported', n=len(dropped)))
+        add_log(t('comment.unsupported', n=len(dropped), platforms=_COMMENT_PLATFORMS))
     if mismatched:
         add_log(t('comment.platformMismatch', n=len(mismatched), platform=want))
     if not urls:
         if mismatched:
             raise ValueError(t('comment.allMismatched', platform=want))
-        raise ValueError(t('comment.no_urls'))
+        raise ValueError(t('comment.no_urls', platforms=_COMMENT_PLATFORMS))
 
     limit = _safe_int(params.get('comment_limit'), 0, minimum=0)  # 0 = every comment
     part_size = _safe_int(params.get('part_size'), 0, minimum=0)  # 0 = single final file only
@@ -2327,16 +2331,15 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             _crawler, session = sessions[kind]
             if cursor_sink is not None:
                 cursor_sink({'url_index': idx - 1, 'url_total': len(urls)})
-            if kind == 'weibo':
-                rows, status = session.crawl_weibo(url, limit)
-            elif kind == 'xiaohongshu':
-                rows, status = session.crawl_xiaohongshu(url, limit)
-            elif kind == 'bilibili':
-                rows, status = session.crawl_bilibili(url, limit)
-            elif kind == 'douyin':
-                rows, status = session.crawl_douyin(url, limit)
-            else:
-                rows, status = session.crawl_zhihu(url, limit)
+            # The adapter is named after the platform the router picked, so adding
+            # a platform to ``utils.helpers._COMMENT_DOMAINS`` without writing its
+            # ``crawl_<platform>`` is a refusal here rather than the old silent
+            # fallback — which handed every unlisted link to the Zhihu reader and
+            # reported whatever that came back with as the site's comments.
+            adapter = getattr(session, f'crawl_{kind}', None)
+            if adapter is None:
+                raise ValueError(t('comment.noAdapter', platform=kind, url=url))
+            rows, status = adapter(url, limit)
             counts[status] = counts.get(status, 0) + 1
             writer = _writer_for(idx, url)
             fresh = []

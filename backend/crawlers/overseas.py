@@ -1,11 +1,14 @@
-"""Cookie capture for the overseas platforms (X/Twitter, Instagram, YouTube).
+"""Cookie capture for the overseas platforms that still have no crawl.
 
-These three are registered so the Cookie panel can log a session in and store it
-*before* any crawl exists for them — the same shape Bilibili and Douyin had while
-only their capture was built. ``supports_crawl`` stays False, so the canvas and
-``/api/workflow/execute`` refuse them by node label
-(``crawl.platformNotCrawlable``) instead of handing back an empty table that
+X (twitter) and Instagram are registered here so the Cookie panel can log a
+session in and store it *before* any crawl exists for them — the shape Bilibili
+and Douyin had while only their capture was built. ``supports_crawl`` stays
+False, so the canvas and ``/api/workflow/execute`` refuse them by node label
+(``engine.source_unknown_platform``) instead of handing back an empty table that
 would read as "this keyword found nothing".
+
+YouTube left this file for ``crawlers/youtube.py`` when its crawl landed; the
+same split applies to whichever of these two is next.
 
 What each class carries is only the two facts the panel needs and cannot know on
 its own: the hosts its cookies are valid on (which is also the allowlist a pasted
@@ -55,18 +58,3 @@ class InstagramCrawler(LoginOnlyCrawler):
 
     domain = 'www.instagram.com'
     login_url = 'https://www.instagram.com/'
-
-
-class YouTubeCrawler(LoginOnlyCrawler):
-    """YouTube.
-
-    ``.google.com`` is deliberately NOT one of its hosts even though the sign-in
-    passes through it: those cookies open Gmail and Drive, and a YouTube cookie
-    file must not become a copy of the whole Google account. The session YouTube
-    actually sends lives on ``.youtube.com`` (``SID``/``__Secure-1PSID`` and
-    friends), which is what the panel stores after pulling the browser back to
-    its own page.
-    """
-
-    domain = 'www.youtube.com'
-    login_url = 'https://www.youtube.com/'

@@ -16,7 +16,7 @@ import pytest
 from crawlers.engine import popup
 from crawlers.engine.counters import clean, first_int, has_count, parse_count, to_int
 from crawlers.engine.feed import wait_for, walk_feed
-from crawlers.engine.jsonpath import collect, continuation_tokens, first_key, get_in, runs_text
+from crawlers.engine.jsonpath import collect, first_key, get_in, runs_text
 from crawlers.engine.pager import walk_pages
 from crawlers.engine.wall import looks_like_login_page
 
@@ -123,10 +123,93 @@ def test_collect_survives_a_self_referencing_tree():
     assert collect(node, 'videoId') == []
 
 
-def test_continuation_tokens_prefers_the_longest_and_drops_short_lookalikes():
-    long_token = 'T' * 900
-    tree = {'x': {'token': 'short'}, 'y': {'token': long_token}, 'z': {'token': 'M' * 200}}
-    assert continuation_tokens(tree) == [long_token, 'M' * 200]
+def test_continuation_tokens_are_read_in_document_order_where_the_api_needs_it():
+    """The innertube helper keeps the site's order instead of guessing by length.
+
+    Which is not a rule for *choosing* one: the two measurements recorded in
+    ``innertube.pager_tokens`` point opposite ways, so the helper hands over all
+    of them and the caller decides — the comment walk by trying, the list pager by
+    the markup that marks it.
+    """
+    from crawlers.engine.innertube import grid_token, pager_tokens
+
+    tree = {
+        'a': {'continuationCommand': {'token': 'S' * 78}},
+        'b': [{'continuationCommand': {'token': 'L' * 1112}}],
+        'c': {'continuationCommand': {'token': ''}},
+        'd': {'clickTrackingParams': 'T' * 900},
+    }
+    assert pager_tokens(tree) == ['S' * 78, 'L' * 1112]
+    # Unmarked by ``continuationItemRenderer``, none of them is a list pager.
+    assert grid_token(tree) == ''
+    marked = {'x': {'continuationItemRenderer': {'continuationEndpoint': {'continuationCommand': {'token': 'PAGE2'}}}}}
+    assert grid_token(marked) == 'PAGE2'
+
+
+def test_a_pager_is_chosen_by_the_list_it_pages():
+    """``pager_of`` — the rule that keeps a comment walk from stalling at page one.
+
+    Measured on a live comment round, which carries three kinds of continuation
+    token: two 78-character sort-menu switches that both answer **page one again**,
+    one ``continuationItemRenderer`` nested inside every thread that has replies,
+    and the list's own pager as the last element of the list. Only the last one
+    grows the crawl, so the pager is picked by the list it belongs to and by being
+    an element of it — not by length, not by "the first token in the answer".
+    """
+    from crawlers.engine.innertube import grid_token, pager_of
+
+    def thread(index, reply_pager=''):
+        nested = {'continuationItemRenderer': {'continuationEndpoint': {'continuationCommand': {'token': reply_pager}}}}
+        entry = {'commentThreadRenderer': {'comment': {'commentEntityPayload': {'key': f'cid{index}'}}}}
+        if reply_pager:
+            entry['commentThreadRenderer']['replies'] = {'commentRepliesRenderer': {'subThreads': [nested]}}
+        return entry
+
+    round_one = {
+        'onResponseReceivedEndpoints': [
+            {
+                'reloadContinuationItemsCommand': {
+                    'continuationItems': [
+                        {
+                            'commentsHeaderRenderer': {
+                                'sortMenu': {
+                                    'sortFilterSubMenuRenderer': {
+                                        'subMenuItems': [
+                                            {'serviceEndpoint': {'continuationCommand': {'token': 'SORT' * 20}}}
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                'reloadContinuationItemsCommand': {
+                    'continuationItems': [
+                        thread(1, reply_pager='REP' * 30),
+                        thread(2),
+                        {
+                            'continuationItemRenderer': {
+                                'continuationEndpoint': {'continuationCommand': {'token': 'PAGE2'}}
+                            }
+                        },
+                    ]
+                }
+            },
+        ]
+    }
+    assert pager_of(round_one, 'commentThreadRenderer') == 'PAGE2'
+    # Nothing in the answer is such a list, so there is no pager — rather than
+    # the sort menu's, which would read page one forever.
+    assert pager_of(round_one, 'noSuchRenderer') == ''
+    # A video list is found the same way; with no such list, grid_token falls back
+    # to the longest pager the markup marks.
+    tab = {
+        'contents': {'a': [{'videoRenderer': {'videoId': 'v'}}]},
+        'trailing': {'continuationItemRenderer': {'continuationEndpoint': {'continuationCommand': {'token': 'GRID2'}}}},
+    }
+    assert grid_token(tab) == 'GRID2'
 
 
 @pytest.mark.parametrize(

@@ -355,6 +355,18 @@ class Crawler(ABC):
         text = (text or '').strip()
         return text if text else default
 
+    def _current_url(self) -> str:
+        """The address bar, or '' when the driver cannot answer.
+
+        Every console line that names where a crawl stopped reads this, and a
+        dead session must not turn a useful warning into an exception on top of
+        the failure the user is already being told about.
+        """
+        try:
+            return self.driver.current_url or ''
+        except Exception:
+            return ''
+
     def _body_text(self, limit: int = 400) -> str:
         """Visible text at the top of the page, used for login-wall detection."""
         try:

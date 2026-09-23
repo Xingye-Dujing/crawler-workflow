@@ -194,6 +194,30 @@ _PER_ARTICLE = Field(
     default=False,
     coerce='bool',
 )
+#: A creator's own posts: what the user types is an address, not a search term,
+#: so the field is its own thing rather than a reuse of 关键词 (a keyword and a
+#: handle that happen to match are different questions, and the panel must not
+#: let one look like the other).
+_AUTHOR = Field(
+    key='author',
+    control='text',
+    label_key='settings.author',
+    name_key='field.author',
+    required=True,
+    hint_key='settings.authorHint',
+    placeholder='@nasa',
+)
+#: The per-row detail call, offered rather than assumed: on YouTube and X one
+#: extra request per row is what buys 点赞数 and the exact publish time, and a
+#: user who only wants links and text can refuse to pay it.
+_WITH_FACTS = Field(
+    key='with_facts',
+    control='checkbox',
+    label_key='settings.withFacts',
+    default=True,
+    hint_key='settings.withFactsHint',
+    coerce='bool',
+)
 
 
 def _comment_mode(platform: str, example: str) -> Mode:
@@ -235,6 +259,17 @@ def _posts_mode(*extra: Field, target: int = 50) -> Mode:
         key='posts',
         label_key='settings.collectPosts',
         fields=(_KEYWORD, replace(_TARGET, default=target), *extra, _RECOLLECT),
+    )
+
+
+def _author_mode(*extra: Field, target: int = 50) -> Mode:
+    """One creator's own posts — the same walk, addressed by author instead of by
+    keyword, so it needs its own entry rather than a wider keyword box."""
+    return Mode(
+        key='author',
+        label_key='settings.collectAuthor',
+        handler='author',
+        fields=(_AUTHOR, replace(_TARGET, default=target), *extra, _RECOLLECT),
     )
 
 
@@ -306,6 +341,17 @@ CAPABILITIES: tuple[Capability, ...] = (
         modes=(
             _posts_mode(),
             _comment_mode('douyin', 'https://www.douyin.com/video/...'),
+        ),
+    ),
+    # The overseas three come last on purpose: they are the newest entries and the
+    # panel's order is this tuple's order, so the platforms a Chinese-language
+    # user reaches for first stay at the top of the list.
+    Capability(
+        platform='youtube',
+        modes=(
+            _posts_mode(_WITH_FACTS),
+            _author_mode(_WITH_FACTS),
+            _comment_mode('youtube', 'https://www.youtube.com/watch?v=...'),
         ),
     ),
 )

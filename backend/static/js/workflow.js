@@ -2250,6 +2250,7 @@ function urlPlatform(url) {
     if (u.indexOf('weibo.com') !== -1 || u.indexOf('weibo.cn') !== -1) return 'weibo';
     if (u.indexOf('bilibili.com') !== -1) return 'bilibili';
     if (u.indexOf('douyin.com') !== -1 || u.indexOf('iesdouyin.com') !== -1) return 'douyin';
+    if (u.indexOf('youtube.com') !== -1 || u.indexOf('youtu.be') !== -1) return 'youtube';
     return '';
 }
 

@@ -1,8 +1,9 @@
-from crawlers.overseas import InstagramCrawler, TwitterCrawler, YouTubeCrawler
+from crawlers.overseas import InstagramCrawler, TwitterCrawler
 from crawlers.video import BilibiliCrawler, DouyinCrawler
 from crawlers.wechat import WechatCrawler
 from crawlers.weibo import WeiboCrawler
 from crawlers.xiaohongshu import XiaohongshuCrawler
+from crawlers.youtube import YouTubeCrawler
 from crawlers.zhihu import ZhihuCrawler
 
 # The registry, not just the factory: the cookie panel needs each platform's

@@ -596,12 +596,6 @@ class DouyinCrawler(VideoCrawler):
         """Wait for the result page to say it found something."""
         return self._wait_for_text(self.MOUNTED_MARKS, timeout=self.MOUNT_WAIT)
 
-    def _current_url(self) -> str:
-        try:
-            return self.driver.current_url or ''
-        except Exception:
-            return ''
-
     def _wait_for_text(self, marks, timeout: float = 20.0) -> bool:
         """Poll the rendered text for one of *marks* (bounded, clock-free)."""
         ticks = max(1, int(timeout / 2.0))
