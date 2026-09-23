@@ -313,14 +313,6 @@ class DouyinCrawler(VideoCrawler):
     domain = 'www.douyin.com'
     cookie_domains = ('douyin.com', 'www.iesdouyin.com')
     login_url = 'https://www.douyin.com/'
-    #: The crawl's own starting point. ``https://www.douyin.com/`` answers with a
-    #: redirect to ``/jingxuan`` (measured: 2.3 s for the pair, and the search box
-    #: is only on the target document), so the hop is entered at its end instead
-    #: of being followed. It also removes one page refresh — which is what was
-    #: wiping the 「保存登录信息」 mask mid start-up and making that failure look
-    #: intermittent. The cookie panel still uses ``login_url``, where a login
-    #: actually begins.
-    crawl_entry = 'https://www.douyin.com/jingxuan'
     supports_crawl = True
 
     #: Headless is answered by 验证码中间页 on every navigation — measured, not
@@ -336,49 +328,47 @@ class DouyinCrawler(VideoCrawler):
     #: Outcomes of the "reach the result list" step — kept as names because the
     #: caller has to treat them differently (see ``_open_results``).
     OK = 'ok'
-    NO_BOX = 'no_box'
     NOT_MOUNTED = 'not_mounted'
     CAPTCHA = 'captcha'
-    #: The words never made it into the search box (or never reached the router),
-    #: so nothing was actually searched. Not the same claim as "0 results".
-    QUERY_LOST = 'query_lost'
 
-    CARD_SELECTOR = 'div.discover-video-card-item[data-aweme-id]'
-    SEARCH_INPUT = '[data-e2e="searchbar-input"]'
-    SEARCH_BUTTON = '[data-e2e="searchbar-button"]'
-    #: The result route carries the keyword in its path (measured:
-    #: ``/jingxuan/search/人工智能?…``), which is the only proof that the query the
-    #: user asked for is the query the app actually ran.
-    #: Douyin's box is a controlled input: while the 「保存登录信息」 mask is up, a
-    #: whole phrase arriving in one event is wiped by the site's own handler, so
-    #: the query is submitted empty. Bulk writing is the fast path (measured: a
-    #: fraction of a second) and per-character typing is the repair (~15 s on a
-    #: busy page), which is why the order is bulk → verify → character by
-    #: character → verify, never character-by-character by default.
-    TYPE_DELAY = 0.12
-    SUBMIT_ATTEMPTS = 2
-    #: How long to wait for the address to carry the keyword after a click. The
-    #: router answers in well under a second once the header is wired up; the wait
-    #: is there for the case where it is not, and it is bounded so a wasted
-    #: attempt costs seconds rather than the whole mount budget.
-    LAND_WAIT = 5.0
-    #: The results are only *there* when the page says so; the deep link and a
-    #: cold SPA both look identical (and empty) before that.
-    MOUNTED_MARKS = ('为你找到', '搜索响应编号')
+    #: A result card is ``li > div.search-result-card > a[href]`` inside the site's
+    #: own ``[data-e2e="scroll-list"]``, and the anchor *is* the video address
+    #: (measured 2026-09: ``//www.douyin.com/video/7688240192020385070``). The
+    #: previous selector, ``div.discover-video-card-item[data-aweme-id]``, now
+    #: matches zero nodes and the class names beside it are build hashes, so the
+    #: ``data-e2e`` key plus the href shape is all that is stable enough to crawl by.
+    CARD_ANCHOR = '[data-e2e="scroll-list"] a[href*="/video/"]'
+    VIDEO_HREF = re.compile(r'/video/(\d{6,25})')
+    #: The search box still takes the text and its 搜索 button is still clickable,
+    #: but neither routes any more (measured, and confirmed by the user watching the
+    #: window: the words appear, the click does nothing, and Enter does not either).
+    #: So the result page is entered through its own address, which has the extra
+    #: merit that the keyword the user asked for is the keyword the URL carries —
+    #: there is no router left to interrogate about it.
+    SEARCH_ENTRY = 'https://www.douyin.com/search/{kw}?type=video'
     CAPTCHA_MARKS = ('验证码', '滑动验证')
-    MOUNT_WAIT = 40.0
-    MAX_ROUNDS = 6
+    #: The list mounts as 16 **skeleton** rows first — an opacity-.04 logo with no
+    #: anchor and no text — and fills them in ~4-6 s later (measured). Waiting for
+    #: "some rows" would read an undrawn page as a keyword that found nothing, so
+    #: the wait is for a row that carries a video address.
+    MOUNT_WAIT = 45.0
+    #: How long one scroll is allowed to take to pay out new rows.
+    SCROLL_WAIT = 14.0
+    MAX_ROUNDS = 12
+    #: Measured: the window scrolling does page the list now (16 → 26 → 36 → 46 → 56
+    #: cards), so the pager is the window and not only the detail visit.
+    SCROLL_STEP = 0.9
     POLITE_BASE = 1.0
     POLITE_SPREAD = 0.4
 
     def search(self, keyword: str, target_count: int = 50, **kwargs):
-        """Drive the site's own search box, then open each card.
+        """Open the result route, then open each card for the numbers it lacks.
 
-        The list is one screen (19–30 cards, and scrolling the route container
-        recycles the same count), so the row budget is not the pager — it is the
-        detail visit: every card is opened for the numbers the card itself never
-        carries. The cursor records which ids have been opened, so a resumed run
-        picks up mid-list instead of re-paying for the head of it.
+        A search card carries an address, a duration and one rounded figure — the
+        four counters and the real publish time come only from the video page, so
+        the row budget is the detail visit and the cursor records which ids have
+        been opened: a resumed run picks up mid-list instead of re-paying for the
+        head of it.
         """
         resume = self.resume_of(kwargs)
         opened = [str(v) for v in (resume.get('opened') or []) if str(v)]
@@ -390,12 +380,6 @@ class DouyinCrawler(VideoCrawler):
         reached = self._open_results(keyword)
         if reached == self.CAPTCHA:
             raise RuntimeError(t('crawl.dy.wall'))
-        if reached == self.NO_BOX:
-            raise RuntimeError(t('crawl.dy.noSearchBox'))
-        if reached == self.QUERY_LOST:
-            # Nothing was searched, so "0 results" would be a lie about the
-            # keyword: say the words never got in, and let the user retry.
-            raise RuntimeError(t('crawl.dy.queryFailed', kw=keyword))
         if reached != self.OK:
             return self.results()
         rounds = 0
@@ -415,6 +399,12 @@ class DouyinCrawler(VideoCrawler):
                     logger.info(t('crawl.dy.processed', i=aweme_id, n=self.collected()))
                 self.mark_position(page=rounds, done=self.collected(), opened=sorted(done)[-40:])
                 self._polite_pause(0.6, 0.2)
+            if self.collected() >= target_count:
+                # The budget is met — do not go looking for the next batch. The
+                # check belongs here rather than being left to the loop condition,
+                # because scrolling first would wait out ``SCROLL_WAIT`` for rows
+                # nobody asked for.
+                break
             if not self._scroll_results():
                 break
         logger.info(t('crawl.dy.finished', n=self.collected(), total=target_count))
@@ -428,176 +418,50 @@ class DouyinCrawler(VideoCrawler):
         return ''
 
     def _open_results(self, keyword: str) -> str:
-        """Drive the real search bar and report *how* the attempt ended.
+        """Enter the result page through its own address; report how it ended.
 
-        Four non-success outcomes and they must not blur:
+        Measured 2026-09: the search box takes the text, the 搜索 button is present
+        and clickable, and neither routes — the address sits on ``/jingxuan``
+        through a click *and* through Enter, which is exactly what the user reported
+        watching the window. The ``/search/<kw>`` deep link, which used to leave
+        three empty ``<ul>``s behind, now serves the result list. So the route is the
+        entry point, and it carries the keyword in its own path: the search the user
+        asked for and the search that ran cannot disagree.
 
-        * ``nobox`` — the page handed over no search tool at all (dead session or
-          a changed DOM): an actionable failure, not an empty result;
-        * ``query_lost`` — the words never got into the box, or never reached the
-          router: also not an empty result, and the retry is a re-type, not a
-          longer wait;
+        Two endings, kept apart because the user's next step differs:
+
         * ``captcha`` — the interstitial, which douyin announces in the **title**
-          rather than in a URL pattern;
-        * ``not_mounted`` — the app accepted the query but never drew cards,
-          which is what a genuinely empty keyword looks like from here, so it is
-          reported as zero rows rather than as a crash.
-
-        A deep link to ``/search/<kw>`` leaves three empty ``<ul>``s behind; only
-        the router's own path — focus, type, click 搜索 — mounts cards. The button
-        is covered by a transparent overlay on this build, so the Enter key is the
-        fallback rather than a stylistic choice.
+          rather than in any URL pattern;
+        * ``not_mounted`` — no card with a video address inside the mount budget,
+          which is what a keyword nobody has posted looks like from here, so it ends
+          as zero rows rather than as a crash. A page that is still drawing its
+          skeleton rows is *not* that: the wait is for an anchor, not for a node.
         """
-        self.open(self.crawl_entry)
-        self._polite_pause(1.2, 0.3)
-        # The dialog can mount during that pause, so look once more before the box
-        # is touched: a mask over the page steals the focus the typing needs.
+        url = self.SEARCH_ENTRY.format(kw=quote(str(keyword or '')))
+        self.open(url)
+        # The 「保存登录信息」 mask mounts seconds after the page and covers the
+        # list; it is dismissed on arrival rather than after a failed click.
         self._dismiss_prompts()
-        box = self._element_or_none(self.SEARCH_INPUT)
-        if box is None:
-            self.check_login_wall(self.crawl_entry)
-            logger.warning(t('crawl.dy.noSearchBox'))
-            return self.NO_BOX
-        landed = False
-        for attempt in range(1, self.SUBMIT_ATTEMPTS + 1):
-            # The router is the only witness that counts: when the URL carries the
-            # keyword, the search happened, whatever the input reported. Reading
-            # the box back is used only to decide whether the retry needs to type
-            # slowly — the node itself is replaced by the app when the header
-            # re-renders, and a stale handle makes the value unreadable, which is
-            # not the same as the words being missing (watched: the box held the
-            # phrase, the search ran, and a value-gated loop kept clearing and
-            # retyping until it gave up).
-            self._type_query(box, keyword, per_character=attempt > 1)
-            self._submit(box, keyword)
-            landed = self._query_landed(keyword, timeout=self.LAND_WAIT)
-            if landed:
-                if self._wait_mounted():
-                    return self.OK
-                if any(mark in self._title() for mark in self.CAPTCHA_MARKS):
-                    # The wall here is a page title; no _WALL_MARKERS URL matches it.
-                    self.login_wall = True
-                    logger.warning(t('crawl.loginWall', platform=self.domain, where=self._title()))
-                    return self.CAPTCHA
-            else:
-                logger.info(t('crawl.dy.queryDropped', kw=keyword, url=self._current_url()))
-                box = self._element_or_none(self.SEARCH_INPUT) or box
-        if self.login_wall:
+        if self.login_wall or self.risk_blocked or any(mark in self._title() for mark in self.CAPTCHA_MARKS):
+            if self.login_wall:
+                logger.warning(t('crawl.loginWall', platform=self.domain, where=self._current_url()))
             return self.CAPTCHA
-        if not landed:
-            # The route never took the words, so no search was run: reporting zero
-            # rows would be a claim about the keyword rather than about us.
-            return self.QUERY_LOST
+        if self._wait_for_cards():
+            return self.OK
         logger.info(t('crawl.dy.noMount', url=self._current_url()))
         return self.NOT_MOUNTED
 
-    def _type_query(self, box, keyword: str, per_character: bool = False) -> bool:
-        """Write *keyword* into the search box; report whether it reads back.
-
-        Bulk first (measured: a fraction of a second), character by character when
-        asked for — that path costs ~15 s on a busy page, so it is a repair and not
-        the default. The return value is advisory: ``_open_results`` judges the
-        attempt by the resulting URL.
-        """
-        text = str(keyword or '')
-        self._clear_box(box)
-        with contextlib.suppress(Exception):
-            self.driver.execute_script('arguments[0].focus();', box)
-        if per_character:
-            for ch in text:
-                with contextlib.suppress(Exception):
-                    box.send_keys(ch)
-                time.sleep(self.TYPE_DELAY)
-        else:
-            with contextlib.suppress(Exception):
-                box.send_keys(text)
-        return self._box_value(box) == text
-
-    def _clear_box(self, box):
-        """Empty the box before a (re)type, so a retry cannot append to leftovers."""
-        script = """
-        var el = arguments[0];
-        el.value = '';
-        el.dispatchEvent(new Event('input', {bubbles: true}));
-        """
-        with contextlib.suppress(Exception):
-            self.driver.execute_script(script, box)
-
-    def _box_value(self, box) -> str:
-        """What the input holds, read as a *property*.
-
-        The HTML attribute is never updated by the site's own framework, so
-        reading it would report an empty box on a page that is showing the words
-        — the mistake this method used to make. Unreadable (a stale node) reads as
-        empty, which is safe because the caller judges the attempt by the URL.
-        """
-        try:
-            return str(self.driver.execute_script('return arguments[0].value;', box) or '')
-        except Exception:
-            return ''
-
-    def _submit(self, box, keyword: str = ''):
-        """Press 搜索 on a page that is actually ready to take it.
-
-        Three things happen here in this order, and each one is a measured
-        observation rather than defensive noise:
-
-        * the dialog is cleared **first** — it mounts some six seconds after the
-          page, so a mask can appear between typing and clicking, and pressing
-          搜索 behind it wipes the box (watched: the click closed the dialog and
-          took the words with it, which threw the whole attempt away);
-        * the box is then re-checked and refilled if the words are gone, because
-          that is exactly what the dialog just did;
-        * the click is retried once if the overlay intercepts it, with Enter as the
-          fallback — the button sits under a transparent layer on this build.
-        """
-        self._dismiss_prompts()
-        if keyword and self._box_value(box) != str(keyword):
-            self._type_query(box, keyword)
-        button = self._element_or_none(self.SEARCH_BUTTON)
-        if button is not None:
-            try:
-                button.click()
-                return
-            except Exception:
-                self._dismiss_prompts()
-                with contextlib.suppress(Exception):
-                    button.click()
-                    return
-        with contextlib.suppress(Exception):
-            box.send_keys('\n')
-
-    def _query_landed(self, keyword: str, timeout: float = 10.0) -> bool:
-        """Poll until the router carries *keyword* in the address.
-
-        The click is not the event that matters: the header is interactive a
-        moment after the page is, and a submit issued before its handler is
-        attached does nothing at all (measured — two immediate clicks left the
-        address on ``/jingxuan``). Waiting on the address is what makes the
-        difference between "the search ran" and "this keyword found nothing"
-        decidable without retrying the whole page.
-
-        Checked in both the decoded and percent-encoded spelling, because the
-        driver reports one or the other depending on the build.
-        """
-        text = str(keyword or '')
-        encoded = quote(text)
-
-        def hit() -> int:
-            try:
-                url = self.driver.current_url or ''
-            except Exception:
-                return 0
-            return 1 if (text in url or encoded in url) else 0
-
-        return feed.wait_for(hit, 1, timeout=timeout, tick=0.5) == 1
-
-    def _wait_mounted(self) -> bool:
-        """Wait for the result page to say it found something."""
-        return self._wait_for_text(self.MOUNTED_MARKS, timeout=self.MOUNT_WAIT)
+    def _wait_for_cards(self) -> bool:
+        """Poll (bounded) until the list holds a card that addresses a video."""
+        return feed.wait_for(lambda: len(self._card_ids()), 1, timeout=self.MOUNT_WAIT, tick=1.0) >= 1
 
     def _wait_for_text(self, marks, timeout: float = 20.0) -> bool:
-        """Poll the rendered text for one of *marks* (bounded, clock-free)."""
+        """Poll the rendered text for one of *marks* (bounded, clock-free).
+
+        Used by the video page, which answers 「视频数据加载中」 for several seconds
+        before the player and its counters exist. A captcha title ends the wait
+        early: waiting out a wall costs the whole timeout and changes nothing.
+        """
         ticks = max(1, int(timeout / 2.0))
         for _ in range(ticks):
             body = self._body_text(limit=4000)
@@ -609,36 +473,39 @@ class DouyinCrawler(VideoCrawler):
         return any(mark in self._body_text(limit=4000) for mark in marks)
 
     def _card_ids(self) -> list:
+        """The video ids on the result page, in the order the list draws them.
+
+        The id comes out of the card's own href (``/video/7688240192020385070``),
+        which is the one thing on the card that is both stable and addressable: a
+        card that has not been filled in yet — the skeleton rows the list mounts
+        first — has no anchor and contributes nothing, which is why the mount wait
+        counts these rather than counting nodes.
+        """
         out = []
-        for el in self.driver.find_elements('css selector', self.CARD_SELECTOR):
+        for el in self.driver.find_elements('css selector', self.CARD_ANCHOR):
             with contextlib.suppress(Exception):
-                aweme_id = str(el.get_attribute('data-aweme-id') or '')
-                if aweme_id and aweme_id not in out:
-                    out.append(aweme_id)
+                match = self.VIDEO_HREF.search(str(el.get_attribute('href') or ''))
+                if match and match.group(1) not in out:
+                    out.append(match.group(1))
         return out
 
     def _scroll_results(self) -> bool:
-        """Scroll the app's own route container — the window never moves here.
+        """Step the window down and report whether the list handed over more rows.
 
-        Returns whether anything new appeared. Measured: the card count stays
-        fixed while scrolling (the list is virtualised), so this normally ends
-        the walk after one screen rather than pretending to find more.
+        Measured on the current build: 16 → 26 → 36 → 46 → 56 cards, one batch of
+        ten per scroll. The previous shape of this method hunted for the page's
+        largest scrollable element and jumped it to its bottom, because on that
+        build the window never moved at all — the measurement is what decides which
+        of the two is right, and returning "nothing new" is how a walk stops
+        pretending a one-screen list paged when it did not.
         """
         before = len(self._card_ids())
-        script = """
-        var best = null;
-        document.querySelectorAll('*').forEach(function (el) {
-          if (el.scrollHeight > el.clientHeight + 200 && el.clientHeight > 300
-              && (!best || el.scrollHeight > best.scrollHeight)) { best = el; }
-        });
-        if (best) { best.scrollTop = best.scrollHeight; return true; }
-        window.scrollTo(0, document.body.scrollHeight);
-        return false;
-        """
+        step = 'window.scrollBy(0, document.body.scrollHeight * arguments[0]);'
         with contextlib.suppress(Exception):
-            self.driver.execute_script(script)
-        time.sleep(2.0)
-        return len(self._card_ids()) > before
+            self.driver.execute_script(step, self.SCROLL_STEP)
+        grown = feed.wait_for(lambda: len(self._card_ids()), before + 1, timeout=self.SCROLL_WAIT, tick=1.0) > before
+        self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
+        return bool(grown)
 
     # ─── one video ────────────────────────────────────────────────────
 

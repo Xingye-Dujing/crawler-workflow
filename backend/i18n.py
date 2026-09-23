@@ -309,13 +309,10 @@ _ZH = {
         '[抖音] 浏览器被挡在「验证码中间页」：抖音网页版对无头浏览器与频繁请求都会弹验证。'
         '请确认已在 Cookie 面板用「可见窗口」登录并保存，稍后再重试本关键词'
     ),
-    'crawl.dy.noSearchBox': '[抖音] 页面没有可用的搜索框（登录态可能失效或页面结构已变），本次未采集',
     'crawl.dy.detailEmpty': '[抖音] 视频 {i} 的详情页没有渲染出数据，已跳过该行',
     'crawl.dy.noMount': (
         '[抖音] 搜索已提交但结果卡片没有出现（可能是无结果，或页面结构已变），按 0 条处理；当前地址：{url}'
     ),
-    'crawl.dy.queryDropped': '[抖音] 关键词「{kw}」未进入结果页地址，已重新提交；当前地址：{url}',
-    'crawl.dy.queryFailed': '[抖音] 关键词「{kw}」始终未能输入搜索框，本次未执行搜索（不是该关键词无结果，请稍候重试）',
     'crawl.bili.start': '[哔哩哔哩搜索] 开始搜索关键词: "{kw}"，目标获取 {n} 条结果',
     'crawl.bili.url': '[哔哩哔哩搜索] 搜索URL: {url}',
     'crawl.bili.page': '[哔哩哔哩搜索] 第 {page} 页：{n} 个视频（新 {fresh} 个，已收录 {done} 条）',
@@ -923,16 +920,8 @@ _EN = {
         'browsers and to bursty requests. Re-save the cookie through the Cookie panel (visible window) '
         'and retry this keyword a little later'
     ),
-    'crawl.dy.noSearchBox': '[Douyin] no usable search box on the page (dead session or changed DOM)',
     'crawl.dy.detailEmpty': '[Douyin] video {i} rendered no detail data, row skipped',
     'crawl.dy.noMount': '[Douyin] the app never drew result cards for this keyword — 0 rows; current URL: {url}',
-    'crawl.dy.queryDropped': (
-        '[Douyin] keyword "{kw}" never reached the result URL, submitting again; current URL: {url}'
-    ),
-    'crawl.dy.queryFailed': (
-        '[Douyin] keyword "{kw}" could not be entered into the search box, so no search ran'
-        ' (this is not "no results" — retry a little later)'
-    ),
     'crawl.bili.start': '[Bilibili search] keyword "{kw}", target {n} results',
     'crawl.bili.url': '[Bilibili search] URL: {url}',
     'crawl.bili.page': '[Bilibili search] page {page}: {n} videos ({fresh} new, {done} collected)',

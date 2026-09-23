@@ -159,40 +159,39 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   78 chars on one video and 146 on another with 1412-char rail tokens beside it, so the first round *tries* candidates
   until one answers with comments. `lockupViewModel` (the 2025+ view model) and `videoRenderer` coexist — search is the
   former's absence, channel tabs the latter's — and a reader for one is silently empty on the other.
-- **Douyin is visible-window-only, DOM-only, and has no play count.** A headless
-  browser is answered by 验证码中间页 on *every* navigation (measured), so the class
+- **Douyin is visible-window-only, DOM-only, entered through its URL, and has no play count.**
+  A headless browser is answered by 验证码中间页 on *every* navigation (measured), so the class
   sets ``never_headless = True`` and `_execute_source_node` downgrades to a visible
   window before buying the browser — never let that flip back to headless "for
-  speed". Its search endpoint is signed (``a_bogus``/``msToken``/``verifyFp``), so
-  the DOM is the only path; results mount only after the real search bar plus its
-  button drive the app router (a ``/search/<kw>`` deep link leaves three empty
-  ``<ul>``s = a shell, not an empty result set) and are detected by the text
-  为你找到…, never by a fixed sleep. Cards are ``div.discover-video-card-item[data-aweme-id]``
-  with no anchors. Counters come only from self-describing ``data-e2e`` keys
-  (``video-player-digg``/``feed-comment-icon``/``video-player-collect``/
-  ``video-player-share``); ``detail-video-info``'s second number **is the like
-  count**, so a 播放数 column would be a wrong figure with a plausible name — don't
-  re-add it. Comments DO render (``[data-e2e="comment-item"]``) and grow only by
-  scrolling the route container; both the panel mount and each scroll settle by
-  *polling inside the crawler*, never via the caller's ``nap`` — a stubbed nap once
-  turned a 2000-comment video into an "exhausted" 5-row crawl.
-- **Douyin's search submit is a three-step dance, and the URL is the only witness.**
-  Re-measured 2026-09: (1) the ``/search/<kw>`` deep link is still a shell — five URL
-  spellings all render 0 cards and 3 empty ``[data-e2e="scroll-list"]`` containers, so
-  the search bar must be driven; (2) entering at the site root costs a redirect to
-  ``/jingxuan`` that used to wipe the 「是否保存登录信息超过5天」 mask, which is why the
-  crawler now enters at ``crawl_entry = /jingxuan`` — but that also means **the mask
-  survives** and it mounts ~6 s after the page, so a click issued at 1.5 s lands while
-  the header's own handler is not attached yet (two immediate clicks left the address on
-  ``/jingxuan``, i.e. no search ran at all); (3) clicking 搜索 **while the mask is up
-  closes the mask and empties the box**, so `_submit` clears the dialog and re-checks the
-  box *before* the click instead of after a failed attempt. Judge success by polling the
-  address for the keyword (`_query_landed`, bounded), never by the input's value: the
-  node is replaced on re-render so a stale-handle read returns empty, and a value-gated
-  loop was watched clearing and retyping several times over a search that had already
-  succeeded. Read the value as the **property** — React never updates the HTML attribute.
-  Never let this become a 0-row success: `QUERY_LOST` is a distinct outcome from
-  `NOT_MOUNTED`, and only the latter may report zero rows.
+  speed". Its search endpoint is signed (``a_bogus``/``msToken``/``verifyFp``), so the
+  DOM is the only path.
+  **Re-measured 2026-09, and two long-standing facts died together:** the search box still
+  accepts the text and its 搜索 button is still clickable, but *neither the click nor Enter
+  routes any more* (the address sits on `/jingxuan`; the user watching the window reported
+  exactly this), while the `/search/<kw>?type=video` deep link — documented for a year as an
+  empty shell of three `<ul>`s — now serves the result list. So `SEARCH_ENTRY` is the route,
+  the keyword is percent-encoded into the path, and there is no router left to interrogate
+  about which search ran. Cards are `[data-e2e="scroll-list"] a[href*="/video/"]` and the id
+  comes out of the href — the old `div.discover-video-card-item[data-aweme-id]` matches
+  **zero** nodes now and the class names beside it are build hashes.
+  **The list mounts as 16 skeleton rows (no anchor, no text) and fills in ~4–6 s**, so
+  "some nodes exist" is not "results exist": `_wait_for_cards` polls for an *anchor*
+  (`MOUNT_WAIT`), and a page that never fills is `NOT_MOUNTED` → zero rows, which is the
+  honest answer for a keyword nobody posted. The **window** now does the paging
+  (measured 16 → 26 → 36 → 46 → 56 cards per ~0.9-viewport scroll), so `_scroll_results`
+  scrolls the window and stops the walk when a scroll yields nothing new — and the loop
+  checks the row budget *before* scrolling, because scrolling first would wait out
+  `SCROLL_WAIT` for rows nobody asked for. Counters still come only from the self-describing
+  `data-e2e` keys **on the video page** (`video-player-digg`/`feed-comment-icon`/
+  `video-player-collect`/`video-player-share`); `detail-video-info`'s second number **is the
+  like count** — and the search card's single bare figure measures equal to it — so a 播放数
+  column would be a wrong figure with a plausible name: don't re-add it. The
+  「是否保存登录信息超过5天」 mask still mounts seconds after the page and is dismissed on
+  arrival (取消 only — the user reports 保存 leads to a phone-verification step). Comments DO
+  render (`[data-e2e="comment-item"]`) and grow only by scrolling the panel container; both
+  the panel mount and each scroll settle by *polling inside the crawler*, never via the
+  caller's `nap` — a stubbed nap once turned a 2000-comment video into an "exhausted" 5-row
+  crawl.
 - **Do not block image loading on douyin** (measured the wrong way first): the class
   sets no `needs_images`, the base default blocks images for speed, and that is fine for
   every other platform — but re-tested with the dialog handled, images-on vs images-off
