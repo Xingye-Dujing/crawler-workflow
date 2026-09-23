@@ -310,8 +310,10 @@ _ZH = {
         '请确认已在 Cookie 面板用「可见窗口」登录并保存，稍后再重试本关键词'
     ),
     'crawl.dy.detailEmpty': '[抖音] 视频 {i} 的详情页没有渲染出数据，已跳过该行',
-    'crawl.dy.noMount': (
-        '[抖音] 搜索已提交但结果卡片没有出现（可能是无结果，或页面结构已变），按 0 条处理；当前地址：{url}'
+    'crawl.dy.noCards': (
+        '[抖音] 结果页始终没有给出任何视频卡片，本次未采集。页面自报：{page}；地址：{url}。'
+        '抖音对根本不存在的关键词也会用相关视频兜底，所以「零卡片」只可能是被拦截或页面出错，'
+        '不是「这个关键词没有结果」'
     ),
     'crawl.bili.start': '[哔哩哔哩搜索] 开始搜索关键词: "{kw}"，目标获取 {n} 条结果',
     'crawl.bili.url': '[哔哩哔哩搜索] 搜索URL: {url}',
@@ -921,7 +923,11 @@ _EN = {
         'and retry this keyword a little later'
     ),
     'crawl.dy.detailEmpty': '[Douyin] video {i} rendered no detail data, row skipped',
-    'crawl.dy.noMount': '[Douyin] the app never drew result cards for this keyword — 0 rows; current URL: {url}',
+    'crawl.dy.noCards': (
+        '[Douyin] the result page never handed over a single video card, so nothing was collected. '
+        'The page said: {page}; URL: {url}. Douyin fills the list with related videos even for a keyword '
+        'that cannot exist, so zero cards means blocked or broken — never "this keyword found nothing"'
+    ),
     'crawl.bili.start': '[Bilibili search] keyword "{kw}", target {n} results',
     'crawl.bili.url': '[Bilibili search] URL: {url}',
     'crawl.bili.page': '[Bilibili search] page {page}: {n} videos ({fresh} new, {done} collected)',

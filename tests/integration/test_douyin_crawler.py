@@ -86,6 +86,7 @@ class FakeDriver:
         dialog=False,
         fill_after=0,
         scroll_batches=None,
+        title='',
     ):
         self.cards = [] if fill_after else list(cards)
         self._pending = list(cards) if fill_after else []
@@ -93,6 +94,9 @@ class FakeDriver:
         self.scroll_batches = list(scroll_batches or [])
         self.facts = facts if facts is not None else _default_facts()
         self.video_body = video_body
+        # The page's own ``<title>``, which is where douyin announces the captcha
+        # interstitial — no URL pattern says it.
+        self.title = title
         # Is the 「保存登录信息」 mask up? It still mounts a few seconds after the
         # page, and dismissal is the cheap case the crawler must handle.
         self.dialog = dialog
@@ -265,12 +269,20 @@ class TestSearch:
         assert [row['视频ID'] for row in rows] == [ID, '7665683746674183460']
         assert driver.scrolls == 0, 'the page was waited on rather than scrolled past'
 
-    def test_a_page_that_never_hands_over_a_card_is_an_empty_answer_not_a_crash(self, make_crawler):
-        """A keyword nobody has posted still has to be reported, not raised — and
-        nothing may be paid for on the way."""
-        crawler, driver = make_crawler(cards=[])
-        assert crawler.search('zzzqqq', target_count=3) == []
-        assert driver.scrolls == 0, 'nothing mounted, so nothing was visited'
+    def test_a_page_that_never_hands_over_a_card_refuses_rather_than_reporting_zero(self, make_crawler):
+        """Zero cards is never "no results" on this site.
+
+        Measured: a keyword that cannot exist still came back with 16 related videos,
+        because douyin fills the list in rather than showing an empty plate — so an
+        empty list is the page failing (blocked, or its own ``502 Bad Gateway``), and
+        a 0-row success would be a claim about the user's keyword. The refusal quotes
+        what the page said, because "nothing" is not something to act on.
+        """
+        crawler, driver = make_crawler(cards=[], title='502 Bad Gateway')
+        with pytest.raises(RuntimeError) as err:
+            crawler.search('人工智能', target_count=3)
+        assert '502 Bad Gateway' in str(err.value)
+        assert driver.scrolls == 0 and len(driver.visited) == 1, 'nothing was paid for on the way'
 
     def test_the_mask_is_cleared_on_arrival(self, make_crawler):
         """The 「保存登录信息超过5天」 dialog still mounts seconds after the page and
@@ -294,10 +306,11 @@ class TestSearch:
     def test_a_captcha_interstitial_refuses_the_run(self, make_crawler):
         """A run answered by 验证码中间页 has to fail, not come back empty — an empty
         table reads as "this keyword has no videos", which is a claim about the
-        data. The wall here lives in the page title, not in any URL pattern."""
-        crawler, driver = make_crawler(cards=[ID])
-        crawler._title = lambda: '验证码中间页'  # type: ignore[method-assign]
-        driver.current_url = 'https://www.douyin.com/verify'
+        data. The wall here lives in the page title, not in any URL pattern — and it
+        arrives *after* the navigation settled (measured), so it has to be watched for
+        during the mount wait: a single check on arrival walked straight past it into a
+        0-row success, which is the bug this now pins."""
+        crawler, _driver = make_crawler(cards=[ID], fill_after=99, title='验证码中间页')
         with pytest.raises(RuntimeError) as err:
             crawler.search('人工智能', target_count=3)
         assert '验证码' in str(err.value) or 'captcha' in str(err.value).lower()

@@ -96,23 +96,23 @@ def test_a_headless_window_never_reports_a_quiet_zero(cookie_dir_str):
     _assert_real_posts(rows, minimum=1)
 
 
-def test_search_rows_carry_the_figures_the_group_sentence_shows(live_crawler):
+def test_search_rows_carry_the_shape_a_post_has(live_crawler):
+    """The row-level contract of a live keyword walk — with no numeric promise.
+
+    A screen of ``f=live`` is minutes-old replies, and measured twice it came back
+    with every engagement figure at zero on rows the site really did show; views are
+    only rendered for some accounts. So nothing here asks for a number: a *number that
+    was never shown* is a legitimate zero, and asserting one would make the tier fail
+    on the world's mood rather than on the crawler. The counter-parsing contract lives
+    in :func:`test_author_mode_reads_that_accounts_own_timeline`, where the account is
+    chosen because it does have them.
+    """
     crawler = live_crawler('twitter', headless=False)
     try:
         rows = crawler.search(KEYWORD, target_count=4)
     finally:
         crawler.close()
     _assert_real_posts(rows, minimum=3)
-    # Parsed off the sentence, not echoed as text: a label that survived into the
-    # row would fail the isinstance check above.
-    #
-    # 浏览数 is the column that proves the sentence was read at all — no button
-    # carries it, so a walk that skipped ``[role="group"]`` would leave every row
-    # at zero. The engagement counts are deliberately *not* asserted: ``f=live`` is
-    # measured to be a stream of minutes-old replies (the sampled screen: seven
-    # rows read "0 Likes. Like", and their sentences said so too), and demanding a
-    # like count from that would be a guess about what the world posted today.
-    assert any(row['浏览数'] > 0 for row in rows), 'no row carried a view count — the group sentence was not parsed'
 
 
 def test_the_walk_reads_past_the_rendered_window(live_crawler):
@@ -127,12 +127,20 @@ def test_the_walk_reads_past_the_rendered_window(live_crawler):
 
 
 def test_author_mode_reads_that_accounts_own_timeline(live_crawler):
+    """An active account is where the counters are asserted, for the simple reason
+    that its posts have them: every number in a row is parsed off the card's
+    ``[role="group"]`` sentence, and "0 Likes. Like" on a two-minute-old reply proves
+    nothing about that parser — a few hundred likes on a NASA post does.
+    """
     crawler = live_crawler('twitter', headless=False)
     try:
         rows = crawler.author(ACCOUNT, target_count=4)
     finally:
         crawler.close()
     _assert_real_posts(rows, minimum=3)
+    assert any(row['评论数'] > 0 or row['点赞数'] > 0 for row in rows), (
+        f'no row of {ACCOUNT} carried a single count — the [role="group"] sentence was not parsed'
+    )
     handle = f'@{ACCOUNT.lower()}'
     # Reposts render the original author's name inside the same article, so the
     # profile walk is judged by how much of it *is* the account, not by every row.

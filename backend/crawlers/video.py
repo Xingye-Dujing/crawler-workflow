@@ -381,7 +381,12 @@ class DouyinCrawler(VideoCrawler):
         if reached == self.CAPTCHA:
             raise RuntimeError(t('crawl.dy.wall'))
         if reached != self.OK:
-            return self.results()
+            # Zero cards is never an empty answer here. Measured: a keyword that
+            # cannot exist still came back with 16 related videos, because douyin
+            # fills the list in rather than showing an empty plate — so an empty
+            # page means blocked (验证码中间页) or broken (``502 Bad Gateway``), both
+            # of which were observed, and reporting 0 rows would blame the keyword.
+            raise RuntimeError(t('crawl.dy.noCards', page=self._page_words(), url=self._current_url()))
         rounds = 0
         while self.collected() < target_count and rounds < self.MAX_ROUNDS:
             rounds += 1
@@ -423,37 +428,58 @@ class DouyinCrawler(VideoCrawler):
         Measured 2026-09: the search box takes the text, the 搜索 button is present
         and clickable, and neither routes — the address sits on ``/jingxuan``
         through a click *and* through Enter, which is exactly what the user reported
-        watching the window. The ``/search/<kw>`` deep link, which used to leave
-        three empty ``<ul>``s behind, now serves the result list. So the route is the
-        entry point, and it carries the keyword in its own path: the search the user
-        asked for and the search that ran cannot disagree.
+        watching the window. The ``/search/<kw>`` deep link, which used to leave three
+        empty ``<ul>``s behind, now serves the result list, and it carries the keyword
+        in its own path: the search the user asked for and the search that ran cannot
+        disagree.
 
-        Two endings, kept apart because the user's next step differs:
-
-        * ``captcha`` — the interstitial, which douyin announces in the **title**
-          rather than in any URL pattern;
-        * ``not_mounted`` — no card with a video address inside the mount budget,
-          which is what a keyword nobody has posted looks like from here, so it ends
-          as zero rows rather than as a crash. A page that is still drawing its
-          skeleton rows is *not* that: the wait is for an anchor, not for a node.
+        ``ok`` / ``captcha`` / ``not_mounted`` — and none of them is "no results".
+        A nonsense keyword still drew 16 related cards, so this page has no empty
+        state to report; see ``search`` for why the third ending raises.
         """
         url = self.SEARCH_ENTRY.format(kw=quote(str(keyword or '')))
         self.open(url)
         # The 「保存登录信息」 mask mounts seconds after the page and covers the
         # list; it is dismissed on arrival rather than after a failed click.
         self._dismiss_prompts()
-        if self.login_wall or self.risk_blocked or any(mark in self._title() for mark in self.CAPTCHA_MARKS):
-            if self.login_wall:
-                logger.warning(t('crawl.loginWall', platform=self.domain, where=self._current_url()))
+        return self._wait_for_page()
+
+    def _wait_for_page(self) -> str:
+        """Poll until the list draws a card, the wall shows up, or time runs out.
+
+        The wall is checked **on every round**, and that ordering is measured:
+        headless douyin is answered with 验证码中间页 *after* the navigation settles,
+        so a single check right after ``open()`` walks straight past the wall and the
+        walk ends reporting zero cards — a statement about the keyword when the truth
+        is about the session. The list also mounts as 16 skeleton rows (no anchor, no
+        text) and fills in ~4-6 s later, so the wait is for an *anchor*.
+        """
+        for _ in range(max(1, int(self.MOUNT_WAIT))):
+            if self._card_ids():
+                return self.OK
+            if self._is_walled():
+                return self.CAPTCHA
+            time.sleep(1.0)
+        if self._is_walled():
             return self.CAPTCHA
-        if self._wait_for_cards():
-            return self.OK
-        logger.info(t('crawl.dy.noMount', url=self._current_url()))
         return self.NOT_MOUNTED
 
-    def _wait_for_cards(self) -> bool:
-        """Poll (bounded) until the list holds a card that addresses a video."""
-        return feed.wait_for(lambda: len(self._card_ids()), 1, timeout=self.MOUNT_WAIT, tick=1.0) >= 1
+    def _is_walled(self) -> bool:
+        """A refusal the page has already announced: captcha title, or a wall flag."""
+        return bool(self.login_wall or self.risk_blocked or any(mark in self._title() for mark in self.CAPTCHA_MARKS))
+
+    def _page_words(self) -> str:
+        """What the page says about itself, quoted into the refusal.
+
+        The title carries both measured cases (``验证码中间页``, ``502 Bad Gateway``);
+        an untitled error plate still spells itself in the body, and a refusal that
+        quotes the site is a different thing to read than one that says "nothing".
+        """
+        title = self._title().strip()
+        if title:
+            return title[:80]
+        head = self._body_text(limit=120).strip()
+        return (head.splitlines() or ['(空白页)'])[0][:80]
 
     def _wait_for_text(self, marks, timeout: float = 20.0) -> bool:
         """Poll the rendered text for one of *marks* (bounded, clock-free).
