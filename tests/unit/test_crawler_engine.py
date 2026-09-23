@@ -254,6 +254,50 @@ def test_wait_for_keeps_polling_until_the_target_or_the_budget(monkeypatch):
     assert wait_for(growing, 100, timeout=1.0, tick=0.5) < 100
 
 
+# ─── jump_to_bottom ──────────────────────────────────────────────────
+
+
+class ScrollDriver:
+    def __init__(self, raises=False):
+        self.calls = []
+        self.raises = raises
+
+    def execute_script(self, script, *args):
+        self.calls.append((script, args))
+        if self.raises:
+            raise RuntimeError('dead session')
+        return 'container'
+
+
+def test_jump_to_bottom_hands_the_anchor_to_the_page_as_an_argument():
+    """The selector is an argument, never interpolated into the script: the anchors
+    that reach here include ones pasted from a user's address bar, and a page
+    script built by string concatenation would be an injection point with a
+    selector in it. The hunt order is the measured one — the anchor's own
+    scrollable ancestor, then the biggest scroller, then the window."""
+    from crawlers.engine.feed import jump_to_bottom
+
+    driver = ScrollDriver()
+    assert jump_to_bottom(driver, '[data-e2e="user-post-list"]') == 'container'
+    script, args = driver.calls[0]
+    assert args == ('[data-e2e="user-post-list"]', '')
+    assert 'scrollerFrom' in script and 'scrollTop = target.scrollHeight' in script
+    assert 'user-post-list' not in script, 'the selector must not be baked into the script'
+
+
+def test_jump_to_bottom_passes_a_secondary_anchor_before_giving_up_on_the_page():
+    """A grid whose own node is a non-scrolling shell needs the second selector
+    (the comment panel passes it), and a page with neither still has to move."""
+    from crawlers.engine.feed import jump_to_bottom
+
+    driver = ScrollDriver()
+    jump_to_bottom(driver, '[data-e2e="comment-list"]', '[data-e2e="comment-item"]')
+    assert driver.calls[0][1] == ('[data-e2e="comment-list"]', '[data-e2e="comment-item"]')
+
+    dead = ScrollDriver(raises=True)
+    assert jump_to_bottom(dead, '[data-e2e="user-post-list"]') == 'none'
+
+
 # ─── walk_feed ───────────────────────────────────────────────────────
 
 

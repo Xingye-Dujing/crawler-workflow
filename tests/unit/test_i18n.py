@@ -199,6 +199,7 @@ class TestCatalogueHealth:
         for suffix in (
             'source_no_platform',
             'source_unknown_platform',
+            'source_unknown_mode',
             'source_missing',
             'source_link_mismatch',
             'upload_no_file',

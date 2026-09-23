@@ -360,6 +360,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         platform='douyin',
         modes=(
             _posts_mode(),
+            _author_mode(
+                placeholder='https://www.douyin.com/user/<sec_uid>',
+                hint_key='settings.authorHintDouyin',
+            ),
             _comment_mode('douyin', 'https://www.douyin.com/video/...'),
         ),
     ),
@@ -435,13 +439,29 @@ def mode_for(platform: str, mode_key: str) -> Mode | None:
     return modes[0]
 
 
+def requested_mode_key(node: dict) -> str:
+    """The mode key a stored node *asks for*, before any fallback.
+
+    :func:`mode_for` answers an unknown key with the platform's first mode on
+    purpose, so a canvas saved before the key existed (or a WeChat node still
+    carrying a stale ``collect='comments'``, which is the article crawl as far as
+    that platform is concerned) still renders and runs. That is the wrong answer for
+    validation wherever the platform *does* offer a choice: on a two-mode platform,
+    substituting its first mode for a mode it never had either runs a different
+    crawl than the one that was asked for or reports 「缺少关键词」 about a field the
+    panel never showed the user.
+    """
+    node = node or {}
+    params = node.get('params') or {}
+    return str(params.get('mode') or params.get(MODE_KEY) or '').strip()
+
+
 def mode_of_node(node: dict) -> Mode | None:
     """The mode a stored node asks for, read the way the executor reads it."""
     node = node or {}
     params = node.get('params') or {}
     platform = str(node.get('platform') or params.get('platform') or '')
-    key = str(params.get('mode') or params.get(MODE_KEY) or '')
-    return mode_for(platform, key)
+    return mode_for(platform, requested_mode_key(node))
 
 
 def fields_for(platform: str, mode_key: str, with_files: bool = True) -> tuple[Field, ...]:

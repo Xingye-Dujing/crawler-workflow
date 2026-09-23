@@ -114,7 +114,12 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   must not import the crawler package. Field labels are *frontend* catalogue keys and
   required-field names are *backend* ones (`field.*`), both pinned by
   `test_frontend_contract.py::TestCrawlMatrixParity`; `target_count` stays 50 for every platform
-  because that is what the panel previews, whatever a crawler's signature says. A payload is a
+  because that is what the panel previews, whatever a crawler's signature says. **An
+  unrecognised mode is refused by name on a platform that offers a choice**
+  (`engine.source_unknown_mode`), while `mode_for` still falls back to the first mode for
+  panel rendering and for single-mode platforms: silently substituting a keyword search
+  for a node that asked for one creator's uploads is a different crawl, and reporting
+  「缺少关键词」 sends the user to a field the panel never showed them. A payload is a
   network response and the renderer writes field names into inline handlers, so a name that is
   not `/^[\w.-]{1,64}$/` is dropped whole — and a JS-generated panel is driven in tests by the
   matrix dumped from Python (`tests/frontend/harness_capabilities.mjs`, fed by the
@@ -123,7 +128,9 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   Counters (`engine.counters.parse_count` — one parser for 万/千/亿/K/M/B, `1,027,710次观看`,
   `97 views`), interception (`engine.wall`: login / risk-control / root-bounce), first-run
   dialogs (`engine.popup.Prompt` + a platform's `prompts`), the infinite-list walk
-  (`engine.feed.walk_feed`, `engine.feed.wait_for`), cursor paging that follows the server's
+  (`engine.feed.walk_feed`, `engine.feed.wait_for`) and the scroll that finds the element
+  which actually moves (`engine.feed.jump_to_bottom`, for lists a window scroll cannot
+  page — douyin's 作品 grid and its comment panel), cursor paging that follows the server's
   own value (`engine.pager.walk_pages`) and reading a page's embedded JSON
   (`engine.jsonpath`) all live in the engine and know nothing about any platform. A platform
   module declares only its selectors, endpoints and column names. New crawl logic goes
@@ -202,6 +209,25 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   the panel mount and each scroll settle by *polling inside the crawler*, never via the
   caller's `nap` — a stubbed nap once turned a 2000-comment video into an "exhausted" 5-row
   crawl.
+  **Author mode is paged by a container the window cannot move.** Measured on `/user/<sec_uid>`:
+  scrolling the window grows the **footer's** recommended-video links (8 → 29 anchors) while the
+  作品 grid (`[data-e2e="user-post-list"]`) does not move — a count-based walk therefore stops at
+  57 on a page that publishes 85. Taking the grid's scrollable ancestor to `scrollTop = scrollHeight`
+  pays out 18 rows a round (21 → 39 → 57 → **85, which is what `[data-e2e="user-tab-count"]` says**)
+  and is why `engine.feed.jump_to_bottom` exists (the comment panel scrolls the same way, so it
+  shares it). A creator is addressed by the opaque `sec_uid` only — `/user/<numeric>` is not a
+  route — and every video page carries `a[href*="/user/"]`, so a live run can discover one;
+  a display name is refused. `DouyinCrawler._published_count()` returns **-1 for "the page said
+  nothing"**, because the shared `parse_count('')` answers 0 and 0 is a *claim*: reading a missing
+  number as zero would let a page that never rendered report an author who never posted.
+  Rows still come from opening each video (`_detail_row`), so this mode carries the same columns
+  as the search mode — including the absence of 播放数.
+- **A self-paging list is walked by `_open_each`, and "every id here is known" is not its end.**
+  The loop used to `break` when the current screen held no unseen id — which is the *normal* first
+  round of a resumed run, because the page reopens on exactly the ids the dead run opened. The
+  symptom was a 断点续跑 that returned the previous run's rows, never reached its target, and
+  complained about nothing. Now an empty `todo` scrolls on and only a scroll that pays out nothing
+  ends the walk; both douyin lists share the one loop.
 - **Blocking video was measured and rejected — do not add it.** Images are blocked by
   default (`profile.managed_default_content_settings.images=2`, opted out per class via
   `needs_images`), which is a real saving. Video has no such preference, and the CDP entry

@@ -231,6 +231,30 @@ class TestValidate:
         wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw'})], [])
         assert WorkflowEngine(wf).validate() == []
 
+    def test_a_mode_the_platform_does_not_offer_is_named_as_such(self, en):
+        """The matrix lookup falls back to the platform's first mode so old canvases
+        still render — which used to mean a node asking for 某作者的作品 on weibo was
+        validated as a keyword search. The user then read 「缺少关键词」 for a field
+        the panel never showed them, or worse, the wrong crawl ran.
+
+        The refusal is scoped to platforms that offer a choice; a single-mode
+        platform has nothing to be confused with, and its stale keys are history
+        (see the WeChat case in TestValidateUsesLabels).
+        """
+        wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw', 'mode': 'author'})], [])
+        errors = WorkflowEngine(wf).validate()
+        assert len(errors) == 1
+        assert 'no such collection mode' in errors[0]
+        assert 'Data Source #node-1' in errors[0] and 'weibo' in errors[0]
+        assert 'keyword is empty' not in errors[0]
+
+    def test_a_canvas_that_names_no_mode_keeps_working(self, en):
+        """The fallback is for nodes saved before the mode selector existed: an
+        empty mode is not a mistake, so it must validate as the platform's own
+        default (keyword) and not be refused."""
+        wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw', 'mode': ''})], [])
+        assert WorkflowEngine(wf).validate() == []
+
     def test_a_cycle_is_fatal_and_names_the_nodes_in_it(self, en):
         conns = [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-1'}]
         nodes = [_node('node-1', platform='zhihu'), _node('node-2', 'output', operation='csv')]

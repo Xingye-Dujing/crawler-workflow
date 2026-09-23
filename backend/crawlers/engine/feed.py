@@ -57,6 +57,45 @@ def wait_for_change(measure: Callable[[], object], before, timeout: float = 1.5,
     return False
 
 
+def jump_to_bottom(driver, anchor_selector: str, fallback_selector: str = '') -> str:
+    """Scroll whatever actually scrolls *anchor_selector* to its bottom.
+
+    Some lists are not moved by a window scroll at all: douyin's profile grid grows
+    only when its route container is taken to the end (measured: a window scroll
+    added nothing to the 作品 list while it kept feeding the footer's recommended
+    videos, so counting anchors after a window scroll says "57 of 85 and no more"
+    about a page that pages perfectly). The anchor's own scrollable ancestor is
+    therefore the first candidate; *fallback_selector* covers a page whose list
+    element is a non-scrolling shell, and the window is the last resort.
+
+    Returns which surface moved, so a caller can log or re-measure the difference.
+    """
+    script = """
+    function scrollerFrom(start) {
+        var host = start;
+        while (host && host.scrollHeight <= host.clientHeight + 50) { host = host.parentElement; }
+        return host;
+    }
+    var target = scrollerFrom(document.querySelector(arguments[0]));
+    if (!target && arguments[1]) { target = scrollerFrom(document.querySelector(arguments[1])); }
+    if (!target) {
+        var best = null;
+        document.querySelectorAll('*').forEach(function (el) {
+            if (el.scrollHeight > el.clientHeight + 200 && el.clientHeight > 300
+                && (!best || el.scrollHeight > best.scrollHeight)) { best = el; }
+        });
+        target = best;
+    }
+    if (target) { target.scrollTop = target.scrollHeight; return 'container'; }
+    window.scrollTo(0, document.body.scrollHeight);
+    return 'window';
+    """
+    try:
+        return str(driver.execute_script(script, anchor_selector, fallback_selector or ''))
+    except Exception:
+        return 'none'
+
+
 @dataclass
 class FeedResult:
     """How a feed walk ended — the caller writes the platform's own log line."""

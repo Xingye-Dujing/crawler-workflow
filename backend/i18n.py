@@ -305,10 +305,23 @@ _ZH = {
         '提示：抖音网页版对自动化浏览器较敏感，若窗口里出现滑块验证，请在窗口内手动完成后再保存。'
     ),
     'crawl.dy.start': '[抖音搜索] 开始搜索关键词: "{kw}"，目标 {n} 条（抖音只接受可见窗口，已自动改用可见窗口）',
-    'crawl.dy.target_reached': '[抖音搜索] 已达到目标数量 {n} 条，停止',
-    'crawl.dy.round': '[抖音搜索] 第 {i} 屏：{n} 张卡片（新 {fresh} 个，已收录 {done} 条）',
-    'crawl.dy.processed': '[抖音搜索] 已收录视频 {i}，当前有效数据: {n} 条',
-    'crawl.dy.finished': '[抖音搜索] 搜索完成，共获取 {n} 条有效结果（目标 {total} 条）',
+    'crawl.dy.target_reached': '[抖音] 已达到目标数量 {n} 条，停止',
+    'crawl.dy.round': '[抖音] 第 {i} 屏：{n} 张卡片（新 {fresh} 个，已收录 {done} 条）',
+    'crawl.dy.processed': '[抖音] 已收录视频 {i}，当前有效数据: {n} 条',
+    'crawl.dy.finished': '[抖音搜索] 搜索完成，共获取 {n} 条有效结果（目标 {total} 条，翻了 {rounds} 屏）',
+    'crawl.dy.authorStart': '[抖音作者] 开始采集该作者的作品，目标 {n} 条（计数要逐条打开视频页取）',
+    'crawl.dy.authorEmpty': '[抖音作者] 没有给出作者（粘贴 douyin.com/user/… 链接或那串 sec_uid）：{author}',
+    'crawl.dy.authorNoWorks': '[抖音作者] 该作者的主页自报作品数为 0，本就没有可采集的内容',
+    'crawl.dy.authorDone': '[抖音作者] 作品列表采集结束，共 {n} 条（主页自报 {works} 条）',
+    'crawl.dy.authorDoneNoCount': '[抖音作者] 作品列表采集结束，共 {n} 条（主页未给出作品数，无法判断是否已到末尾）',
+    'crawl.dy.authorNoCards': (
+        '[抖音作者] 该作者主页始终没有渲染出作品列表，本次未采集。页面自报：{page}；地址：{url}。'
+        '主页自报作品数 {works} 条，所以这是被拦截或页面出错，不是「这个人没发过作品」'
+    ),
+    'crawl.dy.authorNotMounted': (
+        '[抖音作者] 该作者主页既没有渲染出作品列表、也没有给出作品数，本次未采集。'
+        '页面自报：{page}；地址：{url}。这两种缺省同时出现只可能是被拦截或页面出错'
+    ),
     'crawl.dy.wall': (
         '[抖音] 浏览器被挡在「验证码中间页」：抖音网页版对无头浏览器与频繁请求都会弹验证。'
         '请确认已在 Cookie 面板用「可见窗口」登录并保存，稍后再重试本关键词'
@@ -445,6 +458,7 @@ _ZH = {
     'cluster.no_features': '文本无法分词（可能只有符号），已跳过聚类：{err}',
     'engine.source_no_platform': '节点 {nid}：数据源节点没有选择平台',
     'engine.source_unknown_platform': '节点 {nid}：{platform} 还没有可用的采集实现，请改用已支持的平台',
+    'engine.source_unknown_mode': '节点 {nid}：{platform} 没有这种采集内容，请在该节点的「采集内容」里改选一种',
     'engine.source_missing': '节点 {nid}：必填项「{field}」还没有填写',
     'engine.source_link_mismatch': '节点 {nid}：{n} 个链接与所选平台（{platform}）不符',
     'field.keyword': '关键词',
@@ -927,10 +941,24 @@ _EN = {
         'window before saving.'
     ),
     'crawl.dy.start': '[Douyin search] keyword "{kw}", target {n} rows (Douyin only answers a visible window)',
-    'crawl.dy.target_reached': '[Douyin search] target of {n} rows reached, stop',
-    'crawl.dy.round': '[Douyin search] screen {i}: {n} cards ({fresh} new, {done} collected)',
-    'crawl.dy.processed': '[Douyin search] stored video {i}, {n} valid rows so far',
-    'crawl.dy.finished': '[Douyin search] done, {n} valid rows (target {total})',
+    'crawl.dy.target_reached': '[Douyin] target of {n} rows reached, stop',
+    'crawl.dy.round': '[Douyin] screen {i}: {n} cards ({fresh} new, {done} collected)',
+    'crawl.dy.processed': '[Douyin] stored video {i}, {n} valid rows so far',
+    'crawl.dy.finished': '[Douyin search] done, {n} valid rows (target {total}, {rounds} screens walked)',
+    'crawl.dy.authorStart': "[Douyin author] one creator's posts, target {n} (counters cost a page each)",
+    'crawl.dy.authorEmpty': '[Douyin author] no author given (paste a douyin.com/user/… link or the sec_uid): {author}',
+    'crawl.dy.authorNoWorks': '[Douyin author] the profile publishes 0 posts, so there is nothing to collect',
+    'crawl.dy.authorDone': '[Douyin author] post list finished, {n} rows (the profile publishes {works})',
+    'crawl.dy.authorDoneNoCount': '[Douyin author] post list finished, {n} rows (the profile published no count)',
+    'crawl.dy.authorNoCards': (
+        '[Douyin author] the profile never rendered its post grid, so nothing was collected. The page said: '
+        '{page}; URL: {url}. The profile publishes {works} posts, so this is a blocked or broken page — '
+        'not an author who posted nothing'
+    ),
+    'crawl.dy.authorNotMounted': (
+        '[Douyin author] the profile rendered no post grid and published no post count, so nothing was collected. '
+        'The page said: {page}; URL: {url}. Both defaults at once means blocked or broken'
+    ),
     'crawl.dy.wall': (
         '[Douyin] the browser was parked on the captcha interstitial: Douyin web serves it to headless '
         'browsers and to bursty requests. Re-save the cookie through the Cookie panel (visible window) '
@@ -1067,6 +1095,7 @@ _EN = {
     'cluster.no_features': 'Text could not be segmented (symbols only?) — clustering skipped: {err}',
     'engine.source_no_platform': 'Node {nid}: source node has no platform',
     'engine.source_unknown_platform': 'Node {nid}: {platform} has no crawler yet — pick a supported platform',
+    'engine.source_unknown_mode': 'Node {nid}: {platform} has no such collection mode — pick one under Collect',
     'engine.source_missing': 'Node {nid}: the required field {field} is empty',
     'engine.source_link_mismatch': 'Node {nid}: {n} link(s) do not match the selected platform ({platform})',
     'field.keyword': 'keyword',

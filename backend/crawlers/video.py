@@ -429,6 +429,19 @@ class DouyinCrawler(VideoCrawler):
     #: ``data-e2e`` key plus the href shape is all that is stable enough to crawl by.
     CARD_ANCHOR = '[data-e2e="scroll-list"] a[href*="/video/"]'
     VIDEO_HREF = re.compile(r'/video/(\d{6,25})')
+    #: A creator's own page. The 作品 grid is ``[data-e2e="user-post-list"]`` and its
+    #: anchors are the video addresses, but the shape that matters is *how it pages*:
+    #: the window does not scroll this list at all (measured — a window scroll grew the
+    #: footer's recommended-video links from 8 to 29 and left the grid untouched, which
+    #: reads as "57 of 85 and no more" about a page that pages perfectly). Taking the
+    #: grid's own scrollable ancestor to its bottom adds a batch of 18 per round:
+    #: 21 → 39 → 57 → 85, and 85 is what ``user-tab-count`` publishes.
+    PROFILE_ENTRY = 'https://www.douyin.com/user/{sec}'
+    PROFILE_ANCHOR = '[data-e2e="user-post-list"] a[href*="/video/"]'
+    PROFILE_GRID = '[data-e2e="user-post-list"]'
+    #: What the page says its own 作品 count is — the only honest yardstick for
+    #: "did we reach the end of this list" when the list has no end marker.
+    WORK_COUNT = '[data-e2e="user-tab-count"]'
     #: The search box still takes the text and its 搜索 button is still clickable,
     #: but neither routes any more (measured, and confirmed by the user watching the
     #: window: the words appear, the click does nothing, and Enter does not either).
@@ -477,14 +490,77 @@ class DouyinCrawler(VideoCrawler):
             # page means blocked (验证码中间页) or broken (``502 Bad Gateway``), both
             # of which were observed, and reporting 0 rows would blame the keyword.
             raise RuntimeError(t('crawl.dy.noCards', page=self._page_words(), url=self._current_url()))
+        rounds = self._open_each(self._card_ids, self._scroll_results, done, target_count)
+        logger.info(t('crawl.dy.finished', n=self.collected(), rounds=rounds, total=target_count))
+        return self.results()
+
+    def author(self, author: str, target_count: int = 50, **kwargs):
+        """One creator's own posts, read off their profile grid.
+
+        The row budget is the detail visit here exactly as in a keyword search: the
+        grid's card carries an address, a 置顶 mark and one bare figure, and that
+        figure measures equal to the **like** count — so the counters come from
+        opening the video, and a row from this mode is indistinguishable from a row
+        from the search mode.
+        """
+        sec = douyin_sec_uid(author)
+        if not sec:
+            raise ValueError(t('crawl.dy.authorEmpty', author=author))
+        if self.collected() >= target_count:
+            logger.info(t('crawl.dy.target_reached', n=target_count))
+            return self.results()
+        logger.info(t('crawl.dy.authorStart', n=target_count))
+        url = self.PROFILE_ENTRY.format(sec=sec)
+        self.open(url)
+        self._dismiss_prompts()
+        if self._is_walled():
+            raise RuntimeError(t('crawl.dy.wall'))
+        published = self._published_count()
+        if not self._wait_for_grid():
+            if published == 0:
+                # The page says it holds nothing, which is a fact about the creator.
+                logger.info(t('crawl.dy.authorNoWorks'))
+                return self.results()
+            # Anything else is a page that did not answer: quoting the site is the
+            # only way the user can tell a wall from a quiet zero.
+            if published > 0:
+                raise RuntimeError(
+                    t('crawl.dy.authorNoCards', page=self._page_words(), url=self._current_url(), works=published)
+                )
+            raise RuntimeError(t('crawl.dy.authorNotMounted', page=self._page_words(), url=self._current_url()))
+        # Identity, not a resume blob: the rows carry their own 视频ID, so a resumed
+        # run skips what it already paid for and the cursor stays a position.
+        done = {str(row.get('视频ID') or '') for row in self.results() if row.get('视频ID')}
+        self._open_each(lambda: self._grid_ids(), self._scroll_profile, done, target_count)
+        if published >= 0:
+            logger.info(t('crawl.dy.authorDone', n=self.collected(), works=published))
+        else:
+            # No count on the page is not a count of zero: the line says so instead
+            # of printing a number the site never published.
+            logger.info(t('crawl.dy.authorDoneNoCount', n=self.collected()))
+        return self.results()
+
+    # ─── spending the list ─────────────────────────────────────────────
+
+    def _open_each(self, read_ids, scroll, done: set, target_count: int) -> int:
+        """Open one video page per id of a self-paging list, to the budget or the end.
+
+        Both douyin walks are this shape, so the loop that spends the row budget is
+        written once: read the ids on screen, open the ones not yet opened, scroll
+        for the next batch.
+
+        A round whose ids are all already known is **not** the end of the list. That
+        is the resumed run's ordinary first round — the page reopens on the very ids
+        the dead run opened — so stopping there (which this loop used to do) made
+        断点续跑 hand back the dead run's rows and never advance past them. Only a
+        scroll that pays out nothing ends the walk.
+        """
         rounds = 0
         while self.collected() < target_count and rounds < self.MAX_ROUNDS:
             rounds += 1
-            ids = self._card_ids()
+            ids = read_ids()
             todo = [aweme_id for aweme_id in ids if aweme_id not in done]
             logger.info(t('crawl.dy.round', i=rounds, n=len(ids), fresh=len(todo), done=self.collected()))
-            if not todo:
-                break
             for aweme_id in todo:
                 if self.collected() >= target_count:
                     break
@@ -492,18 +568,19 @@ class DouyinCrawler(VideoCrawler):
                 row = self._detail_row(aweme_id)
                 if row and self.emit(row):
                     logger.info(t('crawl.dy.processed', i=aweme_id, n=self.collected()))
+                # ``page`` is kept as the cursor key because runs saved before the
+                # shared walk already store the round number under it.
                 self.mark_position(page=rounds, done=self.collected(), opened=sorted(done)[-40:])
                 self._polite_pause(0.6, 0.2)
             if self.collected() >= target_count:
                 # The budget is met — do not go looking for the next batch. The
                 # check belongs here rather than being left to the loop condition,
-                # because scrolling first would wait out ``SCROLL_WAIT`` for rows
+                # because scrolling first would wait out the settle for rows
                 # nobody asked for.
                 break
-            if not self._scroll_results():
+            if not scroll():
                 break
-        logger.info(t('crawl.dy.finished', n=self.collected(), total=target_count))
-        return self.results()
+        return rounds
 
     # ─── reaching and reading the result list ─────────────────────────
 
@@ -588,22 +665,69 @@ class DouyinCrawler(VideoCrawler):
             time.sleep(2.0)
         return any(mark in self._body_text(limit=4000) for mark in marks)
 
-    def _card_ids(self) -> list:
-        """The video ids on the result page, in the order the list draws them.
+    def _card_ids(self, anchor: str | None = None) -> list:
+        """The video ids on screen, in the order the list draws them.
 
         The id comes out of the card's own href (``/video/7688240192020385070``),
-        which is the one thing on the card that is both stable and addressable: a
-        card that has not been filled in yet — the skeleton rows the list mounts
+        which is the one thing on a card that is both stable and addressable: a card
+        that has not been filled in yet — the skeleton rows the search list mounts
         first — has no anchor and contributes nothing, which is why the mount wait
-        counts these rather than counting nodes.
+        counts these rather than counting nodes. *anchor* switches which list is
+        read: the search result or a creator's own grid.
         """
         out = []
-        for el in self.driver.find_elements('css selector', self.CARD_ANCHOR):
+        for el in self.driver.find_elements('css selector', anchor or self.CARD_ANCHOR):
             with contextlib.suppress(Exception):
                 match = self.VIDEO_HREF.search(str(el.get_attribute('href') or ''))
                 if match and match.group(1) not in out:
                     out.append(match.group(1))
         return out
+
+    def _grid_ids(self) -> list:
+        return self._card_ids(self.PROFILE_ANCHOR)
+
+    def _wait_for_grid(self) -> bool:
+        """Poll the profile grid until it draws a post, or the mount wait is spent.
+
+        A page of one's own has no empty plate to wait for: the grid either hydrates
+        or this session is not being served the list, and the caller tells those two
+        apart with :meth:`_published_count`.
+        """
+        return self._wait_for_count(lambda: len(self._grid_ids()), 1, timeout=self.MOUNT_WAIT, tick=1.0) > 0
+
+    def _published_count(self) -> int:
+        """What the page publishes as its own 作品 count (-1 when it says nothing).
+
+        The site's number is the only honest yardstick for a walk that ends early:
+        57 rows from a page that says 85 is a pager that stopped, while 0 rows from a
+        page that says 0 is a creator who has never posted.
+
+        ``-1`` for "no such element" is the whole point of the signature: the shared
+        counter parser answers an empty string with 0, and 0 is a *claim* — reading a
+        missing number as zero would let a page that never rendered be reported as an
+        author who never posted.
+        """
+        text = ''
+        with contextlib.suppress(Exception):
+            element = self.driver.find_element('css selector', self.WORK_COUNT)
+            text = str(self._node_text(element) or '').strip()
+        return parse_count(text) if text else -1
+
+    def _scroll_profile(self) -> bool:
+        """Take the grid's own scroller to its bottom and wait for the next batch.
+
+        Measured: 21 → 39 → 57 → 85 anchors, one batch of 18 per round, each arriving
+        within a second of the jump. The **window** does none of this on a profile
+        page (it only feeds the footer's recommended videos), which is why the scroll
+        hunts for the element that actually moves instead of calling
+        :meth:`Crawler.scroll_down`.
+        """
+        before = len(set(self._grid_ids()))
+        with contextlib.suppress(Exception):
+            feed.jump_to_bottom(self.driver, self.PROFILE_GRID)
+        settled = feed.wait_for(lambda: len(set(self._grid_ids())), before + 1, timeout=self.SCROLL_WAIT, tick=1.0)
+        self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
+        return bool(settled > before)
 
     def _scroll_results(self) -> bool:
         """Step the window down and report whether the list handed over more rows.
@@ -688,6 +812,26 @@ class DouyinCrawler(VideoCrawler):
             if isinstance(found, dict):
                 return found
         return {}
+
+
+def douyin_sec_uid(value: str) -> str:
+    """The ``sec_uid`` a profile link (or a pasted token) identifies.
+
+    Douyin addresses a creator by this opaque token only — ``/user/<numeric uid>``
+    is not a route on the web app — and the token is handed out on every video page
+    as ``a[href*="/user/"]``, so a pasted profile link is the thing a user can
+    actually bring here. A bare token is accepted on its shape (long, no spaces):
+    a display name is what people try first and it addresses nobody, and opening a
+    guessed profile would report "this account posted nothing" about a page that
+    belongs to someone else.
+    """
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    from_link = re.search(r'/user/([A-Za-z0-9_.-]{10,})', text)
+    if from_link:
+        return from_link.group(1)
+    return text if re.fullmatch(r'[A-Za-z0-9_.-]{30,}', text) else ''
 
 
 def _clean_publish(value) -> str:

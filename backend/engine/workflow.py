@@ -181,6 +181,13 @@ class WorkflowEngine:
         mode = capabilities.mode_of_node(node)
         if mode is None:
             return [t('engine.source_unknown_platform', nid=label, platform=platform)]
+        wanted = capabilities.requested_mode_key(node)
+        offered = capabilities.mode_keys_for(platform)
+        if wanted and len(offered) > 1 and wanted not in offered:
+            # More than one mode on this platform means the fallback would have run
+            # a different kind of crawl than the node asked for. Named by what it
+            # asked for, not by the field the substituted mode happens to require.
+            return [t('engine.source_unknown_mode', nid=label, platform=platform)]
         errors = []
         for field in capabilities.required_missing(mode, params):
             errors.append(t('engine.source_missing', nid=label, field=t(field.name_key)))

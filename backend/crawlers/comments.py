@@ -33,7 +33,7 @@ from selenium.common.exceptions import JavascriptException, StaleElementReferenc
 
 from i18n import t
 
-from .engine import pager
+from .engine import feed, pager
 from .engine.counters import parse_count, to_int
 from .engine.jsonpath import collect, get_in, runs_text
 from .engine.wall import looks_blocked
@@ -919,29 +919,20 @@ class CommentSession:
         run) would read the pre-scroll count, conclude the list was exhausted
         and stop after one screen — which is exactly how a 5-row crawl of a
         2000-comment video once happened.
+
+        The scroll itself is the shared one (:func:`engine.feed.jump_to_bottom`)
+        because the douyin 作品 grid pages off the same route container and needs
+        the identical surface hunt; a second copy of this loop is what the engine
+        rule exists to prevent.
         """
-        before = len(self.driver.find_elements('css selector', '[data-e2e="comment-item"]'))
-        script = """
-        var list = document.querySelector('[data-e2e="comment-list"]');
-        var host = list;
-        while (host && host.scrollHeight <= host.clientHeight + 50) { host = host.parentElement; }
-        if (host) { host.scrollTop = host.scrollHeight; return 'panel'; }
-        var best = null;
-        document.querySelectorAll('*').forEach(function (el) {
-          if (el.scrollHeight > el.clientHeight + 200 && el.clientHeight > 300
-              && (!best || el.scrollHeight > best.scrollHeight)) { best = el; }
-        });
-        if (best) { best.scrollTop = best.scrollHeight; return 'container'; }
-        window.scrollTo(0, document.body.scrollHeight);
-        return 'window';
-        """
+
+        def count() -> int:
+            return len(self.driver.find_elements('css selector', '[data-e2e="comment-item"]'))
+
+        before = count()
         with contextlib.suppress(Exception):
-            self.driver.execute_script(script)
-        for _tick in range(12):
-            time.sleep(0.5)
-            if len(self.driver.find_elements('css selector', '[data-e2e="comment-item"]')) > before:
-                return True
-        return False
+            feed.jump_to_bottom(self.driver, '[data-e2e="comment-list"]')
+        return bool(feed.wait_for(count, before + 1, timeout=6.0, tick=0.5) > before)
 
     def _element_or_none(self, selector: str):
         try:

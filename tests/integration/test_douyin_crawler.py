@@ -31,6 +31,7 @@ from crawlers.video import (
     _author_from_related,
     _clean_publish,
     douyin_id,
+    douyin_sec_uid,
 )
 from utils.helpers import platform_for
 
@@ -87,11 +88,19 @@ class FakeDriver:
         fill_after=0,
         scroll_batches=None,
         title='',
+        grid=None,
+        grid_batches=None,
+        works='',
     ):
         self.cards = [] if fill_after else list(cards)
         self._pending = list(cards) if fill_after else []
         self.fill_after = fill_after
         self.scroll_batches = list(scroll_batches or [])
+        # The author profile's own 作品 grid: the ids mounted in it, the batches a
+        # container jump reveals, and the count the page publishes for itself.
+        self.grid = list(grid or [])
+        self.grid_batches = list(grid_batches or [])
+        self.works = works
         self.facts = facts if facts is not None else _default_facts()
         self.video_body = video_body
         # The page's own ``<title>``, which is where douyin announces the captcha
@@ -112,6 +121,11 @@ class FakeDriver:
         self.visited = []
         self.current_url = 'https://www.douyin.com/'
         self.scrolls = 0
+        # Which surface moved: measured, the profile grid answers only the
+        # container jump, so a walk that scrolled the window instead must be
+        # distinguishable from one that paged the list.
+        self.window_scrolls = 0
+        self.container_jumps = 0
 
     def get(self, url):
         self.visited.append(url)
@@ -124,6 +138,8 @@ class FakeDriver:
             return El('')
         if selector == '[data-e2e="feed-comment-icon"]':
             return El(self.comment_count)
+        if selector == DouyinCrawler.WORK_COUNT:
+            return El(self.works)
         raise RuntimeError(f'no element {selector}')
 
     def find_elements(self, by, selector):
@@ -133,6 +149,8 @@ class FakeDriver:
                 if self._reads >= self.fill_after:
                     self.cards, self._pending = self._pending, []
             return [El('', {'href': f'//www.douyin.com/video/{aweme_id}'}) for aweme_id in self.cards]
+        if selector == DouyinCrawler.PROFILE_ANCHOR:
+            return [El('', {'href': f'https://www.douyin.com/video/{aweme_id}'}) for aweme_id in self.grid]
         if selector == '[data-e2e="comment-item"]':
             return list(self.comment_items)
         return []
@@ -142,13 +160,19 @@ class FakeDriver:
             return getattr(args[0], 'text', '')
         if 'scrollBy' in script:
             self.scrolls += 1
+            self.window_scrolls += 1
             if self.scroll_batches:
                 self.cards = self.cards + self.scroll_batches.pop(0)
             return None
         if 'scrollTop' in script or 'scrollHeight' in script:
             # The comment panel's own scroller (the endpoint is signed, so the
-            # panel is walked by DOM).
+            # panel is walked by DOM), and the profile grid's, which is what
+            # ``engine.feed.jump_to_bottom`` hunts for.
             self.scrolls += 1
+            if 'scrollerFrom' in script:
+                self.container_jumps += 1
+                if self.grid_batches:
+                    self.grid = self.grid + self.grid_batches.pop(0)
             return 'container'
         if 'video-player-digg' in script:
             return dict(self.facts)
@@ -238,6 +262,19 @@ class TestPureHelpers:
         assert platform_for(f'https://www.douyin.com/video/{ID}') == 'douyin'
         assert platform_for('https://v.douyin.com/abc/') == 'douyin'
         assert platform_for('https://www.iesdouyin.com/share/video/1') == 'douyin'
+
+    def test_an_author_is_addressed_by_profile_link_or_token_only(self):
+        sec = 'MS4wLjABAAAAehSj560Se_lTjmmy0imDx_2qKW_Lj8zS45rbZriU62h5ADwatvOxdaZ8lu_SjOGD'
+        assert douyin_sec_uid(f'https://www.douyin.com/user/{sec}') == sec
+        assert douyin_sec_uid(f'https://www.douyin.com/user/{sec}?from_tab_name=main') == sec
+        assert douyin_sec_uid(f'www.douyin.com/user/{sec}/') == sec
+        assert douyin_sec_uid(sec) == sec
+        # A display name is what people type first and it addresses nobody; opening
+        # a guessed profile would report "this author posted nothing" about a page
+        # that belongs to someone else.
+        assert douyin_sec_uid('泫九') == ''
+        assert douyin_sec_uid('https://www.douyin.com/jingxuan') == ''
+        assert douyin_sec_uid('') == ''
 
 
 class TestSearch:
@@ -353,6 +390,105 @@ class TestSearch:
         reopened.seed([{'标题': 'already stored', '链接': f'https://www.douyin.com/video/{ID}'}])
         reopened.search('人工智能', target_count=2, resume={'opened': [ID]})
         assert len([u for u in second.visited if f'/video/{ID}' in u]) == 0, 'must not re-open a paid-for video'
+
+    def test_a_resumed_run_walks_past_the_screen_it_already_paid_for(self, make_crawler):
+        """The resumed page reopens on the very ids the dead run opened, so "every
+        id on screen is known" is that run's *ordinary first round* — not the end of
+        the list. Breaking there (which the walk used to do) made 断点续跑 hand back
+        the dead run's rows and quietly stop, with the target unmet and no complaint."""
+        other = '7678996507694094827'
+        crawler, driver = make_crawler(cards=[ID], scroll_batches=[[other]])
+        crawler.seed([{'视频ID': ID, '链接': f'https://www.douyin.com/video/{ID}'}])
+        rows = crawler.search('人工智能', target_count=2, resume={'opened': [ID]})
+        assert driver.window_scrolls >= 1, 'an exhausted-looking first screen must be scrolled, not obeyed'
+        assert {str(row['视频ID']) for row in rows} == {ID, other}
+
+
+SEC = 'MS4wLjABAAAAehSj560Se_lTjmmy0imDx_2qKW_Lj8zS45rbZriU62h5ADwatvOxdaZ8lu_SjOGD'
+OTHER = '7678996507694094827'
+
+
+class TestAuthorProfile:
+    """One creator's own 作品 grid, which pages off a container the window cannot move."""
+
+    def test_the_profile_is_opened_once_and_its_grid_is_paged(self, make_crawler):
+        crawler, driver = make_crawler(cards=[], grid=[ID], grid_batches=[[OTHER]], works='2')
+        rows = crawler.author(SEC, target_count=5)
+        assert [str(row['视频ID']) for row in rows] == [ID, OTHER]
+        assert driver.visited[0] == DouyinCrawler.PROFILE_ENTRY.format(sec=SEC)
+        assert len([u for u in driver.visited if '/user/' in u]) == 1, 'the grid is one navigation, then scrolls'
+
+    def test_the_container_is_jumped_because_the_window_moves_nothing_here(self, make_crawler):
+        """Measured: a window scroll on a profile page grows the footer's
+        recommended-video links (8 → 29) and leaves the 作品 grid untouched, which a
+        count-based walk reports as an exhausted list at 57 of 85."""
+        crawler, driver = make_crawler(cards=[], grid=[ID], grid_batches=[[OTHER]], works='2')
+        crawler.author(SEC, target_count=2)
+        assert driver.container_jumps >= 1
+        assert driver.window_scrolls == 0, 'the window is the wrong surface on this page'
+
+    def test_the_numbers_come_from_opening_the_video_not_from_the_card(self, make_crawler):
+        crawler, _driver = make_crawler(cards=[], grid=[ID], works='1')
+        row = crawler.author(f'https://www.douyin.com/user/{SEC}?from_tab_name=main', target_count=1)[0]
+        assert row['点赞数'] == 59000 and row['评论数'] == 2099 and row['收藏数'] == 9241 and row['转发数'] == 7839
+        assert row['作者'] == '泫九' and row['发布时间'] == '2026-08-04 16:32'
+        assert row['视频ID'] == ID and '播放数' not in row
+
+    def test_a_profile_that_publishes_zero_works_is_an_answer_not_a_failure(self, make_crawler):
+        crawler, driver = make_crawler(cards=[], grid=[], grid_batches=[[ID]], works='0')
+        assert crawler.author(SEC, target_count=5) == []
+        assert driver.container_jumps == 0, 'the page said it holds nothing; there is nothing to page'
+
+    def test_a_grid_that_never_mounts_refuses_and_quotes_its_own_count(self, make_crawler):
+        crawler, _driver = make_crawler(cards=[], grid=[], works='85')
+        with pytest.raises(RuntimeError) as err:
+            crawler.author(SEC, target_count=5)
+        assert '85' in str(err.value), 'the refusal has to say the list is missing, not that it is empty'
+
+    def test_a_page_that_shows_no_count_is_not_read_as_an_author_who_never_posted(self, make_crawler):
+        """The shared counter parser answers an empty string with 0, and 0 is a
+        claim about the author. A profile whose numbers never arrived has to refuse
+        as itself, not become "this person has no works"."""
+        crawler, _driver = make_crawler(cards=[], grid=[], works='')
+        assert crawler._published_count() == -1
+        with pytest.raises(RuntimeError) as err:
+            crawler.author(SEC, target_count=5)
+        assert '作品数' in str(err.value) or 'post count' in str(err.value)
+
+    def test_a_grid_that_works_without_a_count_still_delivers_rows(self, make_crawler):
+        """A missing count is the page being shy about a number, not the crawl
+        failing: the rows are collected, and the closing line simply has no
+        published figure to claim the walk reached."""
+        crawler, _driver = make_crawler(cards=[], grid=[ID], works='')
+        rows = crawler.author(SEC, target_count=2)
+        assert [str(row['视频ID']) for row in rows] == [ID]
+
+    def test_a_captcha_interstitial_refuses_the_run(self, make_crawler):
+        crawler, driver = make_crawler(cards=[], grid=[ID], works='1', title='验证码中间页')
+        with pytest.raises(RuntimeError) as err:
+            crawler.author(SEC, target_count=3)
+        assert '验证码' in str(err.value)
+        assert driver.visited == [DouyinCrawler.PROFILE_ENTRY.format(sec=SEC)]
+
+    def test_the_budget_stops_the_walk_before_the_next_batch(self, make_crawler):
+        crawler, driver = make_crawler(cards=[], grid=[ID, OTHER], grid_batches=[[ID]], works='3')
+        rows = crawler.author(SEC, target_count=1)
+        assert len(rows) == 1
+        assert driver.container_jumps == 0, 'a scroll that waits for rows nobody asked for is wasted time'
+
+    def test_a_resumed_walk_skips_the_videos_it_already_opened(self, make_crawler):
+        crawler, driver = make_crawler(cards=[], grid=[ID, OTHER], grid_batches=[[ID]], works='2')
+        crawler.seed([{'视频ID': ID, '链接': f'https://www.douyin.com/video/{ID}'}])
+        rows = crawler.author(SEC, target_count=3)
+        assert [str(row['视频ID']) for row in rows] == [ID, OTHER]
+        assert len([u for u in driver.visited if f'/video/{ID}' in u]) == 0, 'a paid-for video is not opened twice'
+
+    def test_something_that_is_not_a_profile_is_refused_before_a_page_opens(self, make_crawler):
+        crawler, driver = make_crawler(cards=[])
+        for value in ('', '   ', '泫九', f'https://www.douyin.com/video/{ID}'):
+            with pytest.raises(ValueError):
+                crawler.author(value, target_count=2)
+        assert driver.visited == []
 
 
 class TestComments:
