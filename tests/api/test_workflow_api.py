@@ -445,7 +445,9 @@ class TestWorkflowExecute:
         # completed run never appears in the resume banner, and the gap would
         # be silent forever.
         assert run['status'] == 'failed'
-        assert run['node_done'] == 1, 'a skipped node must not count as done'
+        # Neither the starved node nor the failed one is "done": the records table
+        # must not print 1/2 for the run whose console said 0/2 个节点完成.
+        assert run['node_done'] == 0, 'a skipped or failed node must not count as done'
 
     @pytest.mark.serial
     def test_resuming_the_same_workflow_reuses_stored_rows(self, client, app_module, paste):

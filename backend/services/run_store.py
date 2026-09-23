@@ -370,18 +370,21 @@ class RunStore:
         resumable. Returns the run ids promoted."""
         rows = self._query('SELECT run_id FROM runs WHERE status = ?', (RUN_RUNNING,))
         ids = [row['run_id'] for row in rows]
-        if ids:
+        for run_id in ids:
             stamp = self.now()
+            # One rule for closing a node that never reached finish_node, shared
+            # with the end-of-run path. The bulk UPDATE this replaces only moved the
+            # status and left ``row_count`` at the 0 ``begin_node`` wrote — and
+            # ``row_count`` is what the run record shows as 已存行数 AND what the
+            # 续跑 node sorts by to find "the fullest node to adopt". So a crawl
+            # killed at row 900 came back claiming it had kept nothing: the user
+            # read an empty record, discarded it, and threw away paid-for rows.
+            self.settle_nodes(run_id)
             self._execute(
-                'UPDATE runs SET status = ?, updated_at = ?, note = ? WHERE status = ?',
-                (RUN_INTERRUPTED, stamp, t('run.interrupted_by_restart'), RUN_RUNNING),
+                'UPDATE runs SET status = ?, updated_at = ?, node_done = ?, note = ? WHERE run_id = ?',
+                (RUN_INTERRUPTED, stamp, self._finished_count(run_id), t('run.interrupted_by_restart'), run_id),
             )
-            # A node caught mid-run has whatever it published kept as its
-            # partial output — that is the data the next attempt starts from.
-            self._execute(
-                'UPDATE node_runs SET status = ?, updated_at = ? WHERE status = ?',
-                (NODE_PARTIAL, stamp, NODE_RUNNING),
-            )
+        if ids:
             logger.warning(t('run.promoted', n=len(ids)))
         return ids
 
@@ -427,16 +430,25 @@ class RunStore:
 
     def finish_run(self, run_id: str, status: str, note: str = ''):
         stamp = self.now()
-        done = self._notskipped_count(run_id)
+        done = self._finished_count(run_id)
         self._execute(
             'UPDATE runs SET status = ?, updated_at = ?, finished_at = ?, node_done = ?, note = ? WHERE run_id = ?',
             (status, stamp, stamp, done, note, run_id),
         )
 
-    def _notskipped_count(self, run_id: str) -> int:
+    def _finished_count(self, run_id: str) -> int:
+        """Nodes this run really finished — the number the console prints.
+
+        ``failed`` and ``partial`` are excluded on purpose: a node that died or
+        starved visited the canvas but produced nothing downstream can rely on.
+        The executor already refuses to count them as done (``completed_nodes``),
+        and ``node_done`` is what the run-records table renders as ``n/N`` — so
+        one answer, not the two the record and the console used to disagree about.
+        ``restored`` counts: those rows are in hand, which is the whole test.
+        """
         rows = self._query(
-            'SELECT COUNT(*) AS n FROM node_runs WHERE run_id = ? AND status NOT IN (?, ?)',
-            (run_id, NODE_PENDING, NODE_SKIPPED),
+            'SELECT COUNT(*) AS n FROM node_runs WHERE run_id = ? AND status NOT IN (?, ?, ?, ?)',
+            (run_id, NODE_PENDING, NODE_SKIPPED, NODE_FAILED, NODE_PARTIAL),
         )
         return int(rows[0]['n']) if rows else 0
 

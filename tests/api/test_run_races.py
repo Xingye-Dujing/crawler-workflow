@@ -28,7 +28,7 @@ import pytest
 from run_wait import run_finished
 
 from i18n import t
-from services.run_store import RunStore
+from services.run_store import NODE_FAILED, RunStore
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
@@ -501,6 +501,85 @@ class TestContinueAfterAnEdit:
         assert nodes['node-2']['status'] == 'restored', nodes['node-2']
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'analysis #node-2' in blob, blob
+
+    def test_the_second_continue_still_reuses_what_the_first_one_restored(self, client, app_module):
+        """Reuse has to survive being reused — otherwise the promise lasts one click.
+
+        The reuse test above stops one attempt short of the real failure: the node
+        that came back as ``restored`` is then settled as ``restored``, and a
+        predicate that only accepts ``done`` no longer recognises its own output.
+        The third attempt therefore re-executed every node the second had just
+        replayed, re-paying an LLM batch or a crawl that had been answered twice
+        already — while the console for the second attempt had said 沿用上次结果.
+        """
+        store = app_module._RUN_STORE
+        started = client.post(
+            '/api/workflow/execute',
+            json={'workflow': self._flow(self.STEPS_A, 'parquet'), 'workflow_name': 'twice'},
+        )
+        run_id = started.get_json()['run_id']
+        assert _wait(app_module)
+        assert {n['node_id']: n['status'] for n in store.get_run(run_id)['nodes']}['node-2'] == 'done'
+
+        # Attempt 2 replays node-2 and fails on the export again, so there is
+        # something left to continue.
+        client.post(
+            '/api/workflow/execute',
+            json={'workflow': self._flow(self.STEPS_A, 'parquet'), 'workflow_name': 'twice', 'resume_run_id': run_id},
+        )
+        assert _wait(app_module)
+        assert store.node_statuses(run_id)['node-2']['status'] == 'restored'
+
+        # Attempt 3: same parameters, working export. node-2 was already only a
+        # replay, and a replay is exactly as finished as a computation.
+        client.post(
+            '/api/workflow/execute',
+            json={'workflow': self._flow(self.STEPS_A, 'csv'), 'workflow_name': 'twice', 'resume_run_id': run_id},
+        )
+        assert _wait(app_module)
+        after = store.node_statuses(run_id)
+        assert after['node-2']['status'] == 'restored', (
+            'a node the previous 继续 restored must not be re-executed by the next one'
+        )
+        blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
+        assert 'analysis #node-2' in blob, blob
+
+    def test_a_node_deleted_from_the_canvas_cannot_keep_failing_later_attempts(self, client, app_module):
+        """``runs.db`` remembers every node a run ever had; the canvas does not.
+
+        The failed count was read from the whole record, so once a node had died,
+        deleting it and pressing 继续 produced 「2/2 个节点完成，1 个失败」 over a run
+        where every remaining node finished — and because a broken count is what
+        marks the run failed, the record stayed resumable forever, offering a
+        continue that could never clear it.
+        """
+        store = app_module._RUN_STORE
+        started = client.post(
+            '/api/workflow/execute',
+            json={'workflow': self._flow(self.STEPS_A, 'parquet'), 'workflow_name': 'ghost'},
+        )
+        run_id = started.get_json()['run_id']
+        assert _wait(app_module)
+        # The node the user is about to delete: not on the canvas, only in the record.
+        store.begin_node(run_id, 'node-9', 'analysis', fingerprint='fp-gone')
+        store.finish_node(run_id, 'node-9', NODE_FAILED, error='the node the user then deleted')
+
+        again = client.post(
+            '/api/workflow/execute',
+            json={'workflow': self._flow(self.STEPS_A, 'csv'), 'workflow_name': 'ghost', 'resume_run_id': run_id},
+        )
+        assert again.status_code == 200, again.get_json()
+        assert _wait(app_module)
+        assert store.get_run(run_id)['status'] == 'completed', 'a deleted node must not hold the run open'
+        assert app_module.execution_state['failed_nodes'] == 0
+        logs = client.get('/api/workflow/status').get_json()['logs']
+        finish = [line for line in logs if '运行结束' in line or 'Run finished' in line]
+        assert finish, '\n'.join(logs)
+        # Neither language's "N failed" tail may be on it: node-9 is not on this
+        # canvas, so it is not this attempt's failure to report. Spelled in both
+        # languages because the request's X-Lang decides what the worker prints,
+        # and a test that pasted one of them would assert nothing.
+        assert not any('个失败' in line or ' failed' in line for line in finish), finish
 
 
 class TestStoreFailures:

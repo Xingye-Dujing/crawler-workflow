@@ -21,6 +21,7 @@ from services.run_store import (
     NODE_DONE,
     NODE_FAILED,
     NODE_PARTIAL,
+    NODE_RESTORED,
     NODE_SKIPPED,
     RUN_COMPLETED,
     RUN_FAILED,
@@ -182,7 +183,49 @@ class TestPromoteStale:
         promoted = RunStore(str(tmp_path / 'runs.db'))  # same file, fresh process
         try:
             assert promoted.get_run('r1')['status'] == RUN_INTERRUPTED
-            assert promoted.node_statuses('r1')['node-1']['status'] == NODE_PARTIAL
+            # Nothing had been published when the process died, so this node kept
+            # nothing. ``partial`` would promise rows that are not there — and this
+            # is the same rule the live path applies (``_run_node_durable`` settles on
+            # the rows in hand), which the promotion used to contradict by marking
+            # every interrupted node partial whatever it had produced.
+            assert promoted.node_statuses('r1')['node-1']['status'] == NODE_FAILED
+        finally:
+            promoted._conn.close()
+
+    def test_a_kill_that_left_rows_behind_reports_the_rows_it_kept(self, store, tmp_path, sample_rows):
+        """The record's 已存行数 must survive the kill that skipped the write.
+
+        ``node_runs.row_count`` is written by ``finish_node`` — precisely the call a
+        killed process never reaches — so the column still held the 0 that
+        ``begin_node`` wrote while the rows themselves were safe in ``node_rows``.
+        Two things read that column: the run-records panel (``rows_kept``), and the
+        续跑 node, which picks "the fullest node" to adopt by it. A crawl killed at
+        row 4 therefore showed up as a run that had kept nothing, and the user —
+        told there was nothing there — discarded paid-for data.
+        """
+        _start(store)
+        store.begin_node('r1', 'node-1', 'source', fingerprint='fp')
+        store.append_rows('r1', 'node-1', sample_rows)
+        store.begin_node('r1', 'node-2', 'analysis', fingerprint='fp2')  # started, published nothing
+        assert store.node_statuses('r1')['node-1']['row_count'] == 0, (
+            'the stored count is what the kill leaves behind — this is the bug being fixed'
+        )
+        store._conn.close()
+
+        promoted = RunStore(str(tmp_path / 'runs.db'))
+        try:
+            nodes = promoted.node_statuses('r1')
+            assert nodes['node-1']['status'] == NODE_PARTIAL
+            assert nodes['node-1']['row_count'] == 4, '4 of the 5 sample rows survive dedupe; the panel must say 4'
+            assert nodes['node-2']['status'] == NODE_FAILED
+            assert nodes['node-2']['row_count'] == 0
+            resumable = {run['run_id']: run for run in promoted.list_resumable()}
+            assert resumable['r1']['rows_kept'] == 4, 'the banner/record shows the rows the crawl really holds'
+            # A set: which nodes are open is the contract, their row order is not.
+            assert set(resumable['r1']['partial_nodes']) == {'node-1', 'node-2'}
+            # The run's own finished-node count is recomputed too: a promoted run is
+            # read by the same panel as any other.
+            assert promoted.get_run('r1')['node_done'] == 0
         finally:
             promoted._conn.close()
 
@@ -202,17 +245,26 @@ class TestPromoteStale:
 
 
 class TestLifecycle:
-    def test_finish_run_counts_non_skipped_nodes(self, store):
+    def test_finish_run_counts_only_nodes_that_really_finished(self, store):
         _start(store)
         store.begin_node('r1', 'a', 'source')
         store.finish_node('r1', 'a', NODE_DONE)
         store.begin_node('r1', 'b', 'analysis')
         store.finish_node('r1', 'b', NODE_SKIPPED)
         store.begin_node('r1', 'c', 'output')
-        store.finish_node('r1', 'c', NODE_FAILED)
+        store.finish_node('r1', 'c', NODE_PARTIAL)
+        store.begin_node('r1', 'd', 'output')
+        store.finish_node('r1', 'd', NODE_FAILED)
+        store.begin_node('r1', 'e', 'visualize')
+        store.finish_node('r1', 'e', NODE_RESTORED)
         store.finish_run('r1', RUN_FAILED)
         run = store.get_run('r1')
-        assert run['node_done'] == 2  # skipped excluded
+        # Neither a starved node, nor one that died, nor one that only half
+        # delivered is "done" — and the console already refuses to count them
+        # (``completed_nodes``), so the record and the console now print one answer
+        # instead of 「1/4」 and 「4/4 个节点完成」 for the same run. A restored node
+        # does count: its rows are in hand, which is the only test that matters.
+        assert run['node_done'] == 2
         assert run['status'] == RUN_FAILED
 
     def test_begin_node_same_fingerprint_keeps_rows(self, store, sample_rows):

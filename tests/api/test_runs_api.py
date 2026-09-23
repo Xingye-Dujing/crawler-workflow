@@ -98,7 +98,9 @@ class TestRunListing:
 
         run = client.get('/api/runs/broken').get_json()['run']
         assert run['status'] == RUN_INTERRUPTED
-        assert run['node_total'] == 3 and run['node_done'] == 3
+        # ``node_done`` counts the nodes that really finished, not the ones merely
+        # visited — the same answer the console gives for this run.
+        assert run['node_total'] == 3 and run['node_done'] == 1
         nodes = {node['node_id']: node for node in run['nodes']}
         assert [nodes[nid]['status'] for nid in ('node-1', 'node-2', 'node-3')] == ['done', 'partial', 'failed']
         assert [nodes[nid]['row_count'] for nid in ('node-1', 'node-2', 'node-3')] == [3, 2, 0]

@@ -384,6 +384,11 @@ execution_state = {
     # worker's own verdict, published once the run stops.
     'skipped_nodes': 0,
     'failed_nodes': 0,
+    # Node ids the CURRENT attempt visited. `runs.db` keeps the status of every
+    # node ever run under this run id, including ones the canvas has since
+    # deleted, so a verdict read from the whole record can blame today's run for
+    # an older shape of the workflow.
+    'attempted_nodes': set(),
     'outcome': '',
     'active_crawlers': set(),
     '_wf_logs': {},  # {wf_idx: [log lines]} per-workflow logs for parallel mode
@@ -1235,6 +1240,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             execution_state['completed_nodes'] = 0
             execution_state['skipped_nodes'] = 0
             execution_state['failed_nodes'] = 0
+            # Node ids THIS attempt visited. The run record outlives the canvas:
+            # nodes deleted between attempts keep their stored status, so any
+            # verdict read from the whole record can blame a finished run for a
+            # failure that belonged to an older shape of the workflow.
+            execution_state['attempted_nodes'] = set()
             execution_state['outcome'] = ''
             execution_state['cookie_expired'] = False
             execution_state['_mode'] = mode
@@ -1337,6 +1347,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     break
                 node = wf_engine.nodes[nid]
                 label = node_label(node, nid)
+                with _completed_lock:
+                    # Recorded before the node runs: one abandoned mid-crawl must
+                    # still be in this attempt's population, or the settle pass in
+                    # the finish line would filter the very node it exists to count.
+                    execution_state['attempted_nodes'].add(nid)
                 primary, upstream = _inputs_for(nid)
                 result, status = _run_node_durable(ctx, node, headless, primary, upstream, wf_idx)
                 results[nid] = result
@@ -1525,11 +1540,20 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 # one sentence that says how the run ended, with its numbers.
 
             still_running = execution_state['running']
-            # Read the settled node states BEFORE announcing the run: the finish
-            # line, the stored outcome and the browser's toast all have to agree,
-            # and the broken count used to be computed after the line was printed.
+            # Settle FIRST, then read the verdict. A node abandoned mid-crawl only
+            # becomes partial/failed inside settle_nodes, and the comment here used to
+            # promise the opposite of the code: the count was taken before that pass
+            # (and from the whole record, so a node deleted from the canvas kept
+            # failing every later 继续). Now the finish line, the stored outcome and
+            # the browser's toast all describe the same settled, current attempt.
+            store.settle_nodes(run_id)
+            statuses = store.node_statuses(run_id)
+            with _completed_lock:
+                attempted = set(execution_state['attempted_nodes'])
             broken = sum(
-                1 for s in store.node_statuses(run_id).values() if s.get('status') in (NODE_FAILED, NODE_PARTIAL)
+                1
+                for nid, state in statuses.items()
+                if nid in attempted and state.get('status') in (NODE_FAILED, NODE_PARTIAL)
             )
             with _completed_lock:
                 execution_state['failed_nodes'] = broken
@@ -2515,8 +2539,18 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
 
     reusable = (
         ctx.get('resume')
-        and stored.get('status') == NODE_DONE
+        # ``restored`` belongs here: a node that only *replayed* its stored rows in
+        # the previous attempt is just as settled as one that computed them, and
+        # leaving it out made the second 继续 re-execute the whole chain the first
+        # 继续 had just restored — the promise of checkpointing lasted one click.
+        and stored.get('status') in (NODE_DONE, NODE_RESTORED)
         and stored.get('fingerprint') == fingerprint
+        # An EMPTY stored result is deliberately not trusted. Reuse is decided by
+        # fingerprint, and a source's fingerprint does not change when it happens
+        # to collect more rows, so adopting "0 rows" here would freeze a node whose
+        # parent finally delivered: the run would report success over an empty
+        # table. Recomputing a 0-row node is at worst one cheap pass; the row
+        # ledger still prevents any double-append.
         and int(stored.get('row_count') or 0) > 0
         and ntype != 'source'
     )
