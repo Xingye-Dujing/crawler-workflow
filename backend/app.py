@@ -3543,7 +3543,11 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = ''):
     job = _COOKIE_JOB
     crawler = None
     try:
-        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR)
+        # ``for_login`` is the point of this window: a human reads it. The crawler
+        # default blocks images to save seconds per navigation, and the QR code a
+        # user must scan is an ``<img>`` — with the blocker on, the panel opened a
+        # window that could not be completed at all.
+        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR, for_login=True)
         url = entry_url or crawler.login_url
         if not url:
             raise ValueError(t('api.unsupportedPlatform', platform=platform))

@@ -70,9 +70,16 @@ class Crawler(ABC):
     # platform that measures a real need opts in.
     needs_images = False
 
-    def __init__(self, headless: bool = True, cookie_path: str | None = None):
+    def __init__(self, headless: bool = True, cookie_path: str | None = None, for_login: bool = False):
         self.headless = headless
         self.cookie_path = cookie_path
+        if for_login:
+            # A window the user looks at is not a crawl. The login page's QR code is
+            # an ``<img>``, so the content blocker that saves seconds on every
+            # navigation would leave the one step a crawler cannot perform —
+            # scanning to log in — impossible. Reported by a user re-saving a weibo
+            # cookie, who got a page with no code to scan.
+            self.needs_images = True
         self.driver = None
         self._sink = None
         self._cursor_sink = None
@@ -157,6 +164,18 @@ class Crawler(ABC):
         cursor = (kwargs or {}).get('resume')
         return cursor if isinstance(cursor, dict) else {}
 
+    def _content_prefs(self) -> dict:
+        """Chrome content preferences for this session.
+
+        Split out of ``_create_driver`` because it is the one place the difference
+        between a crawl and a login window is decided: blocking images is the largest
+        per-navigation saving a text-and-attribute crawler has, and the empty dict is
+        what a human-facing window needs (see ``for_login``).
+        """
+        if self.needs_images:
+            return {}
+        return {'profile.managed_default_content_settings': {'images': 2}}
+
     def _create_driver(self):
         opts = Options()
         if self.headless:
@@ -188,8 +207,9 @@ class Crawler(ABC):
         # event was measured to never arrive at all (a 40 s TimeoutException on
         # the very first navigation), which no amount of timeout tuning fixes.
         opts.page_load_strategy = 'eager'
-        if not self.needs_images:
-            opts.add_experimental_option('prefs', {'profile.managed_default_content_settings': {'images': 2}})
+        prefs = self._content_prefs()
+        if prefs:
+            opts.add_experimental_option('prefs', prefs)
         browser_binary = str(get_setting('browser_binary') or '').strip()
         if browser_binary:
             opts.binary_location = browser_binary

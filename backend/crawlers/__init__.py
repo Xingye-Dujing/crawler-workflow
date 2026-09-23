@@ -50,9 +50,9 @@ def cookie_hosts(platform: str) -> tuple:
     return tuple(host for host in (cls.domain, *cls.cookie_domains) if host)
 
 
-def get_crawler(platform: str, headless: bool = True, cookie_dir: str = None):
+def get_crawler(platform: str, headless: bool = True, cookie_dir: str = None, for_login: bool = False):
     cls = crawler_class(platform)
     if not cls:
         raise ValueError(f'Unknown platform: {platform}')
     cookie_path = f'{cookie_dir}/{platform}_cookies.json' if cookie_dir else None
-    return cls(headless=headless, cookie_path=cookie_path)
+    return cls(headless=headless, cookie_path=cookie_path, for_login=for_login)

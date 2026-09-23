@@ -51,3 +51,48 @@ def test_driver_options_per_mode(captured_options, headless):
     assert '--lang=zh-CN' in joined
     assert captured_options['service'][0] == 'service'
     crawler.driver = None  # nothing real to close
+
+
+def _prefs(box):
+    return (box['options'].experimental_options or {}).get('prefs') or {}
+
+
+IMAGES_BLOCKED = {'profile.managed_default_content_settings': {'images': 2}}
+
+
+def test_a_crawl_blocks_images_and_a_login_window_does_not(captured_options):
+    """The blocker is the largest per-navigation saving a text crawler has — and it
+    is fatal on the one window a human has to read: the QR code is an ``<img>``, so
+    a login browser with images blocked shows nothing to scan. Reported by a user
+    re-saving a weibo cookie and getting a page they could not complete.
+    """
+    crawler = ZhihuCrawler(headless=False)
+    assert _prefs(captured_options) == IMAGES_BLOCKED
+    crawler.driver = None
+
+    login = ZhihuCrawler(headless=False, for_login=True)
+    assert 'profile.managed_default_content_settings' not in _prefs(captured_options), (
+        'the login window still blocks images, so no QR code can load'
+    )
+    login.driver = None
+
+
+def test_a_platform_that_needs_images_still_gets_them(captured_options):
+    """``for_login`` may only ever *widen* what loads: a platform that declares it
+    needs images must not lose them because a caller asked for a crawl."""
+
+    class NeedsImages(ZhihuCrawler):
+        needs_images = True
+
+    crawler = NeedsImages(headless=True)
+    assert _prefs(captured_options) == {}
+    crawler.driver = None
+
+
+def test_get_crawler_passes_the_login_mode_through(captured_options):
+    from crawlers import get_crawler
+
+    crawler = get_crawler('zhihu', headless=False, for_login=True)
+    assert crawler.needs_images is True
+    assert 'profile.managed_default_content_settings' not in _prefs(captured_options)
+    crawler.driver = None

@@ -79,8 +79,11 @@ def job(monkeypatch, app_module):
     block.set()
     state = {'facts': None, 'hold': None}
 
-    def fake_get_crawler(platform, headless=True, cookie_dir=None):
+    def fake_get_crawler(platform, headless=True, cookie_dir=None, for_login=False):
         crawler = FakeCrawler(login_block=block, facts=state['facts'], hold=state['hold'])
+        # What the window was built for, recorded so a test can assert it: a login
+        # browser that does not ask for images cannot show a QR code.
+        crawler.requested = {'headless': headless, 'for_login': for_login}
         made.append(crawler)
         return crawler
 
@@ -130,6 +133,22 @@ class TestCookieJob:
         assert client.get('/api/cookies/status').get_json()['cookies']['zhihu'] is True
         # ...and the browser was closed through the bounded helper.
         assert job['made'][0].closed is True
+
+    def test_the_login_window_is_built_to_show_the_qr_code(self, client, job, app_module):
+        """A crawl browser blocks images to save seconds per navigation; a *login*
+        window that does the same shows the user a page with no QR code to scan, so
+        the one step the crawler cannot perform becomes impossible as well.
+
+        Reported by a user re-saving a weibo cookie: the window opened, the code
+        area stayed empty. The job has to ask for a human-facing window.
+        """
+        assert client.post('/api/cookies/generate', json={'platform': 'weibo', 'wait_seconds': 10}).status_code == 202
+        _await_phase(client, 'waiting')
+        client.post('/api/cookies/generate/confirm')
+        assert _await_idle(client)
+        made = job['made'][0]
+        assert made.requested['for_login'] is True, 'the login window was built as a crawl (images blocked)'
+        assert made.requested['headless'] is False, 'a login has to be a window the user can see'
 
     def test_capture_is_read_on_the_platform_page_not_wherever_login_ended(self, client, job, app_module):
         """A login that finishes on the identity provider's own page (Google behind
