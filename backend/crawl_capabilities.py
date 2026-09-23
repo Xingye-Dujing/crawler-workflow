@@ -349,6 +349,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         platform='bilibili',
         modes=(
             _posts_mode(),
+            _author_mode(
+                placeholder='https://space.bilibili.com/<UID>',
+                hint_key='settings.authorHintBili',
+            ),
             _comment_mode('bilibili', 'https://www.bilibili.com/video/BV...'),
         ),
     ),

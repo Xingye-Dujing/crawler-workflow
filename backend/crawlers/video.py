@@ -98,6 +98,24 @@ def bilibili_bvid(url: str) -> str:
     return match.group(1) if match else ''
 
 
+def bilibili_mid(value: str) -> str:
+    """The numeric member id a space link or a typed mid identifies.
+
+    Accepts ``266765166``, a pasted ``space.bilibili.com/266765166/upload/video``
+    link (what the browser's address bar actually holds after visiting someone) and
+    the ``/space.to_511...`` share form. Anything without digits is refused rather
+    than turned into a URL that would show an empty page — "this UP has posted
+    nothing" must not be inferable from a malformed address.
+    """
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    if text.isdigit():
+        return text
+    match = re.search(r'bilibili\.com/(\d{3,})', text) or re.search(r'space\.to_(\d{3,})', text)
+    return match.group(1) if match else ''
+
+
 def bilibili_search_url(keyword: str, page: int) -> str:
     """Page *page* of a keyword search — where page 1 carries no parameter.
 
@@ -173,6 +191,10 @@ class BilibiliCrawler(VideoCrawler):
 
     MAX_PAGES = 40
     CARD_WAIT = 12.0
+    #: How far one round of the space page is scrolled. The upload list appends as
+    #: it is reached (measured 40 cards, then 80 anchors after three steps), so the
+    #: pager is the scroll and not a page parameter.
+    SCROLL_STEPS = 3
     POLITE_BASE = 0.8
     POLITE_SPREAD = 0.3
 
@@ -238,6 +260,74 @@ class BilibiliCrawler(VideoCrawler):
         if blocked and not self.collected():
             raise RuntimeError(t('crawl.bili.blocked', code=blocked))
         logger.info(t('crawl.bili.finished', n=self.collected(), total=target_count))
+        return self.results()
+
+    def author(self, author: str, target_count: int = 200, **kwargs):
+        """One creator's own uploads, read off their space page.
+
+        The list is built from the same ``.bili-video-card`` container the keyword
+        search uses, so the card reader is shared and a row from this mode cannot
+        disagree with a row from that one — the counts still come from the unsigned
+        ``x/web-interface/view`` per video.
+
+        The signed ``x/space/wbi/arc/search`` is deliberately not used: measured it
+        answers ``code=-403 访问权限不足`` for our session (and the older un-wbi path
+        is rate-limited at ``-799``), and forging a per-request signature is a
+        different, larger problem than reading a page that already renders.
+        """
+        mid = bilibili_mid(author)
+        if not mid:
+            raise ValueError(t('crawl.bili.authorEmpty', author=author))
+        if self.collected() >= target_count:
+            logger.info(t('crawl.bili.target_reached', n=target_count))
+            return self.results()
+        logger.info(t('crawl.bili.authorStart', mid=mid, n=target_count))
+        url = f'https://space.bilibili.com/{mid}/video'
+        self.open(url)
+        self.check_login_wall(url)
+        if self.login_wall:
+            raise RuntimeError(t('crawl.bili.blocked', code='login'))
+        # A space of one's own starts empty only while it hydrates; the profile
+        # header above the list is already there, so a poll is enough.
+        bvids = self._wait_bvids()
+        if not bvids:
+            logger.info(t('crawl.bili.authorNoVideos', mid=mid))
+            return self.results()
+
+        # Identity is the set already in hand, not a resume blob: the rows carry
+        # their own BV号, so a resumed crawl skips what it paid for and the cursor
+        # stays a position. (A bvid is added the moment it is *attempted*: one that
+        # answered 稿件不存在 must not be re-asked every round of the same walk.)
+        seen: set[str] = {str(row.get('BV号') or '') for row in self.results() if row.get('BV号')}
+
+        def scrape(bvid: str, index: int) -> dict | None:
+            if bvid in seen:
+                return None
+            seen.add(bvid)
+            payload = self._fetch_json(f'{VIEW_API}{bvid}')
+            if payload.get('code') != 0:
+                if payload.get('code') is not None and payload.get('code') != CODE_GONE:
+                    raise RuntimeError(t('crawl.bili.blocked', code=str(payload.get('code'))))
+                return None
+            return self._row(payload.get('data') or {})
+
+        def mark(position):
+            self.mark_position(mid=mid, **position, done=self.collected())
+
+        result = feed.walk_feed(
+            self._bvids,
+            scrape,
+            self.emit,
+            scroll=lambda: self.scroll_down(steps=self.SCROLL_STEPS),
+            target=target_count,
+            collected=self.collected,
+            mark=mark,
+            stopped=lambda: self.login_wall,
+            max_rounds=self.MAX_PAGES,
+            stuck_rounds=2,
+            settle_wait=self.CARD_WAIT,
+        )
+        logger.info(t('crawl.bili.authorDone', n=self.collected(), reason=result.stopped_reason))
         return self.results()
 
     # ─── pieces ────────────────────────────────────────────────────────

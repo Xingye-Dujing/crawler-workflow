@@ -140,6 +140,16 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   logged-in session back to the feed. Never judge the wall from the URL right after `get()` —
   `WeiboCrawler._await_search_page` waits for a terminal state (cards / no-result plate / persistent
   passport page). Keep that ordering in any refactor.
+- **Never write the browser's jar back to a saved cookie file.** Measured 2026-09 on weibo: one
+  logged-in page load re-issues the pair (`SUB` 90→94 bytes, `SUBP` 144→56, `XSRF-TOKEN` replaced),
+  and planting that rotated jar into a fresh browser is bounced straight to `/newlogin` — a
+  write-back would degrade the user's file one crawl at a time. A replayed save still *is*
+  accepted (several browsers in a row land logged in), which is why the failure mode looks like
+  a stale cookie and is not. Same measurement says a weibo author/profile crawl must not be
+  written against `/ajax/statuses/mymblog`: the endpoint answers `200` with real posts in one
+  session and `<h2>403 Forbidden</h2>` (an edge/WAF body, not a weibo business code) in the next
+  with the same walk and the same logged-in nav — a per-session throttle, so that mode needs a
+  loud refusal, never an empty table, and `backend/test_weibo_recipe.py` is the re-test gate.
 - Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens
   a visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
   outcome the message catalog already explains — don't "fix" it by loosening assertions.
@@ -226,6 +236,13 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   an incrementing loop would store the same 19 comments forever. `code=-404` is one
   withdrawn video (skip); any other non-zero code is the session/risk engine talking
   (stop, and refuse the run if nothing was collected).
+  Its **author mode is the page, not the API**: `x/space/wbi/arc/search` answers
+  `code=-403 访问权限不足` for our session (the older un-wbi path is rate-limited at `-799`),
+  so `BilibiliCrawler.author()` opens `space.bilibili.com/<mid>/video` once and pages it by
+  scrolling (measured 40 cards on one screen, 80 anchors after three steps) while every number
+  still comes from the unsigned `x/web-interface/view` — so a row is identical across the two
+  modes. `bilibili_mid()` takes digits or a space link and refuses anything else: opening a
+  mistyped space would report "this UP posted nothing" about a page that is not theirs.
 - **Cookie capture and crawling are different capabilities.** `CookieManager.PLATFORMS`
   (8) is who the panel can log in; `crawlers.is_crawlable()` (8: zhihu, weibo,
   xiaohongshu, wechat, bilibili, douyin, youtube, twitter) is who has a crawler.

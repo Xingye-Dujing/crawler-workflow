@@ -23,7 +23,7 @@ import pytest
 
 import crawlers.base as base_module
 from crawlers.base import Crawler
-from crawlers.video import BilibiliCrawler, bilibili_bvid, bilibili_search_url
+from crawlers.video import BilibiliCrawler, bilibili_bvid, bilibili_mid, bilibili_search_url
 
 pytestmark = pytest.mark.unit
 
@@ -136,6 +136,150 @@ def make_crawler(monkeypatch):
         return crawler, driver
 
     return _make
+
+
+class SpaceDriver(FakeDriver):
+    """An UP's own page: the upload list *appends* one screen per scroll round.
+
+    The search driver changes its screen on every ``get()``, which is the wrong
+    shape here — a space is one navigation, and its pager is the scroll.
+    ``scroll_down`` closes a round with ``scrollTo``, so that script (not the
+    ``scrollBy`` steps inside it) is where a new screen mounts.
+    """
+
+    def __init__(self, screens, payloads):
+        super().__init__([screens[0]] if screens else [], payloads)
+        self.screens = [list(screen) for screen in screens]
+        self.depth = 1
+        self.rounds = 0
+
+    def execute_script(self, script, *args):
+        if '.bili-video-card' in script:
+            return [card for screen in self.screens[: self.depth] for card in screen]
+        if 'scrollTo' in script:
+            self.depth += 1
+            self.rounds += 1
+            return None
+        return super().execute_script(script, *args)
+
+
+@pytest.fixture
+def make_space(monkeypatch):
+    """A space page whose list grows by scrolling, with the same fetch queue."""
+    monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
+
+    def _make(screens, payloads):
+        driver = SpaceDriver(screens, payloads)
+
+        def fake_create(self, *args, **kwargs):
+            self.driver = driver
+
+        monkeypatch.setattr(Crawler, '_create_driver', fake_create)
+        crawler = BilibiliCrawler(headless=True)
+        return crawler, driver
+
+    return _make
+
+
+class TestAuthorMid:
+    """The address of an UP is the whole feature, so it is parsed in the open."""
+
+    def test_a_bare_mid_a_space_link_and_a_share_form_are_the_same_up(self):
+        assert bilibili_mid('266765166') == '266765166'
+        assert bilibili_mid('https://space.bilibili.com/266765166/upload/video') == '266765166'
+        assert bilibili_mid('https://space.bilibili.com/266765166/?vd_source=9f') == '266765166'
+        assert bilibili_mid('space.bilibili.com/266765166') == '266765166'
+        assert bilibili_mid('https://space.bilibili.com/space.to_5112345678901234') == '5112345678901234'
+
+    def test_something_that_is_not_an_up_is_refused_before_a_browser_exists(self, make_space):
+        """A display name cannot address an UP, and opening a made-up space would
+        report "this UP has posted nothing" about a page that was never theirs."""
+        crawler, driver = make_space([[_card(A)]], [])
+        for value in ('', '   ', '漫士沉思录', f'https://www.bilibili.com/video/{A}/'):
+            with pytest.raises(ValueError):
+                crawler.author(value, target_count=5)
+        assert driver.visited == []
+
+
+class TestAuthor:
+    def test_the_space_is_opened_once_and_paged_by_scrolling(self, make_space):
+        crawler, driver = make_space([[_card(A)], [_card(B)]], [_view(A), _view(B)])
+        rows = crawler.author('266765166', target_count=10)
+        assert [r['BV号'] for r in rows] == [A, B]
+        assert driver.visited == ['https://space.bilibili.com/266765166/video']
+        assert driver.rounds >= 1, 'the second screen has to arrive by scrolling, not by a page parameter'
+
+    def test_a_row_from_the_space_carries_what_a_search_row_carries(self, make_space):
+        crawler, _driver = make_space([[_card(A)]], [_view(A)])
+        row = crawler.author('266765166', target_count=5)[0]
+        assert row['播放数'] == 1405449 and row['点赞数'] == 85667
+        assert row['UP主'] == '漫士沉思录' and row['UP主ID'] == '266765166'
+        assert row['发布时间'] == '2024-10-19 14:59:31' and row['链接'] == f'https://www.bilibili.com/video/{A}/'
+
+    def test_the_numbers_are_still_not_read_off_the_card(self, make_space):
+        """The card's own figure is a rounded 万-label, so the API answer is the
+        only number in the row — the same rule the search walk follows."""
+        crawler, driver = make_space([[_card(A)]], [_view(A)])
+        crawler.author('266765166', target_count=5)
+        assert driver.fetched == [f'https://api.bilibili.com/x/web-interface/view?bvid={A}']
+
+    def test_a_withdrawn_video_costs_a_row_but_not_the_run(self, make_space):
+        crawler, _driver = make_space([[_card(GONE), _card(A)]], [_view(GONE, code=-404), _view(A)])
+        rows = crawler.author('266765166', target_count=5)
+        assert [r['BV号'] for r in rows] == [A]
+
+    def test_risk_control_refuses_instead_of_reporting_a_short_list(self, make_space):
+        crawler, _driver = make_space([[_card(A)]], [_view(A, code=-412)])
+        with pytest.raises(RuntimeError) as err:
+            crawler.author('266765166', target_count=5)
+        assert '-412' in str(err.value)
+
+    def test_a_login_wall_refuses_rather_than_calling_it_an_empty_space(self, make_space):
+        crawler, driver = make_space([[_card(A)]], [_view(A)])
+        driver.wall = True
+        with pytest.raises(RuntimeError) as err:
+            crawler.author('266765166', target_count=5)
+        assert 'login' in str(err.value)
+        assert driver.fetched == []
+
+    def test_an_up_with_no_uploads_costs_no_api_call(self, make_space):
+        """Zero cards is a real answer here (the profile header rendered, the list
+        did not), and it must not be dressed up as a failed crawl."""
+        crawler, driver = make_space([[]], [])
+        assert crawler.author('266765166', target_count=5) == []
+        assert driver.fetched == []
+
+    def test_the_budget_is_spent_on_rows_not_on_screens(self, make_space):
+        crawler, driver = make_space([[_card(A), _card(B), _card(C)]], [_view(A), _view(B)])
+        rows = crawler.author('266765166', target_count=2)
+        assert len(rows) == 2
+        assert len(driver.fetched) == 2
+        assert driver.rounds == 0, 'no scroll is worth taking when the target is already met'
+
+    def test_a_resumed_run_does_not_pay_twice_for_one_video(self, make_space):
+        """The rows carry their own BV号, so identity comes from what is already
+        on disk and the cursor stays a position."""
+        crawler, driver = make_space([[_card(A), _card(B)]], [_view(B)])
+        crawler.seed([BilibiliCrawler._row(_view(A)['data'])])
+        rows = crawler.author('266765166', target_count=3, resume={'scanned': 1})
+        assert [r['BV号'] for r in rows] == [A, B]
+        assert driver.fetched == [f'https://api.bilibili.com/x/web-interface/view?bvid={B}']
+
+    def test_the_cursor_names_the_up_it_is_walking(self, make_space):
+        crawler, _driver = make_space([[_card(A), _card(B)]], [_view(A), _view(B)])
+        crawler.author('266765166', target_count=2)
+        assert crawler.position['mid'] == '266765166'
+        assert crawler.position['scanned'] == 2 and crawler.position['done'] == 2
+
+    def test_a_list_that_stops_growing_ends_the_walk(self, make_space):
+        """One UP with three videos: the walk must stop instead of scrolling for
+        ``MAX_PAGES`` rounds on a page that will never change. Two rounds in a
+        row where nothing arrives is the agreed end — one is a slow renderer."""
+        crawler, driver = make_space([[_card(A), _card(B), _card(C)]], [_view(A), _view(B), _view(C)])
+        rows = crawler.author('266765166', target_count=50)
+        assert len(rows) == 3
+        assert driver.rounds == 2, 'the walk stops on the second empty round, not the fortieth'
+        assert len(driver.fetched) == 3, 'no video is asked for twice'
 
 
 class TestPureHelpers:

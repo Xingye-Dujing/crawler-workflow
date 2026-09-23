@@ -327,6 +327,10 @@ _ZH = {
     'crawl.bili.processed': '[哔哩哔哩搜索] 已收录 {i}，当前有效数据: {n} 条',
     'crawl.bili.duplicate': '[哔哩哔哩搜索] {i} 已存在于本次运行，跳过',
     'crawl.bili.target_reached': '[哔哩哔哩搜索] 已达到目标数量 {n} 条，停止翻页',
+    'crawl.bili.authorStart': '[哔哩哔哩] 采集 UP主 {mid} 的投稿视频，目标 {n} 条',
+    'crawl.bili.authorEmpty': '[哔哩哔哩] 没有填写 UP主（space.bilibili.com 链接或数字 mid）：{author}',
+    'crawl.bili.authorNoVideos': '[哔哩哔哩] UP主 {mid} 的投稿列表没有渲染出视频（可能真的没投过稿）',
+    'crawl.bili.authorDone': '[哔哩哔哩] 投稿列表采集结束，共 {n} 条（原因：{reason}）',
     'crawl.bili.finished': '[哔哩哔哩搜索] 搜索完成，共获取 {n} 条有效结果（目标 {total} 条）',
     'crawl.bili.blocked': (
         '[哔哩哔哩] 接口拒绝返回数据（code={code}）：Cookie 可能已失效或触发了风控，'
@@ -946,6 +950,10 @@ _EN = {
     'crawl.bili.processed': '[Bilibili search] stored {i}, {n} valid rows so far',
     'crawl.bili.duplicate': '[Bilibili search] {i} already in this run, skipped',
     'crawl.bili.target_reached': '[Bilibili search] target of {n} rows reached, stop paging',
+    'crawl.bili.authorStart': '[Bilibili] collecting uploads of UP {mid}, target {n} rows',
+    'crawl.bili.authorEmpty': '[Bilibili] no UP given (a space.bilibili.com link or a numeric mid): {author}',
+    'crawl.bili.authorNoVideos': '[Bilibili] the upload list of UP {mid} rendered no video (possibly none published)',
+    'crawl.bili.authorDone': '[Bilibili] upload list finished, {n} rows (stopped because: {reason})',
     'crawl.bili.finished': '[Bilibili search] done, {n} valid rows (target {total})',
     'crawl.bili.blocked': (
         '[Bilibili] the endpoint refused to answer (code={code}): the cookie likely died or risk control '
