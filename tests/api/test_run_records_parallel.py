@@ -159,6 +159,38 @@ class TestRowLookupStillWorks:
         ).get_json()
         assert body['ok'] is False, f'an unrelated canvas must not be handed these rows: {body}'
 
+    def test_a_name_that_is_someone_elses_fragment_keeps_its_own_rows(self, client, app_module, paste):
+        """``R`` is not the owner of ``R + B``'s rows.
+
+        The composed label doubles as the lookup key, and offering its pieces exists
+        only to reach runs recorded before the composition existed. Asked first, the
+        pieces let a canvas whose own name node reads ``节奏`` resolve the rows of a
+        different canvas recorded as ``节奏 + BPM`` — a stranger's table under the
+        user's own node name, which is the one thing this lookup exists to refuse. So
+        the name the browser is showing is tried on its own, and only a miss widens.
+        """
+
+        def _labeled(flow, *labels):
+            named = [node for node in flow['nodes'] if node['type'] == 'name']
+            assert len(named) == len(labels), f'{len(labels)} labels for {len(named)} name nodes'
+            for node, label in zip(named, labels):
+                node['params']['workflow_name'] = label
+            return flow
+
+        pair = paste([{'标题': '甲', '正文': '甲的正文'}, {'标题': '乙', '正文': '乙的正文'}], name='pair.csv')
+        solo = paste(RECORDS, name='solo.csv')
+        # Recorded first so the single-label run below is the NEWER one: "latest rows"
+        # is decided by recency, which is what makes a fragment match steal this.
+        _run(client, app_module, _labeled(_two_workflows(pair), '节奏', 'BPM'), 'pair')
+        _run(client, app_module, _labeled(_one_workflow(solo), '节奏'), 'solo')
+        app_module.execution_state['results'] = {}
+
+        composed = client.post('/api/data/preview', json={'node_id': 'out-1', 'workflow_name': '节奏 + BPM'}).get_json()
+        assert composed['ok'] is True, composed
+        assert len(composed['rows']) == 2, 'the composed run must read its own 2 rows, not the newer run\'s 4'
+        alone = client.post('/api/data/preview', json={'node_id': 'out-1', 'workflow_name': '节奏'}).get_json()
+        assert alone['ok'] is True and len(alone['rows']) == 4, alone
+
 
 class TestOldDatabaseMigrates:
     def test_a_database_created_without_the_column_reads_as_one_workflow(self, tmp_path):

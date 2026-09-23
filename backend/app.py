@@ -305,11 +305,20 @@ def _durable_node_rows(node_id: str, workflow_name: str = '') -> list:
     store = get_run_store()
     requested = str(workflow_name or '').strip()
     if requested:
+        exact = store.latest_rows(node_id, workflow_name=requested)
+        if exact[1]:
+            return exact[1]
         # ``A + B`` is how a parallel run is recorded; the same canvas filed its
         # earlier runs under ``A`` alone, so both spellings are offered rather than
-        # leaving a week-old run's rows unreachable behind one string.
-        candidates = [part.strip() for part in requested.split('+')]
-        return store.latest_rows(node_id, workflow_name=requested, workflow_names=candidates)[1]
+        # leaving a week-old run's rows unreachable behind one string. Only after the
+        # name the browser is showing matched nothing, though: a workflow genuinely
+        # called ``R&B`` would otherwise have the ``R`` of somebody else's
+        # ``R + B`` offered as a candidate, and a stranger's table under the user's
+        # own node name is exactly the false data this function exists to refuse.
+        parts = [part.strip() for part in requested.split('+') if part.strip()]
+        if not parts or parts == [requested]:
+            return []
+        return store.latest_rows(node_id, workflow_name=requested, workflow_names=parts)[1]
     fingerprint = execution_state.get('fingerprint') or ''
     ambient = execution_state.get('workflow_name') or ''
     if not fingerprint and not ambient:

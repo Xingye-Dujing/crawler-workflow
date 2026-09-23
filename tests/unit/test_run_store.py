@@ -111,8 +111,37 @@ class TestFingerprints:
         relabeled = _node(params={'dataset_id': 'd1', 'dataset_name': '新名字', 'row_count': 999})
         assert node_fingerprint(plain) == node_fingerprint(relabeled)
 
+    def test_renaming_the_workflow_is_not_a_new_computation(self):
+        """A 工作流命名 label describes the record, not the data.
+
+        The label is a parameter, so it entered the name node's fingerprint — and a
+        node's fingerprint feeds its children, so renaming one box invalidated the
+        whole component. Worse, the crawl's dedupe ledger is scoped by
+        ``'item:' + node_fingerprint``, so 继续 after a rename re-crawled and re-paid
+        for every item it had already collected, over a canvas whose only edit was
+        a word the crawler never reads.
+        """
+        before = fingerprints_for_workflow(
+            _wf([_node('node-1', 'name', params={'workflow_name': '热门榜'}), _node('node-2', params={'keyword': '三亚'})], [{'from': 'node-1', 'to': 'node-2'}])
+        )
+        after = fingerprints_for_workflow(
+            _wf([_node('node-1', 'name', params={'workflow_name': '周排行榜'}), _node('node-2', params={'keyword': '三亚'})], [{'from': 'node-1', 'to': 'node-2'}])
+        )
+        assert before == after, 'the whole chain moved because a label did'
+        # The label still cannot hide a real change of what is crawled.
+        moved = fingerprints_for_workflow(
+            _wf(
+                [
+                    _node('node-1', 'name', params={'workflow_name': '周排行榜'}),
+                    _node('node-2', params={'keyword': '海口'}),
+                ],
+                [{'from': 'node-1', 'to': 'node-2'}],
+            )
+        )
+        assert moved['node-2'] != after['node-2']
+
     def test_stable_params_drops_only_volatile_keys(self):
-        kept = stable_params({'dataset_id': 'd1', 'dataset_name': 'n', 'row_count': 5})
+        kept = stable_params({'dataset_id': 'd1', 'dataset_name': 'n', 'row_count': 5, 'workflow_name': 'w'})
         assert kept == {'dataset_id': 'd1'}
 
     def test_parent_change_cascades_into_child_fingerprint(self):
@@ -245,6 +274,28 @@ class TestPromoteStale:
 
 
 class TestLifecycle:
+    def test_a_resumed_run_describes_the_attempt_that_resumed_it(self, store):
+        """``mode``/``headless``/``workflow_name`` are facts about THIS attempt.
+
+        A resumed run reuses the record by id, and the conflict update only carried
+        the fields its first author remembered. So flipping 并行 or 窗口 and pressing
+        继续 left the record's chips describing an older attempt — the very invariant
+        the 串行/并行 tag exists to state — and renaming the workflow left it filed
+        under the old name, which is worse than a wrong label: that name is the key
+        every preview/chart/export probe looks rows up by, so the rows the run had
+        kept stopped being findable.
+        """
+        store.start_run('r1', '热门榜', 'fp-a', mode='serial', headless=True)
+        store.finish_run('r1', RUN_INTERRUPTED)
+        store.start_run('r1', '热门榜 + 周排行榜', 'fp-b', mode='parallel', headless=False, lang='en', wf_count=2)
+        run = store.get_run('r1')
+        assert (run['mode'], run['headless'], run['wf_count']) == ('parallel', 0, 2)
+        assert run['workflow_name'] == '热门榜 + 周排行榜'
+        assert run['workflow_fingerprint'] == 'fp-b'
+        assert run['lang'] == 'en'
+        # The reset a resume needs, and the date the work began, which is not now.
+        assert run['status'] == RUN_RUNNING and run['finished_at'] is None and run['note'] is None
+
     def test_finish_run_counts_only_nodes_that_really_finished(self, store):
         _start(store)
         store.begin_node('r1', 'a', 'source')
@@ -544,6 +595,28 @@ class TestPurgeAndStats:
         store.append_rows('old', 'n1', sample_rows)
         store.purge(keep_per_workflow=50, keep_days=30)
         assert store.row_count('old', 'n1') == 0
+
+    def test_purge_releases_the_claims_of_the_rows_it_destroyed(self, store, sample_rows):
+        """Retention deletes rows, so "already collected" has to go with them.
+
+        ``item_seen`` is what lets a crawl skip what it already has, and its entry
+        outlived the data when the run that made it was aged out or trimmed by the
+        per-workflow cap: the next crawl of the same signature quietly returned fewer
+        rows than the user asked for — a gap with no visible shape, and no way back
+        except 「重新采集」. A *manual* run deletion still keeps its claims (see
+        ``test_delete_run_keeps_item_claims``): there the user removed a record while
+        knowing the crawl was already paid for; here the storage decided for them.
+        """
+        self._aged_run(store, 'old', 'wf', RUN_COMPLETED, started_at='2019-05-05T00:00:00')
+        store.begin_node('old', 'n1', 'source', fingerprint='fp')
+        store.append_rows('old', 'n1', sample_rows[:2], dedupe_scope='item:fp')
+        first = item_key(sample_rows[0])
+        assert store.claim_item('item:fp', first, 'other') is False, 'the crawl above already claimed this item'
+        store.purge(keep_per_workflow=50, keep_days=30)
+        assert store.row_count('old', 'n1') == 0
+        assert store.claim_item('item:fp', first, 'other') is True, (
+            'an item whose rows were purged is still claimed, so no later crawl will ever collect it again'
+        )
 
     def test_stats_counts_everything_it_tracks(self, store, sample_rows):
         _start(store)

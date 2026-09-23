@@ -139,13 +139,19 @@ def item_key(item) -> str:
     return _sha1('json', _dumps(item))
 
 
-# The two labels an Upload node carries about its file. They are left out of a
-# fingerprint because they *follow* from ``dataset_id`` and describe nothing
-# new — so re-saving a workflow with a tidied name does not invalidate a single
-# stored row. The id itself is deliberately part of the fingerprint: files are
-# stored durably now, so it identifies real input, and pointing a node at a
-# different file must invalidate everything downstream of it.
-_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count'})
+# The labels an Upload node carries about its file, and the label a 工作流命名 node
+# carries about its workflow. They are left out of a fingerprint because they
+# *describe* the input rather than choose it: ``dataset_name`` follows from
+# ``dataset_id``, and a workflow's name is what the run record is filed under, not
+# something the crawl reads. Re-saving a workflow with a tidied name must not
+# invalidate a single stored row — and it used to: a node's fingerprint feeds its
+# children, so renaming one label cascaded over the whole component AND moved the
+# dedupe ledger's scope (``'item:' + node_fingerprint``), which made 继续 after a
+# cosmetic rename re-crawl and re-pay every item it had already collected.
+# The ids themselves stay in the fingerprint: they identify real input, so pointing
+# a node at a different file or a different run must invalidate everything
+# downstream of it.
+_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count', 'workflow_name'})
 
 
 def stable_params(params) -> dict:
@@ -404,12 +410,22 @@ class RunStore:
     ):
         llm = llm or {}
         stamp = self.now()
+        # A resumed run rewrites the description of what this run IS, not just its
+        # status: the attempt after a 继续 may run in the other mode, in a visible
+        # window, or under a label the user has since edited. Left at their
+        # first-attempt values, the record's 并行/串行 and 无头/窗口 chips described a
+        # run that never happened (the invariant they exist to state), and the stale
+        # ``workflow_name`` broke the lookup every preview/chart/export probe uses —
+        # the browser asks under the name on the canvas now. ``started_at`` is
+        # deliberately NOT refreshed: the record's date is when this work began.
         self._execute(
             'INSERT INTO runs (run_id, workflow_name, workflow_fingerprint, status, mode, headless, '
             'llm_provider, llm_model, lang, node_total, node_done, wf_count, started_at, updated_at) '
             'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?) '
             'ON CONFLICT(run_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, '
             'llm_provider = excluded.llm_provider, llm_model = excluded.llm_model, '
+            'workflow_name = excluded.workflow_name, workflow_fingerprint = excluded.workflow_fingerprint, '
+            'mode = excluded.mode, headless = excluded.headless, lang = excluded.lang, '
             'node_total = excluded.node_total, wf_count = excluded.wf_count, finished_at = NULL, note = NULL',
             (
                 run_id,
@@ -544,7 +560,16 @@ class RunStore:
 
         removed = 0
         for run_id in doomed:
+            # Retention destroys the rows, so it must also destroy the promise that
+            # pointed at them. ``item_seen`` says "this exact item is already
+            # collected", and a later crawl of the same signature honours it —
+            # against rows that no longer exist. The user then gets fewer rows than
+            # they asked for, from a table they cannot see the gap in, with no way
+            # back except 「重新采集」. An explicit run deletion keeps its claims (see
+            # ``delete_run``): there the user removed a record while knowing the
+            # crawl was already paid for; here the storage decided for them.
             self.delete_run(run_id)
+            self.forget_run_items(run_id)
             removed += 1
         # 3. The answer cache is the other thing that grows without bound.
         cache_cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - max(1, days) * 86400))

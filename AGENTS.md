@@ -193,6 +193,42 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   is `MAX(seq)+1`, **never `COUNT(*)`** (that ran once per scraped row and made a long crawl quadratic in
   its own table); a **cursor records position, not content** — collected ids come from the seeded rows
   (`Crawler.seed`), so an id list must not go back into `mark_position`.
+- **A label is not an input.** A node's fingerprint feeds its children, and the crawl's
+  dedupe ledger is scoped by `'item:' + node_fingerprint`, so putting a *name* inside one
+  invalidates a whole chain and moves the other: renaming a 工作流命名 box made 继续
+  re-crawl and re-pay items it had already collected. `_VOLATILE_PARAMS`
+  (`dataset_name`, `row_count`, `workflow_name`) is therefore the answer to "does this
+  parameter choose data, or describe the record?" — ids stay in, labels stay out.
+- **Reuse has four rules that are each easy to break.** `done` AND `restored` are reusable
+  (a node that only replayed last time is just as settled — omitting `restored` made the
+  *second* 继续 recompute everything); a stored result with **zero rows** is never reused,
+  because a parent that came up empty last time may deliver this time and reuse is decided
+  by fingerprint, not by rows; the source node is never adopted, it resumes by cursor; and
+  `begin_node` reporting `dropped_stale` cancels reuse, because those rows were deleted.
+- **Startup recovery shares the end-of-run settlement.** A node only ever leaves `running`
+  through `finish_node`, which a kill skips, so `node_runs.row_count` still holds the 0
+  `begin_node` wrote while `node_rows` holds the real work. `promote_stale_runs` must call
+  `settle_nodes` (status *and* count from the rows) — the panel's 已存行数 and the 续跑
+  node's "adopt the fullest node" both read that column, so a status-only promotion
+  reported a 900-row crawl as empty and the user discarded paid-for data.
+- **One definition of "completed".** `runs.node_done` and the console's `completed_nodes`
+  must agree: skipped/failed/partial are not done, `restored` is. And the finish line's
+  failed count is taken **after** settling, from `execution_state['attempted_nodes']` —
+  the run record also keeps nodes the canvas deleted, which otherwise made every later
+  继续 "4/4 个节点完成，1 个失败" over a run that had nothing left to fail.
+- **A resumed run re-describes itself.** `start_run`'s conflict update refreshes
+  `workflow_name`/`workflow_fingerprint`/`mode`/`headless`/`lang` (not `started_at`):
+  leaving them at their first-attempt values made the 并行/串行 and 无头/窗口 chips
+  describe a run that never happened, and the stale name is the key every
+  preview/chart/export probe uses, so the kept rows stopped being findable.
+- **Retention must release what it destroyed.** `purge` deletes a run's rows, so it also
+  calls `forget_run_items` — an `item_seen` entry whose rows are gone would make a later
+  crawl of the same signature silently under-collect, with no visible gap and no way back
+  except 「重新采集」. An explicit `delete_run` still *keeps* claims: there the user removed
+  a record while knowing the crawl was paid for.
+- **`' + '` is a composed lookup key, not a permission.** `_durable_node_rows` tries the
+  exact name the browser sends first and widens to its pieces only on a miss, or a canvas
+  genuinely called `节奏` can be handed the table of someone else's `节奏 + BPM`.
 - **A node id is a storage key — never re-mint one on restore.** Run records, resume cursors, LLM caches
   and `workflow_fingerprint` all key on node ids, so renumbering detaches a canvas from its own
   interrupted run. `canvas.addNode(type, x, y, nodeId)` adopts the stored id and `reserveId` keeps
