@@ -45,11 +45,14 @@ def panel(tmp_path_factory):
     for cap in hostile['platforms']:
         if cap['platform'] != 'zhihu':
             continue
-        field = cap['modes'][0]['fields'][0]
-        field['key'] = "keyword',alert(1)//"
-        cap['modes'][1]['noteKey'] = 'settings.wechatLimitsNote'
-        cap['modes'][1]['actionKey'] = 'settings.wechatLimitsBtn'
-        cap['modes'][1]['actionJs'] = 'noSuchFunctionAnywhere'
+        # Addressed by mode key, never by position: a platform gaining a mode is a
+        # normal edit, and an index here would then poison the wrong mode and the
+        # panel would be tested against a payload the matrix never describes.
+        modes = {mode['key']: mode for mode in cap['modes']}
+        modes['posts']['fields'][0]['key'] = "keyword',alert(1)//"
+        modes['comments']['noteKey'] = 'settings.wechatLimitsNote'
+        modes['comments']['actionKey'] = 'settings.wechatLimitsBtn'
+        modes['comments']['actionJs'] = 'noSuchFunctionAnywhere'
     return _run(
         tmp,
         [

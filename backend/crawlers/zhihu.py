@@ -1,4 +1,5 @@
 import contextlib
+import json
 import logging
 import re
 import time
@@ -10,9 +11,73 @@ from selenium.webdriver.common.by import By
 from i18n import t
 
 from .base import Crawler, as_index
+from .engine import feed
 from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
+
+
+def zhihu_profile_token(value: str) -> str:
+    """``zshu-83`` / ``@zshu-83`` / a pasted profile link → the profile token.
+
+    The token cannot be derived from what the crawler already reads: measured on an
+    answer permalink, the page carries 86 anchors and **not one** of them is a
+    ``/people/`` link, so a display name is all a row can offer. That is why the
+    panel asks for a profile link or the token at its end rather than for a name to
+    search for — the search-by-name route would be a second, weaker opinion about
+    who the user meant.
+    """
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    if '/people/' in text:
+        tail = text.split('/people/', 1)[-1]
+        for cut in ('?', '#', '/'):
+            tail = tail.split(cut)[0]
+        return tail.strip()
+    if '://' in text or text.startswith('/'):
+        # Some other page's address (an answer or question link is what the
+        # clipboard usually holds). There is no token in it, and inventing one
+        # would open /people/https: and report an empty profile as if the author
+        # had published nothing — refuse with the actionable message instead.
+        return ''
+    return text.lstrip('@').strip('/').split('/')[0]
+
+
+def zhihu_item_meta(raw: str) -> dict:
+    """The ``data-zop`` JSON a content item carries, or ``{}``.
+
+    It is the site's own tracking payload — ``authorName`` / ``itemId`` / ``title``
+    / ``type`` — and on a profile page it is the only place the author's name is
+    spelled out as data instead of as markup.
+    """
+    try:
+        parsed = json.loads(str(raw or ''))
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+#: ``data-zop``'s kind → the 分类 label. Two vocabularies are the site's, not ours:
+#: the search page names a card through ``data-za-detail-view-path-module``
+#: (``AnswerItem``) while the row's own tracking payload says ``answer``.
+ZOP_KIND_LABELS = {'answer': '回答', 'article': '文章', 'zvideo': '视频', 'question': '提问'}
+
+
+def zhihu_item_link(meta: dict) -> str:
+    """The address of an item, built from the kind and id the page itself names."""
+    item_id = str((meta or {}).get('itemId') or '')
+    kind = str((meta or {}).get('type') or '')
+    question = str((meta or {}).get('questionId') or '')
+    if not item_id:
+        return ''
+    if kind == 'answer' and question:
+        return f'https://www.zhihu.com/question/{question}/answer/{item_id}'
+    if kind == 'answer':
+        return f'https://www.zhihu.com/answer/{item_id}'
+    if kind == 'article':
+        return f'https://www.zhihu.com/p/{item_id}'
+    return ''
 
 
 class ZhihuCrawler(Crawler):
@@ -40,6 +105,27 @@ class ZhihuCrawler(Crawler):
     # already thrown away.
     CARD_SELECTOR = '.SearchResult-Card[role="listitem"]'
     END_MARKER = '.css-7hmi9v'
+    #: A profile tab's rows. Measured 2026-09: ``/people/<token>/answers`` held 39
+    #: ``.ContentItem`` nodes and 79 after three scrolls, so the list pages by
+    #: scrolling exactly like the search page — and the nodes are the same shape, so
+    #: the search card readers apply unchanged.
+    PROFILE_ITEM = '.List-item .ContentItem'
+    #: The two tabs that hold 作品. 提问/收藏/关注 are not content the user analyses.
+    PROFILE_TABS = ('answers', 'posts')
+    #: Un-clamps one row's body in place. The search crawler must never click inside
+    #: a card (a column article navigates away and detaches every remaining handle),
+    #: but a profile row's 阅读全文 is a state change on the same document — measured:
+    #: the button becomes 收起 and the text runs to its full length.
+    EXPAND_JS = """
+    var hit = null;
+    arguments[0].querySelectorAll('button, a').forEach(function (b) {
+        var t = (b.innerText || '').trim();
+        if (!hit && t.indexOf('阅读全文') !== -1) hit = b;
+    });
+    if (!hit) return 0;
+    hit.click();
+    return 1;
+    """
 
     MAX_SCROLL_ROUNDS = 30
     SCROLL_STEPS = 3
@@ -153,6 +239,116 @@ class ZhihuCrawler(Crawler):
         logger.info(t('crawl.zhihu.phase_done', n=cursor['total']))
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
         return self.results()
+
+    # ─── one creator's own list ───────────────────────────────────────
+
+    def author(self, author: str, target_count: int = 50, **kwargs):
+        """One account's answers and articles, read from their own profile tabs.
+
+        Both tabs are walked, answers first: 「作品」 for zhihu means the 回答 and the
+        文章 an account wrote, and an account that only ever answered (or only ever
+        wrote articles) still gets a complete list rather than a false half.
+
+        A profile row is the same ``.ContentItem`` shape the search page harvests, so
+        the card readers are reused; what is different is that the body is clamped
+        behind 阅读全文 and is expanded **in place** (measured: the button turns into
+        收起 and the text grows to its full length), which costs no navigation — the
+        mistake the search crawler learned never to make.
+        """
+        token = zhihu_profile_token(author)
+        if not token:
+            raise ValueError(t('crawl.zhihu.authorEmpty', author=author))
+        logger.info(t('crawl.zhihu.authorStart', author=token, n=target_count))
+        for tab in self.PROFILE_TABS:
+            if self.collected() >= target_count:
+                break
+            self._walk_profile_tab(token, tab, target_count)
+        logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
+        return self.results()
+
+    def _walk_profile_tab(self, token: str, tab: str, target_count: int) -> None:
+        """Harvest one profile tab, paging it by scrolling the way the search page does."""
+        self.open(f'https://www.zhihu.com/people/{token}/{tab}')
+        if self.login_wall or self.risk_blocked:
+            raise RuntimeError(t('crawl.zhihu.emptyOrBlocked'))
+
+        def items():
+            return self.driver.find_elements(By.CSS_SELECTOR, self.PROFILE_ITEM)
+
+        def item_count():
+            return len(items())
+
+        if self._wait_for_count(item_count, 1, timeout=self.CARD_WAIT * 6) < 1:
+            # Nothing on this tab at all. For a profile that is a normal fact — many
+            # accounts answer questions and never write an article — so it is logged
+            # and skipped, never raised.
+            logger.info(t('crawl.zhihu.authorTabEmpty', tab=tab, author=token))
+            return
+
+        def mark(position):
+            self.mark_position(author=token, tab=tab, **position, done=self.collected())
+
+        result = feed.walk_feed(
+            items,
+            self._profile_card,
+            self.emit,
+            scroll=lambda: self.scroll_down(steps=self.SCROLL_STEPS),
+            target=target_count,
+            collected=self.collected,
+            mark=mark,
+            stopped=lambda: self.login_wall or self.risk_blocked,
+            max_rounds=self.MAX_SCROLL_ROUNDS,
+            stuck_rounds=self.STUCK_ROUNDS,
+            settle_wait=self.CARD_WAIT,
+        )
+        logger.info(t('crawl.zhihu.authorTabDone', tab=tab, n=self.collected(), reason=result.stopped_reason))
+
+    def _profile_card(self, card, index: int = 0) -> dict | None:
+        """One profile row → a row, with the body unclamped before it is read."""
+        self._expand_body(card)
+        item = self._scrape_card(card)
+        meta = zhihu_item_meta(card.get_attribute('data-zop') or '')
+        # ``data-zop`` is the site's own tracking payload: it names the author, the
+        # kind and the id, which is more than the visible markup gives — a profile
+        # row has no 「作者名：」 prefix inside its text, so ``_get_author`` comes back
+        # empty for every row of exactly the page where the author is known.
+        if meta.get('authorName'):
+            item['作者'] = meta['authorName']
+        if not item.get('分类'):
+            item['分类'] = ZOP_KIND_LABELS.get(str(meta.get('type') or ''), '')
+        if not item.get('链接'):
+            item['链接'] = zhihu_item_link(meta)
+        if not item.get('发布时间'):
+            item['发布时间'] = self._profile_time(card)
+        if not (item.get('正文') or item.get('标题')):
+            return None
+        return item
+
+    def _expand_body(self, card) -> None:
+        """Click the row's own 阅读全文, which un-clamps it without leaving the page."""
+        with contextlib.suppress(Exception):
+            if self.driver.execute_script(self.EXPAND_JS, card):
+                # The button's click swaps the clamped node for the full one; the
+                # text is re-read by the caller right away, and a row that is still
+                # short is simply a short answer.
+                time.sleep(0.3)
+
+    def _profile_time(self, card) -> str:
+        """The 发布于 / 编辑于 label of a profile row.
+
+        The label is kept whole, prefix included, because the two words mean
+        different things and the list mixes them: ``meta[itemprop=dateCreated]``
+        measured equal to the *edited* moment on a row the site labelled 编辑于, so
+        reading that attribute and stamping it as 发布时间 would put a wrong figure
+        in a plausible column.
+        """
+        for sel in ('.ContentItem-time', '.ContentItem-footer time', 'time'):
+            with contextlib.suppress(Exception):
+                node = card.find_element(By.CSS_SELECTOR, sel)
+                text = (node.get_attribute('title') or node.text or '').strip()
+                if text:
+                    return text
+        return ''
 
     # ─── scroll + harvest ─────────────────────────────────────────────
 

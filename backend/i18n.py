@@ -133,6 +133,10 @@ _ZH = {
     'node.comment': '评论采集',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': '开始搜索知乎关键词: "{kw}"，目标获取 {n} 条结果',
+    'crawl.zhihu.authorStart': '[知乎] 采集作者「{author}」的回答与文章，目标 {n} 条',
+    'crawl.zhihu.authorEmpty': '[知乎] 没有填写作者（主页链接或 /people/ 后面的 id）：{author}',
+    'crawl.zhihu.authorTabEmpty': '[知乎] 作者「{author}」的「{tab}」标签页没有内容（这类作品他确实没发过），跳过',
+    'crawl.zhihu.authorTabDone': '[知乎] 「{tab}」标签页采集结束，累计 {n} 条（原因：{reason}）',
     'crawl.zhihu.fallbackSearch': '知乎深链搜索返回空壳，改用搜索框重新提交关键词',
     'crawl.zhihu.emptyOrBlocked': (
         '知乎搜索页未返回任何结果（触发风控/登录墙或页面失效）：'
@@ -725,6 +729,12 @@ _EN = {
     'node.comment': 'Comments',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': 'Searching Zhihu for "{kw}", target {n} results',
+    'crawl.zhihu.authorStart': '[Zhihu] collecting answers and articles of "{author}", target {n} rows',
+    'crawl.zhihu.authorEmpty': '[Zhihu] no author given (a profile link, or the id after /people/): {author}',
+    'crawl.zhihu.authorTabEmpty': (
+        '[Zhihu] the "{tab}" tab of "{author}" holds nothing (this kind was never published), skipped'
+    ),
+    'crawl.zhihu.authorTabDone': '[Zhihu] tab "{tab}" finished, {n} rows so far (stopped because: {reason})',
     'crawl.zhihu.fallbackSearch': (
         'Deep-linked search rendered an empty shell; resubmitting the keyword through the search box'
     ),

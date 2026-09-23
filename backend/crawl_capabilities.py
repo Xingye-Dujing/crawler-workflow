@@ -262,14 +262,26 @@ def _posts_mode(*extra: Field, target: int = 50) -> Mode:
     )
 
 
-def _author_mode(*extra: Field, target: int = 50) -> Mode:
+def _author_mode(
+    *extra: Field,
+    target: int = 50,
+    placeholder: str = '@handle',
+    hint_key: str = 'settings.authorHint',
+) -> Mode:
     """One creator's own posts — the same walk, addressed by author instead of by
-    keyword, so it needs its own entry rather than a wider keyword box."""
+    keyword, so it needs its own entry rather than a wider keyword box.
+
+    What an author is *spelled* by differs per site (X and YouTube take a handle,
+    zhihu only has a ``/people/<id>`` token), and the panel's placeholder and hint
+    are the user's only notice of that, so both are per-entry rather than one
+    global string.
+    """
+    author = replace(_AUTHOR, placeholder=placeholder, hint_key=hint_key)
     return Mode(
         key='author',
         label_key='settings.collectAuthor',
         handler='author',
-        fields=(_AUTHOR, replace(_TARGET, default=target), *extra, _RECOLLECT),
+        fields=(author, replace(_TARGET, default=target), *extra, _RECOLLECT),
     )
 
 
@@ -278,6 +290,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         platform='zhihu',
         modes=(
             _posts_mode(),
+            _author_mode(
+                placeholder='https://www.zhihu.com/people/<id>',
+                hint_key='settings.authorHintZhihu',
+            ),
             _comment_mode('zhihu', 'https://www.zhihu.com/question/...'),
         ),
     ),
