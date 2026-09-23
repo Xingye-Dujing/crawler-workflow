@@ -254,6 +254,13 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
 
 - UI text supports zh/en via the `backend/i18n.py` catalog — add every new user-facing string there (both
   languages), and the same for `backend/static/js/app.js` catalogs.
+- **A missing `t()` keyword is a printed bug, not a crash — so the suite checks call sites.** `t()`
+  deliberately returns the *raw template* when a parameter is missing (never abort a crawl for a
+  sentence), which means `t('crawl.wechat.success', i=…)` against a template asking for `{reads}`
+  renders `阅读={reads}` on the console once per article. Key parity, reachability and zh/en matching
+  are all blind to it. `test_i18n.py::TestCallSitePlaceholders` walks every `t('literal', …)` in
+  `backend/` with `ast` and refuses the mismatch (a `**splat` is the one form it cannot judge, so it
+  skips those and the meta-test asserts that skip is still needed).
 - Console/validation messages reference nodes through `engine.workflow.node_label(node, nid)` (→ `title
   #nid`), never a bare `nid`, so a renamed node speaks with the user's name. Store keys, the results dict
   and resume plumbing still use the raw `nid`. The frontend keeps `node.title` in `getState` /

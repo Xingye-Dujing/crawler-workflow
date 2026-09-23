@@ -76,17 +76,16 @@ class WechatCrawler(Crawler):
             logger.info(t('crawl.resume_have', n=have))
 
         total = len(urls)
-        logger.info('=' * 70)
         logger.info(t('crawl.wechat.batch_start', n=total))
-        logger.info('=' * 70)
         self.mark_position(urls=urls, url_total=total, url_index=start_index, done=have)
 
         for idx, url in enumerate(urls, start=1):
             if idx <= start_index:
                 continue
-            logger.info('')
             logger.info(t('crawl.wechat.processing', i=idx, total=total))
-            logger.info(t('crawl.wechat.url', url=url))
+            # Which link is in flight is a debugging detail; the article's own line
+            # below says what came of it, and that is the fact the console carries.
+            logger.debug(t('crawl.wechat.url', url=url))
 
             data = self.get_detail(url)
             if data:
@@ -110,15 +109,12 @@ class WechatCrawler(Crawler):
             self.mark_position(url_index=idx, done=self.collected())
 
             if idx < total:
-                logger.info(t('crawl.wechat.wait'))
-                # The log above promises a second, and a batch of articles is
-                # exactly where WeChat's rate limiter bites — keep the promise.
+                logger.debug(t('crawl.wechat.wait'))
+                # The pause is real (this is where WeChat's rate limiter bites); it is
+                # just not a fact the user needs narrated once per article.
                 self._polite_pause(1.0, 0.3)
 
-        logger.info('')
-        logger.info('=' * 70)
         logger.info(t('crawl.wechat.batch_done', n=self.collected(), total=total))
-        logger.info('=' * 70)
         return self.results()
 
     # ------------------------------------------------------------------
@@ -126,14 +122,21 @@ class WechatCrawler(Crawler):
     # ------------------------------------------------------------------
 
     def get_detail(self, url: str) -> dict | None:
-        """Scrape a single WeChat article and return structured data."""
-        logger.info(t('crawl.wechat.navigating'))
+        """Scrape a single WeChat article and return structured data.
+
+        The narration here is debug-level on purpose: it is a step-by-step trace for a
+        manual run, while the console gets one line per article from the caller. Ten
+        lines per pasted link — including a 120-character quote of the article body —
+        is what made a three-article batch a wall of text in which the one thing the
+        user wanted (did this one come through?) could not be found.
+        """
+        logger.debug(t('crawl.wechat.navigating'))
         self.driver.get(url)
 
-        logger.info(t('crawl.wechat.wait_title'))
+        logger.debug(t('crawl.wechat.wait_title'))
         try:
             WebDriverWait(self.driver, 15).until(ec.presence_of_element_located((By.CSS_SELECTOR, '#activity-name')))
-            logger.info(t('crawl.wechat.loaded'))
+            logger.debug(t('crawl.wechat.loaded'))
         except TimeoutException:
             if self.check_login_wall(url):
                 return None
@@ -141,32 +144,32 @@ class WechatCrawler(Crawler):
             return None
 
         # Scroll to bottom to trigger lazy-loaded elements (read counts, etc.)
-        logger.info(t('crawl.wechat.scroll'))
+        logger.debug(t('crawl.wechat.scroll'))
         self.scroll_down(steps=2, wait=0.2)
-        logger.info(t('crawl.wechat.scroll_done'))
+        logger.debug(t('crawl.wechat.scroll_done'))
 
         # ---- Extract fields ----
-        logger.info(t('crawl.wechat.extracting'))
+        logger.debug(t('crawl.wechat.extracting'))
 
         title = self.get_article_title()
-        logger.info(t('crawl.wechat.title', title=title or '(empty)'))
+        logger.debug(t('crawl.wechat.title', title=title or '(empty)'))
 
         author = self.get_author()
-        logger.info(t('crawl.wechat.author', author=author or '(empty)'))
+        logger.debug(t('crawl.wechat.author', author=author or '(empty)'))
 
         pub_time = self.get_publish_time()
-        logger.info(t('crawl.wechat.pub_time', time=pub_time or '(empty)'))
+        logger.debug(t('crawl.wechat.pub_time', time=pub_time or '(empty)'))
 
         region = self.get_ip_region()
 
         content = self.get_content()
-        logger.info(t('crawl.wechat.content_len', n=len(content)))
+        logger.debug(t('crawl.wechat.content_len', n=len(content)))
 
         # Summarise extracted content (first 120 chars)
         content_preview = content[:120].replace('\n', ' ').strip()
         if len(content) > 120:
             content_preview += '...'
-        logger.info(t('crawl.wechat.preview', preview=content_preview))
+        logger.debug(t('crawl.wechat.preview', preview=content_preview))
 
         return {
             '标题': title,

@@ -149,3 +149,41 @@ class TestNoSearchLeftovers:
         source = inspect.getsource(WechatCrawler)
         for gone in ('searchbiz', 'appmsg', 'list_ex', 'fakeid'):
             assert gone not in source, f'{gone} survived the removal'
+
+    def test_the_batch_narration_promises_no_figure_the_site_withholds(self):
+        """No WeChat message may offer 阅读/点赞/打赏, and no line may print its own keys.
+
+        WeChat publishes none of the three to a browser that is not the client
+        (measured — see the red line about those columns), so naming them in a message
+        about a WeChat scrape is a plausible figure with no source. The per-article
+        line also used to *print* them: the call passed four keywords and the template
+        asked for seven, and ``t()`` answers a missing parameter with the raw template,
+        so the user read ``| 阅读={reads} 点赞={likes} 打赏={rewards}`` once per article.
+        """
+        import i18n
+
+        for lang in ('zh', 'en'):
+            table = i18n.MESSAGES[lang]
+            for key, template in table.items():
+                if not key.startswith('crawl.wechat.'):
+                    continue
+                for banned in ('{reads}', '{likes}', '{rewards}', '阅读=', '点赞=', '--- ', '>>> ', '  '):
+                    assert banned not in template, f'{lang}/{key} still carries {banned!r}'
+            # Renders from exactly what the call site passes.
+            assert '1/3' in table['crawl.wechat.success'].format(i=1, total=3, title='甲', author='乙')
+
+    def test_one_article_produces_one_console_line_not_a_step_trace(self):
+        """The scrape trace is debug-level; the console gets the outcome.
+
+        ``get_detail`` used to narrate ten info lines per article — including a
+        120-character quote of the body — so a three-link batch buried the one thing
+        the user was looking for ("did this one come through?") under a screen of
+        steps, and pasted article text into a shared console.
+        """
+        import inspect
+
+        assert 'logger.info(' not in inspect.getsource(WechatCrawler.get_detail), (
+            'a step inside one article is a debugging detail, not a console line'
+        )
+        batch = inspect.getsource(WechatCrawler.search)
+        assert "'=' * 70" not in batch and "logger.info('')" not in batch, 'banner rows are standalone-script style'

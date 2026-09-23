@@ -327,6 +327,79 @@ class TestKeyReachability:
         assert self._CALL.findall("data.get('workflow'); out.format('x'); d=dict(y)") == []
 
 
+class TestCallSitePlaceholders:
+    """A template's placeholders have to be filled *by the call that renders it*.
+
+    ``t()`` answers a missing parameter by returning the raw template — the
+    deliberate no-crash-mid-crawl fallback pinned above — so forgetting one keyword
+    is not an exception but a console line reading
+    ``>>> 成功 [{i}/{total}]: "{title}" … | 阅读={reads}``. Every parity, reachability
+    and zh/en check passes on that call site, because the key exists, is referenced,
+    and matches its twin. It shipped on WeChat's per-article success line, which the
+    user sees once per scraped article.
+    """
+
+    @staticmethod
+    def _fields(template: str) -> set:
+        import string
+
+        names = set()
+        for _literal, field, _spec, _conv in string.Formatter().parse(template):
+            if field:
+                # ``{a[0]}`` / ``{a.b}`` both ask for the root name.
+                names.add(field.split('.')[0].split('[')[0])
+        return names
+
+    def _unfilled(self):
+        import ast
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        found = []
+        for path in sorted((root / 'backend').rglob('*.py')):
+            if path.name == 'i18n.py':
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding='utf-8'))
+            except SyntaxError:  # pragma: no cover - a file the suite cannot parse is a red run anyway
+                found.append(f'{path.name}: does not parse')
+                continue
+            for node in ast.walk(tree):
+                if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 't'):
+                    continue
+                if not node.args or not isinstance(node.args[0], ast.Constant):
+                    continue  # a computed key is checked by the reachability scan
+                template = i18n._ZH.get(node.args[0].value)
+                if template is None:
+                    continue  # unknown keys are TestKeyReachability's business
+                if any(kw.arg is None for kw in node.keywords):
+                    continue  # a **splat can supply anything; statics cannot judge it
+                given = {kw.arg for kw in node.keywords if kw.arg}
+                missing = self._fields(template) - given
+                if missing:
+                    found.append(f'{path.name}:{node.lineno} {node.args[0].value} -> {sorted(missing)}')
+        return found
+
+    def test_every_call_fills_its_templates_placeholders(self):
+        assert self._unfilled() == []
+
+    def test_the_scan_actually_fires_on_the_shape_it_bans(self):
+        """A guard that cannot fail is not a guard."""
+        i18n._ZH['temp.scan'] = '两行：{a} 和 {b}'
+        try:
+            import ast
+
+            tree = ast.parse("t('temp.scan', a=1)")
+            call = next(node for node in ast.walk(tree) if isinstance(node, ast.Call))
+            given = {kw.arg for kw in call.keywords if kw.arg}
+            assert self._fields(i18n._ZH['temp.scan']) - given == {'b'}
+            # The splat form is the one thing the scan must not guess about.
+            splat = ast.parse("t('temp.scan', **values)").body[0].value
+            assert any(kw.arg is None for kw in splat.keywords)
+        finally:
+            del i18n._ZH['temp.scan']
+
+
 class TestNoDuplicateKeys:
     """A key written twice in one catalogue silently keeps the last spelling.
 
