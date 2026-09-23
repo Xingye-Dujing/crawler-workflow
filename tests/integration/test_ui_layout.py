@@ -250,6 +250,7 @@ PANELS = [
     'style-menu',
     'ai-menu',
     'settings-menu',
+    'profile-status',
 ]
 
 # How many elements each panel actually puts on screen at 1366×768 with nothing
@@ -289,7 +290,36 @@ MIN_MEASURED = {
     'style-menu': 10,
     'ai-menu': 32,
     'settings-menu': 26,
+    # 23 measured in a real Chrome in both languages (one row per capture-capable
+    # platform, WeChat excluded); 20 leaves room for a row's chip to be absent.
+    'profile-status': 20,
 }
+
+#: Containers whose content is fetched rather than written into the markup, so the
+#: audit has to wait for the render instead of measuring a box that is still empty
+#: (which would satisfy every overflow rule by having nothing in it).
+_ASYNCHRONOUS = {'profile-status': 'document.querySelectorAll("#profile-status .profile-item").length'}
+
+
+def _seed(driver, panel_id):
+    """Open what the panel needs and wait until it has drawn its own rows."""
+    if panel_id not in _ASYNCHRONOUS:
+        return
+    driver.execute_script(
+        """
+        const menu = document.getElementById('settings-menu');
+        if (menu) { menu.classList.add('open'); menu.classList.remove('hidden'); }
+        if (window.renderBrowserProfiles) renderBrowserProfiles();
+        """,
+        [],
+    )
+    deadline = time.monotonic() + 15
+    probe = _ASYNCHRONOUS[panel_id]
+    while time.monotonic() < deadline:
+        if driver.execute_script(f'return {probe};', []) > 0:
+            return
+        time.sleep(0.2)
+    pytest.fail(f'#{panel_id} never rendered a row — the panel is empty, so nothing about it was measured')
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
@@ -335,10 +365,70 @@ def test_every_panel_fits_itself_in_both_languages(app_url, driver, panel_id, la
     # body-wide audit below — that would measure a hundred elements and call the
     # panel checked.
     assert opened == 'ok', f'#{panel_id} is not in the page, so nothing about it was measured'
+    _seed(driver, panel_id)
     result = driver.execute_script(_audit_js(panel_id), [])
     _assert_contains_itself(
         result, f'#{panel_id} in {lang}', may_be_wider_than_viewport=True, min_measured=MIN_MEASURED[panel_id]
     )
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_parallel_record_shows_its_names_and_chips_in_the_browser(app_url, driver, lang):
+    """The run-records row is where the user reads "did both workflows run?".
+
+    Nothing is written to the server: the row is drawn by the real
+    ``runsManager.render`` from a payload shaped exactly like ``/api/runs/list``,
+    so what is asserted here is the pixels the composed name and the chips produce
+    — a name cell that clips, a chip that grows the row past the table, or a
+    missing 并行 marker would all be invisible to the Python tier.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        f"""
+        document.body.dataset.lang = {lang!r};
+        I18n.t('runsMgr.tagParallel').replace('{{n}}', 2);
+        I18n.apply();
+        const panel = document.getElementById('runs-panel');
+        panel.classList.add('open');
+        panel.classList.remove('hidden');
+        runsManager.render([{{
+            run_id: 'parallel1', workflow_name: '热门榜 + 周排行榜', status: 'completed',
+            resumable: false, node_done: 6, node_total: 6, rows_kept: 40,
+            started_at: '2026-09-24 03:00', wf_count: 2, headless: 1
+        }}]);
+        """,
+        [],
+    )
+    facts = driver.execute_script(
+        """
+        const cell = document.querySelector('#runs-panel .runs-mgr-wf');
+        if (!cell) return {found: false};
+        const chips = Array.from(cell.querySelectorAll('.runs-mgr-tag'));
+        const table = document.querySelector('#runs-panel table');
+        const window1366 = window.innerWidth;
+        return {
+            found: true,
+            text: cell.textContent,
+            chips: chips.map((c) => c.textContent),
+            // A chip whose own glyphs are cut off reads as a shorter fact than it is.
+            clippedChips: chips.filter((c) => c.scrollWidth - c.clientWidth > 1).length,
+            tableOverflows: table ? table.scrollWidth - table.clientWidth > 1 : null,
+            cellRight: Math.round(cell.getBoundingClientRect().right),
+            windowWidth: window1366,
+            pageBar: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+        };
+        """,
+        [],
+    )
+    assert facts['found'] is True, '#runs-panel .runs-mgr-wf rendered nothing, so the row was not measured'
+    assert '热门榜' in facts['text'] and '周排行榜' in facts['text'], facts['text']
+    assert len(facts['chips']) == 2, f'expected a 并行 and a window chip, got {facts["chips"]}'
+    assert any('2' in chip for chip in facts['chips']), f'the chip must say how many workflows: {facts["chips"]}'
+    assert facts['clippedChips'] == 0, f'a chip is silently cut off: {facts["chips"]}'
+    assert facts['cellRight'] <= facts['windowWidth'] + 1, f'the name cell runs off the window: {facts}'
+    assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
 
 
 @pytest.mark.parametrize('width', [1024, 1280])

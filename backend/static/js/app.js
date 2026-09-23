@@ -416,7 +416,10 @@ const I18n = {
             'set.useProfile': 'Persistent browser profile',
             'set.useProfileInline': 'One profile per platform, so the crawl and the cookie login are the same device',
             'set.profileDir': 'Profile directory',
+            'set.profileDirPlaceholder': 'empty = built-in data/chrome_profile/<platform>; or an absolute path',
+            'set.profileHowTo': 'No need to create anything: the first crawl of a platform makes its directory. A new directory holds no session though, so log in and save that platform once under Cookies — every later run then keeps using this device.',
             'set.profileStatus': 'Profiles by platform',
+            'set.profileNote': 'Platforms marked "recommended" are the ones a throwaway browser fails on; WeChat needs no login at all, so it is not listed.',
             'set.profileUnavailable': 'Profile state is unavailable (the server did not answer)',
             'set.profileSuggested': 'recommended here',
             'set.profileOff': 'profiles are switched off',
@@ -585,6 +588,9 @@ const I18n = {
             'datasetMgr.removeFailed': 'Delete failed',
             'runsMgr.empty': 'No runs recorded yet',
             'runsMgr.colWorkflow': 'Workflow',
+            'runsMgr.tagParallel': 'parallel ×{n}',
+            'runsMgr.tagHeadless': 'headless',
+            'runsMgr.tagWindow': 'window',
             'runsMgr.colStatus': 'Status',
             'runsMgr.colNodes': 'Nodes',
             'runsMgr.colRows': 'Rows',
@@ -1006,6 +1012,9 @@ const I18n = {
             'set.useProfileInline': '每个平台用自己的浏览器目录，抓取与取 Cookie 是同一台设备',
             'set.profileDir': 'Profile 目录',
             'set.profileStatus': '各平台 Profile',
+            'set.profileNote': '标「建议」的平台最容易被一次性浏览器刁难；微信不需要登录，所以不在列表里。',
+            'set.profileDirPlaceholder': '留空 = 内置 data/chrome_profile/平台；也可填绝对路径',
+            'set.profileHowTo': '目录不用手动建：第一次采集某个平台时会自动创建。但新目录里没有会话，所以请在「Cookie」面板里把该平台登录并保存一次，之后抓取就继续用这台设备。',
             'set.profileUnavailable': '读不到 Profile 状态（服务未响应）',
             'set.profileSuggested': '建议开启',
             'set.profileOff': '功能已关闭',
@@ -1171,6 +1180,9 @@ const I18n = {
             'datasetMgr.removeFailed': '删除失败',
             'runsMgr.empty': '还没有运行记录',
             'runsMgr.colWorkflow': '工作流',
+            'runsMgr.tagParallel': '并行 ×{n}',
+            'runsMgr.tagHeadless': '无头',
+            'runsMgr.tagWindow': '窗口',
             'runsMgr.colStatus': '状态',
             'runsMgr.colNodes': '节点',
             'runsMgr.colRows': '行数',
@@ -1242,6 +1254,12 @@ const I18n = {
         });
         document.querySelectorAll('[data-i18n-title]').forEach(el => {
             el.title = this.t(el.dataset.i18nTitle);
+        });
+        /* A placeholder is the only place some inputs explain themselves (the
+           Profile directory field is empty by design, and what empty means is the
+           information), so it has to switch language with the rest of the panel. */
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            el.placeholder = this.t(el.dataset.i18nPlaceholder);
         });
         /* Menu labels and the open dropdown are rendered by TopMenu, not by
            data-i18n attributes, so they need an explicit refresh. */
@@ -1707,11 +1725,38 @@ const BrowserProfiles = {
     data: null,
     _generation: 0,
 
-    _row(text, kind) {
+    _row(entry) {
+        /* Structured, and text-only on purpose: the block sits in a narrow menu
+           where a single unbroken line scrolls it sideways, so the name, the
+           建议 chip and the state are separate cells that wrap between them. */
         const line = document.createElement('div');
-        line.className = 'ai-hint-note';
-        line.textContent = text;
-        if (kind) line.dataset.kind = kind;
+        line.className = 'profile-item';
+        line.dataset.kind = entry.recommended ? 'suggested' : 'plain';
+        const name = document.createElement('span');
+        name.className = 'profile-name';
+        name.textContent = I18n.t('platform.' + entry.platform);
+        line.appendChild(name);
+        if (entry.recommended) {
+            const chip = document.createElement('span');
+            chip.className = 'profile-chip';
+            chip.textContent = I18n.t('set.profileSuggested');
+            line.appendChild(chip);
+        }
+        const state = document.createElement('span');
+        state.className = 'profile-state';
+        state.textContent = this._stateOf(entry);
+        line.appendChild(state);
+        return line;
+    },
+
+    _noteRow(text, kind) {
+        const line = document.createElement('div');
+        line.className = 'profile-item';
+        line.dataset.kind = kind;
+        const state = document.createElement('span');
+        state.className = 'profile-state';
+        state.textContent = text;
+        line.appendChild(state);
         return line;
     },
 
@@ -1746,14 +1791,11 @@ const BrowserProfiles = {
            matrix platform, so no rows means the table broke, and a blank box would
            read as a clean bill of health. */
         if (!this.data || !this.data.profiles.length) {
-            box.appendChild(this._row(I18n.t('set.profileUnavailable'), 'unavailable'));
+            box.appendChild(this._noteRow(I18n.t('set.profileUnavailable'), 'unavailable'));
             return;
         }
         this.data.profiles.forEach(function (entry) {
-            const name = I18n.t('platform.' + entry.platform);
-            const flag = entry.recommended ? ' · ' + I18n.t('set.profileSuggested') : '';
-            const kind = entry.recommended ? 'suggested' : 'plain';
-            box.appendChild(BrowserProfiles._row(name + flag + '：' + BrowserProfiles._stateOf(entry), kind));
+            box.appendChild(BrowserProfiles._row(entry));
         });
     },
 };

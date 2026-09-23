@@ -493,6 +493,68 @@ body.style-menu-open #top-menu {
 #settings-menu .settings-input-sm {
   flex: 0 0 96px;
 }
+/* The profile table: one full-width block inside the settings menu. A label +
+   control row would have squeezed eight platform states into the narrow right
+   column, which is what produced a sideways scrollbar there. */
+#settings-menu .dd-item-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 12px;
+}
+#settings-menu .dd-block-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+#settings-menu .dd-block-note {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  /* Vertical scrolling inside a declared list is allowed; sideways never. */
+  max-height: 168px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Square on purpose: a rounded box cuts the first and last row's descenders at
+     the curve, and this list is scrollable, so its edge is where text gets read. */
+  border-radius: 0;
+  padding: 2px 0;
+}
+.profile-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.profile-item .profile-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.profile-item .profile-state {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.profile-item .profile-chip {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  /* Square, and the hairline divider colour: --border is the strong ink colour, and
+     a rounded chip clips its own 9px text. */
+  border: 1px solid var(--line);
+  font-size: 9px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
 .ai-hint {
   margin-top: 4px;
   padding: 8px;
@@ -1440,8 +1502,21 @@ table.history-runs-table tr:hover td {
   vertical-align: top;
 }
 .runs-mgr-wf {
-  max-width: 130px;
+  /* A record of a parallel run carries every workflow's name, so the cell needs
+     more room than one label ever needed; the text wraps rather than widening the
+     panel, which is what keeps the page free of a horizontal scrollbar. */
+  max-width: 168px;
   overflow-wrap: anywhere;
+}
+.runs-mgr-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 9px;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 .runs-mgr-id {
   font-size: 10px;

@@ -461,6 +461,8 @@ def runsmgr(tmp_path_factory):
                 'node_total': 3,
                 'rows_kept': 17,
                 'started_at': '2026-09-01 10:00',
+                'wf_count': 1,
+                'headless': 0,
             },
             {
                 'run_id': 'def456',
@@ -471,6 +473,20 @@ def runsmgr(tmp_path_factory):
                 'node_total': 3,
                 'rows_kept': 5,
                 'started_at': '',
+                'wf_count': 1,
+                'headless': 1,
+            },
+            {
+                'run_id': 'par789',
+                'workflow_name': '热门榜 + 周排行榜',
+                'status': 'completed',
+                'resumable': False,
+                'node_done': 6,
+                'node_total': 6,
+                'rows_kept': 40,
+                'started_at': '2026-09-22 09:00',
+                'wf_count': 2,
+                'headless': 1,
             },
         ],
         'queue': [
@@ -518,14 +534,33 @@ class TestRunRecordsPanel:
         assert '&lt;script&gt;' in runsmgr['html']
 
     def test_an_unnamed_run_still_has_a_label_and_empty_count_hidden(self, runsmgr):
-        assert runsmgr['count'] == '(2)'
+        assert runsmgr['count'] == '(3)'
         assert 'unnamed' in runsmgr['html'], 'a blank name must fall back to a label'
+
+    def test_a_parallel_record_shows_every_workflow_it_ran(self, runsmgr):
+        """One record for several workflows is correct; showing one name out of
+        two is what made the user look for the 'missing' second record."""
+        rows = runsmgr['html'].split('<tr>')
+        parallel = next(r for r in rows if 'par789' in r)
+        assert '热门榜 + 周排行榜' in parallel
+        assert 'PARALLEL(2)' in parallel, 'the chips are the only place ×N can be read'
+        assert 'HEADLESS' in parallel
+        single = next(r for r in rows if 'def456' in r)
+        assert 'PARALLEL' not in single, 'a one-workflow run must not claim otherwise'
+        assert 'HEADLESS' in single, 'the window mode is stored for every run, not just parallel ones'
+
+    def test_the_chips_are_built_from_stored_fields_not_from_the_name(self, runsmgr):
+        cases = runsmgr['tagCases']
+        assert cases['parallelHeadless'] == ['PARALLEL(2)', 'HEADLESS']
+        assert cases['parallelVisible'] == ['PARALLEL(3)', 'WINDOW']
+        assert cases['single'] == ['HEADLESS'], 'a one-workflow run must not claim 并行'
+        assert cases['singleVisible'] == ['WINDOW']
 
     def test_every_recorded_run_can_be_turned_into_a_report(self, runsmgr):
         """A stored run is reportable whether or not it finished: the tables the
         node settled are there either way, and a partial run is exactly when a
         written account of what was collected has value."""
-        assert runsmgr['reports'] == 2
+        assert runsmgr['reports'] == 3
         assert "runsManager.report('abc123')" in runsmgr['html']
         assert "runsManager.report('def456')" in runsmgr['html']
 
@@ -576,5 +611,16 @@ class TestRunRecordsPanel:
     def test_the_name_node_label_decides_what_a_run_is_called(self, runsmgr):
         """Same precedence the backend applies when it records the run: label,
         then the saved file name. Anything else and the two sides file the same
-        work under two different names."""
-        assert runsmgr['runName'] == {'fromNode': '周报表', 'fromFile': '夜间增量', 'none': ''}
+        work under two different names.
+
+        ``runName`` is also what the request body carries, so the composed
+        spelling and the record shown in the panel cannot disagree.
+        """
+        assert runsmgr['runName'] == {
+            'fromNode': '周报表',
+            'fromTwo': '周报表 + 明细表',
+            'fromFile': '夜间增量',
+            'none': '',
+        }
+        assert runsmgr['twoNodeBody']['workflow_name'] == '周报表 + 明细表'
+        assert runsmgr['twoNodeToasts'] == [], f'a refused run would show as a missing POST: {runsmgr["twoNodeToasts"]}'

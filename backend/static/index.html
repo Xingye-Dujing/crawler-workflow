@@ -1386,13 +1386,19 @@
             type="text"
             id="set-profile-dir"
             class="settings-input"
+            data-i18n-placeholder="set.profileDirPlaceholder"
+            placeholder="留空 = 内置 data/chrome_profile/平台；可填绝对路径"
             oninput="onSettingInput('browser_profile_dir', this.value)"
           />
         </span>
       </div>
-      <div class="dd-item-row">
-        <span data-i18n="set.profileStatus">各平台 Profile</span>
-        <div class="dd-ctrl profile-status" id="profile-status"></div>
+      <!-- One full-width block, not a label+control row: eight platform states in the
+           narrow right column is what made this cell scroll sideways. -->
+      <div class="dd-item-block">
+        <span class="dd-block-title" data-i18n="set.profileStatus">各平台 Profile</span>
+        <div class="profile-list" id="profile-status"></div>
+        <span class="dd-block-note" data-i18n="set.profileHowTo">目录不用手动建：第一次采集该平台时自动创建。但新目录里没有会话，所以要在「Cookie」面板里往该平台登录并保存一次，之后抓取就一直接着用这台设备。</span>
+        <span class="dd-block-note" data-i18n="set.profileNote">标「建议」的平台最容易被一次性浏览器刁难；微信不需要登录，所以不在列表里。</span>
       </div>
       <div class="dd-divider"></div>
       <div class="dd-item-row">

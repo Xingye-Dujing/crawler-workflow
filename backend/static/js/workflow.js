@@ -180,13 +180,18 @@ const workflow = {
        server would have to guess by node id (which repeats on every canvas). */
     runName() {
         var nodes = canvas.nodes || {};
+        var labels = [];
         for (var id in nodes) {
             if (!Object.prototype.hasOwnProperty.call(nodes, id)) continue;
             if (nodes[id].type !== 'name') continue;
             var label = String((nodes[id].params || {}).workflow_name || '').trim();
-            if (label) return label;
+            /* All of them, joined — the same composition the backend applies when it
+               records the run. This string is how a preview finds the stored rows after
+               a refresh (node ids repeat across every canvas), so the two sides have
+               to build it identically or a multi-workflow run's data becomes invisible. */
+            if (label && labels.indexOf(label) < 0) labels.push(label);
         }
-        return this.currentFile || '';
+        return labels.join(' + ') || this.currentFile || '';
     },
 
     async _confirmProfileBeforeRun() {
@@ -3207,6 +3212,17 @@ var runsManager = {
         return known.indexOf(status) >= 0 ? 'runsMgr.status.' + status : 'runsMgr.status.completed';
     },
 
+    /* What kind of run this was, as chips beside the name: several workflows in one
+       record (并行), and which window it crawled in. Both are stored facts, not
+       guesses — and they matter when a record from last week is being read back:
+       a visible-window crawl and a headless one fail differently. */
+    tags(r) {
+        var out = [];
+        if ((r.wf_count || 1) > 1) out.push(I18n.t('runsMgr.tagParallel').replace('{n}', r.wf_count));
+        out.push(I18n.t(r.headless ? 'runsMgr.tagHeadless' : 'runsMgr.tagWindow'));
+        return out;
+    },
+
     render(runs) {
         /* Remembered so a button can ask "which workflow is this row?" without
            the answer having to be woven into its onclick attribute. */
@@ -3237,8 +3253,11 @@ var runsManager = {
                a workflow name is user text, and a quote in it would close this
                attribute and start a new one. */
             ops += '<button class="runs-mgr-btn" onclick="runsManager.report(\'' + r.run_id + '\')">' + I18n.t('runsMgr.report') + '</button>';
+            var tags = runsManager.tags(r).map(function (text) {
+                return '<span class="runs-mgr-tag">' + escapeHtml(text) + '</span>';
+            }).join('');
             return '<tr>' +
-                '<td class="runs-mgr-wf">' + escapeHtml(r.workflow_name || I18n.t('name.unnamed')) + '</td>' +
+                '<td class="runs-mgr-wf">' + escapeHtml(r.workflow_name || I18n.t('name.unnamed')) + tags + '</td>' +
                 '<td class="runs-mgr-id">' + escapeHtml(r.run_id) + '</td>' +
                 '<td><span class="runs-mgr-status st-' + escapeHtml(r.status || '') + '">' + I18n.t(runsManager.statusKey(r.status)) + '</span></td>' +
                 '<td>' + (r.node_done || 0) + '/' + (r.node_total || 0) + '</td>' +

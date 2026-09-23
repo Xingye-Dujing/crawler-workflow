@@ -305,7 +305,11 @@ def _durable_node_rows(node_id: str, workflow_name: str = '') -> list:
     store = get_run_store()
     requested = str(workflow_name or '').strip()
     if requested:
-        return store.latest_rows(node_id, workflow_name=requested)[1]
+        # ``A + B`` is how a parallel run is recorded; the same canvas filed its
+        # earlier runs under ``A`` alone, so both spellings are offered rather than
+        # leaving a week-old run's rows unreachable behind one string.
+        candidates = [part.strip() for part in requested.split('+')]
+        return store.latest_rows(node_id, workflow_name=requested, workflow_names=candidates)[1]
     fingerprint = execution_state.get('fingerprint') or ''
     ambient = execution_state.get('workflow_name') or ''
     if not fingerprint and not ambient:
@@ -392,6 +396,9 @@ execution_state = {
     # node from the database when results are gone, and these tell it which
     # workflow's rows count as "this node's".
     'workflow_name': '',
+    # Every name node's label in canvas order — the record of a run that executed
+    # several workflows carries all of their names, not just the first.
+    'workflow_labels': [],
     'fingerprint': '',
     # Set when a crawl is bounced to a login wall mid-run (the cookie likely
     # expired). Surfaced to the browser through /api/workflow/status so it can
@@ -1158,14 +1165,21 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             workflow_name = str(data.get('workflow_name') or workflow.get('name') or '').strip()
             # A name node on the canvas overrides whatever the browser sent: its label
             # is the user-facing category for this run in the Execution History panel.
-            # First name node wins; the engine's validate() guarantees the label is
-            # non-empty before a run is allowed to start.
+            # EVERY name node contributes, in canvas order: a run that executes several
+            # workflows records them as one run (that is what they are), and labelling it
+            # with only the first swallowed the others — the user saw 热门榜 and concluded
+            # 周排行榜's record had been lost. The engine's validate() guarantees each
+            # label is non-empty before a run is allowed to start.
+            labels = []
             for _node in workflow.get('nodes') or []:
-                if _node.get('type') == 'name':
-                    _label = str((_node.get('params') or {}).get('workflow_name') or '').strip()
-                    if _label:
-                        workflow_name = _label
-                    break
+                if _node.get('type') != 'name':
+                    continue
+                _label = str((_node.get('params') or {}).get('workflow_name') or '').strip()
+                if _label and _label not in labels:
+                    labels.append(_label)
+            if labels:
+                workflow_name = ' + '.join(labels)
+            execution_state['workflow_labels'] = labels
             # Recorded so a preview can find this workflow's rows in the store once the
             # live results are gone (a refresh, a restart) rather than guessing from a
             # node id alone — "node-2" exists in every workflow.
@@ -1423,6 +1437,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 llm=execution_state['llm'],
                 lang=execution_state.get('lang'),
                 node_total=execution_state['total_nodes'],
+                wf_count=wf_count,
             )
             # Read *after* start_run so nodes left 'running' by the promotion
             # are visible as partial, which is what makes them resumable.
@@ -3843,19 +3858,28 @@ def set_runtime_settings():
 
 @app.route('/api/browser/profiles', methods=['GET'])
 def get_browser_profiles():
-    """One row per platform: does it have its own browser profile, and is it in use?
+    """One row per platform that has a login session at all.
 
-    The panel needs this to tell an enabled-but-unused profile from a working one.
-    ``imported`` is the state that matters to the user: false means the next run
-    imports the saved cookie file into a brand-new directory (so if they have never
-    logged in through *this* tool, that file is all the identity the platform will
-    see), true means the browser keeps whatever the site gave it last time — which is
-    the whole point of turning profiles on.
+    WeChat is deliberately absent: its article bodies need no login (there is no
+    cookie row for it anywhere in this app), so a browser profile would be a
+    directory of nothing — and a row in this table reads as "you should log in here".
+
+    Three things can only be checked from the request side:
+
+    * the payload covers **every platform the cookie panel can sign into**, in matrix
+      order (a platform missing here is one whose state the user cannot see);
+    * `recommended` is read off the crawl matrix, not from a second list this endpoint
+      keeps by hand;
+    * a directory is reported as *existing* only after something created it, and as
+      *imported* only after a cookie actually went in. Those two booleans are the whole
+      guidance sentence in the panel.
     """
     rows = {'ok': True, 'enabled': browser_profiles.is_enabled(), 'root': browser_profiles.root_dir()}
     rows['profiles'] = []
     for cap in capabilities.CAPABILITIES:
         platform = cap.platform
+        if not CookieManager.is_supported(platform):
+            continue
         saved = os.path.join(Config.COOKIE_DIR, f'{platform}_cookies.json')
         rows['profiles'].append(
             browser_profiles.status(

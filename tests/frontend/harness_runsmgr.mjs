@@ -29,6 +29,8 @@ const I18n = {
             'runsMgr.queueHeader': 'WAITING({n})', 'runsMgr.queueCancel': 'CancelQueued',
             'runsMgr.queueCancelled': 'REMOVED', 'runsMgr.queueGone': 'GONE',
             'runsMgr.queueCancelFailed': 'FAILED',
+            'runsMgr.tagParallel': 'PARALLEL({n})', 'runsMgr.tagHeadless': 'HEADLESS',
+            'runsMgr.tagWindow': 'WINDOW',
         },
         zh: {},
     },
@@ -98,7 +100,7 @@ sandbox.canvas.connections = [{ from: 'node-1', to: 'node-2' }];
 sandbox.canvas.toWorkflowJSON = () => ({
     nodes: Object.values(sandbox.canvas.nodes),
     connections: sandbox.canvas.connections,
-    settings: { mode: 'serial' },
+    settings: sandbox.canvas.settings || { mode: 'serial' },
 });
 wf.currentFile = '夜间增量';
 const before = captured.posts.length;
@@ -118,10 +120,39 @@ const previewPost = captured.posts.slice(beforePreview).find((p) => p.url === '/
    which beats nothing. */
 sandbox.canvas.nodes.n9 = { id: 'n9', type: 'name', params: { workflow_name: '周报表' } };
 const nameFromNode = wf.runName();
+/* A canvas can hold several workflows, each with its own name node, and they run
+   as one record: naming it with only the first made the others look deleted. The
+   request body must carry the same composed spelling the panel shows, so the two
+   name nodes are wired to two real chains — a name node with nothing downstream
+   is refused before any request is sent. */
+sandbox.canvas.nodes.n10 = { id: 'n10', type: 'name', params: { workflow_name: '明细表' } };
+sandbox.canvas.nodes['node-3'] = { id: 'node-3', type: 'upload', title: '文件', params: { dataset_id: 'd2', dataset_name: 'b.csv', row_count: 4 } };
+sandbox.canvas.nodes['node-4'] = { id: 'node-4', type: 'output', title: '导出', operation: 'save', params: { operation: 'save', filename: 'y' } };
+sandbox.canvas.connections = [
+    { from: 'n9', to: 'node-1' },
+    { from: 'node-1', to: 'node-2' },
+    { from: 'n10', to: 'node-3' },
+    { from: 'node-3', to: 'node-4' },
+];
+sandbox.canvas.settings = { mode: 'parallel' };
+const nameFromTwoNodes = wf.runName();
+const beforeTwo = captured.posts.length;
+await wf.execute({});
+const twoNodePost = captured.posts.slice(beforeTwo).find((p) => p.url === '/api/workflow/execute');
+const twoNodeToasts = captured.toasts.slice(beforeTwo);
+delete sandbox.canvas.nodes.n10;
 delete sandbox.canvas.nodes.n9;
 const nameFromFile = wf.runName();
 wf.currentFile = '';
 const nameWithoutEither = wf.runName();
+
+/* The chips beside the name, straight from the stored fields. */
+const tagCases = {
+    parallelHeadless: manager.tags({ wf_count: 2, headless: 1 }),
+    parallelVisible: manager.tags({ wf_count: 3, headless: 0 }),
+    single: manager.tags({ wf_count: 1, headless: 1 }),
+    singleVisible: manager.tags({ wf_count: 1, headless: 0 }),
+};
 
 /* The report button may name the run only by id: a workflow name is user text,
    and one double quote in it would close the onclick attribute and let whatever
@@ -138,7 +169,10 @@ process.stdout.write(
         resumeBody: resumePost ? resumePost.body : null,
         plainBody: plainPost ? plainPost.body : null,
         previewBody: previewPost ? previewPost.body : null,
-        runName: { fromNode: nameFromNode, fromFile: nameFromFile, none: nameWithoutEither },
+        runName: { fromNode: nameFromNode, fromFile: nameFromFile, none: nameWithoutEither, fromTwo: nameFromTwoNodes },
+        twoNodeBody: twoNodePost ? twoNodePost.body : null,
+        twoNodeToasts,
+        tagCases,
         // Whatever the two execute() calls said — a refused preflight shows here
         // rather than as a missing POST with no reason attached.
         executeToasts: captured.toasts.slice(cancelToasts.length),

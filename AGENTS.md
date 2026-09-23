@@ -28,7 +28,7 @@ install, lint and test goes through it: in Git Bash run `source .venv/Scripts/ac
 - Format: `ruff format backend/`
 - Standalone crawler scripts: `python backend/test_zhihu.py <keyword> --count N --no-headless`
   (test_*.py are manual run scripts, NOT pytest).
-- **Automated tests (pytest, ~2393 fast-tier cases; 2499 across all tiers)**:
+- **Automated tests (pytest, ~2540 fast-tier cases; 2664 across all tiers)**:
   - Fast suite, <60s, no browser/daemon needed: `.venv/Scripts/python.exe -m pytest -q`
     (plain `node` on PATH enables the frontend-JS behavior tests; without it they skip).
   - Device tier (real Chrome on `file://` fixtures + real local Ollama; skips cleanly if absent):
@@ -399,6 +399,19 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   data with a plausible face). The browser therefore sends `workflow_name` — computed by
   `workflow.runName()`, which mirrors the backend's precedence: name-node label, then the
   saved file name.
+- **A parallel run is one record, and its label is every workflow's name.** A canvas holding
+  several workflows (one name node each) executes as one run and must be *stored* as one run,
+  but labelling it with only the first name read as "the other record was deleted" — so
+  `app.py` joins all non-empty labels with `' + '` in canvas order (deduped) and the panel
+  adds 并行 ×N / 无头 / 窗口 chips from the stored `wf_count` and `headless`. That composed
+  string is also a **lookup key**, which is why `_durable_node_rows` splits it on `'+'` and
+  offers both spellings to `latest_rows(workflow_names=…)`: without the split, a run recorded
+  before the composition existed becomes uninspectable to fix a label. A single-workflow run
+  must therefore keep its plain name exactly. `wf_count` is added to an existing `runs.db` by
+  `RunStore._ensure_columns()` (PRAGMA + `ALTER TABLE ADD COLUMN`), so old rows read as 1.
+  Resume state stays **per workflow** even though the record is shared: reuse is decided per
+  node id by `fingerprints_for_workflow` over the whole canvas, so a failure in component B
+  restores A's finished nodes and editing A re-runs A alone (`tests/api/test_run_records_parallel.py`).
 - Run-gating UX lives in `workflow.js execute()`: `_confirmCookieBeforeRun` (dialog, skippable via
   the `cookie_confirm_before_run` setting, auto-pass for resume runs); new settings keys need the
   bool branch in `settings_store.save_settings` + both app.js catalogs + `AppSettings` wiring.

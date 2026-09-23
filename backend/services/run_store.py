@@ -276,6 +276,10 @@ class RunStore:
                     lang TEXT,
                     node_total INTEGER DEFAULT 0,
                     node_done INTEGER DEFAULT 0,
+                    -- How many connected components (user-facing workflows) this
+                    -- one run executed: >1 is what makes the record 并行, and the
+                    -- name field carries all their labels joined.
+                    wf_count INTEGER DEFAULT 1,
                     started_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     finished_at TEXT,
@@ -325,7 +329,24 @@ class RunStore:
                 """
             )
             self._conn.commit()
+        self._ensure_columns()
         self.promote_stale_runs()
+
+    #: Columns that post-date the CREATE TABLE above. ``CREATE TABLE IF NOT
+    #: EXISTS`` leaves an existing database in the shape it was created in, so a
+    #: run recorded before a field existed would have nothing for the panel to
+    #: read; ``ADD COLUMN`` with a default gives every old row that value without
+    #: rewriting the table. The names are a literal tuple written right here.
+    _ADDED_COLUMNS = (('runs', 'wf_count', 'INTEGER DEFAULT 1'),)
+
+    def _ensure_columns(self):
+        for table, column, declaration in self._ADDED_COLUMNS:
+            with self._lock:
+                have = {row[1] for row in self._conn.execute(f'PRAGMA table_info({table})')}
+                if column in have:
+                    continue
+                self._conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {declaration}')
+                self._conn.commit()
 
     @staticmethod
     def now() -> str:
@@ -376,16 +397,17 @@ class RunStore:
         llm: dict = None,
         lang: str = 'zh',
         node_total: int = 0,
+        wf_count: int = 1,
     ):
         llm = llm or {}
         stamp = self.now()
         self._execute(
             'INSERT INTO runs (run_id, workflow_name, workflow_fingerprint, status, mode, headless, '
-            'llm_provider, llm_model, lang, node_total, node_done, started_at, updated_at) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) '
+            'llm_provider, llm_model, lang, node_total, node_done, wf_count, started_at, updated_at) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?) '
             'ON CONFLICT(run_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, '
             'llm_provider = excluded.llm_provider, llm_model = excluded.llm_model, '
-            'node_total = excluded.node_total, finished_at = NULL, note = NULL',
+            'node_total = excluded.node_total, wf_count = excluded.wf_count, finished_at = NULL, note = NULL',
             (
                 run_id,
                 workflow_name,
@@ -397,6 +419,7 @@ class RunStore:
                 llm.get('model', ''),
                 lang,
                 node_total,
+                max(1, int(wf_count or 1)),
                 stamp,
                 stamp,
             ),
@@ -714,7 +737,7 @@ class RunStore:
                 continue
         return out
 
-    def latest_rows(self, node_id: str, fingerprint: str = '', workflow_name: str = '') -> tuple:
+    def latest_rows(self, node_id: str, fingerprint: str = '', workflow_name: str = '', workflow_names=None) -> tuple:
         """The newest rows this node ever produced → (run_id, rows).
 
         This is what lets a preview answer after a page refresh — and after a
@@ -722,6 +745,11 @@ class RunStore:
         node produced were filed here as they were made. ``fingerprint`` pins
         the lookup to one workflow shape, which a caller that knows it should
         pass (node ids like "node-2" repeat across workflows).
+
+        ``workflow_names`` is the same pin, over several spellings: a run that
+        executed two workflows records them as ``A + B``, while the same canvas
+        filed its earlier runs under ``A`` alone. Listing both keeps a preview
+        working across that change without ever dropping the identity requirement.
         """
         sql = (
             'SELECT r.run_id, MAX(r.seq) AS seq FROM node_rows n JOIN runs r ON r.run_id = n.run_id WHERE n.node_id = ?'
@@ -730,9 +758,12 @@ class RunStore:
         if fingerprint:
             sql += ' AND r.workflow_fingerprint = ?'
             params.append(fingerprint)
-        if workflow_name:
-            sql += ' AND r.workflow_name = ?'
-            params.append(workflow_name)
+        names = [str(name).strip() for name in (workflow_names or []) if str(name or '').strip()]
+        if workflow_name and workflow_name not in names:
+            names.insert(0, workflow_name)
+        if names:
+            sql += ' AND r.workflow_name IN (' + ', '.join('?' * len(names)) + ')'
+            params.extend(names)
         sql += ' GROUP BY r.run_id ORDER BY seq DESC LIMIT 5'
         for row in self._query(sql, tuple(params)):
             rows = self.load_rows(row['run_id'], node_id)

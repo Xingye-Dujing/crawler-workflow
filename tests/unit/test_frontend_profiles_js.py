@@ -44,7 +44,12 @@ HARNESS = ROOT / 'tests' / 'frontend' / 'harness_profiles.mjs'
 INDEX = ROOT / 'backend' / 'static' / 'index.html'
 
 MATRIX = crawl_capabilities.as_dict()
-PLATFORMS = [cap['platform'] for cap in MATRIX['platforms']]
+from services.cookie_manager import CookieManager  # noqa: E402
+
+#: The platforms the endpoint can answer for: the matrix, minus the one with no login
+#: at all. The scenario payload below is built from this, so the panel's contract is
+#: tested against the same list the server actually sends.
+PLATFORMS = [cap['platform'] for cap in MATRIX['platforms'] if CookieManager.is_supported(cap['platform'])]
 FLAGGED = [cap['platform'] for cap in MATRIX['platforms'] if cap['profileRecommended']]
 
 
@@ -187,22 +192,30 @@ class TestSettingsTable:
         rows = ui['off-flagged']['rows']
         assert len(rows) == len(PLATFORMS), f'{len(rows)} rows for {len(PLATFORMS)} platforms'
         for platform, line in zip(PLATFORMS, rows, strict=True):
-            assert line, f'{platform} rendered nothing'
+            assert line['name'], f'{platform} rendered no name: {line}'
+            assert line['state'], f'{platform} rendered no state: {line}'
 
-    def test_the_recommendation_lands_on_the_right_rows(self, ui):
-        kinds = ui['off-flagged']['kinds']
-        expected = ['suggested' if platform in FLAGGED else 'plain' for platform in PLATFORMS]
-        assert kinds == expected, f'the panel suggests a profile somewhere the matrix never measured it: {kinds}'
+    def test_the_recommendation_is_a_chip_on_the_right_rows(self, ui):
+        """The chip is its own cell (not text glued onto the name) so a long
+        platform name can wrap without ever widening the menu."""
+        chips = [bool(row['chip']) for row in ui['off-flagged']['rows']]
+        expected = [platform in FLAGGED for platform in PLATFORMS]
+        assert chips == expected, f'the panel suggests a profile somewhere the matrix never measured it: {chips}'
+        for row in ui['off-flagged']['rows']:
+            if row['chip']:
+                assert row['kind'] == 'suggested'
 
     def test_the_four_states_are_distinguishable(self, ui):
         rows = ui['off-flagged']['rows']
-        by_platform = dict(zip(PLATFORMS, rows, strict=True))
-        assert '功能已关闭' in by_platform[PLATFORMS[0]] or 'switched off' in by_platform[PLATFORMS[0]]
-        assert ui['on-flagged']['rows'][0] != ui['off-flagged']['rows'][0], 'the table ignores the switch'
+        states = {row['state'] for row in rows}
+        assert '功能已关闭' in states or 'switched off' in ' '.join(states), states
+        on = {row['state'] for row in ui['on-flagged']['rows']}
+        assert states != on, 'the table says nothing about the switch'
 
     def test_an_unusable_payload_says_so_instead_of_rendering_nothing(self, ui):
         rows = ui['no-matrix']['rows']
         assert len(rows) == 1, f'a silent empty table reads as "all good": {rows}'
+        assert rows[0]['kind'] == 'unavailable'
 
     def test_opening_the_settings_panel_is_what_reads_the_table(self, ui):
         """The read lives in ``toggleSettingsMenu`` (menu.js), not in the page
@@ -213,8 +226,7 @@ class TestSettingsTable:
 
     def test_a_server_that_lists_no_platforms_is_not_a_green_bill(self, ui):
         rows = ui['empty-table']['rows']
-        kinds = ui['empty-table']['kinds']
-        assert len(rows) == 1 and kinds == ['unavailable'], rows
+        assert len(rows) == 1 and rows[0]['kind'] == 'unavailable', rows
 
 
 class TestPanelHint:

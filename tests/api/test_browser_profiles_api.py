@@ -39,12 +39,29 @@ def _rows(client):
     return body
 
 
+def _session_platforms() -> list:
+    """Matrix platforms that have a login session at all, in matrix order.
+
+    The cookie panel's list is the existing answer to "can this platform be logged
+    into", so a profile table that invents its own would be a second opinion — and
+    WeChat is the platform that proves the difference: article bodies need no login,
+    so a "profile" for it would be an empty directory and a row that reads as advice.
+    """
+    from services.cookie_manager import CookieManager
+
+    return [cap.platform for cap in crawl_capabilities.CAPABILITIES if CookieManager.is_supported(cap.platform)]
+
+
 class TestProfilesEndpoint:
-    def test_every_matrix_platform_has_a_row_in_matrix_order(self, client, profiles_on):
+    def test_every_platform_with_a_session_has_a_row_in_matrix_order(self, client, profiles_on):
         body = _rows(client)
         assert body['enabled'] is True and body['root'].endswith('profiles')
-        platforms = [cap.platform for cap in crawl_capabilities.CAPABILITIES]
-        assert [row['platform'] for row in body['profiles']] == platforms
+        assert [row['platform'] for row in body['profiles']] == _session_platforms()
+
+    def test_wechat_is_not_offered_a_profile(self, client, profiles_on):
+        """No cookie row, no login, nothing for a persistent browser to remember."""
+        assert 'wechat' not in [row['platform'] for row in _rows(client)['profiles']]
+        assert len(_session_platforms()) >= 6, 'the list went vacuous, so the assertion above proves nothing'
 
     def test_a_row_carries_exactly_what_the_panel_renders(self, client, profiles_on):
         first = _rows(client)['profiles'][0]

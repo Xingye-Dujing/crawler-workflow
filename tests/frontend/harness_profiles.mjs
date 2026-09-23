@@ -81,11 +81,30 @@ for (const sc of scenarios) {
     entry.result = sandbox.__dialog;
     entry.shown = sandbox.__dialog !== null;
     entry.openedSettings = vm.runInContext(`globalThis.__settingsOpened`, sandbox);
-    /* 3. the settings table */
+    /* The settings table, read the way the DOM builds it: each row is a name, an
+       optional 建议 chip and a state — separate elements, so a long platform name
+       can wrap instead of pushing the menu sideways. */
     await vm.runInContext(`renderBrowserProfiles()`, sandbox);
     const box = sandbox.__byId('profile-status');
-    entry.rows = box.children.map((child) => child.textContent);
-    entry.kinds = box.children.map((child) => (child.dataset && child.dataset.kind) || '');
+    const cells = (item) => {
+        const out = {};
+        (item.children || []).forEach((child) => {
+            for (const cls of child.classList) {
+                if (cls !== 'profile-name' && cls !== 'profile-state' && cls !== 'profile-chip') continue;
+                out[cls] = child.textContent;
+            }
+        });
+        return out;
+    };
+    entry.rows = box.children.map((child) => {
+        const found = cells(child);
+        return {
+            name: found['profile-name'] || '',
+            chip: found['profile-chip'] || '',
+            state: found['profile-state'] || '',
+            kind: (child.dataset && child.dataset.kind) || '',
+        };
+    });
     /* 3b. the wiring the user actually exercises: opening 设置 is what reads the
        table now (a page load must not pay for a panel nobody opens). */
     box.textContent = '';
