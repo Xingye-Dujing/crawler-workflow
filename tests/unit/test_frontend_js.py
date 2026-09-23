@@ -461,6 +461,7 @@ def runsmgr(tmp_path_factory):
                 'node_total': 3,
                 'rows_kept': 17,
                 'started_at': '2026-09-01 10:00',
+                'mode': 'serial',
                 'wf_count': 1,
                 'headless': 0,
             },
@@ -473,6 +474,7 @@ def runsmgr(tmp_path_factory):
                 'node_total': 3,
                 'rows_kept': 5,
                 'started_at': '',
+                'mode': 'serial',
                 'wf_count': 1,
                 'headless': 1,
             },
@@ -485,6 +487,20 @@ def runsmgr(tmp_path_factory):
                 'node_total': 6,
                 'rows_kept': 40,
                 'started_at': '2026-09-22 09:00',
+                'mode': 'parallel',
+                'wf_count': 2,
+                'headless': 1,
+            },
+            {
+                'run_id': 'ser790',
+                'workflow_name': '热门榜 + 周排行榜',
+                'status': 'completed',
+                'resumable': False,
+                'node_done': 6,
+                'node_total': 6,
+                'rows_kept': 40,
+                'started_at': '2026-09-22 09:30',
+                'mode': 'serial',
                 'wf_count': 2,
                 'headless': 1,
             },
@@ -534,7 +550,7 @@ class TestRunRecordsPanel:
         assert '&lt;script&gt;' in runsmgr['html']
 
     def test_an_unnamed_run_still_has_a_label_and_empty_count_hidden(self, runsmgr):
-        assert runsmgr['count'] == '(3)'
+        assert runsmgr['count'] == '(4)'
         assert 'unnamed' in runsmgr['html'], 'a blank name must fall back to a label'
 
     def test_a_parallel_record_shows_every_workflow_it_ran(self, runsmgr):
@@ -549,18 +565,32 @@ class TestRunRecordsPanel:
         assert 'PARALLEL' not in single, 'a one-workflow run must not claim otherwise'
         assert 'HEADLESS' in single, 'the window mode is stored for every run, not just parallel ones'
 
-    def test_the_chips_are_built_from_stored_fields_not_from_the_name(self, runsmgr):
+    def test_the_chips_come_from_the_mode_not_from_the_count(self, runsmgr):
+        """The count says how many workflows the canvas held; only the mode says
+        whether they actually overlapped. Reading the count alone labelled a 串行 run
+        ``并行 ×2`` — a concurrency that never happened, on the one screen a user reads
+        a past run's shape from."""
         cases = runsmgr['tagCases']
         assert cases['parallelHeadless'] == ['PARALLEL(2)', 'HEADLESS']
         assert cases['parallelVisible'] == ['PARALLEL(3)', 'WINDOW']
-        assert cases['single'] == ['HEADLESS'], 'a one-workflow run must not claim 并行'
-        assert cases['singleVisible'] == ['WINDOW']
+        assert cases['serialHeadless'] == ['SERIAL(2)', 'HEADLESS']
+        assert cases['singleParallel'] == ['HEADLESS'], 'one workflow is neither parallel nor serial'
+        assert cases['singleSerial'] == ['WINDOW']
+
+    def test_a_serial_record_with_two_workflows_says_serial(self, runsmgr):
+        rows = runsmgr['html'].split('<tr>')
+        parallel = next(r for r in rows if 'par789' in r)
+        serial = next(r for r in rows if 'ser790' in r)
+        assert '热门榜 + 周排行榜' in parallel and 'PARALLEL(2)' in parallel
+        assert '热门榜 + 周排行榜' in serial, 'both spellings of the name are still one record'
+        assert 'SERIAL(2)' in serial
+        assert 'PARALLEL' not in serial, f'the panel claims a concurrency this run did not have: {serial}'
 
     def test_every_recorded_run_can_be_turned_into_a_report(self, runsmgr):
         """A stored run is reportable whether or not it finished: the tables the
         node settled are there either way, and a partial run is exactly when a
         written account of what was collected has value."""
-        assert runsmgr['reports'] == 3
+        assert runsmgr['reports'] == 4
         assert "runsManager.report('abc123')" in runsmgr['html']
         assert "runsManager.report('def456')" in runsmgr['html']
 

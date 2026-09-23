@@ -1382,7 +1382,7 @@ button.history-del {
   font-family: var(--font);
   padding: 1px 7px;
   border: 1px solid var(--line);
-  border-radius: 0;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;

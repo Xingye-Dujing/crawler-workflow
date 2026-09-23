@@ -429,9 +429,13 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   before the composition existed becomes uninspectable to fix a label. A single-workflow run
   must therefore keep its plain name exactly. `wf_count` is added to an existing `runs.db` by
   `RunStore._ensure_columns()` (PRAGMA + `ALTER TABLE ADD COLUMN`), so old rows read as 1.
-  Resume state stays **per workflow** even though the record is shared: reuse is decided per
-  node id by `fingerprints_for_workflow` over the whole canvas, so a failure in component B
-  restores A's finished nodes and editing A re-runs A alone (`tests/api/test_run_records_parallel.py`).
+  **A chip must describe what happened, not what the canvas held**: `并行 ×N` is printed only
+  when `mode == 'parallel'`, and `串行 ×N` otherwise — `wf_count` counts connected components,
+  and a serial run of the same canvas has the same count with no concurrency at all (this was
+  shipped wrong and a user caught it on screen). Resume state stays **per workflow** even though
+  the record is shared: reuse is decided per node id by `fingerprints_for_workflow` over the
+  whole canvas, so a failure in component B restores A's finished nodes and editing A re-runs A
+  alone (`tests/api/test_run_records_parallel.py`).
 - **The run console keeps its own history per view, because the server cannot give it back.**
   `/api/workflow/status` ships only the last 200 lines of the *whole* run, so a tab switch that
   blanks `#console-output` leaves it empty until the next line arrives — for a finished run that

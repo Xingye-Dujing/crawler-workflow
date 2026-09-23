@@ -3411,7 +3411,15 @@ var runsManager = {
        a visible-window crawl and a headless one fail differently. */
     tags(r) {
         var out = [];
-        if ((r.wf_count || 1) > 1) out.push(I18n.t('runsMgr.tagParallel').replace('{n}', r.wf_count));
+        var count = r.wf_count || 1;
+        if (count > 1) {
+            /* The mode is the fact; the count alone is not. A canvas can hold several
+               workflows and still be run 串行, and labelling that 并行 claims a
+               concurrency that never happened — which is exactly the kind of thing a
+               record from last week is read for. */
+            var key = r.mode === 'parallel' ? 'runsMgr.tagParallel' : 'runsMgr.tagSerial';
+            out.push(I18n.t(key).replace('{n}', count));
+        }
         out.push(I18n.t(r.headless ? 'runsMgr.tagHeadless' : 'runsMgr.tagWindow'));
         return out;
     },

@@ -289,16 +289,29 @@ class TestParallelResumeIndependence:
 
 
 class TestPanelTags:
-    """The chips beside the name are read from stored facts (wf_count, headless)."""
+    """The chips beside the name are read from stored facts (mode, wf_count, headless)."""
 
-    def test_a_parallel_headless_record_carries_both_facts_the_chips_render_from(self, client, app_module, paste):
+    def test_a_parallel_record_carries_both_facts_the_chips_render_from(self, client, app_module, paste):
         _run(client, app_module, _two_workflows(paste(RECORDS, name='ranks')), 'ranks')
         record = _listed(client)[0]
+        assert record['mode'] == 'parallel'
         assert record['wf_count'] == 2
         assert record['headless'] == 1, 'the default is a headless run, and 无头 must not be invented'
-        # The label text itself is built in JS from these two fields (see
-        # harness_run_tags.mjs); no string here has to be parsed for it.
+        # The label text itself is built in JS from these three fields (see
+        # harness_runsmgr.mjs); no string here has to be parsed for it.
         assert json.dumps(record['workflow_name'])
+
+    def test_the_same_canvas_run_serially_is_stored_as_serial(self, client, app_module, paste):
+        """Two workflows and one workflow-at-a-time are different facts, and the
+        record has to keep them apart: labelling a 串行 run 并行 describes a
+        concurrency that never happened (this is what a user caught on screen)."""
+        flow = _two_workflows(paste(RECORDS, name='ranks'))
+        flow['settings']['mode'] = 'serial'
+        _run(client, app_module, flow, 'ranks')
+        record = _listed(client)[0]
+        assert record['mode'] == 'serial'
+        assert record['wf_count'] == 2, 'it did run both workflows — just not at the same time'
+        assert record['workflow_name'] == '热门榜 + 周排行榜', 'the naming rule does not depend on the mode'
 
     def test_a_visible_window_run_is_stored_differently_from_a_headless_one(self, client, app_module, paste):
         """Otherwise 窗口 could never appear and 无头 would be printed on every record."""

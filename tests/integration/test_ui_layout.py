@@ -374,30 +374,38 @@ def test_every_panel_fits_itself_in_both_languages(app_url, driver, panel_id, la
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
-def test_a_parallel_record_shows_its_names_and_chips_in_the_browser(app_url, driver, lang):
-    """The run-records row is where the user reads "did both workflows run?".
+@pytest.mark.parametrize(
+    'mode,expected,wrong',
+    [('parallel', '并行', '串行'), ('serial', '串行', '并行')],
+    ids=['parallel', 'serial'],
+)
+def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, driver, lang, mode, expected, wrong):
+    """The run-records row is where the user reads "did both workflows run, and did
+    they run at the same time?".
 
     Nothing is written to the server: the row is drawn by the real
     ``runsManager.render`` from a payload shaped exactly like ``/api/runs/list``,
     so what is asserted here is the pixels the composed name and the chips produce
-    — a name cell that clips, a chip that grows the row past the table, or a
-    missing 并行 marker would all be invisible to the Python tier.
+    — a name cell that clips, a chip that grows the row past the table, or a chip
+    that claims a concurrency this run never had would all be invisible to the
+    Python tier. Both languages, because the English label is the longer one.
     """
+    if lang == 'en':
+        expected, wrong = 'PARALLEL', 'SERIAL'
     driver.set_window_size(1366, 768)
     driver.get(app_url + '/')
     _kill_animations(driver)
     driver.execute_script(
         f"""
         document.body.dataset.lang = {lang!r};
-        I18n.t('runsMgr.tagParallel').replace('{{n}}', 2);
         I18n.apply();
         const panel = document.getElementById('runs-panel');
         panel.classList.add('open');
         panel.classList.remove('hidden');
         runsManager.render([{{
-            run_id: 'parallel1', workflow_name: '热门榜 + 周排行榜', status: 'completed',
+            run_id: 'multi1', workflow_name: '热门榜 + 周排行榜', status: 'completed',
             resumable: false, node_done: 6, node_total: 6, rows_kept: 40,
-            started_at: '2026-09-24 03:00', wf_count: 2, headless: 1
+            started_at: '2026-09-24 03:00', mode: {mode!r}, wf_count: 2, headless: 1
         }}]);
         """,
         [],
@@ -425,7 +433,13 @@ def test_a_parallel_record_shows_its_names_and_chips_in_the_browser(app_url, dri
     )
     assert facts['found'] is True, '#runs-panel .runs-mgr-wf rendered nothing, so the row was not measured'
     assert '热门榜' in facts['text'] and '周排行榜' in facts['text'], facts['text']
-    assert len(facts['chips']) == 2, f'expected a 并行 and a window chip, got {facts["chips"]}'
+    assert len(facts['chips']) == 2, f'expected a mode chip and a window chip, got {facts["chips"]}'
+    assert any(expected in chip for chip in facts['chips']), (
+        f'a {mode} run must be tagged {expected} ×2, chips were {facts["chips"]}'
+    )
+    assert not any(wrong in chip for chip in facts['chips']), (
+        f'the row claims {wrong}, which this run was not: {facts["chips"]}'
+    )
     assert any('2' in chip for chip in facts['chips']), f'the chip must say how many workflows: {facts["chips"]}'
     assert facts['clippedChips'] == 0, f'a chip is silently cut off: {facts["chips"]}'
     assert facts['cellRight'] <= facts['windowWidth'] + 1, f'the name cell runs off the window: {facts}'

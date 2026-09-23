@@ -29,8 +29,8 @@ const I18n = {
             'runsMgr.queueHeader': 'WAITING({n})', 'runsMgr.queueCancel': 'CancelQueued',
             'runsMgr.queueCancelled': 'REMOVED', 'runsMgr.queueGone': 'GONE',
             'runsMgr.queueCancelFailed': 'FAILED',
-            'runsMgr.tagParallel': 'PARALLEL({n})', 'runsMgr.tagHeadless': 'HEADLESS',
-            'runsMgr.tagWindow': 'WINDOW',
+            'runsMgr.tagParallel': 'PARALLEL({n})', 'runsMgr.tagSerial': 'SERIAL({n})',
+            'runsMgr.tagHeadless': 'HEADLESS', 'runsMgr.tagWindow': 'WINDOW',
         },
         zh: {},
     },
@@ -148,10 +148,13 @@ const nameWithoutEither = wf.runName();
 
 /* The chips beside the name, straight from the stored fields. */
 const tagCases = {
-    parallelHeadless: manager.tags({ wf_count: 2, headless: 1 }),
-    parallelVisible: manager.tags({ wf_count: 3, headless: 0 }),
-    single: manager.tags({ wf_count: 1, headless: 1 }),
-    singleVisible: manager.tags({ wf_count: 1, headless: 0 }),
+    parallelHeadless: manager.tags({ mode: 'parallel', wf_count: 2, headless: 1 }),
+    parallelVisible: manager.tags({ mode: 'parallel', wf_count: 3, headless: 0 }),
+    /* Several workflows run one at a time is 串行, not 并行: the count says how many
+       the canvas held, only the mode says whether they overlapped. */
+    serialHeadless: manager.tags({ mode: 'serial', wf_count: 2, headless: 1 }),
+    singleParallel: manager.tags({ mode: 'parallel', wf_count: 1, headless: 1 }),
+    singleSerial: manager.tags({ mode: 'serial', wf_count: 1, headless: 0 }),
 };
 
 /* The report button may name the run only by id: a workflow name is user text,
