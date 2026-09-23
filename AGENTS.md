@@ -192,6 +192,21 @@ Chinese messages with a type prefix, matching history: `功能更新：`, `问�
   the panel mount and each scroll settle by *polling inside the crawler*, never via the
   caller's `nap` — a stubbed nap once turned a 2000-comment video into an "exhausted" 5-row
   crawl.
+- **Blocking video was measured and rejected — do not add it.** Images are blocked by
+  default (`profile.managed_default_content_settings.images=2`, opted out per class via
+  `needs_images`), which is a real saving. Video has no such preference, and the CDP entry
+  point people reach for, `Page.setBlockedURLs`, **does not exist on Chrome 148**
+  (`unknown command`); the working one is `Network.setBlockedURLs`, verified to bite (a
+  player's `readyState` falls 4 → 0). It still buys nothing: our crawls never wait for a
+  player (`page_load_strategy='eager'`, we read DOM/JSON), so across all seven crawlable
+  platforms A/B'd side by side the blocked arm was equal-or-slower (douyin 22.7 s → 26.5 s,
+  YouTube 9.5 → 11.9, X 19.3 → 20.5; zhihu/weibo/bilibili/xiaohongshu flat) and **six of the
+  seven download no media on the crawl path at all** (`mediaBytes = 0`). Only douyin's
+  per-video page touches a player, and there the page weighs 25.6 MB of which ~2% is media —
+  the top resources are the site's own JS bundles (`player-4.js`, `client-entry`), which a
+  crawl needs. The one honest reason to ask again is metered traffic rather than time:
+  blocking saved ~0.6 MB per douyin video row and 0 bytes elsewhere. Probe:
+  `backend/test_media_ab.py` (payload `scratchpad/media_ab.json`).
 - **Do not block image loading on douyin** (measured the wrong way first): the class
   sets no `needs_images`, the base default blocks images for speed, and that is fine for
   every other platform — but re-tested with the dialog handled, images-on vs images-off
