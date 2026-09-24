@@ -1221,6 +1221,22 @@ input[type="range"]::-moz-range-thumb {
   min-height: 200px;
 }
 
+/* Shown in place of a pie when the ECharts CDN never arrived (this is a local tool,
+   sometimes offline). An empty panel reads as "this run produced no sentiment";
+   say which library is missing instead. */
+.chart-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  padding: 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
 /* ── Chart preview panel (Visualize node) ───────────────────────────────── */
 #chart-preview-panel {
   position: fixed;

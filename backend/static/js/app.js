@@ -538,11 +538,15 @@ const I18n = {
             'settings.textColumnPlaceholder': 'e.g. content text field',
             'toast.mlUpstreamNeeded': 'Please connect an upstream node with labeled data first',
             'toast.languageChanged': 'Language: {lang}',
+            'boot.partial': '{steps} interface module(s) failed to start — the details are in the browser console',
+            'stats.noChartLibrary': 'The chart library did not load (offline?), so these two pies are unavailable. Everything else works.',
             'validate.empty': 'Workflow is empty',
-            'validate.sourceKeyword': 'Source node "{title}": keyword cannot be empty',
+            'validate.sourceNoPlatform': 'Source node "{title}": no platform selected',
+            'validate.sourceUnknownPlatform': 'Source node "{title}": this tool cannot crawl "{platform}"',
+            'validate.sourceUnknownMode': 'Source node "{title}": "{platform}" offers no such collection mode',
+            'validate.capUnavailable': 'Source node "{title}": the platform capability list has not loaded, so its required fields cannot be checked — retry it in the settings panel',
+            'validate.sourceFieldMissing': 'Source node "{title}": {field} cannot be empty',
             'validate.sourceDownstream': 'Source node "{title}": must connect to a downstream node',
-            'validate.sourceUrls': 'Source node "{title}": WeChat needs at least one article URL',
-            'validate.sourceCommentUrls': 'Source node "{title}": comments mode needs at least one article URL',
             'validate.sourceCommentPlat': 'Source node "{title}": {n} link(s) do not match the selected platform ({plat})',
             'validate.joinNeedsTwo': 'Analysis node "{title}": joining needs two input connections (left table, right table)',
             'validate.uploadFile': 'Upload node "{title}": no file uploaded yet',
@@ -1144,11 +1148,15 @@ const I18n = {
             'settings.textColumnPlaceholder': '例如：正文',
             'toast.mlUpstreamNeeded': '请先连接一个带标签数据的上游节点',
             'toast.languageChanged': '语言：{lang}',
+            'boot.partial': '界面有 {steps} 个模块启动失败，详见浏览器控制台',
+            'stats.noChartLibrary': '图表库未加载（离线？），这两个饼图暂不可用；其余功能不受影响',
             'validate.empty': '工作流为空',
-            'validate.sourceKeyword': '数据源节点 "{title}"：关键词不能为空',
+            'validate.sourceNoPlatform': '数据源节点 "{title}"：没有选择平台',
+            'validate.sourceUnknownPlatform': '数据源节点 "{title}"：{platform} 不在本工具可采集的站点里',
+            'validate.sourceUnknownMode': '数据源节点 "{title}"：{platform} 没有这种采集内容',
+            'validate.capUnavailable': '数据源节点 "{title}"：平台能力清单尚未加载，无法核对它需要哪些字段——请到设置面板重试',
+            'validate.sourceFieldMissing': '数据源节点 "{title}"：{field} 不能为空',
             'validate.sourceDownstream': '数据源节点 "{title}"：必须连接到下游节点',
-            'validate.sourceUrls': '数据源节点 "{title}"：微信平台需要填写至少一个文章链接',
-            'validate.sourceCommentUrls': '数据源节点 "{title}"：评论模式需要填写至少一个文章链接',
             'validate.sourceCommentPlat': '数据源节点 "{title}"：{n} 个链接与所选平台（{plat}）不符',
             'validate.joinNeedsTwo': '分析节点 "{title}"：合并表需要两条输入连线（左表、右表）',
             'validate.uploadFile': '上传节点 "{title}"：尚未上传文件',
@@ -1876,14 +1884,29 @@ async function testAIConnection() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    Settings.apply();
-    TopMenu.init();
-    canvas.init();
-    stats.init();
+    /* Each start-up step is allowed to fail on its own. This body used to run
+       straight through, so ONE throwing module took every later step with it —
+       a missing chart CDN blanked the Data Source panel's capability list, the
+       dataset re-link, the autosave and the 断点续跑 banner at once, and nothing
+       on screen said which part had failed. Settings.load already learned this
+       lesson the hard way; now the whole boot does. */
+    const _bootSteps = [];
+    const boot = (name, fn) => {
+        try {
+            fn();
+        } catch (e) {
+            _bootSteps.push(`${name}: ${(e && e.message) || e}`);
+            console.error(`startup step failed: ${name}`, e);
+        }
+    };
+    boot('settings', () => Settings.apply());
+    boot('menu', () => TopMenu.init());
+    boot('canvas', () => canvas.init());
+    boot('stats', () => stats.init());
     /* Replace every OS-drawn candidate UI (select popups, datalist suggestions)
        with the themed equivalents. Runs last so it also catches anything the
        other modules rendered during init. */
-    CustomSelect.init();
+    boot('customSelect', () => CustomSelect.init());
 
     /* The Data Source panel is generated from the backend's crawl matrix, so the
        browser has to have it before a source node can be configured. Fetched at
@@ -1894,15 +1917,17 @@ document.addEventListener('DOMContentLoaded', () => {
     /* Uploaded files are stored on the server, so the canvas restored from
        localStorage very likely still owns every file it referenced. Verify
        each one instead of clearing it — see dataNodes.reconcileDatasets. */
-    dataNodes.reconcileDatasets();
+    boot('datasets', () => dataNodes.reconcileDatasets());
     /* Sweep orphaned files (only ones no saved workflow points at go). */
     fetch('/api/data/clear', { method: 'POST' }).catch(() => { });
 
     /* Palette drag */
-    document.querySelectorAll('.palette-item').forEach(item => {
-        item.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('text/plain', item.dataset.type);
-            e.dataTransfer.effectAllowed = 'copy';
+    boot('palette', () => {
+        document.querySelectorAll('.palette-item').forEach(item => {
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', item.dataset.type);
+                e.dataTransfer.effectAllowed = 'copy';
+            });
         });
     });
 
@@ -1914,7 +1939,12 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('Crawler Workflow initialized');
 
     /* An interrupted run may be waiting from before this page opened. */
-    if (window.resumeBar) resumeBar.refresh();
+    boot('resumeBar', () => {
+        if (typeof resumeBar !== 'undefined' && resumeBar) resumeBar.refresh();
+    });
+    if (_bootSteps.length) {
+        showToast(I18n.t('boot.partial').replace('{steps}', _bootSteps.length));
+    }
 });
 
 /* Background selection is handled by setBg() in workflow.js, which the menu

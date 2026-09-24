@@ -203,8 +203,18 @@ const workflow = {
         /* The panel may still be showing a node from whatever was open before. */
         if (canvas._settingsNodeId) closeSettings();
         var settings = workflowData.settings || {};
-        if (settings.mode === 'serial') RunState.set('parallel', false);
-        if (settings.headless === false) RunState.set('headless', false);
+        /* Read the block in both directions. `toWorkflowJSON` writes all four
+           settings, but this used to look only for 'serial' and `headless:false`, so
+           opening a file saved as parallel/headless left the bar where it was — and
+           the next 保存 then wrote the WRONG settings back over the file, quietly
+           converting the workflow the user had configured. An absent key still means
+           "leave the panel alone", which is what older files expect. */
+        if (settings.mode === 'serial' || settings.mode === 'parallel') {
+            RunState.set('parallel', settings.mode === 'parallel');
+        }
+        if (typeof settings.headless === 'boolean') {
+            RunState.set('headless', settings.headless);
+        }
         return true;
     },
 
@@ -619,6 +629,75 @@ const workflow = {
         }, 1000);
     },
 };
+
+/* What a data source still needs is the MATRIX's answer, not this file's.
+
+   The branch this replaces knew three shapes — comments→links, wechat→links,
+   everything else→keyword — which is the `if platform == '…'` second opinion
+   AGENTS.md forbids, and it was not hypothetical: four platforms offer
+   「某作者的作品」 (which asks for a creator, not a keyword) and 哔哩哔哩 offers
+   热榜 (which asks for nothing at all). Both were declared in the matrix, rendered
+   in the panel, executable by the backend — and unreachable from the UI, because
+   a filled-in author or board node was refused 「缺少关键词」 and no request ever
+   left the page. Same payload, one source: `/api/capabilities`. */
+function sourceNodeErrors(node, label) {
+    var params = node.params || {};
+    var platform = node.platform || params.platform;
+    if (!platform) {
+        return [I18n.t('validate.sourceNoPlatform').replace('{title}', label)];
+    }
+    if (!Capabilities.ready()) {
+        /* Refusing to guess is the honest answer: without the matrix this function
+           cannot know which fields the mode asks for, and the panel already says so
+           with a retry button wherever it renders a form. */
+        return [I18n.t('validate.capUnavailable').replace('{title}', label)];
+    }
+    if (!Capabilities.platform(platform)) {
+        return [I18n.t('validate.sourceUnknownPlatform')
+            .replace('{title}', label)
+            .replace('{platform}', String(platform))];
+    }
+    var wanted = String(params.collect || params.mode || '');
+    var offered = Capabilities.modes(platform);
+    var mode = Capabilities.mode(platform, wanted);
+    if (wanted && offered.length > 1 && mode.key !== wanted) {
+        return [I18n.t('validate.sourceUnknownMode')
+            .replace('{title}', label)
+            .replace('{platform}', I18n.t('platform.' + platform))];
+    }
+    var errors = [];
+    (mode.fields || []).forEach(function (field) {
+        var raw = params[field.key];
+        var text = String(raw === undefined || raw === null ? '' : raw);
+        if (field.linksOf) {
+            var links = text.replace(/,/g, '\n').split(/\r?\n/).filter(function (s) { return s.trim(); });
+            if (!links.length) {
+                if (field.required) {
+                    errors.push(I18n.t('validate.sourceFieldMissing')
+                        .replace('{title}', label)
+                        .replace('{field}', I18n.t(field.labelKey)));
+                }
+                return;
+            }
+            /* Each pasted line has to belong to the platform named for it — the
+               engine refuses others at crawl time; say it before the run. */
+            var bad = links.filter(function (u) { return urlPlatform(u) !== field.linksOf; }).length;
+            if (bad) {
+                errors.push(I18n.t('validate.sourceCommentPlat')
+                    .replace('{title}', label)
+                    .replace('{n}', bad)
+                    .replace('{plat}', I18n.t('platform.' + field.linksOf)));
+            }
+            return;
+        }
+        if (field.required && !text.trim()) {
+            errors.push(I18n.t('validate.sourceFieldMissing')
+                .replace('{title}', label)
+                .replace('{field}', I18n.t(field.labelKey)));
+        }
+    });
+    return errors;
+}
 
 /* ─── Crawl capabilities: the backend's matrix, rendered rather than re-listed ───
    Which platforms exist, which of them take links instead of a keyword, and what
@@ -3651,38 +3730,7 @@ workflow.validate = function () {
         var label = node.title || I18n.t('node.' + type);
 
         if (type === 'source') {
-            var commentsMode = params.collect === 'comments' && params.platform !== 'wechat';
-            if (commentsMode) {
-                /* Comments mode: links are the input — a keyword would be
-                   silently ignored, exactly like WeChat's rule below. Each
-                   pasted line must also belong to the selected platform — the
-                   engine refuses others at crawl time; say it before the run. */
-                var lines = String(params.urls || '').replace(/,/g, '\n').split(/\r?\n/).filter(function (s) {
-                    return s.trim();
-                });
-                if (!lines.length) {
-                    errors.push(I18n.t('validate.sourceCommentUrls').replace('{title}', label));
-                } else if (params.platform) {
-                    var bad = lines.filter(function (u) {
-                        return urlPlatform(u) !== params.platform;
-                    }).length;
-                    if (bad) {
-                        errors.push(I18n.t('validate.sourceCommentPlat')
-                            .replace('{title}', label)
-                            .replace('{n}', bad)
-                            .replace('{plat}', I18n.t('platform.' + params.platform)));
-                    }
-                }
-            } else if (params.platform === 'wechat') {
-                /* WeChat crawls the article URLs you paste; a keyword would be
-                   ignored, so asking for one (as this used to) both blocked a
-                   valid workflow and left the platform unusable. */
-                if (!params.urls || !String(params.urls).trim()) {
-                    errors.push(I18n.t('validate.sourceUrls').replace('{title}', label));
-                }
-            } else if (!params.keyword || !params.keyword.trim()) {
-                errors.push(I18n.t('validate.sourceKeyword').replace('{title}', label));
-            }
+            errors.push.apply(errors, sourceNodeErrors(node, label));
             if (!hasOutput[id]) {
                 errors.push(I18n.t('validate.sourceDownstream').replace('{title}', label));
             }
@@ -4112,12 +4160,17 @@ var datasetManager = {
     },
 
     async rename(id, current) {
+        /* No `value:` on the confirm button: showDialog answers a button with its own
+           value when it has one, and only falls back to the input otherwise — so
+           naming it 'ok' stored the literal string as the dataset's new label. The
+           user read 「已重命名」 and saw the row say `ok`; the id is a content hash, so
+           the file survived, the name did not. */
         var answer = await showDialog({
             message: I18n.t('datasetMgr.renamePrompt'),
             input: { value: current, placeholder: I18n.t('datasetMgr.renamePlaceholder') },
             buttons: [
                 { label: I18n.t('dialog.cancel'), value: null },
-                { label: I18n.t('datasetMgr.rename'), value: 'ok', primary: true },
+                { label: I18n.t('datasetMgr.rename'), primary: true },
             ],
         });
         if (!answer) return;

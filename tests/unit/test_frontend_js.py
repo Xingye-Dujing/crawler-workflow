@@ -27,9 +27,9 @@ HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_validate.m
 
 
 def _parse(msg: str) -> tuple:
-    """'validate.key|Title|2|zhihu|{col}|{op}' → ('validate.key', {...})."""
+    """'validate.key|Title|2|zhihu|{col}|{op}|{field}' → ('validate.key', {...})."""
     head, *fields = msg.split('|')
-    names = ['title', 'n', 'plat', 'col', 'op']
+    names = ['title', 'n', 'plat', 'col', 'op', 'field']
     out = {}
     for name, value in zip(names, fields, strict=False):
         if not value.startswith('{'):  # unfilled placeholders stay literal
@@ -103,6 +103,42 @@ def results(tmp_path_factory, capabilities_matrix):
                 _node('n1', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': '   '}, title=''),
                 _save(),
             ],
+            'connections': [{'from': 'n1', 'to': 'out-1'}],
+        },
+        # ── the matrix decides what a source needs, not workflow.js ──
+        # These four modes exist in crawl_capabilities, are rendered by the panel and
+        # run on the backend — and every one of them was unreachable from the UI,
+        # because validate() knew only "comments→links, wechat→links, else keyword".
+        {
+            'id': 'author_bilibili',
+            'nodes': [
+                _node(
+                    'n1',
+                    'source',
+                    {'platform': 'bilibili', 'collect': 'author', 'author': 'space.bilibili.com/546195'},
+                ),
+                _save(),
+            ],
+            'connections': [{'from': 'n1', 'to': 'out-1'}],
+        },
+        {
+            'id': 'hot_bilibili',
+            'nodes': [_node('n1', 'source', {'platform': 'bilibili', 'collect': 'hot', 'board': 'popular'}), _save()],
+            'connections': [{'from': 'n1', 'to': 'out-1'}],
+        },
+        {
+            'id': 'author_douyin_missing',
+            'nodes': [_node('n1', 'source', {'platform': 'douyin', 'collect': 'author', 'author': ''}), _save()],
+            'connections': [{'from': 'n1', 'to': 'out-1'}],
+        },
+        {
+            'id': 'mode_the_platform_lacks',
+            'nodes': [_node('n1', 'source', {'platform': 'weibo', 'collect': 'author', 'author': 'x'}), _save()],
+            'connections': [{'from': 'n1', 'to': 'out-1'}],
+        },
+        {
+            'id': 'keyword_still_required',
+            'nodes': [_node('n1', 'source', {'platform': 'zhihu', 'keyword': '  '}), _save()],
             'connections': [{'from': 'n1', 'to': 'out-1'}],
         },
         {
@@ -195,9 +231,59 @@ class TestValidateGate:
         # what the executor will happily crawl.
         assert results['validate']['comments_ok'] == []
 
-    def test_comments_mode_without_urls_names_the_urls_rule(self, results):
+    def test_comments_mode_without_urls_names_the_field_the_matrix_declares(self, results):
         key, fields = _parse(results['validate']['comments_empty'][0])
-        assert key == 'validate.sourceCommentUrls'
+        assert key == 'validate.sourceFieldMissing'
+        # The field is named from the payload, so a field renamed in the matrix
+        # cannot be contradicted by a wording hardcoded in tests.
+        assert fields['field'].startswith('field.') or fields['field'].startswith('settings.'), fields
+
+    def test_an_author_mode_node_validates_without_a_keyword(self, results):
+        """「某作者的作品」 asks for a creator, never a keyword — and used to be refused for lacking one.
+
+        The message the user got named a field the panel had not even shown them, and
+        no request left the page, so a mode shipped in the matrix, rendered in the
+        panel and executable by the backend was unreachable from the UI.
+        """
+        assert results['validate']['author_bilibili'] == [], results['validate']['author_bilibili']
+
+    def test_a_hot_board_needs_nothing_at_all(self, results):
+        # 热榜 is one pick: the matrix declares no required field for it, so a node
+        # that selected the board must not be asked for a keyword or an author.
+        assert results['validate']['hot_bilibili'] == [], results['validate']['hot_bilibili']
+
+    def test_an_untouched_author_field_is_reported_as_that_field(self, results):
+        key, fields = _parse(results['validate']['author_douyin_missing'][0])
+        assert key == 'validate.sourceFieldMissing'
+        assert 'author' in fields['field'], fields
+
+    def test_a_mode_the_platform_does_not_offer_is_refused_by_name(self, results):
+        """微博 has no author mode; saying 「缺少关键词」 there would be a lie twice over."""
+        keys = [_parse(message)[0] for message in results['validate']['mode_the_platform_lacks']]
+        assert keys == ['validate.sourceUnknownMode'], results['validate']['mode_the_platform_lacks']
+
+    def test_a_blank_keyword_is_still_a_missing_field(self, results):
+        """The gate did not get looser: the keyword mode still refuses an empty one."""
+        keys = [_parse(message)[0] for message in results['validate']['keyword_still_required']]
+        assert keys == ['validate.sourceFieldMissing'], results['validate']['keyword_still_required']
+
+    def test_without_the_matrix_the_refusal_says_so_instead_of_guessing(self, tmp_path):
+        """No payload → no invented answer.
+
+        The old branch kept its own list of what each platform needs, so it could
+        always "answer" — wrongly. Now the only honest response is that the required
+        fields could not be checked, and the panel's own retry note says what to do.
+        """
+        scenarios = [
+            {
+                'id': 'no_matrix',
+                'nodes': [_node('n1', 'source', {'platform': 'bilibili', 'collect': 'hot'}), _save()],
+                'connections': [{'from': 'n1', 'to': 'out-1'}],
+            }
+        ]
+        out = _run_validate(tmp_path, scenarios, None)
+        keys = [_parse(message)[0] for message in out['validate']['no_matrix']]
+        assert keys == ['validate.capUnavailable'], out['validate']['no_matrix']
 
     def test_wechat_with_a_stale_comments_flag_validates_as_article_crawl(self, results):
         # collect='comments' + wechat is the panel's old leak; both ends now
@@ -216,8 +302,8 @@ class TestValidateGate:
         # title=None must fall back to the type label — 'Source', not 'null'.
         parsed = [_parse(m) for m in results['validate']['titleless']]
         keywords = [k for k, _ in parsed]
-        assert 'validate.sourceKeyword' in keywords
-        got = next(f for k, f in parsed if k == 'validate.sourceKeyword')
+        assert 'validate.sourceFieldMissing' in keywords
+        got = next(f for k, f in parsed if k == 'validate.sourceFieldMissing')
         assert got['title'] == 'Source'
 
 

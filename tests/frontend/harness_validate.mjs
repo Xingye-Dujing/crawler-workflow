@@ -59,7 +59,11 @@ const I18n = {
     lang: 'en',
     dict: { en: {}, zh: {} },
     t(k) {
-        if (k.startsWith('validate.')) return `${k}|{title}|{n}|{plat}|{col}|{op}`;
+        /* One shape for every validate message: key, then one slot per placeholder
+           the catalogue uses. `field` is the matrix's own label key for the field a
+           source node left empty — proving the message names the field THE PAYLOAD
+           declares rather than one this test hardcoded. */
+        if (k.startsWith('validate.')) return `${k}|{title}|{n}|{plat}|{col}|{op}|{field}`;
         return SHORT[k] || k;
     },
 };

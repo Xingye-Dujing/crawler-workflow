@@ -31,6 +31,12 @@ const paths = process.argv.slice(2);
 const src = paths.map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
 
 const answers = { confirm: true, dialog: null };
+/* Every dialog spec the modules under test asked for, in order. A dialog WITH an
+   input is answered by the real showDialog with `b.value !== undefined ? b.value :
+   inputEl.value`, so a confirm button carrying its own value token silently
+   replaces whatever the user typed — the shape of the spec is therefore part of
+   what a scenario asserts, not an implementation detail. */
+const dialogSpecs = [];
 const requests = [];
 const toasts = [];
 const opened = [];
@@ -54,8 +60,19 @@ vm.runInContext(
 sandbox.showToast = (m) => toasts.push(String(m));
 sandbox.showDialog = async (spec) => {
     answers.spec = spec;
+    dialogSpecs.push({
+        hasInput: !!(spec && spec.input),
+        buttons: (spec && spec.buttons || []).map((b) => ({
+            label: b.label,
+            primary: !!b.primary,
+            /* '<absent>' and 'null' mean different things to the real resolver:
+               the first falls back to the input, the second answers null (cancel). */
+            value: 'value' in b ? String(b.value) : '<absent>',
+        })),
+    });
     return typeof answers.dialog === 'function' ? answers.dialog(spec) : answers.dialog;
 };
+
 /* One answer for every URL would be a lie: `execute()` starts by probing the
  * cookie status, then the run-gate settings, then posts the run — a single shared
  * object would satisfy one of those three and silently abort the rest, and the
@@ -113,6 +130,7 @@ function fresh() {
     opened.length = 0;
     answers.confirm = true;
     answers.dialog = null;
+    dialogSpecs.length = 0;
     answer = { ok: true };
     Object.assign(routes, defaultRoutes());
     pa.resumeBar.hide();
@@ -422,7 +440,12 @@ answers.dialog = '新名字';
 answer = { ok: true };
 requests.length = 0;
 await pa.datasetManager.rename('ds1', 'old.csv');
-out.dataset_renamed = { url: requests[0].url, body: JSON.parse(requests[0].body), toasts: toasts.slice() };
+out.dataset_renamed = {
+    url: requests[0].url,
+    body: JSON.parse(requests[0].body),
+    toasts: toasts.slice(),
+    specs: dialogSpecs.slice(),
+};
 fresh();
 answers.dialog = null;
 requests.length = 0;

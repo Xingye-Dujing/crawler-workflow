@@ -165,6 +165,64 @@ def state(tmp_path_factory):
                 'comment',
             ],
         },
+        {
+            'id': 'param_edits_then_undo',
+            'add': ['source'],
+            'paramEdits': [
+                {'id': 'node-1', 'key': 'keyword', 'value': 'AI'},
+                {'id': 'node-1', 'key': 'keyword', 'value': 'Robot'},
+            ],
+            'undo': True,
+        },
+        {
+            'id': 'param_edits_history',
+            'add': ['source'],
+            'paramEdits': [
+                {'id': 'node-1', 'key': 'keyword', 'value': 'AI'},
+                {'id': 'node-1', 'key': 'keyword', 'value': 'Robot'},
+            ],
+        },
+        {
+            'id': 'autosaves_do_not_evict_history',
+            'initialPush': True,
+            'add': ['source'],
+            'autosaves': 60,
+            'undo': True,
+        },
+        {
+            'id': 'draft_open_leaves_one_snapshot',
+            'restore': {
+                'nodes': {
+                    f'node-{i}': {'id': f'node-{i}', 'type': 'source', 'title': 'x', 'params': {}, 'x': i, 'y': i}
+                    for i in range(1, 6)
+                },
+                'connections': [],
+            },
+        },
+        {
+            'id': 'backspace_in_a_textarea',
+            'add': ['source'],
+            'select': 'node-1',
+            'key': {'key': 'Backspace', 'target': {'tagName': 'TEXTAREA'}},
+        },
+        {
+            'id': 'backspace_on_the_canvas',
+            'add': ['source'],
+            'select': 'node-1',
+            'key': {'key': 'Backspace', 'target': 'DIV'},
+        },
+        {
+            'id': 'f_key_in_a_textarea',
+            'add': ['source'],
+            'select': 'node-1',
+            'key': {'key': 'f', 'target': {'tagName': 'TEXTAREA'}},
+        },
+        {
+            'id': 'f_key_on_the_canvas',
+            'add': ['source'],
+            'select': 'node-1',
+            'key': {'key': 'f', 'target': 'DIV'},
+        },
     ]
     return _run('harness_state.mjs', [JS_DIR / 'canvas.js'], scenarios, tmp)
 
@@ -237,6 +295,74 @@ class TestCanvasState:
         assert {'chart_type', 'x_field'} <= set(by_type['visualize'])
         assert {'workflow_name'} <= set(by_type['name'])
         assert {'resume_run_id', 'resume_node_id'} <= set(by_type['resume'])
+
+
+class TestUndoCoversParameterEdits:
+    """A snapshot must be a snapshot, and the stack must hold the user's work.
+
+    getState() handed out the node's LIVE params dict, and updateParam mutates that
+    dict in place — so every history entry for a node aliased its current state: Ctrl+Z
+    undid positions, folds and deletes, but no parameter edit anywhere in the app, and
+    a later edit rewrote the PAST entries too. Compounding it, the 30-second autosave
+    pushed an identical state each time, so after ~25 idle minutes the 50-deep stack
+    held 50 copies of "now" and real edits had been shifted out.
+    """
+
+    def test_undo_returns_the_previous_keyword(self, state):
+        nodes = state['param_edits_then_undo']['nodes']
+        assert len(nodes) == 1, 'undo must not have dropped the node itself'
+        assert nodes[0]['params']['keyword'] == 'AI', 'the value typed BEFORE this one is what undo owes the user'
+
+    def test_an_editing_session_keeps_one_entry_per_change(self, state):
+        # Two edits + the initial empty canvas = three entries, and the newest one
+        # carries the newest value (the undo test above proves the older one does not).
+        r = state['param_edits_history']
+        assert r['historyLen'] == 3, r['historyLen']
+        assert r['nodes'][0]['params']['keyword'] == 'Robot'
+
+    def test_idle_autosaves_cannot_shift_real_edits_out_of_history(self, state):
+        r = state['autosaves_do_not_evict_history']
+        # The scenario opens the way the page does — one snapshot of an empty canvas,
+        # then the node is added, then sixty autosaves of a state nobody changed.
+        # History is 50 deep: each of those saves used to be an entry, so half an idle
+        # hour at the keyboard pushed every real edit out of the stack and Ctrl+Z
+        # started doing nothing at all.
+        assert r['historyLen'] == 2, f'60 identical autosaves became {r["historyLen"]} history entries'
+        assert r['nodes'] == [], 'undo after half an hour of autosaving still has to remove the added node'
+
+    def test_opening_a_draft_leaves_one_undo_point(self, state):
+        """The first Ctrl+Z on a restored canvas must not start deleting restored nodes."""
+        r = state['draft_open_leaves_one_snapshot']
+        assert len(r['nodes']) == 5
+        assert r['historyLen'] == 1, f'each restored node pushed its own snapshot: {r["historyLen"]}'
+        assert r['historyIdx'] == 0
+
+
+class TestTypingNeverTouchesTheCanvas:
+    """Shortcuts belong to the canvas only while the user is not typing.
+
+    The guard named INPUT and SELECT, so every multi-line field in the app was
+    unprotected: with a node selected, Backspace at the end of a pasted URL deleted
+    THE NODE (toast, closed panel, one undo away from being noticed), and typing an
+    `f` — in a URL, in `pdf`, in `if` — was swallowed and folded the node instead.
+    """
+
+    def test_backspace_in_a_textarea_keeps_the_node(self, state):
+        assert len(state['backspace_in_a_textarea']['nodes']) == 1
+        assert state['backspace_in_a_textarea']['toasts'] == []
+
+    def test_backspace_on_the_canvas_still_deletes_the_selected_node(self, state):
+        assert state['backspace_on_the_canvas']['nodes'] == [], 'the shortcut itself must stay alive'
+
+    def test_f_in_a_textarea_is_a_letter_not_a_fold(self, state):
+        r = state['f_key_in_a_textarea']
+        assert len(r['nodes']) == 1
+        assert not any('fold' in str(msg).lower() for msg in r['toasts']), r['toasts']
+
+    def test_f_on_the_canvas_still_folds(self, state):
+        """The exclusion must not quietly retire the shortcut it was written around."""
+        r = state['f_key_on_the_canvas']
+        assert len(r['nodes']) == 1, r['nodes']
 
 
 class TestNodeWiringAndMarkup:
@@ -316,6 +442,20 @@ def life(tmp_path_factory, capabilities_matrix):
     }
     scenarios = [
         {'id': 'load_open', 'load': opened},
+        {
+            # The same file the other way round: a canvas saved as 并行 + 无头.
+            'id': 'load_parallel_headless',
+            'load': {
+                'nodes': opened['nodes'],
+                'connections': opened['connections'],
+                'settings': {'mode': 'parallel', 'headless': True},
+            },
+        },
+        {
+            # A file that says nothing about the run bar must not flip it either way.
+            'id': 'load_without_settings',
+            'load': {'nodes': opened['nodes'], 'connections': opened['connections']},
+        },
         {'id': 'newfile', 'add': ['source'], 'newFile': True},
         {'id': 'save_named', 'currentFile': 'wf1', 'save': True},
         {'id': 'save_cancel', 'dialogAnswer': None, 'save': True},
@@ -388,6 +528,23 @@ class TestFileLifecycle:
         r = dict(life['load_open']['runState'])
         assert r['parallel'] is False, "settings.mode='serial' must leave parallel mode"
         assert r['headless'] is False
+
+    def test_a_parallel_headless_file_applies_its_settings_too(self, life):
+        """The reader had only two of the four directions.
+
+        `toWorkflowJSON` writes mode/headless/parallel/lang, but loadFromJSON looked
+        only for ``mode === 'serial'`` and ``headless === false``. Opening a workflow
+        saved as 并行 + 无头 therefore left the bar where the LAST file had it — and the
+        next 保存 wrote those wrong values back over the file, so opening a workflow
+        quietly rewrote its own settings.
+        """
+        r = dict(life['load_parallel_headless']['runState'])
+        assert r['parallel'] is True, r
+        assert r['headless'] is True, r
+
+    def test_a_file_without_settings_changes_neither(self, life):
+        """An absent block is "leave the user's choice alone", not "reset it"."""
+        assert life['load_without_settings']['runState'] == []
 
     def test_a_dead_upload_file_is_cleared_with_a_toast(self, life):
         r = life['load_open']

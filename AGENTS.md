@@ -52,6 +52,31 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   undo/redo, save/open/new, the run-records table, the profile fork. Any JS change to result-affecting
   logic must sync a scenario there; `urlPlatform` (workflow.js) is contract-pinned against
   `utils.helpers.platform_for`.
+- **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` in
+  workflow.js asks `Capabilities` which fields the selected mode requires; the branch it
+  replaced (`comments→urls, wechat→urls, else keyword`) made the matrix's `author` and
+  `hot` modes unreachable from the UI — refused with a field the panel never showed, and
+  no request left the page. If `Capabilities` has not loaded, refuse by saying the
+  required fields could not be checked; never guess a shape.
+- **A canvas shortcut belongs to the canvas only while the user is not typing.** The
+  keydown guard named `INPUT`/`SELECT` and forgot `TEXTAREA`, so Backspace at the end of
+  a pasted URL deleted the SELECTED NODE, and an `f` typed anywhere outside an `<input>`
+  was swallowed by the fold shortcut. Use `canvas._isTypingTarget()`, which asks what the
+  element IS (`isContentEditable`, `.cselect`, …), not a growing tag list.
+- **History entries are snapshots, and identical ones are not entries.** `getState()`
+  deep-copies `params` because `updateParam` mutates the live dict — aliasing made every
+  parameter edit un-undoable and let later edits rewrite past snapshots. `_pushState()`
+  skips a state equal to the current one, and `restoreState()` brackets itself with
+  `_historySaving` so one restore (a draft open, an undo step) is ONE undo point: the
+  30-second autosave used to consume the 50-deep stack and real edits fell out of it.
+- **One page boot must not be a single point of failure.** It is one `DOMContentLoaded`
+  body, so any throw inside it skipped every later step (a missing ECharts CDN blanked
+  the capability fetch, the dataset re-link, the autosave and the resume banner). Boot
+  steps go through `boot(name, fn)`; `stats` declines on a missing library and says so.
+- **A dialog with an input is answered by the input.** `showDialog` resolves a clicked
+  button as `b.value !== undefined ? b.value : inputEl.value`, so a confirm button that
+  carries its own `value:` replaces whatever the user typed (the dataset rename stored
+  the literal `'ok'` and destroyed the label). Leave `value` off input dialogs.
 - **Two frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a module
   declared as a top-level `const X` — `const` never becomes a window property — which is why
   `resumeBar.refresh()` and `runsManager._busy()` were dead code forever (the 断点续跑 banner never
@@ -84,20 +109,21 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   collect".** It declares each platform's modes, the fields each mode needs (widget, default, floor,
   ceiling, required-ness) and which crawler method runs. `app.py::_execute_source_node` dispatches
   through it, `engine/workflow.py::validate` refuses through it, and `GET /api/capabilities` hands the
-  identical description to the browser, whose Data Source panel is generated from it (`Capabilities` +
-  `sourcePanelHtml`). So a new platform or mode is **one matrix entry**, never an `if platform == '…'`
-  branch in four files — a reintroduced branch is a second opinion that can disagree with the crawl.
-  The module sits at the backend root (like `i18n.py`) because `engine/workflow.py` reads it and must not
-  import the crawler package. Field labels are *frontend* catalog keys, required-field names *backend*
-  ones (`field.*`), both pinned by `test_frontend_contract.py::TestCrawlMatrixParity`; `target_count`
-  stays 50 for every platform because that is what the panel previews, whatever a crawler's signature
-  says. **An unrecognised mode is refused by name on a platform that offers a choice**
-  (`engine.source_unknown_mode`), while `mode_for` still falls back to the first mode for panel rendering
-  and single-mode platforms: silently substituting a keyword search for one creator's uploads is a
-  different crawl, and 「缺少关键词」 sends the user to a field the panel never showed. A payload is a
-  network response and the renderer writes field names into inline handlers, so a name that is not
-  `/^[\w.-]{1,64}$/` is dropped whole — and a JS-generated panel is driven in tests by the matrix dumped
-  from Python (`harness_capabilities.mjs` + the `capabilities_matrix` fixture), never a copy checked in.
+  identical description to the browser, whose Data Source panel is generated from it. So a new platform
+  or mode is **one matrix entry**, never an `if platform == '…'` branch in four files — a reintroduced
+  branch is a second opinion that can disagree with the crawl (the frontend's copy of it is now gone;
+  see the rule under "A browser-measured assertion…"). The module sits at the backend root (like
+  `i18n.py`) because `engine/workflow.py` reads it and must not import the crawler package. Field labels
+  are *frontend* catalog keys, required-field names *backend* ones (`field.*`), both pinned by
+  `test_frontend_contract.py::TestCrawlMatrixParity`; `target_count` stays 50 for every platform because
+  that is what the panel previews, whatever a crawler's signature says. **An unrecognised mode is refused
+  by name on a platform that offers a choice** (`engine.source_unknown_mode`), while `mode_for` still
+  falls back to the first mode for panel rendering and single-mode platforms: substituting a keyword
+  search for one creator's uploads is a different crawl, and 「缺少关键词」 sends the user to a field the
+  panel never showed. A payload is a network response and the renderer writes field names into inline
+  handlers, so a name that is not `/^[\w.-]{1,64}$/` is dropped whole — and a JS-generated panel is
+  driven in tests by the matrix dumped from Python (`harness_capabilities.mjs` + the
+  `capabilities_matrix` fixture), never a copy checked in.
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count` (one
   万/千/亿/K/M/B parser), `engine.wall` (login / risk-control / root-bounce), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (the scroll that finds the
@@ -132,36 +158,35 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
 
 ## Platform red lines (full evidence in `docs/crawler_notes.md`)
 
-- **douyin**: `never_headless = True` (验证码 on every headless navigation), search is DOM-only and routed
-  by `/search/<kw>?type=video`, **no 播放数 column exists** (its only figure is the like count), don't
-  block its images, authors are addressed by opaque `sec_uid` only, `_published_count()` returns `-1` for
-  "the page said nothing".
-- **X (twitter)**: `never_headless = True`; the timeline is virtualized so progress is rows kept and
-  resume identity is the **status-id set**, never a list index; all five counters come from one
+- **douyin**: `never_headless = True` (验证码 on every headless navigation); search is DOM-only, routed by
+  `/search/<kw>?type=video`; **no 播放数 column exists** (its only figure is the like count); don't block
+  its images; authors are opaque `sec_uid` only; `_published_count()` returns `-1` for "page said nothing".
+- **X (twitter)**: `never_headless = True`; the timeline is virtualized, so progress is rows kept and
+  resume identity is the **status-id set**, never an index; all five counters come from one
   `[role="group"]` aria-label and **浏览数 exists nowhere else**; one `execute_script` per card.
-- **bilibili**: search pages by `&page=N` and **`page=1` renders zero cards**; comments have no DOM (only
-  `x/v2/reply/main`, walked by the server's own cursor); author mode is the space *page*, not the
-  (403-wbi) API; hot boards carry `owner`/`stat` inline so `hot()` fetches nothing per row.
+- **bilibili**: `page=1` renders zero cards (request page one as the bare URL); comments have no DOM —
+  only `x/v2/reply/main` by the server's own cursor; author mode is the space *page*, not the 403-wbi API;
+  hot boards carry `owner`/`stat` inline so `hot()` fetches nothing per row.
 - **youtube**: JSON-first via `engine/innertube` POSTs issued *inside* one loaded page (never hardcode
-  `INNERTUBE_*`); headless is fine (no `never_headless`); a channel's uploads come from the loaded
-  `/@handle/videos` document; a continuation token is chosen by **which list it is an element of**.
-- **weibo**: never judge the login wall from the URL right after `get()` (it flashes the passport page
-  then bounces); `/ajax/statuses/mymblog` is a per-session edge 403 → the author mode must refuse loudly,
-  never serve an empty table (`backend/test_weibo_recipe.py` is the re-test gate).
-- **zhihu**: headless throttles day-by-day (risk 40362) — a headless search returning 0 rows is a legit
-  outcome; comment crawling always opens a visible browser. Don't loosen the assertion.
-- **xiaohongshu**: replays of a saved session get walled within minutes (profile required); author mode
-  is dropped — the route needs a per-note `xsec_token` this session cannot reliably get.
-- **wechat**: body-only by measurement. No comments/likes/forwards columns, **no cookie row at all**, no
+  `INNERTUBE_*`); headless is fine; a channel's uploads come from the loaded `/@handle/videos` document;
+  a continuation token is chosen by **which list it is an element of**.
+- **weibo**: never judge the wall from the URL right after `get()` (it flashes the passport page then
+  bounces); `/ajax/statuses/mymblog` is a per-session edge 403 → refuse loudly, never an empty table
+  (`backend/test_weibo_recipe.py` re-tests).
+- **zhihu**: headless throttles day-by-day (risk 40362), so a headless search returning 0 rows is a legit
+  outcome — don't loosen the assertion; comments always open a visible browser.
+- **xiaohongshu**: a replayed session is walled within minutes (profile required); author mode is dropped
+  (needs a per-note `xsec_token` this session cannot reliably get).
+- **wechat**: body-only by measurement — no comments/likes/forwards columns, **no cookie row at all**, no
   `mp_logged_in`/`login_url`/`diagnose`/`MULTI_PURPOSE`, no client impersonation or session replay. The
-  `live_site` file visits article URLs only; the cookie-panel harness samples bilibili/zhihu, never wechat.
+  `live_site` file visits article URLs only; panel harnesses sample bilibili/zhihu, never wechat.
 - **instagram**: capture-only (`supports_crawl = False`), refused by `run.notCrawlable` and earlier by
-  validation; a capture-only platform still needs `domain` + `login_url`, stays OUT of `CAPABILITIES`, and
-  must clear `TestCookiePanelParity` + `TestPlatformOrder`.
+  validation; such a platform still needs `domain` + `login_url`, stays OUT of `CAPABILITIES`, and must
+  clear `TestCookiePanelParity` + `TestPlatformOrder`.
 - **Cookie capture ≠ crawl capability**: `CookieManager.PLATFORMS` is who the panel can log in,
   `crawlers.is_crawlable()` who has a crawler. Captured cookies are filtered to their own platform
-  (`cookie_flow.retain_for_platform`) because a login detours through Google/Facebook — never widen
-  YouTube's allow-list to `.google.com` (that is Gmail and Drive).
+  (`cookie_flow.retain_for_platform`) because logins detour through Google/Facebook — never widen
+  YouTube's list to `.google.com` (that is Gmail and Drive).
 - **Cookie death mid-crawl is a designed path**: `login_wall` + under-target rows →
   `_execute_source_node` sets `execution_state['cookie_expired']` (rides on `/api/workflow/status` for the
   toast), logs `run.cookieExpired`, and **RAISES** so the node settles `partial` and the RUN becomes

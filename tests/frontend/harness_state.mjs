@@ -110,6 +110,10 @@ for (const sc of scenarios) {
     edited = '';
     wiring = {};
     I18n.lang = sc.lang || 'en';
+    /* The page's own first snapshot of an empty canvas (canvas.init() ends with one).
+       Scenarios that ask "what does the FIRST Ctrl+Z do?" need it, or the stack has no
+       earlier state to go back to and the answer is "nothing" for the wrong reason. */
+    if (sc.initialPush) canvas._pushState();
 
     if (sc.restore) canvas.restoreState(sc.restore);
     for (const t of sc.add || []) canvas.addNode(t);
@@ -123,6 +127,23 @@ for (const sc of scenarios) {
     }
     if (sc.copy) useNodeMenu(sc.copy, 'ctxCopy');
     for (let i = 0; i < (sc.paste || 0); i++) useNodeMenu(null, 'ctxPasteNode');
+    /* Selecting is what makes the Delete/f shortcuts dangerous, and the real click
+       handler only sets this field, so setting it is the faithful stand-in. */
+    if (sc.select) canvas.selectedNode = sc.select;
+    /* One parameter edit = what workflow.js's updateParam() does: mutate the node's
+       own params dict in place, then pay for a save. Reporting a scenario after a
+       pair of these is how "Ctrl+Z does not undo a parameter change" gets seen. */
+    for (const e of sc.paramEdits || []) {
+        canvas.nodes[e.id].params[e.key] = e.value;
+        canvas.saveState();
+    }
+    /* The 30-second autosave in app.js calls saveState() with nothing changed; N of
+       those stand in for half an idle hour at the keyboard. */
+    for (let i = 0; i < (sc.autosaves || 0); i++) canvas.saveState();
+    if (sc.key) {
+        const target = typeof sc.key.target === 'string' ? { tagName: sc.key.target } : sc.key.target;
+        fire('keydown', target, { key: sc.key.key, ctrlKey: !!sc.key.ctrlKey });
+    }
     /* Before the undo/redo steps: a scenario that deletes and then rewinds is
        testing what the rewind restores, and applying the delete afterwards would
        silently test the shape of a one-node history instead. */

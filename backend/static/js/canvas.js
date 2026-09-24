@@ -331,7 +331,7 @@ const canvas = {
 
         /* Keyboard shortcuts */
         document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            if (this._isTypingTarget(e.target)) return;
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (this.selectedNode) this.deleteNode(this.selectedNode);
                 return;
@@ -363,6 +363,25 @@ const canvas = {
                 this.toggleFold(this.selectedNode);
             }
         });
+    },
+
+    /* Keys belong to the canvas only while the user is not typing.
+
+       The guard used to name INPUT and SELECT, so every multi-line field in the app —
+       the 推文链接 box of a WeChat source, the 表达式 of a 列计算, the paste field of the
+       Cookie dialog — was unprotected: Backspace at the end of a URL deleted the
+       SELECTED NODE (toast 「节点已删除」, panel closed) instead of one character, and
+       typing an `f` (a URL, `pdf`, `if`) was swallowed by the fold shortcut. A node is
+       cheap to create and expensive to lose mid-edit, so the exclusion is by what the
+       element IS (a text editor of any kind) rather than by its tag name.
+    */
+    _isTypingTarget(target) {
+        if (!target || !target.tagName) return false;
+        const tag = String(target.tagName).toUpperCase();
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+        if (target.isContentEditable) return true;
+        // CustomSelect draws its own focusable option list out of DIVs.
+        return !!(target.closest && target.closest('.cselect, [contenteditable="true"]'));
     },
 
     /* Node ids are keys, not labels: run records, resume cursors and the LLM
@@ -863,7 +882,13 @@ const canvas = {
             const n = this.nodes[id];
             const el = document.getElementById(id);
             nodes[id] = {
-                id: id, type: n.type, title: n.title, params: n.params,
+                id: id, type: n.type, title: n.title,
+                /* A snapshot must be a snapshot. Handing out the live object made
+                   every history entry alias `node.params`, and updateParam mutates
+                   that dict in place — so no parameter edit was undoable anywhere in
+                   the app (Ctrl+Z gave back the value you had just typed), and a
+                   later edit silently rewrote the PAST entries too. */
+                params: JSON.parse(JSON.stringify(n.params || {})),
                 x: el ? parseInt(el.style.left) : n.x,
                 y: el ? parseInt(el.style.top) : n.y,
                 /* A folded node is a layout the user chose, and toggleFold already
@@ -876,6 +901,16 @@ const canvas = {
     },
 
     restoreState(state) {
+        /* A restore is ONE undo point, not one per node.
+
+           addNode() saves a snapshot on its own (correct for a drag-and-drop, which is
+           one user action), so loading a draft or running a history step used to push
+           an entry for every node in it — a five-node draft opened the page with six
+           snapshots, and the first six Ctrl+Z deleted nodes the user had not added in
+           this session. The flag suppresses the per-node pushes; the single
+           `_pushState` at the end is the whole restore. */
+        const outerSaving = this._historySaving;
+        this._historySaving = true;
         this.nextId = 1;
         /* Sort by the trailing number in the id so a rebuild lands in the same
            order it was drawn in. parseInt on a split('-') was the old way and
@@ -918,13 +953,27 @@ const canvas = {
             return null;
         }).filter(Boolean);
         this.scheduleRender();
-        this.saveState();
+        this._historySaving = outerSaving;
+        if (!outerSaving) {
+            /* The one snapshot this restore is worth, taken AFTER the flag is back
+               down — while it is up, saveState() declines to record anything. */
+            this.saveState();
+        }
     },
 
     /* ── Undo / Redo ── */
     _pushState() {
         if (this._historySaving) return;
         const state = this.getState();
+        /* An identical state is not a step. app.js autosaves every 30 seconds and
+           init() used to push once per restored node, so the 50-deep stack filled up
+           with copies of "now": after ~25 idle minutes every real edit had been
+           shifted out and Ctrl+Z did nothing at all, while the first undos after
+           opening a draft deleted nodes the user had not added in that session. */
+        if (this._history.length && this._historyIdx >= 0) {
+            const current = this._history[this._historyIdx];
+            if (JSON.stringify(current) === JSON.stringify(state)) return;
+        }
         /* Remove any redo states beyond current position */
         this._history = this._history.slice(0, this._historyIdx + 1);
         this._history.push(state);

@@ -191,6 +191,28 @@ class TestDatasetActions:
         assert renamed['body'] == {'name': '新名字'}
         assert renamed['toasts'] == ['Dataset renamed']
 
+    def test_the_rename_button_does_not_carry_its_own_answer(self, pa):
+        """A dialog with an input is answered by the INPUT — unless a button says otherwise.
+
+        The real showDialog resolves a clicked button as ``b.value !== undefined ?
+        b.value : inputEl.value``. This call site named its confirm button
+        ``value: 'ok'``, so the POST body was ``{"name": "ok"}``: the panel said
+        已重命名, the row read ``ok``, and the dataset's label was gone (the file
+        itself survives because its id is a content hash). The canned dialog answer in
+        this harness could never show that, so the SPEC of the dialog is asserted.
+        """
+        specs = pa['dataset_renamed']['specs']
+        assert len(specs) == 1, specs
+        spec = specs[0]
+        assert spec['hasInput'] is True, 'this dialog collects text, so the input owns the answer'
+        confirm = [b for b in spec['buttons'] if b['primary']]
+        assert len(confirm) == 1, spec['buttons']
+        assert confirm[0]['value'] == '<absent>', (
+            f'a primary button with a value token replaces what the user typed: {confirm[0]}'
+        )
+        # Cancel answering null is the intended shape — it must not be "fixed" away.
+        assert [b['value'] for b in spec['buttons'] if not b['primary']] == ['null'], spec['buttons']
+
     def test_a_cancelled_rename_sends_nothing(self, pa):
         assert pa['dataset_rename_cancelled']['requested'] == 0
 
