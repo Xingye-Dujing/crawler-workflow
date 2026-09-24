@@ -6,7 +6,10 @@ import pytest
 pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
 
 
-@pytest.mark.parametrize('headless', [True, False], ids=['headless', 'visible'])
+@pytest.mark.parametrize(
+    'headless',
+    [pytest.param(True, marks=pytest.mark.live_quick, id='headless'), pytest.param(False, id='visible')],
+)
 def test_search_returns_note_cards(live_search, headless):
     rows = live_search('xiaohongshu', headless=headless, keyword='三亚', count=3)
     assert rows, (

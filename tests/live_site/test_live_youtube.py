@@ -60,6 +60,7 @@ def test_search_rows_carry_the_figures_only_the_player_answers(live_crawler, hea
     assert any(row['正文'] for row in rows), 'no row carried the description'
 
 
+@pytest.mark.live_quick
 def test_search_without_facts_is_the_fast_path_and_still_returns_rows(live_crawler):
     crawler = live_crawler('youtube')
     try:

@@ -96,6 +96,7 @@ def test_a_headless_window_never_reports_a_quiet_zero(cookie_dir_str):
     _assert_real_posts(rows, minimum=1)
 
 
+@pytest.mark.live_quick
 def test_search_rows_carry_the_shape_a_post_has(live_crawler):
     """The row-level contract of a live keyword walk — with no numeric promise.
 

@@ -35,7 +35,10 @@ def _fresh_post_with_comments(live_crawler, headless=True):
     return link
 
 
-@pytest.mark.parametrize('headless', [True, False], ids=['headless', 'visible'])
+@pytest.mark.parametrize(
+    'headless',
+    [pytest.param(True, marks=pytest.mark.live_quick, id='headless'), pytest.param(False, id='visible')],
+)
 def test_weibo_comments_live(live_crawler, headless):
     link = _fresh_post_with_comments(live_crawler, headless=headless)
     if not link:

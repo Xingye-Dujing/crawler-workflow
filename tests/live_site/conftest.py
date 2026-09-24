@@ -4,7 +4,14 @@ Everything here really drives real Chrome against the real platforms with the
 user's saved cookies — the tier is excluded by default (``live_site`` marker)
 and selected explicitly:
 
-    .venv/Scripts/python.exe -m pytest -q -m live_site
+    .venv/Scripts/python.exe -m pytest -q -m live_site     # every case, ~an hour
+    .venv/Scripts/python.exe -m pytest -q -m live_quick    # one crawl per platform
+
+The second line is the tier a change is supposed to be checked against: 51 real
+crawls is not a gate anyone runs twice an hour, and a gate nobody runs is not a
+gate. ``live_quick`` is a subset of ``live_site`` (``tests/unit/test_test_tiers.py``
+pins that, and that every platform is still visited), so the full pass remains the
+one that says "everything".
 
 A missing or unreadable cookie file SKIPS that platform instead of failing:
 the tier must stay runnable on machines without every login, while on this

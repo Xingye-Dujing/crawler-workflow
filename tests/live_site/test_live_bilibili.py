@@ -38,7 +38,10 @@ def _assert_real_rows(rows, minimum=2):
     assert len(links) == len(rows), 'rows must be distinct videos (dedupe identity is the link)'
 
 
-@pytest.mark.parametrize('headless', [True, False], ids=['headless', 'visible'])
+@pytest.mark.parametrize(
+    'headless',
+    [pytest.param(True, marks=pytest.mark.live_quick, id='headless'), pytest.param(False, id='visible')],
+)
 def test_search_returns_rows_resolved_through_the_api(live_crawler, headless):
     crawler = live_crawler('bilibili', headless=headless)
     try:

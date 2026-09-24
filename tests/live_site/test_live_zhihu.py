@@ -21,6 +21,7 @@ def _assert_rows(rows, minimum=2):
     assert len(unique) >= minimum - 1, 'rows should carry distinct article links (dedupe identity)'
 
 
+@pytest.mark.live_quick
 def test_headless_search_returns_full_rows(live_search):
     try:
         rows = live_search('zhihu', headless=True, keyword='三亚', count=3)

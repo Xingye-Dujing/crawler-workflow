@@ -14,7 +14,10 @@ import pytest
 pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
 
 
-@pytest.mark.parametrize('headless', [True, False], ids=['headless', 'visible'])
+@pytest.mark.parametrize(
+    'headless',
+    [pytest.param(True, marks=pytest.mark.live_quick, id='headless'), pytest.param(False, id='visible')],
+)
 def test_time_window_search_returns_capped_rows(live_search, headless):
     end = date.today()
     start = end - timedelta(days=7)

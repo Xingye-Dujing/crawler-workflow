@@ -32,6 +32,7 @@ def _assert_real_rows(rows, minimum=1):
     assert any((row['正文'] or '').strip() for row in rows), 'no row carried the video text (文案)'
 
 
+@pytest.mark.live_quick
 def test_visible_search_resolves_each_video(live_crawler):
     crawler = live_crawler('douyin', headless=False)
     try:

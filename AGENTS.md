@@ -29,18 +29,19 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   change that adds the tool (already covered: `.venv/`, `.ruff_cache/`, `__pycache__/`, `data/`, `logs/`).
 - `backend/test_*.py` are manual probe scripts, NOT pytest (`python backend/test_zhihu.py <kw> --count N
   --no-headless`). They are the accepted place for a one-off measurement.
-- **Test tiers** (`pytest.ini` `addopts = --disable-socket -m "not integration and not live_ollama and not
-  live_site"`, so the two real tiers are excluded by default):
-  - Fast (~2.6k cases, ~70 s, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
+- **Test tiers** (`pytest.ini` excludes the real tiers by default; that filter is pinned by
+  `tests/unit/test_test_tiers.py`):
+  - Fast (~2.7k, ~75 s, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
   - Device (real Chrome on `file://` fixtures + real Ollama): `... -m "integration or live_ollama"`.
-  - Live-site (REAL crawls; every platform in both browser modes; per-platform skip when a cookie is absent):
-    `... -m live_site`.
+  - Live (REAL crawls, both modes, skip when a cookie is absent): `... -m live_quick` crawls
+    each platform exactly once and is the pre-change tier; `... -m live_site` is the full
+    pass (~an hour) and belongs to acceptance.
   - **To run one device/live case you must override the marker filter as well as naming it** —
     `pytest tests/integration/x.py::test_y` alone reports `N deselected` and looks like it ran.
   - Coverage: `--cov=backend --cov-report=term` (target ≥70%).
-  - Layout: `tests/unit` (pure logic + frontend-JS harnesses), `tests/api` (Flask `test_client`, fully
-    tmp-isolated), `tests/integration` (LLM boundary mocks run by default; Chrome/Ollama are marked).
-    OpenRouter is **never** really called — patch `analyzers.llm_client.requests.post/get`.
+  - Layout: `tests/unit`, `tests/api` (tmp-isolated `test_client`), `tests/integration` (marked
+    Chrome/Ollama; LLM boundary mocks run by default). OpenRouter is **never** really called — patch
+    `analyzers.llm_client.requests.post/get`.
   - Frontend JS needs plain `node` on `PATH`; without it those cases skip, so a "nothing skipped" closure
     run requires node.
 

@@ -22,7 +22,10 @@ ARTICLE_URLS = [
 ]
 
 
-@pytest.mark.parametrize('headless', [True, False], ids=['headless', 'visible'])
+@pytest.mark.parametrize(
+    'headless',
+    [pytest.param(True, marks=pytest.mark.live_quick, id='headless'), pytest.param(False, id='visible')],
+)
 def test_three_real_articles_parse_into_full_rows(live_crawler, headless):
     crawler = live_crawler('wechat', headless=headless)
     rows = crawler.search(urls=list(ARTICLE_URLS))
