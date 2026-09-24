@@ -236,7 +236,7 @@ SCENARIOS = [
     {
         'id': 'same-platform-twice',
         'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True},
-        **_canvas(_chain(1, 'weibo'), _chain(2, 'weibo')),
+        **_canvas(_chain(1, 'douyin'), _chain(2, 'douyin')),
         'canvasSettings': {'mode': 'parallel'},
         'preflight': CLEAN,
         'answers': {'clash': 'skip'},
@@ -244,10 +244,37 @@ SCENARIOS = [
     {
         'id': 'profile-kept',
         'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True},
-        **_canvas(_chain(1, 'weibo'), _chain(2, 'weibo')),
+        **_canvas(_chain(1, 'douyin'), _chain(2, 'douyin')),
         'canvasSettings': {'mode': 'parallel'},
         'preflight': CLEAN,
         'answers': {'clash': 'use'},
+    },
+    {
+        # weibo is serial-only: two of its crawls are NOT the profile fork (they queue
+        # whatever this answer says), so the clash dialog is filtered out — and the
+        # serial warning takes its place, naming weibo and cancelling on refusal.
+        'id': 'weibo-serial-warn-proceeds',
+        'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True, 'warn_mixed_region': False},
+        **_canvas(_chain(1, 'weibo'), _chain(2, 'weibo')),
+        'canvasSettings': {'mode': 'parallel'},
+        'preflight': CLEAN,
+        'answers': {'serial': 'serial'},
+    },
+    {
+        'id': 'weibo-serial-warn-refuses',
+        'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True, 'warn_mixed_region': False},
+        **_canvas(_chain(1, 'weibo'), _chain(2, 'weibo')),
+        'canvasSettings': {'mode': 'parallel'},
+        'preflight': CLEAN,
+        'answers': {'serial': None},
+    },
+    {
+        # One weibo crawl is not a queue: no warning, the run starts.
+        'id': 'weibo-single-runs-quiet',
+        'settings': {'cookie_preflight_before_run': True, 'warn_mixed_region': False},
+        **_canvas(_chain(1, 'weibo')),
+        'canvasSettings': {'mode': 'parallel'},
+        'preflight': CLEAN,
     },
     {
         'id': 'mixed-networks-refuses-to-run',
@@ -344,7 +371,7 @@ class TestWhoIsAsked:
 
     def test_two_workflows_on_one_platform_ask_once(self, gate):
         body = gate['same-platform-twice']['askedBody']
-        assert body['platforms'] == ['weibo'], body
+        assert body['platforms'] == ['douyin'], body
 
     def test_the_platform_of_the_canvas_is_queried_not_the_platform_of_the_panel(self, gate):
         body = gate['silent-pass']['askedBody']
@@ -446,6 +473,36 @@ class TestWhichBrowserIsProbed:
         """Absence means "follow the setting". Writing false here because no dialog
         appeared would turn one press into a global override."""
         assert 'use_profile' not in gate['silent-pass']['askedBody']
+
+
+class TestSerialOnlyPlatforms:
+    """weibo queues by the site's rule, and the user hears it before paying for it."""
+
+    def test_two_weibo_crawls_are_announced_before_the_run(self, gate):
+        case = gate['weibo-serial-warn-proceeds']
+        warn = [dialog for dialog in case['dialogs'] if 'serial' in dialog['values']]
+        assert len(warn) == 1, f'one press, one warning: {case["dialogs"]}'
+        assert 'Weibo' in warn[0]['message'], "the warning names the platform in the user's word"
+        assert 'weibo' not in warn[0]['message'], 'a storage key printed where a platform name belongs'
+        assert case['asked'] is True and case['ran'] is True, 'answering 继续 queues the crawls without losing the run'
+
+    def test_weibo_never_gets_the_profile_fork(self, gate):
+        """The fork offers 本次不用 = true parallelism, which weibo cannot deliver;
+        asking would promise a thing the gate will not do."""
+        case = gate['weibo-serial-warn-proceeds']
+        fork = [dialog for dialog in case['dialogs'] if 'use' in dialog['values'] and 'skip' in dialog['values']]
+        assert fork == [], f'the clash question came back for a platform that queues anyway: {case["dialogs"]}'
+
+    def test_refusing_the_warning_starts_nothing(self, gate):
+        case = gate['weibo-serial-warn-refuses']
+        assert case['ran'] is False
+        assert case['asked'] is False, 'a run the user just cancelled should not have paid for cookie probes'
+
+    def test_one_weibo_crawl_is_not_a_queue(self, gate):
+        case = gate['weibo-single-runs-quiet']
+        serial = [dialog for dialog in case['dialogs'] if 'serial' in dialog['values']]
+        assert serial == [], 'one crawl queues behind nobody — the warning would be noise'
+        assert case['ran'] is True
 
 
 class TestNothingIsSaidTwice:

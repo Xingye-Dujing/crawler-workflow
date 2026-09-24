@@ -37,6 +37,7 @@ import random
 import threading
 import time
 
+import crawl_capabilities as capabilities
 from config import Config
 from i18n import t
 from settings_store import get_setting
@@ -70,9 +71,15 @@ def _lock_for(platform: str, table: dict) -> threading.Lock:
         return lock
 
 
-def strict() -> bool:
-    """真排队 — a platform's turn is held until that crawl has finished."""
-    return bool(get_setting('same_platform_queue'))
+def strict(platform: str = '') -> bool:
+    """真排队 — a platform's turn is held until that crawl has finished.
+
+    The matrix can force it per platform (:func:`crawl_capabilities.serial_only_of`):
+    weibo answers one account's concurrent paging with the login wall, so 错峰
+    cannot make that parallelism work whatever it is spaced by. A switch chooses a
+    policy; it cannot outvote a measured wall.
+    """
+    return bool(get_setting('same_platform_queue')) or capabilities.serial_only_of(platform)
 
 
 def stagger() -> float:
@@ -166,6 +173,10 @@ def _space_the_start(platform: str, log=None, abort=None) -> bool:
 def hold(platform: str, log=None, abort=None):
     """Take *platform*'s turn — held for the crawl when 真排队, for the wait when not.
 
+    A serial-only platform (weibo: one account paging two sessions at once is answered
+    by the login wall) takes the 真排队 branch whatever the switch says, and says why
+    on the console the first time a second crawl has to wait behind it.
+
     Yields whether this caller had to wait, which is the fact the console reports, and
     the gap is paid **only** by a caller that actually waited: a serial canvas never
     contends, so making it sleep for a policy that protects somebody else's parallel run
@@ -176,7 +187,8 @@ def hold(platform: str, log=None, abort=None):
     if not platform:
         yield False
         return
-    if not strict():
+    forced_serial = capabilities.serial_only_of(platform) and not get_setting('same_platform_queue')
+    if not strict(platform):
         if stagger() <= 0:
             # No spacing asked for and no queue: this is the pre-feature behaviour, and
             # the canvas really does run both at once.
@@ -212,6 +224,10 @@ def hold(platform: str, log=None, abort=None):
                 # that never says which of the two workflows is still holding the turn.
                 raise RuntimeError(t('run.platformGateTimeout', platform=platform, n=int(Config.PLATFORM_GATE_TIMEOUT)))
     try:
+        if waited and forced_serial and log is not None:
+            # The user's switch said 错峰; this line is the difference between a
+            # policy obeyed and a mystery stall.
+            log(t('run.serialForced', platform=platform))
         if waited and stagger() > 0:
             gap = stagger() * (1 + random.random() * 0.25)
             if log is not None:

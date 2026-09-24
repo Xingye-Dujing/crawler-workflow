@@ -635,6 +635,10 @@ _ZH = {
         '{platform} 正在被另一条工作流采集，本轮改为排队：{n} 秒后开始，'
         '避免同一账号在同一秒内发出两次搜索而被弹到登录页'
     ),
+    'run.serialForced': (
+        '{platform} 的多条采集强制排队串行执行：同一账号并行翻页必被弹回登录页，'
+        '这个平台的串行由站点决定，与错峰设置无关'
+    ),
     'run.platformStaggered': (
         '{platform} 与上一条同平台采集错开 {n} 秒后发车：这次没有排队，两条仍可能同时跑，'
         '只是避开同一账号一秒内发出两次搜索'
@@ -1321,6 +1325,10 @@ _EN = {
     'run.platformQueued': (
         '{platform} is being crawled by another workflow, so this one queued and starts in {n}s: two '
         'searches from one account in the same second are what gets bounced to the login page'
+    ),
+    'run.serialForced': (
+        '{platform} crawls are forced to run one at a time: parallel paging on one account always draws the '
+        "login wall, so this platform serializes by the site's rule, not by the 错峰 setting"
     ),
     'run.platformGateTimeout': (
         '{platform} waited {n}s for its turn to crawl and gave up: a browser window that never closed may be holding it'

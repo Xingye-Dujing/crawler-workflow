@@ -139,6 +139,13 @@ class Capability:
     #: the payload carries it to the browser, and the test tier reads it back off this
     #: module, so neither can hold a copy that drifts.
     region: str = 'cn'
+    #: Crawls of this platform take turns **even when the user has 错峰 on**: one
+    #: account paging two sessions at once is answered by the login wall — measured
+    #: on weibo, where serial walks reach page 50 while parallel walks are bounced
+    #: on their deeper requests (``docs/crawler_notes.md`` 2026-09-25). This is a
+    #: property of the site, not a preference: the gate forces 真排队 for such a
+    #: platform, and the pre-run dialog says so before the canvas pays for it.
+    serial_only: bool = False
 
 
 # ─── The shared tail: how the rows leave the crawl ───────────────────────
@@ -357,6 +364,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         # into a fresh browser is bounced to /newlogin. Only a browser that keeps its
         # own jar stays in.
         profile_recommended=True,
+        # Parallel windows share one SUB: each serial walk pages to the pager's own
+        # end, while parallel walks are bounced to passport on their deeper requests
+        # (docs/crawler_notes.md). 错峰 cannot fix this — the collision is per account.
+        serial_only=True,
         modes=(
             _posts_mode(*_TIMES),
             _comment_mode('weibo', 'https://weibo.com/...'),
@@ -493,6 +504,17 @@ def region_of(platform: str) -> str:
     """
     cap = capability(platform)
     return cap.region if cap else ''
+
+
+def serial_only_of(platform: str) -> bool:
+    """Whether *platform* must take turns whatever the 排队/错峰 setting says.
+
+    Same rule as ``region_of``: one answer lives in the matrix, and the gate, the
+    pre-run dialog and the tests all read it here rather than keeping their own
+    list of the platform's name.
+    """
+    cap = capability(platform)
+    return bool(cap and cap.serial_only)
 
 
 def split_regions(platforms) -> dict:
@@ -640,6 +662,7 @@ def as_dict() -> dict:
                 'modes': [_mode_as_dict(m) for m in cap.modes],
                 'profileRecommended': bool(cap.profile_recommended),
                 'region': cap.region,
+                'serialOnly': bool(cap.serial_only),
             }
         )
     return {'platforms': platforms, 'fileFields': [_field_as_dict(f) for f in FILE_FIELDS]}

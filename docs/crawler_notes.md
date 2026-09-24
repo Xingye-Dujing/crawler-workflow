@@ -32,7 +32,10 @@ saved cookie and each window's *deeper* requests start getting bounced to passpo
 holds its own copy of one `SUB`, so s.weibo.com sees one account firing several paging requests
 inside a second — the same shape `crawl_gate.hold` exists to space, but that switch spaces crawl
 *starts*, and paging rounds interleave long after any start gap. Nothing inside the crawler can
-talk the site out of it; the answers are 真排队 for the platform, or separate accounts (task #117).
+talk the site out of it. **Shipped rule:** the matrix marks weibo `serial_only`, so its crawls take
+真排队 whatever the 排队/错峰 switch says, and a parallel canvas with 2+ weibo crawls is warned by a
+pre-run dialog before it pays for the collision. The only way back to true weibo parallelism is
+separate accounts, each with its own session (task #117).
 
 **The paging caps that used to live here were quitting below the user's target.** `MAX_PAGES_PER_WINDOW = 5`
 made a feed whose own pager said 共50页 stop at page 5 with the target unmet and no line saying why;

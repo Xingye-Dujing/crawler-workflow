@@ -255,9 +255,14 @@ class TestPayloadShape:
         # throwaway browser is punished per site (a rotating session cookie, a risk
         # control that re-walls a replayed snapshot), and the pre-run notice is the
         # user's only chance to hear about it before the crawl starts.
-        assert set(first) == {'platform', 'modes', 'profileRecommended', 'region'}
+        assert set(first) == {'platform', 'modes', 'profileRecommended', 'region', 'serialOnly'}
         mode = first['modes'][0]
         assert set(mode) == {'key', 'labelKey', 'handler', 'rows', 'noteKey', 'actionKey', 'actionJs', 'fields'}
+        # `serialOnly` marks the platform the site walls on concurrent paging (weibo):
+        # two of its crawls queue whatever the 排队/错峰 switch says. Only weibo carries
+        # it — a second platform flagged here would be a claim to re-measure.
+        serial = {cap['platform'] for cap in payload['platforms'] if cap['serialOnly']}
+        assert serial == {'weibo'}, serial
         # `nameKey` is deliberately absent: that word names the field in the
         # console, which is the backend's language, and shipping it would invite
         # the panel to grow a second, untranslated label path.

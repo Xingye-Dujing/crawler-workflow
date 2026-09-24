@@ -199,17 +199,19 @@ class TestStrictQueue:
 
 
 class TestStaggerOnly:
-    """The mode 真排队 off selects: space the starts, keep the parallelism."""
+    """The mode 真排队 off selects on an ordinary platform: space the starts, keep the
+    parallelism. zhihu is the subject, never weibo — weibo is 真排队 whatever the switch
+    says (TestSerialOnlyBelow), so it could not measure a stagger path here."""
 
     def test_a_running_crawl_does_not_hold_the_next_one_back(self, monkeypatch, isolated):
         """The line this mode must not cross: if the second crawl could not get in
         while the first was inside, the switch would be a queue wearing another name."""
         _settings(monkeypatch, queue=False, stagger=10.0)
         inside, release = threading.Event(), threading.Event()
-        holder = _holder('weibo', inside, release)
+        holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
         try:
-            with crawl_gate.hold('weibo') as waited:
+            with crawl_gate.hold('zhihu') as waited:
                 assert waited is True, 'it started on top of another crawl and was not told it had waited'
                 assert inside.is_set(), 'the first crawl had already left — that overlap was not measured'
         finally:
@@ -222,10 +224,10 @@ class TestStaggerOnly:
         the one already elapsed."""
         _settings(monkeypatch, queue=False, stagger=10.0)
         inside, release = threading.Event(), threading.Event()
-        holder = _holder('weibo', inside, release)
+        holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
         try:
-            with crawl_gate.hold('weibo'):
+            with crawl_gate.hold('zhihu'):
                 pass
         finally:
             release.set()
@@ -241,7 +243,7 @@ class TestStaggerOnly:
         for company that had gone home."""
         _settings(monkeypatch, queue=False, stagger=10.0)
         for _round in range(3):
-            with crawl_gate.hold('weibo') as waited:
+            with crawl_gate.hold('zhihu') as waited:
                 assert waited is False
         assert isolated['waits'] == [], f'a serial hand-off paid a gap: {isolated["waits"]}'
 
@@ -250,11 +252,11 @@ class TestStaggerOnly:
         does not all measure its gap from the first one's departure."""
         _settings(monkeypatch, queue=False, stagger=10.0)
         inside, release = threading.Event(), threading.Event()
-        holder = _holder('weibo', inside, release)
+        holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
         try:
             for _round in range(2):
-                with crawl_gate.hold('weibo'):
+                with crawl_gate.hold('zhihu'):
                     pass
         finally:
             release.set()
@@ -266,40 +268,40 @@ class TestStaggerOnly:
         """Spacing is measured from the last *overlapping* start, so the first crawl of
         a platform is not made to wait for a company that was never in the room."""
         _settings(monkeypatch, queue=False, stagger=10.0)
-        crawl_gate._LAST_START['weibo'] = 0.0
-        with crawl_gate.hold('weibo') as waited:
+        crawl_gate._LAST_START['zhihu'] = 0.0
+        with crawl_gate.hold('zhihu') as waited:
             assert waited is False
         assert isolated['waits'] == []
 
     def test_zero_gap_means_no_ordering_at_all(self, monkeypatch, isolated):
         _settings(monkeypatch, queue=False, stagger=0.0)
         inside, release = threading.Event(), threading.Event()
-        holder = _holder('weibo', inside, release)
+        holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
-        with crawl_gate.hold('weibo') as waited:
+        with crawl_gate.hold('zhihu') as waited:
             assert waited is False
             assert isolated['waits'] == []
         release.set()
         holder.join(5)
 
     def test_a_different_platform_is_not_spaced_either(self, monkeypatch, isolated):
-        """Spacing is per platform, so the waits in here belong to weibo waiting for
-        weibo — a gate that keyed on the directory or on nothing at all would charge
-        zhihu for somebody else's schedule."""
+        """Spacing is per platform, so the waits in here belong to zhihu waiting for
+        zhihu — a gate that keyed on the directory or on nothing at all would charge
+        bilibili for somebody else's schedule."""
         _settings(monkeypatch, queue=False, stagger=10.0)
         inside, release = threading.Event(), threading.Event()
-        holder = _holder('weibo', inside, release)
+        holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
         try:
             for _round in range(2):
-                with crawl_gate.hold('weibo'):
+                with crawl_gate.hold('zhihu'):
                     pass
-            with crawl_gate.hold('zhihu') as waited:
+            with crawl_gate.hold('bilibili') as waited:
                 assert waited is False
         finally:
             release.set()
             holder.join(5)
-        assert len(isolated['waits']) == 2, f'zhihu paid for weibo, or weibo lost its spacing: {isolated["waits"]}'
+        assert len(isolated['waits']) == 2, f'bilibili paid for zhihu, or zhihu lost its spacing: {isolated["waits"]}'
 
     def test_stop_cancels_a_spacing_wait_too(self, monkeypatch, isolated):
         """The wait in this mode can be minutes long, and 停止 has to reach it — the
@@ -315,17 +317,84 @@ class TestStaggerOnly:
         monkeypatch.setattr(crawl_gate, '_interruptible_sleep', sleeping)
         monkeypatch.setattr(crawl_gate.Config, 'PLATFORM_GATE_TIMEOUT', 5.0)
         inside, release = threading.Event(), threading.Event()
-        holder = _holder('weibo', inside, release)
+        holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
         stopped = threading.Event()
         stopped.set()
         try:
-            with crawl_gate.hold('weibo', abort=lambda: stopped.is_set()) as waited:
+            with crawl_gate.hold('zhihu', abort=lambda: stopped.is_set()) as waited:
                 assert waited is True
         finally:
             release.set()
             holder.join(5)
         assert slept, 'the gap was skipped instead of waited-and-cancelled'
+
+
+class TestSerialOnlyBelow:
+    """A platform the matrix marks serial_only (weibo) is 真排队 whatever the switch
+    says — this is a measured property of the site, not a preference."""
+
+    def test_the_switch_off_does_not_unlock_a_serial_only_platform(self, monkeypatch, isolated):
+        """错峰 on its own would let two weibo crawls overlap on their deeper requests,
+        and weibo answers exactly that with the login wall. The second crawl cannot get
+        in until the first finishes, even though the setting says 错峰."""
+        _settings(monkeypatch, queue=False, stagger=0.0)
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release)
+        assert inside.wait(5)
+
+        answers, finished = [], threading.Event()
+
+        def waiter():
+            with crawl_gate.hold('weibo') as waited:
+                answers.append(waited)
+            finished.set()
+
+        second = threading.Thread(target=waiter)
+        second.start()
+        second.join(0.2)
+        assert second.is_alive(), 'the second weibo crawl got in while the first held the turn'
+        release.set()
+        holder.join(5)
+        assert finished.wait(5), 'the queued weibo crawl never came out of its wait'
+        second.join(5)
+        assert answers == [True], 'it waited but was not told it had queued'
+
+    def test_a_forced_hand_off_says_why_on_the_console(self, monkeypatch, isolated):
+        """The user's switch said 错峰; without this line the serial wait is a policy
+        obeyed invisibly and reads as a stall."""
+        _settings(monkeypatch, queue=False, stagger=0.0)
+        lines = []
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release)
+        assert inside.wait(5)
+
+        def waiter():
+            with crawl_gate.hold('weibo', log=lines.append):
+                pass
+
+        second = threading.Thread(target=waiter)
+        second.start()
+        second.join(0.2)
+        release.set()
+        holder.join(5)
+        second.join(5)
+        joined = '\n'.join(lines)
+        assert '微博' in joined or 'Weibo' in joined, f'the forced queue never named the platform: {lines}'
+
+    def test_an_ordinary_platform_is_still_free_to_stagger(self, monkeypatch, isolated):
+        """The override is per platform: making weibo serial must not quietly turn the
+        whole gate into 真排队 and cost bilibili its parallelism."""
+        _settings(monkeypatch, queue=False, stagger=10.0)
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('bilibili', inside, release)
+        assert inside.wait(5)
+        try:
+            with crawl_gate.hold('bilibili'):
+                assert inside.is_set(), 'bilibili was parked behind a rule only weibo carries'
+        finally:
+            release.set()
+            holder.join(5)
 
 
 class TestModeIsolation:
@@ -335,11 +404,11 @@ class TestModeIsolation:
         new mode says it may overlap."""
         _settings(monkeypatch, queue=True)
         inside, release = threading.Event(), threading.Event()
-        holder = _holder('weibo', inside, release)
+        holder = _holder('zhihu', inside, release)
         assert inside.wait(5)
         _settings(monkeypatch, queue=False, stagger=1.0)
         try:
-            with crawl_gate.hold('weibo'):
+            with crawl_gate.hold('zhihu'):
                 pass  # 错峰 says this may enter while the strict holder is still inside
         finally:
             release.set()

@@ -142,11 +142,13 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   ask 用 Profile vs 本次不用 and the answer travels as `use_profile` — **except with 真排队 on**, which
   has answered it for the whole program already.
   **A site's rate limit is a second collision**: two throwaway browsers can still be bounced as the
-  *account* searched twice in one second. So `crawl_gate.hold(platform)` orders crawls by platform, not
-  directory, in whichever of the **two distinct modes** the user's switch means: `same_platform_queue` on
-  holds the turn until that crawl *finishes*; off spaces the *starts* of crawls in flight
-  together by `same_platform_stagger` seconds (错峰; serial hands over seamlessly) — the number is the
-  user's, 0 = neither wait. **No rest is armed when a turn ends** (`docs/crawler_notes.md`). A wall met **before the
+  *account* searched twice in one second. So `crawl_gate.hold(platform)` orders crawls by platform:
+  `same_platform_queue` on
+  holds the turn until that crawl *finishes*; off spaces the *starts* of in-flight crawls
+  by `same_platform_stagger` seconds (错峰; serial is seamless), 0 = no wait.
+  A matrix `serial_only` platform (weibo: parallel paging draws the login wall) is always queued
+  whatever the switch says; the browser warns first. **No rest at a turn's end**
+  (`docs/crawler_notes.md`). A wall met **before the
   first row** retries once after a back-off; a wall met after rows is the cookie dying
   and must go to 继续 instead. **Absence means "follow the setting" — never coerce missing to `False`,** or
   one dialog's answer becomes a global override. `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node
@@ -342,7 +344,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - Run-gating UX lives in `workflow.js execute()` → `_cookieGateBeforeRun`: `cookie_preflight_before_run`
   probes each platform of the canvas before the run and a login wall **refuses it** (no "run anyway");
   「无法核对」 — timeout, captcha, busy profile — never blocks, because no answer is not evidence of a dead
-  cookie. Off asks and blocks nothing — an off switch means off; a resume or a crawl-free canvas skips the
+  cookie. Off asks and blocks nothing; a resume or a crawl-free canvas skips the
   probe, and saving/deleting/capturing a cookie drops the cached verdict. **A new settings key needs all four:**
   the bool branch in `settings_store.save_settings`, both app.js catalogs, and the `AppSettings` wiring.
 

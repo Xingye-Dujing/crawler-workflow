@@ -466,6 +466,12 @@ const I18n = {
                 + 'a brand-new device on a planted cookie snapshot, which is the shape those sites refuse.',
             'dialog.profileClashUse': 'Keep the profile',
             'dialog.profileClashSkip': 'No profile this run',
+            'dialog.serialWarn':
+                '{platforms} crawls are forced to run one at a time: parallel paging on one account is always '
+                + 'answered by the login wall (measured), so a second {platforms} crawl queues until the first '
+                + 'finishes and parallelism buys nothing there. This is the site\'s rule, not a setting. '
+                + 'Start the run anyway?',
+            'dialog.serialWarnGo': 'Run anyway (they queue)',
             'set.save': 'Save settings',
             'set.note':
                 'Machine-local settings. Saved to data/settings.json on the server ' +
@@ -1102,6 +1108,10 @@ const I18n = {
                 + '而这正是那些站点会拒绝的形态。',
             'dialog.profileClashUse': '继续用 Profile',
             'dialog.profileClashSkip': '本次不用 Profile',
+            'dialog.serialWarn':
+                '{platforms} 的多条采集会被强制排队、一条跑完才跑下一条：同一账号并行翻页一定会被弹回登录页'
+                + '（实测），所以这里的并行买不到任何东西。这是站点的规矩，不是设置能改的。仍要继续这次运行吗？',
+            'dialog.serialWarnGo': '继续运行（自动排队）',
             'set.save': '保存设置',
             'set.note':
                 '这些是本机相关设置。保存后写入服务器 ' +

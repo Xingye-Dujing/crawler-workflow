@@ -95,8 +95,9 @@ function world(sc) {
             var kind = null;
             if (values.indexOf('use') >= 0 && values.indexOf('skip') >= 0) kind = 'clash';
             else if (values.indexOf('update') >= 0) kind = 'expired';
-            /* The remaining dialog offers 继续 plus a cancel: the mixed-network ask.
-               The old cookie prompt (「退出更新 Cookie」) is deleted from the product. */
+            /* The serial-only warning carries its own 'serial' button value, checked
+               before the generic 继续 so it is not mistaken for the mixed-network ask. */
+            else if (values.indexOf('serial') >= 0) kind = 'serial';
             else if (values.indexOf('go') >= 0) kind = 'mixed';
             var answers = ${JSON.stringify(sc.answers || {})};
             return Promise.resolve(kind in answers ? answers[kind] : ${JSON.stringify(

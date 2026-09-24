@@ -273,6 +273,46 @@ const workflow = {
         return choice === 'go';
     },
 
+    async _confirmSerialPlatformsBeforeRun() {
+        /* A serial-only platform (weibo: parallel paging on one account is always
+           answered by the login wall — measured) queues whatever the 排队/错峰 switch
+           says, and that is a fact about the site the user is entitled to hear
+           BEFORE the run, not after the console stalls. One dialog per press when
+           the canvas holds 2+ crawls of such a platform; continuing is legitimate —
+           the crawls are correct, just one at a time — closing refuses the run.
+           Serial mode needs nothing said: workflows there take turns anyway, so no
+           two same-platform crawls are ever in flight. Without the matrix loaded
+           nothing is claimed. */
+        var json = canvas.toWorkflowJSON();
+        var settings = (json && json.settings) || {};
+        if (settings.mode !== 'parallel') return true;
+        var data = (window.Capabilities && Capabilities.data) || null;
+        if (!data || !data.platforms) return true;
+        var forced = {};
+        data.platforms.forEach(function (cap) {
+            if (cap.serialOnly) forced[cap.platform] = true;
+        });
+        var counts = {};
+        Object.keys(canvas.nodes).forEach(function (id) {
+            var node = canvas.nodes[id] || {};
+            if (node.type !== 'source') return;
+            var platform = (node.params || {}).platform;
+            if (platform && forced[platform]) counts[platform] = (counts[platform] || 0) + 1;
+        });
+        var names = Object.keys(counts).filter(function (platform) {
+            return counts[platform] > 1;
+        });
+        if (!names.length) return true;
+        var choice = await showDialog({
+            message: I18n.t('dialog.serialWarn').replace('{platforms}', platformLabels(names)),
+            buttons: [
+                { label: I18n.t('dialog.serialWarnGo'), value: 'serial' },
+                { label: I18n.t('dialog.cancel'), value: null },
+            ],
+        });
+        return choice === 'serial';
+    },
+
     async _confirmProfileChoiceBeforeRun() {
         /* Parallel + the same platform in two workflows is a genuine fork in the
            road, and only the user can pick:
@@ -303,6 +343,19 @@ const workflow = {
         if (!values.use_browser_profile) return null;
         if (values.same_platform_queue) return null;
         var shared = profileCollisions(canvas.nodes, canvas.connections);
+        /* A serial-only platform is taken out of the fork: its crawls queue whatever
+           this answer says, so letting it appear here would offer 真并行 that the
+           gate will not deliver. */
+        var fdata = (window.Capabilities && Capabilities.data) || null;
+        if (fdata && fdata.platforms) {
+            shared = shared.filter(function (platform) {
+                var cap = null;
+                fdata.platforms.forEach(function (c) {
+                    if (c.platform === platform) cap = c;
+                });
+                return !(cap && cap.serialOnly);
+            });
+        }
         if (!shared.length) return null;
         var choice = await showDialog({
             message: I18n.t('dialog.profileClash')
@@ -515,6 +568,10 @@ const workflow = {
            whose session rotates, a throwaway profile *is* the failure, and a run
            would only discover it an hour deep. */
         if (!(await this._confirmProfileBeforeRun())) return;
+        /* Said before the fork question and the cookie probes: on a platform the site
+           forces to one-at-a-time, 「本次不用 = 真并行」 is not on offer, and a run the
+           user cancels here should not have paid for the questions behind it. */
+        if (!(await this._confirmSerialPlatformsBeforeRun())) return;
         /* Parallel + a platform two workflows both want is the one case where
            keeping the device and keeping the parallelism are mutually exclusive,
            so the user decides which they are buying. ``undefined`` means they
