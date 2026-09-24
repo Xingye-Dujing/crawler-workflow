@@ -117,7 +117,7 @@ def app_module(data_root):
 
 
 @pytest.fixture(autouse=True)
-def clean_globals():
+def clean_globals(request):
     """Undo the process-global side effects tests can leave behind.
 
     ``sys.stdout`` is snapshotted per test because the run worker replaces it
@@ -127,10 +127,26 @@ def clean_globals():
     the i18n thread-local is restored because Werkzeug dispatches requests on
     the *calling* thread — a test that sent ``X-Lang: en`` would otherwise
     leave the language flipped for every later test on the main thread.
+
+    The console is **reset, not restored**: a test that calls an executor
+    function directly never goes through the run start that clears it, so it
+    leaves its narration for the next test to read. Restoring a snapshot could
+    not fix that either, because the snapshot is taken after the leak — which is
+    how 25 lines from one crawl-matrix test surfaced as "a run nobody started"
+    three files later. A test that reads lines it never wrote now fails on its
+    own empty console, which is the honest place for that to be reported.
+
+    ``execution_state['running']`` gets a **tripwire** instead, because a leaked
+    busy flag is not a stale read but a changed answer: every later serial test
+    waits out its quiet-server timeout on a run that does not exist. So the flag
+    is put back to keep the session readable *and* the offender named to keep it
+    honest — hundreds of cascading failures had no cause in them otherwise.
     """
     stdout_backup = sys.stdout
     i18n = sys.modules.get('i18n')
     lang_backup = i18n.get_lang() if i18n is not None else None
+    app = sys.modules.get('app')
+    running_backup = app.execution_state.get('running') if app is not None else None
     yield
     sys.stdout = stdout_backup
     if i18n is not None:
@@ -141,6 +157,17 @@ def clean_globals():
     ss = sys.modules.get('settings_store')
     if ss is not None:
         ss._values = None
+    if app is not None:
+        app.reset_console_state()
+        if app.execution_state.get('running') != running_backup:
+            leaked = app.execution_state.get('running')
+            app.execution_state['running'] = running_backup
+            pytest.fail(
+                f"{request.node.nodeid} left execution_state['running'] at {leaked!r} "
+                f'(it was {running_backup!r} before). Take the `client` fixture or restore '
+                'it with monkeypatch.setitem: a leaked flag makes the server look busy to '
+                'every later test in the session.'
+            )
 
 
 # ─── Flask test client ──────────────────────────────────────────────────

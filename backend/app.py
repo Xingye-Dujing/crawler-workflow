@@ -436,6 +436,38 @@ _completed_lock = threading.Lock()
 _execute_lock = threading.Lock()  # serializes the guard-and-claim of a new run
 
 
+def _console_baseline() -> dict:
+    """The console and the progress counters, in their between-runs state.
+
+    A factory, not a constant: every value here is mutable-or-counted and must be
+    fresh each time, or two runs would append into one shared list.
+    """
+    return {
+        'logs': [],
+        '_log_total': 0,
+        '_wf_logs': {},
+        '_wf_log_total': {},
+        '_wf_names': {},
+        'total_nodes': 0,
+        'completed_nodes': 0,
+        'skipped_nodes': 0,
+        'failed_nodes': 0,
+    }
+
+
+def reset_console_state() -> None:
+    """Put the console and the progress counters back to their between-runs state.
+
+    One answer for two callers. The run start needs it so a new console never
+    inherits the previous run's lines; the test suite needs it because a test can
+    reach ``_execute_source_node`` directly — no HTTP request, so no run start —
+    and still write narration into the very buffer the next test asserts on. When
+    that reset was inline, one crawl-matrix test leaked 25 lines three files
+    downstream, where they read as a run nobody had started.
+    """
+    execution_state.update(_console_baseline())
+
+
 def _results_snapshot() -> dict:
     """A private copy of ``execution_state['results']``, taken under its lock.
 
@@ -1260,15 +1292,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             cancel_event = threading.Event()
             execution_state['cancel_event'] = cancel_event
             execution_state['results'] = {}
-            execution_state['logs'] = []
-            execution_state['_log_total'] = 0
-            execution_state['_wf_logs'] = {}
-            execution_state['_wf_log_total'] = {}
-            execution_state['_wf_names'] = {}
-            execution_state['total_nodes'] = 0
-            execution_state['completed_nodes'] = 0
-            execution_state['skipped_nodes'] = 0
-            execution_state['failed_nodes'] = 0
+            reset_console_state()
             # Node ids THIS attempt visited. The run record outlives the canvas:
             # nodes deleted between attempts keep their stored status, so any
             # verdict read from the whole record can blame a finished run for a
