@@ -813,3 +813,86 @@ class TestUploadNodeLosesItsFile:
         assert nodes['node-2']['status'] == 'failed', nodes
         assert record['status'] == 'failed', 'a run that could not read its file is not "completed"'
         assert t('upload.stale') in self._console(client)
+
+
+class TestAStoppedRunOwnsItsThreads:
+    """The slot may not be released while a node of that run is still executing.
+
+    Parallel mode starts one thread per workflow, and the run's own thread used to
+    leave them behind: ``pool.shutdown(wait=False)`` returned, so the worker walked on
+    to clear ``running``, settle the record and hand the queue to the NEXT request —
+    whose console, node counters and ``results`` dict are the same objects those
+    threads are still writing to. The symptom is the next run narrating a crawl it
+    never asked for, and a ``completed_nodes`` figure that counts somebody else's work.
+
+    Three workflows, each one parked source node. Why three: the run thread waits in
+    ``fut.result()``, which a Stop cannot interrupt, so the only way it reaches the
+    cancel-and-break branch is after the FIRST workflow has come back while another is
+    still inside its node. Two workflows can never present that shape — with the first
+    one returned, the second is the one the run thread is blocked on. So one node is
+    released to the run thread and two are held, and the held ones are what the test
+    watches. ``_wf_local.idx`` is recorded per node so the released one is provably the
+    first component, instead of the test guessing the discovery order and possibly
+    asserting nothing.
+    """
+
+    @staticmethod
+    def _three_crawls():
+        return {
+            'nodes': [
+                _node('node-1', 'source', {'platform': 'zhihu', 'keyword': '海南'}),
+                _node('node-2', 'source', {'platform': 'weibo', 'keyword': '三亚'}),
+                _node('node-3', 'source', {'platform': 'bilibili', 'keyword': '小镇'}),
+            ],
+            'connections': [],
+            'settings': {'mode': 'parallel'},
+        }
+
+    def test_the_slot_waits_for_every_node_thread_it_started(self, client, app_module, monkeypatch):
+        lock = threading.Lock()
+        entered = []  # {'node', 'thread', 'wf_idx', 'leave'} per node, in arrival order
+        all_inside = threading.Barrier(4, timeout=20)  # 3 node threads + this test
+
+        def _gated_source(node, headless=True, ctx=None):
+            leave = threading.Event()
+            with lock:
+                entered.append(
+                    {
+                        'node': str(node.get('id')),
+                        'thread': threading.current_thread(),
+                        'wf_idx': getattr(app_module._wf_local, 'idx', None),
+                        'leave': leave,
+                    }
+                )
+            all_inside.wait()
+            assert leave.wait(30), 'the test released every node it parked'
+            return [{'标题': '迟到的行'}]
+
+        monkeypatch.setattr(app_module, '_execute_source_node', _gated_source)
+        started = client.post(
+            '/api/workflow/execute',
+            json={'workflow': self._three_crawls(), 'workflow_name': 'stale-pool'},
+        )
+        assert started.get_json().get('ok') is True, started.get_json()
+        all_inside.wait()
+        assert len(entered) == 3, f'expected three components to be crawling, got {entered}'
+        first = [entry for entry in entered if entry['wf_idx'] == 0]
+        assert len(first) == 1, f'no node reports wf_idx 0, so the pool order is not what this watches: {entered}'
+        held = [entry for entry in entered if entry['wf_idx'] != 0]
+
+        client.post('/api/workflow/stop')
+        # Released only AFTER the stop: the run thread resumes inside ``fut.result()``,
+        # sees the cleared flag and takes the break-and-shutdown branch.
+        first[0]['leave'].set()
+        try:
+            settled = run_finished(app_module, timeout=2)
+            still_inside = [entry['node'] for entry in held if entry['thread'].is_alive()]
+            assert not (settled and still_inside), (
+                f'the run released the one-at-a-time slot with {still_inside} still inside a node; '
+                'the next run inherits their console lines and their node counters'
+            )
+        finally:
+            for entry in held:
+                entry['leave'].set()
+        assert _wait(app_module), 'releasing the parked crawls never let the stopped run finish'
+        assert app_module.execution_state['outcome'] == 'interrupted'

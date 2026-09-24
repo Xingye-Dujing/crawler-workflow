@@ -195,3 +195,91 @@ class TestExecute:
 
     def test_no_groups_is_no_results(self):
         assert TaskExecutor().execute([]) == []
+
+
+class TestALevelOwnsItsThreads:
+    """``run_parallel`` returns only once every task it started has returned.
+
+    The caller of a level is the run's own thread, and the moment it returns the run
+    walks on to release the one-at-a-time slot and hand the queue to the NEXT run —
+    whose console, node counters and ``results`` dict are the very objects a task
+    still inside a node is writing to. A stop that cancelled the pool with
+    ``wait=False`` therefore let an interrupted run's last node land its lines in a
+    run that had not started yet.
+    """
+
+    def _parked_level(self, executor):
+        """A level of two tasks that are both demonstrably running.
+
+        The barrier is three-legged (both tasks plus the test), so neither the
+        quick task nor the parked one can be cancelled before it started: what the
+        test observes afterwards is a level whose second task is *inside*, not one
+        that never ran.
+        """
+        both = threading.Barrier(3, timeout=5)
+        inside = []
+        parked = threading.Event()
+        leave = threading.Event()
+
+        def quick():
+            both.wait()
+            return 'quick'
+
+        def block():
+            both.wait()
+            inside.append(threading.current_thread())
+            parked.set()
+            leave.wait(10)
+            return 'block'
+
+        results = []
+        level = threading.Thread(target=lambda: results.append(executor.run_parallel([quick, block])))
+        level.start()
+        both.wait()
+        assert parked.wait(5), 'the parked task never started, so the level proves nothing'
+        return level, inside, leave, results
+
+    def test_a_stopped_level_waits_for_the_task_still_inside_it(self):
+        executor = TaskExecutor(max_workers=2, mode='parallel')
+        # Stop before the level begins: its first completed task is then the moment
+        # the loop breaks out — which is exactly the exit that used to walk away
+        # from the task still running.
+        executor.stop()
+        level, inside, leave, results = self._parked_level(executor)
+        try:
+            level.join(0.5)
+            assert level.is_alive(), (
+                'run_parallel handed the run back while one of its own tasks was still executing a node'
+            )
+        finally:
+            leave.set()
+            level.join(10)
+        assert not level.is_alive(), 'the level never finished once its task was released'
+        assert results == [[]], 'a stopped level reports no results, and now it reports one list'
+        assert not any(thread.is_alive() for thread in inside), 'a task thread outlived the level that ran it'
+
+    def test_the_pool_handle_is_cleared_for_the_next_run(self):
+        """`stop()` no longer dismantles the pool, so the owning thread must."""
+        executor = TaskExecutor(max_workers=2, mode='parallel')
+        executor.stop()
+        _level, _inside, leave, _results = self._parked_level(executor)
+        leave.set()
+        _level.join(10)
+        assert executor._pool is None
+        assert executor._futures == []
+
+    def test_stop_during_a_level_leaves_the_pool_to_its_owner(self):
+        """A `stop()` that nulled `self._pool` made the level's own cleanup raise.
+
+        The two threads are the request thread and the run thread; whichever won the
+        race decided whether the level returned results or died with
+        ``AttributeError: 'NoneType' object has no attribute 'shutdown'``.
+        """
+        executor = TaskExecutor(max_workers=2, mode='parallel')
+        level, inside, leave, results = self._parked_level(executor)
+        executor.stop()
+        leave.set()
+        level.join(10)
+        assert not level.is_alive()
+        assert results and isinstance(results[0], list), 'the level raised on its way out instead of returning'
+        assert not any(thread.is_alive() for thread in inside)

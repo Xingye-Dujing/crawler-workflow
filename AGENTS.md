@@ -210,6 +210,10 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   unwinding thread would queue the next request behind itself forever. Queues are in-memory and
   `tests/conftest.py` clears `_RUN_QUEUE` per test. The Execute button is therefore never disabled; it
   relabels 排队运行.
+- **A test that calls an executor function directly must leave the app quiet**: `clean_globals`
+  (tests/conftest.py) resets the console after every test and *fails* one that leaks
+  `execution_state['running']` — without the `client` fixture nothing else clears either, and a leaked busy
+  flag makes every later serial test wait out its timeout on a run that never happened.
 - **Checkpointing is the core value** (`backend/services/run_store.py`): per-node outputs and LLM answers
   persist so an interrupted run resumes rather than re-crawls or re-pays. Keep `runs.db` state compatible.
   Three measured rules, each pinned by a test: the streaming row sink writes **one transaction per row**

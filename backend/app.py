@@ -1599,7 +1599,14 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                         break
                     with contextlib.suppress(Exception):
                         fut.result()
-                pool.shutdown(wait=False, cancel_futures=True)
+                # `wait=True`, and this is the reason the whole branch exists: the run
+                # thread that passes this line goes on to clear `running`, settle the
+                # record and hand the queue to the NEXT run, whose console, node
+                # counters and `results` dict are the same objects these threads are
+                # still writing to. `cancel_futures` drops the workflows that never
+                # started; the ones that did must finish what they are inside, which
+                # `/api/workflow/stop` makes short by closing their crawlers.
+                pool.shutdown(wait=True, cancel_futures=True)
 
                 # Merged whether or not the run finished: update() keeps partial
                 # rows from branches that stopped mid-way (a Stop, or a dieing
