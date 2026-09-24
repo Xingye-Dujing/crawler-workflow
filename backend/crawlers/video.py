@@ -459,7 +459,20 @@ class BilibiliCrawler(VideoCrawler):
         if not bvid:
             return None
         payload = self._fetch_json(f'{VIEW_API}{bvid}')
-        if payload.get('code') != 0:
+        code = payload.get('code')
+        if code != 0:
+            # None is this method's contract answer (never a plausible empty row), but
+            # on its own it conflates two facts the rest of the project keeps apart:
+            # the endpoint REFUSED (a risk code, or a WAF body that is not JSON at all
+            # — measured 2026-09-25 when a batch's earlier view calls spent the
+            # session's budget) and the video is GONE (-404, a real fact about the
+            # row). The first names itself on ``risk_blocked`` so a caller — and the
+            # live tier — can tell a refusal from an answer, the same rule search()
+            # enforces by raising.
+            if code == CODE_GONE:
+                return None
+            self.risk_blocked = True
+            logger.warning(t('crawl.bili.blocked', code=str(code if code is not None else 'fetch')))
             return None
         return self._row(payload.get('data') or {})
 

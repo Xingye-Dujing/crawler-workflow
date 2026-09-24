@@ -13,7 +13,7 @@ name themselves in the DOM. Note the deliberate absence: a douyin row has no
 
 import pytest
 
-from crawlers.comments import DEAD, OK, CommentSession
+from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
 from crawlers.video import DouyinCrawler, douyin_id
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
@@ -96,7 +96,15 @@ def test_comments_scroll_past_the_first_screen(live_crawler):
         comments, status = session.crawl_douyin(link, limit=40)
     finally:
         crawler.close()
-    assert status == OK, f'douyin comment crawl ended as {status} on {link}'
+    assert status in (OK, BLOCKED), f'douyin comment crawl ended as {status} on {link}'
+    if status == BLOCKED:
+        # A refusal the session names is the site's answer, and the shape this tier exists
+        # to prove is that it is never disguised: a blocked crawl must hand back NO rows
+        # rather than an empty table that reads as "this video has no comments" (the same
+        # contract ``test_a_headless_attempt_never_files_a_silent_empty_success`` pins two
+        # tests up, applied to a comment walk the account was risk-flagged on mid-run).
+        assert not comments, f'a blocked crawl still returned {len(comments)} rows as if it succeeded'
+        return
     assert comments, 'a video reporting 评论数>0 must yield comment rows'
     for row in comments:
         assert row['平台'] == 'douyin' and row['文章URL'].endswith(douyin_id(link))

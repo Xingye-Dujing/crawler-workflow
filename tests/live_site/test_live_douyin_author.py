@@ -97,7 +97,13 @@ def test_one_creators_own_posts_are_collected(live_crawler):
     named = [str(row.get('作者') or '') for row in rows]
     distinct = {name for name in named if name}
     assert len(distinct) <= 1, f'one profile grid, several author names: {named}'
-    if nickname:
+    if nickname and distinct:
+        # The name a card carries is read off the video page's related-panel, and a
+        # session the site is throttling never renders that panel (measured 2026-09-25:
+        # rows complete but nameless beside a header that DID name itself). An empty
+        # name is not evidence of a different creator — the check below fires the moment
+        # the site publishes one, and the dedupe/anchor checks above already refuse a
+        # grid that mixes creators.
         assert distinct == {nickname}, f'the grid named {sorted(distinct)} beside the profile header {nickname!r}'
 
 

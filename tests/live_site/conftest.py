@@ -114,6 +114,22 @@ def live_crawler(cookie_dir_str):
         stack.close()
 
 
+class _Rows(list):
+    """The rows of one live search, carrying the crawler's final answer with them.
+
+    An empty from a real site is three different facts wearing one face: the crawler
+    was bounced to a login page (``login_wall`` — the session is dead), risk control
+    answered (``risk_blocked`` — the session may be perfect, the fix is to back off;
+    measured 2026-09-25 as this account's SECOND search burst of a session), or it
+    found nothing and says so silently — the shape a user would trust as "no
+    results", and the one thing this tier may never pass. A plain list threw the
+    first two answers away, so every caller asserting ``rows`` conflated them.
+    """
+
+    login_wall = False
+    risk_blocked = False
+
+
 @pytest.fixture
 def live_search(live_crawler):
     """``live_search('zhihu', headless=False, keyword='三亚', count=3)`` → rows.
@@ -129,7 +145,9 @@ def live_search(live_crawler):
     reported the wall (`crawler.login_wall`). An empty result with no wall is a genuine
     "this keyword found nothing" and is passed straight back for the caller to assert on —
     the assertions in the tests stay exactly as strict as they were, because a retry that
-    ends in the same assertion cannot weaken one.
+    ends in the same assertion cannot weaken one. The list comes back as :class:`_Rows`,
+    so a caller that still gets nothing can tell the site's honest refusal from the
+    silent empty and assert on the difference.
 
     Two attempts, not more: measured 2026-09-24, weibo's refusals were intermittent risk
     control on one account (the same 7-day windowed search returned 8 rows alone and was
@@ -145,20 +163,22 @@ def live_search(live_crawler):
     from config import Config
 
     def _search(platform, *, headless, keyword=None, count=3, urls=None, attempts=2, **kwargs):
-        rows = []
+        rows = _Rows()
         for attempt in range(attempts):
             crawler = live_crawler(platform, headless=headless)
             try:
                 if urls is not None:
-                    rows = crawler.search(urls=urls, **kwargs)
+                    rows = _Rows(crawler.search(urls=urls, **kwargs) or [])
                 else:
-                    rows = crawler.search(keyword, target_count=count, **kwargs)
+                    rows = _Rows(crawler.search(keyword, target_count=count, **kwargs) or [])
             finally:
                 # Released through the fixture so the platform's turn ends with the crawl:
                 # a bare ``close()`` would hold it until the test finished, and the retry
                 # below would then queue behind a browser that no longer exists.
                 live_crawler.release(crawler)
-            if rows or not getattr(crawler, 'login_wall', False) or attempt == attempts - 1:
+            rows.login_wall = bool(getattr(crawler, 'login_wall', False))
+            rows.risk_blocked = bool(getattr(crawler, 'risk_blocked', False))
+            if rows or not rows.login_wall or attempt == attempts - 1:
                 return rows
             time.sleep(Config.WALL_RETRY_BACKOFF)
         return rows

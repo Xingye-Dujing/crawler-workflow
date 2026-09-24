@@ -483,3 +483,22 @@ class TestGetDetail:
     def test_a_refused_detail_is_none_not_an_empty_row(self, make_crawler):
         crawler, _driver = make_crawler([], [_view(code=-403)])
         assert crawler.get_detail(f'https://www.bilibili.com/video/{A}/') is None
+
+    def test_a_refused_detail_names_the_session_rather_than_lying_quietly(self, make_crawler):
+        """A risk code (-412/-403, or a WAF body so unparseable `code` is missing) means
+        the ENDPOINT refused, and `search`/`author` have always said so loudly; the
+        single-video read used to answer the same None as a withdrawn video, which is
+        the silent shape this project forbids (measured 2026-09-25 on a throttled batch).
+        """
+        for payload in ({'code': -412}, {}):
+            crawler, _driver = make_crawler([], [payload])
+            assert crawler.get_detail(f'https://www.bilibili.com/video/{A}/') is None
+            assert crawler.risk_blocked is True, f'a refusal must be named, not returned as a bare None: {payload}'
+
+    def test_a_withdrawn_video_is_a_fact_about_the_video_not_the_session(self, make_crawler):
+        """-404 is the only non-zero answer that must NOT blame the session: telling the
+        user to back off from a deleted video sends them waiting for nothing.
+        """
+        crawler, _driver = make_crawler([], [_view(code=-404)])
+        assert crawler.get_detail(f'https://www.bilibili.com/video/{A}/') is None
+        assert crawler.risk_blocked is False

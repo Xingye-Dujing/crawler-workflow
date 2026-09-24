@@ -93,8 +93,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **The `integration` UI tier performs no server writes** — uploading, saving a workflow or executing a run
   would leave rows in the user's real `data/` and `logs/` (the app has no data-dir override). Stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`: a valid
-  session can be answered a login redirect once by risk control. An empty result without a wall is a real
-  "found nothing" and still reaches the assertion.
+  session can be answered a login redirect once by risk control. An empty that NAMES its refusal (wall or
+  risk) is the site's answer — assert the naming; an unnamed empty is real "found nothing" and stays red.
 
 ## Crawler architecture
 

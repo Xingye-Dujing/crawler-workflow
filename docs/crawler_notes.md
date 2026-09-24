@@ -530,3 +530,37 @@ and gives one window per workflow (verified by the user).
   re-planted, so a used profile can hold a live login with no snapshot beside it — which is exactly
   the state the new 删除已存 Cookie button leaves behind. The gate therefore probes whenever either
   source exists, and only answers the blocking `nocookie` when neither does.
+
+## 真站层 2026-09-25：拒绝必须被命名，静默空表才是红（measured）
+
+删掉全部采集上限（ab0bb04）与错峰语义（ed007f0）后的第一轮 `live_site AND live_cn` 全量：
+8 红 / 33 绿（9 分 28 秒）。逐条单独复跑后定性如下——**没有一条是这两个提交弄坏的**：深翻页走到了
+pager 自报页底，排队交棒无恙。红条分三类：
+
+1. **同账号连发的间歇风控（只在批量出现，隔离即绿）**：bilibili 详情与 douyin 作者两条在批量里红、
+   单独跑绿。微博侧同一会话第 1 次搜索（windowed，交付 8 行）成功、第 2、3 次（expiry attempt-1、
+   visible）被弹回 passport——与 2026-09-24 那节「微博的墙是间歇风控」同形，也与 `weibo_windowed`
+   记录过的「第二次爆发拿到 passport 页」逐字吻合。
+2. **测试口径落后于产品契约（确定性红）**：`cookie_preflight` 渲染句的断言查的是裸 key `bilibili`
+   或「平台」二字，而 Phase C 之后产品按红线把 `{platform}` 槽答成**词**（「哔哩哔哩 的 Cookie 可用」）。
+   断言改为经 `i18n.platform_label` 解析期望值——不再是贴进来的副本。
+3. **真产品缺陷两枚（都在 xhs 的「静默空表」上）**：`backend/test_xhs_visible_gate.py` 一次可见
+   探针量到底——被风控的小红书有两种形态都会**不点名地**交回空表：(a) 风控页把搜索 URL 原地留着、
+   只渲染「安全验证」，`classify` 答 `blocked`，但 `xiaohongshu.py` 的收口闸只测
+   `check_login_wall`（即 `verdict == 'login'`），`risk_blocked` 已置、循环却继续滚 0 卡网格；
+   (b) 更糟：被限流的可见窗口 `driver.get` 根本没换文档，地址栏停在 `chrome://new-tab-page/`
+   （body 是「新标签页/应用商店/自定义 Chrome」），分类器看不到任何墙词判 `ok`。站点无法重定向进
+   内部协议页——停在这里**本身就是导航失败**。已修两处：搜索闸改判 `check_intercept(url) != 'ok'`
+   （与 zhihu/douyin 的 `login_wall or risk_blocked` 同规则）；`engine/wall.classify` 最先回答
+   `never_arrived`（`chrome://`/`about:` 等自家协议页 = blocked）。fast 层三个反向测试钉住
+   （风控页早退且不写 page_timeout；stuck 窗口点名拒绝；空 URL 仍按死会话规则答 ok，不误伤）。
+
+由此固化的层契约（AGENTS.md「live_site 重试」条的展开）：**被点名（login 或 blocked）的空是站点的
+诚实答案，用例断言点名本身即绿；没点名的空是伪成功，永远红**。`live_search` 现在通过 `_Rows`
+（list 子类）把 `login_wall`/`risk_blocked` 两面旗随结果带回，调用方才有资格做这个区分。微博可见
+窗口用例额外要求「同会话的 headless 采集确实交付过行」才允许接受拒绝——两头都空是死会话，该红，
+并直接告诉用户去重存 Cookie。
+
+配套口径修正（同轮）：被墙拦住的采集把 `done:0` 写进游标是合法记账（游标记位置不记内容），expiry
+用例的拒绝分支只许断言「行表为空且 done==0」，不得断言游标缺席；bilibili 详情与 weibo expiry 各获得
+一次「换新浏览器、隔 `WALL_RETRY_BACKOFF` 再问」的层内容忍，与 `live_search` 的既有政策同构。

@@ -31,32 +31,57 @@ NOTE = 'https://www.xiaohongshu.com/explore/abcdef?xsec_token=xyz'
 RENDERER_TIMEOUT = 'timeout: Timed out receiving message from renderer: -0.001'
 
 
+class _TextElement:
+    """The one shape :meth:`Crawler._node_text` falls back to: an element with text."""
+
+    def __init__(self, text):
+        self.text = text
+
+
 class SlowDriver:
     """A browser whose pages never finish loading, which is a real state on xhs.
 
     ``get`` raises the driver's own words and ``find_element`` keeps answering the way a
     building document does (``no such element``, not a crash), so nothing here pretends
-    the page arrived.
+    the page arrived. ``body_text`` is the refusal xhs serves INSTEAD of a slow grid:
+    the search URL stays and the page becomes 安全验证 — measured 2026-09-25 on a
+    session the site had stopped trusting mid-run.
     """
 
-    def __init__(self, url=SEARCH, get_error=True):
+    def __init__(self, url=SEARCH, get_error=True, body_text=''):
         self.current_url = url
         self.visited = []
         self.get_error = get_error
+        self.body_text = body_text
 
     def get(self, url):
         self.visited.append(url)
-        self.current_url = url
+        # A renderer timeout means the document never swapped: the address bar keeps
+        # showing whatever was there before. Re-modelling that is the whole point of
+        # the stuck-on-new-tab case below — the real measured browser stayed on
+        # ``chrome://new-tab-page`` while ``get`` was already throwing.
+        if not self.get_error:
+            self.current_url = url
         if self.get_error:
             raise TimeoutException(RENDERER_TIMEOUT)
 
     def find_element(self, by, selector):
+        if selector == 'body' and self.body_text:
+            return _TextElement(self.body_text)
         raise NoSuchElementException(selector)
 
     def find_elements(self, by, selector):
         return []
 
     def execute_script(self, script, *args):
+        # A real page answers innerText here, and a refusal page has to be able to hand
+        # over ITS text: ``_node_text`` only falls back to ``element.text`` when the
+        # script throws, so a script that returns nothing would show the wall
+        # classifier a blank page and hide the very refusal this fake is built to prove.
+        for arg in args:
+            text = getattr(arg, 'text', None)
+            if text:
+                return text
         return ''
 
     def quit(self):
@@ -107,6 +132,41 @@ class TestSearchNavigation:
         crawler, _driver = make_crawler()
         crawler.search('三亚', target_count=1)
         assert crawler.login_wall is False
+
+
+class TestRiskControlStopsTheCrawl:
+    """xhs walls a replayed session with a 风控 page, not a login redirect (docs red line).
+
+    That refusal set ``risk_blocked`` but the search gate only tested ``check_login_wall``
+    (verdict == 'login'), so the crawl fell through, scrolled a zero-card grid, and filed an
+    empty table behind a ``page_timeout`` line — a silent "found nothing" that read as a
+    finished crawl for a keyword that plainly has notes. The gate now stops on any refusal,
+    the same rule zhihu and douyin already enforce.
+    """
+
+    def test_a_risk_control_answer_stops_the_walk_and_names_itself(self, make_crawler, caplog):
+        crawler, _driver = make_crawler(body_text='安全验证，请完成验证后继续浏览')
+        with caplog.at_level('INFO'):
+            rows = crawler.search('三亚', target_count=3)
+        assert rows == [], 'a refused page has no notes to file'
+        assert crawler.risk_blocked is True, 'the refusal must be named as risk control, not swallowed'
+        assert crawler.login_wall is False, 'a flagged session is not a dead cookie — the fix is to wait'
+        messages = [r.getMessage() for r in caplog.records]
+        assert t('crawl.xhs.page_timeout') not in messages, (
+            'a named refusal must return at the gate, not fall through to the timeout-and-scroll '
+            'path that produced the silent empty table'
+        )
+
+    def test_a_browser_that_never_left_its_own_page_is_a_named_refusal(self, make_crawler, caplog):
+        """The 2026-09-25 visible-window shape: ``get`` threw mid-navigation and the
+        address bar still reads chrome://new-tab-page — the site was never reached, so
+        'ok' there would file an empty grid as a result. The internal page now classifies
+        as a refusal the search gate stops on.
+        """
+        crawler, _driver = make_crawler(url='chrome://new-tab-page/')
+        crawler.search('三亚', target_count=3)
+        assert crawler.risk_blocked is True, 'a browser parked on its own page never arrived'
+        assert crawler.login_wall is False, 'nothing asked for a login; the user must not be sent to re-save a cookie'
 
 
 class TestNoteNavigation:

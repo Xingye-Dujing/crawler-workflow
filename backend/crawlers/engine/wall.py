@@ -95,6 +95,32 @@ BLOCK_TEXTS = (
 #: A tab title that says the platform's own captcha page (douyin, measured).
 CAPTCHA_TITLES = ('验证码', '安全验证', '滑动验证')
 
+#: Schemes the browser owns, not the site. A crawl that ends up here after
+#: ``driver.get`` never reached the page it asked for: measured 2026-09-25 on an
+#: over-throttled xiaohongshu session, a VISIBLE window stayed on ``chrome://new-tab-page``
+#: (its body read 「新标签页 / 自定义 Chrome」, no wall text), so the classifier saw
+#: 'ok' and the search filed an empty grid as if the keyword had no results. No site
+#: can redirect into these schemes, so arriving here is purely a navigation that did
+#: not happen — a refusal to back off from, never a "found nothing".
+INTERNAL_PAGE_PREFIXES = (
+    'chrome://',
+    'chrome-search://',
+    'edge://',
+    'about:',
+    'data:',
+    'devtools://',
+)
+
+
+def never_arrived(url: str = '') -> bool:
+    """True when the browser is on one of ITS OWN pages, not the site's.
+
+    `about:blank` counts as not-arrived: it is the window a driver starts on and the
+    state a failed navigation leaves behind, and no crawl's content page is a blank.
+    """
+    lowered = (url or '').lower()
+    return lowered.startswith(INTERNAL_PAGE_PREFIXES)
+
 
 def looks_like_login_page(url: str, body_text: str = '') -> bool:
     """True when a page is a login wall rather than the requested content.
@@ -153,7 +179,12 @@ def classify(url: str, body_text: str = '', title: str = '') -> str:
 
     A login marker wins over a block phrase: a risk page that also asks for a
     login is fixed by the cookie, and the resume path keys on that difference.
+    A browser parked on one of its OWN pages (``chrome://new-tab-page``) checked
+    first of all: it did not reach the site, so it is neither a login wall nor a
+    real empty result — it is a refusal to back off from.
     """
+    if never_arrived(url):
+        return 'blocked'
     if looks_like_login_page(url, body_text):
         return 'login'
     if looks_blocked(body_text, url=url, title=title):

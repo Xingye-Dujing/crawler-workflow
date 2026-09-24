@@ -21,6 +21,7 @@ from pathlib import Path
 import cookie_preflight
 import pytest
 
+import i18n
 from config import Config
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
@@ -98,8 +99,13 @@ class TestRealProbe:
 
     def test_a_rendered_sentence_comes_back_for_the_platform(self):
         """The gate shows server-rendered wording rather than a key the browser would
-        have to translate twice; an unresolved key would print as gibberish."""
+        have to translate twice; an unresolved key would print as gibberish.
+
+        The sentence names the platform with the *localized word* (AGENTS: a {platform}
+        slot is answered with a word, not the key), so the assertion asks the catalogue
+        what that word is instead of demanding the raw key it replaced.
+        """
         verdict = cookie_preflight.probe(PLATFORM)
         text = cookie_preflight.describe(verdict)
         assert text and 'cookie.pre.' not in text, text
-        assert PLATFORM in text or '平台' in text, text
+        assert i18n.platform_label(PLATFORM) in text or PLATFORM in text, text

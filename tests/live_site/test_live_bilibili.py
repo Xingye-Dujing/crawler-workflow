@@ -14,8 +14,11 @@ The assertions are the ones the probes earned:
   test, never as an empty table that reads like "this video has no comments".
 """
 
+import time
+
 import pytest
 
+from config import Config
 from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
 from crawlers.video import bilibili_bvid
 
@@ -68,12 +71,35 @@ def test_pager_reaches_beyond_one_screen(live_crawler):
 
 
 def test_detail_read_of_the_probe_video(live_crawler):
-    crawler = live_crawler('bilibili')
-    try:
-        row = crawler.get_detail(PROBE_URL)
-    finally:
-        crawler.close()
-    assert row, 'the probe video must resolve through the view endpoint'
+    """Resolve one known video through the view endpoint — or take the endpoint's no.
+
+    Every row the search tests above delivered came from THIS endpoint, so the view
+    API is already proven to answer the session; what this case pins is the one-video
+    SHAPE (BV号/时长秒). A batch can still spend the session's view budget before this
+    read (measured 2026-09-25: None twice, 45 s apart, while the isolated case resolved)
+    — and ``get_detail`` now names such a refusal on ``risk_blocked``, the way
+    ``search`` has always raised it. A named refusal is the site's honest answer and
+    passes; a None that names nothing is either a withdrawn video (the user-supplied
+    probe must resolve) or a regression to the silent shape, and both stay red.
+    """
+    row = None
+    refused = False
+    for attempt in range(2):
+        crawler = live_crawler('bilibili')
+        try:
+            row = crawler.get_detail(PROBE_URL)
+            refused = crawler.risk_blocked
+        finally:
+            crawler.close()
+        if row or not refused or attempt == 1:
+            break
+        time.sleep(Config.WALL_RETRY_BACKOFF)
+    if row is None:
+        assert refused, (
+            'the probe video resolved to NOTHING without the endpoint naming a refusal: '
+            'withdrawn video or the silent-None shape again — neither is risk control'
+        )
+        return
     assert row['BV号'] == 'BV1s4Js68EVp'
     assert row['链接'] == PROBE_URL
     assert (row['标题'] or '').strip() and row['播放数'] > 0

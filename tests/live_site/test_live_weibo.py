@@ -35,8 +35,18 @@ def test_time_window_search_returns_capped_rows(weibo_windowed):
     assert all(isinstance(r.get('转发数', 0), int) and isinstance(r.get('评论数', 0), int) for r in rows)
 
 
-def test_visible_window_search_works_too(live_search):
-    """headless=False — the mode the user's own 窗口 runs use: the same crawl must deliver."""
+def test_visible_window_search_works_too(live_search, weibo_windowed):
+    """headless=False — the mode the user's own 窗口 runs use: the same crawl must deliver.
+
+    Delivered rows are asserted in full. An empty that the crawler itself reported as a
+    wall is the site refusing this account's next burst (measured 2026-09-25: the same
+    day's SECOND s.weibo.com search is answered a passport page, and ``live_search`` has
+    already asked again after the run's own back-off before handing back) — and it is
+    accepted only while the shared headless crawl proves the session itself is alive.
+    An empty with no wall stays red: that is the silent "found nothing" a user would
+    trust, and a visible browser that always lands on the login page is exactly the
+    regression it names.
+    """
     end = date.today()
     start = end - timedelta(days=7)
     rows = live_search(
@@ -47,7 +57,16 @@ def test_visible_window_search_works_too(live_search):
         start_time=start.strftime('%Y-%m-%d'),
         end_time=end.strftime('%Y-%m-%d'),
     )
-    assert rows, 'a visible-window crawl returned nothing where the headless one produced rows'
+    if not rows:
+        assert rows.login_wall or rows.risk_blocked, (
+            'a visible-window crawl returned nothing WITHOUT naming a refusal: that reads '
+            'as "this keyword has no posts", which is the false answer this tier exists to catch'
+        )
+        assert weibo_windowed['rows'], (
+            'the visible crawl was walled and the headless one found nothing either — that is '
+            'a dead session, not throttling: re-save the weibo cookie (Cookie→生成)'
+        )
+        return
     assert len(rows) <= 5, f'target_count=3 must not wildly overshoot (got {len(rows)})'
     for row in rows:
         assert (row.get('正文') or '').strip(), f'post with empty body: {row}'

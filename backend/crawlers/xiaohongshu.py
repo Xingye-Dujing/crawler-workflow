@@ -76,7 +76,14 @@ class XiaohongshuCrawler(Crawler):
         # Adaptive: the grid renders as soon as the API answers, so a fixed
         # 15 s block is pure loss on a warm session.
         found = self._wait_for_count(self._card_count, 1, timeout=self.NOTE_WAIT * 4)
-        if not found and self.check_login_wall(url):
+        # Stop on EITHER refusal, not just a login redirect. xiaohongshu walls a
+        # replayed session (docs red line: "walled within minutes"), and it answers
+        # that with a 风控 page that sets ``risk_blocked`` but is NOT a login page —
+        # so the old ``check_login_wall``-only test let the crawl fall through,
+        # scroll a zero-card grid, and file an empty table that read as "this keyword
+        # found nothing". zhihu and douyin already gate on ``login_wall or
+        # risk_blocked``; this is the same rule.
+        if not found and self.check_intercept(url) != 'ok':
             return self.results()
         logger.info(t('crawl.xhs.page_ready') if found else t('crawl.xhs.page_timeout'))
 
@@ -124,7 +131,7 @@ class XiaohongshuCrawler(Crawler):
                     break
             else:
                 stuck = 0
-            if self.login_wall:
+            if self.login_wall or self.risk_blocked:
                 logger.info(t('crawl.xhs.collect_done', n=self.collected()))
                 break
             # Politeness between scroll rounds — the grid only ever asks for one

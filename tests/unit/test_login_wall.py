@@ -14,7 +14,7 @@ the site root with no URL clue at all.
 
 import pytest
 
-from crawlers.engine.wall import bounced_to_root, classify, looks_blocked, looks_like_login_page
+from crawlers.engine.wall import bounced_to_root, classify, looks_blocked, looks_like_login_page, never_arrived
 
 pytestmark = pytest.mark.unit
 
@@ -100,6 +100,22 @@ class TestRiskControlIsNotALoginProblem:
         assert classify('https://www.zhihu.com/question/1', '正常内容') == 'ok'
         assert classify('https://x.com/i/flow/login', '') == 'login'
         assert classify('https://www.douyin.com/search/x', '滑动验证') == 'blocked'
+
+    def test_a_browser_still_on_its_own_page_never_arrived(self):
+        """Measured 2026-09-25 on xiaohongshu: a throttled VISIBLE window stayed on
+        ``chrome://new-tab-page`` (body 「新标签页 / 自定义 Chrome」, no wall wording),
+        the classifier read 'ok', and the search filed an empty grid as if the keyword
+        had no notes. No site can redirect into these schemes — being here IS the
+        navigation failure, and a failure must be named, never tabled as a result.
+        """
+        assert never_arrived('chrome://new-tab-page/') is True
+        assert never_arrived('about:blank') is True
+        assert never_arrived('https://www.xiaohongshu.com/search_result?keyword=%E4%B8%89%E4%BA%9A') is False
+        assert classify('chrome://new-tab-page/', '新标签页 应用商店 自定义 Chrome') == 'blocked'
+        # A driver that cannot answer at all ('') is NOT an internal page — it stays
+        # the 'ok' the dead-session rule promises, so a crawl producing rows is not
+        # aborted by a peek that failed.
+        assert classify('', '') == 'ok'
 
 
 class TestTheRootBounce:
