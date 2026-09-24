@@ -109,6 +109,7 @@ class TestSettingsWrite:
         assert 'secret' not in body['settings']
         assert body['settings']['window_size'] == '900x900'
 
+    @pytest.mark.parametrize('key', [key for key, value in settings_store.DEFAULTS.items() if isinstance(value, bool)])
     @pytest.mark.parametrize(
         ('sent', 'expected'),
         [
@@ -116,21 +117,37 @@ class TestSettingsWrite:
             (True, True),
             ('false', False),  # the checkbox's historical string form
             ('true', True),
-            ('maybe', True),  # garbage → the advertised default, with a warning
         ],
     )
-    def test_cookie_confirm_flag_round_trips_as_a_bool(self, client, sent, expected):
-        body = client.post('/api/settings', json={'cookie_confirm_before_run': sent}).get_json()
-        assert body['settings']['cookie_confirm_before_run'] is expected
+    def test_every_switch_round_trips_as_a_bool(self, client, key, sent, expected):
+        """Derived from the defaults, not from a list typed here: a switch added to
+        ``DEFAULTS`` without its branch in ``save_settings`` falls through to "ignore
+        it", which the panel would show as a setting that silently never saves."""
+        body = client.post('/api/settings', json={key: sent}).get_json()
+        assert body['settings'][key] is expected
         # A GET sees the same value the POST settled on (persisted, not echoed).
-        assert client.get('/api/settings').get_json()['settings']['cookie_confirm_before_run'] is expected
-        if sent == 'maybe':
-            assert any('cookie_confirm_before_run' in w for w in body['warnings'])
+        assert client.get('/api/settings').get_json()['settings'][key] is expected
 
-    def test_cookie_confirm_defaults_to_on(self, client):
-        # The prompt protects every unassuming first run; opting out is the
-        # explicit act, not the default.
-        assert client.get('/api/settings').get_json()['settings']['cookie_confirm_before_run'] is True
+    @pytest.mark.parametrize('key', [key for key, value in settings_store.DEFAULTS.items() if isinstance(value, bool)])
+    def test_garbage_in_a_switch_falls_back_to_the_default_and_says_which(self, client, key):
+        body = client.post('/api/settings', json={key: 'maybe'}).get_json()
+        assert body['settings'][key] is settings_store.DEFAULTS[key]
+        assert any(key in warning for warning in body['warnings']), body['warnings']
+
+    @pytest.mark.parametrize(
+        'key',
+        [
+            'cookie_confirm_before_run',
+            'cookie_preflight_before_run',
+            'same_platform_queue',
+            'use_browser_profile',
+        ],
+    )
+    def test_the_switches_that_protect_a_run_default_to_on(self, client, key):
+        """The prompt protects an unassuming first run and the check protects it
+        better; queueing protects a crawl the site would otherwise bounce. Opting out
+        of any of them is the explicit act, not the default."""
+        assert client.get('/api/settings').get_json()['settings'][key] is True
 
     @pytest.mark.parametrize(
         ('patch', 'key', 'expected', 'warning'),

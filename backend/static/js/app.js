@@ -97,6 +97,16 @@ const I18n = {
             'cookie.waiting': '{platform} login window open — finish logging in, then press Done',
             'cookies.entryUrl': 'Login entry link (optional: empty opens the platform login page)',
             'cookies.verify': 'Verify cookie',
+            'cookies.delete': 'Delete saved Cookie',
+            'dialog.cookieDelete': 'Delete the Cookie file saved for {platform}? If this platform is crawled inside its own browser profile, its login lives in that profile: deleting this file does not sign the profile out, it only removes the snapshot a throwaway browser is planted from. The answer says which of the two applies to {platform}.',
+            'dialog.cookieDeleteYes': 'Delete the file',
+            'toast.cookieDeleted': 'Cookie file deleted for {platform}',
+            'toast.cookieChecking': 'Checking the Cookie for {platforms} before the run…',
+            'toast.cookieUncheckable': 'The Cookie check could not run for {platforms} — that is not a pass, and the run is starting anyway',
+            'toast.cookieUnclear': 'Could not verify the Cookie for {platforms} (captcha, timeout or a profile already in use) — no answer is not a failure, so the run is not blocked',
+            'dialog.cookieExpired': '{n} platform(s) refused the stored Cookie, so the run will not start: {platforms}',
+            'dialog.cookieExpiredHint': 'Log in again under Settings → Cookie and save. There is deliberately no "run anyway" here: a crawl that starts at a login page comes back an hour later with an empty table and a half-built dataset.',
+            'dialog.cookieGoUpdate': 'Open the Cookie panel',
             'cookie.verifying': 'Probing the platform with the stored cookie…',
             'cookie.guideLoading': 'Loading the steps for this platform…',
             'cookie.entryRejected': 'That link is not on this platform’s domain — the platform login page was opened instead',
@@ -420,7 +430,10 @@ const I18n = {
             'set.elementWait': 'Element wait timeout (s)',
             'set.ollamaHost': 'Ollama server address',
             'set.cookieConfirm': 'Confirm Cookie before run',
-            'set.cookieConfirmInline': 'Ask every time a run contains a crawler node',
+            'set.cookieConfirmInline': 'This prompt fires only when the automatic check above is off',
+            'set.cookiePreflight': 'Verify Cookie before run',
+            'set.cookiePreflightInline': 'Ask each platform of this canvas whether its Cookie still works',
+            'set.cookiePreflightHint': 'On: before a run that crawls anything, one page load per platform in the very browser that run will use, and the answer is cached for a few minutes so a canvas started twice in a row pays once. A platform that answers with a login page refuses the run there and then — it names itself and opens the Cookie panel on it, with no "run anyway", because a crawl that starts at a wall comes back an hour later with an empty table. A platform that could not be checked at all (captcha, timeout, its profile held by a live run) says "could not be checked" and does not block: no answer is not evidence of a dead Cookie. The price is one visible window per uncached platform and a few seconds. Off: nothing is opened and nothing is measured, and you fall back to the prompt below, which asks you to remember whether the Cookie went stale — a wrong guess there is paid for in crawl time, and the resume then has to sort out the half-finished run.',
             'set.sameQueue': 'Queue same-platform crawls',
             'set.sameQueueInline': 'One crawl per platform at a time; a queued one also waits a few seconds',
             'set.sameQueueHint': 'On: two workflows crawling the same platform take turns, and the one that waited gets an extra gap before it starts. That removes both measured failures — a site answering two searches from one account inside the same second (weibo bounces us to the login page, zhihu answers risk code 40362), and chromedriver refusing a second browser in a profile Chrome already holds. Different platforms stay parallel. Off: same-platform crawls really overlap, which is faster while the site tolerates it; when it does not, both nodes come back red. Either way, a crawl that waited says so in the console.',
@@ -730,6 +743,16 @@ const I18n = {
             'cookie.waiting': '{platform} 登录窗口已打开——完成登录后点「已完成登录」',
             'cookies.entryUrl': '登录入口链接（可留空：默认打开该平台登录页）',
             'cookies.verify': '验证 Cookie',
+            'cookies.delete': '删除已存 Cookie',
+            'dialog.cookieDelete': '删除 {platform} 已保存的 Cookie 文件？如果该平台的抓取是在它自己的浏览器 profile 里跑的，登录态存在那个 profile 里：删这个文件不会把它登出，只是清掉「一次性浏览器」用来植入的快照。删除后的那一行会说明 {platform} 属于哪种情况。',
+            'dialog.cookieDeleteYes': '删除文件',
+            'toast.cookieDeleted': '已删除 {platform} 的 Cookie 文件',
+            'toast.cookieChecking': '运行前先验证 {platforms} 的 Cookie…',
+            'toast.cookieUncheckable': '{platforms} 的 Cookie 没能验证成功——这不是「有效」，本次仍然开始运行',
+            'toast.cookieUnclear': '{platforms} 的 Cookie 无法核对（风控、超时或 profile 被占用）——这不算失效，所以不拦截本次运行',
+            'dialog.cookieExpired': '{n} 个平台拒绝了已保存的 Cookie，本次不启动：{platforms}',
+            'dialog.cookieExpiredHint': '请到「设置 → Cookie」重新登录并保存。这里刻意不留「我确定，照样跑」：从一个登录页开始的抓取，一小时后只会带回一张空表和一个半途的数据集。',
+            'dialog.cookieGoUpdate': '打开 Cookie 面板',
             'cookie.verifying': '正在用已保存的 Cookie 试探该平台…',
             'cookie.guideLoading': '正在载入该平台的获取步骤…',
             'cookie.entryRejected': '该链接不属于本平台的域名，已改用平台登录页打开',
@@ -1042,7 +1065,10 @@ const I18n = {
             'set.elementWait': '元素等待超时(秒)',
             'set.ollamaHost': 'Ollama 服务地址',
             'set.cookieConfirm': '执行前确认 Cookie',
-            'set.cookieConfirmInline': '每次含采集节点的运行前都弹确认框',
+            'set.cookieConfirmInline': '只在上方「自动验证」关闭时才会弹这个确认框',
+            'set.cookiePreflight': '执行前自动验证 Cookie',
+            'set.cookiePreflightInline': '运行前用本次真要用的浏览器各加载一次该平台，问它 Cookie 还认不认',
+            'set.cookiePreflightHint': '开：含采集节点的运行在按下执行之前，先用这一次运行真正会用的浏览器逐平台加载一次（结果缓存几分钟，同一画布连着按两次只付一次钱）。哪个平台回的是登录页，运行就地被拦下：弹窗点名该平台并直接把它选到 Cookie 面板上，且不留「我确定，照样跑」——从登录页开始的抓取，一小时后只会带回一张空表和一个半途的数据集。完全核不上的平台（验证码、超时、profile 正被一场真抓取占着）说「无法核对」并且不拦：没有答案不等于 Cookie 死了。代价是每个未缓存的平台多开一个可见窗口、多等几秒。关：不开任何浏览器、不做任何测量，退回下面那个确认框，由你自己记得 Cookie 有没有过期——判断错了就用抓取时间来付，而且续跑得替你把那半次运行收拾干净。',
             'set.sameQueue': '同平台排队采集',
             'set.sameQueueInline': '同一平台一次只跑一条采集，排到队的再等几秒错峰',
             'set.sameQueueHint': '开：同一平台的两条工作流轮流采集，排到队的那条在开始前再多等几秒错峰。两类实测失败一起消失——站点把同一账号一秒内的两次搜索弹到登录页（微博）或回风控 40362（知乎），以及 chromedriver 拒绝在 Chrome 已占用的 profile 里再开一个浏览器。不同平台照常并行。关：同平台真的重叠，站点容忍时更快；不容忍时两个节点一起变红。无论开关，排过队的那条都会在控制台说明自己等了多久。',
@@ -1690,6 +1716,7 @@ const AppSettings = {
         element_timeout: 'set-elementwait',
         ollama_host: 'set-ollamahost',
         cookie_confirm_before_run: 'set-cookie-confirm',
+        cookie_preflight_before_run: 'set-cookie-preflight',
         same_platform_queue: 'set-same-platform-queue',
         use_browser_profile: 'set-use-profile',
         browser_profile_dir: 'set-profile-dir',
@@ -2266,8 +2293,12 @@ document.addEventListener('mousedown', (e) => {
 
 /* Patch openCookieDialog to init drag+resize on first open */
 const _origOpenCookie = window.openCookieDialog;
-window.openCookieDialog = function () {
-    _origOpenCookie();
+window.openCookieDialog = function (platform) {
+    /* The argument is forwarded, not dropped: app.js patches this function to add
+       drag and resize, and a wrapper that swallowed parameters would silently make
+       「open the Cookie panel on the platform that just refused the run」 open it on
+       whoever happened to be selected before — the refusal then pointed nowhere. */
+    _origOpenCookie(platform);
     const dialog = document.getElementById('cookie-dialog');
     if (dialog.classList.contains('open') && !dialog.dataset._uiInit) {
         dialog.dataset._uiInit = '1';

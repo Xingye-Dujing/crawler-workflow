@@ -275,6 +275,45 @@ class TestCookiePanelParity:
         return html[start : html.index('</select>', start)]
 
 
+class TestSettingsPanelParity:
+    """A server-side setting reaches the screen through four files, and three of them
+    are never read by any other test: ``settings_store.DEFAULTS`` (the key), the bool
+    branch in ``save_settings`` (so it saves at all), ``AppSettings._inputMap`` (so it
+    is read back), and the control in index.html (so a user can change it). A key
+    missing from any of the four is a setting that exists in one file only."""
+
+    def _input_map(self) -> dict:
+        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        block = app.split('_inputMap', 1)[1].split('}', 1)[0]
+        return dict(re.findall(r"(\w+):\s*'(set-[\w-]+)'", block))
+
+    def test_every_server_setting_has_a_wired_control(self):
+        import settings_store
+
+        pairs = self._input_map()
+        html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
+        missing = sorted(key for key in settings_store.DEFAULTS if key not in pairs)
+        assert not missing, f'settings nobody can edit from the panel: {missing}'
+        for key in settings_store.DEFAULTS:
+            element_id = pairs[key]
+            assert f'id="{element_id}"' in html, f'{key} is mapped to a missing #{element_id}'
+            assert f"onSettingInput('{key}'" in html, f'#{element_id} never tells the server about {key}'
+
+    def test_the_two_cookie_gates_explain_their_relationship(self):
+        """The check and the prompt it replaces are one decision seen twice. If the
+        panel ever showed them as independent, a user could believe they had turned
+        the asking off while the measuring kept opening browsers — so each row has to
+        name the other one, in the language the user reads."""
+        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        en = app[app.index('dict: {') : app.index('zh: {')]
+        zh = app[app.index('zh: {') :]
+        assert '自动验证' in zh and '确认框' in zh, 'the Chinese rows stopped pointing at each other'
+        assert 'automatic check' in en and 'prompt' in en, 'the English rows stopped pointing at each other'
+        html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
+        for element_id in ('set-cookie-preflight', 'set-cookie-confirm'):
+            assert f'id="{element_id}"' in html, f'the panel lost #{element_id}'
+
+
 class TestCrawlMatrixParity:
     """The Data Source panel is generated from the crawl matrix, so the matrix now
     owns every word that panel says — and those words live in two catalogues: the

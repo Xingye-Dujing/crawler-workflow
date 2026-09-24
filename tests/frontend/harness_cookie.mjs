@@ -39,7 +39,12 @@ vm.runInContext(src, sandbox);
 sandbox.fetchJSON = (url, opts) => {
     sandbox.__calls.push({ url, opts: opts || null });
     const canned = sandbox.__responses[url];
-    return Promise.resolve(canned === undefined ? { ok: true } : canned);
+    let payload = canned === undefined ? { ok: true } : canned;
+    /* The status endpoint always sends the per-platform map; a stub that answered it
+       without one made the panel crash on a scenario that simply never bothered to
+       seed it, and the crash read as a product bug. */
+    if (url === '/api/cookies/status' && payload && !payload.cookies) payload = { ...payload, cookies: {} };
+    return Promise.resolve(payload);
 };
 sandbox.showToast = (msg) => {
     sandbox.__toasts.push(msg);
@@ -106,6 +111,21 @@ function report() {
 }
 
 const out = {};
+
+/* Every dialog the panel raised, with the values its buttons carry. A dialog WITH an
+   input is answered by the real showDialog as `b.value !== undefined ? b.value :
+   inputEl.value`, so the shape of the spec is part of what is under test: a 「删除」
+   button that shipped a `value:` on an input dialog would replace what the user
+   typed. Here it is what tells a refusal from a confirmation. */
+const dialogs = [];
+sandbox.showDialog = function (spec) {
+    dialogs.push({
+        message: spec.message,
+        labels: (spec.buttons || []).map((b) => b.label),
+        values: (spec.buttons || []).map((b) => ('value' in b ? String(b.value) : '<absent>')),
+    });
+    return Promise.resolve(sandbox.__dialogAnswer);
+};
 
 /* ── 1. the guide is fetched once and rendered per selected platform ───── */
 out.label = 'cookie panel behaviour';
@@ -213,5 +233,69 @@ sandbox.openCookieDialog();
 await flush();
 out.adoptedOnOpen = report();
 out.dialogOpen = doc.getElementById('cookie-dialog').classList.contains('open');
+
+/* ── 6. deleting a cookie asks first, and only the confirmation sends anything ─ */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.cookieJob.active = false;
+sandbox.cookieJob.known = false;
+sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: { zhihu: false, bilibili: false } };
+setPlatform('bilibili');
+sandbox.__dialogAnswer = null; // the user closed the confirmation
+sandbox.__toasts.length = 0;
+let before = sandbox.__calls.length;
+await sandbox.deleteCookie();
+await flush();
+out.deleteCancelled = {
+    calls: sandbox.__calls.slice(before).map((call) => call.url),
+    toasts: sandbox.__toasts.slice(),
+    dialog: dialogs[dialogs.length - 1] || null,
+};
+
+before = sandbox.__calls.length;
+sandbox.__dialogAnswer = 'delete';
+sandbox.__toasts.length = 0;
+await sandbox.deleteCookie();
+await flush();
+out.deleteConfirmed = {
+    requests: sandbox.__calls.slice(before).map((call) => ({ url: call.url, body: call.opts && call.opts.body })),
+    toasts: sandbox.__toasts.slice(),
+    dialog: dialogs[dialogs.length - 1] || null,
+};
+
+/* ── 7. a refusal from the server is shown, not swallowed ───────────────── */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.__responses['/api/cookies/delete'] = { ok: false, error: 'NOTHING-STORED' };
+before = sandbox.__calls.length;
+sandbox.__dialogAnswer = 'delete';
+sandbox.__toasts.length = 0;
+await sandbox.deleteCookie();
+await flush();
+out.deleteRefused = {
+    posted: sandbox.__calls.slice(before).length,
+    statusText: sandbox.document.getElementById('cookie-status').textContent,
+    toasts: sandbox.__toasts.slice(),
+};
+
+/* ── 8. the profile caveat travels from the server's answer to the screen ── */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.__responses['/api/cookies/delete'] = {
+    ok: true,
+    message: 'Cookies deleted for zhihu\nNote: zhihu’s browser profile stays logged in',
+    profile_holds: true,
+};
+before = sandbox.__calls.length;
+sandbox.__dialogAnswer = 'delete';
+sandbox.__toasts.length = 0;
+setPlatform('zhihu');
+await sandbox.deleteCookie();
+await flush();
+out.deleteWithCaveat = {
+    askedPlatforms: sandbox.__calls
+        .slice(before)
+        .filter((call) => call.opts && call.opts.body)
+        .map((call) => JSON.parse(call.opts.body).platform),
+    statusText: sandbox.document.getElementById('cookie-status').textContent,
+    toasts: sandbox.__toasts.slice(),
+};
 
 process.stdout.write(JSON.stringify(out));

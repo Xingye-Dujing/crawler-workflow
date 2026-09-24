@@ -342,3 +342,26 @@ Parallel + the same platform is serialized by the profile lock, not by the pool:
 blocks in `Crawler.__init__` → `acquire_profile()`, i.e. **before Chrome exists**, so only one window
 is ever visible at a time; `crawl.profile_wait` states the wait, and 「本次不用 Profile」 lifts the lock
 and gives one window per workflow (verified by the user).
+
+## 运行前 Cookie 预检（measured 2026-09-24）
+
+`cookie_preflight` answers 「这份会话还认不认」 before a run starts, by loading the platform's own
+`login_url` once. What was measured while building it:
+
+* **The first smoke check ran headless and it over-claimed.** With the zhihu profile reset that
+  morning, a *headless* probe of `www.zhihu.com` came back 「被重定向到登录页」 — which is a true fact
+  about that anonymous session but not necessarily about the user's. This file already records the
+  same trap for 验证 Cookie (this machine answers a headless content page differently, Zhihu in
+  particular), so the probe now uses the same two choices that worker does: `headless=False` and
+  `for_login=True`. Consequence: the panel's 验证 button and the pre-run gate can never disagree
+  about one platform, and a visible window per uncached platform is the price of the guarantee.
+* **Cost, measured:** one probe ≈ 4–5 s of real Chrome (the `live_site` tier runs three of them in
+  ~14 s). Hence `COOKIE_PREFLIGHT_TTL=300` (a parallel canvas and the 继续 behind it pay once),
+  `COOKIE_PREFLIGHT_MAX_PARALLEL=4` and the outer `COOKIE_PREFLIGHT_TIMEOUT=45` budget.
+* **A busy profile is not waited on.** The probe would otherwise block inside `Crawler.__init__` →
+  `acquire_profile()`, whose own timeout (`PROFILE_LOCK_TIMEOUT=900`) outlasts most crawls, so
+  `browser_profiles.is_busy()` answers 「无法核对」 at the door instead.
+* **"No cookie file" is not "no session".** A profile imports the file **once** and is never
+  re-planted, so a used profile can hold a live login with no snapshot beside it — which is exactly
+  the state the new 删除已存 Cookie button leaves behind. The gate therefore probes whenever either
+  source exists, and only answers the blocking `nocookie` when neither does.

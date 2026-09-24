@@ -1,0 +1,418 @@
+"""The press of 执行 between "the canvas is valid" and "the run started".
+
+``tests/frontend/harness_cookie_gate.mjs`` loads the real workflow.js and app.js and
+drives ``workflow.execute()`` per scenario, so what fails here is the shipped code.
+The rules this pins:
+
+* a canvas that crawls nothing asks nothing, and a 继续 is never blocked twice
+  (the user is already inside "refresh the cookie and carry on");
+* the platforms asked about are the ones this canvas crawls — a source node's own
+  platform, and for a comment node the domain of every link, deduped in node order;
+* 「已失效」 refuses the run: no ``/api/workflow/execute`` leaves the page, the dialog
+  names the platform and quotes the server's own sentence, and it offers no
+  「我确定，照样跑」 — that button is the hole this feature exists to close;
+* 「无法核对」 does *not* refuse: risk control, a timeout or a profile held by a live
+  crawl says nothing about the session, and blocking there would send the user to
+  re-log in a cookie that is fine;
+* a gate that could not run says so and lets the run start, rather than inventing a
+  failure the site never reported;
+* the block dialog opens the Cookie panel on the broken platform only when the user
+  asked for it, and never closes a panel that was already open;
+* with 自动验证 off, the old prompt is still there and still decides, and with both
+  off nothing is asked at all;
+* the per-run profile answer travels to the check, so the probe tests the browser the
+  run will use — and absence stays absence rather than becoming a global "off".
+"""
+
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+from node_runner import run_node
+
+import crawl_capabilities as capabilities
+
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(shutil.which('node') is None, reason='node not installed'),
+]
+
+ROOT = Path(__file__).resolve().parents[2]
+JS_DIR = ROOT / 'backend' / 'static' / 'js'
+HARNESS = ROOT / 'tests' / 'frontend' / 'harness_cookie_gate.mjs'
+
+MATRIX = capabilities.as_dict()
+
+#: The gate is a run-gate: it is reached only after the canvas validates, and a
+#: source node missing the field its mode requires is refused before any request is
+#: built. So the fixtures carry what the panel would have filled in.
+DEFAULT_MODE = {entry['platform']: entry['modes'][0]['key'] for entry in MATRIX['platforms']}
+
+
+def _source(node_id, platform):
+    return {
+        node_id: {
+            'id': node_id,
+            'type': 'source',
+            'title': f'采集 {platform}',
+            'params': {'platform': platform, 'keyword': '三亚', 'collect': DEFAULT_MODE[platform]},
+        }
+    }
+
+
+def _comment(node_id, urls):
+    return {node_id: {'id': node_id, 'type': 'comment', 'title': '评论', 'params': {'urls': urls}}}
+
+
+def _upload(node_id='u1', dataset='d1'):
+    return {
+        node_id: {
+            'id': node_id,
+            'type': 'upload',
+            'title': '文件',
+            'params': {'dataset_id': dataset, 'dataset_name': 'a.csv', 'row_count': 4},
+        }
+    }
+
+
+def _output(node_id='o1'):
+    return {
+        node_id: {
+            'id': node_id,
+            'type': 'output',
+            'title': '导出',
+            'operation': 'save',
+            'params': {'operation': 'save', 'filename': 'out'},
+        }
+    }
+
+
+def _chain(index, platform, kind='source', urls=None):
+    """One complete workflow: a crawler node wired into an output node.
+
+    A crawler with nothing downstream is refused by ``validate()`` before the gate is
+    ever reached, so a scenario built that way would report 「the gate let it run」 for
+    a run the canvas had already rejected — an assertion that passes on its own
+    absence.
+    """
+    src_id, out_id = f'w{index}-s', f'w{index}-o'
+    src = _source(src_id, platform) if kind == 'source' else _comment(src_id, urls)
+    return {**src, **_output(out_id)}, [{'from': src_id, 'to': out_id}]
+
+
+def _canvas(*chains):
+    nodes, connections = {}, []
+    for part in chains:
+        nodes.update(part[0])
+        connections.extend(part[1])
+    return {'nodes': nodes, 'connections': connections}
+
+
+def _verdict(platform, state, *, blocking, text):
+    return {'platform': platform, 'state': state, 'blocking': blocking, 'text': text, 'probed': True}
+
+
+#: A refused run and an empty one look identical unless the verdict carries the
+#: sentence the server rendered for it.
+DEAD = {
+    'ok': True,
+    'results': {'weibo': _verdict('weibo', 'expired', blocking=True, text='WEIBO-COOKIE-IS-DEAD')},
+    'blocked': ['weibo'],
+    'unclear': [],
+    'probed': True,
+}
+
+
+CLEAN = {'ok': True, 'results': {}, 'blocked': [], 'unclear': [], 'probed': True}
+
+#: Both gates off is the baseline every other scenario is read against: the run
+#: starts with nothing asked and nothing said.
+NO_GATE = {'cookie_preflight_before_run': False, 'cookie_confirm_before_run': False}
+AUTO = {'cookie_preflight_before_run': True, 'cookie_confirm_before_run': True}
+
+SCENARIOS = [
+    {
+        'id': 'nothing-to-crawl',
+        'settings': AUTO,
+        'nodes': {**_upload(), **_output()},
+        'connections': [{'from': 'u1', 'to': 'o1'}],
+        'preflight': CLEAN,
+    },
+    {
+        'id': 'silent-pass',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'zhihu')),
+        'preflight': {
+            'ok': True,
+            'results': {'zhihu': _verdict('zhihu', 'valid', blocking=False, text='The stored zhihu cookie works')},
+            'blocked': [],
+            'unclear': [],
+            'probed': True,
+        },
+    },
+    {
+        'id': 'expired-blocks-the-run',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'weibo')),
+        'preflight': DEAD,
+        'answers': {'expired': 'update'},
+    },
+    {
+        'id': 'cancel-still-blocks',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'weibo')),
+        'preflight': DEAD,
+        'answers': {'expired': None},
+    },
+    {
+        'id': 'panel-already-open',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'weibo')),
+        'panelOpen': True,
+        'preflight': DEAD,
+        'answers': {'expired': 'update'},
+    },
+    {
+        'id': 'no-answer-does-not-block',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'zhihu')),
+        'preflight': {
+            'ok': True,
+            'results': {'zhihu': _verdict('zhihu', 'unknown', blocking=False, text='ZHIHU-COULD-NOT-BE-CHECKED')},
+            'blocked': [],
+            'unclear': ['zhihu'],
+            'probed': True,
+        },
+    },
+    {
+        'id': 'gate-refused',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'zhihu')),
+        'preflight': {'ok': False, 'error': 'nope'},
+    },
+    {'id': 'gate-unreachable', 'settings': AUTO, **_canvas(_chain(1, 'zhihu')), 'preflightThrows': True},
+    {
+        'id': 'resume-skips',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'zhihu')),
+        'opts': {'resumeRunId': 'r-int'},
+        'preflight': CLEAN,
+    },
+    {
+        'id': 'check-off-prompts',
+        'settings': {'cookie_preflight_before_run': False, 'cookie_confirm_before_run': True},
+        **_canvas(_chain(1, 'zhihu')),
+        'preflight': CLEAN,
+        'answers': {'confirm': 'exit'},
+    },
+    {
+        'id': 'check-off-prompt-said-go',
+        'settings': {'cookie_preflight_before_run': False, 'cookie_confirm_before_run': True},
+        **_canvas(_chain(1, 'zhihu')),
+        'preflight': CLEAN,
+        'answers': {'confirm': 'go'},
+    },
+    {'id': 'both-off', 'settings': NO_GATE, **_canvas(_chain(1, 'zhihu')), 'preflight': CLEAN},
+    {
+        'id': 'links-name-the-platforms',
+        'settings': AUTO,
+        **_canvas(
+            _chain(
+                1,
+                None,
+                kind='comment',
+                urls='https://www.zhihu.com/question/1\nhttps://weibo.com/123\nnot-a-link\nhttps://www.zhihu.com/x',
+            )
+        ),
+        'preflight': CLEAN,
+    },
+    {
+        'id': 'same-platform-twice',
+        'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True},
+        **_canvas(_chain(1, 'weibo'), _chain(2, 'weibo')),
+        'canvasSettings': {'mode': 'parallel'},
+        'preflight': CLEAN,
+        'answers': {'clash': 'skip'},
+    },
+    {
+        'id': 'profile-kept',
+        'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True},
+        **_canvas(_chain(1, 'weibo'), _chain(2, 'weibo')),
+        'canvasSettings': {'mode': 'parallel'},
+        'preflight': CLEAN,
+        'answers': {'clash': 'use'},
+    },
+    {
+        'id': 'server-wording-carries-the-detail',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'zhihu'), _chain(2, 'weibo')),
+        'preflight': {
+            'ok': True,
+            'results': {
+                'zhihu': _verdict('zhihu', 'expired', blocking=True, text='ZHIHU-DEAD'),
+                'weibo': _verdict('weibo', 'expired', blocking=True, text='WEIBO-DEAD'),
+            },
+            'blocked': ['zhihu', 'weibo'],
+            'unclear': [],
+            'probed': True,
+        },
+        'answers': {'expired': 'update'},
+    },
+]
+
+#: Every scenario needs the crawl matrix: the canvas validates required fields
+#: against it, and a gate tested against a panel that could not validate would be
+#: testing a refusal that has nothing to do with a cookie.
+for _scenario in SCENARIOS:
+    _scenario.setdefault('matrix', MATRIX)
+    _scenario.setdefault('nodes', {})
+
+
+@pytest.fixture(scope='module')
+def gate(tmp_path_factory):
+    file = tmp_path_factory.mktemp('cookie-gate') / 'scenarios.json'
+    file.write_text(json.dumps(SCENARIOS, ensure_ascii=False), encoding='utf-8')
+    proc = run_node(str(HARNESS), str(JS_DIR), str(file))
+    assert proc.returncode == 0, f'cookie-gate harness failed: {proc.stderr[-2500:]} {proc.stdout[-800:]}'
+    return json.loads(proc.stdout)
+
+
+class TestWhoIsAsked:
+    def test_a_canvas_that_crawls_nothing_asks_nothing(self, gate):
+        case = gate['nothing-to-crawl']
+        assert case['asked'] is False
+        assert case['ran'] is True, 'an upload-and-export canvas is not a cookie question'
+
+    def test_a_resume_is_never_blocked_by_the_gate(self, gate):
+        """The user is already inside "refresh the cookie and continue": the run they
+        are resuming is the one that just told them the cookie died."""
+        case = gate['resume-skips']
+        assert case['asked'] is False
+        assert case['ran'] is True
+
+    def test_a_comment_node_is_asked_about_the_platform_of_every_link(self, gate):
+        """A Comment node carries no platform selector — each link is dispatched by
+        its own domain — so the gate that only looked at source nodes would probe
+        nothing and block nothing while a dead weibo session waited inside it."""
+        body = gate['links-name-the-platforms']['askedBody']
+        assert body['platforms'] == ['zhihu', 'weibo'], 'node order, deduped, junk lines dropped'
+
+    def test_two_workflows_on_one_platform_ask_once(self, gate):
+        body = gate['same-platform-twice']['askedBody']
+        assert body['platforms'] == ['weibo'], body
+
+    def test_the_platform_of_the_canvas_is_queried_not_the_platform_of_the_panel(self, gate):
+        body = gate['silent-pass']['askedBody']
+        assert body['platforms'] == ['zhihu']
+
+
+class TestHardBlock:
+    def test_a_refused_cookie_starts_no_run(self, gate):
+        case = gate['expired-blocks-the-run']
+        assert case['asked'] is True
+        assert case['ran'] is False, 'the whole feature is this one assertion'
+
+    def test_the_dialog_names_the_platform_and_quotes_the_servers_sentence(self, gate):
+        dialog = gate['expired-blocks-the-run']['dialogs'][-1]
+        assert 'weibo' in dialog['message']
+        assert 'WEIBO-COOKIE-IS-DEAD' in dialog['message'], 'the reason was measured, so it is shown'
+
+    def test_the_refusal_offers_no_way_to_run_anyway(self, gate):
+        """Every other gate in this file has an escape hatch because a guess may be
+        wrong. This one does not, because the answer is not a guess."""
+        dialog = gate['expired-blocks-the-run']['dialogs'][-1]
+        assert dialog['values'] == ['update', 'null'], dialog
+        assert 'go' not in dialog['values']
+
+    def test_canceling_the_dialog_blocks_exactly_as_hard(self, gate):
+        case = gate['cancel-still-blocks']
+        assert case['ran'] is False
+        assert case['cookiePanelOpen'] is False, '「取消」 means "not now", not "show me the panel"'
+
+    def test_going_to_update_lands_on_the_broken_platform(self, gate):
+        """The panel opens on whoever was last picked otherwise, and a user hunting
+        for the platform that just failed is being sent to do the hunt."""
+        case = gate['expired-blocks-the-run']
+        assert case['cookiePanelOpen'] is True
+        assert case['cookiePlatform'] == 'weibo'
+
+    def test_an_already_open_panel_stays_open_and_changes_platform(self, gate):
+        """The toolbar button toggles this panel; a refusal must not. Closing the panel
+        over the answer the user was sent to read would be worse than not opening it."""
+        case = gate['panel-already-open']
+        assert case['ran'] is False
+        assert case['cookiePlatform'] == 'weibo'
+        assert case['cookiePanelOpen'] is True
+
+    def test_every_refused_platform_is_listed(self, gate):
+        case = gate['server-wording-carries-the-detail']
+        message = case['dialogs'][-1]['message']
+        assert 'ZHIHU-DEAD' in message and 'WEIBO-DEAD' in message
+        assert '2' in case['dialogs'][-1]['message'].split('\n')[0], 'the header says how many were refused'
+        assert case['cookiePlatform'] == 'zhihu', 'the panel opens on the first refusal'
+
+
+class TestNoAnswerIsNotAnAnswer:
+    def test_a_platform_that_could_not_be_checked_still_runs(self, gate):
+        """Risk control, a timeout, a profile held by a live crawl: none of them is
+        evidence about the cookie, and refusing on one would waste the very session
+        the user is being told to refresh."""
+        case = gate['no-answer-does-not-block']
+        assert case['ran'] is True
+        assert case['dialogs'] == [], 'a refusal needs a fact, not an absence'
+
+    def test_the_unchecked_case_is_said_out_loud(self, gate):
+        """Silence would read as "verified, fine" — the one misreading that costs a
+        re-login nobody needed."""
+        joined = '\n'.join(gate['no-answer-does-not-block']['toasts'])
+        assert 'zhihu' in joined
+        assert 'could not' in joined.lower() or '无法核对' in joined
+
+    def test_a_gate_that_cannot_be_reached_is_reported_and_skipped(self, gate):
+        for scenario in ('gate-refused', 'gate-unreachable'):
+            case = gate[scenario]
+            assert case['ran'] is True, f'{scenario}: a check that failed is not a wall the site reported'
+            joined = '\n'.join(case['toasts'])
+            assert 'zhihu' in joined, f'{scenario} must say which platforms went unchecked'
+            assert 'not a pass' in joined or '不是「有效」' in joined, f'{scenario} must not imply a pass'
+
+
+class TestTheOldPromptStillExists:
+    def test_with_the_check_off_the_user_is_asked_instead(self, gate):
+        case = gate['check-off-prompts']
+        assert case['asked'] is False, 'the check is off: no browser is bought on a setting that said not to'
+        assert [dialog['values'] for dialog in case['dialogs']] == [['go', 'exit']]
+        assert case['ran'] is False
+
+    def test_the_prompt_says_go_and_the_run_starts(self, gate):
+        case = gate['check-off-prompt-said-go']
+        assert case['ran'] is True
+
+    def test_with_both_switches_off_nothing_is_asked_at_all(self, gate):
+        case = gate['both-off']
+        assert case['asked'] is False
+        assert case['dialogs'] == []
+        assert case['ran'] is True
+
+
+class TestWhichBrowserIsProbed:
+    def test_the_per_run_profile_answer_travels_to_the_check(self, gate):
+        """The two are different sessions: a run that gave up the profile plants the
+        saved file into a new browser, and that is the browser whose cookie matters."""
+        assert gate['same-platform-twice']['askedBody']['use_profile'] is False
+        assert gate['profile-kept']['askedBody']['use_profile'] is True
+
+    def test_a_run_with_nothing_to_decide_sends_no_answer(self, gate):
+        """Absence means "follow the setting". Writing false here because no dialog
+        appeared would turn one press into a global override."""
+        assert 'use_profile' not in gate['silent-pass']['askedBody']
+
+
+class TestNothingIsSaidTwice:
+    def test_a_silent_pass_prints_no_warning(self, gate):
+        case = gate['silent-pass']
+        joined = '\n'.join(case['toasts'])
+        assert 'could not' not in joined.lower(), case['toasts']
+        assert 'refused' not in joined.lower(), case['toasts']
+        assert case['ran'] is True

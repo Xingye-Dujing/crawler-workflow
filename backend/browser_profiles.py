@@ -104,6 +104,22 @@ def release_profile(lock) -> None:
             lock.release()
 
 
+def is_busy(path: str) -> bool:
+    """Whether some browser holds *path* at this instant.
+
+    Advisory only — the answer is stale the moment it is returned, and a caller that
+    *needed* ownership would take :func:`acquire_profile` instead. It exists for the
+    pre-run cookie probe: opening a second browser into a profile a live crawl owns
+    would park that probe behind ``PROFILE_LOCK_TIMEOUT`` (longer than any crawl) and
+    tell the user nothing about their cookie they could act on.
+    """
+    lock = lock_for(path)
+    if lock.acquire(blocking=False):
+        release_profile(lock)
+        return False
+    return True
+
+
 def root_dir() -> str:
     """Where the per-platform directories live (settings can move it)."""
     configured = str(get_setting('browser_profile_dir') or '').strip()

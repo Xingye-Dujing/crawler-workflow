@@ -27,8 +27,7 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   exceptions. The rule is broader than installs: *every package imported directly by code must be declared
   there*, even when it also arrives transitively. A new tool's caches go into `.gitignore` in the same
   change that adds the tool (already covered: `.venv/`, `.ruff_cache/`, `__pycache__/`, `data/`, `logs/`).
-- `backend/test_*.py` are manual probe scripts, NOT pytest (`python backend/test_zhihu.py <kw> --count N
-  --no-headless`). They are the accepted place for a one-off measurement.
+- `backend/test_*.py` are manual probe scripts, NOT pytest — the accepted place for a one-off measurement.
 - **Test tiers** (`pytest.ini` excludes the real tiers by default; that filter is pinned by
   `tests/unit/test_test_tiers.py`):
   - Fast (~2.7k, ~75 s, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
@@ -66,10 +65,10 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   element IS (`isContentEditable`, `.cselect`, …), not a growing tag list.
 - **History entries are snapshots, and identical ones are not entries.** `getState()`
   deep-copies `params` because `updateParam` mutates the live dict — aliasing made every
-  parameter edit un-undoable and let later edits rewrite past snapshots. `_pushState()`
+  parameter edit un-undoable. `_pushState()`
   skips a state equal to the current one, and `restoreState()` brackets itself with
   `_historySaving` so one restore (a draft open, an undo step) is ONE undo point: the
-  30-second autosave used to consume the 50-deep stack and real edits fell out of it.
+  autosave used to consume the 50-deep stack and real edits fell out of it.
 - **One page boot must not be a single point of failure.** It is one `DOMContentLoaded`
   body, so any throw inside it skipped every later step (a missing ECharts CDN blanked
   the capability fetch, the dataset re-link, the autosave and the resume banner). Boot
@@ -78,12 +77,14 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   button as `b.value !== undefined ? b.value : inputEl.value`, so a confirm button that
   carries its own `value:` replaces whatever the user typed (the dataset rename stored
   the literal `'ok'` and destroyed the label). Leave `value` off input dialogs.
-- **Two frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a module
-  declared as a top-level `const X` — `const` never becomes a window property — which is why
-  `resumeBar.refresh()` and `runsManager._busy()` were dead code forever (the 断点续跑 banner never
-  showed). Guard the binding itself (`typeof X !== 'undefined'`) or export it (`window.X = X`, as app.js
-  does for `LLMSettings`/`AppSettings`). (2) The DOM stub's matcher is real (see `harness_dom.mjs`);
-  never fabricate a child when a query finds nothing — that turned a deleted connection into a phantom.
+- **Three frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a module
+  declared as a top-level `const X` — `const` never becomes a window property — which silently killed
+  `resumeBar.refresh()` and `runsManager._busy()`. Guard the binding itself (`typeof X !== 'undefined'`)
+  or export it (`window.X = X`, as app.js does for `LLMSettings`/`AppSettings`). (2) The DOM stub's matcher
+  is real (see `harness_dom.mjs`); never fabricate a child when a query finds nothing — that turned a
+  deleted connection into a phantom. (3) **Decorating a function means forwarding its arguments:** app.js
+  re-wraps `openCookieDialog` to add drag/resize, and the wrapper's empty parameter list made 「open the
+  Cookie panel on the platform that just refused the run」 open it on whoever was selected before.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id** (the page has no `.panel` class — a
   selector matching zero elements kept that test green while checking nothing), never falls back to
@@ -95,7 +96,7 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the
   one the bug was about. The 并行/串行 chip was wrong precisely because `mode` was never a column of the
   record test. When you test a record, a run or a panel row, list the dimensions first (`mode`,
-  `headless`, `wf_count`, resume state, language, platform, cookie state …) and cover the grid.
+  `headless`, `wf_count`, resume state, language, platform …) and cover the grid.
 - **The `integration` UI tier performs no server writes** — uploading, saving a workflow or executing a run
   would leave rows in the user's real `data/` and `logs/` (the app has no data-dir override). Stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`: a valid
@@ -110,8 +111,7 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   through it, `engine/workflow.py::validate` refuses through it, and `GET /api/capabilities` hands the
   identical description to the browser, whose Data Source panel is generated from it. So a new platform
   or mode is **one matrix entry**, never an `if platform == '…'` branch in four files — a reintroduced
-  branch is a second opinion that can disagree with the crawl (the frontend's copy of it is now gone;
-  see the rule under "A browser-measured assertion…"). The module sits at the backend root (like
+  branch is a second opinion that can disagree with the crawl. The module sits at the backend root (like
   `i18n.py`) because `engine/workflow.py` reads it and must not import the crawler package. Field labels
   are *frontend* catalog keys, required-field names *backend* ones (`field.*`), both pinned by
   `test_frontend_contract.py::TestCrawlMatrixParity`; `target_count` stays 50 for every platform because
@@ -119,19 +119,17 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   by name on a platform that offers a choice** (`engine.source_unknown_mode`), while `mode_for` still
   falls back to the first mode for panel rendering and single-mode platforms: substituting a keyword
   search for one creator's uploads is a different crawl, and 「缺少关键词」 sends the user to a field the
-  panel never showed. A payload is a network response and the renderer writes field names into inline
-  handlers, so a name that is not `/^[\w.-]{1,64}$/` is dropped whole — and a JS-generated panel is
-  driven in tests by the matrix dumped from Python (`harness_capabilities.mjs` + the
-  `capabilities_matrix` fixture), never a copy checked in.
+  panel never showed. A field name reaches an inline handler, so one that is not `/^[\w.-]{1,64}$/` is
+  dropped whole; the JS-generated panel is tested against the matrix dumped from Python
+  (`harness_capabilities.mjs`), never a copy checked in.
 - **A visible window must be doing something visible, and it must answer every preference a crawl set.**
   Each `Mode` declares how it collects (DOM walk / in-page fetch / per-row page) and the panel plus the
   pre-run dialog read that field instead of re-judging it: bilibili 热榜 and the YouTube/weibo comment
   crawls navigate once then `fetch`, so 窗口 mode shows a homepage and nothing else — ask once (headless
   / keep window / cancel) before such a run. And a session preference is *stored* in the persistent
   profile, so it outlives the crawl: a human-facing window that merely *omits* the image blocker
-  inherits it and shows a login page with no QR code to scan. 取 Cookie / 验证 Cookie windows write
-  允许 explicitly (`_content_prefs`); an assertion about a key being *absent* passed on the first,
-  incomplete fix, so the device tier measures the profile round trip itself.
+  inherits it and shows a login page with no QR code to scan. 取 Cookie / 验证 Cookie windows — and the
+  pre-run cookie probe, which must agree with them — write 允许 explicitly (`_content_prefs`).
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count` (one
   万/千/亿/K/M/B parser), `engine.wall` (login / risk-control / root-bounce), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (the scroll that finds the
@@ -243,9 +241,8 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   because a parent that came up empty last time may deliver this time and reuse is decided
   by fingerprint, not by rows; the source node is never adopted, it resumes by cursor; and
   `begin_node` reporting `dropped_stale` cancels reuse, because those rows were deleted.
-- **Startup recovery shares the end-of-run settlement.** A node only ever leaves `running`
-  through `finish_node`, which a kill skips, so `node_runs.row_count` still holds the 0
-  `begin_node` wrote while `node_rows` holds the real work. `promote_stale_runs` must call
+- **Startup recovery shares the end-of-run settlement.** A node leaves `running` only through
+  `finish_node`, which a kill skips, so `node_runs.row_count` still holds the 0 `begin_node` wrote. `promote_stale_runs` must call
   `settle_nodes` (status *and* count from the rows) — the panel's 已存行数 and the 续跑
   node's "adopt the fullest node" both read that column, so a status-only promotion
   reported a 900-row crawl as empty and the user discarded paid-for data.
@@ -330,18 +327,19 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   a fact that line cannot carry (how many rows survived), never repeat the reason.
   Refusals `raise` rather than returning `[]`, or the node settles DONE over an empty
   table and the export ships a header row.
-- **`_push_log` stores one entry per physical line.** A multi-line payload (driver
-  `Message:` block, a site's own refusal) used to be one buffer entry that the DOM
-  rendered as several rows, so the browser's line-delta cursor skipped or repeated real
-  console content and the 200-line tail could be spent by one traceback; the running
-  total advances by lines, not by `add_log` calls.
+- **`_push_log` stores one entry per physical line.** One multi-line payload (a driver
+  `Message:` block) used to render as several rows, so the browser's line-delta cursor skipped
+  or repeated real console content; the running total advances by lines, not by `add_log` calls.
 - **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook.** Those
   nodes get no "Executing node …" and no "Node … completed (n/N)" line. Everything that states a fact still
   prints: the upload's own "Loaded uploaded file X: N rows", and any failure/skip/restore line (with
   `node_label` — a silenced node that then fails is a run the user cannot diagnose). Progress counters
   still count them.
-- Run-gating UX lives in `workflow.js execute()`: `_confirmCookieBeforeRun` (skippable via the
-  `cookie_confirm_before_run` setting, auto-pass for resume runs). **A new settings key needs all four:**
+- Run-gating UX lives in `workflow.js execute()` → `_cookieGateBeforeRun`: `cookie_preflight_before_run`
+  probes each platform of the canvas before the run and a login wall **refuses it** (no "run anyway");
+  「无法核对」 — timeout, captcha, busy profile — never blocks, because no answer is not evidence of a dead
+  cookie. Off = the old `cookie_confirm_before_run` prompt; a resume or a crawl-free canvas skips both, and
+  saving/deleting/capturing a cookie drops the cached verdict. **A new settings key needs all four:**
   the bool branch in `settings_store.save_settings`, both app.js catalogs, and the `AppSettings` wiring.
 
 ## Style (differs from defaults)

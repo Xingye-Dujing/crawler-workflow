@@ -32,7 +32,9 @@ RECORDS = [{'title': 'sanya', 'score': 3}, {'title': 'haikou', 'score': 5}]
 BODY_ROUTES = [
     '/api/analysis/run',
     '/api/analysis/train',
+    '/api/cookies/delete',
     '/api/cookies/generate',
+    '/api/cookies/preflight',
     '/api/cookies/save',
     '/api/cookies/verify',
     '/api/data/clear',

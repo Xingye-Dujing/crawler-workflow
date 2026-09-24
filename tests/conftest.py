@@ -157,6 +157,13 @@ def clean_globals(request):
     ss = sys.modules.get('settings_store')
     if ss is not None:
         ss._values = None
+    # The pre-run cookie gate caches a verdict for a few minutes — deliberately, and
+    # across threads. Left alone, one test's 「expired」 would answer the next test's
+    # request without any probe having run in it, which is exactly the kind of
+    # passing-without-measuring this suite refuses.
+    gate = sys.modules.get('cookie_preflight')
+    if gate is not None:
+        gate.reset()
     if app is not None:
         app.reset_console_state()
         if app.execution_state.get('running') != running_backup:

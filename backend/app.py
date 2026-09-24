@@ -14,6 +14,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import browser_profiles
+import cookie_preflight
 import crawl_gate
 import pandas as pd
 import requests
@@ -3737,6 +3738,82 @@ def cookie_flow():
     return jsonify({'ok': True, 'flows': flows})
 
 
+def _flag_or_none(value):
+    """A tri-state flag off a JSON body: True, False, or None for "follow the setting".
+
+    Absence has to stay absence. Coercing a missing key to ``False`` turns one
+    dialog's answer into a silent global override of a setting the user configured,
+    which is the rule :func:`crawlers.get_crawler` documents for ``use_profile``.
+    """
+    if isinstance(value, bool):
+        return value
+    text = str(value or '').strip().lower()
+    if text == 'true':
+        return True
+    if text == 'false':
+        return False
+    return None
+
+
+@app.route('/api/cookies/preflight', methods=['POST'])
+def preflight_cookies():
+    """Ask every platform of this canvas, at once, whether its session still gets us in.
+
+    One request for the whole canvas rather than one per platform: the page has to be
+    able to name *which* source is dead in the dialog it shows before 执行, and it
+    cannot do that if it has to wait on each probe in turn.
+
+    This endpoint answers the question it is asked; it does not decide whether to ask
+    it. That is ``cookie_preflight_before_run`` in the browser
+    (``_preflightCookies`` in workflow.js), so the panel's own 验证 button, a hand-made
+    request and a future caller all get the same facts from the same code.
+
+    ``text`` is rendered here rather than keyed: the sentences live in the backend
+    catalogue next to the crawler that decides them, and the panel already treats
+    server-side wording as the single source (see ``/api/cookies/flow``).
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    raw = data.get('platforms')
+    if raw is None:
+        # Absent means "nothing on this canvas crawls anything", which is an answer,
+        # not a mistake. A field that is there but is not a list is a different thing
+        # and is refused below.
+        raw = []
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return jsonify({'ok': False, 'error': t('api.platformsRequired')}), 400
+    wanted = [str(p).strip() for p in raw if str(p or '').strip()]
+    refused = [p for p in wanted if not cookie_preflight.knows(p)]
+    if refused:
+        # The names arrive from the browser and each one would buy a Chrome, so an
+        # unrecognised name is refused whole instead of being filtered out quietly — a
+        # silent drop reads as "checked and fine" for the platform nobody checked.
+        # A name a *crawler* knows but the cookie store does not (WeChat) passes: the
+        # gate answers it 「不需要登录」 without opening anything.
+        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=refused[0])}), 400
+    use_profile = _flag_or_none(data.get('use_profile'))
+    fresh = _flag_or_none(data.get('fresh')) is True
+    results = cookie_preflight.check(wanted, use_profile=use_profile, fresh=fresh)
+    for verdict in results.values():
+        verdict['text'] = cookie_preflight.describe(verdict)
+    blocked = [name for name, verdict in results.items() if verdict['blocking']]
+    unclear = [name for name, verdict in results.items() if verdict['state'] == cookie_preflight.UNKNOWN]
+    return jsonify(
+        {
+            'ok': True,
+            'results': results,
+            # Split server-side so the browser cannot invent its own reading of a
+            # state it does not know: 「拦下来」 and 「没核得上」 are different answers.
+            'blocked': blocked,
+            'unclear': unclear,
+            'probed': any(v['probed'] for v in results.values()),
+        }
+    )
+
+
 @app.route('/api/cookies/save', methods=['POST'])
 def save_cookies():
     data = _json_body()
@@ -3760,9 +3837,12 @@ def save_cookies():
         if not kept:
             return jsonify({'ok': False, 'error': t('cookie.allForeign', platform=platform)}), 400
         cookie_manager.save(platform, kept)
-        # Console mirror: cookie setup should be traceable like every other
-        # state change the panel makes.
-        add_log(t('cookie.saved', platform=platform))
+        # The file this platform would be planted from just changed, so the cached
+        # verdict about the previous one has to go with it.
+        cookie_preflight.invalidate(platform)
+        # No ``add_log`` beside this: ``CookieManager.save`` logs the same sentence and
+        # ``LogBufferHandler`` forwards every logger call into the console, so the
+        # narration the panel wanted was already there — twice, for one paste.
         return jsonify({'ok': True, 'message': t('cookie.saved', platform=platform), 'count': len(kept)})
     except (OSError, ValueError) as e:
         # One line for one failure. ``LogBufferHandler`` forwards every logger call to
@@ -3771,6 +3851,47 @@ def save_cookies():
         # second time, and the console showed 「保存 Cookie 失败」 twice in a row.
         logger.exception(f'{t("misc.cookie_save_failed")}: {str(e)[:120]}')
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/cookies/delete', methods=['POST'])
+def delete_cookies():
+    """Throw away the saved cookie *file* for one platform.
+
+    The honest scope matters here, and it is why the response carries
+    ``profile_holds``: a file is only what a *throwaway* browser is planted from.
+    A platform profile that has logged in keeps its own session in
+    ``data/chrome_profile/<platform>``, and deleting the snapshot does not sign that
+    device out (see :mod:`browser_profiles`, where the file is imported once and
+    never planted again). Saying 「已删除，已退出登录」 would send the user to re-login
+    over a session that is still live, and hide the case that genuinely needs a
+    profile reset.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    platform = str(data.get('platform', ''))
+    if not cookie_manager.is_supported(platform):
+        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+    if not cookie_manager.exists(platform):
+        # Not a silent success: the panel asked to remove something that is not
+        # there, and 「已删除」 would leave the user believing a stale file was replaced.
+        return jsonify({'ok': False, 'error': t('cookie.delete.none', platform=platform)}), 404
+    try:
+        cookie_manager.delete(platform)
+    except OSError as e:
+        logger.exception(t('cookie.delete.failed', err=str(e)[:120]))
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    cookie_preflight.invalidate(platform)
+    holds = bool(browser_profiles.is_enabled() and browser_profiles.is_used(platform))
+    message = t('cookie.deleted', platform=platform)
+    if holds:
+        # ``CookieManager.delete`` already logged the deletion, and that line reaches
+        # the console as well — so the handler adds only the fact that line cannot
+        # carry, instead of narrating the whole answer a second time.
+        extra = t('cookie.delete.profileHolds', platform=platform)
+        message += '\n' + extra
+        add_log(extra)
+    return jsonify({'ok': True, 'message': message, 'profile_holds': holds})
 
 
 _COOKIE_JOB_LOCK = threading.Lock()
@@ -3894,6 +4015,9 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
             add_log(t('cookie.noCookies'))
             return
         cookie_manager.save(platform, cookies)
+        # A capture replaces the session, so any verdict the pre-run gate cached about
+        # the old one is now not just stale but wrong in the dangerous direction.
+        cookie_preflight.invalidate(platform)
         job['count'] = len(cookies)
         job['phase'] = 'saved'
         add_log(t('wf.cookies_generated', platform=platform, n=len(cookies)))
@@ -3987,12 +4111,21 @@ def cookie_generate_status():
 
 
 def _verify_lines(platform: str, facts: dict) -> list:
-    """Turn one diagnosis into the lines the panel shows."""
+    """Turn one diagnosis into the lines the panel shows.
+
+    Three answers, not the two this had. ``login_wall`` or 可用 called a risk-control
+    page 可用 — the mirror image of the lie the pre-run gate refuses (see
+    :mod:`cookie_preflight`): a page that answered with a captcha says nothing about
+    the cookie, in either direction.
+    """
+    state = cookie_preflight.classify_probe(facts)
     lines = [t('cookie.verify.checkedUrl', url=str(facts.get('url') or ''))]
     lines.append(
         t('cookie.verify.loginWall', platform=platform)
-        if facts.get('login_wall')
+        if state == cookie_preflight.EXPIRED
         else t('cookie.verify.ok', platform=platform)
+        if state == cookie_preflight.VALID
+        else t('cookie.verify.unclear', platform=platform)
     )
     return lines
 
@@ -4014,18 +4147,29 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = ''):
     crawler = None
     set_lang(lang)
     try:
+        # Whatever this probe sees is newer than anything the pre-run gate cached, so
+        # the stale verdict goes before the browser opens, not after.
+        cookie_preflight.invalidate(platform)
         # ``for_login`` because this window is shown to a person, and a person can be
         # sent there by an expired cookie: the probe lands on the login page, whose QR
         # code is an ``<img>``. Blocked, the diagnosis 「cookie 已失效，去登录」 pointed at
         # a window where logging in was impossible.
         crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR, for_login=True)
         facts = crawler.diagnose(url)
+        facts['risk_blocked'] = bool(getattr(crawler, 'risk_blocked', False))
         lines = _verify_lines(platform, facts)
         with _COOKIE_JOB_LOCK:
             job['facts'] = facts
             job['lines'] = lines
             job['entry'] = str(facts.get('url') or '')
             job['phase'] = 'verified'
+        if not url:
+            # A manual 验证 on the platform's own page is the same measurement the
+            # pre-run gate would pay for, so it refreshes that answer: the user who
+            # came here from the block dialog should not have to prove the fix twice.
+            # With a pasted entry URL it does not — the verdict is about that page, not
+            # about the address the gate would visit.
+            cookie_preflight.record(platform, facts)
         for line in lines:
             add_log(line)
     except Exception as e:

@@ -39,7 +39,16 @@ DEFAULTS = {
     # Ask "is the cookie still fresh?" before every run that contains a
     # crawler node. Long crawls can outlive a cookie; the prompt points the
     # user at refresh + resume BEFORE burning time, and can be turned off.
+    # Only consulted when 自动验证 below is off: with the check running, the
+    # site has answered the question and asking it of a person again would be
+    # a second, weaker opinion about the same fact.
     'cookie_confirm_before_run': True,
+    #: Check whether each platform's session still works *before* starting a run that
+    # crawls it, and refuse to start when one is walled (:mod:`cookie_preflight`). Off
+    # falls back to the prompt above — the user's own judgement, no browser bought.
+    # On costs one page load per platform (cached for a few minutes), and is what turns
+    # 「一小时后才发现 Cookie 早死了」 into a refusal that names the platform.
+    'cookie_preflight_before_run': True,
     #: One platform is crawled by at most one workflow at a time, and two that had to
     #: queue are further spaced apart. On, a parallel canvas keeps its *different*
     #: platforms concurrent but same-platform crawls take turns — no passport bounce
@@ -148,7 +157,12 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                     warnings.append(t('set.badOllamaHost'))
                 else:
                     vals[key] = v or DEFAULTS[key]
-            elif key in ('cookie_confirm_before_run', 'use_browser_profile', 'same_platform_queue'):
+            elif key in (
+                'cookie_confirm_before_run',
+                'cookie_preflight_before_run',
+                'use_browser_profile',
+                'same_platform_queue',
+            ):
                 # The browser may send a real bool or the 'true'/'false' string
                 # the checkbox helpers historically produced; anything else
                 # falls back to the default rather than guessing.

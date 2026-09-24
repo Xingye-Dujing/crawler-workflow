@@ -993,6 +993,16 @@
           >
             Verify cookie
           </button>
+          <!-- Destructive, and it asks first: the confirmation says what a cookie
+               file is NOT (a live profile keeps its own login), because the
+               plausible reading of 「删除 Cookie」 is "I am logged out now". -->
+          <button
+            class="menu-btn"
+            onclick="deleteCookie()"
+            data-i18n="cookies.delete"
+          >
+            Delete saved Cookie
+          </button>
         </div>
         <!-- Login-job actions: only visible while a login browser is open.
              The dialog refuses to close while they wait — closing it used to
@@ -1354,6 +1364,24 @@
         </span>
       </div>
       <div class="dd-item-row">
+        <span data-i18n="set.cookiePreflight">执行前自动验证 Cookie</span>
+        <span class="dd-ctrl">
+          <label class="settings-checkbox-label">
+            <input
+              type="checkbox"
+              id="set-cookie-preflight"
+              onchange="onSettingInput('cookie_preflight_before_run', this.checked)"
+            />
+            <span data-i18n="set.cookiePreflightInline">运行前用本次真要用的浏览器问一次该平台：Cookie 还认不认</span>
+          </label>
+        </span>
+      </div>
+      <!-- Long two-sided note: the row above is a real cost (a browser per platform)
+           and a real gain, and the panel has to state both or the choice is a guess. -->
+      <div class="dd-item-block">
+        <span class="dd-block-note" data-i18n="set.cookiePreflightHint">开：含采集节点的运行在按下执行之前，先用这一次运行真正会用的浏览器逐平台加载一次（结果缓存几分钟）。哪个平台回的是登录页，运行就地被拦下并点名该平台，不留「我确定，照样跑」。完全核不上的平台（验证码、超时、profile 被占用）说「无法核对」并且不拦。关：不开浏览器、不做测量，退回下面那个确认框，由你自己判断 Cookie 是否过期。</span>
+      </div>
+      <div class="dd-item-row">
         <span data-i18n="set.cookieConfirm">执行前确认 Cookie</span>
         <span class="dd-ctrl">
           <label class="settings-checkbox-label">
@@ -1362,7 +1390,7 @@
               id="set-cookie-confirm"
               onchange="onSettingInput('cookie_confirm_before_run', this.checked)"
             />
-            <span data-i18n="set.cookieConfirmInline">含采集节点的工作流运行前弹确认框</span>
+            <span data-i18n="set.cookieConfirmInline">只在上方「自动验证」关闭时才会弹这个确认框</span>
           </label>
         </span>
       </div>

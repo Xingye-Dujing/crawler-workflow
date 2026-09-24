@@ -100,6 +100,24 @@ class Config:
     #: browser that never closed cannot park the platform for the rest of the process.
     PLATFORM_GATE_TIMEOUT = 900
 
+    #: The outer bound on the pre-run cookie check (``cookie_preflight``) — the wait a
+    #: user pays for pressing 执行. Each platform's probe is one page load, and the
+    #: driver's own ceiling (the ``page_load_timeout`` setting, 40 s by default) applies
+    #: *inside* this one, so it is deliberately a little above it: a platform that
+    #: overruns answers 「无法核对」 instead of holding the whole run.
+    COOKIE_PREFLIGHT_TIMEOUT = 45
+
+    #: How many probe browsers may be open at once. Capped rather than one-per-platform
+    #: because each is a Chrome on the user's desktop, and four already covers the
+    #: widest canvas this tool crawls.
+    COOKIE_PREFLIGHT_MAX_PARALLEL = 4
+
+    #: How long a verdict is reused. Long enough that a parallel canvas and the 继续
+    #: that follows a stopped run do not each re-pay for the same page load; short
+    #: enough that a cookie which died in the meantime is not vouched for by an answer
+    #: from ten minutes ago. Saving, deleting or capturing a cookie drops it at once.
+    COOKIE_PREFLIGHT_TTL = 300
+
     #: How much of a 公众号 article body a row keeps. A long post runs past ten
     #: thousand characters, and the crawler used to cut it at a hardcoded 5000 —
     #: which silently dropped the ending of every analysis input. 0 keeps it all.

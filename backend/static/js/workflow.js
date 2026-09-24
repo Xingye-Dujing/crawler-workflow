@@ -318,19 +318,139 @@ const workflow = {
         return undefined; // cancelled — the caller must not start the run
     },
 
-    async _confirmCookieBeforeRun(opts) {
-        /* Returns true when the run may proceed (no crawler nodes, the prompt
-           disabled, a resume — the user is already mid "refresh cookie and
-           continue" loop, asking twice would be cruelty —, or the user chose
-           继续执行), false when the user chose to exit and refresh. */
-        if (opts && opts.resumeRunId) return true;
-        var hasCrawler = Object.keys(canvas.nodes).some(function (id) {
-            var t = canvas.nodes[id].type;
-            return t === 'source' || t === 'comment';
+    _crawlPlatforms() {
+        /* Every platform this canvas is about to crawl, in node order, deduped.
+           Two node types buy a session: a Data Source names one, and a Comment node
+           is dispatched per link by its own domain (that is what the backend does
+           with it), so its platforms are read off the links with the same rule the
+           textarea's examples follow. A canvas that crawls nothing asks nothing. */
+        var found = [];
+        Object.keys(canvas.nodes).forEach(function (id) {
+            var node = canvas.nodes[id];
+            var p = node.params || {};
+            if (node.type === 'source') {
+                if (p.platform) found.push(p.platform);
+            } else if (node.type === 'comment') {
+                String(p.urls || '').split(/[\s,;、]+/).forEach(function (line) {
+                    var plat = urlPlatform(line);
+                    if (plat) found.push(plat);
+                });
+            }
         });
-        if (!hasCrawler) return true;
+        return found.filter(function (platform, index) {
+            return found.indexOf(platform) === index;
+        });
+    },
+
+    async _cookieGateBeforeRun(opts, profileChoice) {
+        /* One place decides what this run has to know about its cookies, because the
+           three answers have to stay in one order:
+
+           · nothing to crawl, or a 继续 → no question at all. A resumed run is already
+             inside "refresh the cookie and carry on", and asking again is cruelty;
+           · 自动验证 on → ask the *sites* (``_preflightCookies``), which is a fact;
+           · off → ask the *user* (``_confirmCookieBeforeRun``), which is the prompt
+             this feature was built to replace and which stays reachable on purpose.
+
+           A settings pull is done here so the two branches cannot disagree about
+           which one the user configured. ``profileChoice`` is the per-run answer from
+           the profile dialog, forwarded to the check so it probes the browser the run
+           will actually use. */
+        if (opts && opts.resumeRunId) return true;
+        var platforms = this._crawlPlatforms();
+        if (!platforms.length) return true;
         if (window.AppSettings) await AppSettings.pull();
         var values = (window.AppSettings && AppSettings._values) || {};
+        if (values.cookie_preflight_before_run) return await this._preflightCookies(platforms, profileChoice);
+        return await this._confirmCookieBeforeRun(values);
+    },
+
+    async _preflightCookies(platforms, profileChoice) {
+        /* Ask each platform, with the browser this run would use, whether it still
+           lets us in — and refuse to start when one says it does not. There is
+           deliberately no 「我确定，照样跑」 button: the point of measuring instead of
+           guessing is that a run past a login wall costs the user an hour and a
+           half-finished dataset they then have to reason about.
+
+           A platform that could not be checked does *not* block. Risk control, a
+           timeout and a profile held by another browser say nothing about the
+           cookie, and pretending otherwise would send the user to re-log in a
+           session that is fine — the one mistake this whole path cannot undo. */
+        function verdictOf(table, platform) {
+            return table[platform] || {};
+        }
+        function isBlocked(table, platform) {
+            return verdictOf(table, platform).blocking === true;
+        }
+        showToast(I18n.t('toast.cookieChecking').replace('{platforms}', platforms.join('、')));
+        var body = { platforms: platforms };
+        if (profileChoice !== null && profileChoice !== undefined) {
+            /* The per-run answer from the profile dialog decides *which browser* the
+               crawl will use, so it decides which browser is worth probing. Absent
+               means "follow the setting" and stays absent — writing false here would
+               turn one dialog's answer into a permanent override. */
+            body.use_profile = profileChoice;
+        }
+        var resp = null;
+        try {
+            resp = await fetchJSON('/api/cookies/preflight', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        } catch (e) {
+            resp = null;
+        }
+        if (!resp || !resp.ok) {
+            /* The check itself failed. Say that, and let the run go: the page has no
+               licence to refuse a crawl on an answer it never received, and the run
+               will meet the real wall soon enough and report it as its own failure. */
+            showToast(I18n.t('toast.cookieUncheckable').replace('{platforms}', platforms.join('、')));
+            return true;
+        }
+        var results = resp.results || {};
+        var blocked = (resp.blocked || []).filter(isBlocked.bind(null, results));
+        var unclear = (resp.unclear || []).filter(function (platform) {
+            return blocked.indexOf(platform) < 0;
+        });
+        if (unclear.length) {
+            showToast(I18n.t('toast.cookieUnclear').replace('{platforms}', unclear.join('、')), 6000);
+        }
+        if (!blocked.length) return true;
+        var lines = blocked.map(function (platform) {
+            var verdict = verdictOf(results, platform);
+            /* Server-rendered wording: the sentences live next to the crawler that
+               decided them, so the panel cannot hold a second opinion about what
+               「已失效」 meant on the page the probe actually looked at. */
+            return '· ' + (verdict.text || platform);
+        });
+        var choice = await showDialog({
+            message: I18n.t('dialog.cookieExpired')
+                .replace('{n}', blocked.length)
+                .replace('{platforms}', blocked.join('、')) +
+                '\n' + lines.join('\n') + '\n' + I18n.t('dialog.cookieExpiredHint'),
+            buttons: [
+                { label: I18n.t('dialog.cookieGoUpdate'), value: 'update', primary: true },
+                { label: I18n.t('dialog.cancel'), value: null },
+            ],
+        });
+        /* Both answers stop the run — that is the hard block. Only 「去更新 Cookie」
+           opens the panel: closing the dialog with 取消 and finding a panel the user
+           did not ask for is the difference between refusing and nagging. */
+        if (choice === 'update') {
+            /* Land them on the platform that is broken rather than on a selector
+               still showing whoever was last picked. */
+            openCookieDialog(blocked[0]);
+        }
+        return false;
+    },
+
+    async _confirmCookieBeforeRun(values) {
+        /* The prompt the gate falls back to when 自动验证 is off: the user's own
+           judgement about a session that may have expired. Long crawls can outlive a
+           cookie, so the question is worth asking before burning time — but it is a
+           guess, which is exactly what the check above is not. Returns false only
+           when the user chose to go and refresh first. */
         if (!values.cookie_confirm_before_run) return true;
         var choice = await showDialog({
             message: I18n.t('dialog.cookieConfirm'),
@@ -392,11 +512,11 @@ const workflow = {
         var profileChoice = await this._confirmProfileChoiceBeforeRun();
         if (profileChoice === undefined) return;
         /* A long crawl can outlive its cookie and die at the login wall an hour
-           in. When the setting is on, ask up front "refresh the cookie first?"
-           — the user can bail here instead of wasting a run. Off means run
-           straight away, exactly as before. Only fires when the workflow really
-           contains a crawler (source/comment) node. */
-        if (!(await this._confirmCookieBeforeRun(opts))) return;
+           in. Either the sites are asked whether that has already happened (自动验证,
+           which refuses the run when one says yes) or, with that check switched off,
+           the user is asked — and either way they can bail here instead of wasting a
+           run. Only fires when the canvas really contains a crawler node. */
+        if (!(await this._cookieGateBeforeRun(opts, profileChoice))) return;
         /* A second press while a run is in flight is no longer a dead end: the
            server parks the request and starts it when the slot frees. So every
            claim this function makes about the page state has to go back to what
@@ -3181,10 +3301,27 @@ function pollCookieJob() {
     });
 }
 
-function openCookieDialog() {
+function openCookieDialog(platform) {
     var dialog = document.getElementById('cookie-dialog');
-    dialog.classList.toggle('open');
-    if (!dialog.classList.contains('open')) return;
+    /* An optional platform: the pre-run block sends the user here with the dead
+       session already selected, because a panel that opens on whatever was last
+       picked makes them hunt for the one platform that is broken. */
+    var select = document.getElementById('cookie-platform');
+    if (platform && select) {
+        var known = Array.prototype.some.call(select.options || [], function (option) {
+            return option.value === platform;
+        });
+        if (known) select.value = platform;
+    }
+    if (platform) {
+        /* Naming a platform is never a toggle: the toolbar button opens and shuts
+           this panel, and closing the panel over the answer the user was just sent
+           to look at is the opposite of what a refusal wants. */
+        dialog.classList.add('open');
+    } else {
+        dialog.classList.toggle('open');
+        if (!dialog.classList.contains('open')) return;
+    }
     renderCookieGuide();
     /* Adopt a job that is already running (started before the dialog was
        closed/reopened, or from another tab of this page). */
@@ -3236,6 +3373,39 @@ function saveCookieConfig() {
             });
     } catch (e) {
         showToast(I18n.t('cookie.invalidJson').replace('{err}', e.message));
+    }
+}
+
+async function deleteCookie() {
+    /* Remove this platform's saved cookie file. The confirmation has to be honest
+       about what a file is: since a browser profile imports it once and is never
+       re-planted, a platform that has logged in inside its own profile keeps that
+       session, and deleting the snapshot does not sign it out. Saying 「已删除，等于
+       退出登录」 here would send the user to re-log in a session that is still live —
+       the response's own profile_holds line says which of the two just happened. */
+    var select = document.getElementById('cookie-platform');
+    var statusEl = document.getElementById('cookie-status');
+    var platform = select ? select.value : '';
+    if (!platform) return;
+    var answer = await showDialog({
+        message: I18n.t('dialog.cookieDelete').replace('{platform}', platform),
+        buttons: [
+            { label: I18n.t('dialog.cookieDeleteYes'), value: 'delete', primary: true },
+            { label: I18n.t('dialog.cancel'), value: null },
+        ],
+    });
+    if (answer !== 'delete') return;
+    var result = await fetchJSON('/api/cookies/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: platform }),
+    });
+    if (result.ok) {
+        showToast(result.message || I18n.t('toast.cookieDeleted').replace('{platform}', platform));
+        if (statusEl) statusEl.textContent = result.message || '';
+        refreshCookieStatus();
+    } else if (statusEl) {
+        statusEl.textContent = result.error || I18n.t('cookie.failed').replace('{err}', '');
     }
 }
 

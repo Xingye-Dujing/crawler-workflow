@@ -119,3 +119,49 @@ class TestVerify:
         assert panel['dialogOpen'] is True
         assert report['job'] == {'active': True, 'kind': 'verify', 'platform': 'zhihu'}
         assert report['actionsDisplay'] == 'none'
+
+
+class TestDeleteCookie:
+    """The panel's 「删除已存 Cookie」 button, one of the few places in this app where
+    a click destroys something the user cannot rebuild without a real login."""
+
+    def test_the_button_asks_before_it_sends_anything(self, panel):
+        case = panel['deleteCancelled']
+        assert case['calls'] == [], f'a refusal of the confirmation still deleted: {case["calls"]}'
+        assert case['toasts'] == []
+
+    def test_the_confirmation_is_a_two_button_dialog_not_an_input(self, panel):
+        """An input dialog is answered by its input; a confirm button that carries a
+        ``value`` would replace whatever the user typed. Here there is nothing to type,
+        so the two values are the whole contract."""
+        dialog = panel['deleteCancelled']['dialog']
+        assert dialog['values'] == ['delete', 'null'], dialog
+        assert dialog['message'] == 'dialog.cookieDelete'
+
+    def test_confirming_deletes_the_platform_that_is_selected(self, panel):
+        requests = panel['deleteConfirmed']['requests']
+        posted = [item for item in requests if item['url'] == '/api/cookies/delete']
+        assert len(posted) == 1, requests
+        assert json.loads(posted[0]['body']) == {'platform': 'bilibili'}
+
+    def test_a_deletion_refreshes_the_status_line_it_just_changed(self, panel):
+        """The panel shows which platforms hold a cookie; after a delete that answer
+        is stale, and a stale 「OK」 beside a removed file is a lie of the same shape as
+        the one the delete itself exists to correct."""
+        urls = [item['url'] for item in panel['deleteConfirmed']['requests']]
+        assert '/api/cookies/status' in urls, urls
+
+    def test_a_server_refusal_is_shown_rather_than_left_silent(self, panel):
+        case = panel['deleteRefused']
+        assert case['posted'] == 1
+        assert case['statusText'] == 'NOTHING-STORED'
+        assert case['toasts'] == [], 'a refusal is not a success, so it must not toast as one'
+
+    def test_the_profile_caveat_reaches_the_user(self, panel):
+        """The server says whether the platform's browser profile still holds the
+        session — the one thing the user is certain to assume wrongly — and the panel
+        passes the whole two-line answer through instead of its own shorter phrase."""
+        case = panel['deleteWithCaveat']
+        assert case['askedPlatforms'] == ['zhihu']
+        assert len(case['toasts']) == 1, case['toasts']
+        assert 'profile' in case['toasts'][0] and 'logged in' in case['toasts'][0], case['toasts']

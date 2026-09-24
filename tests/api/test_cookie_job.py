@@ -57,6 +57,9 @@ class FakeCrawler:
         self._block = login_block  # optional Event to stall driver.get
         self.diagnosed = []
         self._facts = facts if facts is not None else {'login_wall': False, 'url': 'https://example.com/feed'}
+        # Risk control is a fact about the *session object*, exactly as in the real
+        # crawler: ``diagnose`` returns the wall and the caller reads this beside it.
+        self.risk_blocked = bool(self._facts.get('risk_blocked'))
         # A probe that answers instantly is never caught mid-flight by a poller,
         # so a test that wants to act *during* one holds it here.
         self._hold = hold
@@ -310,6 +313,43 @@ class TestCookieVerify:
         r = client.post('/api/cookies/verify', json={'platform': 'zhihu', 'url': 'https://evil.test/'})
         assert r.status_code == 400
         assert job['made'] == []
+
+    def test_a_risk_control_page_is_not_reported_as_a_working_cookie(self, client, job, app_module):
+        """The panel answered this question with two verdicts — wall, or 可用 — and a
+        page that came back with a captcha collected the second one. The crawler keeps
+        ``login_wall`` apart from ``risk_blocked`` for exactly this case, so the panel
+        has to inherit three answers rather than inventing a pass.
+        """
+        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        job['state']['facts'] = {
+            'platform': 'www.zhihu.com',
+            'url': 'https://www.zhihu.com/',
+            'login_wall': False,
+            'risk_blocked': True,
+        }
+        assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
+        body = _await_phase(client, 'verified')
+        assert len(body['lines']) == 2, 'the checked URL plus one verdict'
+        assert not any('cookie works' in line for line in body['lines']), body['lines']
+        assert not any('redirects to a login page' in line for line in body['lines']), body['lines']
+        assert any('could not be verified' in line for line in body['lines']), (
+            f'the third answer never reached the panel: {body["lines"]}'
+        )
+
+    def test_a_verification_of_a_pasted_link_does_not_vouch_for_the_platform(
+        self, client, job, app_module, monkeypatch
+    ):
+        """The gate probes the platform's own address; a manual check aimed at an
+        article link measured that page, so it may not become the answer to a question
+        nobody asked about it."""
+        monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        article = 'https://www.zhihu.com/question/1/answer/2'
+        assert client.post('/api/cookies/verify', json={'platform': 'zhihu', 'url': article}).status_code == 202
+        _await_phase(client, 'verified')
+        import cookie_preflight
+
+        assert cookie_preflight.cached('zhihu') is None
 
     def test_the_login_buttons_do_not_answer_a_verification(self, client, job, app_module):
         """Done/Cancel belong to a login window. Pressing them while a probe
