@@ -82,7 +82,12 @@ function fire(type, target, extra = {}) {
 /** Right-click `nodeId` (or empty canvas when null), then pick a menu item. */
 function useNodeMenu(nodeId, action) {
     const noNode = { closest: () => null };
-    const onNode = { closest: (sel) => (sel === '.node' ? { id: nodeId } : null) };
+    /* `closest()` answers with the ELEMENT it matched, so this hands back the node's
+       own box rather than a bare `{id}`: the menu reads the box's live state (is it
+       folded) and the canvas must be able to clamp the menu by its own size. A node
+       with no box is no node — the same answer a browser would give. */
+    const box = (nodeId && canvas.nodes[nodeId] && canvas.nodes[nodeId].el) || null;
+    const onNode = { closest: (sel) => (sel === '.node' ? box : null) };
     const item = { dataset: { action } };
     const menuTarget = { closest: (sel) => (sel === '#context-menu' || sel === '[data-action]' ? item : null) };
     dispatchOn(canvas.workspace, 'contextmenu', {

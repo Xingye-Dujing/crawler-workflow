@@ -666,4 +666,29 @@ route('/api/history/delete', { ok: true, deleted: 1 });
 await pa.historyPanel.deleteRun('   ');
 out.history_blank_id = { requested: requests.length };
 
+/* ── one press, one toast ────────────────────────────────────────────── */
+/* Two source nodes with nothing typed in: the validator has two separate things to
+   say, and the user has to hear both. Looping `showToast` over them printed only the
+   last (one element, text replaced each time), so a canvas with N problems needed N
+   presses of 执行 to discover them one at a time. */
+fresh();
+addCanvasNode('source', { platform: 'zhihu', collect: 'posts', keyword: '' });
+addCanvasNode('source', { platform: 'weibo', collect: 'posts', keyword: '' });
+requests.length = 0;
+await pa.workflow.execute();
+await drain();
+out.two_problems_one_toast = {
+    toasts: toasts.slice(),
+    started: requests.filter((r) => r.url.indexOf('/api/workflow/execute') === 0).length,
+};
+
+/* The same button on a canvas with exactly ONE problem: the list header would be
+   scaffolding around a sentence that already names the node. */
+fresh();
+addCanvasNode('output', { operation: 'save', format: 'csv', filename: 'a.csv' });
+requests.length = 0;
+await pa.workflow.execute();
+await drain();
+out.one_problem_plain_toast = { toasts: toasts.slice() };
+
 process.stdout.write(JSON.stringify(out));

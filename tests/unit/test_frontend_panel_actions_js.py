@@ -333,3 +333,28 @@ class TestHistoryRowActions:
 
     def test_an_id_that_is_only_whitespace_does_not_open_a_dialog(self, pa):
         assert pa['history_blank_id'] == {'requested': 0}
+
+
+class TestOnePressOneToast:
+    """The toast element is ONE node whose text is replaced, so a loop over the
+    validation errors showed the LAST problem only — the user fixed it, pressed
+    执行 again, met the next one, and so on for the length of the list."""
+
+    def test_a_blocked_run_reports_every_problem_in_one_toast(self, pa):
+        got = pa['two_problems_one_toast']
+        assert got['started'] == 0, 'a canvas with problems must not start a run'
+        assert len(got['toasts']) == 1, (
+            f'one press produced {len(got["toasts"])} toasts, and only the last is on screen: {got["toasts"]}'
+        )
+        lines = str(got['toasts'][0]).split('\n')
+        header, items = lines[0], lines[1:]
+        assert len(items) >= 2, f'two broken nodes must say two things: {got["toasts"]}'
+        assert str(len(items)) in header, f'the header has to state how many follow: {header!r}'
+        assert items[0].startswith('1. ') and items[1].startswith('2. '), items
+
+    def test_a_single_problem_stays_a_single_sentence(self, pa):
+        """The count header exists to explain a LIST. With one problem the message
+        already names the node, so numbering it would be scaffolding."""
+        toasts = pa['one_problem_plain_toast']['toasts']
+        assert len(toasts) == 1, toasts
+        assert '\n' not in str(toasts[0]), f'one problem does not need a list: {toasts[0]!r}'

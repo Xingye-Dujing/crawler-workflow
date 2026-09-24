@@ -314,6 +314,20 @@ class TestContextMenu:
         assert ix['context_menu']['fold_action']['folded'] is True
         assert ix['context_menu']['fold_action']['nodes'] == 1
 
+    def test_a_folded_node_offers_the_other_half_of_the_action(self, ix):
+        """The row changes its mind with the node: a menu that keeps saying 「折叠」
+        after the node is folded offers an action that does nothing visible, which
+        reads as a broken item rather than as a toggle."""
+        got = ix['context_menu']['on_folded']
+        assert got['foldAction'] == 'ctxUnfoldNode', got
+        assert got['foldLabel'] == 'UNFOLD', got
+
+    def test_the_menu_is_clamped_by_its_own_measured_box(self, ix):
+        """400×300 window, a 260×180 menu: only its real size says where the right
+        edge is. The old constant margin parked the menu off-screen in one language
+        and stopped it 100 px early in another."""
+        assert ix['context_menu']['clamped']['position'] == ['132px', '112px'], ix['context_menu']['clamped']
+
     def test_the_delete_item_deletes_the_right_node(self, ix):
         assert ix['context_menu']['delete_action']['nodes'] == 0
 

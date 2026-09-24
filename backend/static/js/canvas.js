@@ -175,16 +175,32 @@ const canvas = {
             document.getElementById('ctx-delete-node').style.display = node ? 'block' : 'none';
             const foldItem = document.getElementById('ctx-fold-node');
             if (node) {
-                const el = document.getElementById(node.id);
-                const folded = el && el.classList.contains('node-folded');
+                /* The element `closest()` answered with IS the node box; looking it up
+                   by id again used to resolve to whatever page element shared that id
+                   (see `_nodeEl`). */
+                const folded = node.classList.contains('node-folded');
                 foldItem.style.display = 'block';
                 foldItem.textContent = folded ? I18n.t('canvas.unfold') : I18n.t('canvas.fold');
                 foldItem.dataset.action = folded ? 'ctxUnfoldNode' : 'ctxFoldNode';
             } else {
                 foldItem.style.display = 'none';
             }
-            ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
-            ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 200) + 'px';
+            /* Clamped by what the menu actually is, not by a guessed 200 px: the
+               language changes its width and folding an item changes its height, so a
+               constant either leaves the menu off-screen or stops it far too early.
+               Measured after the visibility decisions above, which is what sizes it. */
+            ctxMenu.style.left = '0px';
+            ctxMenu.style.top = '0px';
+            const room = {
+                x: Math.max(0, e.clientX),
+                y: Math.max(0, e.clientY),
+            };
+            if (ctxMenu.offsetWidth && ctxMenu.offsetHeight) {
+                room.x = Math.min(room.x, window.innerWidth - ctxMenu.offsetWidth - 8);
+                room.y = Math.min(room.y, window.innerHeight - ctxMenu.offsetHeight - 8);
+            }
+            ctxMenu.style.left = Math.max(0, room.x) + 'px';
+            ctxMenu.style.top = Math.max(0, room.y) + 'px';
             ctxMenu.classList.add('open');
         });
         document.addEventListener('click', (e) => {
@@ -628,8 +644,20 @@ const canvas = {
         return '';
     },
 
+    /* A node's element, taken through the node — never through `getElementById`.
+       The id a workflow file carries becomes the DOM id of the box (`addNode` sets
+       `el.id = id`), so a node whose id happens to be `status-zoom`, `svg-layer` or
+       `chart-emotion` resolved to the PAGE element with that name: `deleteNode`
+       removed a piece of the interface, `selectNode` highlighted something that is
+       not a node, and the geometry reads measured it. `nodes[id].el` is the box this
+       object created, which is the only thing these callers may touch. */
+    _nodeEl(id) {
+        const node = this.nodes[id];
+        return node && node.el ? node.el : null;
+    },
+
     deleteNode(id) {
-        const el = document.getElementById(id);
+        const el = this._nodeEl(id);
         if (el) el.remove();
         delete this.nodes[id];
         this.connections = this.connections.filter(c => c.from !== id && c.to !== id);
@@ -646,7 +674,7 @@ const canvas = {
     selectNode(id) {
         document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
         this.selectedNode = id;
-        const el = document.getElementById(id);
+        const el = this._nodeEl(id);
         if (el) el.classList.add('selected');
     },
 
@@ -700,7 +728,7 @@ const canvas = {
             btn.classList.remove('settings-open');
         });
         if (this._settingsNodeId) {
-            const nodeEl = document.getElementById(this._settingsNodeId);
+            const nodeEl = this._nodeEl(this._settingsNodeId);
             if (nodeEl) {
                 const btn = nodeEl.querySelector('.node-action-btn');
                 if (btn) btn.classList.add('settings-open');
@@ -858,8 +886,8 @@ const canvas = {
         const ids = Object.keys(this.nodes);
         if (ids.length > 0) {
             let cxSum = 0, cySum = 0;
-            ids.forEach(function (id) {
-                const el = document.getElementById(id);
+            ids.forEach((id) => {
+                const el = this._nodeEl(id);
                 if (el) {
                     cxSum += el.offsetLeft + el.offsetWidth / 2;
                     cySum += el.offsetTop + el.offsetHeight / 2;
@@ -880,7 +908,7 @@ const canvas = {
         const nodes = {};
         Object.keys(this.nodes).forEach(id => {
             const n = this.nodes[id];
-            const el = document.getElementById(id);
+            const el = this._nodeEl(id);
             nodes[id] = {
                 id: id, type: n.type, title: n.title,
                 /* A snapshot must be a snapshot. Handing out the live object made
@@ -1000,7 +1028,7 @@ const canvas = {
         if (!state) return;
         this._historySaving = true;
         Object.keys(this.nodes).forEach(id => {
-            const el = document.getElementById(id);
+            const el = this._nodeEl(id);
             if (el) el.remove();
         });
         this.nodes = {};
@@ -1024,7 +1052,7 @@ const canvas = {
     updateNodeDisplay(id) {
         const node = this.nodes[id];
         if (!node) return;
-        const el = document.getElementById(id);
+        const el = this._nodeEl(id);
         if (!el) return;
         const content = el.querySelector('.node-content');
         if (content) content.textContent = this.getNodeSummary(node.type, node.params);
@@ -1065,7 +1093,7 @@ const canvas = {
     /* Shared with restoreState: a fold is two style writes plus a class, and a
        second copy would drift the moment one of the three changed. */
     _setFolded(id, folded) {
-        const el = document.getElementById(id);
+        const el = this._nodeEl(id);
         if (!el) return false;
         el.classList.toggle('node-folded', !!folded);
         const content = el.querySelector('.node-content');
@@ -1076,7 +1104,7 @@ const canvas = {
     },
 
     toggleFold(id) {
-        const el = document.getElementById(id);
+        const el = this._nodeEl(id);
         if (!el) return;
         const folded = !el.classList.contains('node-folded');
         if (!this._setFolded(id, folded)) return;
@@ -1169,8 +1197,8 @@ const canvas = {
 
             /* Find component's actual top and bottom edges in local coords */
             let compTop = Infinity, compBottom = -Infinity;
-            positions.forEach(function (p) {
-                const el = document.getElementById(p.id);
+            positions.forEach((p) => {
+                const el = this._nodeEl(p.id);
                 const h = (el && el.offsetHeight) || 80;
                 if (p.y < compTop) compTop = p.y;
                 if (p.y + h > compBottom) compBottom = p.y + h;
@@ -1179,8 +1207,8 @@ const canvas = {
             /* Shift so the top edge aligns with cursorY */
             const shift = cursorY - compTop;
 
-            positions.forEach(function (p) {
-                const el = document.getElementById(p.id);
+            positions.forEach((p) => {
+                const el = this._nodeEl(p.id);
                 if (!el) return;
                 allPositions.push({ id: p.id, x: p.x, y: p.y + shift });
             });
@@ -1190,8 +1218,8 @@ const canvas = {
 
         /* Step 3: center everything in viewport using visual node centers */
         let cxSum = 0, cySum = 0, count = 0;
-        allPositions.forEach(function (p) {
-            const el = document.getElementById(p.id);
+        allPositions.forEach((p) => {
+            const el = this._nodeEl(p.id);
             if (!el) return;
             cxSum += p.x + el.offsetWidth / 2;
             cySum += p.y + el.offsetHeight / 2;
@@ -1205,8 +1233,8 @@ const canvas = {
         const offsetX = vpCenterX - layoutCenterX;
         const offsetY = vpCenterY - layoutCenterY;
 
-        allPositions.forEach(function (p) {
-            const el = document.getElementById(p.id);
+        allPositions.forEach((p) => {
+            const el = this._nodeEl(p.id);
             if (el) {
                 el.style.left = Math.round(p.x + offsetX) + 'px';
                 el.style.top = Math.round(p.y + offsetY) + 'px';
@@ -1227,7 +1255,7 @@ const canvas = {
         const nodes = [];
         Object.keys(this.nodes).forEach(id => {
             const n = this.nodes[id];
-            const el = document.getElementById(id);
+            const el = this._nodeEl(id);
             nodes.push({
                 id: id,
                 type: n.type,

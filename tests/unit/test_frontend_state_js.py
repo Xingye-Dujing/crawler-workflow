@@ -16,6 +16,7 @@ Everything here runs the untouched canvas.js/workflow.js inside node
 """
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -586,6 +587,21 @@ class TestFileLifecycle:
         assert r['currentFile'] == 'old-name', 'a failed open must not forget what is on screen'
         assert len(r['nodes']) == 1, 'the pre-existing canvas must survive untouched'
         assert any('loadfail' in msg for msg in r['toasts'])
+
+    def test_a_node_is_never_looked_up_by_dom_id(self):
+        """`addNode` makes the node's id its element id, and the ids a workflow file
+        carries are adopted as they are — so `getElementById(<node id>)` is a question
+        about the PAGE, not about the node: a node called `status-zoom` made
+        `deleteNode` and the undo path remove the status bar itself, and the geometry
+        reads measured whatever element got there first. The DOM stub cannot express
+        the collision (its registry lets the later element win, a browser keeps the
+        first), so the rule is pinned where it is written: every node lookup goes
+        through `canvas._nodeEl`, and no call in the file takes a variable id.
+        """
+        source = (JS_DIR / 'canvas.js').read_text(encoding='utf-8')
+        by_variable = re.findall(r"getElementById\(\s*(?!['\"])[^)]*\)", source)
+        assert by_variable == [], f'node lookups must go through _nodeEl: {by_variable}'
+        assert source.count('this._nodeEl(') >= 8, 'the helper exists but nothing uses it'
 
     def test_opening_a_file_without_a_node_list_changes_nothing(self, life):
         """The server answered ok for a JSON file that is not a workflow. Loading

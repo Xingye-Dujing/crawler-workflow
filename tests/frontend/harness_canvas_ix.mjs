@@ -628,6 +628,24 @@ out.context_menu.fold_action = {
     stillOpen: ctxMenu.classList.contains('open'),
     nodes: Object.keys(canvas.nodes).length,
 };
+/* The same node, now folded: the row has to advertise the OPPOSITE action, or the
+   second right-click folds a folded node and reads as a dead menu item. */
+const onNode = { closest: (sel) => (sel === '.node' ? doc.getElementById(cmNode) : null) };
+dispatchOn(workspace, 'contextmenu', ev({ clientX: 220, clientY: 240, target: onNode }));
+out.context_menu.on_folded = {
+    foldLabel: doc.getElementById('ctx-fold-node').textContent,
+    foldAction: doc.getElementById('ctx-fold-node').dataset.action,
+};
+/* And the clamp is the menu's own box: 8px padding off a 400×300 window with a
+   260×180 menu can only be answered by measuring, not by a guessed constant. */
+ctxMenu.offsetWidth = 260;
+ctxMenu.offsetHeight = 180;
+sandbox.innerWidth = 400;
+sandbox.innerHeight = 300;
+dispatchOn(workspace, 'contextmenu', ev({ clientX: 380, clientY: 290, target: onNode }));
+out.context_menu.clamped = { position: [ctxMenu.style.left, ctxMenu.style.top] };
+sandbox.innerWidth = 1920;
+sandbox.innerHeight = 1080;
 canvas._contextNode = cmNode;
 clickItem('ctxDeleteNode');
 out.context_menu.delete_action = { nodes: Object.keys(canvas.nodes).length, menuClosed: !ctxMenu.classList.contains('open') };

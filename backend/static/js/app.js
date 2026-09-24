@@ -131,6 +131,9 @@ const I18n = {
             'toast.killFailed': 'Could not kill that process',
             'toast.cookiesSaved': 'Cookies saved',
             'toast.cookiesMissing': 'Cookies not configured for platform. Please set cookies first:',
+            /* One press, one toast: the count is what tells the user the list below is
+               everything that is wrong, not the one thing they will get to see. */
+            'toast.problems': '{n} problems to fix before this run can start:',
             'dialog.workflowName': 'Workflow name:',
             'dialog.selectWorkflow': 'Enter workflow name to load:',
             'dialog.cancel': 'Cancel',
@@ -753,6 +756,7 @@ const I18n = {
             'toast.killFailed': '无法结束该进程',
             'toast.cookiesSaved': 'Cookies 已保存',
             'toast.cookiesMissing': '平台 Cookies 未配置，请先设置:',
+            'toast.problems': '本次运行前有 {n} 个问题需要处理:',
             'dialog.workflowName': '工作流名称:',
             'dialog.selectWorkflow': '输入要加载的工作流名称:',
             'dialog.cancel': '取消',

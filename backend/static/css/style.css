@@ -2545,6 +2545,13 @@ input:-webkit-autofill:focus {
   padding: 8px 20px;
   font-size: 11px;
   letter-spacing: 0.5px;
+  /* A validation toast now carries one numbered line per problem, so it needs to
+     wrap inside the screen instead of pushing a horizontal scrollbar past it
+     (`white-space` was the default `normal`, which would have collapsed the newlines
+     into a single unreadable sentence). */
+  white-space: pre-line;
+  max-width: min(80vw, 520px);
+  text-align: left;
   z-index: 2000;
   opacity: 0;
   transition: opacity 0.3s;

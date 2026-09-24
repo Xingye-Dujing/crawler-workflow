@@ -263,6 +263,10 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   interrupted run. `canvas.addNode(type, x, y, nodeId)` adopts the stored id and `reserveId` keeps
   `nextId` past it (a later drag must not collide); both restore paths (`canvas.restoreState`,
   `WorkflowManager.loadFromJSON`) pass file ids straight through — pinned by `harness_state.mjs`.
+  That same id is the box's **DOM** id, so `getElementById(<node id>)` asks the page a question about a
+  node: a workflow file carrying `id: "status-zoom"` made `deleteNode` and the undo path remove the
+  status bar itself. Node elements are reached through `canvas._nodeEl(id)` (which reads `nodes[id].el`),
+  and the text guard in `test_frontend_state_js.py` fails any variable-argument `getElementById` in canvas.js.
 - **Recorded rows are addressed by workflow, never by bare node id.** `_durable_node_rows` (app.py) answers
   a preview/chart/export/studio probe after a refresh from `runs.db`; ids like `node-2` repeat on every
   canvas, so with no identity it returns nothing rather than guessing. The browser sends `workflow_name`

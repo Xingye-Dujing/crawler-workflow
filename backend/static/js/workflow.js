@@ -355,7 +355,22 @@ const workflow = {
             }
         } catch (e) { /* skip cookie check if API fails */ }
         if (validationErrors.length > 0) {
-            validationErrors.forEach(function (err) { showToast(err); });
+            /* ONE toast for one press of the button. `#toast` is a single element whose
+               text is replaced, so the loop that used to run over these errors left the
+               LAST one on screen: a canvas with five problems reported one, the user
+               fixed it, pressed 执行 again and was told about the next — the same button
+               three times over. Numbered lines and a header that says how many. */
+            if (validationErrors.length === 1) {
+                showToast(validationErrors[0]);
+            } else {
+                var lines = validationErrors.map(function (err, i) {
+                    return (i + 1) + '. ' + err;
+                });
+                showToast(
+                    I18n.t('toast.problems').replace('{n}', validationErrors.length) + '\n' + lines.join('\n'),
+                    Math.min(9000, 2500 + 900 * validationErrors.length)
+                );
+            }
             return;
         }
         /* Ask about the browser before the browser is bought: on the platforms
@@ -2715,11 +2730,14 @@ function setLang(nextLang) {
     if (window.exportsManager) exportsManager.onLanguageChange();
 }
 
-function showToast(msg) {
+function showToast(msg, ms) {
     var toast = document.getElementById('toast');
     toast.textContent = msg;
     toast.classList.add('show');
-    setTimeout(function () { toast.classList.remove('show'); }, 2500);
+    /* A longer message has to be readable, not merely present: the fixed 2.5 s was
+       written for one short sentence and the multi-problem toast below carries a
+       line per problem. */
+    setTimeout(function () { toast.classList.remove('show'); }, ms || 2500);
 }
 
 /* Console Panel */
