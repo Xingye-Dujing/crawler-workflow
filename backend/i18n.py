@@ -170,6 +170,11 @@ _ZH = {
     'crawl.zhihu.no_growth': '卡片数未增长 ({n}/3)，再次滚动确认...',
     'crawl.zhihu.confirmed': '二次确认后卡片数仍为 {n}，内容已加载完毕',
     'crawl.zhihu.phase_done': '滚动加载阶段完成，最终获取 {n} 个卡片',
+    # One fact, one line: what the 正文 column actually holds. The search page only ever
+    # carries an excerpt, so a crawl that did not expand has to say so once at the end.
+    'crawl.zhihu.excerpt_only': '未展开正文：本次所有正文都是搜索页摘要（可在数据源节点勾选「展开全文」）',
+    'crawl.zhihu.bodies_short': '另有 {n} 条回答未能展开，其正文仍为搜索页摘要',
+    'crawl.zhihu.expand_stopped': '连续 {n} 次展开均无回应，本次剩余行改用搜索页摘要',
     # ── crawlers: weibo ───────────────────────────────────────
     'crawl.weibo.keyword': '关键词: {kw}',
     'crawl.weibo.range': '时间范围: {start} 至 {end}',
@@ -843,6 +848,13 @@ _EN = {
     'crawl.zhihu.no_growth': 'Card count did not grow ({n}/3), scrolling once more to confirm...',
     'crawl.zhihu.confirmed': 'Still {n} cards after the second check — content fully loaded',
     'crawl.zhihu.phase_done': 'Scroll phase done, {n} cards in total',
+    'crawl.zhihu.excerpt_only': (
+        'Bodies left collapsed: every 正文 is a search-page excerpt (tick "Expand full text" on the data source node)'
+    ),
+    'crawl.zhihu.bodies_short': '{n} answer(s) did not expand; their 正文 is still a search-page excerpt',
+    'crawl.zhihu.expand_stopped': (
+        '{n} expansions in a row answered nothing; keeping search-page excerpts for the rest of this crawl'
+    ),
     # ── crawlers: weibo ───────────────────────────────────────
     'crawl.weibo.keyword': 'Keyword: {kw}',
     'crawl.weibo.range': 'Time range: {start} to {end}',

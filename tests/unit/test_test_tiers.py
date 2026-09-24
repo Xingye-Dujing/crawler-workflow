@@ -253,3 +253,113 @@ class TestRegionSplit:
         assert "'warn_mixed_region': True" in text, 'asking is the default until somebody says otherwise'
         gate = (REPO_ROOT / 'backend' / 'crawl_gate.py').read_text(encoding='utf-8')
         assert 'warn_mixed_region' not in gate, 'a cosmetic dialog must not be wired into what actually runs'
+
+
+class TestLiveCrawlerFixture:
+    """The helper that holds a platform's turn is under test too — with no browser.
+
+    A case that asks for a second browser of a platform it is *still* holding parks inside
+    the gate for ``Config.PLATFORM_GATE_TIMEOUT`` — 900 seconds that look exactly like a
+    slow crawl, because the wait happens before the browser exists. That is a property of
+    this fixture rather than of any site, so it is checked by driving the fixture itself
+    with both ends replaced: :func:`crawl_gate.hold` becomes a recorder that refuses an
+    overlapping turn, and ``get_crawler`` a stub that closes on command.
+    """
+
+    def _drive(self, monkeypatch):
+        import contextlib
+        import importlib.util
+
+        import crawl_gate
+
+        import crawlers
+
+        spec = importlib.util.spec_from_file_location('live_conftest_under_test', LIVE_DIR / 'conftest.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        monkeypatch.setattr(module, 'has_cookie', lambda platform: True)
+
+        held: list = []
+        events: list = []
+
+        @contextlib.contextmanager
+        def fake_hold(platform, log=None, abort=None):
+            if platform in held:
+                raise AssertionError(f'{platform} held twice by one thread: the next crawler parks in the gate')
+            held.append(platform)
+            events.append(f'take:{platform}')
+            try:
+                yield False
+            finally:
+                held.remove(platform)
+                events.append(f'give:{platform}')
+
+        class Stub:
+            def __init__(self, platform):
+                self.platform = platform
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        made: list = []
+
+        def fake_get_crawler(platform, headless=True, cookie_dir=None):
+            stub = Stub(platform)
+            made.append(stub)
+            return stub
+
+        monkeypatch.setattr(crawl_gate, 'hold', fake_hold)
+        monkeypatch.setattr(crawlers, 'get_crawler', fake_get_crawler)
+        # ``__wrapped__`` is the undecorated generator function: pytest refuses to have a
+        # fixture called directly, and it is right — but driving the helper's own body is
+        # exactly what this class is for, so the decoration is taken off rather than the
+        # tier rewritten to need a browser.
+        fixture = getattr(module.live_crawler, '__wrapped__', None)
+        assert fixture is not None, 'pytest stopped exposing the undecorated fixture'
+        generator = fixture('cookies')
+        factory = next(generator)
+
+        def finish():
+            next(generator, None)
+
+        return factory, events, made, finish
+
+    def test_asking_twice_for_one_platform_hands_the_turn_back_first(self, monkeypatch):
+        factory, events, made, finish = self._drive(monkeypatch)
+        try:
+            first = factory('zhihu')
+            second = factory('zhihu')
+            assert events == ['take:zhihu', 'give:zhihu', 'take:zhihu'], events
+            assert first.closed, 'the crawler it replaced was left holding a browser'
+            assert second is not first and not second.closed
+        finally:
+            finish()
+
+    def test_two_platforms_may_be_held_at_once(self, monkeypatch):
+        # The gate is keyed by platform; a helper that released a *different* platform's
+        # turn to make room would take the tier's fidelity back out again.
+        factory, events, _made, finish = self._drive(monkeypatch)
+        try:
+            factory('zhihu')
+            factory('weibo')
+            assert events == ['take:zhihu', 'take:weibo'], events
+        finally:
+            finish()
+
+    def test_releasing_by_hand_returns_the_turn_once(self, monkeypatch):
+        factory, events, _made, finish = self._drive(monkeypatch)
+        try:
+            crawler = factory('zhihu')
+            factory.release(crawler)
+            factory.release(crawler)  # a double release must not give back someone else's turn
+            assert events == ['take:zhihu', 'give:zhihu'], events
+        finally:
+            finish()
+
+    def test_the_teardown_gives_back_what_the_test_never_released(self, monkeypatch):
+        factory, events, made, finish = self._drive(monkeypatch)
+        factory('zhihu')
+        finish()
+        assert events == ['take:zhihu', 'give:zhihu'], events
+        assert made[0].closed, 'a crawler left open by a test still has to be closed'

@@ -3,18 +3,30 @@
 The point is not Selenium (that chain gets its own real-Chrome tier via the
 WeChat fixture), it is zhihu.py's scraping logic: the search URL it builds, the
 exact selector set it reads cards through, the "作者 or 正文 must be present"
-keep-filter, the streaming sink, and the resume arithmetic. A fake driver lets
-all of that run in the default suite in milliseconds.
+keep-filter, whether a clamped card was opened before its body was kept, the
+streaming sink, and the resume arithmetic. A fake driver lets all of that run in
+the default suite in milliseconds.
 """
 
 import pytest
 from selenium.common.exceptions import NoSuchElementException
 
 import crawlers.base as base_module
+import i18n
 from crawlers.base import Crawler
 from crawlers.zhihu import ZhihuCrawler
 
 pytestmark = pytest.mark.unit
+
+
+def _lines(caplog) -> list:
+    """The console lines a crawl actually logged, as the crawler wrote them.
+
+    Compared against ``i18n.t(...)`` rather than a pasted sentence: the wording is the
+    product's to change, and a test that demands a literal copy of it fails on a
+    translation edit while proving nothing about the crawl.
+    """
+    return [record.getMessage() for record in caplog.records]
 
 
 class FakeElement:
@@ -28,24 +40,64 @@ class FakeElement:
         return self._attrs.get(name, '')
 
     def click(self):
-        # The 2026 layout made 阅读全文 a NAVIGATION on column cards — clicking
-        # it used to detach every remaining card. It must never be clicked.
-        raise AssertionError(f'crawler clicked an expand button (text={self.text!r}) — regression')
+        # Nothing in a search crawl should reach this: the crawler drives the
+        # page through ``execute_script``, and the one control it may click is
+        # answered by ``FakeCard.expand`` below, which is where the site's own
+        # behaviour (in place vs away) is modelled.
+        raise AssertionError(f'crawler clicked a DOM node directly (text={self.text!r}) — regression')
 
 
 class FakeCard:
     """A search-result card: a selector -> text map plus the handful of
     attributes the crawler reads. Unknown selectors raise the same
     NoSuchElementException the real driver raises, which is what the crawler's
-    per-field fallbacks are written against."""
+    per-field fallbacks are written against.
 
-    def __init__(self, texts, buttons=(), hrefs=None, module='', aria=None, cls=''):
-        self._texts = texts
+    The 阅读全文 control is modelled by the three flags below, each one a shape
+    measured on the live page on 2026-09-24:
+
+    * nothing set — the card carries no control, because that answer is short by itself;
+    * ``after`` — an *answer* card's control re-renders the card in place (74 characters
+      became 308, same URL, a handle two rows down still alive). The dict is what the
+      page looks like afterwards, and it is not only the body: the date label also moves
+      off ``.SearchItem-time`` onto a full timestamp, which is why the row keeps the
+      values read before the click;
+    * ``silent`` — the control is there and answers nothing, which is a truncated row
+      the crawl has to admit to;
+    * ``navigate`` — a *column* card's control leaves the page and detaches every
+      remaining handle, so the crawler must never click one. That is an assertion, not a
+      simulation: reaching it fails the test.
+    """
+
+    def __init__(
+        self, texts, buttons=(), hrefs=None, module='', aria=None, cls='', after=None, silent=False, navigate=False
+    ):
+        self._texts = dict(texts)
         self._buttons = list(buttons)
         self._hrefs = hrefs or {}
         self._module = module
         self._aria = aria
         self._cls = cls
+        self._after = dict(after or {})
+        self._silent = silent
+        self._navigate = navigate
+        self.clicks = 0
+
+    def expand(self) -> int:
+        """What the site does when this card's 阅读全文 is clicked."""
+        self.clicks += 1
+        if self._navigate:
+            raise AssertionError(
+                'a column card was clicked — that navigates to its own page and detaches every remaining handle'
+            )
+        if not self._after and not self._silent:
+            return 0
+        for selector, text in self._after.items():
+            if text is None:
+                self._texts.pop(selector, None)
+            else:
+                self._texts[selector] = text
+        return 1
 
     def find_element(self, by, selector):
         if selector in self._texts:
@@ -98,6 +150,10 @@ class FakeDriver:
         return []
 
     def execute_script(self, script, *args):
+        # Checked before the text reader: the expand script also mentions innerText,
+        # and answering it with a text would hide the fact that a card was clicked.
+        if '阅读全文' in script and args:
+            return args[0].expand()
         if 'scroll' in script:
             self.scrolls += 1
             # One harvest round is `SCROLL_STEPS` steps plus the bottom jump.
@@ -115,8 +171,9 @@ class FakeDriver:
 
 CARD_1 = {
     # The 2026 card carries no author element at all — the name is inlined as
-    # a '作者名：正文' prefix inside the preview. 阅读全文 is present and MUST
-    # NOT be clicked (FakeElement.click raises).
+    # a '作者名：正文' prefix inside the preview. This card models one with no
+    # 阅读全文 control (a short answer), so the preview IS its full body and
+    # every assertion below about 正文 holds without expansion.
     '.ContentItem-title a': '三亚的冬天可以下海',
     '.RichContent-inner .RichText': '张三：海水温度非常舒适适合游泳。',
     'button.ContentItem-more': '阅读全文',
@@ -137,8 +194,8 @@ CARD_2_HREFS = {'.ContentItem-title a': 'https://zhuanlan.zhihu.com/p/789'}
 CARD_EMPTY = {}  # neither author nor body → the keep-filter must drop it
 
 
-def _card(texts, buttons=(), hrefs=None, module='PostItem', aria=None, cls=''):
-    return FakeCard(texts, buttons, hrefs, module, aria, cls)
+def _card(texts, buttons=(), hrefs=None, module='PostItem', aria=None, cls='', **site):
+    return FakeCard(texts, buttons, hrefs, module, aria, cls, **site)
 
 
 @pytest.fixture
@@ -182,8 +239,8 @@ class TestZhihuSearch:
         assert [r['分类'] for r in rows] == ['回答', '文章']
 
     def test_cards_parse_into_full_rows(self, make_crawler):
-        # FakeElement.click raises, so this test ALSO proves 阅读全文 is never
-        # clicked — the navigation that used to detach every card after it.
+        # Neither of these cards carries a 阅读全文 control (see FakeCard), so the
+        # preview is its full body and the parse below is the whole story.
         crawler, _ = make_crawler(
             [
                 _card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS, module='AnswerItem'),
@@ -411,3 +468,136 @@ class TestZeroCardSearch:
         # _search_via_input must report False instead of throwing.
         crawler, _ = make_crawler([])
         assert crawler._search_via_input('三亚') is False
+
+
+class TestBodyExpansion:
+    """The search list hands out an excerpt, and the card's own 阅读全文 holds the rest.
+
+    Measured 2026-09-24 across eight answer cards: 35–109 characters before the click,
+    223–2103 after, and the answer's own page agreed (308 both places for one row). No CSS
+    clamp is involved — ``innerText`` equalled ``textContent`` at 109 characters — so this
+    is not a rendering problem a wider read could fix: an unexpanded row is a truncated
+    row, and the only way to the text is the click.
+    """
+
+    ANSWER = 'https://www.zhihu.com/question/123/answer/456'
+    COLUMN = 'https://zhuanlan.zhihu.com/p/789'
+    PREVIEW = '张三：海水温度舒适。'
+    FULL = '海水温度舒适，适合游泳，三亚的冬天比北海暖，人还少。' * 6
+
+    def _answer(self, **site):
+        texts = dict(CARD_1)
+        texts['.RichContent-inner .RichText'] = self.PREVIEW
+        return _card(texts, CARD_1_BUTTONS, {'.ContentItem-title a': self.ANSWER}, module='AnswerItem', **site)
+
+    def test_the_default_is_to_expand(self, make_crawler):
+        # The matrix's checkbox and the crawler's own default are one number, pinned by
+        # test_crawl_capabilities; what this pins is that a caller who says nothing (a
+        # hand-written workflow JSON, a live test) gets the full body rather than the stub.
+        card = self._answer(after={'.RichContent-inner .RichText': self.FULL})
+        crawler, _ = make_crawler([card])
+        assert crawler.search('三亚', target_count=1)[0]['正文'] == self.FULL
+
+    def test_an_answer_card_is_clicked_and_its_text_replaces_the_excerpt(self, make_crawler):
+        card = self._answer(after={'.RichContent-inner .RichText': self.FULL})
+        crawler, _ = make_crawler([card])
+        rows = crawler.search('三亚', target_count=1)
+        assert card.clicks == 1, 'the card was harvested still an excerpt'
+        assert rows[0]['正文'] == self.FULL
+
+    def test_the_rest_of_the_row_stays_what_the_list_reported(self, make_crawler):
+        # The same click moves the date label too (measured: 08-27 became
+        # 编辑于2026-08-27 12:22) and drops the 作者名： prefix off the front of the body.
+        # Re-scraping the row after expanding would leave 发布时间 holding two formats
+        # across one column, decided by an internal retry, and empty 作者 on the rows the
+        # fix was meant to improve.
+        card = self._answer(
+            after={
+                '.RichContent-inner .RichText': self.FULL,
+                '.SearchItem-time': None,
+                '.ContentItem-time a, .ContentItem-time div': '编辑于2026-09-06 12:22',
+            }
+        )
+        crawler, _ = make_crawler([card])
+        row = crawler.search('三亚', target_count=1)[0]
+        assert row['正文'] == self.FULL
+        assert row['发布时间'] == '09-06'
+        assert row['作者'] == '张三'
+        assert row['赞同数'] == 128 and row['评论数'] == 12
+
+    def test_a_column_card_is_never_clicked(self, make_crawler):
+        # FakeCard.expand raises for a navigate card, so passing at all is the proof.
+        card = _card(
+            dict(CARD_2, **{'.RichContent-inner .RichText': '李四：清补凉必吃。'}),
+            CARD_2_BUTTONS,
+            {'.ContentItem-title a': self.COLUMN},
+            module='PostItem',
+            after={'.RichContent-inner .RichText': '一整篇专栏文章。' * 40},
+        )
+        crawler, _ = make_crawler([card])
+        rows = crawler.search('三亚', target_count=1)
+        assert card.clicks == 0
+        assert rows[0]['正文'] == '李四：清补凉必吃。'
+
+    def test_a_card_whose_anchor_never_mounted_is_not_clicked(self, make_crawler):
+        # No link means no kind, and the kind is what says the click is safe. The nudge
+        # path re-scrapes and still finds nothing; expanding on that guess is what used to
+        # cost the whole crawl.
+        card = self._answer(after={'.RichContent-inner .RichText': self.FULL})
+        card._hrefs = {}
+        crawler, _ = make_crawler([card])
+        rows = crawler.search('三亚', target_count=1)
+        assert card.clicks == 0
+        assert rows[0]['正文'] == self.PREVIEW
+
+    def test_a_card_with_no_control_is_not_reported_as_a_shortfall(self, make_crawler, caplog):
+        # A short answer is a complete row, not a failed expansion; the difference is
+        # whether the site offered a control at all.
+        crawler, _ = make_crawler([self._answer()])
+        with caplog.at_level('INFO'):
+            rows = crawler.search('三亚', target_count=1)
+        assert rows[0]['正文'] == self.PREVIEW
+        assert i18n.t('crawl.zhihu.bodies_short', n=1) not in _lines(caplog)
+
+    def test_a_control_that_answers_nothing_is_counted_and_said(self, make_crawler, caplog):
+        crawler, _ = make_crawler([self._answer(silent=True)])
+        with caplog.at_level('INFO'):
+            rows = crawler.search('三亚', target_count=1)
+        assert rows[0]['正文'] == self.PREVIEW, 'a silent card must keep its preview, not lose it'
+        assert i18n.t('crawl.zhihu.bodies_short', n=1) in _lines(caplog)
+
+    def test_three_silent_cards_stop_the_paying(self, make_crawler, caplog):
+        # Each failed click costs the full wait. A site that answers three clicks with
+        # nothing is not answering any more, so the crawl stops asking rather than
+        # spending a minute per hundred rows on a mechanism that already stopped working.
+        silent = [self._answer(silent=True) for _ in range(3)]
+        would_grow = self._answer(after={'.RichContent-inner .RichText': self.FULL})
+        crawler, _ = make_crawler(silent + [would_grow], no_more='亲，没有更多了~')
+        with caplog.at_level('INFO'):
+            rows = crawler.search('三亚', target_count=9)
+        assert [c.clicks for c in silent] == [1, 1, 1]
+        assert would_grow.clicks == 0, 'the crawl kept paying for a mechanism that stopped working'
+        assert len(rows) == 4
+        assert i18n.t('crawl.zhihu.expand_stopped', n=3) in _lines(caplog)
+        assert i18n.t('crawl.zhihu.bodies_short', n=3) in _lines(caplog)
+
+    def test_turning_expansion_off_costs_no_click_and_says_so(self, make_crawler, caplog):
+        card = self._answer(after={'.RichContent-inner .RichText': self.FULL})
+        crawler, _ = make_crawler([card])
+        with caplog.at_level('INFO'):
+            rows = crawler.search('三亚', target_count=1, full_body=False)
+        assert card.clicks == 0
+        assert rows[0]['正文'] == self.PREVIEW
+        lines = _lines(caplog)
+        assert i18n.t('crawl.zhihu.excerpt_only') in lines
+        # Chosen truncation is not the same fact as failed truncation; saying both would
+        # be one line too many about the same column.
+        assert i18n.t('crawl.zhihu.bodies_short', n=1) not in lines
+
+    def test_a_crawl_that_kept_nothing_says_nothing_about_bodies(self, make_crawler, caplog):
+        # The short-excerpt lines describe a table. A run risk-controlled into zero rows
+        # has no 正文 column, and reporting one would describe a run that never happened.
+        crawler, _ = make_crawler([])
+        with caplog.at_level('INFO'):
+            assert crawler.search('三亚', target_count=3, full_body=False) == []
+        assert i18n.t('crawl.zhihu.excerpt_only') not in _lines(caplog)

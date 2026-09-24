@@ -9,9 +9,8 @@ minutes of real crawling.
 ## Project
 
 采析绘 (crawler_workflow): Flask backend + vanilla-JS frontend that crawls Chinese and overseas social
-media (zhihu / weibo / xiaohongshu / wechat / bilibili / douyin / youtube / twitter, plus instagram as
-cookie-capture only) via Selenium, cleans and analyzes the text with local Ollama LLMs and
-scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no build step.
+media (8 platforms; instagram is cookie-capture only) via Selenium, cleans and analyzes the text with
+local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no build step.
 
 ## Commands
 
@@ -55,22 +54,21 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   `utils.helpers.platform_for`.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` in
   workflow.js asks `Capabilities` which fields the selected mode requires; the branch it
-  replaced (`comments→urls, wechat→urls, else keyword`) made the matrix's `author` and
-  `hot` modes unreachable from the UI. If `Capabilities` has not loaded, refuse by saying the
-  required fields could not be checked; never guess a shape.
+  replaced made the matrix's `author` and `hot` modes unreachable from the UI. If
+  `Capabilities` has not loaded, refuse by saying the required fields could not be
+  checked; never guess a shape.
 - **A canvas shortcut belongs to the canvas only while the user is not typing.** The
   keydown guard named `INPUT`/`SELECT` and forgot `TEXTAREA`, so Backspace at the end of
-  a pasted URL deleted the SELECTED NODE, and an `f` typed anywhere outside an `<input>`
-  was swallowed by the fold shortcut. Use `canvas._isTypingTarget()`, which asks what the
-  element IS (`isContentEditable`, `.cselect`, …), not a growing tag list.
+  a pasted URL deleted the SELECTED NODE. Use `canvas._isTypingTarget()`, which asks what
+  the element IS (`isContentEditable`, `.cselect`, …), not a growing tag list.
 - **History entries are snapshots, and identical ones are not entries.** `getState()` deep-copies
   `params` (aliasing made every parameter edit un-undoable), `_pushState()` skips a state equal to the
   current one, and `restoreState()` brackets itself with `_historySaving` so one restore is ONE undo
   point — the autosave used to consume the 50-deep stack and push real edits out of it.
 - **One page boot must not be a single point of failure.** It is one `DOMContentLoaded`
-  body, so any throw inside it skipped every later step (a missing ECharts CDN blanked
-  the capability fetch, the dataset re-link, the autosave and the resume banner). Boot
-  steps go through `boot(name, fn)`; `stats` declines on a missing library and says so.
+  body, so any throw inside it skipped every later step (a missing ECharts CDN once blanked
+  the capability fetch, the autosave and the resume banner). Boot steps go through
+  `boot(name, fn)`; `stats` declines on a missing library and says so.
 - **A dialog with an input is answered by the input.** `showDialog` resolves a clicked
   button as `b.value !== undefined ? b.value : inputEl.value`, so a confirm button that
   carries its own `value:` replaces whatever the user typed (the dataset rename stored
@@ -180,7 +178,10 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   bounces); `/ajax/statuses/mymblog` is a per-session edge 403 → refuse loudly, never an empty table
   (`backend/test_weibo_recipe.py` re-tests).
 - **zhihu**: headless throttles day-by-day (risk 40362), so a headless search returning 0 rows is a legit
-  outcome — don't loosen the assertion; comments always open a visible browser.
+  outcome — don't loosen the assertion; comments always open a visible browser. **A search card is an
+  excerpt**, so the body arrives only by clicking: allowed where the row's own link says `/answer/` (a
+  column card's control navigates and detaches every remaining handle), and 正文 is the only
+  column replaced.
 - **xiaohongshu**: a replayed session is walled within minutes (profile required); author mode is dropped
   (needs a per-note `xsec_token` this session cannot reliably get).
 - **wechat**: body-only by measurement — no comments/likes/forwards columns, **no cookie row at all**, no

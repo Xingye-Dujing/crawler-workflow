@@ -231,6 +231,20 @@ _WITH_FACTS = Field(
     hint_key='settings.withFactsHint',
     coerce='bool',
 )
+#: The card's own 阅读全文 click. Not a nicety: zhihu's search list carries an **excerpt**
+#: in the DOM (measured: 35–109 characters in a plain inline span, no CSS clamp, while the
+#: same answer's page ran to 308), so a crawl that does not expand ships a truncated 正文
+#: column and there is no way to recover the text from what was stored. Offered rather than
+#: forced because it costs one wait per row and only reaches 回答 cards — clicking a column
+#: card's control navigates away and detaches every remaining handle.
+_FULL_BODY = Field(
+    key='full_body',
+    control='checkbox',
+    label_key='settings.fullBody',
+    default=True,
+    hint_key='settings.fullBodyHint',
+    coerce='bool',
+)
 
 
 #: Which list of the moment to read. On bilibili the two boards answer the *same*
@@ -328,7 +342,7 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         platform='zhihu',
         modes=(
-            _posts_mode(),
+            _posts_mode(_FULL_BODY),
             _author_mode(
                 placeholder='https://www.zhihu.com/people/<id>',
                 hint_key='settings.authorHintZhihu',

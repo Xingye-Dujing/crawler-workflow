@@ -73,6 +73,15 @@ def live_crawler(cookie_dir_str):
         # here would skip the only tier that proves that crawl still works.
         if platform != 'wechat' and not has_cookie(platform):
             pytest.skip(f'no saved cookies for {platform}')
+        # A test that asks for a second browser of a platform it is still holding would
+        # otherwise sit in the gate until PLATFORM_GATE_TIMEOUT — 900 seconds, with no
+        # browser on screen and nothing in the report to explain it, because the wait is
+        # indistinguishable from a slow crawl. Three cases do ask (the two-board
+        # comparison, the cookie-death resume, the author-discovery walk), and by the
+        # product's own rule the earlier crawl of that platform is over by then, so
+        # handing the turn back here keeps the promise instead of bypassing the lock.
+        for entry in [e for e in made if e[2] == platform]:
+            release(entry[0])
         stack = contextlib.ExitStack()
         # Taken before the browser exists: the turn has to cover the *whole* crawl, or
         # two tests would each cool down for a crawl that had not started yet.
@@ -82,11 +91,11 @@ def live_crawler(cookie_dir_str):
         except Exception as e:
             stack.close()
             pytest.skip(f'Chrome/driver unavailable: {e}')
-        made.append([crawler, stack])
+        made.append([crawler, stack, platform])
         return crawler
 
     def release(crawler) -> None:
-        """Close *crawler* and hand its platform's turn back — arming the cooldown."""
+        """Close *crawler* and hand its platform's turn back."""
         for entry in made:
             if entry[0] is crawler:
                 with contextlib.suppress(Exception):
@@ -99,7 +108,7 @@ def live_crawler(cookie_dir_str):
 
     _make.release = release
     yield _make
-    for crawler, stack in reversed(made):
+    for crawler, stack, _platform in reversed(made):
         with contextlib.suppress(Exception):
             crawler.close()
         stack.close()

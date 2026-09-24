@@ -2,7 +2,9 @@
 
 Small volume on purpose (target 3): this pins that the 2026-layout parser
 still extracts full rows against the live DOM, that 链接 identity feeds the
-dedupe ledger, and — in the non-headless variant — that a *visible* browser
+dedupe ledger, that a row's 正文 reaches the length its own answer page holds
+(the list is an excerpt list, so only the page can say what "full" is), and —
+in the non-headless variant — that a *visible* browser
 window (the Cookie-login mode) crawls just as correctly, background occlusion
 flags included.
 """
@@ -42,3 +44,28 @@ def test_visible_window_search_works_too(live_search):
     rows = live_search('zhihu', headless=False, keyword='海口', count=2)
     _assert_rows(rows, minimum=1)
     assert rows, 'visible-window crawl must yield at least one row'
+
+
+def test_an_expanded_row_carries_its_own_pages_text(live_crawler):
+    """The length floor is the answer page's own figure, not a guessed constant.
+
+    The search list is an excerpt list (measured 2026-09-24: 35–109 characters per card,
+    with no CSS clamp involved), so a row can only be judged against the text the answer
+    itself carries. Re-read in the same browser session, because the pair is the point:
+    a crawl that stopped clicking 阅读全文 stores ~70 characters where this page holds
+    hundreds, and nothing else in the suite would notice.
+    """
+    crawler = live_crawler('zhihu', headless=False)
+    rows = crawler.search('海口', target_count=2)
+    answer = next((r for r in rows if '/answer/' in str(r.get('链接') or '')), None)
+    assert answer, f'no answer-type row to compare against a page: {[r.get("链接") for r in rows]}'
+    stored = len(str(answer.get('正文') or ''))
+
+    crawler.open(str(answer['链接']))
+    node = crawler._element_or_none('.RichContent-inner .RichText')
+    assert node is not None, 'the answer page gave no body to compare with'
+    page = len(crawler._node_text(node))
+    assert page, 'the answer page read as empty, so this comparison measured nothing'
+    # 0.7 rather than 1.0: the row was read from the list and the page is read afterwards,
+    # and an author may have edited between the two. Everything under that is truncation.
+    assert stored >= page * 0.7, f'the row kept {stored} of the {page} characters its own page holds'

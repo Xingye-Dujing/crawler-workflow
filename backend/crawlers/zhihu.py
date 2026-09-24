@@ -86,10 +86,12 @@ class ZhihuCrawler(Crawler):
     The 2026 result list is an infinite scroll of ``SearchResult-Card`` items.
     Two rules shape this crawler:
 
-    - **never click inside a card** — 展开全文/阅读全文 navigates column
-      articles to their own page, which detaches every remaining card and used
-      to turn whole crawls into 0 rows. The collapsed preview already carries
-      author + body, which is all a search-page crawl needs.
+    - **only an answer card may be clicked** — the list hands out an excerpt and the card's
+      own 阅读全文 holds the rest, so a row that is never expanded is a truncated row.
+      Answers un-clamp in place (measured: same URL, 21 cards still present, a handle to a
+      card two rows down still alive, 8/8 clicks); a column article's control navigates to
+      its own page, which detaches every remaining handle and used to turn whole crawls
+      into 0 rows. The gate is therefore the card's own link, not its class.
     - **harvest while scrolling** — cards are scraped the moment they render, so
       rows stream out during the scroll and the loop can stop the second the
       target is met instead of after a fixed load phase.
@@ -112,10 +114,11 @@ class ZhihuCrawler(Crawler):
     PROFILE_ITEM = '.List-item .ContentItem'
     #: The two tabs that hold 作品. 提问/收藏/关注 are not content the user analyses.
     PROFILE_TABS = ('answers', 'posts')
-    #: Un-clamps one row's body in place. The search crawler must never click inside
-    #: a card (a column article navigates away and detaches every remaining handle),
-    #: but a profile row's 阅读全文 is a state change on the same document — measured:
-    #: the button becomes 收起 and the text runs to its full length.
+    #: Un-clamps one row's body in place, and is only ever pointed at a row whose control
+    #: is known to be a state change on the same document: a profile row measured as one
+    #: (the button turns into 收起 and the text grows to its full length), and a search
+    #: page *answer* card measured as one too. A column card's control navigates, which
+    #: detaches every remaining handle — so the search walk refuses it by link, below.
     EXPAND_JS = """
     var hit = null;
     arguments[0].querySelectorAll('button, a').forEach(function (b) {
@@ -126,6 +129,16 @@ class ZhihuCrawler(Crawler):
     hit.click();
     return 1;
     """
+
+    #: How long an expanded answer may take to arrive. Measured: the text was complete
+    #: within ~0.6 s of the click, and the settle poll costs one tick when it already did.
+    EXPAND_WAIT = 4.0
+    #: Consecutive cards that refuse to grow. A site that answers 3 clicks with nothing is
+    #: not answering any more, and paying the full wait per row for the rest of a crawl
+    #: would be the worse failure.
+    EXPAND_GIVEUP = 3
+    #: The one link shape whose 阅读全文 was measured to expand instead of navigating.
+    ANSWER_LINK = '/answer/'
 
     MAX_SCROLL_ROUNDS = 30
     SCROLL_STEPS = 3
@@ -151,7 +164,16 @@ class ZhihuCrawler(Crawler):
     # punctuation, so ordinary openers like "注意：…" stay part of the body.
     _AUTHOR_PREFIX = re.compile(r'^([\u4e00-\u9fa5A-Za-z0-9_·\-]{1,12})[:：](?=[^\s])')
 
-    def search(self, keyword: str, target_count: int = 200, **_kwargs):
+    def search(self, keyword: str, target_count: int = 200, full_body: bool = True, **_kwargs):
+        """One keyword's result list. ``full_body`` decides what a 正文 column holds.
+
+        The list itself only ever carries an excerpt (measured: 35–109 characters, in a
+        plain inline span with no CSS clamp, while the same answer's page ran to 308). So
+        an unexpanded row is a truncated row, and that is what the flag pays for: one
+        click and one short wait per answer card. Turning it off is a deliberate trade of
+        data for time, which is why the crawl says so on the console instead of leaving
+        the short column to be discovered in the export.
+        """
         # Nothing to seek past: a search result page cannot be re-entered at an
         # old scroll offset, so the position records how many items are in hand
         # and how many cards were read; duplicates are dropped by the sink.
@@ -195,8 +217,12 @@ class ZhihuCrawler(Crawler):
         # ``scanned`` is how far the card walk has got; a resume reads only the
         # cards past it instead of re-emitting the head of the list.
         cursor = {'scanned': as_index(resume.get('scanned')), 'total': self._card_count()}
+        # ``want`` outlives one pass because the decision it carries does: cards that
+        # refuse to expand are a property of the site's mood, not of the scroll round, so
+        # a walk that gave up stays given up instead of paying the wait again next round.
+        expand = {'want': bool(full_body), 'misses': 0, 'short': 0}
         self.mark_position(keyword=keyword, phase='cards', done=have, scanned=cursor['scanned'])
-        self._harvest(cursor, target_count)
+        self._harvest(cursor, target_count, expand)
 
         rounds = 0
         stuck = 0
@@ -210,7 +236,7 @@ class ZhihuCrawler(Crawler):
             logger.info(t('crawl.zhihu.scrolling', i=rounds))
             logger.info(t('crawl.zhihu.scroll_round', i=rounds, n=cursor['total'], total=target_count))
 
-            self._harvest(cursor, target_count)
+            self._harvest(cursor, target_count, expand)
             if self.collected() >= target_count:
                 logger.info(t('crawl.zhihu.target_reached', n=target_count))
                 break
@@ -226,7 +252,7 @@ class ZhihuCrawler(Crawler):
                 logger.info(t('crawl.zhihu.no_growth', n=stuck))
                 self.scroll_down(steps=self.SCROLL_STEPS)
                 cursor['total'] = self._wait_for_count(self._card_count, before + 1, timeout=self.CARD_WAIT)
-                self._harvest(cursor, target_count)
+                self._harvest(cursor, target_count, expand)
                 if cursor['total'] <= before:
                     logger.info(t('crawl.zhihu.stuck', n=stuck))
                     break
@@ -237,6 +263,14 @@ class ZhihuCrawler(Crawler):
             self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
 
         logger.info(t('crawl.zhihu.phase_done', n=cursor['total']))
+        if self.collected():
+            # Said only about a table that exists: a search refused by risk control has no
+            # 正文 column to be an excerpt of, and reporting one would describe a run
+            # that never happened.
+            if not full_body:
+                logger.info(t('crawl.zhihu.excerpt_only'))
+            elif expand['short']:
+                logger.info(t('crawl.zhihu.bodies_short', n=expand['short']))
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
         return self.results()
 
@@ -249,11 +283,12 @@ class ZhihuCrawler(Crawler):
         文章 an account wrote, and an account that only ever answered (or only ever
         wrote articles) still gets a complete list rather than a false half.
 
-        A profile row is the same ``.ContentItem`` shape the search page harvests, so
-        the card readers are reused; what is different is that the body is clamped
-        behind 阅读全文 and is expanded **in place** (measured: the button turns into
-        收起 and the text grows to its full length), which costs no navigation — the
-        mistake the search crawler learned never to make.
+        A profile row is the same ``.ContentItem`` shape the search page harvests, so the
+        card readers and :meth:`_expand_body` are reused. What differs is the risk: a
+        profile row's 阅读全文 was measured to be a state change on the same document (the
+        button turns into 收起 and the text grows), while on the search page the same label
+        on a column card navigates — which is why that walk gates by link and this one
+        expands every row.
         """
         token = zhihu_profile_token(author)
         if not token:
@@ -324,14 +359,20 @@ class ZhihuCrawler(Crawler):
             return None
         return item
 
-    def _expand_body(self, card) -> None:
-        """Click the row's own 阅读全文, which un-clamps it without leaving the page."""
+    def _expand_body(self, card) -> bool:
+        """Click the row's own 阅读全文, which un-clamps it without leaving the page.
+
+        Returns whether a control was found and clicked — the caller needs that to tell
+        "this row was already complete" apart from "this row is still an excerpt".
+        """
         with contextlib.suppress(Exception):
             if self.driver.execute_script(self.EXPAND_JS, card):
                 # The button's click swaps the clamped node for the full one; the
                 # text is re-read by the caller right away, and a row that is still
                 # short is simply a short answer.
                 time.sleep(0.3)
+                return True
+        return False
 
     def _profile_time(self, card) -> str:
         """The 发布于 / 编辑于 label of a profile row.
@@ -414,12 +455,15 @@ class ZhihuCrawler(Crawler):
             return False
         return '没有更多' in self._node_text(marker)
 
-    def _harvest(self, cursor: dict, target_count: int) -> None:
+    def _harvest(self, cursor: dict, target_count: int, expand: dict) -> None:
         """Scrape and emit every card past ``cursor['scanned']``.
 
         Re-reading the cards each round rather than keeping the handles is
         deliberate: the list is virtualised, so an old handle can point at a
         detached node while the same index still resolves to a live card.
+
+        ``expand`` is the crawl's expansion state: whether to keep trying, how many
+        cards in a row refused, and how many rows are therefore still excerpts.
         """
         cards = self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR)
         cursor['total'] = max(cursor['total'], len(cards))
@@ -450,6 +494,15 @@ class ZhihuCrawler(Crawler):
                             if card.find_elements(By.CSS_SELECTOR, 'a[href]'):
                                 break
                         item = self._scrape_card(card)
+                if expand['want'] and self._is_answer_card(item):
+                    if self._expand_answer(card, item):
+                        expand['short'] += 1
+                        expand['misses'] += 1
+                        if expand['misses'] >= self.EXPAND_GIVEUP:
+                            expand['want'] = False
+                            logger.info(t('crawl.zhihu.expand_stopped', n=expand['misses']))
+                    else:
+                        expand['misses'] = 0
                 keep = bool(item.get('作者') or item.get('正文'))
                 if keep:
                     if self.emit(item):
@@ -463,6 +516,35 @@ class ZhihuCrawler(Crawler):
             # Recorded per card: a kill between two cards costs at most the one
             # in flight.
             self.mark_position(done=self.collected(), scanned=idx)
+
+    def _is_answer_card(self, item: dict) -> bool:
+        """Whether this card's own address says it is an answer.
+
+        The link, not the card's class: 阅读全文 is a navigation on a column card, and a
+        row whose anchor never mounted is a row whose kind is unknown, so neither is
+        clicked. Refusing costs an excerpt on the rare card, where clicking costs the
+        rest of the crawl.
+        """
+        return self.ANSWER_LINK in str(item.get('链接') or '')
+
+    def _expand_answer(self, card, item: dict) -> bool:
+        """Un-clamp one answer card in place and put its full body into *item*.
+
+        Returns whether the row is still an excerpt. Only 正文 is touched: the click also
+        swaps the card's date label for a longer one (measured: ``08-27`` became
+        ``编辑于2026-08-27 12:22``) and drops the ``作者名：`` prefix the preview opens with,
+        so re-reading the whole row would leave one column holding two formats depending
+        on an internal retry. 作者 and 发布时间 stay as the list itself reported them.
+        """
+        preview = str(item.get('正文') or '')
+        if not self._expand_body(card):
+            return False  # no 阅读全文 on this card: the answer is simply short
+        feed.wait_for(lambda: len(self._get_content(card)), len(preview) + 1, timeout=self.EXPAND_WAIT, tick=0.25)
+        body = str(self._get_content(card) or '')
+        if len(body) <= len(preview):
+            return True
+        item['正文'] = body
+        return False
 
     # ─── card parsing ─────────────────────────────────────────────────
 

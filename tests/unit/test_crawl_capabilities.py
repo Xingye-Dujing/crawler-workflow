@@ -16,6 +16,9 @@ by themselves:
 The catalogue half of the contract lives in ``test_frontend_contract.py``.
 """
 
+import inspect
+from pathlib import Path
+
 import pytest
 
 from crawl_capabilities import (
@@ -83,10 +86,14 @@ class TestCoercion:
 
     def test_booleans_are_booleans(self):
         mode = _mode('zhihu', 'posts')
+        # recrawl is the run's business and never reaches the crawl; full_body is the
+        # crawl's own trade — excerpt or expanded body — so it does.
         assert crawl_kwargs(mode, {'keyword': 'ai', 'recrawl': True}) == {
             'keyword': 'ai',
             'target_count': 50,
-        }  # recrawl is the run's business, never an argument to the crawl
+            'full_body': True,
+        }
+        assert crawl_kwargs(mode, {'keyword': 'ai', 'full_body': False})['full_body'] is False
 
     def test_urls_arrive_as_a_list_holding_one_entry_per_line(self):
         mode = _mode('zhihu', 'comments')
@@ -173,6 +180,47 @@ class TestRequirements:
 
 
 class TestDefaults:
+    def test_every_field_the_matrix_sends_is_read_by_the_crawl(self):
+        # The executor calls the crawler method with every declared field by keyword, and
+        # every crawler method ends in ``**_kwargs`` — so a switch the crawler does not
+        # read is accepted in silence: the panel draws it, the node stores it, the run
+        # reports success, and nothing was ever decided by it.
+        #
+        # Two shapes count as read: a named parameter, or the key spelled out as a string
+        # in the crawler's own module (xiaohongshu takes 评论预览 out of the kwargs bag on
+        # purpose, because its signature is shared with the other search methods). The
+        # second clause is a text match, not a data-flow proof — it cannot tell a real read
+        # from a comment that mentions the key. It is here because the alternative is a
+        # test that would fail on the platform that does it this way.
+        from crawlers import crawler_class
+
+        offenders = []
+        for cap in CAPABILITIES:
+            cls = crawler_class(cap.platform)
+            module = inspect.getmodule(cls)
+            source = Path(module.__file__).read_text(encoding='utf-8')
+            for mode in cap.modes:
+                if mode.handler == 'comments':
+                    continue  # routed to the shared comment engine, which reads the node
+                method = getattr(cls, mode.handler, None)
+                if method is None:
+                    offenders.append(f'{cap.platform}/{mode.key}: no {cls.__name__}.{mode.handler}')
+                    continue
+                taken = set(inspect.signature(method).parameters)
+                sent = set(crawl_kwargs(mode, declared_defaults(cap.platform)))
+                unread = {key for key in sent - taken if f"'{key}'" not in source}
+                offenders += [f'{cap.platform}/{mode.key}: {key}' for key in sorted(unread)]
+        assert not offenders, 'matrix fields the crawler never reads:\n' + '\n'.join(offenders)
+
+    def test_the_guard_itself_reads_something(self):
+        # A check that compares against an empty set passes forever. This one asks every
+        # platform's every mode, so name the size it is expected to cover.
+        from crawlers import crawler_class
+
+        pairs = [(cap.platform, mode.key) for cap in CAPABILITIES for mode in cap.modes if mode.handler != 'comments']
+        assert len(pairs) >= 10, pairs
+        assert all(crawler_class(platform) is not None for platform, _key in pairs)
+
     def test_defaults_cover_every_field_the_platforms_modes_mention(self):
         defaults = declared_defaults('xiaohongshu')
         assert defaults['target_count'] == 50 and defaults['comment_preview'] == 5

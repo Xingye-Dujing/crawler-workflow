@@ -67,6 +67,41 @@ Zhihu throttles headless content pages day-by-day (risk code 40362); comment cra
 visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
 outcome the message catalog already explains — don't "fix" it by loosening assertions.
 
+**A search card holds an excerpt, not the answer — and only a 回答 card may be opened**
+(measured 2026-09-24, four probes in one logged-in session on `/search?q=三亚&type=content`).
+The crawler used to refuse every click inside a card, on the strength of a navigation incident
+that was never measured as a length question. It was wrong in both directions:
+
+* the excerpt is **not** a CSS clamp. `.RichContent-inner .RichText` is a plain inline span
+  (`display:inline`, `height:auto`, `overflow:visible`) whose `innerText` equalled its
+  `textContent` at 35–109 characters. A wider read could not recover what the payload never
+  carried, so every row this crawler stored was truncated, and the user's CSV said so.
+* an answer card's `button.ContentItem-more` (label 阅读全文, **no href**) re-renders that same
+  node in place: 74 → 308, 75 → 782, 69 → 1067, 71 → 2103 characters, and the answer's own page
+  agreed (307 vs 308). URL unchanged, 21 cards still present, a handle to a card two rows down
+  still alive, 8/8 clicks settled inside ~0.6 s. One node before, one node after — there is no
+  second copy to double-count.
+* a column card's control is the navigation the old rule remembered, so the gate is the row's own
+  link (`/answer/`), not its class. A card whose anchor never mounted has an unknown kind and is
+  not clicked either: refusing costs one excerpt, guessing costs the rest of the crawl.
+* **expansion changes two other fields, which is why the row is frozen at its first reading.**
+  The same click moves the date label off `.SearchItem-time` onto `.ContentItem-time`
+  (`08-27` → `编辑于2026-08-27 12:22`) and drops the `作者名：` prefix the preview opens with.
+  Re-scraping after the click would leave 发布时间 holding two formats across one column, decided
+  by an internal retry, and empty 作者 on exactly the rows the fix improves. Only 正文 is replaced.
+* the API route works and is not needed: `GET https://www.zhihu.com/api/v4/answers/<id>?include=content`
+  answered `200` in 424 ms with `content` (1316 HTML chars → 674 plain, matching the page) and keys
+  including `is_collapsed`, `content_need_truncated`, `force_login_when_click_read_more`. Two other
+  shapes failed: `api.zhihu.com/responses/<id>` is CORS-refused from the page, and
+  `api/v4/questions/<qid>/answers/<aid>` is `404`. A click is cheaper than a request and needs no
+  second vocabulary of ids.
+* cost and its bound: one settle wait per answer card (measured < 0.6 s, capped at 4 s). Three
+  clicks in a row that answer nothing stops the trying for the rest of the crawl
+  (`crawl.zhihu.expand_stopped`), because a site that stopped answering would otherwise be paid
+  four seconds per row for two hundred rows. Turning 展开全文 off is the user's call and says so
+  once on the console (`crawl.zhihu.excerpt_only`); rows that stayed excerpts while it was on are
+  counted (`crawl.zhihu.bodies_short`).
+
 ## Douyin
 
 **Visible-window-only, DOM-only, entered through its URL, and has no play count.**
@@ -333,6 +368,19 @@ table alone cannot tell a batched walk from a per-row one.
 
 知乎那次 0 行是同一晚的另一件事：它没撞墙也没报错，只是页面外壳空着落到滚动循环里（代码里写明
 这是无头风控的合法结局）。重跑同一条用例即通过（20 张卡），所以是当日节流，不是解析器坏了。
+
+**把 `crawl_gate.hold` 搬进 `live_crawler` fixture 的同一批改动，也让真机层自己撞死过一次**
+（measured 2026-09-24）。三条用例在同一条测试里向同一个平台要**第二个**浏览器——
+`test_live_zhihu_author.py`（先搜一条现取作者 token，再开作者页）、
+`test_live_bilibili_hot.py`（两张榜单各一个 crawler）、`test_live_cookie_expiry.py`
+（第一次爬到墙、换新 crawler 续跑）——而第一把锁要等 fixture 结束才释放。
+锁不可重入，于是第二次 `hold` 原地等 `Config.PLATFORM_GATE_TIMEOUT` = **900 秒**：
+没有浏览器弹出来、没有输出、没有任何一行字说明它在等谁——看上去就是"这条真机用例特别慢"。
+判据：单跑 `test_live_zhihu_author.py` 15 分钟无输出且 `chromedriver.exe` 不在进程表里
+（浏览器根本没启动，说明卡在拿锁而不是卡在页面）。修法是 fixture 在向同一平台要第二个
+crawler 之前先把上一个关掉并交还这一轮（一次只可能有一个，这正是产品自己的规则），
+并由 `tests/unit/test_test_tiers.py::TestLiveCrawlerFixture` 用"重复持锁即抛"的假锁把这条
+钉住——它不需要浏览器，测的是测试自己的脚手架。
 
 ## What each mode actually does on screen (measured 2026-09-24)
 
