@@ -375,7 +375,8 @@ class TestHardBlock:
 
     def test_the_dialog_names_the_platform_and_quotes_the_servers_sentence(self, gate):
         dialog = gate['expired-blocks-the-run']['dialogs'][-1]
-        assert 'weibo' in dialog['message']
+        assert 'Weibo' in dialog['message'], 'the user reads a name, not a storage key'
+        assert 'weibo' not in dialog['message']
         assert 'WEIBO-COOKIE-IS-DEAD' in dialog['message'], 'the reason was measured, so it is shown'
 
     def test_the_refusal_offers_no_way_to_run_anyway(self, gate):
@@ -426,7 +427,8 @@ class TestNoAnswerIsNotAnAnswer:
         """Silence would read as "verified, fine" — the one misreading that costs a
         re-login nobody needed."""
         joined = '\n'.join(gate['no-answer-does-not-block']['toasts'])
-        assert 'zhihu' in joined
+        assert 'Zhihu' in joined
+        assert 'zhihu' not in joined, 'a storage key printed where a platform name belongs'
         assert 'could not' in joined.lower() or '无法核对' in joined
 
     def test_a_gate_that_cannot_be_reached_is_reported_and_skipped(self, gate):
@@ -434,7 +436,8 @@ class TestNoAnswerIsNotAnAnswer:
             case = gate[scenario]
             assert case['ran'] is True, f'{scenario}: a check that failed is not a wall the site reported'
             joined = '\n'.join(case['toasts'])
-            assert 'zhihu' in joined, f'{scenario} must say which platforms went unchecked'
+            assert 'Zhihu' in joined, f'{scenario} must say which platforms went unchecked'
+            assert 'zhihu' not in joined, f'{scenario} printed the storage key at the user'
             assert 'not a pass' in joined or '不是「有效」' in joined, f'{scenario} must not imply a pass'
 
 
@@ -491,7 +494,8 @@ class TestMixedNetworks:
         case = gate['mixed-networks-refuses-to-run']
         assert len(case['dialogs']) == 1, case['dialogs']
         message = case['dialogs'][0]['message']
-        assert 'douyin' in message and 'youtube' in message, 'the question has to name both halves'
+        assert 'Douyin' in message and 'YouTube' in message, 'the question has to name both halves'
+        assert 'douyin' not in message, 'the domestic half was a key, not a word'
         assert case['asked'] is False, 'the cookie probe is not bought for a run that was about to be split'
         assert case['ran'] is False
 

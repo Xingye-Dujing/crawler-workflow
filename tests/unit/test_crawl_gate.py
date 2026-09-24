@@ -176,7 +176,7 @@ class TestStrictQueue:
         try:
             with pytest.raises(RuntimeError) as caught, crawl_gate.hold('weibo'):
                 pass
-            assert 'weibo' in str(caught.value)
+            assert 'weibo' not in str(caught.value) and ('微博' in str(caught.value) or 'Weibo' in str(caught.value))
         finally:
             release.set()
             holder.join(5)

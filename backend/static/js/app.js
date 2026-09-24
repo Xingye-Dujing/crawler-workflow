@@ -111,6 +111,8 @@ const I18n = {
             'cookie.guideLoading': 'Loading the steps for this platform…',
             'cookie.entryRejected': 'That link is not on this platform’s domain — the platform login page was opened instead',
             'cookie.savedN': 'Saved {n} cookies for {platform}',
+            'cookie.savedYes': 'saved',
+            'cookie.savedNo': 'none',
             'cookie.cancelledMsg': '{platform} login cancelled',
             'settings.recrawl': 'Re-crawl (ignore previously collected items)',
             'settings.recrawlHint': 'Off by default: items already collected by this node are skipped to save time and cost. Enable to wipe that ledger and collect again.',
@@ -435,7 +437,7 @@ const I18n = {
             'set.mixedRegion': 'Warn about mixed-region platforms',
             'set.mixedRegionInline': 'Ask when one canvas crawls both a domestic and an overseas platform',
             'set.mixedRegionHint': 'On: a canvas that crawls both a Chinese platform and an overseas one is asked about it before the run starts. The reason is measured, not theorised — with a VPN up, douyin answers 502 and refuses the whole crawl, and without one x.com never loads at all, so the two halves cannot be crawled from the same network. This is a recommendation with a switch, not a refusal: a machine with split routing really can serve both, and the page cannot tell that machine from one with a VPN on. Off: nothing is asked, and a mixed run then comes back with whichever half your network cannot reach — which reads as an empty search, not as the routing problem it is.',
-            'dialog.mixedRegion': 'This run crawls both networks at once: domestic {cn} · overseas {overseas}. Measured on this machine: with a VPN up douyin answers 502, and without one x.com never loads — so the two halves cannot be crawled from the same connection. Splitting them into two runs is what usually works; press 继续 anyway if your routing serves both.',
+            'dialog.mixedRegion': 'This run crawls both networks at once: domestic {cn} · overseas {overseas}. Measured on this machine: with a VPN up Douyin answers 502, and without one x.com never loads — so the two halves cannot be crawled from the same connection. Splitting them into two runs is what usually works; press 继续 anyway if your routing serves both.',
             'dialog.mixedRegionGo': 'Run it anyway',
             'dialog.mixedRegionSplit': 'Do not run — I will split it',
             'set.cookiePreflightInline': 'Ask each platform of this canvas whether its Cookie still works',
@@ -469,8 +471,8 @@ const I18n = {
                 + 'throwaway browser for), but those crawls take turns, so parallelism is lost on them.\n'
                 + '· Skip the profile this time — the workflows really crawl side by side, but each starts as '
                 + 'a brand-new device on a planted cookie snapshot, which is the shape those sites refuse.',
-            'dialog.profileClashUse': 'Keep the profile (same device; same-platform crawls still take turns)',
-            'dialog.profileClashSkip': 'No profile this run (true parallel — only their starts are spaced)',
+            'dialog.profileClashUse': 'Keep the profile',
+            'dialog.profileClashSkip': 'No profile this run',
             'set.save': 'Save settings',
             'set.note':
                 'Machine-local settings. Saved to data/settings.json on the server ' +
@@ -762,6 +764,8 @@ const I18n = {
             'cookie.guideLoading': '正在载入该平台的获取步骤…',
             'cookie.entryRejected': '该链接不属于本平台的域名，已改用平台登录页打开',
             'cookie.savedN': '已为 {platform} 保存 {n} 条 Cookie',
+            'cookie.savedYes': '已存 Cookie',
+            'cookie.savedNo': '未存',
             'cookie.cancelledMsg': '{platform} 登录已取消',
             'settings.recrawl': '重新采集（忽略此前已采集条目）',
             'settings.recrawlHint': '默认关闭：该节点此前已采集过的条目会被跳过以节省成本；勾选后清除去重账本并重新抓取。',
@@ -1109,8 +1113,8 @@ const I18n = {
                 + '但同平台的采集会一个跑完再跑下一个，这部分并行等于没有。\n'
                 + '· 本次不用 Profile —— 这些工作流真的同时爬，但每个都是全新设备 + 导入一份旧 Cookie 快照，'
                 + '而这正是那些站点会拒绝的形态。',
-            'dialog.profileClashUse': '继续用 Profile（同一台设备，同平台仍会轮流跑）',
-            'dialog.profileClashSkip': '本次不用 Profile（真并行，只把发车时刻隔开）',
+            'dialog.profileClashUse': '继续用 Profile',
+            'dialog.profileClashSkip': '本次不用 Profile',
             'set.save': '保存设置',
             'set.note':
                 '这些是本机相关设置。保存后写入服务器 ' +

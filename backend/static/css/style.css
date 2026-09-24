@@ -760,6 +760,11 @@ input[type="range"]::-moz-range-thumb {
 #resume-banner {
   position: absolute;
   top: 8px;
+  /* The menu bar is fixed and slides over the top of the workspace whenever it is
+     pinned open (or a style submenu holds it up), and a banner at 8px disappeared
+     underneath it — including the 继续 button the user came for. Animating the offset
+     means the banner does not teleport when the menu is pinned mid-run. */
+  transition: top 180ms ease;
   left: 50%;
   transform: translateX(-50%);
   z-index: 40;
@@ -777,6 +782,12 @@ input[type="range"]::-moz-range-thumb {
 }
 #resume-banner.hidden {
   display: none;
+}
+/* Same fact the menu's own rules state (`top: 0` when pinned), applied to what the
+   menu covers: the banner moves down by the bar's height while it is showing. */
+#top-menu.pinned ~ #workspace #resume-banner,
+body.style-menu-open #workspace #resume-banner {
+  top: calc(var(--menuH) + 8px);
 }
 #resume-banner .resume-dot {
   flex: none;
@@ -1522,6 +1533,20 @@ button.history-del:hover {
   font-size: 11px;
   color: var(--text-faint);
   text-align: center;
+}
+/* The export panel's totals ride at the head of the list and stay there while it
+   scrolls: they describe the whole folder, not the rows currently on screen, and as
+   a centred footnote-shaped line at the bottom they read as part of the last row. */
+.exports-summary {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 6px 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: left;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
 }
 .runs-mgr-table {
   width: 100%;
@@ -2462,11 +2487,18 @@ input:-webkit-autofill:focus {
 }
 #dialog-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
 }
 #dialog-actions .menu-btn {
   min-width: 60px;
+  max-width: 100%;
+  /* `.menu-btn` is nowrap, so a label like 继续用 Profile（同一台设备，同平台仍会轮流跑）
+     measured wider than the 480px dialog and ran out of it: the row could neither shrink
+     nor wrap. A dialog button's text is allowed to take a second line instead. */
+  white-space: normal;
+  line-height: 1.35;
   text-align: center;
 }
 

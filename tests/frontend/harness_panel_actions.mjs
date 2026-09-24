@@ -70,7 +70,18 @@ sandbox.showDialog = async (spec) => {
             value: 'value' in b ? String(b.value) : '<absent>',
         })),
     });
-    return typeof answers.dialog === 'function' ? answers.dialog(spec) : answers.dialog;
+    if (typeof answers.dialog === 'function') return answers.dialog(spec);
+    if (answers.dialog !== null && answers.dialog !== undefined) return answers.dialog;
+    /* A plain confirmation now comes from the app's own dialog rather than from
+       `window.confirm`, which this harness has always let a scenario flip with
+       `answers.confirm`. Read the same switch here, so "declined" still means one
+       thing across the whole file — and so a migrated call site cannot quietly
+       become untestable. */
+    const buttons = (spec && spec.buttons) || [];
+    const go = buttons.find((b) => b.value !== undefined && b.value !== null);
+    /* Only a PLAIN confirmation inherits the switch: a dialog with an input is answered
+       by what the user typed, and `answers.confirm` has no text to give it. */
+    return answers.confirm && go && !(spec && spec.input) ? go.value : null;
 };
 
 /* One answer for every URL would be a lie: `execute()` starts by probing the

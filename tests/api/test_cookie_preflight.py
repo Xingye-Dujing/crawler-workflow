@@ -426,8 +426,15 @@ class TestRoute:
         def text_of(response):
             return response.get_json()['results']['weibo']['text']
 
-        assert i18n._EN['cookie.pre.expired'].replace('{platform}', 'weibo') in text_of(english)
-        assert i18n._ZH['cookie.pre.expired'].replace('{platform}', 'weibo') in text_of(chinese)
+        assert i18n._EN['cookie.pre.expired'].replace('{platform}', i18n.platform_label('weibo', 'en')) in text_of(
+            english
+        )
+        assert i18n._ZH['cookie.pre.expired'].replace('{platform}', i18n.platform_label('weibo', 'zh')) in text_of(
+            chinese
+        )
+        # The sentence is asked for in a language and must come back in that one — a raw
+        # `weibo` inside it would be neither.
+        assert 'weibo' not in text_of(english) and 'weibo' not in text_of(chinese)
 
     def test_the_probe_is_built_with_the_answer_this_run_gave_about_profiles(self, client, probes, with_cookie):
         """The gate has to test the browser the run will use. A canvas whose user

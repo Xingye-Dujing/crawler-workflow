@@ -287,7 +287,8 @@ class TestValidate:
         errors = WorkflowEngine(wf).validate()
         assert len(errors) == 1
         assert 'no such collection mode' in errors[0]
-        assert 'Data Source #node-1' in errors[0] and 'weibo' in errors[0]
+        assert 'Data Source #node-1' in errors[0] and 'Weibo' in errors[0]
+        assert '(weibo' not in errors[0], 'the refusal named the storage key at the user'
         assert 'keyword is empty' not in errors[0]
 
     def test_a_canvas_that_names_no_mode_keeps_working(self, en):
@@ -465,7 +466,7 @@ class TestValidateUsesLabels:
             },
         }
         errors = WorkflowEngine(_wf([node], [])).validate()
-        assert any('2 link(s) do not match the selected platform (zhihu)' in e for e in errors)
+        assert any('2 link(s) do not match the selected platform (Zhihu)' in e for e in errors)
 
     def test_wechat_node_reads_a_stale_comments_flag_as_article_crawl(self, en):
         # WeChat has no comment adapter, so its entry in the matrix carries a

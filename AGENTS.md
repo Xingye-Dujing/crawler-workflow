@@ -74,26 +74,24 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
 - **A dialog with an input is answered by the input.** `showDialog` resolves a clicked
   button as `b.value !== undefined ? b.value : inputEl.value`, so a confirm button that
   carries its own `value:` replaces whatever the user typed (the dataset rename stored
-  the literal `'ok'` and destroyed the label). Leave `value` off input dialogs.
+  the literal `'ok'`). Leave `value` off input dialogs.
 - **Three frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a module
   declared as a top-level `const X` — `const` never becomes a window property — which silently killed
   `resumeBar.refresh()` and `runsManager._busy()`. Guard the binding itself (`typeof X !== 'undefined'`)
   or export it (`window.X = X`, as app.js does for `LLMSettings`/`AppSettings`). (2) The DOM stub's matcher
   is real (see `harness_dom.mjs`); never fabricate a child when a query finds nothing — that turned a
   deleted connection into a phantom. (3) **A wrapper must forward its arguments:** app.js re-wraps
-  `openCookieDialog`, and its empty parameter list made 「open the panel on the platform that just
-  refused」 open it on whoever was selected before.
+  `openCookieDialog`, and its empty parameter list opened it on whoever was selected before, not the
+  platform that just refused.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id** (the page has no `.panel` class — a
   selector matching zero elements kept that test green while checking nothing), never falls back to
-  `<body>`, and asserts a per-container floor on the gathered element count (counted in real Chrome,
-  not guessed); new containers join that list with their floor. Resolve on-screen wording from `I18n`
+  `<body>`, and asserts a per-container floor on the gathered element count, measured in the browser; new containers join that list with their floor. Resolve on-screen wording from `I18n`
   inside the browser, not a pasted copy — one label drifted and the test demanded a string the product
   never emits.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the
-  one the bug was about. The 并行/串行 chip was wrong precisely because `mode` was never a column of the
-  record test. When you test a record, a run or a panel row, list the dimensions first (`mode`,
-  `headless`, `wf_count`, resume state, language, platform …) and cover the grid.
+  one the bug was about. When you test a record, a run or a panel row, list the dimensions first
+  (`mode`, `headless`, `wf_count`, resume state, language, platform …) and cover the grid.
 - **The `integration` UI tier performs no server writes** — uploading, saving a workflow or executing a run
   would leave rows in the user's real `data/` and `logs/` (the app has no data-dir override). Stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`: a valid
@@ -148,9 +146,8 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   directory, in whichever of the **two distinct modes** the user's switch means: `same_platform_queue` on
   holds the turn until that crawl *finishes*; off spaces only their
   *starts* by `same_platform_stagger` seconds and lets them overlap (错峰) — the number is the
-  user's, 0 = neither wait. **No rest is armed when a turn ends**: weibo walls that looked
-  like "queued too soon" were intermittent risk control — 14 later crawls of that platform
-  answered, one of them seconds after the previous browser closed. A wall met **before the
+  user's, 0 = neither wait. **No rest is armed when a turn ends** (weibo's walls were intermittent
+  risk control; `docs/crawler_notes.md`). A wall met **before the
   first row** retries once after a back-off; a wall met after rows is the cookie dying
   and must go to 继续 instead. **Absence means "follow the setting" — never coerce missing to `False`,** or
   one dialog's answer becomes a global override. `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node
@@ -301,6 +298,10 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   are all blind to it. `test_i18n.py::TestCallSitePlaceholders` walks every `t('literal', …)` in
   `backend/` with `ast` and refuses the mismatch (a `**splat` is the one form it cannot judge; the
   meta-test keeps that skip honest).
+- **A `{platform}` slot is answered with a word, not the key.** `zhihu` keys the matrix and the
+  cookie file; `i18n` localizes it, splitting a
+  string on `,`/`、` only (`/` mangled a refused `../x`); `TestPlatformLabelParity` keeps the two
+  lists equal.
 - Console/validation messages reference nodes through `engine.workflow.node_label(node, nid)` (→ `title
   #nid`), never a bare `nid`, so a renamed node speaks with the user's name. Store keys, the results dict
   and resume plumbing still use the raw `nid`. The frontend keeps `node.title` in `getState` /
@@ -311,7 +312,7 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   `#console-output` leaves it empty forever for a finished run. `consoleViews` in workflow.js holds
   `{seen, lines}` per view (`'all'` plus each workflow id), **every** view is fed on every poll, and
   `switchWfTab` repaints from that view's history without moving its cursor. `clearConsole` empties the
-  histories and leaves cursors alone. Cap is `CONSOLE_VIEW_CAP` per view; a trim repaints.
+  histories and leaves cursors alone; the cap is `CONSOLE_VIEW_CAP` per view.
 - **Every thread that logs must pin its own language.** `set_lang` is thread-local and a
   daemon thread starts with a fresh one, so `run()`, the parallel pool wrapper and **both
   cookie workers** take the request's language and set it first — the Cookie panel's probe

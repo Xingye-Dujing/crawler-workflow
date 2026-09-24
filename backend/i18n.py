@@ -1429,6 +1429,74 @@ def set_lang(value):
     return _local.lang
 
 
+#: What a message carries in ``{platform}`` is a **storage key** — that is what the crawl
+#: matrix, the cookie files, the browser profiles and the run records are all addressed by.
+#: Printed as-is it put a bare ``zhihu`` into a Chinese console and into the pre-run dialog,
+#: so the key is named in the language the message is already answering in. One rule here,
+#: so every line that mentions a platform is translated — including lines written later.
+#: The values are pinned equal to the frontend's ``platform.*`` catalogue by
+#: ``test_frontend_contract.py::TestPlatformLabelParity``.
+_PLATFORM_LABELS = {
+    'zh': {
+        'zhihu': '知乎',
+        'weibo': '微博',
+        'xiaohongshu': '小红书',
+        'wechat': '微信',
+        'bilibili': '哔哩哔哩',
+        'douyin': '抖音',
+        'twitter': 'X（推特）',
+        'instagram': 'Instagram',
+        'youtube': 'YouTube',
+    },
+    'en': {
+        'zhihu': 'Zhihu',
+        'weibo': 'Weibo',
+        'xiaohongshu': 'Xiaohongshu',
+        'wechat': 'WeChat',
+        'bilibili': 'Bilibili',
+        'douyin': 'Douyin',
+        'twitter': 'X (Twitter)',
+        'instagram': 'Instagram',
+        'youtube': 'YouTube',
+    },
+}
+
+
+def platform_label(key, lang: str | None = None) -> str:
+    """The word a user reads for a platform key, or the key itself when it is not one.
+
+    Domains (``weibo.com``) and free text pass through untouched: this names keys, it does
+    not judge whether a string was meant to be one.
+    """
+    table = _PLATFORM_LABELS.get(lang or get_lang()) or {}
+    return table.get(str(key), str(key))
+
+
+def _name_platforms(params: dict) -> dict:
+    """Localize ``platform`` / ``platforms`` placeholders on the way into a template.
+
+    Callers hand this slot either one key, a list of them, or a string they joined
+    themselves — all three are answered, because a half-translated list is the same bug
+    with a comma in it. A value that is not made of platform keys (a domain, a free-text
+    reason) is passed through untouched.
+    """
+    named = dict(params)
+    for slot in ('platform', 'platforms'):
+        value = named.get(slot)
+        if isinstance(value, str):
+            # Split on a list separator and nothing else. Splitting on whitespace or on
+            # `/` looked harmless and was not: a refusal that names what it refused
+            # (`../x`) came back mangled, and a sentence would have been re-joined with
+            # 、. An unknown token is passed through whole, which is the safe answer for
+            # every value that was never a platform key.
+            named[slot] = '、'.join(
+                platform_label(part.strip()) for part in re.split(r'[,、]', value.strip()) if part.strip()
+            )
+        elif isinstance(value, (list, tuple, set)):
+            named[slot] = '、'.join(platform_label(item) for item in value)
+    return named
+
+
 def t(key: str, **params) -> str:
     """Render ``key`` in the current thread's language.
 
@@ -1445,6 +1513,7 @@ def t(key: str, **params) -> str:
         return key
     if not params:
         return template
+    params = _name_platforms(params)
     try:
         return template.format(**params)
     except (KeyError, IndexError, ValueError):

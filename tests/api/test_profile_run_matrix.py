@@ -162,7 +162,7 @@ class TestSamePlatformParallel:
         _run(client, app_module, _canvas([_source('s-1', 'bilibili'), _source('s-2', 'bilibili')]))
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         queued = [
-            line for line in blob.splitlines() if 'bilibili' in line and ('排队' in line or 'queue' in line.lower())
+            line for line in blob.splitlines() if 'Bilibili' in line and ('排队' in line or 'queue' in line.lower())
         ]
         assert len(queued) == 1, f'the wait belongs to the one crawl that waited, saw {queued}'
 

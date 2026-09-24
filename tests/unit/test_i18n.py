@@ -130,8 +130,40 @@ class TestTranslation:
         assert 'node-2' in t(key, **params)
 
     def test_placeholders_are_filled_from_the_keywords(self):
-        rendered = t('api.unsupportedPlatform', platform='douyin')
-        assert 'douyin' in rendered and '{platform}' not in rendered
+        rendered = t('api.unsupportedPlatform', platform='not-a-platform-key')
+        assert 'not-a-platform-key' in rendered and '{platform}' not in rendered
+
+    def test_a_platform_placeholder_is_answered_with_a_word_not_a_key(self):
+        """`zhihu` is what the matrix, the cookie file and the run record are addressed by.
+        It is not what a user should read in a console line or a dialog, and every line that
+        names a platform used to print exactly that."""
+        set_lang('zh')
+        assert 'douyin' not in t('crawl.loginWall', platform='douyin', where='x')
+        assert '抖音' in t('crawl.loginWall', platform='douyin', where='x')
+        set_lang('en')
+        assert 'Douyin' in t('crawl.loginWall', platform='douyin', where='x')
+
+    def test_a_platform_list_is_named_in_the_language_too(self):
+        """A `{platforms}` slot arrives as a list — the pre-run gate answers for several
+        platforms at once — and joining it is the same naming decision, not a second one."""
+        set_lang('zh')
+        rendered = t('comment.no_urls', platforms=['zhihu', 'douyin'])
+        assert '知乎' in rendered and '抖音' in rendered
+        assert 'zhihu' not in rendered and 'douyin' not in rendered
+        # A caller that joined the list itself gets the same answer as one that sent a list.
+        joined = t('comment.no_urls', platforms='zhihu,douyin')
+        assert joined == rendered, 'a half-translated list is the same bug with a comma in it'
+
+    def test_a_value_that_is_not_a_platform_key_passes_through(self):
+        """Domains, paths and free text must not be judged: `weibo.com` is a real thing to
+        print, and a refusal that quotes a rejected value (`../x`) back mangled is a refusal
+        that no longer says what it refused."""
+        set_lang('zh')
+        assert t('crawl.loginWall', platform='weibo.com', where='x').count('weibo.com') == 1
+        assert t('api.unsupportedPlatform', platform='../x') == '不支持的平台：../x'
+        assert t('api.unsupportedPlatform', platform='not a key either') == '不支持的平台：not a key either'
+        assert i18n.platform_label('') == ''
+        assert i18n.platform_label('nonexistent') == 'nonexistent'
 
     def test_an_unknown_key_shows_itself_instead_of_a_foreign_language(self):
         assert t('there.is.no.such.message') == 'there.is.no.such.message'

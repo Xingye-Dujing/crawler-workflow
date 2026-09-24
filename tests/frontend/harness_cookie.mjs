@@ -298,4 +298,14 @@ out.deleteWithCaveat = {
     toasts: sandbox.__toasts.slice(),
 };
 
+/* ── 7. the saved-cookie line speaks the interface language ───────────────
+   It used to print `zhihu: OK` / `weibo: -`, which stayed English in a Chinese
+   interface and named nothing the user could read. Because this stub's `t()`
+   answers with the KEY, the assertion is about where the words come from — the
+   catalog — not about any particular translation. */
+sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: { zhihu: true, weibo: false } };
+sandbox.refreshCookieStatus();
+await flush();
+out.savedStatus = doc.getElementById('cookie-status').textContent;
+
 process.stdout.write(JSON.stringify(out));

@@ -306,7 +306,7 @@ const workflow = {
         if (!shared.length) return null;
         var choice = await showDialog({
             message: I18n.t('dialog.profileClash')
-                .replace('{platforms}', shared.join('、'))
+                .replace('{platforms}', platformLabels(shared))
                 .replace('{n}', shared.length),
             buttons: [
                 { label: I18n.t('dialog.profileClashUse'), value: 'use' },
@@ -359,8 +359,8 @@ const workflow = {
         if (!groups.cn.length || !groups.overseas.length) return true;
         var choice = await showDialog({
             message: I18n.t('dialog.mixedRegion')
-                .replace('{cn}', groups.cn.join('、'))
-                .replace('{overseas}', groups.overseas.join('、')),
+                .replace('{cn}', platformLabels(groups.cn))
+                .replace('{overseas}', platformLabels(groups.overseas)),
             buttons: [
                 { label: I18n.t('dialog.mixedRegionGo'), value: 'go', primary: true },
                 { label: I18n.t('dialog.mixedRegionSplit'), value: null },
@@ -409,7 +409,7 @@ const workflow = {
         function isBlocked(table, platform) {
             return verdictOf(table, platform).blocking === true;
         }
-        showToast(I18n.t('toast.cookieChecking').replace('{platforms}', platforms.join('、')));
+        showToast(I18n.t('toast.cookieChecking').replace('{platforms}', platformLabels(platforms)));
         var body = { platforms: platforms };
         if (profileChoice !== null && profileChoice !== undefined) {
             /* The per-run answer from the profile dialog decides *which browser* the
@@ -432,7 +432,7 @@ const workflow = {
             /* The check itself failed. Say that, and let the run go: the page has no
                licence to refuse a crawl on an answer it never received, and the run
                will meet the real wall soon enough and report it as its own failure. */
-            showToast(I18n.t('toast.cookieUncheckable').replace('{platforms}', platforms.join('、')));
+            showToast(I18n.t('toast.cookieUncheckable').replace('{platforms}', platformLabels(platforms)));
             return true;
         }
         var results = resp.results || {};
@@ -441,7 +441,7 @@ const workflow = {
             return blocked.indexOf(platform) < 0;
         });
         if (unclear.length) {
-            showToast(I18n.t('toast.cookieUnclear').replace('{platforms}', unclear.join('、')), 6000);
+            showToast(I18n.t('toast.cookieUnclear').replace('{platforms}', platformLabels(unclear)), 6000);
         }
         if (!blocked.length) return true;
         var lines = blocked.map(function (platform) {
@@ -454,7 +454,7 @@ const workflow = {
         var choice = await showDialog({
             message: I18n.t('dialog.cookieExpired')
                 .replace('{n}', blocked.length)
-                .replace('{platforms}', blocked.join('、')) +
+                .replace('{platforms}', platformLabels(blocked)) +
                 '\n' + lines.join('\n') + '\n' + I18n.t('dialog.cookieExpiredHint'),
             buttons: [
                 { label: I18n.t('dialog.cookieGoUpdate'), value: 'update', primary: true },
@@ -1053,6 +1053,15 @@ function regionGroupsOf(platforms, matrix) {
  * other anyway, and asking the user about that would be a question with no choice
  * behind it. Comment nodes count too — they buy a browser per platform as well.
  */
+function platformLabels(list) {
+    /* A platform key (`zhihu`) is what the canvas, the crawl matrix and the cookie files
+       are addressed by — it is not a word the user reads, and printing it left a bare
+       `zhihu` inside a Chinese dialog. The backend applies the same rule to its own
+       `{platform}` placeholders inside `i18n.t()`, and the two label sets are pinned
+       equal by TestPlatformLabelParity. */
+    return (list || []).map(function (p) { return I18n.t('platform.' + p); }).join('、');
+}
+
 function profileCollisions(nodes, connections) {
     var ids = Object.keys(nodes || {});
     if (ids.length < 2) return [];
@@ -3294,7 +3303,15 @@ function refreshCookieStatus() {
         if (result.ok) {
             var lines = [];
             Object.keys(result.cookies).forEach(function (p) {
-                lines.push(p + ': ' + (result.cookies[p] ? 'OK' : '-'));
+                /* Both halves come from the catalog. Written raw this line read
+                   "zhihu: OK" in a Chinese interface — and a bare "OK" overstates
+                   the fact anyway: what is known here is that a jar is saved,
+                   not that the session inside it still opens pages (that is what
+                   验证 Cookie and the pre-run probe answer). */
+                var saved = result.cookies[p];
+                lines.push(
+                    I18n.t('platform.' + p) + ': ' + I18n.t(saved ? 'cookie.savedYes' : 'cookie.savedNo')
+                );
             });
             statusEl.textContent = lines.join('  |  ');
         } else {
@@ -3878,7 +3895,17 @@ var runsManager = {
 
     async restart(runId) {
         if (this._busy()) return;
-        if (!window.confirm(I18n.t('runsMgr.confirmRestart'))) return;
+        /* The app's own dialog, not window.confirm: a native box cannot be read
+           in the interface language, cannot be styled with the rest of the page,
+           and answers with a bare true/false that hides what is about to be lost. */
+        var go = await showDialog({
+            message: I18n.t('runsMgr.confirmRestart'),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('runsMgr.restart'), value: 'go', primary: true },
+            ],
+        });
+        if (go !== 'go') return;
         try {
             /* Same contract as the banner's restart: dropping the run drops
                its "already crawled" claims, or the fresh attempt would see
@@ -3894,7 +3921,14 @@ var runsManager = {
     },
 
     async remove(runId, wasResumable) {
-        if (!window.confirm(I18n.t('runsMgr.confirmRemove'))) return;
+        var go = await showDialog({
+            message: I18n.t('runsMgr.confirmRemove'),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('runsMgr.remove'), value: 'go', primary: true },
+            ],
+        });
+        if (go !== 'go') return;
         /* An interrupted run being deleted outright means "never continue
            it": its crawl claims must go too, or those items stay claimed by
            a run that no longer exists. A finished run keeps them — deleting
@@ -4235,7 +4269,7 @@ var exportsManager = {
         }).join('');
         var totals = this._totals || {};
         body.innerHTML =
-            '<div class="runs-mgr-empty">' +
+            '<div class="exports-summary">' +
             I18n.t('exportsMgr.summary').replace('{files}', totals.files || 0).replace('{size}', this.size(totals.bytes || 0)) +
             '</div>' +
             '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
@@ -4324,7 +4358,14 @@ var exportsManager = {
     },
 
     async remove(name) {
-        if (!window.confirm(I18n.t('exportsMgr.confirmRemove'))) return;
+        var go = await showDialog({
+            message: I18n.t('exportsMgr.confirmRemove'),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('exportsMgr.remove'), value: 'go', primary: true },
+            ],
+        });
+        if (go !== 'go') return;
         try {
             var resp = await fetch('/api/exports/delete', {
                 method: 'POST',

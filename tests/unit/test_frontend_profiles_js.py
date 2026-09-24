@@ -479,7 +479,8 @@ class TestParallelProfileFork:
         case = ui['clash-parallel-same']
         assert case['clash'] is False and case['ran'] is True
         assert case['sentProfile'] == 'false', 'the answer never travelled, so the server would re-decide it'
-        assert 'bilibili' in case['clashDialog']['message'], 'the question has to name what collides'
+        assert 'Bilibili' in case['clashDialog']['message'], 'the question has to name what collides'
+        assert 'bilibili' not in case['clashDialog']['message'], 'the storage key leaked into a sentence the user reads'
         assert len(case['clashDialog']['labels']) == 3, 'both sides of the fork plus a way out'
 
     def test_keeping_profiles_reaches_the_request_as_true(self, ui):

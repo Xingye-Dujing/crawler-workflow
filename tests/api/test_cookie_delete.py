@@ -20,6 +20,17 @@ from services.cookie_manager import CookieManager
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
 
+def _names(line: str, platform: str) -> bool:
+    """Does this console line name *platform*?
+
+    A `{platform}` slot is answered with the word the language uses (``t()`` localizes
+    it), so counting lines by storage key alone reports "nobody said it" for a sentence
+    the user can read — and the "one failure, one line" rule this file checks would pass
+    by measuring nothing."""
+    forms = {platform, i18n.platform_label(platform, 'zh'), i18n.platform_label(platform, 'en')}
+    return any(form in line for form in forms)
+
+
 @pytest.fixture(autouse=True)
 def clean_jar(app_module):
     """No inherited cookie file and no inherited profile history.
@@ -74,13 +85,16 @@ class TestDelete:
         app_module.cookie_manager.delete('douyin')
         response = client.post('/api/cookies/delete', json={'platform': 'douyin'})
         assert response.status_code == 404
-        assert i18n._EN['cookie.delete.none'].replace('{platform}', 'douyin') in response.get_json()['error']
+        assert (
+            i18n._EN['cookie.delete.none'].replace('{platform}', i18n.platform_label('douyin', 'en'))
+            in response.get_json()['error']
+        )
 
     def test_one_line_for_one_deletion(self, client, app_module, saved):
         saved('bilibili')
         app_module.execution_state['logs'] = []
         assert client.post('/api/cookies/delete', json={'platform': 'bilibili'}).status_code == 200
-        said = [line for line in app_module.execution_state['logs'] if 'bilibili' in line]
+        said = [line for line in app_module.execution_state['logs'] if _names(line, 'bilibili')]
         assert len(said) == 1, f'the console said it {len(said)} times: {said}'
 
     def test_the_profile_caveat_is_the_only_extra_line_a_deletion_may_add(self, client, app_module, saved):
@@ -91,7 +105,7 @@ class TestDelete:
         browser_profiles.mark_used('youtube', imported=False)
         app_module.execution_state['logs'] = []
         assert client.post('/api/cookies/delete', json={'platform': 'youtube'}).status_code == 200
-        said = [line for line in app_module.execution_state['logs'] if 'youtube' in line]
+        said = [line for line in app_module.execution_state['logs'] if _names(line, 'youtube')]
         assert len(said) == 2, f'deletion plus the one fact it cannot carry: {said}'
         assert any('logged in' in line or 'profile' in line for line in said), said
 
@@ -102,7 +116,7 @@ class TestDelete:
         app_module.execution_state['logs'] = []
         body = {'platform': 'zhihu', 'cookies': [{'name': 'z_c0', 'value': 'x'}]}
         assert client.post('/api/cookies/save', json=body).status_code == 200
-        said = [line for line in app_module.execution_state['logs'] if 'zhihu' in line]
+        said = [line for line in app_module.execution_state['logs'] if _names(line, 'zhihu')]
         assert len(said) == 1, f'the console said it {len(said)} times: {said}'
 
     def test_a_file_that_will_not_go_says_why_once(self, client, app_module, saved, monkeypatch):

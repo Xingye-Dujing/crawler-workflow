@@ -381,3 +381,76 @@ class TestCrawlMatrixParity:
                     assert f'function {mode.action_js}(' in source, (
                         f'{cap.platform}/{mode.key} calls a missing {mode.action_js}'
                     )
+
+
+class TestChromeOfThePageItself:
+    """Rules about the page's own furniture: what may interrupt the user, and where.
+
+    A node harness has no CSS and no browser chrome, and a Selenium pass is too slow to
+    be the gate for a one-line stylesheet edit, so these are pinned against the very
+    source the browser loads.
+    """
+
+    def test_no_dialog_is_asked_of_the_browser_itself(self):
+        """``window.confirm``/``alert`` cannot follow the interface language, cannot be
+        styled with the page, and answer with a bare boolean that says nothing about what
+        is about to be lost. The app has its own dialog for every one of them."""
+        offender = re.compile(r"""window\.(?:confirm|alert|prompt)\s*\(""")
+        for name in I18N_USERS:
+            source = (JS_DIR / name).read_text(encoding='utf-8')
+            hits = [line.strip() for line in source.splitlines() if offender.search(line)]
+            assert not hits, f'{name} still interrupts the user with a native dialog: {hits}'
+
+    def test_the_resume_banner_moves_down_when_the_menu_bar_is_pinned(self):
+        """The bar is ``position: fixed`` and slides over the top of the workspace while
+        pinned, so a banner at ``top: 8px`` sat underneath it — including the 继续 button
+        the user came to the page to press."""
+        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
+        assert '--menuH' in css, 'the rule needs the bar height, and the bar is what owns it'
+        assert '#top-menu.pinned ~ #workspace #resume-banner' in css
+        assert 'top: calc(var(--menuH)' in css
+        assert 'transition: top' in css, 'the banner must slide, not teleport under the bar'
+        # A selector that matches nothing is how the old `.panel` audit stayed green while
+        # measuring zero elements, so the structure the `~` needs is checked, not assumed.
+        assert html.count('<nav id="top-menu">') == 1 and html.count('<div id="workspace">') == 1
+        assert html.index('<nav id="top-menu">') < html.index('<div id="workspace">')
+        nav_line = next(line for line in html.splitlines() if '<nav id="top-menu">' in line)
+        workspace_line = next(line for line in html.splitlines() if '<div id="workspace">' in line)
+        assert nav_line.index('<') == workspace_line.index('<'), (
+            'the two must sit at one indentation to be siblings, or the rule is dead text'
+        )
+
+    def test_the_platform_names_agree_between_the_two_layers(self):
+        """The browser labels a platform from ``platform.*`` in app.js and the backend from
+        ``i18n._PLATFORM_LABELS``. Two lists of the same nine words drift the moment one of
+        them is edited — and the console and the dialog would then name the same site
+        differently, in the same language, on the same screen."""
+        import i18n
+
+        source = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        for lang, body in (
+            ('en', source[source.index('dict: {') : source.index('zh: {')]),
+            (
+                'zh',
+                source[source.index('zh: {') : source.index('_missing:')],
+            ),
+        ):
+            front = dict(re.findall(r"""['"]platform\.([\w-]+)['"]\s*:\s*['"]([^'"]*)['"]""", body))
+            back = i18n._PLATFORM_LABELS[lang]
+            assert set(front) == set(back), f'{lang}: the two layers list different platforms'
+            for key, label in front.items():
+                assert back[key] == label, f'{lang}/{key}: {back[key]!r} != {label!r}'
+        for platform in CookieManager.PLATFORMS:
+            assert platform in i18n._PLATFORM_LABELS['zh'], f'{platform} has no label in either list'
+
+    def test_the_export_totals_lead_the_list_and_stay_while_it_scrolls(self):
+        """共 N 个文件 / 合计 X describes the whole folder, not the rows on screen. At the
+        foot of a scrolling list it read as part of the last file, and scrolling pushed the
+        only non-per-row figure out of view."""
+        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        block = css[css.index('.exports-summary {') :]
+        block = block[: block.index('}')]
+        assert 'position: sticky' in block
+        assert 'top: 0' in block
+        assert 'background:' in block, 'a sticky line needs an opaque ground or rows show through it'

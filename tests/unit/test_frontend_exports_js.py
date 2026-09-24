@@ -90,6 +90,30 @@ class TestExportRows:
         assert results['dlHref'] == "/api/exports/download?name=ENC(it's.csv)"
 
 
+class TestDeleteDialog:
+    """Deleting a file is confirmed by the app's dialog, not by the browser's.
+
+    The three destructive buttons in this app used to answer `window.confirm`, which
+    cannot follow the interface language, cannot be styled with the page, and hands back
+    a bare true/false that says nothing about what is about to be lost.
+    """
+
+    def test_canceling_asks_and_sends_nothing(self, results):
+        assert results['cancelledPosts'] == [], 'a closed dialog must not delete the file'
+        assert results['cancelledDialog'] == [['CANCEL', None, False], ['Delete', 'go', False]]
+
+    def test_the_confirmation_names_the_action_it_is_asked_about(self, results):
+        """The button says 删除, not 确认: an irreversible row action should be readable
+        as itself, which is the thing a native confirm dialog cannot do."""
+        assert [label for label, _value, _wi in results['deletedDialog']] == ['CANCEL', 'Delete']
+
+    def test_confirming_deletes_exactly_that_file(self, results):
+        assert len(results['deletedPosts']) == 1, results['deletedPosts']
+        post = results['deletedPosts'][0]
+        assert post['url'] == '/api/exports/delete'
+        assert post['body'] == {'name': 'ok.csv'}
+
+
 class TestReportRow:
     def test_a_report_is_offered_as_a_view_and_never_as_a_download(self, results):
         """The file is .html, and the download route refuses that extension on

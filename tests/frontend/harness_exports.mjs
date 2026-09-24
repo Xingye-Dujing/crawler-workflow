@@ -41,6 +41,9 @@ const I18n = {
             'exportsMgr.reportDone': 'DONE',
             'exportsMgr.reportFailed': 'FAILED',
             'exportsMgr.remove': 'Delete',
+            'exportsMgr.confirmRemove': 'CONFIRM-REMOVE',
+            'exportsMgr.removeDone': 'DELETED',
+            'exportsMgr.removeFailed': 'DELETEFAILED',
             'exportsMgr.loadFailed': 'LOADFAILED',
             'dialog.cancel': 'CANCEL',
         },
@@ -147,7 +150,30 @@ out.dialogs = captured.dialogs.map((opts) => ({
     buttons: (opts.buttons || []).map((b) => [b.label, b.value, !!b.withInput]),
     hasInput: !!opts.input,
 }));
-out.posts = captured.posts;
-out.opens = captured.opens;
-out.toasts = captured.toasts;
+out.posts = captured.posts.slice();
+out.opens = captured.opens.slice();
+out.toasts = captured.toasts.slice();
+
+/* ── deleting a file: the app's own dialog decides, and only 删除 sends ─────
+   This used to be `window.confirm`, which cannot be translated, cannot be
+   styled with the page, and answers with a bare boolean that hides what is
+   about to be lost. It runs last and reports its own slices, so the report
+   assertions above keep seeing only what the report button did. */
+const triples = (opts) =>
+    opts && opts.buttons ? opts.buttons.map((b) => [b.label, b.value === undefined ? null : b.value, !!b.withInput]) : null;
+const postsBefore = captured.posts.length;
+const toastsBefore = captured.toasts.length;
+const dialogsBefore = captured.dialogs.length;
+
+dialogAnswer.value = null;
+await exportsManager.remove("it's.csv");
+out.cancelledPosts = captured.posts.slice(postsBefore);
+out.cancelledDialog = triples(captured.dialogs[dialogsBefore]);
+
+dialogAnswer.value = 'go';
+await exportsManager.remove('ok.csv');
+out.deletedPosts = captured.posts.slice(postsBefore + out.cancelledPosts.length);
+out.deletedDialog = triples(captured.dialogs[dialogsBefore + 1]);
+out.deletedToasts = captured.toasts.slice(toastsBefore + out.cancelledPosts.length);
+
 process.stdout.write(JSON.stringify(out));

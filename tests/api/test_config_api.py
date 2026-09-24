@@ -117,7 +117,9 @@ class TestCookieEndpoints:
         body = response.get_json()
         assert response.status_code == 200
         assert body['ok'] is True
-        assert 'weibo' in body['message']
+        assert 'weibo' in body['message'] or '微博' in body['message'] or 'Weibo' in body['message'], (
+            'the answer names the platform it saved for — as the key or as the word'
+        )
 
         saved = data_root / 'data' / 'cookies' / 'weibo_cookies.json'
         assert saved.exists()

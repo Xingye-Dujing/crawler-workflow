@@ -22,6 +22,8 @@ execution history (pinned by ``test_console_buffer.py::TestImportHygiene``).
 
 import pytest
 
+import i18n
+
 pytestmark = [pytest.mark.api, pytest.mark.serial]
 
 
@@ -69,7 +71,8 @@ def test_a_wall_before_the_first_row_is_asked_again_after_a_back_off(app_module,
     rows = app_module._crawl_with_collision_retry(crawler, crawler.search, {'target_count': 3}, {}, 'weibo')
     assert crawler.calls == 2, 'the collision shape was not retried'
     assert rows == [{'标题': '第二条'}]
-    said = [line for line in _lines(running) if 'weibo' in line]
+    forms = ('weibo', i18n.platform_label('weibo', 'zh'), i18n.platform_label('weibo', 'en'))
+    said = [line for line in _lines(running) if any(form in line for form in forms)]
     assert len(said) == 1, f'the retry should be announced once, saw {said}'
 
 
