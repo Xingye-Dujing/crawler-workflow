@@ -37,7 +37,7 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
     pass (~an hour) and belongs to acceptance. Both are **also split by network** (`live_cn`,
     `live_os`): a VPN gets 502 from douyin and a Chinese network never reaches x.com. So run one
     group, **stop and ask the user which network they are on**, then the other — a case in the wrong
-    group fails as 0 rows, which reads as a broken crawler.
+    group is 0 rows, which reads as a broken crawler.
   - **To run one device/live case you must override the marker filter as well as naming it** —
     `pytest tests/integration/x.py::test_y` alone reports `N deselected` and looks like it ran.
   - Coverage: `--cov=backend --cov-report=term`.
