@@ -83,6 +83,13 @@ class TestExportRows:
     def test_the_header_counts_the_directory_not_the_page(self, results):
         assert '4 file(s)' in results['html'] and '5.9 KB' in results['html']
 
+    def test_the_totals_close_the_list_rather_than_head_it(self, results):
+        """The line counts the whole folder, so it reads as a summary of the table — under
+        it. Placed above, it is a heading over a row and gets read as that row's figures."""
+        html = results['html']
+        assert html.index('</table>') < html.index('exports-summary'), 'the summary must follow the table'
+        assert html.rstrip().endswith('</div>'), 'and it must be the last thing the panel renders'
+
     def test_an_empty_folder_is_empty_not_broken(self, results):
         assert results['empty'] == '<div class="runs-mgr-empty">EMPTY</div>'
 

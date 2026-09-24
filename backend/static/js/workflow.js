@@ -4269,16 +4269,19 @@ var exportsManager = {
         }).join('');
         var totals = this._totals || {};
         body.innerHTML =
-            '<div class="exports-summary">' +
-            I18n.t('exportsMgr.summary').replace('{files}', totals.files || 0).replace('{size}', this.size(totals.bytes || 0)) +
-            '</div>' +
             '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
             '<th>' + I18n.t('exportsMgr.colName') + '</th>' +
             '<th>' + I18n.t('exportsMgr.colKind') + '</th>' +
             '<th>' + I18n.t('exportsMgr.colSize') + '</th>' +
             '<th>' + I18n.t('exportsMgr.colModified') + '</th>' +
             '<th></th>' +
-            '</tr></thead><tbody>' + html + '</tbody></table>';
+            '</tr></thead><tbody>' + html + '</tbody></table>' +
+            /* Read as a summary of the list above it, so it goes after the table — the
+               totals cover the whole export directory, not the rows on screen, and a
+               heading invites reading them as one file's figures. */
+            '<div class="exports-summary">' +
+            I18n.t('exportsMgr.summary').replace('{files}', totals.files || 0).replace('{size}', this.size(totals.bytes || 0)) +
+            '</div>';
     },
 
     _when(epoch) {

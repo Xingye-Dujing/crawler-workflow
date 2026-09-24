@@ -447,6 +447,98 @@ def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, drive
     assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
 
 
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_dialog_never_asks_the_browser_to_overflow_it(app_url, driver, lang):
+    """Measured inside the page, not read off the stylesheet.
+
+    The 「用不用 Profile」 buttons carried whole sentences and `.menu-btn` is
+    ``white-space: nowrap``, so the row could neither shrink nor wrap and the label ran
+    out of the box — which the user read as truncated text. Every property that fixes
+    this can be present in the CSS and still lose in the browser, so the only assertion
+    that means anything here is a rect.
+    """
+    driver.set_window_size(1000, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(f"document.body.dataset.lang = '{lang}'; I18n.apply();")
+    report = driver.execute_script(
+        """
+        showDialog({
+            message: I18n.t('dialog.profileClash')
+                .replace('{platforms}', platformLabels(['weibo', 'zhihu']))
+                .replace('{n}', 2),
+            buttons: [
+                { label: I18n.t('dialog.profileClashUse'), value: 'use' },
+                { label: I18n.t('dialog.profileClashSkip'), value: 'skip', primary: true },
+                { label: I18n.t('dialog.cancel'), value: null },
+            ],
+        });
+        const box = document.getElementById('dialog-box').getBoundingClientRect();
+        const buttons = Array.from(document.querySelectorAll('#dialog-actions .menu-btn'));
+        const worst = buttons.map((node) => {
+            const r = node.getBoundingClientRect();
+            return {
+                text: node.textContent.slice(0, 20),
+                /* Past 1px of rounding slack this is text the user cannot read: either the
+                   box was stepped out of, or the label was clipped inside its own button. */
+                over: Math.round(Math.max(
+                    r.right - box.right, box.left - r.left, node.scrollWidth - node.clientWidth
+                )),
+            };
+        });
+        const rows = document.getElementById('dialog-actions').getBoundingClientRect();
+        document.getElementById('dialog-overlay').classList.remove('open');
+        return {
+            measured: buttons.length,
+            worst: worst,
+            boxWidth: Math.round(box.width),
+            actionsBottom: Math.round(rows.bottom - box.bottom),
+        };
+        """,
+        [],
+    )
+    assert report['measured'] == 3, f'the dialog drew {report["measured"]} buttons, not the three asked for'
+    over = [w for w in report['worst'] if w['over'] > 1]
+    assert not over, f'{lang}: button text escapes the {report["boxWidth"]}px dialog box: {over}'
+    assert report['actionsBottom'] <= 1, f'the button row hangs below the box: {report}'
+
+
+def test_the_resume_banner_gets_out_of_the_pinned_menu_s_way(app_url, driver):
+    """The menu bar is ``position: fixed`` and covers the top ``--menuH`` of the viewport
+    while pinned, and the banner used to sit at a fixed ``top: 8px`` underneath it —
+    hiding the very 继续 button the user came to the page to press. Only a computed style
+    proves the selector matches the real element tree.
+
+    The bar is taken off first rather than assumed: this app persists the pin and boots
+    with it on, so a measurement that starts from whatever the page happened to load
+    compares pinned with pinned and passes on a rule that does nothing.
+    """
+    driver.set_window_size(1280, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    moved = driver.execute_script(
+        """
+        const banner = document.getElementById('resume-banner');
+        const bar = document.getElementById('top-menu');
+        banner.classList.remove('hidden');
+        bar.classList.remove('pinned');
+        const free = parseFloat(getComputedStyle(banner).top);
+        bar.classList.add('pinned');
+        const pushed = parseFloat(getComputedStyle(banner).top);
+        const height = Math.round(bar.getBoundingClientRect().height);
+        bar.classList.remove('pinned');
+        banner.classList.add('hidden');
+        return { free: free, pushed: pushed, height: height };
+        """,
+        [],
+    )
+    assert moved['pushed'] > moved['free'], f'pinning the menu did not move the banner: {moved}'
+    assert moved['pushed'] >= moved['free'] + moved['height'], (
+        f'the banner moved by {moved["pushed"] - moved["free"]}px, which does not clear a '
+        f'{moved["height"]}px bar: {moved}'
+    )
+
+
 def test_switching_console_tabs_keeps_the_lines_already_shown(app_url, driver):
     """The console is the one panel whose content cannot be rebuilt by asking.
 

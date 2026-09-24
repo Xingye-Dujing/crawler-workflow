@@ -1534,19 +1534,14 @@ button.history-del:hover {
   color: var(--text-faint);
   text-align: center;
 }
-/* The export panel's totals ride at the head of the list and stay there while it
-   scrolls: they describe the whole folder, not the rows currently on screen, and as
-   a centred footnote-shaped line at the bottom they read as part of the last row. */
+/* The export panel's totals sit under the table as a centred summary of it: they count
+   the whole folder rather than the rows above, which is what makes them a summary and
+   not a header. */
 .exports-summary {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: 6px 4px;
+  padding: 10px 6px 4px;
   font-size: 11px;
-  color: var(--text-dim);
-  text-align: left;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
+  color: var(--text-faint);
+  text-align: center;
 }
 .runs-mgr-table {
   width: 100%;

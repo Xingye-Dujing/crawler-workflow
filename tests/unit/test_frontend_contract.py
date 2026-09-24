@@ -444,13 +444,12 @@ class TestChromeOfThePageItself:
         for platform in CookieManager.PLATFORMS:
             assert platform in i18n._PLATFORM_LABELS['zh'], f'{platform} has no label in either list'
 
-    def test_the_export_totals_lead_the_list_and_stay_while_it_scrolls(self):
-        """共 N 个文件 / 合计 X describes the whole folder, not the rows on screen. At the
-        foot of a scrolling list it read as part of the last file, and scrolling pushed the
-        only non-per-row figure out of view."""
+    def test_the_export_totals_read_as_a_summary_under_the_list(self):
+        """共 N 个文件 / 合计 X counts the whole export folder, so it belongs under the
+        table as a summary — the user asked for exactly that after trying it pinned at the
+        head, where it read as a figure about the first row."""
         css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
         block = css[css.index('.exports-summary {') :]
         block = block[: block.index('}')]
-        assert 'position: sticky' in block
-        assert 'top: 0' in block
-        assert 'background:' in block, 'a sticky line needs an opaque ground or rows show through it'
+        assert 'text-align: center' in block
+        assert 'position: sticky' not in block, 'it is a summary, not a header that follows you down'
