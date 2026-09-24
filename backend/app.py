@@ -38,7 +38,7 @@ from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, node_label
-from i18n import audit, normalize, set_lang, t
+from i18n import audit, get_lang, normalize, set_lang, t
 from services import StatsService
 from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
@@ -3658,8 +3658,11 @@ def save_cookies():
         add_log(t('cookie.saved', platform=platform))
         return jsonify({'ok': True, 'message': t('cookie.saved', platform=platform), 'count': len(kept)})
     except (OSError, ValueError) as e:
-        logger.exception(t('misc.cookie_save_failed'))
-        add_log(f'{t("misc.cookie_save_failed")}: {str(e)[:120]}')
+        # One line for one failure. ``LogBufferHandler`` forwards every logger call to
+        # the console (its ``format`` is the message alone, so the traceback still goes
+        # only to the log file) — the ``add_log`` beside it printed the same sentence a
+        # second time, and the console showed 「保存 Cookie 失败」 twice in a row.
+        logger.exception(f'{t("misc.cookie_save_failed")}: {str(e)[:120]}')
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
@@ -3711,8 +3714,13 @@ def _close_login_browser(crawler, quit_timeout: float = 5.0):
             )
 
 
-def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = ''):
+def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', lang: str = ''):
     """Drive one login window from the request thread to its own daemon.
+
+    ``set_lang`` is the first thing it does: thread-locals are not inherited, so
+    without it every line this worker wrote into the console panel was Chinese
+    whatever language the interface was showing — the run worker pins its own
+    language, and these two silently did not.
 
     The request thread used to sleep for the whole wait (up to 600 s), so any
     proxy or tab timeout turned a perfectly good login into a broken fetch and
@@ -3725,6 +3733,7 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = ''):
     """
     job = _COOKIE_JOB
     crawler = None
+    set_lang(lang)
     try:
         # ``for_login`` is the point of this window: a human reads it. The crawler
         # default blocks images to save seconds per navigation, and the QR code a
@@ -3736,8 +3745,11 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = ''):
             raise ValueError(t('api.unsupportedPlatform', platform=platform))
         crawler.driver.get(url)
         job['entry'] = url
-        add_log(t('wf.browser_opened', platform=platform, n=wait_seconds))
-        add_log(t('cookie.openedEntry', url=url))
+        # One line for one event, carrying both facts it was split across: which
+        # platform's window opened, how long it will wait, and the page it landed on
+        # (the entry link is what a user checks when the window shows something
+        # unexpected). Two consecutive console lines said one thing each.
+        add_log(t('wf.browser_opened', platform=platform, n=wait_seconds, url=url))
         job['phase'] = 'waiting'
         deadline = time.time() + wait_seconds
         while time.time() < deadline:
@@ -3779,10 +3791,11 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = ''):
         job['phase'] = 'saved'
         add_log(t('wf.cookies_generated', platform=platform, n=len(cookies)))
     except Exception as e:
-        logger.exception(t('misc.cookie_gen_failed'))
         job['phase'] = 'error'
         job['error'] = str(e)[:300]
-        add_log(f'{t("misc.cookie_gen_failed")}: {str(e)[:120]}')
+        # One line, one reason: the logger call already reaches the console (see the
+        # cookie-save handler above), so the extra add_log said 「生成 Cookie 失败」 twice.
+        logger.exception(f'{t("misc.cookie_gen_failed")}: {str(e)[:120]}')
     finally:
         _close_login_browser(crawler)
         with _COOKIE_JOB_LOCK:
@@ -3835,7 +3848,9 @@ def generate_cookies():
         _COOKIE_JOB['lines'] = []
         _COOKIE_JOB['cancel'].clear()
         _COOKIE_JOB['confirm'].clear()
-    threading.Thread(target=_cookie_login_worker, args=(platform, wait_seconds, entry_url), daemon=True).start()
+    threading.Thread(
+        target=_cookie_login_worker, args=(platform, wait_seconds, entry_url, get_lang()), daemon=True
+    ).start()
     payload = {'ok': True, 'message': t('cookie.started'), 'entry': entry_url or ''}
     if entry_rejected:
         # Say so instead of quietly opening somewhere else: the user believes
@@ -3875,16 +3890,22 @@ def _verify_lines(platform: str, facts: dict) -> list:
     return lines
 
 
-def _cookie_verify_worker(platform: str, url: str):
+def _cookie_verify_worker(platform: str, url: str, lang: str = ''):
     """Probe the stored cookie against the live site and report what it unlocks.
 
     Visible by design: this machine's risk control treats a headless content
     page differently from a real window (Zhihu in particular), and a diagnosis
     that blamed the cookie for a headless block would send the user to log in
     again for nothing.
+
+    ``lang`` is handed in by the request thread and pinned here for the same
+    reason the run worker does it: a daemon thread starts with a fresh thread-local,
+    so without this the probe's own lines and its failure were Chinese in an English
+    interface.
     """
     job = _COOKIE_JOB
     crawler = None
+    set_lang(lang)
     try:
         crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR)
         facts = crawler.diagnose(url)
@@ -3897,11 +3918,14 @@ def _cookie_verify_worker(platform: str, url: str):
         for line in lines:
             add_log(line)
     except Exception as e:
-        logger.exception(t('misc.cookie_gen_failed'))
+        # A VERIFICATION failure, so it must not be announced as 「生成 Cookie 失败」 —
+        # the user asked no cookie to be generated here, and the line beside it already
+        # said 验证失败. One attributed line carries the reason; the logger call is what
+        # reaches the console (and the traceback reaches the log file).
+        logger.exception(t('cookie.verifyFailed', err=str(e)[:120]))
         with _COOKIE_JOB_LOCK:
             job['phase'] = 'error'
             job['error'] = str(e)[:300]
-        add_log(t('cookie.verifyFailed', err=str(e)[:120]))
     finally:
         _close_login_browser(crawler)
         with _COOKIE_JOB_LOCK:
@@ -3947,7 +3971,7 @@ def verify_cookies():
         _COOKIE_JOB['lines'] = []
         _COOKIE_JOB['cancel'].clear()
         _COOKIE_JOB['confirm'].clear()
-    threading.Thread(target=_cookie_verify_worker, args=(platform, target), daemon=True).start()
+    threading.Thread(target=_cookie_verify_worker, args=(platform, target, get_lang()), daemon=True).start()
     return jsonify({'ok': True, 'message': t('cookie.verifying')}), 202
 
 

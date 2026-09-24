@@ -272,8 +272,29 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   `{seen, lines}` per view (`'all'` plus each workflow id), **every** view is fed on every poll, and
   `switchWfTab` repaints from that view's history without moving its cursor. `clearConsole` empties the
   histories and leaves cursors alone. Cap is `CONSOLE_VIEW_CAP` per view; a trim repaints.
-- **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook.** Those nodes
-  get no "Executing node …" and no "Node … completed (n/N)" line. Everything that states a fact still
+- **Every thread that logs must pin its own language.** `set_lang` is thread-local and a
+  daemon thread starts with a fresh one, so `run()`, the parallel pool wrapper and **both
+  cookie workers** take the request's language and set it first — the Cookie panel's probe
+  lines and failures were Chinese in an English interface until that argument existed.
+  A test that asserts console text should either send/assert both languages or assert on
+  the reason, not on a pasted English/Chinese sentence.
+- **One failure, one line.** `LogBufferHandler` forwards every `logger.*` call into the
+  console buffer (its `format` is the message alone, so a traceback still goes only to
+  the log file), so `logger.exception(...)` **and** an `add_log` of the same text prints
+  the sentence twice — that pair was live in the cookie save/generate/verify paths and in
+  the LLM failure path (three lines for one transport death, and the circuit-breaker
+  message is two sentences). Keep the logger call for the file's traceback, and let the
+  executor's `wf.node_failed` be the single attributed console line; a helper line may add
+  a fact that line cannot carry (how many rows survived), never repeat the reason.
+  Refusals `raise` rather than returning `[]`, or the node settles DONE over an empty
+  table and the export ships a header row.
+- **`_push_log` stores one entry per physical line.** A multi-line payload (driver
+  `Message:` block, a site's own refusal) used to be one buffer entry that the DOM
+  rendered as several rows, so the browser's line-delta cursor skipped or repeated real
+  console content and the 200-line tail could be spent by one traceback; the running
+  total advances by lines, not by `add_log` calls.
+- **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook.** Those
+  nodes get no "Executing node …" and no "Node … completed (n/N)" line. Everything that states a fact still
   prints: the upload's own "Loaded uploaded file X: N rows", and any failure/skip/restore line (with
   `node_label` — a silenced node that then fails is a run the user cannot diagnose). Progress counters
   still count them.

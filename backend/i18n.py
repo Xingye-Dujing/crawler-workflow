@@ -68,7 +68,7 @@ _ZH = {
     'wf.tokenize_done': '[分词] {mode} 已切分 {col} → {n} 行',
     'wf.visualize_no_input': '没有上游数据，请连接数据源或文件上传节点',
     'wf.visualize_done': '[可视化] 已渲染 {chart} 图表（{engine}），共 {n} 行',
-    'wf.browser_opened': '已打开浏览器用于 {platform} 登录，等待 {n} 秒完成登录…',
+    'wf.browser_opened': '已打开浏览器用于 {platform} 登录（{url}），等待 {n} 秒完成登录…',
     'wf.cookies_generated': '已生成 {platform} 的 Cookie（{n} 项）',
     # ── LLM ───────────────────────────────────────────────────
     'llm.no_key': 'OpenRouter API Key 未填写',
@@ -394,7 +394,6 @@ _ZH = {
         '3. 回到本面板点「已完成登录」——保存前浏览器会自动回到 YouTube 页面，'
         'Google 账号自身的 Cookie 不会被写进本平台文件'
     ),
-    'cookie.openedEntry': '登录浏览器已打开：{url}',
     'cookie.entryRejected': (
         '该链接不属于 {platform} 的域名，已改用平台登录页（不允许把别的站点的 Cookie 存进本平台的 Cookie 文件）'
     ),
@@ -712,7 +711,7 @@ _EN = {
     'wf.tokenize_done': '[Tokenize] {mode} segmented {col} -> {n} rows',
     'wf.visualize_no_input': 'no upstream data — connect a data source or an upload node',
     'wf.visualize_done': '[Visualize] Rendered {chart} chart ({engine}) from {n} rows',
-    'wf.browser_opened': 'Browser opened for {platform} login. Waiting {n}s for user to log in...',
+    'wf.browser_opened': 'Browser opened for {platform} login ({url}); waiting {n}s for the user to log in',
     'wf.cookies_generated': 'Cookies generated for {platform} ({n} cookies)',
     # ── LLM ───────────────────────────────────────────────────
     'llm.no_key': 'OpenRouter API key is missing',
@@ -1052,7 +1051,6 @@ _EN = {
         '3. Come back here and press "Done \u2014 I logged in" — the browser is pulled back to YouTube first, '
         'so the Google account\u2019s own cookies never land in this platform\u2019s file'
     ),
-    'cookie.openedEntry': 'Login browser opened at: {url}',
     'cookie.entryRejected': 'That link is not on a {platform} domain, so the platform login page was used instead '
     '(another site\u2019s cookies must never be stored in this platform\u2019s cookie file)',
     'cookie.verifying': 'Probing this platform with the stored cookie\u2026',

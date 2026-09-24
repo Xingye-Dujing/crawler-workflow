@@ -326,6 +326,47 @@ class TestCookieVerify:
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
         assert _await_phase(client, 'error')
         assert 'chromedriver' in client.get('/api/cookies/generate/status').get_json()['error']
+        # One console line, and the right sentence: this was a VERIFICATION, which the
+        # user never asked to generate anything for, and the reason used to be printed
+        # twice — once as 「生成 Cookie 失败」 and once as 验证失败.
+        announced = [line for line in app_module.execution_state['logs'] if 'chromedriver' in line]
+        assert len(announced) == 1, f'one crash was announced {len(announced)} times: {announced}'
+        assert 'Verification failed' in announced[0], announced[0]
+        assert 'Cookie generation failed' not in announced[0], announced[0]
+
+    def test_a_failed_cookie_save_announces_itself_once(self, client, app_module, monkeypatch):
+        """The logger and the console buffer are the same surface, so two calls are two lines.
+
+        ``LogBufferHandler`` forwards every ``logger.*`` call into the console, which is
+        what the file gets its traceback from — the ``add_log`` beside the
+        ``logger.exception`` therefore repeated 「保存 Cookie 失败」 verbatim, and a user
+        reading two identical failures reasonably assumes two things broke.
+        """
+
+        def refuse(*_args, **_kwargs):
+            raise OSError('disk says no')
+
+        monkeypatch.setattr(app_module.cookie_manager, 'save', refuse)
+        body = {'platform': 'zhihu', 'cookies': [{'name': 'a', 'value': 'b'}]}
+        assert client.post('/api/cookies/save', json=body).status_code == 500
+        lines = app_module.execution_state['logs']
+        said = [line for line in lines if 'Cookie save failed' in line or 'disk says no' in line]
+        assert len(said) == 1, f'the save failure was announced {len(said)} times: {said}'
+        assert 'disk says no' in said[0], 'the one line must still carry the reason'
+
+    def test_opening_the_login_window_prints_one_line_with_the_page_it_used(self, client, job, app_module):
+        """Which platform, how long it waits, and which URL it landed on — one sentence.
+
+        The panel used to emit two consecutive console lines for the single event of a
+        window opening, the second carrying only the address.
+        """
+        app_module.execution_state['logs'] = []
+        assert client.post('/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10}).status_code == 202
+        _await_phase(client, 'waiting')
+        opened = [line for line in app_module.execution_state['logs'] if 'Browser opened' in line]
+        client.post('/api/cookies/generate/cancel')
+        assert len(opened) == 1, opened
+        assert 'zhihu' in opened[0] and 'http' in opened[0], 'the one line owes both facts'
 
     def test_verification_never_shares_the_window_with_a_login(self, client, job, app_module):
         app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
