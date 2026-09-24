@@ -126,7 +126,6 @@ def walk_feed(
     start: int = 0,
     mark: Callable[[dict], None] | None = None,
     stopped: Callable[[], bool] | None = None,
-    max_rounds: int = 12,
     stuck_rounds: int = 3,
     settle_wait: float = 1.5,
     window: Callable[[], object] | None = None,
@@ -157,7 +156,7 @@ def walk_feed(
     """
     result = FeedResult(scanned=start)
     watcher = window if window is not None else (lambda: len(read_cards() or []))
-    while result.rounds < max_rounds and collected() < target:
+    while collected() < target:
         if stopped is not None and stopped():
             result.stopped_reason = result.stopped_reason or 'stopped'
             break
@@ -208,5 +207,8 @@ def walk_feed(
             break
     result.collected = collected()
     if not result.stopped_reason:
-        result.stopped_reason = 'target' if result.collected >= target else 'rounds'
+        # Everything else that ends this walk breaks with its reason set; the
+        # loop condition itself only fails on the target. No round budget —
+        # "how much to collect" is the user's number, not this file's.
+        result.stopped_reason = 'target'
     return result

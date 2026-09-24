@@ -43,7 +43,6 @@ class XiaohongshuCrawler(Crawler):
     NOTE_WAIT = 2.5
     CARD_WAIT = 1.5
     SCROLL_STEPS = 3
-    MAX_SCROLL_ROUNDS = 40
     STUCK_ROUNDS = 3
     POLITE_BASE = 0.9
     POLITE_SPREAD = 0.3
@@ -91,18 +90,16 @@ class XiaohongshuCrawler(Crawler):
 
         rounds = 0
         stuck = 0
-        while rounds < self.MAX_SCROLL_ROUNDS and self.collected() < target_count:
+        while self.collected() < target_count:
             before = cursor['total']
             harvested = self._harvest_cards(seen, target_count)
             cursor['total'] = self._card_count()
             if harvested and self.collected() >= target_count:
                 logger.info(t('crawl.xhs.target_reached', n=target_count))
                 break
-            if rounds >= self.MAX_SCROLL_ROUNDS - 1:
-                break
 
             rounds += 1
-            logger.info(t('crawl.xhs.scroll_round', i=rounds, total=self.MAX_SCROLL_ROUNDS))
+            logger.info(t('crawl.xhs.scroll_round', i=rounds))
             self.scroll_down(steps=self.SCROLL_STEPS)
             cursor['total'] = self._wait_for_count(self._card_count, before + 1, timeout=self.CARD_WAIT)
             logger.info(t('crawl.xhs.cards', n=cursor['total']))

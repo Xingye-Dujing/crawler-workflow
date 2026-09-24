@@ -330,7 +330,6 @@ def harvest(cards=('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'), grows_by=0):
         scroll=feed.scroll,
         target=99,
         collected=lambda: len(kept),
-        max_rounds=4,
         stuck_rounds=2,
     )
     return feed, kept, result
@@ -352,7 +351,7 @@ def test_a_card_that_holds_nothing_is_refused_and_the_walk_continues():
         scroll=feed.scroll,
         target=99,
         collected=lambda: len(kept),
-        max_rounds=1,
+        stuck_rounds=1,
     )
     assert kept == [{'v': 'b'}]
     assert result.refused == 1
@@ -369,7 +368,7 @@ def test_a_row_the_sink_refuses_counts_as_a_repeat_not_a_new_item():
         scroll=feed.scroll,
         target=99,
         collected=lambda: 0,
-        max_rounds=1,
+        stuck_rounds=1,
     )
     assert result.kept == 0 and result.refused == 2
     assert seen == []
@@ -386,7 +385,7 @@ def test_resumed_walk_starts_at_the_recorded_card_index():
         target=99,
         collected=lambda: len(kept),
         start=2,
-        max_rounds=1,
+        stuck_rounds=1,
     )
     assert [row['v'] for row in kept] == ['c', 'd']
     assert [row['i'] for row in kept] == [2, 3]
@@ -403,7 +402,7 @@ def test_position_is_recorded_after_every_card_so_a_kill_resumes_mid_list():
         target=99,
         collected=lambda: 0,
         mark=marks.append,
-        max_rounds=1,
+        stuck_rounds=1,
     )
     assert [m['scanned'] for m in marks] == [1, 2, 3]
     assert all('collected' in m for m in marks)
@@ -427,7 +426,6 @@ def test_a_growing_list_is_walked_until_the_target_is_met():
         scroll=feed.scroll,
         target=5,
         collected=lambda: len(kept),
-        max_rounds=6,
     )
     assert result.collected == 5
     assert result.stopped_reason == 'target'
@@ -463,7 +461,6 @@ def test_the_walk_stops_at_once_when_the_caller_says_the_session_died():
         target=99,
         collected=lambda: 0,
         stopped=dying,
-        max_rounds=5,
     )
     assert result.stopped_reason == 'stopped'
     # One round was already under way when the session died: the walk must not
@@ -482,12 +479,11 @@ def test_the_scroller_is_asked_to_settle_before_the_growth_is_measured(monkeypat
     walk_feed(
         feed.read,
         lambda card, index: {'v': card},
-        lambda row: True,
+        lambda row: (kept.append(row), True)[1],
         scroll=feed.scroll,
         target=4,
         collected=lambda: len(kept),
         settle_wait=1.0,
-        max_rounds=6,
     )
     assert feed.scrolled >= 1
 
@@ -603,19 +599,26 @@ def test_the_walk_stops_at_the_target_without_reading_a_whole_page_extra():
     assert count['n'] == 3 and walk.pages == 1 and walk.stopped_reason == 'target'
 
 
-def test_max_pages_bounds_a_server_that_never_says_stop():
+def test_a_server_that_never_says_stop_is_walked_until_the_target_is_full():
+    """There is no page budget any more: the user's target is the only stop the backend adds.
+
+    The old walk cut such a server at ``max_pages`` and reported fewer rows than
+    asked; the page that answers nothing new, an ended cursor, or a dead request
+    are the site's own endings, and those still end it (next tests).
+    """
+
     def fetch(cursor):
         return {'items': [{'id': cursor or 0}], 'next': (cursor or 0) + 1}
 
+    kept = []
     walk = walk_pages(
         fetch,
         lambda payload: (payload['items'], payload['next']),
-        lambda row: True,
-        collected=lambda: 0,
-        target=10_000,
-        max_pages=4,
+        lambda row: (kept.append(row), True)[1],
+        collected=lambda: len(kept),
+        target=6,
     )
-    assert walk.pages == 4 and walk.stopped_reason == 'max_pages'
+    assert walk.pages == 6 and walk.stopped_reason == 'target'
 
 
 def test_the_caller_can_stop_the_walk_between_pages():

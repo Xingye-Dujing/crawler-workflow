@@ -43,11 +43,6 @@ from .engine.jsonpath import collect, get_in, runs_text
 
 logger = logging.getLogger(__name__)
 
-#: How many JSON rounds one crawl may spend. A keyword round yields ~10 rows and a
-#: channel round 30, so this bounds a crawl at 200-600 rows — past any target a
-#: node declares, and the guard that keeps a paging bug from running all night.
-MAX_ROUNDS = 20
-
 # The transport itself — reading the page's own API key, POSTing a round trip and
 # telling a refusal from an empty list — is in ``engine/innertube.py``, shared
 # with the comment engine, which asks the same endpoints the same way.
@@ -340,7 +335,9 @@ class YouTubeCrawler(Crawler):
         token = str(resume.get('token') or '')
         seen: set[str] = self._collected_ids()
         repeats = 0
-        for round_no in range(1, MAX_ROUNDS + 1):
+        round_no = 0
+        while self.collected() < target_count:
+            round_no += 1
             payload = self._call('search', {'continuation': token} if token else {'query': keyword})
             if not payload:
                 break
@@ -421,7 +418,9 @@ class YouTubeCrawler(Crawler):
             if not rows:
                 raise RuntimeError(t('crawl.yt.authorNoVideos', author=author))
             token = page_token(document)
-        for round_no in range(1, MAX_ROUNDS + 1):
+        round_no = 0
+        while self.collected() < target_count:
+            round_no += 1
             fresh = [row for row in rows if row['视频ID'] not in seen]
             logger.info(t('crawl.yt.page', page=round_no, n=len(rows), fresh=len(fresh), done=self.collected()))
             for row in fresh:

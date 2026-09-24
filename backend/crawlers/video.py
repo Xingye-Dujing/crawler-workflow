@@ -199,7 +199,8 @@ class BilibiliCrawler(VideoCrawler):
     login_url = 'https://www.bilibili.com/'
     supports_crawl = True
 
-    MAX_PAGES = 40
+    #: The site's own pager answers how deep the search goes; the walk stops on the
+    #  user's target, an empty page or risk control — nothing caps it here.
     CARD_WAIT = 12.0
     #: How far one round of the space page is scrolled. The upload list appends as
     #: it is reached (measured 40 cards, then 80 anchors after three steps), so the
@@ -225,7 +226,7 @@ class BilibiliCrawler(VideoCrawler):
         seen: set[str] = set()
         stuck = 0
         blocked = ''
-        while page <= self.MAX_PAGES and self.collected() < target_count:
+        while self.collected() < target_count:
             url = bilibili_search_url(keyword, page)
             if page == 1:
                 logger.info(t('crawl.bili.url', url=url))
@@ -252,7 +253,7 @@ class BilibiliCrawler(VideoCrawler):
                         logger.debug(t('crawl.bili.duplicate', i=bvid))
                 elif code is not None and code != CODE_GONE:
                     # Risk control or a dead session: keep what is on disk, but
-                    # do not spend the remaining 39 pages on it.
+                    # do not spend further pages on it.
                     blocked = str(code)
                     break
                 self.mark_position(page=page, done=self.collected(), bvid=bvid)
@@ -333,7 +334,6 @@ class BilibiliCrawler(VideoCrawler):
             collected=self.collected,
             mark=mark,
             stopped=lambda: self.login_wall,
-            max_rounds=self.MAX_PAGES,
             stuck_rounds=2,
             settle_wait=self.CARD_WAIT,
         )
@@ -368,7 +368,7 @@ class BilibiliCrawler(VideoCrawler):
         if self.login_wall:
             raise RuntimeError(t('crawl.bili.blocked', code='login'))
         seen: set[str] = {str(row.get('BV号') or '') for row in self.results() if row.get('BV号')}
-        while page <= self.MAX_PAGES and self.collected() < target_count:
+        while self.collected() < target_count:
             payload = self._fetch_json(RANKING_API if single else f'{POPULAR_API}{page}')
             code = payload.get('code')
             if code != 0:
@@ -524,7 +524,6 @@ class DouyinCrawler(VideoCrawler):
     MOUNT_WAIT = 45.0
     #: How long one scroll is allowed to take to pay out new rows.
     SCROLL_WAIT = 14.0
-    MAX_ROUNDS = 12
     #: Measured: the window scrolling does page the list now (16 → 26 → 36 → 46 → 56
     #: cards), so the pager is the window and not only the detail visit.
     SCROLL_STEP = 0.9
@@ -623,7 +622,7 @@ class DouyinCrawler(VideoCrawler):
         scroll that pays out nothing ends the walk.
         """
         rounds = 0
-        while self.collected() < target_count and rounds < self.MAX_ROUNDS:
+        while self.collected() < target_count:
             rounds += 1
             ids = read_ids()
             todo = [aweme_id for aweme_id in ids if aweme_id not in done]

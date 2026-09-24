@@ -26,6 +26,21 @@ logged-in session back to the feed. Never judge the wall from the URL right afte
 `WeiboCrawler._await_search_page` waits for a terminal state (cards / no-result plate / persistent
 passport page). Keep that ordering in any refactor.
 
+**The wall that parallel crawls meet on page 2 is the account, not the window (user-observed
+2026-09-25).** A single crawl walks `page=2, 3, …` with no trouble; start two crawls of the same
+saved cookie and each window's *deeper* requests start getting bounced to passport. Every window
+holds its own copy of one `SUB`, so s.weibo.com sees one account firing several paging requests
+inside a second — the same shape `crawl_gate.hold` exists to space, but that switch spaces crawl
+*starts*, and paging rounds interleave long after any start gap. Nothing inside the crawler can
+talk the site out of it; the answers are 真排队 for the platform, or separate accounts (task #117).
+
+**The paging caps that used to live here were quitting below the user's target.** `MAX_PAGES_PER_WINDOW = 5`
+made a feed whose own pager said 共50页 stop at page 5 with the target unmet and no line saying why;
+`MAX_HOURLY_WINDOWS = 720` refused date ranges outright. Both deleted 2026-09-25 together with every
+other backend round/page ceiling (bilibili 40, douyin 12, youtube 20, xhs 40, zhihu 30, twitter 40):
+depth is the site's pager's answer, volume is the user's target, and a walk ends on target,
+site-exhaustion, or a wall — never on a constant.
+
 **Never write the browser's jar back to a saved cookie file.** Measured 2026-09: one logged-in page
 load re-issues the pair (`SUB` 90→94 bytes, `SUBP` 144→56, `XSRF-TOKEN` replaced), and planting that
 rotated jar into a fresh browser is bounced straight to `/newlogin` — a write-back would degrade the
@@ -406,6 +421,9 @@ table alone cannot tell a batched walk from a per-row one.
 
 **结论**：那堵墙与发车间隔无关，是站点间歇风控（目测单次拒绝率在一到两成）。所以
 `crawl_gate` **不加冷却**——为一条测不存在的规律让串行画布多等，是给成本找了个假理由。
+（2026-09-25 的并行深翻页观察与这一节同向：撞的仍是「账号短时连发」这条风控，只不过触发点
+在各自 crawl 的**翻页请求互相重叠**上，不在 crawl 的**起步**上——起步间隔正是本节证明没用的那个
+变量。见上文 Weibo 一节。）
 
 真机层的应对因此只有两条，且都不降低断言：撞墙重试从 2 次提到 **3 次**，并且每次重试等待
 产品自己用的 `Config.WALL_RETRY_BACKOFF`（以前是测试层自己发明的 5 秒，产品路径里根本没有这个

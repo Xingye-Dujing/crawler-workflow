@@ -140,7 +140,6 @@ class ZhihuCrawler(Crawler):
     #: The one link shape whose 阅读全文 was measured to expand instead of navigating.
     ANSWER_LINK = '/answer/'
 
-    MAX_SCROLL_ROUNDS = 30
     SCROLL_STEPS = 3
     STUCK_ROUNDS = 3
     CARD_WAIT = 1.5
@@ -226,7 +225,7 @@ class ZhihuCrawler(Crawler):
 
         rounds = 0
         stuck = 0
-        while rounds < self.MAX_SCROLL_ROUNDS and self.collected() < target_count:
+        while self.collected() < target_count:
             rounds += 1
             self.scroll_down(steps=self.SCROLL_STEPS)
             # Adaptive wait: a screen that already grew costs one poll, a slow
@@ -332,7 +331,6 @@ class ZhihuCrawler(Crawler):
             collected=self.collected,
             mark=mark,
             stopped=lambda: self.login_wall or self.risk_blocked,
-            max_rounds=self.MAX_SCROLL_ROUNDS,
             stuck_rounds=self.STUCK_ROUNDS,
             settle_wait=self.CARD_WAIT,
         )

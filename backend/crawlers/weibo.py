@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 import time
 from datetime import datetime, timedelta
@@ -42,8 +43,11 @@ class WeiboCrawler(Crawler):
       ask for ``page=2`` and deeper when the target genuinely still needs rows.
     - The feed is server-rendered: scrolling fetches nothing new, so "more data"
       means a deeper page or a narrower time window — and each extra request
-      costs wall risk. Hence the target cutoff, the page ceiling and the
-      jittered pauses between requests.
+      costs wall risk. Hence the target cutoff and the jittered pauses between
+      requests; the depth itself is the pager's answer, not a hardcoded cap.
+      Parallel windows of one account pay this risk together (weibo walls a
+      session that fires several deep requests at once), which is what the
+      同平台排队 setting is for — the crawler cannot talk the site out of it.
     """
 
     domain = 'weibo.com'
@@ -58,21 +62,18 @@ class WeiboCrawler(Crawler):
     login_url = 'https://weibo.com/'
 
     CARD_SELECTOR = '.card-wrap'
-    # Rows per feed page is ~9-10, so this ceiling is what a keyword crawl can
-    # reach before the wall becomes the likely answer.
-    MAX_PAGES_PER_WINDOW = 5
+    # Rows per feed page is ~9-10. The walk goes as deep as the site's own pager
+    # says it can; what bounds it is the target (break on reaching it) and the
+    # wall (break on latching it), never a hardcoded page count — capping at 5
+    # made a "共50页" feed quit early with the target unmet and nothing said why.
     # Paging is meaningless inside a time window: the window is already narrow.
     PAGE_WAIT = 3.0
     POLITE_BASE = 1.0
     POLITE_SPREAD = 0.35
 
-    # An hourly-window crawl loads one page per hour of the range, so two years
-    # would be ~17 500 page loads — a run that never ends. Past this many
-    # windows the range is refused instead of started.
-    MAX_HOURLY_WINDOWS = 720
-
-    # A date-range crawl without a target wants every window it was given.
-    DEFAULT_TARGET = 10**9
+    # A date-range crawl without a target wants every window it was given: the
+    # "no number asked" sentinel is *no ceiling*, not a very big one.
+    DEFAULT_TARGET = math.inf
 
     @staticmethod
     def _parse_date(value: str) -> datetime:
@@ -157,9 +158,8 @@ class WeiboCrawler(Crawler):
         return [f'https://s.weibo.com/weibo?q={encoded}&typeall=1&suball=1&Refer=g']
 
     def _generate_hourly_urls(self, keyword: str, start: datetime, end: datetime):
-        windows = int((end - start).total_seconds() // 3600) + 1
-        if windows > self.MAX_HOURLY_WINDOWS:
-            raise ValueError(t('crawl.weibo.range_too_wide', n=windows, max=self.MAX_HOURLY_WINDOWS))
+        # No width cap: how far a range reaches is the user's own choice, and the
+        # walk already ends on the target, on the last window, or on a wall.
         urls = []
         cur = start
         while cur < end:
@@ -193,7 +193,7 @@ class WeiboCrawler(Crawler):
             if self.collected() >= target or not self._may_page(base_url):
                 return scraped
 
-            total_pages = min(self._get_total_pages(), self.MAX_PAGES_PER_WINDOW)
+            total_pages = self._get_total_pages()
             logger.info(t('crawl.weibo.total_pages', n=total_pages))
             page_url = self._page_url(base_url)
             for page_num in range(2, total_pages + 1):

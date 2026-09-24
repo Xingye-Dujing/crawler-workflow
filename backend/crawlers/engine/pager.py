@@ -44,7 +44,6 @@ def walk_pages(
     start_cursor: object = None,
     collected: Callable[[], int],
     target: int,
-    max_pages: int = 40,
     seen: set | None = None,
     identity: Callable[[object], object] = lambda item: item,
     polite: Callable[[], None] | None = None,
@@ -65,7 +64,7 @@ def walk_pages(
     """
     walk = PageWalk(cursor=start_cursor)
     seen = seen
-    while walk.pages < max_pages and collected() < target:
+    while collected() < target:
         if alive is not None and not alive():
             walk.stopped_reason = walk.stopped_reason or 'stopped'
             break
@@ -114,5 +113,9 @@ def walk_pages(
         if polite is not None:
             polite()
     if not walk.stopped_reason:
-        walk.stopped_reason = 'target' if collected() >= target else 'max_pages'
+        # The only way out of the loop left is the target being full: a page
+        # that answers nothing new, a cursor that ends, and a dead request all
+        # break above. There is no page budget to run out of — that is the
+        # caller's target's job.
+        walk.stopped_reason = 'target'
     return walk

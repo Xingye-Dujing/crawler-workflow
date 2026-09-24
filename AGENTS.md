@@ -127,25 +127,26 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   element which actually moves), `engine.pager.walk_pages` (cursor paging that follows the server's own
   value) and `engine.jsonpath` know nothing about any platform; a platform module declares only selectors,
   endpoints and column names. New crawl logic goes through these helpers — a second copy of a scroll loop
-  or a 万-parser is what this rule exists to prevent. `Crawler.open(url)` is the only navigation
+  or a 万-parser is what this rule exists to prevent. No walk has a round/page budget: the user's target
+  answers "how much", and a backend cap only ever quit early with the target unmet. `Crawler.open(url)`
+  is the only navigation
   entry point: it survives a renderer timeout, clears the dialog, and latches a wall only once it is
   still there after re-reading (weibo flashes a login page on the way through).
 - **One profile is one browser, and a parallel canvas has to be told that.** chromedriver pre-writes
   `<user-data-dir>/Default/Preferences`, so two sessions created in one directory at the same instant
-  cannot both come up (`session not created: failed to write prefs file`).
+  cannot both come up.
   `browser_profiles.acquire_profile(dir)` is a plain, **non-reentrant**
   `Lock` keyed by normalised path, held for the crawler's whole life and released in `close()`; it must
   stay non-reentrant because `_close_login_browser` releases it from a *side* thread. Waiting is
   not free, so the user decides per run: `profileCollisions()` + `_confirmProfileChoiceBeforeRun()`
   ask 用 Profile vs 本次不用 and the answer travels as `use_profile` — **except with 真排队 on**, which
-  has answered it for the whole program already (asking would offer a way out of the promise).
+  has answered it for the whole program already.
   **A site's rate limit is a second collision**: two throwaway browsers can still be bounced as the
   *account* searched twice in one second. So `crawl_gate.hold(platform)` orders crawls by platform, not
   directory, in whichever of the **two distinct modes** the user's switch means: `same_platform_queue` on
   holds the turn until that crawl *finishes*; off spaces only their
   *starts* by `same_platform_stagger` seconds and lets them overlap (错峰) — the number is the
-  user's, 0 = neither wait. **No rest is armed when a turn ends** (weibo's walls were intermittent
-  risk control; `docs/crawler_notes.md`). A wall met **before the
+  user's, 0 = neither wait. **No rest is armed when a turn ends** (`docs/crawler_notes.md`). A wall met **before the
   first row** retries once after a back-off; a wall met after rows is the cookie dying
   and must go to 继续 instead. **Absence means "follow the setting" — never coerce missing to `False`,** or
   one dialog's answer becomes a global override. `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node

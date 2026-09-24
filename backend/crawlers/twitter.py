@@ -302,7 +302,6 @@ class TwitterCrawler(Crawler):
     never_headless = True
 
     CARD_SELECTOR = 'article[data-testid="tweet"]'
-    MAX_ROUNDS = 40
     STUCK_ROUNDS = 3
     SETTLE_WAIT = 4.0
     #: How long the *first* screen of a page is given to paint. Measured on the
@@ -385,7 +384,6 @@ class TwitterCrawler(Crawler):
             window=self.window_key,
             mark=mark,
             stopped=lambda: self.login_wall or self.risk_blocked,
-            max_rounds=self.MAX_ROUNDS,
             stuck_rounds=self.STUCK_ROUNDS,
             settle_wait=self.SETTLE_WAIT,
         )

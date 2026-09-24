@@ -26,6 +26,7 @@ Design notes that the code cannot shout later:
 
 import contextlib
 import json
+import math
 import re
 import time
 
@@ -688,12 +689,11 @@ class CommentSession:
             scrape,
             keep,
             scroll=lambda: self._scroll_replies(),
-            target=limit or 100000,
+            target=limit or math.inf,
             collected=lambda: len(rows),
             # Same rule as the timeline: the reply list recycles its nodes, so the
             # walk waits for the ids on screen to change, not for more nodes.
             window=lambda: str(self.driver.execute_script(WINDOW_LINKS_JS) or ''),
-            max_rounds=40,
             stuck_rounds=3,
             settle_wait=4.0,
         )
@@ -817,8 +817,7 @@ class CommentSession:
             keep,
             start_cursor=chosen,
             collected=lambda: len(rows),
-            target=limit or 100000,
-            max_pages=200,
+            target=limit or math.inf,
             seen=seen,
             identity=lambda row: row['评论ID'],
             polite=lambda: self.nap(0.35),
