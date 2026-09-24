@@ -9,12 +9,17 @@ router dropped at the site root read as "this account has no posts".
 """
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 
+import crawlers.base as base_module
 from crawlers.base import Crawler, as_index
 
 pytestmark = pytest.mark.unit
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # A cookie for the parent domain (accepted anywhere below it), one pinned to a
 # sibling host (only that host will take it), and one the sanitizer drops.
@@ -214,9 +219,12 @@ class TestNavigation:
         URL the comparison would always be "same page, no bounce"."""
         seen = {}
         crawler = bare(PlantDriver(start='https://www.instagram.com/'))
-        crawler.check_intercept = lambda where, request_url='': seen.update(where=where, request=request_url) or 'ok'
+        # Spied on ``verdict`` rather than ``check_intercept`` because that is where the
+        # comparison happens now: ``open`` re-reads a suspected wall before recording it,
+        # so a page that is fine never reaches the latching call at all.
+        crawler.verdict = lambda request_url='': seen.update(request=request_url) or 'ok'
         crawler.open('https://www.instagram.com/nasa/')
-        assert seen == {'where': 'https://www.instagram.com/nasa/', 'request': 'https://www.instagram.com/nasa/'}
+        assert seen == {'request': 'https://www.instagram.com/nasa/'}
 
     def test_a_bounce_to_the_site_root_is_a_refusal_not_an_empty_account(self):
         """Instagram answers a challenged profile request with ``/#`` plus a login
@@ -331,3 +339,129 @@ def test_a_cursor_field_that_is_not_a_number_degrades_to_the_start(value, expect
 def test_a_bad_cursor_field_uses_the_callers_default():
     assert as_index('nonsense', default=1) == 1
     assert as_index(None, default=5) == 5
+
+
+class FlashingDriver:
+    """A page with a story: every reading of it sees the next entry of *pages*.
+
+    ``current_url`` peeks and ``body`` advances, which is the order
+    :meth:`Crawler.verdict` reads them in, so one reading is one coherent page rather
+    than the head of one mixed with the tail of the next.
+    """
+
+    def __init__(self, pages):
+        self.pages = list(pages)
+        self.step = 0
+        self.visited = []
+
+    @property
+    def current_url(self):
+        return self.pages[min(self.step, len(self.pages) - 1)][0]
+
+    def body(self):
+        text = self.pages[min(self.step, len(self.pages) - 1)][1]
+        self.step += 1
+        return text
+
+    def get(self, url):
+        self.visited.append(url)
+
+    def find_element(self, by, selector):
+        raise RuntimeError('the fake answers no element lookups')
+
+    def execute_script(self, script, *args):
+        return ''
+
+    def quit(self):
+        pass
+
+
+def _arriving(pages, monkeypatch, **attrs):
+    """A crawler whose next navigation lands on *pages*, with the settle polls free."""
+    monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
+    driver = FlashingDriver(pages)
+    crawler = bare(driver, **attrs)
+    crawler._body_text = driver.body
+    return crawler, driver
+
+
+class TestAWallMustSurviveBeingJudged:
+    """:meth:`Crawler.open` may not let a page on its way somewhere else end a crawl.
+
+    Measured on weibo: a logged-in visit to a search URL flashes ``passport.weibo.com/sso``
+    and is bounced back to the results about a second later. Judging that flash latched
+    ``login_wall``, which stops the harvest loop, turns the run into a 继续 candidate and
+    tells the user to re-save a cookie that is fine — the worst available mistake, because
+    the crawl was working.
+    """
+
+    PASSPORT = 'https://passport.weibo.com/sso/signin'
+    RESULTS = 'https://s.weibo.com/weibo?q=%E4%B8%89%E4%BA%9A'
+    BODY = '三亚五日游攻略 人均两千'
+
+    def _weibo(self, pages, monkeypatch):
+        return _arriving(pages, monkeypatch, domain='www.weibo.com', login_url='https://www.weibo.com/')
+
+    def test_a_redirect_that_flashes_the_login_page_is_not_a_wall(self, monkeypatch):
+        crawler, driver = self._weibo([(self.PASSPORT, ''), (self.RESULTS, self.BODY)], monkeypatch)
+        assert crawler.open(self.RESULTS) is True
+        assert (crawler.login_wall, crawler.risk_blocked) == (False, False), 'the flash was believed'
+        assert driver.step >= 2, 'the page was never re-read, so nothing proved it settled'
+
+    def test_a_login_page_that_stays_is_still_a_wall(self, monkeypatch):
+        crawler, driver = self._weibo([(self.PASSPORT, '')] * 8, monkeypatch)
+        crawler.open(self.RESULTS)
+        assert crawler.login_wall is True, 'a refusal that never moved must still be reported'
+        assert driver.step >= Crawler.WALL_PROOFS, 'it was latched before the settle window was spent'
+
+    def test_a_healthy_landing_costs_one_reading(self, monkeypatch):
+        # The settle window is a defence against a flash, not a tax on every navigation:
+        # a per-row detail crawl pays this once per row, so a clean page must be answered
+        # on the first look.
+        crawler, driver = self._weibo([(self.RESULTS, self.BODY)] * 4, monkeypatch)
+        assert crawler.open(self.RESULTS) is True
+        assert driver.step == 1, f'a clean page cost {driver.step} readings'
+        assert crawler.login_wall is False
+
+    def test_risk_control_that_stays_is_still_not_a_dead_cookie(self, monkeypatch):
+        crawler, _driver = _arriving(
+            [('https://www.zhihu.com/search?q=x', '40362 当前请求存在异常')] * 8,
+            monkeypatch,
+            domain='www.zhihu.com',
+            login_url='https://www.zhihu.com/',
+        )
+        crawler.open('https://www.zhihu.com/search?q=x')
+        assert (crawler.risk_blocked, crawler.login_wall) == (True, False)
+
+
+#: Every navigation the shipped code still issues straight at the driver instead of
+#: through :meth:`Crawler.open` — which owns surviving a slow renderer, dismissing the
+#: site's first-run dialog and recording the request in :attr:`Crawler.requests`. Each
+#: entry is a place where a page that answers late becomes an exception out of the node
+#: instead of the platform's own "the page is not ready" line, and the xiaohongshu search
+#: page is measured doing exactly that. Pinned both ways: a new one is red, and so is a
+#: stale entry once a site has been moved onto ``open``.
+BARE_NAVIGATIONS = {
+    'backend/app.py': 2,
+    'backend/crawlers/base.py': 3,  # ``open`` itself, cookie planting, the cookie probe
+    'backend/crawlers/comments.py': 7,
+    'backend/crawlers/wechat.py': 1,
+    'backend/crawlers/weibo.py': 1,
+    'backend/crawlers/zhihu.py': 2,
+}
+
+
+class TestNavigationGoesThroughOpen:
+    def test_a_page_entered_past_open_is_an_accounted_debt(self):
+        """The rule is only real while somebody counts it (see ``BARE_NAVIGATIONS``)."""
+        found = {}
+        for path in sorted((REPO_ROOT / 'backend').rglob('*.py')):
+            if path.name.startswith('test_'):
+                continue  # the probe scripts are the sanctioned place to drive a browser
+            hits = len(re.findall(r'\.driver\.get\(', path.read_text(encoding='utf-8')))
+            if hits:
+                found[path.relative_to(REPO_ROOT).as_posix()] = hits
+        assert found == BARE_NAVIGATIONS, (
+            f'navigations outside open changed: {found} vs {BARE_NAVIGATIONS}\n'
+            'a new one should go through Crawler.open; a removed one must leave the table too'
+        )

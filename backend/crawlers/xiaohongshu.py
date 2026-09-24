@@ -67,7 +67,12 @@ class XiaohongshuCrawler(Crawler):
         encoded = quote(keyword)
         url = f'https://www.xiaohongshu.com/search_result?keyword={encoded}&source=web_explore_feed&type=51'
         logger.info(t('crawl.xhs.start', kw=keyword, n=target_count))
-        self.driver.get(url)
+        # ``open`` and not ``driver.get``: this is the crawl's first navigation, and a
+        # renderer that answers late is a page still building rather than a failed run.
+        # Straight from the driver that moment arrived as a raw
+        # ``TimeoutException: Timed out receiving message from renderer`` out of the node,
+        # instead of the honest ``crawl.xhs.page_timeout`` line the poll below writes.
+        self.open(url)
         logger.info(t('crawl.xhs.url', url=url))
         # Adaptive: the grid renders as soon as the API answers, so a fixed
         # 15 s block is pure loss on a warm session.
@@ -248,7 +253,10 @@ class XiaohongshuCrawler(Crawler):
                     self.driver.switch_to.window(search_handle)
 
     def _scrape_note(self, url: str) -> dict | None:
-        self.driver.get(url)
+        # Same reason as the search page: this navigation is where a note row is paid
+        # for, and a driver that cannot settle used to abort the whole crawl with a
+        # stack trace rather than lose the one row.
+        self.open(url)
         try:
             WebDriverWait(self.driver, int(self.NOTE_WAIT * 6)).until(
                 ec.presence_of_element_located((By.CSS_SELECTOR, '.title, #detail-title'))

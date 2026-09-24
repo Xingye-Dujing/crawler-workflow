@@ -72,6 +72,15 @@ class Crawler(ABC):
     # platform that measures a real need opts in.
     needs_images = False
 
+    #: How many readings a suspected wall has to survive before it is believed.
+    #: Measured on weibo: a logged-in visit to a search URL flashes the passport page
+    #: and is bounced back to content about a second later, so a crawl that judged the
+    #: flash latched ``login_wall`` for good — it stopped harvesting early and told the
+    #: user to re-save a cookie that was fine. Bounded by poll count rather than by a
+    #: clock, like every other wait here, so a fake driver settles instantly.
+    WALL_PROOFS = 5
+    WALL_POLL = 0.3
+
     def __init__(
         self,
         headless: bool = True,
@@ -313,8 +322,48 @@ class Crawler(ABC):
             logger.debug('navigation did not settle for %s: %s', url, e)
         if self.prompts:
             self._dismiss_prompts()
-        self.check_intercept(url, request_url=url)
+        self._judge_arrival(url)
         return not timed_out
+
+    def _judge_arrival(self, request_url: str = '') -> str:
+        """Classify the page this navigation landed on, believing only a lasting refusal.
+
+        Called by :meth:`open` instead of ``check_intercept`` directly: the redirect chain
+        of a single-page site is still moving when ``driver.get`` returns, and a wall
+        flashed on the way through (weibo's passport hop) is not where the user arrived.
+        A clean page is answered on the first reading, so this costs nothing unless a
+        refusal is on screen.
+        """
+        verdict = self.verdict(request_url=request_url)
+        for _ in range(max(0, self.WALL_PROOFS - 1)):
+            if verdict == 'ok':
+                return verdict
+            time.sleep(self.WALL_POLL)
+            verdict = self.verdict(request_url=request_url)
+        if verdict == 'ok':
+            return verdict
+        # Still refused after the whole settle window: record it the way every caller
+        # reads it. Latched from *this* reading rather than by calling check_intercept
+        # again, because re-judging here would hand a flash one free escape and make the
+        # window above unobservable from the tests.
+        return self._record(verdict, where=request_url, request_url=request_url)
+
+    def verdict(self, request_url: str = '') -> str:
+        """The same judgement :meth:`check_intercept` makes, recorded nowhere.
+
+        Split out so a refusal can be re-read without latching it on the first pass —
+        ``login_wall`` is a one-way flag by design (it stops the harvest loop and turns a
+        run into a resume), which is exactly why it must not be set by a page on its way
+        somewhere else.
+        """
+        try:
+            url = self.driver.current_url or ''
+        except Exception:
+            return 'ok'
+        verdict = classify(url, self._body_text())
+        if verdict == 'ok' and request_url and bounced_to_root(request_url, url, self.login_url):
+            verdict = 'login'
+        return verdict
 
     def _dismiss_prompts(self):
         """Click the site's own first-run dialog away, and say what was clicked."""
@@ -498,7 +547,8 @@ class Crawler(ABC):
         return self.check_intercept(where) == 'login'
 
     def check_intercept(self, where: str = '', request_url: str = '') -> str:
-        """Classify the page the browser is actually on: ``login`` / ``blocked`` / ``ok``.
+        """Classify the page the browser is actually on **and record it**:
+        ``login`` / ``blocked`` / ``ok``.
 
         Two different refusals, because the user's next step differs — one needs
         a fresh cookie, the other needs to wait. ``blocked`` is recorded on
@@ -510,21 +560,27 @@ class Crawler(ABC):
         ``request_url`` enables the bounce test: a profile URL that comes back at
         the site root with no content is a refusal even though nothing on the
         page says "login".
+
+        This latches on the first reading. On a page that has only just been
+        navigated to, go through :meth:`_judge_arrival` (what :meth:`open` calls)
+        instead, which waits to see whether the refusal stays.
         """
-        try:
-            url = self.driver.current_url or ''
-        except Exception:
-            return 'ok'
-        verdict = classify(url, self._body_text())
-        if verdict == 'ok' and request_url and bounced_to_root(request_url, url, self.login_url):
-            verdict = 'login'
+        return self._record(self.verdict(request_url=request_url), where, request_url)
+
+    def _record(self, verdict: str, where: str = '', request_url: str = '') -> str:
+        """Write an already-taken judgement onto the flags that stop a crawl."""
         if verdict == 'login' and not self.login_wall:
             self.login_wall = True
-            logger.warning(t('crawl.loginWall', platform=self.domain, where=where or url))
+            logger.warning(t('crawl.loginWall', platform=self.domain, where=self._refused_at(where, request_url)))
         if verdict == 'blocked' and not self.risk_blocked:
             self.risk_blocked = True
-            logger.warning(t('crawl.riskBlocked', platform=self.domain, where=where or url))
+            logger.warning(t('crawl.riskBlocked', platform=self.domain, where=self._refused_at(where, request_url)))
         return verdict
+
+    def _refused_at(self, where: str = '', request_url: str = '') -> str:
+        """The address to name in a refusal line: where the browser actually is, and
+        only when it cannot answer, what was asked for."""
+        return self._current_url() or where or request_url
 
     def _wait_for_count(self, count_fn, target: int, timeout: float = 1.5, tick: float = 0.3) -> int:
         """Poll ``count_fn`` until it reaches ``target`` or ``timeout`` runs out.

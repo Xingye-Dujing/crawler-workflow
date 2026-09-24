@@ -17,6 +17,7 @@ second opinion beside it.
 - [What each mode actually does on screen](#what-each-mode-actually-does-on-screen-measured-2026-09-24)
 - [网络分区：国内与海外不能一起爬](#网络分区国内与海外不能一起爬用户实测-2026-09-24)
 - [运行前 Cookie 预检](#运行前-cookie-预检measured-2026-09-24)
+- [A login page on the way through is not a wall](#a-login-page-on-the-way-through-is-not-a-wall-measured-2026-09-24)
 
 ## Weibo
 
@@ -265,6 +266,36 @@ that is why the crawl runs in the platform's own profile (see `AGENTS.md`). Its 
 dropped unmeasured: the route needs a per-note `xsec_token`, which a session that is being risk-scored
 cannot be relied on to yield, and the account here is behind 风控 after a few attempts. Don't rebuild
 it by guessing token plumbing.
+
+**Its search page answers late, and that used to be a crash rather than a state** (measured
+2026-09-24, twice in one hour on `live_quick`, in two different variants): the crawl came back red
+with `TimeoutException: Timed out receiving message from renderer: -0.001` thrown out of a bare
+`self.driver.get(url)` — the *first* navigation of the search, and separately of a note page. Two
+consequences, both pinned by `tests/unit/test_xhs_crawler.py`:
+
+* the platform already had the honest answer for this state (`crawl.xhs.page_timeout` → keep
+  polling, zero cards is a legitimate outcome) and never got to use it, because the exception came
+  from the call before its own poll;
+* the request really was issued, so dropping it from `Crawler.requests` on the way out would make
+  the mode look cheaper than it is.
+
+Fixed by entering both pages through `Crawler.open`, which also means **a slow page must not be
+judged as a wall** — see the next section; the two changes only work together.
+
+## A login page on the way through is not a wall (measured 2026-09-24)
+
+`Crawler.open()` judged the wall on the *first* reading after `driver.get`, which is the moment a
+single-page site is still mid-redirect. Weibo is the measured case (its own section documents the
+passport flash and the bounce back), and believing the flash cost more than a wrong word: latching
+`login_wall` stops the harvest loop, makes the run a 继续 candidate and tells the user to re-save a
+cookie that is fine — while the crawl underneath it was working.
+
+Now `open` → `_judge_arrival` re-reads the page and latches only a refusal that is **still there**.
+The cost is deliberately asymmetric: a clean landing is answered on the first reading
+(`test_a_healthy_landing_costs_one_reading` asserts exactly one, because a per-row detail crawl pays
+this once per row), and only a suspected wall pays the ~1.2 s window. `verdict()` is the judgement
+without the write, and `_record()` the write without the judgement — split because a re-read must be
+possible before the one-way flag exists.
 
 ## Cookie capture vs crawling
 

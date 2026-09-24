@@ -116,20 +116,20 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   the JS panel is tested against the matrix dumped from Python, never a copy checked in.
 - **A visible window must be doing something visible, and it must answer every preference a crawl set.**
   Each `Mode` declares how it collects (DOM walk / in-page fetch / per-row page) and the panel plus the
-  pre-run dialog read that field instead of re-judging it — a 窗口 run of a fetch-only mode shows a
-  homepage and nothing else, so the dialog asks about it once up front. And a session preference is
-  *stored* in the persistent profile, so it outlives the crawl: a human-facing window that merely
-  *omits* the image blocker inherits it and shows a login page with no QR code to scan. 取 Cookie /
-  验证 Cookie windows — and the pre-run cookie probe, which must agree with them — write 允许
-  explicitly (`_content_prefs`).
+  pre-run dialog read that field instead of re-judging it — a fetch-only mode shows a homepage and
+  nothing else, which is what the dialog asks about. And a session preference is
+  *stored* in the profile, so it outlives the crawl: a window that merely *omits* the image blocker
+  inherits it and shows a login page with no QR code. 取 Cookie /
+  验证 Cookie windows — and the pre-run probe, which must agree — write 允许 explicitly (`_content_prefs`).
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count` (one
   万/千/亿/K/M/B parser), `engine.wall` (login / risk-control / root-bounce), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (the scroll that finds the
   element which actually moves), `engine.pager.walk_pages` (cursor paging that follows the server's own
   value) and `engine.jsonpath` know nothing about any platform; a platform module declares only selectors,
   endpoints and column names. New crawl logic goes through these helpers — a second copy of a scroll loop
-  or a 万-parser is exactly what this rule exists to prevent. `Crawler.open(url)` is the only navigation
-  entry point: it survives a renderer timeout, clears the dialog and classifies the page.
+  or a 万-parser is what this rule exists to prevent. `Crawler.open(url)` is the only navigation
+  entry point: it survives a renderer timeout, clears the dialog, and latches a wall only once it is
+  still there after re-reading (weibo flashes a login page on the way through).
 - **One profile is one browser, and a parallel canvas has to be told that.** chromedriver pre-writes
   `<user-data-dir>/Default/Preferences`, so two sessions created in one directory at the same instant
   cannot both come up (`session not created: failed to write prefs file`).
