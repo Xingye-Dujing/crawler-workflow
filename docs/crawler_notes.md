@@ -122,6 +122,21 @@ and there is no router left to interrogate about which search ran. Cards are
 `div.discover-video-card-item[data-aweme-id]` matches **zero** nodes now and the class names beside it
 are build hashes.
 
+**The profile header is not there when the session is being refused** (measured 2026-09-24, visible
+window): `backend/test_douyin_profile_probe.py` was answered 验证码中间页 by the *search* itself, and
+the live author case had been dying one step later with a raw
+`NoSuchElementException: [data-e2e="user-info"]` — the tier's own helper read that node with a single
+unwaited `find_element`. The fix is on the test side (bounded wait, absent header is simply no
+anchor), and the identity claim no longer leans on the header at all: every row of the grid already
+carries the name read off the video page it was opened from, so "one profile, two authors" is caught
+from the rows, with the header nickname checked *against* that anchor when the page publishes one.
+That file is green again (3 passed, 2026-09-24) — and the same sweep showed the pattern the next tier
+change has to answer: **on both weibo and xiaohongshu it was the second case of the file — the
+visible-window variant — that came back empty**, weibo still parked on passport after the tier's own
+45-second back-off. A session that gets risk-scored stays scored for minutes, so the acceptance tier
+cannot treat "rows" as the only honest green; it has to distinguish a *reported* refusal from a
+silent empty table, and say per platform which one happened.
+
 **The list mounts as 16 skeleton rows (no anchor, no text) and fills in ~4–6 s**, so "some nodes
 exist" is not "results exist": `_wait_for_cards` polls for an *anchor* (`MOUNT_WAIT`), and a page that
 never fills is `NOT_MOUNTED` → zero rows, which is the honest answer for a keyword nobody posted. The
