@@ -790,6 +790,13 @@ class TestUploadNodeLosesItsFile:
         assert t('upload.stale') not in self._console(client)
 
     def test_a_component_that_never_ran_reports_the_missing_file_on_continue(self, client, app_module, paste):
+        """The workflow that never got its turn leaves no record until it does.
+
+        Serial mode writes one row per workflow that starts, so the stopped attempt has
+        exactly one row — the crawl's — and the Upload workflow, which never ran, has
+        nothing to show for itself. Continuing gives it its turn: its failure lands on
+        ITS row, and the crawl's stored rows come back on its own.
+        """
         dataset = paste(RECORDS, name='never.csv')
         workflow = self._crawl_then_upload(dataset, 'never.csv')
         started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'never'})
@@ -798,6 +805,10 @@ class TestUploadNodeLosesItsFile:
         client.post('/api/workflow/stop')
         _GatedCrawler.release.set()
         assert _wait(app_module)
+        stopped = app_module._RUN_STORE.list_resumable(include_finished=True, limit=10)
+        assert [row['run_id'] for row in stopped] == [run_id], (
+            f'a workflow that never got its turn must not leave a record: {stopped}'
+        )
         client.delete(f'/api/data/datasets/{dataset}')
 
         # `release` is still set from the stop above, so the crawl this attempt
@@ -808,10 +819,18 @@ class TestUploadNodeLosesItsFile:
         )
         assert continued.status_code == 200, continued.get_json()
         assert _wait(app_module)
-        record = app_module._RUN_STORE.get_run(run_id)
-        nodes = {node['node_id']: node for node in record['nodes']}
+        crawl_row = app_module._RUN_STORE.get_run(run_id)
+        assert {node['node_id'] for node in crawl_row['nodes']} == {'node-1'}, (
+            'the resumed crawl continues on its own row, not on the new one'
+        )
+        rows = app_module._RUN_STORE.list_resumable(include_finished=True, limit=10)
+        others = [row for row in rows if row['run_id'] != run_id]
+        assert len(others) == 1, f'the workflow that ran this time needs its own row: {rows}'
+        upload_row = app_module._RUN_STORE.get_run(others[0]['run_id'])
+        nodes = {node['node_id']: node for node in upload_row['nodes']}
         assert nodes['node-2']['status'] == 'failed', nodes
-        assert record['status'] == 'failed', 'a run that could not read its file is not "completed"'
+        assert upload_row['status'] == 'failed', 'a run that could not read its file is not "completed"'
+        assert crawl_row['status'] == 'completed', 'the workflow that finished is not downgraded by its neighbour'
         assert t('upload.stale') in self._console(client)
 
 

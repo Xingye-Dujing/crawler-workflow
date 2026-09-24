@@ -83,6 +83,21 @@ class TestSweep:
         Housekeeping(runs, _FakeDatasetStore()).run_now(exclude_run_id='abc123')
         assert runs.calls == ['abc123']
 
+    def test_a_list_of_exempt_ids_reaches_the_store_unharmed(self):
+        """``str(['abc'])`` is the literal "['abc']", which names no run.
+
+        A serial run closes one record per workflow and hands the sweep after it a list;
+        flattening that list on the way through "protected" every record by deleting them.
+        """
+        runs = _FakeRunStore()
+        Housekeeping(runs, _FakeDatasetStore()).run_now(exclude_run_id=['abc123', 'def456'])
+        assert runs.calls == [['abc123', 'def456']]
+
+    def test_nothing_exempted_is_not_the_string_none(self):
+        runs = _FakeRunStore()
+        Housekeeping(runs, _FakeDatasetStore()).run_now()
+        assert runs.calls == [''], 'an absent exemption stays absent, not a name to match'
+
     def test_a_broken_run_store_does_not_stop_the_file_sweep(self):
         """One store failing must not leave the other growing forever — and the
         failure is reported, not swallowed silently."""

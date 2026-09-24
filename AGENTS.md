@@ -276,17 +276,18 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   a preview/chart/export/studio probe after a refresh from `runs.db`; ids like `node-2` repeat on every
   canvas, so with no identity it returns nothing rather than guessing. The browser sends `workflow_name`
   from `workflow.runName()`, which mirrors the backend precedence: name-node label, then saved file name.
-- **A parallel run is one record, labelled with every workflow's name.** `app.py` joins all non-empty labels
-  with `' + '` in canvas order (deduped); that string is also a **lookup key**, so `_durable_node_rows`
-  splits it on `'+'` and offers both spellings to `latest_rows(workflow_names=…)` — otherwise a run stored
-  before the composition existed is uninspectable. A single-workflow run keeps its plain name exactly.
-  `wf_count`/`headless`/`mode` are added to an existing `runs.db` by `RunStore._ensure_columns()` (PRAGMA +
-  `ALTER TABLE ADD COLUMN`), so old rows read as 1. **A chip must describe what happened, not what the
-  canvas held**: `并行 ×N` only when `mode == 'parallel'`, `串行 ×N` otherwise (`wf_count` counts connected
-  components, and a serial run of the same canvas has the same count with no concurrency — shipped wrong,
-  caught by the user on screen). Resume state stays **per workflow** even though the record is shared:
-  reuse is decided per node id by `fingerprints_for_workflow` over the whole canvas, so a failure in
-  component B restores A's finished nodes and editing A re-runs A alone.
+- **Parallel is one record; serial is one record per workflow that started.** Parallel runs the
+  workflows together, so one row joins their labels with `' + '` in canvas order; that
+  string is also a **lookup key** (old rows stay inspectable, pinned by `TestRowLookupStillWorks`).
+  Serial runs take turns, so each workflow opens its own row **as it is reached** and an unreached
+  one leaves none. Two invariants make it safe: every row keeps the **canvas** fingerprint, which
+  is what the resume banner and `/api/runs/resumable` match on, and the id the HTTP response returns
+  is workflow zero's row (the browser polls it and resumes by it). 继续 then adopts each workflow's
+  own row by name, not a fresh pair per press. `wf_count`/`headless`/`mode` reach old
+  databases through `RunStore._ensure_columns()`. **A chip must describe what
+  happened, not what the canvas held**: `并行 ×N` only when `mode == 'parallel'`, and a serial row
+  says `串行 ×1` because that row *is* one workflow. Resume state stays **per workflow**:
+  reuse is decided per node id by `fingerprints_for_workflow`, so a failure in B restores A.
 
 ## Console, messages and i18n
 

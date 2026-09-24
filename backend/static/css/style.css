@@ -1656,6 +1656,34 @@ button.history-del:hover {
   display: grid;
   gap: 6px;
 }
+/* One heading per workflow inside a run record. `overflow: hidden` is what both makes
+   the name shrinkable (an automatic min size does not apply to a clipped box) and lets
+   the ellipsis say the text was cut. Measured with the browser test: dropping
+   `min-width` changes nothing, which is why it is not carried here. */
+.rm-group {
+  margin-bottom: 10px;
+}
+.rm-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.rm-group-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text);
+}
+.rm-group-tally {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .rm-node {
   background: var(--bg);
   border: 1px solid var(--line2);

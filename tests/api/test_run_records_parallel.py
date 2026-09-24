@@ -336,14 +336,21 @@ class TestPanelTags:
     def test_the_same_canvas_run_serially_is_stored_as_serial(self, client, app_module, paste):
         """Two workflows and one workflow-at-a-time are different facts, and the
         record has to keep them apart: labelling a 串行 run 并行 describes a
-        concurrency that never happened (this is what a user caught on screen)."""
+        concurrency that never happened (this is what a user caught on screen).
+
+        Serial mode also splits the record — one row per workflow that got its turn —
+        so each row says 串行 ×1 for the one workflow it *is*, and the composed
+        'A + B' name belongs to parallel mode only.
+        """
         flow = _two_workflows(paste(RECORDS, name='ranks'))
         flow['settings']['mode'] = 'serial'
         _run(client, app_module, flow, 'ranks')
-        record = _listed(client)[0]
-        assert record['mode'] == 'serial'
-        assert record['wf_count'] == 2, 'it did run both workflows — just not at the same time'
-        assert record['workflow_name'] == '热门榜 + 周排行榜', 'the naming rule does not depend on the mode'
+        records = _listed(client)
+        assert len(records) == 2, f'one record per workflow that ran, got {[r["workflow_name"] for r in records]}'
+        assert {record['workflow_name'] for record in records} == {'热门榜', '周排行榜'}
+        for record in records:
+            assert record['mode'] == 'serial'
+            assert record['wf_count'] == 1, 'this row is one workflow, whatever the canvas held'
 
     def test_a_visible_window_run_is_stored_differently_from_a_headless_one(self, client, app_module, paste):
         """Otherwise 窗口 could never appear and 无头 would be printed on every record."""
@@ -351,3 +358,140 @@ class TestPanelTags:
         workflow['settings']['headless'] = False
         _run(client, app_module, workflow, 'ranks')
         assert _listed(client)[0]['headless'] == 0
+
+
+class TestSerialRunsAreOneRecordPerWorkflow:
+    """Serial mode records each workflow on its own row; parallel mode keeps one.
+
+    The user's rule, twice stated: 串行 means the workflows take turns, so each one that
+    got its turn is a separate piece of work with its own name, its own verdict and its
+    own 继续 — and the one that never got its turn (because the run was stopped before it)
+    has no row at all, because nothing about it happened. 并行 runs them together as one
+    act, so it stays a single row named 'A + B'.
+
+    Splitting the row is safe here because the *fingerprint* stayed the canvas's own:
+    that is the key the resume banner and /api/runs/resumable match on, so every one of
+    these rows is still found from the canvas that produced it.
+    """
+
+    def _records(self, client, app_module, workflow, name='ranks'):
+        """Every row this execution wrote, each with its nodes, newest first."""
+        _run(client, app_module, workflow, name)
+        listed = _listed(client)
+        details = []
+        for entry in listed:
+            detail = client.get(f'/api/runs/{entry["run_id"]}').get_json()['run']
+            details.append(({node['node_id']: node for node in detail['nodes']}, detail))
+        return details
+
+    def test_a_serial_run_writes_one_named_record_per_workflow(self, client, app_module, paste):
+        workflow = _two_workflows(paste(RECORDS, name='ranks'))
+        workflow['settings']['mode'] = 'serial'
+        details = self._records(client, app_module, workflow)
+        assert len(details) == 2, f'expected one row per workflow, got {len(details)}'
+        by_name = {detail['workflow_name']: nodes for nodes, detail in details}
+        assert set(by_name) == {'热门榜', '周排行榜'}, [d['workflow_name'] for _n, d in details]
+        assert by_name['热门榜'].keys() == {'name-1', 'up-1', 'out-1'}, 'a node leaked into the other row'
+        assert by_name['周排行榜'].keys() == {'name-2', 'up-2', 'out-2'}
+        for _nodes, detail in details:
+            assert detail['wf_count'] == 1
+            # Both rows answer to the canvas, or 继续 from that canvas would find neither.
+            assert detail['workflow_fingerprint'] == details[0][1]['workflow_fingerprint']
+        # The component pair is still stored per node: it is what lets a legacy row —
+        # one execution, several workflows, written before the split — be grouped.
+        groups = {node['component_name'] for nodes, _d in details for node in nodes.values()}
+        assert groups == {'热门榜', '周排行榜'}
+
+    def test_a_parallel_run_stays_one_row_holding_both_workflows(self, client, app_module, paste):
+        # Parallel mode runs each workflow on its own pool thread, and the component is
+        # read from a thread-local — so this is the case where a shared or leaked value
+        # would file one thread's nodes under the other workflow's name.
+        details = self._records(client, app_module, _two_workflows(paste(RECORDS, name='ranks')))
+        assert len(details) == 1, '并行 is one act, so it is one record'
+        nodes, detail = details[0]
+        assert detail['workflow_name'] == '热门榜 + 周排行榜'
+        assert detail['wf_count'] == 2
+        assert {node['component_name'] for node in nodes.values()} == {'热门榜', '周排行榜'}
+        assert {node['component'] for node in nodes.values()} == {0, 1}
+
+    def test_the_id_the_response_handed_out_names_a_row_that_exists(self, client, app_module, paste):
+        """The browser keeps the id the execute call returned: it polls the status with
+        it, and 继续 sends it back. Splitting the record must not leave that id naming
+        nothing, or the panel is left holding a phantom of "the execution".
+
+        Workflow zero therefore writes the row the response announced, and the later
+        workflows get ids of their own as they are reached.
+        """
+        flow = _two_workflows(paste(RECORDS, name='ranks'))
+        flow['settings']['mode'] = 'serial'
+        response = client.post('/api/workflow/execute', json={'workflow': flow, 'workflow_name': 'ranks'})
+        body = response.get_json()
+        assert body['ok'] is True, body
+        assert run_finished(app_module), 'the run never settled'
+        announced = client.get(f'/api/runs/{body["run_id"]}').get_json()
+        assert announced['ok'] is True, f'the response announced a row that does not exist: {body["run_id"]}'
+        assert announced['run']['workflow_name'] in {'热门榜', '周排行榜'}
+        assert announced['run']['wf_count'] == 1
+
+    def test_continuing_a_serial_canvas_accumulates_instead_of_duplicating(self, client, app_module, paste):
+        """One attempt, one row per workflow — so 继续 must write onto the rows that
+        already exist for this canvas, not mint a fresh pair per press.
+
+        Duplicates would orphan the rows the first attempt paid for and fill the panel
+        with near-identical records the user cannot tell apart.
+        """
+        flow = _two_workflows(paste(RECORDS, name='ranks'))
+        flow['settings']['mode'] = 'serial'
+        _run(client, app_module, flow, 'ranks')
+        first = {row['run_id'] for row in _listed(client)}
+        assert len(first) == 2, first
+        _run(client, app_module, flow, 'ranks', resume_run_id=sorted(first)[0])
+        assert {row['run_id'] for row in _listed(client)} == first, '继续 added rows instead of reusing them'
+
+    def test_a_single_workflow_run_still_gets_its_own_name_on_every_node(self, client, app_module, paste):
+        # The panel only draws group headings when there is more than one, so a
+        # one-workflow record must not lose the label: it is what the header would say
+        # if the canvas ever grew a second workflow.
+        nodes, _detail = self._records(client, app_module, _one_workflow(paste(RECORDS, name='one')), 'one')[0]
+        assert {node['component'] for node in nodes.values()} == {0}
+        assert {node['component_name'] for node in nodes.values()} == {'只看排行榜'}
+
+    def test_a_run_with_no_name_node_is_grouped_under_the_name_the_console_uses(self, client, app_module, paste):
+        # Not an empty string, and not a positional index: _wf_display_name falls back to
+        # the workflow name the browser sent, and the panel's group header has to say what
+        # the console called that workflow — two names for one workflow is how a record
+        # stops being readable.
+        flow = {
+            'nodes': [
+                _node('up-1', 'upload', {'dataset_id': paste(RECORDS, name='noname'), 'row_count': len(RECORDS)}),
+                _node('out-1', 'output', {'filename': 'x.csv'}, 'save_csv'),
+            ],
+            'connections': [{'from': 'up-1', 'to': 'out-1'}],
+            'settings': {'mode': 'serial'},
+        }
+        nodes, _detail = self._records(client, app_module, flow, 'noname')[0]
+        assert {node['component'] for node in nodes.values()} == {0}
+        assert {node['component_name'] for node in nodes.values()} == {'noname'}
+
+    def test_a_database_created_without_the_columns_reads_as_unnamed(self, tmp_path):
+        path = str(tmp_path / 'runs.db')
+        first = RunStore(path)
+        first.start_run('r1', '旧的', 'fp1')
+        first.begin_node('r1', 'node-1', 'source', title='数据源')
+        first.finish_node('r1', 'node-1', 'done')
+        first.finish_run('r1', 'completed')
+
+        import sqlite3
+
+        with sqlite3.connect(path) as conn:
+            conn.execute('ALTER TABLE node_runs DROP COLUMN component')
+            conn.execute('ALTER TABLE node_runs DROP COLUMN component_name')
+
+        reopened = RunStore(path)
+        node = reopened.get_run('r1')['nodes'][0]
+        assert node['component'] == 0, 'an old row ran in the only workflow there was'
+        assert node['component_name'] == '', 'and nothing may be claimed about its name'
+        reopened.start_run('r2', '新的', 'fp2')
+        reopened.begin_node('r2', 'node-1', 'source', component=2, component_name='周排行榜')
+        fresh = reopened.get_run('r2')['nodes'][0]
+        assert (fresh['component'], fresh['component_name']) == (2, '周排行榜')

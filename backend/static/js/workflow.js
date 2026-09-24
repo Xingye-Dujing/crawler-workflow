@@ -3970,6 +3970,37 @@ var runsManager = {
         };
     },
 
+    // One definition of "settled", shared with the backend's node_done: a node that
+    // only replayed its stored rows is just as finished as one that computed them, and
+    // one that failed or starved is not finished at all. The panel counted these two
+    // statuses differently from the record until they were tied together.
+    nodeDone(status) {
+        var s = String(status || '');
+        return s === 'done' || s === 'restored';
+    },
+
+    // Group a run's nodes by the workflow (connected component) they ran in, keeping
+    // canvas order. One record holds every workflow of a serial run by design, so
+    // without this the user could not tell which rows came from which workflow — the
+    // complaint that started this. A record with a single group renders as it always
+    // did: an unnamed one-workflow canvas does not need a heading over its own nodes.
+    nodeGroups(nodes) {
+        var groups = [];
+        var byIndex = {};
+        (nodes || []).forEach(function (n) {
+            var idx = Number(n.component || 0);
+            if (!byIndex[idx]) {
+                byIndex[idx] = { index: idx, name: String(n.component_name || ''), nodes: [] };
+                groups.push(byIndex[idx]);
+            }
+            byIndex[idx].nodes.push(n);
+        });
+        groups.sort(function (a, b) {
+            return a.index - b.index;
+        });
+        return groups;
+    },
+
     async detail(runId, btn) {
         var row = btn && btn.closest ? btn.closest('tr') : null;
         var existing = document.getElementById('runs-mgr-detail-' + runId);
@@ -3983,7 +4014,8 @@ var runsManager = {
             if (!result.ok || !result.run) return;
             var run = result.run;
             var self = this;
-            var cards = (run.nodes || []).map(function (n) {
+
+            function cardHtml(n) {
                 var info = self.nodeStatusInfo(n.status);
                 var typeLabel = n.node_type
                     ? I18n.t('nodeType.' + n.node_type)
@@ -3996,6 +4028,30 @@ var runsManager = {
                     '<span class="rm-node-rows">' + (n.row_count || 0) + ' ' + I18n.t('runsMgr.colRows') + '</span>' +
                     '</div>' +
                     (n.error ? '<div class="rm-node-err">' + escapeHtml(n.error) + '</div>' : '') +
+                    '</div>';
+            }
+
+            var groups = this.nodeGroups(run.nodes);
+            var multi = groups.length > 1;
+            var body = groups.map(function (group) {
+                var cards = group.nodes.map(cardHtml).join('');
+                if (!multi) {
+                    return cards;
+                }
+                var done = group.nodes.filter(function (n) { return self.nodeDone(n.status); }).length;
+                var rows = group.nodes.reduce(function (sum, n) { return sum + (n.row_count || 0); }, 0);
+                return '<div class="rm-group">' +
+                    '<div class="rm-group-head">' +
+                    // The name is what the console called this workflow — the backend
+                    // stores that same fallback per node, so a group is never left
+                    // nameless and the two views can never disagree about one workflow.
+                    '<span class="rm-group-name">' + escapeHtml(group.name) + '</span>' +
+                    '<span class="rm-group-tally">' +
+                    I18n.t('runsMgr.groupDone').replace('{done}', done).replace('{total}', group.nodes.length) +
+                    ' · ' + rows + ' ' + I18n.t('runsMgr.colRows') +
+                    '</span>' +
+                    '</div>' +
+                    '<div class="rm-nodes">' + cards + '</div>' +
                     '</div>';
             }).join('');
             var tr = document.createElement('tr');
@@ -4010,9 +4066,11 @@ var runsManager = {
                 '</span>' +
                 (run.note ? '<span class="rm-meta-note">' + escapeHtml(run.note) + '</span>' : '') +
                 '</div>' +
-                '<div class="rm-nodes">' +
-                (cards || '<div class="runs-mgr-empty">' + I18n.t('runsMgr.noNodes') + '</div>') +
-                '</div>' +
+                (multi
+                    ? body
+                    : '<div class="rm-nodes">' +
+                        (body || '<div class="runs-mgr-empty">' + I18n.t('runsMgr.noNodes') + '</div>') +
+                        '</div>') +
                 '</td>';
             if (row) row.after(tr);
         } catch (e) { /* leave the table as it was */ }

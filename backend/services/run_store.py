@@ -301,6 +301,13 @@ class RunStore:
                     row_count INTEGER DEFAULT 0,
                     cursor_json TEXT,
                     error TEXT,
+                    -- Which workflow (connected component) of the canvas this node
+                    -- belonged to, and what that component was called. One run is one
+                    -- record even when the canvas holds several workflows, so without
+                    -- these two the record could not say which rows came from 热门榜
+                    -- and which from 周排行榜 — the user's complaint about a serial run.
+                    component INTEGER DEFAULT 0,
+                    component_name TEXT DEFAULT '',
                     started_at TEXT,
                     updated_at TEXT,
                     finished_at TEXT,
@@ -343,7 +350,11 @@ class RunStore:
     #: run recorded before a field existed would have nothing for the panel to
     #: read; ``ADD COLUMN`` with a default gives every old row that value without
     #: rewriting the table. The names are a literal tuple written right here.
-    _ADDED_COLUMNS = (('runs', 'wf_count', 'INTEGER DEFAULT 1'),)
+    _ADDED_COLUMNS = (
+        ('runs', 'wf_count', 'INTEGER DEFAULT 1'),
+        ('node_runs', 'component', 'INTEGER DEFAULT 0'),
+        ('node_runs', 'component_name', "TEXT DEFAULT ''"),
+    )
 
     def _ensure_columns(self):
         for table, column, declaration in self._ADDED_COLUMNS:
@@ -532,11 +543,14 @@ class RunStore:
         cur = self._execute('DELETE FROM item_seen WHERE first_run_id = ?', (run_id,))
         return cur.rowcount
 
-    def purge(self, keep_per_workflow: int = None, keep_days: int = None, exclude_run_id: str = '') -> dict:
+    def purge(self, keep_per_workflow: int = None, keep_days: int = None, exclude_run_id=None) -> dict:
         """Age out old runs. Finished runs go before interrupted ones, and the
         most recent ``keep_per_workflow`` per workflow always stay.
-        ``exclude_run_id`` is the run a live thread is still writing — deleting
-        its rows mid-run would silently destroy the very state being built."""
+        ``exclude_run_id`` is the run (or, since a serial multi-workflow run closes
+        one record per workflow, *runs*) a live thread is still writing — deleting
+        their rows mid-run would silently destroy the very state being built.
+        """
+        exclude = [exclude_run_id] if isinstance(exclude_run_id, str) else list(exclude_run_id or [])
         keep = Config.RUN_KEEP_PER_WORKFLOW if keep_per_workflow is None else int(keep_per_workflow)
         days = Config.RUN_KEEP_DAYS if keep_days is None else int(keep_days)
         cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - max(0, days) * 86400))
@@ -556,7 +570,7 @@ class RunStore:
             finished = [r for r in ordered if r['status'] != RUN_INTERRUPTED]
             keep_ids = {r['run_id'] for r in (interrupted + finished)[: max(0, keep)]}
             doomed.update(r['run_id'] for r in ordered if r['run_id'] not in keep_ids)
-        doomed.discard(exclude_run_id)
+        doomed.difference_update(exclude)
 
         removed = 0
         for run_id in doomed:
@@ -602,10 +616,26 @@ class RunStore:
 
     # ── node state ──────────────────────────────────────────────
 
-    def begin_node(self, run_id: str, node_id: str, node_type: str, title: str = '', fingerprint: str = '') -> bool:
+    def begin_node(
+        self,
+        run_id: str,
+        node_id: str,
+        node_type: str,
+        title: str = '',
+        fingerprint: str = '',
+        component: int = 0,
+        component_name: str = '',
+    ) -> bool:
         """Mark a node as running. Returns True when stored rows had to be
         dropped because the node's own definition changed — those rows describe
-        a different node and must not be restorable."""
+        a different node and must not be restorable.
+
+        ``component``/``component_name`` say which workflow of the canvas the node was
+        executed in. They are refreshed on every visit rather than kept from the first:
+        rewiring the canvas between attempts moves nodes between components, and a record
+        that still said 「热门榜」 for a node the user had since connected to 周排行榜
+        would be a wrong claim in a plausible column.
+        """
         stamp = self.now()
         previous = self._query('SELECT fingerprint FROM node_runs WHERE run_id = ? AND node_id = ?', (run_id, node_id))
         stale = bool(previous) and previous[0]['fingerprint'] not in (None, '', fingerprint)
@@ -613,11 +643,24 @@ class RunStore:
             self._execute('DELETE FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))
         self._execute(
             'INSERT INTO node_runs (run_id, node_id, node_type, title, fingerprint, status, row_count, '
-            'started_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?) '
+            'component, component_name, started_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) '
             'ON CONFLICT(run_id, node_id) DO UPDATE SET status = excluded.status, node_type = excluded.node_type, '
             'title = excluded.title, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, '
+            'component = excluded.component, component_name = excluded.component_name, '
             'row_count = CASE WHEN ? THEN 0 ELSE node_runs.row_count END',
-            (run_id, node_id, node_type, title, fingerprint, NODE_RUNNING, stamp, stamp, 1 if stale else 0),
+            (
+                run_id,
+                node_id,
+                node_type,
+                title,
+                fingerprint,
+                NODE_RUNNING,
+                max(0, int(component or 0)),
+                str(component_name or ''),
+                stamp,
+                stamp,
+                1 if stale else 0,
+            ),
         )
         return stale
 

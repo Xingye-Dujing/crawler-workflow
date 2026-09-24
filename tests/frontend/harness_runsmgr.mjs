@@ -29,6 +29,7 @@ const I18n = {
             'runsMgr.queueHeader': 'WAITING({n})', 'runsMgr.queueCancel': 'CancelQueued',
             'runsMgr.queueCancelled': 'REMOVED', 'runsMgr.queueGone': 'GONE',
             'runsMgr.queueCancelFailed': 'FAILED',
+            'runsMgr.groupDone': '{done}/{total} nodes',
             'runsMgr.tagParallel': 'PARALLEL({n})', 'runsMgr.tagSerial': 'SERIAL({n})',
             'runsMgr.tagHeadless': 'HEADLESS', 'runsMgr.tagWindow': 'WINDOW',
         },
@@ -66,9 +67,14 @@ vm.runInContext(src + '\n;globalThis.__wf = { runsManager, workflow, dataNodes }
 sandbox.showToast = (msg) => captured.toasts.push(String(msg));
 sandbox.fetch = (url, options) => {
     captured.posts.push({ url, body: options && options.body ? JSON.parse(options.body) : null });
-    return Promise.resolve({
-        json: () => Promise.resolve({ ok: true, removed: true, run_id: 'r-new', rows: [], columns: [], total_rows: 0 }),
-    });
+    /* A scenario may seed an answer (the run-detail fetch below asks for one run by
+       id); anything unclaimed keeps the canned reply the execute() phases read, which
+       those phases assert on as "the server said ok". */
+    const frag = Object.keys(sandbox.__routes || {}).filter((f) => String(url).indexOf(f) >= 0)[0];
+    const payload = frag
+        ? sandbox.__routes[frag]
+        : { ok: true, removed: true, run_id: 'r-new', rows: [], columns: [], total_rows: 0 };
+    return Promise.resolve({ json: () => Promise.resolve(payload) });
 };
 sandbox.__byId('runs-mgr-body').innerHTML = '';
 const manager = sandbox.__wf.runsManager;
@@ -160,6 +166,78 @@ const tagCases = {
 /* The report button may name the run only by id: a workflow name is user text,
    and one double quote in it would close the onclick attribute and let whatever
    follows become markup. */
+/* One record holds every workflow of a serial run, so its expansion has to say which
+   node ran in which workflow — and a record that holds ONE workflow must not grow a
+   heading over its own nodes. `detail()` fetches the run and inserts the row; the
+   stub's `after` is a recorder here so the generated markup can be read back. */
+const GROUPED = {
+    ok: true,
+    run: {
+        run_id: 'r-group',
+        status: 'completed',
+        started_at: '2026-09-24T10:00:00',
+        wf_count: 2,
+        workflow_name: '热门榜 + 周排行榜',
+        nodes: [
+            { node_id: 'name-1', node_type: 'name', status: 'done', row_count: 0, component: 0, component_name: '热门榜' },
+            { node_id: 'up-1', node_type: 'upload', status: 'done', row_count: 4, component: 0, component_name: '热门榜' },
+            { node_id: 'name-2', node_type: 'name', status: 'done', row_count: 0, component: 1, component_name: '周排行榜' },
+            /* restored counts as settled — a node that only replayed its stored rows
+               is just as finished, and a tally that forgot it would under-report. */
+            { node_id: 'out-2', node_type: 'output', status: 'restored', row_count: 6, component: 1, component_name: '周排行榜' },
+            { node_id: 'p-2', node_type: 'process', status: 'partial', row_count: 2, component: 1, component_name: '周排行榜' },
+        ],
+    },
+};
+const FLAT = {
+    ok: true,
+    run: {
+        run_id: 'r-flat',
+        status: 'completed',
+        started_at: '2026-09-24T09:00:00',
+        wf_count: 1,
+        workflow_name: '只看排行榜',
+        nodes: [
+            { node_id: 'up-1', node_type: 'upload', status: 'done', row_count: 4, component: 0, component_name: '只看排行榜' },
+            { node_id: 'out-1', node_type: 'output', status: 'failed', row_count: 0, component: 0, component_name: '只看排行榜' },
+        ],
+    },
+};
+/* A record written before the component columns existed: one group, no heading, and
+   nothing invented about which workflow its nodes belonged to. */
+const LEGACY = {
+    ok: true,
+    run: {
+        run_id: 'r-legacy',
+        status: 'completed',
+        started_at: '2026-09-24T08:00:00',
+        wf_count: 1,
+        workflow_name: '旧的',
+        nodes: [{ node_id: 'node-1', node_type: 'source', status: 'done', row_count: 900 }],
+    },
+};
+
+async function renderDetail(payload) {
+    const inserted = [];
+    const id = 'runs-mgr-detail-' + payload.run.run_id;
+    /* The detail row is inserted by the code under test, so it must not exist yet:
+       the stub hands out a fresh element for any id it was never told is absent,
+       and detail() reads that as "already open" and returns without rendering. */
+    sandbox.document.absent.add(id);
+    sandbox.__routes['/api/runs/' + payload.run.run_id] = payload;
+    await manager.detail(payload.run.run_id, { closest: () => ({ after: (el) => inserted.push(el) }) });
+    return inserted.length ? inserted[0].innerHTML : null;
+}
+
+const groupedHtml = await renderDetail(GROUPED);
+const flatHtml = await renderDetail(FLAT);
+const legacyHtml = await renderDetail(LEGACY);
+const groupTally = manager.nodeGroups(GROUPED.run.nodes).map((g) => ({
+    index: g.index,
+    name: g.name,
+    ids: g.nodes.map((n) => n.node_id),
+}));
+
 process.stdout.write(
     JSON.stringify({
         html,
@@ -176,6 +254,25 @@ process.stdout.write(
         twoNodeBody: twoNodePost ? twoNodePost.body : null,
         twoNodeToasts,
         tagCases,
+        grouped: {
+            html: groupedHtml,
+            tally: groupTally,
+            headers: (groupedHtml || '').match(/rm-group-name/g) || [],
+            tallyText: (groupedHtml || '').match(/\d+\/\d+ nodes/g) || [],
+            flatHeaders: (flatHtml || '').match(/rm-group-name/g) || [],
+            flatHtml,
+            legacyHeaders: (legacyHtml || '').match(/rm-group-name/g) || [],
+            legacyHtml,
+            doneOf: {
+                done: manager.nodeDone('done'),
+                restored: manager.nodeDone('restored'),
+                partial: manager.nodeDone('partial'),
+                failed: manager.nodeDone('failed'),
+                skipped: manager.nodeDone('skipped'),
+                running: manager.nodeDone('running'),
+                empty: manager.nodeDone(undefined),
+            },
+        },
         // Whatever the two execute() calls said — a refused preflight shows here
         // rather than as a missing POST with no reason attached.
         executeToasts: captured.toasts.slice(cancelToasts.length),

@@ -634,6 +634,52 @@ def runsmgr(tmp_path_factory):
     return json.loads(proc.stdout)
 
 
+class TestRunDetailGrouping:
+    """One record can hold several workflows, and its expansion has to say which is which.
+
+    The user's complaint about a serial run was that 热门榜 and 周排行榜 were crowded into
+    one row: the node list below the name was one pile, so nothing said which rows belonged
+    to which workflow. The record keeps its single identity (every stored row, cursor and
+    继续 offer is keyed on it) and the *expansion* does the separating — which makes the
+    grouping itself a place a lie can appear on screen, and it is asserted on the real
+    ``runsManager.detail`` rather than on a description of it.
+    """
+
+    def test_each_workflow_gets_its_own_heading_and_tally(self, runsmgr):
+        grouped = runsmgr['grouped']
+        assert grouped['html'], 'detail() rendered nothing at all'
+        assert len(grouped['headers']) == 2, 'both workflows must be told apart'
+        assert grouped['tally'] == [
+            {'index': 0, 'name': '热门榜', 'ids': ['name-1', 'up-1']},
+            {'index': 1, 'name': '周排行榜', 'ids': ['name-2', 'out-2', 'p-2']},
+        ], grouped['tally']
+
+    def test_the_tally_counts_a_replayed_node_as_finished(self, runsmgr):
+        # 周排行榜 holds done + restored + partial: two of three. ``restored`` belongs
+        # with ``done`` (AGENTS: reuse has four rules, and this is one of them) — a tally
+        # that forgot it would under-report the half the user already paid for, and one
+        # that counted ``partial`` would over-report a node that starved.
+        assert runsmgr['grouped']['tallyText'] == ['2/2 nodes', '2/3 nodes']
+        assert runsmgr['grouped']['doneOf'] == {
+            'done': True,
+            'restored': True,
+            'partial': False,
+            'failed': False,
+            'skipped': False,
+            'running': False,
+            'empty': False,
+        }
+
+    def test_a_one_workflow_record_grows_no_heading(self, runsmgr):
+        """The heading exists to separate. Over the only workflow there is, it is noise."""
+        assert runsmgr['grouped']['flatHeaders'] == []
+        assert 'rm-node' in (runsmgr['grouped']['flatHtml'] or ''), 'the nodes must still be listed'
+
+    def test_a_record_written_before_the_columns_existed_is_untouched(self, runsmgr):
+        assert runsmgr['grouped']['legacyHeaders'] == []
+        assert 'rm-node' in (runsmgr['grouped']['legacyHtml'] or '')
+
+
 class TestPanelEscaping:
     """A node parameter is data, and the settings panel prints it into an attribute.
 

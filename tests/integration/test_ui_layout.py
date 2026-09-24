@@ -1006,3 +1006,116 @@ def test_the_palette_items_render_in_both_languages(app_url, driver):
         assert labels, f'{lang}: the palette rendered no text at all'
         raw = [label for label in labels if '.' in label and label.split('.')[0] in ('palette', 'node', 'menu', 'btn')]
         assert not raw, f'{lang}: untranslated keys reached the screen: {raw}'
+
+
+#: Long enough that no panel width this test could reasonably use renders it whole, so
+#: the assertion below measures a heading that really is under stress. A 300-character
+#: name is not paranoia: the panel is a floating window whose width follows the user's,
+#: and anything shorter stops overflowing on a wide screen without saying so.
+LONG_NAME = '热门榜与周排行榜的对照实验' * 25
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver, lang):
+    """One record can hold several workflows; its expansion must say which node ran in
+    which, and do it without breaking the page.
+
+    This is the half of the grouping the Python tier cannot reach: the panel builds the
+    markup it gets from ``/api/runs/<id>``, and whether a long 工作流命名 pushes the tally
+    out of the heading — or the panel out of the window — is a fact about flex layout in a
+    real browser. Nothing is written to the server: ``fetch`` is stubbed with a payload
+    shaped exactly like the endpoint's, so what is measured is the row the product draws.
+    """
+    driver.set_window_size(1100, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        f"""
+        document.body.dataset.lang = {lang!r};
+        I18n.apply();
+        const panel = document.getElementById('runs-panel');
+        panel.classList.add('open');
+        panel.classList.remove('hidden');
+        runsManager.render([{{
+            run_id: 'grp1', workflow_name: '热门榜 + 周排行榜', status: 'completed',
+            resumable: false, node_done: 6, node_total: 6, rows_kept: 40,
+            started_at: '2026-09-24 03:00', mode: 'serial', wf_count: 2, headless: 1
+        }}]);
+        window.fetch = () => Promise.resolve({{ json: () => Promise.resolve({{
+            ok: true,
+            run: {{
+                run_id: 'grp1', status: 'completed', started_at: '2026-09-24 03:00', wf_count: 2,
+                workflow_name: '热门榜 + 周排行榜',
+                nodes: [
+                    {{ node_id: 'name-1', node_type: 'name', status: 'done', row_count: 0,
+                       component: 0, component_name: '{LONG_NAME}' }},
+                    {{ node_id: 'up-1', node_type: 'upload', status: 'done', row_count: 4,
+                       component: 0, component_name: '{LONG_NAME}' }},
+                    {{ node_id: 'name-2', node_type: 'name', status: 'done', row_count: 0,
+                       component: 1, component_name: '周排行榜' }},
+                    {{ node_id: 'out-2', node_type: 'output', status: 'restored', row_count: 6,
+                       component: 1, component_name: '周排行榜' }},
+                ],
+            }},
+        }}) }});
+        """,
+        [],
+    )
+    driver.execute_script("return runsManager.detail('grp1', document.querySelector('#runs-panel tbody tr'));", [])
+    facts = driver.execute_script(
+        """
+        const detail = document.getElementById('runs-mgr-detail-grp1');
+        if (!detail) return {found: false};
+        const names = Array.from(detail.querySelectorAll('.rm-group-name'));
+        const tallies = Array.from(detail.querySelectorAll('.rm-group-tally'));
+        const panel = document.getElementById('runs-panel');
+        const width = (el) => Math.round(el.getBoundingClientRect().width);
+        return {
+            found: true,
+            names: names.map((el) => el.textContent.trim()),
+            // A name too long for the heading must be cut WITH the ellipsis saying so:
+            // text that simply disappears is the failure mode this project has now been
+            // bitten by twice, and the tally must not be the thing that gets pushed out.
+            cut: names.map((el) => el.scrollWidth - el.clientWidth > 1),
+            visible: names.map((el) => width(el) > 0),
+            tallies: tallies.map((el) => el.textContent.trim()),
+            tallyInside: tallies.map((el) => {
+                const head = el.closest('.rm-group-head');
+                return el.getBoundingClientRect().right <= head.getBoundingClientRect().right + 1;
+            }),
+            nodes: detail.querySelectorAll('.rm-node').length,
+            panelBar: [panel.scrollWidth, panel.clientWidth],
+            pageBar: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+            windowWidth: window.innerWidth,
+            detailRight: Math.round(detail.getBoundingClientRect().right),
+        };
+        """,
+        [],
+    )
+
+    def _short(names):
+        return [name[:24] + ('…' if len(name) > 24 else '') for name in names]
+
+    assert facts['found'] is True, 'the detail row never appeared, so nothing about the grouping was measured'
+    assert facts['nodes'] == 4, f'every node must still be listed under its group: {_short(facts["names"])}'
+    assert len(set(facts['names'])) == 2, f'both workflows must be named: {_short(facts["names"])}'
+    assert '周排行榜' in facts['names'], f'a group lost its own name: {_short(facts["names"])}'
+    assert all(facts['visible']), f'a group heading that renders nothing cannot be read: {facts["visible"]}'
+    # The stress has to be real: a name that fits proves nothing about the flex rule, and
+    # this file has already carried a layout test that passed by measuring an element that
+    # never overflowed.
+    assert any(facts['cut']), (
+        f'the long name was never cut, so this case stopped stressing it: {_short(facts["names"])}'
+    )
+    # …and the tally has to stay inside the heading row beside it. This measures boxes,
+    # not ink: two mutations (dropping min-width, and switching the name to
+    # overflow: visible) left every number below unchanged, so what is pinned here is the
+    # layout the panel controls — two named groups, each with its own tally, nothing
+    # spilling out of the panel or the page — and not how the glyphs are painted.
+    assert all(facts['tallyInside']), f'a tally was pushed past its heading row: {facts["tallyInside"]}'
+    assert sum(1 for tally in facts['tallies'] if any(ch.isdigit() for ch in tally)) == 2, facts['tallies']
+    assert facts['detailRight'] <= facts['windowWidth'] + 1, (
+        f'the expansion runs off the window: {facts["detailRight"]} > {facts["windowWidth"]}'
+    )
+    assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
+    assert facts['panelBar'][0] <= facts['panelBar'][1] + 1, f'the panel grew a horizontal bar: {facts["panelBar"]}'

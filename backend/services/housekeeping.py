@@ -30,10 +30,18 @@ class Housekeeping:
         # already elapsed since the process started.
         self._last = None
 
-    def run_now(self, exclude_run_id: str = '') -> dict:
+    def run_now(self, exclude_run_id='') -> dict:
         """Sweep unconditionally. Returns what went; never raises on a store
-        that cannot answer, because losing housekeeping must not fail a run."""
-        exclude = str(exclude_run_id or '')
+        that cannot answer, because losing housekeeping must not fail a run.
+
+        ``exclude_run_id`` is one id or a sequence of them: a serial run with
+        several workflows closes one record per workflow, and the sweep that
+        follows protects all of them.
+        """
+        # Passed through, NOT flattened: ``str(['abc'])`` is the literal "['abc']", which
+        # matches no run id and would have the sweep delete the very record it was told
+        # to protect. The store owns the one-id-or-many normalisation, in one place.
+        exclude = exclude_run_id
         removed_runs = 0
         cache_entries = 0
         seen_keys = 0
@@ -69,7 +77,7 @@ class Housekeeping:
             )
         return result
 
-    def maybe_run(self, exclude_run_id: str = '') -> dict | None:
+    def maybe_run(self, exclude_run_id='') -> dict | None:
         """Sweep only once the gate has elapsed. Returns None when skipped."""
         with self._lock:
             now = self._clock()

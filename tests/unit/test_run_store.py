@@ -587,6 +587,23 @@ class TestPurgeAndStats:
         alive = [r['run_id'] for r in store.list_resumable(include_finished=True)]
         assert alive == ['r1']
 
+    def test_purge_protects_every_id_in_a_list(self, store):
+        """A serial run closes one record per workflow, and the sweep that follows names
+        all of them.
+
+        An exclusion that arrives stringified matches no row — ``str(['r1'])`` is the
+        literal ``"['r1']"`` — and the sweep meant to protect the fresh records then
+        deletes them, taking rows the user paid for minutes earlier. That is a real
+        regression this repo has already met once in another layer: the protection has to
+        survive the hand-over, not just exist at both ends.
+        """
+        for rid in ('r1', 'r2', 'r3'):
+            _start(store, rid, name='wf')
+            store.finish_run(rid, RUN_COMPLETED)
+        assert store.purge(keep_per_workflow=0, keep_days=3650, exclude_run_id=['r1', 'r2'])['runs'] == 1
+        assert store.get_run('r1') is not None and store.get_run('r2') is not None
+        assert store.get_run('r3') is None
+
     def test_purge_removes_rows_of_doomed_runs(self, store, sample_rows):
         self._aged_run(store, 'old', 'wf', RUN_COMPLETED, started_at='2019-05-05T00:00:00')
         store.begin_node('old', 'n1', 'source')
