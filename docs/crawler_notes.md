@@ -13,6 +13,10 @@ second opinion beside it.
 - [Cookie capture vs crawling](#cookie-capture-vs-crawling)
 - [Browser options that were measured](#browser-options-that-were-measured)
 - [Crawl cost is a testable property](#crawl-cost-is-a-testable-property)
+- [微博的墙是间歇风控，不是发车太近](#微博的墙是间歇风控不是发车太近measured-2026-09-24)
+- [What each mode actually does on screen](#what-each-mode-actually-does-on-screen-measured-2026-09-24)
+- [网络分区：国内与海外不能一起爬](#网络分区国内与海外不能一起爬用户实测-2026-09-24)
+- [运行前 Cookie 预检](#运行前-cookie-预检measured-2026-09-24)
 
 ## Weibo
 
@@ -298,6 +302,37 @@ URL *before* asking the driver, so a navigation that timed out still counts — 
 mode that promises "one request per page" must be pinned by asserting on that ledger
 (`tests/live_site/test_live_bilibili_hot.py` asserts no `web-interface/view` call at all), because a
 table alone cannot tell a batched walk from a per-row one.
+
+## 微博的墙是间歇风控，不是发车太近（measured 2026-09-24）
+
+`live_quick` 的国内组两次把微博搜索判红（0 行 + `登录墙`），而**同一条用例单独跑 5.7 秒就绿**。
+排查走过的路与每一步的证据：
+
+1. **不是 Cookie**：`cookie_preflight.probe(fresh=True)`（可见浏览器）对 weibo / zhihu 都回
+   `valid`。注意这只回答「会话能不能打开内容页」，它回答不了搜索端点会不会被拒。
+2. **不是无头**：`backend/test_headless_wall.py`（payload `scratchpad/headless_wall.json`）直接
+   打开那条带时间窗的搜索 URL，无头有头**第一帧**就有卡片（微博 9 张 `.card-wrap`，知乎
+   t=1 有 20 张 `.SearchResult-Card`）。
+3. **第一个归因是错的**：失败的两组都刚好排在另一条微博采集后面，看起来完全就是「排队只去掉
+   重叠、没去掉连发」，于是真给 `crawl_gate` 加了一段「释放时上冷却」的实现。**随后被证伪并
+   整体回退**，留下的记录就是这一节。
+4. **证伪的两组实验**（各 4~6 次，全部用真实 profile、真实账号）：
+   - `backend/test_weibo_second_browser.py`：同一个浏览器连发两次搜索、关掉后**立刻**再开一个
+     浏览器搜、再等 `WALL_RETRY_BACKOFF`(45 s) 开第三个浏览器搜 —— 6/6 全部返回数据；
+   - `backend/test_weibo_windowed.py`：时间窗 URL 与普通关键词 URL 交替各 4 轮 —— 8/8 返回，
+     其中 tier 用的那个 `2026-09-17-00→01` 窗口给了 6 张卡（第 4 轮只给 1 张，也是数据）。
+   当天微博累计 14 次采集，无一被拒。
+
+**结论**：那堵墙与发车间隔无关，是站点间歇风控（目测单次拒绝率在一到两成）。所以
+`crawl_gate` **不加冷却**——为一条测不存在的规律让串行画布多等，是给成本找了个假理由。
+
+真机层的应对因此只有两条，且都不降低断言：撞墙重试从 2 次提到 **3 次**，并且每次重试等待
+产品自己用的 `Config.WALL_RETRY_BACKOFF`（以前是测试层自己发明的 5 秒，产品路径里根本没有这个
+数）。断言仍然要求「真出数据」，只是不再因为一次风控抖动就把爬虫判坏——单次 ~15% 的拒绝率下，
+两次都拒的概率约 2%，三次都拒才说明采集器真的坏了。
+
+知乎那次 0 行是同一晚的另一件事：它没撞墙也没报错，只是页面外壳空着落到滚动循环里（代码里写明
+这是无头风控的合法结局）。重跑同一条用例即通过（20 张卡），所以是当日节流，不是解析器坏了。
 
 ## What each mode actually does on screen (measured 2026-09-24)
 

@@ -16,31 +16,24 @@ from crawlers.comments import BLOCKED, OK, CommentSession
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 
-def _fresh_post_with_comments(live_crawler, headless=True):
-    """A weibo post that reports 评论数 > 0 from the ordinary time-window search."""
-    from datetime import date, timedelta
+def _fresh_post_with_comments(weibo_windowed) -> str:
+    """A weibo post from the session's one windowed search that reports 评论数 > 0.
 
-    crawler = live_crawler('weibo', headless=headless)
-    end = date.today()
-    start = end - timedelta(days=7)
-    rows = crawler.search(
-        '三亚', start_time=start.strftime('%Y-%m-%d'), end_time=end.strftime('%Y-%m-%d'), target_count=8
-    )
-    link = ''
-    for row in rows:
+    Read off the shared crawl rather than searched again: the search endpoint is the
+    request this account gets refused by, and the two cases want the same rows.
+    """
+    for row in weibo_windowed['rows']:
         if int(row.get('评论数') or 0) > 0 and 'weibo.com/' in (row.get('链接') or ''):
-            link = row['链接']
-            break
-    crawler.close()
-    return link
+            return str(row['链接'])
+    return ''
 
 
 @pytest.mark.parametrize(
     'headless',
     [pytest.param(True, marks=pytest.mark.live_quick, id='headless'), pytest.param(False, id='visible')],
 )
-def test_weibo_comments_live(live_crawler, headless):
-    link = _fresh_post_with_comments(live_crawler, headless=headless)
+def test_weibo_comments_live(live_crawler, weibo_windowed, headless):
+    link = _fresh_post_with_comments(weibo_windowed)
     if not link:
         pytest.skip('no searched weibo post had comments right now — nothing to fetch honestly')
     crawler = live_crawler('weibo', headless=headless)

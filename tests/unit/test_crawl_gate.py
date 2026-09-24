@@ -9,6 +9,13 @@ tested apart:
 * **错峰** (off) — only the two *starts* are spaced, by the user's own
   ``same_platform_stagger``, and the crawls may still run over each other.
 
+Whether a *rest* is owed after a crawl turned out to be an assumption worth measuring: on
+2026-09-24 the live tier failed two weibo crawls that had taken turns without overlapping,
+which looked exactly like "queued, but the account needed a breather" — and 14 later
+crawls of that platform, including a second browser started seconds after the first
+closed, were all served. The refusals were intermittent risk control, not ordering, so
+this gate still adds no rest of its own.
+
 Both failure directions are visible to the user, which is why the assertions are about
 spans and about recorded sleeps rather than about a boolean somebody set: a gate that
 never blocks lets the collision through (two red nodes, one account), a gate that
@@ -72,6 +79,12 @@ def _holder(platform, inside, release):
     return thread
 
 
+def _enter(platform):
+    """Take the turn and report the answer the caller gets — so a thread can hand it back."""
+    with crawl_gate.hold(platform) as waited:
+        return waited
+
+
 class TestStrictQueue:
     def test_an_empty_platform_costs_nothing(self, monkeypatch, isolated):
         _settings(monkeypatch, queue=True)
@@ -107,15 +120,25 @@ class TestStrictQueue:
     def test_the_gap_after_a_waited_hand_off_is_the_user_s_number(self, monkeypatch, isolated):
         """The account just ended a session seconds ago, so a turn changing hands is
         followed by the spacing wait as well — and the length is the setting, which the
-        user can raise to 60 or drop to 0 without touching code."""
+        user can raise to 60 or drop to 0 without touching code.
+
+        The second crawl enters the gate from a thread *while the first is still inside*,
+        so "did it queue?" is settled by the lock rather than by which thread the OS woke
+        first after the release.
+        """
         _settings(monkeypatch, queue=True, stagger=42.0)
         inside, release = threading.Event(), threading.Event()
         holder = _holder('weibo', inside, release)
         assert inside.wait(5)
+        answers = []
+        second = threading.Thread(target=lambda: answers.append(_enter('weibo')))
+        second.start()
+        second.join(0.2)
+        assert second.is_alive(), 'the hand-off never actually handed off'
         release.set()
-        with crawl_gate.hold('weibo') as waited:
-            assert waited is True
         holder.join(5)
+        assert second.join(5) is None, 'the queued crawl never came out of its wait'
+        assert answers == [True], 'it waited but was not told it had queued'
         assert isolated['waits'] and isolated['waits'][0] >= 42.0, isolated['waits']
 
     def test_zero_gap_still_queues_and_sleeps_for_nothing(self, monkeypatch, isolated):

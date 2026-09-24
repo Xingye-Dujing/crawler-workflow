@@ -1316,7 +1316,7 @@ _EN = {
         '{platform} waited {n}s for its turn to crawl and gave up: a browser window that never closed may be holding it'
     ),
     'run.platformStaggered': (
-        '{platform} starts {n}s after the last same-platform crawl: this run is queued with nothing, so '
+        '{platform} starts {n}s after the last same-platform crawl: this one queued behind nothing, so '
         'the two may still overlap — only their departures are kept apart, which is what stops one '
         'account issuing two searches in the same second'
     ),

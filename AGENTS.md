@@ -37,10 +37,9 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
     pass (~an hour) and belongs to acceptance. Both are **also split by network** (`live_cn`,
     `live_os`): a VPN gets 502 from douyin and a Chinese network never reaches x.com. So run one
     group, **stop and ask the user which network they are on**, then the other — a case in the wrong
-    group is 0 rows, which reads as a broken crawler.
+    group is 0 rows, and reads as broken.
   - **To run one device/live case you must override the marker filter as well as naming it** —
     `pytest tests/integration/x.py::test_y` alone reports `N deselected` and looks like it ran.
-  - Coverage: `--cov=backend --cov-report=term`.
   - Layout: `tests/unit`, `tests/api` (tmp-isolated `test_client`), `tests/integration` (marked
     Chrome/Ollama; LLM boundary mocks run by default). OpenRouter is **never** really called — patch
     `analyzers.llm_client.requests.post/get`.
@@ -82,15 +81,15 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   or export it (`window.X = X`, as app.js does for `LLMSettings`/`AppSettings`). (2) The DOM stub's matcher
   is real (see `harness_dom.mjs`); never fabricate a child when a query finds nothing — that turned a
   deleted connection into a phantom. (3) **A wrapper must forward its arguments:** app.js re-wraps
-  `openCookieDialog` for drag/resize, and its empty parameter list made 「open the Cookie panel on the
-  platform that just refused the run」 open it on whoever happened to be selected before.
+  `openCookieDialog`, and its empty parameter list made 「open the panel on the platform that just
+  refused」 open it on whoever was selected before.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id** (the page has no `.panel` class — a
   selector matching zero elements kept that test green while checking nothing), never falls back to
   `<body>`, and asserts a per-container floor on the gathered element count (counted in real Chrome,
   not guessed); new containers join that list with their floor. Resolve on-screen wording from `I18n`
-  inside the browser rather than pasting a copy — one label drifted and the test demanded a string the
-  product never emits.
+  inside the browser, not a pasted copy — one label drifted and the test demanded a string the product
+  never emits.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the
   one the bug was about. The 并行/串行 chip was wrong precisely because `mode` was never a column of the
   record test. When you test a record, a run or a panel row, list the dimensions first (`mode`,
@@ -144,13 +143,14 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   not free, so the user decides per run: `profileCollisions()` + `_confirmProfileChoiceBeforeRun()`
   ask 用 Profile vs 本次不用 and the answer travels as `use_profile` — **except with 真排队 on**, which
   has answered it for the whole program already (asking would offer a way out of the promise).
-  **A site's rate limit is a second collision**: two throwaway browsers can start
-  together and still be bounced — the *account* searched twice in one second. So
-  `crawl_gate.hold(platform)` orders crawls by platform, not directory, in whichever of the
-  **two distinct modes** the user's switch means: `same_platform_queue` on holds the turn until
-  that crawl *finishes* (真排队, which is also what a profile does anyway); off spaces only their
+  **A site's rate limit is a second collision**: two throwaway browsers can still be bounced as the
+  *account* searched twice in one second. So `crawl_gate.hold(platform)` orders crawls by platform, not
+  directory, in whichever of the **two distinct modes** the user's switch means: `same_platform_queue` on
+  holds the turn until that crawl *finishes*; off spaces only their
   *starts* by `same_platform_stagger` seconds and lets them overlap (错峰) — the number is the
-  user's, 0 = no spacing. A wall met **before the
+  user's, 0 = neither wait. **No rest is armed when a turn ends**: weibo walls that looked
+  like "queued too soon" were intermittent risk control — 14 later crawls of that platform
+  answered, one of them seconds after the previous browser closed. A wall met **before the
   first row** retries once after a back-off; a wall met after rows is the cookie dying
   and must go to 继续 instead. **Absence means "follow the setting" — never coerce missing to `False`,** or
   one dialog's answer becomes a global override. `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node
@@ -227,7 +227,7 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   Three measured rules, each pinned by a test: the streaming row sink writes **one transaction per row**
   on purpose (WAL + `synchronous=NORMAL` makes a commit microseconds, so batching buys nothing);
   the next free slot
-  is `MAX(seq)+1`, **never `COUNT(*)`** (that ran once per scraped row and made a long crawl quadratic in
+  is `MAX(seq)+1`, **never `COUNT(*)`** (it ran per row, which made a long crawl quadratic in
   its own table); a **cursor records position, not content** — collected ids come from the seeded rows
   (`Crawler.seed`), so an id list must not go back into `mark_position`.
 - **A label is not an input.** A node's fingerprint feeds its children, and the crawl's
@@ -316,8 +316,8 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   daemon thread starts with a fresh one, so `run()`, the parallel pool wrapper and **both
   cookie workers** take the request's language and set it first — the Cookie panel's probe
   lines and failures were Chinese in an English interface until that argument existed.
-  A test that asserts console text should either send/assert both languages or assert on
-  the reason, not on a pasted English/Chinese sentence.
+  A test asserting console text should assert on the reason, not on a pasted sentence, or send both
+  languages.
 - **One failure, one line.** `LogBufferHandler` forwards every `logger.*` call into the
   console buffer (its `format` is the message alone, so a traceback still goes only to
   the log file), so `logger.exception(...)` **and** an `add_log` of the same text prints

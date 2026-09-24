@@ -164,6 +164,16 @@ def clean_globals(request):
     gate = sys.modules.get('cookie_preflight')
     if gate is not None:
         gate.reset()
+    # The same leak one layer down: 真排队 arms a per-platform cooldown when a crawl
+    # ends, and a fast test that never started one would otherwise sit out a stranger's
+    # wait — a leaked 12 s both slowed the session and made a *parallel* canvas test
+    # report that two different platforms had taken turns. The live tier is deliberately
+    # excluded: there, spacing across cases is the thing under test, because the site
+    # answers a second search of one account with a login wall no matter which test sent
+    # the first one.
+    platform_gate = sys.modules.get('crawl_gate')
+    if platform_gate is not None and request.node.get_closest_marker('live_site') is None:
+        platform_gate.reset()
     if app is not None:
         app.reset_console_state()
         if app.execution_state.get('running') != running_backup:
