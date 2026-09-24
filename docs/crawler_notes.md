@@ -33,6 +33,30 @@ session and `<h2>403 Forbidden</h2>` (an edge/WAF body, not a weibo business cod
 the same walk and the same logged-in nav. So that mode needs a loud refusal, never an empty table,
 and `backend/test_weibo_recipe.py` is the re-test gate.
 
+**Re-measured 2026-09-24 (visible Chrome, the saved weibo profile): the endpoint answers, and what it
+answers is the author's own timeline.** Recipe
+`https://weibo.com/ajax/statuses/mymblog?uid=<UID>&page=<N>&feature=0`, fetched *inside the loaded
+page* with `credentials: 'include'` — the same shape bilibili comments and YouTube innertube use
+(a page-context fetch, not a standalone request):
+
+* page 1 → **28 rows**; page 2 → 20 rows with **20 unseen ids**; page 3 → 20 rows with 20 unseen ids.
+  Plain `page=N` advances, so no cursor has to be followed. The page-1 surplus is a fact to pin
+  ("page 1 may return more than the rest"), not something to normalise to 20.
+* the first row's `user.id` equals the requested `uid`. That is the ONLY thing distinguishing a real
+  author crawl from a mirror of the home timeline, because both answer `200` with the same envelope
+  (`data.list`, `data.since_id`, `data.pageid`). An earlier reading of this probe printed the same
+  `since_id` three times and looked like the home feed — it was the same request body previewed
+  three times, not the endpoint ignoring `uid`. **Do not re-derive this from a truncated body:** the
+  probe sliced responses to 300 characters, so its contract step died on `json.JSONDecodeError` and
+  cost four runs to get here.
+* rows carry `id` `mid` `mblogid` `created_at` `text` `text_raw` `source` `region_name` `visible`
+  `isLongText` `pic_num` `pic_ids` `reposts_count` `comments_count` `attitudes_count`
+  `retweeted_status` `user`. `text_raw` sits next to the HTML `text`.
+* still unmeasured before the handler is written: whether `isLongText` rows are truncated in this
+  list (i.e. whether a detail fetch is needed for the full body), and whether the 403 comes back for
+  this session shape. Reading counts from JSON is cheaper and steadier than the DOM walk the search
+  mode uses, so a profile crawl must not copy the card scraper.
+
 ## Zhihu
 
 Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens a
@@ -261,3 +285,47 @@ URL *before* asking the driver, so a navigation that timed out still counts — 
 mode that promises "one request per page" must be pinned by asserting on that ledger
 (`tests/live_site/test_live_bilibili_hot.py` asserts no `web-interface/view` call at all), because a
 table alone cannot tell a batched walk from a per-row one.
+
+## What each mode actually does on screen (measured 2026-09-24)
+
+Why this section exists: the user ran `哔哩哔哩.json` in parallel + 窗口 mode with 「本次不用 Profile」
+and saw **two** windows appear together (correct), but with 「用 Profile」 only **one** window at a time
+(also correct, but never explained). Separately, the 热榜 window opens the homepage and then does
+nothing visible while data arrives — the window demonstrates nothing at all. Both facts belong to the
+mode, not to the platform, so they are recorded per mode here and the rule lives in AGENTS.md
+("A visible window must be doing something visible").
+
+Data path classes: **(a)** navigates and reads the DOM · **(d)** scrolls that page · **(b)** loads one
+page then issues in-page `fetch` calls · **(c)** plain HTTP.
+
+| platform × mode | path | what the user sees |
+| --- | --- | --- |
+| bilibili 关键词 | (a)(b) | search page re-loaded per `page=`, then numbers arrive silently (one `view` fetch per row) |
+| bilibili **热榜/排行榜** | **(b)** | **the homepage, then nothing** — one navigation, `popular`/`ranking` fetched |
+| bilibili 作者 | (a)(d)(b) | a real scrolling space page |
+| bilibili 评论 | (b) | video page open and static (`/x/v2/reply/main` by cursor; there is no comment DOM) |
+| zhihu 搜索 / 作者 / 评论 | (a)(d) | scrolling feed / profile; comments click 展开 |
+| weibo 搜索 | (a)(d) | one search page per hourly window |
+| weibo 评论 | **(b)** | the homepage only |
+| xiaohongshu 搜索 / 评论 | (a)(d) | scrolling grid / scrolling comment panel |
+| douyin 搜索 / 作者 | (a)(d) | a page per row (never headless: 验证码 on every headless navigation) |
+| douyin 评论 | (a)(d) | scrolling route container |
+| youtube 搜索 / 作者 / 评论 | **(b)** | one page load, then innertube POSTs — nothing visible moves |
+| twitter/X 搜索 / 作者 / 评论 | (a)(d) | scrolling virtualized timeline (never headless) |
+| wechat 正文 | (a)(d) | each article page, scrolled |
+
+Consequences to honour when adding a mode:
+
+* A **(b)** mode has no human behaviour to show. Running it in 窗口 mode is a pure cost: a window the
+  user watches do nothing. The pre-run dialog must say so and offer headless — and the mode must
+  declare which class it is, because the frontend may not hold a second opinion about a crawl.
+* A mode where **both** paths exist (bilibili 关键词 reads DOM cards *and* fetches `view` per row) is
+  the only kind that can honestly offer "simulate a human" vs "just take the JSON". Where only one
+  implementation exists (bilibili 热榜 = API only), the choice must not be offered.
+* **(b) still needs the page.** The fetch runs inside the loaded document for same-origin, cookie and
+  risk-control reasons, so "headless" cannot mean "no browser" — it means "no window on your screen".
+
+Parallel + the same platform is serialized by the profile lock, not by the pool: the second worker
+blocks in `Crawler.__init__` → `acquire_profile()`, i.e. **before Chrome exists**, so only one window
+is ever visible at a time; `crawl.profile_wait` states the wait, and 「本次不用 Profile」 lifts the lock
+and gives one window per workflow (verified by the user).

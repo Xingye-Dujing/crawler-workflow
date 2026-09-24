@@ -124,6 +124,11 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   handlers, so a name that is not `/^[\w.-]{1,64}$/` is dropped whole — and a JS-generated panel is
   driven in tests by the matrix dumped from Python (`harness_capabilities.mjs` + the
   `capabilities_matrix` fixture), never a copy checked in.
+- **A visible window must be doing something visible.** Each `Mode` declares how it collects (DOM walk /
+  in-page fetch / per-row page) and the panel plus the pre-run dialog read that field instead of
+  re-judging it: bilibili 热榜 and the YouTube/weibo comment crawls navigate once then `fetch`, so
+  窗口 mode shows a homepage and nothing else — ask once (headless / keep window / cancel) before such
+  a run.
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count` (one
   万/千/亿/K/M/B parser), `engine.wall` (login / risk-control / root-bounce), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (the scroll that finds the
@@ -211,9 +216,8 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   `tests/conftest.py` clears `_RUN_QUEUE` per test. The Execute button is therefore never disabled; it
   relabels 排队运行.
 - **A test that calls an executor function directly must leave the app quiet**: `clean_globals`
-  (tests/conftest.py) resets the console after every test and *fails* one that leaks
-  `execution_state['running']` — without the `client` fixture nothing else clears either, and a leaked busy
-  flag makes every later serial test wait out its timeout on a run that never happened.
+  (tests/conftest.py) resets the console and *fails* a test that leaks `execution_state['running']`,
+  because nothing else clears either without the run start / the `client` fixture.
 - **Checkpointing is the core value** (`backend/services/run_store.py`): per-node outputs and LLM answers
   persist so an interrupted run resumes rather than re-crawls or re-pays. Keep `runs.db` state compatible.
   Three measured rules, each pinned by a test: the streaming row sink writes **one transaction per row**
