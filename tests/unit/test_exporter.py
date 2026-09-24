@@ -12,11 +12,13 @@ contracts are about the file that lands on disk:
 
 import json
 import os
+import re
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
+import services.exporter as exporter_module
 from services.exporter import DataExporter as E
 from services.exporter import UnsupportedFormatError
 
@@ -151,6 +153,42 @@ class TestNormalizeFilename:
 
     def test_unknown_format_still_lands_on_csv(self):
         assert E.normalize_filename('data', 'parquet') == 'data.csv'
+
+
+class TestStampFilename:
+    """The shape of 「文件名追加本次运行时间」: every run keeps its own file.
+
+    ``normalize_filename`` decides the suffix, this decides that a suffix the
+    export panel can read survives the rename, and that the name it returns is
+    a name nothing is sitting on yet.
+    """
+
+    def test_the_stamp_goes_before_the_extension(self, tmp_path):
+        out = E.stamp_filename('report.csv', str(tmp_path))
+        assert re.fullmatch(r'report-\d{8}-\d{6}\.csv', out), out
+
+    @pytest.mark.parametrize('name', ['report.json', 'report.xlsx', 'notes.md', 'a.b.c.csv', '数据.csv'])
+    def test_the_extension_survives_the_rename(self, name, tmp_path):
+        assert E.stamp_filename(name, str(tmp_path)).endswith(os.path.splitext(name)[1])
+
+    def test_a_name_taken_a_second_ago_becomes_the_next_number(self, tmp_path, monkeypatch):
+        # The clock is frozen because otherwise the two calls can fall a second
+        # apart, and the counter branch — the one a parallel canvas hits — never runs.
+        monkeypatch.setattr(exporter_module.time, 'strftime', lambda _fmt: '20260924-081500')
+        first = E.stamp_filename('report.csv', str(tmp_path))
+        (tmp_path / first).write_text('kept', encoding='utf-8')
+        second = E.stamp_filename('report.csv', str(tmp_path))
+        assert second == 'report-20260924-081500-2.csv'
+        (tmp_path / second).write_text('kept', encoding='utf-8')
+        assert E.stamp_filename('report.csv', str(tmp_path)) == 'report-20260924-081500-3.csv'
+        assert (tmp_path / first).read_text(encoding='utf-8') == 'kept', 'an earlier result is never rewritten'
+
+    def test_the_name_it_returns_is_never_an_existing_file(self, tmp_path):
+        for _ in range(3):
+            name = E.stamp_filename('report.csv', str(tmp_path))
+            assert not (tmp_path / name).exists()
+            (tmp_path / name).write_text('x', encoding='utf-8')
+        assert len(list(tmp_path.iterdir())) == 3
 
 
 class TestSave:

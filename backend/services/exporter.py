@@ -9,6 +9,7 @@ The workflow "Save" node is just a thin wrapper around this service.
 import json
 import logging
 import os
+import time
 
 import pandas as pd
 
@@ -71,6 +72,34 @@ class DataExporter:
         if not root.strip('. '):
             return f'export{wanted}'
         return root + wanted
+
+    @classmethod
+    def stamp_filename(cls, filename: str, export_dir: str) -> str:
+        """Rename *filename* so writing it cannot replace last run's file.
+
+        The stamp is the moment this node ran, so a workflow that is executed
+        every day keeps every result and nobody has to edit the filename
+        between runs. Two properties the callers cannot check for themselves:
+        the stamp goes *before* the extension (``data-20260924-081500.csv``,
+        which the export panel still recognises by suffix) and a collision gets
+        a counter instead of a silent overwrite, because two runs in the same
+        second are exactly what a parallel canvas does.
+
+        The result is deliberately not re-truncated to ``MAX_FILENAME_LENGTH``:
+        that cap exists to keep a *user-typed* name writable, the 15 added
+        characters cannot cross a path component limit, and cutting the name now
+        would cut the part that makes it unique.
+        """
+        root, ext = os.path.splitext(str(filename or ''))
+        stamp = time.strftime('%Y%m%d-%H%M%S')
+        candidate = f'{root}-{stamp}{ext}'
+        # ``-2`` rather than a finer clock: the timestamp the user reads is
+        # second-resolution, so the suffix is what says "this is the other one".
+        n = 1
+        while os.path.exists(os.path.join(export_dir, candidate)):
+            n += 1
+            candidate = f'{root}-{stamp}-{n}{ext}'
+        return candidate
 
     @classmethod
     def save(

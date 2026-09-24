@@ -14,6 +14,7 @@ alone. Local pages only: this tier performs no server writes and reaches no site
 """
 
 import contextlib
+import json
 import os
 import threading
 import time
@@ -176,3 +177,56 @@ def test_turning_profiles_off_leaves_the_persistent_directory_untouched(rooted, 
     finally:
         crawler.close()
     assert not unused.exists(), f'a disabled profile still created {unused}'
+
+
+# A 1x1 PNG, so the only thing that can stop it from having a size is the browser
+# refusing to fetch/decode images at all.
+_PIXEL = (
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
+    'AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+)
+_IMAGE_PAGE = 'data:text/html,<img id="i" src="' + _PIXEL + '">'
+
+
+def _picture_width(driver) -> int:
+    driver.get(_IMAGE_PAGE)
+    return int(driver.execute_script("return document.getElementById('i').naturalWidth || 0;"))
+
+
+def _profile_block(dir_path: str):
+    """What the profile itself remembers about images, or None if it says nothing."""
+    prefs = os.path.join(dir_path, 'Default', 'Preferences')
+    if not os.path.isfile(prefs):
+        return None
+    with open(prefs, encoding='utf-8') as fh:
+        data = json.load(fh)
+    return (data.get('profile') or {}).get('managed_default_content_settings', {}).get('images')
+
+
+def test_a_crawl_poisons_the_profile_with_no_images_and_a_login_window_undoes_it(rooted, tmp_path):
+    """The bug the user met: 登录窗口 opened a page with no QR code to scan.
+
+    The blocker a crawl passes as a session preference is written into the
+    *persistent* profile and outlives the session, so 'login windows just omit it'
+    — the first fix, and the assertion that shipped with it — inherits the block
+    instead of lifting it. Only Chrome can demonstrate that half, which is why this
+    measures the file on disk and then asks a real page whether its picture loaded.
+    """
+    target = str(tmp_path / 'profiles' / 'bilibili')
+
+    crawl = _launch()
+    try:
+        assert _picture_width(crawl.driver) == 0, 'a crawl should not be paying for pictures'
+    finally:
+        crawl.close()
+    assert _profile_block(target) == 2, (
+        'the premise of the fix is gone: the profile no longer remembers the crawl’s blocker, '
+        'so check whether Chrome changed before changing the code back'
+    )
+
+    login = get_crawler('bilibili', headless=True, for_login=True)
+    try:
+        assert _picture_width(login.driver) > 0, 'a login window on a profile that crawled has no QR code to scan'
+    finally:
+        login.close()
+    assert _profile_block(target) == 1, 'the human-facing answer should be left in the profile it overwrote'

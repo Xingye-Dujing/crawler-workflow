@@ -2107,6 +2107,17 @@ def _execute_output_node(node: dict, current_input: list):
         # Sanitize first, then (re)apply the extension: the other way round a
         # name like ".." lost its extension and landed as a hidden file.
         filename = DataExporter.normalize_filename(sanitize_filename(filename), fmt)
+        # The stamp is resolved here and never written back into ``params``,
+        # because a run-time value inside a node's parameters would change its
+        # fingerprint on every attempt: 继续 could not recognise the node, every
+        # LLM cache key would miss and a renamed chain would re-crawl.
+        #
+        # One limitation this trades away, stated so it is not discovered later:
+        # on 继续 an output node whose stored rows still match its fingerprint is
+        # *restored*, so this line never runs and no second file appears. Re-running
+        # for a new timestamp means re-running the chain it writes out of.
+        if params.get('filename_timestamp'):
+            filename = DataExporter.stamp_filename(filename, Config.EXPORT_DIR)
         filepath = os.path.join(Config.EXPORT_DIR, filename)
         try:
             DataExporter.save(df, filepath, fmt=fmt, text_column=params.get('text_column'))
@@ -3938,7 +3949,11 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = ''):
     crawler = None
     set_lang(lang)
     try:
-        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR)
+        # ``for_login`` because this window is shown to a person, and a person can be
+        # sent there by an expired cookie: the probe lands on the login page, whose QR
+        # code is an ``<img>``. Blocked, the diagnosis 「cookie 已失效，去登录」 pointed at
+        # a window where logging in was impossible.
+        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR, for_login=True)
         facts = crawler.diagnose(url)
         lines = _verify_lines(platform, facts)
         with _COOKIE_JOB_LOCK:

@@ -81,10 +81,8 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   declared as a top-level `const X` — `const` never becomes a window property — which is why
   `resumeBar.refresh()` and `runsManager._busy()` were dead code forever (the 断点续跑 banner never
   showed). Guard the binding itself (`typeof X !== 'undefined'`) or export it (`window.X = X`, as app.js
-  does for `LLMSettings`/`AppSettings`). (2) The DOM stub parses `innerHTML` into real children, matches
-  `.class`/`#id`/`[data-x="y"]`/`:not()`, walks `closest`, queues `requestAnimationFrame` until
-  `flushFrames()`, and treats an id listed in `document.absent` as truly missing. Never reintroduce
-  "fabricate a child when a query finds nothing": it turned a deleted connection into a phantom one.
+  does for `LLMSettings`/`AppSettings`). (2) The DOM stub's matcher is real (see `harness_dom.mjs`);
+  never fabricate a child when a query finds nothing — that turned a deleted connection into a phantom.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id** (the page has no `.panel` class — a
   selector matching zero elements kept that test green while checking nothing), never falls back to
@@ -124,11 +122,15 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   handlers, so a name that is not `/^[\w.-]{1,64}$/` is dropped whole — and a JS-generated panel is
   driven in tests by the matrix dumped from Python (`harness_capabilities.mjs` + the
   `capabilities_matrix` fixture), never a copy checked in.
-- **A visible window must be doing something visible.** Each `Mode` declares how it collects (DOM walk /
-  in-page fetch / per-row page) and the panel plus the pre-run dialog read that field instead of
-  re-judging it: bilibili 热榜 and the YouTube/weibo comment crawls navigate once then `fetch`, so
-  窗口 mode shows a homepage and nothing else — ask once (headless / keep window / cancel) before such
-  a run.
+- **A visible window must be doing something visible, and it must answer every preference a crawl set.**
+  Each `Mode` declares how it collects (DOM walk / in-page fetch / per-row page) and the panel plus the
+  pre-run dialog read that field instead of re-judging it: bilibili 热榜 and the YouTube/weibo comment
+  crawls navigate once then `fetch`, so 窗口 mode shows a homepage and nothing else — ask once (headless
+  / keep window / cancel) before such a run. And a session preference is *stored* in the persistent
+  profile, so it outlives the crawl: a human-facing window that merely *omits* the image blocker
+  inherits it and shows a login page with no QR code to scan. 取 Cookie / 验证 Cookie windows write
+  允许 explicitly (`_content_prefs`); an assertion about a key being *absent* passed on the first,
+  incomplete fix, so the device tier measures the profile round trip itself.
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count` (one
   万/千/亿/K/M/B parser), `engine.wall` (login / risk-control / root-bounce), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (the scroll that finds the
@@ -139,16 +141,15 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   entry point: it survives a renderer timeout, clears the dialog and classifies the page.
 - **One profile is one browser, and a parallel canvas has to be told that.** chromedriver pre-writes
   `<user-data-dir>/Default/Preferences`, so two sessions created in one directory at the same instant
-  cannot both come up (measured: 2 of 8 barrier-synchronised attempts died with `session not created:
-  failed to write prefs file`). `browser_profiles.acquire_profile(dir)` is a plain, **non-reentrant**
+  cannot both come up (`session not created: failed to write prefs file`).
+  `browser_profiles.acquire_profile(dir)` is a plain, **non-reentrant**
   `Lock` keyed by normalised path, held for the crawler's whole life and released in `close()` — it must
   stay non-reentrant because `_close_login_browser` releases it from a *side* thread (an `RLock` fails to
-  release there and parks the platform for the rest of the process; that was the actual bug). Waiting is
+  release there and parks the platform). Waiting is
   not free, so the user decides per run: `profileCollisions()` groups the canvas by connected component
   and names the platforms two workflows both crawl, `_confirmProfileChoiceBeforeRun()` asks 用 Profile
   (those crawls take turns) vs 本次不用 (true parallel, a brand-new device each), and the answer travels
-  as `settings.use_profile` → `ctx['use_profile']` → `get_crawler(use_profile=…)` →
-  `profile_dir_for(enabled=…)`. **Absence means "follow the setting" — never coerce missing to `False`,** or
+  as `settings.use_profile` → `ctx['use_profile']` → `get_crawler(use_profile=…)`. **Absence means "follow the setting" — never coerce missing to `False`,** or
   one dialog's answer becomes a global override. `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node
   fails with the directory named, never with a driver stack trace.
 - **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.**
@@ -218,11 +219,11 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
 - **A test that calls an executor function directly must leave the app quiet**: `clean_globals`
   (tests/conftest.py) resets the console and *fails* a test that leaks `execution_state['running']`,
   because nothing else clears either without the run start / the `client` fixture.
-- **Checkpointing is the core value** (`backend/services/run_store.py`): per-node outputs and LLM answers
+- **Checkpointing is the core value** (`services/run_store.py`): per-node outputs and LLM answers
   persist so an interrupted run resumes rather than re-crawls or re-pays. Keep `runs.db` state compatible.
   Three measured rules, each pinned by a test: the streaming row sink writes **one transaction per row**
-  on purpose (WAL + `synchronous=NORMAL` makes a commit microseconds while a page costs seconds, so
-  batching trades "killed at row 900 of 1000 still owns those 900 rows" for nothing); the next free slot
+  on purpose (WAL + `synchronous=NORMAL` makes a commit microseconds, so batching buys nothing);
+  the next free slot
   is `MAX(seq)+1`, **never `COUNT(*)`** (that ran once per scraped row and made a long crawl quadratic in
   its own table); a **cursor records position, not content** — collected ids come from the seeded rows
   (`Crawler.seed`), so an id list must not go back into `mark_position`.
@@ -296,8 +297,8 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   sentence), which means `t('crawl.wechat.success', i=…)` against a template asking for `{reads}`
   renders `阅读={reads}` on the console once per article. Key parity, reachability and zh/en matching
   are all blind to it. `test_i18n.py::TestCallSitePlaceholders` walks every `t('literal', …)` in
-  `backend/` with `ast` and refuses the mismatch (a `**splat` is the one form it cannot judge, so it
-  skips those and the meta-test asserts that skip is still needed).
+  `backend/` with `ast` and refuses the mismatch (a `**splat` is the one form it cannot judge; the
+  meta-test keeps that skip honest).
 - Console/validation messages reference nodes through `engine.workflow.node_label(node, nid)` (→ `title
   #nid`), never a bare `nid`, so a renamed node speaks with the user's name. Store keys, the results dict
   and resume plumbing still use the raw `nid`. The frontend keeps `node.title` in `getState` /

@@ -11,6 +11,7 @@ tmp-isolated store, and the slow crawler is a fake that respects the stop
 flag, so /api/workflow/stop is exercised without ever touching a browser.
 """
 
+import re
 import time
 
 import pandas as pd
@@ -329,6 +330,86 @@ class TestOutputFormats:
         client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'defname'})
         assert _wait(app_module)
         assert any(p.suffix == '.csv' for p in (data_root / 'data' / 'exports').iterdir())
+
+
+def _export_names(data_root) -> set:
+    """What is in the export directory right now. The directory is shared for the
+    whole session, so a test may only speak about the names it added."""
+    exports = data_root / 'data' / 'exports'
+    return {p.name for p in exports.iterdir()} if exports.is_dir() else set()
+
+
+def _is_stamped(name: str, stem: str) -> bool:
+    return bool(re.fullmatch(rf'{stem}-\d{{8}}-\d{{6}}(?:-\d+)?\.csv', name))
+
+
+class TestStampedOutputFilenames:
+    """「文件名追加本次运行时间」 — a workflow that runs daily keeps every result.
+
+    The value is decided where the file is written, never stored on the node, so
+    these tests check the export directory and the STORED fingerprint: the two
+    places a run-time value could do damage.
+    """
+
+    def _workflow(self, stem, ds, **extra):
+        params = {'operation': 'save', 'format': 'csv', 'filename': f'{stem}.csv', **extra}
+        return _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 4}),
+                _node('node-2', 'output', params, 'save'),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+
+    def _run(self, client, app_module, workflow, name):
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': name})
+        assert _wait(app_module)
+        return started.get_json()['run_id']
+
+    def test_the_option_writes_a_stamped_name_and_never_the_plain_one(self, client, app_module, paste, data_root):
+        ds = _upload(client, paste)
+        before = _export_names(data_root)
+        self._run(client, app_module, self._workflow('once', ds, filename_timestamp=True), 'stamp-once')
+        fresh = _export_names(data_root) - before
+        assert len(fresh) == 1 and _is_stamped(next(iter(fresh)), 'once'), fresh
+        assert 'once.csv' not in _export_names(data_root), 'the option exists so the plain name is never written'
+
+    def test_two_runs_of_the_same_workflow_keep_both_files(self, client, app_module, paste, data_root):
+        ds = _upload(client, paste)
+        workflow = self._workflow('keep', ds, filename_timestamp=True)
+        before = _export_names(data_root)
+        self._run(client, app_module, workflow, 'stamp-twice')
+        first = _export_names(data_root) - before
+        self._run(client, app_module, workflow, 'stamp-twice')
+        second = _export_names(data_root) - before - first
+        assert len(first) == len(second) == 1, f'{first} / {second}'
+        assert first != second, 'the second run landed on the first run’s file'
+        exports = data_root / 'data' / 'exports'
+        for name in first | second:
+            assert len(pd.read_csv(exports / name, encoding='utf-8-sig')) == 4
+
+    def test_the_stamp_never_reaches_the_node_fingerprint(self, client, app_module, paste):
+        """A time inside a node's parameters would change its fingerprint every run,
+        and 继续 could no longer recognise the node it is resuming: every LLM cache
+        key would miss and the chain above it would re-pay for its rows.
+        """
+        from services.run_store import fingerprints_for_workflow
+
+        ds = _upload(client, paste)
+        workflow = self._workflow('fp', ds, filename_timestamp=True)
+        run_id = self._run(client, app_module, workflow, 'stamp-fp')
+        nodes = {n['node_id']: n for n in client.get(f'/api/runs/{run_id}').get_json()['run']['nodes']}
+        assert nodes['node-2']['fingerprint'] == fingerprints_for_workflow(workflow)['node-2']
+        assert nodes['node-2']['status'] == 'done'
+
+    def test_without_the_option_a_second_run_still_overwrites_the_one_file(self, client, app_module, paste, data_root):
+        """The default is the old behaviour, unchanged: this is a switch, not a policy."""
+        ds = _upload(client, paste)
+        workflow = self._workflow('plain', ds)
+        before = _export_names(data_root)
+        self._run(client, app_module, workflow, 'plain-once')
+        self._run(client, app_module, workflow, 'plain-twice')
+        assert _export_names(data_root) - before == {'plain.csv'}
 
 
 class TestResumeNode:

@@ -59,8 +59,13 @@ def _prefs(box):
 
 IMAGES_BLOCKED = {'profile.managed_default_content_settings': {'images': 2}}
 
+#: 1 = 允许, 2 = 封锁. The two are not interchangeable, and only one of them is
+#: an answer: writing nothing leaves the decision to whatever the profile already
+#: holds, which is what broke 登录窗口 (see ``test_a_login_window_overrides_a_profile_that_blocked``).
+IMAGES_ALLOWED = {'profile.managed_default_content_settings': {'images': 1}}
 
-def test_a_crawl_blocks_images_and_a_login_window_does_not(captured_options):
+
+def test_a_crawl_blocks_images_and_a_login_window_undoes_it(captured_options):
     """The blocker is the largest per-navigation saving a text crawler has — and it
     is fatal on the one window a human has to read: the QR code is an ``<img>``, so
     a login browser with images blocked shows nothing to scan. Reported by a user
@@ -71,10 +76,34 @@ def test_a_crawl_blocks_images_and_a_login_window_does_not(captured_options):
     crawler.driver = None
 
     login = ZhihuCrawler(headless=False, for_login=True)
-    assert 'profile.managed_default_content_settings' not in _prefs(captured_options), (
-        'the login window still blocks images, so no QR code can load'
-    )
+    assert _prefs(captured_options) == IMAGES_ALLOWED, 'the login window must say 允许, not nothing'
     login.driver = None
+
+
+def test_a_login_window_overrides_a_profile_that_blocked_images():
+    """The contract the first fix missed, which is why the bug came back.
+
+    A crawl writes its blocker into the *persistent* profile directory and it
+    outlives the session, so a later login window on that same directory that
+    simply omits the preference inherits the block. Absence is therefore not a
+    usable answer for a human-facing window; only an explicit 允许 is. This checks
+    the shape of that answer without a browser; the round trip through Chrome's own
+    ``Preferences`` file is measured in
+    ``tests/integration/test_browser_profile_launch.py``.
+    """
+
+    def session(**attrs):
+        crawler = ZhihuCrawler.__new__(ZhihuCrawler)
+        crawler.needs_images = False
+        for key, value in attrs.items():
+            setattr(crawler, key, value)
+        return crawler._content_prefs()
+
+    assert session()['profile.managed_default_content_settings']['images'] == 2
+    allowed = session(needs_images=True)
+    assert allowed['profile.managed_default_content_settings']['images'] == 1, (
+        'a login window that inherits the profile block shows a page with no QR code'
+    )
 
 
 def test_a_platform_that_needs_images_still_gets_them(captured_options):
@@ -85,7 +114,7 @@ def test_a_platform_that_needs_images_still_gets_them(captured_options):
         needs_images = True
 
     crawler = NeedsImages(headless=True)
-    assert _prefs(captured_options) == {}
+    assert _prefs(captured_options) == IMAGES_ALLOWED
     crawler.driver = None
 
 
@@ -94,5 +123,5 @@ def test_get_crawler_passes_the_login_mode_through(captured_options):
 
     crawler = get_crawler('zhihu', headless=False, for_login=True)
     assert crawler.needs_images is True
-    assert 'profile.managed_default_content_settings' not in _prefs(captured_options)
+    assert _prefs(captured_options) == IMAGES_ALLOWED
     crawler.driver = None

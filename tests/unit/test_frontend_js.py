@@ -95,6 +95,7 @@ _PANELS = [
     ('panel_visualize_bar', 'visualize', {'chart_type': 'bar', 'x_field': '标题', 'y_field': '点赞', 'title': '统计'}),
     ('panel_visualize_wordcloud', 'visualize', {'chart_type': 'wordcloud', 'value_field': '权重'}),
     ('panel_output_csv', 'output', {'operation': 'save_csv', 'filename': 'export.csv', 'text_column': '正文'}),
+    ('panel_output_stamped', 'output', {'operation': 'save', 'filename': 'stamped.csv', 'filename_timestamp': True}),
 ]
 
 #: One quote is enough to leave an attribute; the rest proves the payload landed.
@@ -406,6 +407,18 @@ class TestSettingsPanel:
     def test_other_platforms_do_not_offer_it(self, results):
         for panel in ('panel_zhihu_posts', 'panel_weibo_posts'):
             assert 'comment_preview' not in results['settings'][panel], f'{panel} has no comment preview to set'
+
+    def test_the_output_panel_offers_the_run_time_in_the_filename(self, results):
+        """The checkbox is the only route to ``params['filename_timestamp']``, which
+        the backend reads when it names the file — and an unchecked box must render
+        unchecked, or turning the option off would not survive a save/reload."""
+        html = results['settings']['panel_output_csv']
+        assert "updateParam('n1','filename_timestamp',this.checked)" in html
+        assert 'settings.filenameTimestamp' in html
+        assert '<input type="checkbox" checked ' not in html
+
+    def test_a_panel_that_stored_the_option_shows_it_ticked(self, results):
+        assert '<input type="checkbox" checked ' in results['settings']['panel_output_stamped']
 
     def test_ner_panel_offers_a_model_switch_and_the_category_filter(self, results):
         """Both fields are the only route to what the backend reads, and the

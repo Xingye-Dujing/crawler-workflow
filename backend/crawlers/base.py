@@ -90,7 +90,9 @@ class Crawler(ABC):
             # an ``<img>``, so the content blocker that saves seconds on every
             # navigation would leave the one step a crawler cannot perform —
             # scanning to log in — impossible. Reported by a user re-saving a weibo
-            # cookie, who got a page with no code to scan.
+            # cookie, who got a page with no code to scan. The profile can already
+            # hold a blocker a previous crawl left behind, so this must be an answer
+            # and not an omission (see ``_content_prefs``).
             self.needs_images = True
         self.driver = None
         self._sink = None
@@ -223,16 +225,20 @@ class Crawler(ABC):
         return cursor if isinstance(cursor, dict) else {}
 
     def _content_prefs(self) -> dict:
-        """Chrome content preferences for this session.
+        """Chrome content preferences for this session — always an explicit answer.
 
-        Split out of ``_create_driver`` because it is the one place the difference
-        between a crawl and a login window is decided: blocking images is the largest
-        per-navigation saving a text-and-attribute crawler has, and the empty dict is
-        what a human-facing window needs (see ``for_login``).
+        Both branches *write* a value, and that is the whole point. A crawl's blocker
+        is persisted into the profile directory it ran on (measured: after one weibo
+        crawl, ``data/chrome_profile/weibo/Default/Preferences`` carried
+        ``managed_default_content_settings.images = 2``), so a later human-facing
+        window that merely *omits* the preference inherits the block from the device
+        it shares with that crawl — and the login page it shows has no QR code to
+        scan, because a QR code is an ``<img>``. Saying 允许 explicitly is what makes
+        「打开浏览器登录」 completable on a profile that has already crawled; the
+        block itself stays the crawl default, since it is the largest per-navigation
+        saving a text-and-attribute crawler has (see ``needs_images``).
         """
-        if self.needs_images:
-            return {}
-        return {'profile.managed_default_content_settings': {'images': 2}}
+        return {'profile.managed_default_content_settings': {'images': 1 if self.needs_images else 2}}
 
     def _create_driver(self):
         opts = Options()

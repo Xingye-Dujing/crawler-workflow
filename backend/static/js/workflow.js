@@ -1357,7 +1357,11 @@ function openSettings(nodeId) {
             '</select></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.filename') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.filename || 'export.csv') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'filename\',this.value)"></div>';
+            'onchange="updateParam(\'' + nodeId + '\',\'filename\',this.value)"></div>' +
+            '<div class="settings-group"><label class="settings-checkbox-label">' +
+            '<input type="checkbox" ' + (p.filename_timestamp ? 'checked' : '') + ' ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'filename_timestamp\',this.checked)"> ' +
+            I18n.t('settings.filenameTimestamp') + '</label></div>';
         if (fmt === 'txt') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
                 '<input class="settings-input" value="' + escapeHtml(p.text_column || '') + '" placeholder="optional: one column per line" ' +

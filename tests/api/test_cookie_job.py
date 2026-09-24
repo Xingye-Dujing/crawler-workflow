@@ -292,6 +292,18 @@ class TestCookieVerify:
         assert 'COOKIE' in r.get_json()['error'] or 'cookie' in r.get_json()['error']
         assert job['made'] == []
 
+    def test_the_verify_window_is_built_for_a_human_to_read(self, client, job, app_module):
+        """The other half of the same trap: 验证 Cookie opens a visible window, and an
+        expired cookie sends that window to the login page the user is then told to
+        sign in on. Built like a crawl, it showed a page with no QR code to scan.
+        """
+        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
+        assert client.post('/api/cookies/verify', json={'platform': 'zhihu'}).status_code == 202
+        _await_phase(client, 'verified')
+        made = job['made'][0]
+        assert made.requested['for_login'] is True, 'a window the user reads must not inherit the crawl’s blocker'
+        assert made.requested['headless'] is False
+
     def test_a_link_outside_the_platform_is_refused(self, client, job, app_module, monkeypatch):
         monkeypatch.setattr('app.cookie_hosts', lambda platform: ('www.zhihu.com',))
         app_module.cookie_manager.save('zhihu', [{'name': 'x', 'value': 'y'}])

@@ -257,6 +257,19 @@ load, measured at ~2.3 s on douyin — and one of the three was a pure redirect.
 The driver runs with `page_load_strategy='eager'` and image loading blocked unless a class sets
 `needs_images = True`, because a crawler reads text and attributes, never pixels.
 
+**A session preference written into a persistent profile stays there (measured 2026-09-24).** After one
+weibo crawl, `data/chrome_profile/weibo/Default/Preferences` held
+`profile.managed_default_content_settings = {"images": 2}` — and 4 of the 7 platform directories on this
+machine carried it. That is what made 登录窗口 unusable: the Cookie panel's login browser runs on the
+*same* profile a crawl used (`use_profile` follows the setting), and the fix that shipped first only
+*omitted* the blocker for that window — omission is not an answer when the device already remembers a
+"no", so the page opened with no QR code to scan and the user could not refresh a dead cookie. Two
+consequences to keep: `_content_prefs` writes 1 (允许) or 2 (封锁) for **every** session, never nothing;
+and any window a human is asked to read is a human-facing window — 取 Cookie and 验证 Cookie both, since
+an expired cookie sends the probe to the login page and the panel then tells the user to sign in there.
+`tests/integration/test_browser_profile_launch.py` measures the whole round trip, including the claim
+above about the file on disk, so if Chrome ever stops persisting it the test says so by name.
+
 **Do not block image loading on douyin** (measured the wrong way first): the class sets no
 `needs_images`, the base default blocks images for speed, and that is fine for every other platform —
 but re-tested with the dialog handled, images-on vs images-off produced identical screens (22-24 vs
