@@ -238,8 +238,72 @@ const groupTally = manager.nodeGroups(GROUPED.run.nodes).map((g) => ({
     ids: g.nodes.map((n) => n.node_id),
 }));
 
+/* ─── following a live run, and a stop that lands late ─────────────────────
+   The panel used to read the record only when the user opened it, so a stopped
+   run sat on 运行中 — the verdict existed, nobody re-asked. autoRefresh keeps
+   the open panel current while the run lives; awaitSettled keeps re-reading
+   after 停止 until no row still claims to be running. */
+const LIVE = {
+    ok: true,
+    runs: [{ run_id: 'live', workflow_name: '在跑', status: 'running', node_done: 1, node_total: 3, rows_kept: 5, wf_count: 1, mode: 'serial', headless: 1 }],
+    queue: [],
+};
+const SETTLED = {
+    ok: true,
+    runs: [{ run_id: 'live', workflow_name: '在跑', status: 'interrupted', node_done: 1, node_total: 3, rows_kept: 5, wf_count: 1, mode: 'serial', headless: 1 }],
+    queue: [],
+};
+const listFetches = () => captured.posts.filter((p) => String(p.url).indexOf('/api/runs/list') === 0).length;
+const follow = {};
+const panel = sandbox.__byId('runs-panel');
+
+/* The renderDetail() phases left a `_detail` flag standing — a table replaced
+   underneath an expansion clears it in the real page, so start honest. */
+manager._detail = null;
+panel.classList.remove('open');
+let beforeFollow = listFetches();
+manager.autoRefresh();
+follow.closedAsksForNothing = listFetches() === beforeFollow;
+
+sandbox.__routes['/api/runs/list'] = LIVE;
+panel.classList.add('open');
+beforeFollow = listFetches();
+manager.autoRefresh();
+/* autoRefresh does not await its refresh (the poller must not block the run's
+   own ticks); the re-render lands one microtask later. */
+await new Promise((r) => setImmediate(r));
+follow.followedLive = listFetches() > beforeFollow && manager._anyRunning() === true;
+
+/* A detail row being read is a reason to leave the table alone: the refresh
+   would yank the expansion the user is reading out of the DOM. The id must be
+   registered-absent first, or the stub's never-null getElementById answers
+   "already open" and nothing gets inserted. */
+sandbox.document.absent.add('runs-mgr-detail-live');
+sandbox.__routes['/api/runs/live'] = { ok: true, run: { run_id: 'live', status: 'running', nodes: [] } };
+await manager.detail('live', { closest: () => ({ after: () => {} }) });
+beforeFollow = listFetches();
+manager.autoRefresh();
+follow.pausedForReading = listFetches() === beforeFollow && manager._detail === 'live';
+
+/* The stop-then-settle follow: the server answers 运行中 twice before the
+   verdict appears; awaitSettled must keep re-reading and stop on the settle.
+   (Collapsed first — awaitSettled honours the open detail, as autoRefresh
+   does: no point arriving here to re-assert the pause proved above.) */
+manager._detail = null;
+const answers = [LIVE, LIVE, SETTLED];
+Object.defineProperty(sandbox.__routes, '/api/runs/list', {
+    configurable: true,
+    get: () => (answers.length > 1 ? answers.shift() : answers[0]),
+});
+beforeFollow = listFetches();
+await manager.awaitSettled(10, 1);
+follow.spun = listFetches() - beforeFollow;
+follow.settled = manager._anyRunning() === false;
+follow.showedVerdict = (sandbox.__byId('runs-mgr-body').innerHTML || '').indexOf('st-interrupted') >= 0;
+
 process.stdout.write(
     JSON.stringify({
+        follow,
         html,
         count: countText,
         reports: (html.match(/runsManager\.report\(/g) || []).length,

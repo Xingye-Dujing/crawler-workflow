@@ -495,6 +495,10 @@ STATUS_FIELDS = {
     'skipped_nodes',
     'failed_nodes',
     'outcome',
+    # A Stop sets running=False on the request thread; the worker still owes the
+    # verdict. The browser reads these instead of printing an unwritten outcome.
+    'stopping',
+    'settling',
     'chart_results',
     'cookie_expired',
     'queue',
@@ -843,7 +847,7 @@ class TestProgressiveOutput:
         monkeypatch.setattr(
             app_module,
             'get_crawler',
-            lambda platform, headless=True, cookie_dir=None, use_profile=None: FakeSinkCrawler(rows),
+            lambda platform, headless=True, cookie_dir=None, use_profile=None, abort=None: FakeSinkCrawler(rows),
         )
         workflow = _workflow(
             [
@@ -1022,7 +1026,7 @@ class TestSourceCommentsMode:
             def close(self):
                 pass
 
-        def fake_get_crawler(kind, headless=True, cookie_dir=None, use_profile=None):
+        def fake_get_crawler(kind, headless=True, cookie_dir=None, use_profile=None, abort=None):
             # Comments mode must force a VISIBLE browser even though the source
             # param says headless — zhihu content pages reject headless.
             assert headless is False, 'comment crawl opens a visible window'
@@ -1225,7 +1229,9 @@ class TestConsoleReadabilityRegression:
                 return kept
 
         monkeypatch.setattr(
-            app_module, 'get_crawler', lambda platform, headless=True, cookie_dir=None, use_profile=None: _C()
+            app_module,
+            'get_crawler',
+            lambda platform, headless=True, cookie_dir=None, use_profile=None, abort=None: _C(),
         )
         started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': '获取微博'})
         assert started.get_json()['ok'] is True

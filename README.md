@@ -307,6 +307,10 @@
   旧写法 `shutdown(wait=False)` 直接走人，于是被停掉那次运行的最后一个节点继续往
   下一次运行的控制台、节点计数与 results 里写——症状是下一次运行"播报了它没做的采集"
   （`/api/workflow/stop` 会关掉在跑的浏览器，所以被等住的最多是"一页加载"，不是一整次抓取）
+  「停止」现在**不再拖住运行记录**：浏览器改到后台线程逐个关，停止请求立刻返回；撞墙退避那
+  45 秒会随停止立即中断，运行线程很快走到收尾把记录判成「中断」。运行记录面板在运行中每秒
+  跟着刷新，按停止后也会续读几条直到那行不再写着「运行中」——停止的 toast 只说"正在停止"，
+  结论由运行自己写。
 - **撤销/重做**：Ctrl+Z / Ctrl+Y 支持 50 步历史回退，菜单和右键菜单均有入口。
   历史快照必须**深拷贝节点参数**（以前直接引用活对象，而参数编辑是原地改，于是全App 任何
   参数改动都撤销不掉，且后续修改还会改写历史里的旧条目）；相同的画面不入栈
@@ -583,8 +587,8 @@ crawler_workflow/
 | `/api/workflow/list` | GET | 列出所有已保存工作流 |
 | `/api/workflow/delete` | POST | 删除工作流 |
 | `/api/workflow/execute` | POST | 执行工作流；已有运行在跑则排队（返回 `queued` 与位次；`queue:false` 保留旧的直接拒绝）。「继续」一定带 `queue:false`——排队期间它指向的运行记录可能被保留策略清掉，那时宁可立刻 400 说明原因，也不会悄悄变成一次从零重爬 |
-| `/api/workflow/stop` | POST | 停止执行 |
-| `/api/workflow/status` | GET | 获取执行状态（含 `queue` 等待列表） |
+| `/api/workflow/stop` | POST | 停止执行（浏览器在后台关，请求立即返回；`browsers` 回执本次关掉的浏览器数） |
+| `/api/workflow/status` | GET | 获取执行状态（含 `queue` 等待列表；`stopping`/`settling` 说明"已叫停但结论还没写"，浏览器据此续读而不是抢答） |
 | `/api/workflow/queue` | GET | 列出排队中的请求 |
 | `/api/workflow/queue/cancel` | POST | 按 `id` 取消一个排队请求（绝不触碰正在跑的运行） |
 | `/api/workflow/queue/clear` | POST | 清空队列 |

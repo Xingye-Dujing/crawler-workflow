@@ -415,6 +415,9 @@ execution_state = {
     'attempted_nodes': set(),
     'outcome': '',
     'active_crawlers': set(),
+    # Set by Stop, cleared when a run claims the slot: it means "the user has asked
+    # to stop and the worker has not written its verdict yet".
+    'stopping': False,
     '_wf_logs': {},  # {wf_idx: [log lines]} per-workflow logs for parallel mode
     '_wf_log_total': {},  # {wf_idx: lines ever produced} — see _push_log
     '_wf_names': {},  # {wf_idx: the workflow's user-facing name} for console lines
@@ -1308,6 +1311,10 @@ def _begin_run(data: dict, lang_header: str) -> dict:
 
             cancel_event = threading.Event()
             execution_state['cancel_event'] = cancel_event
+            # A fresh claim clears the last run's stop: it ended the moment its
+            # worker wrote the verdict, and this run must not inherit a "stopping"
+            # that would freeze its own Stop detection.
+            execution_state['stopping'] = False
             execution_state['results'] = {}
             reset_console_state()
             # Node ids THIS attempt visited. The run record outlives the canvas:
@@ -1480,6 +1487,13 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         # Run parked in a queue behind a run that can never finish.
         ctx = None
         outcome = RUN_FAILED
+        # Bound BEFORE the try: the finally reaches for it on every exit, and a
+        # failure before the store opened (a refused runs.db, a Stop caught in
+        # the first moments) used to raise UnboundLocalError *inside the
+        # finally* — skipping the rest of it: the queue never got the slot back,
+        # the log tee stayed over every later request's stdout. A stop that will
+        # not finish is exactly the stall this whole path exists to avoid.
+        created: list = []
         try:
             store = get_run_store()
             wf_fp = workflow_fingerprint(workflow)
@@ -1537,7 +1551,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # on — separating the records without separating that key is what keeps
             # 继续 findable after the split.
             split_records = mode == 'serial' and wf_count > 1
-            created: list = []
+            created = []  # rebind the outer pre-name so the finally always sees a list
             ctx['open_records'] = []
             if not split_records:
                 store.start_run(
@@ -1917,16 +1931,32 @@ def _is_collision(crawler, resume) -> bool:
     )
 
 
-def _backoff_for_retry(crawler, platform: str) -> None:
-    """Say it once, wait, and hand the crawler back a clean slate.
+def _backoff_for_retry(crawler, platform: str) -> bool:
+    """Say it once, wait out the back-off, and answer whether a retry is still wanted.
 
-    The two flags describe the attempt that just failed; the retry has to be able to
-    report a wall of its own, so they are cleared rather than left to be re-read.
+    The two flags the previous attempt set are cleared so the retry can report a wall
+    of its own. The wait is slice-checked against 停止, not one long ``sleep``: this is
+    the one place a stopped run could still be sitting when the user pressed Stop, and
+    a sleep that ignores it both delays the run-record verdict by up to
+    ``WALL_RETRY_BACKOFF`` and lets the caller open a second browser for a run already
+    declared over. False means "the user stopped us — do not retry".
     """
     add_log(t('run.wallRetry', platform=platform, n=int(Config.WALL_RETRY_BACKOFF)))
-    time.sleep(Config.WALL_RETRY_BACKOFF)
+    cancel = execution_state.get('cancel_event')
+    interrupted = False
+    deadline = time.monotonic() + float(Config.WALL_RETRY_BACKOFF)
+    while time.monotonic() < deadline:
+        if not execution_state['running']:
+            interrupted = True
+            break
+        if cancel is not None and cancel.wait(min(0.5, max(0.0, deadline - time.monotonic()))):
+            interrupted = True
+            break
+    # The retry gets a clean slate whether or not the wait was cut short: the flags
+    # describe the attempt that just failed.
     crawler.login_wall = False
     crawler.risk_blocked = False
+    return not interrupted
 
 
 def _crawl_with_collision_retry(crawler, handler, crawl_args: dict, resume: dict, platform: str):
@@ -1949,10 +1979,10 @@ def _crawl_with_collision_retry(crawler, handler, crawl_args: dict, resume: dict
     except BaseException:
         if not _is_collision(crawler, resume):
             raise
-        _backoff_for_retry(crawler, platform)
+        if not _backoff_for_retry(crawler, platform):
+            raise
         return handler(**crawl_args, resume=resume)
-    if not rows and _is_collision(crawler, resume):
-        _backoff_for_retry(crawler, platform)
+    if not rows and _is_collision(crawler, resume) and _backoff_for_retry(crawler, platform):
         rows = handler(**crawl_args, resume=resume)
     return rows
 
@@ -2007,6 +2037,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         headless=headless,
         cookie_dir=Config.COOKIE_DIR,
         use_profile=(ctx or {}).get('use_profile'),
+        abort=lambda: not execution_state['running'],
     )
     # Registered and guarded from here on: everything between buying a browser
     # and using it can still fail — a read-only or missing export directory, a
@@ -2704,7 +2735,11 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             kind = platform_for(url)
             if kind not in sessions:
                 crawler = get_crawler(
-                    kind, headless=False, cookie_dir=Config.COOKIE_DIR, use_profile=(ctx or {}).get('use_profile')
+                    kind,
+                    headless=False,
+                    cookie_dir=Config.COOKIE_DIR,
+                    use_profile=(ctx or {}).get('use_profile'),
+                    abort=lambda: not execution_state['running'],
                 )
                 sessions[kind] = (
                     crawler,
@@ -3081,12 +3116,29 @@ def stop_workflow():
     # Tell any row-by-row LLM loop to bail out at the next row boundary —
     # finished rows are already checkpointed and stay in results.
     execution_state['cancel_event'].set()
+    # The run is over as far as the browser is concerned; the verdict is not. The
+    # worker thread still owes `settle`/`finish_run`, and until it pays the record
+    # reads "running". `stopping` lets the console say "stopping…" instead of
+    # printing an outcome the run has not written yet.
+    execution_state['stopping'] = True
     execution_state['running'] = False
     crawlers = list(execution_state['active_crawlers'])
     execution_state['active_crawlers'].clear()
-    for c in crawlers:
-        with contextlib.suppress(OSError):
-            c.close()
+
+    def _finish_stop():
+        for c in crawlers:
+            with contextlib.suppress(OSError):
+                c.close()
+        _close_active_crawlers()
+
+    # Closing a browser is quick but not instantaneous, and a visible Chrome with a
+    # pending dialog can take its bounded grace to die. Doing it inline made the Stop
+    # *request* wait on it, so the button, its toast and the run-record refresh all
+    # hung behind teardown the user can already see happening. It runs on a side
+    # thread now; the crawlers are already out of the registry, so the worker's own
+    # finally cannot double-close them, and a browser the stop thread has not reached
+    # yet is closed by that finally when the run unwinds.
+    threading.Thread(target=_finish_stop, daemon=True).start()
     # Clear the console but NOT the results: a stopped run keeps everything it
     # already produced (rows, tables, exports) so nothing paid for is lost.
     #
@@ -3099,8 +3151,7 @@ def stop_workflow():
     # fresh slate belongs.
     execution_state.pop('current_input', None)
     execution_state['executor'] = None
-    _close_active_crawlers()
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'browsers': len(crawlers)})
 
 
 @app.route('/api/workflow/status', methods=['GET'])
@@ -3137,9 +3188,16 @@ def workflow_status():
             if isinstance(data, dict) and 'engine' in data:
                 chart_results[nid] = data
 
+    thread = execution_state.get('thread')
     return jsonify(
         {
             'running': execution_state['running'],
+            # A Stop flips `running` off on the request thread, but the worker still
+            # owes the record its verdict. `settling` is the gap: the browser must not
+            # print an outcome the run has not written, nor stop reading until the
+            # record has landed.
+            'stopping': bool(execution_state.get('stopping')) and execution_state['thread'] is not None,
+            'settling': bool(not execution_state['running'] and thread is not None and thread.is_alive()),
             'logs': execution_state['logs'][-200:],
             'log_total': execution_state['_log_total'],
             'workflows': wf_list,

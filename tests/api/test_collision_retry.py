@@ -56,7 +56,12 @@ class _Crawler:
 @pytest.fixture(autouse=True)
 def running(app_module, monkeypatch):
     """A live run, a cheap back-off, and a console to read the announcement off."""
+    import threading
+
     monkeypatch.setitem(app_module.execution_state, 'running', True)
+    # The back-off now wakes on the run's cancel_event; a fresh unset one says
+    # "nobody stopped" so the retry path is the only variable under test.
+    monkeypatch.setitem(app_module.execution_state, 'cancel_event', threading.Event())
     monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 0.01)
     app_module.reset_console_state()
     return app_module.execution_state
@@ -138,3 +143,31 @@ def test_the_retry_forgets_the_wall_it_just_saw(app_module, running):
 
     app_module._crawl_with_collision_retry(crawler, search, {}, {}, 'weibo')
     assert seen['wall_at_second_return'] is False
+
+
+def test_a_stop_cut_short_the_back_off_cancels_the_retry(app_module, running, monkeypatch):
+    """The whole point of a slice-checked wait: a Stop that lands during the back-off
+    must not spend a second crawl on a run the user already ended."""
+    import threading
+    import time
+
+    monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 30)
+    running['cancel_event'] = threading.Event()
+    running['cancel_event'].set()
+    crawler = _Crawler()
+    started = time.monotonic()
+    proceed = app_module._backoff_for_retry(crawler, 'weibo')
+    assert proceed is False, 'a cancelled wait must refuse the retry'
+    assert time.monotonic() - started < 1, 'the wait slept past the Stop instead of waking on it'
+
+
+def test_a_live_back_off_ends_by_itself_and_allows_the_retry(app_module, running, monkeypatch):
+    """The other answer: with no Stop, a short back-off runs out and the retry goes —
+    proving the previous test's False came from the cancel, not from a broken wait."""
+    import threading
+
+    monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 0.05)
+    running['cancel_event'] = threading.Event()
+    crawler = _Crawler()
+    assert app_module._backoff_for_retry(crawler, 'weibo') is True
+    assert crawler.login_wall is False, 'the retry slate is still cleared on the run-out path'

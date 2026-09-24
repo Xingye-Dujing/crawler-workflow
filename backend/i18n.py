@@ -651,6 +651,7 @@ _ZH = {
     'crawl.profile_stuck': (
         '等待 profile 释放超时（{seconds} 秒）：{dir} —— 可能有浏览器没被关闭，请在进程面板结束残留的 Chrome 后重试'
     ),
+    'crawl.profile_gave_up': '本次运行已停止：不再等待该 profile（{dir}），这次采集就此让路',
     'run.notCrawlable': (
         '「{label}」所在的平台（{platform}）目前只能保存登录 Cookie，还没有采集实现，'
         '因此不能作为数据源运行——请改用已支持的平台，或等该平台的抓取落地'
@@ -1352,6 +1353,7 @@ _EN = {
         'timed out waiting {seconds} s for the profile to free up: {dir} — a browser may have been left '
         'open; end the stray Chrome in the process panel and try again'
     ),
+    'crawl.profile_gave_up': 'this run was stopped: no longer waiting for the profile ({dir}), this crawl stands down',
     'run.notCrawlable': (
         'the platform behind "{label}" ({platform}) can store a login cookie but has no crawler yet, so it cannot '
         'run as a data source — pick a supported platform, or wait for this one to land'

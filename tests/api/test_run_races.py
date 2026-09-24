@@ -602,6 +602,12 @@ class TestStoreFailures:
         assert _wait(app_module), 'the worker never finished'
         assert app_module.execution_state['running'] is False, 'a failed store left the slot claimed'
         assert app_module.execution_state['outcome'] == 'failed'
+        # The finally itself must unwind to its last line. An early `created`
+        # UnboundLocalError once killed it right here — the run still LOOKED
+        # failed and freed, but `thread` was never released and, one line later,
+        # `_start_next_queued` never ran: every queued request waited behind a
+        # run that had already died. That is the stall 停止 must never become.
+        assert app_module.execution_state['thread'] is None, 'the worker died inside its own finally'
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'store' in blob.lower() or 'run record' in blob.lower(), blob
         # The next run must be able to start at all.

@@ -685,7 +685,17 @@ const workflow = {
         try {
             await fetch('/api/workflow/stop', { method: 'POST' });
             RunState.setRunning(false);
-            showToast(I18n.t('toast.workflowStopped'));
+            /* Not "已停止": the Stop request only asks. The browsers close on a side
+               thread and the run's own thread still owes the record its verdict, so
+               announcing the outcome here would be a claim the run has not made — and
+               the run-record row is still '运行中' until it lands. */
+            showToast(I18n.t('toast.stopping'));
+            var statusText = document.getElementById('status-text');
+            if (statusText) statusText.textContent = I18n.t('status.stopping');
+            /* Follow the record to its settled state so the panel flips 运行中 →
+               中断 without the user having to refresh it. The worker may still be
+               writing; awaitSettled re-reads until no row claims to be running. */
+            if (window.runsManager) runsManager.awaitSettled();
         } catch (e) {
             showToast(I18n.t('toast.stopFailed') + ': ' + e.message);
         }
@@ -705,6 +715,12 @@ const workflow = {
         /* The expiry toast is once-per-run: the flag stays set for the rest of
            the crawl, and polling every second would otherwise shout forever. */
         var cookieWarned = false;
+        /* A Stop makes `running` false before the verdict is written, so the record
+           briefly reads 运行中 with no run behind it. Keep reading through that window
+           (bounded, so a wedged worker cannot hang the console open forever) instead
+           of printing a verdict the run never gave. */
+        var SETTLE_TICKS = 15;
+        var settleTicks = 0;
         var interval = setInterval(async function () {
             try {
                 var resp = await fetch('/api/workflow/status');
@@ -712,6 +728,14 @@ const workflow = {
                 if (result.cookie_expired && !cookieWarned) {
                     cookieWarned = true;
                     showToast(I18n.t('toast.cookieExpired'));
+                }
+                if (result.running) {
+                    settleTicks = 0;
+                    /* The panel that shows what has run keeps itself current while a
+                       run is live: the row appears and advances without a manual
+                       refresh. It only re-reads when open, and never while a detail
+                       row is being read. */
+                    if (window.runsManager) runsManager.autoRefresh();
                 }
                 if (result.logs) {
                     var lastLog = result.logs[result.logs.length - 1];
@@ -784,6 +808,13 @@ const workflow = {
                     }
 
                     /* Status bar update */
+                    if (!result.running && (result.settling || result.stopping) && settleTicks < SETTLE_TICKS) {
+                        /* The Stop was received but the worker has not written the
+                           verdict: keep reading rather than guess 'failed'/'interrupted'
+                           from counts a finalizing run is still moving. */
+                        settleTicks += 1;
+                        return;
+                    }
                     if (!result.running) {
                         clearInterval(interval);
                         RunState.setRunning(false);
@@ -817,6 +848,10 @@ const workflow = {
                         }
                         I18n.apply();
                         stats.refresh();
+                        /* The worker's verdict has landed: one last read so the row
+                           in the panel speaks it too — this tick is the first one that
+                           was allowed to trust the record. */
+                        if (window.runsManager) runsManager.refreshIfOpen();
                         /* Only a run that left work behind is worth offering to
                            continue — a clean completion and a refused definition
                            both have nothing to resume. */
@@ -3760,6 +3795,9 @@ var runsManager = {
                what has run is where someone looks for what has not started. */
             this._queue = (result.ok && result.queue) || [];
             this.render(this._lastRuns);
+            /* The table was replaced: whatever row had been expanded is gone, and
+               a stale flag would silence auto-refresh for a detail nobody can see. */
+            this._detail = null;
         } catch (e) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
         }
@@ -3768,6 +3806,48 @@ var runsManager = {
     refreshIfOpen() {
         var panel = this.panel();
         if (panel && panel.classList.contains('open')) this.refresh();
+    },
+
+    /* Follow a live run without the user opening anything: while the console sees
+       `running`, the panel that lists runs keeps itself current so the row appears
+       and advances on its own. It stays silent when the panel is closed (no polling
+       a panel nobody is reading) and while a detail row is expanded — re-rendering
+       there would yank the very table the user is reading out from under them. */
+    autoRefresh() {
+        if (this._detailOpen()) return;
+        this.refreshIfOpen();
+    },
+
+    _detailOpen() {
+        /* The flag, not a DOM probe: render() replaces the whole table, so an
+           expanded row can only have come from the last render — and every path
+           that wipes rows (a manual refresh, a re-render) clears the flag with
+           them. A real `querySelector` here would ask the page a question the
+           panel's own bookkeeping already answers truthfully. */
+        return !!this._detail;
+    },
+
+    /* Any listed record still claiming to be running. Right after 停止 this is true
+       even though the server already says running=false — the row turns 中断 only
+       when the worker's finally writes it, and this is the flag awaitSettled polls. */
+    _anyRunning() {
+        return (this._shown || []).some(function (r) {
+            return r.status === 'running';
+        });
+    },
+
+    /* Keep re-reading after a stop until the record has actually settled. Bounded so
+       a wedged worker cannot make the panel poll forever; a missed flip is repaired
+       the moment the panel is next opened. */
+    async awaitSettled(tries, waitMs) {
+        var self = this;
+        var n = tries || 20;
+        var step = waitMs || 500;
+        for (var i = 0; i < n; i++) {
+            if (!this._detailOpen()) this.refreshIfOpen();
+            await new Promise(function (done) { setTimeout(done, step); });
+            if (!self._anyRunning()) break;
+        }
     },
 
     /* The waiting list, drawn above the finished records. Each row can only be
@@ -4045,6 +4125,7 @@ var runsManager = {
         var existing = document.getElementById('runs-mgr-detail-' + runId);
         if (existing) {
             existing.remove();
+            if (this._detail === runId) this._detail = null;
             return;
         }
         try {
@@ -4111,7 +4192,10 @@ var runsManager = {
                         (body || '<div class="runs-mgr-empty">' + I18n.t('runsMgr.noNodes') + '</div>') +
                         '</div>') +
                 '</td>';
-            if (row) row.after(tr);
+            if (row) {
+                row.after(tr);
+                this._detail = runId;
+            }
         } catch (e) { /* leave the table as it was */ }
     },
 };

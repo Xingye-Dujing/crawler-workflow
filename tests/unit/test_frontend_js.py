@@ -866,3 +866,33 @@ class TestRunRecordsPanel:
         }
         assert runsmgr['twoNodeBody']['workflow_name'] == '周报表 + 明细表'
         assert runsmgr['twoNodeToasts'] == [], f'a refused run would show as a missing POST: {runsmgr["twoNodeToasts"]}'
+
+
+class TestThePanelFollowsALiveRun:
+    """The 运行记录 panel is now a live view, not a snapshot.
+
+    The user's complaint had a precise shape: 停止 closed the browsers instantly,
+    but the row went on saying 运行中 — because re-reading the panel had been
+    left to happenstance. These scenarios drive the real runsManager through a
+    fake server whose answers change between reads: the panel must follow a live
+    run, must not yank an expansion the user is reading, must stay silent when
+    closed, and — after a stop whose verdict lands late — must keep re-reading
+    until no row still claims to be running, then show the settled state.
+    """
+
+    def test_a_closed_panel_asks_the_server_for_nothing(self, runsmgr):
+        assert runsmgr['follow']['closedAsksForNothing'] is True
+
+    def test_an_open_panel_follows_the_live_run(self, runsmgr):
+        assert runsmgr['follow']['followedLive'] is True, 'the running row was not re-read'
+
+    def test_an_expanded_detail_row_pauses_the_follow(self, runsmgr):
+        assert runsmgr['follow']['pausedForReading'] is True, (
+            'a live refresh re-rendered the table out from under a row being read'
+        )
+
+    def test_awaiting_the_settle_re_reads_until_the_verdict_lands(self, runsmgr):
+        follow = runsmgr['follow']
+        assert follow['spun'] == 3, f'it stopped re-reading too early or never stopped: {follow["spun"]}'
+        assert follow['settled'] is True
+        assert follow['showedVerdict'] is True, 'the panel never rendered the settled record'

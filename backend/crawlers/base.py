@@ -87,6 +87,7 @@ class Crawler(ABC):
         cookie_path: str | None = None,
         for_login: bool = False,
         profile_dir: str | None = None,
+        abort=None,
     ):
         self.headless = headless
         self.cookie_path = cookie_path
@@ -94,6 +95,12 @@ class Crawler(ABC):
         # the same device to the site (see ``browser_profiles``). None is the old
         # behaviour: a throwaway profile plus whatever cookie file we plant into it.
         self.profile_dir = str(profile_dir or '') or None
+        # Why THIS browser may not wait: set by the executor to "the run was
+        # stopped", consulted while queued on the profile lock. A Stop that still
+        # had the wait outstanding bought a browser for a run already declared
+        # over — or never reached its finally at all, stranding the record on
+        # 运行中 and the queue behind it.
+        self._profile_abort = abort
         if for_login:
             # A window the user looks at is not a crawl. The login page's QR code is
             # an ``<img>``, so the content blocker that saves seconds on every
@@ -145,8 +152,14 @@ class Crawler(ABC):
         if not self.profile_dir:
             return None
         started = time.monotonic()
-        lock = browser_profiles.acquire_profile(self.profile_dir)
+        lock = browser_profiles.acquire_profile(self.profile_dir, abort=self._profile_abort)
         if lock is None:
+            abort = self._profile_abort
+            if abort is not None and abort():
+                # Not a stuck profile — the user stopped this run while it queued.
+                # Saying so matters: the other message blames a window that never
+                # closed and sends the user hunting a browser that is not there.
+                raise RuntimeError(t('crawl.profile_gave_up', dir=self.profile_dir))
             raise RuntimeError(
                 t(
                     'crawl.profile_stuck',

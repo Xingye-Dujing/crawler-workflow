@@ -84,9 +84,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id** (the page has no `.panel` class — a
   selector matching zero elements kept that test green while checking nothing), never falls back to
-  `<body>`, and asserts a per-container floor on the gathered element count, measured in the browser; new containers join that list with their floor. Resolve on-screen wording from `I18n`
-  inside the browser, not a pasted copy — one label drifted and the test demanded a string the product
-  never emits.
+  `<body>`, and asserts a per-container floor on the gathered element count, measured in the
+  browser. Resolve on-screen wording from `I18n` inside the browser, not a pasted copy — one
+  label drifted and the test demanded a string the product never emits.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the
   one the bug was about. When you test a record, a run or a panel row, list the dimensions first
   (`mode`, `headless`, `wf_count`, resume state, language, platform …) and cover the grid.
@@ -134,25 +134,23 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   still there after re-reading (weibo flashes a login page on the way through).
 - **One profile is one browser, and a parallel canvas has to be told that.** chromedriver pre-writes
   `<user-data-dir>/Default/Preferences`, so two sessions created in one directory at the same instant
-  cannot both come up.
-  `browser_profiles.acquire_profile(dir)` is a plain, **non-reentrant**
-  `Lock` keyed by normalised path, held for the crawler's whole life and released in `close()`; it must
-  stay non-reentrant because `_close_login_browser` releases it from a *side* thread. Waiting is
-  not free, so the user decides per run: `profileCollisions()` + `_confirmProfileChoiceBeforeRun()`
-  ask 用 Profile vs 本次不用 and the answer travels as `use_profile` — **except with 真排队 on**, which
-  has answered it for the whole program already.
+  cannot both come up. `browser_profiles.acquire_profile(dir)` is a plain, **non-reentrant** `Lock`
+  held for the crawler's whole life and released in `close()` — non-reentrant because
+  `_close_login_browser` releases it from a *side* thread. The user decides per run —
+  用 Profile vs 本次不用 — and the answer travels as
+  `use_profile`; 真排队 on has answered it for the whole program already.
   **A site's rate limit is a second collision**: two throwaway browsers can still be bounced as the
   *account* searched twice in one second. So `crawl_gate.hold(platform)` orders crawls by platform:
-  `same_platform_queue` on
-  holds the turn until that crawl *finishes*; off spaces the *starts* of in-flight crawls
-  by `same_platform_stagger` seconds (错峰; serial is seamless), 0 = no wait.
-  A matrix `serial_only` platform (weibo: parallel paging draws the login wall) is always queued
-  whatever the switch says; the browser warns first. **No rest at a turn's end**
-  (`docs/crawler_notes.md`). A wall met **before the
-  first row** retries once after a back-off; a wall met after rows is the cookie dying
-  and must go to 继续 instead. **Absence means "follow the setting" — never coerce missing to `False`,** or
-  one dialog's answer becomes a global override. `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node
-  fails with the directory named, never with a driver stack trace.
+  `same_platform_queue` on holds the turn until that crawl *finishes*; off spaces the *starts*
+  of in-flight crawls by `same_platform_stagger` seconds (错峰; 0 = no wait; serial is seamless).
+  A matrix `serial_only` platform is always queued whatever the switch says; the browser warns
+  first. A wall met **before the first row** retries once after a back-off; a wall met after
+  rows is the cookie dying and must go to 继续 instead. **Absence means "follow the setting" —
+  never coerce missing to `False`,** or one dialog's answer becomes a global override. A Stop is
+  a request, not a verdict: status answers `stopping`/`settling` while the worker is still computing
+  it, and every wait (profile lock, wall back-off) polls whether the run is still live.
+  `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node fails with the directory named,
+  never with a driver stack trace.
 - **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.**
   `browser_profiles.py` resolves `data/chrome_profile/<platform>` (or the user's absolute
   `browser_profile_dir`) and `get_crawler` passes it as `--user-data-dir`, so the login window and the
@@ -244,7 +242,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   by fingerprint, not by rows; the source node is never adopted, it resumes by cursor; and
   `begin_node` reporting `dropped_stale` cancels reuse, because those rows were deleted.
 - **Startup recovery shares the end-of-run settlement.** A node leaves `running` only through
-  `finish_node`, which a kill skips, so `node_runs.row_count` still holds the 0 `begin_node` wrote. `promote_stale_runs` must call
+  `finish_node`, which a kill skips, so `node_runs.row_count` still holds the 0 `begin_node`
+  wrote. `promote_stale_runs` must call
   `settle_nodes` (status *and* count from the rows) — the panel's 已存行数 and the 续跑
   node's "adopt the fullest node" both read that column, so a status-only promotion
   reported a 900-row crawl as empty and the user discarded paid-for data.

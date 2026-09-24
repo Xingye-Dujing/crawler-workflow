@@ -37,12 +37,13 @@ class Recorder:
 
     last = None
 
-    def __init__(self, headless=True, cookie_path=None, for_login=False, profile_dir=None):
+    def __init__(self, headless=True, cookie_path=None, for_login=False, profile_dir=None, abort=None):
         Recorder.last = {
             'headless': headless,
             'cookie_path': cookie_path,
             'for_login': for_login,
             'profile_dir': profile_dir,
+            'abort': abort,
         }
 
 
@@ -229,6 +230,64 @@ class TestOneBrowserPerProfile:
         for t in threads:
             t.join(30)
         assert order == ['holder-finished', 'waiter-entered'], order
+
+    def test_an_abort_ends_the_queue_wait_instead_of_burying_the_stop(self, tmp_path):
+        """A wait that cannot be cancelled turns 停止 into a lie: the node keeps
+        sitting on the lock, the run keeps its slot, the record keeps reading
+        运行中 — and the browser the Stop already closed was the only reason the
+        wait had an end. The abort is polled in slices, so it lands within ~0.5 s
+        rather than after the whole PROFILE_LOCK_TIMEOUT."""
+        path = str(tmp_path / 'weibo')
+        held = threading.Event()
+        release = threading.Event()
+
+        def holder():
+            lock = browser_profiles.acquire_profile(path, timeout=20)
+            held.set()
+            release.wait(20)
+            browser_profiles.release_profile(lock)
+
+        thread = threading.Thread(target=holder, daemon=True)
+        thread.start()
+        held.wait(20)
+        give_up = threading.Event()
+        give_up.set()
+        started = time.monotonic()
+        lock = browser_profiles.acquire_profile(path, timeout=20, abort=lambda: give_up.is_set())
+        release.set()
+        thread.join(30)
+        assert lock is None, 'the aborted wait still took the profile'
+        assert time.monotonic() - started < 1.5, 'the abort was polled too coarsely to end the wait'
+
+    def test_a_crawler_abandons_the_profile_queue_when_its_run_stops(self, tmp_path, monkeypatch):
+        """The crawl side of the same promise: the executor's "run is over" check
+        reaches the profile wait, and a crawler that gives up the queue says it
+        gave up — not blames a browser that was never left open."""
+        import crawlers
+
+        monkeypatch.setattr(crawlers.browser_profiles.Config, 'PROFILE_LOCK_TIMEOUT', 20)
+        path = str(tmp_path / 'weibo')
+        held = browser_profiles.acquire_profile(path, timeout=20)
+        assert held is not None
+        try:
+            with pytest.raises(RuntimeError) as caught:
+                _make_waiting_crawler(path)
+        finally:
+            browser_profiles.release_profile(held)
+        text = str(caught.value)
+        assert '停止' in text or 'stopped' in text.lower(), f'not the gave-up line: {text}'
+        assert '超时' not in text and 'timed out' not in text.lower(), 'a Stop was reported as a stuck profile'
+
+
+def _make_waiting_crawler(profile_dir: str):
+    """A real crawler class pointed at a busy profile with a run already stopped.
+
+    Only the profile claim runs — the browser is never reached — so no Chrome and
+    no monkeypatched driver are needed to exercise the give-up path.
+    """
+    from crawlers.weibo import WeiboCrawler
+
+    return WeiboCrawler(headless=True, profile_dir=profile_dir, abort=lambda: True)
 
     def test_a_claim_taken_on_one_thread_can_be_released_from_another(self, tmp_path):
         """The browser is closed on a helper thread, so the lock has to survive that.

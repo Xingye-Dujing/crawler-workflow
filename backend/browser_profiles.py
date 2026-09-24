@@ -87,15 +87,31 @@ def lock_for(path: str) -> threading.Lock:
         return lock
 
 
-def acquire_profile(path: str, timeout: float = None):
+def acquire_profile(path: str, timeout: float = None, abort=None):
     """Take exclusive use of *path*; return the lock, or None if it stayed busy.
 
     None is an answer the caller must not ignore: proceeding anyway is the crash
     this prevents. The timeout exists because a browser that was killed without
     closing would otherwise park every later run of that platform.
+
+    ``abort`` makes the wait cancellable in half-second slices: a run the user
+    stopped must not sit out the timeout behind a browser the stop has already
+    closed — the wait ending on Stop is what lets the worker reach its finally
+    and turn the record from 运行中 into its verdict. Without it the acquire
+    stays the single blocking call it always was.
     """
     lock = lock_for(path)
-    return lock if lock.acquire(timeout=timeout if timeout is not None else Config.PROFILE_LOCK_TIMEOUT) else None
+    if abort is None:
+        return lock if lock.acquire(timeout=timeout if timeout is not None else Config.PROFILE_LOCK_TIMEOUT) else None
+    deadline = time.monotonic() + (timeout if timeout is not None else Config.PROFILE_LOCK_TIMEOUT)
+    while True:
+        if abort():
+            return None
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return None
+        if lock.acquire(timeout=min(0.5, left)):
+            return lock
 
 
 def release_profile(lock) -> None:

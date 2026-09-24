@@ -30,8 +30,10 @@ const KEYS = {
     'status.running': 'running',
     'status.progress': 'progress {done}/{total}',
     'status.completed': 'completed',
+    'status.stopping': 'STOPPING',
     'status.nodes': 'Nodes: ',
     'console.all': 'ALL',
+    'toast.stopping': 'STOPPING-TOAST',
     'toast.cookieExpired': 'COOKIE-EXPIRED',
     'toast.workflowCompleted': 'WORKFLOW-COMPLETED',
     'toast.workflowEnded': 'WORKFLOW-ENDED {done}/{total}',
@@ -213,6 +215,39 @@ await finishCase(
     'endedInterrupted',
     status(['done'], 4, { running: false, completed_nodes: 1, total_nodes: 3, outcome: 'interrupted' })
 );
+
+/* A Stop flips running off before the worker writes the verdict. The poller must
+   NOT announce an outcome in that window — it keeps reading until the record
+   settles. This is the gap that made the panel show 运行中 forever: here it is
+   measured as "no verdict toast on the settling tick, verdict on the settled one". */
+async function settleCase(name, payloads) {
+    toasts.length = 0;
+    resumeRefreshes = 0;
+    tick = null;
+    wf.pollStatus();
+    const sawTick = [];
+    for (const payload of payloads) {
+        await answer(payload);
+        sawTick.push(tick !== null); // still polling?
+    }
+    out[name] = { toasts: toasts.slice(), stillPolling: sawTick };
+}
+
+await settleCase('settlingThenSettled', [
+    status(['working'], 4, { running: false, settling: true, completed_nodes: 1, total_nodes: 3, outcome: '' }),
+    status(['done'], 4, { running: false, completed_nodes: 1, total_nodes: 3, outcome: 'interrupted' }),
+]);
+
+/* Pressing 停止 announces "stopping…", not "stopped" — the run has not reported
+   an outcome yet, and the toast that lies about it is what the user reads. */
+toasts.length = 0;
+sandbox.__byId('status-text').textContent = 'running';
+nextAnswer = { ok: true, browsers: 2 };
+await wf.stop();
+out.stopPress = {
+    toasts: toasts.slice(),
+    statusText: sandbox.__byId('status-text').textContent,
+};
 
 /* The status bar carries the activity without the console's clock, and keeps the
    progress ratio rather than overwriting it with a different statistic. */

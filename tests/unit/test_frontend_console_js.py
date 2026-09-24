@@ -118,3 +118,17 @@ class TestRunEndReporting:
         assert console['tabBOnOpen'] == ['b-only'], 'a tab must not open blank on lines it already received'
         assert console['tabB'] == ['b-two'], 'only the line new to that tab may be appended'
         assert console['allAfterB'] == ['shared'], "乙's lines must not have leaked into 全部"
+
+    def test_a_stop_that_has_not_landed_prints_no_verdict(self, console):
+        """The gap between the Stop request and the worker's verdict is the whole
+        reason the record used to look frozen: the poller must keep reading and
+        keep its mouth shut until the run has actually spoken."""
+        case = console['settlingThenSettled']
+        assert case['toasts'] == ['WORKFLOW-STOPPED'], 'the settling tick announced an outcome it did not have'
+        assert case['stillPolling'] == [True, False], 'the poller gave up before the settle, or never stopped'
+
+    def test_pressing_stop_says_stopping_not_stopped(self, console):
+        """停止 is a request; the toast may only claim what the request did."""
+        case = console['stopPress']
+        assert case['toasts'] == ['STOPPING-TOAST'], case['toasts']
+        assert case['statusText'] == 'STOPPING'

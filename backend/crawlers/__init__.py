@@ -58,8 +58,13 @@ def get_crawler(
     cookie_dir: str = None,
     for_login: bool = False,
     use_profile: bool = None,
+    abort=None,
 ):
     """Build the crawler for *platform*, in that platform's own browser profile.
+
+    ``abort`` is the executor's "this run is over" check, forwarded to the
+    profile wait: a stopped run must abandon the queue for a busy profile
+    instead of buying a browser nobody asked for any more.
 
     ``use_profile`` decides *this browser* only: None follows the user's setting,
     False gives a throwaway profile. The choice travels with the run rather than
@@ -82,7 +87,7 @@ def get_crawler(
     profile = browser_profiles.profile_dir_for(platform, enabled=use_profile)
     planting = not profile or not browser_profiles.is_used(platform)
     cookie_path = f'{cookie_dir}/{platform}_cookies.json' if (cookie_dir and planting) else None
-    crawler = cls(headless=headless, cookie_path=cookie_path, for_login=for_login, profile_dir=profile)
+    crawler = cls(headless=headless, cookie_path=cookie_path, for_login=for_login, profile_dir=profile, abort=abort)
     if profile:
         browser_profiles.mark_used(platform, imported=bool(cookie_path))
     return crawler

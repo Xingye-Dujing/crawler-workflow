@@ -89,7 +89,7 @@ def matrix(monkeypatch, app_module, tmp_path):
     SPANS.clear()
     asked = []
 
-    def _factory(platform, headless=True, cookie_dir=None, for_login=False, use_profile=None):
+    def _factory(platform, headless=True, cookie_dir=None, for_login=False, use_profile=None, abort=None):
         profile = browser_profiles.profile_dir_for(platform, enabled=use_profile)
         asked.append({'platform': platform, 'use_profile': use_profile, 'profile_dir': profile})
         return _MatrixCrawler(platform, profile)
