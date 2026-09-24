@@ -306,6 +306,12 @@ class TestContextMenu:
         assert ix['context_menu']['foldAction'] == 'ctxFoldNode'
         assert ix['context_menu']['foldLabel'] == 'FOLD'
 
+    def test_paste_is_offered_only_when_something_is_on_the_clipboard(self, ix):
+        """The action itself refuses silently, so an always-visible item was a menu
+        entry that did nothing — reads as broken, not as "nothing copied yet"."""
+        assert ix['context_menu']['pasteVisible'] == 'none', ix['context_menu']
+        assert ix['context_menu']['paste_after_copy'] == 'block'
+
     def test_the_menu_closes_as_it_acts(self, ix):
         assert ix['context_menu']['fold_action']['stillOpen'] is False
         assert ix['context_menu']['delete_action']['menuClosed'] is True

@@ -691,4 +691,34 @@ await pa.workflow.execute();
 await drain();
 out.one_problem_plain_toast = { toasts: toasts.slice() };
 
+/* ── the language switch must reach the tables that JS builds ──────────── */
+/* Both panels write their header row from the catalogue in JS, so `I18n.apply()`
+   re-stamps the static page around them and leaves the table in the old language
+   until the panel is closed and opened again — the headers and every status word in
+   the row are catalogue text, so half the UI kept speaking the previous language. */
+fresh();
+route('/api/data/datasets', {
+    ok: true,
+    datasets: [
+        { id: 'd1', name: 'a.csv', source: 'upload', row_count: 3, column_count: 2, size_bytes: 1234, used_by: [] },
+    ],
+});
+route('/api/history/runs', HISTORY_RUNS);
+route('/api/history/series', { ok: true, rows: [] });
+id('dataset-panel').classList.add('open');
+id('history-panel').classList.add('open');
+sandbox.setLang('zh');
+await pa.datasetManager.refresh();
+await pa.historyPanel._loadRuns();
+const builtinHeaders = () => ({
+    /* `innerHTML` is the string the product assigned (the stub keeps it verbatim and
+       also parses it into children); `textContent` does not aggregate children. */
+    dataset: id('dataset-mgr-body').innerHTML,
+    history: id('history-runs-wrap').innerHTML,
+});
+const beforeFlip = builtinHeaders();
+sandbox.setLang('en');
+await drain();
+out.language_reaches_builtin_tables = { before: beforeFlip, after: builtinHeaders() };
+
 process.stdout.write(JSON.stringify(out));

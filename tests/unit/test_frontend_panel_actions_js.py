@@ -358,3 +358,22 @@ class TestOnePressOneToast:
         toasts = pa['one_problem_plain_toast']['toasts']
         assert len(toasts) == 1, toasts
         assert '\n' not in str(toasts[0]), f'one problem does not need a list: {toasts[0]!r}'
+
+
+class TestLanguageReachesEveryTable:
+    """The 数据集管理 and 执行历史 tables build their header row in JS from the
+    catalogue, so `I18n.apply()` — which re-stamps elements carrying `data-i18n` —
+    walks right past them. The rest of the page changed language and these two did
+    not, until the panel happened to be closed and reopened."""
+
+    def test_the_dataset_table_changes_language_with_the_page(self, pa):
+        got = pa['language_reaches_builtin_tables']
+        assert '名称' in got['before']['dataset'] and '行数' in got['before']['dataset'], got['before']
+        assert 'Name' in got['after']['dataset'] and 'Rows' in got['after']['dataset'], got['after']
+        assert '名称' not in got['after']['dataset'], 'the old header is still on screen underneath the new one'
+
+    def test_the_execution_history_table_changes_language_with_the_page(self, pa):
+        got = pa['language_reaches_builtin_tables']
+        assert '执行 ID' in got['before']['history'], got['before']
+        assert 'Run ID' in got['after']['history'] and 'Workflow' in got['after']['history'], got['after']
+        assert '执行 ID' not in got['after']['history']

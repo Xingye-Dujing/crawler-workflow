@@ -2325,34 +2325,53 @@ var historyPanel = {
             var resp = await fetch('/api/history/runs');
             var result = await resp.json();
             if (!result.ok) return;
-            var select = document.getElementById('history-workflow-select');
-            var current = select.value;
-            select.innerHTML = '<option value="">' + I18n.t('history.allWorkflows') + '</option>' +
-                result.workflow_names.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
-            if (current) select.value = current;
-
-            var wrap = document.getElementById('history-runs-wrap');
-            if (!result.runs.length) {
-                wrap.innerHTML = '<div class="dashboard-empty">' + I18n.t('history.empty') + '</div>';
-                return;
-            }
-            var html = '<table class="history-runs-table"><thead><tr>' +
-                '<th>' + I18n.t('history.runId') + '</th><th>' + I18n.t('history.workflowName') + '</th>' +
-                '<th>' + I18n.t('history.startedAt') + '</th><th>' + I18n.t('history.metricCount') + '</th>' +
-                '<th></th>' +
-                '</tr></thead><tbody>';
-            result.runs.forEach(function (r) {
-                /* The id goes into a data attribute, not into an inline handler:
-                   it is database text, and one quote would end the attribute and
-                   start whatever the user typed next. */
-                html += '<tr><td>' + escapeHtml(r.run_id) + '</td><td>' + escapeHtml(r.workflow_name || '') + '</td>' +
-                    '<td>' + escapeHtml(r.started_at) + '</td><td>' + r.metric_count + '</td>' +
-                    '<td class="history-ops"><button class="history-del" data-run-id="' + escapeHtml(r.run_id) +
-                    '">' + I18n.t('history.remove') + '</button></td></tr>';
-            });
-            html += '</tbody></table>';
-            wrap.innerHTML = html;
+            /* Kept, not only drawn: this table and the filter select are built in JS,
+               so `I18n.apply()` never reaches them — a language switch has to redraw
+               from what is already on hand instead of asking the server again. */
+            this._runs = result;
+            this._renderRuns();
         } catch (e) { /* non-fatal */ }
+    },
+
+    _renderRuns() {
+        var result = this._runs;
+        if (!result) return;
+        var select = document.getElementById('history-workflow-select');
+        var current = select.value;
+        select.innerHTML = '<option value="">' + I18n.t('history.allWorkflows') + '</option>' +
+            result.workflow_names.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+        if (current) select.value = current;
+
+        var wrap = document.getElementById('history-runs-wrap');
+        if (!result.runs.length) {
+            wrap.innerHTML = '<div class="dashboard-empty">' + I18n.t('history.empty') + '</div>';
+            return;
+        }
+        var html = '<table class="history-runs-table"><thead><tr>' +
+            '<th>' + I18n.t('history.runId') + '</th><th>' + I18n.t('history.workflowName') + '</th>' +
+            '<th>' + I18n.t('history.startedAt') + '</th><th>' + I18n.t('history.metricCount') + '</th>' +
+            '<th></th>' +
+            '</tr></thead><tbody>';
+        result.runs.forEach(function (r) {
+            /* The id goes into a data attribute, not into an inline handler:
+               it is database text, and one quote would end the attribute and
+               start whatever the user typed next. */
+            html += '<tr><td>' + escapeHtml(r.run_id) + '</td><td>' + escapeHtml(r.workflow_name || '') + '</td>' +
+                '<td>' + escapeHtml(r.started_at) + '</td><td>' + r.metric_count + '</td>' +
+                '<td class="history-ops"><button class="history-del" data-run-id="' + escapeHtml(r.run_id) +
+                '">' + I18n.t('history.remove') + '</button></td></tr>';
+        });
+        html += '</tbody></table>';
+        wrap.innerHTML = html;
+    },
+
+    onLanguageChange() {
+        /* Same rule as the run-records and export panels: the header row is a
+           catalogue string, so switching to English with this panel open used to
+           leave the whole table Chinese until it was closed and opened again. */
+        var panel = document.getElementById('history-panel');
+        if (!panel || !panel.classList.contains('open')) return;
+        this._renderRuns();
     },
 
     async loadSeries() {
@@ -2728,6 +2747,12 @@ function setLang(nextLang) {
        of only after the next open. */
     if (window.runsManager) runsManager.onLanguageChange();
     if (window.exportsManager) exportsManager.onLanguageChange();
+    /* Both of these had the method and never got the call, so their tables kept the
+       old language while the rest of the page re-stamped around them. `datasetManager`
+       is a top-level `var`, which does make it a window property — but the guard is
+       written against the binding for the same reason the resume bar once wasn't. */
+    if (typeof datasetManager !== 'undefined') datasetManager.onLanguageChange();
+    if (typeof historyPanel !== 'undefined') historyPanel.onLanguageChange();
 }
 
 function showToast(msg, ms) {

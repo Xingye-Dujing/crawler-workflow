@@ -609,6 +609,7 @@ out.context_menu = {
     foldLabel: doc.getElementById('ctx-fold-node').textContent,
     foldAction: doc.getElementById('ctx-fold-node').dataset.action,
     editVisible: doc.getElementById('ctx-edit').style.display,
+    pasteVisible: doc.getElementById('ctx-paste-node').style.display,
     position: [ctxMenu.style.left, ctxMenu.style.top],
 };
 /* The items are data-action driven through one document click listener. */
@@ -649,6 +650,12 @@ sandbox.innerHeight = 1080;
 canvas._contextNode = cmNode;
 clickItem('ctxDeleteNode');
 out.context_menu.delete_action = { nodes: Object.keys(canvas.nodes).length, menuClosed: !ctxMenu.classList.contains('open') };
+/* 粘贴节点 only means something once something has been copied. */
+const copyFirst = addNode('source', 5, 5);
+canvas._contextNode = copyFirst;
+clickItem('ctxCopy');
+dispatchOn(workspace, 'contextmenu', ev({ clientX: 120, clientY: 140, target: { closest: (sel) => (sel === '.node' ? doc.getElementById(copyFirst) : null) } }));
+out.context_menu.paste_after_copy = doc.getElementById('ctx-paste-node').style.display;
 /* A new node from the menu lands at the click position, not at a random one. */
 canvas._contextMenuPos = { x: 300, y: 300 };
 const beforeNew = Object.keys(canvas.nodes);

@@ -173,6 +173,11 @@ const canvas = {
             document.getElementById('ctx-rename').style.display = node ? 'block' : 'none';
             document.getElementById('ctx-copy').style.display = node ? 'block' : 'none';
             document.getElementById('ctx-delete-node').style.display = node ? 'block' : 'none';
+            /* 粘贴节点 is offered only when something is actually on the clipboard.
+               The action itself refuses silently, so the item used to sit there on every
+               canvas with nothing copied and do nothing when clicked — which reads as a
+               broken menu rather than as "there is nothing to paste". */
+            document.getElementById('ctx-paste-node').style.display = this._clipboardData ? 'block' : 'none';
             const foldItem = document.getElementById('ctx-fold-node');
             if (node) {
                 /* The element `closest()` answered with IS the node box; looking it up
