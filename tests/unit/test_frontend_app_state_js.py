@@ -202,12 +202,12 @@ class TestServerSettingsPanel:
         pulled = st['app_settings']['pulled']
         assert pulled['driver'] == 'D:\\chromedriver.exe'
         assert pulled['pageload'] == 40
-        assert pulled['values']['cookie_confirm_before_run'] is True
+        assert pulled['values']['cookie_preflight_before_run'] is True
 
     def test_a_checkbox_is_stamped_on_checked_not_on_value(self, st):
         """Writing `.value` on a checkbox changes nothing, so the panel would show a
         box that is not what the server has."""
-        assert st['app_settings']['pulled']['confirmChecked'] is True
+        assert st['app_settings']['pulled']['preflightChecked'] is True
 
     def test_a_key_the_server_does_not_have_leaves_the_field_empty(self, st):
         assert st['app_settings']['pulled']['missingKeyLeftAlone'] == ''

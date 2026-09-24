@@ -36,16 +36,9 @@ DEFAULTS = {
     'element_timeout': 15,
     # Local Ollama daemon (was OLLAMA_HOST env-only, with no UI).
     'ollama_host': Config.OLLAMA_HOST,
-    # Ask "is the cookie still fresh?" before every run that contains a
-    # crawler node. Long crawls can outlive a cookie; the prompt points the
-    # user at refresh + resume BEFORE burning time, and can be turned off.
-    # Only consulted when 自动验证 below is off: with the check running, the
-    # site has answered the question and asking it of a person again would be
-    # a second, weaker opinion about the same fact.
-    'cookie_confirm_before_run': True,
     #: Check whether each platform's session still works *before* starting a run that
     # crawls it, and refuse to start when one is walled (:mod:`cookie_preflight`). Off
-    # falls back to the prompt above — the user's own judgement, no browser bought.
+    # asks nothing and blocks nothing — the old 「执行前确认 Cookie」 fallback is gone.
     # On costs one page load per platform (cached for a few minutes), and is what turns
     # 「一小时后才发现 Cookie 早死了」 into a refusal that names the platform.
     'cookie_preflight_before_run': True,
@@ -181,7 +174,6 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 else:
                     vals[key] = v or DEFAULTS[key]
             elif key in (
-                'cookie_confirm_before_run',
                 'cookie_preflight_before_run',
                 'use_browser_profile',
                 'same_platform_queue',

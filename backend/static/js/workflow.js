@@ -371,25 +371,25 @@ const workflow = {
 
     async _cookieGateBeforeRun(opts, profileChoice) {
         /* One place decides what this run has to know about its cookies, because the
-           three answers have to stay in one order:
+           answers have to stay in one order:
 
            · nothing to crawl, or a 继续 → no question at all. A resumed run is already
              inside "refresh the cookie and carry on", and asking again is cruelty;
-           · 自动验证 on → ask the *sites* (``_preflightCookies``), which is a fact;
-           · off → ask the *user* (``_confirmCookieBeforeRun``), which is the prompt
-             this feature was built to replace and which stays reachable on purpose.
+           · 自动验证 on → ask the *sites* (``_preflightCookies``), which is a fact, and
+             a platform that answers with a login page refuses the run;
+           · off → proceed unanswered. The old 「执行前确认 Cookie」 prompt that stood here
+             was a guess about a session, and the user asked for it gone: with the real
+             check switched off, nothing is asked and nothing blocks.
 
-           A settings pull is done here so the two branches cannot disagree about
-           which one the user configured. ``profileChoice`` is the per-run answer from
-           the profile dialog, forwarded to the check so it probes the browser the run
-           will actually use. */
+           ``profileChoice`` is the per-run answer from the profile dialog, forwarded to
+           the check so it probes the browser the run will actually use. */
         if (opts && opts.resumeRunId) return true;
         var platforms = this._crawlPlatforms();
         if (!platforms.length) return true;
         if (window.AppSettings) await AppSettings.pull();
         var values = (window.AppSettings && AppSettings._values) || {};
         if (values.cookie_preflight_before_run) return await this._preflightCookies(platforms, profileChoice);
-        return await this._confirmCookieBeforeRun(values);
+        return true;
     },
 
     async _preflightCookies(platforms, profileChoice) {
@@ -472,23 +472,6 @@ const workflow = {
         return false;
     },
 
-    async _confirmCookieBeforeRun(values) {
-        /* The prompt the gate falls back to when 自动验证 is off: the user's own
-           judgement about a session that may have expired. Long crawls can outlive a
-           cookie, so the question is worth asking before burning time — but it is a
-           guess, which is exactly what the check above is not. Returns false only
-           when the user chose to go and refresh first. */
-        if (!values.cookie_confirm_before_run) return true;
-        var choice = await showDialog({
-            message: I18n.t('dialog.cookieConfirm'),
-            buttons: [
-                { label: I18n.t('dialog.cookieGoOn'), value: 'go' },
-                { label: I18n.t('dialog.cookieExit'), value: 'exit', primary: true },
-            ],
-        });
-        return choice === 'go';
-    },
-
     async execute(opts) {
         opts = opts || {};
         /* Validate before running */
@@ -543,10 +526,9 @@ const workflow = {
            the cookie probes below. */
         if (!(await this._confirmRegionBeforeRun())) return;
         /* A long crawl can outlive its cookie and die at the login wall an hour
-           in. Either the sites are asked whether that has already happened (自动验证,
-           which refuses the run when one says yes) or, with that check switched off,
-           the user is asked — and either way they can bail here instead of wasting a
-           run. Only fires when the canvas really contains a crawler node. */
+           in. When 自动验证 is on, the sites are asked whether that has already
+           happened and a login page refuses the run; with it off nothing is asked.
+           Only fires when the canvas really contains a crawler node. */
         if (!(await this._cookieGateBeforeRun(opts, profileChoice))) return;
         /* A second press while a run is in flight is no longer a dead end: the
            server parks the request and starts it when the slot frees. So every

@@ -127,8 +127,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   element which actually moves), `engine.pager.walk_pages` (cursor paging that follows the server's own
   value) and `engine.jsonpath` know nothing about any platform; a platform module declares only selectors,
   endpoints and column names. New crawl logic goes through these helpers — a second copy of a scroll loop
-  or a 万-parser is what this rule exists to prevent. No walk has a round/page budget: the user's target
-  answers "how much", and a backend cap only ever quit early with the target unmet. `Crawler.open(url)`
+  or a 万-parser is what this rule exists to prevent. No walk has a round/page budget: "how much"
+  is the user's target, never a constant. `Crawler.open(url)`
   is the only navigation
   entry point: it survives a renderer timeout, clears the dialog, and latches a wall only once it is
   still there after re-reading (weibo flashes a login page on the way through).
@@ -144,8 +144,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   **A site's rate limit is a second collision**: two throwaway browsers can still be bounced as the
   *account* searched twice in one second. So `crawl_gate.hold(platform)` orders crawls by platform, not
   directory, in whichever of the **two distinct modes** the user's switch means: `same_platform_queue` on
-  holds the turn until that crawl *finishes*; off spaces only their
-  *starts* by `same_platform_stagger` seconds and lets them overlap (错峰) — the number is the
+  holds the turn until that crawl *finishes*; off spaces the *starts* of crawls in flight
+  together by `same_platform_stagger` seconds (错峰; serial hands over seamlessly) — the number is the
   user's, 0 = neither wait. **No rest is armed when a turn ends** (`docs/crawler_notes.md`). A wall met **before the
   first row** retries once after a back-off; a wall met after rows is the cookie dying
   and must go to 继续 instead. **Absence means "follow the setting" — never coerce missing to `False`,** or
@@ -342,8 +342,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - Run-gating UX lives in `workflow.js execute()` → `_cookieGateBeforeRun`: `cookie_preflight_before_run`
   probes each platform of the canvas before the run and a login wall **refuses it** (no "run anyway");
   「无法核对」 — timeout, captcha, busy profile — never blocks, because no answer is not evidence of a dead
-  cookie. Off = the old `cookie_confirm_before_run` prompt; a resume or a crawl-free canvas skips both, and
-  saving/deleting/capturing a cookie drops the cached verdict. **A new settings key needs all four:**
+  cookie. Off asks and blocks nothing — an off switch means off; a resume or a crawl-free canvas skips the
+  probe, and saving/deleting/capturing a cookie drops the cached verdict. **A new settings key needs all four:**
   the bool branch in `settings_store.save_settings`, both app.js catalogs, and the `AppSettings` wiring.
 
 ## Style (differs from defaults)

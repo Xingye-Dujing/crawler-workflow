@@ -217,29 +217,54 @@ class TestStaggerOnly:
             holder.join(5)
 
     def test_the_wait_is_exactly_the_rest_of_the_gap(self, monkeypatch, isolated):
-        """A caller that arrives at once should be told to wait for the *remaining*
-        spacing, not for a fresh whole interval on top of the one already elapsed."""
+        """A caller that arrives while a company crawl is still in flight should be told
+        to wait for the *remaining* spacing, not for a fresh whole interval on top of
+        the one already elapsed."""
         _settings(monkeypatch, queue=False, stagger=10.0)
-        with crawl_gate.hold('weibo'):
-            pass
-        with crawl_gate.hold('weibo'):
-            pass
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release)
+        assert inside.wait(5)
+        try:
+            with crawl_gate.hold('weibo'):
+                pass
+        finally:
+            release.set()
+            holder.join(5)
         assert len(isolated['waits']) == 1, isolated['waits']
         assert 9.0 < isolated['waits'][0] <= 10.0, isolated['waits']
+
+    def test_a_serial_canvas_hands_over_seamlessly(self, monkeypatch, isolated):
+        """错峰 is arithmetic about overlap, not about the calendar: when the platform's
+        earlier crawl has already finished there is nothing left to collide with, so a
+        second crawl starts the instant it is asked for. The old implementation spaced
+        every *start* against the last one, which made a serial canvas sit out the gap
+        for company that had gone home."""
+        _settings(monkeypatch, queue=False, stagger=10.0)
+        for _round in range(3):
+            with crawl_gate.hold('weibo') as waited:
+                assert waited is False
+        assert isolated['waits'] == [], f'a serial hand-off paid a gap: {isolated["waits"]}'
 
     def test_three_crawls_leave_three_spaced_starts(self, monkeypatch, isolated):
         """The schedule is recorded at each crawl's *planned* start, so a queue of three
         does not all measure its gap from the first one's departure."""
         _settings(monkeypatch, queue=False, stagger=10.0)
-        for _round in range(3):
-            with crawl_gate.hold('weibo'):
-                pass
-        assert len(isolated['waits']) == 2, f'three crawls should pay two gaps: {isolated["gaps"]}'
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release)
+        assert inside.wait(5)
+        try:
+            for _round in range(2):
+                with crawl_gate.hold('weibo'):
+                    pass
+        finally:
+            release.set()
+            holder.join(5)
+        assert len(isolated['waits']) == 2, f'three crawls should pay two gaps: {isolated["waits"]}'
         assert all(9.0 < gap <= 10.0 for gap in isolated['waits']), isolated['waits']
 
     def test_a_quiet_platform_never_pays_the_gap(self, monkeypatch, isolated):
-        """Spacing is measured from the last start, so the first crawl after a long
-        pause is not made to wait for a company that left ages ago."""
+        """Spacing is measured from the last *overlapping* start, so the first crawl of
+        a platform is not made to wait for a company that was never in the room."""
         _settings(monkeypatch, queue=False, stagger=10.0)
         crawl_gate._LAST_START['weibo'] = 0.0
         with crawl_gate.hold('weibo') as waited:
@@ -258,16 +283,23 @@ class TestStaggerOnly:
         holder.join(5)
 
     def test_a_different_platform_is_not_spaced_either(self, monkeypatch, isolated):
-        """Spacing is per platform, so the one wait in here must be weibo waiting for
+        """Spacing is per platform, so the waits in here belong to weibo waiting for
         weibo — a gate that keyed on the directory or on nothing at all would charge
         zhihu for somebody else's schedule."""
         _settings(monkeypatch, queue=False, stagger=10.0)
-        for _round in range(2):
-            with crawl_gate.hold('weibo'):
-                pass
-        with crawl_gate.hold('zhihu') as waited:
-            assert waited is False
-        assert len(isolated['waits']) == 1, f'zhihu paid for weibo: {isolated["waits"]}'
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release)
+        assert inside.wait(5)
+        try:
+            for _round in range(2):
+                with crawl_gate.hold('weibo'):
+                    pass
+            with crawl_gate.hold('zhihu') as waited:
+                assert waited is False
+        finally:
+            release.set()
+            holder.join(5)
+        assert len(isolated['waits']) == 2, f'zhihu paid for weibo, or weibo lost its spacing: {isolated["waits"]}'
 
     def test_stop_cancels_a_spacing_wait_too(self, monkeypatch, isolated):
         """The wait in this mode can be minutes long, and 停止 has to reach it — the
@@ -282,12 +314,17 @@ class TestStaggerOnly:
 
         monkeypatch.setattr(crawl_gate, '_interruptible_sleep', sleeping)
         monkeypatch.setattr(crawl_gate.Config, 'PLATFORM_GATE_TIMEOUT', 5.0)
-        with crawl_gate.hold('weibo'):
-            pass
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release)
+        assert inside.wait(5)
         stopped = threading.Event()
         stopped.set()
-        with crawl_gate.hold('weibo', abort=lambda: stopped.is_set()) as waited:
-            assert waited is True
+        try:
+            with crawl_gate.hold('weibo', abort=lambda: stopped.is_set()) as waited:
+                assert waited is True
+        finally:
+            release.set()
+            holder.join(5)
         assert slept, 'the gap was skipped instead of waited-and-cancelled'
 
 

@@ -18,8 +18,8 @@ The rules this pins:
   failure the site never reported;
 * the block dialog opens the Cookie panel on the broken platform only when the user
   asked for it, and never closes a panel that was already open;
-* with 自动验证 off, the old prompt is still there and still decides, and with both
-  off nothing is asked at all;
+* with 自动验证 off nothing is asked at all — the old 「执行前确认 Cookie」 fallback
+  was deleted, an off switch means off;
 * the per-run profile answer travels to the check, so the probe tests the browser the
   run will use — and absence stays absence rather than becoming a global "off".
 """
@@ -139,16 +139,15 @@ DEAD = {
 
 CLEAN = {'ok': True, 'results': {}, 'blocked': [], 'unclear': [], 'probed': True}
 
-#: Both gates off is the baseline every other scenario is read against: the run
-#: starts with nothing asked and nothing said.
+#: Turning the check off is the baseline every other scenario is read against: the
+#: run starts with nothing asked and nothing said — there is no fallback prompt any
+#: more, an off switch means off.
 NO_GATE = {
     'cookie_preflight_before_run': False,
-    'cookie_confirm_before_run': False,
     'warn_mixed_region': False,
 }
 AUTO = {
     'cookie_preflight_before_run': True,
-    'cookie_confirm_before_run': True,
     'warn_mixed_region': True,
 }
 
@@ -220,20 +219,6 @@ SCENARIOS = [
         'opts': {'resumeRunId': 'r-int'},
         'preflight': CLEAN,
     },
-    {
-        'id': 'check-off-prompts',
-        'settings': {'cookie_preflight_before_run': False, 'cookie_confirm_before_run': True},
-        **_canvas(_chain(1, 'zhihu')),
-        'preflight': CLEAN,
-        'answers': {'confirm': 'exit'},
-    },
-    {
-        'id': 'check-off-prompt-said-go',
-        'settings': {'cookie_preflight_before_run': False, 'cookie_confirm_before_run': True},
-        **_canvas(_chain(1, 'zhihu')),
-        'preflight': CLEAN,
-        'answers': {'confirm': 'go'},
-    },
     {'id': 'both-off', 'settings': NO_GATE, **_canvas(_chain(1, 'zhihu')), 'preflight': CLEAN},
     {
         'id': 'links-name-the-platforms',
@@ -282,7 +267,6 @@ SCENARIOS = [
         'id': 'mixed-warning-off',
         'settings': {
             'cookie_preflight_before_run': True,
-            'cookie_confirm_before_run': False,
             'warn_mixed_region': False,
         },
         **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
@@ -441,18 +425,10 @@ class TestNoAnswerIsNotAnAnswer:
             assert 'not a pass' in joined or '不是「有效」' in joined, f'{scenario} must not imply a pass'
 
 
-class TestTheOldPromptStillExists:
-    def test_with_the_check_off_the_user_is_asked_instead(self, gate):
-        case = gate['check-off-prompts']
-        assert case['asked'] is False, 'the check is off: no browser is bought on a setting that said not to'
-        assert [dialog['values'] for dialog in case['dialogs']] == [['go', 'exit']]
-        assert case['ran'] is False
-
-    def test_the_prompt_says_go_and_the_run_starts(self, gate):
-        case = gate['check-off-prompt-said-go']
-        assert case['ran'] is True
-
+class TestTheCheckOffMeansOff:
     def test_with_both_switches_off_nothing_is_asked_at_all(self, gate):
+        """The old 「执行前确认 Cookie」 prompt used to sit on this branch and ask the
+        user to guess; an off switch now genuinely asks and blocks nothing."""
         case = gate['both-off']
         assert case['asked'] is False
         assert case['dialogs'] == []

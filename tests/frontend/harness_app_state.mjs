@@ -281,9 +281,9 @@ async function appSettings() {
     sandbox.showToast = (m) => toasts.push(String(m));
     /* A stub element has no `type`, so the panel's checkbox/text branch would always
        take the text path; declare the two shapes the real panel contains. */
-    doc.getElementById('set-cookie-confirm').type = 'checkbox';
+    doc.getElementById('set-cookie-preflight').type = 'checkbox';
     doc.getElementById('set-driver').type = 'text';
-    settingsAnswer = { ok: true, settings: { driver_path: 'D:\\chromedriver.exe', page_load_timeout: 40, cookie_confirm_before_run: true }, warnings: [] };
+    settingsAnswer = { ok: true, settings: { driver_path: 'D:\\chromedriver.exe', page_load_timeout: 40, cookie_preflight_before_run: true }, warnings: [] };
     await AppSettings.pull();
     results.pulled = {
         values: AppSettings._values,
@@ -291,7 +291,7 @@ async function appSettings() {
         pageload: doc.getElementById('set-pageload').value,
         /* A checkbox answers to .checked: writing .value instead leaves the panel
            showing a box that is not what the server has. */
-        confirmChecked: doc.getElementById('set-cookie-confirm').checked,
+        preflightChecked: doc.getElementById('set-cookie-preflight').checked,
         missingKeyLeftAlone: doc.getElementById('set-window').value,
     };
     /* A second pull is a no-op unless forced — the panel must not lose unsaved

@@ -91,7 +91,7 @@ sandbox.showDialog = async (spec) => {
  * stub routes by URL, with defaults that let a run reach the POST. */
 const defaultRoutes = () => ({
     '/api/cookies/status': { ok: true, cookies: { zhihu: true } },
-    '/api/settings': { ok: true, settings: { cookie_confirm_before_run: false } },
+    '/api/settings': { ok: true, settings: { cookie_preflight_before_run: false } },
     '/api/workflow/execute': { ok: true, run_id: 'newrun1' },
     '/api/runs/discard': { ok: true },
     '/api/runs/delete': { ok: true },

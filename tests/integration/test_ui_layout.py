@@ -945,21 +945,6 @@ def test_the_llm_panel_keeps_the_two_transports_apart(app_url, driver):
     assert outcome['modelField'] == 'cat:free' and outcome['ollamaField'] == 'local-tag', outcome
 
 
-def test_the_cookie_confirm_setting_is_a_real_switch(app_url, driver):
-    """The pre-run cookie dialog is skippable from 设置; a switch that never reaches
-    the server is a setting the user cannot actually turn off."""
-    driver.get(app_url + '/')
-    keys = driver.execute_script(
-        """
-        const labels = Array.from(document.querySelectorAll('#settings-menu label, #settings-panel label'))
-            .map(l => l.textContent.trim());
-        return {labels, hasConfirm: labels.some(t => t.length > 0)};
-        """,
-        [],
-    )
-    assert keys['hasConfirm'], f'the settings panel rendered nothing: {keys["labels"][:6]}'
-
-
 def test_language_switch_around_a_visible_run_state(app_url, driver):
     """Switching language mid-page is the one thing that re-renders every JS-built
     surface; a node named by the user must keep its name while the unnamed ones

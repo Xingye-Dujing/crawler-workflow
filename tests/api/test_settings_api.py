@@ -137,16 +137,15 @@ class TestSettingsWrite:
     @pytest.mark.parametrize(
         'key',
         [
-            'cookie_confirm_before_run',
             'cookie_preflight_before_run',
             'same_platform_queue',
             'use_browser_profile',
         ],
     )
     def test_the_switches_that_protect_a_run_default_to_on(self, client, key):
-        """The prompt protects an unassuming first run and the check protects it
-        better; queueing protects a crawl the site would otherwise bounce. Opting out
-        of any of them is the explicit act, not the default."""
+        """The check protects a run from an hour spent on a dead cookie; queueing
+        protects a crawl the site would otherwise bounce. Opting out of any of them
+        is the explicit act, not the default."""
         assert client.get('/api/settings').get_json()['settings'][key] is True
 
     @pytest.mark.parametrize(

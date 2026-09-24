@@ -152,8 +152,8 @@ class TestVerdicts:
         assert probes.calls == []
 
     def test_no_file_and_no_profile_leaves_nothing_to_probe(self, probes, monkeypatch, app_module):
-        """Refusing here is not the old prompt's 「COOKIE 是不是过期了」 guess: the file
-        is absent and no browser has ever held the platform's session."""
+        """This is a fact, not a guess about whether a cookie expired: the file is
+        absent and no browser has ever held the platform's session."""
         app_module.cookie_manager.delete('xiaohongshu')
         _use_profile(monkeypatch, True)
         verdict = cookie_preflight.probe('xiaohongshu')

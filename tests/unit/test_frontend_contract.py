@@ -299,19 +299,12 @@ class TestSettingsPanelParity:
             assert f'id="{element_id}"' in html, f'{key} is mapped to a missing #{element_id}'
             assert f"onSettingInput('{key}'" in html, f'#{element_id} never tells the server about {key}'
 
-    def test_the_two_cookie_gates_explain_their_relationship(self):
-        """The check and the prompt it replaces are one decision seen twice. If the
-        panel ever showed them as independent, a user could believe they had turned
-        the asking off while the measuring kept opening browsers — so each row has to
-        name the other one, in the language the user reads."""
-        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        en = app[app.index('dict: {') : app.index('zh: {')]
-        zh = app[app.index('zh: {') :]
-        assert '自动验证' in zh and '确认框' in zh, 'the Chinese rows stopped pointing at each other'
-        assert 'automatic check' in en and 'prompt' in en, 'the English rows stopped pointing at each other'
+    def test_the_preflight_switch_is_wired_in_the_panel(self):
+        """The check is now the only Cookie run-gate, so the panel must keep its
+        control; an orphaned row or a lost id would leave the setting unreachable."""
         html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
-        for element_id in ('set-cookie-preflight', 'set-cookie-confirm'):
-            assert f'id="{element_id}"' in html, f'the panel lost #{element_id}'
+        assert 'id="set-cookie-preflight"' in html, 'the panel lost the preflight switch'
+        assert "onSettingInput('cookie_preflight_before_run'" in html, 'the preflight switch never reaches the server'
 
 
 class TestCrawlMatrixParity:

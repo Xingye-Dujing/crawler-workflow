@@ -22,7 +22,10 @@ choice left to ask: the queue is decided for the whole program.
 
 **错峰** (with the switch off) — starts are spaced by 同平台错峰间隔 seconds and nothing
 more. Two crawls of one platform may still be running over each other; that is the
-真并行 the user asked for, with the one-second collision taken out of it. The spacing is
+真并行 the user asked for, with the one-second collision taken out of it. The spacing
+is arithmetic about *overlap*: it is owed only while another crawl of that platform is
+actually in flight, so a serial canvas — where the previous crawl finished before this
+one was asked for — hands over seamlessly and pays nothing. The spacing is
 what the wait buys, so the wait is the setting, not a constant in here.
 
 Either way, a platform the user never runs twice at once pays nothing: an uncontended
@@ -48,6 +51,13 @@ _LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS: dict[str, threading.Lock] = {}
 #: When each platform last started a crawl, so 错峰 can space the starts.
 _LAST_START: dict[str, float] = {}
+#: Crawls of one platform that are inside the gate right now — waiting to start or
+#: actually collecting. 错峰 is arithmetic about *overlap*: two same-platform crawls
+#: that run over each other must not leave a second apart, while a serial canvas has
+#: no company to wait for at all and hands over seamlessly. Without this count the
+#: spacing was measured from the last start alone, so a serial node paid the gap for
+#: a crawl that had finished long before it arrived.
+_ACTIVE: dict[str, int] = {}
 _GUARD = threading.Lock()
 
 
@@ -71,11 +81,12 @@ def stagger() -> float:
 
 
 def reset() -> None:
-    """Forget every queue and every start time. Test isolation, never a runtime act."""
+    """Forget every queue, every start time and every active seat. Test isolation, never a runtime act."""
     with _GUARD:
         _LOCKS.clear()
         _START_LOCKS.clear()
         _LAST_START.clear()
+        _ACTIVE.clear()
 
 
 def _interruptible_sleep(seconds: float, abort) -> None:
@@ -112,6 +123,11 @@ def _space_the_start(platform: str, log=None, abort=None) -> bool:
     because two crawls that arrive together must not both decide "the gap is mine" and
     leave at the same instant — that is the collision this mode exists to remove.
 
+    The gap is arithmetic about **overlap**: it is owed only while another crawl of
+    this platform is actually in flight. A serial canvas has no company to wait for,
+    and spacing its hand-offs would charge the user's seconds for a collision that
+    cannot happen — the previous crawl finished before this one was even asked for.
+
     The start is recorded at its scheduled moment rather than at release, so a third
     arrival measures its own gap from a queue it cannot see finished.
     """
@@ -127,7 +143,11 @@ def _space_the_start(platform: str, log=None, abort=None) -> bool:
                 raise RuntimeError(t('run.platformGateTimeout', platform=platform, n=int(Config.PLATFORM_GATE_TIMEOUT)))
     try:
         now = _now()
-        previous = _LAST_START.get(platform)
+        with _GUARD:
+            others = _ACTIVE.get(platform, 0) - 1
+        # Only *this* caller is in flight: the platform's earlier crawls have all
+        # finished, so there is nothing left to collide with and no gap to pay.
+        previous = _LAST_START.get(platform) if others > 0 else None
         ahead = max(0.0, gap - (now - previous)) if previous is not None else 0.0
         _LAST_START[platform] = now + ahead
         if ahead > 0:
@@ -162,7 +182,16 @@ def hold(platform: str, log=None, abort=None):
             # the canvas really does run both at once.
             yield False
             return
-        yield _space_the_start(platform, log=log, abort=abort)
+        # The seat is taken *before* the wait and held for the whole crawl: a caller
+        # is company for another start-spacing from the moment it commits to this
+        # platform, until its last page is on disk.
+        with _GUARD:
+            _ACTIVE[platform] = _ACTIVE.get(platform, 0) + 1
+        try:
+            yield _space_the_start(platform, log=log, abort=abort)
+        finally:
+            with _GUARD:
+                _ACTIVE[platform] -= 1
         return
     lock = _lock_for(platform, _LOCKS)
     # A non-blocking try first, because "did I queue?" has to be answered by whether
