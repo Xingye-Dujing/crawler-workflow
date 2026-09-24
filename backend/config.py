@@ -86,7 +86,10 @@ class Config:
     #: on one account). When 同平台排队 is on, a crawl that had to wait for its
     #: predecessor backs off this many seconds (plus jitter) before opening its
     #: browser — the gap is only paid where there was real contention, so a serial
-    #: canvas waits for nothing.
+    #: canvas waits for nothing. This is the *default*: the measured 12 that removes
+    #: both collisions, and the settings panel hands the number to the user, because
+    #: how patient a given account should be is a judgement about that account, not a
+    #: fact this code can know. 0 in the panel means "queue, but do not add a gap".
     SAME_PLATFORM_STAGGER = 12.0
 
     #: A wall met *before the first row* is that collision's shape, not a dead cookie:

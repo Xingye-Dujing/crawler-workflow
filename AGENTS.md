@@ -34,7 +34,10 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   - Device (real Chrome on `file://` fixtures + real Ollama): `... -m "integration or live_ollama"`.
   - Live (REAL crawls, both modes, skip when a cookie is absent): `... -m live_quick` crawls
     each platform exactly once and is the pre-change tier; `... -m live_site` is the full
-    pass (~an hour) and belongs to acceptance.
+    pass (~an hour) and belongs to acceptance. Both are **also split by network** (`live_cn`,
+    `live_os`): a VPN gets 502 from douyin and a Chinese network never reaches x.com. So run one
+    group, **stop and ask the user which network they are on**, then the other — a case in the wrong
+    group fails as 0 rows, which reads as a broken crawler.
   - **To run one device/live case you must override the marker filter as well as naming it** —
     `pytest tests/integration/x.py::test_y` alone reports `N deselected` and looks like it ran.
   - Coverage: `--cov=backend --cov-report=term`.
@@ -48,27 +51,23 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
 
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js` /
   `workflow.js` / `app.js` into a zero-dependency node `vm` (shared `harness_dom.mjs`) and are driven by
-  `tests/unit/test_frontend_*` pytest modules: validation gates, panel HTML, popups, catalog parity,
-  undo/redo, save/open/new, the run-records table, the profile fork. Any JS change to result-affecting
+  `tests/unit/test_frontend_*` pytest modules. Any JS change to result-affecting
   logic must sync a scenario there; `urlPlatform` (workflow.js) is contract-pinned against
   `utils.helpers.platform_for`.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` in
   workflow.js asks `Capabilities` which fields the selected mode requires; the branch it
   replaced (`comments→urls, wechat→urls, else keyword`) made the matrix's `author` and
-  `hot` modes unreachable from the UI — refused with a field the panel never showed, and
-  no request left the page. If `Capabilities` has not loaded, refuse by saying the
+  `hot` modes unreachable from the UI. If `Capabilities` has not loaded, refuse by saying the
   required fields could not be checked; never guess a shape.
 - **A canvas shortcut belongs to the canvas only while the user is not typing.** The
   keydown guard named `INPUT`/`SELECT` and forgot `TEXTAREA`, so Backspace at the end of
   a pasted URL deleted the SELECTED NODE, and an `f` typed anywhere outside an `<input>`
   was swallowed by the fold shortcut. Use `canvas._isTypingTarget()`, which asks what the
   element IS (`isContentEditable`, `.cselect`, …), not a growing tag list.
-- **History entries are snapshots, and identical ones are not entries.** `getState()`
-  deep-copies `params` because `updateParam` mutates the live dict — aliasing made every
-  parameter edit un-undoable. `_pushState()`
-  skips a state equal to the current one, and `restoreState()` brackets itself with
-  `_historySaving` so one restore (a draft open, an undo step) is ONE undo point: the
-  autosave used to consume the 50-deep stack and real edits fell out of it.
+- **History entries are snapshots, and identical ones are not entries.** `getState()` deep-copies
+  `params` (aliasing made every parameter edit un-undoable), `_pushState()` skips a state equal to the
+  current one, and `restoreState()` brackets itself with `_historySaving` so one restore is ONE undo
+  point — the autosave used to consume the 50-deep stack and push real edits out of it.
 - **One page boot must not be a single point of failure.** It is one `DOMContentLoaded`
   body, so any throw inside it skipped every later step (a missing ECharts CDN blanked
   the capability fetch, the dataset re-link, the autosave and the resume banner). Boot
@@ -82,17 +81,16 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   `resumeBar.refresh()` and `runsManager._busy()`. Guard the binding itself (`typeof X !== 'undefined'`)
   or export it (`window.X = X`, as app.js does for `LLMSettings`/`AppSettings`). (2) The DOM stub's matcher
   is real (see `harness_dom.mjs`); never fabricate a child when a query finds nothing — that turned a
-  deleted connection into a phantom. (3) **Decorating a function means forwarding its arguments:** app.js
-  re-wraps `openCookieDialog` to add drag/resize, and the wrapper's empty parameter list made 「open the
-  Cookie panel on the platform that just refused the run」 open it on whoever was selected before.
+  deleted connection into a phantom. (3) **A wrapper must forward its arguments:** app.js re-wraps
+  `openCookieDialog` for drag/resize, and its empty parameter list made 「open the Cookie panel on the
+  platform that just refused the run」 open it on whoever happened to be selected before.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id** (the page has no `.panel` class — a
   selector matching zero elements kept that test green while checking nothing), never falls back to
-  `<body>` silently, and asserts a per-container floor on the element count gathered (counted in real
-  Chrome, not guessed). New containers join that list with their floor; a JS-side subtree walk returns its
-  population alongside the verdict. Resolve on-screen wording from `I18n` inside the browser rather than
-  hardcoding it — a pasted copy of a label drifted (lower-case `parallel ×2` vs a demanded `PARALLEL`)
-  and the test asserted a string the product never emits.
+  `<body>`, and asserts a per-container floor on the gathered element count (counted in real Chrome,
+  not guessed); new containers join that list with their floor. Resolve on-screen wording from `I18n`
+  inside the browser rather than pasting a copy — one label drifted and the test demanded a string the
+  product never emits.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the
   one the bug was about. The 并行/串行 chip was wrong precisely because `mode` was never a column of the
   record test. When you test a record, a run or a panel row, list the dimensions first (`mode`,
@@ -107,29 +105,28 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
 
 - **The crawl matrix (`backend/crawl_capabilities.py`) is the only answer to "what can this platform
   collect".** It declares each platform's modes, the fields each mode needs (widget, default, floor,
-  ceiling, required-ness) and which crawler method runs. `app.py::_execute_source_node` dispatches
-  through it, `engine/workflow.py::validate` refuses through it, and `GET /api/capabilities` hands the
-  identical description to the browser, whose Data Source panel is generated from it. So a new platform
-  or mode is **one matrix entry**, never an `if platform == '…'` branch in four files — a reintroduced
-  branch is a second opinion that can disagree with the crawl. The module sits at the backend root (like
-  `i18n.py`) because `engine/workflow.py` reads it and must not import the crawler package. Field labels
-  are *frontend* catalog keys, required-field names *backend* ones (`field.*`), both pinned by
-  `test_frontend_contract.py::TestCrawlMatrixParity`; `target_count` stays 50 for every platform because
-  that is what the panel previews, whatever a crawler's signature says. **An unrecognised mode is refused
-  by name on a platform that offers a choice** (`engine.source_unknown_mode`), while `mode_for` still
-  falls back to the first mode for panel rendering and single-mode platforms: substituting a keyword
-  search for one creator's uploads is a different crawl, and 「缺少关键词」 sends the user to a field the
-  panel never showed. A field name reaches an inline handler, so one that is not `/^[\w.-]{1,64}$/` is
-  dropped whole; the JS-generated panel is tested against the matrix dumped from Python
-  (`harness_capabilities.mjs`), never a copy checked in.
+  ceiling, required-ness), which crawler method runs, and `region` — which network the site answers from
+  (`cn` / `overseas`), which both the mixed-network dialog and the `live_cn` / `live_os` markers read
+  rather than keeping their own list; an empty region asks nothing rather than guessing.
+  `app.py::_execute_source_node` dispatches through it, `engine/workflow.py::validate` refuses through
+  it, and `GET /api/capabilities` hands the identical description to the browser, whose Data Source
+  panel is generated from it. So a new platform or mode is **one matrix entry**, never an
+  `if platform == '…'` branch in four files. It sits at the backend root because
+  `engine/workflow.py` reads it and must not import the crawler package. Field labels are *frontend*
+  keys and required-field names *backend* ones (`field.*`), both pinned by
+  `test_frontend_contract.py::TestCrawlMatrixParity`. **An unrecognised mode is refused by name**
+  (`engine.source_unknown_mode`); `mode_for` still falls back to the first mode for panel rendering and
+  single-mode platforms — substituting a keyword search for one creator's uploads is a different crawl.
+  A field name reaches an inline handler, so one that is not `/^[\w.-]{1,64}$/` is dropped whole, and
+  the JS panel is tested against the matrix dumped from Python, never a copy checked in.
 - **A visible window must be doing something visible, and it must answer every preference a crawl set.**
   Each `Mode` declares how it collects (DOM walk / in-page fetch / per-row page) and the panel plus the
-  pre-run dialog read that field instead of re-judging it: bilibili 热榜 and the YouTube/weibo comment
-  crawls navigate once then `fetch`, so 窗口 mode shows a homepage and nothing else — ask once (headless
-  / keep window / cancel) before such a run. And a session preference is *stored* in the persistent
-  profile, so it outlives the crawl: a human-facing window that merely *omits* the image blocker
-  inherits it and shows a login page with no QR code to scan. 取 Cookie / 验证 Cookie windows — and the
-  pre-run cookie probe, which must agree with them — write 允许 explicitly (`_content_prefs`).
+  pre-run dialog read that field instead of re-judging it — a 窗口 run of a fetch-only mode shows a
+  homepage and nothing else, so the dialog asks about it once up front. And a session preference is
+  *stored* in the persistent profile, so it outlives the crawl: a human-facing window that merely
+  *omits* the image blocker inherits it and shows a login page with no QR code to scan. 取 Cookie /
+  验证 Cookie windows — and the pre-run cookie probe, which must agree with them — write 允许
+  explicitly (`_content_prefs`).
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count` (one
   万/千/亿/K/M/B parser), `engine.wall` (login / risk-control / root-bounce), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (the scroll that finds the
@@ -145,11 +142,15 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   `Lock` keyed by normalised path, held for the crawler's whole life and released in `close()`; it must
   stay non-reentrant because `_close_login_browser` releases it from a *side* thread. Waiting is
   not free, so the user decides per run: `profileCollisions()` + `_confirmProfileChoiceBeforeRun()`
-  ask 用 Profile vs 本次不用, and the answer travels as `use_profile`.
+  ask 用 Profile vs 本次不用 and the answer travels as `use_profile` — **except with 真排队 on**, which
+  has answered it for the whole program already (asking would offer a way out of the promise).
   **A site's rate limit is a second collision**: two throwaway browsers can start
   together and still be bounced — the *account* searched twice in one second. So
-  `crawl_gate.hold(platform)` orders crawls by platform, not directory (setting
-  `same_platform_queue`; sleeps only after a waited hand-off). A wall met **before the
+  `crawl_gate.hold(platform)` orders crawls by platform, not directory, in whichever of the
+  **two distinct modes** the user's switch means: `same_platform_queue` on holds the turn until
+  that crawl *finishes* (真排队, which is also what a profile does anyway); off spaces only their
+  *starts* by `same_platform_stagger` seconds and lets them overlap (错峰) — the number is the
+  user's, 0 = no spacing. A wall met **before the
   first row** retries once after a back-off; a wall met after rows is the cookie dying
   and must go to 继续 instead. **Absence means "follow the setting" — never coerce missing to `False`,** or
   one dialog's answer becomes a global override. `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node
@@ -331,10 +332,9 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   `Message:` block) used to render as several rows, so the browser's line-delta cursor skipped
   or repeated real console content; the running total advances by lines, not by `add_log` calls.
 - **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook.** Those
-  nodes get no "Executing node …" and no "Node … completed (n/N)" line. Everything that states a fact still
-  prints: the upload's own "Loaded uploaded file X: N rows", and any failure/skip/restore line (with
-  `node_label` — a silenced node that then fails is a run the user cannot diagnose). Progress counters
-  still count them.
+  nodes get no "Executing node …" or "Node … completed (n/N)" line, and progress counters still count
+  them. Everything that states a fact still prints: the upload's own "Loaded … N rows", and any
+  failure/skip/restore line — with `node_label`, or a silenced node that fails is undiagnosable.
 - Run-gating UX lives in `workflow.js execute()` → `_cookieGateBeforeRun`: `cookie_preflight_before_run`
   probes each platform of the canvas before the run and a login wall **refuses it** (no "run anyway");
   「无法核对」 — timeout, captcha, busy profile — never blocks, because no answer is not evidence of a dead

@@ -95,7 +95,10 @@ function world(sc) {
             var kind = null;
             if (values.indexOf('use') >= 0 && values.indexOf('skip') >= 0) kind = 'clash';
             else if (values.indexOf('update') >= 0) kind = 'expired';
-            else if (values.indexOf('go') >= 0) kind = 'confirm';
+            /* Both remaining dialogs offer 继续, so the *other* button is what tells
+               them apart — 「退出更新 Cookie」 only exists on the cookie prompt. */
+            else if (values.indexOf('go') >= 0 && values.indexOf('exit') >= 0) kind = 'confirm';
+            else if (values.indexOf('go') >= 0) kind = 'mixed';
             var answers = ${JSON.stringify(sc.answers || {})};
             return Promise.resolve(kind in answers ? answers[kind] : ${JSON.stringify(
                 sc.dialogChoice === undefined ? 'go' : sc.dialogChoice

@@ -17,7 +17,7 @@ from datetime import date, timedelta
 
 import pytest
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 TARGET = 15  # deep enough that one window (~10 cards) never finishes it
 EXPIRE_AFTER = 3  # the cookie dies once this many rows are stored

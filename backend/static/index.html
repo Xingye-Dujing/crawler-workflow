@@ -1382,6 +1382,19 @@
         <span class="dd-block-note" data-i18n="set.cookiePreflightHint">开：含采集节点的运行在按下执行之前，先用这一次运行真正会用的浏览器逐平台加载一次（结果缓存几分钟）。哪个平台回的是登录页，运行就地被拦下并点名该平台，不留「我确定，照样跑」。完全核不上的平台（验证码、超时、profile 被占用）说「无法核对」并且不拦。关：不开浏览器、不做测量，退回下面那个确认框，由你自己判断 Cookie 是否过期。</span>
       </div>
       <div class="dd-item-row">
+        <span data-i18n="set.mixedRegion">国内与海外混采时提醒</span>
+        <span class="dd-ctrl">
+          <label class="settings-checkbox-label">
+            <input
+              type="checkbox"
+              id="set-warn-mixed-region"
+              onchange="onSettingInput('warn_mixed_region', this.checked)"
+            />
+            <span data-i18n="set.mixedRegionInline">同一画布既爬国内平台又爬海外平台时，先问一句</span>
+          </label>
+        </span>
+      </div>
+      <div class="dd-item-row">
         <span data-i18n="set.cookieConfirm">执行前确认 Cookie</span>
         <span class="dd-ctrl">
           <label class="settings-checkbox-label">
@@ -1416,8 +1429,26 @@
               id="set-same-platform-queue"
               onchange="onSettingInput('same_platform_queue', this.checked)"
             />
-            <span data-i18n="set.sameQueueInline">同一平台一次只跑一条采集，排到队的再等几秒错峰</span>
+            <span data-i18n="set.sameQueueInline">真排队：同一平台一次只跑一条，前一条跑完才轮到下一条</span>
           </label>
+        </span>
+      </div>
+      <!-- The gap is a number, not a switch, because the tolerance belongs to the
+           user's account and not to this code: 12 s is what cleared the measured
+           collisions here, and only the owner of the account can say whether that is
+           too careful or not careful enough. -->
+      <div class="dd-item-row">
+        <span data-i18n="set.stagger">同平台错峰间隔（秒）</span>
+        <span class="dd-ctrl">
+          <input
+            type="number"
+            id="set-same-platform-stagger"
+            class="settings-input settings-input-sm"
+            min="0"
+            max="600"
+            step="1"
+            oninput="onSettingInput('same_platform_stagger', this.value)"
+          />
         </span>
       </div>
       <div class="dd-item-row">
@@ -1434,7 +1465,10 @@
         </span>
       </div>
       <div class="dd-item-block">
-        <span class="dd-block-note" data-i18n="set.sameQueueHint">开：同一平台的两条工作流轮流采集，排到队的那条在开始前再多等几秒错峰。两类实测失败一起消失——站点把同一账号一秒内的两次搜索弹到登录页（微博）或回风控 40362（知乎），以及 chromedriver 拒绝在 Chrome 已占用的 profile 里再开一个浏览器。不同平台照常并行。关：同平台真的重叠，站点容忍时更快；不容忍时两个节点一起变红。无论开关，排过队的那条都会在控制台说明自己等了多久。</span>
+        <span class="dd-block-note" data-i18n="set.sameQueueHint">开 = 真排队：同一平台的两条工作流轮流跑，第二条要等第一条整个跑完才开始。这跟持久 profile 的承诺本来就是同一件事，所以开着它时并行同平台不再弹「用不用 Profile」确认框。不同平台照常并行；没有竞争的平台一秒也不多等。关 = 只错峰：同平台仍可能同时在跑，只把两条的发车时刻隔开（隔多久看下一格）。</span>
+      </div>
+      <div class="dd-item-block">
+        <span class="dd-block-note" data-i18n="set.staggerHint">这个数交给你，因为耐受度是你这个账号的属性：12 秒是这台机器上把两类实测冲突都清掉的值，账号更忙可以调到 30~60，而从不同一平台跑两条时填多少都不掏时间。开了真排队，它是交接之后那一下停顿；关掉真排队，它就是全部的秩序。</span>
       </div>
       <!-- One full-width block, not a label+control row: eight platform states in the
            narrow right column is what made this cell scroll sideways. -->

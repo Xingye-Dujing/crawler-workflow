@@ -207,7 +207,7 @@ class TestPayloadShape:
         # throwaway browser is punished per site (a rotating session cookie, a risk
         # control that re-walls a replayed snapshot), and the pre-run notice is the
         # user's only chance to hear about it before the crawl starts.
-        assert set(first) == {'platform', 'modes', 'profileRecommended'}
+        assert set(first) == {'platform', 'modes', 'profileRecommended', 'region'}
         mode = first['modes'][0]
         assert set(mode) == {'key', 'labelKey', 'handler', 'rows', 'noteKey', 'actionKey', 'actionJs', 'fields'}
         # `nameKey` is deliberately absent: that word names the field in the
@@ -310,6 +310,60 @@ class TestPayloadShape:
         assert mode.note_key == 'settings.wechatLimitsNote'
         assert mode.action_key == 'settings.wechatLimitsBtn'
         assert mode.action_js == 'explainWechatLimits'
+
+
+class TestRegions:
+    """Which network each platform is reachable from — the fact behind the pre-run
+    warning about mixing 国内 and 海外, and behind the ``live_cn`` / ``live_os`` split of
+    the real-site tier.
+
+    Measured on this machine: with a VPN up, douyin answers 502 and refuses the crawl;
+    without one, x.com never loads. So one canvas holding both halves cannot be run
+    from either network, and the classification has to be as deliberate as a mode's
+    field list — the default is ``cn``, which means an overseas platform that forgot to
+    say so fails as "an empty search", not as a missing declaration.
+    """
+
+    def test_every_platform_names_exactly_one_of_the_two(self):
+        from crawl_capabilities import REGIONS, region_of
+
+        assert REGIONS == ('cn', 'overseas')
+        for cap in CAPABILITIES:
+            assert cap.region in REGIONS, f'{cap.platform} names {cap.region!r}'
+            assert region_of(cap.platform) == cap.region
+
+    def test_the_overseas_set_is_stated_rather_than_fallen_into(self):
+        from crawl_capabilities import platform_ids
+
+        overseas = sorted(cap.platform for cap in CAPABILITIES if cap.region == 'overseas')
+        assert overseas == ['twitter', 'youtube'], (
+            f'which platforms need a foreign network is a decision, not a default: {overseas}. '
+            f'Known platforms: {list(platform_ids())}'
+        )
+
+    def test_a_platform_nothing_crawls_has_no_region_rather_than_a_guess(self):
+        """Instagram holds a cookie and cannot be crawled, so it is absent from the
+        matrix — and a canvas can never contain it, which is why the mixed-run warning
+        does not need a word to say."""
+        from crawl_capabilities import region_of
+
+        assert region_of('instagram') == ''
+        assert region_of('tumblr') == ''
+
+    def test_the_split_keeps_canvas_order_dedupes_and_drops_strangers(self):
+        from crawl_capabilities import split_regions
+
+        split = split_regions(['douyin', 'twitter', 'douyin', 'tumblr', 'youtube'])
+        assert split == {'cn': ['douyin'], 'overseas': ['twitter', 'youtube']}
+
+    def test_a_single_network_canvas_is_not_mixed(self):
+        from crawl_capabilities import split_regions
+
+        domestic = split_regions(['zhihu', 'weibo', 'bilibili', 'wechat', 'xiaohongshu', 'douyin'])
+        assert domestic['overseas'] == []
+        assert sorted(domestic['cn']) == sorted(['zhihu', 'weibo', 'bilibili', 'wechat', 'xiaohongshu', 'douyin'])
+        assert split_regions([]) == {'cn': [], 'overseas': []}
+        assert split_regions(None)['cn'] == []
 
 
 class TestPlatformOrder:

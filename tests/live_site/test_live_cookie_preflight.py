@@ -23,7 +23,7 @@ import pytest
 
 from config import Config
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COOKIE_DIR = REPO_ROOT / 'data' / 'cookies'

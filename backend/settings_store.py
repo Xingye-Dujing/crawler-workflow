@@ -49,6 +49,13 @@ DEFAULTS = {
     # On costs one page load per platform (cached for a few minutes), and is what turns
     # 「一小时后才发现 Cookie 早死了」 into a refusal that names the platform.
     'cookie_preflight_before_run': True,
+    #: Which network each platform is reachable from is a fact the crawl matrix owns
+    #: (``Capability.region``); this only decides whether the user is told when one
+    #: canvas needs both. On: a mixed canvas is asked about before the run. Off is for
+    #: a machine with split routing, where both halves really do work at once — the
+    #: page cannot tell that machine from one with a VPN on, which is why this is a
+    #: recommendation with a switch rather than a refusal.
+    'warn_mixed_region': True,
     #: One platform is crawled by at most one workflow at a time, and two that had to
     #: queue are further spaced apart. On, a parallel canvas keeps its *different*
     #: platforms concurrent but same-platform crawls take turns — no passport bounce
@@ -56,6 +63,12 @@ DEFAULTS = {
     #: profile Chrome already holds. Off restores true concurrency and its risk.
     #: The cost of each choice is spelled out in the panel and the pre-run dialog.
     'same_platform_queue': True,
+    #: How long a crawl that had to queue behind its own platform then waits before
+    #: opening its browser. The site's tolerance is what set the default (12 s clears
+    #: both measured collisions), but how patient one account should be is the user's
+    #: call — a heavy 并行 canvas may want a bigger gap, and somebody who only ever
+    #: crawls two platforms at once may want none. 0 still queues; it just adds no gap.
+    'same_platform_stagger': int(Config.SAME_PLATFORM_STAGGER),
     # Give every platform its own Chrome profile so the crawl browser stays the same
     # device across runs. Off = the old behaviour (a blank profile plus a planted
     # snapshot), which sites that rotate their session cookie punish.
@@ -67,6 +80,16 @@ DEFAULTS = {
 }
 
 _values = None
+
+#: ``(lo, hi)`` per numeric setting. The bounds are wide on purpose — each is a
+#: machine-dependent wait, and the one thing they must not do is refuse a value the
+#: user chose deliberately; 0 on the stagger is meaningful ("queue, add no gap"), which
+#: is why its floor is 0 while the browser waits, which cannot be zero, are not.
+_NUMERIC_RANGES = {
+    'page_load_timeout': (5, 300),
+    'element_timeout': (3, 600),
+    'same_platform_stagger': (0, 600),
+}
 
 
 def _load() -> dict:
@@ -131,7 +154,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 else:
                     vals[key] = DEFAULTS[key]
                     warnings.append(t('set.badWindow', default=DEFAULTS[key]))
-            elif key in ('page_load_timeout', 'element_timeout'):
+            elif key in _NUMERIC_RANGES:
                 # ``setting=`` rather than ``key=``: i18n.t() owns a parameter
                 # called ``key`` itself and the kwarg collision used to raise
                 # TypeError right here, 500-ing the panel that was only trying
@@ -145,7 +168,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                     warnings.append(t('set.badNumber', setting=key, value=raw))
                     v = DEFAULTS[key]
                 else:
-                    lo, hi = (5, 300) if key == 'page_load_timeout' else (3, 600)
+                    lo, hi = _NUMERIC_RANGES[key]
                     if not lo <= v <= hi:
                         warnings.append(t('set.outOfRange', setting=key, lo=lo, hi=hi, value=v))
                         v = DEFAULTS[key]
@@ -162,6 +185,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 'cookie_preflight_before_run',
                 'use_browser_profile',
                 'same_platform_queue',
+                'warn_mixed_region',
             ):
                 # The browser may send a real bool or the 'true'/'false' string
                 # the checkbox helpers historically produced; anything else

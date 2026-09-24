@@ -13,7 +13,7 @@ spent here for a capability this platform does not have.
 
 import pytest
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 ARTICLE_URLS = [
     'https://mp.weixin.qq.com/s/cAx1zGfT2MzqpwnhULmSQA',

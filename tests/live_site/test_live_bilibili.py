@@ -19,7 +19,7 @@ import pytest
 from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
 from crawlers.video import bilibili_bvid
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 #: The video the user supplied for real testing.
 PROBE_URL = 'https://www.bilibili.com/video/BV1s4Js68EVp/'

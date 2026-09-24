@@ -55,7 +55,7 @@ def _quick_marks_inside(node: ast.AST) -> bool:
 
 
 def _live_files() -> list:
-    """(path, module markers, {test name: (is quick, platforms it crawls)}) per live file."""
+    """(path, module markers, {test name: (is quick, platforms it crawls, regions)}) per live file."""
     out = []
     for path in sorted(LIVE_DIR.glob('test_*.py')):
         tree = ast.parse(path.read_text(encoding='utf-8'))
@@ -63,6 +63,7 @@ def _live_files() -> list:
         literals = {}
         called = {}
         quick = {}
+        regions = {}
         for node in tree.body:
             if isinstance(node, ast.Assign) and any(
                 getattr(target, 'id', '') == 'pytestmark' for target in node.targets
@@ -82,14 +83,21 @@ def _live_files() -> list:
                 literals[node.name] = own
                 called[node.name] = refs
                 if node.name.startswith('test_'):
-                    marks = set()
+                    marks = set(module_marks)
                     for dec in node.decorator_list:
                         marks |= _marker_names(dec)
                     quick[node.name] = bool(marks & {'live_quick'}) or _quick_marks_inside(
                         ast.Module(body=[node], type_ignores=[])
                     )
+                    regions[node.name] = marks & {'live_cn', 'live_os'}
         platforms = {name: _platforms_of(name, literals, called) for name in quick}
-        out.append((path, module_marks, {name: (is_quick, platforms[name]) for name, is_quick in quick.items()}))
+        out.append(
+            (
+                path,
+                module_marks,
+                {name: (is_quick, platforms[name], regions[name]) for name, is_quick in quick.items()},
+            )
+        )
     return out
 
 
@@ -133,7 +141,7 @@ class TestQuickTier:
         quick = [
             f'{path.name}::{name}'
             for path, _marks, tests in _live_files()
-            for name, (is_quick, _platforms) in tests.items()
+            for name, (is_quick, _platforms, _regions) in tests.items()
             if is_quick
         ]
         assert quick, 'nothing is marked live_quick, so the daily tier runs nothing'
@@ -148,7 +156,7 @@ class TestQuickTier:
         """
         covered = set()
         for _path, _marks, tests in _live_files():
-            for is_quick, platforms in tests.values():
+            for is_quick, platforms, _regions in tests.values():
                 if is_quick:
                     covered |= platforms
         missing = {capability.platform for capability in CAPABILITIES} - covered
@@ -161,7 +169,7 @@ class TestQuickTier:
         offenders = [
             f'{path.name}::{name}'
             for path, module_marks, tests in _live_files()
-            for name, (is_quick, _platforms) in tests.items()
+            for name, (is_quick, _platforms, _regions) in tests.items()
             if is_quick and 'live_site' not in module_marks
         ]
         assert not offenders, f'marked quick but not live: {offenders}'
@@ -171,3 +179,77 @@ class TestQuickTier:
         which is how a short tier silently becomes the long one again."""
         wholesale = [path.name for path, module_marks, _tests in _live_files() if 'live_quick' in module_marks]
         assert not wholesale, f'module-level live_quick in {wholesale}; mark one representative instead'
+
+
+class TestRegionSplit:
+    """``live_cn`` and ``live_os`` exist because one machine cannot be in two networks at
+    once: with a VPN up douyin answers 502, without one x.com never loads. A case in the
+    wrong group is not slow, it is **unrunnable** — and it fails as "0 rows", which reads
+    as a broken crawler and sends somebody to read crawl code that was fine.
+
+    The region is never restated here: it comes from the crawl matrix, so a platform whose
+    network requirement changes moves its tests instead of leaving a copy behind.
+    """
+
+    def test_both_region_markers_are_registered(self):
+        declared = PYTEST_INI.read_text(encoding='utf-8')
+        for marker in ('live_cn', 'live_os'):
+            assert f'{marker}:' in declared, f'{marker} runs under every filter and a typo stays silent'
+
+    def test_every_live_case_declares_exactly_one_network(self):
+        missing = [
+            f'{path.name}::{name}'
+            for path, _marks, tests in _live_files()
+            for name, (_quick, _platforms, regions) in tests.items()
+            if len(regions) != 1
+        ]
+        assert not missing, f'live cases without exactly one network marker: {missing}'
+
+    def test_a_case_never_claims_the_wrong_network(self):
+        """The matrix owns each platform's network, so the marker has to agree with it.
+
+        A case that names no crawlable platform at all (it reaches the site through a
+        helper whose literals live elsewhere) is left to the test above rather than
+        guessed at here.
+        """
+        from crawl_capabilities import region_of
+
+        #: The marker is a pytest name, the region is a matrix value; one mapping here is
+        #: the only place the two spellings meet.
+        marker_of = {'cn': 'live_cn', 'overseas': 'live_os'}
+        wrong = []
+        for path, _marks, tests in _live_files():
+            for name, (_quick, platforms, regions) in tests.items():
+                wanted = {marker_of[region] for region in (region_of(p) for p in platforms) if region}
+                if wanted and not wanted <= regions:
+                    wrong.append(f'{path.name}::{name}: matrix says {sorted(wanted)}, marked {sorted(regions)}')
+        assert not wrong, 'the network marker disagrees with the crawl matrix:\n  ' + '\n  '.join(wrong)
+
+    def test_each_network_has_a_quick_representative(self):
+        """The point of the split is two short runs the user can choose to do, one per
+        network. A group with no quick case means switching networks for nothing — and
+        the daily gate quietly covering only half the platforms."""
+        for marker in ('live_cn', 'live_os'):
+            quick = [
+                f'{path.name}::{name}'
+                for path, _marks, tests in _live_files()
+                for name, (is_quick, _platforms, regions) in tests.items()
+                if is_quick and marker in regions
+            ]
+            assert quick, f'no live_quick case in {marker}: that network is only visited by the hour-long pass'
+
+    def test_the_matrix_names_no_network_but_the_two(self):
+        """A typo in a ``region=`` reads as "no opinion" everywhere, and the pre-run
+        dialog would stay silent about a mixed canvas forever."""
+        from crawl_capabilities import REGIONS
+
+        assert REGIONS == ('cn', 'overseas')
+        assert {capability.region for capability in CAPABILITIES} <= set(REGIONS)
+
+    def test_the_warning_switch_hides_the_question_and_nothing_else(self):
+        """Turning the dialog off must not change what a run does — the split of the
+        live tier and the crawl itself read the matrix, never this setting."""
+        text = (REPO_ROOT / 'backend' / 'settings_store.py').read_text(encoding='utf-8')
+        assert "'warn_mixed_region': True" in text, 'asking is the default until somebody says otherwise'
+        gate = (REPO_ROOT / 'backend' / 'crawl_gate.py').read_text(encoding='utf-8')
+        assert 'warn_mixed_region' not in gate, 'a cosmetic dialog must not be wired into what actually runs'

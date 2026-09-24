@@ -9,7 +9,7 @@ flags included.
 
 import pytest
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 
 def _assert_rows(rows, minimum=2):

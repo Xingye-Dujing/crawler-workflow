@@ -16,7 +16,7 @@ import pytest
 
 from crawlers.video import bilibili_bvid
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 
 def _assert_board_rows(rows, minimum=5):

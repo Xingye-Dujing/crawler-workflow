@@ -81,9 +81,11 @@ def matrix(monkeypatch, app_module, tmp_path):
     """Replace the factory with the profile-claiming fake; record what it was asked."""
     values = {'use_browser_profile': True, 'browser_profile_dir': str(tmp_path / 'profiles')}
     monkeypatch.setattr(browser_profiles, 'get_setting', lambda key: values[key])
-    # The gap this module is about is a real wait; its *length* is asserted in
-    # tests/unit/test_crawl_gate.py. Here it would only cost 12 seconds a test.
-    monkeypatch.setattr(crawl_gate.Config, 'SAME_PLATFORM_STAGGER', 0.05)
+    # Both gate knobs, in one place a test can flip. The wait is a real one here — its
+    # *length* is asserted in tests/unit/test_crawl_gate.py against a fake clock — so
+    # this module shrinks it to keep the suite honest but fast.
+    gate = {'same_platform_queue': True, 'same_platform_stagger': 0.05}
+    monkeypatch.setattr(crawl_gate, 'get_setting', lambda key: gate[key])
     SPANS.clear()
     asked = []
 
@@ -93,7 +95,7 @@ def matrix(monkeypatch, app_module, tmp_path):
         return _MatrixCrawler(platform, profile)
 
     monkeypatch.setattr(app_module, 'get_crawler', _factory)
-    return {'asked': asked}
+    return {'asked': asked, 'gate': gate}
 
 
 def _source(node_id, platform, keyword=None):

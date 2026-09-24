@@ -13,7 +13,7 @@ import pytest
 
 from crawlers.comments import BLOCKED, OK, CommentSession
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 
 def _fresh_post_with_comments(live_crawler, headless=True):

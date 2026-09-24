@@ -131,6 +131,14 @@ class Capability:
     #: minutes, while the user's own browser keeps working. The panel and the pre-run
     #: dialog read this; it is never a refusal, only a recommendation with evidence.
     profile_recommended: bool = False
+    #: Which network this site answers from. Not decoration: with a VPN up, douyin
+    #: answers 502 and refuses the crawl (measured by the user), and from inside China
+    #: x.com is simply unreachable — so one canvas holding both regions cannot be run
+    #: from either side, which is what the pre-run dialog warns about and what splits
+    #: the live tier into ``live_cn`` and ``live_os``. The only answer to the question:
+    #: the payload carries it to the browser, and the test tier reads it back off this
+    #: module, so neither can hold a copy that drifts.
+    region: str = 'cn'
 
 
 # ─── The shared tail: how the rows leave the crawl ───────────────────────
@@ -413,6 +421,7 @@ CAPABILITIES: tuple[Capability, ...] = (
     # user reaches for first stay at the top of the list.
     Capability(
         platform='youtube',
+        region='overseas',
         modes=(
             _posts_mode(_WITH_FACTS),
             _author_mode(_WITH_FACTS),
@@ -421,6 +430,7 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     Capability(
         platform='twitter',
+        region='overseas',
         modes=(
             _posts_mode(),
             _author_mode(),
@@ -452,6 +462,38 @@ def has_platform(platform: str) -> bool:
 
 def capability(platform: str) -> Capability | None:
     return _BY_PLATFORM.get(str(platform or ''))
+
+
+#: The two egress networks a crawl can be run from. Names, not booleans: 「国内」 and
+#: 「海外」 are the user's own words for them, and a platform is in exactly one.
+REGIONS = ('cn', 'overseas')
+
+
+def region_of(platform: str) -> str:
+    """Which network *platform* answers from, or '' when nothing crawls it.
+
+    The matrix is the only answer to this: the pre-run dialog, the live tier's
+    ``live_cn`` / ``live_os`` split and the panel all read it here, because a second
+    list of "which platforms are overseas" is exactly the copy that falls behind when
+    a platform is added.
+    """
+    cap = capability(platform)
+    return cap.region if cap else ''
+
+
+def split_regions(platforms) -> dict:
+    """``{'cn': [...], 'overseas': [...]}`` for the platforms of one canvas.
+
+    Order is the canvas's own, and a platform the matrix does not know is left out
+    rather than guessed at: the caller is warning about a crawl, so an invented
+    region is worse than a silent omission.
+    """
+    split = {region: [] for region in REGIONS}
+    for platform in platforms or []:
+        region = region_of(platform)
+        if region in split and platform not in split[region]:
+            split[region].append(platform)
+    return split
 
 
 def modes_for(platform: str) -> tuple[Mode, ...]:
@@ -583,6 +625,7 @@ def as_dict() -> dict:
                 'platform': cap.platform,
                 'modes': [_mode_as_dict(m) for m in cap.modes],
                 'profileRecommended': bool(cap.profile_recommended),
+                'region': cap.region,
             }
         )
     return {'platforms': platforms, 'fileFields': [_field_as_dict(f) for f in FILE_FIELDS]}

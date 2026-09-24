@@ -17,7 +17,7 @@ import pytest
 
 from crawlers.video import bilibili_bvid, bilibili_mid
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 KEYWORD = '人工智能'
 

@@ -194,6 +194,31 @@ class TestSettingsWrite:
         assert body['warnings'] == []
         assert body['settings']['element_timeout'] == 7
 
+    @pytest.mark.parametrize(('sent', 'expected'), [(30, 30), ('45', 45), (0, 0), (3.7, 3)])
+    def test_the_stagger_is_the_users_number(self, client, sent, expected):
+        """The wait a queued crawl pays is theirs to pick, and 0 is a real answer
+        ("queue, add no gap") rather than an empty field falling back to the default."""
+        body = client.post('/api/settings', json={'same_platform_stagger': sent}).get_json()
+        assert body['warnings'] == [], body['warnings']
+        assert body['settings']['same_platform_stagger'] == expected
+        assert client.get('/api/settings').get_json()['settings']['same_platform_stagger'] == expected
+
+    @pytest.mark.parametrize('sent', [-1, 601, 'minutes', None, '1e400'])
+    def test_an_unusable_stagger_falls_back_and_says_which_number_was_refused(self, client, sent):
+        body = client.post('/api/settings', json={'same_platform_stagger': sent}).get_json()
+        assert body['settings']['same_platform_stagger'] == settings_store.DEFAULTS['same_platform_stagger']
+        assert any('same_platform_stagger' in warning for warning in body['warnings']), body['warnings']
+
+    def test_the_gate_reads_the_stagger_the_panel_saved(self, client, app_module):
+        """The last mile: a number that lands in settings.json but is never read is a
+        knob that does nothing, and only this round trip can tell that apart."""
+        import crawl_gate
+
+        saved = client.post('/api/settings', json={'same_platform_stagger': 37, 'same_platform_queue': True}).get_json()
+        assert saved['warnings'] == [], saved['warnings']
+        assert crawl_gate.stagger() == 37.0
+        assert crawl_gate.strict() is True
+
     def test_trailing_slash_is_stripped_from_a_good_host(self, client):
         body = client.post('/api/settings', json={'ollama_host': 'http://box:11434/'}).get_json()
         assert body['warnings'] == []

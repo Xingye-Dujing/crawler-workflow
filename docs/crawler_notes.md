@@ -343,6 +343,21 @@ blocks in `Crawler.__init__` → `acquire_profile()`, i.e. **before Chrome exist
 is ever visible at a time; `crawl.profile_wait` states the wait, and 「本次不用 Profile」 lifts the lock
 and gives one window per workflow (verified by the user).
 
+## 网络分区：国内与海外不能一起爬（用户实测 2026-09-24）
+
+**挂 VPN 时抖音回 502 拒绝访问；不挂时 x.com / YouTube 根本打不开。** 一台机器一次只能在那两条网络
+之一里，所以一张同时包含两边的画布从任何一侧跑都必定缺掉一半——而缺的那一半看起来跟"这次搜索什么都没
+搜到"完全一样，这是它最难自证的一种失败。落在代码里的三件事：
+
+* 分区是**数据**，不是散落的判断：`crawl_capabilities.Capability.region`（`cn` / `overseas`）由矩阵
+  一处声明，随 `/api/capabilities` 发给浏览器；运行前的「国内与海外混采时提醒」和真机层的
+  `live_cn` / `live_os` 分组都读它。`tests/unit/test_test_tiers.py` 会拿矩阵里的 region 去核对每条
+  live 用例的 marker，所以给一个海外平台忘了写 `region` 会被测试层直接指出来（矩阵没说的平台按
+  "不知道"处理：既不提醒也不拦）。
+* 提醒是**建议**且可关（`warn_mixed_region`）：真做了分流路由的机器两边都通，页面分不出那种机器和
+  "只是开着 VPN"，所以它只问不禁。
+* 真机测试必须分两次跑，中间由用户确认网络状态；抖音那条红在 VPN 状态下不是爬虫坏了。
+
 ## 运行前 Cookie 预检（measured 2026-09-24）
 
 `cookie_preflight` answers 「这份会话还认不认」 before a run starts, by loading the platform's own

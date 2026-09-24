@@ -29,7 +29,9 @@ import pytest
 
 from crawlers.comments import OK, CommentSession
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+#: ``live_os``: x.com is unreachable from a Chinese network, so this file runs with a
+#: VPN up while the domestic files run with it off (``live_cn``).
+pytestmark = [pytest.mark.live_site, pytest.mark.live_os, pytest.mark.enable_socket]
 
 KEYWORD = 'OpenAI'
 #: An account that posts daily, so a profile walk never lands on an empty page.

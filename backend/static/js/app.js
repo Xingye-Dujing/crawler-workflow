@@ -432,11 +432,20 @@ const I18n = {
             'set.cookieConfirm': 'Confirm Cookie before run',
             'set.cookieConfirmInline': 'This prompt fires only when the automatic check above is off',
             'set.cookiePreflight': 'Verify Cookie before run',
+            'set.mixedRegion': 'Warn about mixed-region platforms',
+            'set.mixedRegionInline': 'Ask when one canvas crawls both a domestic and an overseas platform',
+            'set.mixedRegionHint': 'On: a canvas that crawls both a Chinese platform and an overseas one is asked about it before the run starts. The reason is measured, not theorised — with a VPN up, douyin answers 502 and refuses the whole crawl, and without one x.com never loads at all, so the two halves cannot be crawled from the same network. This is a recommendation with a switch, not a refusal: a machine with split routing really can serve both, and the page cannot tell that machine from one with a VPN on. Off: nothing is asked, and a mixed run then comes back with whichever half your network cannot reach — which reads as an empty search, not as the routing problem it is.',
+            'dialog.mixedRegion': 'This run crawls both networks at once: domestic {cn} · overseas {overseas}. Measured on this machine: with a VPN up douyin answers 502, and without one x.com never loads — so the two halves cannot be crawled from the same connection. Splitting them into two runs is what usually works; press 继续 anyway if your routing serves both.',
+            'dialog.mixedRegionGo': 'Run it anyway',
+            'dialog.mixedRegionSplit': 'Do not run — I will split it',
             'set.cookiePreflightInline': 'Ask each platform of this canvas whether its Cookie still works',
             'set.cookiePreflightHint': 'On: before a run that crawls anything, one page load per platform in the very browser that run will use, and the answer is cached for a few minutes so a canvas started twice in a row pays once. A platform that answers with a login page refuses the run there and then — it names itself and opens the Cookie panel on it, with no "run anyway", because a crawl that starts at a wall comes back an hour later with an empty table. A platform that could not be checked at all (captcha, timeout, its profile held by a live run) says "could not be checked" and does not block: no answer is not evidence of a dead Cookie. The price is one visible window per uncached platform and a few seconds. Off: nothing is opened and nothing is measured, and you fall back to the prompt below, which asks you to remember whether the Cookie went stale — a wrong guess there is paid for in crawl time, and the resume then has to sort out the half-finished run.',
-            'set.sameQueue': 'Queue same-platform crawls',
-            'set.sameQueueInline': 'One crawl per platform at a time; a queued one also waits a few seconds',
-            'set.sameQueueHint': 'On: two workflows crawling the same platform take turns, and the one that waited gets an extra gap before it starts. That removes both measured failures — a site answering two searches from one account inside the same second (weibo bounces us to the login page, zhihu answers risk code 40362), and chromedriver refusing a second browser in a profile Chrome already holds. Different platforms stay parallel. Off: same-platform crawls really overlap, which is faster while the site tolerates it; when it does not, both nodes come back red. Either way, a crawl that waited says so in the console.',
+            'set.sameQueue': 'Fully queue same-platform crawls',
+            'set.sameQueueInline': '真排队: one platform runs one crawl at a time, start to finish',
+            'set.sameQueueHint': 'On = 真排队: two workflows on one platform take turns, and the second starts only after the first has FINISHED. That is the same promise a persistent profile makes (one directory holds one Chrome), so with this on a run no longer asks 用不用 Profile for that canvas — the choice has been made for the whole program, and every same-platform crawl keeps its device. Different platforms stay parallel, and an uncontended platform waits zero seconds. Off = 错峰 only: same-platform crawls may still run over each other and only their STARTS are spaced (by the interval below). That keeps real 并行 and still removes the shape sites punish hardest — one account issuing two searches in the same second, which bounces weibo to the login page and gets risk code 40362 from zhihu — but it does not remove the profile collision, so the per-run Profile question comes back with it.',
+            'set.stagger': 'Same-platform start gap (seconds)',
+            'set.staggerInline': 'How far apart two crawls of one platform start; 0 adds no gap',
+            'set.staggerHint': 'Yours to set, because the tolerance belongs to the account: 12 s is what cleared both measured collisions on this machine, a heavier account may want 30-60, and a canvas that never runs the same platform twice pays nothing whatever this says. With 真排队 on it is the pause after a turn changes hands; with it off it is the only ordering there is.',
             'set.useProfile': 'Persistent browser profile',
             'set.useProfileInline': 'One profile per platform, so the crawl and the cookie login are the same device',
             'set.profileDir': 'Profile directory',
@@ -460,12 +469,8 @@ const I18n = {
                 + 'throwaway browser for), but those crawls take turns, so parallelism is lost on them.\n'
                 + '· Skip the profile this time — the workflows really crawl side by side, but each starts as '
                 + 'a brand-new device on a planted cookie snapshot, which is the shape those sites refuse.',
-            'dialog.profileClashUse': 'Keep the profile (same-platform crawls queue)',
-            'dialog.profileClashSkip': 'No profile this run (true parallel)',
-            'dialog.profileClashQueued':
-                'Note: "Queue same-platform crawls" is ON in Settings, so those crawls take turns whichever '
-                + 'button you press — this choice only decides which device each workflow crawls as. '
-                + 'Turn the setting off to really overlap.',
+            'dialog.profileClashUse': 'Keep the profile (same device; same-platform crawls still take turns)',
+            'dialog.profileClashSkip': 'No profile this run (true parallel — only their starts are spaced)',
             'set.save': 'Save settings',
             'set.note':
                 'Machine-local settings. Saved to data/settings.json on the server ' +
@@ -1067,11 +1072,20 @@ const I18n = {
             'set.cookieConfirm': '执行前确认 Cookie',
             'set.cookieConfirmInline': '只在上方「自动验证」关闭时才会弹这个确认框',
             'set.cookiePreflight': '执行前自动验证 Cookie',
+            'set.mixedRegion': '国内与海外混采时提醒',
+            'set.mixedRegionInline': '同一画布既爬国内平台又爬海外平台时，先问一句',
+            'set.mixedRegionHint': '开：一张画布同时包含国内平台与海外平台时，运行前先提醒一句。这是实测出来的，不是猜的——挂 VPN 时抖音直接回 502 拒绝对外网入口的整个抓取，不挂时 x.com 根本打不开，所以这两半没法在同一条网络上一起爬。它只是建议、并且可以关掉，不禁运行：一台真的做了分流路由的机器确实能同时服务两边，而这个页面分不出那种机器和"只是开着 VPN"。关：什么都不问，混着跑的那次运行就会缺掉你这条网络够不着的那一半——而缺的那半看起来跟"这次搜索什么都没搜到"一模一样。',
+            'dialog.mixedRegion': '本次同时用到两条网络：国内 {cn} · 海外 {overseas}。\n实测：挂 VPN 时抖音回 502 拒绝抓取，不挂时 x.com 根本打不开，所以这两半没法在同一条网络上一起跑。\n通常的做法是拆成两次运行；如果你的机器本来就分流路由（两边都能通），点「仍然继续」。',
+            'dialog.mixedRegionGo': '仍然继续',
+            'dialog.mixedRegionSplit': '先不跑，我去拆开',
             'set.cookiePreflightInline': '运行前用本次真要用的浏览器各加载一次该平台，问它 Cookie 还认不认',
             'set.cookiePreflightHint': '开：含采集节点的运行在按下执行之前，先用这一次运行真正会用的浏览器逐平台加载一次（结果缓存几分钟，同一画布连着按两次只付一次钱）。哪个平台回的是登录页，运行就地被拦下：弹窗点名该平台并直接把它选到 Cookie 面板上，且不留「我确定，照样跑」——从登录页开始的抓取，一小时后只会带回一张空表和一个半途的数据集。完全核不上的平台（验证码、超时、profile 正被一场真抓取占着）说「无法核对」并且不拦：没有答案不等于 Cookie 死了。代价是每个未缓存的平台多开一个可见窗口、多等几秒。关：不开任何浏览器、不做任何测量，退回下面那个确认框，由你自己记得 Cookie 有没有过期——判断错了就用抓取时间来付，而且续跑得替你把那半次运行收拾干净。',
-            'set.sameQueue': '同平台排队采集',
-            'set.sameQueueInline': '同一平台一次只跑一条采集，排到队的再等几秒错峰',
-            'set.sameQueueHint': '开：同一平台的两条工作流轮流采集，排到队的那条在开始前再多等几秒错峰。两类实测失败一起消失——站点把同一账号一秒内的两次搜索弹到登录页（微博）或回风控 40362（知乎），以及 chromedriver 拒绝在 Chrome 已占用的 profile 里再开一个浏览器。不同平台照常并行。关：同平台真的重叠，站点容忍时更快；不容忍时两个节点一起变红。无论开关，排过队的那条都会在控制台说明自己等了多久。',
+            'set.sameQueue': '同平台真排队',
+            'set.sameQueueInline': '真排队：同一平台一次只跑一条，前一条跑完才轮到下一条',
+            'set.sameQueueHint': '开 = 真排队：同一平台的两条工作流轮流跑，第二条要等第一条**整个跑完**才开始。这跟持久 profile 的承诺本来就是同一件事（一个目录只开一个浏览器），所以开着它时并行同平台不再弹「用不用 Profile」确认框——这个决定已经替整台程序做掉了，每条同平台采集也都保持自己那台设备。不同平台照常并行；没有竞争的平台一秒也不多等。关 = 只错峰：同平台仍可能同时在跑，只把两条的**发车**时刻隔开（隔多久看下面那格）。这保住了真并行，也仍然去掉站点最狠的那种形态——同一账号一秒内发出两次搜索（微博把我们弹到登录页、知乎回风控 40362）——但它管不了 profile 冲突，所以那次运行的 Profile 确认框会跟着回来。',
+            'set.stagger': '同平台错峰间隔（秒）',
+            'set.staggerInline': '同一平台两次采集至少隔多久发车；0 = 不再额外隔',
+            'set.staggerHint': '这个数交给你，因为耐受度是你这个账号的属性：12 秒是这台机器上把两类实测冲突都清掉的值，账号更忙可以调到 30~60，而如果你从不同一平台跑两条，填多少都不掏时间。开了真排队，它是交接之后那一下停顿；关掉真排队，它就是全部的秩序。',
             'set.useProfile': '持久浏览器 Profile',
             'set.useProfileInline': '每个平台用自己的浏览器目录，抓取与取 Cookie 是同一台设备',
             'set.profileDir': 'Profile 目录',
@@ -1095,11 +1109,8 @@ const I18n = {
                 + '但同平台的采集会一个跑完再跑下一个，这部分并行等于没有。\n'
                 + '· 本次不用 Profile —— 这些工作流真的同时爬，但每个都是全新设备 + 导入一份旧 Cookie 快照，'
                 + '而这正是那些站点会拒绝的形态。',
-            'dialog.profileClashUse': '继续用 Profile（同平台排队）',
-            'dialog.profileClashSkip': '本次不用 Profile（真并行）',
-            'dialog.profileClashQueued':
-                '注：设置里的「同平台排队采集」是开着的，所以无论你点哪个按钮，同平台的采集都会轮流跑；'
-                + '这一问只决定每条工作流用哪台设备。想真的重叠请把该设置关掉。',
+            'dialog.profileClashUse': '继续用 Profile（同一台设备，同平台仍会轮流跑）',
+            'dialog.profileClashSkip': '本次不用 Profile（真并行，只把发车时刻隔开）',
             'set.save': '保存设置',
             'set.note':
                 '这些是本机相关设置。保存后写入服务器 ' +
@@ -1717,7 +1728,9 @@ const AppSettings = {
         ollama_host: 'set-ollamahost',
         cookie_confirm_before_run: 'set-cookie-confirm',
         cookie_preflight_before_run: 'set-cookie-preflight',
+        warn_mixed_region: 'set-warn-mixed-region',
         same_platform_queue: 'set-same-platform-queue',
+        same_platform_stagger: 'set-same-platform-stagger',
         use_browser_profile: 'set-use-profile',
         browser_profile_dir: 'set-profile-dir',
     },

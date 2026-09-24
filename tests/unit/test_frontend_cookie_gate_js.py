@@ -113,6 +113,19 @@ def _verdict(platform, state, *, blocking, text):
     return {'platform': platform, 'state': state, 'blocking': blocking, 'text': text, 'probed': True}
 
 
+def _matrix_without_region(platform):
+    """The live matrix with one platform's region blanked.
+
+    Built from the matrix dumped out of Python rather than from a copy, so the only
+    thing the scenario varies is the missing classification.
+    """
+    stripped = json.loads(json.dumps(MATRIX, ensure_ascii=False))
+    for entry in stripped['platforms']:
+        if entry['platform'] == platform:
+            entry['region'] = ''
+    return stripped
+
+
 #: A refused run and an empty one look identical unless the verdict carries the
 #: sentence the server rendered for it.
 DEAD = {
@@ -128,8 +141,16 @@ CLEAN = {'ok': True, 'results': {}, 'blocked': [], 'unclear': [], 'probed': True
 
 #: Both gates off is the baseline every other scenario is read against: the run
 #: starts with nothing asked and nothing said.
-NO_GATE = {'cookie_preflight_before_run': False, 'cookie_confirm_before_run': False}
-AUTO = {'cookie_preflight_before_run': True, 'cookie_confirm_before_run': True}
+NO_GATE = {
+    'cookie_preflight_before_run': False,
+    'cookie_confirm_before_run': False,
+    'warn_mixed_region': False,
+}
+AUTO = {
+    'cookie_preflight_before_run': True,
+    'cookie_confirm_before_run': True,
+    'warn_mixed_region': True,
+}
 
 SCENARIOS = [
     {
@@ -242,6 +263,45 @@ SCENARIOS = [
         'canvasSettings': {'mode': 'parallel'},
         'preflight': CLEAN,
         'answers': {'clash': 'use'},
+    },
+    {
+        'id': 'mixed-networks-refuses-to-run',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
+        'preflight': CLEAN,
+        'answers': {'mixed': None},
+    },
+    {
+        'id': 'mixed-networks-continued',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
+        'preflight': CLEAN,
+        'answers': {'mixed': 'go'},
+    },
+    {
+        'id': 'mixed-warning-off',
+        'settings': {
+            'cookie_preflight_before_run': True,
+            'cookie_confirm_before_run': False,
+            'warn_mixed_region': False,
+        },
+        **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
+        'preflight': CLEAN,
+    },
+    {
+        'id': 'mixed-network-silent',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'douyin'), _chain(2, 'weibo')),
+        'preflight': CLEAN,
+    },
+    {
+        # A platform the matrix says nothing about is left out of both groups rather
+        # than guessed at: 「it might be overseas」 is not a fact to interrupt a run with.
+        'id': 'mixed-without-a-region',
+        'settings': AUTO,
+        'matrix': _matrix_without_region('youtube'),
+        **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
+        'preflight': CLEAN,
     },
     {
         'id': 'server-wording-carries-the-detail',
@@ -415,4 +475,60 @@ class TestNothingIsSaidTwice:
         joined = '\n'.join(case['toasts'])
         assert 'could not' not in joined.lower(), case['toasts']
         assert 'refused' not in joined.lower(), case['toasts']
+        assert case['ran'] is True
+
+
+class TestMixedNetworks:
+    """One canvas, two networks — and the machine is only ever on one of them.
+
+    Measured by the user: with a VPN up douyin answers 502, and without one x.com never
+    loads. So the halves have to be run apart, and the only question worth asking is
+    whether the user meant that. It is asked BEFORE the cookie check, because that check
+    opens a browser per platform and a run about to be cancelled should not have paid.
+    """
+
+    def test_a_two_network_canvas_is_asked_before_anything_else(self, gate):
+        case = gate['mixed-networks-refuses-to-run']
+        assert len(case['dialogs']) == 1, case['dialogs']
+        message = case['dialogs'][0]['message']
+        assert 'douyin' in message and 'youtube' in message, 'the question has to name both halves'
+        assert case['asked'] is False, 'the cookie probe is not bought for a run that was about to be split'
+        assert case['ran'] is False
+
+    def test_continuing_runs_both_halves_and_still_checks_the_cookies(self, gate):
+        """The answer is the user's, because a machine with split routing genuinely can
+        serve both — this page cannot tell that machine from one with a VPN on, so it
+        asks rather than forbidding."""
+        case = gate['mixed-networks-continued']
+        assert len(case['dialogs']) == 1
+        assert case['asked'] is True
+        assert sorted(case['askedBody']['platforms']) == ['douyin', 'youtube']
+        assert case['ran'] is True
+
+    def test_the_two_buttons_are_continue_and_back_away(self, gate):
+        dialog = gate['mixed-networks-refuses-to-run']['dialogs'][0]
+        assert dialog['values'] == ['go', 'null'], dialog
+
+    def test_one_network_is_left_alone(self, gate):
+        """The profile notice still fires (douyin is a platform a throwaway browser
+        fails on) — what must not fire is the routing question, whose two buttons are
+        继续 plus a cancel and nothing else."""
+        case = gate['mixed-network-silent']
+        asked_about_networks = [dialog for dialog in case['dialogs'] if dialog['values'] == ['go', 'null']]
+        assert asked_about_networks == [], f'two domestic crawls are not a routing question: {case["dialogs"]}'
+        assert case['asked'] is True and case['ran'] is True
+
+    def test_a_platform_the_matrix_has_no_region_for_is_not_guessed_at(self, gate):
+        """Blanking youtube's region must not produce a warning built on an assumption,
+        and equally must not lose the run: an unknown classification is nobody's fault."""
+        case = gate['mixed-without-a-region']
+        assert case['dialogs'] == [], case['dialogs']
+        assert case['asked'] is True
+        assert case['ran'] is True
+
+    def test_the_switch_hides_the_question_and_nothing_else(self, gate):
+        """Same run, same platforms, same cookie check: only the asking is switched."""
+        case = gate['mixed-warning-off']
+        assert case['dialogs'] == []
+        assert case['asked'] is True, 'turning the warning off must not turn the cookie check off too'
         assert case['ran'] is True

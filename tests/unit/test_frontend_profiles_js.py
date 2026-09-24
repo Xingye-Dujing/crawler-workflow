@@ -221,6 +221,17 @@ SCENARIOS = [
         'canvasSettings': {'mode': 'parallel'},
         'clashChoice': None,
     },
+    # 真排队 on: the fork has been decided globally, so asking again would let this
+    # one run opt out of a promise the user just made in Settings.
+    {
+        'id': 'clash-parallel-same-queued',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True, 'same_platform_queue': True},
+        'nodes': _two_crawls('bilibili', 'bilibili')[0],
+        'connections': _two_crawls('bilibili', 'bilibili')[1],
+        'profiles': _profiles_rows(enabled=True),
+        'canvasSettings': {'mode': 'parallel'},
+    },
     # Same platform twice, but inside ONE workflow: sequential anyway, so no question.
     {
         'id': 'clash-one-component',
@@ -442,6 +453,18 @@ class TestParallelProfileFork:
         case = ui['clash-different-platforms']
         assert case['collisions'] == [] and case['clash'] == 'not-asked'
         assert case['sentProfile'] == 'undefined', 'no answer, so no field: the setting stays in charge'
+
+    def test_the_fork_goes_away_when_the_queue_is_decided_globally(self, ui):
+        """真排队 on means the user already answered this question for the whole
+        program: one platform, one crawl at a time, on its own device. Asking per run
+        would offer a way to opt out of the promise, and an answer of 本次不用 would
+        then decide which device the queue itself runs on."""
+        case = ui['clash-parallel-same-queued']
+        assert case['collisions'] == ['bilibili'], 'the collision is real — it is just no longer a choice'
+        assert case['clash'] == 'not-asked', case['clash']
+        assert case['clashDialog'] is None
+        assert case['sentProfile'] == 'undefined', 'no answer, so the profile setting stays in charge'
+        assert case['ran'] is True, 'a decided question must not also become a refused run'
 
     def test_serial_mode_does_not_ask(self, ui):
         case = ui['clash-serial']

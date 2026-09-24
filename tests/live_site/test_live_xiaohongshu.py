@@ -3,7 +3,7 @@ in both browser modes (headless + visible window)."""
 
 import pytest
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 
 @pytest.mark.parametrize(

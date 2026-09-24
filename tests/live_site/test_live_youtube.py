@@ -25,7 +25,8 @@ import pytest
 from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
 from crawlers.youtube import video_id_of
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+#: ``live_os`` with X: the overseas half of the live tier, run while the VPN is up.
+pytestmark = [pytest.mark.live_site, pytest.mark.live_os, pytest.mark.enable_socket]
 
 KEYWORD = '人工智能'
 #: A channel with public uploads and an open comment section on most of them.

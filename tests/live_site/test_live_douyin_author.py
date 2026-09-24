@@ -21,7 +21,7 @@ import re
 
 import pytest
 
-pytestmark = [pytest.mark.live_site, pytest.mark.enable_socket]
+pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
 KEYWORD = '风景'
 _VIDEO = re.compile(r'^https://www\.douyin\.com/video/\d{15,20}$')

@@ -631,6 +631,10 @@ _ZH = {
         '{platform} 正在被另一条工作流采集，本轮改为排队：{n} 秒后开始，'
         '避免同一账号在同一秒内发出两次搜索而被弹到登录页'
     ),
+    'run.platformStaggered': (
+        '{platform} 与上一条同平台采集错开 {n} 秒后发车：这次没有排队，两条仍可能同时跑，'
+        '只是避开同一账号一秒内发出两次搜索'
+    ),
     'run.platformGateTimeout': '{platform} 等待采集时段超时（{n} 秒）：可能有浏览器窗口没有关闭',
     'run.queueAbandoned': '{platform} 的排队等待已取消（本次运行已停止）',
     'run.wallRetry': ('{platform} 在第一条数据之前就被弹到登录页，这更像同一账号被两次并发搜索撞了：{n} 秒后重试一次'),
@@ -1310,6 +1314,11 @@ _EN = {
     ),
     'run.platformGateTimeout': (
         '{platform} waited {n}s for its turn to crawl and gave up: a browser window that never closed may be holding it'
+    ),
+    'run.platformStaggered': (
+        '{platform} starts {n}s after the last same-platform crawl: this run is queued with nothing, so '
+        'the two may still overlap — only their departures are kept apart, which is what stops one '
+        'account issuing two searches in the same second'
     ),
     'run.queueAbandoned': 'the queue wait for {platform} was cancelled (this run stopped)',
     'run.wallRetry': (

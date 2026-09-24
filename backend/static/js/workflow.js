@@ -281,32 +281,33 @@ const workflow = {
                xiaohongshu punish a throwaway browser for), but one profile holds
                one Chrome, so those crawls take turns and 并行 buys nothing there;
              · 本次不用 — each workflow starts as a brand-new device on a planted
-               cookie snapshot, which is what makes two of them overlap *unless*
-               同平台排队 is on (the queue then orders them anyway, and the dialog
-               says so in its own line below).
+               cookie snapshot, which is what makes two of them overlap, spaced only
+               by 同平台错峰间隔.
 
-           Returns null when there is nothing to decide (profiles off, not
-           parallel, no shared platform) or true/false for the user's answer. A
-           cancelled dialog returns false *and* stops the run — see the caller. */
+           The question is not asked when 真排队 is on: that switch already decided,
+           for the whole program, that one platform crawls one at a time — and the
+           serialization it promises is the profile's, so answering it would only let
+           this one run opt out of a promise the user just made globally. Returning
+           null (no answer given, nothing to carry) makes the backend follow the
+           profile setting, which is what 真排队 needs to hold.
+
+           Returns null whenever there is nothing to decide (profiles off, not
+           parallel, no shared platform, or 真排队 on), true/false for the user's own
+           answer, and undefined when they closed the dialog — which the caller reads
+           as "do not start the run". */
         var json = canvas.toWorkflowJSON();
         var settings = (json && json.settings) || {};
         if (settings.mode !== 'parallel') return null;
         if (window.AppSettings) await AppSettings.pull();
         var values = (window.AppSettings && AppSettings._values) || {};
         if (!values.use_browser_profile) return null;
+        if (values.same_platform_queue) return null;
         var shared = profileCollisions(canvas.nodes, canvas.connections);
         if (!shared.length) return null;
-        var message = I18n.t('dialog.profileClash')
-            .replace('{platforms}', shared.join('、'))
-            .replace('{n}', shared.length);
-        if (values.same_platform_queue) {
-            // The queue decides the order now, so the second option can no longer
-            // promise two crawls side by side. Saying it still could would be a
-            // promise this build does not keep.
-            message += '\n' + I18n.t('dialog.profileClashQueued');
-        }
         var choice = await showDialog({
-            message: message,
+            message: I18n.t('dialog.profileClash')
+                .replace('{platforms}', shared.join('、'))
+                .replace('{n}', shared.length),
             buttons: [
                 { label: I18n.t('dialog.profileClashUse'), value: 'use' },
                 { label: I18n.t('dialog.profileClashSkip'), value: 'skip', primary: true },
@@ -340,6 +341,32 @@ const workflow = {
         return found.filter(function (platform, index) {
             return found.indexOf(platform) === index;
         });
+    },
+
+    async _confirmRegionBeforeRun() {
+        /* One network cannot serve both halves of this canvas: a VPN gets douyin's 502,
+           a plain Chinese route never reaches x.com. The answer is advisory on purpose —
+           「建议分两次」 rather than 禁止 — because a machine with split routing really can
+           serve both, and this page cannot tell that machine from one with a VPN on.
+
+           Asked *before* the cookie check, because that check buys a browser per
+           platform and a run the user is about to cancel should not have paid for it.
+           With the matrix unavailable it says nothing: no facts, no claim. */
+        if (window.AppSettings) await AppSettings.pull();
+        var values = (window.AppSettings && AppSettings._values) || {};
+        if (!values.warn_mixed_region) return true;
+        var groups = regionGroupsOf(this._crawlPlatforms(), Capabilities.data);
+        if (!groups.cn.length || !groups.overseas.length) return true;
+        var choice = await showDialog({
+            message: I18n.t('dialog.mixedRegion')
+                .replace('{cn}', groups.cn.join('、'))
+                .replace('{overseas}', groups.overseas.join('、')),
+            buttons: [
+                { label: I18n.t('dialog.mixedRegionGo'), value: 'go', primary: true },
+                { label: I18n.t('dialog.mixedRegionSplit'), value: null },
+            ],
+        });
+        return choice === 'go';
     },
 
     async _cookieGateBeforeRun(opts, profileChoice) {
@@ -511,6 +538,10 @@ const workflow = {
            closed the dialog; null means there was nothing to decide. */
         var profileChoice = await this._confirmProfileChoiceBeforeRun();
         if (profileChoice === undefined) return;
+        /* A canvas holding both a domestic and an overseas platform is run from two
+           different networks, and neither one serves both — say so before paying for
+           the cookie probes below. */
+        if (!(await this._confirmRegionBeforeRun())) return;
         /* A long crawl can outlive its cookie and die at the login wall an hour
            in. Either the sites are asked whether that has already happened (自动验证,
            which refuses the run when one says yes) or, with that check switched off,
@@ -978,6 +1009,35 @@ function profileNoticeCount(nodes, settings, matrix) {
         });
     });
     return Object.keys(wanted).length;
+}
+
+/* Which networks this canvas's platforms live behind, split into
+ * ``{cn: [...], overseas: [...]}``.
+ *
+ * A Chinese network and an overseas one are not interchangeable for these sites: with a
+ * VPN up, douyin answers 502 and refuses the whole crawl, and from inside China x.com
+ * is unreachable at all. So a canvas holding both regions cannot be run from either
+ * side today — the user has to split it into two runs, or run it with a routing setup
+ * that serves both.
+ *
+ * The region is read off the crawl matrix (the same payload that says which fields a
+ * mode needs), never from a list typed here: a platform added to the matrix without a
+ * region reads as no region and is simply left out of both groups rather than guessed
+ * at, and a platform the matrix has not delivered yet cannot be classified either —
+ * which is why the caller stays silent when this returns two empty groups.
+ */
+function regionGroupsOf(platforms, matrix) {
+    var groups = { cn: [], overseas: [] };
+    if (!matrix || !Array.isArray(matrix.platforms)) return groups;
+    (platforms || []).forEach(function (platform) {
+        matrix.platforms.forEach(function (cap) {
+            if (cap.platform !== platform) return;
+            if (cap.region === 'cn' || cap.region === 'overseas') {
+                if (groups[cap.region].indexOf(platform) < 0) groups[cap.region].push(platform);
+            }
+        });
+    });
+    return groups;
 }
 
 /* Which platforms two *different* workflows on this canvas both want to crawl.
