@@ -46,12 +46,25 @@ class WorkflowEngine:
         self._build_graph()
 
     def _build_graph(self):
+        # Both ends must be nodes this canvas actually holds. A connection naming a
+        # node that is not there — a hand-edited file, a payload from another
+        # version of the canvas — used to enter the in-degree table anyway, which
+        # made the ordering place more ids than there are nodes and raise
+        # 「工作流存在环，以下节点无法排序：」 with an *empty* node list: the user was
+        # told to hunt a loop that did not exist, in a sentence whose own slot was
+        # blank. The honest report is the missing endpoint, and ``validate`` says it.
         for conn in self.connections:
-            f, t = conn['from'], conn['to']
-            self._adj[f].append(t)
-            self._in_degree[t] += 1
+            f, t_ = conn['from'], conn['to']
+            if f not in self.nodes or t_ not in self.nodes:
+                continue
+            self._adj[f].append(t_)
+            self._in_degree[t_] += 1
             if f not in self._in_degree:
                 self._in_degree[f] = 0
+
+    def dangling_connections(self) -> list[dict]:
+        """Wires that name a node the canvas does not contain."""
+        return [c for c in self.connections if c.get('from') not in self.nodes or c.get('to') not in self.nodes]
 
     def topological_sort(self) -> list[str]:
         in_deg = defaultdict(int, self._in_degree)
@@ -110,9 +123,14 @@ class WorkflowEngine:
         undirected = defaultdict(set)
 
         for conn in self.connections:
-            f, t = conn['from'], conn['to']
-            undirected[f].add(t)
-            undirected[t].add(f)
+            source, target = conn['from'], conn['to']
+            # Same rule as the graph above: a wire to a node that is not on the
+            # canvas joins nothing, and letting it in would invent a component
+            # consisting of an id the executor cannot run.
+            if source not in self.nodes or target not in self.nodes:
+                continue
+            undirected[source].add(target)
+            undirected[target].add(source)
 
         visited = set()
         components = []
@@ -209,6 +227,16 @@ class WorkflowEngine:
         console's words.
         """
         errors = []
+        if not self.nodes:
+            # An empty canvas has no cycle, no missing parameter and no node to
+            # report — and used to "complete": 「发现 0 条工作流」, 0/0 nodes,
+            # outcome completed, toast 已完成. A run of nothing is not a success;
+            # the browser's own gate says so, and the backend must too.
+            return [t('engine.empty_canvas')]
+        for conn in self.dangling_connections():
+            # Named by the ids, because the node they point at is exactly the thing
+            # the canvas no longer has — no title exists to resolve.
+            errors.append(t('engine.dangling_connection', src=str(conn['from']), dst=str(conn['to'])))
         for nid, node in self.nodes.items():
             ntype = node.get('type')
             params = node.get('params', {})

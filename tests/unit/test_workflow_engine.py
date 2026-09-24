@@ -14,7 +14,7 @@ contracts pinned here are the ones the executor silently relies on:
 import pytest
 
 from engine.workflow import WorkflowEngine, node_label
-from i18n import get_lang, set_lang
+from i18n import get_lang, set_lang, t
 
 pytestmark = pytest.mark.unit
 
@@ -66,7 +66,10 @@ class TestConstruction:
         assert engine.topological_sort() == []
         assert engine.group_by_level() == []
         assert engine.find_workflows() == []
-        assert engine.validate() == []
+        # Parsing an absent definition is not an error, but RUNNING one is: a canvas
+        # with no nodes has nothing to complain about field by field, and used to
+        # "complete" at 0/0.
+        assert engine.validate() == [t('engine.empty_canvas')]
 
     def test_executor_is_kept_for_subworkflows(self):
         sentinel = object()
@@ -197,11 +200,16 @@ class TestSubworkflows:
         assert sub.executor == 'exec'
 
     def test_extract_subworkflow_drops_unknown_member_ids(self):
-        # A connection may point at a deleted node; the component still names it.
+        # A wire to a deleted node no longer joins the component at all (naming an id
+        # the canvas does not hold is how the ordering was once told there was a
+        # cycle), so the component is only the node that exists and extraction has
+        # nothing to filter — which is why both answers stay one rule.
         engine = WorkflowEngine(_wf([_node('node-1')], [{'from': 'node-1', 'to': 'node-2'}]))
         component = engine.find_workflows()[0]
-        assert 'node-2' in component
+        assert component == {'node-1'}
         assert list(engine.extract_subworkflow(component).nodes) == ['node-1']
+        # The dangling wire itself is still reported, by validate().
+        assert any('node-2' in error for error in engine.validate()), engine.validate()
 
 
 # ─── validate ──────────────────────────────────────────────────────────
@@ -230,6 +238,40 @@ class TestValidate:
     def test_platform_may_come_from_params(self, en):
         wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw'})], [])
         assert WorkflowEngine(wf).validate() == []
+
+    def test_a_wire_to_a_missing_node_is_named_not_called_a_cycle(self, en):
+        """A dangling endpoint used to be reported as a cycle with an empty node list.
+
+        The ghost id entered the in-degree table, so the ordering placed more ids than
+        ``self.nodes`` holds and the cycle branch printed the difference — which is the
+        empty set. The user was told to hunt a loop that does not exist, in a sentence
+        whose own slot was blank.
+        """
+        ghost = _wf([_node('node-1', 'upload', params={'dataset_id': 'd1'})], [{'from': 'node-1', 'to': 'ghost'}])
+        engine = WorkflowEngine(ghost)
+        assert engine.topological_sort() == ['node-1'], 'a dangling wire must not upset the ordering'
+        errors = engine.validate()
+        assert len(errors) == 1, errors
+        assert 'ghost' in errors[0] and 'node-1' in errors[0], errors
+        assert 'cycle' not in errors[0], 'a missing node is not a loop'
+
+    def test_a_real_cycle_is_still_a_cycle_and_still_named(self, en):
+        """The guard above must not swallow the case it was not written for."""
+        looped = _wf([_node('node-1', 'upload', params={'dataset_id': 'd1'})], [{'from': 'node-1', 'to': 'node-1'}])
+        engine = WorkflowEngine(looped)
+        errors = engine.validate()
+        assert any('cycle' in error and 'node-1' in error for error in errors), errors
+
+    def test_an_empty_canvas_is_refused_not_completed(self, en):
+        """Zero nodes has no cycle, no missing field and nothing to report.
+
+        Validation therefore said nothing, the worker found 0 workflows, ran none, and
+        the run closed as ``completed`` with 「0/0 个节点完成」 and a 已完成 toast —
+        the exact phrasing a refused definition is pinned (elsewhere in this file) never
+        to use. The browser gates this canvas; the backend must too, because a
+        hand-edited file reaches it directly.
+        """
+        assert WorkflowEngine(_wf([], [])).validate() == [t('engine.empty_canvas')]
 
     def test_a_mode_the_platform_does_not_offer_is_named_as_such(self, en):
         """The matrix lookup falls back to the platform's first mode so old canvases

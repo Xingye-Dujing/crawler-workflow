@@ -133,22 +133,35 @@ def _push_log(line: str, wf_idx: int = None):
     ``_log_total`` counts every line ever produced, not the number retained: the
     status endpoint ships only the tail, so without a running total the browser
     cannot work out the delta and the console silently freezes at 200 lines.
+
+    A payload carrying newlines is split into one entry per physical line. A
+    driver's ``Message: …`` block, a site's own multi-line refusal and a
+    ``logger.exception`` traceback all arrived as a SINGLE entry, which the browser
+    counts as one line while the DOM renders several (``.console-line`` is
+    ``white-space: pre-wrap``) — the delta cursor then skipped or repeated real
+    content, blank lines came back through this path after the logger handler
+    filtered them, and the 200-line tail could be spent by one traceback.
     """
     idx = wf_idx if wf_idx is not None else getattr(_wf_local, 'idx', None)
+    parts = [part for part in line.splitlines() if part.strip()]
+    if not parts:
+        return
     # _completed_lock now guards every reader of the console buffers (status
     # endpoint snapshots them), so the writers hold it too.
     with _completed_lock:
         logs = execution_state['logs']
-        logs.append(line)
+        logs.extend(parts)
         if len(logs) > LOG_KEEP:
             del logs[:-LOG_KEEP]
-        execution_state['_log_total'] += 1
+        # The total moves by the number of LINES appended, not by the number of
+        # add_log calls — that total is what the browser's delta cursor reads.
+        execution_state['_log_total'] += len(parts)
         if idx is not None:
             buf = execution_state['_wf_logs'].setdefault(idx, [])
-            buf.append(line)
+            buf.extend(parts)
             if len(buf) > LOG_KEEP:
                 del buf[:-LOG_KEEP]
-            execution_state['_wf_log_total'][idx] = execution_state['_wf_log_total'].get(idx, 0) + 1
+            execution_state['_wf_log_total'][idx] = execution_state['_wf_log_total'].get(idx, 0) + len(parts)
 
 
 class LogBufferHandler(logging.Handler):
@@ -624,6 +637,10 @@ def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
 
 
 def add_log(msg: str, wf_idx: int = None):
+    if not str(msg or '').strip():
+        # A blank console row is noise the logger path already filters; stamping it
+        # would turn ``''`` into a line carrying nothing but a clock.
+        return
     _push_log(f'[{time.strftime("%H:%M:%S")}] {msg}', wf_idx)
 
 
@@ -1012,7 +1029,10 @@ def _enqueue_run(data: dict, lang_header: str) -> dict:
         }
         _RUN_QUEUE.append(entry)
         position = len(_RUN_QUEUE)
-    add_log(t('run.queued', name=name or t('wf.unnamed', i=position), at=position))
+    # ``wf.unnamed`` renders 「未命名工作流{i}」 with the WORKFLOW's index on the canvas;
+    # this is a queue POSITION, and feeding one into the other printed 「已排队（第 2
+    # 位）：未命名工作流2」 where the 2 happened to be the depth of the queue.
+    add_log(t('run.queued', name=name or t('run.queuedUnnamed'), at=position))
     return {
         'status': 200,
         'body': {
@@ -1494,8 +1514,20 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 for wf_idx, se in enumerate(sub_engines):
                     if not execution_state['running']:
                         break
-                    add_log(t('wf.starting', name=_wf_display_name(se, wf_idx)))
-                    results = _run_single_workflow(se, wf_idx, ctx)
+                    # Tagged with its OWN index: this line is printed before
+                    # _run_single_workflow sets the thread-local, so it used to be
+                    # filed under the *previous* component's tab — workflow A's
+                    # console announcing 「开始执行工作流「B」」.
+                    add_log(t('wf.starting', name=_wf_display_name(se, wf_idx)), wf_idx=wf_idx)
+                    try:
+                        results = _run_single_workflow(se, wf_idx, ctx)
+                    finally:
+                        # Released, not left standing. Serial mode runs in the RUN
+                        # thread, so the index of the component that just finished
+                        # would otherwise route every later run-level line — the
+                        # finish line, 存储不可用, the queue hand-off — into that one
+                        # workflow's tab instead of the shared console.
+                        _wf_local.idx = None
                     all_results.update(results)
                 # update(), not replace(): a branch that died halfway already
                 # published its partial rows, and they must survive the merge.
@@ -1526,6 +1558,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                         # and the logger form is the one that also carries the
                         # traceback to the log file.
                         logger.exception(t('wf.wf_exception', wf=_wf_display_name(wf_engine, wf_idx)))
+                    finally:
+                        # Same release as the serial path: a pool thread that kept
+                        # its index would file anything it logs afterwards —
+                        # teardown included — under that one workflow's tab.
+                        _wf_local.idx = None
 
                 pool = ThreadPoolExecutor(max_workers=min(wf_count, max_workers))
                 futures = [pool.submit(_run_workflow_wrapper, se, i) for i, se in enumerate(sub_engines)]
@@ -1750,6 +1787,33 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     execution_state['active_crawlers'].add(crawler)
     resume = {}
     nid = str(node.get('id') or '')
+
+    def _merge_parts(partial_rows) -> None:
+        """Close the 分批输出 writer and announce the merged file — exactly once.
+
+        Named here rather than inlined below because the crawl can also END BY
+        RAISING, and a crawl that refuses to carry on when it hits the wall owed the
+        user the same two facts a crawl that returns under-target gives: the file its
+        parts merged into, and the cookie diagnosis. Neither line existed for
+        zhihu — the platform most likely to bounce us — because both sat after the
+        call that raised.
+        """
+        if writer is None:
+            return
+        if ctx is None and partial_rows:
+            # One-shot path without a run context: nothing flowed through the
+            # tee'd sink, so hand the rows to the writer directly.
+            writer.add(partial_rows)
+        info = writer.finish()
+        add_log(
+            t(
+                'run.progress_file',
+                file=os.path.basename(str(info['path'])),
+                rows=info['rows'],
+                parts=info['parts'],
+            )
+        )
+
     try:
         # ── progressive part files (分批输出) ──
         # With part_size>0 every kept row also lands in a numbered part file while
@@ -1803,6 +1867,16 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # argument that is not the user's — it is where this run stopped, handed
         # over from the store.
         rows = getattr(crawler, mode.handler)(**crawl_args, resume=resume)
+    except BaseException:
+        # The crawler gave up (a wall it refuses to walk into, a risk page, a dead
+        # session). Publish what that answer means BEFORE the failure travels on:
+        # the toast flag, and the merged partial file the row sink already filled.
+        # Suppress the bookkeeping's own errors — they must not replace the real one.
+        if getattr(crawler, 'login_wall', False):
+            execution_state['cookie_expired'] = True
+        with contextlib.suppress(Exception):
+            _merge_parts(None)
+        raise
     finally:
         _close_login_browser(crawler)  # bounded quit + PID-targeted reap, never a global taskkill
         execution_state['active_crawlers'].discard(crawler)
@@ -1818,20 +1892,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
                 # unless the console named the two ways out.
                 add_log(t('run.dedupe_all_skipped'))
     wall = bool(getattr(crawler, 'login_wall', False))
-    if writer is not None:
-        if ctx is None:
-            # One-shot path without a run context: nothing flowed through the
-            # tee'd sink, so hand the rows to the writer directly.
-            writer.add(rows)
-        info = writer.finish()
-        add_log(
-            t(
-                'run.progress_file',
-                file=os.path.basename(str(info['path'])),
-                rows=info['rows'],
-                parts=info['parts'],
-            )
-        )
+    _merge_parts(rows)
     if wall:
         if len(rows) < target_count:
             # A long crawl can outlive its cookie: the platform bounces the
@@ -1984,10 +2045,12 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         df = analyzer_corr.analyze_dataframe(df, columns=columns, method=corr_method, min_abs=min_abs)
         return df.to_dict('records')
 
-    # An unknown operation must not look like "this node simply has no data":
-    # the run continues, but the console says why the table is empty.
-    add_log(t('wf.unknown_process_op', op=op or '(empty)'))
-    return []
+    # An unknown operation is a broken node, not an empty table. Returning [] here
+    # settled it DONE: the run went green, every downstream node complained 「上游没有
+    # 数据」 about itself, and the single sentence explaining why carried no node name
+    # at all — so the user was sent to diagnose the healthy boxes. Raising hands the
+    # reason to the executor, which fails THIS node and prints it with its label.
+    raise ValueError(t('wf.unknown_process_op', op=op or '(empty)'))
 
 
 def _execute_output_node(node: dict, current_input: list):
@@ -2017,7 +2080,9 @@ def _execute_output_node(node: dict, current_input: list):
         try:
             DataExporter.save(df, filepath, fmt=fmt, text_column=params.get('text_column'))
         except UnsupportedFormatError as e:
-            add_log(t('wf.save_failed', err=e))
+            # Refused, and the reason travels: the executor prints it as this node's
+            # failure with the node's own label. A second add_log here said the same
+            # sentence again, unattributed — the version the user could not act on.
             return {'error': str(e)}
         # No "data saved to <path>" line: the exporter has already announced
         # "exported N rows to <path> (fmt)" one line above, and saying the same
@@ -2209,17 +2274,14 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
                 raise UnknownOperationError(t('wf.join_no_right_table'))
             step['params']['other_df'] = pd.DataFrame(right_tables[0])
 
-    try:
-        cleaned, report = DataAnalysisService.run_pipeline(df, steps)
-    except UnknownOperationError as e:
-        # The reason goes to the console *and* the node settles failed. Returning
-        # an empty list here used to make a mistyped filter value look like "the
-        # data was already clean": the run went green, the export wrote a header
-        # row and nothing else, and downstream nodes reported "no upstream data"
-        # for a table that was really refused. Same contract as `/api/analysis/clean`,
-        # which answers these with a 400 and this exact message.
-        add_log(t('wf.analysis_failed', err=e))
-        raise
+    # An unknown/c malformed step RAISES straight through: the executor turns it into
+    # this node's failure and prints the reason with the node's label — one line,
+    # attributed. Swallowing it into an empty list used to make a mistyped filter value
+    # look like "the data was already clean": the run went green, the export wrote a
+    # header row and nothing else, and downstream nodes reported "no upstream data" for
+    # a table that was really refused. Same contract as `/api/analysis/clean`, which
+    # answers these with a 400 and this exact message.
+    cleaned, report = DataAnalysisService.run_pipeline(df, steps)
 
     for step in report:
         line = t('wf.analysis_step', op=step['op'], before=step['rows_before'], after=step['rows_after'])
@@ -2242,17 +2304,19 @@ def _execute_tokenize_node(node: dict, current_input: list):
     params = node.get('params', {})
     column = params.get('text_column', '')
     output_mode = params.get('output_mode', 'word_freq')
+    # Every refusal below RAISES rather than returning []. An empty list settles the
+    # node DONE, so the run read green, the export held only a header, and the one
+    # sentence that explained it carried no node name — the user had to guess which
+    # box was broken. Raising hands the reason to the executor, which fails THIS node
+    # and prints the label with it.
     if not column:
-        add_log(t('wf.tokenize_no_column'))
-        return []
+        raise ValueError(t('wf.tokenize_no_column'))
     if not current_input:
-        add_log(t('wf.tokenize_no_input'))
-        return []
+        raise ValueError(t('wf.tokenize_no_input'))
     df = pd.DataFrame(current_input)
     result_df = _tokenize_dataframe(df, params)
     if result_df is None:
-        add_log(t('wf.tokenize_no_col', col=column, cols=list(df.columns)))
-        return []
+        raise ValueError(t('wf.tokenize_no_col', col=column, cols=list(df.columns)))
     add_log(t('wf.tokenize_done', mode=output_mode, col=column, n=len(result_df)))
     return result_df.to_dict('records')
 
@@ -2304,7 +2368,9 @@ def _execute_visualize_node(node: dict, current_input: list):
             )
             spec = {'engine': 'echarts', 'option': option}
     except ChartConfigError as e:
-        add_log(t('wf.visualize_failed', err=e))
+        # The reason travels as the node's own error; the executor prints it once,
+        # with the node's label. Printing it here too gave two lines for one
+        # failure, the first of them undiagnosable because it named no node.
         return {'error': str(e)}
 
     add_log(t('wf.visualize_done', chart=chart_type, engine=engine, n=len(df)))
@@ -2377,6 +2443,8 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         # (The ledger refuses them as duplicates, so nothing double-stores.)
         rows_out = list(ctx['store'].load_rows(ctx['run_id'], nid))
     counts = {OK: 0, BLOCKED: 0, DEAD: 0}
+    # Which platforms actually answered with a login page, in the order they did.
+    blocked_by: list[str] = []
     sessions = {}
     if headless:
         # This node never crawls headless, whatever the run asked for.
@@ -2418,6 +2486,13 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 raise ValueError(t('comment.noAdapter', platform=kind, url=url))
             rows, status = adapter(url, limit)
             counts[status] = counts.get(status, 0) + 1
+            if status == BLOCKED:
+                # Named by what actually walled. The message used to fall back to a
+                # hand-written list of four platforms, so a YouTube or X comment run
+                # bounced by its own site was reported as 知乎/微博/小红书/哔哩哔哩
+                # 的登录态失效 — naming four platforms the user never crawled and
+                # leaving the one they did unnamed.
+                blocked_by.append(kind)
             writer = _writer_for(idx, url)
             fresh = []
             for row in rows:
@@ -2456,7 +2531,8 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     if blocked_seen:
         # Failed (not done) → the run lands in the resume banner and 继续
         # retries exactly the articles the wall refused.
-        raise ValueError(t('run.cookieExpired', platform=want or 'zhihu/weibo/xiaohongshu/bilibili'))
+        named = '/'.join(dict.fromkeys(blocked_by))
+        raise ValueError(t('run.cookieExpired', platform=named or want or t('run.cookieAnyPlatform')))
     return rows_out
 
 
@@ -2488,6 +2564,21 @@ def _execute_resume_node(node: dict, ctx: dict):
             add_log(t('resume.no_run'))
             return []
         run_id = str(candidates[0].get('run_id') or '')
+
+    def _adopted_label(nid: str) -> str:
+        """The node being adopted, named the way the console names everything.
+
+        ``node_label`` cannot help here: that node lives in another run's record, not
+        on this canvas. But a bare ``node-2`` is just as unreadable, and the row it is
+        about to hand over carries the title its own run stored — so the same
+        「标题 #id」 form is available, and a run of a dozen nodes can be told apart.
+        """
+        if not nid:
+            return t('resume.unpicked')
+        state = store.node_statuses(run_id).get(nid) or {}
+        title = str(state.get('title') or '').strip()
+        return f'{title} #{nid}' if title and title != nid else nid
+
     rows = store.load_rows(run_id, node_id) if node_id else []
     if not rows:
         # No node picked (or the pick holds nothing): take the fullest one.
@@ -2497,11 +2588,11 @@ def _execute_resume_node(node: dict, ctx: dict):
             node_id = str(best.get('node_id') or '')
             rows = store.load_rows(run_id, node_id)
     if not rows:
-        add_log(t('resume.empty', rid=run_id, nid=node_id or t('resume.unpicked')))
+        add_log(t('resume.empty', rid=run_id, nid=_adopted_label(node_id)))
         return []
     if limit and len(rows) > limit:
         rows = rows[:limit]
-    add_log(t('resume.loaded', rid=run_id, nid=node_id, n=len(rows)))
+    add_log(t('resume.loaded', rid=run_id, nid=_adopted_label(node_id), n=len(rows)))
     return rows
 
 

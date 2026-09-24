@@ -100,6 +100,48 @@ class TestTokenizeNode:
         assert 'text column' in blob or '未配置' in blob
 
 
+class TestRefusalsFailTheNode:
+    """A node that could not do its job is a failed node, never a completed one.
+
+    Three of these used to answer ``[]`` after logging the reason. The node settled
+    DONE, the run went green, the export wrote a header and nothing else, and every
+    downstream node then complained 「上游没有数据」 *about itself* — while the one
+    sentence that explained the situation named no node at all. The user is sent to
+    diagnose the healthy boxes.
+    """
+
+    def _flow(self, ds, tail_node, tail_conn=True):
+        nodes = [_node('node-1', 'upload', {'dataset_id': ds, 'row_count': 4}), tail_node]
+        conns = [{'from': 'node-1', 'to': tail_node['id']}] if tail_conn else []
+        return _wf(nodes, conns)
+
+    def test_an_unknown_process_operation_fails_the_node_it_ran_on(self, client, app_module, paste):
+        ds = _upload(client, paste)
+        broken = _node('node-2', 'process', {'operation': 'transliterate'}, 'transliterate')
+        started = client.post(
+            '/api/workflow/execute', json={'workflow': self._flow(ds, broken), 'workflow_name': 'proc-x'}
+        )
+        assert _wait(app_module)
+        nodes = app_module._RUN_STORE.node_statuses(started.get_json()['run_id'])
+        assert nodes['node-2']['status'] == 'failed', nodes['node-2']
+        assert 'transliterate' in (nodes['node-2']['error'] or '')
+        blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
+        named = [line for line in blob.splitlines() if 'transliterate' in line]
+        assert len(named) == 1, f'the refusal was printed {len(named)} times: {named}'
+        assert 'node-2' in named[0], 'the reason must travel with the node it belongs to'
+
+    def test_a_tokenize_node_on_a_missing_column_does_not_look_finished(self, client, app_module, paste):
+        ds = _upload(client, paste)
+        broken = _node('node-2', 'tokenize', {'text_column': '根本没这列', 'output_mode': 'words_only'})
+        started = client.post(
+            '/api/workflow/execute', json={'workflow': self._flow(ds, broken), 'workflow_name': 'tok-y'}
+        )
+        assert _wait(app_module)
+        nodes = app_module._RUN_STORE.node_statuses(started.get_json()['run_id'])
+        assert nodes['node-2']['status'] == 'failed', nodes['node-2']
+        assert '根本没这列' in (nodes['node-2']['error'] or '')
+
+
 class TestVisualizeNode:
     def test_echarts_spec_is_produced_and_exposed(self, client, app_module, paste):
         ds = _upload(client, paste)
@@ -134,7 +176,12 @@ class TestVisualizeNode:
         assert isinstance(spec, dict) and 'error' in spec and 'nope' in str(spec['error'])
         status = client.get('/api/workflow/status').get_json()
         assert 'node-2' not in status['chart_results']
-        assert any('Visualize failed' in line for line in status['logs'])
+        # One refusal, one line — and the line names the node. It used to be two:
+        # an unattributed "Visualize failed: …" from inside the node, then the
+        # executor's own failure line repeating the same reason.
+        carried = [line for line in status['logs'] if 'nope' in line]
+        assert len(carried) == 1, f'one refusal was announced {len(carried)} times: {carried}'
+        assert 'node-2' in carried[0], carried[0]
 
     def test_a_refused_node_never_settles_as_done(self, client, app_module, paste):
         """The node's own answer is a dict with 'error' — and that must not read

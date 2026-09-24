@@ -555,3 +555,51 @@ class TestDurableAnswerCache:
         assert spy.added == [0, 3, 4]
         assert spy.discarded is True
         assert cached_scopes(run_store) == set()  # the store was never written to
+
+
+class TestNarrationCadence:
+    """One fact, once — the console is the only view a long LLM batch ever gets.
+
+    A finished row used to be announced twice at every batch boundary (the per-row
+    line, then the batch line repeating the same ``done/total``), three times on the
+    last row once the closing line joined in, and a failure three times over: this
+    module said the error, ``run_llm_dataframe`` logged it again, and the executor
+    printed it as the node's failure. A circuit-breaker message is two sentences long,
+    so one failure filled a screen.
+    """
+
+    def test_progress_is_stated_once_per_row_when_rows_are_narrated(self):
+        lines = []
+        run_simple(log=lines.append, batch_size=2, label='清洗')
+        first = [line for line in lines if '1/3' in line]
+        assert len(first) == 1, f'the same figure was said {len(first)} times: {lines}'
+        # The batch boundary stays silent here: with every row narrated, a second line
+        # carrying the same numbers is a duplicate rather than progress.
+        assert not any('进度' in line or 'Progress' in line for line in lines), lines
+
+    def test_the_batch_marker_survives_when_per_row_lines_are_thinned(self):
+        lines = []
+        jobs = [(i, f'文本内容{i}') for i in range(250)]
+        run_simple(jobs=jobs, log=lines.append, batch_size=10, label='清洗')
+        narrated = [line for line in lines if '行完成' in line]
+        assert len(narrated) <= 100, f'{len(narrated)} per-row lines on a 250-row table'
+        # Past the thinning threshold the batch line is the user's only sign of
+        # movement, so it must still speak.
+        assert any('进度' in line for line in lines), lines
+
+    def test_a_transport_death_leaves_the_reason_to_the_node_line(self, df_for_llm, caplog):
+        """The failure text belongs to one line: the executor's, which names the node.
+
+        ``llm.aborted`` carries what that line cannot — how many rows survived to be
+        reused — and nothing else.
+        """
+        lines = []
+        with pytest.raises(LLMError):
+            run_simple(client=ScriptedClient(error_after=1), log=lines.append, label='清洗')
+        assert [line for line in lines if 'transport died' in line] == [], lines
+
+        with caplog.at_level('WARNING'), pytest.raises(LLMError):
+            run_df(df_for_llm, client=ScriptedClient(error_after=0))
+        saved = [record.message for record in caplog.records if '已保存' in record.message or 'saved' in record.message]
+        assert len(saved) == 1, saved
+        assert 'transport died' not in saved[0], saved[0]

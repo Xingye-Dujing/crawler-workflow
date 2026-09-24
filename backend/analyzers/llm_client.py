@@ -624,7 +624,14 @@ def run_llm_rows(
         if publish is not None:
             with contextlib.suppress(Exception):
                 publish()
-        say(t('llm.progress', label=label, done=done, total=total))
+        # One narration cadence. With ``progress_step == 1`` every finished row is
+        # already announced by ``llm.row_done``, so this line repeated the same
+        # ``done/total`` one row later — and three lines carried the final figure once
+        # ``llm.node_done`` closed the node. It speaks only when the per-row lines are
+        # being thinned out, which is exactly when a batch marker is the user's only
+        # sign of movement.
+        if progress_step > 1:
+            say(t('llm.progress', label=label, done=done, total=total))
 
     pending = []  # [(future, row_index, text_hash)] in flight within the current batch
     try:
@@ -687,7 +694,7 @@ def run_llm_rows(
             with contextlib.suppress(Exception):
                 publish()
         say(t('llm.node_done', label=label, done=done, total=total))
-    except LLMError as e:
+    except LLMError:
         # Cancel / circuit-break: publish what is done, then bubble up so the
         # workflow stops this branch instead of feeding partial data downstream.
         # pending holds triples — unpacking two of them here used to raise a
@@ -698,7 +705,10 @@ def run_llm_rows(
         if publish is not None:
             with contextlib.suppress(Exception):
                 publish()
-        say(f'[{label}] {e}')
+        # The reason is not printed here. This same exception travels to the executor,
+        # which states it once with the node's label; saying it twice made a single
+        # LLM failure three console lines (this one, ``llm.aborted`` and the node
+        # failure), and the circuit-breaker text is two sentences long.
         raise
     finally:
         if pool is not None:
@@ -849,9 +859,12 @@ def run_llm_dataframe(
             # "14/14 rows saved" when only one had actually landed.
             col = df[result_columns[0]]
             finished = int((col.notna() & (col != blank[0]) & (col != ABORT_MARK)).sum())
-            logger.error(t('llm.aborted', label=label, err=e, done=finished))
+            # The reason is NOT repeated here: the executor prints it once, as this
+            # node's failure with its label. This line carries only what that one
+            # cannot know — how many rows survived to be reused.
+            logger.error(t('llm.aborted', label=label, done=finished))
             raise
-        logger.warning(t('llm.stopped', label=label, err=e))
+        logger.warning(t('llm.stopped', label=label))
 
     # Rows that never landed: explicit parse-failures keep the analyzer's
     # failure value (same as the original code); anything the run never

@@ -55,17 +55,18 @@ _ZH = {
     # replaced printed the same sentence twice.
     'wf.exec_exception': '执行失败，完整堆栈见服务端日志',
     'wf.wf_exception': '工作流「{wf}」执行失败，完整堆栈见服务端日志',
-    'wf.save_failed': '保存失败：{err}',
-    'wf.analysis_failed': '分析失败：{err}',
+    # These refusals are printed by the executor as the node's own failure
+    # (「节点 X 执行失败：…」), so they state the reason only — a second
+    # 「分词失败：」/「可视化失败：」 inside them repeats the wrapper, and the node
+    # used to be logged twice: once here without a name, once attributed.
     'wf.analysis_step': '[分析] {op}：{before} → {after} 行',
     'wf.analysis_step_removed': '（-{removed}）',
     'wf.analysis_step_nochange': '（无变化）',
-    'wf.tokenize_no_column': '分词失败：未配置 text_column',
-    'wf.tokenize_no_input': '分词失败：没有上游数据，请连接数据源或文件上传节点',
-    'wf.tokenize_no_col': '分词失败：列“{col}”不在 {cols} 中',
+    'wf.tokenize_no_column': '未配置要分词的文本列',
+    'wf.tokenize_no_input': '没有上游数据，请连接数据源或文件上传节点',
+    'wf.tokenize_no_col': '列“{col}”不在 {cols} 中',
     'wf.tokenize_done': '[分词] {mode} 已切分 {col} → {n} 行',
-    'wf.visualize_failed': '可视化失败：{err}',
-    'wf.visualize_no_input': '可视化失败：没有上游数据，请连接数据源或文件上传节点',
+    'wf.visualize_no_input': '没有上游数据，请连接数据源或文件上传节点',
     'wf.visualize_done': '[可视化] 已渲染 {chart} 图表（{engine}），共 {n} 行',
     'wf.browser_opened': '已打开浏览器用于 {platform} 登录，等待 {n} 秒完成登录…',
     'wf.cookies_generated': '已生成 {platform} 的 Cookie（{n} 项）',
@@ -107,8 +108,10 @@ _ZH = {
     'llm.missing_column': 'DataFrame 缺少必需的列“{col}”——{label} 节点失败，请检查文本列配置',
     'llm.no_rows': '[{label}] 没有需要处理的行（“{col}”列为空）。',
     'llm.start': '[{label}] 共 {total} 行待处理，调用方式：{transport}（每条数据一次询问，文本越长越耗 token）',
-    'llm.aborted': '[{label}] 中止：{err}（已完成 {done} 行的结果已保存）',
-    'llm.stopped': '[{label}] 已停止：{err}（已完成行已保存）',
+    # Neither line carries the failure text: the executor states it once, attributed
+    # to the node. These two say only what that line cannot — what survived.
+    'llm.aborted': '[{label}] 已完成 {done} 行，结果已保存',
+    'llm.stopped': '[{label}] 已停止，已完成行的结果已保存',
     'llm.unfinished': '[{label}] {n} 行未处理（标记为 {mark}）。重新执行同一节点将从断点续跑，只补这些行。',
     # ── upload node ───────────────────────────────────────────
     'upload.no_file': '文件上传节点未选择文件，请在节点设置里上传 CSV / JSON / TXT',
@@ -143,10 +146,14 @@ _ZH = {
         '请在执行设置中关闭无头模式，或稍后重试；已采集的数据不受影响'
     ),
     'crawl.cookiesSeeded': 'Cookie 预置：{host} 接受 {n}/{total} 条',
-    'crawl.loginWall': '登录墙：{platform} 的 {where} 被重定向到登录页，已停止本次抓取（仅返回已拿到的数据）',
-    'crawl.riskBlocked': (
-        '风控拦截：{platform} 的 {where} 返回了安全验证而非内容，已停止本次抓取（会话未必失效，稍后重试）'
-    ),
+    # Observation only — never a claim about what the crawl then did. This line is
+    # written by ``check_login_wall``, which cannot know the caller's policy: weibo
+    # and zhihu stop, while WeChat's batch skips that one article and carries on to
+    # the next. Saying 「已停止本次抓取」 there told the user their batch had ended.
+    # The stop, when it happens, is announced by the node refusing with
+    # ``run.cookieExpired``, which also says what to do about it.
+    'crawl.loginWall': '登录墙：{platform} 的 {where} 被重定向到登录页',
+    'crawl.riskBlocked': '风控拦截：{platform} 的 {where} 返回了安全验证而非内容（会话未必失效，稍后重试）',
     'crawl.promptDismissed': '{label} 的首屏弹窗已自动点掉：「{button}」',
     'crawl.promptUnmatched': '{label} 的首屏弹窗无法对应按钮（页面提供：{buttons}），本次可能需等待其自动消失',
     'crawl.zhihu.url': '搜索URL: {url}',
@@ -533,13 +540,20 @@ _ZH = {
     'engine.output_no_op': '节点 {nid}：输出节点没有选择操作',
     'engine.analysis_no_op': '节点 {nid}：分析节点没有配置操作或步骤',
     'engine.cycle': '工作流存在环，以下节点无法排序：{nodes}',
+    # A wire whose end is not on the canvas is not a cycle. Reporting it as one
+    # (with an empty node list, which is what the old code produced) sent users
+    # hunting a loop that did not exist.
+    'engine.dangling_connection': '连线指向画布上不存在的节点：{src} → {dst}',
+    # An empty canvas is refused, never "completed": 0/0 nodes with a 已完成 toast
+    # reads as a run that worked.
+    'engine.empty_canvas': '画布上没有任何节点，没有可运行的工作流',
     'engine.tokenize_no_column': '节点 {nid}：分词节点缺少文本列',
     'engine.visualize_no_chart': '节点 {nid}：可视化节点没有选择图表类型',
     'engine.visualize_no_x': '节点 {nid}：可视化节点缺少 X 字段',
     'engine.name_no_label': '节点 {nid}：命名节点的工作流名称不能为空',
     'engine.name_not_head': '节点 {nid}：命名节点必须打头，不能有上游节点接入',
     'engine.name_no_downstream': '节点 {nid}：命名节点后面必须连接下游节点',
-    'wf.unknown_process_op': '处理节点使用了未知操作「{op}」，该节点输出为空',
+    'wf.unknown_process_op': '使用了未知操作「{op}」',
     'wf.join_no_right_table': '合并表需要两条上游连线：第一条是左表，第二条是右表',
     'analysis.join_no_right': '合并失败：没有拿到右表数据（请把第二条连线接到作为右表的节点）',
     'analysis.join_need_keys': '合并失败：请填写左右两边的关联列',
@@ -592,6 +606,10 @@ _ZH = {
         '已采集的数据全部保留——请到 设置→Cookie 更新后，用断点续跑从上次中断处继续'
     ),
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
+    # Only for a comment node whose links came from several platforms and whose own
+    # platform field is empty — the message must name what walled, and a hand-written
+    # list of platforms the user never crawled reads worse than no list at all.
+    'run.cookieAnyPlatform': '所采集的平台',
     'run.forcedVisible': '「{label}」：{platform} 会拦截无头浏览器，本次已自动改用可见窗口运行',
     'run.forcedVisibleComment': '「{label}」：评论采集一律使用可见窗口（知乎等内容页会拒绝无头会话），已忽略无头设置',
     'crawl.profile_wait': '已排队 {seconds} 秒：这个 profile 同时只能开一个浏览器，{dir}',
@@ -643,6 +661,7 @@ _ZH = {
     'api.queued': '已排队：当前运行结束后自动开始（第 {at} 位）',
     'api.queueFull': '排队已满（最多 {n} 个），请等当前运行结束或先取消几个',
     'run.queued': '已排队（第 {at} 位）：{name}',
+    'run.queuedUnnamed': '未命名工作流',
     'run.queue_started': '队列接续：{name} 开始运行（{rid}）',
     'run.queue_waited': '队列接续失败（已有运行在跑），{name} 重新排队',
     'run.queue_broken': '队列里的 {name} 无法启动，已跳过并继续下一个：{err}',
@@ -680,17 +699,18 @@ _EN = {
     # replaced printed the same sentence twice.
     'wf.exec_exception': 'Execution failed — the traceback is in the server log',
     'wf.wf_exception': 'Workflow "{wf}" failed — the traceback is in the server log',
-    'wf.save_failed': 'Save failed: {err}',
-    'wf.analysis_failed': 'Analysis failed: {err}',
+    # Stated as the reason only: the executor prints these as the node's own
+    # failure (「Node X failed: …」), so a "Tokenize failed:" prefix inside them
+    # repeats the wrapper, and the pair used to print the same sentence twice —
+    # once here with no node named, once attributed.
     'wf.analysis_step': '[Analysis] {op}: {before} -> {after} rows',
     'wf.analysis_step_removed': ' (-{removed})',
     'wf.analysis_step_nochange': ' (no change)',
-    'wf.tokenize_no_column': 'Tokenize failed: text_column not configured',
-    'wf.tokenize_no_input': 'Tokenize failed: no upstream data — connect a data source or an upload node',
-    'wf.tokenize_no_col': 'Tokenize failed: column "{col}" not found in {cols}',
+    'wf.tokenize_no_column': 'no text column is configured for tokenizing',
+    'wf.tokenize_no_input': 'no upstream data — connect a data source or an upload node',
+    'wf.tokenize_no_col': 'column "{col}" not found in {cols}',
     'wf.tokenize_done': '[Tokenize] {mode} segmented {col} -> {n} rows',
-    'wf.visualize_failed': 'Visualize failed: {err}',
-    'wf.visualize_no_input': 'Visualize failed: no upstream data — connect a data source or an upload node',
+    'wf.visualize_no_input': 'no upstream data — connect a data source or an upload node',
     'wf.visualize_done': '[Visualize] Rendered {chart} chart ({engine}) from {n} rows',
     'wf.browser_opened': 'Browser opened for {platform} login. Waiting {n}s for user to log in...',
     'wf.cookies_generated': 'Cookies generated for {platform} ({n} cookies)',
@@ -735,8 +755,8 @@ _EN = {
     ),
     'llm.no_rows': '[{label}] Nothing to process (column "{col}" is empty).',
     'llm.start': '[{label}] {total} rows queued via {transport} (one request per row — longer text costs more tokens)',
-    'llm.aborted': '[{label}] Aborted: {err} ({done} finished rows are saved)',
-    'llm.stopped': '[{label}] Stopped: {err} (finished rows are saved)',
+    'llm.aborted': '[{label}] {done} finished rows are saved',
+    'llm.stopped': '[{label}] stopped; finished rows are saved',
     'llm.unfinished': '[{label}] {n} rows not processed (marked {mark}). Re-running this node resumes from '
     'the checkpoint and fills only those.',
     # ── upload node ───────────────────────────────────────────
@@ -776,14 +796,8 @@ _EN = {
         'turn off headless mode in the run settings, or retry later; collected data is safe'
     ),
     'crawl.cookiesSeeded': 'Cookies seeded: {host} accepted {n}/{total}',
-    'crawl.loginWall': (
-        'Login wall: {platform} redirected {where} to a login page; the crawl stopped'
-        ' early (data collected so far is kept)'
-    ),
-    'crawl.riskBlocked': (
-        'Risk control: {platform} answered {where} with a security check instead of content;'
-        ' the crawl stopped (the session may be fine — retry a little later)'
-    ),
+    'crawl.loginWall': 'Login wall: {platform} redirected {where} to a login page',
+    'crawl.riskBlocked': 'Risk control: {platform} answered {where} with a security check instead of content',
     'crawl.promptDismissed': '{label}: dismissed the first-run dialog by pressing "{button}"',
     'crawl.promptUnmatched': (
         '{label}: the first-run dialog matched no known button (the page offers: {buttons}),'
@@ -1178,13 +1192,15 @@ _EN = {
     'engine.output_no_op': 'Node {nid}: output node has no operation',
     'engine.analysis_no_op': 'Node {nid}: analysis node has no operation/steps configured',
     'engine.cycle': 'the workflow contains a cycle; these nodes cannot be ordered: {nodes}',
+    'engine.dangling_connection': 'a connection points at a node the canvas does not hold: {src} → {dst}',
+    'engine.empty_canvas': 'the canvas holds no nodes, so there is no workflow to run',
     'engine.tokenize_no_column': 'Node {nid}: tokenize node is missing its text column',
     'engine.visualize_no_chart': 'Node {nid}: visualize node has no chart type',
     'engine.visualize_no_x': 'Node {nid}: visualize node is missing the x field',
     'engine.name_no_label': 'Node {nid}: the name node needs a workflow name',
     'engine.name_not_head': 'Node {nid}: the name node must lead — nothing may feed into it',
     'engine.name_no_downstream': 'Node {nid}: the name node must connect to a downstream node',
-    'wf.unknown_process_op': 'Process node used an unknown operation "{op}" — its output is empty',
+    'wf.unknown_process_op': 'unknown process operation "{op}"',
     'wf.join_no_right_table': 'A join needs two incoming connections (left table first, right table second)',
     'analysis.join_no_right': "Join failed: no right-hand table — connect it as this node's second input",
     'analysis.join_need_keys': 'Join failed: set both the left and the right key column',
@@ -1243,6 +1259,7 @@ _EN = {
     'run.cookieExpiredOk': (
         'note: {platform} hit the login wall only after the target was met — the data is complete, nothing to resume'
     ),
+    'run.cookieAnyPlatform': 'the platform being crawled',
     'run.forcedVisible': '"{label}": {platform} blocks headless browsers, so this run was switched to a visible window',
     'run.forcedVisibleComment': (
         '"{label}": comment crawling always uses a visible window (zhihu and friends refuse headless '
@@ -1298,6 +1315,7 @@ _EN = {
     'api.queued': 'Queued: it starts when the current run finishes (position {at})',
     'api.queueFull': 'the queue is full ({n} waiting) — wait for the current run, or cancel some',
     'run.queued': 'Queued (position {at}): {name}',
+    'run.queuedUnnamed': 'an unnamed workflow',
     'run.queue_started': 'Queue: {name} started ({rid})',
     'run.queue_waited': 'Queue could not start {name} (a run is active), it waits again',
     'run.queue_broken': 'the queued request {name} could not start; skipped, the next one continues: {err}',

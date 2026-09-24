@@ -700,6 +700,19 @@ class TestProgressAccounting:
         assert rejected and '1' in rejected[0], 'the line must say how many problems there are'
         assert not any('Run finished' in line for line in body['logs']), 'nothing ran, so nothing finished'
 
+    def test_an_empty_canvas_is_rejected_rather_than_completing(self, client, app_module):
+        """The same rule with no node at all — the case the check above cannot see.
+
+        With zero nodes there was no field to complain about, so the definition passed
+        validation, no node ran, and the run reported ``completed``.
+        """
+        client.post('/api/workflow/execute', json={'workflow': _workflow([], []), 'workflow_name': 'empty'})
+        assert _wait_for_worker(app_module)
+        body = client.get('/api/workflow/status').get_json()
+        assert body['outcome'] == 'rejected', 'an empty canvas is not a run that finished'
+        assert not any('Run finished' in line for line in body['logs']), body['logs']
+        assert app_module.get_run_store().list_resumable(include_finished=True) == [], 'a refused run writes no record'
+
     @pytest.mark.serial
     def test_a_node_that_never_ran_is_not_announced_as_starting(self, client, app_module, monkeypatch):
         """'Executing node X' used to be printed before the executor decided
