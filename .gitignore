@@ -8,6 +8,7 @@ logs/
 .pylintrc
 backend/test_*.py
 .qoder/settings.local.json
+.qoder/sessions/
 .coverage
 htmlcov/
 
