@@ -611,6 +611,13 @@ _ZH = {
     'run.cookieAnyPlatform': '所采集的平台',
     'run.forcedVisible': '「{label}」：{platform} 会拦截无头浏览器，本次已自动改用可见窗口运行',
     'run.forcedVisibleComment': '「{label}」：评论采集一律使用可见窗口（知乎等内容页会拒绝无头会话），已忽略无头设置',
+    'run.platformQueued': (
+        '{platform} 正在被另一条工作流采集，本轮改为排队：{n} 秒后开始，'
+        '避免同一账号在同一秒内发出两次搜索而被弹到登录页'
+    ),
+    'run.platformGateTimeout': '{platform} 等待采集时段超时（{n} 秒）：可能有浏览器窗口没有关闭',
+    'run.queueAbandoned': '{platform} 的排队等待已取消（本次运行已停止）',
+    'run.wallRetry': ('{platform} 在第一条数据之前就被弹到登录页，这更像同一账号被两次并发搜索撞了：{n} 秒后重试一次'),
     'crawl.profile_wait': '已排队 {seconds} 秒：这个 profile 同时只能开一个浏览器，{dir}',
     'run.profileOff': '本次执行不使用浏览器 Profile：每次都是全新设备（为让同平台的工作流真并行），Cookie 快照照常导入',
     'crawl.profile_stuck': (
@@ -1262,6 +1269,18 @@ _EN = {
     'run.forcedVisibleComment': (
         '"{label}": comment crawling always uses a visible window (zhihu and friends refuse headless '
         'content pages), so the headless setting was ignored here'
+    ),
+    'run.platformQueued': (
+        '{platform} is being crawled by another workflow, so this one queued and starts in {n}s: two '
+        'searches from one account in the same second are what gets bounced to the login page'
+    ),
+    'run.platformGateTimeout': (
+        '{platform} waited {n}s for its turn to crawl and gave up: a browser window that never closed may be holding it'
+    ),
+    'run.queueAbandoned': 'the queue wait for {platform} was cancelled (this run stopped)',
+    'run.wallRetry': (
+        '{platform} was bounced to its login page before its first row, which reads as two concurrent '
+        'searches from one account colliding: retrying once in {n}s'
     ),
     'crawl.profile_wait': 'queued {seconds} s: this profile runs one browser at a time — {dir}',
     'run.profileOff': (

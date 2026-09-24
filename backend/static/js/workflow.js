@@ -280,8 +280,10 @@ const workflow = {
              · 用 Profile — the site sees one continuous device (what weibo and
                xiaohongshu punish a throwaway browser for), but one profile holds
                one Chrome, so those crawls take turns and 并行 buys nothing there;
-             · 本次不用 — the workflows really do crawl side by side, and each one
-               starts as a brand-new device on a planted cookie snapshot.
+             · 本次不用 — each workflow starts as a brand-new device on a planted
+               cookie snapshot, which is what makes two of them overlap *unless*
+               同平台排队 is on (the queue then orders them anyway, and the dialog
+               says so in its own line below).
 
            Returns null when there is nothing to decide (profiles off, not
            parallel, no shared platform) or true/false for the user's answer. A
@@ -297,6 +299,12 @@ const workflow = {
         var message = I18n.t('dialog.profileClash')
             .replace('{platforms}', shared.join('、'))
             .replace('{n}', shared.length);
+        if (values.same_platform_queue) {
+            // The queue decides the order now, so the second option can no longer
+            // promise two crawls side by side. Saying it still could would be a
+            // promise this build does not keep.
+            message += '\n' + I18n.t('dialog.profileClashQueued');
+        }
         var choice = await showDialog({
             message: message,
             buttons: [

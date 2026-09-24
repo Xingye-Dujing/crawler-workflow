@@ -14,6 +14,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import browser_profiles
+import crawl_gate
 import pandas as pd
 import requests
 from flask import Flask, jsonify, request, send_from_directory
@@ -1760,6 +1761,63 @@ def _source_stream(ctx: dict, nid: str, scope: str, label: str = ''):
     return row_sink, cursor_sink
 
 
+def _is_collision(crawler, resume) -> bool:
+    """Whether a refusal reads as "two of our own crawls met at the door".
+
+    Three conditions, each removing a different false alarm: the platform really
+    bounced us, nothing was collected (so there is no paid-for work to duplicate and
+    no cursor to rewind), and the run still wants its rows (a Stop is not a pause —
+    retrying after it would crawl on behind a run already declared over).
+    """
+    return bool(
+        getattr(crawler, 'login_wall', False)
+        and not crawler.collected()
+        and not resume
+        and execution_state['running']
+        and Config.WALL_RETRY_BACKOFF > 0
+    )
+
+
+def _backoff_for_retry(crawler, platform: str) -> None:
+    """Say it once, wait, and hand the crawler back a clean slate.
+
+    The two flags describe the attempt that just failed; the retry has to be able to
+    report a wall of its own, so they are cleared rather than left to be re-read.
+    """
+    add_log(t('run.wallRetry', platform=platform, n=int(Config.WALL_RETRY_BACKOFF)))
+    time.sleep(Config.WALL_RETRY_BACKOFF)
+    crawler.login_wall = False
+    crawler.risk_blocked = False
+
+
+def _crawl_with_collision_retry(crawler, handler, crawl_args: dict, resume: dict, platform: str):
+    """One trip to the platform, plus the second attempt a collision deserves.
+
+    A wall met before the first row is the shape two same-platform workflows make of
+    each other — measured: weibo answers the second session of one account with a
+    passport redirect inside the same second. Backing off once and trying again is the
+    difference between a red node and a green one.
+
+    A wall met *after* rows were collected is the other event entirely: a cookie dying
+    mid-crawl. That one must not be retried here — it settles the node partial, fails
+    the run and hands the user the 继续 banner, which is the path that keeps the rows
+    already paid for. The wait happens **inside** the platform's turn (see
+    ``crawl_gate.hold`` in :func:`_execute_node`), or a retry would queue up behind
+    the very workflow it is waiting for.
+    """
+    try:
+        rows = handler(**crawl_args, resume=resume)
+    except BaseException:
+        if not _is_collision(crawler, resume):
+            raise
+        _backoff_for_retry(crawler, platform)
+        return handler(**crawl_args, resume=resume)
+    if not rows and _is_collision(crawler, resume):
+        _backoff_for_retry(crawler, platform)
+        rows = handler(**crawl_args, resume=resume)
+    return rows
+
+
 def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     """Scrape a platform, one row at a time.
 
@@ -1897,7 +1955,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # The matrix decided what this crawl is called with; `resume` is the one
         # argument that is not the user's — it is where this run stopped, handed
         # over from the store.
-        rows = getattr(crawler, mode.handler)(**crawl_args, resume=resume)
+        rows = _crawl_with_collision_retry(crawler, getattr(crawler, mode.handler), crawl_args, resume, platform)
     except BaseException:
         # The crawler gave up (a wall it refuses to walk into, a risk page, a dead
         # session). Publish what that answer means BEFORE the failure travels on:
@@ -2822,7 +2880,14 @@ def _execute_node(
     if ntype == 'comment':
         return _execute_comment_node(node, headless=headless, ctx=ctx)
     if ntype == 'source':
-        return _execute_source_node(node, headless, ctx=ctx)
+        # The platform's turn is taken *here*, around the whole node, so the retry
+        # inside the crawl runs within it: a retry that released the queue first would
+        # collide with the very workflow it had been waiting behind. 评论采集 opens one
+        # browser per platform it finds in its links and is not gated yet (stated in
+        # the README next to the setting, so it is a known gap rather than a promise).
+        platform = node.get('platform') or (node.get('params') or {}).get('platform', '')
+        with crawl_gate.hold(platform, log=add_log, abort=lambda: not execution_state['running']):
+            return _execute_source_node(node, headless, ctx=ctx)
     if ntype == 'upload':
         return _execute_upload_node(node)
     if ntype == 'resume':

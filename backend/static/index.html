@@ -1380,6 +1380,19 @@
         </span>
       </div>
       <div class="dd-item-row">
+        <span data-i18n="set.sameQueue">同平台排队采集</span>
+        <span class="dd-ctrl">
+          <label class="settings-checkbox-label">
+            <input
+              type="checkbox"
+              id="set-same-platform-queue"
+              onchange="onSettingInput('same_platform_queue', this.checked)"
+            />
+            <span data-i18n="set.sameQueueInline">同一平台一次只跑一条采集，排到队的再等几秒错峰</span>
+          </label>
+        </span>
+      </div>
+      <div class="dd-item-row">
         <span data-i18n="set.profileDir">Profile 目录</span>
         <span class="dd-ctrl">
           <input
@@ -1391,6 +1404,9 @@
             oninput="onSettingInput('browser_profile_dir', this.value)"
           />
         </span>
+      </div>
+      <div class="dd-item-block">
+        <span class="dd-block-note" data-i18n="set.sameQueueHint">开：同一平台的两条工作流轮流采集，排到队的那条在开始前再多等几秒错峰。两类实测失败一起消失——站点把同一账号一秒内的两次搜索弹到登录页（微博）或回风控 40362（知乎），以及 chromedriver 拒绝在 Chrome 已占用的 profile 里再开一个浏览器。不同平台照常并行。关：同平台真的重叠，站点容忍时更快；不容忍时两个节点一起变红。无论开关，排过队的那条都会在控制台说明自己等了多久。</span>
       </div>
       <!-- One full-width block, not a label+control row: eight platform states in the
            narrow right column is what made this cell scroll sideways. -->

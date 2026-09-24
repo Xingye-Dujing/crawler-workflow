@@ -80,6 +80,26 @@ class Config:
     #: killed without closing cannot park this platform forever.
     PROFILE_LOCK_TIMEOUT = 900
 
+    #: Two crawls of one platform inside the same second look to the site like one
+    #: client doing two searches at once, which is what weibo answers with a passport
+    #: redirect and zhihu with risk code 40362 (both met with two parallel workflows
+    #: on one account). When 同平台排队 is on, a crawl that had to wait for its
+    #: predecessor backs off this many seconds (plus jitter) before opening its
+    #: browser — the gap is only paid where there was real contention, so a serial
+    #: canvas waits for nothing.
+    SAME_PLATFORM_STAGGER = 12.0
+
+    #: A wall met *before the first row* is that collision's shape, not a dead cookie:
+    #: a cookie that dies mid-crawl leaves rows behind, and that path stays
+    #: 判失败 → 续跑 rather than burning a second attempt. One bounded wait and one
+    #: retry is the difference between a red node and a green one; 0 disables it.
+    WALL_RETRY_BACKOFF = 45.0
+
+    #: How long a crawl may wait for its platform's turn. Same reasoning as
+    #: :attr:`PROFILE_LOCK_TIMEOUT`: longer than any single crawl, and finite so a
+    #: browser that never closed cannot park the platform for the rest of the process.
+    PLATFORM_GATE_TIMEOUT = 900
+
     #: How much of a 公众号 article body a row keeps. A long post runs past ten
     #: thousand characters, and the crawler used to cut it at a hardcoded 5000 —
     #: which silently dropped the ending of every analysis input. 0 keeps it all.

@@ -38,7 +38,7 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
     pass (~an hour) and belongs to acceptance.
   - **To run one device/live case you must override the marker filter as well as naming it** —
     `pytest tests/integration/x.py::test_y` alone reports `N deselected` and looks like it ran.
-  - Coverage: `--cov=backend --cov-report=term` (target ≥70%).
+  - Coverage: `--cov=backend --cov-report=term`.
   - Layout: `tests/unit`, `tests/api` (tmp-isolated `test_client`), `tests/integration` (marked
     Chrome/Ollama; LLM boundary mocks run by default). OpenRouter is **never** really called — patch
     `analyzers.llm_client.requests.post/get`.
@@ -144,13 +144,16 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   `<user-data-dir>/Default/Preferences`, so two sessions created in one directory at the same instant
   cannot both come up (`session not created: failed to write prefs file`).
   `browser_profiles.acquire_profile(dir)` is a plain, **non-reentrant**
-  `Lock` keyed by normalised path, held for the crawler's whole life and released in `close()` — it must
-  stay non-reentrant because `_close_login_browser` releases it from a *side* thread (an `RLock` fails to
-  release there and parks the platform). Waiting is
-  not free, so the user decides per run: `profileCollisions()` groups the canvas by connected component
-  and names the platforms two workflows both crawl, `_confirmProfileChoiceBeforeRun()` asks 用 Profile
-  (those crawls take turns) vs 本次不用 (true parallel, a brand-new device each), and the answer travels
-  as `settings.use_profile` → `ctx['use_profile']` → `get_crawler(use_profile=…)`. **Absence means "follow the setting" — never coerce missing to `False`,** or
+  `Lock` keyed by normalised path, held for the crawler's whole life and released in `close()`; it must
+  stay non-reentrant because `_close_login_browser` releases it from a *side* thread. Waiting is
+  not free, so the user decides per run: `profileCollisions()` + `_confirmProfileChoiceBeforeRun()`
+  ask 用 Profile vs 本次不用, and the answer travels as `use_profile`.
+  **A site's rate limit is a second collision**: two throwaway browsers can start
+  together and still be bounced — the *account* searched twice in one second. So
+  `crawl_gate.hold(platform)` orders crawls by platform, not directory (setting
+  `same_platform_queue`; sleeps only after a waited hand-off). A wall met **before the
+  first row** retries once after a back-off; a wall met after rows is the cookie dying
+  and must go to 继续 instead. **Absence means "follow the setting" — never coerce missing to `False`,** or
   one dialog's answer becomes a global override. `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node
   fails with the directory named, never with a driver stack trace.
 - **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.**
@@ -372,9 +375,8 @@ Chinese messages with a type prefix matching history: `功能更新：`, `问题
    (features, node types, API tables, config, structure, quickstart). Move crawler measurements to
    `docs/crawler_notes.md`. A stale README is a failed change.
 7. **Device paths**: if the change touches crawling, LLM transports, checkpoint/resume or the UI, also run
-   `-m "integration or live_ollama"` (Chrome + Ollama exist on this machine — and check port 5000 is free
-   first), then `/smoke-verify` (lint → boot 5057 → GET endpoints 200 → clean shutdown). Paths neither
-   tier reaches (logged-in scraping against live sites, human feel) are exercised by the user in a browser.
+   `-m "integration or live_ollama"` and `-m live_quick` (Chrome + Ollama and one real crawl per platform
+   exist on this machine — check port 5000 is free first), then `/smoke-verify`.
 8. **Commit** last, with a Chinese type prefix.
 9. **Closure gate for any "we are done" claim**: one full run of *every* tier with nothing deselected and
    nothing skipped, in which **no file needed changing**. Any edit restarts the loop.

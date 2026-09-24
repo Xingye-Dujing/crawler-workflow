@@ -421,6 +421,9 @@ const I18n = {
             'set.ollamaHost': 'Ollama server address',
             'set.cookieConfirm': 'Confirm Cookie before run',
             'set.cookieConfirmInline': 'Ask every time a run contains a crawler node',
+            'set.sameQueue': 'Queue same-platform crawls',
+            'set.sameQueueInline': 'One crawl per platform at a time; a queued one also waits a few seconds',
+            'set.sameQueueHint': 'On: two workflows crawling the same platform take turns, and the one that waited gets an extra gap before it starts. That removes both measured failures — a site answering two searches from one account inside the same second (weibo bounces us to the login page, zhihu answers risk code 40362), and chromedriver refusing a second browser in a profile Chrome already holds. Different platforms stay parallel. Off: same-platform crawls really overlap, which is faster while the site tolerates it; when it does not, both nodes come back red. Either way, a crawl that waited says so in the console.',
             'set.useProfile': 'Persistent browser profile',
             'set.useProfileInline': 'One profile per platform, so the crawl and the cookie login are the same device',
             'set.profileDir': 'Profile directory',
@@ -446,6 +449,10 @@ const I18n = {
                 + 'a brand-new device on a planted cookie snapshot, which is the shape those sites refuse.',
             'dialog.profileClashUse': 'Keep the profile (same-platform crawls queue)',
             'dialog.profileClashSkip': 'No profile this run (true parallel)',
+            'dialog.profileClashQueued':
+                'Note: "Queue same-platform crawls" is ON in Settings, so those crawls take turns whichever '
+                + 'button you press — this choice only decides which device each workflow crawls as. '
+                + 'Turn the setting off to really overlap.',
             'set.save': 'Save settings',
             'set.note':
                 'Machine-local settings. Saved to data/settings.json on the server ' +
@@ -1036,6 +1043,9 @@ const I18n = {
             'set.ollamaHost': 'Ollama 服务地址',
             'set.cookieConfirm': '执行前确认 Cookie',
             'set.cookieConfirmInline': '每次含采集节点的运行前都弹确认框',
+            'set.sameQueue': '同平台排队采集',
+            'set.sameQueueInline': '同一平台一次只跑一条采集，排到队的再等几秒错峰',
+            'set.sameQueueHint': '开：同一平台的两条工作流轮流采集，排到队的那条在开始前再多等几秒错峰。两类实测失败一起消失——站点把同一账号一秒内的两次搜索弹到登录页（微博）或回风控 40362（知乎），以及 chromedriver 拒绝在 Chrome 已占用的 profile 里再开一个浏览器。不同平台照常并行。关：同平台真的重叠，站点容忍时更快；不容忍时两个节点一起变红。无论开关，排过队的那条都会在控制台说明自己等了多久。',
             'set.useProfile': '持久浏览器 Profile',
             'set.useProfileInline': '每个平台用自己的浏览器目录，抓取与取 Cookie 是同一台设备',
             'set.profileDir': 'Profile 目录',
@@ -1061,6 +1071,9 @@ const I18n = {
                 + '而这正是那些站点会拒绝的形态。',
             'dialog.profileClashUse': '继续用 Profile（同平台排队）',
             'dialog.profileClashSkip': '本次不用 Profile（真并行）',
+            'dialog.profileClashQueued':
+                '注：设置里的「同平台排队采集」是开着的，所以无论你点哪个按钮，同平台的采集都会轮流跑；'
+                + '这一问只决定每条工作流用哪台设备。想真的重叠请把该设置关掉。',
             'set.save': '保存设置',
             'set.note':
                 '这些是本机相关设置。保存后写入服务器 ' +
@@ -1677,6 +1690,7 @@ const AppSettings = {
         element_timeout: 'set-elementwait',
         ollama_host: 'set-ollamahost',
         cookie_confirm_before_run: 'set-cookie-confirm',
+        same_platform_queue: 'set-same-platform-queue',
         use_browser_profile: 'set-use-profile',
         browser_profile_dir: 'set-profile-dir',
     },

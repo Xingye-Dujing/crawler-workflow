@@ -40,6 +40,13 @@ DEFAULTS = {
     # crawler node. Long crawls can outlive a cookie; the prompt points the
     # user at refresh + resume BEFORE burning time, and can be turned off.
     'cookie_confirm_before_run': True,
+    #: One platform is crawled by at most one workflow at a time, and two that had to
+    #: queue are further spaced apart. On, a parallel canvas keeps its *different*
+    #: platforms concurrent but same-platform crawls take turns — no passport bounce
+    #: from searching twice in one second, and no second browser reaching for a
+    #: profile Chrome already holds. Off restores true concurrency and its risk.
+    #: The cost of each choice is spelled out in the panel and the pre-run dialog.
+    'same_platform_queue': True,
     # Give every platform its own Chrome profile so the crawl browser stays the same
     # device across runs. Off = the old behaviour (a blank profile plus a planted
     # snapshot), which sites that rotate their session cookie punish.
@@ -141,7 +148,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                     warnings.append(t('set.badOllamaHost'))
                 else:
                     vals[key] = v or DEFAULTS[key]
-            elif key in ('cookie_confirm_before_run', 'use_browser_profile'):
+            elif key in ('cookie_confirm_before_run', 'use_browser_profile', 'same_platform_queue'):
                 # The browser may send a real bool or the 'true'/'false' string
                 # the checkbox helpers historically produced; anything else
                 # falls back to the default rather than guessing.

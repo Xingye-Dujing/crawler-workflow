@@ -27,6 +27,7 @@ import threading
 import time
 
 import browser_profiles
+import crawl_gate
 import pytest
 from run_wait import run_finished
 
@@ -80,6 +81,9 @@ def matrix(monkeypatch, app_module, tmp_path):
     """Replace the factory with the profile-claiming fake; record what it was asked."""
     values = {'use_browser_profile': True, 'browser_profile_dir': str(tmp_path / 'profiles')}
     monkeypatch.setattr(browser_profiles, 'get_setting', lambda key: values[key])
+    # The gap this module is about is a real wait; its *length* is asserted in
+    # tests/unit/test_crawl_gate.py. Here it would only cost 12 seconds a test.
+    monkeypatch.setattr(crawl_gate.Config, 'SAME_PLATFORM_STAGGER', 0.05)
     SPANS.clear()
     asked = []
 
@@ -135,13 +139,38 @@ class TestSamePlatformParallel:
         assert {node['status'] for node in nodes.values()} == {'done'}, nodes
         assert all(node['row_count'] == len(PAGE) for node in nodes.values()), nodes
 
-    def test_without_profiles_they_really_run_side_by_side(self, client, app_module, matrix):
-        """The point of answering 本次不用: two devices, two crawls, at the same time."""
+    def test_the_queue_orders_one_platform_even_without_profiles(self, client, app_module, matrix):
+        """「本次不用 Profile」buys a new device, not a second conversation.
+
+        The two collisions are different events: two throwaway browsers can start
+        together and still be answered a login wall, because the *account* behind
+        them searched twice in one second (measured on weibo and zhihu). So one
+        platform takes turns whether or not a profile is shared — which is the
+        opposite of what this test asserted before 同平台排队 existed, when the only
+        serialiser was the profile directory.
+        """
         flow = _canvas([_source('s-1', 'bilibili'), _source('s-2', 'bilibili')], use_profile=False)
-        _run(client, app_module, flow)
+        run_id = _run(client, app_module, flow)
         assert len(SPANS) == 2, SPANS
-        assert _overlaps(), f'the user gave up the device and still got a queue: {SPANS}'
-        assert {entry['use_profile'] for entry in matrix['asked']} == {False}
+        assert not _overlaps(), f'two crawls of one platform were let in together: {SPANS}'
+        assert {entry['use_profile'] for entry in matrix['asked']} == {False}, 'each still got its own device'
+        assert {node['status'] for node in _nodes(run_id).values()} == {'done'}, 'ordering must not cost a node'
+
+    def test_a_crawl_that_queued_says_so_exactly_once(self, client, app_module, matrix):
+        _run(client, app_module, _canvas([_source('s-1', 'bilibili'), _source('s-2', 'bilibili')]))
+        blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
+        queued = [
+            line for line in blob.splitlines() if 'bilibili' in line and ('排队' in line or 'queue' in line.lower())
+        ]
+        assert len(queued) == 1, f'the wait belongs to the one crawl that waited, saw {queued}'
+
+    def test_turning_the_queue_off_restores_true_overlap(self, client, app_module, matrix, monkeypatch):
+        """Off is the user's own choice and must mean the old behaviour, not a weaker
+        on: two crawls of one platform alive at the same moment, gaps and all."""
+        monkeypatch.setattr(crawl_gate, 'get_setting', lambda key: False)
+        _run(client, app_module, _canvas([_source('s-1', 'bilibili'), _source('s-2', 'bilibili')], use_profile=False))
+        assert len(SPANS) == 2, SPANS
+        assert _overlaps(), f'the queue is off and they still took turns: {SPANS}'
 
     def test_declining_profiles_is_said_exactly_once(self, client, app_module, matrix):
         flow = _canvas([_source('s-1', 'bilibili'), _source('s-2', 'bilibili')], use_profile=False)
