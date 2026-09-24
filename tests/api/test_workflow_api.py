@@ -1094,7 +1094,9 @@ class TestSourceCommentsMode:
         assert started.status_code == 200
         assert _wait_for_worker(app_module)
         status = client.get('/api/workflow/status').get_json()
-        assert any('do not match the selected platform (zhihu)' in line for line in status['logs'])
+        assert any('知乎' in line and '不匹配' in line or 'do not match' in line for line in status['logs']), (
+            'the refusal has to name the platform in the language the page speaks'
+        )
         assert built['n'] == 0
 
     def test_runtime_skips_foreign_links_and_refuses_when_none_match(self, app_module, monkeypatch):

@@ -418,7 +418,7 @@ class TestCookieVerify:
         opened = [line for line in app_module.execution_state['logs'] if 'Browser opened' in line]
         client.post('/api/cookies/generate/cancel')
         assert len(opened) == 1, opened
-        assert 'zhihu' in opened[0] and 'http' in opened[0], 'the one line owes both facts'
+        assert 'Zhihu' in opened[0] and 'http' in opened[0], 'the one line owes both facts'
 
     def test_verification_never_shares_the_window_with_a_login(self, client, job, app_module):
         app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
