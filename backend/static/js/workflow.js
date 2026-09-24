@@ -1156,11 +1156,11 @@ function openSettings(nodeId) {
             'onchange="updateParam(\'' + nodeId + '\',\'urls\',this.value)">' + escapeHtml(p.urls || '') + '</textarea>' +
             '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentUrlsHintMixed') + '</div></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentLimit') + '</label>' +
-            '<input class="settings-input" type="number" min="0" value="' + (p.comment_limit != null ? p.comment_limit : 0) + '" ' +
+            '<input class="settings-input" type="number" min="0" value="' + escapeHtml(p.comment_limit != null ? p.comment_limit : 0) + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'comment_limit\',parseInt(this.value)||0)">' +
             '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentLimitHint') + '</div></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.partSize') + '</label>' +
-            '<input class="settings-input" type="number" min="0" value="' + (p.part_size != null ? p.part_size : 50) + '" ' +
+            '<input class="settings-input" type="number" min="0" value="' + escapeHtml(p.part_size != null ? p.part_size : 50) + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'part_size\',parseInt(this.value)||0)">' +
             '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.partSizeHint') + '</div></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.format') + '</label>' +
@@ -1207,13 +1207,13 @@ function openSettings(nodeId) {
             }).join('') +
             '</select></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
-            '<input class="settings-input" value="' + (p.text_column || '正文') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.text_column || '正文') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'text_column\',this.value)"></div>';
 
         /* Clean operation */
         if (p.operation === 'clean') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.topic') + '</label>' +
-                '<input class="settings-input" value="' + (p.topic || '') + '" placeholder="e.g. topic" ' +
+                '<input class="settings-input" value="' + escapeHtml(p.topic || '') + '" placeholder="e.g. topic" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'topic\',this.value)"></div>';
         }
 
@@ -1300,7 +1300,7 @@ function openSettings(nodeId) {
             canvas.saveState();
         }
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
-            '<input class="settings-input" value="' + (p.text_column || '') + '" placeholder="' + I18n.t('settings.textColumnPlaceholder') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.text_column || '') + '" placeholder="' + I18n.t('settings.textColumnPlaceholder') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'text_column\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.outputMode') + '</label>' +
             (hasDownstreamVisualize ? '<div style="font-size:12px;color:var(--accent);padding:4px 0;">' + I18n.t('settings.tokenizeOutputLocked') + '</div>' :
@@ -1311,7 +1311,7 @@ function openSettings(nodeId) {
                 '</select>') + '</div>' +
             ((p.output_mode || 'word_freq') === 'word_freq' ?
                 '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.topN') + '</label>' +
-                '<input class="settings-input" type="number" value="' + (p.top_n || '') + '" placeholder="' + I18n.t('settings.topNPlaceholder') + '" ' +
+                '<input class="settings-input" type="number" value="' + escapeHtml(p.top_n || '') + '" placeholder="' + I18n.t('settings.topNPlaceholder') + '" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'top_n\',this.value)"></div>' : '') +
             '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'name') {
@@ -1341,11 +1341,11 @@ function openSettings(nodeId) {
             }).join('') +
             '</select></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.filename') + '</label>' +
-            '<input class="settings-input" value="' + (p.filename || 'export.csv') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.filename || 'export.csv') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'filename\',this.value)"></div>';
         if (fmt === 'txt') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
-                '<input class="settings-input" value="' + (p.text_column || '') + '" placeholder="optional: one column per line" ' +
+                '<input class="settings-input" value="' + escapeHtml(p.text_column || '') + '" placeholder="optional: one column per line" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'text_column\',this.value)"></div>';
         }
         html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
@@ -1394,7 +1394,7 @@ async function renderResumeSettings(nodeId) {
         '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'resume_run_id\',this.value);renderResumeSettings(\'' + nodeId + '\')">' +
         runs.map(function (r) {
             var label = (r.started_at || r.run_id) + ' · ' + (r.rows_kept || 0) + ' ' + I18n.t('settings.rows');
-            return '<option value="' + r.run_id + '"' + (r.run_id === p.resume_run_id ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+            return '<option value="' + escapeHtml(r.run_id) + '"' + (r.run_id === p.resume_run_id ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
         }).join('') +
         '</select></div>';
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t('resume.nodeSelect') + '</label>' +
@@ -1402,11 +1402,11 @@ async function renderResumeSettings(nodeId) {
         '<option value=""' + (!p.resume_node_id ? ' selected' : '') + '>' + I18n.t('resume.autoNode') + '</option>' +
         nodes.map(function (n) {
             var label = (n.title || n.node_id) + ' · ' + n.row_count + ' ' + I18n.t('settings.rows');
-            return '<option value="' + n.node_id + '"' + (n.node_id === p.resume_node_id ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+            return '<option value="' + escapeHtml(n.node_id) + '"' + (n.node_id === p.resume_node_id ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
         }).join('') +
         '</select></div>';
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t('resume.limit') + '</label>' +
-        '<input class="settings-input" type="number" value="' + (p.resume_limit || 0) + '" placeholder="' + I18n.t('resume.limitPlaceholder') + '" ' +
+        '<input class="settings-input" type="number" value="' + escapeHtml(p.resume_limit || 0) + '" placeholder="' + I18n.t('resume.limitPlaceholder') + '" ' +
         'onchange="updateParam(\'' + nodeId + '\',\'resume_limit\',parseInt(this.value)||0)"></div>';
     holder.innerHTML = html;
     canvas.updateNodeDisplay(nodeId);
@@ -1452,7 +1452,7 @@ function nodeNeedsLlm(params, nodeOperation) {
 /* ── Shared settings UI helpers ── */
 function renderParamInput(nodeId, p, key, labelKey, type, defVal) {
     return '<div class="settings-group"><label class="settings-label">' + I18n.t(labelKey) + '</label>' +
-        '<input class="settings-input" type="' + type + '" value="' + (p[key] !== undefined ? p[key] : defVal) + '" ' +
+        '<input class="settings-input" type="' + type + '" value="' + escapeHtml(p[key] !== undefined ? p[key] : defVal) + '" ' +
         'onchange="updateParam(\'' + nodeId + '\',\'' + key + '\',this.value)"></div>';
 }
 function renderParamSelect(nodeId, p, key, labelKey, defVal, options) {
@@ -1489,7 +1489,7 @@ function renderAnalysisSettings(nodeId, p) {
     var op = p.operation || 'drop_null';
     if (['drop_null', 'fill_null', 'drop_duplicates', 'select_columns', 'strip_whitespace'].indexOf(op) >= 0) {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.columns') + '</label>' +
-            '<input class="settings-input" value="' + (p.columns || '') + '" placeholder="col1, col2 (empty = all)" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.columns || '') + '" placeholder="col1, col2 (empty = all)" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'columns\',this.value)"></div>';
     }
     if (op === 'drop_null') {
@@ -1501,7 +1501,7 @@ function renderAnalysisSettings(nodeId, p) {
     }
     if (op === 'fill_null') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.value') + '</label>' +
-            '<input class="settings-input" value="' + (p.value || '') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.value || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'value\',this.value)"></div>';
         /* A method and a literal value are different operations; leaving method
            empty means "fill with the value above". */
@@ -1510,27 +1510,27 @@ function renderAnalysisSettings(nodeId, p) {
     }
     if (op === 'filter_rows') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + (p.column || '') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.filterOp') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'op\',this.value)">' +
             FILTER_OPS.map(function (o) { return '<option value="' + o + '"' + (p.op === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
             '</select></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.value') + '</label>' +
-            '<input class="settings-input" value="' + (p.value || '') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.value || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'value\',this.value)"></div>';
     }
     if (op === 'rename_columns') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.renameFrom') + '</label>' +
-            '<input class="settings-input" value="' + (p.rename_from || '') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.rename_from || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'rename_from\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.renameTo') + '</label>' +
-            '<input class="settings-input" value="' + (p.rename_to || '') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.rename_to || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'rename_to\',this.value)"></div>';
     }
     if (op === 'convert_type') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + (p.column || '') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.dtype') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'dtype\',this.value)">' +
@@ -1656,15 +1656,15 @@ function renderVisualizeSettings(nodeId, p) {
         html += '<div class="settings-group" style="color:#e67e22;font-size:11px;">' + I18n.t('warn.echartsOnly') + '</div>';
     }
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t(CHART_X_LABEL_KEY[ct] || 'settings.xField') + '</label>' +
-        '<input class="settings-input" value="' + (p.x_field || '') + '" placeholder="category / numeric column" ' +
+        '<input class="settings-input" value="' + escapeHtml(p.x_field || '') + '" placeholder="category / numeric column" ' +
         'onchange="updateParam(\'' + nodeId + '\',\'x_field\',this.value)"></div>';
     if (CHARTS_WITH_Y_AS_CATEGORY.indexOf(ct) >= 0) {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t(CHART_Y_LABEL_KEY[ct]) + '</label>' +
-            '<input class="settings-input" value="' + (p.y_field || '') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.y_field || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'y_field\',this.value)"></div>';
     } else if (CHARTS_NO_Y.indexOf(ct) < 0) {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.yField') + '</label>' +
-            '<input class="settings-input" value="' + (p.y_field || '') + '" placeholder="optional: value column" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.y_field || '') + '" placeholder="optional: value column" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'y_field\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agg') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'agg\',this.value)">' +
@@ -1673,7 +1673,7 @@ function renderVisualizeSettings(nodeId, p) {
     }
     if (CHARTS_WITH_VALUE_FIELD.indexOf(ct) >= 0) {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.valueField') + '</label>' +
-            '<input class="settings-input" value="' + (p.value_field || '') + '" placeholder="optional: weight column (default = count)" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.value_field || '') + '" placeholder="optional: weight column (default = count)" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'value_field\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agg') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'agg\',this.value)">' +
@@ -1694,7 +1694,7 @@ function renderVisualizeSettings(nodeId, p) {
         html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.mapRegionNames') + '</div>';
     }
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.title') + '</label>' +
-        '<input class="settings-input" value="' + (p.title || '') + '" ' +
+        '<input class="settings-input" value="' + escapeHtml(p.title || '') + '" ' +
         'onchange="updateParam(\'' + nodeId + '\',\'title\',this.value)"></div>';
     html += '<div class="settings-group" style="display:flex;gap:8px;flex-wrap:wrap;">' +
         '<button class="menu-btn toggle-on" onclick="dataNodes.previewVisualize(\'' + nodeId + '\')">' + I18n.t('btn.preview') + '</button>' +
@@ -2245,7 +2245,7 @@ var dashboard = {
                 return;
             }
             if (result.engine === 'matplotlib') {
-                body.innerHTML = '<img src="' + result.image + '" />';
+                body.innerHTML = '<img src="' + escapeHtml(result.image) + '" />';
             } else {
                 var inst = echarts.init(body);
                 this._instances[nodeId] = inst;
@@ -2854,7 +2854,7 @@ function processesPoll() {
                     '<td>' + escapeHtml(t.name) + '</td>' +
                     '<td>' + typeLabel + '</td>' +
                     '<td>' + (t.alive ? '<span class="proc-ok">alive</span>' : '<span class="proc-err">dead</span>') + '</td>' +
-                    '<td>' + (canKill ? '<button class="proc-kill-btn" data-ident="' + t.ident + '" onclick="killProcess(this)">' + I18n.t('processes.kill') + '</button>' : '') + '</td>' +
+                    '<td>' + (canKill ? '<button class="proc-kill-btn" data-ident="' + escapeHtml(t.ident) + '" onclick="killProcess(this)">' + I18n.t('processes.kill') + '</button>' : '') + '</td>' +
                     '</tr>';
             });
             html += '</table>';
@@ -2902,10 +2902,10 @@ function processesPoll() {
                     else { typeLabel = t.daemon ? '<span class="proc-tag proc-tag-daemon">daemon</span>' : ''; }
                     var canKill = t.name !== 'MainThread' && t.name !== 'run' && t.alive;
                     html += '<tr>' +
-                        '<td>' + t.name + '</td>' +
+                        '<td>' + escapeHtml(t.name) + '</td>' +
                         '<td>' + typeLabel + '</td>' +
                         '<td>' + (t.alive ? '<span class="proc-ok">alive</span>' : '<span class="proc-err">dead</span>') + '</td>' +
-                        '<td>' + (canKill ? '<button class="proc-kill-btn" data-ident="' + t.ident + '" onclick="killProcess(this)">' + I18n.t('processes.kill') + '</button>' : '') + '</td>' +
+                        '<td>' + (canKill ? '<button class="proc-kill-btn" data-ident="' + escapeHtml(t.ident) + '" onclick="killProcess(this)">' + I18n.t('processes.kill') + '</button>' : '') + '</td>' +
                         '</tr>';
                 });
                 html += '</table>';

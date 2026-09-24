@@ -56,6 +56,59 @@ def _save(nid='out-1', filename='f'):
     return {'id': nid, 'type': 'output', 'title': '保存', 'params': {'operation': 'save', 'filename': filename}}
 
 
+#: Parameters that SELECT which panel is drawn. Poisoning one of these would test
+#: a different panel, so the hostile batch leaves them alone.
+_PANEL_SELECTORS = frozenset({'operation', 'platform', 'collect', 'mode', 'method', 'how', 'bins', 'chart_type'})
+
+#: Every panel this file renders, as (scenario id, node type, params).
+_PANELS = [
+    ('panel_zhihu_comments', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': ''}),
+    (
+        'panel_weibo_comments',
+        'source',
+        {'platform': 'weibo', 'collect': 'comments', 'urls': 'https://weibo.com/1/a'},
+    ),
+    ('panel_xhs_comments', 'source', {'platform': 'xiaohongshu', 'collect': 'comments', 'urls': ''}),
+    (
+        'panel_wechat_stale',
+        'source',
+        {'platform': 'wechat', 'collect': 'comments', 'urls': 'https://mp.weixin.qq.com/s/x'},
+    ),
+    ('panel_zhihu_posts', 'source', {'platform': 'zhihu', 'collect': 'posts', 'keyword': 'k'}),
+    ('panel_xhs_posts', 'source', {'platform': 'xiaohongshu', 'collect': 'posts', 'keyword': 'k'}),
+    ('panel_weibo_posts', 'source', {'platform': 'weibo', 'collect': 'posts', 'keyword': 'k'}),
+    ('panel_legacy_comment', 'comment', {'urls': ''}),
+    # Analysis ops: the panel is the only place these params are set,
+    # so a field missing here is a parameter the user cannot reach.
+    ('panel_drop_null', 'analysis', {'operation': 'drop_null', 'columns': 'a, b'}),
+    ('panel_fill_null', 'analysis', {'operation': 'fill_null', 'columns': 'a', 'value': '0'}),
+    ('panel_bin_column', 'analysis', {'operation': 'bin_column', 'column': 'score', 'bins': '0, 60, 100'}),
+    # Process ops: same rule — a parameter the backend reads must
+    # have a field here, or it is unreachable.
+    ('panel_ner_default', 'process', {'operation': 'ner'}),
+    ('panel_ner_llm', 'process', {'operation': 'ner', 'mode': 'llm', 'entity_types': 'PERSON,DATE'}),
+    ('panel_emotion_ml', 'process', {'operation': 'emotion', 'mode': 'ml'}),
+    ('panel_keyword', 'process', {'operation': 'keyword', 'topk': '5'}),
+    # The remaining text-bearing panels: each owns at least one field the escaping
+    # below is asserted over, and each was written by a different hand.
+    ('panel_tokenize', 'tokenize', {'text_column': '正文', 'top_n': '20'}),
+    ('panel_visualize_bar', 'visualize', {'chart_type': 'bar', 'x_field': '标题', 'y_field': '点赞', 'title': '统计'}),
+    ('panel_visualize_wordcloud', 'visualize', {'chart_type': 'wordcloud', 'value_field': '权重'}),
+    ('panel_output_csv', 'output', {'operation': 'save_csv', 'filename': 'export.csv', 'text_column': '正文'}),
+]
+
+#: One quote is enough to leave an attribute; the rest proves the payload landed.
+HOSTILE = '"><img src=x onerror=alert(1)>'
+
+
+def _poison(params: dict) -> dict:
+    """The same panel, with a markup breakout attempt in every free-text field."""
+    return {
+        key: (HOSTILE if isinstance(value, str) and value and key not in _PANEL_SELECTORS else value)
+        for key, value in params.items()
+    }
+
+
 @pytest.fixture(scope='module')
 def results(tmp_path_factory, capabilities_matrix):
     tmp = tmp_path_factory.mktemp('js-validate')
@@ -170,43 +223,13 @@ def results(tmp_path_factory, capabilities_matrix):
         # ── settings-panel renders (node = openSettings target, HTML captured) ──
         *(
             {'id': pid, 'node': _node('n1', ntype, params)}
-            for pid, ntype, params in (
-                ('panel_zhihu_comments', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': ''}),
-                (
-                    'panel_weibo_comments',
-                    'source',
-                    {'platform': 'weibo', 'collect': 'comments', 'urls': 'https://weibo.com/1/a'},
-                ),
-                ('panel_xhs_comments', 'source', {'platform': 'xiaohongshu', 'collect': 'comments', 'urls': ''}),
-                (
-                    'panel_wechat_stale',
-                    'source',
-                    {'platform': 'wechat', 'collect': 'comments', 'urls': 'https://mp.weixin.qq.com/s/x'},
-                ),
-                ('panel_zhihu_posts', 'source', {'platform': 'zhihu', 'collect': 'posts', 'keyword': 'k'}),
-                ('panel_xhs_posts', 'source', {'platform': 'xiaohongshu', 'collect': 'posts', 'keyword': 'k'}),
-                ('panel_weibo_posts', 'source', {'platform': 'weibo', 'collect': 'posts', 'keyword': 'k'}),
-                ('panel_legacy_comment', 'comment', {'urls': ''}),
-                # Analysis ops: the panel is the only place these params are set,
-                # so a field missing here is a parameter the user cannot reach.
-                ('panel_drop_null', 'analysis', {'operation': 'drop_null', 'columns': 'a, b'}),
-                ('panel_fill_null', 'analysis', {'operation': 'fill_null', 'columns': 'a', 'value': '0'}),
-                (
-                    'panel_bin_column',
-                    'analysis',
-                    {'operation': 'bin_column', 'column': 'score', 'bins': '0, 60, 100'},
-                ),
-                # Process ops: same rule — a parameter the backend reads must
-                # have a field here, or it is unreachable.
-                ('panel_ner_default', 'process', {'operation': 'ner'}),
-                (
-                    'panel_ner_llm',
-                    'process',
-                    {'operation': 'ner', 'mode': 'llm', 'entity_types': 'PERSON,DATE'},
-                ),
-                ('panel_emotion_ml', 'process', {'operation': 'emotion', 'mode': 'ml'}),
-                ('panel_keyword', 'process', {'operation': 'keyword', 'topk': '5'}),
-            )
+            for pid, ntype, params in _PANELS
+        ),
+        # …and the same panels again with a hostile value in every text field, which
+        # is how the escaping rule below is asserted per panel rather than per guess.
+        *(
+            {'id': 'hostile_' + pid, 'node': _node('n1', ntype, _poison(params))}
+            for pid, ntype, params in _PANELS
         ),
     ]
     return _run_validate(tmp, scenarios, capabilities_matrix)
@@ -602,6 +625,56 @@ def runsmgr(tmp_path_factory):
     proc = run_node(str(RUNSMGR_HARNESS), str(JS_DIR / 'workflow.js'), str(sc))
     assert proc.returncode == 0, f'runsmgr harness failed: {proc.stderr}'
     return json.loads(proc.stdout)
+
+
+class TestPanelEscaping:
+    """A node parameter is data, and the settings panel prints it into an attribute.
+
+    Every panel is assembled by string concatenation, so one `"` inside a value closes
+    `value="…"` and the rest of the string becomes MARKUP: an edited workflow file — or
+    a column name that came out of somebody's crawl — ran as a script the moment the
+    node was opened. It is asserted over every panel this file can render rather than
+    over one example, because the hole was per-field and a field written tomorrow
+    forgets the same way.
+    """
+
+    def test_no_panel_prints_its_parameter_as_markup(self, results):
+        offenders = {
+            key: html for key, html in results['settings'].items() if key.startswith('hostile_') and HOSTILE in html
+        }
+        assert offenders == {}, 'the raw payload reached the panel HTML: ' + ', '.join(offenders)
+
+    def test_the_poisoned_value_still_arrives_just_not_as_a_tag(self, results):
+        """A panel that simply dropped the field would pass the test above by
+        silencing the user's own value, so the escaped form must be present."""
+        missing = []
+        for pid, _ntype, params in _PANELS:
+            poisoned = [key for key, value in params.items() if _poison(params)[key] == HOSTILE and value]
+            if not poisoned:
+                continue
+            if '&quot;&gt;&lt;img' not in results['settings']['hostile_' + pid]:
+                missing.append(f'{pid}({",".join(poisoned)})')
+        assert missing == [], 'the panel lost the parameter instead of escaping it: ' + ', '.join(missing)
+
+    def test_the_poison_batch_actually_poisons_the_panels_it_claims(self):
+        """The two assertions above are vacuous if nothing was poisoned — and a
+        panel whose every field is a selector is exactly that."""
+        poisoned_panels = [pid for pid, _t, params in _PANELS if any(v == HOSTILE for v in _poison(params).values())]
+        assert len(poisoned_panels) >= 12, f'only {poisoned_panels} carry a hostile value'
+
+    def test_the_panel_this_harness_cannot_render_escapes_where_it_is_written(self):
+        """``renderResumeSettings`` fills itself from an awaited fetch, so the HTML
+        this file captures is the 「没有可续跑记录」 placeholder — the run/node selects
+        and the row limit never appear. They take server data (a run id, a node id)
+        into attributes, so they are pinned at the line that writes them instead.
+        """
+        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        for site in (
+            "'<option value=\"' + escapeHtml(r.run_id) + '\"'",
+            "'<option value=\"' + escapeHtml(n.node_id) + '\"'",
+            "escapeHtml(p.resume_limit || 0)",
+        ):
+            assert site in source, f'the resume panel no longer escapes: {site}'
 
 
 class TestRunRecordsPanel:

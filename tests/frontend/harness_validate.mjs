@@ -81,6 +81,10 @@ const sandbox = {
         saveState: () => {},
         updateSettingsButton: () => {},
         closeSettingsIfStale: () => {},
+        /* The visualize panel asks which node feeds it, because a tokenize upstream
+           changes the fields it shows. "Nothing upstream" is the answer that renders
+           the ordinary chart form — the one whose parameters are asserted below. */
+        getUpstreamNodeId: () => null,
     },
     RunState: { parallel: false, headless: true },
     showToast: () => {},
