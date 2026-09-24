@@ -221,16 +221,10 @@ def results(tmp_path_factory, capabilities_matrix):
             'connections': [{'from': 'n1', 'to': 'out-1'}],
         },
         # ── settings-panel renders (node = openSettings target, HTML captured) ──
-        *(
-            {'id': pid, 'node': _node('n1', ntype, params)}
-            for pid, ntype, params in _PANELS
-        ),
+        *({'id': pid, 'node': _node('n1', ntype, params)} for pid, ntype, params in _PANELS),
         # …and the same panels again with a hostile value in every text field, which
         # is how the escaping rule below is asserted per panel rather than per guess.
-        *(
-            {'id': 'hostile_' + pid, 'node': _node('n1', ntype, _poison(params))}
-            for pid, ntype, params in _PANELS
-        ),
+        *({'id': 'hostile_' + pid, 'node': _node('n1', ntype, _poison(params))} for pid, ntype, params in _PANELS),
     ]
     return _run_validate(tmp, scenarios, capabilities_matrix)
 
@@ -672,7 +666,7 @@ class TestPanelEscaping:
         for site in (
             "'<option value=\"' + escapeHtml(r.run_id) + '\"'",
             "'<option value=\"' + escapeHtml(n.node_id) + '\"'",
-            "escapeHtml(p.resume_limit || 0)",
+            'escapeHtml(p.resume_limit || 0)',
         ):
             assert site in source, f'the resume panel no longer escapes: {site}'
 
