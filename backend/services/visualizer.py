@@ -598,6 +598,12 @@ class VisualizationService:
             else:
                 labels, values = cls._aggregate(df, x, value_field, agg)
             style_name = kwargs.get('wordcloud_style', 'vibrant')
+            # Deliberate fallback, unlike the parameters that choose *data* or *cost*:
+            # a word cloud's palette is decoration, and an unknown name (a preset this
+            # build no longer ships, a caller that guessed one) must still produce the
+            # chart the rest of the request asked for. The node's own refusal rule
+            # applies wherever a silent default would change what the user got — the
+            # crawl board, the file format, the algorithm, the renderer.
             style = WORDCLOUD_STYLES.get(style_name, WORDCLOUD_STYLES['vibrant'])
             palette = style['textStyle'].get('color', '#ccc')
             if isinstance(palette, list):

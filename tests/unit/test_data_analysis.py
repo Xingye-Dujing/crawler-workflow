@@ -4,9 +4,10 @@ This is the code behind the "Analysis" node's step list, and the pipeline
 report is what the console shows the user after a run, so the tests concentrate
 on the two things a workflow author cannot debug by eye:
 
-- *missing configuration must not destroy data*: an op whose column or bound is
-  absent returns the frame untouched (or raises a named error), never silently
-  drops rows, and
+- *missing configuration must not destroy data*: a step that names no column, or a
+  column this table does not have, is refused by that name before it runs (see
+  :class:`TestTheStepGateRefusesWhatItCannotDo`), and a step whose blank means
+  "every column" is inert rather than a filter, and
 - *what the report claims must be what happened* (rows_before / rows_after /
   rows_removed for every step, in order).
 
@@ -780,18 +781,28 @@ class TestPipelineOrder:
         assert list(result.columns) == ['n', 't', '城市']
 
     def test_the_steps_run_in_list_order_not_in_an_order_of_their_own(self):
-        """Renaming first is what lets the following filter see the column; run the
-        other way round, the filter looks for a 城市 that is not there yet and keeps
-        every row. The list order decides, so the answer is a fact about the file
-        and not about how the runner happens to group its work.
+        """Renaming first is what lets the following filter see the column.
+
+        The list order decides, so the answer is a fact about the file and not about
+        how the runner happens to group its work. Run the other way round, the filter
+        asks for a 城市 that is not there yet — and that is now an error rather than
+        every row kept, because a pipeline that reports the filter's answer while
+        handing back the unfiltered table is the lie this file exists to prevent.
         """
         renamed_then_filtered, _ = D.run_pipeline(SWEEP.copy(), self.STEPS[:2])
-        filtered_then_renamed, _ = D.run_pipeline(SWEEP.copy(), self.STEPS[1::-1])
         assert renamed_then_filtered['n'].tolist() == [3, 1], 'only the 北京 rows hold 京'
-        assert filtered_then_renamed['n'].tolist() == [3, 5, 1]
-        # Both orders end with the rename applied, which is why the surviving rows —
-        # the only visible difference — have to be what is asserted.
-        assert list(filtered_then_renamed.columns) == ['n', 't', '城市']
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.run_pipeline(SWEEP.copy(), self.STEPS[1::-1])
+        assert '城市' in str(excinfo.value), excinfo.value
+
+    def test_a_refused_step_leaves_the_frame_where_it_was(self):
+        """Nothing is applied "partially then fixed": the refusal happens before the
+        step runs, so the rows a valid prefix produced are what comes back — and an
+        exception means the caller must not be shown a table at all.
+        """
+        steps = self.STEPS[:2] + [{'op': 'sort_rows', 'params': {'column': '不存在', 'ascending': True}}]
+        with pytest.raises(UnknownOperationError):
+            D.run_pipeline(SWEEP.copy(), steps)
 
     def test_row_math_is_reported_for_every_step_of_a_shrinking_chain(self):
         steps = [

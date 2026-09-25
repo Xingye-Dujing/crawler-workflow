@@ -84,6 +84,62 @@ def extract_number(text: str) -> int:
     return int(m.group(0)) if m else 0
 
 
+#: The words a stored switch uses for each answer. Three grammars have to agree here
+#: because a parameter can arrive as the literal strings the settings panel writes
+#: (``renderParamCheckbox`` stores ``'true'``/``'false'``), as a real JSON boolean
+#: (an exported-and-reopened workflow, ``/api/analysis/clean``, a hand-written file),
+#: or in the Chinese a person types into a draft.
+_TRUE_TEXT = frozenset({'true', '1', '1.0', 'yes', 'y', 'on', '是', '真'})
+_FALSE_TEXT = frozenset({'false', '0', '0.0', 'no', 'n', 'off', 'none', 'null', 'nan', '否', '不', '假'})
+
+
+def as_bool(value, default: bool = False) -> bool:
+    """Read *value* as a switch, answering *default* when it states nothing.
+
+    Comparing a parameter against the text ``'true'`` is not a boolean test: real
+    ``True`` is unequal to ``'true'``, so every caller that sent the value a JSON
+    document actually holds got the opposite behaviour — 升序 sorted descending. This
+    reads the value instead of matching one spelling of it.
+
+    Absent, blank and unrecognised answer *default* rather than False, because each of
+    these parameters has its own declared default (the figure the panel showed before
+    anyone touched it) and "no answer" must not become "the other answer". A number is
+    interpreted the way pandas interprets a truthy cell: non-zero is on.
+    """
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        if value != value:  # a NaN is a missing value, not the answer "off"
+            return default
+        return value != 0
+    text = str(value).strip().lower()
+    if text in _TRUE_TEXT:
+        return True
+    if text in _FALSE_TEXT:
+        return False
+    return default
+
+
+def split_names(value) -> list[str]:
+    """A list of column names, from whichever shape the caller wrote.
+
+    A real list is what the node executor sends after normalizing the settings box; a
+    comma-separated string is what that box holds and what ``/api/analysis/run`` and a
+    workflow file write. Both have to mean the same list — one path used to, and the
+    other iterated ``'名称, 城市'`` as its **characters**, a step that matched nothing and
+    reported success.
+
+    The reading of a non-string is the one the settings panel has always had: falsy
+    (``0``, ``False``, ``None``, ``''``) is "no names", and anything else is
+    stringified, so ``True`` asks for a column literally called ``True``.
+    """
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [part.strip() for part in str(value or '').split(',') if part.strip()]
+
+
 def sanitize_filename(name: str) -> str:
     """Make *name* safe to use as a single path component.
 

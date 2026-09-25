@@ -94,10 +94,15 @@ class TestDataframeMode:
     def test_a_missing_column_returns_the_frame_untouched(self, extractor, df):
         assert extractor.analyze_dataframe(df, text_column='不存在') is df
 
-    def test_an_unknown_method_falls_back_to_textrank(self, extractor, df):
-        result = extractor.analyze_dataframe(df, method='yake', topk=4, merge=False)
-        assert set(result['method']) == {'yake'}
-        assert len(result) <= 4 * len(df)
+    def test_an_unknown_method_is_refused_by_name(self, extractor, df):
+        """Not TextRank with the requested name stamped into the output.
+
+        The table's own ``method`` column used to say ``'yake'`` for rows jieba's
+        co-occurrence graph had produced, so the file itself lied about how it was
+        made and a filter on that column matched them.
+        """
+        with pytest.raises(ValueError, match='yake'):
+            extractor.analyze_dataframe(df, method='yake', topk=4, merge=False)
 
     def test_a_custom_text_column_is_honoured(self, extractor):
         frame = pd.DataFrame({'内容': ['海口骑楼老街很有味道', '三亚湾的日落非常漂亮', '博鳌小镇安静适合散步']})

@@ -29,7 +29,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - `backend/test_*.py` are manual probe scripts, NOT pytest — the accepted place for a one-off measurement.
 - **Test tiers** (`pytest.ini` excludes the real tiers by default; that filter is pinned by
   `tests/unit/test_test_tiers.py`):
-  - Fast (~2.7k, ~75 s, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
+  - Fast (~3.9k, ~95 s, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
   - Device (real Chrome on `file://` fixtures + real Ollama): `... -m "integration or live_ollama"`.
   - Live (REAL crawls, both modes, skip when a cookie is absent): `... -m live_quick` crawls
     each platform exactly once and is the pre-change tier; `... -m live_site` is the full
@@ -105,9 +105,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   `if platform == '…'` branch in four files. It sits at the backend root because
   `engine/workflow.py` reads it and must not import the crawler package. Field labels are *frontend*
   keys and required-field names *backend* ones (`field.*`), both pinned by
-  `test_frontend_contract.py::TestCrawlMatrixParity`. **An unrecognised mode is refused by name**
-  (`engine.source_unknown_mode`); `mode_for` still falls back to the first mode for panel rendering and
-  single-mode platforms — substituting a keyword search for one creator's uploads is a different crawl.
+  `test_frontend_contract.py::TestCrawlMatrixParity`. `mode_for` still falls back to the first mode for
+  panel rendering and single-mode platforms.
   A field name reaches an inline handler, so one that is not `/^[\w.-]{1,64}$/` is dropped whole, and
   the JS panel is tested against the matrix dumped from Python, never a copy checked in.
 - **A record whose worker is gone is settled by the panel, not by a restart.** `/api/runs/list`
@@ -183,7 +182,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   a continuation token is chosen by **which list it is an element of**.
 - **weibo**: never judge the wall from the URL right after `get()` (it flashes the passport page then
   bounces); `/ajax/statuses/mymblog` is a per-session edge 403 → refuse loudly, never an empty table
-  (`backend/test_weibo_recipe.py` re-tests).
+  (`backend/test_weibo_recipe.py`).
 - **zhihu**: headless throttles day-by-day (risk 40362), so a headless search returning 0 rows is a legit
   outcome — don't loosen the assertion; comments always open a visible browser. **A search card is an
   excerpt**, so the body arrives only by clicking: allowed where the row's own link says `/answer/`, and
@@ -302,8 +301,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   sentence), so a forgotten `{reads}` prints `阅读={reads}` once per article. Key parity,
   reachability and zh/en matching are all blind to it;
   `test_i18n.py::TestCallSitePlaceholders` walks every `t('literal', …)` in
-  `backend/` with `ast` and refuses the mismatch (a `**splat` is the one form it cannot judge; the
-  meta-test keeps that skip honest).
+  `backend/` with `ast` and refuses the mismatch (a `**splat` is the one form it cannot judge).
 - **A `{platform}` slot is answered with a word, not the key.** `zhihu` keys the matrix and the
   cookie file; `i18n` localizes it, splitting on `,`/`、` only; `TestPlatformLabelParity` keeps the
   two lists equal.
@@ -330,10 +328,13 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   executor's `wf.node_failed` be the single attributed console line; a helper line may add
   a fact that line cannot carry (how many rows survived), never repeat the reason.
   Refusals `raise` rather than returning `[]`, or the node settles DONE over an empty
-  table and the export ships a header row.
-- **`_push_log` stores one entry per physical line.** One multi-line payload (a driver
-  `Message:` block) used to render as several rows, so the browser's line-delta cursor skipped
-  or repeated real console content; the running total advances by lines, not by `add_log` calls.
+  table and the export ships a header row. **Anything that chooses data, cost or a name is
+  refused BY NAME, never guessed**: a mode, a `select`, a step's select or missing column
+  (`data_analysis.validate_step`), an analyzer's `method`/`mode` (`app.enum_param`). **Read
+  a switch, never compare it**: `utils.helpers.as_bool`; blank = the declared default.
+- **`_push_log` stores one entry per physical line.** A multi-line payload (a driver
+  `Message:` block) rendered as several rows, so the browser's line-delta cursor skipped
+  or repeated content; the total advances by lines, not by `add_log` calls.
 - **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook.** Those
   nodes get no "Executing node …" or "Node … completed (n/N)" line, and progress counters still count
   them. Everything that states a fact still prints: the upload's own "Loaded … N rows", and any

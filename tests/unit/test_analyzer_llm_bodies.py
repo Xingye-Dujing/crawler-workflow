@@ -580,9 +580,13 @@ class TestAnalyzerRows:
 
 
 class TestUnknownMethodDispatch:
-    """Two nodes take a method name the panel can fill in; only one of them
-    refuses a typo. Pinned as it is, because it is not obvious from either
-    module which behaviour a new analyzer should copy.
+    """Both analyzers that take a method name refuse a typo, by that name.
+
+    They used to disagree, and the disagreement was the lesson: clustering raised while
+    keyword answered an unknown name with TextRank *and* stamped the table's ``method``
+    column with the name that had not run — so a filter on ``method='yake'`` matched
+    rows jieba's co-occurrence graph had produced. The two cases below are kept as a
+    pair so a new analyzer can see which behaviour it is supposed to copy.
     """
 
     @pytest.fixture
@@ -597,19 +601,27 @@ class TestUnknownMethodDispatch:
             }
         )
 
-    def test_keyword_falls_back_to_textrank_and_stamps_the_requested_name(self, frame):
-        result = KeywordExtractor().analyze_dataframe(frame, method='yake', topk=3, merge=False)
-        # Not textrank's own name: the column reports what the node asked for, so
-        # a filter on method='yake' still matches rows TextRank produced.
-        assert set(result['method']) == {'yake'}
-        assert set(result['row']) <= set(frame.index)
+    def test_keyword_refuses_an_unknown_method_by_name(self, frame):
+        with pytest.raises(ValueError, match='yake'):
+            KeywordExtractor().analyze_dataframe(frame, method='yake', topk=3, merge=False)
+
+    def test_keyword_still_runs_both_methods_it_does_know(self, frame):
+        """The refusal must not have cost the two real algorithms their difference."""
         hits = ['keyword', 'weight', 'row']
         textrank = KeywordExtractor().analyze_dataframe(frame, method='textrank', topk=3, merge=False)
         tfidf = KeywordExtractor().analyze_dataframe(frame, method='tfidf', topk=3, merge=False)
+        assert set(textrank['method']) == {'textrank'} and set(tfidf['method']) == {'tfidf'}
         # The fixture must keep telling the two algorithms apart, or the next
         # assertion proves nothing.
         assert not textrank[hits].equals(tfidf[hits]), 'the fixture no longer separates tfidf from textrank'
-        assert result[hits].equals(textrank[hits])
+
+    def test_a_spelling_that_differs_only_in_case_or_padding_is_not_a_method(self, frame):
+        """``' TF-IDF '`` is a name the algorithm does not have; guessing it meant
+        ``tfidf`` would be the same silent substitution in the other direction.
+        """
+        for spelling in ('TF-IDF', ' TF-IDF ', 'Tfidf', ''):
+            with pytest.raises(ValueError):
+                KeywordExtractor().analyze_dataframe(frame, method=spelling, topk=3, merge=False)
 
     def test_clustering_refuses_the_same_typo_by_name(self, frame):
         with pytest.raises(ValueError, match='Unknown clustering method: yake'):

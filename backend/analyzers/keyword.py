@@ -42,13 +42,26 @@ class KeywordExtractor:
             logger.error(t('analysis.col_missing', col=text_column))
             return df
 
-        extract_fn = self.extract_tfidf if method == 'tfidf' else self.extract_textrank
+        extractors = {'tfidf': self.extract_tfidf, 'textrank': self.extract_textrank}
+        wanted = str(method or '').strip()
+        if wanted not in extractors:
+            # Was `self.extract_tfidf if method == 'tfidf' else self.extract_textrank`,
+            # which answered a name it did not know with TextRank — and then wrote
+            # whatever it guessed into the table's own `method` column, so the rows
+            # claimed to be TF-IDF while jieba's co-occurrence graph produced them.
+            # Clustering has refused its methods by name from the start; this is the
+            # same contract, one level below the node check that also refuses it.
+            allowed = ', '.join(extractors)
+            raise ValueError(t('analysis.bad_option', op='keyword', param='method', value=wanted, allowed=allowed))
+        extract_fn = extractors[wanted]
 
         if merge:
             all_text = ' '.join(df[text_column].dropna().astype(str).tolist())
             keywords = extract_fn(all_text, topk=topk)
             result = pd.DataFrame(keywords, columns=['keyword', 'weight'])
-            result.insert(0, 'method', method)
+            # `wanted`, not `method`: the column states which algorithm produced the row,
+            # and a spelling that only differed in padding must not read as a third one.
+            result.insert(0, 'method', wanted)
             return result
 
         all_rows = []
@@ -58,7 +71,7 @@ class KeywordExtractor:
             kw_list = extract_fn(str(text), topk=topk)
             for kw in kw_list:
                 kw['row'] = idx
-                kw['method'] = method
+                kw['method'] = wanted
                 all_rows.append(kw)
 
         # Same column set as the merged mode (plus the originating row), so a

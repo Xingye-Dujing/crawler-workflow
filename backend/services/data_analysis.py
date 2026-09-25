@@ -4,6 +4,7 @@ import logging
 import pandas as pd
 
 from i18n import t
+from utils.helpers import split_names
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,185 @@ def _to_bool(value) -> bool:
 
 class UnknownOperationError(ValueError):
     pass
+
+
+#: The select-shaped parameters of each cleaning step. A step reads these the way the
+#: crawl matrix reads a ``select`` Field: only the listed spellings mean something,
+#: and anything else is refused by name instead of being guessed into a different
+#: operation. Before this table, ``convert_type(dtype='number')`` silently produced
+#: text, ``fill_null(method='mean')`` silently filled a literal value, and
+#: ``drop_null(how='none')`` died inside pandas with a stack trace.
+FILTER_OPS = (
+    'eq',
+    'ne',
+    'gt',
+    'gte',
+    'lt',
+    'lte',
+    'contains',
+    'not_contains',
+    'in',
+    'not_in',
+    'is_null',
+    'not_null',
+)
+CONVERT_TYPES = ('str', 'int', 'float', 'bool', 'datetime')
+DROP_HOW = ('any', 'all')
+#: ``fill_null`` accepts pandas' own aliases, so both spellings of each pair are named
+#: rather than mapped: the value that reaches the step has to be one the step honours.
+FILL_METHODS = ('ffill', 'pad', 'bfill', 'backfill')
+JOIN_HOW = ('left', 'right', 'inner', 'outer', 'cross')
+
+#: Sentinel for a select with no fallback: leaving it blank is a missing choice, and
+#: guessing one is the bug this table exists to stop. ``filter_rows`` uses it — defaulting
+#: a blank comparison to ``eq`` would answer a mistyped filter with "the data was already
+#: clean", which is the sentence this repo refuses to print.
+NO_DEFAULT = object()
+
+#: What each step needs from the table it is handed, checked before it runs.
+#:
+#: ``one`` names exactly one column, so a blank or an absent name is a mistake the user
+#: can fix — it is NOT read as "every column". ``some`` names a subset where an empty
+#: list legitimately means "every column" (the panel's 留空=全部 behaviour, which several
+#: saved pipelines rely on). ``enums`` maps each select to ``(its fallback, the names it
+#: accepts)``, the fallback being :data:`NO_DEFAULT` when a blank has to be refused.
+#: ``nonblank`` is a parameter that names a *new* column or an expression: writing it
+#: blank used to "succeed" by adding a header the CSV export shows as an empty cell.
+#:
+#: Applied in :meth:`DataAnalysisService.run_pipeline`, which both the analysis node and
+#: ``/api/analysis/run`` go through, so one table guards every entry point — and after
+#: :func:`normalize_step_params`, which is what makes each check a question about the
+#: value the operation really receives.
+STEP_PARAMS: dict = {
+    'drop_null': {'some': ('columns',), 'enums': {'how': ('any', DROP_HOW)}},
+    'fill_null': {'some': ('columns',), 'enums': {'method': (None, FILL_METHODS)}},
+    'drop_duplicates': {'some': ('columns',)},
+    'select_columns': {'some': ('columns',)},
+    'strip_whitespace': {'some': ('columns',)},
+    'filter_rows': {'one': ('column',), 'enums': {'op': (NO_DEFAULT, FILTER_OPS)}},
+    'rename_columns': {'mapping': True},
+    'convert_type': {'one': ('column',), 'enums': {'dtype': ('str', CONVERT_TYPES)}},
+    'sort_rows': {'one': ('column',)},
+    'groupby_agg': {'one': ('group_col', 'agg_col')},
+    'join_tables': {'enums': {'how': ('left', JOIN_HOW)}},
+    'column_calc': {'nonblank': ('new_col', 'expr')},
+    'bin_column': {'one': ('column',)},
+    'sample_rows': {},
+}
+
+
+def _blank(value) -> bool:
+    """Nothing stated: absent, or the empty text a cleared settings box leaves behind."""
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def normalize_step_params(op: str, params: dict) -> dict:
+    """Coerce one step's parameters into the shape and spelling the operation reads.
+
+    Two entry paths used to disagree about this and nothing told the caller. The node
+    executor sends the *flat* panel fields through ``_normalize_analysis_params``, which
+    splits ``columns: '名称, 城市'`` into two stripped names; ``/api/analysis/run`` and a
+    workflow file's own ``steps`` handed the same params to ``run_pipeline`` as they were,
+    so a string was iterated as its **characters** — seven "columns" that match nothing, a
+    step that quietly did nothing, and a green node. Normalizing here, at the one place
+    both doors pass through, makes them mean the same thing.
+
+    Padding comes off the names and selects, matching what the crawl matrix does with a
+    text field (``Field.value_from`` strips), and a blank select becomes its declared
+    fallback: passing ``how=''`` on to pandas is a ``ValueError: invalid how option:``
+    for a box the user simply left alone. A *value* is deliberately untouched —
+    ``filter_rows(value=' ')`` searches for a space, which is a real answer rather than a
+    missing one.
+    """
+    spec = STEP_PARAMS.get(op)
+    if spec is None or not isinstance(params, dict):
+        return params or {}
+    out = dict(params)
+    for key in spec.get('some', ()):
+        if key in out:
+            out[key] = split_names(out[key])
+    for key in (*spec.get('one', ()), *spec.get('nonblank', ())):
+        if isinstance(out.get(key), str):
+            out[key] = out[key].strip()
+    for key, (default, _allowed) in (spec.get('enums') or {}).items():
+        if key not in out or default is NO_DEFAULT or isinstance(out[key], bool):
+            continue
+        out[key] = default if _blank(out[key]) else str(out[key]).strip()
+    return out
+
+
+def validate_step(df: pd.DataFrame, op: str, params: dict) -> None:
+    """Refuse a step this table cannot carry out, naming the reason.
+
+    The silent alternatives were each worse than an error: a mistyped entry in a column
+    *list* was dropped, and when every entry missed, ``drop_null`` read the emptied subset
+    as "all columns" and deleted rows the user never aimed at, while
+    ``filter_rows``/``sort_rows``/``convert_type`` on a column that does not exist settled
+    the node **done** and passed the untouched table downstream — so an export shipped
+    unfiltered data with a green check on it.
+
+    Call it with :func:`normalize_step_params` output: it compares the value the operation
+    will receive, so a name that passes here is a name that resolves there.
+    """
+    spec = STEP_PARAMS.get(op)
+    if spec is None:
+        # An op with no entry here is a gap in this table, not a licence to skip the
+        # check; `test_the_gate_knows_every_registered_step` fails the suite first.
+        return
+    params = params or {}
+    columns = [str(col) for col in df.columns]
+    for key in spec.get('one', ()):
+        name = params.get(key)
+        if _blank(name):
+            raise UnknownOperationError(t('analysis.need_param', op=op, param=key))
+        if str(name) not in columns:
+            raise UnknownOperationError(t('analysis.step_col_missing', op=op, col=str(name)))
+    for key in spec.get('some', ()):
+        wanted = params.get(key) or []
+        missing = [str(name) for name in wanted if str(name) not in columns]
+        if wanted and missing:
+            raise UnknownOperationError(t('analysis.step_cols_missing', op=op, cols=', '.join(missing)))
+    for key, (_default, allowed) in (spec.get('enums') or {}).items():
+        if key not in params or params[key] is None:
+            continue  # absent: the operation's own signature default answers
+        value = str(params[key])
+        if not value.strip():
+            # A blank here survived normalize_step_params, so this select has no
+            # fallback to fall back on and the choice is simply missing.
+            raise UnknownOperationError(t('analysis.need_param', op=op, param=key))
+        if value not in allowed:
+            raise UnknownOperationError(
+                t('analysis.bad_option', op=op, param=key, value=value, allowed=', '.join(allowed))
+            )
+    for key in spec.get('nonblank', ()):
+        if _blank(params.get(key)):
+            raise UnknownOperationError(t('analysis.need_param', op=op, param=key))
+    if spec.get('mapping'):
+        _validate_renames(df, op, params.get('mapping'))
+
+
+def _validate_renames(df: pd.DataFrame, op: str, mapping) -> None:
+    """A rename that would erase a column's name is refused, not applied.
+
+    ``{'标题': ''}`` used to rename the column to the empty string: every later step
+    that named 标题 then found nothing, and the exported CSV carried a header cell
+    with no word in it. A blank *source* name is the same mistake on the other side,
+    and an empty mapping "succeeded" while changing nothing.
+    """
+    if not isinstance(mapping, dict) or not mapping:
+        raise UnknownOperationError(t('analysis.need_param', op=op, param='rename_from'))
+    columns = [str(col) for col in df.columns]
+    missing, blank_target = [], []
+    for source, target in mapping.items():
+        name = str(source)
+        if not name.strip() or name not in columns:
+            missing.append(name.strip() or name)
+        elif _blank(target):
+            blank_target.append(name)
+    if missing:
+        raise UnknownOperationError(t('analysis.step_cols_missing', op=op, cols=', '.join(missing)))
+    if blank_target:
+        raise UnknownOperationError(t('analysis.rename_blank', op=op, cols=', '.join(blank_target)))
 
 
 class DataAnalysisService:
@@ -313,10 +493,11 @@ class DataAnalysisService:
         current = df
         for step in steps or []:
             op = step.get('op')
-            params = step.get('params', {})
+            params = normalize_step_params(op, step.get('params', {}))
             func = operations.get(op)
             if func is None:
                 raise UnknownOperationError(f'Unknown analysis operation: {op}')
+            validate_step(current, op, params)
             before = len(current)
             current = func(current, **params)
             report.append(

@@ -27,7 +27,7 @@ derive columns from real crawls instead.
 
 from dataclasses import dataclass, replace
 
-from utils.helpers import split_urls
+from utils.helpers import as_bool, split_urls
 
 
 def _int(raw, default, minimum=None, maximum=None) -> int:
@@ -93,7 +93,13 @@ class Field:
         if self.coerce == 'number':
             return _int(raw, self.default, self.minimum, self.maximum)
         if self.coerce == 'bool':
-            return bool(raw)
+            # NOT ``bool(raw)``: an unticked box can be stored as the text 'false'
+            # (``renderParamCheckbox`` wrote exactly that until it started writing
+            # ``this.checked``, and a hand-written or imported workflow still holds
+            # either spelling), and ``bool('false')`` is True — which read "do not
+            # keep the part files" as "keep them", and "do not re-crawl" as
+            # "re-crawl everything this node already paid for".
+            return as_bool(raw, bool(self.default))
         if self.coerce == 'urls':
             return split_urls(raw)
         return str(raw).strip()
@@ -184,6 +190,7 @@ FILE_FIELDS = (
         key='format',
         control='select',
         label_key='settings.format',
+        name_key='field.format',
         default='csv',
         options=(('csv', 'format.csv'), ('json', 'format.json')),
     ),
@@ -279,6 +286,7 @@ _BOARD = Field(
     key='board',
     control='select',
     label_key='settings.hotBoard',
+    name_key='field.board',
     default='popular',
     options=(('popular', 'settings.hotBoardPopular'), ('ranking', 'settings.hotBoardRanking')),
 )
@@ -747,6 +755,37 @@ def required_missing(mode: Mode, params: dict) -> list[Field]:
         empty = not value if f.is_link_list() else not str(value or '').strip()
         if empty:
             out.append(f)
+    return out
+
+
+def unoffered_selections(mode: Mode, params: dict, with_files: bool = True) -> list[tuple[Field, str]]:
+    """Select fields whose stored value names an option the matrix does not declare.
+
+    A select is a choice from a fixed list, so a value off that list is not a variant
+    of an answer — it is no answer at all. Every reader here treats "anything except
+    the one value I special-case" as the default (`board`: only ``'ranking'`` is
+    checked, so ``'Popular'``, ``'rank'`` or a typo walks 热门; `format`: only
+    ``'json'`` is checked, so ``'Json'`` or ``'jsonl'`` writes CSV), which is how a
+    hand-written or externally generated workflow silently crawls or saves something
+    else. Refusing it by name is the same rule :func:`requested_mode_key` enforces for
+    the mode selector, extended to the choices inside a mode.
+
+    A blank is not a mistake but "never chose", which the declared default answers —
+    so it is skipped, exactly as an empty mode key is. Case is deliberately **not**
+    folded: an option value is a storage key, and the user has to see what they wrote
+    rather than have a near miss guessed into a different crawl.
+    """
+    out: list[tuple[Field, str]] = []
+    for field in list(mode.fields) + (list(FILE_FIELDS) if with_files else []):
+        if field.control != 'select' or not field.options:
+            continue
+        raw = params.get(field.key)
+        if raw is None:
+            continue
+        value = str(raw).strip()
+        if not value or value in {stored for stored, _label in field.options}:
+            continue
+        out.append((field, value))
     return out
 
 

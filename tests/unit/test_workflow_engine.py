@@ -302,6 +302,54 @@ class TestValidate:
         wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw', 'mode': ''})], [])
         assert WorkflowEngine(wf).validate() == []
 
+    def test_a_board_the_platform_does_not_offer_is_refused_by_that_value(self, en):
+        """``board`` is a select, and the crawler reads it as one comparison:
+        ``== 'ranking'`` else 热门. A value that is not on the list therefore did not
+        choose the board it names — it chose the *other* one, silently, and the run
+        recorded the crawl the node did not ask for.
+
+        The panel cannot send such a value (it builds its options from the matrix), so
+        this is the hand-written / externally generated workflow file the engine is the
+        last place able to stop.
+        """
+        wf = _wf([_node('node-1', params={'platform': 'bilibili', 'collect': 'hot', 'board': 'Popular'})], [])
+        errors = WorkflowEngine(wf).validate()
+        assert len(errors) == 1, errors
+        assert 'Popular' in errors[0] and 'board' in errors[0], errors
+        assert 'Data Source #node-1' in errors[0]
+        assert '(bilibili' not in errors[0], 'the refusal named the storage key at the user'
+
+    @pytest.mark.parametrize('blank', [None, '', '   '])
+    def test_a_board_nobody_chose_validates_as_the_default_board(self, en, blank):
+        params = {'platform': 'bilibili', 'collect': 'hot'}
+        if blank is not None:
+            params['board'] = blank
+        assert WorkflowEngine(_wf([_node('node-1', params=params)], [])).validate() == []
+
+    def test_the_file_format_is_refused_because_it_decides_what_hits_disk(self, en):
+        """Every reader of ``format`` asks ``== 'json'``, so 'JSON' or 'xlsx' wrote CSV
+        under a name that said the other thing."""
+        wf = _wf([_node('node-1', params={'platform': 'zhihu', 'keyword': 'kw', 'format': 'xlsx'})], [])
+        errors = WorkflowEngine(wf).validate()
+        assert len(errors) == 1, errors
+        assert 'xlsx' in errors[0] and 'format' in errors[0], errors
+
+    def test_a_key_the_selected_mode_does_not_declare_is_not_called_a_mistake(self, en):
+        """A stale ``board`` is normal: the panel leaves the other platform's fields in
+        ``params`` when the node switches. Refusing it would break saved canvases over
+        a key nothing reads."""
+        wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw', 'board': 'ranking'})], [])
+        assert WorkflowEngine(wf).validate() == []
+
+    def test_a_mistake_in_a_select_and_a_missing_field_are_two_lines(self, en):
+        """One failure, one line — and both are the node's own problems, so the user
+        gets both fields to go back to rather than only the first one found."""
+        wf = _wf([_node('node-1', params={'platform': 'zhihu', 'keyword': '  ', 'format': 'nope'})], [])
+        errors = WorkflowEngine(wf).validate()
+        assert len(errors) == 2, errors
+        assert any('keyword' in line for line in errors), errors
+        assert any('nope' in line for line in errors), errors
+
     def test_a_cycle_is_fatal_and_names_the_nodes_in_it(self, en):
         conns = [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-1'}]
         nodes = [_node('node-1', platform='zhihu'), _node('node-2', 'output', operation='csv')]

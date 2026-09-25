@@ -40,6 +40,7 @@ from crawl_capabilities import (
     platform_ids,
     required_missing,
     shows_nothing,
+    unoffered_selections,
 )
 
 pytestmark = pytest.mark.unit
@@ -98,6 +99,42 @@ class TestCoercion:
         }
         assert crawl_kwargs(mode, {'keyword': 'ai', 'full_body': False})['full_body'] is False
 
+    @pytest.mark.parametrize('off', ['false', 'False', 'FALSE', '  false  ', '0', 'no', 'off', '否'])
+    def test_a_switch_written_as_text_is_not_read_as_on(self, off):
+        """``bool(raw)`` was the old reading, and ``bool('false')`` is True.
+
+        That is not hypothetical: a checkbox in this app stores the strings
+        ``'true'``/``'false'``, so an unticked 正文展开 (one page-wait per row, and the
+        click that navigates away from a column card) meant "expand every answer", and
+        an unticked 重新采集 released the already-collected ledger — re-crawling, at the
+        user's cost, every item the node had already paid for.
+        """
+        mode = _mode('zhihu', 'posts')
+        assert crawl_kwargs(mode, {'keyword': 'ai', 'full_body': off})['full_body'] is False
+
+    @pytest.mark.parametrize('on', ['true', 'True', 'yes', '1', '是'])
+    def test_a_switch_written_as_text_is_not_read_as_off(self, on):
+        mode = _mode('zhihu', 'posts')
+        assert crawl_kwargs(mode, {'keyword': 'ai', 'full_body': on})['full_body'] is True
+
+    def test_a_cleared_switch_is_the_figure_the_panel_showed(self):
+        """Blank answers the Field's own default, in both directions: 正文展开 defaults
+        to on and 保留分片 to off, so neither box may be flipped by deleting its text.
+
+        A value that is neither grammar — ``[]``, ``{}``, a random word — takes the
+        declared default too. It used to be read as "off" by ``bool()``, which turned a
+        corrupt field into a silent behaviour change; "states nothing" is the truer
+        reading, and the panel's figure is what a person saw when they saved.
+        """
+        posts = _mode('zhihu', 'posts')
+        assert crawl_kwargs(posts, {'keyword': 'ai', 'full_body': ''})['full_body'] is True
+        keep = next(f for f in FILE_FIELDS if f.key == 'keep_parts')
+        assert keep.default is False
+        assert keep.value_from({'keep_parts': '   '}) is False
+        assert keep.value_from({'keep_parts': 'true'}) is True
+        assert keep.value_from({'keep_parts': []}) is False
+        assert crawl_kwargs(posts, {'keyword': 'ai', 'full_body': []})['full_body'] is True
+
     def test_urls_arrive_as_a_list_holding_one_entry_per_line(self):
         mode = _mode('zhihu', 'comments')
         urls = crawl_kwargs(mode, {'urls': 'https://a/1\nhttps://b/2, https://c/3'})['urls']
@@ -120,6 +157,120 @@ class TestCoercion:
             for mode in cap.modes:
                 keys = {f.key for f in mode.fields}
                 assert 'resume' not in keys, f'{cap.platform}/{mode.key} declares a resume field'
+
+
+class TestSelectsAreHeldToTheirOptions:
+    """A ``select`` is a choice from a list the matrix owns, so a value off that list
+    is not a variant of an answer — it is no answer, and every reader here treats
+    "anything except the one value I special-case" as the default.
+
+    The measurement that makes this real is ``board``: ``crawlers/video.py`` asks
+    ``== 'ranking'`` and crawls 热门 for everything else, so ``'Popular'`` (a label, not
+    a value), ``'rank'``, ``'ranking2'`` or a retired option in an old file all crawled
+    the *other* board — with the run recorded as the one the node asked for. ``format``
+    behaves the same way in reverse (only ``'json'`` is checked). The refusal belongs to
+    validation because the panel cannot produce such a value: it builds its options from
+    this very table, so only a hand-written or externally generated workflow gets here.
+    """
+
+    def test_the_two_selects_the_matrix_declares_are_the_two_it_can_refuse(self):
+        declared = {
+            (cap.platform, mode.key, f.key)
+            for cap in CAPABILITIES
+            for mode in cap.modes
+            for f in mode.fields
+            if f.control == 'select'
+        }
+        assert declared == {('bilibili', 'hot', 'board')}, declared
+        # The shared file tail is the other one, and it is on every mode.
+        assert [f.key for f in FILE_FIELDS if f.control == 'select'] == ['format']
+
+    @pytest.mark.parametrize('value', ['popular', 'ranking'])
+    def test_a_declared_option_is_accepted(self, value):
+        assert unoffered_selections(_mode('bilibili', 'hot'), {'board': value}) == []
+
+    @pytest.mark.parametrize('blank', [None, '', '   ', '\t'])
+    def test_a_box_nobody_chose_is_the_declared_default_not_a_mistake(self, blank):
+        """Same rule as an empty mode key: a canvas saved before the field existed must
+        keep running, and the default it gets is the one the panel showed.
+        """
+        params = {'board': blank} if blank is not None else {}
+        assert unoffered_selections(_mode('bilibili', 'hot'), params) == []
+
+    @pytest.mark.parametrize(
+        'wrong',
+        [
+            'Popular',  # the label the user sees, not the value stored
+            'RANKING',
+            'rank',
+            'ranking2',
+            'hot',  # another platform's word, which means nothing here
+            '0',
+            'false',
+            '无',
+            3,
+            ['ranking'],
+            {'value': 'ranking'},
+        ],
+    )
+    def test_a_value_off_the_list_is_named_with_the_field_that_carries_it(self, wrong):
+        found = unoffered_selections(_mode('bilibili', 'hot'), {'board': wrong})
+        assert len(found) == 1, (wrong, found)
+        field, value = found[0]
+        assert field.key == 'board' and field.name_key == 'field.board'
+        assert value == str(wrong).strip(), (wrong, value)
+
+    def test_padding_is_not_a_mistake_because_the_crawler_never_sees_it(
+        self,
+    ):
+        """``Field.value_from`` strips, so the executor receives ``'ranking'`` and the
+        check has to agree with what actually runs — a name that is checked and a value
+        that is used being different strings is the mistake this pair prevents.
+        """
+        assert unoffered_selections(_mode('bilibili', 'hot'), {'board': '  ranking  '}) == []
+        assert crawl_kwargs(_mode('bilibili', 'hot'), {'board': '  ranking  '})['board'] == 'ranking'
+
+    def test_the_case_variant_is_refused_rather_than_folded_into_an_option(self):
+        """Folding ``'RANKING'`` to ``'ranking'`` would guess at a choice, and the
+        storage value is a key, not a word the user typed."""
+        assert unoffered_selections(_mode('bilibili', 'hot'), {'board': 'RANKING'})
+
+    def test_the_file_format_is_checked_too_because_it_decides_what_hits_disk(self):
+        mode = _mode('zhihu', 'posts')
+        assert unoffered_selections(mode, {'format': 'csv'}) == []
+        assert unoffered_selections(mode, {'format': 'json'}) == []
+        for wrong in ('JSON', 'Json', 'xlsx', 'tsv', 'jsonl'):
+            found = unoffered_selections(mode, {'format': wrong})
+            assert [field.key for field, _value in found] == ['format'], wrong
+
+    def test_a_mode_that_declares_no_board_cannot_be_blamed_for_one(self):
+        """weibo has exactly one board, so a ``board`` key on its node is a leftover
+        from another platform's node — and refusing it would send the user to a field
+        the panel never showed them.
+        """
+        assert unoffered_selections(_mode('weibo', 'hot'), {'board': 'ranking'}) == []
+        assert 'board' not in {f.key for f in _mode('weibo', 'hot').fields}
+
+    def test_the_tail_can_be_left_off_for_a_caller_that_ignores_files(self):
+        mode = _mode('zhihu', 'posts')
+        assert unoffered_selections(mode, {'format': 'xlsx'}, with_files=False) == []
+
+    def test_every_select_the_matrix_declares_names_its_field_in_both_console_languages(self):
+        """The refusal prints the field's *word*, so a select without a backend name key
+        would print ``{field}`` — or the storage key — at the user. This is the same
+        mechanism 关键词 uses for a missing required field, and it is required of every
+        select, not just the two that exist today.
+        """
+        import i18n
+
+        selects = [f for f in FILE_FIELDS if f.control == 'select']
+        for cap in CAPABILITIES:
+            for mode in cap.modes:
+                selects += [f for f in mode.fields if f.control == 'select']
+        assert len(selects) >= 2, selects
+        for field in selects:
+            assert field.name_key, f'{field.key} declares no backend name'
+            assert field.name_key in i18n._ZH and field.name_key in i18n._EN, field.name_key
 
 
 class TestModeResolution:

@@ -209,6 +209,8 @@ class WorkflowEngine:
         errors = []
         for field in capabilities.required_missing(mode, params):
             errors.append(t('engine.source_missing', nid=label, field=t(field.name_key)))
+        for field, value in capabilities.unoffered_selections(mode, params):
+            errors.append(t('engine.source_bad_option', nid=label, field=t(field.name_key), value=value))
         for field in capabilities.link_fields(mode):
             urls = field.value_from(params)
             bad = sum(1 for u in urls if platform_for(u) != field.links_of)

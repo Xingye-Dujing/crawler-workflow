@@ -999,3 +999,190 @@ class TestOutputNodeOperations:
         _run, status, rows = self._run(client, app_module, paste, {'filename': 'matrix-none'}, 'archive')
         assert status['status'] == 'done', status.get('error')
         assert len(rows) == len(RICH_RECORDS), 'an unknown op must still not lose the table'
+
+
+class TestSelectsAndSwitchesAsNodes:
+    """The panel's dropdowns and checkboxes, driven through a real run.
+
+    Each parameter here chooses *data* or *cost* — which algorithm runs, whether the
+    row-by-row LLM is paid for, what shape the answer has — and every one of them used to
+    answer an unrecognised spelling with a different choice: ``method='TF-IDF'`` ran
+    TextRank and stamped the output with the name that had not run, ``mode='ML'`` fell
+    through to the **LLM** branch (the comparison was against the text ``'ml'``), and
+    ``merge=True`` — the boolean a workflow file writes — meant per-row expansion
+    because the comparison was against the text ``'true'``.
+    """
+
+    @pytest.mark.parametrize('wrong', ['TF-IDF', 'tf_idf', 'BM25', 'TextRank', 'True'])
+    def test_a_keyword_method_the_extractor_does_not_have_fails_the_node(self, client, app_module, paste, wrong):
+        _run, status, rows = _run_node(
+            client, app_module, paste, 'process', {'operation': 'keyword', 'method': wrong, 'topk': '2'}, 'keyword'
+        )
+        assert status['status'] == 'failed', status
+        assert wrong in (status.get('error') or ''), status.get('error')
+        assert rows == [], 'a node that never settled on an algorithm must not publish a keyword table'
+
+    @pytest.mark.parametrize(('spelling', 'expected'), [(' tfidf ', 'tfidf'), ('textrank', 'textrank')])
+    def test_a_padded_or_declared_method_runs_under_the_name_that_ran(
+        self, client, app_module, paste, spelling, expected
+    ):
+        """Padding is not a third algorithm: the value is stripped, and the ``method``
+        column then says what actually ran rather than either spelling of it.
+        """
+        _run, status, rows = _run_node(
+            client, app_module, paste, 'process', {'operation': 'keyword', 'method': spelling, 'topk': '2'}, 'keyword'
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert {row['method'] for row in rows} == {expected}, rows[:2]
+
+    def test_a_blank_method_is_the_one_the_panel_showed(self, client, app_module, paste):
+        _run, status, rows = _run_node(
+            client, app_module, paste, 'process', {'operation': 'keyword', 'method': '', 'topk': '2'}, 'keyword'
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert {row['method'] for row in rows} == {'tfidf'}, rows[:2]
+
+    #: Which module and class each operation reaches, so a refusal can be proven to have
+    #: stopped *before* the analyzer — that is, before the cost.
+    _ANALYZERS = {
+        'emotion': ('analyzers.emotion', 'EmotionAnalyzer'),
+        'tendency': ('analyzers.tendency', 'TendencyAnalyzer'),
+        'ner': ('analyzers.ner', 'NamedEntityRecognizer'),
+        'cluster': ('analyzers.clustering', 'TextCluster'),
+        'correlation': ('analyzers.correlation', 'CorrelationAnalyzer'),
+    }
+
+    @pytest.mark.parametrize(
+        ('operation', 'key', 'wrong'),
+        [
+            ('emotion', 'mode', 'ML'),
+            ('tendency', 'mode', 'LLM'),
+            ('ner', 'mode', 'Large'),
+            ('cluster', 'cluster_method', 'KMeans'),
+            ('correlation', 'corr_method', 'person'),
+        ],
+    )
+    def test_a_model_choice_is_refused_before_anything_is_paid_for(
+        self, client, app_module, paste, monkeypatch, operation, key, wrong
+    ):
+        """The refusal is not only a failed node: the analyzer must never be reached.
+
+        ``emotion``/``tendency`` branched on ``mode == 'ml'`` and took the LLM for every
+        other spelling, so a typo'd request for the local model paid for a row-by-row
+        pass over the whole table; ``ner`` normalised the other way and ran the rules
+        while the node said 大模型. The spy is the proof that neither happened.
+        """
+        import importlib
+
+        module_name, class_name = self._ANALYZERS[operation]
+        cls = getattr(importlib.import_module(module_name), class_name)
+        reached = []
+
+        def spy(self, df, *args, **kwargs):
+            reached.append(operation)
+            return df
+
+        monkeypatch.setattr(cls, 'analyze_dataframe', spy, raising=True)
+        _run, status, _rows = _run_node(
+            client,
+            app_module,
+            paste,
+            'process',
+            {'operation': operation, key: wrong, 'columns': '点赞, 阅读'},
+            operation,
+            llm={'provider': 'ollama', 'model': 'a-model-the-test-never-calls'},
+        )
+        assert status['status'] == 'failed', status
+        assert wrong in (status.get('error') or ''), status.get('error')
+        assert reached == [], f'{operation} reached its analyzer with an unusable {key}'
+
+    @pytest.mark.parametrize('missing', ['不存在', '  '])
+    def test_a_text_column_that_is_not_in_the_table_fails_the_node(
+        self, client, app_module, paste, monkeypatch, missing
+    ):
+        """Every analyzer answered this by logging 未找到列 and returning the input frame,
+        which settled the node DONE over a table the algorithm never touched: the run
+        went green and the export was the crawl again, one column short of what the user
+        had wired the node to add.
+        """
+        import analyzers.keyword as keyword_module
+
+        reached = []
+
+        def spy(self, df, text_column='正文', **kwargs):
+            reached.append(text_column)
+            return df
+
+        monkeypatch.setattr(keyword_module.KeywordExtractor, 'analyze_dataframe', spy, raising=True)
+        _run, status, _rows = _run_node(
+            client, app_module, paste, 'process', {'operation': 'keyword', 'text_column': missing}, 'keyword'
+        )
+        assert status['status'] == 'failed', status
+        assert missing.strip() in (status.get('error') or ''), status.get('error')
+        assert reached == [], 'the analyzer was reached with a column this table does not have'
+
+    #: Each operation's own parameter, the values to store in it, and the value the
+    #: analyzer must be handed. Blank takes the declared default and padding comes off —
+    #: this is the pin that the string `check_process_params` judges and the string the
+    #: analyzer receives are ONE string. A gate that forgave padding the branch still
+    #: read raw would pass ``' ML '`` on to a comparison against ``'ml'``, which is the
+    #: same split that made a refused spelling pay for the LLM.
+    _HANDOFF = [
+        ('emotion', 'mode', 'llm', ('', '  llm  ')),
+        ('emotion', 'mode', 'ml', ('ml', ' ml ')),
+        ('tendency', 'mode', 'llm', ('', '  llm  ')),
+        ('ner', 'mode', 'regex', ('', ' regex ')),
+        ('ner', 'mode', 'llm', ('llm', ' llm ')),
+        ('cluster', 'cluster_method', 'kmeans', ('', ' kmeans ')),
+        ('cluster', 'cluster_method', 'kmeans++', ('kmeans++',)),
+        ('correlation', 'corr_method', 'pearson', ('', ' pearson ')),
+        ('correlation', 'corr_method', 'kendall', ('kendall',)),
+    ]
+
+    @pytest.mark.parametrize(('operation', 'key', 'stored', 'cases'), _HANDOFF)
+    def test_the_value_the_gate_judges_is_the_value_the_analyzer_is_handed(
+        self, client, app_module, paste, monkeypatch, operation, key, stored, cases
+    ):
+        import importlib
+
+        module_name, class_name = self._ANALYZERS[operation]
+        cls = getattr(importlib.import_module(module_name), class_name)
+        received = []
+
+        def spy(self, df, *args, **kwargs):
+            received.append(getattr(self, 'mode', None) or kwargs.get('method'))
+            return df
+
+        monkeypatch.setattr(cls, 'analyze_dataframe', spy, raising=True)
+        for sent in cases:
+            received.clear()
+            _run, status, _rows = _run_node(
+                client,
+                app_module,
+                paste,
+                'process',
+                {'operation': operation, key: sent, 'columns': '点赞, 阅读'},
+                operation,
+                llm={'provider': 'ollama', 'model': 'a-model-the-test-never-calls'},
+            )
+            assert status['status'] == 'done', (sent, status.get('error'))
+            assert received == [stored], (operation, sent, received)
+
+    def test_a_blank_text_column_is_the_default_column_not_a_mistake(self, client, app_module, paste):
+        _run, status, rows = _run_node(
+            client, app_module, paste, 'process', {'operation': 'keyword', 'topk': '2'}, 'keyword'
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert rows and {row['method'] for row in rows} == {'tfidf'}
+
+    @pytest.mark.parametrize(('merge', 'has_row'), [(True, False), (False, True), ('true', False), ('false', True)])
+    def test_merge_reads_the_switch_in_both_grammars(self, client, app_module, paste, merge, has_row):
+        """One merged table, or one group of keywords per input row: the row-level shape
+        of the answer is what a person sees, and comparing the stored value against the
+        text ``'true'`` inverted it for the grammar a workflow file writes.
+        """
+        _run, status, rows = _run_node(
+            client, app_module, paste, 'process', {'operation': 'keyword', 'topk': '2', 'merge': merge}, 'keyword'
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert ('row' in rows[0]) is has_row, (merge, rows[:1])

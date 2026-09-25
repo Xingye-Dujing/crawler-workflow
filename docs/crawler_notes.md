@@ -739,3 +739,54 @@ Chrome 148 各测两种"卡在页面里"：一个 40 秒才答复的导航（正
 `BaseException`——`crawlers/` 里约 60 处 `except Exception` 是"读不到就接着走"的容错，一次停止
 被它们咽下就等于悄悄少采，而没人看得见少了什么。
 
+## 参数只有"被读懂"和"被点名拒绝"两种下场：静默降级实测清单（audited 2026-09-25，#132）
+
+这一轮把"用户选了 A、系统做了 B"的整类问题一次查清。方法：把每个 select/开关参数从**面板写入**
+一路读到**真正改变行为的那一句比较**，再问"如果一个不在列表上的值走到这里，会发生什么"。
+答案是绝大多数情况**什么都不发生**——因为每个读它的地方只特判自己认识的那一个值：
+
+| 位置 | 比较 | 未知值的下场 | 用户看到什么 |
+|---|---|---|---|
+| `crawlers/video.py:343`（B 站热榜） | `== 'ranking'` | 走热门榜 | 选了排行榜、拿回热门榜，记录里写着用户"选"的那个 |
+| `app.py` 三处 + `part_writer.py` | `== 'json'` | 写 CSV（扩展名也 CSV） | 要 JSON 拿到 CSV |
+| `analyzers/keyword.py:45` | `== 'tfidf'` else textrank | 跑 TextRank，并把 `method` 列写成用户请求的名字 | 表里声称 TF-IDF，实际是共现图 |
+| `analyzers/emotion.py:130` / `tendency.py:148` | `== 'ml'` else LLM | **走 LLM 逐行** | 拼错 `ML` 就白付一整轮模型调用 |
+| `analyzers/ner.py:179` | `== 'llm'` else regex | 走规则 | 节点写着大模型，实体是正则抽的 |
+| `services/data_analysis.py` `convert_type` | else 分支 | `astype(str)` | 要 int 拿到文本，节点照 done |
+| `services/data_analysis.py` `fill_null` | 字典查不到 | 用字面值填充 | `method='mean'` 把单词 mean 写进每个空格 |
+| `data_analysis` 各处 `if column not in df.columns: return df` | — | 整步跳过 | **过滤没生效却绿色**，导出的是没过滤的表 |
+| `drop_null`/`fill_null`/`drop_duplicates` 的列清单 | `[c for c in columns if c in df.columns] or None` | 名单全落空 → 子集为空 → **当成所有列** | 打错一个列名，`任一为空` 删掉远超目标的行 |
+
+布尔的两种写法同样会翻车，而且方向相反：
+
+* `params.get('ascending', 'true') == 'true'`：JSON 里的真布尔 `True != 'true'` → **升序变降序**；
+* `bool(raw)`（`Field.value_from` 的 bool 分支）与 `bool(params.get(key))`：面板的复选框历史上写的是
+  文本 `'false'`，而 `bool('false')` 是 **True** → 不勾选＝勾选。落到 `recrawl` 上就是"没点重新采集
+  却释放了台账"，把已经付过钱的条目再爬一遍；落到 `full_body`/`with_facts`/`keep_parts` 上就是白等
+  或白留文件。
+
+因此规则收敛成一句话：**选数据、选花费、选名字的参数，只能"被读懂"或"被点名拒绝"**。落点是四个，
+不是四十个 `if`：
+
+1. `capabilities.unoffered_selections(mode, params)` + `engine.source_bad_option` —— 矩阵里声明过的
+   `select`（现在只有 `board` 与 `format`）值不在 options 内就拒绝；**空值不是错误**（"没选过"，
+   按声明默认跑），这一点与 `requested_mode_key` 对未知 mode 的处理完全一致；面板不会写坏值，所以
+   这条路只挡手写/外部生成的 JSON 与被下架的旧选项。平台"这个模式根本没这个字段"不算错（切平台
+   不会删掉旧 key，拒绝它等于砸用户保存过的工作流）。
+2. `data_analysis.normalize_step_params` → `validate_step`，装在 `run_pipeline` 里——分析节点与
+   `/api/analysis/run` **两道门都只经过这一处**，所以两条门现在读同一份参数（以前 steps 门把
+   `'名称, 城市'` 当成 7 个字符的列名迭代，整步静默无效）。
+3. `app.enum_param(op, params, key)` + `PROCESS_ENUMS`（`参数 → (默认值, 允许写法)`）—— 处理节点的
+   `mode`/`method`/`cluster_method`/`corr_method`；关键是**被检查的那串字符就是递给分析器的那串**，
+   所以测试直接断言分析器收到的值（`test_the_value_the_gate_judges_is_the_value_the_analyzer_is_handed`）。
+4. `utils.helpers.as_bool(value, default)` —— 开关一律"读"，不比较。空白／听不懂的写法回答**默认值**
+   （面板在那一格显示的数字），因为它不是"另一个答案"。`services/data_analysis._to_bool` 是另一件事：
+   它读**抓来的单元格**，那里"不是假即真"是对的，用在参数上就会把清空的一格读成"关"。
+
+`keyword.py` 的 `method` 列现在写 `wanted`（解析后真跑的那个名字），不再写用户送进来的拼写——账本
+上"哪种算法产出了这行"必须是事实。
+
+两处**故意保留**的宽松：词云配色（`WORDCLOUD_STYLES.get(name, vibrant)`）与 `merge_frames` 的
+`mode`（它把自己的 `used_mode` 回给调用者）。前者是装饰参数，为一个配色丢掉整张图更糟；后者已经
+诚实报告了自己用了哪种。两者都不是"选数据/选花费"的参数。
+

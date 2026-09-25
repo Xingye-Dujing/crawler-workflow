@@ -67,7 +67,7 @@ from services.run_store import (
 from services.visualizer import ChartConfigError, VisualizationService
 from services.workflow_manager import WorkflowManager
 from settings_store import all_settings, get_setting, save_settings
-from utils.helpers import comment_platforms, platform_for, sanitize_filename, split_urls
+from utils.helpers import as_bool, comment_platforms, platform_for, sanitize_filename, split_names, split_urls
 
 #: The comment router's supported platforms, spelled for the console. Read once
 #: because the table is a module constant; a test asserts it stays in step.
@@ -686,7 +686,7 @@ def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     # 'the table as it stands', so every settled batch rewrites the whole
     # snapshot (atomic tmp+replace — an opened file is never half-written).
     live_writer = None
-    if bool((node.get('params') or {}).get('live_export')):
+    if as_bool((node.get('params') or {}).get('live_export')):
         from services.part_writer import SnapshotWriter, safe_stem
 
         stem = safe_stem(f'{execution_state.get("workflow_name") or "llm"}-{node_id}')
@@ -2195,7 +2195,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # the crawl is still running, and the parts merge into one file at the end
         # — the results are openable before the node finishes.
         part_size = _safe_int(params.get('part_size'), 0, minimum=0)
-        keep_parts = bool(params.get('keep_parts', False))
+        keep_parts = as_bool(params.get('keep_parts'))
         pfmt = 'json' if str(params.get('format') or 'csv') == 'json' else 'csv'
         writer = None
         if part_size > 0:
@@ -2205,7 +2205,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
             writer = PartWriter(Config.EXPORT_DIR, stem, pfmt, part_size, keep_parts)
         if ctx is not None:
             scope = _item_scope(ctx, node)
-            if params.get('recrawl') and not ctx.get('resume'):
+            if as_bool(params.get('recrawl')) and not ctx.get('resume'):
                 # 重新采集 (node setting): release this node's 'already collected'
                 # ledger so the same items are collected again — the incremental
                 # default would skip every one of them. Never on a resumed run:
@@ -2339,16 +2339,107 @@ def _execute_upload_node(node: dict, headless: bool = True):
     return _json_safe_records(df)
 
 
+#: The select-shaped parameter of each analysis-algorithm node, and the spellings that
+#: mean something to it. This is the same rule the crawl matrix applies to a ``select``
+#: Field and ``DataAnalysisService.STEP_PARAMS`` applies to a cleaning step: a value off
+#: the list is refused by name instead of being guessed into another algorithm. Before
+#: the table, ``method='TF-IDF'`` ran TextRank (``keyword.py`` compared against one
+#: name and treated everything else as the other), ``mode='ML'`` paid for a row-by-row
+#: LLM pass the user had just declined (``emotion.py``/``tendency.py`` test only for
+#: ``'ml'``), and ``mode='llm'`` on 实体识别 silently ran the rules instead.
+#:
+#: ``anomaly_method`` and ``topk`` are absent because their own code already refuses or
+#: clamps them, and this table guards the sites that had no answer at all.
+#:
+#: Each entry is ``parameter -> (declared default, the spellings that mean something)``.
+#: The default lives here because a blank field is "not stated", and the only safe
+#: answer is the one the panel showed — read at the site that uses it, so the string
+#: that is checked and the string the analyzer receives cannot be two different things.
+PROCESS_ENUMS = {
+    'emotion': {'mode': ('llm', ('llm', 'ml'))},
+    'tendency': {'mode': ('llm', ('llm', 'ml'))},
+    'ner': {'mode': ('regex', ('regex', 'llm'))},
+    'keyword': {'method': ('tfidf', ('tfidf', 'textrank'))},
+    'cluster': {'cluster_method': ('kmeans', ('kmeans', 'kmeans++', 'dbscan'))},
+    'correlation': {'corr_method': ('pearson', ('pearson', 'spearman', 'kendall'))},
+}
+
+#: The operations whose whole job is to read one text column of the table.
+_TEXT_COLUMN_OPS = ('clean', 'emotion', 'tendency', 'keyword', 'cluster', 'ner')
+
+
+def enum_param(op: str, params: dict, key: str) -> str:
+    """The value a select-shaped process parameter will really be called with.
+
+    ``'TF-IDF'``, ``'ML'`` and ``' tfidf '` are each a name the operation does not
+    know, and every site used to answer one of those with a different algorithm:
+    ``keyword.py`` compared against ``'tfidf'`` and took TextRank for everything else
+    (then stamped the table's ``method`` column with the name that had not run), while
+    ``emotion``/``tendency`` tested only for ``'ml'`` and so took the **row-by-row LLM
+    pass** for a misspelled request to use the local model. Clustering already refused;
+    this is the same contract, applied where the parameter is read.
+    """
+    default, allowed = PROCESS_ENUMS[op][key]
+    raw = params.get(key)
+    value = default if raw is None or (isinstance(raw, str) and not raw.strip()) else str(raw).strip().strip()
+    if value not in allowed:
+        raise UnknownOperationError(t('analysis.bad_option', op=op, param=key, value=value, allowed=', '.join(allowed)))
+    return value
+
+
+#: The two chart renderers a visualize node can choose.
+_CHART_ENGINES = ('echarts', 'matplotlib')
+
+
+def chart_engine(value) -> str:
+    """The renderer this chart asked for, refused by name when it asked for neither.
+
+    Both visualize paths branched on ``engine == 'matplotlib'`` and sent everything
+    else to the browser library, so ``'mpl'``, ``'Matplotlib'`` or a key that named no
+    renderer produced the chart the user had *not* chosen — and, unlike a bad column
+    name, no line anywhere saying the choice was not understood. The chart's own error
+    channel is ``ChartConfigError``, which the node reports as its failure reason and
+    the HTTP route as a 400.
+    """
+    name = str(value or 'echarts').strip() or 'echarts'
+    if name not in _CHART_ENGINES:
+        raise ChartConfigError(
+            t('analysis.bad_option', op='visualize', param='engine', value=name, allowed=', '.join(_CHART_ENGINES))
+        )
+    return name
+
+
+def check_process_params(op: str, params: dict, df) -> None:
+    """Refuse an algorithm node whose parameters name nothing it can run.
+
+    Every analyzer answers a missing 文本列 by logging 未找到列 and handing back the
+    frame **unchanged**, which settles the node DONE: the run went green, the table
+    downstream was the input table, and the only sentence saying why was in the log
+    file. A node that did nothing is a failure, so the reason is raised here — at the
+    one boundary every op passes through, where the node's own label can be attached
+    by the executor.
+    """
+    for key in PROCESS_ENUMS.get(op) or {}:
+        enum_param(op, params, key)
+    if op in _TEXT_COLUMN_OPS:
+        name = str(params.get('text_column') or '正文').strip()
+        if name not in [str(col) for col in df.columns]:
+            raise UnknownOperationError(t('analysis.step_col_missing', op=op, col=name))
+
+
 def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
     params = node.get('params', {})
     op = node.get('operation', params.get('operation', ''))
     # Default matches the frontend canvas default and every crawler's output
-    # column; the old 'content' silently mismatched real crawl data.
-    text_column = params.get('text_column', '正文')
+    # column; the old 'content' silently mismatched real crawl data. Read through the
+    # same blank-means-default rule `check_process_params` validates, so the column it
+    # checks is the column the analyzer gets.
+    text_column = str(params.get('text_column') or '正文').strip()
     if not current_input:
         return []
 
     df = pd.DataFrame(current_input)
+    check_process_params(op, params, df)
 
     if op == 'clean':
         topic = params.get('topic', '')
@@ -2356,27 +2447,29 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         df = cleaner.clean_dataframe(df, text_column=text_column, topic=topic, ctx=run_ctx)
         return df.to_dict('records')
 
-    mode = params.get('mode', 'llm')
     if op == 'emotion':
-        analyzer = EmotionAnalyzer(mode=mode)
+        analyzer = EmotionAnalyzer(mode=enum_param(op, params, 'mode'))
         df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')
 
     if op == 'tendency':
-        analyzer = TendencyAnalyzer(mode=mode)
+        analyzer = TendencyAnalyzer(mode=enum_param(op, params, 'mode'))
         df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')
 
     if op == 'keyword':
-        method = params.get('method', 'tfidf')
+        method = enum_param(op, params, 'method')
         topk = _safe_int(params.get('topk'), 10, minimum=1)
-        merge = params.get('merge', 'true') == 'true'
+        # ``as_bool``, never ``== 'true'``: real ``True`` is unequal to the text 'true',
+        # so a workflow that stored the boolean (an exported file, /api/analysis/run)
+        # asking for one merged keyword table silently got the per-row expansion.
+        merge = as_bool(params.get('merge'), True)
         extractor = KeywordExtractor()
         df = extractor.analyze_dataframe(df, text_column=text_column, method=method, topk=topk, merge=merge)
         return df.to_dict('records')
 
     if op == 'cluster':
-        method = params.get('cluster_method', 'kmeans')
+        method = enum_param(op, params, 'cluster_method')
         n_clusters = _safe_int(params.get('n_clusters'), 3, minimum=1)
         eps = _safe_float(params.get('eps'), 0.5)
         min_samples = _safe_int(params.get('min_samples'), 2, minimum=1)
@@ -2394,7 +2487,7 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
     if op == 'ner':
         # Its own mode default: the rules need no model, and a workflow saved
         # before the mode selector existed must not start paying for one.
-        recognizer = NamedEntityRecognizer(mode=params.get('mode', 'regex'))
+        recognizer = NamedEntityRecognizer(mode=enum_param(op, params, 'mode'))
         df = recognizer.analyze_dataframe(
             df,
             text_column=text_column,
@@ -2414,7 +2507,7 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
 
     if op == 'correlation':
         columns = _split_columns(params.get('columns')) or None
-        corr_method = params.get('corr_method', 'pearson')
+        corr_method = enum_param(op, params, 'corr_method')
         min_abs = _safe_float(params.get('min_abs'), 0.0)
         analyzer_corr = CorrelationAnalyzer()
         df = analyzer_corr.analyze_dataframe(df, columns=columns, method=corr_method, min_abs=min_abs)
@@ -2460,7 +2553,7 @@ def _execute_output_node(node: dict, current_input: list):
         # on 继续 an output node whose stored rows still match its fingerprint is
         # *restored*, so this line never runs and no second file appears. Re-running
         # for a new timestamp means re-running the chain it writes out of.
-        if params.get('filename_timestamp'):
+        if as_bool(params.get('filename_timestamp')):
             filename = DataExporter.stamp_filename(filename, Config.EXPORT_DIR)
         filepath = os.path.join(Config.EXPORT_DIR, filename)
         try:
@@ -2542,9 +2635,13 @@ def _optional_float(value):
 
 
 def _split_columns(value) -> list:
-    if isinstance(value, list):
-        return [str(c).strip() for c in value if str(c).strip()]
-    return [c.strip() for c in str(value or '').split(',') if c.strip()]
+    """The panel's ``列名`` box, read as names.
+
+    Delegates to :func:`utils.helpers.split_names`, which the pipeline gate also uses,
+    so a step's ``columns`` cannot mean one thing to the executor and another to the
+    check that decides whether it can run.
+    """
+    return split_names(value)
 
 
 def _normalize_analysis_params(op: str, params: dict) -> dict:
@@ -2579,7 +2676,10 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
     if op == 'convert_type':
         return {'column': params.get('column', ''), 'dtype': params.get('dtype', 'str')}
     if op == 'sort_rows':
-        return {'column': params.get('column', ''), 'ascending': params.get('ascending', 'true') == 'true'}
+        # Both spellings of a switch are in the saved files: the panel used to store
+        # the text 'true'/'false' and a hand-written or exported workflow stores the
+        # boolean. Comparing against one of them inverted 升序 into 降序 for the other.
+        return {'column': params.get('column', ''), 'ascending': as_bool(params.get('ascending'), True)}
     if op == 'sample_rows':
         result = {'n': _optional_int(params.get('n')), 'frac': _optional_float(params.get('frac'))}
         seed = _optional_int(params.get('seed'))
@@ -2724,7 +2824,7 @@ def _execute_visualize_node(node: dict, current_input: list):
     value_field = params.get('value_field')
     agg = params.get('agg', 'sum')
     title = params.get('title', '')
-    tokenize = bool(params.get('tokenize'))
+    tokenize = as_bool(params.get('tokenize'))
     wordcloud_style = params.get('wordcloud_style')
 
     if not current_input:
@@ -2823,8 +2923,8 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
 
     limit = _safe_int(params.get('comment_limit'), 0, minimum=0)  # 0 = every comment
     part_size = _safe_int(params.get('part_size'), 0, minimum=0)  # 0 = single final file only
-    per_article = bool(params.get('per_article_file'))
-    keep_parts = bool(params.get('keep_parts', True))
+    per_article = as_bool(params.get('per_article_file'))
+    keep_parts = as_bool(params.get('keep_parts'), True)
     fmt = 'json' if str(params.get('format') or 'csv') == 'json' else 'csv'
     nid = str(node.get('id') or '')
     stem_base = safe_stem(f'{execution_state.get("workflow_name") or "comments"}-{nid}')
@@ -3889,7 +3989,7 @@ def render_visualization():
     value_field = data.get('value_field')
     agg = data.get('agg', 'sum')
     title = data.get('title', '')
-    tokenize = bool(data.get('tokenize'))
+    tokenize = as_bool(data.get('tokenize'))
     wordcloud_style = data.get('wordcloud_style')
 
     try:

@@ -233,6 +233,7 @@ class TestCatalogueHealth:
             'source_unknown_platform',
             'source_unknown_mode',
             'source_missing',
+            'source_bad_option',
             'source_link_mismatch',
             'upload_no_file',
             'process_no_op',
