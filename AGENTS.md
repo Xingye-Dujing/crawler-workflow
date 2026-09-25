@@ -50,9 +50,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **Isolation happens at conftest import, and the suite fails if `data/` or `logs/` gains a byte.**
   `tests/conftest.py` redirects every write path *before any test module is imported* — collection
   imports all of them before fixtures run, and `app.py` captures `Config.COOKIE_DIR` / `history.db`
-  into module-level singletons at its own import. Two incidents: the `integration` UI tier landed runs
-  in the real `data/` (stub `fetch` instead), and a top-level `import app` in a test file then froze
-  the real cookie dir and destroyed the user's saved cookies. `test_test_tiers.py` refuses the import
+  into module-level singletons at its own import. Two incidents taught this (`docs/crawler_notes.md`):
+  a UI tier that wrote runs into the real `data/`, and a top-level `import app` that froze the real
+  cookie dir and destroyed the user's saved cookies. `test_test_tiers.py` refuses the import
   statically; the session-finish snapshot refuses the write dynamically.
 
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js` /
@@ -111,50 +111,51 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   **one matrix entry**, never an `if platform == '…'` branch in four files. It sits at the backend root
   because `engine/workflow.py` reads it and must not import the crawler package. Field labels are
   *frontend* keys and required-field names *backend* ones (`field.*`), both pinned by
-  `test_frontend_contract.py::TestCrawlMatrixParity`; `mode_for` falls back to the first mode for
-  panel rendering and single-mode platforms. A field name reaches an inline handler, so one that is not `/^[\w.-]{1,64}$/` is
-  dropped whole, and the JS panel is tested against the matrix dumped from Python, never a copy checked in.
+  `test_frontend_contract.py::TestCrawlMatrixParity`. A field name reaches an inline handler, so one
+  that is not `/^[\w.-]{1,64}$/` is dropped whole, and the JS panel is tested against the matrix
+  dumped from Python, never a copy checked in.
 - **A record whose worker is gone is settled by the panel, not by a restart.** `/api/runs/list`
   settles a row this process opened and never closed, once no worker is alive. Adding a run
   status means updating `RESUMABLE_RUN_STATUS`, `purge`'s protection, the panel's `known` list
   and both app.js catalogs.
 - **A visible window must be doing something visible, and it must answer every preference a run set.**
-  Each `Mode` declares `collects` (fetch / DOM walk / per-row page); the panel note, the comment window choice
-  (`_comment_headless`) and the run chip read it. A fetch mode honours 无头 (weibo/bilibili comments run so);
-  a scrolled/`never_headless` one keeps the window and sets `forced_visible` so the chip reads
-  无头→窗口. A session preference is
-  *stored* in the profile, so it outlives the crawl: a window that merely *omits* the image blocker
-  inherits it and shows a login page with no QR code. 取 Cookie /
-  验证 Cookie windows — and the pre-run probe, which must agree — write 允许 explicitly (`_content_prefs`).
+  Each `Mode` declares `collects` (fetch / DOM walk / per-row page); the panel note, the comment window
+  (`_comment_headless`) and the run chip read it, and a scrolled/`never_headless` one sets
+  `forced_visible` so the chip reads 无头→窗口. A session preference is *stored* in the profile, so it
+  outlives the crawl: a window that merely *omits* the image blocker inherits it and shows a login page
+  with no QR code, so 取 Cookie / 验证 Cookie and the pre-run probe write 允许 explicitly
+  (`_content_prefs`).
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count` (one
-  万/千/亿/K/M/B parser), `engine.wall` (login / risk-control / root-bounce), `engine.popup.Prompt` + a
+  万/千/亿/K/M/B parser), `engine.wall` (the four page verdicts), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (the scroll that finds the
   element which actually moves), `engine.pager.walk_pages` (cursor paging that follows the server's own
   value) and `engine.jsonpath` know nothing about any platform; a platform module declares only selectors,
   endpoints and column names. New crawl logic goes through these helpers — a second copy of a scroll loop
   or a 万-parser is what this rule exists to prevent. No walk has a round/page budget: "how much"
-  is the user's target, never a constant. `Crawler.open(url)`
-  is the only navigation
-  entry point: it survives a renderer timeout and **records whether the navigation settled** — a load
-  that never finished is a slow network, not a refusal, and a refusal may name only what the code can
-  see. It clears the dialog, and latches a wall only once it is still there after re-reading.
-- **One profile is one browser, and a parallel canvas has to be told that.** chromedriver pre-writes
-  the profile's `Preferences`, so two sessions in one directory cannot both come up.
-  `browser_profiles.acquire_profile(dir)` is a plain, **non-reentrant** `Lock`
-  held for the crawler's whole life and released in `close()` — non-reentrant because
-  `_close_login_browser` releases it from a *side* thread. The user decides per run —
-  用 Profile vs 本次不用 — and the answer travels as
-  `use_profile`; 真排队 on has answered it for the whole program already.
-  **A site's rate limit is a second collision**: two throwaway browsers can still be bounced as the
-  *account* searched twice in one second. So `crawl_gate.hold(platform)` orders crawls by platform:
-  `same_platform_queue` on holds the turn until that crawl *finishes*; off spaces the *starts*
-  of in-flight crawls by `same_platform_stagger` seconds (错峰; 0 = no wait).
-  A matrix `serial_only` platform is always queued whatever the switch says; the browser warns
-  first. A wall met **before the first row** retries once after a back-off; a wall met after
-  rows is the cookie dying and must go to 继续 instead. **Absence means "follow the setting" —
-  never coerce missing to `False`,** or one dialog's answer becomes a global override.
-  `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node fails with the directory named,
-  never with a driver stack trace.
+  is the user's target, never a constant. `Crawler.open(url)` is the only navigation entry point: it
+  survives a renderer timeout and **records whether the navigation settled** — a load that never
+  finished is a slow network, not a refusal, and a refusal may name only what the code can see. It
+  clears the dialog, and latches a wall only once it is still there after re-reading.
+- **A slow network is not a refusal, and only a refusal may be named one.** One page's *first
+  content* gets `Config.PAGE_WAIT_TIMEOUT` via `Crawler.wait_for_first_content` — stop-aware, out
+  early on evidence, refused once this browser has watched two expire; "any new rows?" keeps its
+  short budget, because stretching a progress judgement buys a crawl that never ends.
+  `wall.classify` answers four words (`VERDICTS` is closed); `unreachable` is the browser's own
+  page, read from `documentURI` since `current_url` still shows what was asked for, and it sets
+  **neither** wall flag — the site never saw the session.
+- **One profile is one browser, and a parallel canvas has to be told that.** chromedriver
+  pre-writes the profile's `Preferences`, so two sessions in one directory cannot both come up:
+  `browser_profiles.acquire_profile(dir)` is a plain, **non-reentrant** `Lock` held for the
+  crawler's whole life (non-reentrant because `_close_login_browser` releases it from a *side*
+  thread). The user answers 用 Profile per run as `use_profile`; 真排队 has answered it for the
+  whole program. **A site's rate limit is a second collision** — two throwaway browsers can still
+  be bounced as the *account* searching twice in one second — so `crawl_gate.hold(platform)`
+  orders crawls by platform (真排队 holds the turn until that crawl *finishes*, 错峰 only spaces
+  their starts). A matrix `serial_only` platform is always queued whatever the switch says; the
+  browser warns first. A wall met **before the first row** retries once after a back-off; a wall
+  met after rows is the cookie dying and must go to 继续 instead. **Absence means "follow the
+  setting" — never coerce missing to `False`,** or one dialog's answer becomes a global override.
+  `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node fails with the directory named.
 - **A Stop is a request, not a verdict.** 停止 writes `stopping` into the record **on the request
   thread** (the worker's verdict replaces it) and `stop_requested()` reads that — never
   `not running`, which an idle server also answers. Each crawl asks it at its next row via
@@ -164,9 +165,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   ceiling**: `ollama.Client` defaults to `None` (never), so pass the run's timeout there; and the
   panel's post-stop watch must outlast the measured tail (`docs/crawler_notes.md`).
 - **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.**
-  `browser_profiles.py` resolves `data/chrome_profile/<platform>` (or the user's absolute
-  `browser_profile_dir`) and `get_crawler` passes it as `--user-data-dir`, so the login window and the
-  crawl are the same device. Consequence: **the saved cookie file is imported once** (first use of the
+  `get_crawler` passes `data/chrome_profile/<platform>` (or the user's absolute
+  `browser_profile_dir`) as `--user-data-dir`, so the login window and the crawl are the same
+  device. Consequence: **the saved cookie file is imported once** (first use of the
   directory) and **never planted again** — overwriting a live profile
   with an old snapshot is the harm, not the fix. **Never write the browser's live jar back to a saved
   cookie file.** `Capability.profile_recommended` is the single source for "this platform punishes a
@@ -235,9 +236,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **Checkpointing is the core value** (`services/run_store.py`): per-node outputs and LLM answers
   persist so an interrupted run resumes rather than re-crawls or re-pays. Keep `runs.db` state compatible.
   Three measured rules, each pinned by a test: the streaming row sink writes **one transaction per row**
-  on purpose; the next free slot is `MAX(seq)+1`, **never `COUNT(*)`** (per row, that is quadratic in a
-  long crawl's own table); a **cursor records position, not content** — collected ids come from the
-  seeded rows (`Crawler.seed`), so an id list must not go back into `mark_position`.
+  on purpose; the next free slot is `MAX(seq)+1`, **never `COUNT(*)`**; a **cursor records position,
+  not content** — collected ids come from the seeded rows (`Crawler.seed`), so an id list must not go
+  back into `mark_position`.
 - **A label is not an input.** A node's fingerprint feeds its children, and the crawl's
   dedupe ledger is scoped by `'item:' + node_fingerprint`, so putting a *name* inside one
   invalidates a whole chain and moves the other. `_VOLATILE_PARAMS`
@@ -289,8 +290,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   one leaves none. Two invariants make it safe: every row keeps the **canvas** fingerprint, which
   is what the resume banner and `/api/runs/resumable` match on, and the id the HTTP response returns
   is workflow zero's row (the browser polls it and resumes by it). 继续 then adopts each workflow's
-  own row by name. `wf_count`/`headless`/`mode` reach old databases through
-  `RunStore._ensure_columns()`. **A chip must describe what happened, not what the canvas held**:
+  own row by name. **A chip must describe what happened, not what the canvas held**:
   `并行 ×N` only when `mode == 'parallel'`, and a serial row says `串行 ×1` because that row *is*
   one workflow. Resume state stays **per workflow** (decided by `fingerprints_for_workflow`), so a
   failure in B restores A.

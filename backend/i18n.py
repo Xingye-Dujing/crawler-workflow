@@ -154,6 +154,10 @@ _ZH = {
     # ``run.cookieExpired``, which also says what to do about it.
     'crawl.loginWall': '登录墙：{platform} 的 {where} 被重定向到登录页',
     'crawl.riskBlocked': '风控拦截：{platform} 的 {where} 返回了安全验证而非内容（会话未必失效，稍后重试）',
+    # Neither of the two above: the browser wrote this page itself, so the site never saw
+    # the request and the session is not the thing in question.
+    'crawl.unreachable': '浏览器自己拒绝了这次访问：{platform} 的 {where}{detail}',
+    'crawl.unreachableToken': '（{token}）',
     'crawl.promptDismissed': '{label} 的首屏弹窗已自动点掉：「{button}」',
     'crawl.promptUnmatched': '{label} 的首屏弹窗无法对应按钮（页面提供：{buttons}），本次可能需等待其自动消失',
     'crawl.zhihu.url': '搜索URL: {url}',
@@ -387,6 +391,9 @@ _ZH = {
         '[抖音] 结果页在加载超时内没有加载完，因此始终没有视频卡片（地址：{url}）。'
         '这通常是本机网络或站点响应慢，稍后重试即可；既不是「这个关键词没有结果」，也不是被拦截'
     ),
+    # The one refusal on this page that needs no waiting and no probing: the document is
+    # the browser's own, and it says which address it refused.
+    'crawl.dy.noPageRefused': '[抖音] 浏览器自己拒绝了这一页，因此不可能有卡片：{url}{detail}',
     'crawl.dy.hotStart': '[抖音热榜] 开始采集热榜，目标 {n} 条（榜单一次给全，不逐条打开）',
     'crawl.dy.hotTarget': '[抖音热榜] 已采集到目标 {n} 条，不再读取榜单',
     'crawl.dy.hotDone': '[抖音热榜] 榜单采集结束，共 {n} 条（目标 {total} 条）',
@@ -467,6 +474,9 @@ _ZH = {
     'cookie.pre.timeout': '验证超时（{n} 秒）',
     'cookie.pre.riskControl': '页面回的是验证码/风控',
     'cookie.verify.unclear': '{platform} 的验证没有结论：页面回的是验证码/风控，与 Cookie 是否有效无关',
+    # The page never came from the site at all, so nothing about the cookie was tested —
+    # and 「可用」 here would be cached and reused by every later run.
+    'cookie.verify.unreachable': '{platform} 无法验证：浏览器自己没能打开这个地址（本机网络或 DNS），未检验到 Cookie',
     'cookie.delete.none': '{platform} 没有已保存的 Cookie 可删除',
     'cookie.delete.profileHolds': '注意：{platform} 的浏览器 profile 仍是登录状态，删这个文件不会把它登出',
     'cookie.delete.failed': '删除 Cookie 文件失败：{err}',
@@ -688,6 +698,16 @@ _ZH = {
         '已采集的数据全部保留——请到 设置→Cookie 更新后，用断点续跑从上次中断处继续'
     ),
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
+    # A page that never arrived, said once with the one thing the crawler cannot know:
+    # whether this machine can reach anything at all. ``{advice}`` is left empty when the
+    # page already named its own cause, so the sentence must read in both shapes.
+    'run.pagePending': '{page}{streak}{advice}',
+    'run.pageStreak': '；这已是本机连续第 {n} 次没有拿到页面',
+    'net.region': '。诊断：本机目前到不了该平台所在的那一侧网络（对照主机不通，另一端正常）——请换网络后重跑',
+    'net.offline': '。诊断：本机当前连不上任何外网（两个对照主机都不通），请先恢复网络再跑',
+    'net.blocked': '。诊断：本机出网正常，但该平台的主机连不上，可能是站点故障或本地拦截',
+    'net.slow': '。诊断：两侧网络都能连通，因此没有依据判断这一页为什么没到；可以再跑一次，或按停止结束',
+    'net.speed': '（实测下载约 {speed} kB/s）',
     # Only for a comment node whose links came from several platforms and whose own
     # platform field is empty — the message must name what walled, and a hand-written
     # list of platforms the user never crawled reads worse than no list at all.
@@ -898,6 +918,10 @@ _EN = {
     'crawl.cookiesSeeded': 'Cookies seeded: {host} accepted {n}/{total}',
     'crawl.loginWall': 'Login wall: {platform} redirected {where} to a login page',
     'crawl.riskBlocked': 'Risk control: {platform} answered {where} with a security check instead of content',
+    # Neither of the two above: the browser wrote this page itself, so the site never saw
+    # the request and the session is not the thing in question.
+    'crawl.unreachable': 'The browser refused this visit itself: {platform} at {where}{detail}',
+    'crawl.unreachableToken': ' ({token})',
     'crawl.promptDismissed': '{label}: dismissed the first-run dialog by pressing "{button}"',
     'crawl.promptUnmatched': (
         '{label}: the first-run dialog matched no known button (the page offers: {buttons}),'
@@ -1150,6 +1174,9 @@ _EN = {
         'appeared (URL: {url}). That is normally the network on this machine or a site answering slowly; '
         'retry later. It is neither "this keyword found nothing" nor a block'
     ),
+    # The one refusal on this page that needs no waiting and no probing: the document is
+    # the browser's own, and it says which address it refused.
+    'crawl.dy.noPageRefused': '[Douyin] the browser refused this page itself, so there can be no cards: {url}{detail}',
     'crawl.dy.hotStart': '[Douyin hot board] collecting the board, target {n} (one answer, no per-row page)',
     'crawl.dy.hotTarget': '[Douyin hot board] the target of {n} rows is already stored, the board is not read again',
     'crawl.dy.hotDone': '[Douyin hot board] finished with {n} rows (target {total})',
@@ -1238,6 +1265,10 @@ _EN = {
     'cookie.pre.riskControl': 'the page answered with a captcha / risk control',
     'cookie.verify.unclear': '{platform} could not be verified: the page answered with a captcha or risk '
     'control, which says nothing about whether the cookie is valid',
+    # The page never came from the site at all, so nothing about the cookie was tested —
+    # and 「可用」 here would be cached and reused by every later run.
+    'cookie.verify.unreachable': '{platform} could not be verified: the browser never opened this address '
+    '(this machine\u2019s network or DNS), so the cookie was not tested',
     'cookie.delete.none': 'There is no saved {platform} cookie to delete',
     'cookie.delete.profileHolds': 'Note: {platform}\u2019s browser profile stays logged in — deleting this '
     'file does not sign that device out',
@@ -1458,6 +1489,28 @@ _EN = {
     'run.cookieExpiredOk': (
         'note: {platform} hit the login wall only after the target was met — the data is complete, nothing to resume'
     ),
+    # A page that never arrived, said once with the one thing the crawler cannot know:
+    # whether this machine can reach anything at all. ``{advice}`` is empty when the page
+    # already named its own cause, so the sentence has to read in both shapes.
+    'run.pagePending': '{page}{streak}{advice}',
+    'run.pageStreak': '; this is the {n}th page in a row this machine has not delivered',
+    'net.region': (
+        '. Diagnosis: this machine cannot reach the side of the internet that platform lives on (the control host '
+        'for it fails while the other answers) — switch network and run it again'
+    ),
+    'net.offline': (
+        '. Diagnosis: this machine has no outbound connection at all right now (both control hosts fail), '
+        'so restore the network before running again'
+    ),
+    'net.blocked': (
+        '. Diagnosis: this machine routes normally but the platform host itself does not answer, '
+        'which is a site outage or a local interception rather than a slow page'
+    ),
+    'net.slow': (
+        '. Diagnosis: both sides connect, so there is no evidence for why this page did not arrive; '
+        'run it again, or press Stop to end the run'
+    ),
+    'net.speed': ' (measured about {speed} kB/s)',
     'run.cookieAnyPlatform': 'the platform being crawled',
     'run.forcedVisible': '"{label}": {platform} blocks headless browsers, so this run was switched to a visible window',
     'run.forcedVisibleComment': (

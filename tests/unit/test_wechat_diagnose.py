@@ -92,7 +92,9 @@ class TestNoCommentApparatus:
         crawler = make_crawler()
         facts = crawler.diagnose(ARTICLE)
         assert facts['platform'] == 'mp.weixin.qq.com'
-        assert set(facts) == {'platform', 'url', 'login_wall'}
+        # ``unreachable`` is a base-class fact, not WeChat apparatus: it says the browser
+        # wrote the page itself, which every platform can have happen.
+        assert set(facts) == {'platform', 'url', 'login_wall', 'unreachable'}
 
     def test_wechat_offers_no_login_page_at_all(self):
         """The residue this pins: a ``login_url`` on this class means some code
@@ -109,7 +111,7 @@ class TestNoCommentApparatus:
         the user never asked about."""
         crawler = make_crawler()
         facts = crawler.diagnose()
-        assert facts == {'platform': 'mp.weixin.qq.com', 'url': '', 'login_wall': False}
+        assert facts == {'platform': 'mp.weixin.qq.com', 'url': '', 'login_wall': False, 'unreachable': False}
         assert crawler.driver.visited == []
 
     def test_the_cookie_panel_has_no_wechat_row(self):

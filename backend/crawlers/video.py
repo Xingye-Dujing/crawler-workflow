@@ -51,7 +51,7 @@ from urllib.parse import quote
 
 from i18n import t
 
-from .base import Crawler, as_index
+from .base import Crawler, PageNotArrivedError, as_index
 from .engine import feed, pagefetch, popup
 from .engine.counters import parse_count
 
@@ -565,9 +565,9 @@ class DouyinCrawler(VideoCrawler):
             return self.results()
         logger.info(t('crawl.dy.start', kw=keyword, n=target_count))
         reached = self._open_results(keyword)
-        if reached == self.CAPTCHA:
+        if self._page_outcome(reached) == self.CAPTCHA:
             raise RuntimeError(t('crawl.dy.wall'))
-        if reached != self.OK:
+        if not reached['arrived']:
             # Zero cards is never an empty answer here. Measured: a keyword that
             # cannot exist still came back with 16 related videos, because douyin
             # fills the list in rather than showing an empty plate — so an empty
@@ -576,9 +576,21 @@ class DouyinCrawler(VideoCrawler):
             # The third of those is said by its own sentence: it is the machine's
             # network, not the site refusing, and the user watching the window told us
             # so after a run blamed douyin for exactly this.
+            #
+            # And when the browser wrote the page itself, that is said instead: there
+            # is no slower wait that would change a refused address into a page, which
+            # is why the shared wait leaves it as soon as it sees it. Every branch
+            # raises :class:`PageNotArrivedError` with its own numbers so the executor can
+            # add what only a probe of this machine can tell — the three sentences on
+            # their own are observations, not advice.
+            facts = {'waited': reached['waited'], 'verdict': reached['verdict'], 'gave_up': reached['gave_up']}
+            if reached['verdict'] == 'unreachable':
+                raise PageNotArrivedError(
+                    t('crawl.dy.noPageRefused', url=self._current_url(), detail=self._error_detail()), **facts
+                )
             if not self.navigation_settled:
-                raise RuntimeError(t('crawl.dy.noCardsSlow', url=self._current_url()))
-            raise RuntimeError(t('crawl.dy.noCards', page=self._page_words(), url=self._current_url()))
+                raise PageNotArrivedError(t('crawl.dy.noCardsSlow', url=self._current_url()), **facts)
+            raise PageNotArrivedError(t('crawl.dy.noCards', page=self._page_words(), url=self._current_url()), **facts)
         rounds = self._open_each(self._card_ids, self._scroll_results, done, target_count)
         logger.info(t('crawl.dy.finished', n=self.collected(), rounds=rounds, total=target_count))
         return self.results()
@@ -605,18 +617,31 @@ class DouyinCrawler(VideoCrawler):
         if self._is_walled():
             raise RuntimeError(t('crawl.dy.wall'))
         published = self._published_count()
-        if not self._wait_for_grid():
+        # A page that has already published its own 作品 count arrived, so what is left to
+        # learn about its grid is progress — and progress keeps the short budget. Any
+        # other page is one this machine may still be delivering, and that is what the
+        # patient clock is for.
+        grid = self._wait_for_grid(timeout=self.MOUNT_WAIT if published == 0 else None)
+        if not grid['arrived']:
             if published == 0:
                 # The page says it holds nothing, which is a fact about the creator.
                 logger.info(t('crawl.dy.authorNoWorks'))
                 return self.results()
             # Anything else is a page that did not answer: quoting the site is the
             # only way the user can tell a wall from a quiet zero.
-            if published > 0:
-                raise RuntimeError(
-                    t('crawl.dy.authorNoCards', page=self._page_words(), url=self._current_url(), works=published)
+            facts = {'waited': grid['waited'], 'verdict': grid['verdict'], 'gave_up': grid['gave_up']}
+            if grid['verdict'] == 'unreachable':
+                raise PageNotArrivedError(
+                    t('crawl.dy.noPageRefused', url=self._current_url(), detail=self._error_detail()), **facts
                 )
-            raise RuntimeError(t('crawl.dy.authorNotMounted', page=self._page_words(), url=self._current_url()))
+            if published > 0:
+                raise PageNotArrivedError(
+                    t('crawl.dy.authorNoCards', page=self._page_words(), url=self._current_url(), works=published),
+                    **facts,
+                )
+            raise PageNotArrivedError(
+                t('crawl.dy.authorNotMounted', page=self._page_words(), url=self._current_url()), **facts
+            )
         # Identity, not a resume blob: the rows carry their own 视频ID, so a resumed
         # run skips what it already paid for and the cursor stays a position.
         done = {str(row.get('视频ID') or '') for row in self.results() if row.get('视频ID')}
@@ -651,10 +676,21 @@ class DouyinCrawler(VideoCrawler):
         logger.info(t('crawl.dy.hotStart', n=target_count))
         self.open(self.HOT_ENTRY)
         self._dismiss_prompts()
-        if self._wait_for_page() == self.CAPTCHA or self._is_walled():
+        wait = self._wait_for_page()
+        if self._page_outcome(wait) == self.CAPTCHA or self._is_walled():
             # Named, not empty: the board needs a session, and 0 rows would read as
             # "nothing is hot today" rather than "this cookie is not getting in".
             raise RuntimeError(t('crawl.dy.hotWall'))
+        if not wait['arrived'] and wait['verdict'] == 'unreachable':
+            # The browser wrote this page itself. There is no board to read out of a
+            # document that never came from douyin, and saying so is better than the
+            # empty-payload refusal two lines below, which would blame the endpoint.
+            raise PageNotArrivedError(
+                t('crawl.dy.noPageRefused', url=self._current_url(), detail=self._error_detail()),
+                waited=wait['waited'],
+                verdict=wait['verdict'],
+                gave_up=wait['gave_up'],
+            )
         payload = self._fetch_json(self.HOT_API)
         data = payload.get('data') if isinstance(payload, dict) else None
         words = data.get('word_list') if isinstance(data, dict) else None
@@ -763,8 +799,8 @@ class DouyinCrawler(VideoCrawler):
             return self.driver.title or ''
         return ''
 
-    def _open_results(self, keyword: str) -> str:
-        """Enter the result page through its own address; report how it ended.
+    def _open_results(self, keyword: str) -> dict:
+        """Enter the result page through its own address; report how the wait ended.
 
         Measured 2026-09: the search box takes the text, the 搜索 button is present
         and clickable, and neither routes — the address sits on ``/jingxuan``
@@ -774,9 +810,11 @@ class DouyinCrawler(VideoCrawler):
         in its own path: the search the user asked for and the search that ran cannot
         disagree.
 
-        ``ok`` / ``captcha`` / ``not_mounted`` — and none of them is "no results".
-        A nonsense keyword still drew 16 related cards, so this page has no empty
-        state to report; see ``search`` for why the third ending raises.
+        The dict is :meth:`Crawler.wait_for_first_content`'s own answer, because which
+        of the three endings this is changes what the caller may claim: ``ok`` /
+        ``captcha`` / ``not_mounted`` — and none of them is "no results". A nonsense
+        keyword still drew 16 related cards, so this page has no empty state to report;
+        see ``search`` for why the third ending raises.
         """
         url = self.SEARCH_ENTRY.format(kw=quote(str(keyword or '')))
         self.open(url)
@@ -785,23 +823,23 @@ class DouyinCrawler(VideoCrawler):
         self._dismiss_prompts()
         return self._wait_for_page()
 
-    def _wait_for_page(self) -> str:
-        """Poll until the list draws a card, the wall shows up, or time runs out.
+    def _wait_for_page(self) -> dict:
+        """Wait for the result list's first card, under the shared patient clock.
 
-        The wall is checked **on every round**, and that ordering is measured:
-        headless douyin is answered with 验证码中间页 *after* the navigation settles,
-        so a single check right after ``open()`` walks straight past the wall and the
-        walk ends reporting zero cards — a statement about the keyword when the truth
-        is about the session. The list also mounts as 16 skeleton rows (no anchor, no
-        text) and fills in ~4-6 s later, so the wait is for an *anchor*.
+        Two facts of this page stay here rather than in the shared wait, because they
+        are douyin's and not the engine's: the list mounts as 16 **skeleton** rows (no
+        anchor, no text) and fills in ~4-6 s later, so the probe asks for an *anchor*
+        and not for rows; and the 验证码中间页 this platform answers a bad session with
+        speaks in the tab **title**, which the shared classifier cannot read — so it is
+        handed in as *stalled* and the wait leaves as soon as it appears.
         """
-        for _ in range(max(1, int(self.MOUNT_WAIT))):
-            if self._card_ids():
-                return self.OK
-            if self._is_walled():
-                return self.CAPTCHA
-            time.sleep(1.0)
-        if self._is_walled():
+        return self.wait_for_first_content(has_content=self._card_ids, stalled=self._is_walled)
+
+    def _page_outcome(self, wait: dict) -> str:
+        """The three-way answer this platform's callers branch on, from a wait's facts."""
+        if wait.get('arrived'):
+            return self.OK
+        if wait.get('verdict') in ('login', 'blocked', 'wall') or self._is_walled():
             return self.CAPTCHA
         return self.NOT_MOUNTED
 
@@ -860,14 +898,16 @@ class DouyinCrawler(VideoCrawler):
     def _grid_ids(self) -> list:
         return self._card_ids(self.PROFILE_ANCHOR)
 
-    def _wait_for_grid(self) -> bool:
-        """Poll the profile grid until it draws a post, or the mount wait is spent.
+    def _wait_for_grid(self, timeout: float | None = None) -> dict:
+        """Wait for the profile grid's first post, under the shared patient clock.
 
-        A page of one's own has no empty plate to wait for: the grid either hydrates
-        or this session is not being served the list, and the caller tells those two
-        apart with :meth:`_published_count`.
+        A page of one's own has no empty plate to wait for: the grid either hydrates or
+        this session is not being served the list, and the caller tells those two apart
+        with :meth:`_published_count` — which is also why it may hand in a *shorter*
+        budget, because a page that has already published its own count is a page that
+        arrived, and what is left to learn there is progress, not arrival.
         """
-        return self._wait_for_count(lambda: len(self._grid_ids()), 1, timeout=self.MOUNT_WAIT, tick=1.0) > 0
+        return self.wait_for_first_content(has_content=self._grid_ids, stalled=self._is_walled, timeout=timeout)
 
     def _published_count(self) -> int:
         """What the page publishes as its own 作品 count (-1 when it says nothing).

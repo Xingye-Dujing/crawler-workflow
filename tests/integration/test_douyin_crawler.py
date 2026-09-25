@@ -95,7 +95,17 @@ class FakeDriver:
         works='',
         board=None,
         load_timeout=False,
+        document_uri='',
+        body=None,
     ):
+        # What the *document* says it is. Measured: after a navigation the browser itself
+        # refuses, this is ``chrome-error://chromewebdata`` while ``current_url`` goes on
+        # reporting the address that was asked for — so a fake that cannot answer it can
+        # never model the one failure mode the crawler has to tell apart.
+        self.document_uri = document_uri
+        # The whole-page body text, when a test needs the page to say something other than
+        # what the video/search fixtures hold (an error page's own words, for instance).
+        self.body = body
         # A navigation that never settles: measured on a real run (and named by the user
         # watching the window), this is what a slow network looks like from inside the
         # crawler, and the refusal it produces must say so rather than blame the site.
@@ -132,6 +142,7 @@ class FakeDriver:
         self.comment_count = comment_count
         self.visited = []
         self.current_url = 'https://www.douyin.com/'
+        self.card_reads = 0
         self.scrolls = 0
         # Which surface moved: measured, the profile grid answers only the
         # container jump, so a walk that scrolled the window instead must be
@@ -149,6 +160,8 @@ class FakeDriver:
 
     def find_element(self, by, selector):
         if selector == 'body':
+            if self.body is not None:
+                return El(self.body)
             return El(self.video_body if '/video/' in self.current_url else '')
         if selector == '[data-e2e="comment-list"]':
             return El('')
@@ -160,6 +173,10 @@ class FakeDriver:
 
     def find_elements(self, by, selector):
         if selector == DouyinCrawler.CARD_ANCHOR:
+            # Counted because a patient wait has to be *interruptible by evidence*: the
+            # number of looks this fixture records is how a test proves a provable death
+            # was given up on at once rather than waited out to the budget.
+            self.card_reads += 1
             if self.fill_after and self._pending:
                 self._reads = getattr(self, '_reads', 0) + 1
                 if self._reads >= self.fill_after:
@@ -172,6 +189,8 @@ class FakeDriver:
         return []
 
     def execute_script(self, script, *args):
+        if 'documentURI' in script:
+            return self.document_uri
         if 'innerText' in script and args:
             return getattr(args[0], 'text', '')
         if 'scrollBy' in script:
@@ -772,6 +791,65 @@ class TestSlowNetworkIsNotBlamedOnTheSite:
         crawler, _driver = make_crawler(cards=[])
         crawler.open('https://www.douyin.com/search/x')
         assert crawler.navigation_settled is True
+
+
+#: One of the three measured error pages Chrome commits for a refused navigation
+#: (``backend/test_arrival_evidence.py``); the other two differ only in the token.
+REFUSED_URI = 'chrome-error://chromewebdata/'
+DNS_PAGE = '无法访问此网站\n\n找不到 www.douyin.com 的服务器 IP 地址\n\nERR_NAME_NOT_RESOLVED'
+
+
+class TestTheBrowserRefusedThePage:
+    """The third empty-page shape, which is neither the site's nor the keyword's fault.
+
+    Measured: a navigation Chrome itself refuses leaves a committed document that calls
+    itself ``chrome-error://chromewebdata`` and prints its own token, while the address
+    bar — and ``driver.current_url`` — keep showing the URL that was asked for. Read as
+    an ordinary page, that is 「结果页没有给出任何视频卡片」: a sentence about douyin,
+    said about this machine.
+    """
+
+    def test_a_refusal_names_the_browser_and_leaves_the_session_alone(self, make_crawler):
+        crawler, driver = make_crawler(cards=[], document_uri=REFUSED_URI, body=DNS_PAGE)
+        with pytest.raises(RuntimeError) as err:
+            crawler.search('美食', target_count=3)
+        message = str(err.value)
+        assert 'ERR_NAME_NOT_RESOLVED' in message, message
+        # The two sentences this one must not be confused with: the exclusivity claim
+        # (「只可能是被拦截…」) belongs to a page that arrived and stayed empty, and a
+        # cookie is not in question when the site never saw the request.
+        assert '只可能是' not in message, message
+        assert 'Cookie' not in message and '登录' not in message, message
+        assert (crawler.unreachable, crawler.login_wall, crawler.risk_blocked) == (True, False, False)
+        assert not driver.fetched, 'a refused page was still charged for an in-page read'
+
+    def test_a_provable_death_is_given_up_on_at_once(self, make_crawler):
+        """Patience is for a page that may still be coming. This one is not, and the
+        number of looks at the list is how a test can tell the two waits apart."""
+        crawler, driver = make_crawler(cards=[], document_uri=REFUSED_URI, body=DNS_PAGE)
+        with pytest.raises(RuntimeError):
+            crawler.search('美食', target_count=3)
+        assert driver.card_reads == 1, f'a provable death was waited out for {driver.card_reads} looks'
+
+    def test_a_hot_board_behind_a_refused_page_is_not_read_as_an_empty_board(self, make_crawler):
+        crawler, driver = make_crawler(cards=[], board=None, document_uri=REFUSED_URI, body=DNS_PAGE)
+        with pytest.raises(RuntimeError) as err:
+            crawler.hot(target_count=5)
+        assert 'ERR_NAME_NOT_RESOLVED' in str(err.value), str(err.value)
+        assert not driver.fetched, 'the board endpoint was asked from a page that never arrived'
+
+    def test_an_article_that_only_mentions_the_token_is_not_a_death(self, make_crawler):
+        """The expensive direction: a page that arrived is a page. The decision reads the
+        document's own address, so a development post about connection resets stays
+        crawlable even though the token is sitting in its body."""
+        crawler, _driver = make_crawler(
+            cards=[],
+            body='排查 net::ERR_CONNECTION_RESET 的三种原因',
+            document_uri='https://www.douyin.com/search/美食',
+        )
+        crawler.open('https://www.douyin.com/search/美食')
+        assert crawler.verdict() == 'ok'
+        assert crawler.unreachable is False
 
 
 def _lines(caplog) -> list:

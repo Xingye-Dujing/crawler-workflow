@@ -37,12 +37,13 @@ from analyzers import (
 from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
-from crawlers.base import CrawlerStopped, DeadDriver
+from crawlers.base import CrawlerStopped, DeadDriver, PageNotArrivedError
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, node_label
 from i18n import audit, get_lang, normalize, set_lang, t
 from services import StatsService
+from services import net_probe as network_probe
 from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
 from services.data_analysis import DataAnalysisService, UnknownOperationError
@@ -2077,6 +2078,7 @@ def _backoff_for_retry(crawler, platform: str) -> bool:
     # describe the attempt that just failed.
     crawler.login_wall = False
     crawler.risk_blocked = False
+    crawler.unreachable = False
     return not interrupted
 
 
@@ -2106,6 +2108,55 @@ def _crawl_with_collision_retry(crawler, handler, crawl_args: dict, resume: dict
     if not rows and _is_collision(crawler, resume) and _backoff_for_retry(crawler, platform):
         rows = handler(**crawl_args, resume=resume)
     return rows
+
+
+#: Which sentence each diagnosis answers. ``'slow'`` is deliberately the fall-through:
+#: it is the one verdict that admits nothing was found, and a message that named a cause
+#: here would be a guess wearing the authority of a probe.
+_NET_ADVICE_KEYS = {
+    'region': 'net.region',
+    'offline': 'net.offline',
+    'blocked': 'net.blocked',
+    'slow': 'net.slow',
+}
+
+
+def _net_advice(platform: str) -> str:
+    """What this machine can say about its own network, in the run's language.
+
+    Asked only after a page went unmatched for the whole patience budget, which is what
+    makes the cost defensible: two control hosts and one 2 s throughput sample, on the
+    path where the run has already lost minutes. The controls are why this is worth
+    asking at all — without a host that *should* answer for comparison, "switch network"
+    is a guess, and the user is entitled to know which of the two it is.
+    """
+    diagnosis = network_probe.diagnose(capabilities.region_of(platform), platform)
+    key = _NET_ADVICE_KEYS.get(str(diagnosis.get('verdict')), 'net.slow')
+    speed = diagnosis.get('speed_kbps')
+    return t(key) + (t('net.speed', speed=speed) if speed else '')
+
+
+def _page_not_arrived(platform: str, exc: PageNotArrivedError) -> ValueError:
+    """Turn one crawler's observation into a line that says what to do next.
+
+    The crawler's own sentence is about a page ("no cards after N seconds at this
+    address"); this adds the only fact that sentence cannot carry, which is whether the
+    machine running it can reach anything at all. The node label and the 「执行失败」 frame
+    come from the executor, so nothing is said twice.
+
+    No advice is appended when the page already explained itself — a login wall, a captcha
+    or the browser's own ``net::ERR_…`` token are each a named cause, and a network probe
+    on top of one of them would be a second opinion about something already measured.
+    """
+    advice = ''
+    if exc.verdict in ('', 'ok', 'breaker'):
+        with contextlib.suppress(Exception):
+            # A probe that cannot run must not become the reason a crawl cannot report.
+            advice = _net_advice(platform)
+    streak = t('run.pageStreak', n=exc.gave_up) if exc.gave_up > 1 else ''
+    if not (advice or streak):
+        return ValueError(str(exc))
+    return ValueError(t('run.pagePending', page=str(exc), streak=streak, advice=advice))
 
 
 def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
@@ -2256,6 +2307,20 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # argument that is not the user's — it is where this run stopped, handed
         # over from the store.
         rows = _crawl_with_collision_retry(crawler, getattr(crawler, mode.handler), crawl_args, resume, platform)
+    except PageNotArrivedError as exc:
+        # The patience budget ran out with nothing on the page. What the crawler saw is
+        # turned into a line that also says what this machine can reach, then the node
+        # settles the way any refusal settles: the rows already streamed stay (which is
+        # what makes it ``partial`` with a 继续 rather than an empty failure), and the
+        # run is failed so the banner appears. Deliberately *not* routed through
+        # ``cookie_expired``: an unreachable page says nothing about the session, and
+        # sending the user to re-save a cookie they just saved is how this project has
+        # burned a user's trust in its messages before.
+        if getattr(crawler, 'login_wall', False):
+            execution_state['cookie_expired'] = True
+        with contextlib.suppress(Exception):
+            _merge_parts(None)
+        raise _page_not_arrived(platform, exc) from exc
     except BaseException:
         # The crawler gave up (a wall it refuses to walk into, a risk page, a dead
         # session). Publish what that answer means BEFORE the failure travels on:
@@ -4753,13 +4818,17 @@ def _verify_lines(platform: str, facts: dict) -> list:
     """
     state = cookie_preflight.classify_probe(facts)
     lines = [t('cookie.verify.checkedUrl', url=str(facts.get('url') or ''))]
-    lines.append(
-        t('cookie.verify.loginWall', platform=platform)
-        if state == cookie_preflight.EXPIRED
-        else t('cookie.verify.ok', platform=platform)
-        if state == cookie_preflight.VALID
-        else t('cookie.verify.unclear', platform=platform)
-    )
+    if facts.get('unreachable'):
+        # Before the three states below, and as its own line: 「无法核对」 is true but
+        # useless here, because what could not be checked was not the cookie — the page
+        # the browser was asked to open never arrived.
+        lines.append(t('cookie.verify.unreachable', platform=platform))
+    elif state == cookie_preflight.EXPIRED:
+        lines.append(t('cookie.verify.loginWall', platform=platform))
+    elif state == cookie_preflight.VALID:
+        lines.append(t('cookie.verify.ok', platform=platform))
+    else:
+        lines.append(t('cookie.verify.unclear', platform=platform))
     return lines
 
 

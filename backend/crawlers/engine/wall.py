@@ -20,7 +20,20 @@ Measured shapes this module has to catch, all of them real observations:
 ``blocked`` and ``login`` are kept apart because the user's next action differs:
 re-save the cookie, or back off and wait. A crawl that reports the wrong one
 sends them off doing the wrong thing.
+
+``unreachable`` is kept apart from both because it is not a statement about the
+site at all. Measured 2026-09-25 (``backend/test_arrival_evidence.py``, Chrome
+148): when the browser itself refuses a navigation it commits *its own* document —
+``documentURI`` and ``location.href`` both ``chrome-error://chromewebdata``,
+``readyState`` complete, navigation ``responseStatus`` 0, the title the bare host
+and a ``net::ERR_…`` token in the body — while ``driver.current_url`` keeps
+reporting the address that was asked for. The same three shapes (dead DNS,
+refused port, black-holed address) differ only in the token. Reading that document
+as an ordinary page is how a network failure gets filed as "this keyword has no
+results", which is the lie this whole module exists to prevent.
 """
+
+import re
 
 # ─── the vocabulary the platforms actually use ───────────────────────
 
@@ -112,6 +125,53 @@ INTERNAL_PAGE_PREFIXES = (
 )
 
 
+#: The document Chrome commits when **it** refused the navigation. Measured on three
+#: shapes (unresolvable host, refused port, black-holed address) and identical in all
+#: three; the address bar — and ``driver.current_url`` — still shows the URL that was
+#: asked for, so this string is only ever found in the document's own URI.
+ERROR_PAGE_PREFIX = 'chrome-error://'
+
+#: Every word :func:`classify` may answer, closed on purpose: a consumer that tests
+#: ``== 'blocked'`` silently reads a word it has never seen as "not blocked", so a
+#: new verdict has to be a deliberate edit here (pinned by tests/unit/test_login_wall.py).
+VERDICTS = ('ok', 'login', 'blocked', 'unreachable')
+
+#: Chrome's own machine token, printed inside its error page. Measured in three
+#: spellings on a Chinese Chrome (``ERR_NAME_NOT_RESOLVED``, ``ERR_UNSAFE_PORT``,
+#: ``ERR_CONNECTION_TIMED_OUT``), each on a line of its own and **without** the
+#: ``net::`` prefix that the driver's exception message carries — so the prefix is
+#: optional here rather than required, and a required one would name nothing at all.
+#: Searched for **only** on a browser-written page anyway: a development article that
+#: quotes ``net::ERR_CONNECTION_RESET`` is content, and mistaking it for a transport
+#: death would discard a page that did arrive.
+_ERROR_TOKEN = re.compile(r'\bERR_[A-Z0-9_]{2,}\b')
+
+
+def _is_error_uri(value: str) -> bool:
+    return (value or '').lower().startswith(ERROR_PAGE_PREFIX)
+
+
+def unreachable_page(url: str = '', document_uri: str = '') -> bool:
+    """True when what is on screen is the browser's own "I could not get there".
+
+    ``url`` is accepted as well as ``document_uri`` because the two agree on this
+    page and a caller may only reliably have one of them; the check is on the
+    *document*, never on the address that was asked for, which is precisely the
+    distinction that makes this word provable rather than a guess.
+    """
+    return _is_error_uri(document_uri) or _is_error_uri(url)
+
+
+def error_token(body_text: str = '') -> str:
+    """The machine's own name for the refusal (``ERR_NAME_NOT_RESOLVED``), or ``''``.
+
+    ``''`` means the page did not say, which the caller must be able to tell from a
+    token — inventing one would put a claim in the console that nothing measured.
+    """
+    match = _ERROR_TOKEN.search(body_text or '')
+    return match.group(0) if match else ''
+
+
 def never_arrived(url: str = '') -> bool:
     """True when the browser is on one of ITS OWN pages, not the site's.
 
@@ -174,15 +234,25 @@ def bounced_to_root(request_url: str, current_url: str, site_root: str) -> bool:
     return requested.startswith(root)
 
 
-def classify(url: str, body_text: str = '', title: str = '') -> str:
-    """One of ``login`` / ``blocked`` / ``ok``, decided in that order of urgency.
+def classify(url: str, body_text: str = '', title: str = '', document_uri: str = '') -> str:
+    """One of :data:`VERDICTS`, decided in that order of urgency.
 
     A login marker wins over a block phrase: a risk page that also asks for a
     login is fixed by the cookie, and the resume path keys on that difference.
-    A browser parked on one of its OWN pages (``chrome://new-tab-page``) checked
-    first of all: it did not reach the site, so it is neither a login wall nor a
-    real empty result — it is a refusal to back off from.
+    A browser parked on one of its OWN pages (``chrome://new-tab-page``) is checked
+    before anything else: it did not reach the site, so it is neither a login wall nor
+    a real empty result — it is a refusal to back off from.
+
+    ``unreachable`` is judged first of all, because it is the one word here that is
+    not a reading of the page's *content* but of who wrote the page: a Chrome error
+    document carries the site's address nowhere in itself, and a crawl that asked for
+    an article and got a token back must say so rather than describe the token.
+    ``document_uri`` is where that lives — measured, ``current_url`` still reports the
+    address that was asked for. A caller that cannot read it passes nothing and gets
+    the older judgement, which is the right way for a missing fact to degrade.
     """
+    if unreachable_page(url, document_uri):
+        return 'unreachable'
     if never_arrived(url):
         return 'blocked'
     if looks_like_login_page(url, body_text):

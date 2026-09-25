@@ -15,5 +15,6 @@ pylint
 pytest
 pytest-cov
 pytest-socket
+pytest-timeout
 jieba
 scikit-learn

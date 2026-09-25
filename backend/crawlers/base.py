@@ -17,7 +17,7 @@ from i18n import t
 from settings_store import get_setting
 
 from .engine import feed, popup
-from .engine.wall import bounced_to_root, classify
+from .engine.wall import bounced_to_root, classify, error_token, unreachable_page
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,26 @@ class ProfileUnavailableError(RuntimeError):
     MUST stay red: it is this machine failing to serialize its own crawls, and a skip is
     how that becomes invisible.
     """
+
+
+class PageNotArrivedError(RuntimeError):
+    """One page of a crawl stayed empty for the whole patience budget.
+
+    Its own type because the user's next step differs from every other failure, and the
+    sentence worth reading carries numbers: how long this waited, which page, and what a
+    probe of this machine's own network says about it. Raised as an ordinary ``Exception``
+    on purpose — the node runner already settles a refused source node the right way for
+    this outcome (rows already streamed stay on disk, the node is ``partial`` where there
+    are rows and ``failed`` where there are none, and a failed run is what makes 继续
+    appear), so all this adds is a reason that can be told apart from a typo in a
+    parameter.
+    """
+
+    def __init__(self, message: str, waited: float = 0.0, verdict: str = '', gave_up: int = 0):
+        super().__init__(message)
+        self.waited = float(waited)
+        self.verdict = str(verdict or '')
+        self.gave_up = int(gave_up)
 
 
 class Crawler(ABC):
@@ -200,6 +220,17 @@ class Crawler(ABC):
         # and the fix is to back off. Kept apart from ``login_wall`` so the
         # console never tells the user to re-save a cookie that is fine.
         self.risk_blocked = False
+        # The browser refused the navigation and wrote the refusal itself into the
+        # document (``chrome-error://``). Neither of the two flags above: the site
+        # never saw the request, so its session is not in question and nothing about
+        # waiting would help. Read by the cookie pre-flight (an error page must never
+        # be cached as 「Cookie 可用」) and by the walks that would otherwise read the
+        # blank as "no results".
+        self.unreachable = False
+        #: How many first-content waits this browser has watched expire, and the counter
+        #: :attr:`MAX_PENDING_WAITS` reads. An instance counter rather than a wall flag:
+        #: it is about what *this* machine just did, not about what the site said.
+        self.pending_waits = 0
         self.cookies_loaded = 0
         self._profile_lock = self._claim_profile()
         try:
@@ -456,16 +487,20 @@ class Crawler(ABC):
         """
         verdict = self.verdict(request_url=request_url)
         for _ in range(max(0, self.WALL_PROOFS - 1)):
-            if verdict == 'ok':
-                return verdict
+            # Two answers are final on the first reading. ``ok`` for the reason above;
+            # ``unreachable`` because a document the browser wrote for itself cannot
+            # change without a new navigation — measured, it is a *committed* document
+            # (``readyState`` complete, ``responseStatus`` 0), so re-reading it five
+            # times costs five round trips per row and buys no evidence that could
+            # change the answer. The settle window guards against a flash, and nothing
+            # about a refused address is a flash.
+            if verdict in ('ok', 'unreachable'):
+                break
             time.sleep(self.WALL_POLL)
             verdict = self.verdict(request_url=request_url)
-        if verdict == 'ok':
-            return verdict
-        # Still refused after the whole settle window: record it the way every caller
-        # reads it. Latched from *this* reading rather than by calling check_intercept
-        # again, because re-judging here would hand a flash one free escape and make the
-        # window above unobservable from the tests.
+        # Latched from *this* reading rather than by calling check_intercept again,
+        # because re-judging here would hand a flash one free escape and make the window
+        # above unobservable from the tests.
         return self._record(verdict, where=request_url, request_url=request_url)
 
     def verdict(self, request_url: str = '') -> str:
@@ -480,10 +515,28 @@ class Crawler(ABC):
             url = self.driver.current_url or ''
         except Exception:
             return 'ok'
-        verdict = classify(url, self._body_text())
+        verdict = classify(url, self._body_text(), document_uri=self._document_uri())
         if verdict == 'ok' and request_url and bounced_to_root(request_url, url, self.login_url):
             verdict = 'login'
         return verdict
+
+    def _document_uri(self) -> str:
+        """What the document on screen calls itself, which is not always the address bar.
+
+        Measured (Chrome 148): after a navigation the browser itself refuses,
+        ``documentURI`` is ``chrome-error://chromewebdata`` while ``current_url``
+        reports the URL that was *asked for*. Without this reading, a dead DNS entry
+        and a site that answered with nothing are the same page to this code — and the
+        second one is a result the user has to be told about.
+
+        A driver that cannot answer (a test double without scripting, a session mid-
+        teardown) returns ``''``, which classifies as no evidence rather than as a
+        refusal: that is the same rule ``verdict`` follows for ``current_url``.
+        """
+        try:
+            return str(self.driver.execute_script('return document.documentURI || "";') or '')
+        except Exception:
+            return ''
 
     def _dismiss_prompts(self):
         """Click the site's own first-run dialog away, and say what was clicked."""
@@ -646,7 +699,7 @@ class Crawler(ABC):
         answers.
         """
         target = str(url or '') or self.login_url
-        facts = {'platform': self.domain, 'url': '', 'login_wall': False}
+        facts = {'platform': self.domain, 'url': '', 'login_wall': False, 'unreachable': False}
         if not target:
             return facts
         self.driver.get(target)
@@ -655,6 +708,12 @@ class Crawler(ABC):
         except Exception:
             facts['url'] = target
         facts['login_wall'] = self.check_login_wall(target)
+        # Read after the judgement, which is what latches it. A probe whose browser wrote
+        # its own error page never showed the site this session at all, so the honest
+        # answer about the cookie is "could not check" — and the pre-flight caches
+        # verdicts, which is why getting this word wrong outlasts the probe that got it
+        # wrong. See :func:`cookie_preflight.classify_probe`.
+        facts['unreachable'] = bool(self.unreachable)
         return facts
 
     def check_login_wall(self, where: str = '') -> bool:
@@ -668,14 +727,16 @@ class Crawler(ABC):
 
     def check_intercept(self, where: str = '', request_url: str = '') -> str:
         """Classify the page the browser is actually on **and record it**:
-        ``login`` / ``blocked`` / ``ok``.
+        one of :data:`~crawlers.engine.wall.VERDICTS`.
 
         Two different refusals, because the user's next step differs — one needs
         a fresh cookie, the other needs to wait. ``blocked`` is recorded on
         :attr:`risk_blocked` and deliberately does *not* set ``login_wall``: a
         headless zhihu search answered by risk control (code 40362) is a real
         outcome of that mode, and calling it a dead cookie would send the user to
-        re-save a session that is fine.
+        re-save a session that is fine. ``unreachable`` sets neither, because a
+        browser that refused the navigation never showed the site its session at
+        all; see :attr:`unreachable`.
 
         ``request_url`` enables the bounce test: a profile URL that comes back at
         the site root with no content is a refusal even though nothing on the
@@ -695,7 +756,29 @@ class Crawler(ABC):
         if verdict == 'blocked' and not self.risk_blocked:
             self.risk_blocked = True
             logger.warning(t('crawl.riskBlocked', platform=self.domain, where=self._refused_at(where, request_url)))
+        if verdict == 'unreachable' and not self.unreachable:
+            self.unreachable = True
+            # Its own latch and its own sentence, and deliberately *not* ``risk_blocked``:
+            # six call sites read that word as "the session is being refused" and turn it
+            # into 请重新保存 Cookie — advice about a session the site never saw.
+            logger.warning(
+                t(
+                    'crawl.unreachable',
+                    platform=self.domain,
+                    where=self._refused_at(where, request_url),
+                    detail=self._error_detail(),
+                )
+            )
         return verdict
+
+    def _error_detail(self) -> str:
+        """The browser's own token for a refused navigation, already framed for a message.
+
+        ``''`` when the page did not name itself: a made-up ``ERR_UNKNOWN`` would put a
+        claim in the console that nothing on this machine observed.
+        """
+        token = error_token(self._body_text(limit=2000))
+        return t('crawl.unreachableToken', token=token) if token else ''
 
     def _refused_at(self, where: str = '', request_url: str = '') -> str:
         """The address to name in a refusal line: where the browser actually is, and
@@ -711,6 +794,124 @@ class Crawler(ABC):
         function of the page (and stays instant under a fake driver).
         """
         return feed.wait_for(count_fn, target, timeout=timeout, tick=tick)
+
+    # ─── the first content of one page ───────────────────────────
+
+    #: How many first-content waits one browser may watch expire before the next one is
+    #: refused without being paid for. Two is the number that keeps
+    #: :attr:`~config.Config.PAGE_WAIT_TIMEOUT` survivable: a page that arrives pays
+    #: nothing, and a machine that cannot deliver a page after two full budgets is not
+    #: going to deliver the third — while a per-row crawl could otherwise spend
+    #: 行数 × 300 s learning that. Reset by any page that does arrive.
+    MAX_PENDING_WAITS = 2
+    #: How often the patient wait re-reads the page for a wall it cannot see in the count
+    #: of cards. The measured shape this is for is douyin's: 验证码中间页 mounts *after* the
+    #: navigation settles, so flags latched at arrival would miss it — and re-reading the
+    #: whole page on every tick buys nothing on a wait that is about seconds.
+    WALL_RECHECK_TICKS = 5
+    #: One look per second. The pages this waits for render seconds apart, and every look
+    #: costs driver round trips.
+    FIRST_CONTENT_TICK = 1.0
+
+    def _rendered_by_the_site(self) -> bool:
+        """The default "something arrived": text the *site* wrote, not text on screen.
+
+        The distinction is why this is not simply "the body is non-empty" — measured, a
+        Chrome error document is full of text (「无法访问此网站」 and its own
+        ``net::ERR_…`` token), and a wait that accepted that as content would report a
+        network failure as a page that loaded.
+        """
+        if unreachable_page(document_uri=self._document_uri()):
+            return False
+        return bool(self._body_text(limit=200).strip())
+
+    def wait_for_first_content(self, has_content=None, stalled=None, timeout: float | None = None) -> dict:
+        """Wait for a page's first content, however long it honestly takes to arrive.
+
+        Returns ``{'arrived', 'waited', 'verdict', 'gave_up'}``. Four rules make this a
+        different instrument from the other waits in this file, and each answers a fact
+        a short wait would get wrong:
+
+        * **Patient** (:attr:`~config.Config.PAGE_WAIT_TIMEOUT`), because a slow network
+          is not a refusal. The complaint this answers is a run that blamed douyin for a
+          page the machine had not finished delivering.
+        * **Stop-aware.** The loop asks :meth:`may_stop` every tick and leaves through
+          ``CrawlerStopped``: with a 300 s budget, a wait that ignored 停止 would be the
+          longest thing in the program, and 停止 is the user's only exit out of it.
+        * **It stops early on evidence.** A wall — login, risk control, a document the
+          browser refused to fetch — is an *answer*, so waiting it out costs the user and
+          changes nothing.
+        * **It refuses to start a third time** (:attr:`MAX_PENDING_WAITS`), which is what
+          makes the patience survivable in a crawl that opens a page per row.
+
+        ``has_content`` is the caller's own cheap question ("are there cards?"); the
+        default asks whether the site put anything on the page at all. ``stalled`` is the
+        caller's own evidence that waiting is pointless — a platform whose wall speaks in
+        the tab *title* (douyin's 验证码中间页, measured) is invisible to the shared
+        classifier, so without this the patient wait would sit out its whole budget on a
+        page that has already refused.
+        """
+        budget = float(Config.PAGE_WAIT_TIMEOUT if timeout is None else timeout)
+        probe = has_content if has_content is not None else self._rendered_by_the_site
+        started = time.monotonic()
+        ticks = max(1, int(budget / self.FIRST_CONTENT_TICK))
+        for tick in range(ticks):
+            if self.may_stop():
+                raise CrawlerStopped(t('crawl.stopped'))
+            try:
+                if probe():
+                    self.pending_waits = 0
+                    return {'arrived': True, 'waited': time.monotonic() - started, 'verdict': '', 'gave_up': 0}
+            except CrawlerStopped:
+                raise
+            except Exception as exc:
+                # A probe that cannot answer is not a page that arrived. Logged, because
+                # the alternative is a wait that burns its whole budget on a selector the
+                # site changed, and nothing afterwards explains why.
+                logger.debug('first-content probe failed: %s', exc)
+            if tick == 0 and self.pending_waits >= self.MAX_PENDING_WAITS:
+                # The breaker, consulted only after the page was actually asked once: a
+                # crawl whose *next* page is fine must not be refused sight unseen, or a
+                # pair of unlucky rows would condemn every row after them.
+                return {'arrived': False, 'waited': 0.0, 'verdict': 'breaker', 'gave_up': self.pending_waits}
+            if stalled is not None and stalled():
+                # Counted as a page this browser did not deliver: the breaker is about
+                # "nothing arrived", and a wall is a nothing that simply said why.
+                # Report the word the shared classifier has when it has one — a platform
+                # that sees a wall this code cannot read must not invent a verdict,
+                # because its caller branches on login versus blocked.
+                self.pending_waits += 1
+                word = self.verdict()
+                return {
+                    'arrived': False,
+                    'waited': time.monotonic() - started,
+                    'verdict': word if word != 'ok' else 'wall',
+                    'gave_up': self.pending_waits,
+                }
+            # Phase-shifted onto tick 0 on purpose: :meth:`open` has already judged this
+            # arrival once, so a page the browser refused is visible here at the first
+            # look rather than at the fifth — while the cadence after that is still what
+            # catches a wall that mounts late (douyin's captcha, measured).
+            if tick % self.WALL_RECHECK_TICKS == 0:
+                verdict = self.check_intercept()
+                if verdict != 'ok':
+                    self.pending_waits += 1
+                    return {
+                        'arrived': False,
+                        'waited': time.monotonic() - started,
+                        'verdict': verdict,
+                        'gave_up': self.pending_waits,
+                    }
+            time.sleep(self.FIRST_CONTENT_TICK)
+        # Out of patience, not out of evidence. The caller decides what to say; the only
+        # claim made here is that nothing arrived inside the budget.
+        self.pending_waits += 1
+        return {
+            'arrived': False,
+            'waited': time.monotonic() - started,
+            'verdict': self.verdict(),
+            'gave_up': self.pending_waits,
+        }
 
     @staticmethod
     def _polite_pause(base: float = 1.0, spread: float = 0.4):

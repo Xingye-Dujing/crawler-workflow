@@ -1,4 +1,4 @@
-"""The Crawler base: cookie planting, navigation, and the three page verdicts.
+"""The Crawler base: cookie planting, navigation, and the four page verdicts.
 
 None of this had unit coverage before: the cookie loop, :meth:`Crawler.open` and
 the login/blocked classification were only ever exercised by a real browser. They
@@ -8,6 +8,7 @@ session: a risk-control page read as a dead cookie, and a profile request the
 router dropped at the site root read as "this account has no posts".
 """
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -106,6 +107,11 @@ def bare(driver, **attrs):
     crawler.prompts = ()
     crawler.login_wall = False
     crawler.risk_blocked = False
+    crawler.unreachable = False
+    crawler.pending_waits = 0
+    crawler.profile_dir = None
+    crawler._profile_lock = None
+    crawler._abort = None
     crawler.cookies_loaded = 0
     crawler.requests = []
     crawler._collected = []
@@ -125,6 +131,37 @@ def write_cookies(tmp_path):
         return str(path)
 
     return _write
+
+
+def _initializer_fields():
+    """Every ``self.<name> =`` inside ``Crawler.__init__``, read off the source."""
+    source = (REPO_ROOT / 'backend' / 'crawlers' / 'base.py').read_text(encoding='utf-8')
+    tree = ast.parse(source)
+    crawler = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'Crawler')
+    init = next(n for n in crawler.body if isinstance(n, ast.FunctionDef) and n.name == '__init__')
+    fields = set()
+    for node in ast.walk(init):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == 'self':
+                fields.add(target.attr)
+    return fields
+
+
+class TestTheBareBuilderStaysInStep:
+    """``bare()`` rebuilds a crawler by hand, and the comment above it says somebody has
+    to keep that list current. This is the somebody: a field added to ``__init__`` and
+    missed here does not announce itself as a missing fixture — it arrives as an
+    ``AttributeError`` from whichever branch first reads it, in whichever test that is.
+    """
+
+    def test_it_sets_every_attribute_the_real_initializer_sets(self):
+        # ``dir`` rather than ``vars`` because a class-level default *is* an
+        # initialization: ``needs_images`` is declared False on the class and only
+        # overridden for a login window, and a builder that omitted it would be right.
+        missing = sorted(name for name in _initializer_fields() if not hasattr(bare(PlantDriver()), name))
+        assert not missing, f'bare() leaves these unreadable: {missing}'
 
 
 class TestCookiePlanting:

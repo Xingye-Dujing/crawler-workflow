@@ -112,8 +112,14 @@ def classify_probe(facts: dict) -> str:
     unverifiable page is not evidence of a dead cookie. Whether the page was a wall or
     risk control is :meth:`crawlers.base.Crawler.check_intercept`'s judgement, and this
     function inherits it rather than re-reading the page.
+
+    ``unreachable`` is checked before even ``login_wall``, and this is the one place its
+    cost is visible: verdicts are *cached*. A browser that wrote its own error page never
+    showed the site this session, so answering 「Cookie 可用」 here would park a claim about
+    a cookie in the path of every run that starts — with no probe behind it and no way for
+    the user to see that nothing was tested.
     """
-    if facts.get('error'):
+    if facts.get('error') or facts.get('unreachable'):
         return UNKNOWN
     if facts.get('login_wall'):
         return EXPIRED
@@ -248,6 +254,10 @@ def _probe_live(platform: str, *, use_profile: bool = None) -> dict:
         return {
             'login_wall': bool(facts.get('login_wall')),
             'risk_blocked': bool(getattr(crawler, 'risk_blocked', False)),
+            # Carried through rather than dropped: this reduced dict is what the pre-run
+            # gate classifies, and a page the browser wrote for itself is exactly the
+            # case that must not reach ``classify_probe`` looking like a tested session.
+            'unreachable': bool(facts.get('unreachable')),
         }
     except Exception as e:
         return {'error': str(e)[:200]}

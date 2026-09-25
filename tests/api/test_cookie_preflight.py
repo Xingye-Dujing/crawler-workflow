@@ -190,6 +190,16 @@ class TestVerdicts:
         assert cookie_preflight.classify_probe({'risk_blocked': True}) == cookie_preflight.UNKNOWN
         assert cookie_preflight.classify_probe({}) == cookie_preflight.VALID
 
+    def test_a_page_the_browser_wrote_says_nothing_about_the_cookie(self):
+        """The inversion this guards: an error document answers neither wall flag, so the
+        fall-through used to be 可用 — and a 「可用」 is *cached*, so one dead DNS entry
+        would keep licensing runs that were never checked. 'unreachable' outranks even a
+        login flag, because a session that was not transmitted cannot have been refused.
+        """
+        assert cookie_preflight.classify_probe({'unreachable': True}) == cookie_preflight.UNKNOWN
+        assert cookie_preflight.classify_probe({'unreachable': True, 'login_wall': True}) == cookie_preflight.UNKNOWN
+        assert cookie_preflight.classify_probe({'unreachable': False, 'login_wall': True}) == cookie_preflight.EXPIRED
+
 
 class TestCache:
     def test_a_recent_verdict_is_reused_instead_of_opening_a_second_browser(self, probe_zhihu):

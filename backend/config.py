@@ -81,6 +81,20 @@ class Config:
     PAGE_LOAD_TIMEOUT = 15
     SCROLL_WAIT = 2.5
 
+    #: How long a crawl waits for **one page's first content** before it says the page
+    #: is not arriving. Two different clocks, routinely confused: the driver's
+    #: ``page_load_timeout`` (the setting's 40 s) bounds only the browser's *load event*,
+    #: and an eager-strategy document keeps building after it — so a platform's own poll
+    #: is what really gives up, and douyin's was :attr:`~crawlers.video.DouyinCrawler.MOUNT_WAIT`
+    #: of 45 s, after which the run blamed the site for what the user watching the window
+    #: could see was a network that had not delivered the page. 300 s is the same
+    #: judgement with far more patience. It stays finite on purpose — "wait forever" is not
+    #: a policy one run-slot can survive — and 停止 remains the user's exit at any point
+    #: inside it (:meth:`Crawler.wait_for_first_content`). This budget is for the *first*
+    #: content of a page and nothing else: "did that scroll add rows" is a progress
+    #: judgement, and stretching it would turn a finished list into a crawl that never ends.
+    PAGE_WAIT_TIMEOUT = 300
+
     #: How long a crawl waits for its platform's browser profile to be free. A
     #: parallel canvas starts its workflows together, so two nodes of one platform
     #: reach for the same directory in the same instant — and a profile only carries

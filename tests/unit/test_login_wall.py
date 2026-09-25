@@ -10,11 +10,25 @@ Login and risk control are pinned *apart*, because the user's next action
 differs: re-save the cookie, or wait. The shapes below are all measured, not
 imagined — including Instagram's, where the router answers a profile request at
 the site root with no URL clue at all.
+
+A third thing is pinned apart from both: a navigation the *browser* refused. That
+page is not the site's answer at all, so it is neither a dead cookie nor a risk
+refusal — and it is only visible in the document's own address, because the
+address bar keeps showing what was asked for.
 """
 
 import pytest
 
-from crawlers.engine.wall import bounced_to_root, classify, looks_blocked, looks_like_login_page, never_arrived
+from crawlers.engine.wall import (
+    VERDICTS,
+    bounced_to_root,
+    classify,
+    error_token,
+    looks_blocked,
+    looks_like_login_page,
+    never_arrived,
+    unreachable_page,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -96,10 +110,31 @@ class TestRiskControlIsNotALoginProblem:
         """The fix differs, and a cookie is the cheaper thing to ask for first."""
         assert classify('https://passport.zhihu.com', '暂时限制 登录后查看') == 'login'
 
-    def test_the_three_verdicts_are_the_three_user_actions(self):
+    def test_the_four_verdicts_are_the_four_user_actions(self):
         assert classify('https://www.zhihu.com/question/1', '正常内容') == 'ok'
         assert classify('https://x.com/i/flow/login', '') == 'login'
         assert classify('https://www.douyin.com/search/x', '滑动验证') == 'blocked'
+        assert classify('https://www.douyin.com/search/x', '', document_uri='chrome-error://chromewebdata/') == (
+            'unreachable'
+        )
+
+    def test_the_vocabulary_is_closed_because_a_consumer_tests_one_word(self):
+        """``== 'blocked'`` is how half the crawler reads this answer, so a fifth word
+        added without noticing would be silently filed as "not risk control". Listing
+        the words here is what makes adding one a deliberate edit."""
+        assert VERDICTS == ('ok', 'login', 'blocked', 'unreachable')
+        seen = {
+            classify(url, body, title, uri)
+            for url, body, title, uri in (
+                ('https://www.zhihu.com/question/1', '正常内容', '', ''),
+                ('https://x.com/i/flow/login', '', '', ''),
+                ('https://www.douyin.com/search/x', '滑动验证', '', ''),
+                ('https://www.douyin.com/search/x', '无法访问此网站', '', 'chrome-error://chromewebdata/'),
+                ('chrome://new-tab-page/', '新标签页', '', ''),
+                ('', '', '', ''),
+            )
+        }
+        assert seen <= set(VERDICTS), f'classify answered a word outside its own vocabulary: {seen - set(VERDICTS)}'
 
     def test_a_browser_still_on_its_own_page_never_arrived(self):
         """Measured 2026-09-25 on xiaohongshu: a throttled VISIBLE window stayed on
@@ -138,3 +173,83 @@ class TestTheRootBounce:
 
     def test_the_fragment_and_trailing_slash_do_not_matter(self):
         assert bounced_to_root('https://www.instagram.com/nasa', 'https://www.instagram.com', self.ROOT) is True
+
+
+#: The three measured shapes of a navigation the browser refused, and the document each
+#: one leaves behind. Taken with Chrome 148 by ``backend/test_arrival_evidence.py``; the
+#: body text is the real Chinese error page, abbreviations aside.
+REFUSALS = [
+    (
+        'http://no-host-xyz-invalid.example/',
+        'chrome-error://chromewebdata/',
+        '无法访问此网站\n\n找不到 no-host-xyz-invalid.example 的服务器 IP 地址\n\nERR_NAME_NOT_RESOLVED',
+        'ERR_NAME_NOT_RESOLVED',
+    ),
+    (
+        'http://127.0.0.1:1/nope',
+        'chrome-error://chromewebdata/',
+        '无法访问此网站\n\n无效的网址\n\nERR_UNSAFE_PORT',
+        'ERR_UNSAFE_PORT',
+    ),
+    (
+        'http://10.255.255.1/',
+        'chrome-error://chromewebdata/',
+        '无法访问此网站\n\n10.255.255.1 响应时间过长\n\nERR_CONNECTION_TIMED_OUT',
+        'ERR_CONNECTION_TIMED_OUT',
+    ),
+]
+
+
+class TestTheBrowserRefusedTheNavigation:
+    """:class:`Crawler` reads the address it asked for; only the document knows it lost.
+
+    This is the distinction the whole word exists for. Measured 2026-09-25: after a
+    refused navigation ``driver.current_url`` still reports the URL that was asked for,
+    while the committed document calls itself ``chrome-error://chromewebdata`` and prints
+    a ``net::ERR_…`` token. A classifier that reads only the first of those two files a
+    dead DNS entry as "the site answered with nothing", which is the same lie in a
+    different costume as calling a login page an empty account.
+    """
+
+    @pytest.mark.parametrize(('asked', 'uri', 'body', 'token'), REFUSALS)
+    def test_a_page_the_browser_wrote_names_itself(self, asked, uri, body, token):
+        assert classify(asked, body, document_uri=uri) == 'unreachable'
+        assert error_token(body) == token
+
+    @pytest.mark.parametrize(('asked', 'uri', 'body', 'token'), REFUSALS)
+    def test_the_asked_for_address_alone_does_not_give_it_away(self, asked, uri, body, token):
+        """The bug this regression-pins: judging the address bar says the page is fine."""
+        assert classify(asked, body) == 'ok', 'the asked-for URL is a real http address, and reads as arrived'
+
+    def test_a_refusal_that_printed_no_token_is_still_a_refusal(self):
+        """The token is a name, not the evidence: the document's own address is."""
+        assert unreachable_page('https://www.douyin.com/hot', 'chrome-error://chromewebdata/') is True
+        assert error_token('无法访问此网站') == ''
+
+    def test_an_article_about_the_token_is_not_a_refusal(self):
+        """The reverse case, and the expensive one: a development post that quotes
+        ``net::ERR_CONNECTION_RESET`` in its body is content. Reading the body for the
+        token without the browser-owned document would throw away a page that arrived.
+        """
+        body = '排查 net::ERR_CONNECTION_RESET 的三种原因：代理、防火墙、服务端主动关闭。'
+        url = 'https://blog.example.com/2026/09/reset'
+        assert classify(url, body, document_uri=url) == 'ok'
+        assert error_token(body) == 'ERR_CONNECTION_RESET', 'the reader works; the *decision* is what is guarded'
+
+    def test_an_address_that_merely_mentions_the_error_scheme_is_not_one(self):
+        """The test is on what the document *is*, not on a substring of the request."""
+        assert unreachable_page('https://example.com/?next=chrome-error://x', '') is False
+
+    def test_no_reading_at_all_is_still_no_evidence(self):
+        """A driver that cannot answer ``documentURI`` (a test double, a session tearing
+        down) must not hand out a refusal — the same rule ``current_url`` follows."""
+        assert classify('https://www.douyin.com/search/x', '', document_uri='') == 'ok'
+        assert unreachable_page('', '') is False
+
+    def test_a_refusal_is_not_the_same_page_as_a_window_on_its_own_new_tab(self):
+        """``chrome://new-tab-page`` means the navigation never happened; ``chrome-error``
+        means it happened and was refused. One is a flash to wait out, the other names
+        its own cause, and they reach the user as different sentences.
+        """
+        assert never_arrived('chrome-error://chromewebdata/') is False
+        assert classify('chrome-error://chromewebdata/', '无法访问此网站') == 'unreachable'
