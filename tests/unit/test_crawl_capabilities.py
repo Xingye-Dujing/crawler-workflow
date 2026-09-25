@@ -124,6 +124,7 @@ class TestCoercion:
 class TestModeResolution:
     def test_each_platform_names_its_modes(self):
         assert mode_keys_for('zhihu') == ('posts', 'author', 'comments')
+        assert mode_keys_for('weibo') == ('posts', 'author', 'comments')
         assert mode_keys_for('wechat') == ('posts',), 'WeChat has no comment adapter'
 
     def test_an_unknown_mode_key_reads_as_the_first_mode(self):
@@ -401,6 +402,7 @@ class TestCollectionKind:
         """
         fetched = {(cap.platform, mode.key) for cap in CAPABILITIES for mode in cap.modes if mode.collects == 'fetch'}
         assert fetched == {
+            ('weibo', 'author'),
             ('weibo', 'comments'),
             ('bilibili', 'hot'),
             ('bilibili', 'comments'),

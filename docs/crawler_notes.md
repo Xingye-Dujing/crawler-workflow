@@ -75,10 +75,22 @@ page* with `credentials: 'include'` — the same shape bilibili comments and You
 * rows carry `id` `mid` `mblogid` `created_at` `text` `text_raw` `source` `region_name` `visible`
   `isLongText` `pic_num` `pic_ids` `reposts_count` `comments_count` `attitudes_count`
   `retweeted_status` `user`. `text_raw` sits next to the HTML `text`.
-* still unmeasured before the handler is written: whether `isLongText` rows are truncated in this
-  list (i.e. whether a detail fetch is needed for the full body), and whether the 403 comes back for
-  this session shape. Reading counts from JSON is cheaper and steadier than the DOM walk the search
-  mode uses, so a profile crawl must not copy the card scraper.
+* **Measured 2026-09-25 (same recipe, a long row found on page 1): `text_raw` is the COMPLETE body.**
+  An `isLongText=true` row carried `text_raw` of 43 chars and `statuses/show?id=<idstr>` answered 200
+  with the *same* 43 chars (`text` was the 354-char HTML) — so the author crawl reads 正文 from
+  `text_raw` and needs **no per-row detail fetch**. Truncation was the open question; it is closed:
+  this list does not truncate.
+* `topic_struct` is `[{topic_url, title}]` with `title` empty and the `#话题名#` inside
+  `topic_url`'s `q=%23…%23` — so 话题 is parsed from the URL, not the (empty) title, matching the
+  search mode's anchor-derived `#…#`.
+* rows have **`pic_num` + `pic_ids[]` but NO `pics[]`**: the image count is available, the image URLs
+  are not on the row, so 图片数 is filled and 图片链接 is left empty rather than built from a guessed
+  CDN pattern. `page_info` may be non-null (`type=11`), but video/album counts do not come from the
+  search mode's `.media-video-a` DOM here — 视频数 is not fabricated.
+* the row's `user.id == uid` anchor is confirmed on real author rows (`user.idstr` mirrors it); link the
+  row as the search mode does (`weibo.com/detail/<mid>`), the identity field is the numeric `mid`/`id`.
+  Reading counts from JSON is cheaper and steadier than the DOM walk the search mode uses, so a profile
+  crawl must not copy the card scraper.
 
 ## Zhihu
 

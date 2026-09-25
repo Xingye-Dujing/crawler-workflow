@@ -1,8 +1,8 @@
 """Every (platform, mode) pair of the crawl matrix, driven to its crawler method.
 
-`crawl_capabilities.CAPABILITIES` is the only answer to "what can this platform collect", and 21
+`crawl_capabilities.CAPABILITIES` is the only answer to "what can this platform collect", and 22
 pairs ride on it. Until now every fake crawler in the suite defined ``search`` and nothing else, so
-the five 「某作者的作品」 modes and the 热榜 mode had never been *dispatched* anywhere: a node that
+the six 「某作者的作品」 modes and the 热榜 mode had never been *dispatched* anywhere: a node that
 called ``search()`` with the author dropped, or lost ``board=``, or sent the creator's handle under
 a keyword key, would have passed the whole fast tier — the rows it fakes come back either way, and
 an author crawl mistaken for a keyword crawl is a different answer with the same shape.
@@ -32,6 +32,7 @@ pytestmark = pytest.mark.api
 #: A value that survives each platform's own parser, per field key + platform.
 _SAMPLES = {
     ('author', 'zhihu'): 'https://www.zhihu.com/people/abc',
+    ('author', 'weibo'): 'https://weibo.com/u/6302837173',
     ('author', 'bilibili'): 'https://space.bilibili.com/546195',
     ('author', 'douyin'): 'MS4wLjABAAAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     ('author', 'youtube'): '@NASA',

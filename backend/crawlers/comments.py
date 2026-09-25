@@ -34,7 +34,7 @@ from selenium.common.exceptions import JavascriptException, StaleElementReferenc
 
 from i18n import t
 
-from .engine import feed, pager
+from .engine import feed, pagefetch, pager
 from .engine.counters import parse_count, to_int
 from .engine.jsonpath import collect, get_in, runs_text
 from .engine.wall import looks_blocked
@@ -406,13 +406,10 @@ class CommentSession:
     # -- low-level helpers -------------------------------------------------
 
     def _in_page_fetch(self, url: str, timeout_ms: int = 25000) -> str:
-        script = (
-            'var cb=arguments[arguments.length-1];'
-            f"fetch({json.dumps(url)},{{credentials:'include'}})"
-            ".then(r=>r.text()).then(t=>cb(t)).catch(e=>cb('ERR '+e));"
-        )
-        self.driver.set_script_timeout(timeout_ms / 1000)
-        return self.driver.execute_async_script(script)
+        # The mechanics live in engine.pagefetch (one home for the three page-context
+        # fetch shapes); the comment engine wants the raw text so it can read wall
+        # wording out of an HTML body a JSON parse would discard.
+        return pagefetch.fetch_text(self.driver, url, timeout=timeout_ms / 1000)
 
     def _body_head(self, limit: int = 600) -> str:
         with contextlib.suppress(Exception):

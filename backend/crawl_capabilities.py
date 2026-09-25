@@ -405,6 +405,14 @@ CAPABILITIES: tuple[Capability, ...] = (
         serial_only=True,
         modes=(
             _posts_mode(*_TIMES),
+            _author_mode(
+                placeholder='https://weibo.com/u/<UID>',
+                hint_key='settings.authorHintWeibo',
+                # The author timeline is one in-page JSON endpoint read from the
+                # profile page: a visible window shows the profile and then nothing.
+                collects='fetch',
+                note_key='settings.fetchQuietNote',
+            ),
             _comment_mode('weibo', 'https://weibo.com/...'),
         ),
     ),

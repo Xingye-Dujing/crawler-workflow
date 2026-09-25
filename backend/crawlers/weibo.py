@@ -1,9 +1,10 @@
+import json
 import logging
 import math
 import re
 import time
 from datetime import datetime, timedelta
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
@@ -11,15 +12,41 @@ from selenium.webdriver.common.by import By
 from i18n import t
 
 from .base import Crawler, as_index
+from .engine import pagefetch, pager
 from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
 
-# Log strings this crawler needs that the catalog does not have yet.
-# ``backend/i18n.py`` is outside this change's ownership, so the wanted keys are
-# reported alongside the literal:
-#   crawl.weibo.target_reached  {n}
-_LOG_TARGET = '已达到目标数量 {n} 条，停止翻页'
+
+# The author walk addresses a person by their numeric uid only; the mymblog endpoint
+# honours `uid`, and a screen name addresses nobody (measured).
+_UID_PATTERNS = (
+    re.compile(r'(?:^|\.)weibo\.com/u/(\d{5,})'),
+    re.compile(r'(?:^|//)m?\.?weibo\.(?:com|cn)/u/(\d{5,})'),
+    re.compile(r'weibo\.com/(\d{5,})(?:[/?#]|$)'),
+    re.compile(r'^(\d{5,})$'),
+)
+
+
+def weibo_uid(value: str) -> str:
+    """Digits, a ``weibo.com/u/<uid>`` profile link, a ``weibo.com/<uid>/<post>`` link
+    or the search row's own 用户链接 → the numeric uid.
+
+    Anything without one of those digit shapes is refused with ``''``: opening a
+    guessed profile would report "this person posted nothing" about a page that is
+    not theirs, which is worse than saying the address was not a uid. The ``/u/<id>``
+    form is matched only on a weibo host (a taobao ``/u/123456`` is a different
+    person), and query/fragment junk is stripped first because the real 用户链接
+    carries ``?refer_flag=…``.
+    """
+    raw = str(value or '').strip().split('#')[0].split('?')[0]
+    if not raw:
+        return ''
+    for pattern in _UID_PATTERNS:
+        match = pattern.search(raw)
+        if match:
+            return match.group(1)
+    return ''
 
 
 class WeiboCrawler(Crawler):
@@ -109,7 +136,7 @@ class WeiboCrawler(Crawler):
             if idx <= start_index:
                 continue
             if self.collected() >= target:
-                logger.info(_LOG_TARGET.format(n=target))
+                logger.info(t('crawl.weibo.target_reached', n=target))
                 break
             logger.info('')
             logger.info('=' * 80)
@@ -137,6 +164,167 @@ class WeiboCrawler(Crawler):
                 self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
 
         return self.results()
+
+    # ─── one author's posts ─────────────────────────────────────────────
+
+    def author(self, author: str, target_count: int = 50, **kwargs):
+        """One account's own posts, read from the author's loaded profile page.
+
+        The ``mymblog`` endpoint is fetched INSIDE ``weibo.com/u/<uid>`` with
+        ``credentials:'include'`` — the shape that answers, where the same request
+        issued standalone is bounced (docs). Depth is the pager's answer (``page=N``
+        advances until the target, the server's end, or a refusal), never a page
+        budget. Two refusals are named, never filed as an empty table: the edge's
+        403/WAF body (a per-session throttle — the cookie may be fine, so the user
+        backs off rather than re-saving), and the mirror case (the payload is the
+        home timeline, not this uid's posts), caught by the one anchor that separates
+        them — the first row's ``user.id`` must equal the requested uid.
+        """
+        uid = weibo_uid(author)
+        if not uid:
+            raise ValueError(t('crawl.weibo.authorEmpty', author=author))
+        target = self.DEFAULT_TARGET if not target_count else int(target_count)
+        if self.collected() >= target:
+            logger.info(t('crawl.weibo.target_reached', n=target))
+            return self.results()
+        resume = self.resume_of(kwargs)
+        page = max(1, as_index(resume.get('page'), 1))
+        logger.info(t('crawl.weibo.authorStart', uid=uid, n=target))
+        # One navigation, through open() so the passport-flash is judged the way the
+        # search path judges it; the endpoint is asked from that loaded page.
+        self.open(f'https://weibo.com/u/{uid}')
+        if self.login_wall:
+            raise RuntimeError(t('crawl.weibo.authorWall', uid=uid))
+
+        seen = {str(r.get('微博ID') or '') for r in self.results() if r.get('微博ID')}
+        state = {'page': page, 'refused_status': None}
+
+        def _fetch(cursor):
+            state['page'] = int(cursor)
+            answer = pagefetch.fetch(self.driver, self._mymblog(uid, cursor), requests=self.requests)
+            body = str(answer.get('body') or '')
+            if answer.get('status') != 200 or not body.lstrip().startswith('{'):
+                # 403 edge, an HTML wall, or a transport death: a refused page, not
+                # an empty one — remember the status so the message can name it.
+                if state['refused_status'] is None:
+                    state['refused_status'] = answer.get('status')
+                return None
+            return json.loads(body)
+
+        def _extract(payload):
+            rows = (payload.get('data') or {}).get('list') or []
+            if rows and str((rows[0].get('user') or {}).get('id')) != uid:
+                raise RuntimeError(t('crawl.weibo.authorMirror', uid=uid))
+            return rows, state['page'] + 1
+
+        def _emit(raw):
+            row = self._author_row(raw, uid)
+            if not row:
+                return False
+            kept = self.emit(row)
+            if kept:
+                # The cursor is the page number plus the uid it was walked for, so a
+                # 继续 resumes on the same author rather than guessing. Ids never go
+                # into the cursor (they come from the seeded rows).
+                self.mark_position(uid=uid, page=state['page'], done=self.collected())
+            return kept
+
+        walk = pager.walk_pages(
+            _fetch,
+            _extract,
+            _emit,
+            start_cursor=page,
+            collected=self.collected,
+            target=target,
+            seen=seen,
+            identity=lambda raw: str(raw.get('mid') or raw.get('id') or ''),
+            polite=lambda: self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD),
+            alive=lambda: not self.login_wall,
+        )
+        if not self.collected() and walk.stopped_reason == 'fetch_failed':
+            raise ValueError(t('crawl.weibo.authorRefused', uid=uid, status=state['refused_status']))
+        if not self.collected():
+            # 200 with an empty list is a real fact about the account, not a
+            # refusal — legal, exactly as a bilibili space with no uploads is.
+            logger.info(t('crawl.weibo.authorNoPosts', uid=uid))
+        logger.info(t('crawl.weibo.authorDone', n=self.collected(), reason=walk.stopped_reason))
+        return self.results()
+
+    @staticmethod
+    def _mymblog(uid: str, page: int) -> str:
+        return f'https://weibo.com/ajax/statuses/mymblog?uid={uid}&page={page}&feature=0'
+
+    def _author_row(self, raw: dict, uid: str) -> dict | None:
+        """Flatten one mymblog item into the SEARCH mode's column set.
+
+        Same keys as :meth:`_scrape_card` on purpose: author and keyword crawls of
+        one platform feed the same cleaning/analysis nodes, and a table that differs
+        per mode is the "same video, two tables" trap. The counters are already ints
+        here, so they are NOT run through :func:`parse_count` (which reads the
+        search page's 万-labelled text). Columns the payload cannot fill honestly —
+        图片链接 (only ``pic_ids``, no URLs), 话题 beyond ``topic_struct``, 视频数
+        beyond what ``page_info`` says — are left empty/zero rather than guessed.
+        """
+        user = raw.get('user') or {}
+        mid = str(raw.get('mid') or raw.get('id') or '')
+        if not mid:
+            return None
+        return {
+            '发布者': str(user.get('screen_name') or ''),
+            '发布时间': self._normalise_weibo_time(raw.get('created_at')),
+            '发布来源': str(raw.get('source') or ''),
+            '正文': str(raw.get('text_raw') or '') or self._strip_html(str(raw.get('text') or '')),
+            '转发数': self._as_int(raw.get('reposts_count')),
+            '评论数': self._as_int(raw.get('comments_count')),
+            '点赞数': self._as_int(raw.get('attitudes_count')),
+            '图片链接': '',
+            '图片数': self._as_int(raw.get('pic_num')),
+            '话题': self._author_topics(raw.get('topic_struct')),
+            '视频数': 0,
+            '用户链接': f'https://weibo.com/u/{uid}',
+            '链接': f'https://weibo.com/detail/{mid}',
+            '微博ID': mid,
+        }
+
+    @staticmethod
+    def _as_int(value) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _normalise_weibo_time(value) -> str:
+        # The endpoint stamps 'Wed Sep 24 15:42:51 +0800 2026'; the search page
+        # shows a relative label. Two shapes in one column is the documented defect,
+        # so normalise the absolute time to a readable absolute form rather than
+        # shipping an English stamp beside a Chinese one.
+        text = str(value or '').strip()
+        if not text:
+            return ''
+        try:
+            return datetime.strptime(text, '%a %b %d %H:%M:%S %z %Y').strftime('%Y-%m-%d %H:%M')
+        except ValueError:
+            return text
+
+    @staticmethod
+    def _strip_html(text: str) -> str:
+        return re.sub(r'<[^>]+>', '', text).strip()
+
+    @staticmethod
+    def _author_topics(struct) -> str:
+        # topic_struct carries {topic_url, title} with an EMPTY title; the name lives
+        # url-encoded between %23…%23 (#…#) in topic_url's q= parameter.
+        names = []
+        for item in struct or []:
+            url = str((item or {}).get('topic_url') or '')
+            match = re.search(r'q=([^&]+)', url)
+            if not match:
+                continue
+            label = unquote(match.group(1)).strip('#').strip()
+            if label and label not in names:
+                names.append(label)
+        return ' | '.join(names)
 
     def _build_urls(self, keyword: str, start_time: str, end_time: str) -> list:
         if start_time or end_time:
@@ -198,7 +386,7 @@ class WeiboCrawler(Crawler):
             page_url = self._page_url(base_url)
             for page_num in range(2, total_pages + 1):
                 if self.collected() >= target:
-                    logger.info(_LOG_TARGET.format(n=target))
+                    logger.info(t('crawl.weibo.target_reached', n=target))
                     break
                 # Politeness *between* requests: this is the path that reaches
                 # s.weibo.com's rate limiter, so the pause is the fix.
@@ -283,7 +471,7 @@ class WeiboCrawler(Crawler):
         kept = []
         for idx, card in enumerate(cards[start:], start + 1):
             if self.collected() >= target:
-                logger.info(_LOG_TARGET.format(n=target))
+                logger.info(t('crawl.weibo.target_reached', n=target))
                 break
             try:
                 item = self._scrape_card(card, idx)

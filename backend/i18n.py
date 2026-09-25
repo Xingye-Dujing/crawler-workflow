@@ -184,6 +184,18 @@ _ZH = {
     'crawl.weibo.url': 'URL: {url}',
     'crawl.weibo.link_done': '第 {i} 个链接爬取完成，获取 {n} 条数据',
     'crawl.weibo.accumulated': '当前累计数据: {n} 条',
+    'crawl.weibo.target_reached': '已达到目标数量 {n} 条，停止翻页',
+    'crawl.weibo.authorStart': '开始采集作者 {uid} 的作品，目标 {n} 条',
+    'crawl.weibo.authorDone': '作者作品采集结束：{n} 条（{reason}）',
+    'crawl.weibo.authorEmpty': '「{author}」不是微博作者地址：填 weibo.com/u/<UID> 主页链接或数字 UID',
+    'crawl.weibo.authorWall': '微博把 UID {uid} 的主页弹回了登录页：这个会话进不去作者页',
+    'crawl.weibo.authorMirror': (
+        'UID {uid} 的答复第一行不属于该作者——接口给的是首页时间线而不是作者作品，拒绝张冠李戴'
+    ),
+    'crawl.weibo.authorRefused': (
+        'mymblog 接口拒绝应答（状态 {status}，UID {uid}）：这是按会话的限流，Cookie 可能并未失效，请稍后再试'
+    ),
+    'crawl.weibo.authorNoPosts': 'UID {uid} 没有返回任何作品：这个账号可能确实没发过微博',
     'crawl.weibo.visiting': '访问搜索链接: {url}',
     'crawl.weibo.no_result': '该时间段无搜索结果，跳过',
     'crawl.weibo.waiting': '等待页面加载...',
@@ -870,6 +882,24 @@ _EN = {
     'crawl.weibo.url': 'URL: {url}',
     'crawl.weibo.link_done': 'Link {i} done, {n} rows collected',
     'crawl.weibo.accumulated': 'Total collected so far: {n}',
+    'crawl.weibo.target_reached': 'Reached the target of {n} rows, stopping the walk',
+    'crawl.weibo.authorStart': 'Collecting author {uid}\u2019s posts, target {n}',
+    'crawl.weibo.authorDone': 'Author walk finished: {n} rows ({reason})',
+    'crawl.weibo.authorEmpty': (
+        '"{author}" is not a weibo author address: give a weibo.com/u/<UID> profile link or the numeric UID'
+    ),
+    'crawl.weibo.authorWall': (
+        'weibo bounced UID {uid}\u2019s profile back to a login page: this session cannot reach the author page'
+    ),
+    'crawl.weibo.authorMirror': (
+        'the first row returned for UID {uid} is not theirs \u2014 the endpoint answered the '
+        'home timeline, not this author\u2019s posts; refusing to file it as theirs'
+    ),
+    'crawl.weibo.authorRefused': (
+        'the mymblog endpoint refused (status {status}, UID {uid}): this is a per-session '
+        'throttle, the cookie may be fine \u2014 try again later'
+    ),
+    'crawl.weibo.authorNoPosts': 'UID {uid} returned no posts: this account may genuinely have none',
     'crawl.weibo.visiting': 'Visiting search link: {url}',
     'crawl.weibo.no_result': 'No results in this time window, skipping',
     'crawl.weibo.waiting': 'Waiting for the page to load...',

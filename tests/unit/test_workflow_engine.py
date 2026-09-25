@@ -275,15 +275,19 @@ class TestValidate:
 
     def test_a_mode_the_platform_does_not_offer_is_named_as_such(self, en):
         """The matrix lookup falls back to the platform's first mode so old canvases
-        still render — which used to mean a node asking for 某作者的作品 on weibo was
-        validated as a keyword search. The user then read 「缺少关键词」 for a field
-        the panel never showed them, or worse, the wrong crawl ran.
+        still render — which used to mean a node asking for a mode that never existed
+        was validated as a keyword search. The user then read 「缺少关键词」 for a
+        field the panel never showed them, or worse, the wrong crawl ran.
+
+        The made-up key is deliberate: a real mode another platform owns (``author``
+        on 微博 until #80 shipped it, say) would make this test's premise rot, while
+        an unknown key refuses the one thing validation must always refuse.
 
         The refusal is scoped to platforms that offer a choice; a single-mode
         platform has nothing to be confused with, and its stale keys are history
         (see the WeChat case in TestValidateUsesLabels).
         """
-        wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw', 'mode': 'author'})], [])
+        wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw', 'mode': 'timeline'})], [])
         errors = WorkflowEngine(wf).validate()
         assert len(errors) == 1
         assert 'no such collection mode' in errors[0]

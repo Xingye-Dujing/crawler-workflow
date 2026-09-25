@@ -187,7 +187,7 @@ def results(tmp_path_factory, capabilities_matrix):
         },
         {
             'id': 'mode_the_platform_lacks',
-            'nodes': [_node('n1', 'source', {'platform': 'weibo', 'collect': 'author', 'author': 'x'}), _save()],
+            'nodes': [_node('n1', 'source', {'platform': 'xiaohongshu', 'collect': 'author', 'author': 'x'}), _save()],
             'connections': [{'from': 'n1', 'to': 'out-1'}],
         },
         {
@@ -276,7 +276,9 @@ class TestValidateGate:
         assert 'author' in fields['field'], fields
 
     def test_a_mode_the_platform_does_not_offer_is_refused_by_name(self, results):
-        """微博 has no author mode; saying 「缺少关键词」 there would be a lie twice over."""
+        """小红书 has no author mode (its per-note token is not reliably reachable);
+        running its keyword search or saying 「缺少关键词」 there would each be a lie.
+        The refusal must name the mode the platform never offered."""
         keys = [_parse(message)[0] for message in results['validate']['mode_the_platform_lacks']]
         assert keys == ['validate.sourceUnknownMode'], results['validate']['mode_the_platform_lacks']
 

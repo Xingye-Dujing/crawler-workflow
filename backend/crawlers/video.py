@@ -44,7 +44,6 @@ the opposite of bilibili's in every respect that matters:
 """
 
 import contextlib
-import json
 import logging
 import re
 import time
@@ -53,7 +52,7 @@ from urllib.parse import quote
 from i18n import t
 
 from .base import Crawler, as_index
-from .engine import feed, popup
+from .engine import feed, pagefetch, popup
 from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
@@ -164,25 +163,13 @@ class VideoCrawler(Crawler):
         The endpoints authenticate the cookie the panel saved, so issuing the
         request in page is both the only way the credentials travel and the
         reason no signature has to be forged: measured ``code=0`` from the search
-        page and from the video page alike.
+        page and from the video page alike. The mechanics live in
+        :mod:`crawlers.engine.pagefetch` (one home for every page-context fetch);
+        this keeps the platform's own ledger (``self.requests``) wired in.
         """
-        script = (
-            'var done = arguments[arguments.length - 1];'
-            f'fetch({json.dumps(url)}, {{credentials: "include"}})'
-            '.then(function (r) { return r.json(); })'
-            '.then(function (j) { done(j); })'
-            '.catch(function (e) { done({err: String(e)}); });'
-        )
         # Counted alongside the navigations: "this board needs one request per page"
         # is a claim about the in-page fetches, not about ``open()``.
-        self.requests.append(str(url))
-        try:
-            self.driver.set_script_timeout(25)
-            payload = self.driver.execute_async_script(script)
-        except Exception as e:
-            logger.debug('in-page fetch failed: %s', e)
-            return {}
-        return payload if isinstance(payload, dict) else {}
+        return pagefetch.fetch_json(self.driver, url, requests=self.requests)
 
     def search(self, keyword: str, **_kwargs):
         raise self._not_crawlable()
