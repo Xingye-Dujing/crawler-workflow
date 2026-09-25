@@ -107,8 +107,8 @@ const I18n = {
                 'A profile is this platform’s own browser directory, and a crawl runs on the login inside it. '
                 + 'Cookies taken with 「Generate via Browser」 came out of that directory already, so the button '
                 + 'above is not for them. Press 「Plant cookies into profile」 only when you pasted a cookie in '
-                + 'yourself (or wrote that file by hand) — that is the one case where the browser the crawl '
-                + 'actually uses never sees it.',
+                + 'yourself (or edited that platform’s data/cookies/<platform>_cookies.json by hand) — that is '
+                + 'the one case where the browser the crawl actually uses never sees it.',
             'cookie.refreshHint':
                 'This profile was given a different cookie file than the one now saved: press '
                 + '「Plant cookies into profile」 to make the crawl use the one you re-took',
@@ -806,8 +806,9 @@ const I18n = {
             'cookies.refresh': '把 Cookie 更新进 Profile',
             'cookies.refreshExplain':
                 'Profile 是这个平台自己的浏览器目录，抓取用的是它里面的登录态。用「浏览器生成」拿到的 Cookie 本来就出自这个目录，'
-                + '不用再按上面这个按钮；只有当你把自己复制的 Cookie 粘贴进来（或直接写那个文件）时，才需要按一次'
-                + '「把 Cookie 更新进 Profile」，让它进到抓取真正在用的那个浏览器里。',
+                + '不用再按上面这个按钮；只有当你把自己复制的 Cookie 粘贴进来（或直接改那个平台的 '
+                + 'data/cookies/<平台>_cookies.json 文件）时，才需要按一次「把 Cookie 更新进 Profile」，'
+                + '让它进到抓取真正在用的那个浏览器里。',
             'cookie.refreshHint':
                 '这个 profile 当初导入的不是现在这份 Cookie：按「把 Cookie 更新进 Profile」，'
                 + '让抓取真正用上你刚重取的那一份',

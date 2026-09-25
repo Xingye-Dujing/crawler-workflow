@@ -2632,6 +2632,20 @@ input:-webkit-autofill:focus {
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
+/* The Cookie panel's own footnote: it is the only place the interface explains what a
+   "Profile" is, so it is boxed like the platform guide above it (same border, radius and
+   line length) and given real side padding instead of riding the dialog edge. */
+#cookie-explain {
+  margin: 4px 12px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 /* ── Toast ──────────────────────────────────────────────────────────────── */
 #toast {
