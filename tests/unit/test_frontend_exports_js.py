@@ -75,7 +75,9 @@ class TestExportRows:
         """The handler is a JS string inside an HTML attribute: a quote or a
         backslash that is not doubled terminates the call early and turns the
         button into a request for the wrong file."""
-        assert results['quoted'] == ["it\\'s.csv", 'back\\\\slash.csv', 'a"b.csv']
+        assert results['quoted'] == ["it\\'s.csv", 'back\\\\slash.csv', 'a&quot;b.csv'], (
+            'the third is the attribute half of the job: a raw " closes the onclick'
+        )
 
     def test_sizes_are_human_readable(self, results):
         assert results['size'] == ['0 B', '999 B', '2.0 KB', '5.0 MB']

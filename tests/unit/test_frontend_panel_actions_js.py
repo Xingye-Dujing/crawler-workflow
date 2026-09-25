@@ -377,3 +377,93 @@ class TestLanguageReachesEveryTable:
         assert '执行 ID' in got['before']['history'], got['before']
         assert 'Run ID' in got['after']['history'] and 'Workflow' in got['after']['history'], got['after']
         assert '执行 ID' not in got['after']['history']
+
+    def test_the_workflow_file_table_changes_language_with_the_page(self, pa):
+        got = pa['language_reaches_builtin_tables']
+        assert '名称' in got['before']['workflows'] and '节点数' in got['before']['workflows'], got['before']
+        assert 'Name' in got['after']['workflows'] and 'Nodes' in got['after']['workflows'], got['after']
+        assert '名称' not in got['after']['workflows']
+
+
+class TestRowButtonEscaping:
+    """Every panel row builds `onclick="fn('…')"` out of a name the user chose.
+
+    The escaper has to satisfy two grammars at once — the JavaScript literal and the
+    HTML attribute — and the three panels each carried a copy of the JS half only, so
+    one double quote in a file name closed its own attribute. That is the same class
+    of hole #115 closed on the canvas nodes, so the panels now share one function and
+    all three shapes are pinned here.
+    """
+
+    def test_a_double_quote_becomes_an_entity_not_an_attribute_end(self, pa):
+        assert pa['attrEscaper']['quote'] == 'a&quot;b'
+
+    def test_an_ampersand_is_escaped_exactly_once(self, pa):
+        assert pa['attrEscaper']['ampersandOnce'] is True
+
+    def test_a_real_newline_cannot_end_the_literal(self, pa):
+        assert pa['attrEscaper']['newline'] == 'a\\nb'
+
+    def test_the_javascript_half_still_holds(self, pa):
+        assert pa['attrEscaper']['stillJsSafe'] is True
+
+
+class TestWorkflowFilePanel:
+    """打开 / 重命名 / 删除 on a saved canvas — three ways to lose work if wrong."""
+
+    def test_rename_posts_both_names_and_rebinds_the_canvas(self, pa):
+        got = pa['wf_renamed']
+        assert got['url'] == '/api/workflow/rename'
+        assert got['body'] == {'name': 'old', 'new_name': '新名字'}
+        assert got['currentFile'] == '新名字', 'the next 保存 would recreate the file just renamed away'
+
+    def test_the_rename_answer_comes_from_the_input_not_the_button(self, pa):
+        """A confirm button carrying its own `value:` replaces whatever was typed —
+        the shape that once stored the literal 'ok' as a dataset name."""
+        spec = pa['wf_renamed']['specs'][-1]
+        assert spec['hasInput'] is True
+        assert [b['value'] for b in spec['buttons']] == ['null', '<absent>'], spec['buttons']
+
+    def test_a_cancelled_rename_sends_nothing(self, pa):
+        assert pa['wf_rename_cancelled']['requested'] == 0
+
+    def test_an_unchanged_name_sends_nothing(self, pa):
+        """The dialog is pre-filled with the current name, so answering it untouched
+        is the user pressing the button without editing — not a rename to itself."""
+        assert pa['wf_rename_unchanged']['requested'] == 0
+
+    def test_a_refusal_shows_the_servers_reason_and_keeps_the_binding(self, pa):
+        got = pa['wf_rename_refused']
+        assert got['toasts'] == ['name taken: x'], got['toasts']
+        assert got['currentFile'] is None
+
+    def test_opening_a_workflow_over_a_non_empty_canvas_asks_first(self, pa):
+        got = pa['wf_open_declined']
+        assert got['asked'] == 1 and got['requested'] == 0, 'a decline must not even read the file'
+
+    def test_an_empty_canvas_opens_without_a_dialog(self, pa):
+        got = pa['wf_open_empty_canvas']
+        assert got['asked'] == 0
+        assert got['url'] == '/api/workflow/load?name=saved'
+        assert got['currentFile'] == 'saved'
+
+    def test_an_accepted_open_loads_and_remembers_the_name(self, pa):
+        got = pa['wf_open_accepted']
+        assert got['asked'] == 1
+        assert got['urls'] == ['/api/workflow/load?name=saved']
+        assert got['currentFile'] == 'saved'
+
+    def test_delete_confirms_then_posts_the_name(self, pa):
+        got = pa['wf_removed']
+        assert (got['method'], got['url'], got['body']) == ('POST', '/api/workflow/delete', {'name': 'old'})
+
+    def test_a_declined_delete_sends_nothing(self, pa):
+        assert pa['wf_remove_declined']['requested'] == 0
+
+    @pytest.mark.parametrize('action', ['wf_open_while_running', 'wf_rename_while_running'])
+    def test_all_three_actions_refuse_while_a_run_is_live(self, pa, action):
+        """打开 re-keys the ambient name of the live run and 重命名/删除 move or drop
+        the file behind it, so the panel says so instead of bouncing a 409."""
+        got = pa[action]
+        assert got['requested'] == 0, got
+        assert len(got['toasts']) == 1 and 'run is live' in str(got['toasts'][0]), got['toasts']

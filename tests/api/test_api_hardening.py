@@ -59,6 +59,7 @@ BODY_ROUTES = [
     '/api/workflow/execute',
     '/api/workflow/processes/kill',
     '/api/workflow/queue/cancel',
+    '/api/workflow/rename',
     '/api/workflow/save',
 ]
 NON_OBJECT_BODIES = ['null', '[1, 2]', '"abc"', '123']
@@ -76,6 +77,12 @@ BODYLESS_POSTS = {
     '/api/workflow/queue/clear': 'drops every parked request',
     '/api/workflow/stop': 'sets the stop flag',
 }
+
+
+def _wf_names(client) -> list:
+    """Saved-workflow names; ``/api/workflow/list`` returns one object per file
+    for the management panel, while these guards speak about names."""
+    return [w['name'] for w in client.get('/api/workflow/list').get_json()['workflows']]
 
 
 def _post_route_policies() -> dict:
@@ -182,7 +189,7 @@ class TestMalformedBodies:
         response = client.post('/api/workflow/save', json={'name': 'typed-wrong', 'workflow': [1, 2]})
         assert response.status_code == 400
         assert response.get_json()['ok'] is False
-        assert 'typed-wrong' not in client.get('/api/workflow/list').get_json()['workflows']
+        assert 'typed-wrong' not in _wf_names(client)
 
 
 class TestNumericLimits:
@@ -269,7 +276,7 @@ class TestWorkflowNameGuard:
         assert response.status_code == 400
         body = response.get_json()
         assert body['ok'] is False and 'name' in body['error']
-        assert 'untitled' in client.get('/api/workflow/list').get_json()['workflows']
+        assert 'untitled' in _wf_names(client)
 
     @pytest.mark.parametrize('name', ['', '   ', '..', '...', '....'])
     def test_an_unresolvable_name_cannot_load_the_untitled_workflow(self, client, untitled, name):
@@ -283,7 +290,7 @@ class TestWorkflowNameGuard:
         # the fallback file. (A dot-only stem cleans to one underscore — a name
         # of its own inside the workflow directory, so it simply is not there.)
         assert client.post('/api/workflow/delete', json={'name': name}).status_code in (200, 400)
-        assert 'untitled' in client.get('/api/workflow/list').get_json()['workflows']
+        assert 'untitled' in _wf_names(client)
         loaded = client.get('/api/workflow/load', query_string={'name': name})
         assert loaded.status_code in (400, 404)
 
@@ -298,7 +305,7 @@ class TestWorkflowNameGuard:
         assert loaded['workflow']['name'] == 'untitled'
         # ...and deleting it is allowed, because the user said so explicitly.
         assert client.post('/api/workflow/delete', json={'name': 'untitled'}).get_json() == {'ok': True}
-        assert 'untitled' not in client.get('/api/workflow/list').get_json()['workflows']
+        assert 'untitled' not in _wf_names(client)
 
 
 class TestResultSnapshot:

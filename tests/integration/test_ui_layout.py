@@ -243,6 +243,7 @@ PANELS = [
     'runs-panel',
     'exports-panel',
     'dataset-panel',
+    'workflows-panel',
     'processes-panel',
     'status-bar',
     'context-menu',
@@ -283,6 +284,9 @@ MIN_MEASURED = {
     'runs-panel': 5,
     'exports-panel': 6,
     'dataset-panel': 5,
+    # 7 counted in a real Chrome in both languages with the list still empty; 6
+    # leaves one element of slack for a state that shows fewer chrome parts.
+    'workflows-panel': 6,
     'processes-panel': 4,
     'status-bar': 7,
     'context-menu': 13,
@@ -445,6 +449,90 @@ def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, drive
     assert facts['clippedChips'] == 0, f'a chip is silently cut off: {facts["chips"]}'
     assert facts['cellRight'] <= facts['windowWidth'] + 1, f'the name cell runs off the window: {facts}'
     assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_workflow_row_survives_being_built_from_its_own_name(app_url, driver, lang):
+    """The 工作流文件 table draws a user-chosen stem twice: as text, and inside the
+    ``onclick="wfFiles.rename('…')"`` attribute the row buttons are made of.
+
+    Only a real HTML parser can say whether that attribute held. The node harness
+    sees the string the product assigned; the browser is what decides whether one
+    double quote in a file name closed the attribute and turned the rest of the
+    name into markup — and whether the cell still fits its row instead of growing a
+    page-level bar. Nothing is written: ``fetch`` is stubbed.
+    """
+    hostile = 'q"uote \'quote \\slash <img src=x onerror=alert(1)> 以及一段很长的中文工作流名称用来把它撑开'
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        f"""
+        document.body.dataset.lang = {lang!r};
+        I18n.apply();
+        window.__calls = [];
+        window.fetch = function (url, opts) {{
+            window.__calls.push({{ url: String(url), body: opts && opts.body ? String(opts.body) : null }});
+            const payload = {{ ok: true, name: {hostile!r}, workflows: [] }};
+            return Promise.resolve({{
+                ok: true, json: () => Promise.resolve(payload), text: () => Promise.resolve(JSON.stringify(payload)),
+            }});
+        }};
+        window.showDialog = () => Promise.resolve('renamed');
+        const panel = document.getElementById('workflows-panel');
+        panel.classList.add('open');
+        panel.classList.remove('hidden');
+        wfFiles._last = [
+            {{ name: {hostile!r}, nodes: 3, labels: [], size: 400, mtime: 1760000000, broken: false }},
+            {{ name: 'broken', nodes: 0, labels: [], size: 10, mtime: 0, broken: true }},
+        ];
+        workflow.currentFile = {hostile!r};
+        wfFiles.render();
+        """,
+        [],
+    )
+    facts = driver.execute_script(
+        """
+        const cell = document.querySelector('#workflows-mgr-body .runs-mgr-wf');
+        const buttons = Array.from(document.querySelectorAll('#workflows-mgr-body .runs-mgr-btn'));
+        const rename = buttons.find((b) => (b.getAttribute('onclick') || '').indexOf('rename') >= 0);
+        window.__calls = [];
+        if (rename) rename.click();
+        const table = document.querySelector('#workflows-mgr-body table');
+        return {
+            text: cell ? cell.textContent : null,
+            buttons: buttons.length,
+            imgElements: document.querySelectorAll('#workflows-mgr-body img').length,
+            clipped: cell ? cell.scrollWidth - cell.clientWidth : null,
+            cellRight: cell ? Math.round(cell.getBoundingClientRect().right) : null,
+            windowWidth: window.innerWidth,
+            tableOverflows: table ? table.scrollWidth - table.clientWidth : null,
+            page: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+        };
+        """,
+        [],
+    )
+    # The click answers a promise before it fetches, so the request is polled rather
+    # than read in the same task — reading it synchronously passes by accident and
+    # fails whenever the page is busy.
+    deadline = time.monotonic() + 10
+    calls: list = []
+    while time.monotonic() < deadline:
+        calls = driver.execute_script('return window.__calls;', [])
+        if any(str(c['url']).split('?')[0] == '/api/workflow/rename' for c in calls):
+            break
+        time.sleep(0.2)
+    assert facts['text'] and 'q"uote' in facts['text'] and '<img' in facts['text'], facts['text']
+    assert facts['imgElements'] == 0, 'the name reached the DOM as a tag, not as text'
+    rename_calls = [c for c in calls if str(c['url']).split('?')[0] == '/api/workflow/rename']
+    assert rename_calls, f'the click never reached the server: {calls}'
+    assert json.loads(rename_calls[0]['body'])['name'] == hostile, (
+        f'the name the button handed over is not the name on disk: {rename_calls[0]["body"]!r}'
+    )
+    assert facts['cellRight'] <= facts['windowWidth'] + 1, f'the name cell runs off the window: {facts}'
+    assert facts['page'][0] <= facts['page'][1] + 1, f'the page grew a horizontal bar: {facts["page"]}'
+    if facts['clipped'] and facts['clipped'] > 1:
+        assert facts['tableOverflows'] > 1, f'the cell is cut off with no way to reach the rest: {facts}'
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])

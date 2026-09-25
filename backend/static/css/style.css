@@ -2278,7 +2278,8 @@ input:-webkit-autofill:focus {
 /* ── Run records panel (docked at the bottom, console-style) ────────────── */
 #runs-panel,
 #exports-panel,
-#dataset-panel {
+#dataset-panel,
+#workflows-panel {
   position: fixed;
   bottom: var(--barH);
   left: 0;
@@ -2294,7 +2295,8 @@ input:-webkit-autofill:focus {
 }
 #runs-panel.open,
 #exports-panel.open,
-#dataset-panel.open {
+#dataset-panel.open,
+#workflows-panel.open {
   height: 240px;
 }
 #runs-panel.open ~ #status-bar {
@@ -2302,7 +2304,8 @@ input:-webkit-autofill:focus {
 }
 #runs-resize-handle,
 #exports-resize-handle,
-#dataset-resize-handle {
+#dataset-resize-handle,
+#workflows-resize-handle {
   position: absolute;
   top: 0;
   left: 0;
@@ -2317,12 +2320,15 @@ input:-webkit-autofill:focus {
 #exports-resize-handle:hover,
 #exports-resize-handle.active,
 #dataset-resize-handle:hover,
-#dataset-resize-handle.active {
+#dataset-resize-handle.active,
+#workflows-resize-handle:hover,
+#workflows-resize-handle.active {
   background: var(--line);
 }
 #runs-mgr-body,
 #exports-mgr-body,
-#dataset-mgr-body {
+#dataset-mgr-body,
+#workflows-mgr-body {
   flex: 1;
   overflow: auto;
   padding: 0 8px 8px;
@@ -2330,7 +2336,8 @@ input:-webkit-autofill:focus {
 @media (max-width: 768px) {
   #runs-panel.open,
   #exports-panel.open,
-  #dataset-panel.open {
+  #dataset-panel.open,
+  #workflows-panel.open {
     height: 140px;
   }
 }

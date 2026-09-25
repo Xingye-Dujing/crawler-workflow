@@ -33,7 +33,7 @@ vm.runInContext(workflowSrc, sandbox);
 /* app.js is an IIFE-ish sibling of workflow.js in the browser: same global. */
 vm.runInContext(appSrc, sandbox);
 
-const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel'];
+const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel'];
 
 function state() {
     const out = {};
@@ -57,6 +57,7 @@ for (const target of ids) {
         'runs-panel': 'runsManager.toggle()',
         'exports-panel': 'exportsManager.toggle()',
         'dataset-panel': 'datasetManager.toggle()',
+        'workflows-panel': 'wfFiles.toggle()',
     };
     const toggler = togglers[target];
     sandbox.__byId(target).classList.remove('open');
@@ -74,6 +75,8 @@ for (const target of ids) {
 }
 
 out.exportHandle = !!sandbox.__byId('exports-resize-handle');
+out.datasetHandle = !!sandbox.__byId('dataset-resize-handle');
+out.workflowsHandle = !!sandbox.__byId('workflows-resize-handle');
 out.dockedList = typeof sandbox.closeDockedPanels === 'function' ? 'helper present' : 'MISSING helper';
 /* The cookie dialog's ceiling has to be viewport-derived, not 500px. */
 out.cookieBounds = /maxW:\s*Math\.min\(760,\s*window\.innerWidth\s*-\s*40\)[\s\S]{0,80}maxH:\s*window\.innerHeight\s*-\s*40/.test(

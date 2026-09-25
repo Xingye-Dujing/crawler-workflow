@@ -55,6 +55,78 @@ class WorkflowManager:
         files = [f for f in os.listdir(self.workflow_dir) if f.endswith('.json')]
         return [f.replace('.json', '') for f in files]
 
+    def describe(self) -> list:
+        """One object per saved file: what the management panel draws.
+
+        The list used to be bare stems, which forced the panel to fetch each file
+        to say anything useful (and the old 「打开」 picker could not show what a
+        name would overwrite). A corrupt file is STILL a row — with ``broken`` set —
+        because the panel must be able to delete the file the loader refuses to open;
+        dropping it here would strand it invisible on disk.
+        """
+        out = []
+        for name in self.list_workflows():
+            path = os.path.join(self.workflow_dir, f'{name}.json')
+            entry = {'name': name, 'nodes': 0, 'labels': [], 'size': 0, 'mtime': 0, 'broken': False}
+            try:
+                stat = os.stat(path)
+                entry['size'] = stat.st_size
+                entry['mtime'] = int(stat.st_mtime)
+            except OSError:
+                entry['broken'] = True
+            try:
+                with open(path, encoding='utf-8') as f:
+                    payload = json.load(f)
+                nodes = (payload or {}).get('nodes') or []
+                entry['nodes'] = len(nodes)
+                # The name nodes are what the run records are keyed by — showing
+                # them tells the user which "files" share a run history.
+                entry['labels'] = sorted(
+                    {
+                        str((n.get('params') or {}).get('workflow_name') or '').strip()
+                        for n in nodes
+                        if n.get('type') == 'name' and str((n.get('params') or {}).get('workflow_name') or '').strip()
+                    }
+                )[:4]
+            except (OSError, ValueError):
+                entry['broken'] = True
+            out.append(entry)
+        out.sort(key=lambda e: str(e['name']).lower())
+        return out
+
+    def rename(self, old: str, new: str) -> str | None:
+        """Move ``old.json`` to ``new.json``, keeping the name inside the file honest.
+
+        Returns the new stem, or ``None`` when the old file is not there. The inner
+        ``name`` field is rewritten because that is what a load reports back as the
+        canvas's ambient name — a file that still says the old name would rename
+        itself straight back on the next save. A taken target is refused by the
+        CALLER (the route answers 409); this method never overwrites, so a rename
+        cannot destroy a third workflow the way a same-name save deliberately does.
+        """
+        src = self._path_for(old)
+        if not os.path.exists(src):
+            return None
+        dst = self._path_for(new)
+        if os.path.exists(dst):
+            raise FileExistsError(dst)
+        try:
+            with open(src, encoding='utf-8') as f:
+                payload = json.load(f)
+            payload = dict(payload or {})
+            payload['name'] = self.clean_name(new)
+        except ValueError:
+            # A corrupt file can still be renamed (the panel may want a readable
+            # name for it); keep the bytes, fix the inner name only if parseable.
+            payload = None
+        if payload is not None:
+            with open(dst, 'w', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            os.remove(src)
+        else:
+            os.replace(src, dst)
+        return self.clean_name(new)
+
     def delete(self, name: str):
         path = self._path_for(name)
         if os.path.exists(path):

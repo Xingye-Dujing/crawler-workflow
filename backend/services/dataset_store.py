@@ -379,6 +379,22 @@ class DatasetStore:
         cur = self._execute('DELETE FROM dataset_refs WHERE workflow_name = ?', (str(workflow_name),))
         return cur.rowcount
 
+    def move_workflow(self, old: str, new: str) -> int:
+        """Re-point every dataset reference from *old* to *new* (a rename).
+
+        Without this, a renamed workflow reopens with empty Upload nodes (the
+        restore asks by the new name and finds nothing) while the OLD name keeps a
+        phantom reference that makes its bound files refuse deletion forever — the
+        same referenced-by rule the 删除 guard reads. The target's stale refs go
+        first so a rename onto a name that once existed cannot inherit them.
+        """
+        old, new = str(old), str(new)
+        with self._lock:
+            self._conn.execute('DELETE FROM dataset_refs WHERE workflow_name = ?', (new,))
+            cur = self._conn.execute('UPDATE dataset_refs SET workflow_name = ? WHERE workflow_name = ?', (new, old))
+            self._conn.commit()
+            return cur.rowcount
+
     def datasets_of(self, workflow_name: str) -> list:
         """Full metadata for every file a saved workflow depends on."""
         refs = self.refs_for(workflow_name)

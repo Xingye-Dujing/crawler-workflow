@@ -960,6 +960,24 @@ def load_workflow():
     name = _request_workflow_name(request.args.get('name'))
     if name is None:
         return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
+    if execution_state['running']:
+        # Loading overwrites the live run's ambient name and fingerprint (below),
+        # so a second tab opening a file mid-run would re-key the record of a
+        # crawl that is still writing rows. The panel asks first; this is the
+        # loud line that holds even when it does not.
+        return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409
+    workflow = workflow_manager.load(name)
+    if not workflow:
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    # Reconnect the nodes with their files *before* the canvas draws them, so
+    # the workflow it returns is the runnable one.
+    datasets = _restore_workflow_datasets(name, workflow)
+    execution_state['workflow_name'] = str(workflow.get('name') or name or '')
+    execution_state['fingerprint'] = workflow_fingerprint(workflow)
+    return jsonify({'ok': True, 'workflow': workflow, 'datasets': datasets})
+    name = _request_workflow_name(request.args.get('name'))
+    if name is None:
+        return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
     workflow = workflow_manager.load(name)
     if not workflow:
         return jsonify({'ok': False, 'error': 'Not found'}), 404
@@ -973,7 +991,39 @@ def load_workflow():
 
 @app.route('/api/workflow/list', methods=['GET'])
 def list_workflows():
-    return jsonify({'ok': True, 'workflows': workflow_manager.list_workflows()})
+    # Objects, not bare stems: the management panel shows node/dataset counts and
+    # a modified time per file, which is what makes 打开/重命名/删除 an informed
+    # choice instead of a name-blind file picker.
+    return jsonify({'ok': True, 'workflows': workflow_manager.describe()})
+
+
+@app.route('/api/workflow/rename', methods=['POST'])
+def rename_workflow():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    for field in ('name', 'new_name'):
+        if not isinstance(data.get(field), str):
+            return _bad_param(field)
+    old = _request_workflow_name(data.get('name'))
+    new = _request_workflow_name(data.get('new_name'))
+    if old is None or new is None:
+        return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
+    if old == new:
+        return jsonify({'ok': False, 'error': t('api.workflowNameSame')}), 400
+    if execution_state['running'] and str(execution_state.get('workflow_name') or '') == old:
+        # Renaming the canvas that is mid-run would re-key the record it is
+        # writing; the panel refuses first, this holds the line regardless.
+        return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409
+    if os.path.exists(workflow_manager._path_for(new)):
+        return jsonify({'ok': False, 'error': t('api.workflowNameTaken', name=new)}), 409
+    moved = workflow_manager.rename(old, new)
+    if moved is None:
+        # Unlike delete (idempotent), a rename of a missing file is a lost edit.
+        return jsonify({'ok': False, 'error': t('api.workflowMissing', name=old)}), 404
+    refs = get_dataset_store().move_workflow(old, new)
+    logger.info(t('api.workflowRenamed', old=old, new=new))
+    return jsonify({'ok': True, 'name': new, 'path': workflow_manager._path_for(new), 'datasets': refs})
 
 
 @app.route('/api/workflow/delete', methods=['POST'])

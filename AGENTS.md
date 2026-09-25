@@ -48,10 +48,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 ## How tests are written here
 
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js` /
-  `workflow.js` / `app.js` into a zero-dependency node `vm` (shared `harness_dom.mjs`) and are driven by
-  `tests/unit/test_frontend_*` pytest modules. Any JS change to result-affecting
-  logic must sync a scenario there; `urlPlatform` (workflow.js) is contract-pinned against
-  `utils.helpers.platform_for`.
+  `workflow.js` / `app.js` into a zero-dependency node `vm` (shared `harness_dom.mjs`) and are driven
+  by `tests/unit/test_frontend_*` modules. Any JS change to result-affecting logic must sync a scenario
+  there; `urlPlatform` is contract-pinned against `utils.helpers.platform_for`.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` in
   workflow.js asks `Capabilities` which fields the selected mode requires; the branch it
   replaced made the matrix's `author` and `hot` modes unreachable from the UI. If
@@ -73,20 +72,19 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   button as `b.value !== undefined ? b.value : inputEl.value`, so a confirm button that
   carries its own `value:` replaces whatever the user typed (the dataset rename stored
   the literal `'ok'`). Leave `value` off input dialogs.
-- **Three frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a module
+- **Four frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a module
   declared as a top-level `const X` — `const` never becomes a window property — which silently killed
   `resumeBar.refresh()` and `runsManager._busy()`. Guard the binding itself (`typeof X !== 'undefined'`)
-  or export it (`window.X = X`, as app.js does for `LLMSettings`/`AppSettings`). (2) The DOM stub's matcher
-  is real (see `harness_dom.mjs`); never fabricate a child when a query finds nothing — that turned a
-  deleted connection into a phantom. (3) **A wrapper must forward its arguments:** app.js re-wraps
-  `openCookieDialog`, and its empty parameter list opened it on whoever was selected before, not the
-  platform that just refused.
+  or export it (`window.X = X`). (2) The DOM stub's matcher is real (see `harness_dom.mjs`); never
+  fabricate a child when a query finds nothing — that turned a deleted connection into a phantom.
+  (3) **A wrapper must forward its arguments:** app.js re-wraps `openCookieDialog`, and its empty
+  parameter list opened it on whoever was selected before, not the platform that just refused.
+  (4) **A name written into `onclick="fn('…')"` spans two grammars:** `attrJsArg` escapes `\`/`'` for
+  the literal, then `&`/`"` for the attribute — JS-escaping alone lets one `"` end the attribute.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
-  `tests/integration/test_ui_layout.py` audits containers **by id** (the page has no `.panel` class — a
-  selector matching zero elements kept that test green while checking nothing), never falls back to
-  `<body>`, and asserts a per-container floor on the gathered element count, measured in the
-  browser. Resolve on-screen wording from `I18n` inside the browser, not a pasted copy — one
-  label drifted and the test demanded a string the product never emits.
+  `tests/integration/test_ui_layout.py` audits containers **by id** (a `.panel` selector matches nothing
+  here), never falls back to `<body>`, and asserts a per-container floor on the count it gathered,
+  measured in the browser. Resolve on-screen wording from `I18n` inside the browser, not a pasted copy.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the
   one the bug was about. When you test a record, a run or a panel row, list the dimensions first
   (`mode`, `headless`, `wf_count`, resume state, language, platform …) and cover the grid.

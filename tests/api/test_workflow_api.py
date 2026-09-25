@@ -52,6 +52,14 @@ def _workflow(nodes, connections, settings=None):
     return {'nodes': nodes, 'connections': connections, 'settings': settings or {'mode': 'serial'}}
 
 
+def _list_names(client) -> list:
+    """The saved-workflow names only. ``/api/workflow/list`` returns one object
+    per file (name, node/dataset counts, mtime) for the management panel; most
+    assertions here speak about names, so extract them rather than re-read the
+    shape in every test."""
+    return [w['name'] for w in client.get('/api/workflow/list').get_json()['workflows']]
+
+
 def _e2e_workflow(dataset_id: str, filename: str = 'e2e') -> dict:
     """upload → analysis → output, wired the way the canvas wires it."""
     return _workflow(
@@ -86,7 +94,7 @@ class TestWorkflowCrud:
         assert (data_root / 'data' / 'workflows' / 'crud-basic.json').exists()
         assert body['datasets'] == 1
 
-        assert 'crud-basic' in client.get('/api/workflow/list').get_json()['workflows']
+        assert 'crud-basic' in _list_names(client)
 
         loaded = client.get('/api/workflow/load', query_string={'name': 'crud-basic'}).get_json()
         assert loaded['ok'] is True
@@ -95,7 +103,7 @@ class TestWorkflowCrud:
         assert [node['id'] for node in loaded['workflow']['nodes']] == ['node-1']
 
         assert client.post('/api/workflow/delete', json={'name': 'crud-basic'}).get_json() == {'ok': True}
-        assert 'crud-basic' not in client.get('/api/workflow/list').get_json()['workflows']
+        assert 'crud-basic' not in _list_names(client)
         assert not (data_root / 'data' / 'workflows' / 'crud-basic.json').exists()
 
     def test_saving_twice_under_one_name_replaces_it(self, client):
@@ -104,7 +112,7 @@ class TestWorkflowCrud:
         client.post('/api/workflow/save', json={'name': 'overwrite-me', 'workflow': first})
         client.post('/api/workflow/save', json={'name': 'overwrite-me', 'workflow': second})
 
-        listed = client.get('/api/workflow/list').get_json()['workflows']
+        listed = _list_names(client)
         assert listed.count('overwrite-me') == 1
         workflow = client.get('/api/workflow/load', query_string={'name': 'overwrite-me'}).get_json()['workflow']
         assert [node['id'] for node in workflow['nodes']] == ['node-1', 'node-2']
@@ -166,6 +174,104 @@ class TestWorkflowCrud:
         assert paste(E2E_RECORDS, name='orders.csv') == dataset_id
         entry, _params = _report()
         assert entry['restored'] is True
+
+
+class TestWorkflowRename:
+    """Rename is the one new mutation: a move that keeps the file's inner name honest."""
+
+    def _save(self, client, name, nodes=None):
+        workflow = _workflow(nodes or [_node('node-1', 'upload', params={'dataset_id': 'x'})], [])
+        return client.post('/api/workflow/save', json={'name': name, 'workflow': workflow})
+
+    def test_rename_moves_the_file_and_rewrites_the_inner_name(self, client, data_root):
+        self._save(client, 'old-name')
+        response = client.post('/api/workflow/rename', json={'name': 'old-name', 'new_name': 'new-name'})
+        assert response.status_code == 200
+        assert response.get_json()['name'] == 'new-name'
+        assert not (data_root / 'data' / 'workflows' / 'old-name.json').exists()
+        assert (data_root / 'data' / 'workflows' / 'new-name.json').exists()
+        loaded = client.get('/api/workflow/load', query_string={'name': 'new-name'}).get_json()
+        # The saved name is what a reopened canvas reports as its own; a file still
+        # saying 'old-name' would rename itself back on the next save.
+        assert loaded['workflow']['name'] == 'new-name'
+        assert 'old-name' not in _list_names(client) and 'new-name' in _list_names(client)
+
+    def test_node_ids_survive_a_rename_byte_for_byte(self, client):
+        # A node id is a storage key (cursors, LLM cache, run records) — renaming
+        # the FILE must never renumber it.
+        self._save(client, 'ids-keep', nodes=[_node('node-7', 'upload'), _node('node-3', 'output')])
+        client.post('/api/workflow/rename', json={'name': 'ids-keep', 'new_name': 'ids-renamed'})
+        loaded = client.get('/api/workflow/load', query_string={'name': 'ids-renamed'}).get_json()
+        assert [n['id'] for n in loaded['workflow']['nodes']] == ['node-7', 'node-3']
+
+    def test_rename_repoints_the_dataset_reference(self, client, paste):
+        # Without the move, the renamed workflow reopens with an empty Upload node
+        # and the OLD name keeps a phantom ref that blocks the file's deletion.
+        dataset_id = paste(E2E_RECORDS, name='orders.csv')
+        upload_params = {'dataset_id': dataset_id, 'dataset_name': 'orders.csv'}
+        workflow = _workflow([_node('n1', 'upload', params=upload_params)], [])
+        client.post('/api/workflow/save', json={'name': 'ref-old', 'workflow': workflow})
+        moved = client.post('/api/workflow/rename', json={'name': 'ref-old', 'new_name': 'ref-new'}).get_json()
+        assert moved['datasets'] == 1, 'the binding moved with the name'
+        entry = client.get('/api/workflow/load', query_string={'name': 'ref-new'}).get_json()['datasets'][0]
+        assert entry['restored'] is True, 'the renamed workflow lost its dataset binding'
+        # The old name no longer references it: deleting the dataset now lists only
+        # the new name as a blocker (the reference followed the rename, no phantom).
+        client.post('/api/workflow/save', json={'name': 'ref-new', 'workflow': workflow})
+        guard = client.delete(f'/api/data/datasets/{dataset_id}')
+        assert guard.status_code == 409 and 'ref-new' in str(guard.get_json()), guard.get_json()
+
+    def test_rename_onto_an_existing_name_is_refused_and_changes_nothing(self, client, data_root):
+        self._save(client, 'take-a')
+        self._save(client, 'take-b')
+        response = client.post('/api/workflow/rename', json={'name': 'take-a', 'new_name': 'take-b'})
+        assert response.status_code == 409
+        assert (data_root / 'data' / 'workflows' / 'take-a.json').exists(), 'a refused rename must be all-or-nothing'
+        assert (data_root / 'data' / 'workflows' / 'take-b.json').exists()
+
+    def test_renaming_a_missing_workflow_is_404(self, client):
+        response = client.post('/api/workflow/rename', json={'name': 'ghost', 'new_name': 'real'})
+        assert response.status_code == 404
+
+    def test_same_name_is_refused_so_no_ref_bind_is_wasted(self, client):
+        self._save(client, 'same-file')
+        response = client.post('/api/workflow/rename', json={'name': 'same-file', 'new_name': 'same-file'})
+        assert response.status_code == 400
+
+    @pytest.mark.parametrize('bad', ['', '  ', '..', '....'])
+    def test_hostile_or_empty_names_are_refused_on_both_fields(self, client, bad):
+        self._save(client, 'guard-ok')
+        # The bad value as the OLD name (the file it addresses is not a real stem)
+        # and as the NEW name (it cleans down to nothing, so the untitled fallback
+        # would point at somebody else's file). A traversal like ``../x`` is NOT
+        # here: it sanitizes to the safe stem ``x`` and renames legitimately.
+        assert client.post('/api/workflow/rename', json={'name': bad, 'new_name': 'target'}).status_code == 400
+        assert client.post('/api/workflow/rename', json={'name': 'guard-ok', 'new_name': bad}).status_code == 400
+
+    def test_a_two_hundred_char_new_name_lands_capped(self, client, data_root):
+        self._save(client, 'cap-me')
+        response = client.post('/api/workflow/rename', json={'name': 'cap-me', 'new_name': 'z' * 200})
+        assert response.status_code == 200
+        assert os.path.basename(response.get_json()['path']) == 'z' * 60 + '.json'
+        assert (data_root / 'data' / 'workflows' / ('z' * 60 + '.json')).exists()
+
+
+class TestLoadRefusedWhileRunning:
+    def test_a_second_tab_cannot_rekey_a_live_run(self, client, app_module, monkeypatch):
+        import json as _json
+
+        workflow = _workflow([_node('node-1', 'upload')], [])
+        client.post('/api/workflow/save', json={'name': 'ambient', 'workflow': workflow})
+        client.post('/api/workflow/save', json={'name': 'other', 'workflow': workflow})
+        monkeypatch.setitem(app_module.execution_state, 'running', True)
+        app_module.execution_state['workflow_name'] = 'ambient'
+        app_module.execution_state['fingerprint'] = 'live-fp'
+
+        refused = client.get('/api/workflow/load', query_string={'name': 'other'})
+        assert refused.status_code == 409
+        assert app_module.execution_state['workflow_name'] == 'ambient', 'a refused load must not re-key the live run'
+        assert app_module.execution_state['fingerprint'] == 'live-fp'
+        assert _json  # (import kept local to the test)
 
 
 class TestWorkflowExecute:

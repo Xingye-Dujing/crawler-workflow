@@ -52,7 +52,7 @@ vm.runInContext(
     `${src}
      ;globalThis.__pa = { resumeBar, runsManager, exportsManager, datasetManager, dataNodes,
                           workflow, canvas, historyPanel, processesPoll, killProcess,
-                          togglePin, setBg, setLang, closeDockedPanels, RunState };`,
+                          togglePin, setBg, setLang, closeDockedPanels, RunState, wfFiles };`,
     sandbox,
 );
 
@@ -143,11 +143,17 @@ function fresh() {
     answers.dialog = null;
     dialogSpecs.length = 0;
     answer = { ok: true };
+    /* A scenario's `route()` override has to die with the scenario: merging the
+       defaults over the top would leave it live for every later section, which is
+       how a stubbed 409 once made three unrelated scenarios share one verdict. */
+    Object.keys(routes).forEach((key) => delete routes[key]);
     Object.assign(routes, defaultRoutes());
     pa.resumeBar.hide();
     pa.runsManager._shown = [];
     pa.exportsManager._last = [];
     pa.datasetManager._last = [];
+    pa.wfFiles._last = [];
+    pa.workflow.currentFile = null;
     Object.keys(pa.canvas.nodes).forEach((key) => delete pa.canvas.nodes[key]);
     pa.canvas.connections = [];
     pa.canvas._settingsNodeId = null;
@@ -445,6 +451,17 @@ out.export_quoting = {
     roundTripSafe: pa.exportsManager._quote("it's") === "it\\'s",
 };
 
+/* Every panel row button embeds a name inside `onclick="fn('…')"` — two contexts at
+   once. These three escapers were three copies of the JS half only, so a file named
+   with a double quote closed its own attribute; they now share one function, and the
+   shapes below are what "shared" has to keep paying for. */
+out.attrEscaper = {
+    quote: pa.exportsManager._quote('a"b'),
+    ampersandOnce: pa.datasetManager._quote('a&b') === 'a&amp;b',
+    newline: pa.wfFiles._quote('a\nb'),
+    stillJsSafe: pa.wfFiles._quote("it's") === "it\\'s",
+};
+
 /* ── dataset panel ─────────────────────────────────────────────────── */
 fresh();
 answers.dialog = '新名字';
@@ -483,6 +500,90 @@ answers.dialog = false;
 requests.length = 0;
 await pa.datasetManager.remove('ds1', 'old.csv', false);
 out.dataset_remove_declined = { requested: requests.length };
+
+/* ── workflow-file panel (#115) ────────────────────────────────────── */
+fresh();
+answers.dialog = '新名字';
+answer = { ok: true, name: '新名字' };
+pa.workflow.currentFile = 'old';
+requests.length = 0;
+await pa.wfFiles.rename('old');
+out.wf_renamed = {
+    url: requests[0].url,
+    body: JSON.parse(requests[0].body),
+    /* The canvas that was open under the old stem must re-bind to the new one,
+       or the next 保存 recreates the file the user just renamed away. */
+    currentFile: pa.workflow.currentFile,
+    specs: dialogSpecs.slice(),
+};
+fresh();
+answers.dialog = null;
+requests.length = 0;
+await pa.wfFiles.rename('old');
+out.wf_rename_cancelled = { requested: requests.length };
+fresh();
+/* The dialog is pre-filled with the current name, so "answered with the same
+   word" is the user pressing 重命名 without editing — not a rename to itself,
+   which the backend refuses with 400 for a reason the panel already knows. */
+answers.dialog = 'old';
+requests.length = 0;
+await pa.wfFiles.rename('old');
+out.wf_rename_unchanged = { requested: requests.length };
+fresh();
+answers.dialog = 'x';
+answer = { ok: false, error: 'name taken: x' };
+requests.length = 0;
+await pa.wfFiles.rename('old');
+out.wf_rename_refused = { toasts: toasts.slice(), currentFile: pa.workflow.currentFile };
+fresh();
+answers.dialog = 'x';
+pa.RunState.running = true;
+requests.length = 0;
+await pa.wfFiles.rename('old');
+out.wf_rename_while_running = { requested: requests.length, toasts: toasts.slice() };
+fresh();
+answers.dialog = true;
+answer = { ok: true };
+requests.length = 0;
+await pa.wfFiles.remove('old');
+out.wf_removed = { method: requests[0].method, url: requests[0].url, body: JSON.parse(requests[0].body) };
+fresh();
+answers.dialog = false;
+requests.length = 0;
+await pa.wfFiles.remove('old');
+out.wf_remove_declined = { requested: requests.length };
+fresh();
+/* An empty canvas has nothing to lose, so opening must not stop to ask. */
+route('/api/workflow/load', { ok: true, workflow: { nodes: [], connections: [] } });
+requests.length = 0;
+await pa.wfFiles.open('saved');
+out.wf_open_empty_canvas = {
+    asked: dialogSpecs.length,
+    url: requests.filter((r) => r.url.indexOf('/api/workflow/load') === 0).map((r) => r.url)[0],
+    currentFile: pa.workflow.currentFile,
+};
+fresh();
+addCanvasNode('upload');
+answers.dialog = false;
+requests.length = 0;
+await pa.wfFiles.open('saved');
+out.wf_open_declined = { asked: dialogSpecs.length, requested: requests.length };
+fresh();
+addCanvasNode('upload');
+answers.dialog = true;
+route('/api/workflow/load', { ok: true, workflow: { nodes: [], connections: [] } });
+requests.length = 0;
+await pa.wfFiles.open('saved');
+out.wf_open_accepted = {
+    asked: dialogSpecs.length,
+    urls: requests.filter((r) => r.url.indexOf('/api/workflow/load') === 0).map((r) => r.url),
+    currentFile: pa.workflow.currentFile,
+};
+fresh();
+pa.RunState.running = true;
+requests.length = 0;
+await pa.wfFiles.open('saved');
+out.wf_open_while_running = { requested: requests.length, toasts: toasts.slice() };
 
 /* ── processes panel ───────────────────────────────────────────────── */
 fresh();
@@ -718,14 +819,24 @@ route('/api/history/runs', HISTORY_RUNS);
 route('/api/history/series', { ok: true, rows: [] });
 id('dataset-panel').classList.add('open');
 id('history-panel').classList.add('open');
+/* The workflow-file table is the third JS-built surface, and it is fed here rather
+   than by the flip below: the thing under test is that `setLang` repaints a table the
+   panel already holds, not that it can re-read the disk. */
+route('/api/workflow/list', {
+    ok: true,
+    workflows: [{ name: '日报', nodes: 2, labels: ['日报'], size: 120, mtime: 1760000000, broken: false }],
+});
 sandbox.setLang('zh');
 await pa.datasetManager.refresh();
 await pa.historyPanel._loadRuns();
+id('workflows-panel').classList.add('open');
+await pa.wfFiles.refresh();
 const builtinHeaders = () => ({
     /* `innerHTML` is the string the product assigned (the stub keeps it verbatim and
        also parses it into children); `textContent` does not aggregate children. */
     dataset: id('dataset-mgr-body').innerHTML,
     history: id('history-runs-wrap').innerHTML,
+    workflows: id('workflows-mgr-body').innerHTML,
 });
 const beforeFlip = builtinHeaders();
 sandbox.setLang('en');

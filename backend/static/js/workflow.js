@@ -112,7 +112,11 @@ const workflow = {
                 showToast(I18n.t('toast.noWorkflows'));
                 return;
             }
-            var names = result.workflows;
+            var names = result.workflows.map(function (w) {
+                // The list now carries one object per file (for the management
+                // panel); this menu path only needs the stems.
+                return typeof w === 'string' ? w : w.name;
+            });
             if (names.length === 1) {
                 this._loadByName(names[0]);
             } else {
@@ -2336,6 +2340,25 @@ function escapeHtml(str) {
     });
 }
 
+/* Escape a value destined for `fn('…')` written INSIDE a double-quoted HTML
+   attribute — the shape every panel table builds its row buttons with. Two
+   contexts have to be satisfied in order: the JavaScript literal needs `\` and
+   `'` (and a raw newline would end it), then the attribute needs `&` and `"`.
+   `escapeHtml` alone cannot serve: it also turns `'` into `&#39;`, which the
+   parser hands back as a bare quote inside the literal. A panel that skipped the
+   second half is how one double quote in a file name closed the attribute and
+   made whatever followed into markup — which is why the run panel's buttons carry
+   only a hex run id. Names are user data, so they need this. */
+function attrJsArg(value) {
+    return String(value)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;');
+}
+
 var dataPreview = {
     _payload: null,
     _offset: 0,
@@ -3028,6 +3051,7 @@ function setLang(nextLang) {
        written against the binding for the same reason the resume bar once wasn't. */
     if (typeof datasetManager !== 'undefined') datasetManager.onLanguageChange();
     if (typeof historyPanel !== 'undefined') historyPanel.onLanguageChange();
+    if (typeof wfFiles !== 'undefined') wfFiles.onLanguageChange();
 }
 
 function showToast(msg, ms) {
@@ -4350,7 +4374,7 @@ workflow.validate = function () {
    leaves it visually expanded — two panels then overlap in the same slot. All
    three toggles live in this file, so the helper is called directly rather than
    reached for through `window`. */
-var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel'];
+var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel'];
 
 function closeDockedPanels(exceptId) {
     DOCKED_PANELS.forEach(function (id) {
@@ -4485,9 +4509,9 @@ var exportsManager = {
 
     /* Filenames carry quotes and backslashes; an inline onclick is built by
        string concatenation, so the value has to survive both the JS literal and
-       the HTML attribute. */
+       the HTML attribute — see attrJsArg, which is the one place that knows how. */
     _quote(name) {
-        return String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return attrJsArg(name);
     },
 
     download(name) {
@@ -4675,7 +4699,7 @@ var datasetManager = {
     },
 
     _quote(value) {
-        return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return attrJsArg(value);
     },
 
     async rename(id, current) {
@@ -4727,6 +4751,197 @@ var datasetManager = {
     },
 };
 
+/* One run at a time is the product's rule, and this panel's three actions all
+   reach into the canvas the live run is writing: 打开 would re-key the run's
+   ambient name, 重命名/删除 would move or drop the file behind it. The backend now
+   refuses load during a run too; this is the front line that says why before
+   sending a request the panel already knows will bounce. */
+function refuseWhileRunning() {
+    if (typeof RunState !== 'undefined' && RunState.running) {
+        showToast(I18n.t('wfMgr.busy'));
+        return true;
+    }
+    return false;
+}
+
+/* The workflow-file manager (task #115). The menu 「打开」 only ever had a file
+   picker; this lists what is saved and lets the user 打开 / 重命名 / 删除 without
+   guessing which stems exist. It reuses the runs/dataset panels' delegated-button +
+   escaping shape, not a second invention. */
+var wfFiles = {
+    panel() {
+        return document.getElementById('workflows-panel');
+    },
+
+    toggle() {
+        var panel = this.panel();
+        if (!panel) return;
+        if (panel.classList.contains('open')) {
+            this.close();
+            return;
+        }
+        closeDockedPanels('workflows-panel');
+        panel.classList.add('open');
+        this.refresh();
+    },
+
+    close() {
+        var panel = this.panel();
+        if (!panel) return;
+        panel.classList.remove('open');
+        panel.style.height = '';
+    },
+
+    async refresh() {
+        var body = document.getElementById('workflows-mgr-body');
+        if (!body) return;
+        body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfMgr.loading') + '</div>';
+        var result = await fetchJSON('/api/workflow/list').catch(function () { return null; });
+        if (!result || !result.ok) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfMgr.loadFailed') + '</div>';
+            return;
+        }
+        this._last = result.workflows || [];
+        this.render();
+    },
+
+    onLanguageChange() {
+        var panel = this.panel();
+        if (!panel || !panel.classList.contains('open')) return;
+        if (this._last) this.render();
+        else this.refresh();
+    },
+
+    _when(seconds) {
+        var value = Number(seconds) || 0;
+        if (!value) return '';
+        var d = new Date(value * 1000);
+        function pad(n) { return (n < 10 ? '0' : '') + n; }
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+            ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    },
+
+    _quote(value) {
+        return attrJsArg(value);
+    },
+
+    render() {
+        var body = document.getElementById('workflows-mgr-body');
+        if (!body) return;
+        var rows = this._last || [];
+        if (!rows.length) {
+            body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfMgr.empty') + '</div>';
+            return;
+        }
+        var self = this;
+        var current = (typeof workflow !== 'undefined' && workflow.currentFile) || '';
+        var html = rows.map(function (row) {
+            var name = String(row.name || '');
+            var ops = '';
+            if (!row.broken) {
+                ops += '<button class="runs-mgr-btn" onclick="wfFiles.open(\'' + self._quote(name) + '\')">' +
+                    I18n.t('wfMgr.open') + '</button>';
+            }
+            ops += '<button class="runs-mgr-btn" onclick="wfFiles.rename(\'' + self._quote(name) + '\')">' +
+                I18n.t('wfMgr.rename') + '</button>';
+            ops += '<button class="runs-mgr-btn del" onclick="wfFiles.remove(\'' + self._quote(name) + '\')">' +
+                I18n.t('wfMgr.remove') + '</button>';
+            var chip = name === current ? ' <span class="runs-mgr-cur">' + escapeHtml(I18n.t('wfMgr.current')) + '</span>' : '';
+            var broken = row.broken ? ' <span class="runs-mgr-cur">' + escapeHtml(I18n.t('wfMgr.broken')) + '</span>' : '';
+            return '<tr>' +
+                '<td class="runs-mgr-wf">' + escapeHtml(name) + chip + broken + '</td>' +
+                '<td>' + (row.nodes || 0) + '</td>' +
+                '<td class="runs-mgr-id">' + escapeHtml(self._when(row.mtime)) + '</td>' +
+                '<td class="runs-mgr-ops">' + ops + '</td>' +
+                '</tr>';
+        }).join('');
+        body.innerHTML =
+            '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
+            '<th>' + I18n.t('wfMgr.colName') + '</th>' +
+            '<th>' + I18n.t('wfMgr.colNodes') + '</th>' +
+            '<th>' + I18n.t('wfMgr.colModified') + '</th>' +
+            '<th></th>' +
+            '</tr></thead><tbody>' + html + '</tbody></table>';
+    },
+
+    async open(name) {
+        if (refuseWhileRunning()) return;
+        /* Opening replaces the canvas (and its autosave draft) wholesale, and the
+           app tracks no dirty flag — so confirm first when the canvas is not empty,
+           exactly as the dataset delete confirms before it destroys. */
+        if (typeof canvas !== 'undefined' && Object.keys(canvas.nodes || {}).length) {
+            var ok = await showDialog({
+                message: I18n.t('wfMgr.confirmOpen').replace('{name}', name),
+                buttons: [
+                    { label: I18n.t('dialog.cancel'), value: false },
+                    { label: I18n.t('wfMgr.open'), value: true, primary: true },
+                ],
+            });
+            if (!ok) return;
+        }
+        await workflow._loadByName(name);
+        this.refresh();
+    },
+
+    async rename(name) {
+        if (refuseWhileRunning()) return;
+        /* No `value:` on the primary button — showDialog answers a button carrying
+           one with that value, ignoring the typed input (the dataset rename once
+           stored the literal 'ok' this way). */
+        var answer = await showDialog({
+            message: I18n.t('wfMgr.renamePrompt').replace('{name}', name),
+            input: { value: name, placeholder: I18n.t('wfMgr.renamePlaceholder') },
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('wfMgr.rename'), primary: true },
+            ],
+        });
+        if (!answer || answer === name) return;
+        var result = await fetchJSON('/api/workflow/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ name: name, new_name: answer }),
+        });
+        if (result && result.ok) {
+            /* The canvas that was open under the old stem now IS the new file;
+               leaving currentFile on the old name would make the next Save
+               recreate the just-renamed-away file. */
+            if (typeof workflow !== 'undefined' && workflow.currentFile === name) workflow.currentFile = result.name;
+            showToast(I18n.t('wfMgr.renameDone'));
+            this.refresh();
+        } else {
+            showToast((result && result.error) || I18n.t('wfMgr.renameFailed'));
+        }
+    },
+
+    async remove(name) {
+        if (refuseWhileRunning()) return;
+        var ok = await showDialog({
+            message: I18n.t('wfMgr.confirmRemove').replace('{name}', name),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: false },
+                { label: I18n.t('wfMgr.remove'), value: true, primary: true },
+            ],
+        });
+        if (!ok) return;
+        var result = await fetchJSON('/api/workflow/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ name: name }),
+        });
+        showToast(result && result.ok ? I18n.t('wfMgr.removeDone') : I18n.t('wfMgr.removeFailed'));
+        if (typeof resumeBar !== 'undefined' && resumeBar.refresh) resumeBar.refresh();
+        this.refresh();
+    },
+};
+
 function toggleDatasetPanel() {
     datasetManager.toggle();
+}
+
+/* Reached from both the status-bar button and the menu 「打开」. `wfFiles` is a
+   top-level `var`, so the inline handlers in its rendered table resolve it, but an
+   explicit export costs nothing and keeps the panel reachable from app.js. */
+function toggleWorkflowsPanel() {
+    wfFiles.toggle();
 }
