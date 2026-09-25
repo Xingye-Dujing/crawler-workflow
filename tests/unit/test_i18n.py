@@ -561,3 +561,51 @@ class TestNoHardcodedConsoleText:
             'add_log(f\'{t("misc.cookie_save_failed")}: {str(err)[:120]}\')\n'
         )
         assert self._scan(allowed, 'sample.py') == []
+
+
+#: app.js holds the interface wording: one object per language, English first.
+_JS_CATALOG = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'app.js'
+
+
+def _js_texts(key: str) -> tuple:
+    """The English and Chinese values of one ``app.js`` catalogue key, as written."""
+    src = _JS_CATALOG.read_text(encoding='utf-8')
+    split = src.index('zh: {')
+    out = []
+    for block in (src[:split], src[split:]):
+        at = block.find(f"'{key}'")
+        assert at != -1, f'{key} is missing from one of the two interface catalogues'
+        out.append(block[at : at + 900])
+    return tuple(out)
+
+
+class TestTheOneSessionRuleIsSpoken:
+    """The measured Weibo rule has to keep being SAID to the user, in both languages.
+
+    2026-09-26 cost a session twice over: the test tier replayed a copy of the saved cookie every
+    round, and even a single copy is a second device to the site — so both halves of the rule
+    ("never in parallel", "only ever the same live session") are things a user can only learn from
+    the interface or lose their evening to. A sentence this specific is the first casualty of a
+    later "shorten the hint" pass, so the check is on the idea's words, not on punctuation.
+    """
+
+    def test_the_cookie_panel_states_both_halves_of_the_rule(self):
+        for lang, words in (('zh', ('并行', '同一个')), ('en', ('parallel', 'same'))):
+            text = i18n.MESSAGES[lang]['cookie.weibo.purpose']
+            for word in words:
+                assert word in text, f'cookie.weibo.purpose dropped {word!r} in {lang}: {text}'
+
+    @pytest.mark.parametrize(
+        'key,en_words,zh_words',
+        [
+            ('settings.profileOffHint', ('second device',), ('第二台设备',)),
+            ('dialog.profileOff', ('second device',), ('第二台设备',)),
+            ('dialog.serialWarn', ('parallel',), ('并行',)),
+        ],
+    )
+    def test_the_interface_says_why_a_second_browser_is_refused(self, key, en_words, zh_words):
+        english, chinese = _js_texts(key)
+        for word in en_words:
+            assert word in english, f'{key} lost {word!r} in English'
+        for word in zh_words:
+            assert word in chinese, f'{key} lost {word!r} in Chinese'

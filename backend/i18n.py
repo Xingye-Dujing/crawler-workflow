@@ -339,7 +339,9 @@ _ZH = {
         '2. 随便翻一页，确认右上角已是你的头像\n'
         '3. 回到本面板点「已完成登录」'
     ),
-    'cookie.weibo.purpose': '解锁微博搜索（s.weibo.com）与评论 JSON 接口；未登录会被跳回 passport 二维码页。',
+    'cookie.weibo.purpose': '解锁微博搜索（s.weibo.com）与评论 JSON 接口；未登录会被跳回 passport 二维码页。'
+    '微博只认一份一直在用的会话：同账号并行翻页、或另开一个浏览器重放同一份 Cookie，都会被弹回登录页。'
+    '所以抓取请始终用同一个 Profile，也不要同时跑两条微博。',
     'cookie.weibo.steps': (
         '1. 点「浏览器生成」，在窗口里登录微博\n2. 手动搜一次关键词，能看到微博列表即可\n3. 回到本面板点「已完成登录」'
     ),
@@ -1133,7 +1135,9 @@ _EN = {
         '3. Come back here and press "Done — I logged in"'
     ),
     'cookie.weibo.purpose': 'Unlocks Weibo search (s.weibo.com) and the comment JSON API; logged out you are '
-    'bounced back to the passport QR page.',
+    'bounced back to the passport QR page. Weibo accepts one live session per account: paging in parallel, '
+    'or replaying the same cookie from a second browser, is answered with the login page — so always crawl '
+    'from the same profile, and never run two Weibo crawls at once.',
     'cookie.weibo.steps': (
         '1. Press "Generate via Browser" and sign in to Weibo in that window\n'
         '2. Search one keyword and confirm the post list renders\n'

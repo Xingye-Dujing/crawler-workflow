@@ -11,6 +11,13 @@ Two things are pinned here, and they are pinned apart on purpose:
 
 A genuine wall is *reported*, never answered with an empty success — that part is asserted by
 the crawler's own flag on the shared crawl rather than by a second request.
+
+**Run this file with ``CIXI_LIVE_USE_USER_PROFILE=1`` when the question is "does the logged-in
+crawl work".** Weibo will not be crawled in parallel, and it will not be crawled from a *copy* of
+a login either: the site keeps one rolling session per browser directory and answers a second one
+with a passport page, so a red here without the flag is usually an answer about the session shape
+(``docs/crawler_notes.md`` measured it both ways at 06:13 and 06:14 of 2026-09-26) rather than
+about the code. The flag is the user's consent to let the tier use his own profile.
 """
 
 from datetime import date, timedelta

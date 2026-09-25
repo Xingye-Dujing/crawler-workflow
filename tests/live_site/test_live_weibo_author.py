@@ -18,6 +18,11 @@ search that yielded an author link is the same precondition every author case de
 The endpoint is throttle-prone on one account (docs), so this case is deliberately
 OUTSIDE ``live_quick``: the quick tier would spend an author burst every run for an
 answer that depends on the session's mood; the acceptance pass already pays it.
+
+Same warning as ``test_live_weibo.py``: crawl this from the user's own profile
+(``CIXI_LIVE_USE_USER_PROFILE=1``). Measured 2026-09-26, the very same case returned 403 and
+passport pages all morning and collected **5 real rows within a second** the moment it ran on the
+jar weibo already recognises — the mode was never broken, the session it was asked from was.
 """
 
 import pytest

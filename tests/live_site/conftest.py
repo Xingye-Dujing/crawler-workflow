@@ -17,6 +17,20 @@ A missing or unreadable cookie file SKIPS that platform instead of failing:
 the tier must stay runnable on machines without every login, while on this
 machine all four platforms run for real. Volumes are deliberately tiny (3-5
 rows) — the point is correctness of the pipeline, not scraping data.
+
+**Whose browser this tier crawls in is a measured question, not a style choice.** Two layers, both
+learned the expensive way on 2026-09-26 (evidence in ``docs/crawler_notes.md``):
+
+1. starting from an empty profile every run meant replaying the saved cookie file into a fresh
+   browser each round, which is the shape weibo answers with a login page — fixed by
+   :func:`live_profile_root`, a profile root that outlives the run;
+2. and even then, **a copy of a login is a second device to the site**: the user's own crawl
+   returned results at 06:14 while this tier's browser, planted from a copy of the same cookie file
+   minutes earlier, was bounced at 06:13. So the only way to really test a logged-in crawl on this
+   machine is to crawl from the jar the site already knows — his — and that needs him to say so:
+   ``CIXI_LIVE_USE_USER_PROFILE=1`` (read once, in :mod:`isolation_guard`, which also narrows the
+   ``data/chrome_profile`` exemption to exactly that run). Without the flag the tier stays
+   isolated, and a weibo refusal then is an answer about the *session shape*, not about the code.
 """
 
 import contextlib
