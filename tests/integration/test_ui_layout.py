@@ -850,12 +850,35 @@ return {
 """
 
 
+def _quiet_canvas(driver, app_url):
+    """Load the page with nothing on the canvas and nothing left to restore.
+
+    Boot rebuilds the canvas from the autosaved draft — the previous test's nodes —
+    and that repaint replaces ``#nodes-container``'s children. A test that injected
+    its own nodes right after ``get()`` could therefore have them removed underneath
+    it, which surfaced as ``document.getElementById(<node id>)`` answering null and
+    the click script dying inside the page (measured once in five runs, and a test
+    that fails one time in five is a test that tells you nothing when it passes).
+    """
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {};
+        canvas.connections = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        """,
+        [],
+    )
+
+
 def test_a_wide_node_is_bounded_and_its_title_says_it_was_cut(app_url, driver):
     """A node summary is user text; without a ceiling one long keyword made the
     whole page scroll sideways, and without an ellipsis a truncated title just
     looked like a shorter name."""
     driver.set_window_size(1366, 768)
-    driver.get(app_url + '/')
+    _quiet_canvas(driver, app_url)
     made = driver.execute_script(NODE_JS, [])
     assert made['nodeMaxWidth'] != 'none', 'the .node max-width guard is gone'
     assert made['boxWidth'] <= 340, f'the node grew to {made["boxWidth"]}px'
@@ -867,7 +890,7 @@ def test_the_markup_a_node_is_built_from_carries_no_inline_handler(app_url, driv
     """The id and the summary used to be spliced into onclick="…('<id>')", so an id
     with a quote escaped its string literal and ran as code — from a workflow JSON
     the user can hand-edit. The behaviour has to live in listeners."""
-    driver.get(app_url + '/')
+    _quiet_canvas(driver, app_url)
     made = driver.execute_script(NODE_JS, [])
     assert 'onclick' not in made['markup'], made['markup'][:400]
     assert 'ondblclick' not in made['markup'], made['markup'][:400]
@@ -876,7 +899,7 @@ def test_the_markup_a_node_is_built_from_carries_no_inline_handler(app_url, driv
 def test_the_delegated_node_buttons_still_act_on_their_own_node(app_url, driver):
     """The point of removing inline handlers: a click reached `deleteNode` through
     a closure over the id. Only a real browser fires that path."""
-    driver.get(app_url + '/')
+    _quiet_canvas(driver, app_url)
     made = driver.execute_script(NODE_JS, [])
     edit, delete = driver.execute_script(
         """
@@ -895,7 +918,7 @@ def test_the_delegated_node_buttons_still_act_on_their_own_node(app_url, driver)
 
 
 def test_double_click_on_a_title_opens_the_rename_dialog(app_url, driver):
-    driver.get(app_url + '/')
+    _quiet_canvas(driver, app_url)
     made = driver.execute_script(NODE_JS, [])
     label = driver.execute_script(
         """
@@ -1192,3 +1215,212 @@ def test_a_run_detail_splits_its_workflows_without_growing_a_bar(app_url, driver
     )
     assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
     assert facts['panelBar'][0] <= facts['panelBar'][1] + 1, f'the panel grew a horizontal bar: {facts["panelBar"]}'
+
+
+# ─── #97: the bar, the tall panels, and an option longer than its menu ──────
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+@pytest.mark.parametrize('width', [1366, 1024])
+def test_the_menu_bar_never_hides_a_button_past_its_left_edge(app_url, driver, lang, width):
+    """``#top-menu`` is one fixed row of twenty buttons. It used to be centred inside
+    ``overflow: auto`` with its scrollbar hidden — and a scroller cannot scroll to a
+    NEGATIVE overflow, so once the row was wider than the window BOTH ends were
+    unreachable, not merely off-screen. Measured at 1366px in English: the row wanted
+    1577px, the first button sat at x=53 only after the fix, and before it sat at -63.
+
+    Asserted is the shape that makes an overflowing bar honest: anchored at the left,
+    a scrollbar actually reserved when it overflows (``offsetHeight - clientHeight``
+    is the ink-free proof that one exists), and no page-level bar either way.
+    """
+    driver.set_window_size(width, 700)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    facts = driver.execute_script(
+        f"""
+        document.body.dataset.lang = {lang!r};
+        I18n.apply();
+        const bar = document.getElementById('top-menu');
+        bar.classList.add('pinned');
+        const buttons = Array.from(bar.querySelectorAll('.menu-btn'));
+        const r = bar.getBoundingClientRect();
+        const first = buttons.length ? buttons[0].getBoundingClientRect() : null;
+        return {{
+            measured: buttons.length,
+            barLeft: Math.round(r.left),
+            firstLeft: first ? Math.round(first.left) : null,
+            scroll: [bar.scrollWidth, bar.clientWidth],
+            reserved: bar.offsetHeight - bar.clientHeight,
+            computedScrollbar: getComputedStyle(bar).scrollbarWidth,
+            justify: getComputedStyle(bar).justifyContent,
+            page: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+        }};
+        """,
+        [],
+    )
+    assert facts['measured'] >= 15, f'the bar drew {facts["measured"]} buttons, so this measured nothing'
+    assert facts['firstLeft'] >= facts['barLeft'] - 1, (
+        f'a button hangs off the left edge where no scrollbar can reach it: {facts}'
+    )
+    overflows = facts['scroll'][0] > facts['scroll'][1] + 1
+    if overflows:
+        assert facts['reserved'] >= 4, f'the row overflows with no visible scrollbar: {facts}'
+        assert facts['computedScrollbar'] != 'none', f'the affordance is hidden again: {facts}'
+    assert facts['page'][0] <= facts['page'][1] + 1, f'the page grew a horizontal bar: {facts["page"]}'
+    if width == 1024:
+        assert overflows, (
+            f'at 1024px the row no longer overflows ({facts["scroll"]}), so the anchored-and-visible '
+            'path this test exists for stopped being exercised — update or delete the test'
+        )
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_tall_panel_scrolls_itself_instead_of_hanging_off_the_screen(app_url, driver, lang):
+    """``#node-settings`` and ``#cookie-dialog`` are vertically centred with
+    ``overflow-y: auto`` and had no height ceiling — so the box grew to its content,
+    the box hung off the viewport (a long node form measured ``top: -177 / bottom: 727``
+    in a 550px window), and the scroll that should have engaged never did: the first
+    fields simply existed above the screen.
+
+    A ceiling turns that into an internal scroll. Asserted per panel: the whole box
+    is inside the viewport, it genuinely overflowed its own client height, and the
+    document grew neither bar.
+    """
+    driver.set_window_size(1366, 700)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    facts = driver.execute_script(
+        f"""
+        document.body.dataset.lang = {lang!r};
+        I18n.apply();
+        const out = {{}};
+        for (const id of ['node-settings', 'cookie-dialog']) {{
+            const box = document.getElementById(id);
+            box.innerHTML = '';
+            for (let i = 0; i < 24; i += 1) {{
+                const row = document.createElement('div');
+                row.className = 'settings-group';
+                row.innerHTML = '<label>' + 'a'.repeat(46) + ' ' + i + '</label>';
+                box.appendChild(row);
+            }}
+            box.classList.add('open');
+            box.classList.remove('hidden');
+            const rect = box.getBoundingClientRect();
+            const cs = getComputedStyle(box);
+            out[id] = {{
+                rows: box.querySelectorAll('.settings-group').length,
+                top: Math.round(rect.top),
+                bottom: Math.round(rect.bottom),
+                maxHeight: cs.maxHeight,
+                overflowY: cs.overflowY,
+                scrollHeight: box.scrollHeight,
+                clientHeight: box.clientHeight,
+                innerHeight: window.innerHeight,
+                pageV: [document.documentElement.scrollHeight, document.documentElement.clientHeight],
+                pageH: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+            }};
+            box.classList.remove('open');
+            box.innerHTML = '';
+        }}
+        return out;
+        """,
+        [],
+    )
+    for panel_id, box in facts.items():
+        assert box['rows'] == 24, f'#{panel_id} kept {box["rows"]} injected rows, so nothing was measured'
+        assert box['maxHeight'] != 'none', f'#{panel_id} has no height ceiling again'
+        assert box['top'] >= -1, f'#{panel_id} starts above the screen ({box["top"]} of {box["innerHeight"]})'
+        assert box['bottom'] <= box['innerHeight'] + 1, (
+            f'#{panel_id} runs past the bottom of the viewport: {box["bottom"]} > {box["innerHeight"]}'
+        )
+        assert box['scrollHeight'] > box['clientHeight'], (
+            f'#{panel_id} did not have to scroll, so this case stopped stressing it: {box}'
+        )
+        assert box['overflowY'] == 'auto', f'#{panel_id} lost its own scroll: {box["overflowY"]}'
+        assert box['pageH'][0] <= box['pageH'][1] + 1, f'#{panel_id} grew a page-level horizontal bar'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_an_option_longer_than_its_menu_is_cut_visibly(app_url, driver, lang):
+    """A dropdown row used to ellipsise only in multi-select mode. A single option
+    longer than the capped menu — a crawled column name is exactly this shape — ran
+    past its row inside a box whose ``overflow-y: auto`` computes ``overflow-x`` to
+    ``auto``, so it was cut with no ellipsis, no scrollbar meaning and no tooltip.
+
+    Both states are measured, and the stress is proven rather than assumed: the
+    closed control must actually be overflowing its own box, the open row must be
+    ellipsised and stay inside the menu, and the full text must survive somewhere
+    the user can read it (``title``).
+    """
+    driver.set_window_size(1024, 700)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    facts = driver.execute_script(
+        f"""
+        document.body.dataset.lang = {lang!r};
+        I18n.apply();
+        const LONG = '一个特别长的选项标签'.repeat(12);
+        const host = document.getElementById('node-settings');
+        host.innerHTML = '';
+        host.classList.add('open');
+        const select = document.createElement('select');
+        const option = document.createElement('option');
+        option.value = 'a';
+        option.textContent = LONG;
+        select.appendChild(option);
+        select.appendChild(new Option('短', 'b'));
+        host.appendChild(select);
+        CustomSelect.scan(host);
+        /* `.cselect` is the wrapper and `.cselect-trigger` is the button the control
+           actually listens on — grabbing the wrapper measures a div that has no
+           title and clicking it opens nothing. */
+        const trigger = host.querySelector('.cselect-trigger');
+        if (!trigger) return {{ enhanced: false }};
+        const value = trigger.querySelector('.cselect-value');
+        const out = {{
+            enhanced: true,
+            longLength: LONG.length,
+            valueEllipsis: getComputedStyle(value).textOverflow,
+            valueOverflow: value.scrollWidth - value.clientWidth,
+            triggerTitle: trigger.title,
+        }};
+        /* The control opens on mousedown, not click (see custom-select.js: a click
+           only fires when press and release land on the same moving element). A DOM
+           .click() here would press nothing and the menu would stay unbuilt. */
+        trigger.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true, cancelable: true, button: 0 }}));
+        /* The popup is rendered into <body> and the page holds several of them (one
+           per enhanced control), so the menu under test is found by whose select it
+           remembers — a bare querySelector here would measure somebody else's. */
+        const menu = Array.from(document.querySelectorAll('.cselect-menu')).find((m) => m._csSource === select);
+        if (!menu) return Object.assign(out, {{ menuFound: false }});
+        out.menuFound = true;
+        const row = menu.querySelector('.cselect-option');
+        if (!row) return Object.assign(out, {{ rowFound: false, buttons: menu.querySelectorAll('button').length }});
+        out.rowFound = true;
+        const label = row.querySelector('.cselect-option-label');
+        const mr = menu.getBoundingClientRect();
+        const lr = label.getBoundingClientRect();
+        out.menuScroll = [menu.scrollWidth, menu.clientWidth];
+        out.menuMaxWidth = getComputedStyle(menu).maxWidth;
+        out.labelEllipsis = getComputedStyle(label).textOverflow;
+        out.labelOverflow = label.scrollWidth - label.clientWidth;
+        out.rowInsideMenu = lr.right <= mr.right + 1 && lr.left >= mr.left - 1;
+        out.rowTitleIsFull = row.title === LONG;
+        out.menuInsideWindow = mr.left >= -1 && mr.right <= window.innerWidth + 1;
+        return out;
+        """,
+        [],
+    )
+    assert facts['enhanced'] is True, 'CustomSelect never built the control, so nothing was measured'
+    assert facts['valueEllipsis'] == 'ellipsis', facts
+    assert facts['valueOverflow'] > 1, f'the closed control is not actually cut, so this stopped stressing it: {facts}'
+    assert facts['triggerTitle'] == '一个特别长的选项标签' * 12, f'the full text is mirrored nowhere: {facts}'
+    assert facts['menuFound'] is True, 'clicking the control opened no menu'
+    assert facts.get('rowFound') is True, f'the menu drew no option row, so nothing was measured: {facts}'
+    assert facts['menuInsideWindow'] is True, f'the popup hangs off the window: {facts}'
+    assert facts['labelEllipsis'] == 'ellipsis', f'a single option row is cut without an ellipsis: {facts}'
+    assert facts['labelOverflow'] > 1, f'the open row is not actually cut, so this stopped stressing it: {facts}'
+    assert facts['rowInsideMenu'] is True, f'the label escapes its row: {facts}'
+    scroller = facts['menuScroll']
+    assert scroller[0] <= scroller[1] + 1, f'the menu scrolls sideways instead of cutting: {facts}'
+    assert facts['rowTitleIsFull'] is True, f'the cut option carries no tooltip: {facts}'

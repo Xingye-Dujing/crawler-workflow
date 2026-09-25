@@ -180,15 +180,22 @@
         border-bottom: 1px solid var(--ink);
         display: flex;
         align-items: center;
-        justify-content: center;
+        /* Mirrors #top-menu in css/style.css: centred content that overflows cannot
+           be scrolled to, and this page's bar holds the workbench menus. */
+        justify-content: safe center;
         gap: 2px;
         padding: 0 10px;
-        overflow: auto;
-        scrollbar-width: none;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
         transition: top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       }
       #top-menu::-webkit-scrollbar {
-        display: none;
+        height: 6px;
+      }
+      #top-menu::-webkit-scrollbar-thumb {
+        background: var(--line);
+        border-radius: 3px;
       }
       #menu-trigger:hover ~ #top-menu,
       #top-menu:hover,

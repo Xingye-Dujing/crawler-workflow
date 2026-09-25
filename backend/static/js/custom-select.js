@@ -111,6 +111,10 @@
 
     trigger.appendChild(value)
     trigger.appendChild(svgArrow())
+    /* Mirror the full text now, not only when the menu is next built: the label
+       ellipsises inside a control whose width follows its field, and a control that
+       has never been opened would have said nowhere what it had cut off. */
+    trigger.title = value.textContent
     wrap.appendChild(trigger)
     wrap.appendChild(sel) /* move the native select inside (kept for value) */
     sel.tabIndex = -1
@@ -206,6 +210,10 @@
           }
           if (o.title || (o.dataset && o.dataset.reason)) {
             b.title = o.title || o.dataset.reason
+          } else {
+            /* The label ellipsises when the row is wider than the capped menu, so
+               without this the full text exists nowhere the user can read it. */
+            b.title = o.textContent
           }
           b.addEventListener('click', function (e) {
             e.stopPropagation()

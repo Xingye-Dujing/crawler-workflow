@@ -414,6 +414,53 @@ class TestChromeOfThePageItself:
             'the two must sit at one indentation to be siblings, or the rule is dead text'
         )
 
+    def test_an_overflowing_menu_bar_is_anchored_and_admits_it(self):
+        """``justify-content: center`` inside ``overflow: auto`` is the one combination
+        that hides content with no way back — a scroller cannot reach a negative
+        overflow, so at 1366px English the bar's first button sat 63px off the left
+        edge with its scrollbar hidden. The browser tier measures the pixels; this
+        pins the declarations that produce them, so the fix cannot be dropped by an
+        edit that never opens Chrome."""
+        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        bar = css[css.index('#top-menu {') : css.index('#menu-trigger:hover')]
+        assert 'justify-content: safe center' in bar, f'the bar is centred again: {bar}'
+        assert 'scrollbar-width: none' not in bar, 'the overflow affordance is hidden again'
+        assert 'scrollbar-width: thin' in bar
+        assert 'overflow-y: hidden' in bar, 'a vertical bar would push the row out of the 48px strip'
+        assert '#top-menu::-webkit-scrollbar {' in css
+        assert 'display: none' not in css[css.index('#top-menu::-webkit-scrollbar {') :].split('}')[0]
+
+    def test_the_workbench_copy_of_the_bar_keeps_the_same_rule(self):
+        """``zenviz.html`` carries its own inline copy of the top-menu block for the
+        embedded workbench. Left alone, the main-page fix silently forks."""
+        page = (STATIC_DIR / 'zenviz.html').read_text(encoding='utf-8')
+        bar = page[page.index('#top-menu {') : page.index('#menu-trigger:hover')]
+        assert 'justify-content: safe center' in bar, 'the embedded page still centres an overflowing row'
+        assert 'scrollbar-width: none' not in bar
+
+    def test_a_centred_panel_that_can_grow_tall_has_a_ceiling(self):
+        """``overflow-y: auto`` on a vertically centred, uncapped box does nothing:
+        the box grows to its content and hangs off the viewport, so the top of a long
+        node form simply existed above the screen (measured ``top: -177`` in 550px)."""
+        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        for selector in ('#node-settings {', '#cookie-dialog {'):
+            block = css[css.index(selector) : css.index('}', css.index(selector))]
+            assert 'max-height: calc(100vh - 24px)' in block, f'{selector} can outgrow the screen again'
+            assert 'overflow-y: auto' in block, f'{selector} lost the scroll the ceiling exists to enable'
+
+    def test_a_single_select_option_row_ellipsises_and_carries_its_full_text(self):
+        """The ellipsis rule used to live only under ``.cselect-option.multi``, so a
+        single option longer than the capped menu was cut with no ellipsis, no
+        scrollbar meaning and no tooltip — and the option text of this app is crawled
+        column names, which are exactly that long."""
+        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        label = css[css.index('.cselect-option-label {') : css.index('}', css.index('.cselect-option-label {'))]
+        assert 'text-overflow: ellipsis' in label and 'min-width: 0' in label, label
+        menu = css[css.index('.cselect-menu {') : css.index('}', css.index('.cselect-menu {'))]
+        assert 'max-width' in menu, 'the popup has no width ceiling beside the JS one it mirrors'
+        js = (JS_DIR / 'custom-select.js').read_text(encoding='utf-8')
+        assert 'b.title = o.textContent' in js, 'an ellipsised option says its full text nowhere'
+
     def test_the_platform_names_agree_between_the_two_layers(self):
         """The browser labels a platform from ``platform.*`` in app.js and the backend from
         ``i18n._PLATFORM_LABELS``. Two lists of the same nine words drift the moment one of
