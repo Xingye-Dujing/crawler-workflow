@@ -278,12 +278,13 @@ class TestModeResolution:
         # 热榜 sits between 作者 and 评论 on both platforms that publish one, and its
         # presence is a measurement (docs/crawler_notes.md), not a guess: xiaohongshu
         # has no board surface at all (its /hot redirects to the ordinary feed), so it
-        # must NOT appear here.
+        # must NOT appear here. Douyin's board was the one still unsettled when this
+        # test was written; it shipped once its own answer was measured end to end.
         assert mode_keys_for('zhihu') == ('posts', 'author', 'hot', 'comments')
         assert mode_keys_for('weibo') == ('posts', 'author', 'hot', 'comments')
+        assert mode_keys_for('douyin') == ('posts', 'author', 'hot', 'comments')
         assert mode_keys_for('wechat') == ('posts',), 'WeChat has no comment adapter'
         assert 'hot' not in mode_keys_for('xiaohongshu'), '小红书 has no measurable board'
-        assert 'hot' not in mode_keys_for('douyin'), 'the douyin board is not settled yet (docs)'
 
     def test_an_unknown_mode_key_reads_as_the_first_mode(self):
         # Old canvases and hand-edited JSON both land here; the panel shows the
@@ -568,6 +569,11 @@ class TestCollectionKind:
             ('weibo', 'hot'),
             ('zhihu', 'hot'),
             ('bilibili', 'hot'),
+            # Measured the same way (one page load, then the site's own JSON), and the
+            # window it keeps is a separate fact: douyin's class is ``never_headless``,
+            # so the executor opens one whatever this field says. ``collects`` describes
+            # what the mode does on screen, not whether a window is allowed.
+            ('douyin', 'hot'),
             ('bilibili', 'comments'),
             ('youtube', 'posts'),
             ('youtube', 'author'),

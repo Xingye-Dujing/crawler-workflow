@@ -516,6 +516,24 @@ class DouyinCrawler(VideoCrawler):
     #: merit that the keyword the user asked for is the keyword the URL carries —
     #: there is no router left to interrogate about it.
     SEARCH_ENTRY = 'https://www.douyin.com/search/{kw}?type=video'
+    #: The board page and its own endpoint. Measured twice today
+    #: (``scratchpad/douyin_hot_static.json``): asked from inside a loaded ``/hot``
+    #: document with a URL built **from literals** — no ``a_bogus``, no ``msToken``, no
+    #: ``fp``, no ``webid`` — it answers ``status_code=0`` with 51 rows and every one of
+    #: them carries ``hot_value`` *and* ``view_count``, four repeats in a row. Adding a
+    #: made-up ``webid`` changes nothing, so the crawler can author the URL instead of
+    #: copying the page's request; stripping down to 6 public params loses the figure
+    #: entirely (48 rows, ``view_count`` null on all of them), which is why the names
+    #: below are spelled out rather than reduced to what "looks required".
+    HOT_ENTRY = 'https://www.douyin.com/hot'
+    HOT_API = (
+        'https://www.douyin.com/aweme/v1/web/hot/search/list/'
+        '?device_platform=webapp&aid=6383&channel=channel_pc_web&detail_list=1&source=6'
+        '&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true'
+        '&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=Win32'
+        '&browser_name=Chrome&browser_version=148.0.0.0&browser_online=true&os_name=Windows'
+        '&platform=webapp'
+    )
     CAPTCHA_MARKS = ('验证码', '滑动验证')
     #: The list mounts as 16 **skeleton** rows first — an opacity-.04 logo with no
     #: anchor and no text — and fills them in ~4-6 s later (measured). Waiting for
@@ -605,6 +623,91 @@ class DouyinCrawler(VideoCrawler):
             # of printing a number the site never published.
             logger.info(t('crawl.dy.authorDoneNoCount', n=self.collected()))
         return self.results()
+
+    # ─── the site's own hot board ──────────────────────────────────────
+
+    def hot(self, target_count: int = 50, **kwargs):
+        """抖音热榜 — one answer, which IS the whole board.
+
+        The page is opened for two reasons and neither is the rows: it is the same-origin
+        document the endpoint is asked from, and it is where a session that has died is
+        seen being answered the 验证码中间页 (measured: the wall arrives *after* the
+        navigation settles, which is why this waits the way ``search`` does rather than
+        checking the URL once).
+
+        There is no paging and no per-row visit: measured, the one answer carries all 51
+        entries with their own figures, so asking again would replay the board and
+        opening each topic page would pay for rows the board already published. A target
+        above what the board holds is answered by saying what it holds.
+        """
+        if self.collected() >= target_count:
+            logger.info(t('crawl.dy.hotTarget', n=target_count))
+            return self.results()
+        logger.info(t('crawl.dy.hotStart', n=target_count))
+        self.open(self.HOT_ENTRY)
+        self._dismiss_prompts()
+        if self._wait_for_page() == self.CAPTCHA or self._is_walled():
+            # Named, not empty: the board needs a session, and 0 rows would read as
+            # "nothing is hot today" rather than "this cookie is not getting in".
+            raise RuntimeError(t('crawl.dy.hotWall'))
+        payload = self._fetch_json(self.HOT_API)
+        data = payload.get('data') if isinstance(payload, dict) else None
+        words = data.get('word_list') if isinstance(data, dict) else None
+        if not isinstance(words, list) or not words:
+            envelope = payload if isinstance(payload, dict) else {}
+            answer = str(envelope.get('status_msg') or envelope.get('status_code') or 'empty')[:60]
+            raise RuntimeError(t('crawl.dy.hotRefused', answer=answer))
+        seen = {str(row.get('链接') or '') for row in self.results()}
+        for index, item in enumerate(words, start=1):
+            if self.collected() >= target_count:
+                break
+            row = self._hot_row(item, index)
+            if not row or row['链接'] in seen:
+                continue
+            seen.add(row['链接'])
+            self.emit(row)
+            self.mark_position(board='hot', done=self.collected())
+        logger.info(t('crawl.dy.hotDone', n=self.collected(), total=target_count))
+        if self.collected() < target_count:
+            logger.info(t('crawl.dy.hotCapped', board=len(words)))
+        return self.results()
+
+    @staticmethod
+    def _published(value):
+        """The site's own figure, or blank when it published none.
+
+        ``as_index`` would answer 0 for a missing value, and on this board 0 is a claim:
+        the pinned top entry really is published as ``0`` at one hour and ``null`` at
+        another (measured twice the same day), so only a blank says "the site gave no
+        number here" without also saying it counted one.
+        """
+        return value if isinstance(value, int) and not isinstance(value, bool) else ''
+
+    @classmethod
+    def _hot_row(cls, item: dict, rank: int) -> dict | None:
+        """One board entry, flattened by what the answer actually publishes.
+
+        ``word`` is both the title and the topic on this site — weibo publishes a separate
+        ``#…#`` form and douyin does not, so 话题 is not invented as a second column of the
+        same text. ``position`` is the site's own rank and it is **absent** on the pinned
+        entry, which is why the caller's index is only a fallback. The link is the address
+        the board's own anchors use: ``/hot/<sentence_id>/<word>``, verified today against
+        four DOM hrefs and the ids in the same answer.
+        """
+        word = str(item.get('word') or '').strip()
+        sentence = str(item.get('sentence_id') or '').strip()
+        if not word or not sentence:
+            return None
+        return {
+            '排名': cls._published(item.get('position')) or rank,
+            '标题': word,
+            '热度': cls._published(item.get('hot_value')),
+            '观看数': cls._published(item.get('view_count')),
+            '视频数': cls._published(item.get('video_count')),
+            '讨论视频数': cls._published(item.get('discuss_video_count')),
+            '发布时间': _stamp(item.get('event_time')),
+            '链接': f'https://www.douyin.com/hot/{sentence}/{quote(word)}',
+        }
 
     # ─── spending the list ─────────────────────────────────────────────
 

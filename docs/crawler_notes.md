@@ -18,7 +18,7 @@ second opinion beside it.
 - [网络分区：国内与海外不能一起爬](#网络分区国内与海外不能一起爬用户实测-2026-09-24)
 - [运行前 Cookie 预检](#运行前-cookie-预检measured-2026-09-24)
 - [A login page on the way through is not a wall](#a-login-page-on-the-way-through-is-not-a-wall-measured-2026-09-24)
-- [热榜：四个平台、两种答案、一条被证无的](#热榜四个平台两种答案一条被证无的measured-2026-09-25)
+- [热榜：问过五个平台、上线四块、证无一块](#热榜问过五个平台上线四块证无一块measured-2026-09-25)
 - [「停止」为什么必须去杀进程](#停止为什么必须去杀进程quit--stoprequest--kill-三选实测measured-2026-09-25131)
 - [停止路径的真机时间戳](#停止路径的真机时间戳measured-2026-09-25133)
 
@@ -624,7 +624,7 @@ pager 自报页底，排队交棒无恙。红条分三类：
 （标签是本地化的，开关串不是），一次断言 `--enable-automation` **不在**，另一次把
 `excludeSwitches` 摘掉重开、断言它**在**——没有后者，前一句只是"这页什么都没读到"。
 
-## 热榜：四个平台、两种答案、一条被证无的（measured 2026-09-25）
+## 热榜：问过五个平台、上线四块、证无一块（measured 2026-09-25）
 
 #83 的四个平台逐个问过真站，没有一个是照着"看起来合理的 URL"写的。探针都在
 `backend/test_*_hot*.py`（一次性脚本，gitignore），载荷在 `scratchpad/*_hot*.json`。
@@ -671,25 +671,46 @@ pager 自报页底，排队交棒无恙。红条分三类：
   必须重写成 `https://www.zhihu.com/question/<id>`；
 * 热度在 `detail_text`，形如 `398 万热度`，走 `engine.counters.parse_count` 展开成整数。
 
-### 抖音热榜：**没上线**，因为"要不要签名"这一问没答完就被风控打断了
+### 抖音热榜：**已上线**，因为那两个没答完的问题今天答完了
 
-一次会话里确实成了：`https://www.douyin.com/hot` 渲染出榜单（51 个 `a[href*="/hot/"]`、
-89 个 `li`），它自己的 XHR `aweme/v1/web/hot/search/list/` 在页内重放得到
-`data.word_list` **51 行**（`word` / `hot_value` / `view_count` / `discuss_video_count` /
-`sentence_id` / `topic_info` / `label`）。但两件事没落地：
+2026-09-25 重探（探针 `backend/test_douyin_hot_probe.py` / `test_douyin_hot_signed2.py` /
+`test_douyin_hot_static.py`，载荷 `scratchpad/douyin_hot_*.json`）。当初拦住的正是当年列出的
+那两条，如今各有各的实测：
 
-1. **重放成功可能是因为原样带回了页面的 `a_bogus`/`msToken`** —— 探针没能抓到完整 URL
-   （钩子只存了前 300 字符，而签名参数在尾部），所以"自拼 URL 到底答不答"是未知；
-   抖音的搜索是**签名**接口，这条未知就足以不写这个模式。
-2. 会话很快被风控：第二次访问（profile）与随后第三次访问（一次性浏览器）都被答
-   `验证码中间页`。抖音 `never_headless`，所以不能靠改无头绕开。
+1. **自拼 URL 到底答不答**：答。钩子这次存完整 URL（不再截断到 300 字符），拿到页面自己那一条
+   之后，用**只由公开字面量拼出的** URL 在同一个已加载文档里问四组参数：
 
-顺带量到一条判墙事实：`验证码中间页` 这种标题下，**通用的 `check_intercept()` 说 `ok`**，
-而抖音自己的 `_wait_for_page()` 说 `captcha`、`_is_walled()` 说 `True`。也就是说抖音的墙
-只能由抖音的判定来读，别拿通用判定当结论。
+   | 参数集 | 行数 | 带 hot_value | 带 view_count |
+   |---|---|---|---|
+   | 21 个公开参数（无 webid） | 51 | 51 | 51 |
+   | 再去掉 downlink/effective_type/round_trip_time（18 个） | 51 | 51 | 51 |
+   | 上面 21 个 + 一个**假** `webid` | 51 | 51 | 51 |
+   | 只留 6 个（device_platform/aid/channel/detail_list/source） | 47~48 | 48 | **0** |
 
-再探的入口条件（下次做）：把钩子存成完整 URL（别截断），并且**先确认一次成功的页内重放
-用的是自拼 URL**；两条都过了才谈模式、列与 live 用例。
+   同一个 URL 连打四次，计数次次一致。结论两头都清楚：**签名一个都不需要**（假 `webid` 不改结果，
+   所以爬虫不必去抄页面的请求，也不必新增"抓页内请求 URL"这套机制）；而那批公开参数是**承重的**，
+   退到 6 个就丢掉整列 `view_count` 并少掉几行。`HOT_API` 里写下的就是中间那 18 个。
+2. **会话**：本工具自己的抖音 profile 仍被答 `验证码中间页`，插 Cookie 的一次性浏览器能读到榜
+   （用户手工过的滑块在他的 Chrome 里，那是第三个 profile 目录）。所以矩阵里 `needs_session=True`，
+   live 用例显式 `use_profile=False`。
+
+一次回答就是整块榜：不翻页（`len(fetched) == 1` 被离线用例钉住）、不逐条打开话题页 —— 榜自己就带着
+`hot_value` / `view_count` / `video_count` / `discuss_video_count` / `event_time`。
+
+行的取值也有据：`word` 在这张榜上**既是标题也是话题**（抖音不像微博另发一个 `#…#` 串），所以**不做**
+`话题` 列 —— 一列重复另一列的文字是用户会当成数据的噪声；`position` 是站点自己的名次；链接用榜单
+DOM 锚点自己那形状 `https://www.douyin.com/hot/<sentence_id>/<词>`（四条真实 href 与同一次回答里的
+`sentence_id` 一一对上，所以这不是猜的）。
+
+**榜首那一行是 0 还是没数**：两种都在同一天出现过 —— 一次是 `position: null, hot_value: 0,
+view_count: 0`，另一次同样位置是 `null`。所以这一列的规则是"站点没给的留空"，不给 0：0 在这张榜上
+是一个真实的读数，填出来的 0 与读到的 0 分不开。`_published()` 就是为此存在，
+`test_a_figure_the_site_did_not_publish_stays_blank_rather_than_becoming_zero` 钉住它。
+
+判墙那一条仍然成立，而且现在被离线用例直接钉住：`验证码中间页` 这种标题下
+**通用的 `check_intercept()` 说 `ok`**，而抖音自己的 `_wait_for_page()` 说 `captcha`、
+`_is_walled()` 说 `True`。抖音的墙只能由抖音的判定来读；而读到墙时**一次请求都不该发出去**
+（`test_the_captcha_interstitial_refuses_before_the_endpoint_is_asked`）。
 
 ### 小红书热榜：**证无**，不是"暂时没测到"
 
@@ -704,9 +725,10 @@ pager 自报页底，排队交棒无恙。红条分三类：
   `/404?source=/404/sec_...`。这与 #82 放弃作者模式是同一堵墙，因此"榜单行打不开"不是
   实现细节，而是这个平台对网页端的整体态度。
 
-`'hot' not in mode_keys_for('xiaohongshu')` 与 `'hot' not in mode_keys_for('douyin')` 被
-`test_each_platform_names_its_modes` 钉住 —— 想加必须先重新测量，不能让它在没人注意时
-"顺手补上"。
+`'hot' not in mode_keys_for('xiaohongshu')` 被 `test_each_platform_names_its_modes` 钉住 ——
+想加必须先重新测量，不能让它在没人注意时"顺手补上"。同一条测试今天也收了抖音的 `hot`：
+它当初的断言写的就是"抖音的榜还没 settle"，等测量把两个问题答完（上面那两条）才换成
+`('posts','author','hot','comments')`。少一块榜是红，凭空多一块榜也是红。
 
 ## 「停止」为什么必须去杀进程：quit / stopRequest / kill 三选实测（measured 2026-09-25，#131）
 

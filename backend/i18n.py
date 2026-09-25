@@ -380,6 +380,12 @@ _ZH = {
         '抖音对根本不存在的关键词也会用相关视频兜底，所以「零卡片」只可能是被拦截或页面出错，'
         '不是「这个关键词没有结果」'
     ),
+    'crawl.dy.hotStart': '[抖音热榜] 开始采集热榜，目标 {n} 条（榜单一次给全，不逐条打开）',
+    'crawl.dy.hotTarget': '[抖音热榜] 已采集到目标 {n} 条，不再读取榜单',
+    'crawl.dy.hotDone': '[抖音热榜] 榜单采集结束，共 {n} 条（目标 {total} 条）',
+    'crawl.dy.hotCapped': '[抖音热榜] 榜单本次只有 {board} 条，已按实际条数收尾（榜单大小由网站决定）',
+    'crawl.dy.hotWall': '[抖音热榜] 打开榜单页时被挡在「验证码中间页」，本次未采集：请先在 Cookie 面板登录并保存抖音',
+    'crawl.dy.hotRefused': '[抖音热榜] 榜单接口没有给出榜单（返回 {answer}）',
     'crawl.bili.start': '[哔哩哔哩搜索] 开始搜索关键词: "{kw}"，目标获取 {n} 条结果',
     'crawl.bili.url': '[哔哩哔哩搜索] 搜索URL: {url}',
     'crawl.bili.page': '[哔哩哔哩搜索] 第 {page} 页：{n} 个视频（新 {fresh} 个，已收录 {done} 条）',
@@ -1124,6 +1130,18 @@ _EN = {
         'The page said: {page}; URL: {url}. Douyin fills the list with related videos even for a keyword '
         'that cannot exist, so zero cards means blocked or broken — never "this keyword found nothing"'
     ),
+    'crawl.dy.hotStart': '[Douyin hot board] collecting the board, target {n} (one answer, no per-row page)',
+    'crawl.dy.hotTarget': '[Douyin hot board] the target of {n} rows is already stored, the board is not read again',
+    'crawl.dy.hotDone': '[Douyin hot board] finished with {n} rows (target {total})',
+    'crawl.dy.hotCapped': (
+        '[Douyin hot board] the board held {board} rows this time, so the run ended there '
+        '(the site decides how large a board is)'
+    ),
+    'crawl.dy.hotWall': (
+        '[Douyin hot board] the board page was parked on the captcha interstitial, so nothing was collected: '
+        'save the douyin cookie through the Cookie panel first'
+    ),
+    'crawl.dy.hotRefused': '[Douyin hot board] the board endpoint gave no board (answered {answer})',
     'crawl.bili.start': '[Bilibili search] keyword "{kw}", target {n} results',
     'crawl.bili.url': '[Bilibili search] URL: {url}',
     'crawl.bili.page': '[Bilibili search] page {page}: {n} videos ({fresh} new, {done} collected)',

@@ -528,6 +528,12 @@ CAPABILITIES: tuple[Capability, ...] = (
                 hint_key='settings.authorHintDouyin',
                 collects='page_per_row',
             ),
+            # One answer is the whole board (measured 51 rows), and it needs no board
+            # choice: douyin publishes this one list. It does need a session — measured
+            # on the same day, the tool's own douyin profile was answered the captcha
+            # interstitial while a cookie-planted throwaway browser read the board, so
+            # 需要登录 here is the truth rather than a hedge.
+            _hot_mode(board=False),
             _comment_mode('douyin', 'https://www.douyin.com/video/...', collects='dom_scroll'),
         ),
     ),

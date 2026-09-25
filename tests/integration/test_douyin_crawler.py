@@ -33,6 +33,7 @@ from crawlers.video import (
     douyin_id,
     douyin_sec_uid,
 )
+from i18n import t
 from utils.helpers import platform_for
 
 pytestmark = pytest.mark.unit
@@ -91,7 +92,12 @@ class FakeDriver:
         grid=None,
         grid_batches=None,
         works='',
+        board=None,
     ):
+        # What the board's own endpoint answers, asked from inside the loaded page.
+        # ``None`` stands for "not JSON at all", which is how a WAF page arrives.
+        self.board = board
+        self.fetched = []
         self.cards = [] if fill_after else list(cards)
         self._pending = list(cards) if fill_after else []
         self.fill_after = fill_after
@@ -179,6 +185,12 @@ class FakeDriver:
         return None
 
     def execute_async_script(self, script, *args):
+        # The board's in-page fetch. It has to be told apart from the dismissal script
+        # by shape, because both arrive here: the fetch bridge is the only one that
+        # names ``fetch(``.
+        if 'fetch(' in script:
+            self.fetched.append(script)
+            return self.board
         # The prompt-dismissal script: it reports 取消 when the dialog is up, and
         # nothing at all when it is not — which is the cheap case.
         if self.dialog:
@@ -550,3 +562,150 @@ class TestComments:
         for name in rows[0]:
             assert name not in _URL_FIELDS + _AUTHOR_FIELDS + _BODY_FIELDS, name
         assert rows[0]['楼层'] == 1
+
+
+def _entry(word='中美元首会谈', sentence='2665423', position=1, hot=12112641, views=64657293, **extra):
+    """One board entry, with the keys today's answer really publishes.
+
+    Measured twice on 2026-09-25 (``scratchpad/douyin_hot_static.json``): the list is
+    ``word / position / hot_value / view_count / video_count / discuss_video_count /
+    sentence_id / event_time``, and the DOM's own anchors read ``/hot/<sentence_id>/<词>``,
+    which is what makes the link a link rather than a guess.
+    """
+    row = {
+        'word': word,
+        'sentence_id': sentence,
+        'position': position,
+        'hot_value': hot,
+        'view_count': views,
+        'video_count': 4,
+        'discuss_video_count': 1,
+        'event_time': 1790266760,
+    }
+    row.update(extra)
+    return row
+
+
+def _board(rows):
+    return {'status_code': 0, 'data': {'word_list': list(rows)}}
+
+
+class TestHotBoard:
+    """抖音热榜, against the answer shape the endpoint was measured giving.
+
+    What is pinned is the part that was NOT obvious from the board on screen: the crawl
+    authors its own URL out of public literals (no signature at all — measured, adding a
+    made-up ``webid`` changes nothing and stripping to six params loses every figure),
+    it asks ONCE because one answer is the whole board, and a figure the site did not
+    publish stays blank instead of becoming a 0 that reads as "counted, nothing".
+    """
+
+    def test_the_board_is_asked_from_a_loaded_hot_page(self, make_crawler):
+        crawler, driver = make_crawler(cards=['1'], board=_board([_entry()]))
+        rows = crawler.hot(target_count=5)
+        assert driver.visited == [DouyinCrawler.HOT_ENTRY], driver.visited
+        assert len(rows) == 1 and rows[0]['标题'] == '中美元首会谈'
+
+    def test_one_answer_is_the_board_so_nothing_pages_and_nothing_is_revisited(self, make_crawler):
+        # 51 entries came back from one call, measured. A second read would replay the
+        # same board and a per-topic visit would pay for rows the board already gave.
+        # Distinct ``sentence_id``s, because the topic id is what a row is deduped by.
+        entries = [_entry(sentence='2665423', position=1), _entry(word='第二条', sentence='2665424', position=2)]
+        crawler, driver = make_crawler(cards=['1'], board=_board(entries))
+        rows = crawler.hot(target_count=50)
+        assert len(rows) == 2
+        assert len(driver.fetched) == 1, 'the board was asked more than once'
+
+    def test_the_url_is_built_from_literals_and_carries_no_signature(self):
+        lowered = DouyinCrawler.HOT_API.lower()
+        for token in ('a_bogus', 'brotli', 'mistoken', 'verifyfp', 'webid', 'fp='):
+            assert token not in lowered, f'{token} is not something this crawler can produce'
+        # The load-bearing names, each measured: drop any of the first group and the
+        # answer loses every 观看数; the endpoint path itself was read off the page.
+        for token in ('hot/search/list', 'device_platform=webapp', 'aid=6383', 'detail_list=1', 'source=6'):
+            assert token in lowered, token
+
+    def test_the_link_is_the_address_the_board_itself_uses(self, make_crawler):
+        crawler, _driver = make_crawler(cards=['1'], board=_board([_entry()]))
+        row = crawler.hot(target_count=1)[0]
+        assert (
+            row['链接'] == 'https://www.douyin.com/hot/2665423/%E4%B8%AD%E7%BE%8E%E5%85%83%E9%A6%96%E4%BC%9A%E8%B0%88'
+        )
+
+    def test_a_figure_the_site_did_not_publish_stays_blank_rather_than_becoming_zero(self, make_crawler):
+        # The pinned top entry is published with ``position: null`` and — measured in one
+        # of the two runs — ``hot_value``/``view_count`` null too. 0 on a board means
+        # "the site counted nothing"; blank is the only cell that says "no figure".
+        crawler, _driver = make_crawler(
+            cards=['1'],
+            board=_board([_entry(position=None, hot=None, views=None, video_count=None)]),
+        )
+        row = crawler.hot(target_count=1)[0]
+        assert row['热度'] == '' and row['观看数'] == '' and row['视频数'] == '', row
+        assert row['排名'] == 1, 'the entry is first on the board; that much the answer does say'
+
+    def test_no_second_topic_column_is_invented_from_the_same_words(self, make_crawler):
+        # weibo publishes ``word`` and a ``#…#`` scheme, so 话题 means something there.
+        # Douyin publishes one string; a second column of it would be noise the user
+        # reads as data.
+        crawler, _driver = make_crawler(cards=['1'], board=_board([_entry()]))
+        assert set(crawler.hot(target_count=1)[0]) == {
+            '排名',
+            '标题',
+            '热度',
+            '观看数',
+            '视频数',
+            '讨论视频数',
+            '发布时间',
+            '链接',
+        }
+
+    def test_a_repeated_topic_is_kept_once(self, make_crawler):
+        crawler, _driver = make_crawler(cards=['1'], board=_board([_entry(), _entry()]))
+        assert len(crawler.hot(target_count=10)) == 1
+
+    def test_the_target_is_a_cap_not_a_padding(self, make_crawler, caplog):
+        crawler, _driver = make_crawler(cards=['1'], board=_board([_entry(position=1)]))
+        with caplog.at_level('INFO'):
+            rows = crawler.hot(target_count=5)
+        assert len(rows) == 1
+        assert t('crawl.dy.hotCapped', board=1) in _lines(caplog), _lines(caplog)
+
+    def test_an_answer_that_is_not_a_board_is_refused_by_name(self, make_crawler):
+        # A WAF page or a dead transport arrives as ``{}`` from the in-page fetch; a
+        # risk-control envelope arrives with a status_code. Neither may read as
+        # "nothing is hot today".
+        crawler, _driver = make_crawler(cards=['1'], board={'status_code': 10, 'status_msg': 'verify'})
+        with pytest.raises(RuntimeError) as err:
+            crawler.hot(target_count=5)
+        assert 'verify' in str(err.value)
+
+    def test_a_non_json_answer_is_refused_too(self, make_crawler):
+        crawler, _driver = make_crawler(cards=['1'], board=None)
+        with pytest.raises(RuntimeError):
+            crawler.hot(target_count=5)
+
+    def test_the_captcha_interstitial_refuses_before_the_endpoint_is_asked(self, make_crawler):
+        crawler, driver = make_crawler(
+            cards=[],
+            title='验证码中间页',
+            video_body='当前请求存在异常，暂时限制访问',
+            board=_board([_entry()]),
+        )
+        with pytest.raises(RuntimeError) as err:
+            crawler.hot(target_count=5)
+        assert t('crawl.dy.hotWall') in str(err.value)
+        assert not driver.fetched, 'a walled session was still charged for a read'
+
+    def test_a_board_already_collected_to_the_target_is_not_read_again(self, make_crawler, caplog):
+        crawler, driver = make_crawler(cards=['1'], board=_board([_entry(), _entry(position=2)]))
+        crawler.emit({'标题': '已有', '链接': 'https://www.douyin.com/hot/1/x'})
+        with caplog.at_level('INFO'):
+            rows = crawler.hot(target_count=1)
+        assert len(rows) == 1
+        assert not driver.fetched, 'the endpoint was asked although the target was already stored'
+        assert t('crawl.dy.hotTarget', n=1) in ' '.join(_lines(caplog)), _lines(caplog)
+
+
+def _lines(caplog) -> list:
+    return [record.getMessage() for record in caplog.records]
