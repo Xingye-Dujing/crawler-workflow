@@ -59,6 +59,7 @@ def get_crawler(
     for_login: bool = False,
     use_profile: bool = None,
     abort=None,
+    refresh_cookies: bool = False,
 ):
     """Build the crawler for *platform*, in that platform's own browser profile.
 
@@ -80,14 +81,29 @@ def get_crawler(
     logged-in page load re-issues ``SUB``/``SUBP`` and the saved pair stops being
     accepted afterwards. A browser with no profile has nothing to overwrite, so it
     is planted from the saved file exactly as before the feature existed.
+
+    ``refresh_cookies`` is the one exception, and it is only ever set by the user
+    asking for it (``POST /api/cookies/refresh-profile``, the panel's
+    「把 Cookie 更新进 Profile」 button): a re-taken session that cannot reach the
+    profile it will be crawled from is a session the user paid to fetch for nothing.
+    Nothing automatic opens this door, because *this function* runs at the start of
+    every crawl.
     """
     cls = crawler_class(platform)
     if not cls:
         raise ValueError(f'Unknown platform: {platform}')
     profile = browser_profiles.profile_dir_for(platform, enabled=use_profile)
-    planting = not profile or not browser_profiles.is_used(platform)
-    cookie_path = f'{cookie_dir}/{platform}_cookies.json' if (cookie_dir and planting) else None
-    crawler = cls(headless=headless, cookie_path=cookie_path, for_login=for_login, profile_dir=profile, abort=abort)
+    saved = f'{cookie_dir}/{platform}_cookies.json' if cookie_dir else ''
+    planting = bool(saved) and (not profile or not browser_profiles.is_used(platform) or refresh_cookies)
+    crawler = cls(
+        headless=headless,
+        cookie_path=saved if planting else None,
+        for_login=for_login,
+        profile_dir=profile,
+        abort=abort,
+    )
     if profile:
-        browser_profiles.mark_used(platform, imported=bool(cookie_path))
+        # The stamp is *which* file went in, so the panel can tell a saved-over cookie
+        # from a profile that already holds the current one.
+        browser_profiles.mark_used(platform, imported=planting, cookie_stamp=browser_profiles.file_stamp(saved))
     return crawler

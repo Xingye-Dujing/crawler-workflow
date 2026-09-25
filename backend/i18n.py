@@ -479,6 +479,18 @@ _ZH = {
     'cookie.verify.unreachable': '{platform} 无法验证：浏览器自己没能打开这个地址（本机网络或 DNS），未检验到 Cookie',
     'cookie.delete.none': '{platform} 没有已保存的 Cookie 可删除',
     'cookie.delete.profileHolds': '注意：{platform} 的浏览器 profile 仍是登录状态，删这个文件不会把它登出',
+    # Each refusal its own sentence, because from a button "nothing needed doing" and
+    # "nothing could be done" look exactly alike.
+    'cookie.refresh.noFile': '{platform} 还没有已保存的 Cookie，没有可更新进 profile 的内容',
+    'cookie.refresh.noProfile': '当前未启用「使用浏览器 profile」，每次抓取本来就是从这份 Cookie 文件植入的，无需更新',
+    'cookie.refresh.notYet': '{platform} 的 profile 还没被用过，下一次抓取会自动导入这份 Cookie，无需现在更新',
+    'cookie.refresh.busy': '{platform} 的浏览器正被占用（可能有抓取在跑），请先结束后再更新',
+    'cookie.refresh.failed': '更新 profile 登录态失败：打不开该平台的浏览器（{err}）',
+    'cookie.refresh.done': '已把保存的 {platform} Cookie 更新进它的浏览器 profile（{n} 条）',
+    # Measured: a cookie without an expiry is never written to the profile store, so it
+    # dies with the window that was opened to plant it. The count is said because the
+    # alternative is a promise the next restart will break.
+    'cookie.refresh.sessionOnly': '其中 {n} 条没有有效期（会话 Cookie），关掉这个窗口后不会留在 profile 里',
     'cookie.delete.failed': '删除 Cookie 文件失败：{err}',
     'api.platformsRequired': 'platforms 字段必须是平台名列表',
     'api.cookieBusy': '已有 {platform} 的登录窗口打开中——请先完成或取消它',
@@ -1277,6 +1289,21 @@ _EN = {
     'cookie.delete.none': 'There is no saved {platform} cookie to delete',
     'cookie.delete.profileHolds': 'Note: {platform}\u2019s browser profile stays logged in — deleting this '
     'file does not sign that device out',
+    # Each refusal its own sentence, because from a button "nothing needed doing" and
+    # "nothing could be done" look exactly alike.
+    'cookie.refresh.noFile': 'There is no saved {platform} cookie to put into the profile',
+    'cookie.refresh.noProfile': 'Using a browser profile is switched off, so every crawl is already planted '
+    'from this file — nothing to update',
+    'cookie.refresh.notYet': '{platform}\u2019s profile has never been used, so the next crawl imports '
+    'this cookie by itself',
+    'cookie.refresh.busy': '{platform}\u2019s browser is held by something else (a crawl may be running); '
+    'retry after it ends',
+    'cookie.refresh.failed': 'Could not update the profile session: this platform\u2019s browser did not open ({err})',
+    'cookie.refresh.done': 'Saved {platform} cookies were planted into its browser profile ({n} entries)',
+    # Measured: a cookie without an expiry is never written to the profile store, so it
+    # dies with the window that was opened to plant it.
+    'cookie.refresh.sessionOnly': 'Note: {n} of them carry no expiry, so they live only in that window and are not '
+    'kept by the profile once it closes',
     'cookie.delete.failed': 'Could not delete the cookie file: {err}',
     'api.platformsRequired': 'platforms must be a list of platform names',
     'api.cookieBusy': 'A {platform} login window is already open — finish or cancel it first',

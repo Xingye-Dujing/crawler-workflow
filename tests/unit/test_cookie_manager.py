@@ -168,3 +168,55 @@ class TestDamagedFiles:
 
     def test_a_platform_with_no_file_reads_as_no_cookies(self, manager):
         assert manager.load('wechat') == []
+
+
+class TestSessionOnlyCount:
+    """How many saved entries will NOT outlive the window that imports them.
+
+    Measured against a real Chrome (``tests/integration/test_profile_cookie_plant.py``):
+    a cookie planted without an expiry is written to memory, not to the profile store, so
+    the 「更新进 Profile」 answer has to count them — a transfer that partly evaporates is
+    not a transfer.
+    """
+
+    def test_a_persistent_entry_is_not_counted(self, manager):
+        manager.save('zhihu', [{'name': 'sid', 'value': 'v', 'domain': '.zhihu.com', 'expiry': 4e9}])
+        assert manager.session_only_count('zhihu') == 0
+
+    def test_an_entry_with_no_expiry_at_all_is_counted(self, manager):
+        manager.save('zhihu', [{'name': 'sid', 'value': 'v', 'domain': '.zhihu.com'}])
+        assert manager.session_only_count('zhihu') == 1
+
+    @pytest.mark.parametrize('field', ['expiry', 'expirationDate'])
+    def test_either_spelling_of_an_expiry_is_honoured(self, manager, field):
+        """The driver reports one shape and a browser's own export another; reading only
+        one would tell the user a persistent cookie is about to be lost."""
+        manager.save('zhihu', [{'name': 'sid', 'value': 'v', 'domain': '.zhihu.com', field: 4e9}])
+        assert manager.session_only_count('zhihu') == 0
+
+    def test_a_zero_expiry_is_no_expiry(self, manager):
+        manager.save('weibo', [{'name': 'sid', 'value': 'v', 'domain': '.weibo.com', 'expiry': 0}])
+        assert manager.session_only_count('weibo') == 1
+
+    def test_the_two_shapes_are_counted_separately(self, manager):
+        manager.save(
+            'bilibili',
+            [
+                {'name': 'a', 'value': '1', 'domain': '.bilibili.com', 'expiry': 4e9},
+                {'name': 'b', 'value': '2', 'domain': '.bilibili.com'},
+                {'name': 'c', 'value': '3', 'domain': '.bilibili.com'},
+            ],
+        )
+        assert manager.session_only_count('bilibili') == 2
+
+    def test_a_missing_file_counts_nothing_rather_than_raising(self, manager):
+        assert manager.session_only_count('youtube') == 0
+
+    def test_an_unsupported_platform_counts_nothing(self, manager):
+        assert manager.session_only_count('../../etc/passwd') == 0
+
+    def test_a_non_dictionary_entry_is_not_counted_as_a_cookie(self, manager):
+        """``load`` returns whatever list was stored; a row that is not an object plants
+        nothing anywhere, so it must not be reported as a cookie about to be lost."""
+        manager.save('zhihu', ['not-a-cookie'])
+        assert manager.session_only_count('zhihu') == 0

@@ -35,6 +35,7 @@ BODY_ROUTES = [
     '/api/cookies/delete',
     '/api/cookies/generate',
     '/api/cookies/preflight',
+    '/api/cookies/refresh-profile',
     '/api/cookies/save',
     '/api/cookies/verify',
     '/api/data/clear',

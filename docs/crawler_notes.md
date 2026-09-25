@@ -1108,3 +1108,36 @@ E       AssertionError: assert 'done' == 'partial'
 小于 16 毫秒的量"的断言都是掷硬币，`services/net_probe.throughput` 的算术就因此需要注入
 时钟（`tests/unit/test_net_probe.py::_clock`）才能钉住 kB/s 的算法本身。
 
+## 种进 profile 的 Cookie，只有带有效期的那部分留得住（measured 2026-09-26，#108）
+
+「重取的 Cookie 进不了正在用的 profile」这个洞补上之后，真机量了一次**它到底能补多少**：
+在本地 HTTP 服务上（Cookie 的 domain 必须和文档主机对得上，`127.0.0.1` 是唯一能自己服务的选项），
+用 `Crawler._plant()` 种一个 Cookie → 关掉浏览器 → 用**同一个 profile 目录**再开一个 → 读回来。
+
+| 种进去的 Cookie | 同一个浏览器里看得见 | 关掉再开还看得见 |
+|---|---|---|
+| 没有 `expiry`（会话 Cookie） | 看得见 | **看不见**（jar 是空的） |
+| 带 `expiry`（持久 Cookie） | 看得见 | 看得见 |
+
+Chrome 只把**持久 Cookie** 写进 profile 的 Cookie 库，会话 Cookie 只在内存里。这条决定三件事：
+
+1. 「把 Cookie 更新进 Profile」的答案必须**同时报两个数**：种进去几条、其中几条关掉窗口就没了
+   （`cookie.refresh.sessionOnly`）。只说「已更新」就是许了一个下次重启会破的承诺；
+2. 「profile 拥有自己的会话」的准确形式是 **profile 拥有它那份持久 Cookie 与其它站点状态**，
+   不是"站点认为我登录了的那一切"。站点若只发会话 Cookie，profile 也留不住；
+3. 本机已存的几份文件里，绝大多数条目是带 `expiry` 的（各平台从 7/8 到 57/63 不等），
+   所以这个按钮对真实登录态有效，不是只对测试有效——但"绝大多数"不等于全部，提醒照旧要出。
+
+`expiry` 有两种拼法：driver 报回来的是 `expiry`（epoch 秒），浏览器自己导出的是
+`expirationDate`。`CookieManager._has_expiry` 两种都认；只认一种会把持久 Cookie 误报成要丢的那种。
+`Crawler._cookie_payload` 早就做了同样的兼容（它把 float 的 expiry 取整，否则 `add_cookie` 整条拒绝）。
+
+测量脚本已经变成测试：`tests/integration/test_profile_cookie_plant.py`（真 Chrome，4 条，27 秒），
+其中一条**专门钉住那个坏消息**（会话 Cookie 不留在 profile 里）——哪天有人以为"种下去当然会留着"，
+那条会红，面板那句提醒也就同时失去依据。
+
+**为什么种 Cookie 只能让浏览器自己干**：Chrome 的 Cookie 库在 Windows 上是应用绑定加密的
+（本轮试图从用户日常 Chrome 直接读 Cookie 时实测：66 条目标 Cookie 全是 `v20`，用户态进程解不开，
+复制出来的库交给 Chrome 自己也解不开），所以"外部写那个 sqlite"这条路不存在——唯一能写进去的
+途径是开着浏览器用 `add_cookie`。这也是这个功能必须开一次浏览器的原因。
+

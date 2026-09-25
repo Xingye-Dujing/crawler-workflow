@@ -201,6 +201,18 @@
   选「先去设置」会直接打开面板。也可以填一个绝对路径，改用你专为该工具新建的 profile
   目录（**不要**填你日常使用的 Chrome 目录：Chrome 运行时独占该目录与其 Cookie 库，
   且默认 profile 禁止远程调试，实测拿不到也带不进去）。
+  **"用过之后不再种"留下过一个洞**：你在面板里重取的 Cookie 只写进了 `data/cookies/*.json`，
+  而真正用来抓取的那个 profile 永远不再读它——于是"更新登录态"这件事根本没有入口。
+  现在 Cookie 面板多了一个按钮**「把 Cookie 更新进 Profile」**（POST `/api/cookies/refresh-profile`）：
+  它先弹确认（这件事会覆盖该 profile 里同名的 Cookie，若你是先在窗口里登录、之后才保存的文件，
+  就别按），然后开一次该平台自己的浏览器、用浏览器把文件里的 Cookie 种进去（这是唯一能写进
+  Chrome Cookie 库的途径——那个库被应用绑定加密，外部进程写不了）、记下"种的是哪一份"，再把浏览器关掉。
+  面板据此能说出**「这个 profile 导入的不是现在这份 Cookie」**这一行提示（`/api/browser/profiles`
+  里每平台的 `needs_refresh`），点完按钮后提示会自己消失。profile 从没被用过、没启用 profile、
+  浏览器被占用、有运行在跑——这四种情况各回各的话，不会假装"已更新"。
+  **一条实测划出的边界**：Chrome 只把**带有效期**的 Cookie 写进 profile 库，会话 Cookie 关掉窗口就没了
+  （真机对照见 `docs/crawler_notes.md`）。所以那句回答会同时报"种进去几条"和"其中几条留不住"，
+  不写成一句笼统的「已更新」。
 - **并行 + 同平台 = 运行前问你一次**：一份 profile 同时只能开一个浏览器（chromedriver 建会话前
   要预写该目录的偏好文件，实测两个线程同时建会话 8 次里死 2 次，报 `session not created:
   failed to write prefs file`）。所以画布里有**两个以上互不相连的工作流采集同一平台**、且当前是并行模式时，
@@ -796,6 +808,7 @@ crawler_workflow/
 | `/api/cookies/generate` | POST | 打开浏览器引导扫码登录并捕获 Cookie；可选 `url` 指定入口链接（仅限该平台域名），取 Cookie 前先把浏览器带回本平台页面 |
 | `/api/cookies/verify` | POST | 用已存 Cookie 实地探测该平台还放行什么（结论逐条回显：可用 / 仍被挡在登录页 / 回的是验证码·风控所以**没有结论**） |
 | `/api/cookies/delete` | POST | 删除该平台的 Cookie 快照文件；回话里说清该平台的浏览器 profile 是否仍持有登录态（删文件不会把 profile 登出） |
+| `/api/cookies/refresh-profile` | POST | 把已保存的 Cookie 种进该平台**正在使用的**浏览器 profile（一次性、由用户点）：profile 平时只首次导入，之后重取的 Cookie 进不去，这个端点就是那条唯一的入口；profile 未启用 / 从未使用 / 被占用 / 有运行在跑时各自拒绝，不谎报"已更新" |
 | `/api/cookies/preflight` | POST | 运行前一次性验证画布要用到的多个平台：`{platforms, use_profile?, fresh?}` → 逐平台 `valid/expired/unknown/nocookie/nologin/notcrawlable` + 已渲染文案 + `blocked`/`unclear` 两个清单（结果按 `COOKIE_PREFLIGHT_TTL` 缓存） |
 | `/api/settings` | GET / POST | 读取 / 修改运行时设置（data/settings.json） |
 | `/api/browser/profiles` | GET | 每个平台的持久浏览器 Profile 状态（是否启用、目录是否已建、是否已导入过 Cookie、占用空间、是否建议开启） |

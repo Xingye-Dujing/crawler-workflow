@@ -51,8 +51,17 @@ class TestGuide:
         assert report['guideLines'] == ['PURPOSE-BILIBILI', 'STEP-ONE', 'STEP-TWO']
 
     def test_the_flow_is_fetched_once_and_then_served_from_cache(self, panel):
-        assert _urls(panel['guideBilibiliFirstCall']) == ['/api/cookies/flow']
-        assert _urls(panel['guideBilibiliSecondCall']) == ['/api/cookies/flow']
+        """Two tables behind the guide — the per-platform steps and the profile state that
+        decides whether to advertise 「把 Cookie 更新进 Profile」 — and each is fetched once,
+        including while both are still in flight (the guide repaints when either lands).
+
+        ``report()`` accumulates every call the panel made, so the interesting half is
+        that the second render's list is **the same length** as the first: nothing new
+        was bought by repainting.
+        """
+        fetched = ['/api/browser/profiles', '/api/cookies/flow']
+        assert _urls(panel['guideBilibiliFirstCall']) == fetched
+        assert _urls(panel['guideBilibiliSecondCall']) == fetched
 
     def test_re_rendering_replaces_the_list_instead_of_appending(self, panel):
         """A panel that grew a second copy of the steps on every platform switch
@@ -165,3 +174,55 @@ class TestDeleteCookie:
         assert case['askedPlatforms'] == ['zhihu']
         assert len(case['toasts']) == 1, case['toasts']
         assert 'profile' in case['toasts'][0] and 'logged in' in case['toasts'][0], case['toasts']
+
+
+class TestRefreshProfileCookie:
+    """「把 Cookie 更新进 Profile」 (#108) — the button that re-plants a saved cookie
+    into the browser profile that crawls with it.
+
+    The panel imports a cookie file once, so this is the only way a re-taken session
+    reaches a live profile, and it is also the only place the app can *overwrite* a
+    session the site has already refreshed. Both halves are why the button asks first
+    and why the hint that advertises it has to come from the server.
+    """
+
+    def test_the_button_asks_before_it_overwrites_anything(self, panel):
+        case = panel['refreshCancelled']
+        assert case['calls'] == [], f'a refused confirmation still planted: {case["calls"]}'
+
+    def test_the_confirmation_names_the_risk_it_carries(self, panel):
+        dialog = panel['refreshCancelled']['dialog']
+        assert dialog['values'] == ['refresh', 'null'], dialog
+        assert dialog['message'] == 'dialog.cookieRefresh'
+        assert dialog['labels'] == ['dialog.cookieRefreshYes', 'dialog.cancel'], dialog
+
+    def test_confirming_plants_the_selected_platform(self, panel):
+        requests = panel['refreshConfirmed']['requests']
+        posted = [item for item in requests if item['url'] == '/api/cookies/refresh-profile']
+        assert len(posted) == 1, requests
+        assert json.loads(posted[0]['body']) == {'platform': 'weibo'}
+
+    def test_a_successful_plant_re_reads_the_profile_table(self, panel):
+        """The profile now holds a different session, so the answer behind the hint is
+        stale — and a hint that keeps offering the button after it succeeded is the panel
+        contradicting something it just caused."""
+        urls = [item['url'] for item in panel['refreshConfirmed']['requests']]
+        assert '/api/browser/profiles' in urls, urls
+
+    def test_the_server_word_is_what_the_user_sees(self, panel):
+        case = panel['refreshConfirmed']
+        assert case['toasts'] == ['PLANTED-3'], case
+        assert case['statusText'] == 'PLANTED-3'
+
+    def test_a_refusal_is_not_toasted_as_a_success(self, panel):
+        case = panel['refreshRefused']
+        assert case['statusText'] == 'BUSY-PROFILE'
+        assert case['toasts'] == [], case
+
+    def test_the_hint_appears_only_when_the_server_measured_a_newer_file(self, panel):
+        stale = panel['hintWhenStale']
+        assert 'cookie.refreshHint' in stale, stale
+        assert 'PURPOSE' in stale and 'STEP-1' in stale, f'the hint replaced the guidance: {stale}'
+        current = panel['hintWhenCurrent']
+        assert 'cookie.refreshHint' not in current, current
+        assert current == ['PURPOSE', 'STEP-1'], current

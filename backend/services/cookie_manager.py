@@ -7,6 +7,20 @@ from i18n import t
 logger = logging.getLogger(__name__)
 
 
+def _has_expiry(row: dict):
+    """The expiry a browser will honour, under either spelling it is stored with.
+
+    ``expiry`` is what the W3C ``add_cookie`` payload takes (seconds since the epoch) and
+    what ``save_cookies`` writes back from a driver; ``expirationDate`` is what Chrome's own
+    export names it. Accepting only one would report a persistent cookie as a session one.
+    """
+    for key in ('expiry', 'expirationDate'):
+        value = row.get(key)
+        if value not in (None, '', 0):
+            return value
+    return None
+
+
 class CookieManager:
     """Manages cookie persistence for different platforms.
 
@@ -50,6 +64,19 @@ class CookieManager:
         if not self.is_supported(platform):
             return False
         return os.path.exists(self._path_for(platform))
+
+    def session_only_count(self, platform: str) -> int:
+        """How many saved entries carry no expiry, which is how long they will live.
+
+        Measured on a real Chrome with a real profile directory: a cookie planted without an
+        ``expiry`` is gone once that browser closes — persistent cookies are written to the
+        profile's own store, session cookies are not. So a profile refresh keeps the part of
+        the session the site meant to outlive a window and loses the part it did not, and the
+        panel has to say the number rather than promise a full transfer.
+
+        Counts only: no name and no value is read out of the file here.
+        """
+        return sum(1 for row in self.load(platform) if isinstance(row, dict) and not _has_expiry(row))
 
     def delete(self, platform: str):
         path = self._path_for(platform)

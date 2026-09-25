@@ -102,6 +102,18 @@ const I18n = {
             'dialog.cookieDelete': 'Delete the Cookie file saved for {platform}? If this platform is crawled inside its own browser profile, its login lives in that profile: deleting this file does not sign the profile out, it only removes the snapshot a throwaway browser is planted from. The answer says which of the two applies to {platform}.',
             'dialog.cookieDeleteYes': 'Delete the file',
             'toast.cookieDeleted': 'Cookie file deleted for {platform}',
+            'cookies.refresh': 'Plant cookies into profile',
+            'cookie.refreshHint':
+                'This profile was given a different cookie file than the one now saved: press '
+                + '「Plant cookies into profile」 to make the crawl use the one you re-took',
+            'cookie.refreshWorking': 'Opening the platform browser to plant the saved cookies…',
+            'cookie.refreshed': 'Saved cookies planted into the {platform} profile',
+            'dialog.cookieRefresh':
+                'Plant the saved {platform} cookie into that platform\u2019s browser profile? '
+                + 'Its own session for those cookie names is overwritten by the file. '
+                + 'If you logged in inside the profile window more recently than you saved this '
+                + 'file, do NOT do this — the profile already holds the newer session.',
+            'dialog.cookieRefreshYes': 'Plant into the profile',
             'toast.cookieChecking': 'Checking the Cookie for {platforms} before the run…',
             'toast.cookieUncheckable': 'The Cookie check could not run for {platforms} — that is not a pass, and the run is starting anyway',
             'toast.cookieUnclear': 'Could not verify the Cookie for {platforms} (captcha, timeout or a profile already in use) — no answer is not a failure, so the run is not blocked',
@@ -785,6 +797,18 @@ const I18n = {
             'dialog.cookieDelete': '删除 {platform} 已保存的 Cookie 文件？如果该平台的抓取是在它自己的浏览器 profile 里跑的，登录态存在那个 profile 里：删这个文件不会把它登出，只是清掉「一次性浏览器」用来植入的快照。删除后的那一行会说明 {platform} 属于哪种情况。',
             'dialog.cookieDeleteYes': '删除文件',
             'toast.cookieDeleted': '已删除 {platform} 的 Cookie 文件',
+            'cookies.refresh': '把 Cookie 更新进 Profile',
+            'cookie.refreshHint':
+                '这个 profile 当初导入的不是现在这份 Cookie：按「把 Cookie 更新进 Profile」，'
+                + '让抓取真正用上你刚重取的那一份',
+            'cookie.refreshWorking': '正在打开该平台浏览器，把保存的 Cookie 植入…',
+            'cookie.refreshed': '已把保存的 Cookie 植入 {platform} 的 profile',
+            'dialog.cookieRefresh':
+                '把已保存的 {platform} Cookie 植入该平台的浏览器 profile？'
+                + '这些同名 Cookie 在 profile 里原有的值会被覆盖。'
+                + '如果你是在 profile 窗口里登录后又保存了这份文件，请不要这样做——'
+                + '那时 profile 里的会话更新。',
+            'dialog.cookieRefreshYes': '植入该 profile',
             'toast.cookieChecking': '运行前先验证 {platforms} 的 Cookie…',
             'toast.cookieUncheckable': '{platforms} 的 Cookie 没能验证成功——这不是「有效」，本次仍然开始运行',
             'toast.cookieUnclear': '{platforms} 的 Cookie 无法核对（风控、超时或 profile 被占用）——这不算失效，所以不拦截本次运行',

@@ -4592,6 +4592,82 @@ def delete_cookies():
     return jsonify({'ok': True, 'message': message, 'profile_holds': holds})
 
 
+#: One refresh at a time: two browsers planting the same profile would each report a
+#: session count that the other had already overwritten.
+_PROFILE_REFRESH_LOCK = threading.Lock()
+
+
+@app.route('/api/cookies/refresh-profile', methods=['POST'])
+def refresh_profile_cookies():
+    """Plant the saved cookie file into the profile that crawls with it.
+
+    The import-once rule is right for a crawl — planting an older snapshot over a live,
+    rotating session is how weibo's ``SUB``/``SUBP`` get thrown away — but it left the
+    other half of the story with no door at all: a user who re-took a cookie in this panel
+    held a file, and the browser that will actually do the crawling would never read it
+    again. This is that door, and only a press of the button opens it.
+
+    Refusing is the common answer and each refusal is its own sentence, because "nothing
+    changed" and "there was nothing to change" look identical from a button. The residual
+    race — a run claiming the profile between the check and the browser — is bounded by
+    the profile wait rather than by luck: a local tool has one panel and one run, and the
+    panel is open precisely when nothing is crawling.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    platform = str(data.get('platform', ''))
+    if not cookie_manager.is_supported(platform):
+        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+    if not cookie_manager.exists(platform):
+        return jsonify({'ok': False, 'error': t('cookie.refresh.noFile', platform=platform)}), 400
+    if not browser_profiles.is_enabled():
+        # Without a profile every crawl is already planted from this file, so a browser
+        # would be bought to change nothing.
+        return jsonify({'ok': False, 'error': t('cookie.refresh.noProfile')}), 400
+    if not browser_profiles.is_used(platform):
+        # Never used means the next crawl imports the file by itself. Reporting 「已更新」
+        # for something that has not happened is the exact thing this panel lost trust over.
+        return jsonify({'ok': False, 'error': t('cookie.refresh.notYet', platform=platform)}), 400
+    profile = browser_profiles.platform_dir(platform)
+    if browser_profiles.is_busy(profile) or execution_state['running']:
+        return jsonify({'ok': False, 'error': t('cookie.refresh.busy', platform=platform)}), 409
+    if not _PROFILE_REFRESH_LOCK.acquire(blocking=False):
+        return jsonify({'ok': False, 'error': t('cookie.refresh.busy', platform=platform)}), 409
+    try:
+        try:
+            crawler = get_crawler(
+                platform,
+                # A platform that answers a headless browser with a captcha gets a real
+                # window for this too: the plant is a page load on that site.
+                headless=not getattr(crawler_class(platform), 'never_headless', False),
+                cookie_dir=Config.COOKIE_DIR,
+                use_profile=True,
+                refresh_cookies=True,
+            )
+        except Exception as e:
+            logger.debug('the refresh browser for %s did not come up: %s', platform, e)
+            return jsonify({'ok': False, 'error': t('cookie.refresh.failed', err=str(e)[:160])}), 500
+        try:
+            planted = int(getattr(crawler, 'cookies_loaded', 0))
+        finally:
+            _close_login_browser(crawler)
+    finally:
+        _PROFILE_REFRESH_LOCK.release()
+    # The profile now holds a different session than the one the last probe looked at.
+    cookie_preflight.invalidate(platform)
+    message = t('cookie.refresh.done', platform=platform, n=planted)
+    # Measured on a real Chrome: a cookie without an expiry is not written to the profile
+    # store at all, so it dies with the window that was opened to plant it. Saying only
+    # 「已更新」 would promise a transfer that partly did not happen.
+    fading = cookie_manager.session_only_count(platform)
+    if fading:
+        message += '\n' + t('cookie.refresh.sessionOnly', n=fading)
+    # ``_load_cookies`` already says what went in, and the console shows every logger
+    # call, so this handler only answers the button.
+    return jsonify({'ok': True, 'message': message, 'count': planted, 'session_only': fading})
+
+
 _COOKIE_JOB_LOCK = threading.Lock()
 _COOKIE_JOB = {
     'active': False,
@@ -5091,6 +5167,9 @@ def get_browser_profiles():
                 platform,
                 recommended=cap.profile_recommended,
                 has_cookie=os.path.isfile(saved),
+                # The path, not the contents: this is what lets the panel say "the file you
+                # saved is not the session this profile holds" without reading a cookie.
+                cookie_path=saved,
             )
         )
     return jsonify(rows)

@@ -124,11 +124,11 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   outlives the crawl: a window that merely *omits* the image blocker inherits it and shows a login page
   with no QR code, so 取 Cookie / 验证 Cookie and the pre-run probe write 允许 explicitly
   (`_content_prefs`).
-- **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count` (one
-  万/千/亿/K/M/B parser), `engine.wall` (the four page verdicts), `engine.popup.Prompt` + a
+- **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count`,
+  `engine.wall` (the four page verdicts), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (the scroll that finds the
-  element which actually moves), `engine.pager.walk_pages` (cursor paging that follows the server's own
-  value) and `engine.jsonpath` know nothing about any platform; a platform module declares only selectors,
+  element which actually moves), `engine.pager.walk_pages` and `engine.jsonpath` know nothing
+  about any platform; a platform module declares only selectors,
   endpoints and column names. New crawl logic goes through these helpers — a second copy of a scroll loop
   or a 万-parser is what this rule exists to prevent. No walk has a round/page budget: "how much"
   is the user's target, never a constant. `Crawler.open(url)` is the only navigation entry point: it
@@ -170,7 +170,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   `--user-data-dir`, so the login window and the crawl are the same
   device. Consequence: **the saved cookie file is imported once** (first use of the
   directory) and **never planted again** — overwriting a live profile
-  with an old snapshot is the harm, not the fix. **Never write the browser's live jar back to a saved
+  with an old snapshot is the harm, not the fix; the only exception is
+  `get_crawler(refresh_cookies=True)`, panel button only.
+  **Never write the browser's live jar back to a saved
   cookie file.** `Capability.profile_recommended` is the single source for "this platform punishes a
   throwaway browser"; a second list of platforms anywhere else will drift.
 

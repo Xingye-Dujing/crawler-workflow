@@ -75,6 +75,9 @@ class TestProfilesEndpoint:
             'used_at',
             'size_mb',
             'has_saved_cookie',
+            # Which cookie file this profile was planted from, expressed as one boolean:
+            # the panel cannot know a saved-over file is being ignored without it.
+            'needs_refresh',
         }
         assert json.dumps(first)  # the payload must survive JSON, sizes and all
 

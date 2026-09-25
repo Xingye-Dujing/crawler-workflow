@@ -308,4 +308,78 @@ sandbox.refreshCookieStatus();
 await flush();
 out.savedStatus = doc.getElementById('cookie-status').textContent;
 
+/* ── 9. the profile refresh asks first, and only the confirmation sends anything ─
+   The button overwrites a live profile session with the saved file, which is the one
+   thing the import-once rule exists to prevent — so it may never fire on a click alone. */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.cookieJob.active = false;
+sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: {} };
+setPlatform('weibo');
+sandbox.__dialogAnswer = null;
+sandbox.__toasts.length = 0;
+before = sandbox.__calls.length;
+await sandbox.refreshProfileCookie();
+await flush();
+out.refreshCancelled = {
+    calls: sandbox.__calls.slice(before).map((call) => call.url),
+    dialog: dialogs[dialogs.length - 1] || null,
+};
+
+before = sandbox.__calls.length;
+sandbox.__dialogAnswer = 'refresh';
+sandbox.__responses['/api/cookies/refresh-profile'] = { ok: true, message: 'PLANTED-3', count: 3 };
+sandbox.__toasts.length = 0;
+await sandbox.refreshProfileCookie();
+await flush();
+out.refreshConfirmed = {
+    requests: sandbox.__calls.slice(before).map((call) => ({ url: call.url, body: call.opts && call.opts.body })),
+    toasts: sandbox.__toasts.slice(),
+    statusText: doc.getElementById('cookie-status').textContent,
+};
+
+/* ── 10. a refusal is shown as the server worded it ─────────────────────── */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.__responses['/api/cookies/refresh-profile'] = { ok: false, error: 'BUSY-PROFILE' };
+sandbox.__dialogAnswer = 'refresh';
+sandbox.__toasts.length = 0;
+await sandbox.refreshProfileCookie();
+await flush();
+out.refreshRefused = {
+    statusText: doc.getElementById('cookie-status').textContent,
+    toasts: sandbox.__toasts.slice(),
+};
+
+/* ── 11. the panel says "your file is newer than the profile" only when the
+   server measured that ───────────────────────────────────────────────────
+   The hint is the whole reason the button is findable, and a browser-side guess
+   about which cookie file a Chrome profile was planted from is not knowable —
+   so the row comes from /api/browser/profiles and nothing else. */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.cookieFlows = null;
+sandbox.cookieProfilesLoaded = false;
+sandbox.cookieProfiles = {};
+sandbox.__responses['/api/cookies/flow'] = {
+    ok: true,
+    flows: [{ platform: 'weibo', purpose: 'PURPOSE', steps: ['STEP-1'], accepts_custom_url: true, login_url: 'https://weibo.com' }],
+};
+sandbox.__responses['/api/browser/profiles'] = {
+    ok: true,
+    profiles: [{ platform: 'weibo', needs_refresh: true }],
+};
+setPlatform('weibo');
+sandbox.renderCookieGuide();
+await flush();
+await flush();
+out.hintWhenStale = (doc.getElementById('cookie-guide-body').children || []).map((row) => row.textContent);
+
+sandbox.cookieProfilesLoaded = false;
+sandbox.__responses['/api/browser/profiles'] = {
+    ok: true,
+    profiles: [{ platform: 'weibo', needs_refresh: false }],
+};
+sandbox.renderCookieGuide();
+await flush();
+await flush();
+out.hintWhenCurrent = (doc.getElementById('cookie-guide-body').children || []).map((row) => row.textContent);
+
 process.stdout.write(JSON.stringify(out));

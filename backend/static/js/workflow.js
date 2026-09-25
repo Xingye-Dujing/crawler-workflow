@@ -3548,14 +3548,48 @@ var cookieJob = { active: false, known: false, timer: null, platform: '', kind: 
 /* The server owns the guidance (translated, and next to the code that enforces
    which link is acceptable), so it is fetched once and rendered from cache. */
 var cookieFlows = null;
+var cookieFlowsLoading = false;
+/* The profile state comes from its own endpoint (it is the same table the settings panel
+   renders) and is cached by platform name, because the one thing the user cannot see from
+   outside is that the cookie file in data/cookies is NOT the session this profile holds. */
+var cookieProfiles = {};
+var cookieProfilesLoaded = false;
+var cookieProfilesLoading = false;
+
+function loadCookieProfiles() {
+    /* In-flight as well as loaded: the guide repaints when its own fetch lands, and a
+       second call during that window would buy the same table twice — the reason the
+       panel is allowed to cache it at all is that it is fetched once. A failed read
+       leaves ``loaded`` false, so the next render asks again. */
+    if (cookieProfilesLoaded || cookieProfilesLoading) return;
+    cookieProfilesLoading = true;
+    fetchJSON('/api/browser/profiles').then(function (result) {
+        cookieProfilesLoading = false;
+        if (!result || !result.ok) return;
+        var byName = {};
+        (result.profiles || []).forEach(function (row) {
+            byName[row.platform] = row;
+        });
+        cookieProfiles = byName;
+        cookieProfilesLoaded = true;
+        renderCookieGuide();
+    });
+}
 
 function renderCookieGuide() {
     var body = document.getElementById('cookie-guide-body');
     if (!body) return;
     var platform = document.getElementById('cookie-platform').value;
+    loadCookieProfiles();
     if (!cookieFlows) {
         body.textContent = I18n.t('cookie.guideLoading');
+        /* The same in-flight guard the profile table needs: this function is called again
+           when either fetch lands, and without it a repaint mid-flight bought the flow a
+           second time for a panel that caches it precisely because it is fetched once. */
+        if (cookieFlowsLoading) return;
+        cookieFlowsLoading = true;
         fetchJSON('/api/cookies/flow').then(function (result) {
+            cookieFlowsLoading = false;
             if (!result.ok) {
                 body.textContent = I18n.t('cookie.failed').replace('{err}', result.error || '');
                 return;
@@ -3578,6 +3612,15 @@ function renderCookieGuide() {
     flow.steps.forEach(function (step) {
         lines.push(step);
     });
+    /* The staleness sentence is only ever true because the server measured it: the
+       profile records WHICH cookie file went into it, and the answer here is "a
+       different one is sitting in data/cookies now". Without that hint the button is
+       a mystery door, and with it the panel says the one thing the user cannot
+       find out from outside: that their re-taken cookie is not being used yet. */
+    var profile = cookieProfiles[platform];
+    if (profile && profile.needs_refresh) {
+        lines.push(I18n.t('cookie.refreshHint'));
+    }
     body.textContent = '';
     lines.forEach(function (line) {
         var row = document.createElement('div');
@@ -3787,6 +3830,47 @@ async function deleteCookie() {
 function cookieEntryUrl() {
     var el = document.getElementById('cookie-entry');
     return el ? String(el.value || '').trim() : '';
+}
+
+async function refreshProfileCookie() {
+    /* Put the saved file INTO the profile this platform crawls with.
+
+       The panel imports a cookie file once and never re-plants it, because overwriting a
+       live profile with an older snapshot destroys a session the site has already
+       refreshed. That is right for a crawl and wrong for a person who has just re-taken a
+       cookie: the file is newer than what the profile holds, and nothing would ever read
+       it again. So this button exists, it asks first, and the backend answers with its own
+       refusal sentence when there is nothing to do (never-used profile → the next crawl
+       imports it anyway; no profile switched on → every crawl already plants from the
+       file; browser busy → say so rather than queue a fifteen-minute wait). */
+    var select = document.getElementById('cookie-platform');
+    var statusEl = document.getElementById('cookie-status');
+    var platform = select ? select.value : '';
+    if (!platform) return;
+    var answer = await showDialog({
+        message: I18n.t('dialog.cookieRefresh').replace('{platform}', platform),
+        buttons: [
+            { label: I18n.t('dialog.cookieRefreshYes'), value: 'refresh', primary: true },
+            { label: I18n.t('dialog.cancel'), value: null },
+        ],
+    });
+    if (answer !== 'refresh') return;
+    if (statusEl) statusEl.textContent = I18n.t('cookie.refreshWorking');
+    var result = await fetchJSON('/api/cookies/refresh-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: platform }),
+    });
+    if (result.ok) {
+        showToast(result.message || I18n.t('cookie.refreshed').replace('{platform}', platform));
+        if (statusEl) statusEl.textContent = result.message || '';
+        /* The profile now holds a different session, so the cached "is this file newer
+           than what went in?" answer has to be re-read, not edited here. */
+        cookieProfilesLoaded = false;
+        renderCookieGuide();
+    } else if (statusEl) {
+        statusEl.textContent = result.error || I18n.t('cookie.failed').replace('{err}', '');
+    }
 }
 
 function startCookiePolling() {

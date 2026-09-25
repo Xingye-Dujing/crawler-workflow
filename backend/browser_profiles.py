@@ -209,12 +209,16 @@ def is_imported(platform: str) -> bool:
     return bool(_marker(platform).get('imported_at'))
 
 
-def mark_used(platform: str, *, imported: bool = True) -> None:
+def mark_used(platform: str, *, imported: bool = True, cookie_stamp: str = '') -> None:
     """Record that the profile was handed to a browser, and whether cookies went in.
 
     A failed write leaves the profile "new", which re-imports the cookie file next
     run — the safe direction of failure (a session refresh, not a silently frozen
     credential).
+
+    ``cookie_stamp`` is *which* file went in (see :func:`file_stamp`). It is what lets
+    the panel answer "the saved Cookie is newer than what this profile holds" without
+    re-reading the browser's own store, which no process but Chrome can do.
     """
     path = marker_path(platform)
     stamp = time.strftime('%Y-%m-%d %H:%M:%S')
@@ -225,8 +229,48 @@ def mark_used(platform: str, *, imported: bool = True) -> None:
         if imported and not existing.get('imported_at'):
             existing['imported_at'] = stamp
         existing.setdefault('imported_at', '')
+        if imported:
+            existing['cookie_stamp'] = cookie_stamp
         with open(path, 'w', encoding='utf-8') as handle:
             json.dump(existing, handle, ensure_ascii=False, indent=1)
+
+
+def file_stamp(path: str) -> str:
+    """A cheap identity for a cookie file: its mtime and size, not its contents.
+
+    Contents would be the precise answer and also a read of the user's session values,
+    which this module has no business holding in memory. A re-save changes the
+    modification time, which is the event the panel cares about.
+    """
+    try:
+        info = os.stat(path)
+    except OSError:
+        return ''
+    return f'{int(info.st_mtime)}:{info.st_size}'
+
+
+def needs_refresh(platform: str, cookie_path: str) -> bool:
+    """Is the saved cookie file a *different* file than the one this profile was given?
+
+    Three answers must stay separate, and two of them are "no":
+
+    * a profile that has never been used will import the file on its own — nothing to
+      refresh;
+    * a profile whose marker predates this field answers "no" rather than nagging,
+      because "I cannot tell what went in" is not evidence that something changed;
+    * a platform with no saved file has nothing to plant.
+
+    Only "it was planted, and the file has been saved since" is a real difference, and
+    even then this is a hint and a button — never an automatic re-plant. Overwriting a
+    live profile with an older snapshot is the harm the import-once rule exists to
+    prevent; the user asking is the one thing that makes it a refresh.
+    """
+    if not cookie_path or not is_used(platform):
+        return False
+    recorded = str(_marker(platform).get('cookie_stamp') or '')
+    if not recorded:
+        return False
+    return file_stamp(cookie_path) != recorded
 
 
 def _dir_size_mb(path: str) -> int:
@@ -238,11 +282,14 @@ def _dir_size_mb(path: str) -> int:
     return total // (1024 * 1024)
 
 
-def status(platform: str, *, recommended: bool = False, has_cookie: bool = False) -> dict:
+def status(platform: str, *, recommended: bool = False, has_cookie: bool = False, cookie_path: str = '') -> dict:
     """One platform's profile state, shaped for the settings panel.
 
     ``imported`` is what the guidance sentence turns on: false with an existing
     directory means "it has been used but never given a session — log into it".
+    ``needs_refresh`` is the other half of that story: the profile *was* given a
+    session, and the file it came from has been saved over since, so the login the user
+    just re-took is sitting in a file the browser will never look at again by itself.
     """
     path = platform_dir(platform)
     exists = os.path.isdir(path)
@@ -257,4 +304,5 @@ def status(platform: str, *, recommended: bool = False, has_cookie: bool = False
         'used_at': str(marker.get('used_at') or ''),
         'size_mb': _dir_size_mb(path) if exists else 0,
         'has_saved_cookie': bool(has_cookie),
+        'needs_refresh': bool(cookie_path) and needs_refresh(platform, cookie_path),
     }

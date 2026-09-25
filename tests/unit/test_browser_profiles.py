@@ -10,7 +10,9 @@ The rules worth pinning are the ones that are invisible when they break:
 
 * **used profile ⇒ no planting.** Importing the cookie file is a one-time act; planting
   it again would overwrite the live session with the stale snapshot — the harm inverted,
-  and the crawl would look like a dead cookie;
+  and the crawl would look like a dead cookie. The one exception is an explicit
+  ``refresh_cookies=True`` from the panel's own button, which is the door a *re-taken*
+  cookie gets in through (see ``TestCookieFileIsNotTheProfileSession``);
 * **switched off ⇒ exactly the old behaviour**, including planting every time;
 * the settings panel's two new keys survive a round-trip, and a *relative* directory is
   refused with a warning rather than quietly made into a path somewhere surprising;
@@ -21,6 +23,7 @@ The rules worth pinning are the ones that are invisible when they break:
 import json
 import threading
 import time
+from pathlib import Path
 
 import browser_profiles
 import pytest
@@ -143,6 +146,89 @@ class TestFactoryPolicy:
         crawlers_pkg.get_crawler('xiaohongshu', cookie_dir='/tmp/cookies')
         assert fake_crawler()['profile_dir'] == login_profile
         assert fake_crawler()['for_login'] is False
+
+    def test_an_explicit_refresh_replants_into_a_used_profile(self, profiles_on, fake_crawler, tmp_path):
+        """#108, the one door through which a used profile is given the file again.
+
+        Without it the panel's 「保存 Cookie」 writes a file that the crawling browser
+        will never read again, and a re-taken session buys nothing.
+        """
+        cookie_dir = tmp_path / 'cookies'
+        cookie_dir.mkdir()
+        saved = cookie_dir / 'weibo_cookies.json'
+        saved.write_text('[]', encoding='utf-8')
+        crawlers_pkg.get_crawler('weibo', cookie_dir=str(cookie_dir))
+        crawlers_pkg.get_crawler('weibo', cookie_dir=str(cookie_dir))
+        assert fake_crawler()['cookie_path'] is None, 'the second ordinary crawl planted, which is the harm'
+        crawlers_pkg.get_crawler('weibo', cookie_dir=str(cookie_dir), refresh_cookies=True)
+        # Compared as paths: the factory joins with a forward slash and Windows reports
+        # ``tmp_path`` with backslashes, and both name the same file.
+        assert Path(fake_crawler()['cookie_path']) == saved
+
+    def test_the_refresh_is_not_a_new_default(self, profiles_on, fake_crawler):
+        """A caller that says nothing must not re-plant: a crawl is not a user asking."""
+        crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies')
+        crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies', refresh_cookies=False)
+        assert fake_crawler()['cookie_path'] is None
+
+
+class TestCookieFileIsNotTheProfileSession:
+    """Can the panel tell "the file changed" from "the profile already holds this file"?
+
+    The marker records *which* file it was planted from, by mtime and size rather than by
+    contents: reading the cookie values to compare them would put a live session in this
+    module's memory for no reason, and a re-save always moves the modification time.
+    """
+
+    def test_a_file_that_never_changed_needs_no_refresh(self, profiles_on, tmp_path):
+        saved = tmp_path / 'weibo_cookies.json'
+        saved.write_text('[{"name":"a"}]', encoding='utf-8')
+        browser_profiles.mark_used('weibo', imported=True, cookie_stamp=browser_profiles.file_stamp(str(saved)))
+        assert browser_profiles.needs_refresh('weibo', str(saved)) is False
+
+    def test_a_file_saved_over_since_needs_one(self, profiles_on, tmp_path):
+        saved = tmp_path / 'weibo_cookies.json'
+        saved.write_text('[{"name":"a"}]', encoding='utf-8')
+        browser_profiles.mark_used('weibo', imported=True, cookie_stamp=browser_profiles.file_stamp(str(saved)))
+        saved.write_text('[{"name":"a"},{"name":"b"}]', encoding='utf-8')
+        assert browser_profiles.needs_refresh('weibo', str(saved)) is True
+
+    def test_a_profile_used_without_a_file_is_not_nagged(self, profiles_on, tmp_path):
+        """Logging in *inside* the profile plants nothing, so there is no "your file is
+        newer" to say — and a hint that fired here would push the user to overwrite the
+        very session they just created by hand."""
+        saved = tmp_path / 'douyin_cookies.json'
+        saved.write_text('[{"name":"a"}]', encoding='utf-8')
+        browser_profiles.mark_used('douyin', imported=False)
+        assert browser_profiles.needs_refresh('douyin', str(saved)) is False
+
+    def test_a_profile_with_no_history_of_what_went_in_says_nothing(self, profiles_on, tmp_path):
+        """Every profile built before this field existed answers "I cannot tell", which is
+        deliberately not rendered as a hint. The button still works for them."""
+        saved = tmp_path / 'zhihu_cookies.json'
+        saved.write_text('[{"name":"a"}]', encoding='utf-8')
+        browser_profiles.mark_used('zhihu', imported=True)
+        assert browser_profiles.needs_refresh('zhihu', str(saved)) is False
+
+    def test_an_unused_profile_is_answered_by_the_next_crawl_not_by_a_button(self, profiles_on, tmp_path):
+        saved = tmp_path / 'weibo_cookies.json'
+        saved.write_text('[]', encoding='utf-8')
+        assert browser_profiles.needs_refresh('weibo', str(saved)) is False
+
+    def test_a_missing_or_unreadable_file_has_no_stamp_rather_than_a_fake_one(self, tmp_path):
+        assert browser_profiles.file_stamp(str(tmp_path / 'nope.json')) == ''
+        assert browser_profiles.file_stamp('') == ''
+
+    def test_the_status_row_carries_the_answer_for_the_panel(self, profiles_on, tmp_path):
+        saved = tmp_path / 'weibo_cookies.json'
+        saved.write_text('[{"name":"a"}]', encoding='utf-8')
+        browser_profiles.mark_used('weibo', imported=True, cookie_stamp='111:8')
+        row = browser_profiles.status('weibo', has_cookie=True, cookie_path=str(saved))
+        assert row['needs_refresh'] is True
+        assert row['imported'] is True
+        # Asked without a path (a caller that cannot know which file), the answer is no —
+        # never a guess.
+        assert browser_profiles.status('weibo')['needs_refresh'] is False
 
 
 class TestSettingsRoundTrip:
