@@ -4068,10 +4068,18 @@ var runsManager = {
        the moment the panel is next opened. The bound is minutes rather than seconds
        because the worker may be inside a page load it cannot be pulled out of, and
        this is the only thing that turns 正在停止 into the run's real verdict without
-       the user touching anything. */
+       the user touching anything.
+
+       The watch has to outlast the longest tail the worker can be inside, which is
+       measured, not guessed (docs/crawler_notes.md): a model request gives up at its
+       own 300 s timeout and the retry ladder runs it again — 600 s — while a crawl cut
+       short by killing its driver lands in about 5 to 30 s. A 120 s watch expired in
+       the middle of that, freezing the row at 正在停止 until somebody opened it again.
+       `tries` is derived from the watch budget and the step actually used, so passing a
+       shorter `waitMs` (a test does) cannot silently shorten the watch too. */
     async awaitSettled(tries, waitMs) {
-        var n = tries || 240;
-        var step = waitMs || 500;
+        var step = waitMs || runsManager.SETTLE_POLL_MS;
+        var n = tries || Math.ceil(runsManager.SETTLE_WATCH_MS / step);
         for (var i = 0; i < n; i++) {
             await new Promise(function (done) { setTimeout(done, step); });
             if (this._detailOpen()) continue;
@@ -4083,6 +4091,12 @@ var runsManager = {
             if (!this._awaitable()) break;
         }
     },
+
+    /* Poll interval and total watch of the loop above, as data: the frontend test pins
+       that the watch outlasts the measured model tail, which a literal buried in a call
+       argument could not be checked against. */
+    SETTLE_POLL_MS: 500,
+    SETTLE_WATCH_MS: 660000,
 
     /* The waiting list, drawn above the finished records. Each row can only be
        cancelled — starting it sooner would break the one-writer rule the whole

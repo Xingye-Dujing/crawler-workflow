@@ -9,6 +9,7 @@ Stop lands between attempts, and the
 model-list endpoints' filtering — all without a byte leaving the machine.
 """
 
+import socket
 import threading
 import time
 
@@ -170,6 +171,10 @@ class FakeOllamaClient:
 
     def __init__(self, host=None, **kw):
         self.host = host
+        # Everything else the constructor was handed. The transport options are the
+        # other half of this client's contract: `host` alone would pass while the
+        # connection ran with no timeout at all.
+        self.options = kw
         self.calls = []
         FakeOllamaClient.instances.append(self)
 
@@ -205,6 +210,20 @@ class TestOllamaTransport:
         assert kwargs['stream'] is False
         assert kwargs['options'] == {'temperature': 0.1, 'num_predict': 32}
         assert 'think' not in kwargs  # older builds reject unknown kwargs
+
+    def test_the_daemon_client_is_built_with_the_run_timeout(self, fake_ollama, monkeypatch):
+        """``timeout`` reaches the connection, or the run's ceiling is a comment.
+
+        The ollama transport is the only one that does not call ``requests`` itself, so
+        the timeout the rest of this class honours has to be handed to the client
+        constructor — and ollama-python's default is ``None``, which httpx reads as
+        "never time out", not as "use my own default". A daemon that accepts the
+        connection and stops answering then holds the worker forever, and 停止 waits
+        on a request that will never return.
+        """
+        monkeypatch.setattr(lc, '_CHAT_KWARGS', frozenset())
+        LLMClient(provider='ollama', model='m', timeout=42).chat('p')
+        assert fake_ollama.instances[0].options['timeout'] == 42
 
     def test_think_disabled_when_build_supports_it(self, fake_ollama, monkeypatch):
         monkeypatch.setattr(lc, '_CHAT_KWARGS', frozenset({'model', 'messages', 'stream', 'options', 'think'}))
@@ -353,6 +372,60 @@ class TestInterruptibleBackoff:
         assert err.value.kind == 'network'
         assert len(Dead.instances[0].calls) == 4  # retries still happen
         assert time.monotonic() - started < 2.0
+
+
+@pytest.mark.enable_socket
+class TestSilentDaemon:
+    """The measured form of "the daemon stopped answering": a real socket, no reply.
+
+    Everything else here mocks the transport, and a mock answers instantly however it
+    is configured — so no mocked test can tell ``timeout=None`` (never give up) from a
+    number. This one accepts the connection and says nothing, which is the only way to
+    see the difference, and it is the state a wedged Ollama is really in.
+    """
+
+    def test_a_silent_daemon_is_given_up_on_within_the_timeout(self):
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(('127.0.0.1', 0))
+        port = listener.getsockname()[1]
+        listener.listen(4)
+        held: list = []
+
+        def accept_and_say_nothing():
+            while True:
+                try:
+                    held.append(listener.accept()[0])
+                except OSError:
+                    return
+
+        threading.Thread(target=accept_and_say_nothing, daemon=True).start()
+        outcome: list = []
+
+        def ask():
+            started = time.monotonic()
+            try:
+                LLMClient(provider='ollama', model='m', host=f'http://127.0.0.1:{port}', timeout=1).chat(
+                    'p', max_retries=1
+                )
+                outcome.append(('answered', time.monotonic() - started))
+            except Exception as exc:
+                outcome.append((type(exc).__name__, time.monotonic() - started))
+
+        worker = threading.Thread(target=ask, daemon=True)
+        worker.start()
+        worker.join(20)
+        try:
+            assert not worker.is_alive(), 'the silent daemon still held the request after 20 s'
+            assert outcome and outcome[0][0] == 'LLMError', outcome
+            # Generously under the join above and far over the 1 s that was asked for:
+            # this asserts the give-up happened because of the timeout, not because the
+            # socket died.
+            assert 0.5 < outcome[0][1] < 10, outcome
+        finally:
+            for conn in held:
+                conn.close()
+            listener.close()
 
 
 class TestBaseUrl:

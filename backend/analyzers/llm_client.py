@@ -216,9 +216,16 @@ class LLMClient:
         # (or to the module-level ollama.chat, which forwards to Client.chat)
         # raises "unexpected keyword argument 'host'" before a single byte is
         # sent — which is exactly how the local Ollama path used to die.
+        #
+        # `timeout` is a client option for the same reason, and omitting it was not
+        # cosmetic: ollama-python hands httpx `timeout=None`, which httpx reads as
+        # "no timeout at all" rather than "use my default". Measured against a daemon
+        # that accepts the connection and never answers, a 20 s client was still
+        # blocked 70 s later — so the run's 300 s ceiling existed only on paper and
+        # 停止 could wait forever on a wedged daemon.
         base = _ollama_base_url(self.host)
         try:
-            client = Client(host=base)
+            client = Client(host=base, timeout=self.timeout)
         except Exception as e:
             raise LLMError(t('llm.ollama_client_failed', host=base, err=e), 'network') from e
 

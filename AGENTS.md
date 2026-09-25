@@ -64,7 +64,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   current one, and `restoreState()` brackets itself with `_historySaving` so one restore is ONE undo
   point.
 - **One page boot must not be a single point of failure.** It is one `DOMContentLoaded`
-  body, so any throw inside it skipped every later step. Boot steps go through
+  body, so a throw inside it skips every later step. Boot steps go through
   `boot(name, fn)`; `stats` declines on a missing library and says so.
 - **A dialog with an input is answered by the input.** `showDialog` resolves a clicked
   button as `b.value !== undefined ? b.value : inputEl.value`, so a confirm button that
@@ -88,8 +88,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the
   one the bug was about: for a record, a run or a panel row, list the dimensions first (`mode`,
   `headless`, `wf_count`, resume state, language …) and cover the grid.
-- **The `integration` UI tier performs no server writes** — uploading, saving a workflow or executing a run
-  would leave rows in the user's real `data/` and `logs/` (the app has no data-dir override). Stub `fetch`.
+- **The `integration` UI tier performs no server writes** — no data-dir switch exists, so a run
+  or an upload lands in the user's real `data/` and `logs/`. Stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`: a valid
   session can be answered a login redirect once by risk control. An empty that NAMES its refusal (wall or
   risk) is the site's answer — assert the naming; an unnamed empty is real "found nothing" and stays red.
@@ -155,8 +155,10 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   thread** (the worker's verdict replaces it) and `stop_requested()` reads that — never
   `not running`, which an idle server also answers. Each crawl asks it at its next row via
   `Crawler.emit` (a `BaseException`: `except Exception` would swallow it into "the site sent
-  nothing more"). `driver.quit()` cannot interrupt the command the worker is inside (numbers in
-  `docs/crawler_notes.md`), so 停止 kills that driver process.
+  nothing more"). `driver.quit()` cannot interrupt the command the worker is inside, so 停止
+  kills that driver process. **A timeout not handed to the connection is a comment, not a
+  ceiling**: `ollama.Client` defaults to `None` (never), so pass the run's timeout there; and the
+  panel's post-stop watch must outlast the measured tail (`docs/crawler_notes.md`).
 - **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.**
   `browser_profiles.py` resolves `data/chrome_profile/<platform>` (or the user's absolute
   `browser_profile_dir`) and `get_crawler` passes it as `--user-data-dir`, so the login window and the
@@ -230,7 +232,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **Checkpointing is the core value** (`services/run_store.py`): per-node outputs and LLM answers
   persist so an interrupted run resumes rather than re-crawls or re-pays. Keep `runs.db` state compatible.
   Three measured rules, each pinned by a test: the streaming row sink writes **one transaction per row**
-  on purpose (WAL + `synchronous=NORMAL` makes a commit microseconds, so batching buys nothing);
+  on purpose (a commit here is microseconds);
   the next free slot
   is `MAX(seq)+1`, **never `COUNT(*)`** (it ran per row, which made a long crawl quadratic in
   its own table); a **cursor records position, not content** — collected ids come from the seeded rows
@@ -242,8 +244,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   (`dataset_name`, `row_count`, `workflow_name`) is therefore the answer to "does this
   parameter choose data, or describe the record?" — ids stay in, labels stay out.
 - **Reuse has four rules that are each easy to break.** `done` AND `restored` are reusable
-  (a node that only replayed last time is just as settled — omitting `restored` made the
-  *second* 继续 recompute everything); a stored result with **zero rows** is never reused
+  (a node that only replayed last time is just as settled); a stored result with **zero rows** is never reused
   (a parent that came up empty may deliver this time, and reuse is decided by fingerprint);
   the source node is never adopted, it resumes by cursor; and `begin_node` reporting
   `dropped_stale` cancels reuse, because those rows were deleted.
@@ -319,8 +320,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   `switchWfTab` repaints from that view's history without moving its cursor.
 - **Every thread that logs must pin its own language.** `set_lang` is thread-local and a
   daemon thread starts with a fresh one, so `run()`, the parallel pool wrapper and **both
-  cookie workers** take the request's language and set it first — the Cookie panel's probe
-  lines and failures were Chinese in an English interface until that argument existed.
+  cookie workers** take the request's language and set it first, because a daemon thread that
+  does not is Chinese in an English interface.
   A test asserting console text should assert on the reason, not on a pasted sentence, or send both
   languages.
 - **One failure, one line.** `LogBufferHandler` forwards every `logger.*` call into the

@@ -952,6 +952,20 @@ class TestThePanelFollowsALiveRun:
         assert 'continueRun' not in follow['stoppingHandlers'], follow['stoppingHandlers']
         assert 'restart' not in follow['stoppingHandlers'], follow['stoppingHandlers']
 
+    def test_the_watch_outlasts_the_longest_tail_measured_on_a_real_machine(self, runsmgr):
+        """停止 is honoured when the *worker* says so, and a worker can be inside one
+        model request for 600 s (measured on this machine: a 300 s timeout, then the
+        retry ladder again). The watch ran out at 240 × 500 ms = 120 s, so the row kept
+        reading 正在停止 after the record had a verdict — the same lie by omission the
+        bound was supposed to prevent.
+        """
+        follow = runsmgr['follow']
+        assert follow['longTailSettled'] is True, follow
+        assert follow['longTailReads'] > 240, (
+            f'the default watch gave up after {follow["longTailReads"]} reads, well inside the tail a real run takes'
+        )
+        assert follow['watchMs'] >= 600000, follow['watchMs']
+
     def test_a_status_this_build_has_no_word_for_is_not_called_completed(self, runsmgr):
         """A history panel is read for what happened; an unrecognised stored value must
         show that value rather than borrow the friendly verdict."""

@@ -370,6 +370,26 @@ follow.stoppingHandlers = [...stoppingHtml.matchAll(/runsManager\.(\w+)\(/g)].ma
    record never said, which is the one thing a history panel exists to avoid. */
 follow.unknownLabel = I18n.t(manager.statusKey('undone-by-a-stranger'));
 
+/* The bound itself. Measured on a real machine, a stopped run's worker can still be
+   inside one model request for 600 s — its own timeout, then the retry ladder — and the
+   watch used to run out at 240 × 500 ms = 120 s, which left the row reading 正在停止
+   with nothing re-reading it until somebody opened the panel again. So an answer that
+   refuses to settle for 400 reads — past the 240 the old default allowed — has to be
+   followed to its verdict. */
+manager._detail = null;
+let longReads = 0;
+Object.defineProperty(sandbox.__routes, '/api/runs/list', {
+    configurable: true,
+    get: () => (longReads++ > 400 ? SETTLED : STOPPING),
+});
+await manager.awaitSettled(undefined, 1);
+follow.longTailReads = longReads;
+follow.longTailSettled = manager._awaitable() === false;
+/* The budget as data, because the derived `tries` is what makes a shorter poll
+   lengthen the loop rather than shorten the watch. */
+follow.watchMs = manager.SETTLE_WATCH_MS;
+follow.pollMs = manager.SETTLE_POLL_MS;
+
 /* ─── a refresh that lands while the detail fetch is in flight ────────────
    The panel keeps itself current during a live run, which is exactly when a person
    opens a record's detail. The row the click came from can therefore be gone by the
