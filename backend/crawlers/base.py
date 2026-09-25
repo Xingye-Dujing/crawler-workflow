@@ -114,6 +114,14 @@ class Crawler(ABC):
     WALL_PROOFS = 5
     WALL_POLL = 0.3
 
+    #: Whether the most recent :meth:`open` saw its navigation finish inside the
+    #: page-load timeout. Measured, and confirmed by the user watching the window: a
+    #: slow connection leaves a douyin 视频页 unfinished, and a refusal that then says
+    #: "blocked or a broken page" blames the site for the machine's network. Read this
+    #: only where nothing navigates in between; a caller that may (``check_login_wall``
+    #: does) takes ``open``'s return value instead.
+    navigation_settled = True
+
     def __init__(
         self,
         headless: bool = True,
@@ -389,7 +397,9 @@ class Crawler(ABC):
         renderer is survived. A timeout is not fatal — the document keeps
         building, and the caller's own poll is what decides whether the page is
         ready — but it must be *seen*, because "zero cards" after a timeout reads
-        to the user as an empty search.
+        to the user as an empty search. It is recorded on the instance as well as
+        returned, so a caller that reached this through a helper (rather than
+        calling ``open`` itself) can still tell a slow network from a refusal.
         """
         timed_out = False
         self.requests.append(str(url))
@@ -398,6 +408,7 @@ class Crawler(ABC):
         except Exception as e:
             timed_out = True
             logger.debug('navigation did not settle for %s: %s', url, e)
+        self.navigation_settled = not timed_out
         if self.prompts:
             self._dismiss_prompts()
         self._judge_arrival(url)

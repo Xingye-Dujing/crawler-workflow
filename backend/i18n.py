@@ -375,10 +375,17 @@ _ZH = {
         '请确认已在 Cookie 面板用「可见窗口」登录并保存，稍后再重试本关键词'
     ),
     'crawl.dy.detailEmpty': '[抖音] 视频 {i} 的详情页没有渲染出数据，已跳过该行',
+    'crawl.dy.detailSlow': (
+        '[抖音] 视频 {i} 的详情页在加载超时内没加载完，已跳过该行：这是网络或站点响应慢，稍后重试可能就拿到了'
+    ),
     'crawl.dy.noCards': (
         '[抖音] 结果页始终没有给出任何视频卡片，本次未采集。页面自报：{page}；地址：{url}。'
-        '抖音对根本不存在的关键词也会用相关视频兜底，所以「零卡片」只可能是被拦截或页面出错，'
+        '抖音对根本不存在的关键词也会用相关视频兜底，所以「零卡片」只可能是被拦截、页面出错或站点响应过慢，'
         '不是「这个关键词没有结果」'
+    ),
+    'crawl.dy.noCardsSlow': (
+        '[抖音] 结果页在加载超时内没有加载完，因此始终没有视频卡片（地址：{url}）。'
+        '这通常是本机网络或站点响应慢，稍后重试即可；既不是「这个关键词没有结果」，也不是被拦截'
     ),
     'crawl.dy.hotStart': '[抖音热榜] 开始采集热榜，目标 {n} 条（榜单一次给全，不逐条打开）',
     'crawl.dy.hotTarget': '[抖音热榜] 已采集到目标 {n} 条，不再读取榜单',
@@ -1125,10 +1132,20 @@ _EN = {
         'and retry this keyword a little later'
     ),
     'crawl.dy.detailEmpty': '[Douyin] video {i} rendered no detail data, row skipped',
+    'crawl.dy.detailSlow': (
+        '[Douyin] video {i} did not finish loading inside the page-load timeout, row skipped: that is the '
+        'network or the site being slow, a retry may well get it'
+    ),
     'crawl.dy.noCards': (
         '[Douyin] the result page never handed over a single video card, so nothing was collected. '
         'The page said: {page}; URL: {url}. Douyin fills the list with related videos even for a keyword '
-        'that cannot exist, so zero cards means blocked or broken — never "this keyword found nothing"'
+        'that cannot exist, so zero cards means blocked, broken, or the site answering far too slowly — '
+        'never "this keyword found nothing"'
+    ),
+    'crawl.dy.noCardsSlow': (
+        '[Douyin] the result page did not finish loading inside the page-load timeout, so no video card ever '
+        'appeared (URL: {url}). That is normally the network on this machine or a site answering slowly; '
+        'retry later. It is neither "this keyword found nothing" nor a block'
     ),
     'crawl.dy.hotStart': '[Douyin hot board] collecting the board, target {n} (one answer, no per-row page)',
     'crawl.dy.hotTarget': '[Douyin hot board] the target of {n} rows is already stored, the board is not read again',

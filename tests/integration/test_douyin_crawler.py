@@ -21,6 +21,7 @@ every change:
 import json
 
 import pytest
+from selenium.common.exceptions import TimeoutException
 
 import crawlers.base as base_module
 from crawlers.base import Crawler
@@ -93,7 +94,12 @@ class FakeDriver:
         grid_batches=None,
         works='',
         board=None,
+        load_timeout=False,
     ):
+        # A navigation that never settles: measured on a real run (and named by the user
+        # watching the window), this is what a slow network looks like from inside the
+        # crawler, and the refusal it produces must say so rather than blame the site.
+        self.load_timeout = load_timeout
         # What the board's own endpoint answers, asked from inside the loaded page.
         # ``None`` stands for "not JSON at all", which is how a WAF page arrives.
         self.board = board
@@ -136,6 +142,10 @@ class FakeDriver:
     def get(self, url):
         self.visited.append(url)
         self.current_url = url
+        if self.load_timeout:
+            # What chromedriver answers when the document is still building at the end
+            # of ``page_load_timeout`` — the page is not wrong, it is unfinished.
+            raise TimeoutException(f'no such window: navigation timed out for {url}')
 
     def find_element(self, by, selector):
         if selector == 'body':
@@ -705,6 +715,63 @@ class TestHotBoard:
         assert len(rows) == 1
         assert not driver.fetched, 'the endpoint was asked although the target was already stored'
         assert t('crawl.dy.hotTarget', n=1) in ' '.join(_lines(caplog)), _lines(caplog)
+
+
+class TestSlowNetworkIsNotBlamedOnTheSite:
+    """A navigation that never finished is a different complaint from a refusal.
+
+    Measured on a real run and confirmed by the user watching the window: on a bad
+    connection douyin's pages simply do not arrive inside ``page_load_timeout``, and
+    before this distinction existed the run answered 「只可能是被拦截或页面出错」 —
+    sending the user to re-save a cookie that was fine, or to blame a site that was
+    merely slow. ``Crawler.open`` already knew the difference; both douyin call sites
+    were throwing the answer away.
+    """
+
+    def test_a_result_page_still_loading_says_the_network_not_the_site(self, make_crawler):
+        crawler, driver = make_crawler(cards=[], load_timeout=True)
+        with pytest.raises(RuntimeError) as err:
+            crawler.search('美食', target_count=3)
+        assert t('crawl.dy.noCardsSlow', url=driver.current_url) in str(err.value)
+        # The old sentence did not merely name a cause, it claimed exclusivity
+        # (「只可能是…」) and sent the user to re-save a cookie that was fine.
+        assert '只可能是' not in str(err.value), str(err.value)
+
+    def test_a_result_page_that_did_finish_but_mounted_nothing_still_quotes_the_page(self, make_crawler):
+        # The old sentence is not deleted, only narrowed to the case it was measured on:
+        # the navigation completed, the list stayed empty, and douyin does fill even a
+        # nonsense keyword — so THAT one really is a block or a broken page.
+        crawler, _driver = make_crawler(cards=[], title='502 Bad Gateway')
+        with pytest.raises(RuntimeError) as err:
+            crawler.search('美食', target_count=3)
+        assert '502 Bad Gateway' in str(err.value), str(err.value)
+        assert '加载超时' not in str(err.value), str(err.value)
+        # The two sentences are told apart by what they may claim: this one may name a
+        # cause exclusively, the slow-load one may not.
+        assert '只可能是' in str(err.value), str(err.value)
+
+    def test_a_detail_page_still_loading_is_not_reported_as_having_no_data(self, make_crawler, caplog):
+        crawler, _driver = make_crawler(cards=[ID], video_body='', load_timeout=True)
+        with caplog.at_level('WARNING'):
+            assert crawler.get_detail(f'https://www.douyin.com/video/{ID}') is None
+        assert t('crawl.dy.detailSlow', i=ID) in ' '.join(_lines(caplog)), _lines(caplog)
+        assert t('crawl.dy.detailEmpty', i=ID) not in ' '.join(_lines(caplog))
+
+    def test_a_detail_page_that_arrived_and_shown_nothing_still_says_no_data(self, make_crawler, caplog):
+        crawler, _driver = make_crawler(cards=[ID], video_body='')
+        with caplog.at_level('WARNING'):
+            assert crawler.get_detail(f'https://www.douyin.com/video/{ID}') is None
+        assert t('crawl.dy.detailEmpty', i=ID) in ' '.join(_lines(caplog)), _lines(caplog)
+
+    def test_the_open_verdict_is_recorded_for_the_caller_that_cannot_take_it(self, make_crawler):
+        # ``search`` reaches the refusal through ``_open_results``, so it cannot take the
+        # return value; the recorded flag is what lets it say the true thing.
+        crawler, _driver = make_crawler(cards=[], load_timeout=True)
+        crawler.open('https://www.douyin.com/search/x')
+        assert crawler.navigation_settled is False
+        crawler, _driver = make_crawler(cards=[])
+        crawler.open('https://www.douyin.com/search/x')
+        assert crawler.navigation_settled is True
 
 
 def _lines(caplog) -> list:

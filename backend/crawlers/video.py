@@ -571,8 +571,13 @@ class DouyinCrawler(VideoCrawler):
             # Zero cards is never an empty answer here. Measured: a keyword that
             # cannot exist still came back with 16 related videos, because douyin
             # fills the list in rather than showing an empty plate — so an empty
-            # page means blocked (验证码中间页) or broken (``502 Bad Gateway``), both
-            # of which were observed, and reporting 0 rows would blame the keyword.
+            # page means blocked (验证码中间页), broken (``502 Bad Gateway``) or a
+            # load that never finished, and reporting 0 rows would blame the keyword.
+            # The third of those is said by its own sentence: it is the machine's
+            # network, not the site refusing, and the user watching the window told us
+            # so after a run blamed douyin for exactly this.
+            if not self.navigation_settled:
+                raise RuntimeError(t('crawl.dy.noCardsSlow', url=self._current_url()))
             raise RuntimeError(t('crawl.dy.noCards', page=self._page_words(), url=self._current_url()))
         rounds = self._open_each(self._card_ids, self._scroll_results, done, target_count)
         logger.info(t('crawl.dy.finished', n=self.collected(), rounds=rounds, total=target_count))
@@ -934,10 +939,19 @@ class DouyinCrawler(VideoCrawler):
         counter, so it *is* the like count, and publishing it as 播放数 would be a
         wrong figure with a plausible column name.
         """
-        self.open(f'https://www.douyin.com/video/{aweme_id}')
+        # Taken from the call, not from ``navigation_settled``: ``check_login_wall``
+        # below may navigate again, and by the time the line is written the stored fact
+        # would no longer be about this page.
+        settled = self.open(f'https://www.douyin.com/video/{aweme_id}')
         if not self._wait_for_text(('发布时间', '评论'), timeout=15.0):
             self.check_login_wall(f'https://www.douyin.com/video/{aweme_id}')
-            logger.warning(t('crawl.dy.detailEmpty', i=aweme_id))
+            # Two different complaints. "No data rendered" says the page arrived and
+            # published nothing; "the page never finished loading" says the request is
+            # still owed — which is what a slow connection actually produces, and the
+            # row may well be there on a retry.
+            logger.warning(
+                t('crawl.dy.detailSlow', i=aweme_id) if not settled else t('crawl.dy.detailEmpty', i=aweme_id)
+            )
             return None
         facts = self._driver_facts()
         info_lines = [line.strip() for line in str(facts.get('info') or '').split('\n') if line.strip()]
