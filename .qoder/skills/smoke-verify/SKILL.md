@@ -31,10 +31,14 @@ Do NOT run `python app.py` directly — its `__main__` opens a browser and enabl
 reloader (two processes, messy to kill). Instead, in the background with cwd `backend/`:
 
 ```bash
-cd backend && PORT=5057 ../.venv/Scripts/python.exe -c "from app import app; app.run(host='127.0.0.1', port=5057, use_reloader=False)"
+cd backend && PORT=5057 CRAWLER_DATA_ROOT=../scratchpad/smoke_state \
+  ../.venv/Scripts/python.exe -c "from app import app; app.run(host='127.0.0.1', port=5057, use_reloader=False)"
 ```
 
 - Port 5057 avoids clashing with a user-run instance on 5000. Never kill a process on 5000.
+- `CRAWLER_DATA_ROOT` gives this boot its **own** `data/` and `logs/`. Without it the second
+  instance shares the user's state, and `RunStore.__init__` settles the user's live run as
+  interrupted on startup — so create `scratchpad/smoke_state` first, and keep it out of git.
 - The import itself is the first real test: any syntax error, bad import, or missing
   dependency crashes the boot. Check the background output for the "Running on" line
   (or traceback) before proceeding.

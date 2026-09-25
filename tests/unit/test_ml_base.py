@@ -8,9 +8,9 @@ Two properties are worth pinning:
 - the training guards have to fire before sklearn does, because the API layer
   turns ``ValueError`` into a 400 the user can act on.
 
-``MODEL_DIR`` is derived from ``__file__`` at import time, so each test
-monkeypatches it into its own tmp directory (the harness deliberately does not
-own this path).
+``MODEL_DIR`` follows ``Config.DATA_DIR`` (which the harness redirects before anything is
+imported), so each test still monkeypatches it into its own tmp directory — a shared root would
+let one test's fitted model answer another's training guard.
 """
 
 import os

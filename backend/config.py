@@ -2,6 +2,16 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+#: The parent of ``data/`` and ``logs/``, for the one process that asks for its own.
+#:
+#: Two callers need the state root to be movable. A test tier that boots a throwaway server of its
+#: own would otherwise have that server open the user's real ``runs.db`` and append to their
+#: ``app.log`` while the in-process suite believes itself isolated — which is what happened before
+#: this switch existed. And ``/smoke-verify`` boots a second instance on another port: with no
+#: separate root, that instance's ``RunStore`` settles the user's live run as stale on startup.
+#: Unset, everything is exactly where it always was — beside the code.
+DATA_ROOT = os.environ.get('CRAWLER_DATA_ROOT') or BASE_DIR
+
 
 class Config:
     DRIVER_PATH = r'C:\Program Files\Google\Chrome\Application\chromedriver.exe'
@@ -9,11 +19,11 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'crawler-workflow-secret-key')
 
     # Paths
-    DATA_DIR = os.path.join(BASE_DIR, 'data')
+    DATA_DIR = os.path.join(DATA_ROOT, 'data')
     COOKIE_DIR = os.path.join(DATA_DIR, 'cookies')
     EXPORT_DIR = os.path.join(DATA_DIR, 'exports')
     WORKFLOW_DIR = os.path.join(DATA_DIR, 'workflows')
-    LOG_DIR = os.path.join(BASE_DIR, 'logs')
+    LOG_DIR = os.path.join(DATA_ROOT, 'logs')
     # The run log is written by every crawl, so it rotates instead of growing
     # without limit: app.log rolls at LOG_MAX_BYTES and the previous
     # LOG_BACKUP_COUNT rolls are kept as app.log.1 … app.log.N.

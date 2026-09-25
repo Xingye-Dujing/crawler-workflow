@@ -957,7 +957,10 @@ app.js 为了拖拽把 `openCookieDialog` 又包了一层，包装函数的空�
 只在第一次使用时导入一次"这件事由目录里的 `.crawler-profile.json` 标记；`MAX(seq)+1` 那条的
 代价是曾经的 `COUNT(*)` 按**每一行**跑一次，于是一次长抓取在自己的表上平方级地慢下去。
 
-## 一次测试套件写进用户目录的事故：collect 早于 fixture（measured 2026-09-25，#134）
+## 测试套件两次写进用户目录：第二次之后，把它改成做不到的事（measured 2026-09-25 与 09-26，#134）
+
+**这是同类事故的第二次。** 第一次的记录是 AGENTS 里那条"UI 层不许写服务器，把 `fetch` 打桩"——
+那次是自启的服务把运行与上传落进了真 `data/`、`logs/`。第二次就是本节这一行：
 
 新加的 `tests/integration/test_stop_reaper.py` 在文件顶部写了 `from app import _close_login_browser`。
 就这一行，让那次 `pytest -q` 把**假 Cookie 写进了用户真正的 `data/cookies/`**，并且把里面原有的
@@ -975,11 +978,30 @@ app.js 为了拖拽把 `openCookieDialog` 又包了一层，包装函数的空�
   delete 也打在真目录上。
 
 症状不是崩溃，是**45 个断言在别的时间点也过、只有整轮跑才红**（各模块单跑全绿，因为它们没有提前
-导入 `app`）。修复分两层：把新文件改成用 `app_module` fixture（`import app` 因此发生在隔离之后）；
-再在 `tests/unit/test_test_tiers.py` 里用 AST 静态拒绝任何测试文件的**模块级** `app` 导入——
-函数体内的导入是安全的，所以只扫 `tree.body`。
+导入 `app`）。第一层修法是把新文件改成用 `app_module` fixture（`import app` 因此发生在隔离之后），
+再在 `tests/unit/test_test_tiers.py` 里用 AST 静态拒绝任何测试文件的**模块级** `app` 导入。
+
+但这层修法把安全性寄托在"每个人都记得用 fixture"上，而这条规矩本轮已经被违反两次（第一次是
+`integration` UI 层往真 `data/`、`logs/` 里落运行痕迹，那次写进 AGENTS 的是"本层不许写服务器，
+把 `fetch` 打桩"）。所以真正的修法是**把时序问题解决掉**：
+
+* `tests/conftest.py::_isolate_paths()` 现在在 **conftest 被导入的那一刻**执行，先于 collection
+  导入任何测试文件；`data_root` 只负责把那个根目录报给用例，不再负责搬路径——于是"隔离根"与
+  单例冻结的路径**不可能不一致**，无论谁在什么时候 import 什么；
+* 它同时写下环境变量 `CRAWLER_DATA_ROOT`（`backend/config.py`），所以**子进程**里自启的那台服务
+  也用自己的状态目录。这一条不是猜想：新加的看门狗第一次跑设备层就抓到 `logs/app.log`、
+  `logs/_ui_layout_server.log` 与 `data/{runs,datasets}.db-wal/-shm` 在动——UI 层自己拉起的服务
+  用的正是真 `data/`，而它一旦启动还会把用户正在跑的那次运行判为已中断；
+* `tests/isolation_guard.py` 在 conftest 导入时给 `data/`+`logs/` 拍一张指纹（路径、大小、mtime），
+  会话结束时比一遍：**只要有一个字节变了就把这轮判红**，并点名是哪些文件。判定逻辑放在这个模块里
+  而不是放在 conftest 里，是因为 pytest 会导入本树四个 `conftest.py`，`sys.modules['conftest']`
+  属于最后被收集的那一个——写在 conftest 里的判据，测试根本导不到（实测：单独跑绿、整轮跑红）。
+  Chrome profile 的子树不逐文件走（每个目录几万文件），但目录本身与其顶层的标记文件在比较之列，
+  因为那正是"爬虫没接到重定向"会留下痕迹的地方；只读不动 mtime，所以真站层读你的 Cookie 不会误报。
 
 留在这里的原因：这条不违反就会毁掉用户数据的规矩，长得完全不像错误。写它的反面教材是
 `tests/api/test_config_api.py::test_save_persists_into_the_isolated_cookie_dir`——它断言的是
 "保存到隔离根"，而它自己那次失败的方式，是**保存成功、日志也说了 saved、文件落在用户目录里**。
+看门狗自己也被真机证明过一次：一个临时用例往 `data/_guard_probe.json` 写四个字节，那轮
+`1 passed` 仍然以非零码退出并点名了那个文件。
 

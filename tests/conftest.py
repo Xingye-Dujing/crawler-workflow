@@ -1,36 +1,132 @@
 """Session-wide isolation harness for the whole test suite.
 
-Two facts about this codebase drive everything here:
+Three facts about this codebase drive everything here:
 
 1. ``backend/`` is the application's sys.path root — every module imports the
    next by top-level name (``from config import Config``). So backend/ goes on
-   sys.path at *conftest import time*; a test file that does ``from config
-   import ...`` at module level is collected before any fixture runs.
-2. Several paths are captured at import time and written to immediately:
-   ``app.history_service`` opens ``data/history.db``, ``settings_store._PATH``
-   was computed from ``Config.DATA_DIR``, and the lazy ``_RUN_STORE`` /
-   ``_DATASET_STORE`` singletons read ``Config.*_DB`` at first use. Therefore
-   the autouse ``isolated_paths`` fixture mutates those module globals *before*
-   anything constructs a store, and ``import app`` stays behind the session
-   ``app_module`` fixture so only API/integration tests pay the import cost.
+   sys.path at *conftest import time*.
+2. Paths are captured **at import time, into module-level singletons**:
+   ``app.cookie_manager = CookieManager(Config.COOKIE_DIR)``, ``app.history_service``
+   opens ``data/history.db``, ``settings_store._PATH`` and ``analyzers/ml_base.MODEL_DIR``
+   are each computed once, and the lazy ``_RUN_STORE`` / ``_DATASET_STORE`` read
+   ``Config.*_DB`` at first use.
+3. pytest imports *every collected test module* during collection — before any fixture
+   runs, and regardless of marker filters (a deselected file is still imported).
 
-Real ``data/`` and ``logs/`` must never gain a byte from a test run.
+(2) and (3) together are why the redirect below happens at **conftest import time** instead of
+in a fixture: a fixture is too late for anything a test module imports at its top level, and
+"too late" means the singleton holds the user's REAL directory. Measured the hard way, twice —
+once when the integration UI tier landed runs and uploads in ``data/`` (no switch existed then),
+and once when one new file's ``from app import ...`` froze ``data/cookies`` so a cookies test
+overwrote and deleted the user's saved cookies while the suite reported green.
+
+Real ``data/`` and ``logs/`` must never gain a byte from a test run, and
+:func:`pytest_sessionfinish` is what turns that sentence into a check rather than a hope: both
+directories are fingerprinted at import and compared at the end, and any new, changed or missing
+file fails the run — loudly, with the paths named, even if every single test passed.
 """
 
 import contextlib
+import os
+import shutil
 import sys
+import tempfile
 from itertools import count
 from pathlib import Path
 
 import pytest
+from isolation_guard import enforce
+from isolation_guard import fingerprint as _fingerprint_protected
 from run_wait import describe_state, wait_until_quiet
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = REPO_ROOT / 'backend'
 TESTS_DIR = REPO_ROOT / 'tests'
 
+#: Isolated roots live here, and the last few are kept — the way pytest keeps its own tmp dirs —
+#: so a failed run's files can still be opened afterwards.
+ISOLATED_PARENT = Path(tempfile.gettempdir()) / 'cixi_pytest'
+KEEP_ISOLATED_RUNS = 3
+
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
+
+
+PROTECTED_AT_IMPORT = _fingerprint_protected()
+
+
+#: (Config attribute, path inside the throwaway root). The same table drives the mkdir and the
+#: assignment, so a new write path cannot be added to one and missed in the other.
+ISOLATED_PATHS = (
+    ('DATA_DIR', 'data'),
+    ('COOKIE_DIR', 'data/cookies'),
+    ('EXPORT_DIR', 'data/exports'),
+    ('WORKFLOW_DIR', 'data/workflows'),
+    ('LLM_CHECKPOINT_DIR', 'data/checkpoints'),
+    # A crawler built by any test would otherwise drop a real Chrome profile into the user's
+    # data/ directory and keep reusing it across runs.
+    ('BROWSER_PROFILE_DIR', 'data/chrome_profile'),
+    ('LOG_DIR', 'logs'),
+)
+
+
+def _isolate_paths() -> Path:
+    """Point every write path the backend knows about at a throwaway directory, right now.
+
+    Called at conftest import time — see the module docstring for why it cannot be a fixture.
+    The layout mirrors the real one, so a test that names ``data_root / 'data' / 'cookies'``
+    is naming the same shape the application uses.
+    """
+    root = ISOLATED_PARENT / f'isolated-{os.getpid()}'
+    # Removed before created: a process id can be reused, and an isolated root that still holds a
+    # previous run's cookies, workflows or run rows would make "empty at the start" a lie.
+    shutil.rmtree(root, ignore_errors=True)
+    for _attr, rel in ISOLATED_PATHS:
+        (root / rel).mkdir(parents=True, exist_ok=True)
+
+    # The env var first: it is the answer a *child process* (a self-booted server, a probe) reads,
+    # and it is what makes every path derived from ``Config.DATA_DIR`` — including ones this file
+    # has never heard of, like the trained-model directory — land in the throwaway root. The
+    # explicit assignment below is what moves an already-imported ``config`` module.
+    os.environ['CRAWLER_DATA_ROOT'] = str(root)
+
+    from config import Config
+
+    for attr, rel in ISOLATED_PATHS:
+        setattr(Config, attr, str(root / rel))
+    Config.RUNS_DB = str(root / 'data' / 'runs.db')
+    Config.DATASETS_DB = str(root / 'data' / 'datasets.db')
+
+    import settings_store
+
+    settings_store._PATH = str(root / 'data' / 'settings.json')
+    settings_store._values = None
+
+    return root
+
+
+ISOLATED_ROOT = _isolate_paths()
+
+
+def _prune_isolated_roots() -> None:
+    """Drop the older throwaway roots, keeping the most recent few."""
+    if not ISOLATED_PARENT.is_dir():
+        return
+    children = sorted((p for p in ISOLATED_PARENT.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)
+    for stale in children[:-KEEP_ISOLATED_RUNS]:
+        shutil.rmtree(stale, ignore_errors=True)
+
+
+def pytest_sessionfinish(session) -> None:
+    """Fail the run if a test wrote into the user's ``data/`` or ``logs/``.
+
+    The body lives in :mod:`isolation_guard` so it can be tested at all (four conftest files exist
+    in this tree, so ``import conftest`` from a test reaches whichever was collected last). This
+    hook is the half that cannot move: it needs pytest to call it, and the fingerprint it compares
+    against was taken at conftest import — before collection imported anything.
+    """
+    _prune_isolated_roots()
+    enforce(session, PROTECTED_AT_IMPORT)
 
 
 def _warm_http_stack() -> bool:
@@ -74,38 +170,16 @@ def capabilities_matrix(tmp_path_factory):
 
 
 @pytest.fixture(scope='session', autouse=True)
-def data_root(tmp_path_factory):
-    """Redirect every write path the backend knows about into a throwaway dir.
+def data_root():
+    """The throwaway root everything in this suite writes to — named for the tests that ask.
 
-    Session scope + autouse: runs once before the first test body, so the app
-    (and any store built lazily from Config) only ever sees tmp paths.
+    The redirect itself happened at conftest import (see :func:`_isolate_paths`), which is the
+    only moment early enough to matter: a fixture that *re-pointed* Config would arrive too late
+    for a module-level ``import app``, and the singleton it built would keep the user's directory.
+    This fixture therefore reports the root rather than moving anything, so the path a test
+    asserts on and the path a captured singleton writes through cannot disagree.
     """
-    root = tmp_path_factory.mktemp('isolated')
-    from config import Config
-
-    for attr, rel in (
-        ('DATA_DIR', 'data'),
-        ('COOKIE_DIR', 'data/cookies'),
-        ('EXPORT_DIR', 'data/exports'),
-        ('WORKFLOW_DIR', 'data/workflows'),
-        ('LLM_CHECKPOINT_DIR', 'data/checkpoints'),
-        # A crawler built by any test would otherwise drop a real Chrome profile
-        # into the user's data/ directory and keep reusing it across runs.
-        ('BROWSER_PROFILE_DIR', 'data/chrome_profile'),
-        ('LOG_DIR', 'logs'),
-    ):
-        path = root / rel
-        path.mkdir(parents=True, exist_ok=True)
-        setattr(Config, attr, str(path))
-    Config.RUNS_DB = str(root / 'data' / 'runs.db')
-    Config.DATASETS_DB = str(root / 'data' / 'datasets.db')
-
-    import settings_store
-
-    settings_store._PATH = str(root / 'data' / 'settings.json')
-    settings_store._values = None
-
-    return root
+    return ISOLATED_ROOT
 
 
 @pytest.fixture(scope='session')

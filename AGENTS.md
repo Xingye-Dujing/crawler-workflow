@@ -47,11 +47,13 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 
 ## How tests are written here
 
-- **A test module must not import `app` at module level.** pytest imports every collected file
-  *before any fixture runs* (marker filters do not help), while `data_root` is what redirects the
-  write paths into a tmp dir — so a top-level `import app` freezes `cookie_manager =
-  CookieManager(Config.COOKIE_DIR)` onto the user's real `data/cookies`. That cost a run's worth of
-  saved cookies. Take the `app_module` fixture; `test_test_tiers.py` refuses the import statically.
+- **Isolation happens at conftest import, and the suite fails if `data/` or `logs/` gains a byte.**
+  `tests/conftest.py` redirects every write path *before any test module is imported* — collection
+  imports all of them before fixtures run, and `app.py` captures `Config.COOKIE_DIR` / `history.db`
+  into module-level singletons at its own import. Two incidents: the `integration` UI tier landed runs
+  in the real `data/` (stub `fetch` instead), and a top-level `import app` in a test file then froze
+  the real cookie dir and destroyed the user's saved cookies. `test_test_tiers.py` refuses the import
+  statically; the session-finish snapshot refuses the write dynamically.
 
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js` /
   `workflow.js` / `app.js` into a zero-dependency node `vm` (shared `harness_dom.mjs`) and are driven
@@ -214,11 +216,11 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 
 - Runtime state lives in gitignored `data/` (SQLite `runs.db` / `datasets.db` / `history.db`) and `logs/`.
   Do not delete `data/` casually — saved workflows reference uploaded datasets stored there.
-- **One server at a time, by design (local single-user tool).** `RunStore.__init__` calls
-  `promote_stale_runs()`, which marks every run still `running` as interrupted, assuming a dead process
-  left it. Booting a second instance against the same `data/` interrupts the first one's live run. So
-  `/smoke-verify`'s port-5057 boot is only safe when the user's own server is stopped — **ask before
-  booting a second one, and never work around it by killing a process on 5000.**
+- **One server per data root, by design (local single-user tool).** `RunStore.__init__` calls
+  `promote_stale_runs()`, which marks every run still `running` as interrupted, so a second instance
+  on the same `data/` kills the first one's live run. `CRAWLER_DATA_ROOT` (config.py) gives a process
+  its own `data/` + `logs/` — the `/smoke-verify` boot and the UI tier's self-booted server both use
+  it. Without it, **ask before booting a second server, and never kill a process on 5000.**
 - **One run at a time; a busy server queues instead of refusing.** `_begin_run()` (app.py) owns the whole
   start path (claim, validations, `execution_state`, worker thread), so the queue drains by calling *that*
   function, never a second weaker one. `/api/workflow/execute` with `queue:false` keeps the 400 for callers

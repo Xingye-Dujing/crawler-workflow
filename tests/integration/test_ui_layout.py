@@ -44,12 +44,18 @@ VIEWPORTS = [(1920, 1080), (1366, 768), (1024, 700)]
 
 
 @pytest.fixture(scope='module')
-def app_url():
-    """Boot the real server on a private port; tear it down after the module.
+def app_url(tmp_path_factory):
+    """Boot the real server on a private port, in a state root of its own.
 
-    A second instance against the same ``data/`` would promote the first one's live
-    run to interrupted, so this fixture is only ever used with the user's own server
-    stopped — which is also why nothing here writes.
+    ``CRAWLER_DATA_ROOT`` (see ``backend/config.py``) is what makes that possible: without it, this
+    instance shares the user's ``data/`` — and a second process reading that directory still writes
+    ``app.log`` and the databases' ``-wal``/``-shm`` sidecars, while a startup ``promote_stale_runs``
+    would settle whatever run their own instance is in the middle of. Measured, that is exactly what
+    happened: the suite's own end-of-run snapshot caught these files moving.
+
+    Nothing here needs the user's state anyway — every panel is driven by a stubbed ``fetch`` — so
+    an empty root costs the assertions nothing, and this tier no longer depends on the user having
+    stopped their own server.
     """
     import urllib.error
     import urllib.request
@@ -57,9 +63,10 @@ def app_url():
     with socket.socket() as probe:
         probe.bind(('127.0.0.1', 0))
         port = probe.getsockname()[1]
-    env = {**os.environ, 'PORT': str(port)}
-    (REPO / 'logs').mkdir(exist_ok=True)
-    log_path = REPO / 'logs' / '_ui_layout_server.log'
+    root = tmp_path_factory.mktemp('ui_server_state')
+    env = {**os.environ, 'PORT': str(port), 'CRAWLER_DATA_ROOT': str(root)}
+    (root / 'logs').mkdir(exist_ok=True)
+    log_path = root / 'logs' / '_ui_layout_server.log'
     with log_path.open('w', encoding='utf-8') as log:
         proc = subprocess.Popen(
             [sys.executable, 'app.py'],

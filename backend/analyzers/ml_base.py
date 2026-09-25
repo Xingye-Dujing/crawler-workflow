@@ -9,11 +9,15 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
+from config import Config
 from i18n import t
 
 logger = logging.getLogger(__name__)
 
-MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data', 'models')
+# Derived from ``Config.DATA_DIR`` rather than from this file's location: the test harness
+# redirects Config before anything is imported, and a path computed here would be a second,
+# unredirectable answer to "where do trained models live".
+MODEL_DIR = os.path.join(Config.DATA_DIR, 'models')
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 

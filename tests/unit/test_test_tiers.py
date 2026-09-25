@@ -12,6 +12,9 @@ Read statically on purpose — importing the live modules would start a browser.
 
 import ast
 import configparser
+import contextlib
+import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,6 +26,7 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTEST_INI = REPO_ROOT / 'pytest.ini'
 LIVE_DIR = REPO_ROOT / 'tests' / 'live_site'
+TESTS_DIR = REPO_ROOT / 'tests'
 
 #: ``live_quick`` exists to be short. Nine today; the ceiling is where a future
 #: "just add one more" has to say why out loud instead of silently doubling the
@@ -256,19 +260,24 @@ class TestRegionSplit:
 
 
 class TestIsolationRunsBeforeTheAppIsImported:
-    """No test module may import ``app`` at module level, because that outruns the isolation fixture.
+    """No test module may import ``app`` at module level, because collection beats every fixture.
 
-    ``data_root`` (tests/conftest.py) is what keeps the suite out of the user's ``data/``: it rewrites
-    ``Config.COOKIE_DIR`` and friends before any test body runs. But it is a *fixture*, and pytest
-    imports every collected module during collection — before any fixture, and regardless of marker
-    filters, so a file that is deselected still gets imported. ``app.py`` then does
-    ``cookie_manager = CookieManager(Config.COOKIE_DIR)`` at module level, which freezes the real
-    directory into a singleton that no later fixture can move.
+    ``app.py`` freezes paths into module-level singletons at its own import
+    (``cookie_manager = CookieManager(Config.COOKIE_DIR)``, ``history_service`` opening
+    ``data/history.db``). pytest imports every collected file during collection — before any fixture
+    runs, and regardless of marker filters, since a deselected file is still imported. So the
+    harness redirects at conftest **import** time instead, which reaches the whole suite no matter
+    what a test file imports and when.
 
-    Measured consequence: one new integration file with ``from app import _close_login_browser`` at
-    the top made ``/api/cookies/save`` write ``{'name': 'SUB', 'value': 'x'}`` into the user's own
-    ``data/cookies/weibo_cookies.json`` while the suite "passed". Read statically, so a violation is
-    reported without importing anything.
+    This rule is the second lock on the same door, and it stays locked for two reasons: a redirect
+    that has to beat collection is one refactor away from being a fixture again, and an early
+    ``import app`` drags Flask, pandas and sklearn into every collection, including the ``-q`` run
+    of a single unit test.
+
+    Measured consequence, recorded in ``docs/crawler_notes.md``: one integration file with
+    ``from app import _close_login_browser`` at the top made ``/api/cookies/save`` write
+    ``{'name': 'SUB', 'value': 'x'}`` into the user's own ``data/cookies/weibo_cookies.json``, and a
+    delete case removed the entries that were really there — while the suite reported green.
     """
 
     def _module_level_app_imports(self, path: Path) -> list:
@@ -289,24 +298,226 @@ class TestIsolationRunsBeforeTheAppIsImported:
             offenders += [(path, hit) for hit in self._module_level_app_imports(path)]
         assert not offenders, [
             f'{path.relative_to(REPO_ROOT)}:{line} imports the application at module level, which '
-            'happens before the isolation fixture and freezes the real data/ paths — take the '
-            'app_module fixture instead'
+            'collection does before any fixture — take the app_module fixture (or import inside the '
+            'test) so the app is imported by something that runs after the harness is in place'
             for path, (line, _) in offenders
         ]
 
-    def test_the_isolation_fixture_holds_for_the_cookie_directory(self, data_root, app_module):
-        """The other half: proof that the ordering this file enforces is the ordering that protects.
+    def test_the_app_singleton_itself_writes_inside_the_throwaway_root(self, data_root, app_module):
+        """The other half: the captured string, not the Config attribute it came from.
 
-        Asserted against the live singleton rather than against ``Config``, because it is the
-        singleton's captured string that a cookie save actually writes through.
+        Asserted against the live singleton rather than against ``Config``, because it is
+        ``cookie_manager.cookie_dir`` that a cookie save actually writes through — and that is the
+        value a too-early import would have frozen onto the user's directory.
         """
         from pathlib import Path as _Path
 
         captured = _Path(app_module.cookie_manager.cookie_dir).resolve()
         assert captured.is_relative_to(data_root.resolve()), (
             f'the application under test writes cookies to {captured}, outside the throwaway root '
-            f'{data_root} — an import beat the isolation fixture'
+            f'{data_root} — something captured the real path before the harness redirected it'
         )
+
+
+class _FakeConfig:
+    """Stands in for ``session.config`` with the one attribute the hook reaches for.
+
+    Deliberately has **no** ``workerinput`` — that is how the hook tells a controller from an
+    xdist worker, and a fake that defined it would take the raise-instead-of-report branch.
+    """
+
+    class _Plugins:
+        def getplugin(self, _name):
+            return None
+
+    pluginmanager = _Plugins()
+
+
+class _FakeSession:
+    def __init__(self):
+        self.exitstatus = pytest.ExitCode.OK
+        self.config = _FakeConfig()
+
+
+class TestUserDirectoryStaysReadOnly:
+    """The suite reads the user's ``data/`` (cookies, profiles) and must never write to it.
+
+    This is the guard that does not depend on anybody remembering an import rule. It exists because
+    the same accident happened twice: paths captured at import time land on the real directory when
+    the redirect arrives too late, and once the app's singletons hold a real path, no fixture can
+    move them again — a cookies test then overwrote and deleted saved cookies while the suite said
+    green. Two halves, both under test here: :func:`_isolate_paths` runs at conftest import (before
+    collection), and :func:`pytest_sessionfinish` compares the two directories at the end.
+    """
+
+    def _every_captured_path(self) -> dict:
+        """Each place a module-level singleton wrote down a path, as it stands right now."""
+        import sys
+
+        import settings_store
+        from analyzers import ml_base
+        from config import Config
+
+        found = {
+            'Config.DATA_DIR': Config.DATA_DIR,
+            'Config.COOKIE_DIR': Config.COOKIE_DIR,
+            'Config.EXPORT_DIR': Config.EXPORT_DIR,
+            'Config.WORKFLOW_DIR': Config.WORKFLOW_DIR,
+            'Config.LLM_CHECKPOINT_DIR': Config.LLM_CHECKPOINT_DIR,
+            'Config.BROWSER_PROFILE_DIR': Config.BROWSER_PROFILE_DIR,
+            'Config.LOG_DIR': Config.LOG_DIR,
+            'Config.RUNS_DB': Config.RUNS_DB,
+            'Config.DATASETS_DB': Config.DATASETS_DB,
+            'settings_store._PATH': settings_store._PATH,
+            'ml_base.MODEL_DIR': ml_base.MODEL_DIR,
+        }
+        app = sys.modules.get('app')
+        if app is not None:
+            # Only reachable once some test has taken the app_module fixture — which is the moment
+            # the two singletons below freeze their paths, so when it has happened it must have
+            # happened against the throwaway root.
+            found['app.cookie_manager.cookie_dir'] = app.cookie_manager.cookie_dir
+            found['app.history_service.db_path'] = app.history_service.db_path
+        return found
+
+    def test_every_path_captured_at_import_points_at_the_throwaway_root(self, data_root):
+        outside = {
+            name: str(value)
+            for name, value in self._every_captured_path().items()
+            if not Path(str(value)).resolve().is_relative_to(data_root.resolve())
+        }
+        assert not outside, (
+            f'these captured a path outside the isolated root {data_root}: {outside} — a test that '
+            'writes through any of them is writing into the user directory'
+        )
+
+    def test_the_diff_reports_what_appeared_vanished_or_moved(self):
+        import isolation_guard
+
+        before = {
+            'data/a.json': ('file', 10, 111),
+            'data/gone.json': ('file', 5, 222),
+            'data/same.json': ('file', 7, 333),
+            'data/chrome_profile/weibo': ('profile', 0, 0),
+        }
+        now = {
+            'data/a.json': ('file', 10, 111),
+            'data/new.json': ('file', 4, 444),
+            'data/same.json': ('file', 7, 999),  # rewritten to the same size
+            'data/chrome_profile/weibo': ('profile', 0, 0),
+        }
+        added, removed, changed = isolation_guard.diff(before, now)
+        assert added == ['data/new.json'], added
+        assert removed == ['data/gone.json'], removed
+        assert changed == ['data/same.json'], changed
+        assert isolation_guard.diff(before, before) == ([], [], []), 'a clean run must say nothing'
+
+    def test_the_check_itself_is_quiet_on_a_read_only_session(self):
+        """Fingerprinting ``data/`` twice, with nothing but reads in between, must say nothing.
+
+        The live tier opens the user's real cookie files and profile markers; if merely reading
+        them moved an entry, the guard would cry wolf every run and be silenced within a week.
+        """
+        import isolation_guard
+
+        first = isolation_guard.fingerprint()
+        for key, tag in list(first.items())[:20]:
+            path = REPO_ROOT / key
+            if tag[0] == 'file' and path.is_file():
+                # A Chrome profile file can be locked by a browser the user has open; skipping it
+                # costs this check nothing, since it is the *fingerprint* that must not move.
+                with contextlib.suppress(OSError):
+                    path.read_bytes()
+        assert isolation_guard.diff(first, isolation_guard.fingerprint()) == ([], [], [])
+
+    def test_a_leak_fails_the_run_and_names_the_path(self, capsys):
+        """A leak must change the exit status, because a green line next to it is invisible.
+
+        Verified end to end once by hand — a throwaway test writing ``data/_guard_probe.json`` made
+        a run report ``1 passed`` and still exit 1, naming that file. Proved here without writing
+        anything into the user directory.
+        """
+        import isolation_guard
+
+        session = _FakeSession()
+        clean = isolation_guard.enforce(session, {'data/_never_written.json': ('file', 1, 1)})
+        assert clean is False, 'a missing file was not reported as a leak'
+        assert session.exitstatus == pytest.ExitCode.TESTS_FAILED, 'a leak did not fail the run'
+        err = capsys.readouterr().err
+        assert 'data/_never_written.json' in err, err
+        assert isolation_guard.REPORT_HEADLINE in err, err
+
+    def test_a_clean_session_leaves_the_exit_status_alone(self, capsys):
+        import isolation_guard
+
+        session = _FakeSession()
+        assert isolation_guard.enforce(session, isolation_guard.fingerprint()) is True
+        assert session.exitstatus == pytest.ExitCode.OK
+        assert isolation_guard.REPORT_HEADLINE not in capsys.readouterr().err
+
+    def test_an_app_imported_before_any_fixture_still_sees_the_throwaway_root(self):
+        """The ordering itself, proved in fresh interpreters rather than argued.
+
+        Two children, differing only in whether conftest was imported first: one sees the throwaway
+        cookie directory, the other sees the real one. That difference is the whole incident — a
+        module-level ``from app import ...`` is exactly "conftest first, then app", and the second
+        child is what the harness used to answer. Importing ``config`` writes nothing beyond
+        ``makedirs(exist_ok=True)`` on directories that already exist, so the comparison is made
+        without opening the application or touching the user's files.
+        """
+        import subprocess
+
+        def run(source: str) -> dict:
+            out = subprocess.run([sys.executable, '-c', source], capture_output=True, text=True, timeout=180)
+            assert out.returncode == 0, out.stderr[-1500:]
+            return json.loads(out.stdout.strip().splitlines()[-1])
+
+        paths = f'sys.path[:0] = [{str(TESTS_DIR)!r}, {str(REPO_ROOT / "backend")!r}]'
+        isolated = run(
+            '\n'.join(
+                (
+                    'import json, sys',
+                    paths,
+                    'import conftest',
+                    'from config import Config',
+                    'print(json.dumps({"cookies": Config.COOKIE_DIR, "root": str(conftest.ISOLATED_ROOT)}))',
+                )
+            )
+        )
+        plain = run(
+            '\n'.join(
+                (
+                    'import json, sys',
+                    paths,
+                    'from config import Config',
+                    'print(json.dumps({"cookies": Config.COOKIE_DIR}))',
+                )
+            )
+        )
+        root = Path(isolated['root']).resolve()
+        assert Path(isolated['cookies']).resolve().is_relative_to(root), (
+            f'conftest no longer redirects before an early import: {isolated["cookies"]} is outside {root}'
+        )
+        assert not Path(plain['cookies']).resolve().is_relative_to(root), (
+            'a bare config import answered the throwaway root, so the comparison above measured '
+            'nothing and this case can no longer catch the incident it exists for'
+        )
+
+    def test_the_conftest_hook_is_the_side_that_holds_the_import_time_fingerprint(self):
+        """The half that cannot move into a module: pytest has to call it, at both ends of the run.
+
+        Read statically for the same reason the app-import rule is: importing ``conftest`` from a
+        test reaches whichever of this tree's four conftest files was collected last, not this one.
+        """
+        source = (TESTS_DIR / 'conftest.py').read_text(encoding='utf-8')
+        tree = ast.parse(source)
+        names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        assert 'pytest_sessionfinish' in names, 'the session-finish hook is gone from conftest'
+        assert 'PROTECTED_AT_IMPORT = _fingerprint_protected()' in source, (
+            'the fingerprint must be taken at conftest import, before collection imports any test '
+            'module — a fixture is too late for a path a singleton already captured'
+        )
+        assert 'enforce(session, PROTECTED_AT_IMPORT)' in source, 'the hook no longer consults the guard'
 
 
 class TestLiveCrawlerFixture:
