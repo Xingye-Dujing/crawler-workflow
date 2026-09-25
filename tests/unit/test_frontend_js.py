@@ -788,6 +788,11 @@ class TestRunRecordsPanel:
         assert cases['serialHeadless'] == ['SERIAL(2)', 'HEADLESS']
         assert cases['singleParallel'] == ['HEADLESS'], 'one workflow is neither parallel nor serial'
         assert cases['singleSerial'] == ['WINDOW']
+        # forced_visible: a 无头 run the executor switched to a real window reads
+        # 「无头→窗口」, not a bare 无头 (「a chip must describe what happened」).
+        assert cases['headlessForcedWindow'] == ['MIXED'], cases['headlessForcedWindow']
+        assert cases['headlessClean'] == ['HEADLESS']
+        assert cases['windowIgnoringFlag'] == ['WINDOW'], 'the flag only matters under a headless request'
 
     def test_a_serial_record_with_two_workflows_says_serial(self, runsmgr):
         rows = runsmgr['html'].split('<tr>')

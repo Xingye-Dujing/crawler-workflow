@@ -564,3 +564,26 @@ pager 自报页底，排队交棒无恙。红条分三类：
 配套口径修正（同轮）：被墙拦住的采集把 `done:0` 写进游标是合法记账（游标记位置不记内容），expiry
 用例的拒绝分支只许断言「行表为空且 done==0」，不得断言游标缺席；bilibili 详情与 weibo expiry 各获得
 一次「换新浏览器、隔 `WALL_RETRY_BACKOFF` 再问」的层内容忍，与 `live_search` 的既有政策同构。
+
+## 窗口模式的真实语义：评论可按平台无头、chip 说真话（measured 2026-09-25，#102）
+
+`_execute_comment_node` 过去对**所有**平台写死 `headless=False`，声称「评论一律开可见窗口」。
+`backend/test_headless_comments.py`（一次性探针，国内网络，真实 Cookie）量出这不是事实：
+
+* **微博评论**：无头浏览器先搜到 5 行、取一条 评论数>5 的推文，`CommentSession.crawl_weibo(limit=15)`
+  → `status=ok`、15 行、15 个 (作者,内容) 全不同；爬虫两面旗都没立（会话是活的）。
+* **B 站评论**：对分层测试用的那条已知视频 `crawl_bilibili(limit=40)` → `status=ok`、40 行、40 个去重键，
+  地址栏停在视频页（`?vd_source=` 说明页面真加载了，不是被弹走）。
+
+也就是说这两家的评论区是**页内 fetch**（AGENTS 分类表的 (b) 类），开着的窗口只会停在首页什么都不动。
+据此把「怎么采集」从散文变成代码：
+
+* `Mode.collects ∈ {fetch, dom_read, dom_scroll, page_per_row}`，每个模式的值按 `docs` 分类表 + 上面实测
+  逐条标注；`capabilities.shows_nothing(platform, mode)` 是唯一答复「可见窗口有没有东西可看」。
+* 评论建浏览器改判 `_comment_headless(run_headless, kind)` = 用户选择 ∧ `shows_nothing` ∧ ¬`never_headless`；
+  于是微博/B站/YouTube 评论尊重无头，知乎/小红书（真滚动）与抖音/X（`never_headless`）仍强制可见窗口。
+* 被强制开窗口时置 `runs.forced_visible=1`（`start_run` 的 ON CONFLICT 会把它复位，续跑不背旧值），
+  面板 chip 于是能读真话：请求无头却开过窗口 → 「无头→窗口」，不再顶着「无头」骗人。
+* 面板文案按 `collects` 分流：fetch 评论模式用新键 `settings.commentFetchHint`（不再声称开窗口），
+  滚动/验证码平台仍用 `settings.commentHint`；fetch 源模式（B 站热榜、YouTube 搜索/作者）用
+  `settings.fetchQuietNote`。`tests/unit/test_crawl_capabilities.py` 钉住「note 只说它真会做的事」。

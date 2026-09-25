@@ -2031,6 +2031,12 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # its class and the executor pays for the visible window instead.
         headless = False
         add_log(t('run.forcedVisible', label=node_label(node, str(node.get('id') or '')), platform=platform))
+        if ctx is not None:
+            # The run record must say the window was not the user's choice, so the
+            # 无头/窗口 chip describes what ran rather than what was asked (AGENTS:
+            # 「a chip must describe what happened」).
+            with contextlib.suppress(Exception):
+                ctx['store'].mark_forced_visible(ctx['run_id'])
 
     crawler = get_crawler(
         platform,
@@ -2647,6 +2653,23 @@ def _execute_visualize_node(node: dict, current_input: list):
     return spec
 
 
+def _comment_headless(run_headless: bool, kind: str) -> bool:
+    """Whether the comment crawler for *kind* may run headless inside a run that asked *run_headless*.
+
+    Three answers compose here, and each is measured, not guessed: the user's choice
+    (a visible run stays visible everywhere), the matrix (``collects='fetch'`` means
+    the panel is read by in-page fetch and a window would show nothing — weibo and
+    bilibili proved it by answering a headless browser with the same rows,
+    ``backend/test_headless_comments.py`` 2026-09-25), and the class flag (douyin/X
+    answer ANY headless navigation with a captcha wall, comment pages included).
+    Everything else — zhihu and xiaohongshu panels that must genuinely be scrolled —
+    keeps the window.
+    """
+    if not run_headless:
+        return False
+    return capabilities.shows_nothing(kind, 'comments') and not getattr(crawler_class(kind), 'never_headless', False)
+
+
 def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     """Comment crawler: article links in, comment rows out, batch by batch.
 
@@ -2655,10 +2678,11 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     (resume restores position), and PartWriter (every settled batch hits disk
     as a readable file while the run is still going; a resumed writer adopts
     the parts the crashed run left behind, so kept-elsewhere rows are exactly
-    the rows already in those files). zhihu content pages reject headless
-    sessions, so this node always drives a visible browser — and says so when
-    the run was started in 无头 mode, because a window appearing mid-run with no
-    explanation reads as the setting having been ignored.
+    the rows already in those files). The window is each link platform's own
+    answer (:func:`_comment_headless`) — fetch-read panels honour 无头, scrolled
+    or captcha-walled ones keep the window — and a switch inside a headless run
+    says so per platform, because a window appearing with no explanation reads
+    as the setting having been ignored.
     """
     from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
     from services.part_writer import PartWriter, safe_stem
@@ -2716,9 +2740,6 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     # Which platforms actually answered with a login page, in the order they did.
     blocked_by: list[str] = []
     sessions = {}
-    if headless:
-        # This node never crawls headless, whatever the run asked for.
-        add_log(t('run.forcedVisibleComment', label=node_label(node, nid)))
 
     def _writer_for(idx: int, url: str) -> PartWriter:
         stem = f'{stem_base}-{idx:02d}' if per_article else stem_base
@@ -2734,9 +2755,19 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 continue
             kind = platform_for(url)
             if kind not in sessions:
+                # The window is each platform's own answer (see _comment_headless), not
+                # the node's: a fetch-read panel honours 无头, a scrolled one or a
+                # captcha site keeps its window even inside a headless run — said out
+                # loud per platform, not as the blanket claim this line used to be.
+                want_headless = _comment_headless(headless, kind)
+                if headless and not want_headless:
+                    add_log(t('run.forcedVisibleComment', platform=kind))
+                    if ctx is not None:
+                        with contextlib.suppress(Exception):
+                            ctx['store'].mark_forced_visible(ctx['run_id'])
                 crawler = get_crawler(
                     kind,
-                    headless=False,
+                    headless=want_headless,
                     cookie_dir=Config.COOKIE_DIR,
                     use_profile=(ctx or {}).get('use_profile'),
                     abort=lambda: not execution_state['running'],

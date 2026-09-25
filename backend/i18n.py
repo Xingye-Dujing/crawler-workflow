@@ -630,7 +630,9 @@ _ZH = {
     # list of platforms the user never crawled reads worse than no list at all.
     'run.cookieAnyPlatform': '所采集的平台',
     'run.forcedVisible': '「{label}」：{platform} 会拦截无头浏览器，本次已自动改用可见窗口运行',
-    'run.forcedVisibleComment': '「{label}」：评论采集一律使用可见窗口（知乎等内容页会拒绝无头会话），已忽略无头设置',
+    'run.forcedVisibleComment': (
+        '「{platform}」的评论区要真的滚动才能取全（或该站点拒绝无头浏览器），这个链接的评论改用可见窗口采集'
+    ),
     'run.platformQueued': (
         '{platform} 正在被另一条工作流采集，本轮改为排队：{n} 秒后开始，'
         '避免同一账号在同一秒内发出两次搜索而被弹到登录页'
@@ -1320,8 +1322,8 @@ _EN = {
     'run.cookieAnyPlatform': 'the platform being crawled',
     'run.forcedVisible': '"{label}": {platform} blocks headless browsers, so this run was switched to a visible window',
     'run.forcedVisibleComment': (
-        '"{label}": comment crawling always uses a visible window (zhihu and friends refuse headless '
-        'content pages), so the headless setting was ignored here'
+        '"{platform}" comments must actually be scrolled to collect fully (or that site refuses '
+        'headless browsers), so this link\u2019s comments use a visible window'
     ),
     'run.platformQueued': (
         '{platform} is being crawled by another workflow, so this one queued and starts in {n}s: two '

@@ -107,6 +107,17 @@ class Mode:
     crawler method) is dispatched on the platform's crawler with the coerced
     fields; ``'comments'`` routes to the shared comment engine, which reads the
     same field names off the node and is why the two look-alike forms exist.
+
+    ``collects`` is what the mode actually DOES on screen, and it is the only
+    answer to "does a visible window show anything?": ``'fetch'`` loads a page and
+    then reads JSON from inside it (nothing moves afterwards — measured 2026-09-25:
+    the weibo and bilibili comment walks answer a HEADLESS browser with the same
+    rows the window sees), ``'dom_read'`` reads a rendered page without scrolling,
+    ``'dom_scroll'`` scrolls a feed that visibly moves, and ``'page_per_row'``
+    opens one page per row. The panel's note and the comment engine's window
+    decision read this field instead of each holding its own opinion — which is
+    what the AGENTS rule 「a visible window must be doing something visible」 needs
+    to be code rather than prose.
     """
 
     key: str
@@ -118,6 +129,7 @@ class Mode:
     note_key: str = ''  # a line the panel must show under this mode
     action_key: str = ''  # label of the optional button beside that line
     action_js: str = ''  # the browser function that button calls
+    collects: str = 'dom_scroll'
 
 
 @dataclass(frozen=True)
@@ -266,27 +278,37 @@ _BOARD = Field(
 )
 
 
-def _hot_mode(*extra: Field, target: int = 50) -> Mode:
+def _hot_mode(*extra: Field, target: int = 50, collects: str = 'fetch') -> Mode:
     """The site's own hot list — not a keyword's result page.
 
     No required field: what a hot list is about is chosen by the site, so the only
-    choices offered are how many rows and which board.
+    choices offered are how many rows and which board. Default ``collects='fetch'``:
+    every hot board in this project reads one JSON answer from inside a loaded page,
+    which is the mode that shows nothing in a window.
     """
     return Mode(
         key='hot',
         label_key='settings.collectHot',
         handler='hot',
         fields=(replace(_TARGET, default=target), _BOARD, *extra, _RECOLLECT),
+        # A board opens a page once then reads JSON: a visible window only sits there.
+        # The note says so (and that 无头 saves nothing to watch) instead of the panel
+        # holding its own opinion about which modes move the screen.
+        note_key='settings.fetchQuietNote' if collects == 'fetch' else '',
+        collects=collects,
     )
 
 
-def _comment_mode(platform: str, example: str) -> Mode:
+def _comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
     """The 评论 form, which is the same on every platform except the link shape.
 
     The example URL is the only per-platform part besides the ownership rule, and
     both are data: the panel prints the example as the field's placeholder so a
     person sees one valid shape rather than three at once, and the engine refuses
-    links that contradict the platform the node selected.
+    links that contradict the platform the node selected. ``collects`` is passed in
+    per platform because the comment engine is where the platforms genuinely differ:
+    weibo/bilibili/YouTube read a JSON answer (nothing on screen moves), while
+    zhihu/xiaohongshu have to be scrolled and douyin/X are answered a captcha headless.
     """
     return Mode(
         key='comments',
@@ -307,18 +329,26 @@ def _comment_mode(platform: str, example: str) -> Mode:
             _COMMENT_LIMIT,
             _PER_ARTICLE,
         ),
-        # The comment engine opens a visible window whatever the run settings
-        # say (Zhihu refuses a headless content page), and the panel has to say
-        # so before the user starts a crawl that looks like it hung.
-        note_key='settings.commentHint',
+        # Two comment notes, chosen by ``collects`` so the panel never claims a window
+        # that the executor will not open. The scrolled/captcha platforms
+        # (``commentHint``) genuinely drive a visible browser even under 无头 — zhihu
+        # refuses a headless content page, douyin/X answer a captcha — and that note
+        # also carries the comment-specific 分片文件 sentence. The fetch platforms
+        # (``commentFetchHint``) honour 无头 (measured 2026-09-25: weibo/bilibili
+        # comment walks answer a headless browser with the same rows), so their note
+        # must NOT claim a window; it keeps the same 分片文件 sentence.
+        note_key='settings.commentHint' if collects != 'fetch' else 'settings.commentFetchHint',
+        collects=collects,
     )
 
 
-def _posts_mode(*extra: Field, target: int = 50) -> Mode:
+def _posts_mode(*extra: Field, target: int = 50, collects: str = 'dom_scroll', note_key: str = '') -> Mode:
     return Mode(
         key='posts',
         label_key='settings.collectPosts',
         fields=(_KEYWORD, replace(_TARGET, default=target), *extra, _RECOLLECT),
+        note_key=note_key,
+        collects=collects,
     )
 
 
@@ -327,6 +357,8 @@ def _author_mode(
     target: int = 50,
     placeholder: str = '@handle',
     hint_key: str = 'settings.authorHint',
+    collects: str = 'dom_scroll',
+    note_key: str = '',
 ) -> Mode:
     """One creator's own posts — the same walk, addressed by author instead of by
     keyword, so it needs its own entry rather than a wider keyword box.
@@ -342,6 +374,8 @@ def _author_mode(
         label_key='settings.collectAuthor',
         handler='author',
         fields=(author, replace(_TARGET, default=target), *extra, _RECOLLECT),
+        note_key=note_key,
+        collects=collects,
     )
 
 
@@ -349,12 +383,13 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         platform='zhihu',
         modes=(
-            _posts_mode(_FULL_BODY),
+            _posts_mode(_FULL_BODY, collects='dom_scroll'),
             _author_mode(
                 placeholder='https://www.zhihu.com/people/<id>',
                 hint_key='settings.authorHintZhihu',
+                collects='dom_scroll',
             ),
-            _comment_mode('zhihu', 'https://www.zhihu.com/question/...'),
+            _comment_mode('zhihu', 'https://www.zhihu.com/question/...', collects='dom_scroll'),
         ),
     ),
     Capability(
@@ -389,9 +424,10 @@ CAPABILITIES: tuple[Capability, ...] = (
                     hint_key='settings.commentPreviewHint',
                     minimum=0,
                     coerce='number',
-                )
+                ),
+                collects='dom_scroll',
             ),
-            _comment_mode('xiaohongshu', 'https://www.xiaohongshu.com/explore/...'),
+            _comment_mode('xiaohongshu', 'https://www.xiaohongshu.com/explore/...', collects='dom_scroll'),
         ),
     ),
     Capability(
@@ -415,13 +451,14 @@ CAPABILITIES: tuple[Capability, ...] = (
                 note_key='settings.wechatLimitsNote',
                 action_key='settings.wechatLimitsBtn',
                 action_js='explainWechatLimits',
+                collects='page_per_row',
             ),
         ),
     ),
     Capability(
         platform='bilibili',
         modes=(
-            _posts_mode(),
+            _posts_mode(collects='dom_read'),
             _author_mode(
                 placeholder='https://space.bilibili.com/<UID>',
                 hint_key='settings.authorHintBili',
@@ -433,12 +470,13 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         platform='douyin',
         modes=(
-            _posts_mode(),
+            _posts_mode(collects='page_per_row'),
             _author_mode(
                 placeholder='https://www.douyin.com/user/<sec_uid>',
                 hint_key='settings.authorHintDouyin',
+                collects='page_per_row',
             ),
-            _comment_mode('douyin', 'https://www.douyin.com/video/...'),
+            _comment_mode('douyin', 'https://www.douyin.com/video/...', collects='dom_scroll'),
         ),
     ),
     # The overseas three come last on purpose: they are the newest entries and the
@@ -448,8 +486,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         platform='youtube',
         region='overseas',
         modes=(
-            _posts_mode(_WITH_FACTS),
-            _author_mode(_WITH_FACTS),
+            _posts_mode(_WITH_FACTS, collects='fetch', note_key='settings.fetchQuietNote'),
+            _author_mode(_WITH_FACTS, collects='fetch', note_key='settings.fetchQuietNote'),
             _comment_mode('youtube', 'https://www.youtube.com/watch?v=...'),
         ),
     ),
@@ -459,7 +497,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         modes=(
             _posts_mode(),
             _author_mode(),
-            _comment_mode('twitter', 'https://x.com/.../status/...'),
+            _comment_mode('twitter', 'https://x.com/.../status/...', collects='dom_scroll'),
         ),
     ),
 )
@@ -515,6 +553,25 @@ def serial_only_of(platform: str) -> bool:
     """
     cap = capability(platform)
     return bool(cap and cap.serial_only)
+
+
+#: The vocabulary of :attr:`Mode.collects`. One of these four on every mode, checked
+#: by the tests so a mode cannot declare a word the panel and executor do not know.
+COLLECT_KINDS = ('fetch', 'dom_read', 'dom_scroll', 'page_per_row')
+
+
+def shows_nothing(platform: str, mode_key: str) -> bool:
+    """Whether a visible window of this crawl would show nothing worth watching.
+
+    True for the ``'fetch'`` kinds — a page loads and every row after that is read
+    from inside it, so a window just sits on the homepage. The comment executor and
+    the panel's note ask this rather than each holding their own opinion about which
+    platforms need a screen; ``never_headless`` (the two sites that answer a headless
+    browser with a captcha) is a separate, still-authoritative gate the executor
+    keeps, so a fetch mode on douyin/X is never made headless by this answer.
+    """
+    mode = mode_for(platform, mode_key)
+    return bool(mode and mode.collects == 'fetch')
 
 
 def split_regions(platforms) -> dict:
@@ -677,6 +734,7 @@ def _mode_as_dict(mode: Mode) -> dict:
         'noteKey': mode.note_key,
         'actionKey': mode.action_key,
         'actionJs': mode.action_js,
+        'collects': mode.collects,
         'fields': [_field_as_dict(f) for f in mode.fields],
     }
 

@@ -23,6 +23,7 @@ import pytest
 
 from crawl_capabilities import (
     CAPABILITIES,
+    COLLECT_KINDS,
     FILE_FIELDS,
     as_dict,
     capability,
@@ -37,6 +38,7 @@ from crawl_capabilities import (
     modes_for,
     platform_ids,
     required_missing,
+    shows_nothing,
 )
 
 pytestmark = pytest.mark.unit
@@ -257,7 +259,17 @@ class TestPayloadShape:
         # user's only chance to hear about it before the crawl starts.
         assert set(first) == {'platform', 'modes', 'profileRecommended', 'region', 'serialOnly'}
         mode = first['modes'][0]
-        assert set(mode) == {'key', 'labelKey', 'handler', 'rows', 'noteKey', 'actionKey', 'actionJs', 'fields'}
+        assert set(mode) == {
+            'key',
+            'labelKey',
+            'handler',
+            'rows',
+            'noteKey',
+            'actionKey',
+            'actionJs',
+            'collects',
+            'fields',
+        }
         # `serialOnly` marks the platform the site walls on concurrent paging (weibo):
         # two of its crawls queue whatever the 排队/错峰 switch says. Only weibo carries
         # it — a second platform flagged here would be a claim to re-measure.
@@ -352,11 +364,58 @@ class TestPayloadShape:
         ]
         assert not orphan, f'buttons with nowhere to sit: {orphan}'
 
-    def test_the_comment_modes_explain_the_visible_window(self):
-        # Comment crawling opens a browser whatever the headless switch says; the
-        # panel has to say so, and the matrix is where that text is attached.
-        for platform in ('zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin'):
-            assert _mode(platform, 'comments').note_key == 'settings.commentHint'
+    def test_the_comment_modes_note_only_the_window_they_actually_open(self):
+        """A note that claims a window the executor won't open is the dishonesty #102
+        removes. The scrolled/captcha comment platforms keep 「opens a visible
+        window」 (commentHint); the fetch platforms (weibo/bilibili/YouTube — measured
+        headless) carry a note that says a headless run opens no window (commentFetchHint).
+        """
+        for platform in ('zhihu', 'xiaohongshu', 'douyin', 'twitter'):
+            assert _mode(platform, 'comments').note_key == 'settings.commentHint', platform
+        for platform in ('weibo', 'bilibili', 'youtube'):
+            assert _mode(platform, 'comments').note_key == 'settings.commentFetchHint', platform
+
+
+class TestCollectionKind:
+    """`collects` is the matrix's answer to 「what does a visible window show」 (#102).
+
+    Not prose from the AGENTS rule but the field the comment executor and the panel
+    read, so the values are pinned against measurement:
+    ``backend/test_headless_comments.py`` (2026-09-25) proved weibo and bilibili
+    comment walks answer a HEADLESS browser with the same rows a window sees, which is
+    what makes them ``'fetch'`` and lets them honour 无头.
+    """
+
+    def test_every_mode_declares_a_kind_the_code_knows(self):
+        bad = [
+            f'{cap.platform}/{mode.key}={mode.collects!r}'
+            for cap in CAPABILITIES
+            for mode in cap.modes
+            if mode.collects not in COLLECT_KINDS
+        ]
+        assert not bad, f'unknown collects values: {bad}'
+
+    def test_the_fetch_modes_are_exactly_the_measured_list(self):
+        """Reclassifying one of these must be a deliberate edit backed by a measurement,
+        because the comment executor lets a ``'fetch'`` platform run headless on it.
+        """
+        fetched = {(cap.platform, mode.key) for cap in CAPABILITIES for mode in cap.modes if mode.collects == 'fetch'}
+        assert fetched == {
+            ('weibo', 'comments'),
+            ('bilibili', 'hot'),
+            ('bilibili', 'comments'),
+            ('youtube', 'posts'),
+            ('youtube', 'author'),
+            ('youtube', 'comments'),
+        }, fetched
+
+    def test_shows_nothing_follows_the_field_not_a_second_list(self):
+        assert shows_nothing('weibo', 'comments') is True
+        assert shows_nothing('bilibili', 'hot') is True
+        assert shows_nothing('zhihu', 'comments') is False
+        assert shows_nothing('douyin', 'posts') is False
+        # An unknown platform/mode is answered honestly, not with a guess.
+        assert shows_nothing('wechat', 'nonsense') is False
 
     def test_wechat_states_its_limits_and_offers_the_reason(self):
         mode = _mode('wechat', 'posts')

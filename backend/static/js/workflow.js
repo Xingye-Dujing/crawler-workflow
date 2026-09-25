@@ -3920,7 +3920,16 @@ var runsManager = {
             var key = r.mode === 'parallel' ? 'runsMgr.tagParallel' : 'runsMgr.tagSerial';
             out.push(I18n.t(key).replace('{n}', count));
         }
-        out.push(I18n.t(r.headless ? 'runsMgr.tagHeadless' : 'runsMgr.tagWindow'));
+        /* A chip must describe what RAN, not what was asked. 无头 means the whole run
+           stayed in a headless browser; when the executor had to open a real window
+           for part of it (a captcha site, or a comment panel that must be scrolled —
+           the forced_visible flag the backend sets at the switch) the record says
+           无头 but a Chrome was on screen, and only 「无头→窗口」 tells that honestly. */
+        if (r.headless && r.forced_visible) {
+            out.push(I18n.t('runsMgr.tagHeadlessMixed'));
+        } else {
+            out.push(I18n.t(r.headless ? 'runsMgr.tagHeadless' : 'runsMgr.tagWindow'));
+        }
         return out;
     },
 
