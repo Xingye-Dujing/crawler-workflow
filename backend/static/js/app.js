@@ -103,6 +103,11 @@ const I18n = {
             'dialog.cookieDeleteYes': 'Delete the file',
             'toast.cookieDeleted': 'Cookie file deleted for {platform}',
             'cookies.refresh': 'Plant cookies into profile',
+            'cookies.refreshExplain':
+                'A profile is this platform’s own browser directory, and a crawl really runs on the login '
+                + 'inside it; the Cookie saved in this panel is only a file next to it. That file was imported '
+                + 'once, the first time this profile was used — so a cookie you re-took afterwards gets in only '
+                + 'through the button above.',
             'cookie.refreshHint':
                 'This profile was given a different cookie file than the one now saved: press '
                 + '「Plant cookies into profile」 to make the crawl use the one you re-took',
@@ -798,6 +803,10 @@ const I18n = {
             'dialog.cookieDeleteYes': '删除文件',
             'toast.cookieDeleted': '已删除 {platform} 的 Cookie 文件',
             'cookies.refresh': '把 Cookie 更新进 Profile',
+            'cookies.refreshExplain':
+                'Profile 是这个平台自己的浏览器目录，抓取真正用的是它里面的登录态；面板里保存的 Cookie '
+                + '只是它旁边的一个文件。那个文件只在这个 profile 第一次被使用时导入过一次——所以你后来重取的 '
+                + 'Cookie，只有按上面这个按钮才进得去。',
             'cookie.refreshHint':
                 '这个 profile 当初导入的不是现在这份 Cookie：按「把 Cookie 更新进 Profile」，'
                 + '让抓取真正用上你刚重取的那一份',

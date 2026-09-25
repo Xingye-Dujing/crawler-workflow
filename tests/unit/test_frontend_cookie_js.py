@@ -226,3 +226,21 @@ class TestRefreshProfileCookie:
         current = panel['hintWhenCurrent']
         assert 'cookie.refreshHint' not in current, current
         assert current == ['PURPOSE', 'STEP-1'], current
+
+    def test_the_panel_explains_the_button_without_opening_the_dialog(self):
+        """Asked directly by the user: 「把 Cookie 更新进 Profile 什么意思我怎么没看懂」.
+
+        The explanation cannot live only in the confirmation, because a dialog has to be
+        opened to teach anything and the word "Profile" is one this interface otherwise
+        never defines. So the sentence sits under the button, in the page, and this test
+        keeps it there: it must come AFTER that button (it explains that button, not the
+        delete above it) and BEFORE the login-job actions (which are a different question).
+        """
+        html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
+        button = html.index('onclick="refreshProfileCookie()"')
+        note = html.index('data-i18n="cookies.refreshExplain"')
+        job_actions = html.index('id="cookie-job-actions"')
+        assert button < note < job_actions, f'the note is not attached to the button it explains: {note}'
+        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        assert app.count("'cookies.refreshExplain'") == 2, 'both catalogues must carry the sentence'
+
