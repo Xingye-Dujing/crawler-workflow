@@ -155,11 +155,14 @@ class Capability:
     #: minutes, while the user's own browser keeps working. The panel and the pre-run
     #: dialog read this; it is never a refusal, only a recommendation with evidence.
     profile_recommended: bool = False
-    #: Which network this site answers from. Not decoration: with a VPN up, douyin
-    #: answers 502 and refuses the crawl (measured by the user), and from inside China
-    #: x.com is simply unreachable — so one canvas holding both regions cannot be run
-    #: from either side, which is what the pre-run dialog warns about and what splits
-    #: the live tier into ``live_cn`` and ``live_os``. The only answer to the question:
+    #: Which side of the world this site's content and account live on: ``cn`` or
+    #: ``overseas``. Not decoration, and not a reachability claim — from inside China
+    #: x.com and YouTube do not load at all, so a canvas holding one needs the VPN and the
+    #: crawl can be started without it and quietly return nothing. Measured 2026-09-26 the
+    #: other way round as well: a Chinese platform crawled normally from an overseas exit,
+    #: which is why the interface asks about the VPN once (``ask_overseas_network``) instead
+    #: of warning about "mixed" canvases, and why the live tier splits into ``live_cn`` and
+    #: ``live_os`` while nothing splits a user's run. The only answer to the question:
     #: the payload carries it to the browser, and the test tier reads it back off this
     #: module, so neither can hold a copy that drifts.
     region: str = 'cn'

@@ -144,11 +144,11 @@ CLEAN = {'ok': True, 'results': {}, 'blocked': [], 'unclear': [], 'probed': True
 #: more, an off switch means off.
 NO_GATE = {
     'cookie_preflight_before_run': False,
-    'warn_mixed_region': False,
+    'ask_overseas_network': False,
 }
 AUTO = {
     'cookie_preflight_before_run': True,
-    'warn_mixed_region': True,
+    'ask_overseas_network': True,
 }
 
 SCENARIOS = [
@@ -293,7 +293,7 @@ SCENARIOS = [
         # whatever this answer says), so the clash dialog is filtered out — and the
         # serial warning takes its place, naming weibo and cancelling on refusal.
         'id': 'weibo-serial-warn-proceeds',
-        'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True, 'warn_mixed_region': False},
+        'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True, 'ask_overseas_network': False},
         **_canvas(_chain(1, 'weibo'), _chain(2, 'weibo')),
         'canvasSettings': {'mode': 'parallel'},
         'preflight': CLEAN,
@@ -301,7 +301,7 @@ SCENARIOS = [
     },
     {
         'id': 'weibo-serial-warn-refuses',
-        'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True, 'warn_mixed_region': False},
+        'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True, 'ask_overseas_network': False},
         **_canvas(_chain(1, 'weibo'), _chain(2, 'weibo')),
         'canvasSettings': {'mode': 'parallel'},
         'preflight': CLEAN,
@@ -310,44 +310,54 @@ SCENARIOS = [
     {
         # One weibo crawl is not a queue: no warning, the run starts.
         'id': 'weibo-single-runs-quiet',
-        'settings': {'cookie_preflight_before_run': True, 'warn_mixed_region': False},
+        'settings': {'cookie_preflight_before_run': True, 'ask_overseas_network': False},
         **_canvas(_chain(1, 'weibo')),
         'canvasSettings': {'mode': 'parallel'},
         'preflight': CLEAN,
     },
     {
-        'id': 'mixed-networks-refuses-to-run',
+        # An overseas platform asks on its own: the question is 「is the VPN up」, not
+        # 「does this canvas mix networks」 — measured 2026-09-26, a domestic platform
+        # crawls fine from an overseas exit, so the domestic half is nobody's problem.
+        'id': 'overseas-alone-asks',
+        'settings': AUTO,
+        **_canvas(_chain(2, 'youtube')),
+        'preflight': CLEAN,
+        'answers': {'overseas': 'go'},
+    },
+    {
+        'id': 'overseas-refuses-to-run',
         'settings': AUTO,
         **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
         'preflight': CLEAN,
-        'answers': {'mixed': None},
+        'answers': {'overseas': None},
     },
     {
-        'id': 'mixed-networks-continued',
+        'id': 'overseas-continued',
         'settings': AUTO,
         **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
         'preflight': CLEAN,
-        'answers': {'mixed': 'go'},
+        'answers': {'overseas': 'go'},
     },
     {
-        'id': 'mixed-warning-off',
+        'id': 'overseas-ask-switched-off',
         'settings': {
             'cookie_preflight_before_run': True,
-            'warn_mixed_region': False,
+            'ask_overseas_network': False,
         },
         **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
         'preflight': CLEAN,
     },
     {
-        'id': 'mixed-network-silent',
+        'id': 'domestic-only-silent',
         'settings': AUTO,
         **_canvas(_chain(1, 'douyin'), _chain(2, 'weibo')),
         'preflight': CLEAN,
     },
     {
-        # A platform the matrix says nothing about is left out of both groups rather
-        # than guessed at: 「it might be overseas」 is not a fact to interrupt a run with.
-        'id': 'mixed-without-a-region',
+        # A platform the matrix says nothing about is left out rather than guessed at:
+        # 「it might be overseas」 is not a fact to interrupt a run with.
+        'id': 'overseas-without-a-region',
         'settings': AUTO,
         'matrix': _matrix_without_region('youtube'),
         **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
@@ -578,43 +588,49 @@ class TestNothingIsSaidTwice:
         assert case['ran'] is True
 
 
-class TestMixedNetworks:
-    """One canvas, two networks — and the machine is only ever on one of them.
+class TestOverseasNetworkAsk:
+    """An overseas platform on the canvas asks one thing: 外网开了吗?
 
-    Measured by the user: with a VPN up douyin answers 502, and without one x.com never
-    loads. So the halves have to be run apart, and the only question worth asking is
-    whether the user meant that. It is asked BEFORE the cookie check, because that check
-    opens a browser per platform and a run about to be cancelled should not have paid.
+    Rewritten 2026-09-26. The dialog used to be about MIXED canvases, on the belief that one
+    network can only serve one half — douyin refusing with 502 from a VPN being the domestic
+    side of that story. Measured directly, a Chinese platform crawled normally from an overseas
+    exit, so the mixed-canvas premise was false and the pairing went with it. What survives is
+    the half that is still a fact: inside China x.com and YouTube do not load at all, and the
+    page cannot see the route — so any overseas platform asks, and asks BEFORE the cookie check,
+    because that check buys a browser per platform and a run about to be cancelled should not
+    have paid for it.
     """
 
-    def test_a_two_network_canvas_is_asked_before_anything_else(self, gate):
-        case = gate['mixed-networks-refuses-to-run']
+    def test_an_overseas_platform_asks_even_without_a_domestic_one(self, gate):
+        case = gate['overseas-alone-asks']
+        assert len(case['dialogs']) == 1, case['dialogs']
+        assert case['ran'] is True
+
+    def test_the_ask_names_the_platform_and_comes_before_the_cookie_check(self, gate):
+        case = gate['overseas-refuses-to-run']
         assert len(case['dialogs']) == 1, case['dialogs']
         message = case['dialogs'][0]['message']
-        assert 'Douyin' in message and 'YouTube' in message, 'the question has to name both halves'
-        assert 'douyin' not in message, 'the domestic half was a key, not a word'
-        assert case['asked'] is False, 'the cookie probe is not bought for a run that was about to be split'
+        assert 'YouTube' in message, f'the question has to name what needs the VPN: {message}'
+        assert 'youtube' not in message, 'the platform was printed as a key, not as a word'
+        assert case['asked'] is False, 'the cookie probe is not bought for a run the user just stopped'
         assert case['ran'] is False
 
-    def test_continuing_runs_both_halves_and_still_checks_the_cookies(self, gate):
-        """The answer is the user's, because a machine with split routing genuinely can
-        serve both — this page cannot tell that machine from one with a VPN on, so it
-        asks rather than forbidding."""
-        case = gate['mixed-networks-continued']
+    def test_saying_it_is_up_runs_everything_and_still_checks_the_cookies(self, gate):
+        case = gate['overseas-continued']
         assert len(case['dialogs']) == 1
         assert case['asked'] is True
         assert sorted(case['askedBody']['platforms']) == ['douyin', 'youtube']
         assert case['ran'] is True
 
-    def test_the_two_buttons_are_continue_and_back_away(self, gate):
-        dialog = gate['mixed-networks-refuses-to-run']['dialogs'][0]
+    def test_the_two_buttons_are_up_and_not_yet(self, gate):
+        dialog = gate['overseas-refuses-to-run']['dialogs'][0]
         assert dialog['values'] == ['go', 'null'], dialog
 
-    def test_one_network_is_left_alone(self, gate):
+    def test_a_domestic_canvas_is_never_asked(self, gate):
         """The profile notice still fires (douyin is a platform a throwaway browser
         fails on) — what must not fire is the routing question, whose two buttons are
-        继续 plus a cancel and nothing else."""
-        case = gate['mixed-network-silent']
+        「已开」 plus a cancel and nothing else."""
+        case = gate['domestic-only-silent']
         asked_about_networks = [dialog for dialog in case['dialogs'] if dialog['values'] == ['go', 'null']]
         assert asked_about_networks == [], f'two domestic crawls are not a routing question: {case["dialogs"]}'
         assert case['asked'] is True and case['ran'] is True
@@ -622,14 +638,14 @@ class TestMixedNetworks:
     def test_a_platform_the_matrix_has_no_region_for_is_not_guessed_at(self, gate):
         """Blanking youtube's region must not produce a warning built on an assumption,
         and equally must not lose the run: an unknown classification is nobody's fault."""
-        case = gate['mixed-without-a-region']
+        case = gate['overseas-without-a-region']
         assert case['dialogs'] == [], case['dialogs']
         assert case['asked'] is True
         assert case['ran'] is True
 
     def test_the_switch_hides_the_question_and_nothing_else(self, gate):
         """Same run, same platforms, same cookie check: only the asking is switched."""
-        case = gate['mixed-warning-off']
+        case = gate['overseas-ask-switched-off']
         assert case['dialogs'] == []
         assert case['asked'] is True, 'turning the warning off must not turn the cookie check off too'
         assert case['ran'] is True

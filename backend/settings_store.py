@@ -43,12 +43,13 @@ DEFAULTS = {
     # 「一小时后才发现 Cookie 早死了」 into a refusal that names the platform.
     'cookie_preflight_before_run': True,
     #: Which network each platform is reachable from is a fact the crawl matrix owns
-    #: (``Capability.region``); this only decides whether the user is told when one
-    #: canvas needs both. On: a mixed canvas is asked about before the run. Off is for
-    #: a machine with split routing, where both halves really do work at once — the
-    #: page cannot tell that machine from one with a VPN on, which is why this is a
-    #: recommendation with a switch rather than a refusal.
-    'warn_mixed_region': True,
+    #: (``Capability.region``); this only decides whether the user is ASKED about it. On: a
+    #: canvas holding any overseas platform is asked before the run whether the VPN is up,
+    #: because from inside China x.com and YouTube do not load at all, and the crawler cannot
+    #: see the route. Off: nothing is asked. It is a question, not a gate — measured 2026-09-26,
+    #: an overseas exit crawled a domestic platform normally, so "which network am I on" is
+    #: worth one confirmation and nothing more.
+    'ask_overseas_network': True,
     #: One platform is crawled by at most one workflow at a time, and two that had to
     #: queue are further spaced apart. On, a parallel canvas keeps its *different*
     #: platforms concurrent but same-platform crawls take turns — no passport bounce
@@ -177,7 +178,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 'cookie_preflight_before_run',
                 'use_browser_profile',
                 'same_platform_queue',
-                'warn_mixed_region',
+                'ask_overseas_network',
             ):
                 # The browser may send a real bool or the 'true'/'false' string
                 # the checkbox helpers historically produced; anything else

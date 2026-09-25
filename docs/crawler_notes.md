@@ -15,7 +15,7 @@ second opinion beside it.
 - [Crawl cost is a testable property](#crawl-cost-is-a-testable-property)
 - [微博的墙是间歇风控，不是发车太近](#微博的墙是间歇风控不是发车太近measured-2026-09-24)
 - [What each mode actually does on screen](#what-each-mode-actually-does-on-screen-measured-2026-09-24)
-- [网络分区：国内与海外不能一起爬](#网络分区国内与海外不能一起爬用户实测-2026-09-24)
+- [网络分区：海外平台要走外网](#网络分区海外平台要走外网混采必缺一半已被实测否掉用户实测-2026-09-242026-09-26-修正)
 - [运行前 Cookie 预检](#运行前-cookie-预检measured-2026-09-24)
 - [A login page on the way through is not a wall](#a-login-page-on-the-way-through-is-not-a-wall-measured-2026-09-24)
 - [热榜：问过五个平台、上线四块、证无一块](#热榜问过五个平台上线四块证无一块measured-2026-09-25)
@@ -518,20 +518,44 @@ blocks in `Crawler.__init__` → `acquire_profile()`, i.e. **before Chrome exist
 is ever visible at a time; `crawl.profile_wait` states the wait, and 「本次不用 Profile」 lifts the lock
 and gives one window per workflow (verified by the user).
 
-## 网络分区：国内与海外不能一起爬（用户实测 2026-09-24）
+## 网络分区：海外平台要走外网；"混采必缺一半"已被实测否掉（用户实测 2026-09-24，2026-09-26 修正）
 
-**挂 VPN 时抖音回 502 拒绝访问；不挂时 x.com / YouTube 根本打不开。** 一台机器一次只能在那两条网络
-之一里，所以一张同时包含两边的画布从任何一侧跑都必定缺掉一半——而缺的那一半看起来跟"这次搜索什么都没
-搜到"完全一样，这是它最难自证的一种失败。落在代码里的三件事：
+**不挂 VPN 时 x.com / YouTube 根本打不开。** 这条仍然成立，也是界面上唯一值得问的一句：画布里出现
+海外平台，运行前问「外网开了吗」（`ask_overseas_network`，默认开；答"还没开"那次就不启动，因为空表
+会被读成"这个关键词什么都没搜到"）。这一问排在 Cookie 预检之前 —— 预检要按平台开浏览器，一次注定
+被取消的运行不该付那份钱。
 
-* 分区是**数据**，不是散落的判断：`crawl_capabilities.Capability.region`（`cn` / `overseas`）由矩阵
-  一处声明，随 `/api/capabilities` 发给浏览器；运行前的「国内与海外混采时提醒」和真机层的
-  `live_cn` / `live_os` 分组都读它。`tests/unit/test_test_tiers.py` 会拿矩阵里的 region 去核对每条
-  live 用例的 marker，所以给一个海外平台忘了写 `region` 会被测试层直接指出来（矩阵没说的平台按
+**被否掉的那半：「挂 VPN 时抖音回 502，所以一张画布不能同时含国内与海外」。** 2026-09-24 那次只被
+观察过一次，却被我写成了平台规律，还据此做了一个"列出两边、建议拆成两次"的弹窗。2026-09-26 用户
+的怀疑（是不是 Cookie 签发的 IP 与访问的 IP 不一致才被风控）把这件事一次测清 —— 探针
+`backend/test_douyin_region_probe.py`（一次性；只记 IP、行数与判定，绝不记 Cookie 值）拿同一份
+**国内签发的会话**跑了三次：
+
+| 时刻 | 出口 | 结果 |
+|---|---|---|
+| 06:4x | `183.205.131.79`（中国 河南 郑州 移动） | rows=2 verdict=ok |
+| 07:04 | 同上（VPN 尚未接管这台机器的流量） | rows=2 verdict=ok |
+| 07:1x | **`134.195.101.194`（海外出口；requests 与浏览器两处读到同一个）** | **rows=3 verdict=ok，零登录墙、零风控** |
+
+三条结论：
+* **"会话绑 IP"不成立**（用户自己的假设被自己的实验否掉）：国内签发的抖音会话从海外出口照样交出真行
+  （标题/作者/发布时间/点赞都齐）。
+* **"抖音只在国服应答"也不成立**：至少这个海外节点完全正常。抖音的 502 因此降级为**特定出口/节点或
+  时段的现象**，不再作为任何分区依据；下次再见到 502，先用那个探针读出口，再猜原因。
+* 于是"混采弹窗"整个删掉，不留残余：`regionGroupsOf` → `overseasPlatformsOf`（只回答"哪些平台要外网"），
+  设置键 `warn_mixed_region` → `ask_overseas_network`，两套语言里那三条解释文字一并删除，
+  `Capability.region` 的注释改成它真正的含义：**标的是内容与账号属于哪一边，不是哪条路能不能通**。
+
+留在代码里的两件事没变：
+* 分区仍是**数据**：`crawl_capabilities.Capability.region`（`cn` / `overseas`）由矩阵一处声明，随
+  `/api/capabilities` 发给浏览器；真机层的 `live_cn` / `live_os` 分组读它，
+  `tests/unit/test_test_tiers.py` 拿矩阵里的 region 核对每条 live 用例的 marker（矩阵没说的平台按
   "不知道"处理：既不提醒也不拦）。
-* 提醒是**建议**且可关（`warn_mixed_region`）：真做了分流路由的机器两边都通，页面分不出那种机器和
-  "只是开着 VPN"，所以它只问不禁。
-* 真机测试必须分两次跑，中间由用户确认网络状态；抖音那条红在 VPN 状态下不是爬虫坏了。
+* 提醒是**建议且可关**：真做了分流路由的机器两边都通，页面分不出那种机器和"只是开着 VPN"。
+
+顺带量到的一条（与网络无关）：一次性浏览器里 **10 个视频页只渲染出计数条**（作者与发布时间都没出），
+被 identity 门槛丢掉不计行 —— throwaway 会话的 hydration 明显比 profile 会话慢，另案处理。
+
 
 ## 运行前 Cookie 预检（measured 2026-09-24）
 

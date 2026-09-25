@@ -96,9 +96,9 @@ function world(sc) {
             if (values.indexOf('use') >= 0 && values.indexOf('skip') >= 0) kind = 'clash';
             else if (values.indexOf('update') >= 0) kind = 'expired';
             /* The serial-only warning carries its own 'serial' button value, checked
-               before the generic 继续 so it is not mistaken for the mixed-network ask. */
+               before the generic 继续 so it is not mistaken for the overseas-VPN ask. */
             else if (values.indexOf('serial') >= 0) kind = 'serial';
-            else if (values.indexOf('go') >= 0) kind = 'mixed';
+            else if (values.indexOf('go') >= 0) kind = 'overseas';
             var answers = ${JSON.stringify(sc.answers || {})};
             return Promise.resolve(kind in answers ? answers[kind] : ${JSON.stringify(
                 sc.dialogChoice === undefined ? 'go' : sc.dialogChoice

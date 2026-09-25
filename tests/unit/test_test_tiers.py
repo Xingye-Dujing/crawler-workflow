@@ -244,7 +244,7 @@ class TestRegionSplit:
 
     def test_the_matrix_names_no_network_but_the_two(self):
         """A typo in a ``region=`` reads as "no opinion" everywhere, and the pre-run
-        dialog would stay silent about a mixed canvas forever."""
+        dialog would stay silent about an overseas platform forever."""
         from crawl_capabilities import REGIONS
 
         assert REGIONS == ('cn', 'overseas')
@@ -254,9 +254,9 @@ class TestRegionSplit:
         """Turning the dialog off must not change what a run does — the split of the
         live tier and the crawl itself read the matrix, never this setting."""
         text = (REPO_ROOT / 'backend' / 'settings_store.py').read_text(encoding='utf-8')
-        assert "'warn_mixed_region': True" in text, 'asking is the default until somebody says otherwise'
+        assert "'ask_overseas_network': True" in text, 'asking is the default until somebody says otherwise'
         gate = (REPO_ROOT / 'backend' / 'crawl_gate.py').read_text(encoding='utf-8')
-        assert 'warn_mixed_region' not in gate, 'a cosmetic dialog must not be wired into what actually runs'
+        assert 'ask_overseas_network' not in gate, 'a cosmetic dialog must not be wired into what actually runs'
 
 
 class TestIsolationRunsBeforeTheAppIsImported:
