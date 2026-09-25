@@ -1118,7 +1118,7 @@ class _FakeCommentSession:
 
     rows = [{'平台': 'zhihu', '文章URL': 'https://x/1', '评论者': 'a', '评论内容': 'good'}]
 
-    def __init__(self, driver, log=None, nap=None, abort=None):
+    def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
         self.log = log
         self.abort = abort
 
@@ -1227,7 +1227,7 @@ class TestSourceCommentsMode:
                 pass
 
         class _RecordingSession:
-            def __init__(self, driver, log=None, nap=None, abort=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
                 pass
 
             def crawl_zhihu(self, url, limit):

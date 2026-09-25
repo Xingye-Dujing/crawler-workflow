@@ -2307,6 +2307,14 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # argument that is not the user's — it is where this run stopped, handed
         # over from the store.
         rows = _crawl_with_collision_retry(crawler, getattr(crawler, mode.handler), crawl_args, resume, platform)
+        if stop_requested():
+            # A walk that honours 停止 does not raise: it breaks at its next row and hands
+            # back what it collected. So a crawl that finished by *returning* after the
+            # button was pressed would settle DONE — the run record saying 运行完成 over a
+            # half-collected table, and the 继续 banner never appearing, which is the one
+            # outcome a stop must never produce. The rows stand; the node is reported as
+            # what it was.
+            raise CrawlerStopped(t('crawl.stopped'))
     except PageNotArrivedError as exc:
         # The patience budget ran out with nothing on the page. What the crawler saw is
         # turned into a line that also says what this machine can reach, then the node
@@ -3073,6 +3081,8 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                         crawler.driver,
                         log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
                         abort=stop_requested,
+                        # The live attribute, not just its value: see CommentSession.driver.
+                        owner=crawler,
                     ),
                 )
                 # Last, so a refusal while building the session cannot leave a
@@ -3117,6 +3127,13 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             _close_login_browser(crawler)
 
     files = [writer.finish() for writer in writers.values()]
+    if stop_requested():
+        # The article loop above stops taking URLs once the run is not wanted, and then it
+        # *returns* — so without this check a comment node cut short by 停止 settled DONE
+        # over a partial table and the run never offered 继续. Everything it did collect is
+        # finished into its part files first; what is dropped is the ``comment.done``
+        # summary, because the executor's own 被停止 line is the one true sentence here.
+        raise CrawlerStopped(t('crawl.stopped'))
     blocked_seen = bool(counts.get(BLOCKED))
     if blocked_seen:
         # Same story as the source crawler: a blocked article means the saved
@@ -4594,6 +4611,29 @@ _COOKIE_JOB = {
 }
 
 
+def _stuck_where(thread) -> str:
+    """Where a side thread is standing right now — its own top frame, file and line.
+
+    ``sys._current_frames`` is the only thing that can answer this about a thread that is
+    not cooperating: the situation is a ``close()`` that never returns, so nothing it logs
+    itself will ever be heard. The address of a hang is the difference between "a browser
+    is wedged somewhere" and a line a developer can go and read.
+    """
+    frame = sys._current_frames().get(thread.ident)
+    if frame is None:
+        return ''
+    # The frame ``_current_frames`` returns is the *innermost* one — the call that is not
+    # coming back. Alone that is usually a lock or a socket inside somebody else's library,
+    # which names the wait but not the crawler waiting, so three callers come along: the
+    # first word is what to grep, the rest say whose browser this is.
+    frames = []
+    while frame is not None and len(frames) < 4:
+        code = frame.f_code
+        frames.append(f'{code.co_name} at {os.path.basename(code.co_filename)}:{frame.f_lineno}')
+        frame = frame.f_back
+    return ' ← '.join(frames)
+
+
 def _close_login_browser(crawler, quit_timeout: float = 5.0):
     """Close the login browser of THIS session, whatever state it is in.
 
@@ -4638,6 +4678,23 @@ def _close_login_browser(crawler, quit_timeout: float = 5.0):
             # measured 16.3 s each, which is how a mid-walk stop took 29.6 s to settle. See
             # ``crawlers.base.DeadDriver`` for why the refusal is a ``BaseException``.
             crawler.driver = DeadDriver()
+    elif waiter.is_alive():
+        # No process number to aim a kill at, and no promise this thread ever returns.
+        # The harm is specific and has to be said: ``crawler.close()`` is what releases the
+        # platform's profile lock, so that directory stays claimed until wherever it is
+        # stuck unsticks — the next crawl of this platform waits up to
+        # ``Config.PROFILE_LOCK_TIMEOUT`` for it. Silence here reads as "closed", while the
+        # user may be looking at the window.
+        domain = getattr(crawler, 'domain', '')
+        add_log(t('run.browserStuck', platform=domain, seconds=int(Config.PROFILE_LOCK_TIMEOUT)))
+        # ``debug`` on purpose: the console line above is the user's, and this one is for
+        # whoever reads ``logs/`` — where English is what a person grepping for a hang wants,
+        # and a translated frame would put a stack address through the message catalogue.
+        logger.debug(
+            'the browser of %s could not be closed and has no readable process id; still running at %s',
+            domain,
+            _stuck_where(waiter),
+        )
 
 
 def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', lang: str = ''):

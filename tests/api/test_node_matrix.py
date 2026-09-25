@@ -887,7 +887,7 @@ class TestCommentNodeFilesAndLimits:
         class _Session:
             seen = []
 
-            def __init__(self, driver, log=None, nap=None, abort=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
                 # The real session's signature: `abort` is the 停止 predicate, and a
                 # double that silently dropped it would let a comment walk keep
                 # reading pages behind a run the user had already ended.

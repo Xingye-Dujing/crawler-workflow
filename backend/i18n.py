@@ -698,6 +698,11 @@ _ZH = {
         '已采集的数据全部保留——请到 设置→Cookie 更新后，用断点续跑从上次中断处继续'
     ),
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
+    # Said out loud because the alternative is silence that reads as "closed", while the
+    # user may be looking at the window that is still open.
+    'run.browserStuck': (
+        '警告：{platform} 的浏览器关不掉（读不到它的进程号），它可能仍然开着，并会占用该平台目录最多 {seconds} 秒'
+    ),
     # A page that never arrived, said once with the one thing the crawler cannot know:
     # whether this machine can reach anything at all. ``{advice}`` is left empty when the
     # page already named its own cause, so the sentence must read in both shapes.
@@ -1488,6 +1493,12 @@ _EN = {
     ),
     'run.cookieExpiredOk': (
         'note: {platform} hit the login wall only after the target was met — the data is complete, nothing to resume'
+    ),
+    # Said out loud because the alternative is silence that reads as "closed", while the
+    # user may be looking at the window that is still open.
+    'run.browserStuck': (
+        'warning: {platform}\u2019s browser could not be closed (no readable process id); it may still be '
+        'open and holds that platform\u2019s directory for up to {seconds} seconds'
     ),
     # A page that never arrived, said once with the one thing the crawler cannot know:
     # whether this machine can reach anything at all. ``{advice}`` is empty when the page

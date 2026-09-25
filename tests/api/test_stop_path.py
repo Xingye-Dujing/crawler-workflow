@@ -45,6 +45,7 @@ import types
 import pytest
 from run_wait import run_finished
 
+from config import Config
 from crawlers.base import Crawler, CrawlerStopped, DeadDriver
 from i18n import t
 from services.run_store import (
@@ -375,11 +376,13 @@ class TestNoFurtherWork:
         gate = {'inside': threading.Event(), 'release': threading.Event()}
 
         class _Session:
-            def __init__(self, driver, log=None, nap=None, abort=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
                 # The stop predicate must reach the engine that reads hundreds of
-                # pages, not only the crawler that owns the browser.
+                # pages, not only the crawler that owns the browser — and so must the
+                # crawler itself, or a reap cannot be seen from inside the walk.
                 assert callable(abort) and abort() is False
                 self.abort = abort
+                self.owner = owner
 
             def crawl_zhihu(self, url, limit):
                 gate['inside'].set()
@@ -399,6 +402,59 @@ class TestNoFurtherWork:
         assert run_finished(app_module)
         assert built[0].closed, "停止 never reached the comment node's browser"
         assert _record(client, app_module, run_id)['status'] == RUN_INTERRUPTED
+
+    def test_a_comment_walk_cut_short_reports_a_stop_and_not_a_finished_node(self, client, app_module, monkeypatch):
+        """The article loop stops *taking* URLs once the run is not wanted, and then it
+        returns. Returning is success to the node runner, so the record used to say the
+        comments were all in — with half the list never read and no 继续 offered."""
+        built = []
+
+        class _FakeCrawler:
+            domain = 'zhihu'
+
+            def __init__(self, abort=None):
+                self._abort = abort
+                self.driver = None
+
+            def close(self):
+                return None
+
+        def factory(platform, headless=True, cookie_dir=None, use_profile=None, for_login=False, abort=None, **kw):
+            crawler = _FakeCrawler(abort=abort)
+            built.append(crawler)
+            return crawler
+
+        monkeypatch.setattr(app_module, 'get_crawler', factory)
+        import crawlers.comments as comments_module
+
+        gate = {'inside': threading.Event(), 'release': threading.Event()}
+
+        class _Session:
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+                self.read = 0
+
+            def crawl_zhihu(self, url, limit):
+                self.read += 1
+                if self.read == 1:
+                    gate['inside'].set()
+                    assert gate['release'].wait(10), 'the article walk was never released'
+                return [{'文章URL': url, '评论内容': 'c'}], 'ok'
+
+        monkeypatch.setattr(comments_module, 'CommentSession', _Session)
+        urls = 'https://www.zhihu.com/question/1/answer/1\nhttps://www.zhihu.com/question/2/answer/2'
+        node = _node('node-1', 'comment', {'platform': 'zhihu', 'urls': urls, 'comment_limit': 5})
+        run_id = _start(client, _wf([node]), 'stop-comments-returns')
+        assert gate['inside'].wait(10), 'the comment engine never reached an article'
+        client.post('/api/workflow/stop')
+        gate['release'].set()
+        assert run_finished(app_module)
+
+        record = _record(client, app_module, run_id)
+        assert record['status'] == RUN_INTERRUPTED, record['status']
+        assert _node_row(record, 'node-1')['status'] == NODE_PARTIAL
+        blob = _logs(client)
+        assert t('comment.done', urls=2, ok=1, blocked=0, dead=0, rows=1, files=1) not in blob, blob
+        assert t('run.nodeStopped', nid='comment #node-1', n=1) in blob, blob
 
 
 class TestAbandonedRecords:
@@ -575,6 +631,182 @@ class TestTheReapedSession:
         finally:
             child.terminate()
             child.wait(10)
+
+
+class _PoliteCrawler(_StreamingCrawler):
+    """A walk that ends on 停止 the way the shared engines do: by **returning**.
+
+    ``feed.walk_feed`` and ``engine.pager.walk_pages`` take their stop predicate as a loop
+    condition, so an interrupted crawl hands back its rows normally instead of raising. That
+    is the right behaviour for a walk and the wrong thing for a run record: a node that
+    returns is a node that succeeded, and a stopped run would read 运行完成 over a
+    half-collected table with no 继续 offered for the rest of it.
+    """
+
+    def search(self, keyword=None, target_count=None, urls=None, resume=None, **kw):
+        self.started += 1
+        for row in self._rows[:2]:
+            self.emit(row)
+        while not self.may_stop():
+            time.sleep(0.02)
+        return self.results()
+
+
+class TestACrawlThatStopsByReturning:
+    def test_a_walk_that_honours_the_stop_is_still_reported_as_stopped(self, client, app_module, monkeypatch):
+        built = []
+
+        def factory(platform, headless=True, cookie_dir=None, use_profile=None, for_login=False, abort=None, **kw):
+            crawler = _PoliteCrawler(abort=abort)
+            built.append(crawler)
+            return crawler
+
+        monkeypatch.setattr(app_module, 'get_crawler', factory)
+        run_id = _start(client, _wf([_source()]), 'stop-returns-early')
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not built:
+            time.sleep(0.05)
+        client.post('/api/workflow/stop')
+        assert run_finished(app_module)
+
+        record = _record(client, app_module, run_id)
+        assert record['status'] == RUN_INTERRUPTED, 'a returning walk settled the run as if it had finished'
+        node = _node_row(record, 'node-1')
+        assert node['status'] == NODE_PARTIAL, node['status']
+        assert app_module.get_run_store().row_count(run_id, 'node-1') == 2
+        blob = _logs(client)
+        assert t('run.nodeStopped', nid='source #node-1', n=2) in blob, blob
+        assert t('wf.node_failed', wf='stop-returns-early', nid='source #node-1', err='') not in blob
+
+    def test_the_console_says_the_user_ended_it_not_the_workflow(self, client, app_module, monkeypatch):
+        """The count that used to blame the canvas: a stop is not a failure."""
+        built = []
+
+        def factory(platform, headless=True, cookie_dir=None, use_profile=None, for_login=False, abort=None, **kw):
+            crawler = _PoliteCrawler(abort=abort)
+            built.append(crawler)
+            return crawler
+
+        monkeypatch.setattr(app_module, 'get_crawler', factory)
+        _start(client, _wf([_source()]), 'stop-returns-counts')
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not built:
+            time.sleep(0.05)
+        client.post('/api/workflow/stop')
+        assert run_finished(app_module)
+        status = client.get('/api/workflow/status').get_json()
+        assert status['failed_nodes'] == 0, status
+        # The stopped count rides on the finish line, not on a status field: one source of
+        # truth for "what happened to this run", which is what the two used to disagree on.
+        assert t('run.finished.stopped', n=1) in _logs(client), _logs(client)
+
+
+class TestTheCommentSessionFollowsTheReap:
+    """#138: the comment engine held a *snapshot* of the driver, so the dead-session stub
+    covered every crawl in the program except the one that reads hundreds of pages."""
+
+    def test_the_walk_sees_the_session_the_reaper_installed(self, app_module):
+        crawler = _StreamingCrawler()
+        live = _SlowSession(pid=0)
+        crawler.driver = live
+        import crawlers.comments as comments_module
+
+        session = comments_module.CommentSession(crawler.driver, owner=crawler, log=lambda m: None)
+        assert session.driver is live
+        crawler.driver = DeadDriver()
+        assert session.driver is crawler.driver, 'the session is still talking to a dead chromedriver'
+
+    def test_an_owned_session_refuses_at_once_after_the_browser_is_reaped(self, app_module):
+        """The cost this removes, on the crawl that pays it most: 16.3 s per command against
+        a port nobody holds, one ladder per page of a walk the user has already ended."""
+        child, crawler, release = _wedged_crawler()
+        import crawlers.comments as comments_module
+
+        session = comments_module.CommentSession(crawler.driver, owner=crawler, nap=lambda s: None)
+        try:
+            app_module._close_login_browser(crawler, quit_timeout=0.4)
+            assert isinstance(session.driver, DeadDriver), 'the reap did not reach the comment walk'
+            started = time.monotonic()
+            with pytest.raises(CrawlerStopped):
+                session.driver.find_element('css selector', 'body')
+            assert time.monotonic() - started < 1.0
+        finally:
+            release.set()
+            child.wait(10)
+
+    def test_a_session_built_without_an_owner_keeps_its_driver(self):
+        """Every crawler-less caller (the live tier builds sessions straight off a browser)
+        must keep working: the owner is what makes the handle live, not what makes it valid."""
+        import crawlers.comments as comments_module
+
+        live = _SlowSession(pid=1)
+        session = comments_module.CommentSession(live, nap=lambda s: None)
+        assert session.driver is live
+
+
+class TestABrowserWithNoProcessId:
+    """#139: the reap needs a PID, and a session that cannot answer for one is neither
+    killed nor awaited by anything ever again — while the thread that owns the profile lock
+    is standing wherever it is standing."""
+
+    def test_the_user_is_told_a_window_may_still_be_open(self, app_module, monkeypatch):
+        class _WedgedNoPid:
+            def __init__(self):
+                self.gone = threading.Event()
+
+            @property
+            def service(self):
+                raise RuntimeError('session was never created')
+
+            def quit(self):
+                self.gone.wait()
+
+        crawler = _StreamingCrawler()
+        crawler.driver = _WedgedNoPid()
+        killed = []
+        said = []
+        monkeypatch.setattr(app_module, 'add_log', lambda msg, **kw: said.append(str(msg)))
+        monkeypatch.setattr(
+            app_module.subprocess, 'run', lambda cmd, **kw: killed.append(cmd) or types.SimpleNamespace(returncode=0)
+        )
+        try:
+            app_module._close_login_browser(crawler, quit_timeout=0.4)
+        finally:
+            crawler.driver.gone.set()
+
+        expected = t('run.browserStuck', platform='zhihu', seconds=int(Config.PROFILE_LOCK_TIMEOUT))
+        assert expected in said, said
+        assert not killed, 'a kill was claimed against a process this code never read'
+        assert crawler.driver is not None and not isinstance(crawler.driver, DeadDriver), (
+            'a browser that may still be open was declared dead to the crawl using it'
+        )
+
+    def test_the_log_names_the_call_that_is_not_returning(self, app_module):
+        """'It is stuck' is not actionable; the innermost frame is. This is the only way to
+        hear about a hang from the thread that is too busy hanging to log anything."""
+
+        def hang():
+            threading.Event().wait()
+
+        thread = threading.Thread(target=hang, daemon=True)
+        thread.start()
+        time.sleep(0.2)
+        try:
+            where = app_module._stuck_where(thread)
+        finally:
+            thread.join(0.1)
+        assert 'hang' in where and 'test_stop_path.py' in where, where
+
+    def test_a_browser_that_did_close_says_nothing_about_being_stuck(self, app_module, monkeypatch):
+        """The other direction, because a warning that fires on every normal close would
+        teach the user to ignore the one time it means something."""
+        said = []
+        monkeypatch.setattr(app_module, 'add_log', lambda msg, **kw: said.append(str(msg)))
+        crawler = _StreamingCrawler()
+        crawler.driver = _SlowSession(pid=0)
+        app_module._close_login_browser(crawler, quit_timeout=5.0)
+        expected = t('run.browserStuck', platform='zhihu', seconds=int(Config.PROFILE_LOCK_TIMEOUT))
+        assert expected not in said, said
 
 
 class TestStoreStatusMachine:

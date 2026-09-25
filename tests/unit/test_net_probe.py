@@ -12,8 +12,8 @@ Every case below therefore replaces one of the module's own two primitives
 them, and what is asserted is the *classification*, which is the part a message quotes.
 """
 
+import contextlib
 import socket
-import time
 
 import pytest
 
@@ -40,23 +40,36 @@ class _UnreachableError(Exception):
 
 
 class FakeResponse:
-    #: A measurable pause per chunk: ``throughput`` divides bytes by elapsed seconds, and
-    #: on this machine 256 KB of in-memory reads costs a *single* clock tick (measured
-    #: ``elapsed == 0.0``), which the product correctly refuses to report as a speed.
-    CHUNK_DELAY = 0.005
-
     def __init__(self, chunks, status=200):
         self._chunks = list(chunks)
         self.status_code = status
         self.closed = False
 
     def iter_content(self, chunk_size=1):
-        for chunk in self._chunks:
-            time.sleep(self.CHUNK_DELAY)
-            yield chunk
+        yield from self._chunks
 
     def close(self):
         self.closed = True
+
+
+def _clock(values):
+    """A monotonic() that advances by *statement*, not by waiting.
+
+    Needed because this machine's ``time.monotonic`` has a ~16 ms tick (measured: a
+    5 ms sleep leaves the reading unchanged), and ``throughput`` divides by what the
+    clock says. A test that slept long enough to be visible would be slow *and* still
+    timing-dependent; a test that names its own elapsed figure measures the arithmetic
+    instead.
+    """
+    steps = iter(values)
+    hold = [values[0]]
+
+    def read():
+        with contextlib.suppress(StopIteration):
+            hold[0] = next(steps)
+        return hold[0]
+
+    return read
 
 
 class FakeSession:
@@ -139,7 +152,9 @@ class TestTheSpeedSample:
         the one path where a probe is allowed to be asked at all."""
         session = FakeSession(FakeResponse(_chunks(net_probe.SPEED_MIN_BYTES * 4)))
         monkeypatch.setattr(net_probe, '_session', lambda: session)
-        assert net_probe.throughput() is not None
+        monkeypatch.setattr(net_probe.time, 'monotonic', _clock([0.0, 0.5, 1.0]))
+        read = net_probe.SPEED_MIN_BYTES * 4
+        assert net_probe.throughput() == int(read / 1.0 / 1024)
         assert len(session.calls) == 1, 'the sample was not taken through the session'
 
     def test_a_response_that_is_not_a_200_is_not_a_measurement(self, monkeypatch):
@@ -150,6 +165,7 @@ class TestTheSpeedSample:
         """Below the floor the figure is handshake, and a message quoting it would be a
         measurement of the probe rather than of the user's line."""
         monkeypatch.setattr(net_probe, '_session', lambda: FakeSession(FakeResponse([b'x' * 64])))
+        monkeypatch.setattr(net_probe.time, 'monotonic', _clock([0.0, 0.5, 1.0]))
         assert net_probe.throughput() is None
 
     def test_a_line_that_refuses_to_be_measured_is_none_and_not_an_error(self, monkeypatch):
@@ -161,7 +177,8 @@ class TestTheSpeedSample:
         is a leaked socket on exactly the path that runs repeatedly."""
         response = FakeResponse(_chunks(net_probe.SPEED_MIN_BYTES * 8))
         monkeypatch.setattr(net_probe, '_session', lambda: FakeSession(response))
-        net_probe.throughput(window=0.0)
+        monkeypatch.setattr(net_probe.time, 'monotonic', _clock([0.0, 1.0, 2.0, 3.0]))
+        assert net_probe.throughput(window=1.0) is not None
         assert response.closed is True
 
     def test_the_shared_session_is_built_once_and_closed_at_exit(self, monkeypatch):

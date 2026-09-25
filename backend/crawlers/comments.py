@@ -398,13 +398,25 @@ def parse_twitter_replies(cards: list, article_url: str, root_id: str = '') -> l
 class CommentSession:
     """One browser session per platform; the node handler owns lifecycle."""
 
-    def __init__(self, driver, log=None, nap=None, abort=None):
-        self.driver = driver
+    def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+        self._driver = driver
+        # The crawler whose browser this is, when there is one. Held rather than flattened
+        # into the snapshot above because 停止 may *replace* the session under the crawl:
+        # the reaper installs a :class:`~crawlers.base.DeadDriver` once it has had to kill
+        # the process by PID, and a session that read its own stored reference would go on
+        # asking a dead chromedriver — 16.3 seconds per command, measured, one retry ladder
+        # per row of a walk that is already over.
+        self._owner = owner
         self.log = log or (lambda msg: None)
         self.nap = nap or time.sleep
         # "May I stop?" — the same predicate the crawlers carry, because a comment
         # node reads hundreds of pages and the node handler only asks between URLs.
         self._abort = abort
+
+    @property
+    def driver(self):
+        """The session as it is *now*, not as it was when the walk started."""
+        return self._owner.driver if self._owner is not None else self._driver
 
     def may_stop(self) -> bool:
         return bool(self._abort is not None and self._abort())

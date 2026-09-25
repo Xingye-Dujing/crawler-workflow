@@ -1062,3 +1062,49 @@ app.js 为了拖拽把 `openCookieDialog` 又包了一层，包装函数的空�
 看门狗自己也被真机证明过一次：一个临时用例往 `data/_guard_probe.json` 写四个字节，那轮
 `1 passed` 仍然以非零码退出并点名了那个文件。
 
+## 停止剩下的三条尾巴：返回的抓取、快照里的 driver、没有 pid 的卡死（#136 / #138 / #139，2026-09-26）
+
+三条都在 #134 的审计里被记下来，今天一起收。**先说被量掉的那半条**：#136 的原始描述里写着
+"`engine/feed.py` 卡片读取失败被吞 → 卡片恒空 → `_wait_for_change` 每轮只睡 1.5 秒 → 死循环"。
+逐行读下来不是死循环：`read_cards()` 抛异常会被吞成 `[]`，而 `walk_feed` 在**每一轮开头**就对
+空卡片 break（`stopped_reason='no_cards'`），所以最坏是 `stuck_rounds × settle_wait`（默认 3 × 1.5
+≈ 4.5 秒，X 用 4.0 时约 12 秒）。据此**没有**给走查加"连续 N 轮读不到卡片"的上限——那条会误伤
+骨架屏（抖音 16 张空壳正是"有卡片容器、零张卡"的形状），买到的只是一个已经被 break 覆盖的场景。
+
+真剩下的是**结局词**：抓取 honor 停止的方式是**返回**它已经采到的行，不是抛异常。而
+`_execute_source_node` 只在**进入节点前**查一次 `stop_requested()`（`_execute_node` 里那条
+`if stop_requested(): raise CrawlerStopped`），返回之后没人再问；`_run_node_durable` 的两条
+`except` 都要求**有人抛出**。于是一次被停止的走查会：节点 settle `done` → 运行记录写「运行完成」
+→ 续跑横幅不给「继续」。回退验证拿到的就是这个字面断言：
+
+```
+>       assert _node_row(record, 'node-1')['status'] == NODE_PARTIAL
+E       AssertionError: assert 'done' == 'partial'
+```
+
+评论节点同样：它的 URL 循环在顶上 `if not execution_state['running']: break`，跳出之后照样
+`return rows_out`。两处各补一次"回来了也要问一句"，走既有 `_settle_node_as_stopped`
+（保留行、记 被停止、不计入 failed）。评论那处刻意放在 `writer.finish()` **之后**，
+`comment.done` 那行随之不再打印——被停止的运行由 `run.nodeStopped` 一个人说。
+
+**#138**：`CommentSession` 存的是 `crawler.driver` 的**对象快照**，`app.py` 传进去就切断了
+和 crawler 属性的联系；强杀时换成 `DeadDriver` 的是 crawler 身上的名字，评论引擎手里那个
+老对象还活着，于是每条命令继续付 16.3 秒（#134 实测）。改法是把 crawler 交给 session
+（`owner=`），`driver` 变成**每次现读**的属性——30 处 `self.driver.<cmd>` 一行没动，但都变活了。
+没有 owner 的老构造方式（live 层直接从浏览器建 session）行为不变，这条由一条反向用例钉住。
+
+**#139**：强杀分支的条件是 `waiter.is_alive() and pid`，而 `pid` 那次读被 `suppress(Exception)`
+包着——读不到 pid 的卡死会话因此**既没被杀也没人再问**（`/api/workflow/stop` 取完快照就
+`clear()`），而释放 profile 锁的正是那个永不返回的 `close()`，本平台目录被占到
+`PROFILE_LOCK_TIMEOUT`。没有加"留在注册表里下次再试"的机制：那需要一个第二持有者和一个能
+展示它的界面位置，而这里能确定说的只有一句——**它可能还开着**。于是 `run.browserStuck`
+进控制台（说占多久、为什么），`_stuck_where()` 把卡住那一帧进 `logs/`。用 `logger.debug`
+而不是 `warning`：`LogBufferHandler` 会把 INFO 及以上的 logger 调用转发进控制台，英文帧地址
+走 `t()` 没有意义，而 `tests/unit/test_i18n.py::TestNoHardcodedConsoleText` 正是靠"debug 只进
+文件"这条豁免的——第一次写成 warning 时它就是被这个用例挡下来的。
+
+**顺带量到的一个平台事实**（写下来是因为它会骗测试）：这台机器上 `time.monotonic()` 的
+步进约 16 毫秒——`time.sleep(0.005)` 之后再读，返回值**一模一样**。任何"用真实时钟测一个
+小于 16 毫秒的量"的断言都是掷硬币，`services/net_probe.throughput` 的算术就因此需要注入
+时钟（`tests/unit/test_net_probe.py::_clock`）才能钉住 kB/s 的算法本身。
+

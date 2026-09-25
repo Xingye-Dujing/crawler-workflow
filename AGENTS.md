@@ -86,13 +86,12 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   `await` is not on the page after it** — settings panels and run-list refreshes rebuild the markup, so
   re-look the element up (`_rowFor`, the holder by id) or the write lands in an orphan and a flag is
   set for nothing.
-- **A browser-measured assertion must report how much it measured, or it is not an assertion.**
-  `tests/integration/test_ui_layout.py` audits containers **by id**, never falls back to `<body>`,
-  and asserts a per-container floor on the count it gathered in the browser. Resolve on-screen
-  wording from `I18n` inside the browser, not a pasted copy.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the
-  one the bug was about: for a record, a run or a panel row, list the dimensions first (`mode`,
-  `headless`, `wf_count`, resume state, language …) and cover the grid.
+  one the bug was about: for a record, a run or a panel row, list the dimensions first and cover the grid.
+- **A browser-measured assertion must report how much it measured, or it is not an assertion.**
+  `tests/integration/test_ui_layout.py` audits containers **by id**, never falls back to `<body>`, and
+  reports a per-container floor on what it counted. Resolve on-screen wording from `I18n` inside the
+  browser, not a pasted copy.
 - **The `integration` UI tier performs no server writes** — no data-dir switch exists, so a run
   or an upload lands in the user's real `data/` and `logs/`. Stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`: a valid
@@ -160,13 +159,15 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   thread** (the worker's verdict replaces it) and `stop_requested()` reads that — never
   `not running`, which an idle server also answers. Each crawl asks it at its next row via
   `Crawler.emit` (a `BaseException`: `except Exception` would swallow it into "the site sent
-  nothing more"). `driver.quit()` cannot interrupt the command the worker is inside, so 停止
+  nothing more"). **A walk may honour 停止 by *returning* its rows, so the executor asks again
+  after it comes back: a returned table is not a completed node.** `driver.quit()` cannot
+  interrupt the command the worker is inside, so 停止
   kills that driver process. **A timeout not handed to the connection is a comment, not a
   ceiling**: `ollama.Client` defaults to `None` (never), so pass the run's timeout there; and the
   panel's post-stop watch must outlast the measured tail (`docs/crawler_notes.md`).
 - **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.**
-  `get_crawler` passes `data/chrome_profile/<platform>` (or the user's absolute
-  `browser_profile_dir`) as `--user-data-dir`, so the login window and the crawl are the same
+  `get_crawler` passes `data/chrome_profile/<platform>` (or the user's override) as
+  `--user-data-dir`, so the login window and the crawl are the same
   device. Consequence: **the saved cookie file is imported once** (first use of the
   directory) and **never planted again** — overwriting a live profile
   with an old snapshot is the harm, not the fix. **Never write the browser's live jar back to a saved
