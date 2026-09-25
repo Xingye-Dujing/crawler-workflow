@@ -41,6 +41,74 @@ def has_cookie(platform: str) -> bool:
     return isinstance(data, list) and len(data) > 0
 
 
+#: Where this tier's browsers keep their own session, and it has to OUTLIVE the run.
+#:
+#: The root conftest sends every writable path into ``<tmp>/cixi_pytest/isolated-<pid>`` and
+#: deletes that directory at import, so a live crawl started there begins in a brand-new profile
+#: **every run** and has the saved cookie file replanted into it (``crawlers/__init__.py:97``).
+#: That is the shape this account gets refused by: weibo re-issues ``SUB``/``SUBP`` on a logged-in
+#: page load, so the saved pair stops being accepted once it has been used, and measuring it on
+#: 2026-09-26 is what cost the USER their own session (docs/crawler_notes.md). A real run — the
+#: user's — crawls from a profile that keeps its own jar, and that is the only difference between
+#: "the tests get bounced to the login page" and "the user never sees that page".
+#:
+#: ``scratchpad/`` is gitignored, and this is deliberately NOT ``data/chrome_profile``: that
+#: directory belongs to the user's own crawls, and a test session must not log into it, be logged
+#: out of it, or contend with their browser for its single-writer lock.
+LIVE_PROFILE_ROOT = REPO_ROOT / 'scratchpad' / 'live_profiles'
+
+
+def live_attempts(platform: str) -> int:
+    """How many times this tier may ask *platform* one question.
+
+    Two everywhere but weibo, and one is the account's protection rather than a looser assertion:
+    the second ask is the same refused endpoint seen again with the same saved credential, and it
+    is the ACCOUNT that carries the flag (measured 2026-09-26, the night the retries were found to
+    have cost the user their own session). A refusal there is asserted as a refusal — see
+    ``test_live_weibo.py::test_visible_window_search_works_too`` — so nothing about strictness is
+    traded away, only the repeat request.
+    """
+    return 1 if platform == 'weibo' else 2
+
+
+def refresh_for_planting(platform: str) -> bool:
+    """Does this platform's test profile need the saved file put into it again?
+
+    This is the panel's own question, asked with the panel's own answer
+    (:func:`browser_profiles.needs_refresh`): "it was planted, and the file has been saved since".
+    The tier borrows it rather than keeping a rule of its own so that a cookie the user re-took
+    reaches the test profile exactly the way the 「把 Cookie 更新进 Profile」 button makes it reach
+    theirs — once, from the file that is current now. A profile that has never been used answers
+    ``False``: its first crawl imports the file by itself.
+    """
+    import browser_profiles
+
+    return bool(browser_profiles.needs_refresh(platform, str(COOKIE_DIR / f'{platform}_cookies.json')))
+
+
+@pytest.fixture(scope='session', autouse=True)
+def live_profile_root():
+    """Give the tier a profile directory that survives the run — and prove it is not the user's.
+
+    Written as a *setting* rather than passed as an argument, because that is how the product
+    chooses its profile root (:func:`browser_profiles.root_dir`): the tier then goes through the
+    same resolution a user's crawl does, including "an absolute path wins, empty means the
+    app-managed one". A refusal there is the one way this fixture could quietly end back at the
+    user's directory, so the warnings come back as a failure rather than as a log line.
+    """
+    import settings_store
+
+    resolved = LIVE_PROFILE_ROOT.resolve()
+    forbidden = (REPO_ROOT / 'data').resolve()
+    assert not str(resolved).startswith(str(forbidden)), (
+        f'the live tier profile root {resolved} sits inside {forbidden}, which holds the user profiles'
+    )
+    resolved.mkdir(parents=True, exist_ok=True)
+    _saved, warnings = settings_store.save_settings({'browser_profile_dir': str(resolved), 'use_browser_profile': True})
+    assert not warnings, f'the tier profile root was refused, so crawls would use the user directory: {warnings}'
+    return str(resolved)
+
+
 @pytest.fixture(scope='session')
 def cookie_dir_str() -> str:
     return str(COOKIE_DIR)
@@ -88,7 +156,13 @@ def live_crawler(cookie_dir_str):
         # two tests would each cool down for a crawl that had not started yet.
         stack.enter_context(crawl_gate.hold(platform))
         try:
-            crawler = get_crawler(platform, headless=headless, cookie_dir=cookie_dir_str, use_profile=use_profile)
+            crawler = get_crawler(
+                platform,
+                headless=headless,
+                cookie_dir=cookie_dir_str,
+                use_profile=use_profile,
+                refresh_cookies=refresh_for_planting(platform),
+            )
         except ProfileUnavailableError:
             # Not "no browser on this machine" — the profile is held by something that
             # has not finished. Skipping here would hide a serialization bug in this
@@ -163,13 +237,22 @@ def live_search(live_crawler):
     the tier waits :data:`Config.WALL_RETRY_BACKOFF`, the back-off a user's run gets, where
     it used to sleep 5 s — a patience no product path has ever offered.
 
+    **Weibo gets one attempt** (measured 2026-09-26, the same night the retries were found to
+    have cost the user their own session): a retry there is the same refused endpoint asked
+    again by the same saved credential, and the account is what carries the flag — so the
+    second request buys a red that names nothing new and spends budget that is not the test's
+    to spend. A refusal is asserted as a refusal instead (see
+    ``test_live_weibo.py::test_visible_window_search_works_too``).
+
     Each crawl is created inside :func:`crawl_gate.hold`, the same turn the app takes for a
     crawl's whole life, so the tier orders one platform's crawls the way the program does
     rather than running its own policy beside it.
     """
     from config import Config
 
-    def _search(platform, *, headless, keyword=None, count=3, urls=None, attempts=2, **kwargs):
+    def _search(platform, *, headless, keyword=None, count=3, urls=None, attempts=None, **kwargs):
+        if attempts is None:
+            attempts = live_attempts(platform)
         rows = _Rows()
         for attempt in range(attempts):
             crawler = live_crawler(platform, headless=headless)
@@ -213,7 +296,6 @@ def weibo_windowed(cookie_dir_str):
 
     import crawl_gate
 
-    from config import Config
     from crawlers import get_crawler
 
     target = 8
@@ -221,23 +303,28 @@ def weibo_windowed(cookie_dir_str):
     start = end - timedelta(days=7)
     rows: list = []
     refused = False
-    for _round in range(2):
-        with crawl_gate.hold('weibo'):
-            crawler = get_crawler('weibo', headless=True, cookie_dir=cookie_dir_str)
-            try:
-                rows = (
-                    crawler.search(
-                        '三亚',
-                        start_time=start.strftime('%Y-%m-%d'),
-                        end_time=end.strftime('%Y-%m-%d'),
-                        target_count=target,
-                    )
-                    or []
+    # ONE round, one browser: a second ask is the same refused endpoint seen again with the same
+    # credential, and the ACCOUNT carries the flag — which is why ``live_search`` ends a weibo
+    # attempt instead of repeating it. Refusing to retry is what keeps this tier from spending an
+    # allowance that belongs to the user.
+    with crawl_gate.hold('weibo'):
+        crawler = get_crawler(
+            'weibo',
+            headless=True,
+            cookie_dir=cookie_dir_str,
+            refresh_cookies=refresh_for_planting('weibo'),
+        )
+        try:
+            rows = (
+                crawler.search(
+                    '三亚',
+                    start_time=start.strftime('%Y-%m-%d'),
+                    end_time=end.strftime('%Y-%m-%d'),
+                    target_count=target,
                 )
-                refused = bool(crawler.login_wall)
-            finally:
-                crawler.close()
-        if rows or not refused:
-            break
-        time.sleep(Config.WALL_RETRY_BACKOFF)
+                or []
+            )
+            refused = bool(crawler.login_wall)
+        finally:
+            crawler.close()
     return {'rows': rows, 'target': target, 'login_wall': refused}

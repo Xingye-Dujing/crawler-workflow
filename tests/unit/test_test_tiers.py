@@ -560,9 +560,10 @@ class TestLiveCrawlerFixture:
                 events.append(f'give:{platform}')
 
         class Stub:
-            def __init__(self, platform, use_profile=None):
+            def __init__(self, platform, use_profile=None, refresh_cookies=False):
                 self.platform = platform
                 self.use_profile = use_profile
+                self.refresh_cookies = refresh_cookies
                 self.closed = False
 
             def close(self):
@@ -570,10 +571,10 @@ class TestLiveCrawlerFixture:
 
         made: list = []
 
-        def fake_get_crawler(platform, headless=True, cookie_dir=None, use_profile=None):
+        def fake_get_crawler(platform, headless=True, cookie_dir=None, use_profile=None, refresh_cookies=False):
             if isinstance(raises, Exception):
                 raise raises
-            stub = Stub(platform, use_profile)
+            stub = Stub(platform, use_profile, refresh_cookies)
             made.append(stub)
             return stub
 
@@ -658,6 +659,109 @@ class TestLiveCrawlerFixture:
         finally:
             finish()
         assert made[-1].use_profile is False, 'the request to skip the profile was dropped'
+
+    def test_the_broker_forwards_what_the_panel_says_about_replanting(self, monkeypatch):
+        """``refresh_cookies`` is the one door into a profile that is already in use, so the tier
+        has to hand the answer over rather than decide for itself — and only for the platform the
+        panel actually flagged. Dropping the argument would plant an old snapshot over a live
+        session for every platform on every run, which is the harm the import-once rule exists to
+        prevent (and, measured 2026-09-26, the thing that got an account risk-flagged).
+        """
+        import browser_profiles
+
+        monkeypatch.setattr(browser_profiles, 'needs_refresh', lambda platform, path: platform == 'weibo')
+        factory, _events, made, finish = self._drive(monkeypatch)
+        try:
+            factory('weibo')
+            factory('zhihu')
+        finally:
+            finish()
+        assert made[0].refresh_cookies is True, made
+        assert made[1].refresh_cookies is False, 'an unused profile imports the saved file by itself'
+
+
+def _live_conftest():
+    """The live tier's own conftest, loaded as a module so its policies are testable at all."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location('live_conftest_policy', LIVE_DIR / 'conftest.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestLiveTierSessionShape:
+    """The live tier has to crawl the way the USER does, and must not spend his account.
+
+    Measured 2026-09-26: the root conftest deletes and recreates its isolated root per process, so
+    every live run began in a brand-new Chrome profile with the saved cookie file replanted into it.
+    Weibo answers that shape with a login page, and its risk control is filed against the ACCOUNT —
+    which is how the tests' throwaway sessions bounced the user's own crawls. Each property below
+    is refused with fakes, because a browser is exactly what cannot be spent to prove them.
+    """
+
+    def test_the_tier_profile_root_is_its_own_and_outlives_the_run(self):
+        module = _live_conftest()
+        root = module.LIVE_PROFILE_ROOT
+        assert (REPO_ROOT / 'scratchpad') in root.parents, (
+            f'the live profile root is not inside the gitignored scratchpad: {root}'
+        )
+        assert not str(root).startswith(str(REPO_ROOT / 'data' / 'chrome_profile')), (
+            f'the live tier would crawl inside the user profiles: {root}'
+        )
+
+    def test_the_session_fixture_actually_moves_where_a_crawler_resolves_its_profile(self, monkeypatch, tmp_path):
+        """Not "the fixture wrote a setting" but "the product's own resolution now answers the
+        tier's directory" — the seam is :func:`browser_profiles.root_dir`, which every crawl and
+        every marker path goes through."""
+        import browser_profiles
+
+        import settings_store
+
+        module = _live_conftest()
+        target = tmp_path / 'live_profiles'
+        monkeypatch.setattr(module, 'LIVE_PROFILE_ROOT', target)
+        monkeypatch.setattr(settings_store, '_PATH', str(tmp_path / 'settings.json'))
+        monkeypatch.setattr(settings_store, '_values', None)
+        module.live_profile_root.__wrapped__()
+        assert browser_profiles.is_enabled() is True, 'a tier that silently fell back to no profile replants every run'
+        assert browser_profiles.root_dir() == str(target.resolve()), browser_profiles.root_dir()
+
+    def test_a_profile_root_inside_the_user_directory_is_refused(self, monkeypatch, tmp_path):
+        """The one mistake this fixture could make that would do harm rather than lose fidelity."""
+        import settings_store
+
+        module = _live_conftest()
+        monkeypatch.setattr(module, 'LIVE_PROFILE_ROOT', REPO_ROOT / 'data' / 'chrome_profile')
+        monkeypatch.setattr(settings_store, '_PATH', str(tmp_path / 'settings.json'))
+        with pytest.raises(AssertionError) as refused:
+            module.live_profile_root.__wrapped__()
+        assert 'user' in str(refused.value).lower(), refused.value
+        assert not (tmp_path / 'settings.json').exists(), 'the refusal must come before anything is written'
+
+    def test_the_refresh_question_is_asked_about_this_platforms_own_file(self, monkeypatch):
+        """The tier asks the panel's question instead of holding a rule of its own, so a cookie the
+        user re-took reaches the test profile the way the button makes it reach his — once, and
+        about the right file: asking about another platform's cookie would plant a stranger's
+        session into this browser.
+        """
+        import browser_profiles
+
+        module = _live_conftest()
+        asked = []
+
+        def answer(platform, path):
+            asked.append((platform, path))
+            return True
+
+        monkeypatch.setattr(browser_profiles, 'needs_refresh', answer)
+        assert module.refresh_for_planting('weibo') is True
+        assert asked == [('weibo', str(module.COOKIE_DIR / 'weibo_cookies.json'))], asked
+
+    def test_weibo_is_asked_once_and_the_others_twice(self):
+        module = _live_conftest()
+        assert module.live_attempts('weibo') == 1, 'a retry asks the same refused endpoint with the same credential'
+        assert module.live_attempts('zhihu') == 2 and module.live_attempts('xiaohongshu') == 2
 
 
 #: The only outcomes the live tier may file as *skipped*, each with the precondition it names.

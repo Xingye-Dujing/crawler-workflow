@@ -1173,4 +1173,40 @@ Chrome 只把**持久 Cookie** 写进 profile 的 Cookie 库，会话 Cookie 只
 2026-09-23 那轮全量绿提供；真站这一格"能不能取到行"取决于该 session 当日的心情，
 所以这条用例才故意在 `live_quick` 之外。
 
+## 真站层每轮都在新浏览器里重放同一份 Cookie（measured 2026-09-26，#140）
+
+微博那条"发现步骤付第三次 burst"只是表面。**结构原因**在这里：`tests/conftest.py:73-102` 为了隔离，
+在导入时把 data/、logs/、settings.json 指向 `<tmp>/cixi_pytest/isolated-<pid>`，而且**开头先
+rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新空 profile** 起步 ⇒
+`crawlers/__init__.py:97` 的 `planting` 条件每轮成立 ⇒ **每轮都把同一份保存的 Cookie 重放进一个新浏览器**。
+日志原文可查：`Cookie 预置：weibo.com 接受 8/8 条`。
+
+对照用户自己的抓取：`data/chrome_profile/weibo/.crawler-profile.json` 写着
+`used_at 2026-09-26 00:29 / imported_at 2026-09-24` —— profile 已被用过 ⇒ **他的抓取根本不种 Cookie**，
+用的是站点自己发给它的那份 jar。这解释了一个原本说不通的现象：**测试反复被弹登录页，而用户
+一次都没见过**。而微博的风控记在**账号**上，不是记在浏览器上，所以测试的重放最终把用户自己的
+抓取也弹下了登录页（2026-09-26 05:2x 实测发生；他重新登录 + 重存 Cookie 后恢复）。
+`crawl_gate.hold` 对此无能为力：它只管顺序，release 之后没有任何冷却
+（`crawl_gate.py:230-235` 只给"到门口确实等过"的调用补那一段抖动间隔）。
+
+落地四件：
+1. 真站层改用**跨运行保留**的 profile 根 `scratchpad/live_profiles/<platform>`（gitignored，
+   且显式拒绝落在 `data/` 里——那是用户自己的目录），首轮种一次、之后与用户同形；
+2. 只在**面板那道问句**为真时再种：`refresh_for_planting(platform)` 直接问
+   `browser_profiles.needs_refresh(platform, 该平台的 Cookie 文件)`，也就是"种过、之后文件又被保存过"。
+   于是用户重存 Cookie 之后测试会话会跟上一次，别的任何时候都不动它；
+3. **微博每轮只问一次**：`live_attempts('weibo') == 1`（`live_search` 与 `weibo_windowed` 都读它）。
+   重试对微博不是"再试一次"，是拿同一份被拒凭据再敲一次同一扇门；拒绝被当作拒绝来断言
+   （`test_visible_window_search_works_too`），严格度一点没降；
+4. 真站层的 `pytest.skip` 变成**必须被列举**（`_LIVE_SKIP_ALLOWANCE`，正反两方向都有测试），
+   防止"跑不过就跳过"悄悄吃掉闸门。
+
+被数字或事实否掉的三个选项：**给 hold 加冷却**——产品路径从来没有这个承诺，测试自己加会把
+真问题（会话形状）盖住，而且每轮多睡几十秒；**把微博降级成只测匿名热搜**——丢掉的是登录态抓取
+这一整块覆盖；**每轮删掉测试 profile**——等于回到原点。
+
+**还欠一次真机复验**（要用户点头才跑，跑它就是在花他的账号额度）：连跑两轮真站层，微博相关用例
+不再出现 `登录墙 → passport`，且他自己抓取不受影响。
+
+
 
