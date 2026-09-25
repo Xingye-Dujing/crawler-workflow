@@ -1,8 +1,9 @@
 """Live Weibo author crawl — the 某作者的作品 mode against the mymblog endpoint.
 
-The uid is **discovered during this run** from a real keyword search's 用户链接 (a
-written-down uid rots, and a home timeline answering 200 with the same envelope is
-exactly what the anchor check defends against). The endpoint is read from inside the
+The uid is **discovered from a real keyword search's 用户链接** (a written-down uid rots,
+and a home timeline answering 200 with the same envelope is exactly what the anchor check
+defends against) — from the tier's one shared crawl rather than a search of its own, because
+this account is refused by bursts (see ``_discover_uid``). The endpoint is read from inside the
 author's loaded profile page with the browser's own session — the shape that answers.
 
 What is proven is the mode's two foundations and the tier's refusal contract:
@@ -25,22 +26,26 @@ from crawlers.weibo import weibo_uid
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
-KEYWORD = '人工智能'
 
-
-def _discover_uid(live_crawler):
-    """The numeric uid of an author the keyword search itself returned.
+def _discover_uid(weibo_windowed):
+    """The numeric uid of an author the tier's one shared keyword search already named.
 
     Reuses the crawler's own ``weibo_uid`` (the search row is ``weibo.com/<uid>?refer_flag=…``,
-    which that parser exists to read) rather than a second, narrower regex here. A search that
-    yielded no such link means the crawl stopped working — a real red, not a skip.
+    which that parser exists to read) rather than a second, narrower regex here.
+
+    Read from :func:`weibo_windowed` instead of paying a discovery search of its own, because the
+    two are the same crawl and this account is refused by **bursts**: measured 2026-09-26, the
+    author case's own discovery search was answered a passport page in a run in which the shared
+    crawl had already delivered rows — the sibling visible-window case documents that
+    second-burst shape. Spending a burst to rediscover a uid the run already holds made this case
+    answer to the site's mood rather than to the mode, and a retry would only ask the refused
+    endpoint again.
     """
-    crawler = live_crawler('weibo')
-    try:
-        rows = crawler.search(KEYWORD, target_count=5) or []
-    finally:
-        crawler.close()
-    assert rows, f'the {KEYWORD} search returned nothing, so there is no author to ask'
+    rows = weibo_windowed['rows']
+    assert rows, (
+        f'weibo delivered nothing WITH saved cookies (login_wall={weibo_windowed["login_wall"]}), '
+        'so there is no author to ask — that is a dead session, not throttling: re-save the weibo cookie'
+    )
     for row in rows:
         uid = weibo_uid(row.get('用户链接'))
         if uid:
@@ -48,8 +53,8 @@ def _discover_uid(live_crawler):
     pytest.fail(f'no author link with a numeric uid among {len(rows)} live rows: {[r.get("用户链接") for r in rows]}')
 
 
-def test_one_authors_posts_are_collected_or_the_refusal_is_named(live_crawler):
-    uid = _discover_uid(live_crawler)
+def test_one_authors_posts_are_collected_or_the_refusal_is_named(live_crawler, weibo_windowed):
+    uid = _discover_uid(weibo_windowed)
     crawler = live_crawler('weibo')
     try:
         try:

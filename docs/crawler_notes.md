@@ -1141,3 +1141,27 @@ Chrome 只把**持久 Cookie** 写进 profile 的 Cookie 库，会话 Cookie 只
 复制出来的库交给 Chrome 自己也解不开），所以"外部写那个 sqlite"这条路不存在——唯一能写进去的
 途径是开着浏览器用 `add_cookie`。这也是这个功能必须开一次浏览器的原因。
 
+## 微博作者模式的「发现」步骤，付的是第三次 burst（measured 2026-09-26，收口第 1 轮）
+
+收口第 1 轮（`-m "not live_os"`，1027.22 秒，4213 passed）唯一的红是
+`tests/live_site/test_live_weibo_author.py` 的 `_discover_uid`：它自己起一个浏览器去搜
+`人工智能`，被答了 `登录墙：weibo.com … 重定向到登录页`，取回 0 条，然后那句
+`assert rows` 把它读成"搜索坏了"。**同一次运行里** `test_live_weibo.py` 的两条都是绿的
+（共享的 7 天窗口搜索交出 8 行、可见窗口那条按契约过了），所以会话是活的——这是本文更早那一节
+量的同一个形状：**这个账号的下一条 burst 被答 passport 页**，不是死登录态。
+
+于是发现步骤改成读**这一轮已经付过的那一次搜索**（`weibo_windowed`，session 作用域，
+`tests/live_site/conftest.py` 里就是为"一个账号被 burst 拒"而存在的），不再另起第三次 burst。
+断言的强度一点没降：行必须存在（不存在就是死会话，红），必须有一条带数字 uid 的 `用户链接`
+（没有就 `pytest.fail` 把看到的链接全打出来，红）。`live_search` 那条"撞墙就退避后再问一次"的
+路子在这里解决不了问题：**重试只是把同一个被拒的端点再问一遍**，多花的正是账号的额度。
+
+顺带量到 today 的另一半：单跑那条用例时日志停在 `开始采集作者 <uid> 的作品，目标 5 条`，
+既没有 WARNING 也没有 `authorDone` → 走的是 `crawl.weibo.authorRefused`（mymblog 那一格
+`fetch_failed`）分支。用例按自己的契约把"被点名的拒绝"当作站点的诚实回答放它过，这与
+`weibo: /ajax/statuses/mymblog is a per-session edge 403 → refuse loudly` 那条红线一致。
+作者模式真取到行的证据由离线用例（`_author_row` 的列集合、翻页游标、mirror 拒绝）与
+2026-09-23 那轮全量绿提供；真站这一格"能不能取到行"取决于该 session 当日的心情，
+所以这条用例才故意在 `live_quick` 之外。
+
+
