@@ -36,6 +36,23 @@ def as_index(value, default: int = 0) -> int:
         return default
 
 
+class CrawlerStopped(BaseException):
+    """The user pressed 停止 and this crawl must end, keeping what it already paid for.
+
+    Not an ``Exception`` subclass for one structural reason: this codebase reads a
+    dead session, a missing card and a refused page as "keep going without it" in
+    about sixty places, nearly all of them ``except Exception`` or
+    ``contextlib.suppress(Exception)`` — a stop raised as an ordinary error would be
+    swallowed into a silently short table, which is the opposite of what a stop is
+    for. As a ``BaseException`` it walks out of every crawl loop unharmed and is
+    caught once, by the node runner, which reports 被停止.
+
+    It is also the difference between an honest short table and a dishonest one:
+    measured, a killed driver makes an in-page ``fetch`` answer ``ERR …``, and
+    ``engine/pagefetch.py`` folds that into "the site sent no more rows".
+    """
+
+
 class ProfileUnavailableError(RuntimeError):
     """The browser was never built because the platform's profile could not be taken.
 
@@ -83,6 +100,11 @@ class Crawler(ABC):
     # platform that measures a real need opts in.
     needs_images = False
 
+    #: "May this crawl stop?" — installed by the runner, defaulted on the class so a
+    #: test double that subclasses Crawler without calling ``__init__`` still answers
+    #: it (False) instead of raising AttributeError from inside ``emit``.
+    _abort = None
+
     #: How many readings a suspected wall has to survive before it is believed.
     #: Measured on weibo: a logged-in visit to a search URL flashes the passport page
     #: and is bounced back to content about a second later, so a crawl that judged the
@@ -106,12 +128,12 @@ class Crawler(ABC):
         # the same device to the site (see ``browser_profiles``). None is the old
         # behaviour: a throwaway profile plus whatever cookie file we plant into it.
         self.profile_dir = str(profile_dir or '') or None
-        # Why THIS browser may not wait: set by the executor to "the run was
-        # stopped", consulted while queued on the profile lock. A Stop that still
-        # had the wait outstanding bought a browser for a run already declared
-        # over — or never reached its finally at all, stranding the record on
-        # 运行中 and the queue behind it.
-        self._profile_abort = abort
+        # Why THIS browser may not carry on: set by the executor to "the user stopped
+        # the run", consulted in two places — queued on the profile lock, and at every
+        # boundary of a crawl's own walk. A Stop that still had the wait outstanding
+        # bought a browser for a run already declared over — or never reached its
+        # finally at all, stranding the record on 运行中 and the queue behind it.
+        self._abort = abort
         if for_login:
             # A window the user looks at is not a crawl. The login page's QR code is
             # an ``<img>``, so the content blocker that saves seconds on every
@@ -163,10 +185,9 @@ class Crawler(ABC):
         if not self.profile_dir:
             return None
         started = time.monotonic()
-        lock = browser_profiles.acquire_profile(self.profile_dir, abort=self._profile_abort)
+        lock = browser_profiles.acquire_profile(self.profile_dir, abort=self._abort)
         if lock is None:
-            abort = self._profile_abort
-            if abort is not None and abort():
+            if self._abort is not None and self._abort():
                 # Not a stuck profile — the user stopped this run while it queued.
                 # Saying so matters: the other message blames a window that never
                 # closed and sends the user hunting a browser that is not there.
@@ -189,6 +210,24 @@ class Crawler(ABC):
         lock, self._profile_lock = self._profile_lock, None
         browser_profiles.release_profile(lock)
 
+    def may_stop(self) -> bool:
+        """Whether the user asked this crawl to end, as of right now.
+
+        The walk engines (:func:`engine.feed.walk_feed`, :func:`engine.pager.walk_pages`)
+        already take a predicate here, and every one of them had it wired to the wall
+        flags only — so a Stop left a scrolling crawl harvesting, page after page, in a
+        browser the user believes is dead. Measured why the flag is needed even though
+        the Stop also closes the browser: ``driver.quit()`` from another thread is an
+        in-band command, queued *behind* the running one, so it neither interrupts a
+        page load (40.0 s of ``page_load_timeout``) nor an in-page fetch (30.0 s of
+        script timeout). Only killing the driver process returns the worker early.
+
+        A crawl therefore stops at its own next boundary, which costs one round rather
+        than one page, and the node reports 被停止 rather than "the site had no more".
+        """
+        abort = getattr(self, '_abort', None)
+        return bool(abort is not None and abort())
+
     # ── streaming hooks (installed by the runner) ───────────────
 
     def set_sink(self, sink):
@@ -202,7 +241,17 @@ class Crawler(ABC):
         self._cursor_sink = sink
 
     def emit(self, item) -> bool:
-        """Hand one scraped item over. Returns whether it was kept."""
+        """Hand one scraped item over. Returns whether it was kept.
+
+        The stop is checked HERE rather than at each call site because every crawl in
+        this project streams its rows through this one method — so a hand-rolled loop
+        that never went through the shared walkers is interrupted at its next row too,
+        and a platform added tomorrow inherits it without knowing. Raising rather than
+        answering False is what keeps a stopped crawl from being reported as "the site
+        had nothing more"; the rows already handed over are checkpointed and stay.
+        """
+        if self.may_stop():
+            raise CrawlerStopped(t('crawl.stopped'))
         if item is None:
             return False
         if self._sink is None:

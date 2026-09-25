@@ -37,6 +37,7 @@ from analyzers import (
 from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
+from crawlers.base import CrawlerStopped
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, node_label
@@ -408,6 +409,18 @@ execution_state = {
     # worker's own verdict, published once the run stops.
     'skipped_nodes': 0,
     'failed_nodes': 0,
+    # Nodes cut short by the user's own 停止. Kept apart from `failed_nodes` because a
+    # stopped node is not a failure, and blaming one on the workflow is the last thing
+    # a run the user ended by hand should say.
+    'stopped_node_ids': set(),
+    # The run rows a live worker still owns (one per workflow in a serial
+    # multi-workflow canvas): 停止 writes to these, and nothing settles a row that
+    # is not on this list while its worker may still be running.
+    'open_records': [],
+    # Every record THIS process opened, kept across runs. It is what lets the panel
+    # settle a row its own worker abandoned without ever touching a row another
+    # server instance might be writing right now.
+    'owned_records': set(),
     # Node ids the CURRENT attempt visited. `runs.db` keeps the status of every
     # node ever run under this run id, including ones the canvas has since
     # deleted, so a verdict read from the whole record can blame today's run for
@@ -439,6 +452,18 @@ execution_state = {
 }
 _completed_lock = threading.Lock()
 _execute_lock = threading.Lock()  # serializes the guard-and-claim of a new run
+
+
+def stop_requested() -> bool:
+    """Whether 停止 has been pressed for the run in flight.
+
+    Read ``stopping``, NOT ``not running``. The two look interchangeable and are not:
+    a helper or a test that calls an executor function directly has no claim in place
+    at all, and for it "nobody is running" is not an answer to "did the user end this
+    run" — inferring the second from the first made every such call refuse to work.
+    ``stopping`` is set only by the Stop handler and cleared when a run claims the slot.
+    """
+    return bool(execution_state.get('stopping'))
 
 
 def _console_baseline() -> dict:
@@ -548,25 +573,36 @@ def _housekeep(exclude_run_id='', force: bool = False):
 
 
 def _close_run(ctx: dict, outcome: str):
-    """Record how a run ended. Never raises: losing the record must never lose
-    the run itself — the rows were already safely in the database, this says
-    only whether they are complete.
+    """Record how a run ended.
+
+    Never raises: losing the record must never lose the run itself — the rows were
+    already safely in the database, this says only whether they are complete.
+
+    But it does not swallow the failure *silently* either. A row left on 运行中 is read
+    back as "still crawling", the resume banner will not offer it, and the only repair
+    was restarting the service — measured, and it is why pressing 停止 used to look
+    slower than a restart. The console therefore says which record it could not close,
+    and `/api/runs/list` settles it on the next panel read (see ``run.reconciled``).
 
     Serial mode with several workflows opens one record per workflow, and each is
     closed with its own verdict the moment its workflow's turn ends; what is left
     standing here is the record that was still executing when the run exited, and
     the single-record case, where the whole run shares one verdict.
     """
-    with contextlib.suppress(Exception):
-        # ``open_records`` is set as soon as a record is opened, so a run that closed
-        # every workflow it started arrives here with an EMPTY list — which means
-        # nothing to close, not "close the run's own id" (that row may not exist at
-        # all after the split, and re-writing a verdict over a workflow that already
-        # got its own would be the worse mistake).
-        for run_id in ctx.get('open_records', [ctx['run_id']]):
+    # ``open_records`` is set as soon as a record is opened, so a run that closed
+    # every workflow it started arrives here with an EMPTY list — which means
+    # nothing to close, not "close the run's own id" (that row may not exist at
+    # all after the split, and re-writing a verdict over a workflow that already
+    # got its own would be the worse mistake).
+    records = ctx.get('open_records')
+    for run_id in records if records is not None else [ctx['run_id']]:
+        try:
             ctx['store'].settle_nodes(run_id)
             ctx['store'].finish_run(run_id, outcome)
-        ctx['open_records'] = []
+        except Exception as e:
+            add_log(t('run.recordWriteFailed', rid=run_id, err=e))
+    if records is not None:
+        records[:] = []
 
 
 def _item_scope(ctx: dict, node: dict) -> str:
@@ -1372,6 +1408,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # verdict read from the whole record can blame a finished run for a
             # failure that belonged to an older shape of the workflow.
             execution_state['attempted_nodes'] = set()
+            execution_state['stopped_node_ids'] = set()
+            # The list object the worker's `ctx` will also hold, so 停止 can write to
+            # exactly the rows this run owns and a later reconciler can tell an
+            # unwinding worker's rows from a dead one's.
+            execution_state['open_records'] = []
             execution_state['outcome'] = ''
             execution_state['cookie_expired'] = False
             execution_state['_mode'] = mode
@@ -1602,7 +1643,10 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # 继续 findable after the split.
             split_records = mode == 'serial' and wf_count > 1
             created = []  # rebind the outer pre-name so the finally always sees a list
-            ctx['open_records'] = []
+            # THE SAME list object the claim put in `execution_state`: 停止 reads it from
+            # the request thread, so a rebind here would leave it writing to a list
+            # nobody is looking at.
+            ctx['open_records'] = execution_state['open_records']
             if not split_records:
                 store.start_run(
                     run_id,
@@ -1616,7 +1660,8 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     wf_count=wf_count,
                 )
                 created.append(run_id)
-                ctx['open_records'] = [run_id]
+                ctx['open_records'].append(run_id)
+                execution_state['owned_records'].add(run_id)
                 # Read *after* start_run so nodes left 'running' by the promotion
                 # are visible as partial, which is what makes them resumable.
                 ctx['statuses'] = store.node_statuses(run_id)
@@ -1681,6 +1726,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 )
                 created.append(rid)
                 ctx['open_records'].append(rid)
+                execution_state['owned_records'].add(rid)
                 # The status endpoint and the resume banner follow the record that is
                 # being written RIGHT NOW, so a stop mid-run leaves the panel offering
                 # the workflow that was interrupted rather than the first one.
@@ -1831,10 +1877,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 statuses.update(store.node_statuses(rid))
             with _completed_lock:
                 attempted = set(execution_state['attempted_nodes'])
+                stopped = set(execution_state['stopped_node_ids']) & attempted
             broken = sum(
                 1
                 for nid, state in statuses.items()
-                if nid in attempted and state.get('status') in (NODE_FAILED, NODE_PARTIAL)
+                if nid in attempted and nid not in stopped and state.get('status') in (NODE_FAILED, NODE_PARTIAL)
             )
             with _completed_lock:
                 execution_state['failed_nodes'] = broken
@@ -1850,6 +1897,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # quietly subtracting from a ratio the reader cannot interpret.
             if execution_state['skipped_nodes']:
                 finish_line += t('run.finished.skipped', n=execution_state['skipped_nodes'])
+            # A stop is not a failure, and counting the nodes it cut as failures made
+            # every stopped run read as a broken workflow — the one claim on that line
+            # the user caused themselves.
+            if stopped:
+                finish_line += t('run.finished.stopped', n=len(stopped))
             if broken:
                 finish_line += t('run.finished.failed', n=broken)
             add_log(finish_line)
@@ -1886,6 +1938,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
         finally:
             execution_state['running'] = False
+            # The stop is answered as of this line, not "sometime after": `stopping`
+            # is what `stop_requested()` reads, and leaving it set for a settled run
+            # would make the next helper that calls an executor function directly
+            # refuse to work over a run that finished two hours ago.
+            execution_state['stopping'] = False
             # Whatever is left claiming to be running was killed, not finished;
             # the rows it published are what the next attempt resumes from. With
             # no context the store never opened at all, so there is no run row to
@@ -2093,7 +2150,10 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         headless=headless,
         cookie_dir=Config.COOKIE_DIR,
         use_profile=(ctx or {}).get('use_profile'),
-        abort=lambda: not execution_state['running'],
+        # `stop_requested`, not "no run is in flight": this predicate is what makes the
+        # crawl end at its next row, and an idle server (a test calling the executor
+        # directly) is not a user who pressed 停止.
+        abort=stop_requested,
     )
     # Registered and guarded from here on: everything between buying a browser
     # and using it can still fail — a read-only or missing export directory, a
@@ -2820,14 +2880,25 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                     headless=want_headless,
                     cookie_dir=Config.COOKIE_DIR,
                     use_profile=(ctx or {}).get('use_profile'),
-                    abort=lambda: not execution_state['running'],
+                    abort=stop_requested,
                 )
+                # Registered for the same reason the source node registers its own:
+                # a browser 停止 does not know about is a window the user watches keep
+                # working — and this loop only asks "may I stop?" between URLs, so one
+                # article's page walk could run the whole node out after the Stop.
                 sessions[kind] = (
                     crawler,
                     # The comment engine reports per-URL facts; prefix them so a
                     # line in the shared console says which node it came from.
-                    CommentSession(crawler.driver, log=lambda m: add_log(f'{t("comment.prefix")} {m}')),
+                    CommentSession(
+                        crawler.driver,
+                        log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
+                        abort=stop_requested,
+                    ),
                 )
+                # Last, so a refusal while building the session cannot leave a
+                # registered browser that nothing here would ever close.
+                execution_state['active_crawlers'].add(crawler)
             _crawler, session = sessions[kind]
             if cursor_sink is not None:
                 cursor_sink({'url_index': idx - 1, 'url_total': len(urls)})
@@ -2861,6 +2932,9 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             add_log(t('comment.article', url=url, n=len(fresh), status=t(f'comment.status.{status}')))
     finally:
         for crawler, _session in sessions.values():
+            # Out of the registry first: if 停止 reaches it on its own thread while
+            # this one is still unwinding, the two must not both be reaping it.
+            execution_state['active_crawlers'].discard(crawler)
             _close_login_browser(crawler)
 
     files = [writer.finish() for writer in writers.values()]
@@ -2969,6 +3043,28 @@ _NON_INPUT_NODES = frozenset({'source', 'upload', 'resume', 'name', 'comment'})
 _QUIET_NODE_TYPES = frozenset({'name', 'upload'})
 
 
+def _settle_node_as_stopped(store, run_id: str, nid: str, label: str, wf_idx: int, err: str = ''):
+    """Close one node as "the user stopped the run", whatever raised on its way here.
+
+    Two deaths look identical and mean different things: a crawl that refuses (a wall,
+    a bad parameter) is a node that FAILED, while a browser killed under a Stop leaves
+    a dead session behind instead of an answer. Only the second is reported here, and
+    the row keeps the driver's own text as its ``error`` so the detail view can still
+    show what actually happened while the console says the one true sentence.
+
+    `partial` rather than `skipped`: the rows already paid for stand and travel
+    downstream, and 继续 must still be able to pick this node up again.
+    """
+    rows = execution_state['results'].get(nid)
+    if not isinstance(rows, list):
+        rows = store.load_rows(run_id, nid)
+    store.finish_node(run_id, nid, NODE_PARTIAL, error=err)
+    with _completed_lock:
+        execution_state['stopped_node_ids'].add(nid)
+    add_log(t('run.nodeStopped', nid=label, n=len(rows)), wf_idx=wf_idx)
+    return rows, NODE_PARTIAL
+
+
 def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upstream: list, wf_idx: int):
     """Run one node with the run store underneath it. Returns (result, status).
 
@@ -3044,6 +3140,13 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         return [], NODE_SKIPPED
 
     try:
+        # A stopped run executes no further node. The graph loops already check
+        # ``running`` between levels and between workflows, so this is the narrow case
+        # they cannot cover: the Stop arriving after a level has committed to its node
+        # list — where the next thing that would happen is buying a fresh browser for
+        # a run the user had already ended.
+        if stop_requested():
+            raise CrawlerStopped(t('crawl.stopped'))
         # Announced HERE, after the reuse and empty-upstream decisions above: it
         # used to be printed by the caller before this function decided anything,
         # so a restored or skipped node read "Executing node …" and then, one line
@@ -3059,7 +3162,15 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
                 wf_idx=wf_idx,
             )
         result = _execute_node(node, headless, primary, upstream=upstream, ctx=ctx)
+    except CrawlerStopped:
+        return _settle_node_as_stopped(store, run_id, nid, label, wf_idx)
     except Exception as e:
+        if stop_requested():
+            # The browser was killed under a Stop, so what reaches here is a dead
+            # session, not a site refusing and not a node that broke. Reported the
+            # same way on purpose: a stopped run whose summary blames the user's own
+            # button press on their workflow teaches them never to press it.
+            return _settle_node_as_stopped(store, run_id, nid, label, wf_idx, err=str(e))
         # What the node already produced: process nodes publish finished rows
         # after every batch, and crawlers stream every item into the store.
         published = execution_state['results'].get(nid)
@@ -3174,7 +3285,7 @@ def _execute_node(
     return []
 
 
-def _close_active_crawlers():
+def _close_active_crawlers(quit_timeout: float = 3.0):
     """Close the login/crawl browsers of live sessions, one at a time.
 
     Used to run `taskkill /F /IM chromedriver.exe` — which killed every
@@ -3184,14 +3295,96 @@ def _close_active_crawlers():
     chrome children of *this* session die with it.
     """
     for crawler in list(execution_state['active_crawlers']):
-        _close_login_browser(crawler, quit_timeout=3.0)
+        _close_login_browser(crawler, quit_timeout=quit_timeout)
 
 
 # ─── Stop / Status API ─────────────────────────────────────────
 
 
+#: How long a browser gets to close itself before 停止 kills its driver process.
+#: Measured, the graceful answer is the fast one when it can be given at all: an idle
+#: session quits in well under a second. What it can NEVER do is interrupt a command
+#: already running — ``driver.quit()`` is an in-band request that chromedriver queues
+#: *behind* the worker's own, so a Stop that waited on it watched the worker finish its
+#: 40.0 s page load (or its 30.0 s in-page fetch) first. The kill is what ends a crawl;
+#: this is only the grace given to a browser that is already done.
+STOP_QUIT_GRACE = 0.8
+
+
+def _mark_records_stopping() -> None:
+    """Flip the records this run owns from 运行中 to 正在停止, on this thread.
+
+    The worker still owes each of them a verdict, and measured, that debt can take
+    tens of seconds to pay. A row that reads 运行中 for that long after the button said
+    正在停止 is read as "停止 did nothing" — which is the complaint this answers, and
+    the reason it is written here rather than left to the unwinding thread.
+    ``finish_run`` overwrites it with the real verdict when that thread arrives.
+    """
+    opened = list(execution_state['open_records'])
+    if not opened:
+        return
+    try:
+        store = get_run_store()
+    except Exception as e:
+        add_log(t('run.recordWriteFailed', rid=' + '.join(opened), err=e))
+        return
+    for rid in opened:
+        try:
+            store.mark_stopping(rid)
+        except Exception as e:
+            add_log(t('run.recordWriteFailed', rid=rid, err=e))
+
+
+def _settle_orphaned_records() -> int:
+    """Settle a record this process opened and then abandoned without a verdict.
+
+    ``promote_stale_runs`` only ever ran at startup, so a row whose write failed (a
+    locked runs.db at exactly the wrong moment) or whose daemon thread died with the
+    window stayed on 运行中 until the service was restarted. Measured: that restart was
+    faster than 停止, which is how this gap was found.
+
+    Two things keep it safe to ask the question of a live server. It is asked under
+    ``_execute_lock`` — the same lock that claims a run — so it cannot settle a row a
+    run an instant older has just opened; and it is limited to ``owned_records``, the
+    ids THIS process wrote, so a second instance's live run is none of its business.
+    """
+    thread = execution_state.get('thread')
+    if execution_state['running'] or (thread is not None and thread.is_alive()):
+        return 0
+    owned = set(execution_state.get('owned_records') or set())
+    if not owned:
+        return 0
+    with _execute_lock:
+        # Re-read inside the lock: a claim that started while we were deciding has
+        # now either finished or cannot proceed.
+        thread = execution_state.get('thread')
+        if execution_state['running'] or (thread is not None and thread.is_alive()):
+            return 0
+        try:
+            promoted = get_run_store().promote_stale_runs(
+                only=owned,
+                note=t('run.interrupted_by_dead_worker'),
+            )
+        except Exception:
+            # A store we cannot open is a store we cannot settle; the panel says so
+            # through its own error, and 运行中 is not a lie worse than no answer.
+            return 0
+    if promoted:
+        # Said out loud because it otherwise looks like the panel decided to lie: a
+        # row flips to 已中断 with no run having ended in front of the user.
+        add_log(t('run.reconciled', n=len(promoted)))
+    return len(promoted)
+
+
 @app.route('/api/workflow/stop', methods=['POST'])
 def stop_workflow():
+    thread = execution_state.get('thread')
+    if not execution_state['running'] and not (thread is not None and thread.is_alive()):
+        # Nothing is running and nothing is unwinding. Answering as if a stop had been
+        # honoured would leave `stopping` standing with no run behind it — and
+        # `stop_requested()` hands that flag to every crawl, so the next one would
+        # answer "the user stopped me" to a button nobody pressed.
+        return jsonify({'ok': True, 'browsers': 0, 'records': [], 'idle': True})
     if execution_state['executor']:
         execution_state['executor'].stop()
     # Tell any row-by-row LLM loop to bail out at the next row boundary —
@@ -3199,18 +3392,35 @@ def stop_workflow():
     execution_state['cancel_event'].set()
     # The run is over as far as the browser is concerned; the verdict is not. The
     # worker thread still owes `settle`/`finish_run`, and until it pays the record
-    # reads "running". `stopping` lets the console say "stopping…" instead of
-    # printing an outcome the run has not written yet.
+    # reads "stopping" — not "running", which is what made a stop look ignored, and
+    # not an outcome the run has not written yet.
     execution_state['stopping'] = True
     execution_state['running'] = False
+    _mark_records_stopping()
     crawlers = list(execution_state['active_crawlers'])
     execution_state['active_crawlers'].clear()
 
     def _finish_stop():
-        for c in crawlers:
-            with contextlib.suppress(OSError):
-                c.close()
-        _close_active_crawlers()
+        # One thread per browser. Reaping them in series made the LAST crawl of a
+        # parallel run wait behind every earlier reap, and the run record cannot be
+        # written until all of them are over (`pool.shutdown` waits by design).
+        reapers = [
+            threading.Thread(
+                target=_close_login_browser,
+                args=(c,),
+                kwargs={'quit_timeout': STOP_QUIT_GRACE},
+                daemon=True,
+            )
+            for c in crawlers
+        ]
+        for r in reapers:
+            r.start()
+        for r in reapers:
+            r.join(STOP_QUIT_GRACE + 12)
+        # A browser the worker registered *after* the snapshot above is still in the
+        # registry, and nothing else on this path would ever reach it: the node that
+        # bought it is standing in a page load, not in its finally.
+        _close_active_crawlers(quit_timeout=STOP_QUIT_GRACE)
 
     # Closing a browser is quick but not instantaneous, and a visible Chrome with a
     # pending dialog can take its bounded grace to die. Doing it inline made the Stop
@@ -3232,7 +3442,7 @@ def stop_workflow():
     # fresh slate belongs.
     execution_state.pop('current_input', None)
     execution_state['executor'] = None
-    return jsonify({'ok': True, 'browsers': len(crawlers)})
+    return jsonify({'ok': True, 'browsers': len(crawlers), 'records': list(execution_state['open_records'])})
 
 
 @app.route('/api/workflow/status', methods=['GET'])
@@ -3274,10 +3484,12 @@ def workflow_status():
         {
             'running': execution_state['running'],
             # A Stop flips `running` off on the request thread, but the worker still
-            # owes the record its verdict. `settling` is the gap: the browser must not
-            # print an outcome the run has not written, nor stop reading until the
-            # record has landed.
-            'stopping': bool(execution_state.get('stopping')) and execution_state['thread'] is not None,
+            # owes the record its verdict — and it writes `stopping` into that record
+            # itself, so the panel can already show 正在停止. `stopping` here is the
+            # same promise for the console: the browser must not print an outcome the
+            # run has not written, nor stop reading until the record has landed. The
+            # worker's own finally clears it, so it never outlives the run.
+            'stopping': bool(execution_state.get('stopping')),
             'settling': bool(not execution_state['running'] and thread is not None and thread.is_alive()),
             'logs': execution_state['logs'][-200:],
             'log_total': execution_state['_log_total'],
@@ -5179,6 +5391,9 @@ def runs_resumable():
     if not isinstance(workflow, dict) or not workflow.get('nodes'):
         return jsonify({'ok': True, 'runs': []})
     limit = _safe_int(data.get('limit'), 10, minimum=1, maximum=100)
+    # Same repair as the panel's: a record its worker abandoned must become
+    # continuable on a page load, not only once somebody opens 运行记录.
+    _settle_orphaned_records()
     found = get_run_store().list_resumable(workflow_fingerprint(workflow), limit=limit)
     # A *live* run is never resumable — offering it invites 重新开始 to discard
     # the run that is still writing right now. Leftover 'running' rows from a
@@ -5196,7 +5411,11 @@ def runs_list():
     they can never be continued or cleaned up.
     """
     limit = _safe_int(request.args.get('limit'), 50, minimum=1, maximum=200)
-    runs = get_run_store().list_resumable(limit=limit, include_finished=True)
+    store = get_run_store()
+    # Asking the store is the moment to repair it: this is the read that happens when
+    # somebody opens the panel because a record looks wrong.
+    _settle_orphaned_records()
+    runs = store.list_resumable(limit=limit, include_finished=True)
     # The waiting list rides along: the panel that shows finished runs is where
     # someone looks to see what has not started yet.
     return jsonify({'ok': True, 'runs': runs, 'queue': queue_snapshot()})
@@ -5222,12 +5441,26 @@ def runs_stats():
 
 
 def _reject_live_run(run_id: str):
-    """True when run_id names the run a live thread is still writing.
+    """True when run_id names a run a live thread is still writing.
 
     Discarding or deleting it mid-flight would pull the rows and cursor out
     from under the writer — the UI's 丢弃/删除 must go through Stop first.
+
+    "Go through Stop" is not the same as "Stop has been honoured": after 停止 the
+    worker is still settling, still holding its browsers, and still writing rows, so
+    the answer must be yes until its thread is actually gone. Reading only
+    ``running`` refused the live run before the Stop and allowed it during the one
+    window where deleting it is most destructive.
     """
-    return bool(run_id) and execution_state['running'] and run_id == str(execution_state.get('run_id') or '')
+    if not run_id:
+        return False
+    thread = execution_state.get('thread')
+    live = bool(execution_state['running']) or bool(thread is not None and thread.is_alive())
+    if not live:
+        return False
+    return run_id in {str(r) for r in execution_state['open_records']} or run_id == str(
+        execution_state.get('run_id') or ''
+    )
 
 
 @app.route('/api/runs/purge', methods=['POST'])

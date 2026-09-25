@@ -97,7 +97,9 @@ class XiaohongshuCrawler(Crawler):
 
         rounds = 0
         stuck = 0
-        while self.collected() < target_count:
+        # `emit` already refuses to accept a row after a Stop, but this loop can also
+        # spin on a page that adds no cards at all — where nothing is ever emitted.
+        while self.collected() < target_count and not self.may_stop():
             before = cursor['total']
             harvested = self._harvest_cards(seen, target_count)
             cursor['total'] = self._card_count()

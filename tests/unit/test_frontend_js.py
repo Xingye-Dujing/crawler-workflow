@@ -903,3 +903,24 @@ class TestThePanelFollowsALiveRun:
         assert follow['spun'] == 3, f'it stopped re-reading too early or never stopped: {follow["spun"]}'
         assert follow['settled'] is True
         assert follow['showedVerdict'] is True, 'the panel never rendered the settled record'
+
+    def test_a_row_the_stop_request_wrote_is_still_being_watched(self, runsmgr):
+        """`stopping` is written by the Stop request itself and carries no verdict, so
+        watching only for 运行中 would end the poll at the very moment the record left
+        that status — leaving 正在停止 on screen until somebody reopened the panel.
+        """
+        follow = runsmgr['follow']
+        assert follow['stoppingKeptWatching'] == 3, (
+            f'it gave up on a row that had no verdict yet, or never stopped: {follow["stoppingKeptWatching"]}'
+        )
+        assert follow['stoppingSettled'] is True, follow
+        assert follow['stoppingLabel'] == 'stopping', f'the panel has no word for its own state: {follow}'
+        assert follow['stoppingChip'] is True, 'the row wore no chip of its own'
+        assert follow['stoppingWord'] is True, 'the label fell back to some other status'
+        assert 'continueRun' not in follow['stoppingHandlers'], follow['stoppingHandlers']
+        assert 'restart' not in follow['stoppingHandlers'], follow['stoppingHandlers']
+
+    def test_a_status_this_build_has_no_word_for_is_not_called_completed(self, runsmgr):
+        """A history panel is read for what happened; an unrecognised stored value must
+        show that value rather than borrow the friendly verdict."""
+        assert runsmgr['follow']['unknownLabel'] == 'undone-by-a-stranger', runsmgr['follow']

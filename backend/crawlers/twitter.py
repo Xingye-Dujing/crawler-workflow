@@ -383,7 +383,7 @@ class TwitterCrawler(Crawler):
             # stop after one screen on a timeline that was still delivering.
             window=self.window_key,
             mark=mark,
-            stopped=lambda: self.login_wall or self.risk_blocked,
+            stopped=lambda: self.login_wall or self.risk_blocked or self.may_stop(),
             stuck_rounds=self.STUCK_ROUNDS,
             settle_wait=self.SETTLE_WAIT,
         )

@@ -422,7 +422,7 @@ class ZhihuCrawler(Crawler):
             target=target_count,
             collected=self.collected,
             mark=mark,
-            stopped=lambda: self.login_wall or self.risk_blocked,
+            stopped=lambda: self.login_wall or self.risk_blocked or self.may_stop(),
             stuck_rounds=self.STUCK_ROUNDS,
             settle_wait=self.CARD_WAIT,
         )

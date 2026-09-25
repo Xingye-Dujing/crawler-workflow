@@ -20,6 +20,7 @@ const I18n = {
     dict: {
         en: {
             'runsMgr.status.running': 'running', 'runsMgr.status.interrupted': 'interrupted',
+            'runsMgr.status.stopping': 'stopping',
             'runsMgr.status.completed': 'completed', 'runsMgr.status.failed': 'failed',
             'runsMgr.status.abandoned': 'abandoned', 'runsMgr.resume': 'Continue',
             'runsMgr.restart': 'Restart', 'runsMgr.remove': 'Delete', 'runsMgr.detail': 'Detail',
@@ -249,10 +250,16 @@ const groupTally = manager.nodeGroups(GROUPED.run.nodes).map((g) => ({
    The panel used to read the record only when the user opened it, so a stopped
    run sat on 运行中 — the verdict existed, nobody re-asked. autoRefresh keeps
    the open panel current while the run lives; awaitSettled keeps re-reading
-   after 停止 until no row still claims to be running. */
+   after 停止 until the row carries a verdict. "Carries a verdict" excludes
+   `stopping` too, which is the state the Stop request itself writes. */
 const LIVE = {
     ok: true,
     runs: [{ run_id: 'live', workflow_name: '在跑', status: 'running', node_done: 1, node_total: 3, rows_kept: 5, wf_count: 1, mode: 'serial', headless: 1 }],
+    queue: [],
+};
+const STOPPING = {
+    ok: true,
+    runs: [{ run_id: 'live', workflow_name: '在跑', status: 'stopping', node_done: 1, node_total: 3, rows_kept: 5, wf_count: 1, mode: 'serial', headless: 1 }],
     queue: [],
 };
 const SETTLED = {
@@ -279,7 +286,7 @@ manager.autoRefresh();
 /* autoRefresh does not await its refresh (the poller must not block the run's
    own ticks); the re-render lands one microtask later. */
 await new Promise((r) => setImmediate(r));
-follow.followedLive = listFetches() > beforeFollow && manager._anyRunning() === true;
+follow.followedLive = listFetches() > beforeFollow && manager._awaitable() === true;
 
 /* A detail row being read is a reason to leave the table alone: the refresh
    would yank the expansion the user is reading out of the DOM. The id must be
@@ -305,8 +312,40 @@ Object.defineProperty(sandbox.__routes, '/api/runs/list', {
 beforeFollow = listFetches();
 await manager.awaitSettled(10, 1);
 follow.spun = listFetches() - beforeFollow;
-follow.settled = manager._anyRunning() === false;
+follow.settled = manager._awaitable() === false;
 follow.showedVerdict = (sandbox.__byId('runs-mgr-body').innerHTML || '').indexOf('st-interrupted') >= 0;
+
+/* The state the Stop request writes itself. A row that says 正在停止 carries no
+   verdict either, so watching only for 运行中 would stop re-reading at exactly the
+   moment the record had just left it — and 正在停止 would be the last thing on
+   screen until somebody clicked the panel again. */
+manager._detail = null;
+const stoppingAnswers = [STOPPING, STOPPING, SETTLED];
+Object.defineProperty(sandbox.__routes, '/api/runs/list', {
+    configurable: true,
+    get: () => (stoppingAnswers.length > 1 ? stoppingAnswers.shift() : stoppingAnswers[0]),
+});
+beforeFollow = listFetches();
+await manager.awaitSettled(10, 1);
+/* Two `stopping` answers then the verdict: three reads, and the watch ends on the
+   one that carried a verdict — not on the first answer that merely was not 运行中. */
+follow.stoppingKeptWatching = listFetches() - beforeFollow;
+follow.stoppingSettled = manager._awaitable() === false;
+follow.stoppingLabel = I18n.t(manager.statusKey('stopping'));
+/* What that row LOOKS like while it is being read: its own word and chip, and no
+   affordance that would discard or resume a run whose rows are still being written.
+   Measured off the rendered table because the panel's row markup is where a missing
+   label silently falls back to 已完成. */
+manager._detail = null;
+Object.defineProperty(sandbox.__routes, '/api/runs/list', {configurable: true, get: () => STOPPING});
+await manager.refresh();
+const stoppingHtml = sandbox.__byId('runs-mgr-body').innerHTML || '';
+follow.stoppingChip = stoppingHtml.indexOf('st-stopping') >= 0;
+follow.stoppingWord = stoppingHtml.indexOf('>stopping<') >= 0;
+follow.stoppingHandlers = [...stoppingHtml.matchAll(/runsManager\.(\w+)\(/g)].map((m) => m[1]);
+/* And a status this build has no word for: answering it 已完成 states a fact the
+   record never said, which is the one thing a history panel exists to avoid. */
+follow.unknownLabel = I18n.t(manager.statusKey('undone-by-a-stranger'));
 
 process.stdout.write(
     JSON.stringify({

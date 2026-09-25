@@ -84,8 +84,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   here), never falls back to `<body>`, and asserts a per-container floor on the count it gathered,
   measured in the browser. Resolve on-screen wording from `I18n` inside the browser, not a pasted copy.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the
-  one the bug was about. When you test a record, a run or a panel row, list the dimensions first
-  (`mode`, `headless`, `wf_count`, resume state, language, platform …) and cover the grid.
+  one the bug was about: for a record, a run or a panel row, list the dimensions first (`mode`,
+  `headless`, `wf_count`, resume state, language …) and cover the grid.
 - **The `integration` UI tier performs no server writes** — uploading, saving a workflow or executing a run
   would leave rows in the user's real `data/` and `logs/` (the app has no data-dir override). Stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`: a valid
@@ -98,7 +98,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   collect".** It declares each platform's modes, the fields each mode needs (widget, default, floor,
   ceiling, required-ness), which crawler method runs, and `region` — which network the site answers from
   (`cn` / `overseas`), which both the mixed-network dialog and the `live_cn` / `live_os` markers read
-  rather than keeping their own list; an empty region asks nothing rather than guessing.
+  rather than keeping their own list.
   `app.py::_execute_source_node` dispatches through it, `engine/workflow.py::validate` refuses through
   it, and `GET /api/capabilities` hands the identical description to the browser, whose Data Source
   panel is generated from it. So a new platform or mode is **one matrix entry**, never an
@@ -110,6 +110,10 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   single-mode platforms — substituting a keyword search for one creator's uploads is a different crawl.
   A field name reaches an inline handler, so one that is not `/^[\w.-]{1,64}$/` is dropped whole, and
   the JS panel is tested against the matrix dumped from Python, never a copy checked in.
+- **A record whose worker is gone is settled by the panel, not by a restart.** `/api/runs/list`
+  settles a row this process opened and never closed, once no worker is alive. Adding a run
+  status means updating `RESUMABLE_RUN_STATUS`, `purge`'s protection, the panel's `known` list
+  and both app.js catalogs.
 - **A visible window must be doing something visible, and it must answer every preference a run set.**
   Each `Mode` declares `collects` (fetch / DOM walk / per-row page); the panel note, the comment window choice
   (`_comment_headless`) and the run chip read it. A fetch mode honours 无头 (weibo/bilibili comments run so);
@@ -143,11 +147,15 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   A matrix `serial_only` platform is always queued whatever the switch says; the browser warns
   first. A wall met **before the first row** retries once after a back-off; a wall met after
   rows is the cookie dying and must go to 继续 instead. **Absence means "follow the setting" —
-  never coerce missing to `False`,** or one dialog's answer becomes a global override. A Stop is
-  a request, not a verdict: status answers `stopping`/`settling` while the worker is still computing
-  it, and every wait (profile lock, wall back-off) polls whether the run is still live.
+  never coerce missing to `False`,** or one dialog's answer becomes a global override.
   `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node fails with the directory named,
   never with a driver stack trace.
+- **A Stop is a request, not a verdict.** 停止 writes `stopping` into the record **on the request
+  thread** (the worker's verdict replaces it) and `stop_requested()` reads that — never
+  `not running`, which an idle server also answers. Each crawl asks it at its next row via
+  `Crawler.emit` (a `BaseException`: `except Exception` would swallow it into "the site sent
+  nothing more"). `driver.quit()` cannot interrupt the command the worker is inside (numbers in
+  `docs/crawler_notes.md`), so 停止 kills that driver process.
 - **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.**
   `browser_profiles.py` resolves `data/chrome_profile/<platform>` (or the user's absolute
   `browser_profile_dir`) and `get_crawler` passes it as `--user-data-dir`, so the login window and the
@@ -161,8 +169,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 ## Platform red lines (full evidence in `docs/crawler_notes.md`)
 
 - **douyin**: `never_headless = True` (验证码 on every navigation, and a visible window is necessary,
-  **not sufficient** — 2026-09-25: profile and throwaway both answered that page minutes apart);
-  search is DOM-only, routed by
+  **not sufficient** — evidence in `docs/crawler_notes.md`); search is DOM-only, routed by
   `/search/<kw>?type=video`; **no 播放数 column exists** (its only figure is the like count); don't block
   its images; authors are opaque `sec_uid` only; `_published_count()` returns `-1` for "page said nothing".
 - **X (twitter)**: `never_headless = True`; the timeline is virtualized, so progress is rows kept and
@@ -235,21 +242,19 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   parameter choose data, or describe the record?" — ids stay in, labels stay out.
 - **Reuse has four rules that are each easy to break.** `done` AND `restored` are reusable
   (a node that only replayed last time is just as settled — omitting `restored` made the
-  *second* 继续 recompute everything); a stored result with **zero rows** is never reused,
-  because a parent that came up empty last time may deliver this time and reuse is decided
-  by fingerprint, not by rows; the source node is never adopted, it resumes by cursor; and
-  `begin_node` reporting `dropped_stale` cancels reuse, because those rows were deleted.
+  *second* 继续 recompute everything); a stored result with **zero rows** is never reused
+  (a parent that came up empty may deliver this time, and reuse is decided by fingerprint);
+  the source node is never adopted, it resumes by cursor; and `begin_node` reporting
+  `dropped_stale` cancels reuse, because those rows were deleted.
 - **Startup recovery shares the end-of-run settlement.** A node leaves `running` only through
   `finish_node`, which a kill skips, so `node_runs.row_count` still holds the 0 `begin_node`
-  wrote. `promote_stale_runs` must call
-  `settle_nodes` (status *and* count from the rows) — the panel's 已存行数 and the 续跑
-  node's "adopt the fullest node" both read that column, so a status-only promotion
-  reported a 900-row crawl as empty and the user discarded paid-for data.
+  wrote. `promote_stale_runs` must call `settle_nodes` (status *and* count from the rows):
+  the panel's 已存行数 and the 续跑 node's "adopt the fullest node" both read that column.
 - **One definition of "completed".** `runs.node_done` and the console's `completed_nodes`
-  must agree: skipped/failed/partial are not done, `restored` is. And the finish line's
-  failed count is taken **after** settling, from `execution_state['attempted_nodes']` —
-  the run record also keeps nodes the canvas deleted, which otherwise made every later
-  继续 "4/4 个节点完成，1 个失败" over a run that had nothing left to fail.
+  must agree: skipped/failed/partial are not done, `restored` is. The finish line's counts
+  are taken **after** settling and only over `attempted_nodes` (the record also keeps nodes
+  the canvas deleted), and a node 停止 cut short is counted in its own `stopped_node_ids`
+  bucket — reporting the user's button press as 「1 个失败」 is.
 - **A resumed run re-describes itself.** `start_run`'s conflict update refreshes
   `workflow_name`/`workflow_fingerprint`/`mode`/`headless`/`lang` (not `started_at`):
   leaving them at their first-attempt values made the 并行/串行 and 无头/窗口 chips
@@ -257,9 +262,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   preview/chart/export probe uses, so the kept rows stopped being findable.
 - **Retention must release what it destroyed.** `purge` deletes a run's rows, so it also
   calls `forget_run_items` — an `item_seen` entry whose rows are gone would make a later
-  crawl of the same signature silently under-collect, with no visible gap and no way back
-  except 「重新采集」. An explicit `delete_run` still *keeps* claims: there the user removed
-  a record while knowing the crawl was paid for.
+  crawl under-collect silently, with no way back except 「重新采集」. An explicit `delete_run`
+  still *keeps* claims: there the user removed a record knowing the crawl was paid for.
 - **`' + '` is a composed lookup key, not a permission.** `_durable_node_rows` tries the
   exact name the browser sends first and widens to its pieces only on a miss, or a canvas
   genuinely called `节奏` can be handed the table of someone else's `节奏 + BPM`.
@@ -295,15 +299,14 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   languages), and the same for `backend/static/js/app.js` catalogs.
 - **A missing `t()` keyword is a printed bug, not a crash — so the suite checks call sites.** `t()`
   deliberately returns the *raw template* when a parameter is missing (never abort a crawl for a
-  sentence), which means `t('crawl.wechat.success', i=…)` against a template asking for `{reads}`
-  renders `阅读={reads}` on the console once per article. Key parity, reachability and zh/en matching
-  are all blind to it. `test_i18n.py::TestCallSitePlaceholders` walks every `t('literal', …)` in
+  sentence), so a forgotten `{reads}` prints `阅读={reads}` once per article. Key parity,
+  reachability and zh/en matching are all blind to it;
+  `test_i18n.py::TestCallSitePlaceholders` walks every `t('literal', …)` in
   `backend/` with `ast` and refuses the mismatch (a `**splat` is the one form it cannot judge; the
   meta-test keeps that skip honest).
 - **A `{platform}` slot is answered with a word, not the key.** `zhihu` keys the matrix and the
-  cookie file; `i18n` localizes it, splitting a
-  string on `,`/`、` only (`/` mangled a refused `../x`); `TestPlatformLabelParity` keeps the two
-  lists equal.
+  cookie file; `i18n` localizes it, splitting on `,`/`、` only; `TestPlatformLabelParity` keeps the
+  two lists equal.
 - Console/validation messages reference nodes through `engine.workflow.node_label(node, nid)` (→ `title
   #nid`), never a bare `nid`, so a renamed node speaks with the user's name. Store keys, the results dict
   and resume plumbing still use the raw `nid`. The frontend keeps `node.title` in `getState` /
@@ -313,8 +316,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   `/api/workflow/status` ships only the last 200 lines of the *whole* run, so a tab switch that blanks
   `#console-output` leaves it empty forever for a finished run. `consoleViews` in workflow.js holds
   `{seen, lines}` per view (`'all'` plus each workflow id), **every** view is fed on every poll, and
-  `switchWfTab` repaints from that view's history without moving its cursor. `clearConsole` empties the
-  histories and leaves cursors alone; the cap is `CONSOLE_VIEW_CAP` per view.
+  `switchWfTab` repaints from that view's history without moving its cursor.
 - **Every thread that logs must pin its own language.** `set_lang` is thread-local and a
   daemon thread starts with a fresh one, so `run()`, the parallel pool wrapper and **both
   cookie workers** take the request's language and set it first — the Cookie panel's probe
@@ -324,9 +326,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **One failure, one line.** `LogBufferHandler` forwards every `logger.*` call into the
   console buffer (its `format` is the message alone, so a traceback still goes only to
   the log file), so `logger.exception(...)` **and** an `add_log` of the same text prints
-  the sentence twice — that pair was live in the cookie save/generate/verify paths and in
-  the LLM failure path (three lines for one transport death, and the circuit-breaker
-  message is two sentences). Keep the logger call for the file's traceback, and let the
+  the sentence twice. Keep the logger call for the file's traceback, and let the
   executor's `wf.node_failed` be the single attributed console line; a helper line may add
   a fact that line cannot carry (how many rows survived), never repeat the reason.
   Refusals `raise` rather than returning `[]`, or the node settles DONE over an empty
@@ -339,9 +339,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   them. Everything that states a fact still prints: the upload's own "Loaded … N rows", and any
   failure/skip/restore line — with `node_label`, or a silenced node that fails is undiagnosable.
 - Run-gating UX lives in `workflow.js execute()` → `_cookieGateBeforeRun`: `cookie_preflight_before_run`
-  probes each canvas platform **whose mode needs a session** (`Mode.needs_session` — measured: weibo's
-  热搜 answers an anonymous browser, so a board-only canvas must not be refused for a cookie the site
-  never wanted) and a login wall **refuses it** (no "run anyway");
+  probes each canvas platform **whose mode needs a session** (`Mode.needs_session`; weibo's 热搜
+  answers anonymously) and a login wall **refuses it** (no "run anyway");
   「无法核对」 — timeout, captcha, busy profile — never blocks, because no answer is not evidence of a dead
   cookie. Off asks and blocks nothing; a resume or a crawl-free canvas skips the probe, and a cookie
   write drops the cached verdict. **A new settings key needs all four:**

@@ -309,7 +309,7 @@ class WeiboCrawler(Crawler):
             seen=seen,
             identity=lambda raw: str(raw.get('mid') or raw.get('id') or ''),
             polite=lambda: self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD),
-            alive=lambda: not self.login_wall,
+            alive=lambda: not self.login_wall and not self.may_stop(),
         )
         if not self.collected() and walk.stopped_reason == 'fetch_failed':
             raise ValueError(t('crawl.weibo.authorRefused', uid=uid, status=state['refused_status']))

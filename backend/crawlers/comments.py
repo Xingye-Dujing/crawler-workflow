@@ -398,10 +398,16 @@ def parse_twitter_replies(cards: list, article_url: str, root_id: str = '') -> l
 class CommentSession:
     """One browser session per platform; the node handler owns lifecycle."""
 
-    def __init__(self, driver, log=None, nap=None):
+    def __init__(self, driver, log=None, nap=None, abort=None):
         self.driver = driver
         self.log = log or (lambda msg: None)
         self.nap = nap or time.sleep
+        # "May I stop?" — the same predicate the crawlers carry, because a comment
+        # node reads hundreds of pages and the node handler only asks between URLs.
+        self._abort = abort
+
+    def may_stop(self) -> bool:
+        return bool(self._abort is not None and self._abort())
 
     # -- low-level helpers -------------------------------------------------
 
@@ -693,6 +699,7 @@ class CommentSession:
             window=lambda: str(self.driver.execute_script(WINDOW_LINKS_JS) or ''),
             stuck_rounds=3,
             settle_wait=4.0,
+            stopped=self.may_stop,
         )
         if not rows and walk.stopped_reason == 'no_cards':
             self.log(t('comment.xNoList', url=url))
@@ -818,6 +825,9 @@ class CommentSession:
             seen=seen,
             identity=lambda row: row['评论ID'],
             polite=lambda: self.nap(0.35),
+            # The pager's own stop check: a comment walk can be asked for hundreds of
+            # pages, and the node handler only looks between URLs.
+            alive=lambda: not self.may_stop(),
         )
         if not rows and walk.stopped_reason == 'fetch_failed':
             return [], BLOCKED

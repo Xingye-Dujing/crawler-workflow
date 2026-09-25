@@ -132,3 +132,37 @@ class TestRunEndReporting:
         case = console['stopPress']
         assert case['toasts'] == ['STOPPING-TOAST'], case['toasts']
         assert case['statusText'] == 'STOPPING'
+
+    def test_the_run_panel_is_kept_current_through_the_settling_window(self, console):
+        """The row a user is watching is the run record, not the console.
+
+        Refreshing the panel only while the server said `running` is what made a
+        stopped run look ignored for half a minute: the record had already been
+        flipped to 正在停止 by the Stop request, and nothing re-read it until the
+        worker's verdict happened to land while a poll was looking.
+        """
+        settling = console['settlingTick']
+        assert settling['refreshed'] == 1, 'the settling tick did not ask the panel to re-read'
+        assert settling['toasts'] == [], 'the settling tick announced a verdict it did not have'
+        assert settling['stillPolling'] is True
+        settled = console['settledTick']
+        assert settled['toasts'] == ['WORKFLOW-STOPPED'], settled['toasts']
+        assert settled['stillPolling'] is False, 'the poller outlived the verdict'
+
+    def test_the_record_being_stopped_has_its_own_word(self, console):
+        """`stopping` is a status the record really holds; falling through to
+        已完成 would print the opposite of the truth for the seconds it lasts, and
+        the panel would offer 丢弃 on a run whose rows are still being written."""
+        assert console['stoppingChip'] == 'runsMgr.status.stopping'
+        assert console['stoppingIsAwaited'] is True
+        assert console['settledIsNotAwaited'] is False
+
+    def test_running_out_of_settle_budget_admits_it_instead_of_guessing(self, console):
+        """Past the budget the poller stops reading — but the worker was still
+        unwinding, and `outcome` was the empty string. Inferring a verdict from that
+        blamed the user's own button press on their workflow."""
+        case = console['budgetExhausted']
+        assert case['toasts'] == ['STILL-SETTLING'], case['toasts']
+        assert case['statusText'] == 'STOPPING', 'the bar moved off 正在停止 without a verdict'
+        assert case['stillPolling'] is False
+        assert case['resumeRefreshed'] == 0, 'a continue offer was made for a run that had not settled'

@@ -866,8 +866,11 @@ class TestCommentNodeFilesAndLimits:
         class _Session:
             seen = []
 
-            def __init__(self, driver, log=None):
-                pass
+            def __init__(self, driver, log=None, nap=None, abort=None):
+                # The real session's signature: `abort` is the 停止 predicate, and a
+                # double that silently dropped it would let a comment walk keep
+                # reading pages behind a run the user had already ended.
+                assert callable(abort), 'the comment engine was never given a stop check'
 
             def crawl_zhihu(self, url, limit):
                 type(self).seen.append((url, limit))

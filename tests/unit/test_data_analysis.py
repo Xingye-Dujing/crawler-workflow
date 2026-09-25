@@ -9,11 +9,21 @@ on the two things a workflow author cannot debug by eye:
   drops rows, and
 - *what the report claims must be what happened* (rows_before / rows_after /
   rows_removed for every step, in order).
+
+A second half grew here: the operator vocabulary itself. The browser's dropdowns,
+this module's own list and the service's ``if/elif`` chains were three unlinked
+copies, and every filter operator but eight had never been swept on a real numeric
+column, on a text column or on a column that is not there.
 """
+
+import ast
+import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
+import services.data_analysis as _data_analysis_module
 from services.data_analysis import DataAnalysisService as D
 from services.data_analysis import UnknownOperationError
 
@@ -36,6 +46,60 @@ OPERATIONS = [
     'column_calc',
     'bin_column',
 ]
+
+# ─── reading the names out of the real sources ─────────────────────────
+#
+# The operator vocabulary existed in three unlinked places: this module's
+# ``OPERATIONS`` literal, the ``if op == …`` chains inside the service, and three
+# ``var … = […]`` arrays the browser builds its dropdowns from. Nothing connected
+# them, so adding an operator to the service left the panel silent about it — and
+# adding one to the panel made a node raise. These helpers read the *sources* so
+# the assertions below compare names without becoming a fourth copy of them.
+
+DATA_ANALYSIS_PY = Path(_data_analysis_module.__file__)
+WORKFLOW_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'workflow.js'
+
+
+def _source_walk(node):
+    """Pre-order (i.e. source order) walk — ``ast.walk`` is breadth-first, which
+    would reorder an ``elif`` chain whose branches nest ever deeper."""
+    yield node
+    for child in ast.iter_child_nodes(node):
+        yield from _source_walk(child)
+
+
+def _compared_literals(function_name: str, subject: str) -> list:
+    """Every string literal ``function_name`` compares ``subject`` against, in source order.
+
+    This is how the module names the filter operators and the convertible types
+    without hand-listing them again: the ``if/elif`` chain in the service *is* the
+    registry the browser has to agree with.
+    """
+    tree = ast.parse(DATA_ANALYSIS_PY.read_text(encoding='utf-8'))
+    function = next(
+        (node for node in _source_walk(tree) if isinstance(node, ast.FunctionDef) and node.name == function_name),
+        None,
+    )
+    assert function is not None, f'{function_name} is gone from data_analysis.py'
+    names = []
+    for node in _source_walk(function):
+        if not isinstance(node, ast.Compare) or not isinstance(node.left, ast.Name):
+            continue
+        if node.left.id != subject or not all(isinstance(op, (ast.Eq, ast.In)) for op in node.ops):
+            continue
+        for comparator in node.comparators:
+            values = comparator.elts if isinstance(comparator, ast.Tuple) else [comparator]
+            names.extend(
+                value.value for value in values if isinstance(value, ast.Constant) and isinstance(value.value, str)
+            )
+    return names
+
+
+def _js_array(name: str) -> list:
+    """The string literals of workflow.js's ``var NAME = […];`` dropdown source."""
+    match = re.search(rf'var {name} = \[([^\]]*)\];', WORKFLOW_JS.read_text(encoding='utf-8'))
+    assert match, f'{name} is no longer a flat literal array in workflow.js'
+    return re.findall(r"'([^']*)'", match.group(1))
 
 
 @pytest.fixture
@@ -437,3 +501,317 @@ class TestReshaping:
 
     def test_bin_column_on_a_missing_column_changes_nothing(self, df):
         assert D.bin_column(df, 'nope', bins=[0, 1]) is df
+
+
+# ─── the operator vocabulary shared with the browser ───────────────────
+
+
+class TestOperatorNameLists:
+    """ONE place where the browser's operator names meet Python's registry.
+
+    The 分析 node's dropdowns are three flat literal arrays in
+    ``backend/static/js/workflow.js`` (``ANALYSIS_OPS`` / ``FILTER_OPS`` /
+    ``CONVERT_TYPES``); Python keeps its own answers — ``_operations()`` for the
+    steps, the ``if op == …`` chain inside ``filter_rows`` for the comparisons,
+    the ``if dtype == …`` chain inside ``convert_type`` for the types. They were
+    never compared, so the two halves drifted in both directions: an operator the
+    service gained stayed invisible to the user, and an operator the panel offered
+    for a service that had none made the node die on ``Unknown filter operator``.
+
+    The parity is asserted against the *sources* (the AST chain, the JS text), so
+    this module's own ``OPERATIONS`` literal cannot quietly become the truth.
+    """
+
+    def test_the_panel_and_python_name_the_same_operations(self):
+        registry = set(D._operations())
+        assert registry == set(OPERATIONS), 'this module must not hold its own opinion'
+        assert set(_js_array('ANALYSIS_OPS')) == registry, (
+            'the 步骤 dropdown and DataAnalysisService._operations drifted apart'
+        )
+
+        # ``filter_rows`` answers a name it does not compare with a refusal, so a
+        # panel-only operator is a runtime error rather than a missing feature.
+        assert _compared_literals('filter_rows', 'op') == _js_array('FILTER_OPS'), (
+            'the 比较方式 dropdown and filter_rows drifted apart'
+        )
+
+        # ``convert_type`` compares four names and *falls through* to str for
+        # anything else, so 'str' is in the dropdown but never compared; a name in
+        # the dropdown that the chain does not compare would silently stringify.
+        compared = set(_compared_literals('convert_type', 'dtype'))
+        offered = set(_js_array('CONVERT_TYPES'))
+        assert offered == compared | {'str'}, 'a dtype the service does not compare is offered anyway'
+        assert 'str' not in compared
+
+    def test_no_further_copy_of_the_operation_names_exists(self):
+        """A fourth list is how this contract broke before: whoever added an
+        operator edited the two copies they could see. Only the panel and this
+        module may name the whole set, and both are pinned above.
+        """
+        root = Path(__file__).resolve().parents[2]
+        candidates = (
+            list((root / 'backend').rglob('*.py'))
+            + list((root / 'backend' / 'static').rglob('*.js'))
+            + list((root / 'tests').rglob('*.py'))
+        )
+        bracketed = re.compile(r'[\[(][^\[\]()]*[\])]', re.DOTALL)
+        names = set(OPERATIONS)
+        offenders = {}
+        for path in candidates:
+            if '__pycache__' in path.parts:
+                continue
+            text = path.read_text(encoding='utf-8', errors='replace')
+            for match in bracketed.finditer(text):
+                found = {op for op in names if f"'{op}'" in match.group(0) or f'"{op}"' in match.group(0)}
+                if len(found) >= 4:
+                    offenders.setdefault(path.relative_to(root).as_posix(), set()).update(found)
+        assert set(offenders) == {'backend/static/js/workflow.js', 'tests/unit/test_data_analysis.py'}, (
+            f'an unlinked copy of the operation names appeared in {sorted(offenders)}'
+        )
+
+
+# ─── every filter operator, on every column shape ──────────────────────
+
+# The sweep frame is deliberately awkward: a real integer column (so a text bound
+# cannot match it), text that contains regex metacharacters, an empty cell, and
+# Chinese labels the panel's 值 box would carry.
+SWEEP = pd.DataFrame(
+    {
+        'n': [3, 5, 1],
+        't': ['甲.', '乙(1)', ''],
+        'city': ['北京', '上海', '北京'],
+    }
+)
+
+# Six rows is enough for all twelve comparison names to be told apart by one
+# probe each; three rows only have eight subsets to hand out.
+SIGN = pd.DataFrame(
+    {
+        'n': [3, 5, 1, 3, 9, 7],
+        't': ['甲.', '乙(1)', '', '甲', 'x', '3'],
+        'city': ['北京', '上海', '北京', None, '广州', '广州'],
+    }
+)
+SIGNATURES = [
+    ('eq', 'city', '北京', [3, 1]),
+    ('ne', 'city', '北京', [5, 3, 9, 7]),
+    ('gt', 'n', '3', [5, 9, 7]),
+    ('gte', 'n', '3', [3, 5, 3, 9, 7]),
+    ('lt', 'n', '3', [1]),
+    ('lte', 'n', '3', [3, 1, 3]),
+    ('contains', 't', '甲', [3, 3]),
+    ('not_contains', 't', 'x', [3, 5, 1, 3, 7]),
+    ('in', 'city', '北京,上海', [3, 5, 1]),
+    ('not_in', 't', '3', [3, 5, 1, 3, 9]),
+    ('is_null', 'city', None, [3]),
+    ('not_null', 'city', None, [3, 5, 1, 9, 7]),
+]
+
+
+class TestEveryFilterOperator:
+    """All twelve comparison names the panel offers, none of them untested.
+
+    A node-level case existed for eight of them; ``not_in``, ``gt``, ``lt`` and
+    ``lte`` had never been sent by a test that reached the operator through the
+    pipeline at all. Each row below is the *measured* answer, including the
+    surprises: an integer column never equals the text typed in the 值 box, while
+    ``contains`` reads that same text.
+    """
+
+    @pytest.mark.parametrize('op', _compared_literals('filter_rows', 'op'))
+    def test_a_column_that_is_not_there_is_a_no_op_for_every_operator(self, op):
+        """Even an unusable bound is not reached: the column check comes first, so
+        a filter on a renamed-away column keeps every row rather than refusing.
+        """
+        assert D.filter_rows(SWEEP, 'nope', op, 'not-a-number') is SWEEP
+
+    @pytest.mark.parametrize(
+        ('op, bound, expected'),
+        [
+            ('eq', '3', []),
+            ('ne', '3', [3, 5, 1]),
+            ('gt', '3', [5]),
+            ('gte', '3', [3, 5]),
+            ('lt', '3', [1]),
+            ('lte', '3', [3, 1]),
+            ('contains', '3', [3]),
+            ('not_contains', '3', [5, 1]),
+            ('in', '3, 5', []),
+            ('not_in', '3', [3, 5, 1]),
+            ('is_null', None, []),
+            ('not_null', None, [3, 5, 1]),
+        ],
+    )
+    def test_a_real_integer_column_answers_the_measured_row_set(self, op, bound, expected):
+        """The trap this pins: ``gt``/``lt`` coerce the bound to a number and the
+        column too, but ``eq`` and ``in`` compare the *text* against integers, so
+        序号 等于 3 finds nothing while 序号 大于 3 finds rows. Only ``contains``
+        stringifies the column.
+        """
+        assert D.filter_rows(SWEEP, 'n', op, bound)['n'].tolist() == expected
+
+    @pytest.mark.parametrize(
+        ('op, bound, expected'),
+        [
+            ('eq', '北京', [3, 1]),
+            ('ne', '北京', [5]),
+            ('gt', '3', []),
+            ('gte', '3', []),
+            ('lt', '3', []),
+            ('lte', '3', []),
+            ('contains', '京', [3, 1]),
+            ('not_contains', '京', [5]),
+            ('in', '北京,上海', [3, 5, 1]),
+            ('not_in', '北京', [5]),
+            ('is_null', None, []),
+            ('not_null', None, [3, 5, 1]),
+        ],
+    )
+    def test_a_text_column_answers_the_measured_row_set(self, op, bound, expected):
+        """The four numeric comparisons coerce the *column* with
+        ``to_numeric(errors='coerce')``, so on a text column they match nothing
+        instead of complaining — the bound is what has to parse.
+        """
+        assert D.filter_rows(SWEEP, 'city', op, bound)['n'].tolist() == expected
+
+    @pytest.mark.parametrize('op', ['gt', 'gte', 'lt', 'lte'])
+    @pytest.mark.parametrize('bound', ['', '   ', 'abc', None, '3, 5', [], {}])
+    def test_a_comparison_without_a_number_refuses_by_naming_the_bound(self, op, bound):
+        """The refusal is the point: an unparseable bound used to die inside
+        ``float()`` with a bare ValueError, and a pipeline that answers "no rows"
+        for a typo is indistinguishable from data that really was empty.
+        """
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.filter_rows(SWEEP, 'n', op, bound)
+        assert f'"{op}" needs a numeric value' in str(excinfo.value)
+
+    def test_each_operator_has_an_answer_no_other_operator_gives(self):
+        """``in``/``not_in`` and ``is_null``/``not_null`` differ only by a leading
+        ``~``, so a copy-paste could make two names answer the same thing and no
+        single-op test would notice. Each name here gets one probe, and the twelve
+        answers are pairwise different.
+        """
+        answers = []
+        for op, column, bound, expected in SIGNATURES:
+            got = D.filter_rows(SIGN, column, op, bound)['n'].tolist()
+            assert got == expected, (op, column, bound, got)
+            answers.append(tuple(got))
+        assert len(set(answers)) == len(SIGNATURES) == len(_compared_literals('filter_rows', 'op'))
+        assert {row[0] for row in SIGNATURES} == set(_compared_literals('filter_rows', 'op'))
+
+
+class TestFilterValueTraps:
+    """Three behaviours a panel user cannot predict from the label alone.
+
+    Each is the *current* behaviour, pinned on purpose so a change is a decision
+    rather than a surprise (see the controller notes: two of them are bugs).
+    """
+
+    def test_contains_reads_the_value_as_a_regular_expression_not_as_text(self):
+        """``str.contains`` defaults to ``regex=True``, so a 值 of ``.`` matches
+        every row and ``(`` is refused as a broken pattern by the arrow engine.
+        The panel's label says 包含 — the user types what they see in the cell.
+        """
+        assert D.filter_rows(SWEEP, 't', 'contains', '.')['n'].tolist() == [3, 5]
+        with pytest.raises(ValueError) as excinfo:
+            D.filter_rows(SWEEP, 't', 'contains', '(')
+        assert 'regular expression' in str(excinfo.value)
+
+    def test_a_blank_value_under_not_contains_is_an_empty_table(self):
+        """Every cell contains the empty string, so the negation keeps nothing:
+        choosing 不包含 and leaving 值 empty destroys the whole run rather than
+        meaning "no rows excluded".
+        """
+        assert D.filter_rows(SWEEP, 't', 'not_contains', '')['n'].tolist() == []
+        assert D.filter_rows(SWEEP, 't', 'contains', '')['n'].tolist() == [3, 5, 1]
+
+    def test_is_null_treats_an_empty_cell_as_missing_but_a_none_bound_is_not_a_value(self):
+        assert D.filter_rows(SWEEP, 't', 'is_null', None)['n'].tolist() == [1]
+        assert D.filter_rows(SWEEP, 't', 'not_null', None)['n'].tolist() == [3, 5]
+        # The bound is ignored by both, so junk next to it changes nothing.
+        assert D.filter_rows(SWEEP, 't', 'is_null', 'anything')['n'].tolist() == [1]
+
+    @pytest.mark.parametrize('bound', ['北京,上海', '北京, 上海', ('北京', '上海'), ['北京', '上海'], {'北京', '上海'}])
+    def test_membership_accepts_the_comma_string_the_panel_sends(self, bound):
+        """The panel's 值 box can only ever send text — and the service splits it on
+        the comma, which is what makes 属于 usable from a form. A list/tuple/set is
+        what a JSON caller sends, and both spellings have to agree.
+        """
+        assert D.filter_rows(SWEEP, 'city', 'in', bound)['n'].tolist() == [3, 5, 1]
+        assert D.filter_rows(SWEEP, 'city', 'not_in', bound)['n'].tolist() == []
+
+    @pytest.mark.parametrize('junk', ['', '   ', 'abc', 'regex:*', None, 0, 1e400, [], {}])
+    def test_an_operator_name_that_is_not_a_name_is_refused_by_name(self, junk):
+        """``filter_rows`` refuses instead of defaulting to ``eq``: the normalizer
+        supplies 'eq' when the key is *absent*, so a present-but-wrong value is a
+        different mistake and must not quietly become a different comparison.
+        """
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.filter_rows(SWEEP, 'city', junk, '北京')
+        assert 'Unknown filter operator' in str(excinfo.value)
+
+
+# ─── pipeline order ────────────────────────────────────────────────────
+
+
+class TestPipelineOrder:
+    """``run_pipeline`` is the only code that decides what "then" means.
+
+    A workflow file is a list, so the user's step order is the answer; nothing
+    sorts, groups or deduplicates it. These tests pin that a reordering is a
+    different pipeline, because a runner that keyed its work by operation name
+    would pass every single-step test in this file and still be wrong.
+    """
+
+    STEPS = [
+        {'op': 'rename_columns', 'params': {'mapping': {'city': '城市'}}},
+        {'op': 'filter_rows', 'params': {'column': '城市', 'op': 'contains', 'value': '京'}},
+        {'op': 'drop_duplicates', 'params': {'columns': ['n']}},
+    ]
+
+    def test_the_report_follows_the_list_in_order_and_keeps_repeated_steps(self):
+        steps = self.STEPS + [self.STEPS[1], self.STEPS[1]]
+        result, report = D.run_pipeline(SWEEP.copy(), steps)
+        assert [step['op'] for step in report] == [step['op'] for step in steps]
+        assert [step['params'] for step in report] == [step['params'] for step in steps]
+        # The report is per *entry*, not per name: two identical filter steps are
+        # two lines, so the console shows what actually ran.
+        assert len(report) == 5
+        assert list(result.columns) == ['n', 't', '城市']
+
+    def test_the_steps_run_in_list_order_not_in_an_order_of_their_own(self):
+        """Renaming first is what lets the following filter see the column; run the
+        other way round, the filter looks for a 城市 that is not there yet and keeps
+        every row. The list order decides, so the answer is a fact about the file
+        and not about how the runner happens to group its work.
+        """
+        renamed_then_filtered, _ = D.run_pipeline(SWEEP.copy(), self.STEPS[:2])
+        filtered_then_renamed, _ = D.run_pipeline(SWEEP.copy(), self.STEPS[1::-1])
+        assert renamed_then_filtered['n'].tolist() == [3, 1], 'only the 北京 rows hold 京'
+        assert filtered_then_renamed['n'].tolist() == [3, 5, 1]
+        # Both orders end with the rename applied, which is why the surviving rows —
+        # the only visible difference — have to be what is asserted.
+        assert list(filtered_then_renamed.columns) == ['n', 't', '城市']
+
+    def test_row_math_is_reported_for_every_step_of_a_shrinking_chain(self):
+        steps = [
+            {'op': 'filter_rows', 'params': {'column': 'city', 'op': 'eq', 'value': '北京'}},
+            {'op': 'sample_rows', 'params': {'n': 1, 'seed': 0}},
+        ]
+        result, report = D.run_pipeline(SWEEP.copy(), steps)
+        assert [(r['rows_before'], r['rows_after'], r['rows_removed']) for r in report] == [(3, 2, 1), (2, 1, 1)]
+        assert len(result) == 1
+
+    def test_a_step_that_raises_leaves_the_pipeline_at_that_step(self):
+        """Nothing downstream of a refusal runs, and the refusal is the service's
+        own message rather than a partially-transformed frame. The *bound* is what
+        fails here: a column that is not there is a no-op (pinned above) and would
+        let the chain finish on a wrong answer.
+        """
+        steps = [
+            {'op': 'select_columns', 'params': {'columns': ['n', 'city']}},
+            {'op': 'filter_rows', 'params': {'column': 'n', 'op': 'gt', 'value': '很多'}},
+            {'op': 'sort_rows', 'params': {'column': 'n', 'ascending': False}},
+        ]
+        with pytest.raises(UnknownOperationError, match='needs a numeric value'):
+            D.run_pipeline(SWEEP.copy(), steps)

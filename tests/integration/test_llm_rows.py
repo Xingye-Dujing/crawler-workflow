@@ -10,12 +10,11 @@ exercised over a real RunStore on a throwaway database, because the keying rules
 that matter are the ones the store actually receives.
 """
 
-import contextlib
-
 import pytest
 
 import analyzers.llm_client as lc
 import services.run_store
+from analyzers.emotion import EmotionAnalyzer
 from analyzers.llm_client import (
     ABORT_MARK,
     LLMClient,
@@ -33,20 +32,14 @@ from services.run_store import RowCache, RunStore
 pytestmark = pytest.mark.unit
 
 
-def parse_emotion(content):
-    """The real emotion.py contract: 'Emotion: pos\\nConfidence: 0.9' -> ('pos', 0.9),
-    unparseable -> (None, 0.0)."""
-    label = ''
-    confidence = 0.0
-    for line in content.splitlines():
-        if line.startswith('Emotion:'):
-            label = line.split(':', 1)[1].strip().lower()
-        elif line.startswith('Confidence:'):
-            with contextlib.suppress(ValueError):
-                confidence = float(line.split(':', 1)[1])
-    if label not in ('pos', 'neg', 'neutral'):
-        return None, 0.0
-    return label, confidence
+# The parser is the production one, not a stand-in: these rows are only evidence
+# about ``run_llm_rows`` if the function chewing them is the function a real
+# emotion node runs. The hand-written copy that lived here claimed to be "the real
+# emotion.py contract" while returning ``(None, 0.0)`` for an unparseable answer
+# and accepting ``pos``/``neg``/``neutral`` — a label set and a failure shape the
+# module has never produced. Its replacements are pinned for real in
+# ``tests/unit/test_analyzer_llm_bodies.py``.
+parse_emotion = EmotionAnalyzer().parse_emotion_response
 
 
 def build_prompt(text):
@@ -67,7 +60,7 @@ class ScriptedClient(LLMClient):
     def __init__(self, replies=None, error_after=None, exc=None, **kw):
         super().__init__(provider='openrouter', model='scripted', api_key='test-key', **kw)
         self.replies = dict(replies or {})
-        self.default_reply = 'Emotion: pos\nConfidence: 0.9'
+        self.default_reply = 'Emotion: Joy\nConfidence: 0.9'
         self.error_after = error_after  # raise transport LLMError after N chats
         self.exc = exc  # raise this exception class every row
         self.prompts = []
@@ -97,14 +90,14 @@ def run_simple(jobs=None, **overrides):
 class TestRowCheckpoint:
     def test_add_get_roundtrip(self, tmp_path):
         cp = RowCheckpoint(str(tmp_path), 'emotion|ds1')
-        cp.add(3, 'h3', ('pos', 0.8))
-        assert cp.get(3, 'h3') == {'i': 3, 'h': 'h3', 'r': ['pos', 0.8]}
+        cp.add(3, 'h3', ('Joy', 0.8))
+        assert cp.get(3, 'h3') == {'i': 3, 'h': 'h3', 'r': ['Joy', 0.8]}
         assert cp.get(3, 'other-hash') is None  # re-crawled table must not inherit
         assert cp.get(4, 'h3') is None
 
     def test_reload_from_disk_ignores_corrupt_lines(self, tmp_path):
         cp = RowCheckpoint(str(tmp_path), 'k1')
-        cp.add(0, 'h0', ('neg', 0.2))
+        cp.add(0, 'h0', ('Sadness', 0.2))
         with open(cp.path, 'a', encoding='utf-8') as fh:
             fh.write('not json at all\n')
             fh.write('{"i": 9}\n')  # missing fields
@@ -114,7 +107,7 @@ class TestRowCheckpoint:
 
     def test_discard_removes_the_file(self, tmp_path):
         cp = RowCheckpoint(str(tmp_path), 'k1')
-        cp.add(0, 'h0', ('pos', 0.1))
+        cp.add(0, 'h0', ('Joy', 0.1))
         cp.discard()
         import os
 
@@ -140,7 +133,7 @@ class TestRunRows:
             batch_size=2,
         )
         assert set(results) == {0, 1, 2}
-        assert results[0] == ('pos', 0.9)
+        assert results[0] == ('Joy', 0.9)
         assert applied == [0, 1, 2]
         assert len(publishes) == 2  # after batch of 2, then the tail batch
 
@@ -169,7 +162,7 @@ class TestRunRows:
         client = ScriptedClient(replies={build_prompt('三亚的海非常蓝'): 'garbage output'})
         cp = RowCheckpoint(str(tmp_path), 'cpkey')
         results = run_llm_rows(list(JOBS), client, build_prompt, parse_emotion, checkpoint=cp)
-        assert 0 not in results  # (None, 0.0) is treated as failure
+        assert 0 not in results  # (None, None) is treated as failure
         assert cp.get(0, text_hash('三亚的海非常蓝')) is None
         assert cp.get(1, text_hash('海南粉的汤底鲜美')) is not None
 
@@ -258,13 +251,13 @@ class TestRunRows:
         client = ScriptedClient()
 
         def reply_for(prompt):
-            return 'Emotion: neg\nConfidence: 0.2' if '安静' in prompt else 'Emotion: pos\nConfidence: 0.7'
+            return 'Emotion: Sadness\nConfidence: 0.2' if '安静' in prompt else 'Emotion: Joy\nConfidence: 0.7'
 
         client.replies = {build_prompt(t): reply_for(build_prompt(t)) for _i, t in JOBS}
         extra = [(10 + i, t) for i, (_j, t) in enumerate(JOBS)]
         results = run_simple(jobs=list(JOBS) + extra, client=client, workers=3, batch_size=2)
         assert len(results) == 6
-        assert {r[0] for r in results.values()} == {'pos', 'neg'}
+        assert {r[0] for r in results.values()} == {'Sadness', 'Joy'}
 
 
 # ─── run_llm_dataframe ──────────────────────────────────────────────────
@@ -312,14 +305,14 @@ class TestDataframeRunner:
         df = run_df(df_for_llm, client=client)
         assert df.loc[1, '情感'] == '跳过'  # len < min_len(10)
         assert df.loc[2, '情感'] == ''  # blank never enters process_indices
-        assert df.loc[0, '情感'] == 'pos' and df.loc[4, '情感'] == 'pos'
+        assert df.loc[0, '情感'] == 'Joy' and df.loc[4, '情感'] == 'Joy'
         assert len(client.prompts) == 3
 
     def test_clean_run_discards_the_checkpoint_file(self, df_for_llm, tmp_path):
         client = ScriptedClient()
         df = run_df(df_for_llm, client=client, checkpoint_dir=str(tmp_path))
         assert list(tmp_path.glob('*.jsonl')) == []  # written while running, gone after
-        assert (df.loc[4, '情感'], df.loc[4, '置信度']) == ('pos', 0.9)
+        assert (df.loc[4, '情感'], df.loc[4, '置信度']) == ('Joy', 0.9)
 
     def test_transport_death_marks_unprocessed_and_reraises(self, df_for_llm):
         published = []
@@ -378,7 +371,7 @@ class TestDataframeRunner:
         # for the durable cache that is a no-op by contract, but it must not
         # raise, and the run must complete.
         assert getattr(spy, 'discarded', False) is True
-        assert (df.loc[0, '情感'], df.loc[4, '情感']) == ('pos', 'pos')
+        assert (df.loc[0, '情感'], df.loc[4, '情感']) == ('Joy', 'Joy')
 
 
 # ─── prompt version + answer scope (what an answer is still valid for) ───
@@ -492,7 +485,7 @@ class TestDurableAnswerCache:
         assert second.prompts == []  # every answer came back from runs.db
         # The frame is blanked at the start of each run, so these landed from the
         # cache rather than being left over from the first pass.
-        assert [df_for_llm.loc[i, '情感'] for i in (0, 3, 4)] == ['pos', 'pos', 'pos']
+        assert [df_for_llm.loc[i, '情感'] for i in (0, 3, 4)] == ['Joy', 'Joy', 'Joy']
 
     def test_edited_prompt_template_invalidates_the_answers(self, run_store, df_for_llm):
         replay(run_store, df_for_llm)
@@ -527,7 +520,7 @@ class TestDurableAnswerCache:
         assert list(tmp_path.glob('*.jsonl')) == []
         rows = run_store._query('SELECT cache_key, value FROM llm_cache')
         assert len(rows) == 3
-        assert all('"pos"' in row['value'] for row in rows)
+        assert all('"Joy"' in row['value'] for row in rows)
         # Keyed by the text itself, not by its row number — that is what lets a
         # re-crawled table reuse these answers.
         expected = {text_hash(str(df_for_llm.loc[i, '正文']).strip()) for i in (0, 3, 4)}

@@ -34,6 +34,7 @@ const KEYS = {
     'status.nodes': 'Nodes: ',
     'console.all': 'ALL',
     'toast.stopping': 'STOPPING-TOAST',
+    'toast.stillSettling': 'STILL-SETTLING',
     'toast.cookieExpired': 'COOKIE-EXPIRED',
     'toast.workflowCompleted': 'WORKFLOW-COMPLETED',
     'toast.workflowEnded': 'WORKFLOW-ENDED {done}/{total}',
@@ -110,6 +111,14 @@ function status(logs, total, extra) {
 }
 
 const out = { label: 'console poller' };
+
+/* The settle budget, read out of the file under test rather than copied here: the
+   scenario below walks the poller to the END of that budget, so a constant kept in
+   two places would silently stop short (or spin forever) after someone changed it. */
+const SETTLE_BUDGET = Number(/var SETTLE_TICKS = (\d+);/.exec(src)?.[1]);
+if (!Number.isFinite(SETTLE_BUDGET) || SETTLE_BUDGET < 30) {
+    throw new Error(`settle budget missing or too short in workflow.js: ${SETTLE_BUDGET}`);
+}
 
 /** Forget everything the browser believes it has shown.
  *
@@ -237,6 +246,79 @@ await settleCase('settlingThenSettled', [
     status(['working'], 4, { running: false, settling: true, completed_nodes: 1, total_nodes: 3, outcome: '' }),
     status(['done'], 4, { running: false, completed_nodes: 1, total_nodes: 3, outcome: 'interrupted' }),
 ]);
+
+/* ── 9. what the panel is asked to do while a stop settles ──────────────── */
+/* The complaint this is measured against: after 停止 the run record went on reading
+   运行中 for as long as the worker took to unwind, and the only thing that fixed it
+   faster was restarting the service. Two halves: the record itself is flipped to
+   `stopping` by the Stop request, and the panel has to be RE-read through the whole
+   settling window — which it was not, because the refresh rode on `result.running`. */
+let refreshes = 0;
+sandbox.runsManager.autoRefresh = () => {
+    refreshes += 1;
+};
+toasts.length = 0;
+tick = null;
+wf.pollStatus();
+await answer(status(['working'], 4, { running: false, settling: true, completed_nodes: 1, total_nodes: 3, outcome: '' }));
+out.settlingTick = { refreshed: refreshes, toasts: toasts.slice(), stillPolling: tick !== null };
+await answer(status(['done'], 4, { running: false, completed_nodes: 1, total_nodes: 3, outcome: 'interrupted' }));
+out.settledTick = { refreshed: refreshes, toasts: toasts.slice(), stillPolling: tick !== null };
+
+/* The panel's own reading of the in-between record: a word for it, and the rule
+   that it is not yet settled. Falling through to `completed` here would print the
+   opposite of the truth for the few seconds the state lasts. */
+out.stoppingChip = sandbox.runsManager.statusKey('stopping');
+out.stoppingIsAwaited = sandbox.runsManager._awaitable.call({ _shown: [{ status: 'stopping' }] });
+out.settledIsNotAwaited = sandbox.runsManager._awaitable.call({ _shown: [{ status: 'interrupted' }] });
+
+/* Out of budget the poller must stop WITHOUT inventing a verdict: `outcome` is the
+   empty string while the worker is still unwinding, and reading a failure out of
+   that told the user their own button press had broken the workflow. */
+toasts.length = 0;
+tick = null;
+resumeRefreshes = 0;
+wf.pollStatus();
+const wedged = status(['working'], 4, { running: false, stopping: true, completed_nodes: 1, total_nodes: 3, outcome: '' });
+for (let i = 0; i <= SETTLE_BUDGET; i++) await answer(wedged);
+out.budgetExhausted = {
+    toasts: toasts.slice(),
+    statusText: sandbox.__byId('status-text').textContent,
+    stillPolling: tick !== null,
+    resumeRefreshed: resumeRefreshes,
+};
+
+/* ── 10. how long the panel watches a stopping record ───────────────────── */
+/* `awaitSettled` used to poll a list captured BEFORE its own re-read, so the row
+   that had just landed 已中断 was still believed to be running: every 停止 repainted
+   the table twenty times and then gave up without a word. The two cases below are
+   the two halves of that — keep watching while it is unsettled, stop the moment the
+   fresh answer says it is not. */
+const listReads = { n: 0 };
+let listScript = [];
+const statusFetch = sandbox.fetch;
+sandbox.fetch = (url) => {
+    if (String(url).indexOf('/api/runs/list') === 0) {
+        const status = listScript.length > 1 ? listScript.shift() : listScript[0];
+        listReads.n += 1;
+        return Promise.resolve({
+            json: () => Promise.resolve({ ok: true, runs: [{ run_id: 'r1', status, nodes: [] }], queue: [] }),
+        });
+    }
+    return statusFetch(url);
+};
+sandbox.__byId('runs-panel').classList.add('open');
+
+listScript = ['stopping', 'stopping', 'stopping', 'interrupted'];
+listReads.n = 0;
+await sandbox.runsManager.awaitSettled(20, 0);
+out.awaitStopsOnTheFreshAnswer = { reads: listReads.n, last: sandbox.runsManager._shown[0].status };
+
+listScript = ['running', 'running', 'running'];
+listReads.n = 0;
+await sandbox.runsManager.awaitSettled(3, 0);
+out.awaitKeepsWatchingAnUnsettledRow = listReads.n;
+sandbox.__byId('runs-panel').classList.remove('open');
 
 /* Pressing 停止 announces "stopping…", not "stopped" — the run has not reported
    an outcome yet, and the toast that lies about it is what the user reads. */

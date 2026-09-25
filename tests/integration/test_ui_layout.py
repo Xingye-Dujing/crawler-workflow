@@ -452,6 +452,69 @@ def test_a_multi_workflow_record_is_tagged_with_how_it_really_ran(app_url, drive
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_stopping_record_says_stopping_and_offers_nothing(app_url, driver, lang):
+    """The row the user stares at after pressing 停止, measured in the browser.
+
+    This record is the whole complaint: the Stop request writes 正在停止 into it and
+    the worker's verdict arrives seconds later, so the panel has to (a) have a word
+    for that state instead of falling back to 已完成, (b) wear its own chip colour,
+    (c) offer no 继续/重新开始 and refuse nothing the user might click, because the
+    run is still writing its rows — and (d) do all of that in both languages without
+    the longer label pushing the table or the page into a horizontal bar.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        I18n.apply();
+        const panel = document.getElementById('runs-panel');
+        panel.classList.add('open');
+        panel.classList.remove('hidden');
+        runsManager.render([{
+            run_id: 'stopping1', workflow_name: '正在被停止的采集', status: 'stopping',
+            resumable: false, node_done: 1, node_total: 3, rows_kept: 12,
+            started_at: '2026-09-25 03:00', mode: 'serial', wf_count: 1, headless: 1
+        }]);
+        """,
+        [lang],
+    )
+    facts = driver.execute_script(
+        """
+        const row = document.querySelector('#runs-panel tbody tr');
+        if (!row) return {found: false};
+        const chip = row.querySelector('.runs-mgr-status');
+        const table = document.querySelector('#runs-panel table');
+        return {
+            found: true,
+            label: chip ? chip.textContent : null,
+            cls: chip ? chip.className : null,
+            // A cut-off word is a different word: 「正在停止」 printed as 「正在停…」
+            // is the one state the user needs to read correctly.
+            clipped: chip ? chip.scrollWidth - chip.clientWidth > 1 : null,
+            handlers: Array.from(row.querySelectorAll('.runs-mgr-btn')).map((b) => b.textContent),
+            tableOverflows: table ? table.scrollWidth - table.clientWidth > 1 : null,
+            pageBar: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+            fallback: I18n.t('runsMgr.status.completed'),
+            key: I18n.t('runsMgr.status.stopping'),
+        };
+        """,
+        [],
+    )
+    assert facts['found'] is True, 'the run row rendered nothing, so nothing was measured'
+    assert facts['key'] != 'runsMgr.status.stopping', f'{lang} has no word for the stopping state'
+    assert facts['label'] == facts['key'], f'the row reads {facts["label"]!r}, expected {facts["key"]!r}'
+    assert facts['label'] != facts['fallback'], 'a run with no verdict yet is presented as completed'
+    assert 'st-stopping' in (facts['cls'] or ''), f'the chip wears no style of its own: {facts["cls"]}'
+    assert facts['clipped'] is False, f'the word is cut off in {lang}: {facts["label"]!r}'
+    offered = (facts['key'], '继续', '重新开始', 'Continue', 'Restart')
+    assert not any(h in facts['handlers'] for h in offered), facts['handlers']
+    assert facts['tableOverflows'] is False, 'the row widened its own table'
+    assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
 def test_a_workflow_row_survives_being_built_from_its_own_name(app_url, driver, lang):
     """The 工作流文件 table draws a user-chosen stem twice: as text, and inside the
     ``onclick="wfFiles.rename('…')"`` attribute the row buttons are made of.

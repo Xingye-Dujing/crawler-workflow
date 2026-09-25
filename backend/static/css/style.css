@@ -1606,7 +1606,11 @@ button.history-del:hover {
   font-size: 10px;
   white-space: nowrap;
 }
-.runs-mgr-status.st-running {
+.runs-mgr-status.st-running,
+/* Neither of these has a verdict yet, and both mean "a run is still being written
+   or torn down" — so they wear the same neutral chip rather than the amber of a
+   record that ended. */
+.runs-mgr-status.st-stopping {
   background: rgba(26, 26, 26, 0.08);
   color: var(--text);
 }

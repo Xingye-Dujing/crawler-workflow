@@ -8,8 +8,11 @@ file in, cleaned rows out, and a durable record that says exactly what each
 node produced — so it deliberately uses only non-crawling, non-LLM nodes:
 ``upload`` → ``analysis`` → ``output``. A ``source`` node would start Selenium
 and does not belong in a test that has to run offline. Where a test here does
-run an LLM node (``TestEntityNode``), the transport itself is patched, so no
-daemon and no API are ever asked.
+run one (the 关键词/作者/热榜/评论 mode classes below), the crawler itself is
+replaced by a recorder before the request is posted, so the run still reaches
+the real executor, the real validation and the real store — only the browser is
+missing. Where a test runs an LLM node (``TestEntityNode``), the transport
+itself is patched, so no daemon and no API are ever asked.
 
 The polling tests carry ``@pytest.mark.serial`` because the worker installs a
 ``_LogTee`` over ``sys.stdout`` for the duration of the run.
@@ -1115,8 +1118,9 @@ class _FakeCommentSession:
 
     rows = [{'平台': 'zhihu', '文章URL': 'https://x/1', '评论者': 'a', '评论内容': 'good'}]
 
-    def __init__(self, driver, log=None):
+    def __init__(self, driver, log=None, nap=None, abort=None):
         self.log = log
+        self.abort = abort
 
     def crawl_zhihu(self, url, limit):
         return list(self.rows), 'ok'
@@ -1223,7 +1227,7 @@ class TestSourceCommentsMode:
                 pass
 
         class _RecordingSession:
-            def __init__(self, driver, log=None):
+            def __init__(self, driver, log=None, nap=None, abort=None):
                 pass
 
             def crawl_zhihu(self, url, limit):
@@ -1267,6 +1271,180 @@ class TestSourceCommentsMode:
                 app_module._execute_comment_node(all_foreign)
         finally:
             set_lang(previous)
+
+
+class _RoutingCrawler:
+    """A crawler that answers with rows AND says which handler was called.
+
+    ``_ScriptedCrawler`` above defines only ``search``, so no run built from this
+    file ever reached ``author`` or ``hot``: the matrix routed those two to a method
+    nothing at the endpoint level had watched being picked. Recording one call and
+    reading it back is what makes a run's routing checkable rather than inferred —
+    and a node that ran a SECOND method (an author crawl that fell back to a keyword
+    search after failing) is visible in the same list.
+    """
+
+    calls: list = []
+    rows = (
+        {'标题': '条目1', '作者': '某人', '链接': 'https://example.com/1'},
+        {'标题': '条目2', '作者': '某人', '链接': 'https://example.com/2'},
+    )
+
+    def __init__(self, *args, **kwargs):
+        self._sink = None
+        self.driver = None
+
+    def set_sink(self, sink):
+        self._sink = sink
+
+    def set_cursor_sink(self, sink):
+        pass
+
+    def seed(self, saved):
+        pass
+
+    def close(self):
+        pass
+
+    @property
+    def login_wall(self):
+        return False
+
+    def _answer(self, name, kwargs):
+        type(self).calls.append((name, dict(kwargs)))
+        kept = []
+        for item in self.rows:
+            if self._sink is None or self._sink(dict(item)):
+                kept.append(item)
+        return kept
+
+    def search(self, *args, **kwargs):
+        return self._answer('search', kwargs)
+
+    def author(self, *args, **kwargs):
+        return self._answer('author', kwargs)
+
+    def hot(self, *args, **kwargs):
+        return self._answer('hot', kwargs)
+
+
+@pytest.fixture
+def routing(app_module, monkeypatch):
+    """Install the recorder as the only crawler a run in this test may build."""
+    _RoutingCrawler.calls = []
+    monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _RoutingCrawler())
+    return _RoutingCrawler.calls
+
+
+def _settled(app_module, run_id, nid='node-1'):
+    """The one node's stored record, with the run's own verdict beside it.
+
+    'the run reached the right method' is only half of what a mode needs at this
+    level: a node that raised on the way out settles ``failed``/``partial``, and the
+    resume banner would then offer 继续 on a crawl that worked.
+    """
+    run = app_module._RUN_STORE.get_run(run_id)
+    assert run is not None, f'run {run_id} left no record to settle'
+    nodes = {node['node_id']: node for node in run['nodes']}
+    assert nid in nodes, f'{nid} never opened a node record: {sorted(nodes)}'
+    return run, nodes[nid]
+
+
+class TestSourceAuthorMode:
+    """「采集内容=某作者的作品」 run through the real endpoint.
+
+    An author node carries an address and no keyword, so it is the source mode
+    validation could most plausibly refuse — 「缺少关键词」 about a field its panel
+    never showed — and the one the executor could most plausibly route wrongly,
+    because ``mode_for`` answers a missing ``collect`` with the platform's FIRST
+    mode, which on every author platform is the keyword search. Both halves are
+    measured here: the call that reached the crawler, and the verdict the run kept.
+    """
+
+    @pytest.mark.serial
+    def test_an_author_node_reaches_the_author_method_and_settles_done(self, client, app_module, routing):
+        author = 'https://space.bilibili.com/546195'
+        workflow = _workflow(
+            [_node('node-1', 'source', params={'platform': 'bilibili', 'collect': 'author', 'author': author})],
+            [],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'author-mode'})
+        body = started.get_json()
+        assert body['ok'] is True, f'an author node was refused before it ran: {body}'
+        run_id = body['run_id']
+        assert _wait_for_worker(app_module)
+
+        assert len(routing) == 1, f'the author node reached {len(routing)} crawler methods: {routing}'
+        called, kwargs = routing[0]
+        assert called == 'author', f'an author node ran {called}() — a keyword search is a different crawl'
+        assert kwargs['author'] == author, f'the creator address arrived as {kwargs.get("author")!r}'
+        assert 'keyword' not in kwargs, f'the author travelled under a keyword key: {kwargs}'
+        assert kwargs.get('resume') == {}, 'a first run has no stored position to resume from'
+
+        run, node = _settled(app_module, run_id)
+        assert node['status'] == 'done', f'the node settled {node["status"]}: {node["error"]}'
+        assert run['status'] == 'completed', run['status']
+        assert app_module._RUN_STORE.row_count(run_id, 'node-1') == len(_RoutingCrawler.rows)
+
+
+class TestSourceHotMode:
+    """「采集内容=热榜」 run through the real endpoint.
+
+    A board asks for nothing at all — no keyword, no creator, sometimes no cookie —
+    so it is the mode most easily lost twice over: validation refusing a crawl with
+    no required field, and the executor inventing a ``board`` argument for a site
+    that publishes one list. Measured: weibo's ``ajax/side/hotSearch`` answers an
+    anonymous browser, while bilibili really does serve two boards.
+    """
+
+    @pytest.mark.serial
+    def test_a_board_with_nothing_to_ask_for_runs_and_settles_done(self, client, app_module, routing):
+        """weibo 热搜: the mode declares no required field and no board choice."""
+        workflow = _workflow(
+            [_node('node-1', 'source', params={'platform': 'weibo', 'collect': 'hot'})],
+            [],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'hot-plain'})
+        body = started.get_json()
+        assert body['ok'] is True, f'a board needing no field was refused: {body}'
+        run_id = body['run_id']
+        assert _wait_for_worker(app_module)
+
+        assert len(routing) == 1, f'the hot node reached {len(routing)} crawler methods: {routing}'
+        called, kwargs = routing[0]
+        assert called == 'hot', f'a board ran {called}()'
+        assert 'board' not in kwargs, f'weibo publishes one list, and this run asked for the other: {kwargs}'
+        assert not {'keyword', 'author'} & set(kwargs), f"the board is the site's choice, not the user's: {kwargs}"
+        assert kwargs['target_count'] == 50, 'the panel previewed the declared 50 and the run must use it'
+
+        run, node = _settled(app_module, run_id)
+        assert node['status'] == 'done', f'the node settled {node["status"]}: {node["error"]}'
+        assert run['status'] == 'completed', run['status']
+
+    @pytest.mark.serial
+    def test_the_board_the_user_chose_reaches_the_crawler_as_a_value(self, client, app_module, routing):
+        """bilibili's second board: the one select any hot mode offers.
+
+        The choice is the whole difference between the two crawls (热门 vs
+        排行榜), so a run that quietly sent the default answered a different
+        question than the canvas asked and still reported success.
+        """
+        workflow = _workflow(
+            [_node('node-1', 'source', params={'platform': 'bilibili', 'collect': 'hot', 'board': 'ranking'})],
+            [],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'hot-ranking'})
+        assert started.get_json()['ok'] is True
+        run_id = started.get_json()['run_id']
+        assert _wait_for_worker(app_module)
+
+        assert len(routing) == 1, f'the hot node reached {len(routing)} crawler methods: {routing}'
+        called, kwargs = routing[0]
+        assert called == 'hot', f'a board ran {called}()'
+        assert kwargs.get('board') == 'ranking', f'the run sent board={kwargs.get("board")!r}'
+
+        _run, node = _settled(app_module, run_id)
+        assert node['status'] == 'done', f'the node settled {node["status"]}: {node["error"]}'
 
 
 class TestConsoleReadabilityRegression:

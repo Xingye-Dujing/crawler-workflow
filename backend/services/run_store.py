@@ -55,10 +55,20 @@ logger = logging.getLogger(__name__)
 # every leftover `running` row is promoted to `interrupted`, which is exactly
 # the case "the server died mid-run" that resume exists for.
 RUN_RUNNING = 'running'
+#: The user pressed 停止 and the record has been flipped off 运行中, but the worker has
+#: not written its verdict yet. Its own status rather than an early `interrupted`,
+#: because a stopped-but-unsettled run must be neither deletable (its rows are still
+#: being written) nor offered to 继续 (its cursor is not final). The gap is real:
+#: closing a browser from another thread does not interrupt the command the worker is
+#: inside, which used to leave the record reading 运行中 for up to 40 s.
+RUN_STOPPING = 'stopping'
 RUN_INTERRUPTED = 'interrupted'
 RUN_COMPLETED = 'completed'
 RUN_FAILED = 'failed'
 RUN_ABANDONED = 'abandoned'
+
+#: Statuses that still owe somebody a verdict: never purge them as if they were over.
+UNRESOLVED_RUN_STATUS = (RUN_RUNNING, RUN_STOPPING, RUN_INTERRUPTED)
 
 # Node lifecycle. `partial` is the one that carries real work forward: the node
 # died, but the rows it already produced are kept and handed downstream.
@@ -70,6 +80,9 @@ NODE_FAILED = 'failed'
 NODE_SKIPPED = 'skipped'
 NODE_RESTORED = 'restored'
 
+# What 「可续跑」 means to a query. `stopping` is deliberately absent: that run is
+# still unwinding, and offering it invites 重新开始 to discard the rows a live thread
+# is writing. The panel sees it anyway — it lists everything.
 RESUMABLE_RUN_STATUS = (RUN_INTERRUPTED, RUN_FAILED, RUN_RUNNING)
 
 # Column names the crawlers in this project actually emit, best identity first.
@@ -388,12 +401,20 @@ class RunStore:
 
     # ── startup recovery ────────────────────────────────────────
 
-    def promote_stale_runs(self) -> list:
-        """A run left in 'running' belongs to a process that is no longer alive
-        (this one just started), so it is by definition interrupted — and
-        resumable. Returns the run ids promoted."""
-        rows = self._query('SELECT run_id FROM runs WHERE status = ?', (RUN_RUNNING,))
-        ids = [row['run_id'] for row in rows]
+    def promote_stale_runs(self, statuses=(RUN_RUNNING, RUN_STOPPING), only=None, note: str = '') -> list:
+        """A run left in *statuses* belongs to a worker that is no longer writing it,
+        so it is by definition interrupted — and resumable. Returns the ids promoted.
+
+        ``only`` restricts the claim to the ids a caller can prove it owns. Startup
+        passes nothing (every leftover row there belongs to a dead process by
+        definition); a caller asking the same question of a *running* server must pass
+        its own, or a second instance would settle another one's live run.
+
+        ``note`` says which of the two it was, because the user reads that word.
+        """
+        placeholders = ', '.join('?' * len(statuses))
+        rows = self._query(f'SELECT run_id FROM runs WHERE status IN ({placeholders})', tuple(statuses))
+        ids = [row['run_id'] for row in rows if only is None or row['run_id'] in only]
         for run_id in ids:
             stamp = self.now()
             # One rule for closing a node that never reached finish_node, shared
@@ -406,11 +427,23 @@ class RunStore:
             self.settle_nodes(run_id)
             self._execute(
                 'UPDATE runs SET status = ?, updated_at = ?, node_done = ?, note = ? WHERE run_id = ?',
-                (RUN_INTERRUPTED, stamp, self._finished_count(run_id), t('run.interrupted_by_restart'), run_id),
+                (RUN_INTERRUPTED, stamp, self._finished_count(run_id), note or t('run.interrupted_by_restart'), run_id),
             )
         if ids:
             logger.warning(t('run.promoted', n=len(ids)))
         return ids
+
+    def mark_stopping(self, run_id: str) -> bool:
+        """Say at once that this run is being stopped, before the verdict exists.
+
+        Returns False when the row is not running any more, so a run that settled
+        between the Stop request and this call keeps the answer it actually gave.
+        """
+        cur = self._execute(
+            'UPDATE runs SET status = ?, updated_at = ? WHERE run_id = ? AND status = ?',
+            (RUN_STOPPING, self.now(), run_id, RUN_RUNNING),
+        )
+        return bool(cur.rowcount)
 
     # ── run lifecycle ───────────────────────────────────────────
 
@@ -577,16 +610,17 @@ class RunStore:
         # 1. Too old to be worth continuing, whatever its status.
         rows = self._query('SELECT run_id FROM runs WHERE started_at < ?', (cutoff,))
         doomed.update(row['run_id'] for row in rows)
-        # 2. Beyond the per-workflow cap. Interrupted runs are counted first,
-        # so the ones someone may still want to continue survive the trim.
+        # 2. Beyond the per-workflow cap. A run that is unfinished in any sense —
+        # interrupted, still writing, or stopped but not yet settled — is counted
+        # first, so the ones someone may still want to continue survive the trim.
         grouped = {}
         for row in self._query('SELECT workflow_name, run_id, status, seq FROM runs'):
             grouped.setdefault(row['workflow_name'] or '', []).append(dict(row))
         for runs in grouped.values():
             ordered = sorted(runs, key=lambda r: r['seq'], reverse=True)
-            interrupted = [r for r in ordered if r['status'] == RUN_INTERRUPTED]
-            finished = [r for r in ordered if r['status'] != RUN_INTERRUPTED]
-            keep_ids = {r['run_id'] for r in (interrupted + finished)[: max(0, keep)]}
+            unresolved = [r for r in ordered if r['status'] in UNRESOLVED_RUN_STATUS]
+            settled = [r for r in ordered if r['status'] not in UNRESOLVED_RUN_STATUS]
+            keep_ids = {r['run_id'] for r in (unresolved + settled)[: max(0, keep)]}
             doomed.update(r['run_id'] for r in ordered if r['run_id'] not in keep_ids)
         doomed.difference_update(exclude)
 

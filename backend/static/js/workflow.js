@@ -749,11 +749,13 @@ const workflow = {
         /* The expiry toast is once-per-run: the flag stays set for the rest of
            the crawl, and polling every second would otherwise shout forever. */
         var cookieWarned = false;
-        /* A Stop makes `running` false before the verdict is written, so the record
-           briefly reads 运行中 with no run behind it. Keep reading through that window
-           (bounded, so a wedged worker cannot hang the console open forever) instead
-           of printing a verdict the run never gave. */
-        var SETTLE_TICKS = 15;
+        /* A Stop flips `running` off on the request thread and writes 正在停止 into
+           the record, but the worker still owes that record its verdict. Keep reading
+           through that window — bounded, so a wedged worker cannot hold the console
+           open forever, and long enough to cover a page load the worker may be
+           standing in: measured, 40 s, because a browser closed from the Stop request
+           does not interrupt the command already running inside it. */
+        var SETTLE_TICKS = 90;
         var settleTicks = 0;
         var interval = setInterval(async function () {
             try {
@@ -763,13 +765,16 @@ const workflow = {
                     cookieWarned = true;
                     showToast(I18n.t('toast.cookieExpired'));
                 }
+                /* The panel that shows what has run keeps itself current for the whole
+                   life of the run's record — while it runs AND while a stopped one is
+                   being settled. Stopping was the case where nobody touched anything
+                   and the row still said 运行中 for half a minute, because the tick
+                   that refreshes it only ran while the run said 'running'. */
+                if (result.running || result.settling || result.stopping) {
+                    if (window.runsManager) runsManager.autoRefresh();
+                }
                 if (result.running) {
                     settleTicks = 0;
-                    /* The panel that shows what has run keeps itself current while a
-                       run is live: the row appears and advances without a manual
-                       refresh. It only re-reads when open, and never while a detail
-                       row is being read. */
-                    if (window.runsManager) runsManager.autoRefresh();
                 }
                 if (result.logs) {
                     var lastLog = result.logs[result.logs.length - 1];
@@ -847,6 +852,20 @@ const workflow = {
                            verdict: keep reading rather than guess 'failed'/'interrupted'
                            from counts a finalizing run is still moving. */
                         settleTicks += 1;
+                        return;
+                    }
+                    if (!result.running && (result.settling || result.stopping)) {
+                        /* Out of budget with the worker still unwinding. This used to
+                           fall straight into the block below and print a verdict — the
+                           run's own `outcome` was still the empty string, so the
+                           console claimed 失败 for a run that had merely been stopped
+                           slowly. Say the one thing that is known instead, and let the
+                           record be read where it is read from: the run panel keeps
+                           re-reading it until the verdict lands. */
+                        clearInterval(interval);
+                        RunState.setRunning(false);
+                        document.getElementById('status-text').textContent = I18n.t('status.stopping');
+                        showToast(I18n.t('toast.stillSettling'));
                         return;
                     }
                     if (!result.running) {
@@ -3893,26 +3912,36 @@ var runsManager = {
         return !!this._detail;
     },
 
-    /* Any listed record still claiming to be running. Right after 停止 this is true
-       even though the server already says running=false — the row turns 中断 only
-       when the worker's finally writes it, and this is the flag awaitSettled polls. */
-    _anyRunning() {
+    /* Any listed record still claiming that no verdict has been written for it.
+       Right after 停止 this is true twice over: the row says 正在停止 because the Stop
+       request wrote that itself, and the worker may still be unwinding behind it.
+       Neither is a finished record, so `awaitSettled` keeps reading through both —
+       counting only 'running' made the panel stop watching at the exact moment the
+       record had just left that status. */
+    _awaitable() {
         return (this._shown || []).some(function (r) {
-            return r.status === 'running';
+            return r.status === 'running' || r.status === 'stopping';
         });
     },
 
     /* Keep re-reading after a stop until the record has actually settled. Bounded so
        a wedged worker cannot make the panel poll forever; a missed flip is repaired
-       the moment the panel is next opened. */
+       the moment the panel is next opened. The bound is minutes rather than seconds
+       because the worker may be inside a page load it cannot be pulled out of, and
+       this is the only thing that turns 正在停止 into the run's real verdict without
+       the user touching anything. */
     async awaitSettled(tries, waitMs) {
-        var self = this;
-        var n = tries || 20;
+        var n = tries || 240;
         var step = waitMs || 500;
         for (var i = 0; i < n; i++) {
-            if (!this._detailOpen()) this.refreshIfOpen();
             await new Promise(function (done) { setTimeout(done, step); });
-            if (!self._anyRunning()) break;
+            if (this._detailOpen()) continue;
+            /* Awaited, and the flag read from THAT answer: `refreshIfOpen()` fires the
+               request without waiting, so a poll that asked `_shown` immediately
+               after was judging the PREVIOUS read — which could end the watch the
+               moment it started, on a list captured before this run existed. */
+            await this.refresh();
+            if (!this._awaitable()) break;
         }
     },
 
@@ -3967,8 +3996,18 @@ var runsManager = {
     },
 
     statusKey(status) {
-        var known = ['running', 'interrupted', 'completed', 'failed', 'abandoned'];
-        return known.indexOf(status) >= 0 ? 'runsMgr.status.' + status : 'runsMgr.status.completed';
+        /* `stopping` is a status the record really holds: the Stop request writes it
+           before the worker's verdict can arrive, so without this line the row would
+           read 已完成 for the few seconds it is being stopped. */
+        var known = ['running', 'stopping', 'interrupted', 'completed', 'failed', 'abandoned'];
+        if (known.indexOf(status) >= 0) {
+            return 'runsMgr.status.' + status;
+        }
+        /* Nothing here is 已完成 by default. A status this build has no word for came
+           from somewhere else — an older row, a hand-edited database — and answering
+           it with the friendly verdict states a fact the record never said. `I18n.t`
+           returns an unknown key verbatim, so the row shows the stored word. */
+        return String(status || '');
     },
 
     /* What kind of run this was, as chips beside the name: several workflows in one

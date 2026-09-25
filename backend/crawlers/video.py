@@ -320,7 +320,7 @@ class BilibiliCrawler(VideoCrawler):
             target=target_count,
             collected=self.collected,
             mark=mark,
-            stopped=lambda: self.login_wall,
+            stopped=lambda: self.login_wall or self.may_stop(),
             stuck_rounds=2,
             settle_wait=self.CARD_WAIT,
         )

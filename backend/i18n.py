@@ -635,7 +635,13 @@ _ZH = {
     # ── 断点续跑（durable run state） ────────────────────────
     'run.row_limit': '节点 {nid} 已达到保存上限 {limit} 行，超出部分不再落库',
     'run.interrupted_by_restart': '服务重启时被打断',
+    'run.interrupted_by_dead_worker': '执行线程已不在，记录自动判定为中断',
     'run.promoted': '发现 {n} 条上次没跑完的记录，已标记为「可续跑」',
+    'run.reconciled': '发现 {n} 条线程已结束却没写下结论的记录，已判定为「已中断」',
+    'run.recordWriteFailed': '记录 {rid} 的结论没能写进数据库（{err}）：运行记录会在下次刷新时自动补上判定',
+    'run.nodeStopped': '节点 {nid} 已按「停止」结束：本次保留 {n} 行',
+    'run.finished.stopped': '，{n} 个被停止',
+    'crawl.stopped': '收到「停止」，本次抓取到此为止',
     'run.started': '本次运行已记账：{rid}（随时可中断，数据逐条落库）',
     'run.resume_from': '续跑模式：接着 {at} 那次往下跑，此前已保存 {rows} 行',
     'run.restored': '节点 {nid} 沿用上次结果（{n} 行），不再重跑',
@@ -1358,7 +1364,15 @@ _EN = {
     # ── resumable runs ────────────────────────────────────────
     'run.row_limit': 'Node {nid} hit its {limit}-row safety cap — further rows are not stored',
     'run.interrupted_by_restart': 'Interrupted by a service restart',
+    'run.interrupted_by_dead_worker': 'Its worker thread is gone, so the record was settled as interrupted',
     'run.promoted': '{n} unfinished run(s) from an earlier session marked resumable',
+    'run.reconciled': '{n} record(s) whose worker had already gone were settled as interrupted',
+    'run.recordWriteFailed': (
+        'Could not write the verdict for record {rid} ({err}): the run list settles it on the next refresh'
+    ),
+    'run.nodeStopped': 'Node {nid} ended on Stop: {n} row(s) kept',
+    'run.finished.stopped': ', {n} stopped',
+    'crawl.stopped': 'Stop received — this crawl ends here',
     'run.started': 'This run is checkpointed as {rid} — every row lands in the database as it is produced',
     'run.resume_from': 'Resuming the run interrupted at {at} — {rows} rows already stored',
     'run.restored': 'Node {nid} reuses its previous result ({n} rows) instead of running again',

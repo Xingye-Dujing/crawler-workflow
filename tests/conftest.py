@@ -147,6 +147,15 @@ def clean_globals(request):
     lang_backup = i18n.get_lang() if i18n is not None else None
     app = sys.modules.get('app')
     running_backup = app.execution_state.get('running') if app is not None else None
+    stopping_backup = app.execution_state.get('stopping') if app is not None else None
+    # Which run rows the process believes it still owns, and which it opened. Both are
+    # read by `_reject_live_run` and by the panel's reconciler, so a leftover id would
+    # make a later test's delete refused — or worse, settle a row it never wrote.
+    records_backup = (
+        (list(app.execution_state['open_records']), set(app.execution_state['owned_records']))
+        if app is not None
+        else (None, None)
+    )
     yield
     sys.stdout = stdout_backup
     if i18n is not None:
@@ -176,6 +185,10 @@ def clean_globals(request):
         platform_gate.reset()
     if app is not None:
         app.reset_console_state()
+        app.execution_state['open_records'][:] = records_backup[0]
+        app.execution_state['owned_records'].clear()
+        app.execution_state['owned_records'].update(records_backup[1])
+        app.execution_state['stopped_node_ids'].clear()
         if app.execution_state.get('running') != running_backup:
             leaked = app.execution_state.get('running')
             app.execution_state['running'] = running_backup
@@ -184,6 +197,18 @@ def clean_globals(request):
                 f'(it was {running_backup!r} before). Take the `client` fixture or restore '
                 'it with monkeypatch.setitem: a leaked flag makes the server look busy to '
                 'every later test in the session.'
+            )
+        # A leaked 停止 is the same class of bug wearing a different name: `stopping`
+        # is what `stop_requested()` reads, and every crawl's next row asks it. Left
+        # set, the next test's crawl raises CrawlerStopped for a stop that happened in
+        # a different file.
+        if app.execution_state.get('stopping') != stopping_backup:
+            leaked = app.execution_state.get('stopping')
+            app.execution_state['stopping'] = stopping_backup
+            pytest.fail(
+                f"{request.node.nodeid} left execution_state['stopping'] at {leaked!r} "
+                f'(it was {stopping_backup!r} before). Restore it with monkeypatch.setitem: '
+                'a leaked stop makes every later crawl end on its first row.'
             )
 
 

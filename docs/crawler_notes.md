@@ -19,6 +19,7 @@ second opinion beside it.
 - [运行前 Cookie 预检](#运行前-cookie-预检measured-2026-09-24)
 - [A login page on the way through is not a wall](#a-login-page-on-the-way-through-is-not-a-wall-measured-2026-09-24)
 - [热榜：四个平台、两种答案、一条被证无的](#热榜四个平台两种答案一条被证无的measured-2026-09-25)
+- [「停止」为什么必须去杀进程](#停止为什么必须去杀进程quit--stoprequest--kill-三选实测measured-2026-09-25131)
 
 ## Weibo
 
@@ -684,3 +685,36 @@ pager 自报页底，排队交棒无恙。红条分三类：
 `'hot' not in mode_keys_for('xiaohongshu')` 与 `'hot' not in mode_keys_for('douyin')` 被
 `test_each_platform_names_its_modes` 钉住 —— 想加必须先重新测量，不能让它在没人注意时
 "顺手补上"。
+
+## 「停止」为什么必须去杀进程：quit / stopRequest / kill 三选实测（measured 2026-09-25，#131）
+
+用户的说法是："中止之后运行记录刷新慢得不如重开服务"。这句里有两个不同的问题，必须分开量：
+**记录什么时候不再说「运行中」**，以及**上一个任务什么时候真的停了**。
+
+探针 `backend/test_stop_latency.py`（一次性脚本，载荷 `scratchpad/stop_latency.json`）用真
+Chrome 148 各测两种"卡在页面里"：一个 40 秒才答复的导航（正好是 `page_load_timeout` 的默认值），
+以及一个永远不调用回调的 `execute_async_script`（页内 fetch 的形状，30 秒脚本超时）。 worker
+线程卡在里面，主线程按三种方式去"停止"它：
+
+| 停止方式 | 卡在导航 | 卡在页内 fetch | worker 最后怎么死的 |
+|---|---|---|---|
+| 侧线程 `driver.quit()` | **40.02 s** | **30.02 s** | 自己的超时，不是被停 |
+| 第二条连接 POST `…/chromium/stopRequest` | 40.01 s | — | 同上，而且端点 **404 unknown command** |
+| `taskkill /F /T` 该会话的 chromedriver | **2.25 s** | **2.25 s** | `ConnectionResetError`（socket 被断） |
+
+结论三条，都已写进代码：
+
+* **跨线程 `driver.quit()` 对"正在跑的命令"完全无效**——它是会话内的有序请求，排在 worker 那条
+  之后；旧实现把 3 秒宽限给完，就以为自己在关浏览器，实际只是在等 worker 自己超时。
+* **`stopRequest` 这个"温柔中断"在 chromedriver 148 上已经不存在**（Selenium 4.45 也没有包装），
+  所以别指望它：唯一可靠的打断是让驱动进程消失。
+* 因此 `STOP_QUIT_GRACE = 0.8`：给一个本来空闲的浏览器体面退出的机会（顺带把 Cookie 落盘），
+  到点就按 PID 杀树；多个浏览器各一条线程并行收，否则并行运行的最后一条抓取要排在前面所有
+  清理之后，而记录必须等它们全结束。
+
+至于"抓取自己该不该继续"，以前**没有任何一处**问过：`crawlers/**` 里 `stop`/`cancel` 出现 0 次，
+`feed.walk_feed(stopped=…)` / `pager.walk_pages(alive=…)` 这两个钩子只接了 `login_wall`。现在
+问题问在 `Crawler.emit`（全站唯一过行口）以及那两处共享走查的谓词里，`CrawlerStopped` 故意继承
+`BaseException`——`crawlers/` 里约 60 处 `except Exception` 是"读不到就接着走"的容错，一次停止
+被它们咽下就等于悄悄少采，而没人看得见少了什么。
+
