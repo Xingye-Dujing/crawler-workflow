@@ -658,3 +658,56 @@ class TestLiveCrawlerFixture:
         finally:
             finish()
         assert made[-1].use_profile is False, 'the request to skip the profile was dropped'
+
+
+#: The only outcomes the live tier may file as *skipped*, each with the precondition it names.
+#: A skip is how a tier stops testing something while still reading green, and the closure run is
+#: defined as "nothing skipped" — so the allowance is exhaustive: a platform with no saved cookie
+#: (another machine without that login), no Chrome at all, one shared search whose posts all
+#: report zero comments, and zhihu's designed day-by-day headless refusal, whose visible-window
+#: sibling always runs. Anything the CRAWL answers gets asserted, not skipped.
+_LIVE_SKIP_ALLOWANCE = {
+    ('conftest.py', 'no saved cookies'),
+    ('conftest.py', 'Chrome/driver unavailable'),
+    ('test_live_comments.py', 'no searched weibo post had comments'),
+    ('test_live_zhihu.py', 'refused the headless session'),
+    ('test_live_cookie_preflight.py', 'no saved cookies'),
+}
+
+
+class TestLiveTierSkipsAreEnumerated:
+    """``pytest.skip`` inside the live tier is a coverage decision, so it is pinned by name.
+
+    Two directions are checked: a NEW skip cannot be added without being listed here, and a
+    listed allowance cannot outlive the skip it was made for (the same reason ``BODY_ROUTES``
+    carries its own meta test — a stale whitelist is a door left open).
+    """
+
+    def _skips(self) -> list:
+        found = []
+        for path in sorted(LIVE_DIR.glob('*.py')):
+            for lineno, line in enumerate(path.read_text(encoding='utf-8').splitlines(), start=1):
+                if 'pytest.skip(' in line or 'pytest.xfail(' in line:
+                    found.append((path.name, lineno, line.strip()))
+        return found
+
+    def test_every_live_skip_names_a_listed_environment_precondition(self):
+        offenders = [
+            (name, lineno, text)
+            for name, lineno, text in self._skips()
+            if not any(name == listed and reason in text for listed, reason in _LIVE_SKIP_ALLOWANCE)
+        ]
+        assert not offenders, (
+            f'a live case may only be skipped for a listed precondition; these name a crawl result '
+            f'instead (assert the refusal, or add the precondition and its reason to the allowance): {offenders}'
+        )
+
+    def test_no_allowance_outlives_the_skip_it_was_made_for(self):
+        """The other direction: a listed reason nobody uses any more is a door left standing open."""
+        reported = self._skips()
+        unused = sorted(
+            f'{listed}: {reason}'
+            for listed, reason in _LIVE_SKIP_ALLOWANCE
+            if not any(name == listed and reason in text for name, _lineno, text in reported)
+        )
+        assert not unused, f'the allowance lists skips the tier no longer has, drop them: {unused}'
