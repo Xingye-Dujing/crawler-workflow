@@ -379,6 +379,10 @@ _ZH = {
         '请确认已在 Cookie 面板用「可见窗口」登录并保存，稍后再重试本关键词'
     ),
     'crawl.dy.detailEmpty': '[抖音] 视频 {i} 的详情页没有渲染出数据，已跳过该行',
+    'crawl.dy.detailNoIdentity': (
+        '[抖音] 视频 {i} 的详情页只渲染出计数条，作者与发布时间都没有，已跳过该行：'
+        '一条说不出是谁、什么时候发的记录不是数据，只是把额度花在一个空行上'
+    ),
     'crawl.dy.detailSlow': (
         '[抖音] 视频 {i} 的详情页在加载超时内没加载完，已跳过该行：这是网络或站点响应慢，稍后重试可能就拿到了'
     ),
@@ -1176,6 +1180,10 @@ _EN = {
         'and retry this keyword a little later'
     ),
     'crawl.dy.detailEmpty': '[Douyin] video {i} rendered no detail data, row skipped',
+    'crawl.dy.detailNoIdentity': (
+        '[Douyin] video {i} rendered only its counter bar — no author and no publish time, row skipped: '
+        'a record that cannot say whose it is or when it was posted is not data, just budget spent on a blank row'
+    ),
     'crawl.dy.detailSlow': (
         '[Douyin] video {i} did not finish loading inside the page-load timeout, row skipped: that is the '
         'network or the site being slow, a retry may well get it'

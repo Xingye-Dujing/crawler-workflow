@@ -998,6 +998,14 @@ class DouyinCrawler(VideoCrawler):
         text = info_lines[0] if info_lines else ''
         publish = _clean_publish(facts.get('publish'))
         author, followers, liked = _author_from_related(str(facts.get('related') or ''))
+        if not author and not publish:
+            # Measured 2026-09-26 on a live run: the video page handed over its counter bar and
+            # nothing else — an id, 点赞 300, 评论 11, no author, no publish time, no 文案. That is
+            # a page still hydrating, not a caption-less video (one of those keeps its author and
+            # its date), and filing it spends a row of the user's target on a line an export then
+            # has to explain away.
+            logger.warning(t('crawl.dy.detailNoIdentity', i=aweme_id))
+            return None
         return {
             '标题': (self._title().removesuffix(' - 抖音').strip() or text)[:120],
             '正文': text,

@@ -208,6 +208,15 @@ a resumed run, because the page reopens on exactly the ids the dead run opened. 
 nothing. Now an empty `todo` scrolls on and only a scroll that pays out nothing ends the walk; both
 douyin lists share the one loop.
 
+**A detail page that publishes only its counter bar is not a row (measured 2026-09-26, live).** One
+opened video answered 点赞 300 / 评论 11 and nothing else — no author, no 发布时间, no 文案, and
+`document.title` still empty. `_detail_row` filed it as valid data, so a 2-row target was met by two
+blank lines and the live tier caught it as "row without a title". It now refuses a page with
+**neither author nor publish time** (`crawl.dy.detailNoIdentity`, one line naming the id) and the walk
+moves on to the next card, so the budget buys rows that say something. **The gate is identity, not
+prose**: a caption-less clip keeps its author and its date, so it stays a row with an empty 正文 —
+refusing on an empty 标题 would drop real data over one column.
+
 ## Bilibili
 
 **Its two paging contracts are measured, not guessed — keep them exactly.**

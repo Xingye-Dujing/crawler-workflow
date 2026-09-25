@@ -83,6 +83,7 @@ class FakeDriver:
         self,
         cards,
         facts=None,
+        facts_by_id=None,
         video_body=INFO_TEXT,
         comment_items=None,
         comment_count='2099',
@@ -124,6 +125,10 @@ class FakeDriver:
         self.grid_batches = list(grid_batches or [])
         self.works = works
         self.facts = facts if facts is not None else _default_facts()
+        # Facts per opened video, so a walk can be shown one page that published nothing but
+        # its counter bar and a next page that answered: the measured failure is one row in a
+        # batch, not every row.
+        self.facts_by_id = dict(facts_by_id or {})
         self.video_body = video_body
         # The page's own ``<title>``, which is where douyin announces the captcha
         # interstitial — no URL pattern says it.
@@ -210,7 +215,8 @@ class FakeDriver:
                     self.grid = self.grid + self.grid_batches.pop(0)
             return 'container'
         if 'video-player-digg' in script:
-            return dict(self.facts)
+            asked = douyin_id(self.current_url)
+            return dict(self.facts_by_id.get(asked, self.facts))
         return None
 
     def execute_async_script(self, script, *args):
@@ -422,6 +428,38 @@ class TestSearch:
         crawler, _driver = make_crawler(cards=[ID, '7678996507694094827'], video_body='加载中')
         rows = crawler.search('人工智能', target_count=5)
         assert rows == []
+
+    def test_a_page_that_published_only_its_counter_bar_is_not_data(self, make_crawler, caplog):
+        """Measured live 2026-09-26: the opened video page gave its counter bar and nothing
+        else — id, 点赞 300, 评论 11, no author, no 发布时间, no 文案. Counted as a valid row,
+        that shape filled a 2-row target with two blank lines, and the live tier caught it as a
+        row without a title. Only a *caption-less* video is legitimately text-free, and one of
+        those still states its author and its date.
+        """
+        blank = {**_default_facts(), 'info': '', 'publish': '', 'related': ''}
+        crawler, _driver = make_crawler(cards=[ID], facts=blank)
+        rows = crawler.search('人工智能', target_count=2)
+        assert rows == []
+        assert t('crawl.dy.detailNoIdentity', i=ID) in ' '.join(_lines(caplog)), _lines(caplog)
+
+    def test_the_walk_spends_the_target_on_rows_that_say_something(self, make_crawler):
+        """One blank page must not cost the user a row of their target: the walk moves on to the
+        next card rather than stopping at a count that is really one row short."""
+        crawler, _driver = make_crawler(
+            cards=[ID],
+            scroll_batches=[[OTHER]],
+            facts_by_id={ID: {**_default_facts(), 'info': '', 'publish': '', 'related': ''}},
+        )
+        rows = crawler.search('人工智能', target_count=1)
+        assert [str(row['视频ID']) for row in rows] == [OTHER]
+
+    def test_a_video_with_no_caption_is_still_one_row(self, make_crawler):
+        """The gate is identity, not prose: a clip with no 文案 has nothing to put in that column,
+        and refusing those would drop real data over one empty cell."""
+        crawler, _driver = make_crawler(cards=[ID], facts={**_default_facts(), 'info': ''})
+        rows = crawler.search('人工智能', target_count=1)
+        assert len(rows) == 1, 'an author and a publish time make this a row'
+        assert rows[0]['正文'] == '' and (rows[0]['作者'] or '').strip()
 
     def test_opened_ids_ride_in_the_cursor_for_a_resumed_run(self, make_crawler):
         crawler, driver = make_crawler(cards=[ID, '7678996507694094827'])
