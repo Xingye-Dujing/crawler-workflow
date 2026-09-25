@@ -54,24 +54,23 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` in
   workflow.js asks `Capabilities` which fields the selected mode requires. If
   `Capabilities` has not loaded, refuse by saying the required fields could not be
-  checked; never guess a shape.
-- **A canvas shortcut belongs to the canvas only while the user is not typing.** The
-  keydown guard named `INPUT`/`SELECT` and forgot `TEXTAREA`, so Backspace at the end of
-  a pasted URL deleted the SELECTED NODE. Use `canvas._isTypingTarget()`, which asks what
-  the element IS (`isContentEditable`, `.cselect`, …), not a growing tag list.
+  checked; never guess a shape. The form obeys it too: a stored value off the option list
+  shows as itself (`selectOptionTags`, `boolParam`), never as option #0.
+- **A canvas shortcut belongs to the canvas only while the user is not typing.** Use
+  `canvas._isTypingTarget()`, which asks what the element IS (`isContentEditable`, `.cselect`, …),
+  not a growing tag list — a list of tag names is how a paste box was left out.
 - **History entries are snapshots, and identical ones are not entries.** `getState()` deep-copies
   `params` (aliasing made every parameter edit un-undoable), `_pushState()` skips a state equal to the
   current one, and `restoreState()` brackets itself with `_historySaving` so one restore is ONE undo
-  point — the autosave used to consume the 50-deep stack and push real edits out of it.
+  point.
 - **One page boot must not be a single point of failure.** It is one `DOMContentLoaded`
-  body, so any throw inside it skipped every later step (a missing ECharts CDN once blanked
-  the capability fetch, the autosave and the resume banner). Boot steps go through
+  body, so any throw inside it skipped every later step. Boot steps go through
   `boot(name, fn)`; `stats` declines on a missing library and says so.
 - **A dialog with an input is answered by the input.** `showDialog` resolves a clicked
   button as `b.value !== undefined ? b.value : inputEl.value`, so a confirm button that
   carries its own `value:` replaces whatever the user typed (the dataset rename stored
   the literal `'ok'`). Leave `value` off input dialogs.
-- **Four frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a module
+- **Five frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a module
   declared as a top-level `const X` — `const` never becomes a window property. Guard the binding itself (`typeof X !== 'undefined'`)
   or export it (`window.X = X`). (2) The DOM stub's matcher is real (see `harness_dom.mjs`); never
   fabricate a child when a query finds nothing — that turned a deleted connection into a phantom.
@@ -79,6 +78,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   parameter list opened it on whoever was selected before, not the platform that just refused.
   (4) **A name written into `onclick="fn('…')"` spans two grammars:** `attrJsArg` escapes `\`/`'` for
   the literal, then `&`/`"` for the attribute — JS-escaping alone lets one `"` end the attribute.
+  (5) **A node captured before an `await` is not on the page after it** — `openSettings` and the
+  run-list `refresh` rebuild the markup. Re-look it up (`_rowFor`, `_isLiveCell`, the holder by
+  id) or the write lands in an orphan and the pause flag is set for nothing.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id** (a `.panel` selector matches nothing
   here), never falls back to `<body>`, and asserts a per-container floor on the count it gathered,
@@ -167,10 +169,10 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 
 ## Platform red lines (full evidence in `docs/crawler_notes.md`)
 
-- **douyin**: `never_headless = True` (验证码 on every navigation, and a visible window is necessary,
-  **not sufficient** — evidence in `docs/crawler_notes.md`); search is DOM-only, routed by
-  `/search/<kw>?type=video`; **no 播放数 column exists** (its only figure is the like count); don't block
-  its images; authors are opaque `sec_uid` only; `_published_count()` returns `-1` for "page said nothing".
+- **douyin**: `never_headless = True` (验证码 on every navigation, and a visible window is
+  necessary, **not sufficient**); search is DOM-only, routed by
+  `/search/<kw>?type=video`; **no 播放数 column exists**; don't block its images; authors are opaque
+  `sec_uid` only; `_published_count()` returns `-1` for "page said nothing".
 - **X (twitter)**: `never_headless = True`; the timeline is virtualized, so progress is rows kept and
   resume identity is the **status-id set**, never an index; all five counters come from one
   `[role="group"]` aria-label and **浏览数 exists nowhere else**; one `execute_script` per card.
@@ -310,9 +312,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   and resume plumbing still use the raw `nid`. The frontend keeps `node.title` in `getState` /
   `toWorkflowJSON`, and BOTH restore paths re-apply title + element text BEFORE `updateNodeDisplay`, whose
   re-stamp guard reads the element.
-- **The run console keeps its own history per view, because the server cannot give it back.**
-  `/api/workflow/status` ships only the last 200 lines of the *whole* run, so a tab switch that blanks
-  `#console-output` leaves it empty forever for a finished run. `consoleViews` in workflow.js holds
+- **The run console keeps its own history per view, because the server cannot give it back**
+  (it ships only the last 200 lines of the *whole* run, so a tab switch that blanks
+  `#console-output` would otherwise lose them). `consoleViews` in workflow.js holds
   `{seen, lines}` per view (`'all'` plus each workflow id), **every** view is fed on every poll, and
   `switchWfTab` repaints from that view's history without moving its cursor.
 - **Every thread that logs must pin its own language.** `set_lang` is thread-local and a
@@ -327,14 +329,15 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   the sentence twice. Keep the logger call for the file's traceback, and let the
   executor's `wf.node_failed` be the single attributed console line; a helper line may add
   a fact that line cannot carry (how many rows survived), never repeat the reason.
-  Refusals `raise` rather than returning `[]`, or the node settles DONE over an empty
-  table and the export ships a header row. **Anything that chooses data, cost or a name is
+  Refusals `raise` rather than returning `[]`, or the node settles DONE over an empty table.
+  **Anything that chooses data, cost or a name is
   refused BY NAME, never guessed**: a mode, a `select`, a step's select or missing column
   (`data_analysis.validate_step`), an analyzer's `method`/`mode` (`app.enum_param`). **Read
-  a switch, never compare it**: `utils.helpers.as_bool`; blank = the declared default.
+  a switch, never compare it**: `utils.helpers.as_bool`; blank = the declared default. A form
+  shows a stored value off the list (`selectOptionTags`), never option #0.
 - **`_push_log` stores one entry per physical line.** A multi-line payload (a driver
-  `Message:` block) rendered as several rows, so the browser's line-delta cursor skipped
-  or repeated content; the total advances by lines, not by `add_log` calls.
+  `Message:` block) rendered as several rows, so the browser's cursor skipped or repeated
+  content; the total advances by lines, not by `add_log` calls.
 - **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook.** Those
   nodes get no "Executing node …" or "Node … completed (n/N)" line, and progress counters still count
   them. Everything that states a fact still prints: the upload's own "Loaded … N rows", and any

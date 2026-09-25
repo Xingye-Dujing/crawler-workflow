@@ -790,3 +790,27 @@ Chrome 148 各测两种"卡在页面里"：一个 40 秒才答复的导航（正
 `mode`（它把自己的 `used_mode` 回给调用者）。前者是装饰参数，为一个配色丢掉整张图更糟；后者已经
 诚实报告了自己用了哪种。两者都不是"选数据/选花费"的参数。
 
+界面这一侧同步改了三处，都是"同一件事只说一次"的反面：
+
+* **画出来的值和存下来的值不是一回事**：`renderParamSelect`/`sourceSelectHtml` 过去用
+  `(p[key] || def) === o.v` 判选中——值不在列表里时**没有一个 option 被选中**，浏览器于是显示
+  第 0 项（热门榜 / TF-IDF / ECharts），而参数里写的还是那个要被拒绝的值。现在
+  `selectOptionTags` 把节点真正持有的值作为一个"不是可选项"的 option 显示出来（原文经
+  escapeHtml，因为它是用户自己写进文件的文字）。
+* **复选框显示读的是 truthy**：`p.x ? 'checked' : ''` 对文本 `'false'` 为真，于是用户取消勾选、
+  重新打开面板却看到勾上，而运行按"关"执行（或相反）。统一成 `boolParam(value, 默认)`，与后端
+  `as_bool` 同一套词表；`renderParamCheckbox` 也改成像其它复选框一样写 `this.checked`。
+* **await 之前抓的 DOM，await 之后可能已经不在页面上**：`runsManager.detail`、
+  `renderResumeSettings`、`dashboard._renderCell` 三处都是"先拿到行/容器，再 `await fetch`，
+  然后往里写"。运行中的时候控制台每 2 秒刷一次运行列表，`openSettings` 在任何一次参数改动时
+  重写整个表单，`dashboard.open()` 清空重建网格——所以那三次写入经常落进一个已经脱离文档的子树：
+  屏幕上什么都没出现，而 `_detail` / `_instances` 这类记账照样被写下（`_detail` 一写，面板就
+  以为用户在读明细，自动刷新停了；`echarts.init` 在离页元素上建出的实例每次 resize 都被重画、
+  永不 dispose）。现在都是"等回来再按 id/属性重新找一次，找不到就什么都不写"。
+
+顺带记录两条被从 AGENTS.md 移出来的旧事实（那边有 32 KB 硬预算，规则留在那儿，事故留在这儿）：
+`_pushState` 曾经让自动保存吃掉 50 步历史栈、把真实编辑挤出去；`DOMContentLoaded` 里一个裸调用
+曾经因为 ECharts CDN 拿不到而连带跳过能力拉取、自动保存和续跑横幅——这就是 `boot(name, fn)` 与
+`canvas._isTypingTarget()`（曾经只认 `INPUT`/`SELECT`，漏了 `TEXTAREA`，于是粘贴长链接后按退格
+删掉的是**选中的节点**）存在的原因。
+

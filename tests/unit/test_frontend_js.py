@@ -11,6 +11,7 @@ Requirements: plain `node` on PATH (already needed for the canvas harness).
 """
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -732,6 +733,17 @@ class TestPanelEscaping:
             assert site in source, f'the resume panel no longer escapes: {site}'
 
 
+def _rows(html):
+    """Each record's own <tr>, split on the row OPENING tag.
+
+    Not ``split('<tr>')``: a row carries attributes (``data-run-id`` is how the panel
+    re-finds a record after its detail fetch lands), and a split that only recognises the
+    bare tag returns one giant chunk — every assertion then reads the whole table, and a
+    chip that belongs to another row looks like a lie told about this one.
+    """
+    return re.split(r'<tr\b', html)
+
+
 class TestRunRecordsPanel:
     """The 运行记录 table is the resume funnel: wrong buttons here either
     discard paid-for data or pretend a dead run is alive."""
@@ -741,15 +753,35 @@ class TestRunRecordsPanel:
         assert "runsManager.continueRun('abc123')" in html
         assert "runsManager.restart('abc123')" in html
 
+    def test_a_detail_row_lands_in_the_table_the_user_is_looking_at(self, runsmgr):
+        """The row captured before the fetch is an orphan once the panel has redrawn.
+
+        `detail()` used to take `btn.closest('tr')` before `await fetch(...)` and insert
+        under it afterwards. The console keeps the run list current while a run lives —
+        which is exactly when a person opens a detail — so the clicked row was regularly
+        replaced mid-flight: the expansion went into a detached subtree (nothing appeared),
+        and `_detail` was set anyway, which is the flag that stops auto-refresh. So the
+        panel went quiet *and* blank: the worst of both, and only a restart of the page or
+        a manual refresh repaired it.
+        """
+        race = runsmgr['race']
+        assert race['landed'] == 1, f'the expansion did not land in the live table: {race}'
+        assert race['flagMatchesWhatIsShown'] is True, race
+        assert race['rowsShown'] >= 3, f'the redraw was not a real replacement: {race}'
+        assert race['collapses'] is True, 'the same button no longer closes its own row'
+        # A record that left the list mid-flight has nowhere to go — and must not claim
+        # the reading flag that would freeze the panel for a detail nobody can see.
+        assert race['vanishedDrawsNothing'] is True, race
+
     def test_a_finished_run_offers_neither(self, runsmgr):
         # Split rows so the assertions can't borrow each other's buttons.
-        rows = runsmgr['html'].split('<tr>')
+        rows = _rows(runsmgr['html'])
         finished = next(r for r in rows if 'def456' in r)
         assert 'continueRun' not in finished
         assert 'restart' not in finished
 
     def test_progress_and_row_counts_read_honestly(self, runsmgr):
-        rows = runsmgr['html'].split('<tr>')
+        rows = _rows(runsmgr['html'])
         interrupted = next(r for r in rows if 'abc123' in r)
         assert '2/3' in interrupted, 'node progress must be done/total'
         assert '>17<' in interrupted, 'kept rows must show'
@@ -770,7 +802,7 @@ class TestRunRecordsPanel:
     def test_a_parallel_record_shows_every_workflow_it_ran(self, runsmgr):
         """One record for several workflows is correct; showing one name out of
         two is what made the user look for the 'missing' second record."""
-        rows = runsmgr['html'].split('<tr>')
+        rows = _rows(runsmgr['html'])
         parallel = next(r for r in rows if 'par789' in r)
         assert '热门榜 + 周排行榜' in parallel
         assert 'PARALLEL(2)' in parallel, 'the chips are the only place ×N can be read'
@@ -797,7 +829,7 @@ class TestRunRecordsPanel:
         assert cases['windowIgnoringFlag'] == ['WINDOW'], 'the flag only matters under a headless request'
 
     def test_a_serial_record_with_two_workflows_says_serial(self, runsmgr):
-        rows = runsmgr['html'].split('<tr>')
+        rows = _rows(runsmgr['html'])
         parallel = next(r for r in rows if 'par789' in r)
         serial = next(r for r in rows if 'ser790' in r)
         assert '热门榜 + 周排行榜' in parallel and 'PARALLEL(2)' in parallel

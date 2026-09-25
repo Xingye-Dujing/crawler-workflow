@@ -9,6 +9,7 @@ real renderer rather than argued about in a comment.
 """
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -18,6 +19,21 @@ from node_runner import run_node
 import crawl_capabilities
 
 pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')]
+
+
+def _checked_boxes(html):
+    """How many checkboxes the panel drew TICKED.
+
+    Matched on the attribute's adjacency (`type="checkbox" checked`), not on the word
+    'checked' anywhere inside the tag: every box also carries
+    ``onchange="…this.checked…"``, so a looser pattern counts the handlers and reports
+    every box as ticked. The count is used instead of per-field matching because the
+    renderer emits bare inputs in one string, and which box is which is decided by the
+    matrix's field order — an assertion that keyed on order would pass when the order
+    changed and the reading stayed wrong.
+    """
+    return html.count('type="checkbox" checked')
+
 
 REPO = Path(__file__).resolve().parents[2]
 JS_DIR = REPO / 'backend' / 'static' / 'js'
@@ -57,6 +73,25 @@ def panel(tmp_path_factory):
         tmp,
         [
             {'id': 'loaded', 'payload': zhihu, 'params': {'platform': 'zhihu', 'keyword': 'ai'}},
+            # A board the matrix does not offer, and switches in the TEXT grammar the
+            # panel used to write: the panel must show what the node holds, because the
+            # run refuses these values by name rather than guessing another choice.
+            {
+                'id': 'offered',
+                'payload': _matrix(),
+                'params': {'platform': 'bilibili', 'collect': 'hot', 'board': 'Popular', 'format': 'xlsx'},
+            },
+            {
+                'id': 'textswitches',
+                'payload': zhihu,
+                'params': {
+                    'platform': 'zhihu',
+                    'keyword': 'ai',
+                    'full_body': 'false',
+                    'recrawl': 'true',
+                    'keep_parts': '',
+                },
+            },
             {'id': 'unanswered', 'payload': None, 'params': {'platform': 'zhihu'}},
             {'id': 'malformed', 'payload': 'malformed', 'params': {'platform': 'zhihu'}},
             {'id': 'undeclared', 'payload': zhihu, 'params': {'platform': 'kuaishou'}},
@@ -64,6 +99,163 @@ def panel(tmp_path_factory):
             {'id': 'wechat', 'payload': zhihu, 'params': {'platform': 'wechat'}},
         ],
     )
+
+
+class TestPanelReadsWhatTheNodeHolds:
+    """A panel that paints a choice the node does not hold is a second opinion — and the
+    run refuses by name now, so the mismatch used to look like the panel agreeing with a
+    refusal it could not explain.
+
+    Two shapes are pinned here: a `select` whose stored value is not one of the options
+    (only a hand-edited or externally generated workflow gets this far, because the panel
+    writes the option values), and a switch stored as the TEXT 'true'/'false' — which the
+    panel itself wrote until it started writing `this.checked`, and which `p.x ? 'checked'`
+    reads as ON: the box showed the opposite of what the backend then did.
+    """
+
+    def test_an_unoffered_board_is_shown_as_stored_rather_than_painted_as_the_first_choice(self, panel):
+        html = panel['offered']['html']
+        assert 'value="Popular"' in html, html
+        assert re.search(r'<option value="Popular"[^>]*selected', html), 'the stored value is not the visible one'
+        # 热门榜 is what option #0 means; it is not what this node says.
+        assert not re.search(r'<option value="popular"[^>]*selected', html), html
+
+    def test_an_unoffered_format_is_shown_the_same_way(self, panel):
+        html = panel['offered']['html']
+        assert re.search(r'<option value="xlsx"[^>]*selected', html), html
+        assert not re.search(r'<option value="csv"[^>]*selected', html), html
+
+    @pytest.mark.parametrize(
+        ('params', 'expected'),
+        [
+            # zhihu 帖子模式 draws 正文展开 (declared default ON), 重新采集 and 保留分片 (both OFF).
+            ({'platform': 'zhihu', 'keyword': 'ai'}, 1),
+            # The text grammar the panel used to write: 'false' is OFF, not ON.
+            ({'platform': 'zhihu', 'keyword': 'ai', 'full_body': 'false'}, 0),
+            ({'platform': 'zhihu', 'keyword': 'ai', 'full_body': 'true'}, 1),
+            # A blank box follows its own declared default, in both directions.
+            ({'platform': 'zhihu', 'keyword': 'ai', 'full_body': ''}, 1),
+            ({'platform': 'zhihu', 'keyword': 'ai', 'recrawl': 'true'}, 2),
+            ({'platform': 'zhihu', 'keyword': 'ai', 'keep_parts': 'true'}, 2),
+            # The boolean grammar an exported file carries must read the same way.
+            ({'platform': 'zhihu', 'keyword': 'ai', 'full_body': False}, 0),
+        ],
+    )
+    def test_the_drawn_boxes_are_the_backend_s_answer(self, tmp_path, params, expected):
+        """One row of the grid per grammar, asserted as a count of ticked boxes.
+
+        `bool(raw)` was the old reading, and `bool('false')` is True — so a workflow file
+        that stored the panel's historical text drew every box ticked and the run then did
+        what the user had just refused. The count is compared against the *same* fixture
+        the backend's `Field.value_from` is pinned on, so the screen and the run cannot
+        drift apart again.
+        """
+        run = _run(tmp_path, [{'id': 'x', 'payload': _matrix(), 'params': params}])
+        assert _checked_boxes(run['x']['html']) == expected, (params, run['x']['html'][:400])
+
+    def test_the_switch_reading_does_not_depend_on_which_grammar_wrote_it(self, tmp_path):
+        """Same panel, one field, both spellings: a file this app wrote must read back
+        the same way after one save cycle, and `'false'` is a spelling this app wrote.
+        """
+        run = _run(
+            tmp_path,
+            [
+                {
+                    'id': 'as_text',
+                    'payload': _matrix(),
+                    'params': {'platform': 'zhihu', 'keyword': 'ai', 'full_body': 'false'},
+                },
+                {
+                    'id': 'as_bool',
+                    'payload': _matrix(),
+                    'params': {'platform': 'zhihu', 'keyword': 'ai', 'full_body': False},
+                },
+            ],
+        )
+        assert _checked_boxes(run['as_text']['html']) == _checked_boxes(run['as_bool']['html']), (
+            'the two grammars drew different forms'
+        )
+
+    @pytest.mark.parametrize(
+        ('node_type', 'params', 'field'),
+        [
+            # Both switches that used to be stored as the words 'true'/'false'.
+            ('analysis', {'operation': 'sort_rows', 'column': '城市'}, 'ascending'),
+            ('process', {'operation': 'keyword', 'text_column': '正文'}, 'merge'),
+        ],
+    )
+    def test_the_panel_writes_a_switch_as_a_boolean_not_as_two_words(self, tmp_path, node_type, params, field):
+        """`this.checked ? 'true' : 'false'` was how the text grammar got written at all.
+
+        Every other checkbox in this app stored the boolean, so one helper writing strings
+        gave one field on every canvas two spellings and left the backend to read both —
+        which it did not. Read from the rendered markup rather than the source, because the
+        writer builds the handler name from its argument.
+        """
+        run = _run(tmp_path, [{'id': 'x', 'payload': _matrix(), 'params': params, 'type': node_type}])
+        html = run['x']['html']
+        assert f"'{field}',this.checked" in html, f'{field} is not writing this.checked: {html[:400]}'
+        assert "this.checked ? 'true' : 'false'" not in html, html[:400]
+
+    def test_no_checkbox_writes_the_text_grammar_anymore(self):
+        """The door that let the strings in is shut at the source.
+
+        Scoped to what a checkbox WRITES: `aria-pressed` legitimately spells its boolean
+        as text, and a boolean inside an inline handler is source text rather than a
+        stored value — both of those stay, and are not this rule.
+        """
+        source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        assert "this.checked ? 'true' : 'false'" not in source, 'a checkbox is writing the text grammar again'
+
+    def test_an_unticked_box_stays_unticked_in_the_file_it_writes(self, tmp_path):
+        """The two writers agree: a cleared box stores off, whichever way it is spelled."""
+        run = _run(
+            tmp_path,
+            [
+                {
+                    'id': 'text',
+                    'payload': _matrix(),
+                    'params': {'platform': 'zhihu', 'keyword': 'ai', 'full_body': 'false'},
+                },
+                {
+                    'id': 'bool',
+                    'payload': _matrix(),
+                    'params': {'platform': 'zhihu', 'keyword': 'ai', 'full_body': False},
+                },
+            ],
+        )
+        assert _checked_boxes(run['text']['html']) == _checked_boxes(run['bool']['html']) == 0, run
+
+    @pytest.mark.parametrize(
+        ('node_type', 'params', 'value'),
+        [
+            # A mode the analyzer refuses by name must not be painted as 「大模型」.
+            ('process', {'operation': 'emotion', 'mode': 'ML'}, 'ML'),
+            # A chart type the renderer has no case for must not be painted as 柱状图.
+            ('visualize', {'chart_type': 'violin', 'x_field': '城市'}, 'violin'),
+        ],
+    )
+    def test_a_stored_choice_off_the_list_is_the_choice_on_screen(self, tmp_path, node_type, params, value):
+        """The panel builds its options from a fixed list, and the old code selected one
+        by comparing the stored value against each — so a value off the list selected
+        NOTHING, and the browser then displayed option #0. The run refuses that value by
+        name, so the form was showing a choice the user never made about to be rejected.
+        """
+        run = _run(tmp_path, [{'id': 'x', 'payload': _matrix(), 'params': params, 'type': node_type}])
+        html = run['x']['html']
+        assert f'value="{value}" selected' in html, f'{value} is hidden behind option #0: {html[:500]}'
+
+    def test_an_option_that_is_still_on_the_list_is_not_marked(self, tmp_path):
+        """The marker must not become the default answer, or every honest canvas reads
+        as broken.
+        """
+        run = _run(
+            tmp_path,
+            [{'id': 'x', 'payload': _matrix(), 'params': {'operation': 'emotion', 'mode': 'ml'}, 'type': 'process'}],
+        )
+        html = run['x']['html']
+        assert 'settings.unknownOption' not in html, html[:500]
+        assert 'value="ml" selected' in html, html[:500]
 
 
 class TestLoadedPanel:

@@ -46,11 +46,18 @@ function _camelize(name) {
 
 /* Attach `child` under `parent`, carrying the document's element index with it.
  * The index is what makes page-wide `querySelectorAll` work, and a node built by
- * `innerHTML` is as findable as one built by `createElement`. */
+ * `innerHTML` is as findable as one built by `createElement`.
+ *
+ * Ids come along too: markup the product wrote must be what `getElementById` answers with,
+ * otherwise the placeholder this stub hands out for an unknown id — empty, detached, with
+ * no dataset — is what the product re-reads, and a "is my holder still the one on the
+ * page?" check could never be answered here. It can be answered in a browser, which is
+ * the asymmetry that let a panel write into a holder nobody displays. */
 function _adopt(child, parent) {
     child.parentElement = parent;
     child.parentNode = parent;
     const world = parent && parent._world;
+    if (parent) child.__registry = parent.__registry;
     if (!world) return child;
     child._world = world;
     child.__unregister = parent.__unregister;
@@ -58,6 +65,8 @@ function _adopt(child, parent) {
         if (!world.includes(node)) world.push(node);
         node._world = world;
         node.__unregister = parent.__unregister;
+        node.__registry = parent.__registry;
+        if (node.id && node.__registry) node.__registry.set(node.id, node);
     }
     return child;
 }
@@ -181,10 +190,18 @@ export function makeEl(tag = 'div', id = '') {
        selectors the product uses afterwards resolve against what it just wrote.
        Attributes become plain fields — an `onclick="…"` in a template is stored as
        a string and never wrapped in a function, which is what lets a test assert
-       that no inline handler exists without the harness running one. */
+       that no inline handler exists without the harness running one.
+       The children it replaces are DETACHED first: a browser stops answering
+       `element.parentElement` (and the id lookup) for markup it dropped, and the
+       run panel's detail toggle asks exactly that question after a refresh. */
     Object.defineProperty(el, 'innerHTML', {
         get: () => el._html,
         set: (v) => {
+            el.children.forEach((child) => {
+                child.parentElement = null;
+                child.parentNode = null;
+                if (child.__unregister) child.__unregister(child);
+            });
             el._html = v === null || v === undefined ? '' : String(v);
             el.children = [];
             el._text = '';
@@ -281,7 +298,20 @@ export function makeEl(tag = 'div', id = '') {
         if (el.__unregister) el.__unregister(el);
         if (el.parentElement) el.parentElement.removeChild(el);
     };
-    el.after = () => {};
+    /* A real sibling insert, into the parent the element is actually under. A no-op here
+       made "did the row land in the live table?" unanswerable — which is precisely the
+       bug it has to be able to show: a panel that captured a row before an await and
+       inserted under it afterwards put the detail into a detached subtree, and the page
+       showed nothing. */
+    el.after = (child) => {
+        const parent = el.parentElement;
+        if (!parent || !child) return child;
+        const i = parent.children.indexOf(el);
+        if (i < 0) return child;
+        parent.children.splice(i + 1, 0, child);
+        _adopt(child, parent);
+        return child;
+    };
     /* A real parent chain, so delegated handlers — "find the `.node` this click
        landed inside" — are the shipped code path rather than an unenterable one. */
     el.matches = (sel) => matches(el, sel);
@@ -312,12 +342,20 @@ export function makeDocument() {
         if (!world.includes(el)) world.push(el);
         el._world = world;
         el.__unregister = unregisterTree;
+        el.__registry = registry;
         return el;
     };
     const unregisterTree = (el) => {
         const doomed = new Set([el, ..._descendants(el, [])]);
         for (let i = world.length - 1; i >= 0; i -= 1) {
             if (doomed.has(world[i])) world.splice(i, 1);
+        }
+        /* Out of the id table too: a browser does not answer getElementById for markup it
+           no longer holds. Without this, a row the panel removed still resolved by id, and
+           "is this detail already open?" — which is exactly how the run-detail toggle
+           decides what to do — read a gone row as an open one. */
+        for (const node of doomed) {
+            if (node.id && registry.get(node.id) === node) registry.delete(node.id);
         }
     };
     /* Ids a scenario has decided do NOT exist. Auto-creation is what lets a

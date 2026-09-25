@@ -1373,6 +1373,63 @@ function sourcePanelHtml(nodeId, p) {
     return html;
 }
 
+/* A stored switch, read in whichever grammar wrote it.
+
+   Two spellings are on disk and always have been: `renderParamCheckbox` stored the TEXTS
+   'true'/'false' until it started storing `this.checked`, every other checkbox stored the
+   boolean, and a hand-written or exported workflow file holds either. `p.x ? 'checked' : ''`
+   reads the text 'false' as ON — the box then shows the opposite of what the run does, which
+   is the one thing a settings panel may not do. Same rule as the backend's
+   `utils.helpers.as_bool`: a value that states nothing (absent, blank, a word neither list
+   knows) answers the default the panel shows. */
+function boolParam(value, defVal) {
+    if (value === undefined || value === null) return !!defVal;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value === value && value !== 0;
+    var text = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on', '是'].indexOf(text) >= 0) return true;
+    if (['false', '0', 'no', 'n', 'off', 'none', 'null', 'nan', '否', '不', '假'].indexOf(text) >= 0) return false;
+    return !!defVal;
+}
+
+/* One select's options, with the node's own stored value kept on screen when it is not one
+   of the choices. Painting the first option instead would show a choice the run then
+   refuses BY NAME (the backend refuses an unoffered `select` rather than guessing), so the
+   user would re-pick exactly what was already written and still be refused. The extra
+   option carries the raw text through escapeHtml: it is the user's own data, most often
+   from a file they edited by hand. */
+function selectOptionTags(items, stored, defVal) {
+    var value =
+        stored === undefined || stored === null || String(stored).trim() === ''
+            ? String(defVal === undefined ? '' : defVal)
+            : String(stored);
+    var known = items.some(function (item) {
+        return String(item.value) === value;
+    });
+    var html = items
+        .map(function (item) {
+            return (
+                '<option value="' +
+                escapeHtml(String(item.value)) +
+                '"' +
+                (known && String(item.value) === value ? ' selected' : '') +
+                '>' +
+                item.label +
+                '</option>'
+            );
+        })
+        .join('');
+    if (known || value === '') return html;
+    return (
+        html +
+        '<option value="' +
+        escapeHtml(value) +
+        '" selected>' +
+        escapeHtml(I18n.t('settings.unknownOption').replace('{value}', value)) +
+        '</option>'
+    );
+}
+
 function sourceSelectHtml(nodeId, labelKey, options, value, onChange) {
     if (!onChange) return '';
     var html =
@@ -1381,16 +1438,13 @@ function sourceSelectHtml(nodeId, labelKey, options, value, onChange) {
         '</label><select class="settings-select" onchange="' +
         onChange +
         '">';
-    for (var i = 0; i < options.length; i++) {
-        html +=
-            '<option value="' +
-            escapeHtml(options[i].value) +
-            '"' +
-            (options[i].value === value ? ' selected' : '') +
-            '>' +
-            I18n.t(options[i].labelKey) +
-            '</option>';
-    }
+    html += selectOptionTags(
+        options.map(function (o) {
+            return { value: o.value, label: I18n.t(o.labelKey) };
+        }),
+        value,
+        ''
+    );
     return html + '</select></div>';
 }
 
@@ -1405,7 +1459,7 @@ function sourceFieldHtml(nodeId, f, value) {
         return (
             '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
             '<input type="checkbox" ' +
-            (v ? 'checked' : '') +
+            (boolParam(v, f.default) ? 'checked' : '') +
             ' onchange="' +
             paramCall(nodeId, f.key, 'this.checked') +
             '">' +
@@ -1516,15 +1570,19 @@ function openSettings(nodeId) {
             '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.partSizeHint') + '</div></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.format') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'format\',this.value)">' +
-            ['csv', 'json'].map(function (f) {
-                return '<option value="' + f + '"' + ((p.format || 'csv') === f ? ' selected' : '') + '>' + I18n.t('format.' + f) + '</option>';
-            }).join('') +
+            selectOptionTags(
+                ['csv', 'json'].map(function (f) {
+                    return { value: f, label: I18n.t('format.' + f) };
+                }),
+                p.format,
+                'csv'
+            ) +
             '</select></div>' +
             '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
-            '<input type="checkbox" ' + (p.per_article_file ? 'checked' : '') + ' ' +
+            '<input type="checkbox" ' + (boolParam(p.per_article_file, false) ? 'checked' : '') + ' ' +
             'onchange="updateParam(\'' + nodeId + '\',\'per_article_file\',this.checked)">' + I18n.t('settings.perArticleFile') + '</label></div>' +
             '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
-            '<input type="checkbox" ' + (p.keep_parts ? 'checked' : '') + ' ' +
+            '<input type="checkbox" ' + (boolParam(p.keep_parts, true) ? 'checked' : '') + ' ' +
             'onchange="updateParam(\'' + nodeId + '\',\'keep_parts\',this.checked)">' + I18n.t('settings.keepParts') + '</label></div>' +
             '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentHint') + '</div>';
     } else if (node.type === 'upload') {
@@ -1553,9 +1611,13 @@ function openSettings(nodeId) {
         var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'keyword', 'cluster', 'ner', 'anomaly', 'correlation'];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
-            PROCESS_OPS.map(function (op) {
-                return '<option value="' + op + '"' + (p.operation === op ? ' selected' : '') + '>' + I18n.t('op.' + op) + '</option>';
-            }).join('') +
+            selectOptionTags(
+                PROCESS_OPS.map(function (op) {
+                    return { value: op, label: I18n.t('op.' + op) };
+                }),
+                p.operation,
+                'clean'
+            ) +
             '</select></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.text_column || '正文') + '" ' +
@@ -1572,8 +1634,14 @@ function openSettings(nodeId) {
         if (p.operation === 'emotion' || p.operation === 'tendency') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.mode') + '</label>' +
                 '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'mode\',this.value)">' +
-                '<option value="llm"' + (p.mode !== 'ml' ? ' selected' : '') + '>' + I18n.t('mode.llm') + '</option>' +
-                '<option value="ml"' + (p.mode === 'ml' ? ' selected' : '') + '>' + I18n.t('mode.ml') + '</option>' +
+                selectOptionTags(
+                    [
+                        { value: 'llm', label: I18n.t('mode.llm') },
+                        { value: 'ml', label: I18n.t('mode.ml') },
+                    ],
+                    p.mode,
+                    'llm'
+                ) +
                 '</select></div>';
             if (p.mode === 'ml') {
                 html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
@@ -1631,7 +1699,7 @@ function openSettings(nodeId) {
         var isLlmOp = nodeNeedsLlm(p, node.operation);
         if (isLlmOp) {
             html += '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
-                '<input type="checkbox" ' + (p.live_export ? 'checked' : '') + ' ' +
+                '<input type="checkbox" ' + (boolParam(p.live_export, false) ? 'checked' : '') + ' ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'live_export\',this.checked)">' + I18n.t('settings.liveExport') + '</label>' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.liveExportHint') + '</div></div>';
         }
@@ -1656,9 +1724,13 @@ function openSettings(nodeId) {
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.outputMode') + '</label>' +
             (hasDownstreamVisualize ? '<div style="font-size:12px;color:var(--accent);padding:4px 0;">' + I18n.t('settings.tokenizeOutputLocked') + '</div>' :
                 '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'output_mode\',this.value)">' +
-                ['word_freq', 'words_only', 'csv_line'].map(function (m) {
-                    return '<option value="' + m + '"' + ((p.output_mode || 'word_freq') === m ? ' selected' : '') + '>' + I18n.t('outputMode.' + m) + '</option>';
-                }).join('') +
+                selectOptionTags(
+                    ['word_freq', 'words_only', 'csv_line'].map(function (m) {
+                        return { value: m, label: I18n.t('outputMode.' + m) };
+                    }),
+                    p.output_mode,
+                    'word_freq'
+                ) +
                 '</select>') + '</div>' +
             ((p.output_mode || 'word_freq') === 'word_freq' ?
                 '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.topN') + '</label>' +
@@ -1687,15 +1759,19 @@ function openSettings(nodeId) {
         var fmt = p.format || (p.operation === 'save_csv' ? 'csv' : 'csv');
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.format') + '</label>' +
             '<select class="settings-select" onchange="onOutputFormatChange(\'' + nodeId + '\',this.value)">' +
-            ['csv', 'json', 'excel', 'txt', 'html', 'markdown'].map(function (f) {
-                return '<option value="' + f + '"' + (fmt === f ? ' selected' : '') + '>' + I18n.t('format.' + f) + '</option>';
-            }).join('') +
+            selectOptionTags(
+                ['csv', 'json', 'excel', 'txt', 'html', 'markdown'].map(function (f) {
+                    return { value: f, label: I18n.t('format.' + f) };
+                }),
+                p.format,
+                'csv'
+            ) +
             '</select></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.filename') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.filename || 'export.csv') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'filename\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-checkbox-label">' +
-            '<input type="checkbox" ' + (p.filename_timestamp ? 'checked' : '') + ' ' +
+            '<input type="checkbox" ' + (boolParam(p.filename_timestamp, false) ? 'checked' : '') + ' ' +
             'onchange="updateParam(\'' + nodeId + '\',\'filename_timestamp\',this.checked)"> ' +
             I18n.t('settings.filenameTimestamp') + '</label></div>';
         if (fmt === 'txt') {
@@ -1713,10 +1789,7 @@ function openSettings(nodeId) {
 /* ── Resume node: pick a stored run and one of its node outputs ── */
 async function renderResumeSettings(nodeId) {
     var node = canvas.nodes[nodeId];
-    var holder = document.getElementById('resume-pick');
-    /* The panel may have moved on to another node while this request was in
-       flight; writing then would overwrite that node's settings. */
-    if (!node || !holder || holder.dataset.node !== nodeId) return;
+    if (!node) return;
     var p = node.params;
     var runs = [];
     try {
@@ -1730,6 +1803,18 @@ async function renderResumeSettings(nodeId) {
     } catch (e) {
         runs = [];
     }
+    /* Looked up AFTER the await, and attributed to the node it belongs to.
+       `openSettings` rewrites the whole form — which any parameter edit does — so the
+       holder this call started with can be off the page when the answer lands, and the
+       dropdown then never appears while everything looks idle. The guard used to run
+       before the await, which is the one moment it could not be wrong. */
+    /* Looked up AFTER the await, and attributed to the node it belongs to.
+       `openSettings` rewrites the whole form — which any parameter edit does — so the
+       holder this call started with can be off the page when the answer lands, and the
+       dropdown then never appears while everything looks idle. The guard used to run
+       before the await, which is the one moment it could not be wrong. */
+    var holder = document.getElementById('resume-pick');
+    if (!holder || holder.dataset.node !== nodeId) return;
     if (!runs.length) {
         holder.innerHTML = '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('resume.none') + '</div>';
         return;
@@ -1813,18 +1898,21 @@ function renderParamInput(nodeId, p, key, labelKey, type, defVal) {
 function renderParamSelect(nodeId, p, key, labelKey, defVal, options) {
     var html = '<div class="settings-group"><label class="settings-label">' + I18n.t(labelKey) + '</label>' +
         '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'' + key + '\',this.value)">';
-    options.forEach(function (o) {
-        var sel = (p[key] || defVal) === o.v ? ' selected' : '';
-        html += '<option value="' + o.v + '"' + sel + '>' + (o.l || o.v) + '</option>';
-    });
+    html += selectOptionTags(
+        options.map(function (o) {
+            return { value: o.v, label: o.l || o.v };
+        }),
+        p[key],
+        defVal
+    );
     html += '</select></div>';
     return html;
 }
 function renderParamCheckbox(nodeId, p, key, labelKey, defVal) {
-    var checked = p[key] !== undefined ? (p[key] === true || p[key] === 'true') : !!defVal;
+    var checked = boolParam(p[key], defVal);
     return '<div class="settings-group"><label class="settings-label">' +
         '<input type="checkbox" ' + (checked ? 'checked' : '') + ' ' +
-        'onchange="updateParam(\'' + nodeId + '\',\'' + key + '\',this.checked ? \'true\' : \'false\')"> ' +
+        'onchange="updateParam(\'' + nodeId + '\',\'' + key + '\',this.checked)"> ' +
         I18n.t(labelKey) + '</label></div>';
 }
 
@@ -1836,9 +1924,13 @@ var CONVERT_TYPES = ['str', 'int', 'float', 'bool', 'datetime'];
 function renderAnalysisSettings(nodeId, p) {
     var html = '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
         '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value)">' +
-        ANALYSIS_OPS.map(function (op) {
-            return '<option value="' + op + '"' + (p.operation === op ? ' selected' : '') + '>' + I18n.t('op.' + op) + '</option>';
-        }).join('') +
+        selectOptionTags(
+            ANALYSIS_OPS.map(function (op) {
+                return { value: op, label: I18n.t('op.' + op) };
+            }),
+            p.operation,
+            'drop_null'
+        ) +
         '</select></div>';
 
     var op = p.operation || 'drop_null';
@@ -1869,7 +1961,13 @@ function renderAnalysisSettings(nodeId, p) {
             'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.filterOp') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'op\',this.value)">' +
-            FILTER_OPS.map(function (o) { return '<option value="' + o + '"' + (p.op === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') +
+            selectOptionTags(
+                FILTER_OPS.map(function (o) {
+                    return { value: o, label: o };
+                }),
+                p.op,
+                'eq'
+            ) +
             '</select></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.value') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.value || '') + '" ' +
@@ -1889,7 +1987,13 @@ function renderAnalysisSettings(nodeId, p) {
             'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.dtype') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'dtype\',this.value)">' +
-            CONVERT_TYPES.map(function (t) { return '<option value="' + t + '"' + (p.dtype === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') +
+            selectOptionTags(
+                CONVERT_TYPES.map(function (t) {
+                    return { value: t, label: t };
+                }),
+                p.dtype,
+                'str'
+            ) +
             '</select></div>';
     }
     if (op === 'sort_rows') {
@@ -1936,6 +2040,12 @@ function renderAnalysisSettings(nodeId, p) {
 /* ── Visualize node settings ── */
 var CHART_TYPES = ['bar', 'line', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'wordcloud', 'map'];
 
+// The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
+var ENGINES = [
+    { value: 'echarts', label: 'ECharts' },
+    { value: 'matplotlib', label: 'Matplotlib' },
+];
+
 /* Field labels change meaning per chart type (e.g. x/y are two category
    dimensions for heatmap/sankey, not "category + value" like bar/line). */
 var CHART_X_LABEL_KEY = {
@@ -1976,12 +2086,17 @@ function renderVisualizeSettings(nodeId, p) {
             (isWordcloud ? '' :
                 '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.engine') + '</label>' +
                 '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'engine\',this.value)">' +
-                '<option value="echarts"' + (p.engine !== 'matplotlib' ? ' selected' : '') + '>ECharts</option>' +
-                '<option value="matplotlib"' + (p.engine === 'matplotlib' ? ' selected' : '') + '>Matplotlib</option>' +
+                selectOptionTags(ENGINES, p.engine, 'echarts') +
                 '</select></div>') +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chartType') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'chart_type\',this.value)">' +
-            TOKENIZE_CHART_TYPES.map(function (c) { return '<option value="' + c + '"' + (ct === c ? ' selected' : '') + '>' + I18n.t('chart.' + c) + '</option>'; }).join('') +
+            selectOptionTags(
+                TOKENIZE_CHART_TYPES.map(function (c) {
+                    return { value: c, label: I18n.t('chart.' + c) };
+                }),
+                ct,
+                'bar'
+            ) +
             '</select></div>';
         if (isWordcloud) {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.wordcloudStyle') + '</label>' +
@@ -2000,12 +2115,17 @@ function renderVisualizeSettings(nodeId, p) {
     var ct = p.chart_type || 'bar';
     var html = '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chartType') + '</label>' +
         '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'chart_type\',this.value)">' +
-        CHART_TYPES.map(function (c) { return '<option value="' + c + '"' + (ct === c ? ' selected' : '') + '>' + I18n.t('chart.' + c) + '</option>'; }).join('') +
+        selectOptionTags(
+            CHART_TYPES.map(function (c) {
+                return { value: c, label: I18n.t('chart.' + c) };
+            }),
+            ct,
+            'bar'
+        ) +
         '</select></div>' +
         '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.engine') + '</label>' +
         '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'engine\',this.value)">' +
-        '<option value="echarts"' + (p.engine !== 'matplotlib' ? ' selected' : '') + '>ECharts</option>' +
-        '<option value="matplotlib"' + (p.engine === 'matplotlib' ? ' selected' : '') + '>Matplotlib</option>' +
+        selectOptionTags(ENGINES, p.engine, 'echarts') +
         '</select></div>';
     if (p.engine === 'matplotlib' && ['heatmap'].indexOf(ct) < 0 && ['wordcloud', 'sankey', 'map'].indexOf(ct) >= 0) {
         html += '<div class="settings-group" style="color:#e67e22;font-size:11px;">' + I18n.t('warn.echartsOnly') + '</div>';
@@ -2037,7 +2157,7 @@ function renderVisualizeSettings(nodeId, p) {
     }
     if (ct === 'wordcloud') {
         html += '<div class="settings-group"><label class="settings-checkbox-label">' +
-            '<input type="checkbox" ' + (p.tokenize ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'tokenize\',this.checked)"> ' +
+            '<input type="checkbox" ' + (boolParam(p.tokenize, false) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'tokenize\',this.checked)"> ' +
             I18n.t('settings.tokenize') + '</label></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.wordcloudStyle') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'wordcloud_style\',this.value)">' +
@@ -2156,7 +2276,7 @@ var dataNodes = {
         var payload = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
             y_field: p.y_field, value_field: p.value_field, agg: p.agg, title: p.title,
-            tokenize: !!p.tokenize,
+            tokenize: boolParam(p.tokenize, false),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
         /* A chart always renders whatever its upstream produced — a crawl or
@@ -2584,20 +2704,33 @@ var dashboard = {
             cell.className = 'dashboard-cell';
             cell.innerHTML =
                 '<div class="dashboard-cell-title">' + escapeHtml(node.title || id) + '</div>' +
-                '<div class="dashboard-cell-body" id="dash-cell-' + id + '"></div>';
+                '<div class="dashboard-cell-body"></div>';
             grid.appendChild(cell);
-            self._renderCell(id, node);
+            self._renderCell(id, node, cell, grid);
         });
     },
 
-    async _renderCell(nodeId, node) {
-        var body = document.getElementById('dash-cell-' + nodeId);
+    /* Is this cell still one of the board's cells?
+
+       `open()` clears the grid and rebuilds it — on a refresh, a language switch or
+       reopening the panel — so a cell from the previous board is an object with no place on
+       the page. Tested by position rather than by selector because a node id is not a
+       selector: a restored workflow may carry any id, and building a CSS string out of one
+       asks the page to parse user data. */
+    _isLiveCell(grid, cell) {
+        if (!grid || !cell) return false;
+        var cells = grid.querySelectorAll('.dashboard-cell');
+        return Array.prototype.indexOf.call(cells, cell) >= 0;
+    },
+
+    async _renderCell(nodeId, node, cell, grid) {
+        var body = cell ? cell.querySelector('.dashboard-cell-body') : null;
         if (!body) return;
         var p = node.params;
         var payload = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
             y_field: p.y_field, value_field: p.value_field, agg: p.agg,
-            title: p.title, tokenize: !!p.tokenize,
+            title: p.title, tokenize: boolParam(p.tokenize, false),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
         var upstream = canvas.getUpstreamNodeId(nodeId);
@@ -2614,6 +2747,11 @@ var dashboard = {
                 body: JSON.stringify(payload),
             });
             var result = await resp.json();
+            /* Re-checked after the await: `echarts.init` on a cell the board has since
+               replaced paints nothing and still registers the instance, which is then
+               resized on every window resize for the life of the page and never disposed.
+               No chart, no instance and no error text is the honest outcome. */
+            if (!this._isLiveCell(grid, cell)) return;
             if (!result.ok) {
                 body.innerHTML = '<div class="dashboard-cell-error">' + escapeHtml(result.error) + '</div>';
                 return;
@@ -2626,6 +2764,7 @@ var dashboard = {
                 applyEchartsOption(inst, result.option);
             }
         } catch (e) {
+            if (!this._isLiveCell(grid, cell)) return;
             body.innerHTML = '<div class="dashboard-cell-error">' + escapeHtml(e.message) + '</div>';
         }
     },
@@ -4062,7 +4201,7 @@ var runsManager = {
                 ops += '<button class="runs-mgr-btn" onclick="runsManager.restart(\'' + r.run_id + '\')">' + I18n.t('runsMgr.restart') + '</button>';
             }
             ops += '<button class="runs-mgr-btn del" onclick="runsManager.remove(\'' + r.run_id + '\', ' + (resumable ? 'true' : 'false') + ')">' + I18n.t('runsMgr.remove') + '</button>';
-            ops += '<button class="runs-mgr-btn" onclick="runsManager.detail(\'' + r.run_id + '\', this)">' + I18n.t('runsMgr.detail') + '</button>';
+            ops += '<button class="runs-mgr-btn" onclick="runsManager.detail(\'' + r.run_id + '\')">' + I18n.t('runsMgr.detail') + '</button>';
             /* The stored tables are what a report needs, so a run from last week
                is reportable from here. Only the run id travels into the handler:
                a workflow name is user text, and a quote in it would close this
@@ -4071,7 +4210,7 @@ var runsManager = {
             var tags = runsManager.tags(r).map(function (text) {
                 return '<span class="runs-mgr-tag">' + escapeHtml(text) + '</span>';
             }).join('');
-            return '<tr>' +
+            return '<tr data-run-id="' + escapeHtml(r.run_id) + '">' +
                 '<td class="runs-mgr-wf">' + escapeHtml(r.workflow_name || I18n.t('name.unnamed')) + tags + '</td>' +
                 '<td class="runs-mgr-id">' + escapeHtml(r.run_id) + '</td>' +
                 '<td><span class="runs-mgr-status st-' + escapeHtml(r.status || '') + '">' + I18n.t(runsManager.statusKey(r.status)) + '</span></td>' +
@@ -4234,8 +4373,19 @@ var runsManager = {
         return groups;
     },
 
-    async detail(runId, btn) {
-        var row = btn && btn.closest ? btn.closest('tr') : null;
+    /* The live <tr> for one run, found by the attribute the table stamps it with — never
+       by a selector built from the id, which would ask the page to parse user data. */
+    _rowFor(runId) {
+        var body = document.getElementById('runs-mgr-body');
+        if (!body) return null;
+        var rows = body.querySelectorAll('tr');
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].dataset && String(rows[i].dataset.runId) === String(runId)) return rows[i];
+        }
+        return null;
+    },
+
+    async detail(runId) {
         var existing = document.getElementById('runs-mgr-detail-' + runId);
         if (existing) {
             existing.remove();
@@ -4306,10 +4456,19 @@ var runsManager = {
                         (body || '<div class="runs-mgr-empty">' + I18n.t('runsMgr.noNodes') + '</div>') +
                         '</div>') +
                 '</td>';
-            if (row) {
-                row.after(tr);
-                this._detail = runId;
-            }
+            /* Re-resolved AFTER the fetch, from the live table. `refresh()` replaces the
+               whole table while this request is in flight — the console keeps the run list
+               current for a live run, which is exactly when a person opens a detail — so the
+               row that was clicked can be an orphan by the time the answer lands. Inserting
+               under that orphan drew the detail into a detached subtree (nothing appeared on
+               screen) and then set `_detail`, which silences auto-refresh *for a detail
+               nobody can see*: the panel went quiet and blank at once, and only a page
+               reload or a manual refresh repaired it. A run no longer listed answers with
+               nothing at all. */
+            var row = this._rowFor(runId);
+            if (!row) return;
+            row.after(tr);
+            this._detail = runId;
         } catch (e) { /* leave the table as it was */ }
     },
 };

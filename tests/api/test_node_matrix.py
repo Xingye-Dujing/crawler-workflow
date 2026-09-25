@@ -633,6 +633,27 @@ class TestTokenizeNodeModes:
         assert status['status'] == 'done', status.get('error')
         assert rows, 'unparseable text is the panel default (120 words), not an error'
 
+    @pytest.mark.parametrize('wrong', ['wordfreq', 'WORDS_ONLY', 'tokens', 'True'])
+    def test_an_output_shape_the_tokenizer_does_not_have_is_refused_by_name(self, client, app_module, paste, wrong):
+        """The three shapes were chosen by two equality tests and a final ``return``, so
+        every other spelling — including a case slip of a real one — produced 词频+次数
+        while the console line announced the name that had not run. A tokenized file is
+        usually fed to a word cloud or a text miner, whose input shape is the whole point
+        of the choice.
+        """
+        _run, status, rows = self._run(client, app_module, paste, {'output_mode': wrong})
+        assert status['status'] == 'failed', status
+        assert wrong in (status.get('error') or ''), status.get('error')
+        assert rows == [], 'a node that never settled its shape must not publish a table'
+
+    def test_a_padded_shape_still_produces_that_shape(self, client, app_module, paste):
+        """Stripped before the check and before the branch, so what is judged is what
+        runs — and the 「已完成」 line names the mode that actually produced the file.
+        """
+        _run, status, rows = self._run(client, app_module, paste, {'output_mode': ' words_only '})
+        assert status['status'] == 'done', status.get('error')
+        assert rows and set(rows[0]) == {'word'}, rows[:1]
+
 
 RICH_RECORDS = [
     {'city': '三亚', 'district': '海棠区', 'likes': 10, 'text': '三亚的海滩很美'},

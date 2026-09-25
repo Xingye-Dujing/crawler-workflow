@@ -378,8 +378,22 @@ def _tokenize_dataframe(df: pd.DataFrame, params: dict) -> pd.DataFrame | None:
     column = params.get('text_column', '')
     if column not in df.columns:
         return None
-    output_mode = params.get('output_mode', 'word_freq')
+    output_mode = str(params.get('output_mode') or 'word_freq').strip()
     top_n = params.get('top_n', '')
+    # One of the three shapes, refused by name otherwise: the last branch of this
+    # function is 词频+次数, so an unrecognised mode used to produce that table and the
+    # console then announced the name the caller had written — a log line describing a
+    # shape the file does not have.
+    if output_mode not in ('word_freq', 'words_only', 'csv_line'):
+        raise ValueError(
+            t(
+                'analysis.bad_option',
+                op='tokenize',
+                param='output_mode',
+                value=output_mode,
+                allowed='word_freq, words_only, csv_line',
+            )
+        )
     kwargs = {}
     if output_mode == 'word_freq' and top_n:
         kwargs['top_n'] = _safe_int(top_n, 120, minimum=1)

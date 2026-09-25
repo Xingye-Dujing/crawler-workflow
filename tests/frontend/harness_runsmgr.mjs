@@ -176,8 +176,10 @@ const tagCases = {
    follows become markup. */
 /* One record holds every workflow of a serial run, so its expansion has to say which
    node ran in which workflow — and a record that holds ONE workflow must not grow a
-   heading over its own nodes. `detail()` fetches the run and inserts the row; the
-   stub's `after` is a recorder here so the generated markup can be read back. */
+   heading over its own nodes. `detail()` fetches the run and inserts a row under the
+   record's own <tr>, so the scenario renders the table first: the panel's code path is
+   "find the live row, insert after it", and a stub that faked the row would not be able
+   to see the case where a refresh replaced the table while the fetch was in flight. */
 const GROUPED = {
     ok: true,
     run: {
@@ -226,15 +228,36 @@ const LEGACY = {
 };
 
 async function renderDetail(payload) {
-    const inserted = [];
-    const id = 'runs-mgr-detail-' + payload.run.run_id;
+    const runId = payload.run.run_id;
+    const id = 'runs-mgr-detail-' + runId;
     /* The detail row is inserted by the code under test, so it must not exist yet:
        the stub hands out a fresh element for any id it was never told is absent,
        and detail() reads that as "already open" and returns without rendering. */
     sandbox.document.absent.add(id);
-    sandbox.__routes['/api/runs/' + payload.run.run_id] = payload;
-    await manager.detail(payload.run.run_id, { closest: () => ({ after: (el) => inserted.push(el) }) });
-    return inserted.length ? inserted[0].innerHTML : null;
+    sandbox.__routes['/api/runs/' + runId] = payload;
+    manager._detail = null;
+    /* The record has to be in the table for its expansion to have somewhere to go —
+       that is the state a person is in when they click 详情, and the only way to test
+       "inserted under the LIVE row" rather than under whatever object the click came from. */
+    manager.render([
+        {
+            run_id: runId,
+            workflow_name: payload.run.workflow_name,
+            status: payload.run.status,
+            node_done: 3,
+            node_total: 3,
+            rows_kept: 9,
+            wf_count: payload.run.wf_count,
+            mode: 'parallel',
+            headless: 1,
+        },
+    ]);
+    await manager.detail(runId);
+    const drawn = sandbox
+        .__byId('runs-mgr-body')
+        .querySelectorAll('tr')
+        .filter((row) => row.id === id)[0];
+    return drawn ? drawn.innerHTML : null;
 }
 
 const groupedHtml = await renderDetail(GROUPED);
@@ -294,7 +317,7 @@ follow.followedLive = listFetches() > beforeFollow && manager._awaitable() === t
    "already open" and nothing gets inserted. */
 sandbox.document.absent.add('runs-mgr-detail-live');
 sandbox.__routes['/api/runs/live'] = { ok: true, run: { run_id: 'live', status: 'running', nodes: [] } };
-await manager.detail('live', { closest: () => ({ after: () => {} }) });
+await manager.detail('live');
 beforeFollow = listFetches();
 manager.autoRefresh();
 follow.pausedForReading = listFetches() === beforeFollow && manager._detail === 'live';
@@ -347,9 +370,96 @@ follow.stoppingHandlers = [...stoppingHtml.matchAll(/runsManager\.(\w+)\(/g)].ma
    record never said, which is the one thing a history panel exists to avoid. */
 follow.unknownLabel = I18n.t(manager.statusKey('undone-by-a-stranger'));
 
+/* ─── a refresh that lands while the detail fetch is in flight ────────────
+   The panel keeps itself current during a live run, which is exactly when a person
+   opens a record's detail. The row the click came from can therefore be gone by the
+   time the answer arrives — and the code used to insert under THAT row: the detail
+   landed in a detached subtree (the user saw nothing) while `_detail` was still set,
+   which silenced auto-refresh for an expansion nobody could see. The fetch is held
+   open here so the re-render happens between the click and the answer. */
+const RACE = {
+    ok: true,
+    run: {
+        run_id: 'r-race',
+        status: 'completed',
+        started_at: '2026-09-25T10:00:00',
+        wf_count: 1,
+        workflow_name: '抢刷新的',
+        nodes: [{ node_id: 'n-1', node_type: 'source', status: 'done', row_count: 2 }],
+    },
+};
+const raceRow = {
+    run_id: 'r-race',
+    workflow_name: '抢刷新的',
+    status: 'completed',
+    node_done: 1,
+    node_total: 1,
+    rows_kept: 2,
+    wf_count: 1,
+    mode: 'serial',
+    headless: 1,
+};
+const liveDetailRows = () =>
+    sandbox
+        .__byId('runs-mgr-body')
+        .querySelectorAll('tr')
+        .filter((row) => String(row.id || '').indexOf('runs-mgr-detail-') === 0).length;
+const race = {};
+const realFetch = sandbox.fetch;
+let release;
+function holdDetail(urlFragment, payload) {
+    sandbox.fetch = (url, options) => {
+        if (String(url).indexOf(urlFragment) >= 0) {
+            return new Promise((resolve) => {
+                release = () => resolve({ json: () => Promise.resolve(payload) });
+            });
+        }
+        return realFetch(url, options);
+    };
+}
+
+manager._detail = null;
+sandbox.document.absent.add('runs-mgr-detail-r-race');
+manager.render([raceRow]);
+holdDetail('/api/runs/r-race', RACE);
+const raceInFlight = manager.detail('r-race');
+await new Promise((r) => setImmediate(r));
+/* The refresh: a new table object, a new <tr> for the same run, and a second record
+   that was not there when the click happened. */
+manager.render([raceRow, Object.assign({}, raceRow, { run_id: 'r-late', workflow_name: '后来那条' })]);
+release();
+sandbox.fetch = realFetch;
+await raceInFlight;
+/* The row exists now, so the scenario stops declaring it absent: that flag stands in for
+   "the page has no such id", which is what the toggle-off question asks. */
+sandbox.document.absent.delete('runs-mgr-detail-r-race');
+race.landed = liveDetailRows();
+race.flagMatchesWhatIsShown = manager._detail === 'r-race';
+race.rowsShown = sandbox.__byId('runs-mgr-body').querySelectorAll('tr').length;
+/* The expansion is now a real row, so the same button closes it — and after that the
+   panel is free to refresh again. */
+await manager.detail('r-race');
+race.collapses = liveDetailRows() === 0 && manager._detail === null;
+
+/* A record that left the list while its detail was being read has nowhere to go:
+   saying nothing is the honest answer, and setting the reading flag for it would stop
+   the panel updating over a detail that does not exist. */
+manager._detail = null;
+sandbox.document.absent.add('runs-mgr-detail-gone');
+manager.render([Object.assign({}, raceRow, { run_id: 'gone-1' })]);
+holdDetail('/api/runs/gone-1', { ok: true, run: { run_id: 'gone-1', status: 'completed', nodes: [] } });
+const goneInFlight = manager.detail('gone-1');
+await new Promise((r) => setImmediate(r));
+manager.render([]);
+release();
+sandbox.fetch = realFetch;
+await goneInFlight;
+race.vanishedDrawsNothing = liveDetailRows() === 0 && manager._detail === null;
+
 process.stdout.write(
     JSON.stringify({
         follow,
+        race,
         html,
         count: countText,
         reports: (html.match(/runsManager\.report\(/g) || []).length,
