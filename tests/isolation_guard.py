@@ -1,7 +1,9 @@
 """The rule the harness enforces, in a module a test can actually import.
 
 A test run may **read** ``data/`` and ``logs/`` — the live tier crawls with the user's saved
-cookies and profile directories by absolute path, on purpose — and may not **write** to them.
+cookies by absolute path, on purpose — and may not **write** to them. The single exception is
+``data/chrome_profile``, and only when :data:`USER_PROFILE_ENV` is set deliberately; see the note
+on that flag for why a browser is allowed to move its own files there and nothing else is.
 
 Two reasons this lives here instead of inside ``tests/conftest.py``:
 
@@ -37,6 +39,31 @@ PROTECTED_SHALLOW = 'data/chrome_profile'
 #: How many offending paths to name per line before truncating.
 REPORT_LIMIT = 12
 
+#: Set this to ``1`` to let the live tier crawl in the user's OWN browser profiles
+#: (``data/chrome_profile``) instead of the throwaway root the tier otherwise keeps.
+#:
+#: Why an operator has to say this out loud: a *copied* login is a second device to a site.
+#: Measured 2026-09-26 — the user's own weibo crawl (a session this browser has been rotating
+#: since 09-24) returned results at 06:14 while the tier's browser, planted minutes earlier from
+#: a copy of that same cookie file, was answered a passport page at 06:13. So a tier that wants to
+#: prove "the logged-in crawl works" has to crawl from the jar the site already knows, and the
+#: only such jar on this machine is the user's.
+#:
+#: The flag exempts that one subtree from this guard; nothing else about ``data/`` or ``logs/``
+#: becomes writable, and the live tier refuses to run at all unless it is set deliberately.
+USER_PROFILE_ENV = 'CIXI_LIVE_USE_USER_PROFILE'
+
+
+def uses_user_profile() -> bool:
+    """Whether the operator allowed the live tier to crawl in the user's own profiles."""
+    return str(os.environ.get(USER_PROFILE_ENV, '')).strip() in {'1', 'true', 'yes', 'on'}
+
+
+def user_profile_dir() -> Path:
+    """The directory the flag hands to the live tier — the app-managed one, no interpretation."""
+    return REPO_ROOT / 'data' / 'chrome_profile'
+
+
 #: The headline of the report. Exported because the test asserts it appears.
 REPORT_HEADLINE = 'THE SUITE WROTE INTO THE USER DIRECTORY'
 
@@ -48,11 +75,19 @@ def fingerprint() -> dict:
     filesystems, and this is a check about bytes gained or lost, not about who looked.
     """
     seen: dict = {}
+    exempt = uses_user_profile()
     for root in PROTECTED_DIRS:
         if not root.is_dir():
             continue
         for dirpath, dirnames, filenames in os.walk(root):
             rel = Path(dirpath).relative_to(REPO_ROOT).as_posix()
+            if exempt and rel == PROTECTED_SHALLOW:
+                # The operator said the tier may crawl in these profiles, so a browser moving its
+                # own cache and marker in here is the run doing what it was told to do. Everything
+                # else under ``data/`` — cookies, workflows, the databases — stays guarded, and a
+                # test that writes there is still named and still fails the session.
+                dirnames[:] = []
+                continue
             for name in filenames:
                 stat = (Path(dirpath) / name).stat()
                 seen[f'{rel}/{name}'] = ('file', stat.st_size, stat.st_mtime_ns)

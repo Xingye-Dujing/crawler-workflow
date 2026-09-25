@@ -430,6 +430,59 @@ class TestUserDirectoryStaysReadOnly:
                     path.read_bytes()
         assert isolation_guard.diff(first, isolation_guard.fingerprint()) == ([], [], [])
 
+    def _fake_user_directory(self, monkeypatch, tmp_path):
+        """A miniature ``data/`` + ``logs/`` with the guard pointed at it.
+
+        The real one cannot be used to test a *write* exemption: this suite is not allowed to
+        write into it, which is the very rule under test.
+        """
+        import isolation_guard
+
+        (tmp_path / 'data' / 'cookies').mkdir(parents=True)
+        (tmp_path / 'data' / 'chrome_profile').mkdir(parents=True)
+        (tmp_path / 'logs').mkdir(parents=True)
+        (tmp_path / 'data' / 'cookies' / 'weibo_cookies.json').write_text('[]', encoding='utf-8')
+        (tmp_path / 'data' / 'chrome_profile' / 'weibo').mkdir()
+        (tmp_path / 'logs' / 'app.log').write_text('x', encoding='utf-8')
+        monkeypatch.setattr(isolation_guard, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(isolation_guard, 'PROTECTED_DIRS', (tmp_path / 'data', tmp_path / 'logs'))
+        return isolation_guard
+
+    def test_the_profile_flag_needs_an_explicit_yes(self, monkeypatch):
+        import isolation_guard
+
+        for value, expected in (('1', True), ('true', True), ('on', True), ('', False), ('0', False), ('no', False)):
+            monkeypatch.setenv(isolation_guard.USER_PROFILE_ENV, value)
+            assert isolation_guard.uses_user_profile() is expected, f'{value!r} answered wrong'
+
+    def test_the_flag_exempts_the_profile_directory_and_nothing_else(self, monkeypatch, tmp_path):
+        """How a browser moving into its own profile reads, and what still counts as a leak.
+
+        A new platform directory under ``data/chrome_profile`` is what a crawl leaves behind; a new
+        file under ``data/cookies`` is what a stray test leaves behind. Only the first is excused,
+        and only while the operator asked for it — otherwise the flag would be a global mute button
+        on the guard that exists because the user's cookies were destroyed once.
+        """
+        guard = self._fake_user_directory(monkeypatch, tmp_path)
+        monkeypatch.setenv(guard.USER_PROFILE_ENV, '1')
+        before = guard.fingerprint()
+        assert not [key for key in before if key.startswith('data/chrome_profile')], (
+            f'the flagged guard still records profile paths: {sorted(before)}'
+        )
+        # What a crawl leaves: a second platform's directory. And what no test may leave: a cookie.
+        (tmp_path / 'data' / 'chrome_profile' / 'douyin').mkdir()
+        (tmp_path / 'data' / 'cookies' / 'zhihu_cookies.json').write_text('[]', encoding='utf-8')
+        added, _removed, _changed = guard.diff(before, guard.fingerprint())
+        assert added == ['data/cookies/zhihu_cookies.json'], added
+
+        monkeypatch.delenv(guard.USER_PROFILE_ENV)
+        off_before = guard.fingerprint()
+        (tmp_path / 'data' / 'chrome_profile' / 'xiaohongshu').mkdir()
+        added, _removed, _changed = guard.diff(off_before, guard.fingerprint())
+        assert 'data/chrome_profile/xiaohongshu' in added, (
+            f'without the flag a profile directory must still be reported, got {added}'
+        )
+
     def test_a_leak_fails_the_run_and_names_the_path(self, capsys):
         """A leak must change the exit status, because a green line next to it is invisible.
 
@@ -715,10 +768,12 @@ class TestLiveTierSessionShape:
         tier's directory" — the seam is :func:`browser_profiles.root_dir`, which every crawl and
         every marker path goes through."""
         import browser_profiles
+        import isolation_guard
 
         import settings_store
 
         module = _live_conftest()
+        monkeypatch.delenv(isolation_guard.USER_PROFILE_ENV, raising=False)
         target = tmp_path / 'live_profiles'
         monkeypatch.setattr(module, 'LIVE_PROFILE_ROOT', target)
         monkeypatch.setattr(settings_store, '_PATH', str(tmp_path / 'settings.json'))
@@ -729,15 +784,36 @@ class TestLiveTierSessionShape:
 
     def test_a_profile_root_inside_the_user_directory_is_refused(self, monkeypatch, tmp_path):
         """The one mistake this fixture could make that would do harm rather than lose fidelity."""
+        import isolation_guard
+
         import settings_store
 
         module = _live_conftest()
+        monkeypatch.delenv(isolation_guard.USER_PROFILE_ENV, raising=False)
         monkeypatch.setattr(module, 'LIVE_PROFILE_ROOT', REPO_ROOT / 'data' / 'chrome_profile')
         monkeypatch.setattr(settings_store, '_PATH', str(tmp_path / 'settings.json'))
         with pytest.raises(AssertionError) as refused:
             module.live_profile_root.__wrapped__()
         assert 'user' in str(refused.value).lower(), refused.value
         assert not (tmp_path / 'settings.json').exists(), 'the refusal must come before anything is written'
+
+    def test_the_operators_flag_hands_the_tier_the_user_own_profiles(self, monkeypatch):
+        """The consent is read once, from the guard — so the tier and the guard can never disagree
+        about whether crawling in ``data/chrome_profile`` was allowed this run.
+
+        Why it exists at all: a copied login is a second device to a site. Measured 2026-09-26, the
+        user's own weibo crawl answered while this tier's browser — planted from a copy of the same
+        cookie file minutes earlier — was bounced to the login page. Proving a logged-in crawl on
+        this machine therefore means crawling from the jar the site already knows, and only the user
+        can authorise spending it.
+        """
+        import isolation_guard
+
+        module = _live_conftest()
+        monkeypatch.setenv(isolation_guard.USER_PROFILE_ENV, '1')
+        assert module.resolve_profile_root(True) == isolation_guard.user_profile_dir().resolve()
+        monkeypatch.delenv(isolation_guard.USER_PROFILE_ENV)
+        assert module.resolve_profile_root(False) == module.LIVE_PROFILE_ROOT.resolve()
 
     def test_the_refresh_question_is_asked_about_this_platforms_own_file(self, monkeypatch):
         """The tier asks the panel's question instead of holding a rule of its own, so a cookie the

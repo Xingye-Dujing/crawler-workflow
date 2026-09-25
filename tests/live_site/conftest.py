@@ -24,7 +24,10 @@ import json
 import time
 from pathlib import Path
 
+import isolation_guard
 import pytest
+
+import settings_store
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COOKIE_DIR = REPO_ROOT / 'data' / 'cookies'
@@ -86,9 +89,36 @@ def refresh_for_planting(platform: str) -> bool:
     return bool(browser_profiles.needs_refresh(platform, str(COOKIE_DIR / f'{platform}_cookies.json')))
 
 
+def resolve_profile_root(in_user_directory: bool) -> Path:
+    """The profile root this tier crawls from, and the one rule that decides it.
+
+    Default: :data:`LIVE_PROFILE_ROOT` — it survives the run (so the saved cookie is not replayed
+    into a fresh browser every round) and it is nowhere near the user's own directories.
+
+    With the operator's flag: ``data/chrome_profile``, the app-managed profile the user's own
+    crawls run in. That is not a shortcut — it is the only honest way to test a logged-in crawl:
+    measured 2026-09-26, the user's weibo crawl (a session his browser has been rotating since
+    09-24) returned results at 06:14 while this tier's browser, planted minutes earlier from a
+    COPY of the same cookie file, was answered a passport page at 06:13. To a site, a copied login
+    is a second device. The flag is his consent, read from the one place the isolation guard reads
+    it too, so the tier and the guard cannot disagree about what was allowed.
+
+    The refusal in the default branch is the point of this function: without it, one edited
+    constant would have the tests crawling inside the user's session, quietly, on every run.
+    """
+    root = isolation_guard.user_profile_dir() if in_user_directory else LIVE_PROFILE_ROOT
+    if not in_user_directory:
+        forbidden = (REPO_ROOT / 'data').resolve()
+        assert not str(root.resolve()).startswith(str(forbidden)), (
+            f'the live tier profile root {root} sits inside {forbidden}, which holds the user profiles'
+        )
+    root.mkdir(parents=True, exist_ok=True)
+    return root.resolve()
+
+
 @pytest.fixture(scope='session', autouse=True)
 def live_profile_root():
-    """Give the tier a profile directory that survives the run — and prove it is not the user's.
+    """Give the tier a profile directory that survives the run — and name whose it is.
 
     Written as a *setting* rather than passed as an argument, because that is how the product
     chooses its profile root (:func:`browser_profiles.root_dir`): the tier then goes through the
@@ -96,17 +126,10 @@ def live_profile_root():
     app-managed one". A refusal there is the one way this fixture could quietly end back at the
     user's directory, so the warnings come back as a failure rather than as a log line.
     """
-    import settings_store
-
-    resolved = LIVE_PROFILE_ROOT.resolve()
-    forbidden = (REPO_ROOT / 'data').resolve()
-    assert not str(resolved).startswith(str(forbidden)), (
-        f'the live tier profile root {resolved} sits inside {forbidden}, which holds the user profiles'
-    )
-    resolved.mkdir(parents=True, exist_ok=True)
-    _saved, warnings = settings_store.save_settings({'browser_profile_dir': str(resolved), 'use_browser_profile': True})
+    root = resolve_profile_root(isolation_guard.uses_user_profile())
+    _saved, warnings = settings_store.save_settings({'browser_profile_dir': str(root), 'use_browser_profile': True})
     assert not warnings, f'the tier profile root was refused, so crawls would use the user directory: {warnings}'
-    return str(resolved)
+    return str(root)
 
 
 @pytest.fixture(scope='session')

@@ -32,12 +32,12 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   - Fast (~4k cases, ~2 min, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
   - Device (real Chrome on `file://` fixtures + real Ollama): `... -m "integration or live_ollama"`.
   - Live (REAL crawls, both modes, skip when a cookie is absent): `... -m live_quick` visits
-    each platform once and gates a change; `... -m live_site` is the full pass (~an hour) and
-    belongs to acceptance. **Never run a live tier unattended: a pass spends the user's real
-    accounts.** It crawls from a profile that outlives the run (planting once, like his does) and
-    weibo is asked one question per pass. Both split by network (`live_cn`, `live_os`): a VPN gets
-    502 from douyin, a Chinese network never reaches x.com. Run one group, **ask which network he
-    is on**, then the other.
+    each platform once and gates a change; `... -m live_site` is the full pass and belongs to
+    acceptance. **Never run a live tier unattended: it spends the user's accounts.** A copied
+    login is a second device, so the tier keeps its own profile root; only
+    `CIXI_LIVE_USE_USER_PROFILE=1` — his consent, which also exempts that subtree from the
+    isolation guard — crawls as he does. Weibo is asked once per pass. Both split by network
+    (`live_cn`, `live_os`); **ask which network he is on**, then run the other.
   - **To run one device/live case, override the marker filter too**: naming the file alone reports
     `N deselected` and looks like it ran.
   - Layout: `tests/unit`, `tests/api` (tmp-isolated `test_client`), `tests/integration` (marked
