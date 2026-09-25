@@ -25,7 +25,9 @@ def test_time_window_search_returns_capped_rows(weibo_windowed):
     rows = weibo_windowed['rows']
     assert rows, (
         f'weibo returned nothing WITH saved cookies (login_wall={weibo_windowed["login_wall"]}) — '
-        'the redirect facade was likely mis-read as a login wall, or the cookie is stale (Cookie→generate)'
+        'the redirect facade was likely mis-read as a login wall, the cookie is stale (Cookie→生成), '
+        'or this ACCOUNT is flagged by recent volume: measured 2026-09-26, a cookie re-saved 30 minutes '
+        'earlier was still answered a passport page, and a retry changes neither'
     )
     assert len(rows) <= weibo_windowed['target'], (
         f'target_count={weibo_windowed["target"]} must not wildly overshoot (got {len(rows)})'
@@ -63,8 +65,9 @@ def test_visible_window_search_works_too(live_search, weibo_windowed):
             'as "this keyword has no posts", which is the false answer this tier exists to catch'
         )
         assert weibo_windowed['rows'], (
-            'the visible crawl was walled and the headless one found nothing either — that is '
-            'a dead session, not throttling: re-save the weibo cookie (Cookie→生成)'
+            'the visible crawl was walled and the headless one found nothing either: either the session is '
+            'dead (re-save it, Cookie→生成) or the account is flagged by recent volume — measured '
+            '2026-09-26, where a session re-saved 30 minutes earlier was still answered a passport page'
         )
         return
     assert len(rows) <= 5, f'target_count=3 must not wildly overshoot (got {len(rows)})'

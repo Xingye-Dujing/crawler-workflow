@@ -43,8 +43,10 @@ def _discover_uid(weibo_windowed):
     """
     rows = weibo_windowed['rows']
     assert rows, (
-        f'weibo delivered nothing WITH saved cookies (login_wall={weibo_windowed["login_wall"]}), '
-        'so there is no author to ask — that is a dead session, not throttling: re-save the weibo cookie'
+        f'weibo delivered nothing WITH saved cookies (login_wall={weibo_windowed["login_wall"]}), so there is '
+        'no author to ask. A bounce to the login page is either the saved session dying (re-save the weibo '
+        'cookie) or the ACCOUNT being flagged by recent volume — measured 2026-09-26: a session re-saved 30 '
+        'minutes earlier was still answered a passport page, and nothing a retry could do would change that'
     )
     for row in rows:
         uid = weibo_uid(row.get('用户链接'))
