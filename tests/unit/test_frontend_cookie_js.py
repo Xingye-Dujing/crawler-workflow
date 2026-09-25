@@ -243,4 +243,3 @@ class TestRefreshProfileCookie:
         assert button < note < job_actions, f'the note is not attached to the button it explains: {note}'
         app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
         assert app.count("'cookies.refreshExplain'") == 2, 'both catalogues must carry the sentence'
-
