@@ -37,7 +37,7 @@ from analyzers import (
 from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
-from crawlers.base import CrawlerStopped
+from crawlers.base import CrawlerStopped, DeadDriver
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, node_label
@@ -4542,6 +4542,16 @@ def _close_login_browser(crawler, quit_timeout: float = 5.0):
     """
     if crawler is None:
         return
+    if isinstance(getattr(crawler, 'driver', None), DeadDriver):
+        # One browser asked about twice — the stop thread and the worker's own finally both reach
+        # this for a parallel run. There is nothing left to close, and the check has to happen
+        # before the line below: reading ``driver.service.process.pid`` off a dead session raises
+        # ``CrawlerStopped``, which is a ``BaseException`` and so walks straight out of the
+        # ``suppress(Exception)`` guarding it, killing the thread on its way to the *next* browser.
+        # Its profile is deliberately not released from here either: a lock handed back for a
+        # session the worker is still scrolling in lets the next crawl of that platform open a
+        # second Chrome on the same directory.
+        return
     pid = None
     with contextlib.suppress(Exception):
         pid = crawler.driver.service.process.pid
@@ -4556,6 +4566,13 @@ def _close_login_browser(crawler, quit_timeout: float = 5.0):
                 timeout=8,
                 check=False,
             )
+            # Replacing the session is what makes 停止 mean now, and it is the only reliable way to
+            # do it: the reap frees the command the worker is *inside* (a dead driver resets the
+            # socket, measured 1.7 s) but the worker's NEXT command opens a fresh connection to a
+            # port nobody holds, and selenium's pool re-sends a failed connect four times —
+            # measured 16.3 s each, which is how a mid-walk stop took 29.6 s to settle. See
+            # ``crawlers.base.DeadDriver`` for why the refusal is a ``BaseException``.
+            crawler.driver = DeadDriver()
 
 
 def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', lang: str = ''):

@@ -27,19 +27,25 @@ the design each case below checks:
    a stop and not as "the site sent nothing more";
 3. a node cut short is 被停止, never 失败, and is excluded from the failure count;
 4. a browser the Stop request does not know about is a browser that keeps working;
-5. a record its worker abandoned is settled by reading the panel — not by restarting.
+5. a record its worker abandoned is settled by reading the panel — not by restarting;
+6. a browser that had to be reaped is a browser the crawl is told to stop using, because
+   the reap frees the command in flight (1.72 s) but each command after it would pay
+   selenium's connect-retry ladder against a dead port — measured 16.3 s each.
 
 All offline: the tmp-isolated store from the `client` fixture, and a fake crawler that
 receives the SAME stop predicate a real one does.
 """
 
+import subprocess
+import sys
 import threading
 import time
+import types
 
 import pytest
 from run_wait import run_finished
 
-from crawlers.base import Crawler
+from crawlers.base import Crawler, CrawlerStopped, DeadDriver
 from i18n import t
 from services.run_store import (
     NODE_PARTIAL,
@@ -109,6 +115,58 @@ def _crawler_factory(app_module, monkeypatch, gate=None, rows=None, pre=0):
 
     monkeypatch.setattr(app_module, 'get_crawler', factory)
     return built
+
+
+class _SlowSession:
+    """A driver process that answers nothing, the way a reaped one's port behaves.
+
+    ``cost`` is what one command spends waiting: on a dead chromedriver that is the connect retry
+    ladder, measured at 16.3 s. A test names its own number, because what is under test is that the
+    crawler is never asked to pay it a second time — not how long the wait is.
+    """
+
+    def __init__(self, pid: int, cost: float = 0.0, hang: threading.Event | None = None):
+        self.service = types.SimpleNamespace(process=types.SimpleNamespace(pid=pid))
+        self.cost = cost
+        self._hang = hang
+        self.commands = 0
+
+    def quit(self):
+        self.commands += 1
+        if self._hang is not None:
+            assert self._hang.wait(30), 'the test never released this close'
+            return
+        time.sleep(self.cost)
+
+    def execute_script(self, *_args):
+        self.commands += 1
+        if self._hang is not None:
+            assert self._hang.wait(30), 'the test never released this command'
+        else:
+            time.sleep(self.cost)
+        return None
+
+    def get(self, url):
+        return self.execute_script(url)
+
+    def find_element(self, *args):
+        return self.execute_script(*args)
+
+    def find_elements(self, *args):
+        return self.execute_script(*args)
+
+
+def _wedged_crawler():
+    """A crawler whose browser is stuck inside its own ``quit()``, plus the process standing in for it.
+
+    The release is handed back so no thread outlives the test: the reaper leaves that side thread
+    waiting by design, and a fixture that slept out the hang would make every case here take a minute.
+    """
+    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+    release = threading.Event()
+    crawler = _StreamingCrawler()
+    crawler.driver = _SlowSession(child.pid, hang=release)
+    return child, crawler, release
 
 
 def _node(nid, ntype, params):
@@ -425,6 +483,98 @@ class TestAbandonedRecords:
             assert found == [], 'a run in flight was offered to 继续'
         finally:
             keeper.join(0.1)
+
+
+class TestTheReapedSession:
+    """A browser that had to be killed by PID is a browser the crawl is no longer asked to use (#134).
+
+    Measured on a real Chrome (``backend/test_dead_driver.py``, payload
+    ``scratchpad/dead_driver.json``): the kill frees the command the worker is *inside* in about
+    1.7 s — a dead driver resets the socket, and a request already written is never re-sent. Every
+    command after it is a fresh connect to a port nobody holds, and selenium builds its pool with
+    urllib3's default ``Retry(total=3)``: measured 16.3 s each, four attempts at ~4.07 s. A walk
+    sends several commands per row, and that is what made a 停止 in the middle of a feed take the
+    measured 29.6 s to settle — the worker failing, slowly, against a browser that had stopped
+    existing seconds earlier.
+    """
+
+    def test_a_reaped_browser_holds_a_session_that_refuses_at_once(self, app_module):
+        child, crawler, release = _wedged_crawler()
+        try:
+            app_module._close_login_browser(crawler, quit_timeout=0.3)
+            assert isinstance(crawler.driver, DeadDriver), (
+                'the reap left the crawler holding the session it just killed, so its next command '
+                'is a retry ladder against a dead port'
+            )
+            started = time.monotonic()
+            with pytest.raises(CrawlerStopped) as err:
+                crawler.driver.execute_script('return 1;')
+            took = time.monotonic() - started
+            assert took < 1.0, f'a dead session needed {took:.2f} s to refuse; the ladder is back'
+            assert str(err.value) == t('crawl.driverDead')
+        finally:
+            release.set()
+            child.terminate()
+            child.wait(10)
+
+    def test_the_same_reaped_browser_may_be_asked_about_again(self, app_module):
+        """The stop thread and the worker's own finally both reach this for one browser.
+
+        Asked a second time without the guard, the reaper reads ``driver.service.process.pid`` off the
+        session it installed, that read raises ``CrawlerStopped``, and the ``suppress(Exception)``
+        around it catches no BaseException — so the thread dies on its way to the NEXT browser,
+        leaving that one scrolled to death.
+        """
+        child, crawler, release = _wedged_crawler()
+        try:
+            app_module._close_login_browser(crawler, quit_timeout=0.3)
+            started = time.monotonic()
+            app_module._close_login_browser(crawler, quit_timeout=0.3)
+            took = time.monotonic() - started
+            assert took < 0.3, f'the second call spent {took:.2f} s on a grace for a browser already reaped'
+        finally:
+            release.set()
+            child.terminate()
+            child.wait(10)
+
+    def test_its_own_teardown_is_silent(self):
+        """``Crawler.close()`` runs in a ``finally`` after the reap; raising from there would replace
+        the crawl's result — the rows it already paid for — with a teardown stack trace."""
+        crawler = _StreamingCrawler()
+        crawler.driver = DeadDriver()
+        crawler.close()
+        assert crawler.driver is None
+
+    def test_a_reap_landing_while_close_waits_is_not_erased(self):
+        """The order the kill actually produces: ``close()`` is inside ``quit()``, the reaper swaps in
+        the dead session, and that swap is what lets ``quit()`` return. A ``close()`` that then wrote
+        ``self.driver = None`` would hand the worker an ``AttributeError`` on None — an ordinary
+        ``Exception``, folded into "the page gave nothing" by exactly the tolerance above."""
+        crawler = _StreamingCrawler()
+
+        class _SwapOnQuit:
+            service = types.SimpleNamespace(process=types.SimpleNamespace(pid=0))
+
+            def quit(self):
+                crawler.driver = DeadDriver()
+
+        crawler.driver = _SwapOnQuit()
+        Crawler.close(crawler)
+        assert isinstance(crawler.driver, DeadDriver), 'close() erased the session the reap installed'
+
+    def test_a_browser_that_closed_itself_is_left_alone(self, app_module):
+        """The guard the other direction: marking a live session dead, or reaping a process that quit
+        politely, would break the next crawl of that platform for a reason nobody asked for."""
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+        crawler = _StreamingCrawler()
+        crawler.driver = _SlowSession(child.pid)
+        try:
+            app_module._close_login_browser(crawler, quit_timeout=5.0)
+            assert crawler.driver is None, 'a session that closed itself was replaced with a dead one'
+            assert child.poll() is None, 'a browser that quit politely had its process reaped anyway'
+        finally:
+            child.terminate()
+            child.wait(10)
 
 
 class TestStoreStatusMachine:

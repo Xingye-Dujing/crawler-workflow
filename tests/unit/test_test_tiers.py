@@ -255,6 +255,60 @@ class TestRegionSplit:
         assert 'warn_mixed_region' not in gate, 'a cosmetic dialog must not be wired into what actually runs'
 
 
+class TestIsolationRunsBeforeTheAppIsImported:
+    """No test module may import ``app`` at module level, because that outruns the isolation fixture.
+
+    ``data_root`` (tests/conftest.py) is what keeps the suite out of the user's ``data/``: it rewrites
+    ``Config.COOKIE_DIR`` and friends before any test body runs. But it is a *fixture*, and pytest
+    imports every collected module during collection — before any fixture, and regardless of marker
+    filters, so a file that is deselected still gets imported. ``app.py`` then does
+    ``cookie_manager = CookieManager(Config.COOKIE_DIR)`` at module level, which freezes the real
+    directory into a singleton that no later fixture can move.
+
+    Measured consequence: one new integration file with ``from app import _close_login_browser`` at
+    the top made ``/api/cookies/save`` write ``{'name': 'SUB', 'value': 'x'}`` into the user's own
+    ``data/cookies/weibo_cookies.json`` while the suite "passed". Read statically, so a violation is
+    reported without importing anything.
+    """
+
+    def _module_level_app_imports(self, path: Path) -> list:
+        tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+        found = []
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                found += [(node.lineno, alias.name) for alias in node.names if alias.name.split('.')[0] == 'app']
+            elif isinstance(node, ast.ImportFrom) and (node.module or '').split('.')[0] == 'app':
+                found.append((node.lineno, f'from {node.module} import ...'))
+        return found
+
+    def test_no_test_file_imports_the_app_module_at_top_level(self):
+        offenders = []
+        for path in sorted((REPO_ROOT / 'tests').rglob('*.py')):
+            if '__pycache__' in str(path):
+                continue
+            offenders += [(path, hit) for hit in self._module_level_app_imports(path)]
+        assert not offenders, [
+            f'{path.relative_to(REPO_ROOT)}:{line} imports the application at module level, which '
+            'happens before the isolation fixture and freezes the real data/ paths — take the '
+            'app_module fixture instead'
+            for path, (line, _) in offenders
+        ]
+
+    def test_the_isolation_fixture_holds_for_the_cookie_directory(self, data_root, app_module):
+        """The other half: proof that the ordering this file enforces is the ordering that protects.
+
+        Asserted against the live singleton rather than against ``Config``, because it is the
+        singleton's captured string that a cookie save actually writes through.
+        """
+        from pathlib import Path as _Path
+
+        captured = _Path(app_module.cookie_manager.cookie_dir).resolve()
+        assert captured.is_relative_to(data_root.resolve()), (
+            f'the application under test writes cookies to {captured}, outside the throwaway root '
+            f'{data_root} — an import beat the isolation fixture'
+        )
+
+
 class TestLiveCrawlerFixture:
     """The helper that holds a platform's turn is under test too — with no browser.
 

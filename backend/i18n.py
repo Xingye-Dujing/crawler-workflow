@@ -667,6 +667,9 @@ _ZH = {
     'run.nodeStopped': '节点 {nid} 已按「停止」结束：本次保留 {n} 行',
     'run.finished.stopped': '，{n} 个被停止',
     'crawl.stopped': '收到「停止」，本次抓取到此为止',
+    # Said by a session whose browser process was already reaped, so it must not claim a person did
+    # anything: the same object answers a cookie window that was closed after its grace ran out.
+    'crawl.driverDead': '这个浏览器进程已经关掉了，不再向它发送命令',
     'run.started': '本次运行已记账：{rid}（随时可中断，数据逐条落库）',
     'run.resume_from': '续跑模式：接着 {at} 那次往下跑，此前已保存 {rows} 行',
     'run.restored': '节点 {nid} 沿用上次结果（{n} 行），不再重跑',
@@ -1428,6 +1431,9 @@ _EN = {
     'run.nodeStopped': 'Node {nid} ended on Stop: {n} row(s) kept',
     'run.finished.stopped': ', {n} stopped',
     'crawl.stopped': 'Stop received — this crawl ends here',
+    # Said by a session whose browser process was already reaped, so it must not claim a person did
+    # anything: the same object answers a cookie window that was closed after its grace ran out.
+    'crawl.driverDead': 'This browser process is already closed, so no further commands are sent to it',
     'run.started': 'This run is checkpointed as {rid} — every row lands in the database as it is produced',
     'run.resume_from': 'Resuming the run interrupted at {at} — {rows} rows already stored',
     'run.restored': 'Node {nid} reuses its previous result ({n} rows) instead of running again',

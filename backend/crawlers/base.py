@@ -53,6 +53,37 @@ class CrawlerStopped(BaseException):
     """
 
 
+class DeadDriver:
+    """The session left in place of a browser that had to be killed by PID.
+
+    Measured, and the two halves come apart. The command a worker is *inside* when the kill lands is
+    freed by it in about 1.7 s: a dead chromedriver resets the socket, and a request already written is
+    never re-sent. Every command after that is a fresh connect to a port nobody holds, and it costs
+    16.3 s — four attempts at ~4.07 s, because selenium builds the pool with urllib3's default
+    ``Retry(total=3)`` and a connect failure is always allowed to retry. A crawl sends several commands
+    per row, so the worker 停止 was meant to release kept walking off a browser that no longer existed,
+    ~29.6 s in the middle of one feed (``docs/crawler_notes.md``).
+
+    Answering at once is the whole point, and answering *by name* is the rest of it:
+    ``CrawlerStopped`` is a ``BaseException``, so it gets out of the about sixty ``except Exception``
+    tolerances a walk has for a missing card or a refused page — the ones that would otherwise fold a
+    dead session into "the site had no more rows" and report a stopped run as a short, successful crawl.
+
+    ``quit`` and ``close`` stay silent rather than refusing, because this object is installed while
+    another thread may still be inside ``Crawler.close()``: raising from a teardown would replace the
+    crawl's own result with a stack trace, and ``contextlib.suppress(Exception)`` would not catch it.
+    """
+
+    def __getattr__(self, _name: str):
+        raise CrawlerStopped(t('crawl.driverDead'))
+
+    def quit(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
 class ProfileUnavailableError(RuntimeError):
     """The browser was never built because the platform's profile could not be taken.
 
@@ -747,10 +778,17 @@ class Crawler(ABC):
     def close(self):
         # quit() on a dead session raises; callers close in a `finally`, where
         # an exception would mask the real result of the crawl.
-        if self.driver:
+        driver = self.driver
+        if driver is not None:
             with contextlib.suppress(Exception):
-                self.driver.quit()
-            self.driver = None
+                driver.quit()
+            # Cleared only while this is still the session the crawler owned. A 停止 that had to reap
+            # the process replaces it with a :class:`DeadDriver` — and that reap is what lets the
+            # ``quit()`` above come back at all — so clearing unconditionally would hand the worker's
+            # next command an ``AttributeError`` on None, which a tolerance site reads as "the page
+            # gave nothing" instead of the refusal it is.
+            if self.driver is driver:
+                self.driver = None
         # Released after the browser is gone: the next crawl of this platform may
         # not be able to write its profile while this one still owns Chrome.
         self._release_profile()

@@ -770,7 +770,8 @@ Chrome 148 各测两种"卡在页面里"：一个 40 秒才答复的导航（正
 真正没人答复的那个）、真 B 站搜索、真 Ollama，并且**由页面自己的「执行」「停止」按钮**发起——
 这样被测的就是出厂代码，而不是替它写好的替身。载荷 `scratchpad/stop_real.json`。
 
-按停止的**那一刻**为零。首屏那一档跑了三次，中途那一档两次：
+按停止的**那一刻**为零。首屏那一档跑了三次，中途那一档两次（**这些数字是修复前的**；
+被杀后仍向死驱动发命令那一条已由 #134 修掉，见下一节，修复后的整轮定档还没重新量过）：
 
 | 场景 | 记录不再说「运行中」 | 界面那一行自己换字 | worker 定档 | 界面读到定档 |
 |---|---|---|---|---|
@@ -782,12 +783,40 @@ Chrome 148 各测两种"卡在页面里"：一个 40 秒才答复的导航（正
 定档那一列才是 worker 的退出。两次中途运行的换字差一倍（0.45 / 0.19 秒），量的其实是**上一次
 `pollStatus` 落在哪**（每 2 秒一拍），不是换字本身有多快——上限就是一拍，这一列别当成毫秒级承诺。
 
-**中途那 29.6 s 是新的、#131 没量到的**。控制台尾巴给出了原因：驱动进程被杀之后，worker 还在
-往那个已经不存在的 chromedriver 发命令，Selenium 的 urllib3 池按默认 `Retry(total=3)` 逐条重试
-（日志里 `Retrying ... /session/<id>/timeouts`，每条约 4 秒），于是"发现浏览器没了"这件事本身
-被重试梯吃掉二十几秒。首屏那次只花 4.8 s，是因为那时 in-flight 的是一条命令而不是一个循环。
-没有动它：把 `retries` 调小要伸进 Selenium 内部（池已按 host 建好），而"停止后不要再发命令"
-需要在 60 处容错里都问一次标志——两样都不该在这一轮顺手做。记为后续。
+**中途那 29.6 s 是新的、#131 没量到的**。当时的猜测是"驱动进程被杀之后 worker 还在往它发命令，
+每条约 4 秒"，并把它记为后续；#134 用 `backend/test_dead_driver.py`（真 Chrome + `file://`，
+四个变体，载荷 `scratchpad/dead_driver.json`）把猜测量开，四条数字把做法直接定了下来：
+
+| 一条命令花多久 | 秒 | 为什么 |
+|---|---|---|
+| 被杀那一刻**正在执行**的那条 | 1.72（其中 1.5 s 是探针自己按下去前的等待） | 驱动进程没了 → 连接被 RST；**已经写出去的请求不再重发** |
+| 之后每一条（老 driver 对象） | 16.3 | 全新一次 connect 打在没人监听的端口上；Selenium 建池时不传 `retries`，于是拿到 urllib3 默认 `Retry(total=3)`——4 次 × ~4.07 s，connect 失败永远允许重试 |
+| 之后每一条（把已建好的 `pool.retries` 归零） | 4.07 | 只剩一次尝试，但每条仍要 4 秒 |
+| 之后每一条（换成死驱动桩） | 0.00 | 根本不打开 socket |
+
+三条推论，都改变了做法：**(1)** in-flight 那条不用管，杀进程本身就解了它；被拖长的全是**后面的**
+命令——所以"强杀成功后把 `crawler.driver` 换成一个立即抛 `CrawlerStopped` 的桩"就够了。
+**(2)** 归零重试严格更差（4.07 s/条 vs 0.00 s/条），于是 urllib3 一处都不动，`requirements.txt`
+也因此不加包。**(3)** 关掉/清空连接池（`command_executor.close()`）是唯一"看着该做而实测不该做"
+的选项：它不仅不救 in-flight（那条本来就 1.7 s），还让之后的命令回到 16.3 s——`clear()` 之后
+新池带着默认 `Retry(3)` 重建。
+
+桩有两处形状是必需的，不是风格：`quit()`/`close()` 必须**静默**（worker 自己的 `finally` 会调
+`Crawler.close()`，从收尾里抛 `BaseException` 会把这次抓取的结论换成一段栈回溯）；而 `close()`
+清 `self.driver` 必须**比较之后再清**——worker 回来的路正好是被杀的那一秒，`quit()` 恰恰是因为
+进程没了才返回，此时若无条件写 `None`，下一条命令拿到的是 `None.<cmd>` 的 `AttributeError`：
+一个普通 `Exception`，会被 60 处容错折成"这一页没有更多了"，正是 `CrawlerStopped` 存在要防的那句话。
+另有一条反作用力：`_close_login_browser` 会再被 worker 的 `finally` 问第二次，而从死桩上读
+`driver.service.process.pid` 抛的是 `CrawlerStopped`，`contextlib.suppress(Exception)` 拦不住它，
+那个线程会死在去**下一个**浏览器的路上——所以重入必须在入口就返回，且返回时**不**替它放 profile 锁。
+
+**端到端那一档还没重测**：#133 用的是 B 站搜索，而 `workflow.js:576` 的界面校验对
+`needs_session` 的平台没有 Cookie 就直接拒绝（与 `cookie_preflight_before_run` 无关），
+那些 Cookie 文件在今晚被测试套件删掉了（见下条），所以现在能匿名跑的只有 `微博 热搜` 这种
+`collects=fetch` 的模式——它一次请求就是一整块榜，走查中途没有循环可掐。16.3 s → 0.00 s 这一条
+已经在 `tests/integration/test_stop_reaper.py` 里用真 Chrome 通过产品自己的 `_close_login_browser`
+复测（并且带一个"老对象仍要 5 秒以上"的反向对照）；整次运行的定档秒数要等 Cookie 回来再量。
+
 
 模型那一头量到两件事：
 
@@ -927,4 +956,30 @@ app.js 为了拖拽把 `openCookieDialog` 又包了一层，包装函数的空�
 `<user-data-dir>/Default/Preferences`，同一目录同一瞬间起来的两个会话不可能都起来，而"配置文件
 只在第一次使用时导入一次"这件事由目录里的 `.crawler-profile.json` 标记；`MAX(seq)+1` 那条的
 代价是曾经的 `COUNT(*)` 按**每一行**跑一次，于是一次长抓取在自己的表上平方级地慢下去。
+
+## 一次测试套件写进用户目录的事故：collect 早于 fixture（measured 2026-09-25，#134）
+
+新加的 `tests/integration/test_stop_reaper.py` 在文件顶部写了 `from app import _close_login_browser`。
+就这一行，让那次 `pytest -q` 把**假 Cookie 写进了用户真正的 `data/cookies/`**，并且把里面原有的
+条目删掉了。机制是一串各自合理、合起来致命的规定：
+
+* `pytest.ini` 的 `addopts` 用 marker 过滤掉的只是**执行**，collection 仍然 `import` 了 `tests/` 下
+  每一个 `.py`；被 deselect 的文件照样在导入时跑顶层代码；
+* `tests/conftest.py::data_root` 是 session + autouse 的**fixture**，它在第一个测试体之前跑，
+  但 fixtures 一律晚于 collection；
+* `app.py` 顶层就有 `cookie_manager = CookieManager(Config.COOKIE_DIR)`——**导入那一刻**把目录字符串
+  存进单例，之后 `setattr(Config, 'COOKIE_DIR', tmp)` 改不到它；
+* 于是 `tests/api/test_config_api.py`（它自己顶层没有任何危险 import，靠 fixture 拿 `app_module`）
+  在 `app` 已被我的文件提前导入的那次运行里，往真目录存了 `weibo_cookies.json` /
+  `zhihu_cookies.json`（内容 `[{'name':'SUB','value':'x'}]`），而 `test_cookie_delete` 那类用例的
+  delete 也打在真目录上。
+
+症状不是崩溃，是**45 个断言在别的时间点也过、只有整轮跑才红**（各模块单跑全绿，因为它们没有提前
+导入 `app`）。修复分两层：把新文件改成用 `app_module` fixture（`import app` 因此发生在隔离之后）；
+再在 `tests/unit/test_test_tiers.py` 里用 AST 静态拒绝任何测试文件的**模块级** `app` 导入——
+函数体内的导入是安全的，所以只扫 `tree.body`。
+
+留在这里的原因：这条不违反就会毁掉用户数据的规矩，长得完全不像错误。写它的反面教材是
+`tests/api/test_config_api.py::test_save_persists_into_the_isolated_cookie_dir`——它断言的是
+"保存到隔离根"，而它自己那次失败的方式，是**保存成功、日志也说了 saved、文件落在用户目录里**。
 

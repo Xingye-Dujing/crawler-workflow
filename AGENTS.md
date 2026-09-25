@@ -47,6 +47,12 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 
 ## How tests are written here
 
+- **A test module must not import `app` at module level.** pytest imports every collected file
+  *before any fixture runs* (marker filters do not help), while `data_root` is what redirects the
+  write paths into a tmp dir — so a top-level `import app` freezes `cookie_manager =
+  CookieManager(Config.COOKIE_DIR)` onto the user's real `data/cookies`. That cost a run's worth of
+  saved cookies. Take the `app_module` fixture; `test_test_tiers.py` refuses the import statically.
+
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js` /
   `workflow.js` / `app.js` into a zero-dependency node `vm` (shared `harness_dom.mjs`) and are driven
   by `tests/unit/test_frontend_*` modules. Any JS change to result-affecting logic must sync a scenario
