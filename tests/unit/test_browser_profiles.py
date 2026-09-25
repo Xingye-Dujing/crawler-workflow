@@ -118,6 +118,32 @@ class TestMarker:
         assert json.loads(json.dumps(browser_profiles.status('weibo')))['platform'] == 'weibo'
         assert path
 
+    def test_remember_cookie_marks_the_file_without_claiming_a_plant(self, profiles_on, tmp_path):
+        """A cookie captured out of the profile IS the profile's session; saying so must not
+        rewrite history as "it was imported", because the panel's advice differs between the two
+        (imported = planted from a file; remembered = it came from here)."""
+        browser_profiles.mark_used('weibo', imported=False)
+        marker = Path(browser_profiles.marker_path('weibo'))
+        before = json.loads(marker.read_text(encoding='utf-8'))
+        path = tmp_path / 'weibo_cookies.json'
+        path.write_text('[]', encoding='utf-8')
+        browser_profiles.remember_cookie('weibo', str(path))
+        after = browser_profiles.status('weibo', cookie_path=str(path))
+        assert after['needs_refresh'] is False, after
+        written = json.loads(marker.read_text(encoding='utf-8'))
+        assert written['cookie_stamp'] == browser_profiles.file_stamp(str(path)), written
+        assert written['imported_at'] == before['imported_at'], 'remembering must not claim an import'
+
+    def test_a_file_saved_after_a_remember_still_asks_for_the_button(self, profiles_on, tmp_path):
+        """The recording is about THAT file, not about the platform forever: a later paste is a
+        different session again, and the hint has to come back."""
+        browser_profiles.mark_used('weibo', imported=False)
+        path = tmp_path / 'weibo_cookies.json'
+        path.write_text('[]', encoding='utf-8')
+        browser_profiles.remember_cookie('weibo', str(path))
+        path.write_text('[{"name": "x"}]', encoding='utf-8')
+        assert browser_profiles.status('weibo', cookie_path=str(path))['needs_refresh'] is True
+
 
 class TestFactoryPolicy:
     def test_the_first_run_imports_the_saved_cookie_file(self, profiles_on, fake_crawler):

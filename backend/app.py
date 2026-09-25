@@ -4846,6 +4846,12 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
             add_log(t('cookie.noCookies'))
             return
         cookie_manager.save(platform, cookies)
+        # This jar was read OUT OF the platform's own profile browser, so the profile is not behind
+        # the file: without this line the panel would go on offering 「把 Cookie 更新进 Profile」,
+        # a button that here would overwrite a live session with a copy of itself. Only when a
+        # profile really exists — a run that chose 本次不用 Profile has no live session to spare.
+        if browser_profiles.is_enabled() and browser_profiles.is_used(platform):
+            browser_profiles.remember_cookie(platform, cookie_manager._path_for(platform))
         # A capture replaces the session, so any verdict the pre-run gate cached about
         # the old one is now not just stale but wrong in the dangerous direction.
         cookie_preflight.invalidate(platform)

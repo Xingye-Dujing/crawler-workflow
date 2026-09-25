@@ -137,6 +137,50 @@ class TestCookieJob:
         # ...and the browser was closed through the bounded helper.
         assert job['made'][0].closed is True
 
+    def test_a_generated_cookie_leaves_the_profile_looking_up_to_date(self, client, job, app_module, monkeypatch):
+        """The 「把 Cookie 更新进 Profile」 hint must NOT appear after a 浏览器生成.
+
+        That login happens INSIDE the platform's profile browser, so the saved file is a copy of
+        what the profile already holds — and the button, if pressed, would overwrite a live
+        session with that copy. Before this behaviour existed, the file's new timestamp alone made
+        the panel offer it, which is advice in exactly the wrong direction.
+
+        The profile is faked as used (the real one needs a browser); the assertion is about what
+        the endpoint reports afterwards.
+        """
+        import browser_profiles
+
+        monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: True)
+        monkeypatch.setattr(browser_profiles, 'is_used', lambda platform: True)
+        stamps = []
+        monkeypatch.setattr(
+            browser_profiles,
+            'remember_cookie',
+            lambda platform, path: stamps.append((platform, path)),
+        )
+        assert client.post('/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10}).status_code == 202
+        _await_phase(client, 'waiting')
+        client.post('/api/cookies/generate/confirm')
+        assert _await_idle(client)
+        assert stamps and stamps[0][0] == 'zhihu', f'the profile was never told it holds this file: {stamps}'
+        assert stamps[0][1].endswith('zhihu_cookies.json'), stamps
+
+    def test_a_generated_cookie_does_not_touch_the_profile_when_no_profile_is_used(
+        self, client, job, app_module, monkeypatch
+    ):
+        """The other answer is the one the user chose: 本次不用 Profile, so no live session exists
+        to be clobbered and the button really is the way in — recording would hide it."""
+        import browser_profiles
+
+        monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: False)
+        called = []
+        monkeypatch.setattr(browser_profiles, 'remember_cookie', lambda platform, path: called.append(platform))
+        assert client.post('/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10}).status_code == 202
+        _await_phase(client, 'waiting')
+        client.post('/api/cookies/generate/confirm')
+        assert _await_idle(client)
+        assert called == [], 'a run without a profile must keep offering the plant button'
+
     def test_the_login_window_is_built_to_show_the_qr_code(self, client, job, app_module):
         """A crawl browser blocks images to save seconds per navigation; a *login*
         window that does the same shows the user a page with no QR code to scan, so

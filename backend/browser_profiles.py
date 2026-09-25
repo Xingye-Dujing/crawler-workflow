@@ -235,6 +235,25 @@ def mark_used(platform: str, *, imported: bool = True, cookie_stamp: str = '') -
             json.dump(existing, handle, ensure_ascii=False, indent=1)
 
 
+def remember_cookie(platform: str, cookie_path: str) -> None:
+    """Record that this file IS the profile's own session, without claiming a plant.
+
+    The panel's 「把 Cookie 更新进 Profile」 hint answers one question: *did a different file go in
+    last time?* A cookie captured **out of this very profile** (the panel's 浏览器生成 path logs in
+    inside the profile browser and reads its jar) is not a different file — the profile already
+    holds it. Leaving the old stamp there would advertise a button whose only effect is to
+    overwrite a live session with a copy of itself, which is precisely what the import-once rule
+    exists to prevent. ``imported_at`` stays where it is: nothing was imported.
+    """
+    path = marker_path(platform)
+    with contextlib.suppress(OSError):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        existing = _marker(platform)
+        existing['cookie_stamp'] = file_stamp(cookie_path)
+        with open(path, 'w', encoding='utf-8') as handle:
+            json.dump(existing, handle, ensure_ascii=False, indent=1)
+
+
 def file_stamp(path: str) -> str:
     """A cheap identity for a cookie file: its mtime and size, not its contents.
 
