@@ -602,6 +602,27 @@ pager 自报页底，排队交棒无恙。红条分三类：
   滚动/验证码平台仍用 `settings.commentHint`；fetch 源模式（B 站热榜、YouTube 搜索/作者）用
   `settings.fetchQuietNote`。`tests/unit/test_crawl_capabilities.py` 钉住「note 只说它真会做的事」。
 
+## 那条「受自动测试软件的控制」横幅：excludeSwitches 认的是开关名（measured 2026-09-25，#129）
+
+用户问：驱动开出来的 Chrome 都写着"正受到自动测试软件的控制"，平台会不会识别，我们要不要伪装。
+
+量过的答案分三层：
+
+* **横幅本身页面读不到**——它是浏览器自己的外壳（窗口标题条上那一条），不在 DOM 里；
+  页面能读到的自动化痕迹是 `navigator.webdriver`、`cdc_adoQpoasnfa76pfcZLmcfl_*` 全局键、
+  以及 HeadlessChrome 的 UA。本项目 `navigator.webdriver` 已经是 False（`--disable-blink-features=
+  AutomationControlled` 的效果）。
+* **横幅的直接原因是 chromedriver 自己往 Chrome 命令行加的 `--enable-automation`**，去掉它的
+  正规手段是 `excludeSwitches`——但它匹配的是**生成的开关名**，写错名字不会报错、只是什么都不排除。
+  本项目从写下那天起就是 `'automation'`（真名 `enable-automation`），所以每个可见窗口都带着横幅。
+* **伪装不是决定性的**：同一晚、同一台机器、同一套 `cdc_*` 表面上，一个会话被挡回登录墙而
+  另一个把 51 条数据交了回来；抖音那条风控滑块也在用户手工通过后立刻可爬。因此这次只修拼写，
+  不做 UA 伪造、不清 `cdc_*`、不碰验证码——那是把"我们可能被识别"换成"我们确定在违反条款"。
+
+浏览器侧的自证在 `tests/integration/test_driver_surface.py`：读 `chrome://version` 的命令行
+（标签是本地化的，开关串不是），一次断言 `--enable-automation` **不在**，另一次把
+`excludeSwitches` 摘掉重开、断言它**在**——没有后者，前一句只是"这页什么都没读到"。
+
 ## 热榜：四个平台、两种答案、一条被证无的（measured 2026-09-25）
 
 #83 的四个平台逐个问过真站，没有一个是照着"看起来合理的 URL"写的。探针都在

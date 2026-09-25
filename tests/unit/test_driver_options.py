@@ -53,6 +53,22 @@ def test_driver_options_per_mode(captured_options, headless):
     crawler.driver = None  # nothing real to close
 
 
+#: The switches chromedriver puts on every Chrome command line that we ask it to
+#: leave out. These are **names of generated switches**, not descriptions: a name
+#: chromedriver never adds is accepted silently and excludes nothing, which is
+#: exactly what `'automation'` did here — the real one is `enable-automation`, and
+#: without it every visible crawl window kept the 「受自动测试软件的控制」 banner.
+#: The browser-side proof is in `tests/integration/test_browser_profile_launch.py`.
+EXCLUDED_SWITCHES = ['enable-logging', 'enable-automation']
+
+
+def test_excluded_switches_name_generated_switches_by_their_real_names(captured_options):
+    crawler = ZhihuCrawler(headless=False)
+    excluded = (captured_options['options'].experimental_options or {}).get('excludeSwitches')
+    assert excluded == EXCLUDED_SWITCHES, f'excludeSwitches must name real generated switches: {excluded!r}'
+    crawler.driver = None
+
+
 def _prefs(box):
     return (box['options'].experimental_options or {}).get('prefs') or {}
 
