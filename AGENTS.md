@@ -358,7 +358,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - Ruff: line-length 120, **single quotes**, indent 4, modern typing (`str | None`), py311. Lint findings are
   **genuinely fixed**: never `# noqa`, never `# ruff: noqa`, never a `per-file-ignores` or rule exemption
   in `ruff.toml`.
-- **Code changes are tracked Edits.** No Python/sed bulk rewrites of source or test files.
+- **Code changes are tracked Edits.** No Python/sed rewrite of any file: unrestorable = work is gone.
 
 ## Commits
 
