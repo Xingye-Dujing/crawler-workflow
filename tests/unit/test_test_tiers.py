@@ -266,7 +266,7 @@ class TestLiveCrawlerFixture:
     overlapping turn, and ``get_crawler`` a stub that closes on command.
     """
 
-    def _drive(self, monkeypatch):
+    def _drive(self, monkeypatch, raises=None):
         import contextlib
         import importlib.util
 
@@ -295,8 +295,9 @@ class TestLiveCrawlerFixture:
                 events.append(f'give:{platform}')
 
         class Stub:
-            def __init__(self, platform):
+            def __init__(self, platform, use_profile=None):
                 self.platform = platform
+                self.use_profile = use_profile
                 self.closed = False
 
             def close(self):
@@ -304,8 +305,10 @@ class TestLiveCrawlerFixture:
 
         made: list = []
 
-        def fake_get_crawler(platform, headless=True, cookie_dir=None):
-            stub = Stub(platform)
+        def fake_get_crawler(platform, headless=True, cookie_dir=None, use_profile=None):
+            if isinstance(raises, Exception):
+                raise raises
+            stub = Stub(platform, use_profile)
             made.append(stub)
             return stub
 
@@ -363,3 +366,30 @@ class TestLiveCrawlerFixture:
         finish()
         assert events == ['take:zhihu', 'give:zhihu'], events
         assert made[0].closed, 'a crawler left open by a test still has to be closed'
+
+    def test_a_profile_held_by_this_tier_stays_red_instead_of_skipping(self, monkeypatch):
+        """The one failure mode this fixture must NOT report as "no browser here".
+
+        A profile the previous case has not finished closing raises `ProfileUnavailable`
+        after `PROFILE_LOCK_TIMEOUT`, which arrives through the same `Exception` as a
+        missing Chrome — and skipping it would turn a serialization bug in this tier into
+        a grey line in a run the user is told must be all-green. Seen for real when the
+        device + live tiers ran back to back and a 热榜 case skipped for that reason.
+        """
+        from crawlers.base import ProfileUnavailableError
+
+        factory, _events, _made, finish = self._drive(monkeypatch, raises=ProfileUnavailableError('profile held'))
+        with pytest.raises(ProfileUnavailableError):
+            factory('weibo')
+        finish()
+
+    def test_a_case_may_ask_for_no_profile_and_is_honoured(self, monkeypatch):
+        """The boards are measured on a throwaway browser, so their cases have to be able
+        to say so; a fixture that dropped the argument would quietly run them on the
+        user's real profile instead."""
+        factory, _events, made, finish = self._drive(monkeypatch)
+        try:
+            factory('weibo', use_profile=False)
+        finally:
+            finish()
+        assert made[-1].use_profile is False, 'the request to skip the profile was dropped'

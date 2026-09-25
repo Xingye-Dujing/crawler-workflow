@@ -8,6 +8,8 @@ streaming sink, and the resume arithmetic. A fake driver lets all of that run in
 the default suite in milliseconds.
 """
 
+import re
+
 import pytest
 from selenium.common.exceptions import NoSuchElementException
 
@@ -601,3 +603,151 @@ class TestBodyExpansion:
         with caplog.at_level('INFO'):
             assert crawler.search('三亚', target_count=3, full_body=False) == []
         assert i18n.t('crawl.zhihu.excerpt_only') not in _lines(caplog)
+
+
+class FakeBoardDriver:
+    """Answers the zhihu home page and the in-page 热榜 bridge.
+
+    ``payload`` is what ``hot-lists/total`` returns; ``wall`` parks the browser on
+    ``/signin`` from the navigation itself, which is what an anonymous session is
+    actually answered with (measured) before the endpoint ever says 401.
+    """
+
+    def __init__(self, payload, wall=False):
+        self.payload = payload
+        self.wall = wall
+        self.current_url = 'about:blank'
+        self.visited = []
+        self.fetched = []
+
+    def get(self, url):
+        self.visited.append(url)
+        if self.wall:
+            self.current_url = 'https://www.zhihu.com/signin?next=%2F'
+            return
+        self.current_url = url
+
+    def set_script_timeout(self, seconds):
+        pass
+
+    def execute_async_script(self, script):
+        match = re.search(r'fetch\("(.*?)"', script)
+        self.fetched.append(match.group(1) if match else script[:80])
+        if isinstance(self.payload, Exception):
+            raise self.payload
+        return self.payload
+
+    def find_element(self, by, selector):
+        if selector == 'body':
+            return FakeElement('登录 二维码' if self.wall else '知乎 首页')
+        raise NoSuchElementException(selector)
+
+    def find_elements(self, by, selector):
+        return []
+
+    def quit(self):
+        pass
+
+
+def _hot_row(question='2086444635463705931', title='网民吐槽美团抽成太多', heat='398 万热度', author='用户'):
+    """One board entry, shaped by the measured answer: the author object carries the
+    literal 「用户」 for every row and 评论数 is 0 for every row."""
+    return {
+        'type': 'hot_list_feed',
+        'detail_text': heat,
+        'card_id': f'Q_{question}',
+        'target': {
+            'type': 'question',
+            'id': question,
+            'title': title,
+            'url': f'https://api.zhihu.com/questions/{question}',
+            'excerpt': '小时候夏夜躺在院子的摘要',
+            'answer_count': 275,
+            'comment_count': 0,
+            'follower_count': 134,
+            'created': 1790258301,
+            'author': {'name': author, 'type': 'people'},
+        },
+    }
+
+
+def _board(rows):
+    return {'data': list(rows), 'paging': {'is_end': True, 'next': '', 'is_start': False, 'totals': 0}}
+
+
+@pytest.fixture
+def make_board(monkeypatch):
+    monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
+
+    def _make(payload, wall=False):
+        driver = FakeBoardDriver(payload, wall=wall)
+
+        def fake_create(self, *a, **kw):
+            self.driver = driver
+
+        monkeypatch.setattr(Crawler, '_create_driver', fake_create)
+        return ZhihuCrawler(headless=True), driver
+
+    return _make
+
+
+class TestZhihuHotBoard:
+    def test_the_board_drops_the_two_columns_that_are_not_data(self, make_board):
+        """Measured on all 30 rows: 作者 is the literal 「用户」 and 评论数 is 0. A column
+        of one repeated word, or of a number the payload never varies, is read by the
+        user as content — so neither is emitted, and the columns that ARE filled stay."""
+        second = _hot_row(question='2', title='第二个问题', heat='238 万热度')
+        crawler, _driver = make_board(_board([_hot_row(), second]))
+        rows = crawler.hot(target_count=10)
+        assert [set(row) for row in rows] == [{'排名', '标题', '链接', '热度', '回答数', '关注数', '摘要'}] * 2, rows
+        assert rows[0]['回答数'] == 275 and rows[0]['关注数'] == 134
+
+    def test_the_link_is_the_page_a_person_can_open(self, make_board):
+        """The answer hands out ``api.zhihu.com/questions/<id>``, which is not a page."""
+        crawler, _driver = make_board(_board([_hot_row(question='2068641114068988689')]))
+        rows = crawler.hot(target_count=5)
+        assert rows[0]['链接'] == 'https://www.zhihu.com/question/2068641114068988689'
+
+    def test_the_heat_text_becomes_a_number(self, make_board):
+        crawler, _driver = make_board(_board([_hot_row(heat='398 万热度')]))
+        assert crawler.hot(target_count=5)[0]['热度'] == 3980000
+
+    def test_a_walled_session_is_named_not_answered_with_an_empty_board(self, make_board):
+        import i18n
+
+        crawler, driver = make_board(_board([_hot_row()]), wall=True)
+        with pytest.raises(RuntimeError) as caught:
+            crawler.hot(target_count=10)
+        assert str(caught.value) == i18n.t('crawl.zhihu.hotWall')
+        assert driver.fetched == [], 'a session already held at the sign-in page must not pay for the endpoint'
+
+    def test_an_answer_that_is_not_a_board_raises(self, make_board):
+        import i18n
+
+        crawler, _driver = make_board({'status': 401, 'error': {'code': 101, 'name': 'AuthenticationError'}})
+        with pytest.raises(RuntimeError) as caught:
+            crawler.hot(target_count=10)
+        assert i18n.t('crawl.zhihu.hotRefused', answer='401') == str(caught.value)
+
+    def test_the_board_is_asked_for_once_and_a_resume_answers_from_the_cursor(self, make_board):
+        crawler, driver = make_board(_board([_hot_row(), _hot_row(question='2')]))
+        crawler.hot(target_count=200)
+        assert len(driver.fetched) == 1, 'every paging parameter is ignored by the site, so a loop replays it'
+        # A finished board must not be re-paid: 继续 with the whole board already done
+        # returns the stored rows without opening a browser at all.
+        crawler2, driver2 = make_board(_board([_hot_row()]))
+        rows = crawler2.hot(target_count=30, resume={'done': 30})
+        assert driver2.fetched == [], 'the resume short circuit asked the site anyway'
+        assert rows == []
+
+    def test_a_target_above_the_board_says_the_site_capped_it(self, make_board, caplog):
+        crawler, _driver = make_board(_board([_hot_row(), _hot_row(question='2')]))
+        with caplog.at_level('INFO'):
+            rows = crawler.hot(target_count=50)
+        assert len(rows) == 2
+        assert i18n.t('crawl.zhihu.hotCapped', board=2) in _lines(caplog)
+
+    def test_a_row_the_answer_cannot_identify_is_not_emitted(self, make_board):
+        crawler, _driver = make_board(_board([{'target': {'title': '没有问题 id'}}, _hot_row()]))
+        rows = crawler.hot(target_count=10)
+        assert [row['标题'] for row in rows] == ['网民吐槽美团抽成太多'], rows

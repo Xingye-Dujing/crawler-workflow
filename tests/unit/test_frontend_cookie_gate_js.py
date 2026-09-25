@@ -50,13 +50,13 @@ MATRIX = capabilities.as_dict()
 DEFAULT_MODE = {entry['platform']: entry['modes'][0]['key'] for entry in MATRIX['platforms']}
 
 
-def _source(node_id, platform):
+def _source(node_id, platform, mode=None):
     return {
         node_id: {
             'id': node_id,
             'type': 'source',
             'title': f'采集 {platform}',
-            'params': {'platform': platform, 'keyword': '三亚', 'collect': DEFAULT_MODE[platform]},
+            'params': {'platform': platform, 'keyword': '三亚', 'collect': mode or DEFAULT_MODE[platform]},
         }
     }
 
@@ -88,7 +88,7 @@ def _output(node_id='o1'):
     }
 
 
-def _chain(index, platform, kind='source', urls=None):
+def _chain(index, platform, kind='source', urls=None, mode=None):
     """One complete workflow: a crawler node wired into an output node.
 
     A crawler with nothing downstream is refused by ``validate()`` before the gate is
@@ -97,7 +97,7 @@ def _chain(index, platform, kind='source', urls=None):
     absence.
     """
     src_id, out_id = f'w{index}-s', f'w{index}-o'
-    src = _source(src_id, platform) if kind == 'source' else _comment(src_id, urls)
+    src = _source(src_id, platform, mode) if kind == 'source' else _comment(src_id, urls)
     return {**src, **_output(out_id)}, [{'from': src_id, 'to': out_id}]
 
 
@@ -170,6 +170,45 @@ SCENARIOS = [
             'unclear': [],
             'probed': True,
         },
+    },
+    {
+        # 微博热搜 is measured answering an anonymous browser, so a canvas whose only
+        # crawl is that board must not have its run refused for a missing weibo cookie.
+        # The gate asks per platform AND per mode, so this must not send the request.
+        'id': 'board-needs-no-cookie',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'weibo', mode='hot')),
+        'preflight': {
+            'ok': True,
+            'results': {'weibo': _verdict('weibo', 'invalid', blocking=True, text='The stored weibo cookie is dead')},
+            'blocked': ['weibo'],
+            'unclear': [],
+            'probed': True,
+        },
+    },
+    {
+        # The zhihu board is the opposite answer (401 without a session), so the same
+        # mode on the next platform still asks — exempting weibo must not become
+        # exempting 热榜.
+        'id': 'board-needs-a-cookie',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'zhihu', mode='hot')),
+        'preflight': {
+            'ok': True,
+            'results': {'zhihu': _verdict('zhihu', 'invalid', blocking=True, text='The stored zhihu cookie is dead')},
+            'blocked': ['zhihu'],
+            'unclear': [],
+            'probed': True,
+        },
+    },
+    {
+        # Both on one canvas: the probe runs for the platform that needs it and the
+        # request names only that one. A filter that dropped the whole canvas, or
+        # none of it, both fail here.
+        'id': 'board-mixed-with-post',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'weibo', mode='hot'), _chain(2, 'zhihu')),
+        'preflight': CLEAN,
     },
     {
         'id': 'expired-blocks-the-run',
@@ -502,6 +541,31 @@ class TestSerialOnlyPlatforms:
         case = gate['weibo-single-runs-quiet']
         serial = [dialog for dialog in case['dialogs'] if 'serial' in dialog['values']]
         assert serial == [], 'one crawl queues behind nobody — the warning would be noise'
+        assert case['ran'] is True
+
+
+class TestTheGateFollowsTheModeNotJustThePlatform:
+    """A cookie is a fact about a session; whether this crawl needs one is a fact about
+    the MODE. Measured on the live site: weibo's 热搜 endpoint returns the same board to
+    an anonymous browser, while zhihu's answers it 401. Probing the first would refuse a
+    run the site would have served, and tell the user to log in for nothing."""
+
+    def test_a_board_that_needs_no_session_is_never_probed(self, gate):
+        case = gate['board-needs-no-cookie']
+        assert case['asked'] is False, f'the gate probed a crawl that needs no cookie: {case["askedBody"]}'
+        assert case['ran'] is True, 'and the run was still started'
+
+    def test_the_same_board_on_a_session_platform_still_asks(self, gate):
+        case = gate['board-needs-a-cookie']
+        assert case['asked'] is True, 'exempting weibo must not exempt 热榜 as a word'
+        assert case['askedBody']['platforms'] == ['zhihu'], case['askedBody']
+
+    def test_a_mixed_canvas_probes_only_the_platform_that_needs_it(self, gate):
+        case = gate['board-mixed-with-post']
+        assert case['asked'] is True
+        assert case['askedBody']['platforms'] == ['zhihu'], (
+            f'the weibo 热搜 node was carried into the probe: {case["askedBody"]}'
+        )
         assert case['ran'] is True
 
 

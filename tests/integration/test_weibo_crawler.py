@@ -9,6 +9,7 @@ settle behavior of ``WeiboCrawler._await_search_page``.
 
 import json
 import re
+from urllib.parse import quote
 
 import pytest
 from selenium.common.exceptions import NoSuchElementException
@@ -421,3 +422,142 @@ class TestWeiboAuthorWalk:
         crawler, _driver = make_author({1: [item]})
         rows = crawler.author('6302837173', target_count=1)
         assert rows[0]['发布者'] == '转发者', 'the row is the reposter own post, not the source of the retweet'
+
+
+class FakeBoardDriver:
+    """Answers the weibo.com homepage and the in-page hotSearch bridge.
+
+    ``payload`` is what ``ajax/side/hotSearch`` returns — the shape the site gave in
+    every measured session (``ok: 1`` with ~52 rows under ``data.realtime``). The
+    fetch is answered through the ``done(j)`` object bridge ``fetch_json`` uses, so
+    the fake returns a dict and never sees a JSON string.
+    """
+
+    def __init__(self, payload):
+        self.payload = payload
+        self.current_url = 'about:blank'
+        self.visited = []
+        self.fetched = []
+
+    def get(self, url):
+        self.visited.append(url)
+        self.current_url = url
+
+    def set_script_timeout(self, seconds):
+        pass
+
+    def execute_async_script(self, script):
+        match = re.search(r'fetch\("(.*?)"', script)
+        self.fetched.append(match.group(1) if match else script[:80])
+        if isinstance(self.payload, Exception):
+            raise self.payload
+        return self.payload
+
+    def find_element(self, by, selector):
+        raise NoSuchElementException(selector)
+
+    def find_elements(self, by, selector):
+        return []
+
+    def quit(self):
+        pass
+
+
+def _hot_item(word='中美元首华盛顿会晤', num='1003085', realpos='1', scheme=None):
+    return {
+        'word': word,
+        'word_scheme': scheme if scheme is not None else f'#{word}#',
+        'note': word,
+        'num': num,
+        'realpos': realpos,
+        'rank': str(int(realpos) - 1),
+        'topic_flag': '1',
+        'label_name': '',
+        'emoticon': '',
+    }
+
+
+def _board(items):
+    return {'ok': 1, 'data': {'realtime': list(items)}, 'logs': [], 'topLogs': []}
+
+
+@pytest.fixture
+def make_board(monkeypatch):
+    monkeypatch.setattr(weibo_module.time, 'sleep', lambda s: None)
+
+    def _make(payload):
+        driver = FakeBoardDriver(payload)
+
+        def fake_create(self, *a, **kw):
+            self.driver = driver
+
+        monkeypatch.setattr(Crawler, '_create_driver', fake_create)
+        return WeiboCrawler(headless=True), driver
+
+    return _make
+
+
+class TestWeiboHotBoard:
+    def test_the_board_rows_carry_only_what_the_answer_really_fills(self, make_board):
+        """A 热搜 row is a TOPIC. The post vocabulary (正文/发布者/发布时间) is not in the
+        answer, so a row that grew those columns would be inventing them."""
+        crawler, _driver = make_board(_board([_hot_item(), _hot_item(word='另一条热搜', num='12', realpos='2')]))
+        rows = crawler.hot(target_count=10)
+        assert [set(row) for row in rows] == [{'排名', '标题', '话题', '热度', '链接'}] * 2, rows
+        assert rows[0]['排名'] == 1 and rows[0]['标题'] == '中美元首华盛顿会晤'
+        assert rows[0]['热度'] == 1003085, 'the heat is an exact integer in the answer, so it must not be relabelled 万'
+        assert rows[0]['链接'].startswith('https://s.weibo.com/weibo?q=')
+        assert '%23' in rows[0]['链接'], 'the link is the search page for the #topic# form'
+
+    def test_the_board_is_asked_for_exactly_once(self, make_board):
+        """One answer IS the board (measured). A page loop here would re-request the same
+        list until the target filled, which is both a lie about depth and weibo's wall
+        risk paid for nothing."""
+        crawler, driver = make_board(_board([_hot_item(word=f'话题{i}') for i in range(3)]))
+        crawler.hot(target_count=200)
+        assert len(driver.fetched) == 1, driver.fetched
+
+    def test_a_refused_answer_raises_and_files_no_empty_board(self, make_board):
+        import i18n
+
+        crawler, _driver = make_board({'ok': 0, 'data': {}})
+        with pytest.raises(RuntimeError) as caught:
+            crawler.hot(target_count=10)
+        assert str(caught.value) == i18n.t('crawl.weibo.hotRefused', answer='0')
+        assert crawler.results() == [], 'a refusal must not leave a board-shaped empty table behind'
+
+    def test_a_target_above_the_board_says_the_site_capped_it(self, make_board, caplog):
+        """The number in the panel is the user's ask; the board's length is the site's
+        answer. Silence here would read as "weibo had nothing else today"."""
+        import i18n
+
+        crawler, _driver = make_board(_board([_hot_item(word=f'话题{i}') for i in range(3)]))
+        with caplog.at_level('INFO'):
+            rows = crawler.hot(target_count=50)
+        assert len(rows) == 3
+        assert i18n.t('crawl.weibo.hotCapped', board=3) in [record.getMessage() for record in caplog.records]
+
+    def test_a_row_without_a_topic_word_is_not_a_row(self, make_board):
+        crawler, _driver = make_board(_board([_hot_item(word='  '), _hot_item(word='真热搜')]))
+        rows = crawler.hot(target_count=10)
+        assert [row['标题'] for row in rows] == ['真热搜'], rows
+
+    def test_a_board_entry_that_is_not_a_topic_keeps_its_own_form(self, make_board):
+        """Live measured: some rows carry ``word_scheme`` equal to the bare word (a
+        非话题 entry). The column is the site's string, and the link has to search for
+        exactly that — rewriting it into a #…# shape would ask for a topic that is
+        not on the board."""
+        crawler, _driver = make_board(_board([_hot_item(word='让家更有AI', scheme='让家更有AI', realpos='4')]))
+        row = crawler.hot(target_count=5)[0]
+        assert row['话题'] == '让家更有AI' and row['标题'] == '让家更有AI'
+        assert '%23' not in row['链接'], row['链接']
+        assert quote('让家更有AI') in row['链接']
+
+    def test_the_board_never_asks_for_a_login(self, make_board):
+        """Measured: hotSearch answers the same way with no cookie at all, so this mode
+        must not gate on a session the site does not require."""
+        crawler, driver = make_board(_board([_hot_item()]))
+        rows = crawler.hot(target_count=5)
+        assert len(rows) == 1
+        assert crawler.login_wall is False
+        assert driver.visited == ['https://weibo.com/'], 'one page load buys the document to ask from'

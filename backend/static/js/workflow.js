@@ -400,6 +400,36 @@ const workflow = {
         });
     },
 
+    _sessionPlatforms() {
+        /* The platforms whose crawl a cookie actually decides, out of the canvas.
+
+           ``_crawlPlatforms()`` answers "where is this run going" — the network
+           warning and the cost of a browser are per site, whatever the mode. This
+           answers a narrower question, because the matrix says some crawls are served
+           to an anonymous browser (measured: weibo's 热搜 board). Probing those would
+           refuse a run the site would have completed, on the strength of a login the
+           user was never asked for.
+
+           Comment nodes are always in: the comment engine reads a logged-in feed
+           whatever the platform, and its mode is not on the node. */
+        var found = [];
+        Object.keys(canvas.nodes).forEach(function (id) {
+            var node = canvas.nodes[id];
+            var p = node.params || {};
+            if (node.type === 'source') {
+                if (p.platform && Capabilities.needsSession(p.platform, p.collect || p.mode)) found.push(p.platform);
+            } else if (node.type === 'comment') {
+                String(p.urls || '').split(/[\s,;、]+/).forEach(function (line) {
+                    var plat = urlPlatform(line);
+                    if (plat) found.push(plat);
+                });
+            }
+        });
+        return found.filter(function (platform, index) {
+            return found.indexOf(platform) === index;
+        });
+    },
+
     async _confirmRegionBeforeRun() {
         /* One network cannot serve both halves of this canvas: a VPN gets douyin's 502,
            a plain Chinese route never reaches x.com. The answer is advisory on purpose —
@@ -441,7 +471,7 @@ const workflow = {
            ``profileChoice`` is the per-run answer from the profile dialog, forwarded to
            the check so it probes the browser the run will actually use. */
         if (opts && opts.resumeRunId) return true;
-        var platforms = this._crawlPlatforms();
+        var platforms = this._sessionPlatforms();
         if (!platforms.length) return true;
         if (window.AppSettings) await AppSettings.pull();
         var values = (window.AppSettings && AppSettings._values) || {};
@@ -1037,6 +1067,18 @@ const Capabilities = {
         var mode = this.mode(id, key);
         if (!mode) return [];
         return mode.fields.concat((this.data && this.data.fileFields) || []);
+    },
+
+    needsSession(id, key) {
+        /* Whether this crawl is a session crawl. With no answer from the matrix it
+           says yes: a probe that is not run cannot block a run, but a crawl that
+           quietly turns out to need a login costs the user a wasted crawl — so the
+           unknown direction is "keep asking", matching `fields()` never guessing a
+           shape. */
+        if (!this.ready()) return true;
+        var mode = this.mode(id, key);
+        if (!mode) return true;
+        return mode.needsSession !== false;
     },
 
     defaults(id) {

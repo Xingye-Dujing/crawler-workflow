@@ -36,6 +36,17 @@ def as_index(value, default: int = 0) -> int:
         return default
 
 
+class ProfileUnavailableError(RuntimeError):
+    """The browser was never built because the platform's profile could not be taken.
+
+    Its own type because "a Chrome is not installed" and "Chrome is installed but
+    somebody still holds this profile" arrive through the same `Exception` — and the
+    live tier answers the first by skipping (nothing to test here) while the second
+    MUST stay red: it is this machine failing to serialize its own crawls, and a skip is
+    how that becomes invisible.
+    """
+
+
 class Crawler(ABC):
     """Base class for all platform crawlers.
 
@@ -159,8 +170,8 @@ class Crawler(ABC):
                 # Not a stuck profile — the user stopped this run while it queued.
                 # Saying so matters: the other message blames a window that never
                 # closed and sends the user hunting a browser that is not there.
-                raise RuntimeError(t('crawl.profile_gave_up', dir=self.profile_dir))
-            raise RuntimeError(
+                raise ProfileUnavailableError(t('crawl.profile_gave_up', dir=self.profile_dir))
+            raise ProfileUnavailableError(
                 t(
                     'crawl.profile_stuck',
                     dir=self.profile_dir,

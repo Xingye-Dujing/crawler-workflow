@@ -76,7 +76,11 @@ class TestMatrixEntry:
     def test_zhihu_offers_the_author_mode_between_posts_and_comments(self):
         from crawl_capabilities import mode_keys_for
 
-        assert mode_keys_for('zhihu') == ('posts', 'author', 'comments')
+        # The *order* is the claim (the panel lists modes in this sequence), so the
+        # test states the relationship instead of pinning the whole tuple: adding a
+        # mode to zhihu is not this test's business.
+        keys = list(mode_keys_for('zhihu'))
+        assert keys.index('posts') < keys.index('author') < keys.index('comments'), keys
 
     def test_the_author_mode_asks_for_the_profile_token(self):
         mode = mode_for('zhihu', 'author')

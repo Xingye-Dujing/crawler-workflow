@@ -78,6 +78,9 @@ class WeiboCrawler(Crawler):
     """
 
     domain = 'weibo.com'
+    #: 热搜, served by the logged-in origin. Measured: ``ok: 1`` with ~52 rows in
+    #: ``data.realtime``, repeatable, and answered with or without a session.
+    HOT_API = 'https://weibo.com/ajax/side/hotSearch'
     # The search host gets its own cookie pass: a cookie scoped to
     # ``.weibo.com`` is accepted on weibo.com and simply not offered to
     # s.weibo.com until the browser has been there once.
@@ -164,6 +167,73 @@ class WeiboCrawler(Crawler):
                 self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
 
         return self.results()
+
+    # ─── the site's own board ─────────────────────────────────────────
+
+    def hot(self, target_count: int = 50, **kwargs):
+        """微博热搜 — the topic board the site ranks for itself.
+
+        ``ajax/side/hotSearch`` is read from inside a loaded ``weibo.com`` document,
+        which is the shape that answers: measured 52 rows carrying an exact integer
+        heat (``num``), a repeat call returning the same list, and — unlike every other
+        weibo surface here — the same answer in a planted-cookie window, in the
+        profile, and with **no cookie at all**. That last fact is why this mode asks
+        for no login: refusing to run without a session would be inventing a
+        requirement the site does not have.
+
+        The DOM table on the search host (``s.weibo.com/top/summary``) answers in all
+        three shapes too and is kept as the fallback in docs; it is not used here
+        because it labels its heat with 万 rounding and costs a passport-flash judge on
+        the way in, while the JSON gives the same rows exactly.
+
+        A row is a TOPIC, not a post: its 链接 is the search page for that word, which
+        is what the board itself links to. Columns the payload cannot fill (正文, 作者,
+        发布时间) are simply absent rather than empty-and-implied.
+        """
+        logger.info(t('crawl.weibo.hotStart', n=target_count))
+        self.open('https://weibo.com/')
+        payload = pagefetch.fetch_json(self.driver, self.HOT_API, requests=self.requests)
+        rows = None
+        if isinstance(payload, dict) and payload.get('ok') == 1:
+            data = payload.get('data') or {}
+            candidate = data.get('realtime')
+            if isinstance(candidate, list):
+                rows = candidate
+        if rows is None:
+            answer = payload.get('ok') if isinstance(payload, dict) else None
+            raise RuntimeError(t('crawl.weibo.hotRefused', answer=str(answer if answer is not None else 'empty')))
+        seen = {str(row.get('链接') or '') for row in self.results()}
+        for index, item in enumerate(rows, start=1):
+            if self.collected() >= target_count:
+                break
+            row = self._hot_row(item, index)
+            if not row or row['链接'] in seen:
+                continue
+            seen.add(row['链接'])
+            self.emit(row)
+            self.mark_position(board='hot', done=self.collected())
+        logger.info(t('crawl.weibo.hotDone', n=self.collected(), total=target_count))
+        if self.collected() < target_count:
+            logger.info(t('crawl.weibo.hotCapped', board=len(rows)))
+        return self.results()
+
+    @staticmethod
+    def _hot_row(item: dict, rank: int) -> dict | None:
+        """One board entry, flattened. ``word`` is the topic; ``word_scheme`` carries
+        the ``#…#`` form the site publishes. ``note`` duplicates ``word`` on the
+        measured rows, so it is not a column of its own."""
+        word = str(item.get('word') or '').strip()
+        if not word:
+            return None
+        scheme = str(item.get('word_scheme') or '').strip() or word
+        heat = item.get('num')
+        return {
+            '排名': as_index(item.get('realpos'), rank),
+            '标题': word,
+            '话题': scheme,
+            '热度': as_index(heat, 0) if str(heat or '').strip() else parse_count(str(item.get('label') or '')),
+            '链接': f'https://s.weibo.com/weibo?q={quote(scheme)}',
+        }
 
     # ─── one author's posts ─────────────────────────────────────────────
 

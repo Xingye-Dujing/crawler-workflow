@@ -11,7 +11,7 @@ from selenium.webdriver.common.by import By
 from i18n import t
 
 from .base import Crawler, as_index
-from .engine import feed
+from .engine import feed, pagefetch
 from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,12 @@ class ZhihuCrawler(Crawler):
     # already thrown away.
     CARD_SELECTOR = '.SearchResult-Card[role="listitem"]'
     END_MARKER = '.css-7hmi9v'
+    #: The board's own endpoint, read from inside a loaded zhihu document. Measured:
+    #: 30 rows with every field inline, in both a visible and a headless window.
+    HOT_API = 'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50'
+    #: How many rows the board really holds (measured; every cursor parameter is
+    #: ignored). A target above this is answered by saying so, not by looping.
+    HOT_BOARD_SIZE = 30
     #: A profile tab's rows. Measured 2026-09: ``/people/<token>/answers`` held 39
     #: ``.ContentItem`` nodes and 79 after three scrolls, so the list pages by
     #: scrolling exactly like the search page — and the nodes are the same shape, so
@@ -272,6 +278,92 @@ class ZhihuCrawler(Crawler):
                 logger.info(t('crawl.zhihu.bodies_short', n=expand['short']))
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
         return self.results()
+
+    # ─── the site's own board ─────────────────────────────────────────
+
+    def hot(self, target_count: int = 30, **kwargs):
+        """知乎热榜 — the questions the site itself is ranking right now.
+
+        One in-page fetch of the board's own endpoint, from inside a loaded zhihu
+        document (the session's cookie is what the endpoint asks for: measured, an
+        anonymous session is answered ``401 AuthenticationError``, and the homepage
+        itself bounces to ``/signin`` first).
+
+        The answer is the WHOLE board: measured 30 rows with ``limit=50``, and
+        ``limit=100`` / ``offset=30`` / ``page=2`` / a guessed cursor each returned the
+        same 30 ids with ``paging.next`` empty. So there is no page loop here — asking
+        again would replay the list, and a target above 30 is answered by saying what
+        the board holds rather than by padding or looping.
+
+        Columns follow what the payload really fills (see docs/crawler_notes.md):
+        标题 / 链接 / 热度 / 回答数 / 关注数 / 摘要. NOT 作者 (all 30 rows carry the
+        literal 「用户」 — a column of one repeated word is noise the user reads as data)
+        and NOT 评论数 (0 in all 30, which would report "no comments" for a question
+        with hundreds). The link is rewritten from ``api.zhihu.com/questions/<id>``,
+        which the payload hands out, to the page a person can open.
+        """
+        resume = self.resume_of(kwargs)
+        if as_index(resume.get('done'), 0) >= self._board_size(target_count):
+            logger.info(t('crawl.zhihu.hotDone', n=self.collected(), total=target_count))
+            return self.results()
+        logger.info(t('crawl.zhihu.hotStart', n=target_count))
+        # The home page is both the document the fetch is asked from and the honest
+        # place to learn that this session is not logged in (see `login_url` above).
+        self.open(self.login_url)
+        self.check_login_wall(self.login_url)
+        if self.login_wall:
+            # Named, not empty: the board needs a session, and "0 rows" would read as
+            # "nothing is hot" rather than "you are not logged in".
+            raise RuntimeError(t('crawl.zhihu.hotWall'))
+        payload = pagefetch.fetch_json(self.driver, self.HOT_API, requests=self.requests)
+        rows = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            status = payload.get('status') if isinstance(payload, dict) else None
+            error = payload.get('error') if isinstance(payload, dict) else None
+            raise RuntimeError(t('crawl.zhihu.hotRefused', answer=str(status or error or 'empty')))
+        seen = {str(row.get('链接') or '') for row in self.results()}
+        emitted = 0
+        for index, item in enumerate(rows, start=1):
+            if emitted >= target_count:
+                break
+            row = self._hot_row(item, index)
+            if not row or row['链接'] in seen:
+                continue
+            seen.add(row['链接'])
+            self.emit(row)
+            emitted += 1
+            self.mark_position(board='hot', done=self.collected())
+        logger.info(t('crawl.zhihu.hotDone', n=self.collected(), total=target_count))
+        if emitted < target_count:
+            # The one promise this mode cannot keep is the number in the box, and the
+            # site is the reason — say it once, in the console, where the user is.
+            logger.info(t('crawl.zhihu.hotCapped', board=len(rows)))
+        return self.results()
+
+    @staticmethod
+    def _board_size(target_count: int) -> int:
+        """The smaller of the ask and the board. Kept separate so the resume short
+        circuit above and the cap message cannot drift apart."""
+        return min(max(0, as_index(target_count, 30)), ZhihuCrawler.HOT_BOARD_SIZE)
+
+    @staticmethod
+    def _hot_row(item: dict, rank: int) -> dict | None:
+        target = item.get('target') if isinstance(item.get('target'), dict) else {}
+        question = str(target.get('id') or '')
+        if not question:
+            return None
+        link = str(target.get('url') or '')
+        if '/questions/' in link:
+            link = f'https://www.zhihu.com/question/{question.split("/")[-1]}'
+        return {
+            '排名': rank,
+            '标题': str(target.get('title') or ''),
+            '链接': link or str(target.get('url') or ''),
+            '热度': parse_count(str(item.get('detail_text') or '')),
+            '回答数': as_index(target.get('answer_count'), 0),
+            '关注数': as_index(target.get('follower_count'), 0),
+            '摘要': str(target.get('excerpt') or ''),
+        }
 
     # ─── one creator's own list ───────────────────────────────────────
 

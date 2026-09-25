@@ -18,6 +18,7 @@ second opinion beside it.
 - [网络分区：国内与海外不能一起爬](#网络分区国内与海外不能一起爬用户实测-2026-09-24)
 - [运行前 Cookie 预检](#运行前-cookie-预检measured-2026-09-24)
 - [A login page on the way through is not a wall](#a-login-page-on-the-way-through-is-not-a-wall-measured-2026-09-24)
+- [热榜：四个平台、两种答案、一条被证无的](#热榜四个平台两种答案一条被证无的measured-2026-09-25)
 
 ## Weibo
 
@@ -599,3 +600,87 @@ pager 自报页底，排队交棒无恙。红条分三类：
 * 面板文案按 `collects` 分流：fetch 评论模式用新键 `settings.commentFetchHint`（不再声称开窗口），
   滚动/验证码平台仍用 `settings.commentHint`；fetch 源模式（B 站热榜、YouTube 搜索/作者）用
   `settings.fetchQuietNote`。`tests/unit/test_crawl_capabilities.py` 钉住「note 只说它真会做的事」。
+
+## 热榜：四个平台、两种答案、一条被证无的（measured 2026-09-25）
+
+#83 的四个平台逐个问过真站，没有一个是照着"看起来合理的 URL"写的。探针都在
+`backend/test_*_hot*.py`（一次性脚本，gitignore），载荷在 `scratchpad/*_hot*.json`。
+
+### 微博热搜：已上线，且是唯一不需要登录态的采集
+
+`https://weibo.com/ajax/side/hotSearch`，在已加载的 `weibo.com` 文档里用
+`credentials:'include'` 读（`pagefetch.fetch_json`）。实测：
+
+* `ok:1`，榜单在 `data.realtime`，**51–52 行**，每行带 `word` / `word_scheme` / `note` /
+  `num` / `realpos` / `rank` / `topic_flag` / `label_name` / `emoticon`；
+* `num` 是**精确整数**（1003085），不是 DOM 表上的 万 标签 —— 这是选 JSON 而不选
+  `s.weibo.com/top/summary` 的第二个理由；
+* 连打两次计数一致，所以"一次回答就是整块榜"不是猜的；
+* **三种会话都答**：插 Cookie 的一次性浏览器、平台 profile、**完全无 Cookie**（匿名会话
+  同样 `ok:1`）。这条决定了矩阵新增的 `Mode.needs_session`：Cookie 预检是按**平台**问的，
+  如果只看平台，一个只挂「微博热搜」节点的画布会因为没 Cookie 被拒 —— 而站点本来就把榜单
+  给了匿名浏览器。所以现在只有 `('weibo','hot')` 是 `needs_session=False`，
+  `test_only_the_measured_board_answers_an_anonymous_browser` 钉住"恰好这一个"，
+  多一个就是需要重新测量的主张；
+* 备用路径（已实测、未使用）：`https://s.weibo.com/top/summary` 的 DOM 表在三种会话下也
+  都出表（每行 3 格：序号 / 关键词 / 热度，行链是 `/weibo?q=<词>&t=31&band_rank=N`）。
+  没用它是因为它把热度写成 万 标签，并且要先判"路过型 passport 闪现"。
+* **一条热搜不一定是 #话题#**：真站跑出来 `word_scheme == word`（例：`让家更有AI`）的行
+  确实存在。所以 话题 列存的是站点自己的串，链接按那一串去搜索 ——
+  把它统一改写成 `#…#` 会搜出一个榜单上并不存在的话题。
+  （这条是**真站测试替我抓到的**：断言"必须以 # 开头"在第一轮 live_cn 就红了。）
+
+### 知乎热榜：已上线，一块只有 30 行、且所有游标都被无视的榜
+
+`https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50`，同样页内 fetch。实测：
+
+* 恰好 **30 行**，`paging.is_end=true`、`next=""`、`totals=0`；
+* `limit=100` / `offset=30` / `page=2` / 猜的 cursor **都返回同一批 30 个 id**（重叠 30/30）
+  —— 所以这里没有翻页循环，写了就是拿风控的钱重放同一张表；`target_count` 大于 30 时
+  日志明说"榜单只有这么多"，不填充也不空转；
+* **无 Cookie 直接被拒**：`401 AuthenticationError`，而且首页本身就跳 `/signin`，
+  所以 `login_wall` 在问接口之前就已经成立 —— 那时一次请求都不该发出去（有单测钉住）；
+* 有 Cookie 时**无头与窗口给出同一个答案**（今天两种都 200/30 行）；
+* 行的形状里有**两个字段不能成为列**：`target.author.name` 在 30/30 行都是字面量「用户」，
+  `target.comment_count` 在 30/30 行都是 0。把它们写进表就是造两列假数据（同抖音没有
+  播放数列的理由）。`answer_count` / `follower_count` 30/30 有值，所以留下；
+* `target.url` 给的是 `https://api.zhihu.com/questions/<id>` —— 那不是能打开的页面，
+  必须重写成 `https://www.zhihu.com/question/<id>`；
+* 热度在 `detail_text`，形如 `398 万热度`，走 `engine.counters.parse_count` 展开成整数。
+
+### 抖音热榜：**没上线**，因为"要不要签名"这一问没答完就被风控打断了
+
+一次会话里确实成了：`https://www.douyin.com/hot` 渲染出榜单（51 个 `a[href*="/hot/"]`、
+89 个 `li`），它自己的 XHR `aweme/v1/web/hot/search/list/` 在页内重放得到
+`data.word_list` **51 行**（`word` / `hot_value` / `view_count` / `discuss_video_count` /
+`sentence_id` / `topic_info` / `label`）。但两件事没落地：
+
+1. **重放成功可能是因为原样带回了页面的 `a_bogus`/`msToken`** —— 探针没能抓到完整 URL
+   （钩子只存了前 300 字符，而签名参数在尾部），所以"自拼 URL 到底答不答"是未知；
+   抖音的搜索是**签名**接口，这条未知就足以不写这个模式。
+2. 会话很快被风控：第二次访问（profile）与随后第三次访问（一次性浏览器）都被答
+   `验证码中间页`。抖音 `never_headless`，所以不能靠改无头绕开。
+
+顺带量到一条判墙事实：`验证码中间页` 这种标题下，**通用的 `check_intercept()` 说 `ok`**，
+而抖音自己的 `_wait_for_page()` 说 `captcha`、`_is_walled()` 说 `True`。也就是说抖音的墙
+只能由抖音的判定来读，别拿通用判定当结论。
+
+再探的入口条件（下次做）：把钩子存成完整 URL（别截断），并且**先确认一次成功的页内重放
+用的是自拼 URL**；两条都过了才谈模式、列与 live 用例。
+
+### 小红书热榜：**证无**，不是"暂时没测到"
+
+三条独立的墙，任何一条都足以不做：
+
+* 没有榜单页面：`https://www.xiaohongshu.com/hot` 重定向回 `/explore?source=4`，就是普通
+  信息流；
+* 页面上唯一和"热"有关的请求是 `edith.xiaohongshu.com/api/sns/web/v1/search/trending/query`
+  —— 那是搜索框的**提示词**接口，不是榜；而且它在页内重放时返回 **406**（同域也拒），
+  连提示词都拿不出来；
+* 更根本的：从**同一张页面现取**的 `xsec_token` 拼出的笔记链接，打开仍落到
+  `/404?source=/404/sec_...`。这与 #82 放弃作者模式是同一堵墙，因此"榜单行打不开"不是
+  实现细节，而是这个平台对网页端的整体态度。
+
+`'hot' not in mode_keys_for('xiaohongshu')` 与 `'hot' not in mode_keys_for('douyin')` 被
+`test_each_platform_names_its_modes` 钉住 —— 想加必须先重新测量，不能让它在没人注意时
+"顺手补上"。

@@ -52,8 +52,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   by `tests/unit/test_frontend_*` modules. Any JS change to result-affecting logic must sync a scenario
   there; `urlPlatform` is contract-pinned against `utils.helpers.platform_for`.
 - **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` in
-  workflow.js asks `Capabilities` which fields the selected mode requires; the branch it
-  replaced made the matrix's `author` and `hot` modes unreachable from the UI. If
+  workflow.js asks `Capabilities` which fields the selected mode requires. If
   `Capabilities` has not loaded, refuse by saying the required fields could not be
   checked; never guess a shape.
 - **A canvas shortcut belongs to the canvas only while the user is not typing.** The
@@ -73,8 +72,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   carries its own `value:` replaces whatever the user typed (the dataset rename stored
   the literal `'ok'`). Leave `value` off input dialogs.
 - **Four frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a module
-  declared as a top-level `const X` — `const` never becomes a window property — which silently killed
-  `resumeBar.refresh()` and `runsManager._busy()`. Guard the binding itself (`typeof X !== 'undefined'`)
+  declared as a top-level `const X` — `const` never becomes a window property. Guard the binding itself (`typeof X !== 'undefined'`)
   or export it (`window.X = X`). (2) The DOM stub's matcher is real (see `harness_dom.mjs`); never
   fabricate a child when a query finds nothing — that turned a deleted connection into a phantom.
   (3) **A wrapper must forward its arguments:** app.js re-wraps `openCookieDialog`, and its empty
@@ -162,7 +160,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 
 ## Platform red lines (full evidence in `docs/crawler_notes.md`)
 
-- **douyin**: `never_headless = True` (验证码 on every headless navigation); search is DOM-only, routed by
+- **douyin**: `never_headless = True` (验证码 on every navigation, and a visible window is necessary,
+  **not sufficient** — 2026-09-25: profile and throwaway both answered that page minutes apart);
+  search is DOM-only, routed by
   `/search/<kw>?type=video`; **no 播放数 column exists** (its only figure is the like count); don't block
   its images; authors are opaque `sec_uid` only; `_published_count()` returns `-1` for "page said nothing".
 - **X (twitter)**: `never_headless = True`; the timeline is virtualized, so progress is rows kept and
@@ -179,9 +179,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   (`backend/test_weibo_recipe.py` re-tests).
 - **zhihu**: headless throttles day-by-day (risk 40362), so a headless search returning 0 rows is a legit
   outcome — don't loosen the assertion; comments always open a visible browser. **A search card is an
-  excerpt**, so the body arrives only by clicking: allowed where the row's own link says `/answer/` (a
-  column card's control navigates and detaches every remaining handle), and 正文 is the only
-  column replaced.
+  excerpt**, so the body arrives only by clicking: allowed where the row's own link says `/answer/`, and
+  正文 is the only column replaced.
 - **xiaohongshu**: a replayed session is walled within minutes (profile required); author mode is dropped
   (needs a per-note `xsec_token` this session cannot reliably get).
 - **wechat**: body-only by measurement — no comments/likes/forwards columns, **no cookie row at all**, no
@@ -340,10 +339,12 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   them. Everything that states a fact still prints: the upload's own "Loaded … N rows", and any
   failure/skip/restore line — with `node_label`, or a silenced node that fails is undiagnosable.
 - Run-gating UX lives in `workflow.js execute()` → `_cookieGateBeforeRun`: `cookie_preflight_before_run`
-  probes each platform of the canvas before the run and a login wall **refuses it** (no "run anyway");
+  probes each canvas platform **whose mode needs a session** (`Mode.needs_session` — measured: weibo's
+  热搜 answers an anonymous browser, so a board-only canvas must not be refused for a cookie the site
+  never wanted) and a login wall **refuses it** (no "run anyway");
   「无法核对」 — timeout, captcha, busy profile — never blocks, because no answer is not evidence of a dead
-  cookie. Off asks and blocks nothing; a resume or a crawl-free canvas skips the
-  probe, and saving/deleting/capturing a cookie drops the cached verdict. **A new settings key needs all four:**
+  cookie. Off asks and blocks nothing; a resume or a crawl-free canvas skips the probe, and a cookie
+  write drops the cached verdict. **A new settings key needs all four:**
   the bool branch in `settings_store.save_settings`, both app.js catalogs, and the `AppSettings` wiring.
 
 ## Style (differs from defaults)

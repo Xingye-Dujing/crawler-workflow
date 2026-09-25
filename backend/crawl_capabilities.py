@@ -130,6 +130,12 @@ class Mode:
     action_key: str = ''  # label of the optional button beside that line
     action_js: str = ''  # the browser function that button calls
     collects: str = 'dom_scroll'
+    #: Whether this mode's crawl needs a logged-in session at all. The pre-run cookie
+    #: probe works per PLATFORM, so without this field a mode that answers an anonymous
+    #: browser (measured: weibo's ``ajax/side/hotSearch`` gives the same board with no
+    #: cookie) is refused by a gate that was never about it. Default True: nearly every
+    #: crawl here is a session crawl, and the exceptions are named by measurement.
+    needs_session: bool = True
 
 
 @dataclass(frozen=True)
@@ -277,25 +283,44 @@ _BOARD = Field(
     options=(('popular', 'settings.hotBoardPopular'), ('ranking', 'settings.hotBoardRanking')),
 )
 
+#: How many rows zhihu's board really holds. Measured at 30 with ``limit=50``,
+#: ``limit=100`` and ``offset=30`` all returning the SAME 30 (30/30 ids overlap) and
+#: ``paging.next`` empty — so the target box is capped by the site, not by us, and the
+#: handler says "the board holds 30" rather than looping or padding to a number the
+#: site never offered.
+_ZHIHU_HOT_ROWS = 30
 
-def _hot_mode(*extra: Field, target: int = 50, collects: str = 'fetch') -> Mode:
+
+def _hot_mode(
+    *extra: Field,
+    target: int = 50,
+    collects: str = 'fetch',
+    board: bool = True,
+    needs_session: bool = True,
+) -> Mode:
     """The site's own hot list — not a keyword's result page.
 
     No required field: what a hot list is about is chosen by the site, so the only
-    choices offered are how many rows and which board. Default ``collects='fetch'``:
-    every hot board in this project reads one JSON answer from inside a loaded page,
-    which is the mode that shows nothing in a window.
+    choices offered are how many rows and, where the site really publishes more than
+    one list, which board. ``board=False`` is for a site with exactly one board —
+    offering a choice there is a control that changes nothing, and the handler would
+    have to keep a parameter it cannot honour.
+
+    Default ``collects='fetch'``: measured on bilibili, weibo and zhihu, a board is one
+    JSON answer read from inside a loaded page, which is the mode that shows nothing in
+    a window.
     """
     return Mode(
         key='hot',
         label_key='settings.collectHot',
         handler='hot',
-        fields=(replace(_TARGET, default=target), _BOARD, *extra, _RECOLLECT),
+        fields=(replace(_TARGET, default=target), *((_BOARD,) if board else ()), *extra, _RECOLLECT),
         # A board opens a page once then reads JSON: a visible window only sits there.
         # The note says so (and that 无头 saves nothing to watch) instead of the panel
         # holding its own opinion about which modes move the screen.
         note_key='settings.fetchQuietNote' if collects == 'fetch' else '',
         collects=collects,
+        needs_session=needs_session,
     )
 
 
@@ -389,6 +414,11 @@ CAPABILITIES: tuple[Capability, ...] = (
                 hint_key='settings.authorHintZhihu',
                 collects='dom_scroll',
             ),
+            # Measured: `hot-lists/total` answers 30 rows with every field inline, in
+            # both a visible and a headless window, but NOT anonymously (401), and it
+            # ignores limit/offset/page/cursor — 30 is the whole board, so the target
+            # box has a ceiling the handler states rather than loops against.
+            _hot_mode(target=_ZHIHU_HOT_ROWS, board=False),
             _comment_mode('zhihu', 'https://www.zhihu.com/question/...', collects='dom_scroll'),
         ),
     ),
@@ -413,6 +443,12 @@ CAPABILITIES: tuple[Capability, ...] = (
                 collects='fetch',
                 note_key='settings.fetchQuietNote',
             ),
+            # Measured: `ajax/side/hotSearch` answers ~52 rows with an exact integer
+            # heat (`num`), repeats cleanly, and answers in all three session shapes —
+            # planted cookie, profile and no cookie at all. One board, so no choice;
+            # and because an anonymous browser is served too, this is the one crawl in
+            # the matrix that must not make the canvas ask for a login.
+            _hot_mode(board=False, needs_session=False),
             _comment_mode('weibo', 'https://weibo.com/...'),
         ),
     ),
@@ -582,6 +618,18 @@ def shows_nothing(platform: str, mode_key: str) -> bool:
     return bool(mode and mode.collects == 'fetch')
 
 
+def needs_session(platform: str, mode_key: str) -> bool:
+    """Whether this crawl is a session crawl — the question the cookie gate asks.
+
+    The gate probes per platform, so a canvas whose only node is weibo's 热搜 board
+    would be refused for lacking a cookie the measured endpoint never wanted. Unknown
+    platform or mode answers True: no answer is not evidence that a crawl is anonymous,
+    and the gate staying on for something it cannot judge is the safe direction.
+    """
+    mode = mode_for(platform, mode_key)
+    return True if mode is None else bool(mode.needs_session)
+
+
 def split_regions(platforms) -> dict:
     """``{'cn': [...], 'overseas': [...]}`` for the platforms of one canvas.
 
@@ -743,6 +791,7 @@ def _mode_as_dict(mode: Mode) -> dict:
         'actionKey': mode.action_key,
         'actionJs': mode.action_js,
         'collects': mode.collects,
+        'needsSession': bool(mode.needs_session),
         'fields': [_field_as_dict(f) for f in mode.fields],
     }
 

@@ -36,6 +36,7 @@ from crawl_capabilities import (
     mode_keys_for,
     mode_of_node,
     modes_for,
+    needs_session,
     platform_ids,
     required_missing,
     shows_nothing,
@@ -123,9 +124,15 @@ class TestCoercion:
 
 class TestModeResolution:
     def test_each_platform_names_its_modes(self):
-        assert mode_keys_for('zhihu') == ('posts', 'author', 'comments')
-        assert mode_keys_for('weibo') == ('posts', 'author', 'comments')
+        # 热榜 sits between 作者 and 评论 on both platforms that publish one, and its
+        # presence is a measurement (docs/crawler_notes.md), not a guess: xiaohongshu
+        # has no board surface at all (its /hot redirects to the ordinary feed), so it
+        # must NOT appear here.
+        assert mode_keys_for('zhihu') == ('posts', 'author', 'hot', 'comments')
+        assert mode_keys_for('weibo') == ('posts', 'author', 'hot', 'comments')
         assert mode_keys_for('wechat') == ('posts',), 'WeChat has no comment adapter'
+        assert 'hot' not in mode_keys_for('xiaohongshu'), '小红书 has no measurable board'
+        assert 'hot' not in mode_keys_for('douyin'), 'the douyin board is not settled yet (docs)'
 
     def test_an_unknown_mode_key_reads_as_the_first_mode(self):
         # Old canvases and hand-edited JSON both land here; the panel shows the
@@ -269,6 +276,7 @@ class TestPayloadShape:
             'actionKey',
             'actionJs',
             'collects',
+            'needsSession',
             'fields',
         }
         # `serialOnly` marks the platform the site walls on concurrent paging (weibo):
@@ -404,12 +412,30 @@ class TestCollectionKind:
         assert fetched == {
             ('weibo', 'author'),
             ('weibo', 'comments'),
+            # Both boards were measured answering with a window that shows nothing:
+            # one page load, then the site's own JSON.
+            ('weibo', 'hot'),
+            ('zhihu', 'hot'),
             ('bilibili', 'hot'),
             ('bilibili', 'comments'),
             ('youtube', 'posts'),
             ('youtube', 'author'),
             ('youtube', 'comments'),
         }, fetched
+
+    def test_only_the_measured_board_answers_an_anonymous_browser(self):
+        """`needs_session` is what stops the cookie gate refusing a crawl the site would
+        have served. Exactly one mode is measured doing that, so exactly one is exempt —
+        a second False would be a claim nobody re-measured."""
+        anonymous = {(cap.platform, mode.key) for cap in CAPABILITIES for mode in cap.modes if not mode.needs_session}
+        assert anonymous == {('weibo', 'hot')}, anonymous
+        assert needs_session('weibo', 'hot') is False
+        assert needs_session('weibo', 'posts') is True, 'the same platform, a different answer'
+        assert needs_session('zhihu', 'hot') is True, 'the zhihu board is 401 without a session'
+        # No answer is not evidence of anonymity: an unknown platform or mode keeps
+        # the probe on.
+        assert needs_session('kuaishou', 'hot') is True
+        assert needs_session('weibo', 'nonsense') is True
 
     def test_shows_nothing_follows_the_field_not_a_second_list(self):
         assert shows_nothing('weibo', 'comments') is True

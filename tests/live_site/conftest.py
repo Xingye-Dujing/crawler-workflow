@@ -64,10 +64,11 @@ def live_crawler(cookie_dir_str):
     import crawl_gate
 
     from crawlers import get_crawler
+    from crawlers.base import ProfileUnavailableError
 
     made = []
 
-    def _make(platform, headless=True):
+    def _make(platform, headless=True, use_profile=None):
         # WeChat is the one platform crawled without a session: its article bodies
         # are public, and it has no cookie row in the panel at all. Requiring one
         # here would skip the only tier that proves that crawl still works.
@@ -87,7 +88,13 @@ def live_crawler(cookie_dir_str):
         # two tests would each cool down for a crawl that had not started yet.
         stack.enter_context(crawl_gate.hold(platform))
         try:
-            crawler = get_crawler(platform, headless=headless, cookie_dir=cookie_dir_str)
+            crawler = get_crawler(platform, headless=headless, cookie_dir=cookie_dir_str, use_profile=use_profile)
+        except ProfileUnavailableError:
+            # Not "no browser on this machine" — the profile is held by something that
+            # has not finished. Skipping here would hide a serialization bug in this
+            # very tier behind a grey line, so it stays red.
+            stack.close()
+            raise
         except Exception as e:
             stack.close()
             pytest.skip(f'Chrome/driver unavailable: {e}')

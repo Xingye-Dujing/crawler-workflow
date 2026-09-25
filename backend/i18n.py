@@ -173,6 +173,13 @@ _ZH = {
     # One fact, one line: what the 正文 column actually holds. The search page only ever
     # carries an excerpt, so a crawl that did not expand has to say so once at the end.
     'crawl.zhihu.excerpt_only': '未展开正文：本次所有正文都是搜索页摘要（可在数据源节点勾选「展开全文」）',
+    # 热榜: measured as one answer of 30 questions with every paging parameter ignored,
+    # so the mode never promises more than the board holds.
+    'crawl.zhihu.hotStart': '开始采集知乎热榜，目标 {n} 条',
+    'crawl.zhihu.hotDone': '热榜采集结束：{n} 条（目标 {total} 条）',
+    'crawl.zhihu.hotCapped': '热榜一共只有 {board} 条，已按实际条数收尾（榜单大小由网站决定）',
+    'crawl.zhihu.hotRefused': '知乎热榜接口没有给出榜单（返回 {answer}）',
+    'crawl.zhihu.hotWall': '知乎热榜需要登录：当前 Cookie 被挡在登录页，无法读取榜单',
     'crawl.zhihu.bodies_short': '另有 {n} 条回答未能展开，其正文仍为搜索页摘要',
     'crawl.zhihu.expand_stopped': '连续 {n} 次展开均无回应，本次剩余行改用搜索页摘要',
     # ── crawlers: weibo ───────────────────────────────────────
@@ -187,6 +194,12 @@ _ZH = {
     'crawl.weibo.target_reached': '已达到目标数量 {n} 条，停止翻页',
     'crawl.weibo.authorStart': '开始采集作者 {uid} 的作品，目标 {n} 条',
     'crawl.weibo.authorDone': '作者作品采集结束：{n} 条（{reason}）',
+    # 热搜: one answer is the whole board, so the three lines below are the only
+    # things this mode can honestly say.
+    'crawl.weibo.hotStart': '开始采集微博热搜，目标 {n} 条',
+    'crawl.weibo.hotDone': '热搜采集结束：{n} 条（目标 {total} 条）',
+    'crawl.weibo.hotCapped': '热搜榜本次只有 {board} 条，已按实际条数收尾（榜单大小由网站决定）',
+    'crawl.weibo.hotRefused': '微博热搜接口没有给出榜单（返回 {answer}）',
     'crawl.weibo.authorEmpty': '「{author}」不是微博作者地址：填 weibo.com/u/<UID> 主页链接或数字 UID',
     'crawl.weibo.authorWall': '微博把 UID {uid} 的主页弹回了登录页：这个会话进不去作者页',
     'crawl.weibo.authorMirror': (
@@ -874,6 +887,13 @@ _EN = {
         'Bodies left collapsed: every 正文 is a search-page excerpt (tick "Expand full text" on the data source node)'
     ),
     'crawl.zhihu.bodies_short': '{n} answer(s) did not expand; their 正文 is still a search-page excerpt',
+    'crawl.zhihu.hotStart': 'Collecting the zhihu hot board, target {n}',
+    'crawl.zhihu.hotDone': 'Hot board finished: {n} rows (target {total})',
+    'crawl.zhihu.hotCapped': (
+        'The board holds {board} questions in total, so the walk stopped there (the site sets the board size)'
+    ),
+    'crawl.zhihu.hotRefused': 'The zhihu hot-list endpoint gave no board (answered {answer})',
+    'crawl.zhihu.hotWall': 'The zhihu hot board needs a login: the current cookie was held at the sign-in page',
     'crawl.zhihu.expand_stopped': (
         '{n} expansions in a row answered nothing; keeping search-page excerpts for the rest of this crawl'
     ),
@@ -889,6 +909,12 @@ _EN = {
     'crawl.weibo.target_reached': 'Reached the target of {n} rows, stopping the walk',
     'crawl.weibo.authorStart': 'Collecting author {uid}\u2019s posts, target {n}',
     'crawl.weibo.authorDone': 'Author walk finished: {n} rows ({reason})',
+    'crawl.weibo.hotStart': 'Collecting the weibo hot search board, target {n}',
+    'crawl.weibo.hotDone': 'Hot board finished: {n} rows (target {total})',
+    'crawl.weibo.hotCapped': (
+        'The hot board held only {board} rows this time, so the walk stopped there (the site sets the board size)'
+    ),
+    'crawl.weibo.hotRefused': 'The weibo hot-search endpoint gave no board (answered {answer})',
     'crawl.weibo.authorEmpty': (
         '"{author}" is not a weibo author address: give a weibo.com/u/<UID> profile link or the numeric UID'
     ),
