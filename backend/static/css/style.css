@@ -502,6 +502,18 @@ body.style-menu-open #top-menu {
 #settings-menu .menu-btn {
   flex: 0 0 auto;
 }
+/* A lone action button in a control column (the 采集建议 / 保存设置 rows). The
+   rows above give the empty label column its 92px, which squeezed the button; a
+   long nowrap label — and in English the advice caption is far wider — then
+   overflowed the fixed panel and raised a sideways scrollbar. Let it take the
+   remaining width and wrap, exactly as the sentence rows above already do. Scoped
+   to the settings menu only: the AI panel's own buttons already fit unwrapped. */
+#settings-menu .dd-ctrl > .menu-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+}
 /* Path fields want the full width; numeric ones stay short. */
 #settings-menu .settings-input-sm {
   flex: 0 0 96px;
