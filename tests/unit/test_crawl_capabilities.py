@@ -178,11 +178,34 @@ class TestSelectsAreHeldToTheirOptions:
             for cap in CAPABILITIES
             for mode in cap.modes
             for f in mode.fields
-            if f.control == 'select'
+            if f.control == 'select' and f.key != 'account'
         }
         assert declared == {('bilibili', 'hot', 'board'), ('douyin', 'posts', 'sort')}, declared
         # The shared file tail is the other one, and it is on every mode.
         assert [f.key for f in FILE_FIELDS if f.control == 'select'] == ['format']
+
+    def test_the_account_selector_is_on_every_session_form_and_nowhere_else(self):
+        """账号 is the cross-cutting select, so it is checked as its own population
+        rather than folded into the board/sort enumeration: it belongs on exactly the
+        modes that open a logged-in browser ON A PLATFORM THAT CAN HOLD A SESSION
+        (a choice with no effect is the control the matrix rule forbids). WeChat is
+        the edge the two sets share: its body-only crawl needs no cookie row at all
+        (AGENTS red line), so it declares no account to pick."""
+        from services.cookie_manager import CookieManager
+
+        with_account = {
+            (cap.platform, mode.key)
+            for cap in CAPABILITIES
+            for mode in cap.modes
+            if any(f.key == 'account' for f in mode.fields)
+        }
+        session = {
+            (cap.platform, mode.key)
+            for cap in CAPABILITIES
+            for mode in cap.modes
+            if mode.needs_session and CookieManager.is_supported(cap.platform)
+        }
+        assert with_account == session, with_account ^ session
 
     @pytest.mark.parametrize('value', ['popular', 'ranking'])
     def test_a_declared_option_is_accepted(self, value):
@@ -516,13 +539,22 @@ class TestPayloadShape:
         for cap in CAPABILITIES:
             for mode in cap.modes:
                 for field in mode.fields + FILE_FIELDS:
-                    if field.control == 'select':
-                        assert field.options, f'{field.key} offers nothing to pick'
-                        for value, label in field.options:
-                            # The value is what gets stored in the node and what
-                            # the backend reads back, so it cannot be prose.
-                            assert value.isidentifier(), f'{field.key} stores an unusable value {value!r}'
-                            assert label.startswith('format.') or label.startswith('settings.'), label
+                    if field.control != 'select':
+                        continue
+                    if field.key == 'account':
+                        # Its real options are per-machine (they come from the cookie
+                        # files at payload time), so the STATIC matrix carries exactly
+                        # one choice: the empty default — '' is not a mistake here but
+                        # "the platform's own login", and the label is a cookies.* panel
+                        # word because it names the cookie subsystem.
+                        assert field.options == (('', 'cookies.accountDefault'),)
+                        continue
+                    assert field.options, f'{field.key} offers nothing to pick'
+                    for value, label in field.options:
+                        # The value is what gets stored in the node and what
+                        # the backend reads back, so it cannot be prose.
+                        assert value.isidentifier(), f'{field.key} stores an unusable value {value!r}'
+                        assert label.startswith('format.') or label.startswith('settings.'), label
 
     def test_an_action_button_is_a_function_name_the_page_can_call(self):
         noted = [(mode.action_js, mode.action_key) for cap in CAPABILITIES for mode in cap.modes if mode.note_key]

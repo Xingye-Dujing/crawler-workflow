@@ -57,9 +57,11 @@ def factory(monkeypatch, app_module, tmp_path):
 
         monkeypatch.setattr(app_module, 'get_crawler', build)
         monkeypatch.setattr(app_module.browser_profiles, 'is_enabled', lambda: True)
-        monkeypatch.setattr(app_module.browser_profiles, 'is_used', lambda platform: True)
+        monkeypatch.setattr(app_module.browser_profiles, 'is_used', lambda platform, account='': True)
         monkeypatch.setattr(app_module.browser_profiles, 'is_busy', lambda path: False)
-        monkeypatch.setattr(app_module.browser_profiles, 'platform_dir', lambda platform: str(tmp_path / platform))
+        monkeypatch.setattr(
+            app_module.browser_profiles, 'platform_dir', lambda platform, account='': str(tmp_path / platform)
+        )
         app_module.cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'x', 'domain': '.weibo.com'}])
         return made
 
@@ -88,7 +90,7 @@ class TestWhatItRefuses:
         """The next crawl imports the file by itself, and reporting 「已更新」 for a thing
         that has not happened is exactly the overstatement this panel has to keep not doing."""
         factory()
-        monkeypatch.setattr(app_module.browser_profiles, 'is_used', lambda platform: False)
+        monkeypatch.setattr(app_module.browser_profiles, 'is_used', lambda platform, account='': False)
         answer = _post(client)
         assert answer.status_code == 400
         assert answer.get_json()['error'] == app_module.t('cookie.refresh.notYet', platform='weibo')
@@ -202,7 +204,7 @@ class TestThePanelCanSeeIt:
     def test_the_profile_table_says_which_profiles_are_behind_their_file(self, client, monkeypatch):
         """The hint is the server's answer, not a browser-side guess: it is the only place
         that knows both the marker and the file."""
-        monkeypatch.setattr(browser_profiles, 'needs_refresh', lambda platform, path: platform == 'weibo')
+        monkeypatch.setattr(browser_profiles, 'needs_refresh', lambda platform, path, account='': platform == 'weibo')
         rows = client.get('/api/browser/profiles').get_json()['profiles']
         by_name = {row['platform']: row for row in rows}
         assert by_name['weibo']['needs_refresh'] is True

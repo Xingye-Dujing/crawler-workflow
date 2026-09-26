@@ -148,9 +148,10 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   crawler's whole life (non-reentrant because `_close_login_browser` releases it from a *side*
   thread). The user answers 用 Profile per run as `use_profile`; 真排队 has answered it for the
   whole program. **A site's rate limit is a second collision** — two throwaway browsers can still
-  be bounced as the *account* searching twice in one second — so `crawl_gate.hold(platform)`
-  orders crawls by platform (真排队 holds the turn until that crawl *finishes*, 错峰 only spaces
-  their starts). A matrix `serial_only` platform is always queued whatever the switch says; the
+  be bounced as the *account* searching twice in one second — so `crawl_gate` lanes crawls by
+  (platform, account): one login takes turns, two logins run at once (真排队 holds a lane until
+  its crawl *finishes*, 错峰 only spaces its starts). A matrix `serial_only` platform is always
+  queued whatever the switch says; the
   browser warns first. A wall met **before the first row** retries once after a back-off; a wall
   met after rows is the cookie dying and must go to 继续 instead. **Absence means "follow the
   setting" — never coerce missing to `False`,** or one dialog's answer becomes a global override.

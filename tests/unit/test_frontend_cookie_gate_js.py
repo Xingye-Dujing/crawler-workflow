@@ -50,13 +50,16 @@ MATRIX = capabilities.as_dict()
 DEFAULT_MODE = {entry['platform']: entry['modes'][0]['key'] for entry in MATRIX['platforms']}
 
 
-def _source(node_id, platform, mode=None):
+def _source(node_id, platform, mode=None, account=None):
+    params = {'platform': platform, 'keyword': '三亚', 'collect': mode or DEFAULT_MODE[platform]}
+    if account is not None:
+        params['account'] = account
     return {
         node_id: {
             'id': node_id,
             'type': 'source',
             'title': f'采集 {platform}',
-            'params': {'platform': platform, 'keyword': '三亚', 'collect': mode or DEFAULT_MODE[platform]},
+            'params': params,
         }
     }
 
@@ -88,7 +91,7 @@ def _output(node_id='o1'):
     }
 
 
-def _chain(index, platform, kind='source', urls=None, mode=None):
+def _chain(index, platform, kind='source', urls=None, mode=None, account=None):
     """One complete workflow: a crawler node wired into an output node.
 
     A crawler with nothing downstream is refused by ``validate()`` before the gate is
@@ -97,7 +100,7 @@ def _chain(index, platform, kind='source', urls=None, mode=None):
     absence.
     """
     src_id, out_id = f'w{index}-s', f'w{index}-o'
-    src = _source(src_id, platform, mode) if kind == 'source' else _comment(src_id, urls)
+    src = _source(src_id, platform, mode, account) if kind == 'source' else _comment(src_id, urls)
     return {**src, **_output(out_id)}, [{'from': src_id, 'to': out_id}]
 
 
@@ -109,8 +112,24 @@ def _canvas(*chains):
     return {'nodes': nodes, 'connections': connections}
 
 
-def _verdict(platform, state, *, blocking, text):
-    return {'platform': platform, 'state': state, 'blocking': blocking, 'text': text, 'probed': True}
+def _verdict(platform, state, *, blocking, text, account=''):
+    return {
+        'platform': platform,
+        'account': account,
+        'state': state,
+        'blocking': blocking,
+        'text': text,
+        'probed': True,
+    }
+
+
+def _pairs(body):
+    """The gate's requested entries as (platform, account) tuples.
+
+    The request body stopped being a list of bare platform names when one platform
+    could hold several logins: an entry is a SESSION, so that is what the tests read.
+    """
+    return [(e['platform'], e['account']) for e in body['platforms']]
 
 
 def _matrix_without_region(platform):
@@ -285,6 +304,21 @@ SCENARIOS = [
         'answers': {'clash': 'skip'},
     },
     {
+        # One platform, two logins: the second account is a different session and a
+        # different browser, so the probe asks twice — and two nodes on the SAME
+        # account still collapse to one question.
+        'id': 'two-accounts-are-two-sessions',
+        'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True},
+        **_canvas(
+            _chain(1, 'douyin', account=''),
+            _chain(2, 'douyin', account='work'),
+            _chain(3, 'douyin', account='work'),
+        ),
+        'canvasSettings': {'mode': 'parallel'},
+        'preflight': CLEAN,
+        'answers': {'clash': 'skip'},
+    },
+    {
         'id': 'profile-kept',
         'settings': {'cookie_preflight_before_run': True, 'use_browser_profile': True},
         **_canvas(_chain(1, 'douyin'), _chain(2, 'douyin')),
@@ -421,15 +455,22 @@ class TestWhoIsAsked:
         its own domain — so the gate that only looked at source nodes would probe
         nothing and block nothing while a dead weibo session waited inside it."""
         body = gate['links-name-the-platforms']['askedBody']
-        assert body['platforms'] == ['zhihu', 'weibo'], 'node order, deduped, junk lines dropped'
+        assert _pairs(body) == [('zhihu', ''), ('weibo', '')], 'node order, deduped, junk lines dropped'
 
     def test_two_workflows_on_one_platform_ask_once(self, gate):
         body = gate['same-platform-twice']['askedBody']
-        assert body['platforms'] == ['douyin'], body
+        assert _pairs(body) == [('douyin', '')], body
+
+    def test_two_accounts_of_one_platform_are_two_sessions(self, gate):
+        """The whole point of the account dimension at the gate: a login that was
+        never used cannot be defended or condemned by another one's verdict — and
+        two nodes on the same account still ask once."""
+        body = gate['two-accounts-are-two-sessions']['askedBody']
+        assert _pairs(body) == [('douyin', ''), ('douyin', 'work')], body
 
     def test_the_platform_of_the_canvas_is_queried_not_the_platform_of_the_panel(self, gate):
         body = gate['silent-pass']['askedBody']
-        assert body['platforms'] == ['zhihu']
+        assert _pairs(body) == [('zhihu', '')]
 
 
 class TestHardBlock:
@@ -573,12 +614,12 @@ class TestTheGateFollowsTheModeNotJustThePlatform:
     def test_the_same_board_on_a_session_platform_still_asks(self, gate):
         case = gate['board-needs-a-cookie']
         assert case['asked'] is True, 'exempting weibo must not exempt 热榜 as a word'
-        assert case['askedBody']['platforms'] == ['zhihu'], case['askedBody']
+        assert _pairs(case['askedBody']) == [('zhihu', '')], case['askedBody']
 
     def test_a_mixed_canvas_probes_only_the_platform_that_needs_it(self, gate):
         case = gate['board-mixed-with-post']
         assert case['asked'] is True
-        assert case['askedBody']['platforms'] == ['zhihu'], (
+        assert _pairs(case['askedBody']) == [('zhihu', '')], (
             f'the weibo 热搜 node was carried into the probe: {case["askedBody"]}'
         )
         assert case['ran'] is True
@@ -624,7 +665,7 @@ class TestOverseasNetworkAsk:
         case = gate['overseas-continued']
         assert len(case['dialogs']) == 1
         assert case['asked'] is True
-        assert sorted(case['askedBody']['platforms']) == ['douyin', 'youtube']
+        assert sorted(_pairs(case['askedBody'])) == [('douyin', ''), ('youtube', '')]
         assert case['ran'] is True
 
     def test_the_two_buttons_are_up_and_not_yet(self, gate):

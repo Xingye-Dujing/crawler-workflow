@@ -687,6 +687,7 @@ def browser_asked(app_module, recorder, monkeypatch):
     def _make(platform, headless=True, **kwargs):
         seen['platform'] = platform
         seen['headless'] = headless
+        seen['account'] = kwargs.get('account')
         return _RecordingCrawler()
 
     monkeypatch.setattr(app_module, 'get_crawler', _make)
@@ -715,3 +716,19 @@ def test_every_crawler_mode_is_built_headless_exactly_as_asked(app_module, brows
 
     assert rows, f'{platform}/{mode_key} produced nothing, so the flag below proves nothing'
     assert browser_asked['headless'] is True, f'{platform}/{mode_key} opened a window nobody asked for'
+
+
+def test_the_account_on_the_node_selects_the_browser(app_module, browser_asked):
+    """Multi-account at the one seam that matters: the executor reads 账号 off the
+    node and hands it to ``get_crawler``, so the crawl runs as that login's cookie and
+    that account's profile — while the CRAWL METHOD never sees the parameter (it is
+    ``_NOT_ARGS``-excluded, which the kwargs-equality tests above hold honest)."""
+    mode = capabilities.mode_for('zhihu', 'posts')
+    params = _params_for('zhihu', mode)
+    params['account'] = 'work'
+    node = {'id': 'node-1', 'type': 'source', 'title': '采集', 'params': params, 'platform': 'zhihu'}
+    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+    assert rows
+    assert browser_asked['account'] == 'work'
+    # and the crawl method itself was NOT given the account
+    assert 'account' not in capabilities.crawl_kwargs(mode, params)

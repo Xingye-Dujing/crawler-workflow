@@ -413,7 +413,8 @@ const workflow = {
     },
 
     _sessionPlatforms() {
-        /* The platforms whose crawl a cookie actually decides, out of the canvas.
+        /* The sessions this run actually visits, as {platform, account} entries —
+           a cookie only decides the crawl of the login it belongs to.
 
            ``_crawlPlatforms()`` answers "where is this run going" — the network
            warning and the cost of a browser are per site, whatever the mode. This
@@ -437,16 +438,18 @@ const workflow = {
             var node = canvas.nodes[id];
             var p = node.params || {};
             if (node.type === 'source') {
-                if (p.platform && Capabilities.needsSession(p.platform, p.collect || p.mode)) found.push(p.platform);
+                if (p.platform && Capabilities.needsSession(p.platform, p.collect || p.mode)) {
+                    found.push({ platform: p.platform, account: String(p.account || '') });
+                }
             } else if (node.type === 'comment') {
                 String(p.urls || '').split(/[\s,;、]+/).forEach(function (line) {
                     var plat = urlPlatform(line);
-                    if (plat) found.push(plat);
+                    if (plat) found.push({ platform: plat, account: String(p.account || '') });
                 });
             }
         });
-        return found.filter(function (platform, index) {
-            return found.indexOf(platform) === index;
+        return found.filter(function (entry, index) {
+            return found.map(preflightEntryKey).indexOf(preflightEntryKey(entry)) === index;
         });
     },
 
@@ -502,25 +505,26 @@ const workflow = {
         return true;
     },
 
-    async _preflightCookies(platforms, profileChoice) {
-        /* Ask each platform, with the browser this run would use, whether it still
-           lets us in — and refuse to start when one says it does not. There is
-           deliberately no 「我确定，照样跑」 button: the point of measuring instead of
-           guessing is that a run past a login wall costs the user an hour and a
-           half-finished dataset they then have to reason about.
+    async _preflightCookies(entries, profileChoice) {
+        /* Ask each (platform, account) this run will use whether it still lets us in —
+           and refuse to start when one says it does not. There is deliberately no
+           「我确定，照样跑」 button: the point of measuring instead of guessing is that a
+           run past a login wall costs the user an hour and a half-finished dataset they
+           then have to reason about.
 
            A platform that could not be checked does *not* block. Risk control, a
            timeout and a profile held by another browser say nothing about the
            cookie, and pretending otherwise would send the user to re-log in a
-           session that is fine — the one mistake this whole path cannot undo. */
-        function verdictOf(table, platform) {
-            return table[platform] || {};
+           session that is fine — the one mistake this whole path cannot undo.
+
+           The answer table and the blocked/unclear lists are keyed by the same
+           ``preflightEntryKey`` the backend computes, so a second account's dead
+           cookie never stands in for the one this node actually asks for. */
+        function isBlocked(table, key) {
+            return (table[key] || {}).blocking === true;
         }
-        function isBlocked(table, platform) {
-            return verdictOf(table, platform).blocking === true;
-        }
-        showToast(I18n.t('toast.cookieChecking').replace('{platforms}', platformLabels(platforms)));
-        var body = { platforms: platforms };
+        showToast(I18n.t('toast.cookieChecking').replace('{platforms}', entryLabels(entries)));
+        var body = { platforms: entries };
         if (profileChoice !== null && profileChoice !== undefined) {
             /* The per-run answer from the profile dialog decides *which browser* the
                crawl will use, so it decides which browser is worth probing. Absent
@@ -542,29 +546,29 @@ const workflow = {
             /* The check itself failed. Say that, and let the run go: the page has no
                licence to refuse a crawl on an answer it never received, and the run
                will meet the real wall soon enough and report it as its own failure. */
-            showToast(I18n.t('toast.cookieUncheckable').replace('{platforms}', platformLabels(platforms)));
+            showToast(I18n.t('toast.cookieUncheckable').replace('{platforms}', entryLabels(entries)));
             return true;
         }
         var results = resp.results || {};
         var blocked = (resp.blocked || []).filter(isBlocked.bind(null, results));
-        var unclear = (resp.unclear || []).filter(function (platform) {
-            return blocked.indexOf(platform) < 0;
+        var unclear = (resp.unclear || []).filter(function (key) {
+            return blocked.indexOf(key) < 0;
         });
         if (unclear.length) {
-            showToast(I18n.t('toast.cookieUnclear').replace('{platforms}', platformLabels(unclear)), 6000);
+            showToast(I18n.t('toast.cookieUnclear').replace('{platforms}', entryLabels(unclear.map(unpackEntryKey))), 6000);
         }
         if (!blocked.length) return true;
-        var lines = blocked.map(function (platform) {
-            var verdict = verdictOf(results, platform);
+        var lines = blocked.map(function (key) {
+            var verdict = results[key] || {};
             /* Server-rendered wording: the sentences live next to the crawler that
                decided them, so the panel cannot hold a second opinion about what
                「已失效」 meant on the page the probe actually looked at. */
-            return '· ' + (verdict.text || platform);
+            return '· ' + (verdict.text || key);
         });
         var choice = await showDialog({
             message: I18n.t('dialog.cookieExpired')
                 .replace('{n}', blocked.length)
-                .replace('{platforms}', platformLabels(blocked)) +
+                .replace('{platforms}', entryLabels(blocked.map(unpackEntryKey))) +
                 '\n' + lines.join('\n') + '\n' + I18n.t('dialog.cookieExpiredHint'),
             buttons: [
                 { label: I18n.t('dialog.cookieGoUpdate'), value: 'update', primary: true },
@@ -577,7 +581,7 @@ const workflow = {
         if (choice === 'update') {
             /* Land them on the platform that is broken rather than on a selector
                still showing whoever was last picked. */
-            openCookieDialog(blocked[0]);
+            openCookieDialog(unpackEntryKey(blocked[0]).platform);
         }
         return false;
     },
@@ -1221,6 +1225,41 @@ function platformLabels(list) {
        `{platform}` placeholders inside `i18n.t()`, and the two label sets are pinned
        equal by TestPlatformLabelParity. */
     return (list || []).map(function (p) { return I18n.t('platform.' + p); }).join('、');
+}
+
+/* The one answer-key for a preflight entry — the same string the backend computes in
+   ``cookie_preflight.entry_key``. A blank account keeps the bare platform name (every
+   old payload and test stays true); a named account gets its own slot, so a second
+   login that was never used cannot be called dead on the first one's verdict. */
+function preflightEntryKey(entry) {
+    var plat = typeof entry === 'string' ? entry : String((entry && entry.platform) || '');
+    var acct = typeof entry === 'string' ? '' : String((entry && entry.account) || '');
+    return acct ? plat + '@' + acct : plat;
+}
+
+/* The reverse: an answer key back into an entry, for display and for opening the
+   panel on the right platform. An entry that is already an object passes through —
+   the blocked/unclear lists arrive as keys, the toast paths may hold either. */
+function unpackEntryKey(key) {
+    if (key && typeof key === 'object') {
+        return { platform: String(key.platform || ''), account: String(key.account || '') };
+    }
+    var s = String(key || '');
+    var at = s.indexOf('@');
+    return at < 0 ? { platform: s, account: '' } : { platform: s.slice(0, at), account: s.slice(at + 1) };
+}
+
+function entryLabels(entries) {
+    /* Localize an entry list for a dialog: the platform word, and the account only
+       when there is one. Printing ``weibo@work`` verbatim would be the bare-key bug
+       again — a machine name inside prose the user reads. */
+    return (entries || [])
+        .map(function (e) {
+            var plat = typeof e === 'string' ? e : String((e && e.platform) || '');
+            var acct = typeof e === 'string' ? '' : String((e && e.account) || '');
+            return I18n.t('platform.' + plat) + (acct ? '@' + acct : '');
+        })
+        .join('、');
 }
 
 function profileCollisions(nodes, connections) {
@@ -3612,6 +3651,8 @@ function renderCookieGuide() {
     if (!body) return;
     var platform = document.getElementById('cookie-platform').value;
     loadCookieProfiles();
+    // The account offers follow the platform the guide is being drawn for.
+    renderCookieAccounts();
     if (!cookieFlows) {
         body.textContent = I18n.t('cookie.guideLoading');
         /* The same in-flight guard the profile table needs: this function is called again
@@ -3681,11 +3722,18 @@ function refreshCookieStatus() {
                    not that the session inside it still opens pages (that is what
                    验证 Cookie and the pre-run probe answer). */
                 var saved = result.cookies[p];
+                // A named account is said by name: "知乎: 未存（work）" tells the
+                // default file is empty while a second login exists — two facts
+                // the old boolean could not separate.
+                var names = (result.accounts && result.accounts[p]) || [];
+                var tag = names.length ? ' (' + names.join(', ') + ')' : '';
                 lines.push(
-                    I18n.t('platform.' + p) + ': ' + I18n.t(saved ? 'cookie.savedYes' : 'cookie.savedNo')
+                    I18n.t('platform.' + p) + tag + ': ' + I18n.t(saved ? 'cookie.savedYes' : 'cookie.savedNo')
                 );
             });
             statusEl.textContent = lines.join('  |  ');
+            cookieAccountsByPlatform = result.accounts || {};
+            renderCookieAccounts();
         } else {
             statusEl.textContent = I18n.t('cookie.unreachable');
         }
@@ -3697,7 +3745,7 @@ function setCookieJobUI(on) {
     /* A verification resolves itself — showing "Done — I logged in" over it
        would invite a click that means nothing (and the server refuses it). */
     if (actions) actions.style.display = on && cookieJob.kind === 'login' ? 'flex' : 'none';
-    ['cookie-platform', 'cookie-wait', 'cookie-json', 'cookie-entry'].forEach(function (id) {
+    ['cookie-platform', 'cookie-wait', 'cookie-json', 'cookie-entry', 'cookie-account'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.disabled = !!on;
     });
@@ -3810,7 +3858,7 @@ function saveCookieConfig() {
         fetchJSON('/api/cookies/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ platform: platform, cookies: cookies }),
+            body: JSON.stringify({ platform: platform, cookies: cookies, account: cookieAccount() }),
         })
             .then(function (result) {
                 if (result.ok) {
@@ -3847,7 +3895,7 @@ async function deleteCookie() {
     var result = await fetchJSON('/api/cookies/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: platform }),
+        body: JSON.stringify({ platform: platform, account: cookieAccount() }),
     });
     if (result.ok) {
         showToast(result.message || I18n.t('toast.cookieDeleted').replace('{platform}', platform));
@@ -3861,6 +3909,33 @@ async function deleteCookie() {
 function cookieEntryUrl() {
     var el = document.getElementById('cookie-entry');
     return el ? String(el.value || '').trim() : '';
+}
+
+function cookieAccount() {
+    /* Which login the panel's actions speak for. Free text, lowercase-normalized —
+       the shape the backend validates before it ever reaches a filename, and blank
+       is the platform's default account (the only one that existed before
+       multi-account). Typing a NEW name here is how a second login is created:
+       生成/保存 then write that account's file, and every node can pick it. */
+    var el = document.getElementById('cookie-account');
+    return el ? String(el.value || '').trim().toLowerCase() : '';
+}
+
+var cookieAccountsByPlatform = {};
+
+function renderCookieAccounts() {
+    /* Offer the names that already have a file for the platform on screen. A
+       datalist, not a select: the honest answer to "which account?" includes names
+       that do not exist yet — that is how one gets created. */
+    var dl = document.getElementById('cookie-account-options');
+    var select = document.getElementById('cookie-platform');
+    if (!dl) return;
+    var list = cookieAccountsByPlatform[select ? select.value : ''] || [];
+    dl.innerHTML = list
+        .map(function (a) {
+            return '<option value="' + escapeHtml(a) + '"></option>';
+        })
+        .join('');
 }
 
 async function refreshProfileCookie() {
@@ -3890,7 +3965,7 @@ async function refreshProfileCookie() {
     var result = await fetchJSON('/api/cookies/refresh-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: platform }),
+        body: JSON.stringify({ platform: platform, account: cookieAccount() }),
     });
     if (result.ok) {
         showToast(result.message || I18n.t('cookie.refreshed').replace('{platform}', platform));
@@ -3922,7 +3997,12 @@ function generateCookie() {
     fetchJSON('/api/cookies/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: platform, wait_seconds: waitSeconds, url: cookieEntryUrl() }),
+        body: JSON.stringify({
+            platform: platform,
+            wait_seconds: waitSeconds,
+            url: cookieEntryUrl(),
+            account: cookieAccount(),
+        }),
     })
         .then(function (result) {
             if (result.ok) {
@@ -3954,7 +4034,7 @@ function verifyCookie() {
     fetchJSON('/api/cookies/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: platform, url: cookieEntryUrl() }),
+        body: JSON.stringify({ platform: platform, url: cookieEntryUrl(), account: cookieAccount() }),
     }).then(function (result) {
         if (result.ok) {
             cookieJob.platform = platform;

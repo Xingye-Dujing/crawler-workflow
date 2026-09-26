@@ -4,7 +4,9 @@ import logging
 from collections import defaultdict, deque
 
 import crawl_capabilities as capabilities
+from config import Config
 from i18n import t
+from services.cookie_manager import CookieManager
 from utils.helpers import as_bool, platform_for
 
 logger = logging.getLogger(__name__)
@@ -294,7 +296,12 @@ class WorkflowEngine:
         errors = []
         for field in capabilities.required_missing(mode, params):
             errors.append(t('engine.source_missing', nid=label, field=t(field.name_key)))
-        for field, value in capabilities.unoffered_selections(mode, params):
+        # The 账号 options are whatever this machine has a saved file for RIGHT NOW —
+        # the same list the panel was offered from. A stored name with no file is
+        # refused by name (it says "crawl as a login that is not here"); guessing the
+        # default instead would hand one node another account's session.
+        accounts = CookieManager(Config.COOKIE_DIR).account_files(str(platform))
+        for field, value in capabilities.unoffered_selections(mode, params, accounts=accounts):
             errors.append(t('engine.source_bad_option', nid=label, field=t(field.name_key), value=value))
         for field in capabilities.link_fields(mode):
             urls = field.value_from(params)

@@ -64,11 +64,11 @@ def _settings(monkeypatch, *, queue, stagger=10.0):
     monkeypatch.setattr(crawl_gate, 'get_setting', lambda key: values[key])
 
 
-def _holder(platform, inside, release):
-    """A crawl that occupies *platform* until the test lets it out."""
+def _holder(platform, inside, release, account=''):
+    """A crawl that occupies *platform*'s lane until the test lets it out."""
 
     def body():
-        with crawl_gate.hold(platform):
+        with crawl_gate.hold(platform, account=account):
             if inside is not None:
                 inside.set()
             if release is not None:
@@ -164,6 +164,78 @@ class TestStrictQueue:
         assert isolated['waits'] == []
         release.set()
         holder.join(5)
+
+    def test_a_second_account_starts_while_the_first_holds_its_turn(self, monkeypatch, isolated):
+        """Multi-account through the gate: the measured wall is ONE SESSION doing the
+        same thing twice, so weibo's second login is not company for the first — it
+        takes its own lane and runs at the same moment. Were the lane keyed by
+        platform alone, the queue would serialize away the entire point of accounts."""
+        _settings(monkeypatch, queue=True)
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release)
+        assert inside.wait(5)
+        answers, finished = [], threading.Event()
+
+        def other():
+            with crawl_gate.hold('weibo', account='work') as waited:
+                answers.append(waited)
+            finished.set()
+
+        thread = threading.Thread(target=other)
+        thread.start()
+        assert finished.wait(5), 'the second account queued behind a login it is not'
+        thread.join(5)
+        assert answers == [False], 'the other lane entered, but was told it had waited'
+        assert isolated['waits'] == []
+        release.set()
+        holder.join(5)
+
+    def test_the_same_account_still_takes_turns_with_itself(self, monkeypatch, isolated):
+        """The lane only splits on a DIFFERENT account; two crawls on one login collide
+        exactly as they did before, or the feature would buy parallelism by walking
+        straight back into the measured wall."""
+        _settings(monkeypatch, queue=True)
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release, account='work')
+        assert inside.wait(5)
+        answers, finished = [], threading.Event()
+
+        def waiter():
+            with crawl_gate.hold('weibo', account='work') as waited:
+                answers.append(waited)
+            finished.set()
+
+        second = threading.Thread(target=waiter)
+        second.start()
+        second.join(0.2)
+        assert second.is_alive(), 'the same account walked in beside itself'
+        release.set()
+        holder.join(5)
+        assert finished.wait(5)
+        second.join(5)
+
+    def test_the_blank_account_is_the_bare_platform_lane(self, monkeypatch, isolated):
+        """'' must key exactly the pre-multi-account lane — a caller that names no
+        account and a caller that names the default are the same conversation, or
+        every old canvas would suddenly own two lanes and collide with itself."""
+        _settings(monkeypatch, queue=True)
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release, account='')
+        assert inside.wait(5)
+        blocked = threading.Event()
+
+        def waiter():
+            with crawl_gate.hold('weibo'):
+                blocked.set()
+
+        thread = threading.Thread(target=waiter)
+        thread.start()
+        thread.join(0.2)
+        assert thread.is_alive(), 'the omitted account found a lane the blank one had not taken'
+        release.set()
+        holder.join(5)
+        assert blocked.wait(5)
+        thread.join(5)
 
     def test_a_wait_that_never_ends_is_refused_by_name(self, monkeypatch, isolated):
         """The ceiling exists so a browser that never closed cannot park a platform for

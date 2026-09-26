@@ -67,6 +67,9 @@ class TestProfilesEndpoint:
         first = _rows(client)['profiles'][0]
         assert set(first) == {
             'platform',
+            # Which account's device this row describes — '' is the platform's
+            # default profile, the only kind that existed before multi-account.
+            'account',
             'enabled',
             'recommended',
             'path',

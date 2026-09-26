@@ -956,7 +956,9 @@ class TestProgressiveOutput:
         monkeypatch.setattr(
             app_module,
             'get_crawler',
-            lambda platform, headless=True, cookie_dir=None, use_profile=None, abort=None: FakeSinkCrawler(rows),
+            lambda platform, headless=True, cookie_dir=None, use_profile=None, abort=None, account='': FakeSinkCrawler(
+                rows
+            ),
         )
         workflow = _workflow(
             [
@@ -1136,7 +1138,7 @@ class TestSourceCommentsMode:
             def close(self):
                 pass
 
-        def fake_get_crawler(kind, headless=True, cookie_dir=None, use_profile=None, abort=None):
+        def fake_get_crawler(kind, headless=True, cookie_dir=None, use_profile=None, abort=None, account=''):
             # The comment engine honours the run's 无头 choice verbatim (#148): a headless request
             # builds a headless browser even for a scrolled comment panel — the old "content pages
             # reject headless, force a window" rule is gone, measured zhihu comments 5/5 headless.
@@ -1516,7 +1518,7 @@ class TestConsoleReadabilityRegression:
         monkeypatch.setattr(
             app_module,
             'get_crawler',
-            lambda platform, headless=True, cookie_dir=None, use_profile=None, abort=None: _C(),
+            lambda platform, headless=True, cookie_dir=None, use_profile=None, abort=None, account='': _C(),
         )
         started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': '获取微博'})
         assert started.get_json()['ok'] is True

@@ -56,7 +56,7 @@ NOT_CRAWLABLE = 'notcrawlable'
 #: detail to be rediscovered in two places.
 BLOCKING = (EXPIRED, NO_COOKIE)
 
-_cache: dict[str, dict] = {}
+_cache: dict[tuple, dict] = {}
 _lock = threading.Lock()
 
 
@@ -72,27 +72,33 @@ def invalidate(platform: str = None) -> None:
     Called by every path that can change a session — a pasted save, a login capture,
     a deletion — because a five-minute cache that outlives the re-login it was
     refreshed by would refuse a run the user *just* fixed, with no way to see why.
+
+    A platform's entry drops **every account** of it: a save is one account's event,
+    but re-listing which file moved is not what a cache clear is asked to be careful
+    about — dropping one platform's whole family is.
     """
     with _lock:
         if platform is None:
             _cache.clear()
         else:
-            _cache.pop(str(platform), None)
+            for key in [k for k in _cache if k[0] == str(platform)]:
+                _cache.pop(key, None)
 
 
-def cached(platform: str) -> dict | None:
-    """The stored verdict for *platform* while it is still young enough to quote."""
+def cached(platform: str, account: str = '') -> dict | None:
+    """The stored verdict for one (platform, account) while it is young enough to quote."""
+    key = (str(platform), str(account or '').strip())
     with _lock:
-        entry = _cache.get(str(platform))
+        entry = _cache.get(key)
         if not entry:
             return None
         if time.monotonic() - entry['at'] > Config.COOKIE_PREFLIGHT_TTL:
-            _cache.pop(str(platform), None)
+            _cache.pop(key, None)
             return None
         return dict(entry)
 
 
-def _remember(platform: str, verdict: dict) -> None:
+def _remember(platform: str, verdict: dict, account: str = '') -> None:
     """Cache only the two verdicts that are facts about the session.
 
     An ``unknown`` is not one: it says the check did not happen, and reusing it for
@@ -102,7 +108,7 @@ def _remember(platform: str, verdict: dict) -> None:
     if verdict.get('state') not in (VALID, EXPIRED):
         return
     with _lock:
-        _cache[str(platform)] = {**verdict, 'at': time.monotonic()}
+        _cache[(str(platform), str(account or '').strip())] = {**verdict, 'at': time.monotonic()}
 
 
 def classify_probe(facts: dict) -> str:
@@ -128,15 +134,16 @@ def classify_probe(facts: dict) -> str:
     return VALID
 
 
-def record(platform: str, facts: dict) -> dict:
+def record(platform: str, facts: dict, account: str = '') -> dict:
     """Cache a verdict somebody else already measured and reported.
 
     The panel's 验证 Cookie button asks this same question of the same browser, so a
     user who just watched it answer 「已失效」 should not pay for a second probe to be
     told so again — and a stale 「可用」 must not survive the check that contradicted it.
     """
-    verdict = _verdict(str(platform), classify_probe(facts), probed=True)
-    _remember(platform, verdict)
+    account = str(account or '').strip()
+    verdict = _verdict(str(platform), classify_probe(facts), probed=True, account=account)
+    _remember(platform, verdict, account)
     return verdict
 
 
@@ -167,13 +174,21 @@ def describe(verdict: dict) -> str:
     """
     platform = str(verdict.get('platform') or '')
     text = t(str(verdict.get('why_key') or _reason_key(str(verdict.get('state') or ''))), platform=platform)
+    # A named account is part of the fact: 「知乎 Cookie 已失效」 sent the user to refresh
+    # the login that was never the dead one when the node had chosen a second account.
+    account = str(verdict.get('account') or '')
+    if account:
+        text += t('cookie.pre.account', account=account)
     detail = str(verdict.get('detail') or '')
     return f'{text}（{detail}）' if detail else text
 
 
-def _verdict(platform: str, state: str, *, detail: str = '', why_key: str = '', probed: bool = False) -> dict:
+def _verdict(
+    platform: str, state: str, *, detail: str = '', why_key: str = '', probed: bool = False, account: str = ''
+) -> dict:
     return {
         'platform': platform,
+        'account': str(account or '').strip(),
         'state': state,
         'blocking': state in BLOCKING,
         'detail': detail,
@@ -192,7 +207,7 @@ def _needs_session(platform: str) -> bool:
     return bool(getattr(crawler_class(platform), 'login_url', ''))
 
 
-def _has_session_to_test(platform: str, use_profile: bool = None) -> bool:
+def _has_session_to_test(platform: str, use_profile: bool = None, account: str = '') -> bool:
     """Whether anything could carry this platform's login.
 
     The saved file is the obvious source, but a *used profile* is a second one: since
@@ -200,11 +215,14 @@ def _has_session_to_test(platform: str, use_profile: bool = None) -> bool:
     the directory from then on, and :func:`browser_profiles` ignores the file
     completely. Deleting a snapshot (#111) therefore does not log that device out — so
     this must not answer "nothing to test" while the profile is in play.
+
+    Both halves are the *account's*: one account can hold a session while another has
+    none, and asking the wrong one is how a valid login gets called missing.
     """
-    if CookieManager(Config.COOKIE_DIR).exists(platform):
+    if CookieManager(Config.COOKIE_DIR).exists(platform, account):
         return True
     active = browser_profiles.is_enabled() if use_profile is None else bool(use_profile)
-    return bool(active and browser_profiles.is_used(platform))
+    return bool(active and browser_profiles.is_used(platform, account))
 
 
 def knows(platform: str) -> bool:
@@ -221,7 +239,7 @@ def knows(platform: str) -> bool:
     return bool(platform) and (CookieManager.is_supported(platform) or crawler_class(platform) is not None)
 
 
-def _probe_live(platform: str, *, use_profile: bool = None) -> dict:
+def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -> dict:
     """One bounded page load in the browser the run would have used.
 
     Isolated as a function so the whole of ``check`` below — the cache, the deadline,
@@ -244,6 +262,7 @@ def _probe_live(platform: str, *, use_profile: bool = None) -> dict:
             cookie_dir=Config.COOKIE_DIR,
             for_login=True,
             use_profile=use_profile,
+            account=account,
         )
     except Exception as e:
         # A browser that would not start (no chromedriver, a profile Chrome refuses to
@@ -271,11 +290,18 @@ def _probe_live(platform: str, *, use_profile: bool = None) -> dict:
             logger.debug('cookie probe browser did not close cleanly: %s', e)
 
 
-def probe(platform: str, *, use_profile: bool = None, fresh: bool = False) -> dict:
-    """The verdict for one platform, from cache when a recent one exists."""
+def probe(platform: str, *, use_profile: bool = None, fresh: bool = False, account: str = '') -> dict:
+    """The verdict for one (platform, account), from cache when a recent one exists.
+
+    The account is part of the question, not decoration: a second login that has
+    never been used answers 「no saved session」 while the first one is valid, and
+    merging the two verdicts under the platform alone would refuse runs over a
+    session the node is not even using.
+    """
     platform = str(platform or '')
+    account = str(account or '').strip()
     if not fresh:
-        hit = cached(platform)
+        hit = cached(platform, account)
         if hit:
             # ``cached=True`` is what lets the console say "reusing the check from
             # N minutes ago" instead of printing a verdict that looks freshly earned.
@@ -286,32 +312,57 @@ def probe(platform: str, *, use_profile: bool = None, fresh: bool = False) -> di
             return hit
 
     if not knows(platform):
-        return _verdict(platform, UNKNOWN, detail=t('cookie.pre.notListed', platform=platform))
+        return _verdict(platform, UNKNOWN, detail=t('cookie.pre.notListed', platform=platform), account=account)
     if not is_crawlable(platform):
-        return _verdict(platform, NOT_CRAWLABLE)
+        return _verdict(platform, NOT_CRAWLABLE, account=account)
     if not _needs_session(platform):
-        return _verdict(platform, NO_LOGIN)
-    if not _has_session_to_test(platform, use_profile):
-        return _verdict(platform, NO_COOKIE)
-    profile = browser_profiles.profile_dir_for(platform, enabled=use_profile)
+        return _verdict(platform, NO_LOGIN, account=account)
+    if not _has_session_to_test(platform, use_profile, account):
+        return _verdict(platform, NO_COOKIE, account=account)
+    profile = browser_profiles.profile_dir_for(platform, enabled=use_profile, account=account)
     if profile and browser_profiles.is_busy(profile):
         # Something already holds that browser — an in-flight run, or the panel's own
         # login window. Waiting here would park the press of Execute behind a wait
         # whose own timeout is longer than any crawl, and the run that owns the
         # profile is already the best evidence about the session there is.
-        return _verdict(platform, UNKNOWN, detail=t('cookie.pre.busy', platform=platform))
-    facts = _probe_live(platform, use_profile=use_profile)
-    verdict = _verdict(platform, classify_probe(facts), probed=True)
+        return _verdict(platform, UNKNOWN, detail=t('cookie.pre.busy', platform=platform), account=account)
+    facts = _probe_live(platform, use_profile=use_profile, account=account)
+    verdict = _verdict(platform, classify_probe(facts), probed=True, account=account)
     if verdict['state'] == UNKNOWN and not facts.get('error'):
         verdict['detail'] = t('cookie.pre.riskControl')
     elif verdict['state'] == UNKNOWN:
         verdict['detail'] = facts['error']
-    _remember(platform, verdict)
+    _remember(platform, verdict, account)
     return verdict
 
 
-def check(platforms, *, use_profile: bool = None, fresh: bool = False) -> dict:
-    """Probe every platform of *platforms* at once and return ``{platform: verdict}``.
+def entry_key(platform: str, account: str = '') -> str:
+    """The one answer-key for a request entry.
+
+    A blank account keeps the bare platform string — every caller, cached payload and
+    test that ever keyed results by platform stays true — while a named account
+    gains its own slot. The browser computes the same key (``preflightEntryKey`` in
+    workflow.js) so a request, its verdict and the blocked list are one name.
+    """
+    platform = str(platform or '').strip()
+    account = str(account or '').strip()
+    return f'{platform}@{account}' if account else platform
+
+
+def entry_of(value) -> tuple:
+    """One requested entry, however it arrived, as ``(platform, account)``.
+
+    A bare string is the old shape and still legal: this endpoint is also what a
+    hand-made request hits, and refusing a platform-only question because the account
+    dimension is new would punish exactly the callers the feature did not change.
+    """
+    if isinstance(value, dict):
+        return str(value.get('platform') or '').strip(), str(value.get('account') or '').strip()
+    return str(value or '').strip(), ''
+
+
+def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
+    """Probe every (platform, account) of *entries* at once, keyed by :func:`entry_key`.
 
     The parallelism is capped rather than per-platform because the cost is a browser
     each: a canvas with six sources must not open six Chromes at the user's press of
@@ -326,24 +377,30 @@ def check(platforms, *, use_profile: bool = None, fresh: bool = False) -> dict:
     :func:`browser_profiles.acquire_profile`, which is bounded and reports the
     directory it is stuck on. That is a slower start, never a corrupted session.
     """
-    names = list(dict.fromkeys(str(p or '') for p in (platforms or []) if str(p or '')))
+    pairs = list(dict.fromkeys(entry_of(e) for e in (entries or [])))
+    pairs = [p for p in pairs if p[0]]
     answers: dict[str, dict] = {}
-    if not names:
+    if not pairs:
         return answers
-    workers = max(1, min(len(names), int(Config.COOKIE_PREFLIGHT_MAX_PARALLEL)))
+    workers = max(1, min(len(pairs), int(Config.COOKIE_PREFLIGHT_MAX_PARALLEL)))
     pool = ThreadPoolExecutor(max_workers=workers)
     try:
-        futures = {pool.submit(probe, name, use_profile=use_profile, fresh=fresh): name for name in names}
+        futures = {
+            pool.submit(probe, platform, use_profile=use_profile, fresh=fresh, account=account): (platform, account)
+            for platform, account in pairs
+        }
         deadline = time.monotonic() + Config.COOKIE_PREFLIGHT_TIMEOUT
-        for future, name in futures.items():
+        for future, (platform, account) in futures.items():
             remaining = max(0.0, deadline - time.monotonic())
+            key = entry_key(platform, account)
             try:
-                answers[name] = future.result(timeout=remaining)
+                answers[key] = future.result(timeout=remaining)
             except Exception:
-                answers[name] = _verdict(
-                    name,
+                answers[key] = _verdict(
+                    platform,
                     UNKNOWN,
                     detail=t('cookie.pre.timeout', n=int(Config.COOKIE_PREFLIGHT_TIMEOUT)),
+                    account=account,
                 )
     finally:
         pool.shutdown(wait=False, cancel_futures=True)

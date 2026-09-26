@@ -1005,6 +1005,25 @@
             <option value="youtube" data-i18n="platform.youtube">YouTube</option>
           </select>
         </div>
+        <!-- One platform can hold several logins (the rate limit a crawl hits is
+             per ACCOUNT). The box is free text on purpose: typing a name that has
+             no file yet is how a second login is BORN — every action below saves,
+             logs in or deletes exactly what is written here. The datalist only
+             offers what already exists; it never limits the answer. -->
+        <div class="settings-group">
+          <label class="settings-label" data-i18n="cookies.account"
+            >Account</label
+          >
+          <input
+            id="cookie-account"
+            class="settings-input"
+            type="text"
+            list="cookie-account-options"
+            data-i18n-placeholder="cookies.accountPlaceholder"
+            placeholder="work"
+          />
+          <datalist id="cookie-account-options"></datalist>
+        </div>
         <!-- Filled from /api/cookies/flow: which page to log in on and why.
              Server-side text on purpose — the guidance must stay translated and
              next to the code that enforces the entry link's host. -->

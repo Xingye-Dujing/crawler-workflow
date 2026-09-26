@@ -624,7 +624,9 @@ class TestLiveCrawlerFixture:
 
         made: list = []
 
-        def fake_get_crawler(platform, headless=True, cookie_dir=None, use_profile=None, refresh_cookies=False):
+        def fake_get_crawler(
+            platform, headless=True, cookie_dir=None, use_profile=None, refresh_cookies=False, account=''
+        ):
             if isinstance(raises, Exception):
                 raise raises
             stub = Stub(platform, use_profile, refresh_cookies)

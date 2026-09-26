@@ -102,6 +102,28 @@ class TestCapabilitiesEndpoint:
     def test_it_is_read_only(self, client):
         assert client.post('/api/capabilities', json={}).status_code == 405
 
+    def test_saved_accounts_join_the_fields_options_at_send_time(self, client):
+        """账号's real options are per-machine: the matrix declares only the default,
+        and the payload adds whatever cookie files exist NOW. The panel therefore lists
+        exactly what can be chosen — and a name saved after the page loaded simply
+        appears on the next pull, with no browser code of its own."""
+        saved = client.post(
+            '/api/cookies/save', json={'platform': 'zhihu', 'cookies': [{'name': 'a', 'value': 'v'}], 'account': 'work'}
+        )
+        assert saved.get_json()['ok'] is True, saved.get_json()
+        body = client.get('/api/capabilities').get_json()
+        zhihu = next(p for p in body['platforms'] if p['platform'] == 'zhihu')
+        posts = next(m for m in zhihu['modes'] if m['key'] == 'posts')
+        account_field = next(f for f in posts['fields'] if f['key'] == 'account')
+        assert [o['value'] for o in account_field['options']] == ['', 'work'], account_field
+        # the label of a real account IS its name — the catalogue has no word for it,
+        # and I18n.t answers an unknown key verbatim, which is the intent.
+        assert account_field['options'][1]['labelKey'] == 'work'
+        # anonymous forms carry no account field at all, and the static matrix did not move
+        weibo = next(p for p in body['platforms'] if p['platform'] == 'weibo')
+        hot = next(m for m in weibo['modes'] if m['key'] == 'hot')
+        assert 'account' not in [f['key'] for f in hot['fields']], hot['fields']
+
 
 class TestCookieEndpoints:
     def test_status_answers_for_every_supported_platform(self, client):
@@ -110,6 +132,19 @@ class TestCookieEndpoints:
         assert set(body['cookies']) == COOKIE_PLATFORMS
         # Existence flags only: never the cookie contents.
         assert all(isinstance(flag, bool) for flag in body['cookies'].values())
+
+    def test_status_lists_saved_account_names_without_touching_their_values(self, client, app_module):
+        """The panel shows WHICH accounts a platform holds so the user can pick or
+        delete one — that list is read off the filenames, and no cookie value is
+        opened for it (the same no-peeking rule the existence flags follow)."""
+        app_module.cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'secret'}], 'acct_one')
+        app_module.cookie_manager.save('weibo', [{'name': 'SUB', 'value': 'other'}], 'acct_two')
+        body = client.get('/api/cookies/status').get_json()
+        assert set(body['accounts']['weibo']) >= {'acct_one', 'acct_two'}, body['accounts']
+        # Every value is a list of NAMES — the shape that cannot carry a session.
+        assert all(isinstance(names, list) for names in body['accounts'].values())
+        assert all(isinstance(n, str) for names in body['accounts'].values() for n in names)
+        assert 'secret' not in str(body['accounts']), 'a cookie value leaked into the listing'
 
     def test_save_persists_into_the_isolated_cookie_dir(self, client, app_module, data_root):
         payload = {'platform': 'weibo', 'cookies': [{'name': 'SUB', 'value': 'x'}]}

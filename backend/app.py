@@ -2215,6 +2215,11 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # canvases that used to own it.
         return _execute_comment_node(dict(node, type='comment'), headless=headless, ctx=ctx)
     crawl_args = capabilities.crawl_kwargs(mode, params)
+    # The account is the executor's own field (like recrawl it stays out of crawl_args):
+    # it chooses WHICH session and WHICH browser device the crawl runs as — two accounts
+    # of one platform are two devices, so two nodes can crawl in real parallel instead
+    # of queueing behind one rate limit. Blank is the historical default account.
+    account = str(params.get('account') or '').strip()
     # A mode without a row budget (WeChat's article list) promised no number, so
     # nothing can be missing from it: the cookie-wall check below reads zero as
     # "this crawl ended where it was meant to" instead of inventing a target.
@@ -2235,6 +2240,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         # crawl end at its next row, and an idle server (a test calling the executor
         # directly) is not a user who pressed 停止.
         abort=stop_requested,
+        account=account,
     )
     # Registered and guarded from here on: everything between buying a browser
     # and using it can still fail — a read-only or missing export directory, a
@@ -2988,6 +2994,10 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     # links from another site must not silently crawl a platform nobody chose.
     # The standalone Comment node has no platform param, so it stays mixed-input.
     want = str(params.get('platform') or '').strip().lower()
+    # Which saved login (and device) walks these comments; blank is the historical
+    # default account. The comment wall is a per-ACCOUNT rate limit — the reason
+    # multi-account exists — so this must reach every get_crawler call below.
+    account = str(params.get('account') or '').strip()
     all_urls = split_urls(params.get('urls'))
     urls, dropped, mismatched = [], [], []
     for u in all_urls:
@@ -3068,6 +3078,10 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                     cookie_dir=Config.COOKIE_DIR,
                     use_profile=(ctx or {}).get('use_profile'),
                     abort=stop_requested,
+                    # The node's chosen login walks its comments too: the comment rate
+                    # limit is an ACCOUNT limit, which is the whole reason multi-account
+                    # exists. Blank = the historical default session.
+                    account=account,
                 )
                 # Registered for the same reason the source node registers its own:
                 # a browser 停止 does not know about is a window the user watches keep
@@ -3461,7 +3475,11 @@ def _execute_node(
         # browser per platform it finds in its links and is not gated yet (stated in
         # the README next to the setting, so it is a known gap rather than a promise).
         platform = node.get('platform') or (node.get('params') or {}).get('platform', '')
-        with crawl_gate.hold(platform, log=add_log, abort=lambda: not execution_state['running']):
+        # The lane splits per ACCOUNT (crawl_gate._lane): the measured wall is one
+        # SESSION searching twice, so two logins of one platform are two lanes and
+        # may crawl at the same moment — which is the whole reason accounts exist here.
+        account = str((node.get('params') or {}).get('account') or '').strip()
+        with crawl_gate.hold(platform, log=add_log, abort=lambda: not execution_state['running'], account=account):
             return _execute_source_node(node, headless, ctx=ctx)
     if ntype == 'upload':
         return _execute_upload_node(node)
@@ -4448,7 +4466,10 @@ COOKIE_PLATFORMS = CookieManager.PLATFORMS
 @app.route('/api/cookies/status', methods=['GET'])
 def cookie_status():
     status = {platform: cookie_manager.exists(platform) for platform in COOKIE_PLATFORMS}
-    return jsonify({'ok': True, 'cookies': status})
+    # The named accounts each platform already holds — the panel lists them to
+    # switch or delete, and no file's CONTENT is read for it (names off the listing).
+    accounts = {platform: cookie_manager.account_files(platform) for platform in COOKIE_PLATFORMS}
+    return jsonify({'ok': True, 'cookies': status, 'accounts': accounts})
 
 
 @app.route('/api/cookies/flow', methods=['GET'])
@@ -4521,8 +4542,12 @@ def preflight_cookies():
         raw = [raw]
     if not isinstance(raw, list):
         return jsonify({'ok': False, 'error': t('api.platformsRequired')}), 400
-    wanted = [str(p).strip() for p in raw if str(p or '').strip()]
-    refused = [p for p in wanted if not cookie_preflight.knows(p)]
+    # Each entry is a platform string (the shape before accounts existed, still
+    # accepted) or a {platform, account} pair. Only the PLATFORM is knowledge-checked —
+    # an account is a filename segment the store validates, and a name nobody saved is
+    # answered 「no cookie」 by the probe, not refused at the door. ``check`` normalizes
+    # the same way, so the door and the probe never disagree about what an entry is.
+    refused = [plat for plat, _acct in (cookie_preflight.entry_of(p) for p in raw) if not cookie_preflight.knows(plat)]
     if refused:
         # The names arrive from the browser and each one would buy a Chrome, so an
         # unrecognised name is refused whole instead of being filtered out quietly — a
@@ -4532,7 +4557,7 @@ def preflight_cookies():
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=refused[0])}), 400
     use_profile = _flag_or_none(data.get('use_profile'))
     fresh = _flag_or_none(data.get('fresh')) is True
-    results = cookie_preflight.check(wanted, use_profile=use_profile, fresh=fresh)
+    results = cookie_preflight.check(raw, use_profile=use_profile, fresh=fresh)
     for verdict in results.values():
         verdict['text'] = cookie_preflight.describe(verdict)
     blocked = [name for name, verdict in results.items() if verdict['blocking']]
@@ -4557,11 +4582,15 @@ def save_cookies():
         return _bad_body()
     platform = data.get('platform', '')
     cookies = data.get('cookies', [])
+    account = str(data.get('account') or '').strip()
     if not platform:
         return jsonify({'ok': False, 'error': t('api.platformRequired')}), 400
     if not cookie_manager.is_supported(platform):
         # The platform becomes part of a filename — refuse anything else.
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+    if account and not cookie_manager.is_account(account):
+        # The account is the OTHER filename segment that comes from a text box.
+        return jsonify({'ok': False, 'error': t('api.badAccount', account=account)}), 400
     if not cookies:
         return jsonify({'ok': False, 'error': t('api.cookiesRequired')}), 400
     try:
@@ -4572,7 +4601,7 @@ def save_cookies():
             add_log(t('cookie.droppedForeign', platform=platform, n=dropped))
         if not kept:
             return jsonify({'ok': False, 'error': t('cookie.allForeign', platform=platform)}), 400
-        cookie_manager.save(platform, kept)
+        cookie_manager.save(platform, kept, account)
         # The file this platform would be planted from just changed, so the cached
         # verdict about the previous one has to go with it.
         cookie_preflight.invalidate(platform)
@@ -4606,19 +4635,22 @@ def delete_cookies():
     if data is None:
         return _bad_body()
     platform = str(data.get('platform', ''))
+    account = str(data.get('account') or '').strip()
     if not cookie_manager.is_supported(platform):
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
-    if not cookie_manager.exists(platform):
+    if account and not cookie_manager.is_account(account):
+        return jsonify({'ok': False, 'error': t('api.badAccount', account=account)}), 400
+    if not cookie_manager.exists(platform, account):
         # Not a silent success: the panel asked to remove something that is not
         # there, and 「已删除」 would leave the user believing a stale file was replaced.
         return jsonify({'ok': False, 'error': t('cookie.delete.none', platform=platform)}), 404
     try:
-        cookie_manager.delete(platform)
+        cookie_manager.delete(platform, account)
     except OSError as e:
         logger.exception(t('cookie.delete.failed', err=str(e)[:120]))
         return jsonify({'ok': False, 'error': str(e)}), 500
     cookie_preflight.invalidate(platform)
-    holds = bool(browser_profiles.is_enabled() and browser_profiles.is_used(platform))
+    holds = bool(browser_profiles.is_enabled() and browser_profiles.is_used(platform, account))
     message = t('cookie.deleted', platform=platform)
     if holds:
         # ``CookieManager.delete`` already logged the deletion, and that line reaches
@@ -4655,19 +4687,22 @@ def refresh_profile_cookies():
     if data is None:
         return _bad_body()
     platform = str(data.get('platform', ''))
+    account = str(data.get('account') or '').strip()
     if not cookie_manager.is_supported(platform):
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
-    if not cookie_manager.exists(platform):
+    if account and not cookie_manager.is_account(account):
+        return jsonify({'ok': False, 'error': t('api.badAccount', account=account)}), 400
+    if not cookie_manager.exists(platform, account):
         return jsonify({'ok': False, 'error': t('cookie.refresh.noFile', platform=platform)}), 400
     if not browser_profiles.is_enabled():
         # Without a profile every crawl is already planted from this file, so a browser
         # would be bought to change nothing.
         return jsonify({'ok': False, 'error': t('cookie.refresh.noProfile')}), 400
-    if not browser_profiles.is_used(platform):
+    if not browser_profiles.is_used(platform, account):
         # Never used means the next crawl imports the file by itself. Reporting 「已更新」
         # for something that has not happened is the exact thing this panel lost trust over.
         return jsonify({'ok': False, 'error': t('cookie.refresh.notYet', platform=platform)}), 400
-    profile = browser_profiles.platform_dir(platform)
+    profile = browser_profiles.platform_dir(platform, account)
     if browser_profiles.is_busy(profile) or execution_state['running']:
         return jsonify({'ok': False, 'error': t('cookie.refresh.busy', platform=platform)}), 409
     if not _PROFILE_REFRESH_LOCK.acquire(blocking=False):
@@ -4683,6 +4718,7 @@ def refresh_profile_cookies():
                 cookie_dir=Config.COOKIE_DIR,
                 use_profile=True,
                 refresh_cookies=True,
+                account=account,
             )
         except Exception as e:
             logger.debug('the refresh browser for %s did not come up: %s', platform, e)
@@ -4699,7 +4735,7 @@ def refresh_profile_cookies():
     # Measured on a real Chrome: a cookie without an expiry is not written to the profile
     # store at all, so it dies with the window that was opened to plant it. Saying only
     # 「已更新」 would promise a transfer that partly did not happen.
-    fading = cookie_manager.session_only_count(platform)
+    fading = cookie_manager.session_only_count(platform, account)
     if fading:
         message += '\n' + t('cookie.refresh.sessionOnly', n=fading)
     # ``_load_cookies`` already says what went in, and the console shows every logger
@@ -4715,6 +4751,9 @@ _COOKIE_JOB = {
     # shows its "Done — I logged in" button only for the first.
     'kind': '',
     'platform': '',
+    # The account the live job owns its browser AS — carried so a second request
+    # can be refused with the SESSION that is busy, not just the platform.
+    'account': '',
     'phase': '',  # login: starting → waiting → saved | cancelled | error; verify: verifying → verified | error
     'error': '',
     'count': 0,
@@ -4812,7 +4851,7 @@ def _close_login_browser(crawler, quit_timeout: float = 5.0):
         )
 
 
-def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', lang: str = ''):
+def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', lang: str = '', account: str = ''):
     """Drive one login window from the request thread to its own daemon.
 
     ``set_lang`` is the first thing it does: thread-locals are not inherited, so
@@ -4828,6 +4867,11 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
     cookies the crawler needs while sitting on a page the user picks (a note or
     video link), so the panel lets that link be pasted in — validated against
     the crawler's own host list before it is ever opened.
+
+    *account* is which login of the platform this window captures: the browser
+    opens that account's profile and the jar is saved to that account's file.
+    Blank is the platform's default session — the only one that existed before
+    multi-account.
     """
     job = _COOKIE_JOB
     crawler = None
@@ -4837,7 +4881,7 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
         # default blocks images to save seconds per navigation, and the QR code a
         # user must scan is an ``<img>`` — with the blocker on, the panel opened a
         # window that could not be completed at all.
-        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR, for_login=True)
+        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR, for_login=True, account=account)
         url = entry_url or crawler.login_url
         if not url:
             raise ValueError(t('api.unsupportedPlatform', platform=platform))
@@ -4884,13 +4928,13 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
             job['error'] = t('cookie.noCookies')
             add_log(t('cookie.noCookies'))
             return
-        cookie_manager.save(platform, cookies)
+        cookie_manager.save(platform, cookies, account)
         # This jar was read OUT OF the platform's own profile browser, so the profile is not behind
         # the file: without this line the panel would go on offering 「把 Cookie 更新进 Profile」,
         # a button that here would overwrite a live session with a copy of itself. Only when a
         # profile really exists — a run that chose 本次不用 Profile has no live session to spare.
-        if browser_profiles.is_enabled() and browser_profiles.is_used(platform):
-            browser_profiles.remember_cookie(platform, cookie_manager._path_for(platform))
+        if browser_profiles.is_enabled() and browser_profiles.is_used(platform, account):
+            browser_profiles.remember_cookie(platform, cookie_manager._path_for(platform, account), account)
         # A capture replaces the session, so any verdict the pre-run gate cached about
         # the old one is now not just stale but wrong in the dangerous direction.
         cookie_preflight.invalidate(platform)
@@ -4921,10 +4965,14 @@ def generate_cookies():
     if data is None:
         return _bad_body()
     platform = str(data.get('platform', ''))
+    account = str(data.get('account') or '').strip()
     if not platform:
         return jsonify({'ok': False, 'error': t('api.platformRequired')}), 400
     if not cookie_manager.is_supported(platform):
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+    if account and not cookie_manager.is_account(account):
+        # The window will one day SAVE under this name — it enters a filename.
+        return jsonify({'ok': False, 'error': t('api.badAccount', account=account)}), 400
     wait_seconds = _safe_int(data.get('wait_seconds'), 120, minimum=10, maximum=600)
     # A cookie-only platform still needs a real login page; anything without one
     # would open a browser at about:blank and capture nothing.
@@ -4944,19 +4992,22 @@ def generate_cookies():
                         'ok': False,
                         'busy': True,
                         'platform': _COOKIE_JOB['platform'],
+                        'account': _COOKIE_JOB['account'],
                         'error': t('api.cookieBusy', platform=_COOKIE_JOB['platform']),
                     }
                 ),
                 409,
             )
-        _COOKIE_JOB.update(active=True, kind='login', platform=platform, phase='starting', error='', count=0)
+        _COOKIE_JOB.update(
+            active=True, kind='login', platform=platform, account=account, phase='starting', error='', count=0
+        )
         _COOKIE_JOB['entry'] = ''
         _COOKIE_JOB['facts'] = {}
         _COOKIE_JOB['lines'] = []
         _COOKIE_JOB['cancel'].clear()
         _COOKIE_JOB['confirm'].clear()
     threading.Thread(
-        target=_cookie_login_worker, args=(platform, wait_seconds, entry_url, get_lang()), daemon=True
+        target=_cookie_login_worker, args=(platform, wait_seconds, entry_url, get_lang(), account), daemon=True
     ).start()
     payload = {'ok': True, 'message': t('cookie.started'), 'entry': entry_url or ''}
     if entry_rejected:
@@ -5010,7 +5061,7 @@ def _verify_lines(platform: str, facts: dict) -> list:
     return lines
 
 
-def _cookie_verify_worker(platform: str, url: str, lang: str = ''):
+def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str = ''):
     """Probe the stored cookie against the live site and report what it unlocks.
 
     Visible by design: this machine's risk control treats a headless content
@@ -5034,7 +5085,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = ''):
         # sent there by an expired cookie: the probe lands on the login page, whose QR
         # code is an ``<img>``. Blocked, the diagnosis 「cookie 已失效，去登录」 pointed at
         # a window where logging in was impossible.
-        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR, for_login=True)
+        crawler = get_crawler(platform, headless=False, cookie_dir=Config.COOKIE_DIR, for_login=True, account=account)
         facts = crawler.diagnose(url)
         facts['risk_blocked'] = bool(getattr(crawler, 'risk_blocked', False))
         lines = _verify_lines(platform, facts)
@@ -5049,7 +5100,7 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = ''):
             # came here from the block dialog should not have to prove the fix twice.
             # With a pasted entry URL it does not — the verdict is about that page, not
             # about the address the gate would visit.
-            cookie_preflight.record(platform, facts)
+            cookie_preflight.record(platform, facts, account)
         for line in lines:
             add_log(line)
     except Exception as e:
@@ -5078,9 +5129,12 @@ def verify_cookies():
     if data is None:
         return _bad_body()
     platform = str(data.get('platform', ''))
+    account = str(data.get('account') or '').strip()
     if not cookie_manager.is_supported(platform):
         return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
-    if not cookie_manager.exists(platform):
+    if account and not cookie_manager.is_account(account):
+        return jsonify({'ok': False, 'error': t('api.badAccount', account=account)}), 400
+    if not cookie_manager.exists(platform, account):
         return jsonify({'ok': False, 'error': t('cookie.verify.noCookie', platform=platform)}), 400
     requested = str(data.get('url') or '').strip()
     target = normalize_entry_url(requested, cookie_hosts(platform))
@@ -5095,18 +5149,21 @@ def verify_cookies():
                         'ok': False,
                         'busy': True,
                         'platform': _COOKIE_JOB['platform'],
+                        'account': _COOKIE_JOB['account'],
                         'error': t('api.cookieBusy', platform=_COOKIE_JOB['platform']),
                     }
                 ),
                 409,
             )
-        _COOKIE_JOB.update(active=True, kind='verify', platform=platform, phase='verifying', error='', count=0)
+        _COOKIE_JOB.update(
+            active=True, kind='verify', platform=platform, account=account, phase='verifying', error='', count=0
+        )
         _COOKIE_JOB['entry'] = ''
         _COOKIE_JOB['facts'] = {}
         _COOKIE_JOB['lines'] = []
         _COOKIE_JOB['cancel'].clear()
         _COOKIE_JOB['confirm'].clear()
-    threading.Thread(target=_cookie_verify_worker, args=(platform, target, get_lang()), daemon=True).start()
+    threading.Thread(target=_cookie_verify_worker, args=(platform, target, get_lang(), account), daemon=True).start()
     return jsonify({'ok': True, 'message': t('cookie.verifying')}), 202
 
 
@@ -5152,8 +5209,21 @@ def get_capabilities():
     a fact the executor already had to know. Labels travel as catalogue keys
     because this payload has no language: the canvas translates it into whichever
     one the user is reading.
+
+    The one list that cannot be static is 账号: which accounts exist is which cookie
+    files are on disk NOW, so the field's declared default option is extended here
+    at send time. The account name doubles as its own label (it is user-typed, not
+    a catalogue key — ``I18n.t`` answers an unknown key verbatim, which is exactly
+    the intent); the panel needs no new code to show a new account.
     """
-    return jsonify(capabilities.as_dict())
+    payload = capabilities.as_dict()
+    for cap in payload.get('platforms', []):
+        saved = cookie_manager.account_files(cap.get('platform') or '')
+        for mode in cap.get('modes', []):
+            for field in mode.get('fields', []):
+                if field.get('key') == 'account':
+                    field['options'] = field['options'] + [{'value': a, 'labelKey': a} for a in saved]
+    return jsonify(payload)
 
 
 # ─── Runtime settings API ──────────────────────────────────────

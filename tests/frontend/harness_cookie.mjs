@@ -382,4 +382,21 @@ await flush();
 await flush();
 out.hintWhenCurrent = (doc.getElementById('cookie-guide-body').children || []).map((row) => row.textContent);
 
+/* ── the typed account rides every request; a blank box is the default account ──
+   One platform can now hold several logins, so WHICH file the login browser writes is
+   decided by the account box. A name typed in mixed case has to reach the backend
+   lowercased (the filename rule is lowercase), and the empty box is the historical
+   default account — a missing key would read as "not sent" rather than "default". */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.cookieJob.active = false;
+sandbox.cookieJob.known = false;
+sandbox.__calls.length = 0;
+doc.getElementById('cookie-account').value = 'Work';
+sandbox.__responses['/api/cookies/generate'] = { ok: true, message: 'started' };
+sandbox.__responses['/api/cookies/generate/status'] = { ok: true, active: false, phase: '', kind: 'login' };
+setPlatform('weibo');
+sandbox.generateCookie();
+await flush();
+out.account = report();
+
 process.stdout.write(JSON.stringify(out));

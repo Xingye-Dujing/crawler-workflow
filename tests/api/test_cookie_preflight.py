@@ -40,8 +40,8 @@ class _Probes:
         # test catches one on its deadline instead of pretending the wait is instant.
         self.hold = None
 
-    def __call__(self, platform, *, use_profile=None):
-        self.calls.append({'platform': platform, 'use_profile': use_profile})
+    def __call__(self, platform, *, use_profile=None, account=''):
+        self.calls.append({'platform': platform, 'use_profile': use_profile, 'account': account})
         if self.hold is not None:
             self.hold()
         facts = self.by_platform.get(platform, self.answer)
@@ -88,8 +88,8 @@ def probe_zhihu(probes, with_cookie):
 def with_cookie(app_module):
     """Give a platform a saved cookie file, as the panel would have."""
 
-    def _give(platform, count=1):
-        app_module.cookie_manager.save(platform, [{'name': f'c{i}', 'value': 'v'} for i in range(count)])
+    def _give(platform, count=1, account=''):
+        app_module.cookie_manager.save(platform, [{'name': f'c{i}', 'value': 'v'} for i in range(count)], account)
 
     return _give
 
@@ -317,7 +317,7 @@ class TestParallelAndDeadline:
         barrier = threading.Barrier(2)
         seen = []
 
-        def fake_probe(platform, *, use_profile=None):
+        def fake_probe(platform, *, use_profile=None, account=''):
             seen.append(platform)
             try:
                 barrier.wait(timeout=3)
@@ -337,7 +337,7 @@ class TestParallelAndDeadline:
         with_cookie('weibo')
         barrier = threading.Barrier(2)
 
-        def fake_probe(platform, *, use_profile=None):
+        def fake_probe(platform, *, use_profile=None, account=''):
             try:
                 barrier.wait(timeout=0.4)
                 return {'login_wall': False, 'risk_blocked': False}
@@ -355,7 +355,7 @@ class TestParallelAndDeadline:
         with_cookie('zhihu')
         hold = threading.Event()
 
-        def fake_probe(platform, *, use_profile=None):
+        def fake_probe(platform, *, use_profile=None, account=''):
             hold.wait(10)
             return {'login_wall': True, 'risk_blocked': False}
 
@@ -452,7 +452,18 @@ class TestRoute:
         session from the profile's own."""
         with_cookie('zhihu')
         client.post('/api/cookies/preflight', json={'platforms': ['zhihu'], 'use_profile': False})
-        assert probes.calls == [{'platform': 'zhihu', 'use_profile': False}]
+        # A bare platform string is still a legal entry, and it means the DEFAULT
+        # account — the shape the blank account has always carried.
+        assert probes.calls == [{'platform': 'zhihu', 'use_profile': False, 'account': ''}]
+
+    def test_an_entry_account_reaches_the_browser_it_is_probed_with(self, client, probes, with_cookie):
+        """The account dimension of the gate: the pair asked for is the pair asked
+        OF — a named account must not be tested through the default login's browser."""
+        with_cookie('weibo', account='work')
+        result = client.post('/api/cookies/preflight', json={'platforms': [{'platform': 'weibo', 'account': 'work'}]})
+        assert probes.calls == [{'platform': 'weibo', 'use_profile': None, 'account': 'work'}]
+        # and the answer is keyed by the pair, which is what the browser matches on
+        assert 'weibo@work' in result.get_json()['results']
 
     def test_a_missing_use_profile_stays_a_missing_answer(self, client, probes, with_cookie):
         with_cookie('zhihu')

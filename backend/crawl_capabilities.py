@@ -222,6 +222,22 @@ _RECOLLECT = Field(
     hint_key='settings.recrawlHint',
     coerce='bool',
 )
+#: Which saved login (and therefore which browser device) a session crawl uses. Like
+#: ``recrawl`` it is an executor-only field: it never reaches the crawler method — the
+#: executor reads it to pick the cookie file and the profile directory (see
+#: ``get_crawler(account=…)``) — but unlike ``recrawl`` it DOES choose data, so it is
+#: deliberately not volatile in the run fingerprint. Declared with only the default
+#: option; ``GET /api/capabilities`` appends the accounts that really have a saved
+#: file when it sends the payload, so the panel lists exactly what can be chosen and
+#: a stale hand-written account is refused by name at validation.
+_ACCOUNT = Field(
+    key='account',
+    control='select',
+    label_key='field.account',
+    name_key='field.account',
+    default='',
+    options=(('', 'cookies.accountDefault'),),
+)
 _TIMES = (
     Field(key='start_time', control='text', label_key='settings.startTime', placeholder='2026-01-01'),
     Field(key='end_time', control='text', label_key='settings.endTime', placeholder='2026-12-31'),
@@ -345,7 +361,17 @@ def _hot_mode(
         key='hot',
         label_key='settings.collectHot',
         handler='hot',
-        fields=(replace(_TARGET, default=target), *((_BOARD,) if board else ()), *extra, _RECOLLECT),
+        fields=(
+            replace(_TARGET, default=target),
+            *((_BOARD,) if board else ()),
+            *extra,
+            # A board is chosen by the site, but reading it can still be logged in —
+            # only when it is (measured: zhihu's hot list 401s anonymously) does the
+            # node get an account to pick; weibo's 热搜 answers anyone and keeps no
+            # choice it cannot honour.
+            *((_ACCOUNT,) if needs_session else ()),
+            _RECOLLECT,
+        ),
         # A board opens a page once then reads JSON: a visible window only sits there.
         # The note says so (and that 无头 saves nothing to watch) instead of the panel
         # holding its own opinion about which modes move the screen.
@@ -391,6 +417,11 @@ def _comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
             # ``test_every_mode_that_skips_rows_offers_to_forget_them`` now refuses:
             # a crawl that silently dedupes with no way back reads as "the site has no
             # more comments", and 重新采集 was the only repair.
+            #
+            # Comments are read as a logged-in reader on every platform that offers
+            # this form, so the account selector belongs here as well as on the source
+            # walks: the wall a comment crawl hits is the *account's* rate limit.
+            _ACCOUNT,
             _RECOLLECT,
         ),
         # Two comment notes, chosen by ``collects`` so the panel never claims a window
@@ -410,7 +441,7 @@ def _posts_mode(*extra: Field, target: int = 50, collects: str = 'dom_scroll', n
     return Mode(
         key='posts',
         label_key='settings.collectPosts',
-        fields=(_KEYWORD, replace(_TARGET, default=target), *extra, _RECOLLECT),
+        fields=(_KEYWORD, replace(_TARGET, default=target), *extra, _ACCOUNT, _RECOLLECT),
         note_key=note_key,
         collects=collects,
     )
@@ -437,7 +468,7 @@ def _author_mode(
         key='author',
         label_key='settings.collectAuthor',
         handler='author',
-        fields=(author, replace(_TARGET, default=target), *extra, _RECOLLECT),
+        fields=(author, replace(_TARGET, default=target), *extra, _ACCOUNT, _RECOLLECT),
         note_key=note_key,
         collects=collects,
     )
@@ -764,7 +795,7 @@ def crawler_fields(mode: Mode) -> tuple[Field, ...]:
     return tuple(f for f in mode.fields if f.key not in _NOT_ARGS)
 
 
-_NOT_ARGS = frozenset({'recrawl'})
+_NOT_ARGS = frozenset({'recrawl', 'account'})
 
 
 def crawl_kwargs(mode: Mode, params: dict) -> dict:
@@ -800,7 +831,7 @@ def required_missing(mode: Mode, params: dict) -> list[Field]:
     return out
 
 
-def unoffered_selections(mode: Mode, params: dict, with_files: bool = True) -> list[tuple[Field, str]]:
+def unoffered_selections(mode: Mode, params: dict, with_files: bool = True, accounts=()) -> list[tuple[Field, str]]:
     """Select fields whose stored value names an option the matrix does not declare.
 
     A select is a choice from a fixed list, so a value off that list is not a variant
@@ -812,11 +843,19 @@ def unoffered_selections(mode: Mode, params: dict, with_files: bool = True) -> l
     else. Refusing it by name is the same rule :func:`requested_mode_key` enforces for
     the mode selector, extended to the choices inside a mode.
 
+    ``accounts`` is the one list that is not fixed: the 账号 selector is declared with
+    only the default option, because WHICH accounts exist is whatever cookie files the
+    user has saved *right now* (the same list the panel is offered at payload time).
+    A stored account outside it is refused by name for the same reason as any stale
+    option — it names a session that does not exist — and nothing may quietly fall
+    back to the default account and crawl as somebody else's login.
+
     A blank is not a mistake but "never chose", which the declared default answers —
     so it is skipped, exactly as an empty mode key is. Case is deliberately **not**
     folded: an option value is a storage key, and the user has to see what they wrote
     rather than have a near miss guessed into a different crawl.
     """
+    allowed_accounts = {str(a) for a in accounts}
     out: list[tuple[Field, str]] = []
     for field in list(mode.fields) + (list(FILE_FIELDS) if with_files else []):
         if field.control != 'select' or not field.options:
@@ -825,7 +864,10 @@ def unoffered_selections(mode: Mode, params: dict, with_files: bool = True) -> l
         if raw is None:
             continue
         value = str(raw).strip()
-        if not value or value in {stored for stored, _label in field.options}:
+        offered = {stored for stored, _label in field.options}
+        if field.key == 'account':
+            offered |= allowed_accounts
+        if not value or value in offered:
             continue
         out.append((field, value))
     return out

@@ -62,13 +62,30 @@ _ACTIVE: dict[str, int] = {}
 _GUARD = threading.Lock()
 
 
-def _lock_for(platform: str, table: dict) -> threading.Lock:
+def _lock_for(key: str, table: dict) -> threading.Lock:
     with _GUARD:
-        lock = table.get(platform)
+        lock = table.get(key)
         if lock is None:
             lock = threading.Lock()
-            table[platform] = lock
+            table[key] = lock
         return lock
+
+
+def _lane(platform: str, account: str = '') -> str:
+    """The gate's lane for one crawl.
+
+    The default account keeps the bare platform name — every lock, timer and test
+    written before multi-account addressed exactly this lane — while a named account
+    gets a lane of its own. The reason is the feature itself: the wall this gate
+    dodges is per-ACCOUNT (one session searching twice in a second), so serializing
+    two DIFFERENT logins of one platform would throw away the only parallelism
+    multi-account is for. The 真排队/错峰 POLICY stays per-platform (a serial_only
+    verdict describes what one session tolerates), so each lane obeys the same rule
+    independently: weibo's two accounts may now run at once where its one account
+    could not.
+    """
+    account = str(account or '').strip()
+    return f'{platform}@{account}' if account else platform
 
 
 def strict(platform: str = '') -> bool:
@@ -121,45 +138,49 @@ def _now() -> float:
     return time.monotonic()
 
 
-def _space_the_start(platform: str, log=None, abort=None) -> bool:
+def _space_the_start(lane: str, platform: str = '', log=None, abort=None) -> bool:
     """错峰: keep this crawl's *start* away from the last one, then let it run.
 
     The spacing lock is released before the crawl begins, which is the whole
-    difference from 真排队: two crawls of one platform may still be running over each
+    difference from 真排队: two crawls of one lane may still be running over each
     other here, and only their departures are ordered. It is held *during* the wait,
     because two crawls that arrive together must not both decide "the gap is mine" and
     leave at the same instant — that is the collision this mode exists to remove.
 
     The gap is arithmetic about **overlap**: it is owed only while another crawl of
-    this platform is actually in flight. A serial canvas has no company to wait for,
-    and spacing its hand-offs would charge the user's seconds for a collision that
+    this lane is actually in flight. A serial canvas has no company to wait for, and
+    spacing its hand-offs would charge the user's seconds for a collision that
     cannot happen — the previous crawl finished before this one was even asked for.
 
     The start is recorded at its scheduled moment rather than at release, so a third
     arrival measures its own gap from a queue it cannot see finished.
+
+    *lane* keys the bookkeeping (a named account is a lane of its own); *platform* is
+    only what the sentences say.
     """
+    display = platform or lane
     gap = stagger()
-    lock = _lock_for(platform, _START_LOCKS)
+    lock = _lock_for(lane, _START_LOCKS)
     blocked = not lock.acquire(blocking=False)
     if blocked:
         deadline = time.monotonic() + gap + Config.PLATFORM_GATE_TIMEOUT
         while not lock.acquire(timeout=0.5):
             if abort is not None and abort():
-                raise RuntimeError(t('run.queueAbandoned', platform=platform))
+                raise RuntimeError(t('run.queueAbandoned', platform=display))
             if time.monotonic() >= deadline:
-                raise RuntimeError(t('run.platformGateTimeout', platform=platform, n=int(Config.PLATFORM_GATE_TIMEOUT)))
+                raise RuntimeError(t('run.platformGateTimeout', platform=display, n=int(Config.PLATFORM_GATE_TIMEOUT)))
     try:
         now = _now()
         with _GUARD:
-            others = _ACTIVE.get(platform, 0) - 1
-        # Only *this* caller is in flight: the platform's earlier crawls have all
+            others = _ACTIVE.get(lane, 0) - 1
+        # Only *this* caller is in flight: the lane's earlier crawls have all
         # finished, so there is nothing left to collide with and no gap to pay.
-        previous = _LAST_START.get(platform) if others > 0 else None
+        previous = _LAST_START.get(lane) if others > 0 else None
         ahead = max(0.0, gap - (now - previous)) if previous is not None else 0.0
-        _LAST_START[platform] = now + ahead
+        _LAST_START[lane] = now + ahead
         if ahead > 0:
             if log is not None:
-                log(t('run.platformStaggered', platform=platform, n=int(round(ahead))))
+                log(t('run.platformStaggered', platform=display, n=int(round(ahead))))
             _interruptible_sleep(ahead, abort)
     finally:
         lock.release()
@@ -170,8 +191,14 @@ def _space_the_start(platform: str, log=None, abort=None) -> bool:
 
 
 @contextlib.contextmanager
-def hold(platform: str, log=None, abort=None):
-    """Take *platform*'s turn — held for the crawl when 真排队, for the wait when not.
+def hold(platform: str, log=None, abort=None, account: str = ''):
+    """Take this lane's turn — held for the crawl when 真排队, for the wait when not.
+
+    ``account`` splits the lane (see :func:`_lane`): two logins of one platform crawl
+    at the same time, two crawls on ONE login still take turns — the collision the
+    gate protects against is a per-session fact, not a per-site one. Every refusal
+    and notice below still speaks the PLATFORM word: the queue line tells the user
+    which site is busy, and the account is what they chose on the node they can see.
 
     A serial-only platform (weibo: one account paging two sessions at once is answered
     by the login wall) takes the 真排队 branch whatever the switch says, and says why
@@ -187,6 +214,7 @@ def hold(platform: str, log=None, abort=None):
     if not platform:
         yield False
         return
+    lane = _lane(platform, account)
     forced_serial = capabilities.serial_only_of(platform) and not get_setting('same_platform_queue')
     if not strict(platform):
         if stagger() <= 0:
@@ -196,16 +224,16 @@ def hold(platform: str, log=None, abort=None):
             return
         # The seat is taken *before* the wait and held for the whole crawl: a caller
         # is company for another start-spacing from the moment it commits to this
-        # platform, until its last page is on disk.
+        # lane, until its last page is on disk.
         with _GUARD:
-            _ACTIVE[platform] = _ACTIVE.get(platform, 0) + 1
+            _ACTIVE[lane] = _ACTIVE.get(lane, 0) + 1
         try:
-            yield _space_the_start(platform, log=log, abort=abort)
+            yield _space_the_start(lane, platform, log=log, abort=abort)
         finally:
             with _GUARD:
-                _ACTIVE[platform] -= 1
+                _ACTIVE[lane] -= 1
         return
-    lock = _lock_for(platform, _LOCKS)
+    lock = _lock_for(lane, _LOCKS)
     # A non-blocking try first, because "did I queue?" has to be answered by whether
     # the platform was free *at the door*, not by whether a one-second poll happened
     # to time out. Reading it off the poll instead reports the caller that waited

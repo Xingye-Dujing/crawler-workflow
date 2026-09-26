@@ -122,7 +122,7 @@ class TestDelete:
     def test_a_file_that_will_not_go_says_why_once(self, client, app_module, saved, monkeypatch):
         saved('bilibili')
 
-        def refuse(_platform):
+        def refuse(_platform, _account=''):
             raise OSError('read-only volume')
 
         monkeypatch.setattr(app_module.cookie_manager, 'delete', refuse)

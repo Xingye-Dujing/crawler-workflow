@@ -175,6 +175,22 @@ class TestFingerprints:
         absent = _node(params={'keyword': '三亚'})
         assert node_fingerprint(on) == node_fingerprint(off) == node_fingerprint(absent)
 
+    def test_the_default_account_hashed_the_same_before_and_after_multi_account(self):
+        """A BLANK 账号 IS the default account — the very session this node crawled as
+        before multi-account existed. So absence and '' must hash alike, or the first
+        save after the upgrade (whose panel stamps '' into every source node) would
+        re-key every stored row and every resume cursor of every old canvas.
+
+        A NAMED account still moves the fingerprint: it chooses a different session and
+        a different device, and its cursor must not claim the default account's rows.
+        """
+        plain = _node(params={'keyword': '三亚'})
+        blank = _node(params={'keyword': '三亚', 'account': ''})
+        spaced = _node(params={'keyword': '三亚', 'account': '   '})
+        assert node_fingerprint(plain) == node_fingerprint(blank) == node_fingerprint(spaced)
+        named = _node(params={'keyword': '三亚', 'account': 'work'})
+        assert node_fingerprint(named) != node_fingerprint(plain)
+
     def test_structure_fingerprint_treats_a_disabled_node_as_absent(self):
         """The resume key is computed on the EFFECTIVE graph, so a disabled node is the same as a
         deleted one — and re-enabling it returns to the original identity, keeping the interrupted

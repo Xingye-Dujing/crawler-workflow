@@ -89,7 +89,7 @@ def sim(monkeypatch, app_module):
         if page is not None:
             plan['page'] = page
 
-    def fake_get_crawler(platform, headless=True, cookie_dir=None, use_profile=None, abort=None):
+    def fake_get_crawler(platform, headless=True, cookie_dir=None, use_profile=None, abort=None, account=''):
         crawler = SimCrawler(plan['page'], plan['expire_after'])
         made.append(crawler)
         return crawler

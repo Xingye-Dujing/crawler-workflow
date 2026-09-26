@@ -84,7 +84,17 @@ class TestGenerate:
             'platform': 'bilibili',
             'wait_seconds': 45,
             'url': 'https://www.bilibili.com/video/BV1xx411c7mD',
+            'account': '',
         }
+
+    def test_the_typed_account_is_sent_with_the_login_request(self, panel):
+        """One platform, several logins: the panel's account box decides WHICH file the
+        browser writes, so the request that opens it has to carry that name. The blank
+        is the default account — the shape every cookie had before multi-account — and a
+        typed name must reach the backend verbatim (lowercased) or the login is saved
+        under the wrong session and the crawl that picks it comes up empty."""
+        body = _body(panel['account'], '/api/cookies/generate')
+        assert body['account'] == 'work', panel['account']
 
     def test_a_rejected_link_is_toasted_not_swallowed(self, panel):
         """The window opens on the platform page instead; silence here would let
@@ -151,7 +161,7 @@ class TestDeleteCookie:
         requests = panel['deleteConfirmed']['requests']
         posted = [item for item in requests if item['url'] == '/api/cookies/delete']
         assert len(posted) == 1, requests
-        assert json.loads(posted[0]['body']) == {'platform': 'bilibili'}
+        assert json.loads(posted[0]['body']) == {'platform': 'bilibili', 'account': ''}
 
     def test_a_deletion_refreshes_the_status_line_it_just_changed(self, panel):
         """The panel shows which platforms hold a cookie; after a delete that answer
@@ -200,7 +210,7 @@ class TestRefreshProfileCookie:
         requests = panel['refreshConfirmed']['requests']
         posted = [item for item in requests if item['url'] == '/api/cookies/refresh-profile']
         assert len(posted) == 1, requests
-        assert json.loads(posted[0]['body']) == {'platform': 'weibo'}
+        assert json.loads(posted[0]['body']) == {'platform': 'weibo', 'account': ''}
 
     def test_a_successful_plant_re_reads_the_profile_table(self, panel):
         """The profile now holds a different session, so the answer behind the hint is

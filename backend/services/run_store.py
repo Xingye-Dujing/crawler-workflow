@@ -184,7 +184,19 @@ _VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count', 'workflow_name', 'rec
 
 
 def stable_params(params) -> dict:
-    return {k: v for k, v in (params or {}).items() if str(k) not in _VOLATILE_PARAMS}
+    """The parameters that choose DATA, for hashing.
+
+    Volatile entries (labels, switches) drop out entirely. A BLANK 账号 is also
+    dropped: blank IS the default account — the very session this node crawled as
+    before multi-account existed — so a panel stamping ``''`` onto an old canvas
+    must not re-key rows already paid for. A NAMED account stays in the hash: it
+    selects a different session and device, and per the design that makes it a
+    different crawl — its cursor and dedupe scope must not claim the old one's.
+    """
+    out = {k: v for k, v in (params or {}).items() if str(k) not in _VOLATILE_PARAMS}
+    if str(out.get('account') or '').strip() == '':
+        out.pop('account', None)
+    return out
 
 
 def node_fingerprint(node: dict, upstream: tuple = ()) -> str:

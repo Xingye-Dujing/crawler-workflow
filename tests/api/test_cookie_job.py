@@ -82,11 +82,11 @@ def job(monkeypatch, app_module):
     block.set()
     state = {'facts': None, 'hold': None}
 
-    def fake_get_crawler(platform, headless=True, cookie_dir=None, for_login=False, use_profile=None):
+    def fake_get_crawler(platform, headless=True, cookie_dir=None, for_login=False, use_profile=None, account=''):
         crawler = FakeCrawler(login_block=block, facts=state['facts'], hold=state['hold'])
         # What the window was built for, recorded so a test can assert it: a login
         # browser that does not ask for images cannot show a QR code.
-        crawler.requested = {'headless': headless, 'for_login': for_login}
+        crawler.requested = {'headless': headless, 'for_login': for_login, 'account': account}
         made.append(crawler)
         return crawler
 
@@ -98,6 +98,7 @@ def job(monkeypatch, app_module):
                 active=False,
                 kind='',
                 platform='',
+                account='',
                 phase='',
                 error='',
                 count=0,
@@ -151,12 +152,12 @@ class TestCookieJob:
         import browser_profiles
 
         monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: True)
-        monkeypatch.setattr(browser_profiles, 'is_used', lambda platform: True)
+        monkeypatch.setattr(browser_profiles, 'is_used', lambda platform, account='': True)
         stamps = []
         monkeypatch.setattr(
             browser_profiles,
             'remember_cookie',
-            lambda platform, path: stamps.append((platform, path)),
+            lambda platform, path, account='': stamps.append((platform, path, account)),
         )
         assert client.post('/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10}).status_code == 202
         _await_phase(client, 'waiting')
