@@ -376,3 +376,29 @@ class TestNodeMarkup:
     def test_the_upstream_lookup_finds_the_parent_and_reports_none_for_a_source(self, ix):
         assert ix['upstream']['found'] == ix['ids']['upstream'][0]
         assert ix['upstream']['none'] is None
+
+
+class TestCommentNodeForm:
+    """The 评论 node's form is written by hand in workflow.js, so nothing above it checked it.
+
+    That is how 重新采集 came to be missing on every platform's comment node while the matrix
+    said the field exists: the panel builds this form field by field rather than from the
+    matrix, and no test had ever rendered it. The knobs are asserted by what they WRITE — a
+    checkbox whose ``onchange`` does not name the parameter would be decoration.
+    """
+
+    def test_the_form_renders_with_its_own_knobs(self, ix):
+        html = ix['comment_form']
+        assert "'comment_limit'" in html and "'per_article_file'" in html and "'keep_parts'" in html, html[:400]
+
+    def test_the_comment_form_offers_to_recollect_what_its_ledger_would_skip(self, ix):
+        """A comment walk dedupes through the same ledger a source walk does, so the way back
+        has to be on this form too — with the hint that says what ticking it costs."""
+        html = ix['comment_form']
+        assert "'recrawl',this.checked" in html, f'no recrawl checkbox on the comment form: {html[:600]}'
+        assert 'settings.recrawl' in html or '重新采集' in html, html[:600]
+        assert 'settings.recrawlHint' in html or '默认关闭' in html, 'a costly switch with no explanation'
+
+    def test_an_untouched_comment_node_starts_with_the_ledger_in_force(self, ix):
+        """Default off: re-collecting everything is the expensive reading of an empty box."""
+        assert ix['comment_form'], 'the form did not render at all'

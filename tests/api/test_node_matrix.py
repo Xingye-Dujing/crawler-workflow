@@ -966,6 +966,98 @@ class TestCommentNodeFilesAndLimits:
         assert len(merged) == 1, merged
 
 
+class TestCommentNodeRecrawl:
+    """重新采集 on a comment node — the checkbox that was not on the form (user-reported 2026-09-26).
+
+    The comment walk shares the source walk's machinery: a row the ledger has already seen is
+    skipped, not re-fetched. That is right and also, with no switch, a dead end — a second run of
+    the same workflow hands back an empty table that reads as "this article has no more comments".
+    Two directions are pinned: the ledger really does refuse the rows (so the checkbox has
+    something to release), and releasing it collects them again.
+    """
+
+    URLS = 'https://www.zhihu.com/question/1/answer/1\nhttps://www.zhihu.com/question/2/answer/2'
+
+    class _FakeCrawler:
+        driver = None
+
+        def close(self):
+            pass
+
+    def _install(self, app_module, monkeypatch):
+        import crawlers.comments as comments_module
+
+        class _Session:
+            calls = 0
+
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+                pass
+
+            def crawl_zhihu(self, url, limit):
+                type(self).calls += 1
+                return [{'文章URL': url, '评论内容': f'{url}-甲'}, {'文章URL': url, '评论内容': f'{url}-乙'}], 'ok'
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: self._FakeCrawler())
+        monkeypatch.setattr(comments_module, 'CommentSession', _Session)
+        return _Session
+
+    def _run(self, client, app_module, params, name):
+        started = client.post(
+            '/api/workflow/execute',
+            json={'workflow': _wf([_node('node-1', 'comment', params)], []), 'workflow_name': name},
+        )
+        assert started.status_code == 200, started.get_json()
+        assert _wait(app_module), 'the run never finished'
+        return started.get_json()['run_id']
+
+    def test_the_second_run_refuses_the_comments_it_already_stored(self, client, app_module, monkeypatch):
+        self._install(app_module, monkeypatch)
+        plain = {'platform': 'zhihu', 'urls': self.URLS}
+        first = self._run(client, app_module, plain, 'cmt-ledger')
+        assert len(app_module._RUN_STORE.load_rows(first, 'node-1')) == 4
+        second = self._run(client, app_module, plain, 'cmt-ledger')
+        assert app_module._RUN_STORE.load_rows(second, 'node-1') == [], (
+            'the ledger must refuse rows it holds — that is the behaviour 重新采集 exists to undo'
+        )
+
+    def test_recrawl_collects_again_and_releases_the_claims_it_says_it_released(self, client, app_module, monkeypatch):
+        self._install(app_module, monkeypatch)
+        plain = {'platform': 'zhihu', 'urls': self.URLS}
+        self._run(client, app_module, plain, 'cmt-again')
+        run_id = self._run(client, app_module, {**plain, 'recrawl': True}, 'cmt-again')
+        assert len(app_module._RUN_STORE.load_rows(run_id, 'node-1')) == 4, 'the checkbox means "collect again"'
+        blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
+        said = [line for line in blob.splitlines() if 'released' in line.lower() or '已释放' in line]
+        assert said, blob
+        # The number in that sentence is the point: 0 means the release missed the scope the
+        # previous run claimed into, and the rows came back only because the scope had moved.
+        assert 'released 0' not in said[0], said[0]
+
+    def test_a_resumed_run_never_forgets_what_it_is_deduping_from(self, client, app_module, monkeypatch):
+        """The one place the switch must NOT act: on 继续 the ledger is the resume machinery, so
+        releasing it would re-buy every comment the dead run already paid for."""
+        session = self._install(app_module, monkeypatch)
+        params = {'platform': 'zhihu', 'urls': self.URLS, 'recrawl': True}
+        run_id = self._run(client, app_module, params, 'cmt-resume')
+        before = session.calls
+        resumed = client.post(
+            '/api/workflow/execute',
+            json={
+                'workflow': _wf([_node('node-1', 'comment', params)], []),
+                'workflow_name': 'cmt-resume',
+                'resume_run_id': run_id,
+                'queue': False,
+            },
+        )
+        assert resumed.status_code == 200, resumed.get_json()
+        assert _wait(app_module)
+        # Both links were already answered, so a correct resume has nothing left to fetch: it
+        # must not re-buy the comments *and* must not clear the ledger that told it so.
+        blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
+        assert 'released' not in blob.lower(), f'a resumed run released the ledger it resumes from:\n{blob}'
+        assert session.calls == before, 'a finished comment node was crawled again on resume'
+
+
 class TestOutputNodeOperations:
     """The 输出 node passes its input through, and only writes for the formats
     it knows. A Save node that silently wrote nothing would be the worst kind of

@@ -731,6 +731,12 @@ out.ids = {
     upstream: [u1, u2],
 };
 
+/* ── the comment node's own form (workflow.js renders it by hand) ──── */
+freshWorld();
+const cf1 = addNode('comment', 0, 0);
+canvas.editNode(cf1);
+out.comment_form = doc.getElementById('settings-content').innerHTML;
+
 Math.random = realRandom;
 renameScenarios().then((renamed) => {
     out.rename = renamed;

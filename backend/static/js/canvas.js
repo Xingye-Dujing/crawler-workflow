@@ -542,7 +542,7 @@ const canvas = {
         /* Empty run ids mean "auto": pick the newest interrupted run, and
            inside it whichever node holds the most rows. */
         if (type === 'resume') return { resume_run_id: '', resume_node_id: '', resume_limit: 0 };
-        if (type === 'comment') return { urls: '', comment_limit: 0, part_size: 50, per_article_file: true, keep_parts: false, format: 'csv' };
+        if (type === 'comment') return { urls: '', comment_limit: 0, part_size: 50, per_article_file: true, keep_parts: false, recrawl: false, format: 'csv' };
         if (type === 'output') return { operation: 'save', format: 'csv', filename: 'export.csv' };
         return {};
     },

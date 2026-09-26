@@ -690,3 +690,39 @@ class TestPlatformOrder:
         # of the first platform is the default behaviour of the whole product.
         assert _mode('zhihu', '').key == 'posts'
         assert platform_ids()[0] == 'zhihu'
+
+
+class TestTheRecrawlSwitchIsOnEveryForm:
+    """Every crawl that dedupes rows must offer the way back, on every one of its forms.
+
+    Both streaming executors skip a row the ledger already holds, so a run without the
+    checkbox ends in an empty table that reads as "the site has nothing more". The field is
+    reached through the shared ``_posts_mode`` / ``_author_mode`` / ``_comment_mode`` helpers,
+    which is exactly why a hand-written list of platforms would keep passing while the hole is
+    open: 2026-09-26 found it on **all seven** comment forms (user-reported on weibo) and on
+    wechat's hand-written posts form — three of the four mode shapes, none of them reachable by
+    "check what `_posts_mode` builds". So this walks the matrix, not the helpers.
+    """
+
+    def test_every_crawl_mode_declares_the_field(self):
+        missing = [
+            f'{cap.platform}/{mode.key}'
+            for cap in CAPABILITIES
+            for mode in cap.modes
+            if 'recrawl' not in {field.key for field in mode.fields}
+        ]
+        assert missing == [], f'these forms dedupe rows with no way to re-collect them: {missing}'
+
+    def test_both_executors_that_stream_rows_actually_read_it(self):
+        """A checkbox nothing reads is worse than no checkbox: it promises a repair.
+
+        Checked as source text on purpose — the two executors are separate functions, and a
+        future third one streaming rows would have to be added to this list, which is the
+        kind of thing a passing test should make loud rather than miss.
+        """
+        import app as app_module
+
+        for name in ('_execute_source_node', '_execute_comment_node'):
+            body = inspect.getsource(getattr(app_module, name))
+            assert "params.get('recrawl')" in body, f'{name} never reads 重新采集'
+            assert 'forget_items' in body, f'{name} logs the switch but releases nothing'

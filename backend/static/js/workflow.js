@@ -1586,6 +1586,15 @@ function openSettings(nodeId) {
             '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
             '<input type="checkbox" ' + (boolParam(p.keep_parts, true) ? 'checked' : '') + ' ' +
             'onchange="updateParam(\'' + nodeId + '\',\'keep_parts\',this.checked)">' + I18n.t('settings.keepParts') + '</label></div>' +
+            /* 重新采集 belongs here for the same reason it exists on a source node: the comment
+               walk shares that walk's ledger, so a comment already stored is skipped rather than
+               re-fetched — and a node whose form cannot say "collect again" leaves the user with
+               an empty table and no explanation. (Measured: it was missing on every platform's
+               comment node, which is what the matrix test now refuses.) */
+            '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
+            '<input type="checkbox" ' + (boolParam(p.recrawl, false) ? 'checked' : '') + ' ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'recrawl\',this.checked)">' + I18n.t('settings.recrawl') + '</label>' +
+            '<div class="settings-hint">' + I18n.t('settings.recrawlHint') + '</div></div>' +
             '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentHint') + '</div>';
     } else if (node.type === 'upload') {
         /* The single place a file enters a workflow: pick a CSV / JSON / TXT

@@ -3019,6 +3019,12 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     row_sink = cursor_sink = None
     resumed_index = 0
     if ctx is not None:
+        if as_bool(params.get('recrawl')) and not ctx.get('resume'):
+            # 重新采集 means the same thing here as in a source crawl: the ledger that
+            # says "this comment is already stored" is released, so the comments are
+            # fetched again. Never on a resumed run — there that ledger *is* the resume
+            # machinery, and clearing it would re-buy every comment already paid for.
+            add_log(t('run.recrawl', n=ctx['store'].forget_items(_item_scope(ctx, node))))
         row_sink, cursor_sink = _source_stream(ctx, nid, _item_scope(ctx, node), node_label(node, nid))
         if ctx.get('resume'):
             from crawlers.base import as_index

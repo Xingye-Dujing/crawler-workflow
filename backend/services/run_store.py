@@ -164,7 +164,16 @@ def item_key(item) -> str:
 # The ids themselves stay in the fingerprint: they identify real input, so pointing
 # a node at a different file or a different run must invalidate everything
 # downstream of it.
-_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count', 'workflow_name'})
+#
+# ``recrawl`` (重新采集) joined this set for the same reason it joined the last one, and a
+# measurement said so: the checkbox is an instruction about the ledger, not a choice of data —
+# the keyword, the URLs and the target decide what is collected, and the box only says "do not
+# trust what you already have". While it was in the fingerprint, ticking it MOVED the ledger's
+# scope instead of releasing it: the comment-node test recorded ``released 0 dedupe records``
+# while collecting 4 rows, so the re-collection happened by accident on an empty new scope and
+# the claims the user had asked to forget stayed behind forever — which is the silent
+# under-collection retention exists to prevent.
+_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count', 'workflow_name', 'recrawl'})
 
 
 def stable_params(params) -> dict:

@@ -384,6 +384,14 @@ def _comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
             ),
             _COMMENT_LIMIT,
             _PER_ARTICLE,
+            # The comment walk keeps the same ledger a source crawl does — an
+            # already-stored comment is skipped, never re-fetched — so the switch that
+            # releases it belongs here too. It was missing on **every** platform's
+            # comment node (user-reported 2026-09-26, weibo first), which is the hole
+            # ``test_every_mode_that_skips_rows_offers_to_forget_them`` now refuses:
+            # a crawl that silently dedupes with no way back reads as "the site has no
+            # more comments", and 重新采集 was the only repair.
+            _RECOLLECT,
         ),
         # Two comment notes, chosen by ``collects`` so the panel never claims a window
         # that the executor will not open. The scrolled/captcha platforms
@@ -522,6 +530,14 @@ CAPABILITIES: tuple[Capability, ...] = (
                         coerce='urls',
                         placeholder='https://mp.weixin.qq.com/s/...',
                     ),
+                    # An article URL already collected is skipped here too — the ledger is
+                    # the source path's, not a per-platform choice — so the way back has to
+                    # be on this form as well. It was missing because this mode is the one
+                    # that does not come from ``_posts_mode``, which is how a rule that
+                    # looks "shared" ends up holding for 26 of 27 forms; the matrix test
+                    # ``test_every_crawl_mode_offers_to_forget_what_it_deduped`` now walks
+                    # all of them instead of the helpers.
+                    _RECOLLECT,
                 ),
                 note_key='settings.wechatLimitsNote',
                 action_key='settings.wechatLimitsBtn',

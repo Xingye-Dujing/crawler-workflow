@@ -139,8 +139,32 @@ class TestFingerprints:
         assert moved['node-2'] != after['node-2']
 
     def test_stable_params_drops_only_volatile_keys(self):
-        kept = stable_params({'dataset_id': 'd1', 'dataset_name': 'n', 'row_count': 5, 'workflow_name': 'w'})
+        kept = stable_params(
+            {
+                'dataset_id': 'd1',
+                'dataset_name': 'n',
+                'row_count': 5,
+                'workflow_name': 'w',
+                'recrawl': True,
+            }
+        )
         assert kept == {'dataset_id': 'd1'}
+
+    def test_ticking_recrawl_does_not_move_the_dedupe_ledger(self):
+        """重新采集 releases the scope's claims — so it must not first REPLACE that scope.
+
+        While the checkbox was inside the fingerprint, ticking it produced a brand-new
+        ``'item:' + fingerprint`` with nothing in it: the run collected again by accident,
+        reported ``released 0``, and left the old claims stranded forever (a later crawl under
+        the un-ticked fingerprint would skip items nobody can see). The same instruction is why
+        a renamed workflow must not re-pay a crawl.
+        """
+        plain = _node(params={'keyword': '三亚', 'target_count': 3})
+        ticking = _node(params={'keyword': '三亚', 'target_count': 3, 'recrawl': True})
+        assert node_fingerprint(plain) == node_fingerprint(ticking)
+        # And the data-choosing parameters still do move it.
+        other = _node(params={'keyword': '海口', 'target_count': 3})
+        assert node_fingerprint(plain) != node_fingerprint(other)
 
     def test_parent_change_cascades_into_child_fingerprint(self):
         parent = _node('node-1')
