@@ -123,9 +123,14 @@ class DouyinCrawler(VideoCrawler):
         applied is refused by name — carrying on with 综合排序 behind the user's back would file
         a table under a claim this crawl never made.
         """
-        resume = self.resume_of(kwargs)
-        opened = [str(v) for v in (resume.get('opened') or []) if str(v)]
-        done = set(opened)
+        # Identity, not a resume blob: the rows a resumed run reloaded carry their
+        # own 视频ID, so the skip-set is derived from them — exactly what the author
+        # grid below already does. The cursor used to also carry an id list
+        # truncated to the last forty; resuming a run that had collected more than
+        # that re-opened every already-collected video past the cut, buying a paid
+        # navigation per stale head-card. (AGENTS: a cursor records position, not
+        # content.)
+        done = {str(row.get('视频ID') or '') for row in self.results() if row.get('视频ID')}
         if self.collected() >= target_count:
             logger.info(t('crawl.dy.target_reached', n=target_count))
             return self.results()
@@ -412,8 +417,10 @@ class DouyinCrawler(VideoCrawler):
                 if row and self.emit(row):
                     logger.info(t('crawl.dy.processed', i=aweme_id, n=self.collected()))
                 # ``page`` is kept as the cursor key because runs saved before the
-                # shared walk already store the round number under it.
-                self.mark_position(page=screens, done=self.collected(), opened=sorted(done)[-40:])
+                # shared walk already store the round number under it. The cursor
+                # records position only — the already-opened ids come back from the
+                # seeded rows, never from an id list written here.
+                self.mark_position(page=screens, done=self.collected())
                 self._polite_pause(0.6, 0.2)
             if drained:
                 # The list itself said it has nothing more, so every row this crawl can get is

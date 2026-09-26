@@ -537,13 +537,17 @@ class TestSearch:
         assert len(rows) == 1, 'an author and a publish time make this a row'
         assert rows[0]['正文'] == '' and (rows[0]['作者'] or '').strip()
 
-    def test_opened_ids_ride_in_the_cursor_for_a_resumed_run(self, make_crawler):
-        crawler, driver = make_crawler(cards=[ID, '7678996507694094827'])
+    def test_the_cursor_records_position_not_an_id_list(self, make_crawler):
+        """A resumed search skips what its stored rows already hold, and the cursor
+        carries no ``opened`` blob (AGENTS: position, not content). A truncated id
+        list was the bug: resuming past its cut re-opened the videos before it."""
+        crawler, _driver = make_crawler(cards=[ID, '7678996507694094827'])
         crawler.search('人工智能', target_count=2)
-        assert ID in crawler.position['opened']
+        assert 'opened' not in crawler.position, 'the cursor must not carry a content id-list'
         reopened, second = make_crawler(cards=[ID, '7678996507694094827'])
-        reopened.seed([{'标题': 'already stored', '链接': f'https://www.douyin.com/video/{ID}'}])
-        reopened.search('人工智能', target_count=2, resume={'opened': [ID]})
+        # The resume reloads this row (视频ID and all); that id alone decides the skip.
+        reopened.seed([{'视频ID': ID, '链接': f'https://www.douyin.com/video/{ID}'}])
+        reopened.search('人工智能', target_count=2)
         assert len([u for u in second.visited if f'/video/{ID}' in u]) == 0, 'must not re-open a paid-for video'
 
     def test_a_resumed_run_walks_past_the_screen_it_already_paid_for(self, make_crawler):
