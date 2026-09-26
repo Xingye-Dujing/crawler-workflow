@@ -24,9 +24,11 @@ plausible-looking alternative here is wrong:
 Douyin is measured too (``backend/test_douyin_*.py``) and its constraints are
 the opposite of bilibili's in every respect that matters:
 
-* **Only a visible window gets through.** A headless one is answered with
-  验证码中间页 on every navigation, so ``never_headless`` is set and the executor
-  downgrades ``headless`` before the browser is bought.
+* **A bare headless browser was answered 验证码中间页; a desktop-fingerprinted one gets
+  through.** A plain ``--headless=new`` used to be blocked on every navigation, so the
+  platform forced a visible window. Measured 2026-09-26 (#148): with the headless Chrome
+  reporting a desktop UA and window metrics (``base.py``) it returns real rows, so there
+  is no ``never_headless`` here any more and the run's own 无头 choice is honoured.
 * **The search endpoint is signed** (``a_bogus``/``msToken``/``verifyFp`` on the
   page's own ``general/search/single`` call), so there is no API to call and the
   DOM is the only path — the reverse of bilibili.
@@ -471,10 +473,6 @@ class DouyinCrawler(VideoCrawler):
     cookie_domains = ('douyin.com', 'www.iesdouyin.com')
     login_url = 'https://www.douyin.com/'
     supports_crawl = True
-
-    #: Headless is answered by 验证码中间页 on every navigation — measured, not
-    #: assumed. The executor has to open a real window for this platform.
-    never_headless = True
 
     #: The 「保存登录信息超过5天」 mask covers the search button (measured: the
     #: click is intercepted by ``.trust-login-dialog-mask``). Only 取消 is ever

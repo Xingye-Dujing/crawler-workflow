@@ -117,13 +117,14 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   settles a row this process opened and never closed, once no worker is alive. Adding a run
   status means updating `RESUMABLE_RUN_STATUS`, `purge`'s protection, the panel's `known` list
   and both app.js catalogs.
-- **A visible window must be doing something visible, and it must answer every preference a run set.**
-  Each `Mode` declares `collects` (fetch / DOM walk / per-row page); the panel note, the comment window
-  (`_comment_headless`) and the run chip read it, `never_headless` or a mode's `needs_window` demand one,
-  and it sets `forced_visible` so the chip reads 无头→窗口. A session preference is *stored* in the profile, so it
-  outlives the crawl: a window that merely *omits* the image blocker inherits it and shows a login page
-  with no QR code, so 取 Cookie / 验证 Cookie and the pre-run probe write 允许 explicitly
-  (`_content_prefs`).
+- **A visible window must be doing something visible.**
+  Each `Mode` declares `collects` (fetch / DOM walk / per-row page); the panel note and the comment window
+  (`_comment_headless`) read it — only a **scrolled** panel forces a window (a fetch panel runs headless),
+  and that window sets `forced_visible` so the chip reads 无头→窗口. No class forces one now — headless carries
+  a desktop fingerprint (#148), so `never_headless`/`needs_window` are gone. A session
+  preference is *stored* in the profile (it outlives the crawl): a window that merely *omits* the image
+  blocker inherits it and shows a login page with no QR code, so 取 Cookie / 验证 Cookie and the pre-run
+  probe write 允许 explicitly (`_content_prefs`).
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count`,
   `engine.wall` (the four page verdicts), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (finds what actually
@@ -179,10 +180,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 
 ## Platform red lines (full evidence in `docs/crawler_notes.md`)
 
-- **douyin**: `never_headless = True` (验证码 on every navigation, and a visible window is
-  necessary, **not sufficient**); search is DOM-only; **no 播放数 column exists**; don't block its
-  images; authors are opaque `sec_uid` only (measured: `docs/crawler_notes.md`).
-- **X (twitter)**: `never_headless = True`; the timeline is virtualized, so progress is rows kept and
+- **douyin**: headless works now (#148, was forced to a window by 验证码); search is DOM-only; **no 播放数
+  column exists**; don't block its images; authors are opaque `sec_uid` only.
+- **X (twitter)**: headless works now (#148); the timeline is virtualized, so progress is rows kept and
   resume identity is the **status-id set**, never an index; all five counters come from one
   `[role="group"]` aria-label and **浏览数 exists nowhere else**; one `execute_script` per card.
 - **bilibili**: `page=1` renders zero cards (request page one as the bare URL); comments have no DOM —

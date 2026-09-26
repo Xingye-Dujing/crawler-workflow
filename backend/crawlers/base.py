@@ -2,6 +2,7 @@ import contextlib
 import json
 import logging
 import random
+import re
 import time
 from abc import ABC, abstractmethod
 
@@ -113,6 +114,30 @@ class PageNotArrivedError(RuntimeError):
         self.waited = float(waited)
         self.verdict = str(verdict or '')
         self.gave_up = int(gave_up)
+
+
+#: Rewrites the screen/window geometry a headless Chrome reports before any site script runs.
+#: A bare ``--headless=new`` sits on an 800×600 virtual display, which — together with the
+#: ``HeadlessChrome`` token in its UA — is the whole fingerprint that gives a headless crawler
+#: away (measured 2026-09-26 in the #148 probes; everything else, incl. navigator.webdriver and
+#: the WebGL renderer, already matches a real window on this Chrome). ``__METRICS__`` is replaced
+#: with the crawler's configured desktop size, so the window only ever reports those numbers.
+#: It deliberately does NOT touch navigator.webdriver or navigator.languages: the blink flag
+#: already makes webdriver a real ``false``, and a languages override leaked ``;q=0.9`` into
+#: ``navigator.languages`` (measured) — both would *add* a mismatch instead of removing one.
+_DESKTOP_GEOMETRY_JS = r"""
+(function () {
+    var M = __METRICS__;
+    function rd(o, k, v) {
+        try { Object.defineProperty(o, k, {get: function () { return v; }, configurable: true}); } catch (e) {}
+    }
+    var sw = M.sw, sh = M.sh;
+    rd(window.screen, 'width', sw); rd(window.screen, 'height', sh);
+    rd(window.screen, 'availWidth', sw); rd(window.screen, 'availHeight', sh);
+    rd(window, 'outerWidth', sw); rd(window, 'outerHeight', sh);
+    rd(window, 'innerWidth', sw); rd(window, 'innerHeight', sh);
+})();
+"""
 
 
 class Crawler(ABC):
@@ -440,12 +465,64 @@ class Crawler(ABC):
             opts.binary_location = browser_binary
         service = Service(executable_path=get_setting('driver_path'))
         self.driver: webdriver.Chrome = webdriver.Chrome(options=opts, service=service)  # pylint: disable=not-callable
+        # A headless browser must not announce itself as headless. Measured 2026-09-26 (#148): a
+        # bare --headless=new reveals only two things a desktop does not — a UA containing
+        # "HeadlessChrome", and an 800×600 virtual display. Zhihu's 某作者的作品 page hands the
+        # bare headless a silent 0-row plate but renders 20→40 cards once BOTH are removed, so the
+        # platform was being served by forcing a VISIBLE window; we now fix the fingerprint and let
+        # headless stay headless instead. See _disguise_headless_as_desktop.
+        if self.headless:
+            self._disguise_headless_as_desktop()
         # A timeout the driver rejects (bad value, dead session) must not kill
         # the session — the crawl can still run on the default timeout.
         with contextlib.suppress(Exception):
             self.driver.set_page_load_timeout(int(get_setting('page_load_timeout')))
         if self.cookie_path:
             self._load_cookies()
+
+    def _desktop_metrics(self) -> tuple:
+        """The display size to report, from the configured ``window_size`` (default 1920×1080).
+
+        Parsed rather than hardcoded so the reported desktop tracks what the user actually set —
+        an invented 1707×1000 was measured to be *itself* a mismatch against a real window, which
+        is the opposite of a disguise.
+        """
+        raw = str(get_setting('window_size') or '1920x1080')
+        parts = re.split(r'[x*,\s]+', raw.strip()) if raw.strip() else []
+
+        def positive(value, fallback: int) -> int:
+            try:
+                return max(800, int(value))
+            except (TypeError, ValueError):
+                return fallback
+
+        width = positive(parts[0] if parts else '', 1920)
+        height = positive(parts[1] if len(parts) > 1 else '', 1080)
+        return width, height
+
+    def _disguise_headless_as_desktop(self) -> None:
+        """Remove the two headless tells (UA, virtual-display metrics) on the live session.
+
+        The UA is read back from this very Chrome and de-Headlessed, so its version can never rot
+        against the installed build and the HTTP UA, ``navigator.userAgent`` and the Client-Hints
+        platform all stay consistent — a hand-written UA string would drift out of the match. The
+        geometry is registered to run before any page script. A CDP command that fails (an old
+        driver, a session already mid-teardown) degrades to "still a plain headless browser" and
+        only logs, rather than tearing down a browser that came up correctly.
+        """
+        try:
+            real_ua = str(self.driver.execute_script('return navigator.userAgent;') or '')
+        except Exception as e:  # an unreadable session: leave the browser as a plain headless one
+            logger.debug('headless disguise skipped (UA unreadable): %s', e)
+            return
+        desktop_ua = real_ua.replace('HeadlessChrome', 'Chrome')
+        width, height = self._desktop_metrics()
+        script = _DESKTOP_GEOMETRY_JS.replace('__METRICS__', json.dumps({'sw': width, 'sh': height}))
+        try:
+            self.driver.execute_cdp_cmd('Network.setUserAgentOverride', {'userAgent': desktop_ua, 'platform': 'Win32'})
+            self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': script})
+        except Exception as e:  # a partial disguise beats none; it only costs this browser the mask
+            logger.debug('headless disguise partially applied: %s', e)
 
     # ─── navigation ─────────────────────────────────────────────
 

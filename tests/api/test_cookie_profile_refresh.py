@@ -138,14 +138,15 @@ class TestWhatItDoes:
         assert made[0]['use_profile'] is True
         assert made[0]['cookie_dir']
 
-    def test_a_platform_that_punishes_a_headless_browser_gets_a_window(self, client, factory, app_module):
-        """The plant *is* a page load on that site, and douyin answers a headless one with
-        验证码中间页 — so the same class flag the run path reads decides the window here."""
+    def test_a_headless_plant_works_on_every_platform_now(self, client, factory, app_module):
+        """The plant *is* a page load on that site — and a headless Chrome now reports a
+        desktop fingerprint (#148), so even douyin, which used to answer a bare headless
+        browser with 验证码中间页, takes it. No refresh forces a window any more."""
         made = factory()
         app_module.cookie_manager.save('douyin', [{'name': 'sessionid', 'value': 'x', 'domain': '.douyin.com'}])
         _post(client, 'douyin')
         assert made[-1]['platform'] == 'douyin'
-        assert made[-1]['headless'] is False, 'a headless plant was bought for a platform that refuses one'
+        assert made[-1]['headless'] is True, 'the disguise makes a headless plant valid everywhere'
 
     def test_the_browser_is_closed_whatever_the_plant_counted(self, client, factory, monkeypatch, app_module):
         made = factory(planted=0)

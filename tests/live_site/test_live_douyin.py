@@ -1,9 +1,11 @@
-"""Live Douyin crawl — real Chrome in a VISIBLE window, the user's own session.
+"""Live Douyin crawl — real Chrome, the user's own session, in both browser shapes.
 
-Douyin is the platform where the browser mode is part of the contract: headless
-is answered with 验证码中间页 on every navigation, so this tier drives the visible
-window (the same mode the Cookie panel logs in with) and separately asserts what
-a headless attempt produces — a refusal, never a table of zeros.
+Douyin used to be the platform where headless was refused: a bare browser was answered
+验证码中间页 on every navigation, so this tier drove the visible window only. #148 gave a
+headless Chrome a desktop UA + window metrics, measured serving real rows, so douyin no longer
+forces a window and this tier now exercises BOTH shapes — visible and headless — and the headless
+test asserts the honest rule either way: real rows, or a refusal that names the wall, never a
+silent empty table.
 
 Videos are discovered live rather than bookmarked, because an aweme id can be
 withdrawn and a search page cannot, and every assertion is on the counters that
@@ -47,12 +49,13 @@ def test_visible_search_resolves_each_video(live_crawler):
 
 
 def test_a_headless_attempt_never_files_a_silent_empty_success(live_crawler):
-    """Measured environment fact: headless douyin gets the captcha page.
+    """The headless shape must return to the user with a real answer, never a false one.
 
-    The contract is not "a refusal happens" — it is "a headless run never returns
-    an empty table as if it had succeeded". So both live outcomes are asserted
-    here and neither is skipped: refused, it must name the wall or the missing
-    search box; allowed through, it must actually deliver rows. Zero rows without
+    Since #148 a headless Chrome carries a desktop fingerprint, so the expected live
+    outcome here is rows — but the contract is stronger than any single expectation: it
+    is "a headless run never returns an empty table as if it had succeeded". Both live
+    outcomes are asserted and neither is skipped: refused, it must name the wall or the
+    missing search box; allowed through, it must actually deliver rows. Zero rows without
     a refusal is the one shape that would mislead a user, and it fails.
     """
     crawler = live_crawler('douyin', headless=True)
@@ -135,7 +138,8 @@ def test_detail_read_of_one_live_video(live_crawler):
         crawler.close()
     assert row and row['视频ID'] == douyin_id(rows[0]['链接'])
     assert row['链接'].startswith('https://www.douyin.com/video/')
-    assert DouyinCrawler.never_headless is True and DouyinCrawler.supports_crawl is True
+    assert not getattr(DouyinCrawler, 'never_headless', False), 'douyin no longer forces a window (#148)'
+    assert DouyinCrawler.supports_crawl is True
 
 
 def test_a_link_that_is_not_a_video_is_dead(live_crawler):

@@ -2196,21 +2196,12 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     # "this crawl ended where it was meant to" instead of inventing a target.
     target_count = crawl_args.get('target_count') or 0
 
-    if headless and (getattr(crawler_class(platform), 'never_headless', False) or mode.needs_window):
-        # Two different measurements arrive at the same action. Douyin answers a headless
-        # browser with 验证码中间页 on EVERY navigation, so the flag is on its class; zhihu's
-        # keyword search answers headless legitimately (its 0 is honest) while its 某作者的作品
-        # form returns a settled page with no wall, no risk flag and no rows at all — so that
-        # one is a fact about the mode and lives in the matrix (`needs_window`). Neither is a
-        # preference the run can outvote: the crawl would just look like an empty day.
-        headless = False
-        add_log(t('run.forcedVisible', label=node_label(node, str(node.get('id') or '')), platform=platform))
-        if ctx is not None:
-            # The run record must say the window was not the user's choice, so the
-            # 无头/窗口 chip describes what ran rather than what was asked (AGENTS:
-            # 「a chip must describe what happened」).
-            with contextlib.suppress(Exception):
-                ctx['store'].mark_forced_visible(ctx['run_id'])
+    # No source node forces a visible window any more. Douyin and X used to (a headless browser
+    # got a captcha/403), but a headless Chrome now reports a desktop fingerprint instead
+    # (base.py, #148) — measured serving real rows on both, and on zhihu's author page — so the
+    # run's own 无头/窗口 choice is honoured as asked. (The comment engine still opens a window
+    # for panels that must be *scrolled* to fill — ``_comment_headless`` — a different rule about
+    # what a window is doing, not about a platform refusing headless.)
 
     crawler = get_crawler(
         platform,
@@ -2955,18 +2946,17 @@ def _execute_visualize_node(node: dict, current_input: list):
 def _comment_headless(run_headless: bool, kind: str) -> bool:
     """Whether the comment crawler for *kind* may run headless inside a run that asked *run_headless*.
 
-    Three answers compose here, and each is measured, not guessed: the user's choice
-    (a visible run stays visible everywhere), the matrix (``collects='fetch'`` means
-    the panel is read by in-page fetch and a window would show nothing — weibo and
-    bilibili proved it by answering a headless browser with the same rows,
-    ``backend/test_headless_comments.py`` 2026-09-25), and the class flag (douyin/X
-    answer ANY headless navigation with a captcha wall, comment pages included).
-    Everything else — zhihu and xiaohongshu panels that must genuinely be scrolled —
-    keeps the window.
+    Two answers compose, each measured: the user's choice (a visible run stays visible everywhere),
+    and the matrix's ``collects`` — ``'fetch'`` means the panel is read by an in-page fetch and a
+    window would show nothing (weibo and bilibili answered a headless browser with the same rows,
+    ``backend/test_headless_comments.py`` 2026-09-25), while a ``'dom_scroll'`` panel (zhihu,
+    xiaohongshu, douyin) only fills by scrolling and keeps a real window. There is no longer a
+    third, captcha-driven answer: a headless Chrome carries a desktop fingerprint now (#148), so no
+    platform is excluded from headless by its class — douyin and X included, measured serving rows.
     """
     if not run_headless:
         return False
-    return capabilities.shows_nothing(kind, 'comments') and not getattr(crawler_class(kind), 'never_headless', False)
+    return capabilities.shows_nothing(kind, 'comments')
 
 
 def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
@@ -4684,9 +4674,10 @@ def refresh_profile_cookies():
         try:
             crawler = get_crawler(
                 platform,
-                # A platform that answers a headless browser with a captcha gets a real
-                # window for this too: the plant is a page load on that site.
-                headless=not getattr(crawler_class(platform), 'never_headless', False),
+                # The plant is one page load on that site, and a headless Chrome now carries the
+                # desktop fingerprint (#148) so every platform — douyin and X included — serves it;
+                # no cookie refresh needs a visible window any more.
+                headless=True,
                 cookie_dir=Config.COOKIE_DIR,
                 use_profile=True,
                 refresh_cookies=True,

@@ -4,11 +4,12 @@ Measured on the live site in 2026-9 (scratchpad/x_map.json, x_detail.json,
 x_crawl.json, x_counts.json), and every one of these facts changed a line of code
 below:
 
-* **A headless browser is refused outright.** ``/search`` renders the sign-up
-  sheet and zero tweets, and a profile answers "Access to x.com was denied …
-  HTTP ERROR 403". So ``never_headless = True`` and the executor buys a visible
-  window for it, exactly as it does for douyin — but for the opposite reason:
-  douyin blocks the *mode*, X blocks the *window type*.
+* **A bare headless browser was refused; a desktop-fingerprinted one is not.**
+  A plain ``--headless=new`` rendered the sign-up sheet on ``/search`` and a hard
+  "HTTP ERROR 403" on a profile, so this platform used to force a visible window.
+  Measured 2026-09-26 (#148): once the headless Chrome reports a desktop UA and
+  window metrics (``base.py``), it serves the same rows a window does — so there is
+  no ``never_headless`` here any more, and headless is honoured as asked.
 * **The feed is virtualized.** ``article[data-testid="tweet"]`` holds 13-21 nodes
   however far you scroll, while 139 distinct tweets passed through in eight
   scrolls. So the walk waits for the *window of ids on screen* to change
@@ -297,9 +298,6 @@ class TwitterCrawler(Crawler):
     cookie_domains = ('twitter.com',)
     login_url = 'https://x.com/'
     supports_crawl = True
-    #: Measured: a headless browser is served the sign-up sheet on ``/search``
-    #: and a hard 403 on a profile, so this platform is visible-window only.
-    never_headless = True
 
     CARD_SELECTOR = 'article[data-testid="tweet"]'
     STUCK_ROUNDS = 3

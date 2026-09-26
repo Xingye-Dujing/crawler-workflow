@@ -752,7 +752,6 @@ _ZH = {
     # platform field is empty — the message must name what walled, and a hand-written
     # list of platforms the user never crawled reads worse than no list at all.
     'run.cookieAnyPlatform': '所采集的平台',
-    'run.forcedVisible': '「{label}」：{platform} 会拦截无头浏览器，本次已自动改用可见窗口运行',
     'run.forcedVisibleComment': (
         '「{platform}」的评论区要真的滚动才能取全（或该站点拒绝无头浏览器），这个链接的评论改用可见窗口采集'
     ),
@@ -1597,7 +1596,6 @@ _EN = {
     ),
     'net.speed': ' (measured about {speed} kB/s)',
     'run.cookieAnyPlatform': 'the platform being crawled',
-    'run.forcedVisible': '"{label}": {platform} blocks headless browsers, so this run was switched to a visible window',
     'run.forcedVisibleComment': (
         '"{platform}" comments must actually be scrolled to collect fully (or that site refuses '
         'headless browsers), so this link\u2019s comments use a visible window'

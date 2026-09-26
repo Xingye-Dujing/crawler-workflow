@@ -364,10 +364,11 @@ class TestMatrixEntry:
     def test_the_crawler_class_offers_both_handlers(self):
         assert callable(TwitterCrawler.search) and callable(TwitterCrawler.author)
 
-    def test_x_is_visible_window_only(self):
-        """Measured: a headless browser gets a login sheet on search and a 403 on
-        a profile, so the flag that makes the executor buy a real window must not
-        be able to drift back to False without a test noticing."""
-        assert TwitterCrawler.never_headless is True
+    def test_x_runs_headless_like_everyone_now(self):
+        """A bare headless browser used to get a login sheet on search and a 403 on a
+        profile, forcing a window. With the desktop fingerprint (#148) a headless Chrome
+        is served real rows, so X no longer carries ``never_headless`` — and the point of
+        pinning its absence is that nobody re-adds a class-level window mandate by hand."""
+        assert not getattr(TwitterCrawler, 'never_headless', False), 'X must not force a window any more'
         assert TwitterCrawler.supports_crawl is True
         assert TwitterCrawler.domain == 'x.com'

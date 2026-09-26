@@ -3,11 +3,12 @@
 This tier is where the four design claims of ``crawlers/twitter.py`` meet the
 site they were read off:
 
-* **A headless window is refused, not empty.** The whole reason for
-  ``never_headless`` is that X answers an automation-shaped browser with a
-  sign-up sheet (search) or a 403 (profile). The test does not assert the exact
-  refusal — a site is free to change which rude page it serves — it asserts the
-  property that matters: a headless crawl never comes back with a quiet zero that
+* **A headless run delivers, or refuses by name — never a quiet zero.** X used to
+  answer a bare headless browser with a sign-up sheet (search) or a 403 (profile),
+  which is why it forced a visible window. #148 gave headless a desktop UA + window
+  metrics and X serves real rows now, so this tier exercises both shapes. It does not
+  assert the exact refusal — a site is free to change which rude page it serves — it
+  asserts the property that matters: a crawl never comes back with a quiet zero that
   would read as "this keyword found nothing".
 * **The timeline is virtualized**, so a walk that watched the card count would
   stop after one screen. Asking for more rows than a screen holds (measured: 13-21
@@ -77,9 +78,9 @@ def _assert_real_posts(rows, minimum):
 
 
 def test_a_headless_window_never_reports_a_quiet_zero(cookie_dir_str):
-    """The measurement behind ``never_headless``: refused, or — if the site ever
-    relents — real rows. Never an empty list, which is the outcome a user cannot
-    tell apart from a dead keyword.
+    """A headless X run comes back with real rows (since #148 gave it a desktop
+    fingerprint) or with a named refusal — never an empty list, which is the outcome a
+    user cannot tell apart from a dead keyword.
 
     Built directly instead of through ``live_crawler``: that fixture skips when no
     session is saved, and skipping is exactly what a test about refusal must not do.

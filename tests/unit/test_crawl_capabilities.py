@@ -37,7 +37,6 @@ from crawl_capabilities import (
     mode_of_node,
     modes_for,
     needs_session,
-    needs_window,
     platform_ids,
     required_missing,
     shows_nothing,
@@ -430,9 +429,6 @@ class TestPayloadShape:
         payload = json.loads(json.dumps(as_dict(), ensure_ascii=False))
         assert set(payload) == {'platforms', 'fileFields'}
         first = payload['platforms'][0]
-        # `needsWindow` is in the payload for the panel's sake, not the executor's: a
-        # mode that is only answered by a browser on screen must say so before the run,
-        # and the only copy of that fact is this matrix.
         # `profileRecommended` travels with the platform, not the mode: running in a
         # throwaway browser is punished per site (a rotating session cookie, a risk
         # control that re-walls a replayed snapshot), and the pre-run notice is the
@@ -449,7 +445,6 @@ class TestPayloadShape:
             'actionJs',
             'collects',
             'needsSession',
-            'needsWindow',
             'fields',
         }
         # `serialOnly` marks the platform the site walls on concurrent paging (weibo):
@@ -590,10 +585,11 @@ class TestCollectionKind:
             ('weibo', 'hot'),
             ('zhihu', 'hot'),
             ('bilibili', 'hot'),
-            # Measured the same way (one page load, then the site's own JSON), and the
-            # window it keeps is a separate fact: douyin's class is ``never_headless``,
-            # so the executor opens one whatever this field says. ``collects`` describes
-            # what the mode does on screen, not whether a window is allowed.
+            # Measured the same way (one page load, then the site's own JSON). douyin's
+            # board is ``'fetch'`` like the rest here: a window would just sit on the page
+            # while the rows come from inside it, so it runs headless too — since #148 no
+            # class carries ``never_headless`` to override that. ``collects`` describes what
+            # the mode does on screen, and that is now the whole story.
             ('douyin', 'hot'),
             ('bilibili', 'comments'),
             ('youtube', 'posts'),
@@ -622,48 +618,6 @@ class TestCollectionKind:
         assert shows_nothing('douyin', 'posts') is False
         # An unknown platform/mode is answered honestly, not with a guess.
         assert shows_nothing('wechat', 'nonsense') is False
-
-    def test_the_window_demanding_modes_are_exactly_the_measured_list(self):
-        """`needs_window` (#144) is a claim about a site, so it is stated rather than defaulted.
-
-        A True buys a real Chrome for every run of that mode — slower and visible on
-        purpose — so a second one needs a measurement behind it, the same way
-        ``needs_session``'s single exemption does. The list is the whole evidence:
-        zhihu's 某作者的作品, answered twice headless with a settled page, no wall, no
-        risk flag and 0 rows, then twice in a window with rows
-        (``backend/test_zhihu_author_headless.py``, 2026-09-26).
-        """
-        needing = {(cap.platform, mode.key) for cap in CAPABILITIES for mode in cap.modes if mode.needs_window}
-        assert needing == {('zhihu', 'author')}, needing
-
-    def test_such_a_mode_warns_in_the_panel_before_the_run(self):
-        """The executor switching to a window after the press explains itself in the console;
-
-        the mode's `note_key` is what tells the user *before* — so a mode that demands a
-        screen and names no note is a run the user did not agree to.
-        """
-        silent = [
-            f'{cap.platform}/{mode.key}'
-            for cap in CAPABILITIES
-            for mode in cap.modes
-            if mode.needs_window and not mode.note_key
-        ]
-        assert not silent, f'modes that need a window but say nothing: {silent}'
-
-    def test_the_rest_of_zhihu_keeps_its_headless_answer(self):
-        """The platform-wide flag would be the wrong tool: zhihu's keyword search answering
-
-        0 headless is a DESIGNED refusal (its day-by-day risk control), not a window
-        problem, and forcing a screen there would hide a legal empty day rather than fix it.
-        """
-        assert _mode('zhihu', 'author').needs_window is True
-        for key in ('posts', 'hot', 'comments'):
-            assert _mode('zhihu', key).needs_window is False, f'zhihu/{key} quietly started demanding a window'
-        assert needs_window('zhihu', 'author') is True
-        assert needs_window('zhihu', 'posts') is False, 'the same platform, a different answer'
-        # No answer is not evidence that a crawl needs a screen.
-        assert needs_window('kuaishou', 'author') is False
-        assert needs_window('zhihu', 'nonsense') is False
 
     def test_wechat_states_its_limits_and_offers_the_reason(self):
         mode = _mode('wechat', 'posts')

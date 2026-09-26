@@ -1389,6 +1389,87 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 一条没少。如果 502 的真凶是"单位时间导航次数"，这条改动会改变它的出现频率——**这正是要在同一台
 机器上重测的理由，不要拿它当作已经解释了 502**。
 
+## 无头到底在哪些指纹上露馅（measured 2026-09-26，#148「尝试伪装」）
+
+`backend/test_headless_fingerprint.py` 在 `about:blank` 上把**无头**与**可见窗口**同一批信号各读
+一遍（不访问任何站点、不花账号），逐字段比。结论是：**我们已有的三条 flag 已经把大部分破绽抹平了**
+——`navigator.webdriver` 两边都是 `false`（`--disable-blink-features=AutomationControlled` 生效）、
+`--headless=new`、`excludeSwitches` 去横幅；`window.chrome`、`plugins`(5)、`mimeTypes`(2)、
+`languages`、`Notification.permission`、**WebGL vendor/renderer** 两边**完全一致**（因为 `--disable-gpu`
+对两种形状都开着，软件渲染器不是知乎的判据）。真正两边不一致的只有两项：
+
+1. **UA 里带 `HeadlessChrome/148`**：`--headless=new` 也照样保留这个词——这是最强的一条露馅，
+   且 `--headless` 系列自身改不掉，必须 `Network.setUserAgentOverride` 或 `--user-agent` 重写；
+2. **虚拟显示尺寸**：无头 `screen.width=800 / outerWidth=780 / dpr=1`，可见 `1707 / 1050 / 1.5`。
+   （`window-size` 设置只给了 viewport，没给 screen 度量。）
+
+`backend/test_headless_masked.py` 造了只针对这两项的最小伪装（CDP 改 UA + 用
+`addScriptToEvaluateOnNewDocument` 把 screen/outerWidth/dpr 改回桌面值），对**同一个作者 token**
+跑三臂：无头裸 / 无头伪装 / 可见。**伪装本身验证生效**（masked 臂 `headless_ua=False`、
+`screen_w=1707`），但这次**判不了成败**：三臂（含作为阳性对照的可见窗口）全部 `rows=0 risk=True`。
+#144 测过同一个可见窗口是 5 行无标记——所以此刻这个 profile 被知乎**整体会话风控**了，
+拿"对照也撞墙"的结果去论伪装成败，正是本仓库反复吃亏的"单次观察下结论"。
+
+教训两条，都写进探针了：其一，**对照必须先行且为绿**——`test_headless_masked.py` 现在先只跑可见
+对照，0 行或带标记就直接中止、不发其余臂（宁可不测，也不要烧着账号产出一个无意义的对比）；
+其二，**探针自己的连发就是风控来源**——token 发现 + 每臂两轮共七八次作者页导航挤在几分钟里，
+很可能就是它把会话打成 scored 的（见 #132 那条"会话被打分后会持续几分钟"）。重测要**隔到分数冷却**
+（约 10–20 分钟）再跑，且一次一臂。
+
+**没有据此改任何产品旗标**：伪装能不能替掉知乎的 `needs_window`，要等一个"可见对照稳定交行、
+伪装无头也交行、裸无头 0 行"的完整三态齐活才说；现在只知道"两项露馅已可机械抹平"。
+
+### 追加（measured 2026-09-26）：伪装能做到"指纹与可见窗口逐项相等"，但知乎那关仍未过
+
+`backend/test_headless_mask_full.py` 在 `about:blank` 上（**不联网、不碰账号**）把三种形状
+（无头裸 / 无头全伪装 / 可见）用同一段脚本读回 20 项自动化信号并逐字段比。两个确定结论：
+
+1. **裸无头只露 5 项**：`ua_headless`、`screen_w`(800 vs 1707)、`outer_w`、`inner_w`、`dpr`(1 vs 1.5)。
+   其余 15 项——`navigator.webdriver`(已 false)、plugins(5)、mimeTypes(2)、languages、`window.chrome`、
+   `maxTouchPoints`、hardwareConcurrency、deviceMemory、WebGL vendor+renderer、Notification 权限、
+   Client-Hints——**本来就和可见窗口一模一样**。所以 `--disable-gpu` 不用动（两种形状都给软件渲染器，
+   不是判别项），`navigator.userAgentData` 在 about:blank 上两边都 undefined，也没得伪。
+2. **把 UA 去 Headless + 用运行时读到的可见窗口真实像素回填 screen/outer/inner/dpr/languages 之后，
+   伪装无头与可见窗口在这 20 项上逐项相等。** 这一条是确定性的、与站点心情无关的。
+
+踩到并已改的两个"越伪越露馅"：
+- 把 `navigator.webdriver` 用 `defineProperty` 强改成 `undefined`——可见窗口是真 `false`，于是伪成了
+  **新的**不等项。正解是**信任已有的 blink flag 给 false**，别再动它；
+- 用 `Network.setUserAgentOverride` 传 `acceptLanguage='zh-CN,zh;q=0.9'` 会渗进
+  `navigator.languages`（变成 `zh-CN,zh;q=0.9`）；且第一版把窗口尺寸**写死成猜的 1707/1687**，
+  反而和可见窗口对不上——正解是**先读可见窗口的真实值再回填**。
+
+**仍未证明的**：伪装能否让知乎作者页在无头下交出数据。三臂活体测试
+(`test_headless_masked.py`) 这次**被它自己的绿灯闸挡住了**——作为阳性对照的**可见窗口**本身回了
+`rows=0 risk=True`（账号还在被早先连发打出的风控窗口里，"打分持续几分钟"），于是探针按设计**中止、
+不发其余两臂**，不拿"对照也撞墙"的 void 结果下任何结论。要出结论，得等冷却（≥30 分钟，期间**不要**
+再用作者页访问去续这个风控）后单跑一次 `test_headless_masked.py`，由它先验对照是否转绿。
+
+### 落地（measured 2026-09-26，#148 收尾）：伪装进了产品，三平台的窗口强制全删
+
+把上面那套最小伪装（去 Headless 的 UA + 用 `window_size` 回填 screen/outer/inner，**不**碰
+`navigator.webdriver`）做进了 `base.py::Crawler._disguise_headless_as_desktop`——**只要选无头就常开**，
+不加设置项、不给 `get_crawler` 加参数。真机复测两遍（用户授权、真实 profile）：
+
+- 知乎作者页（`test_headless_disguise_domcount.py`）：**伪装无头渲染 20→40 张卡，与可见窗口一致；裸无头 0 张**。
+- 抖音搜索、X 搜索（`test_disguise_live.py`）：**伪装无头各交 5 行、无墙无风控**，两遍都可复现。
+
+据此删除三处"必须可见窗口"：知乎 author 的 `Mode.needs_window`（矩阵字段 + helper + API `needsWindow` +
+面板 note 一并撤）、抖音与 X 类上的 `never_headless`、执行器里"源节点把无头偷偷换成窗口"的那段降级与
+`run.forcedVisible` 文案。仍**保留**评论引擎"滚动面板开窗口"的规则（`collects` + `run.forcedVisibleComment`
++ `forced_visible` chip）——那是"窗口在为滚动服务"，与"平台拒绝无头"是两回事，且没在伪装无头下重测过，
+不顺手拆。测试口径翻转：`test_source_dispatch_matrix` 现在断言**每个非评论组合都按所选以无头建**，
+`test_workflow_api` 新增一条评论节点用例钉住"被强制开的窗口仍写进记录"。`test_a_headless_*`（抖音/X 真机）
+本就写成"要么出数、要么点名拒绝、绝不安静交 0"，所以伪装成功时它自然转绿、站点哪天变脸也不假绿。
+
+**分类器假阳性留而未改**（诚实记录）：知乎作者页连**可见窗口**都偶发 `risk_blocked=True`，
+查因到 `engine.wall.looks_blocked` 对 head[:400] 里任一短语即判 blocked、表内含 `登录后查看`/`扫码登录`。
+但直接把它们从表里删会**弄坏** `test_login_wall_page_is_blocked`——小红书空评论面板的"登录后查看更多内容
+扫码登录"确实要靠 `扫码登录` 单独判 blocked。两者只差"页面有没有内容"，而 `classify` 只看 body 文本、
+看不到内容密度，删词=拆东墙补西墙。且知乎那次假阳性我始终没采到确切短语（post-hydration 采样恒空、
+伪装无头 author() 实跑 5 行 risk=False）。故 `wall.py` 原样保留，已 `git checkout` 回退我的删词尝试——
+这是"没取证就不动共享内核"的正当收手，不是遗漏。要修得引入"空内容 + 登录词"的佐证信号，独立调查。
+
 
 
 

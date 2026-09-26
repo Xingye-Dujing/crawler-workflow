@@ -1721,91 +1721,25 @@ class TestCrawlableGuard:
         rows = app_module._execute_source_node(self._node('bilibili'), headless=True)
         assert rows and seen['keyword'] == 'ai' and seen['target'] == 50
 
-    def test_a_platform_that_refuses_headless_is_run_in_a_visible_window(self, monkeypatch):
-        """Douyin answers a headless browser with a captcha interstitial on every
-        navigation, so the node must be re-planned onto a real window rather than
-        quietly returning nothing — and the console has to say it switched."""
-        import app as app_module
-
-        from crawlers.video import DouyinCrawler
-
-        seen = {}
-        logs = []
-
-        class _One:
-            def set_sink(self, sink):
-                pass
-
-            def set_cursor_sink(self, sink):
-                pass
-
-            def search(self, keyword, **kwargs):
-                return [{'标题': 'x', '链接': 'https://www.douyin.com/video/7665683746674183459'}]
-
-            def close(self):
-                pass
-
-        assert DouyinCrawler.never_headless is True
-        monkeypatch.setattr(app_module, 'get_crawler', _capture(_One, seen))
-        monkeypatch.setattr(app_module, 'add_log', lambda msg: logs.append(msg))
-        from i18n import t
-
-        rows = app_module._execute_source_node(self._node('douyin'), headless=True)
-        assert rows
-        assert seen['headless'] is False, 'the crawler must be built with a visible window'
-        assert t('run.forcedVisible', label='某平台源 #src-1', platform='douyin') in logs
-
 
 class TestHeadlessIsNeverSilentlyIgnored:
-    """Two crawl paths override the run's 无头 choice, and an unexplained browser
-    appearing mid-run reads as the setting having been broken.
-
-    Douyin refuses a headless browser on every navigation, and comment crawling
-    drives a visible window for all platforms (zhihu content pages reject
-    headless). Both now say so in the console; a user who sees no such line is
-    looking at a crawl that really did run headless.
+    """One crawl path still overrides the run's 无头 choice: comment panels that must be
+    *scrolled* to fill. A source node no longer does — a headless Chrome carries a desktop
+    fingerprint now (#148), so every platform serves headless and the run's own choice stands.
+    When the comment engine does switch, it says so in the console and on the run record; a
+    user who sees no such line is looking at a crawl that really did run headless.
     """
 
     @staticmethod
     def _node(nid='src-1', title='源', platform='douyin'):
         return {'id': nid, 'type': 'source', 'title': title, 'platform': platform, 'params': {'keyword': 'ai'}}
 
-    def test_the_source_node_announces_the_switch(self, monkeypatch):
-        import app as app_module
-
-        from i18n import t
-
-        seen = {}
-
-        class _One:
-            def set_sink(self, sink):
-                pass
-
-            def set_cursor_sink(self, sink):
-                pass
-
-            def search(self, keyword, **kwargs):
-                return [{'标题': 'x', '链接': 'https://www.douyin.com/video/1'}]
-
-            def close(self):
-                pass
-
-        logs = []
-        monkeypatch.setattr(app_module, 'get_crawler', _capture(_One, seen))
-        monkeypatch.setattr(app_module, 'add_log', lambda m: logs.append(m))
-        app_module._execute_source_node(self._node(), headless=True)
-        assert seen['headless'] is False
-        assert t('run.forcedVisible', label='源 #src-1', platform='douyin') in logs
-
     def test_the_comment_window_is_each_platforms_own_answer(self):
-        """#102: the comment engine used to force a visible window for EVERY platform.
-
-        ``_comment_headless`` is the honest answer now — the user's choice, the
-        matrix's ``collects``, and the class-level captcha flag composed. A fetch panel
-        (weibo/bilibili/YouTube) honours 无头; a scrolled panel (zhihu/xiaohongshu) and
-        a captcha site (douyin/X) keep the window. The measurement behind it:
-        ``backend/test_headless_comments.py`` (2026-09-25) — 15/15 and 40/40 rows with
-        a headless browser.
+        """#102 then #148: ``_comment_headless`` honours the user's choice and the matrix's
+        ``collects`` only. A fetch panel (weibo/bilibili/YouTube) runs headless; a scrolled
+        panel (zhihu/xiaohongshu/douyin) keeps the window because scrolling needs a painted
+        page — not because the platform refuses headless (no platform does now). The fetch
+        answer is measured: ``backend/test_headless_comments.py`` (2026-09-25), 15/15, 40/40.
         """
         import app as app_module
 
@@ -1813,46 +1747,59 @@ class TestHeadlessIsNeverSilentlyIgnored:
         assert app_module._comment_headless(True, 'bilibili') is True
         assert app_module._comment_headless(True, 'zhihu') is False
         assert app_module._comment_headless(True, 'xiaohongshu') is False
-        assert app_module._comment_headless(True, 'douyin') is False, 'never_headless outranks the field'
+        assert app_module._comment_headless(True, 'douyin') is False, 'a scrolled panel keeps its window'
         assert app_module._comment_headless(True, 'twitter') is False
         # A run that asked for a window never yields a headless comment crawl.
         assert app_module._comment_headless(False, 'weibo') is False
         # An unknown platform invents no answer.
         assert app_module._comment_headless(True, 'nosuch') is False
 
-    def test_the_source_node_records_the_forced_window_on_the_run(self, monkeypatch, tmp_path):
-        """The 无头/窗口 chip reads the run record, so a source forced visible must
-        set ``forced_visible`` — otherwise a headless-requested douyin crawl shows 无头
-        while a real Chrome was on screen (「a chip must describe what happened」).
-        """
+    def test_a_forced_comment_window_reaches_the_run_record(self, monkeypatch, tmp_path):
+        """The 无头→窗口 chip is still real, just comment-only: a zhihu comment panel
+        (scrolled) in a headless run must set ``forced_visible`` and log the switch, so the
+        chip describes the window that appeared rather than the 无头 that was asked (「a chip
+        must describe what happened」)."""
         import app as app_module
 
+        import crawlers.comments as comments_module
         from i18n import t
         from services.run_store import RunStore
 
-        store = RunStore(str(tmp_path / 'chip.db'))
-        store.start_run('r-forced', 'wf', 'fp', headless=True)
         seen = {}
 
-        class _One:
-            def set_sink(self, sink):
-                pass
-
-            def set_cursor_sink(self, sink):
-                pass
-
-            def search(self, keyword, **kwargs):
-                return [{'标题': 'x', '链接': 'https://www.douyin.com/video/1'}]
+        class _FakeCrawler:
+            driver = object()
 
             def close(self):
                 pass
 
+        class _FakeSession:
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+                pass
+
+            def crawl_zhihu(self, url, limit):
+                return [{'评论内容': 'kept'}], 'ok'
+
+        def _make(platform, headless=True, **kwargs):
+            seen['headless'] = headless
+            return _FakeCrawler()
+
+        store = RunStore(str(tmp_path / 'chip.db'))
+        store.start_run('r-forced', 'wf', 'fp', headless=True)
         logs = []
-        monkeypatch.setattr(app_module, 'get_crawler', _capture(_One, seen))
+        monkeypatch.setattr(app_module, 'get_crawler', _make)
+        monkeypatch.setattr(comments_module, 'CommentSession', _FakeSession)
         monkeypatch.setattr(app_module, 'add_log', lambda m: logs.append(m))
-        ctx = {'run_id': 'r-forced', 'store': store, 'nid': 'src-1'}
-        app_module._execute_source_node(self._node(), headless=True, ctx=ctx)
-        assert seen['headless'] is False
-        assert t('run.forcedVisible', label='源 #src-1', platform='douyin') in logs
+        monkeypatch.setitem(app_module.execution_state, 'running', True)
+        node = {
+            'id': 'node-1',
+            'type': 'comment',
+            'params': {'platform': 'zhihu', 'urls': 'https://www.zhihu.com/question/2'},
+        }
+        app_module._execute_comment_node(
+            node, headless=True, ctx={'run_id': 'r-forced', 'store': store, 'nid': 'node-1'}
+        )
+        assert seen['headless'] is False, 'a scrolled comment panel must run in a window'
+        assert t('run.forcedVisibleComment', platform='zhihu') in logs
         row = next(r for r in store.list_resumable(limit=10, include_finished=True) if r['run_id'] == 'r-forced')
         assert row['forced_visible'] == 1, 'the forced window must reach the record the chip reads'

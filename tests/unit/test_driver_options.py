@@ -24,15 +24,29 @@ OCCLUSION_FLAGS = (
 
 @pytest.fixture
 def captured_options(monkeypatch):
-    box = {}
+    box = {'cdp': []}
 
     class FakeChrome:
+        # A headless Chrome reports this UA; the disguise reads it back and strips the token, so
+        # the recorder has to answer execute_script the way the real session would.
+        SCRIPTED_UA = (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+            'HeadlessChrome/148.0.0.0 Safari/537.36'
+        )
+
         def __init__(self, options=None, service=None):
             box['options'] = options
             box['service'] = service
 
         def set_page_load_timeout(self, seconds):
             box['timeout'] = seconds
+
+        def execute_script(self, script, *args):
+            box.setdefault('scripts', []).append(script)
+            return self.SCRIPTED_UA
+
+        def execute_cdp_cmd(self, name, params=None):
+            box['cdp'].append((name, params or {}))
 
     monkeypatch.setattr(base_module.webdriver, 'Chrome', FakeChrome)
     monkeypatch.setattr(base_module, 'Service', lambda executable_path=None: ('service', executable_path))
@@ -141,3 +155,38 @@ def test_get_crawler_passes_the_login_mode_through(captured_options):
     assert crawler.needs_images is True
     assert _prefs(captured_options) == IMAGES_ALLOWED
     crawler.driver = None
+
+
+def _cdp_names(box):
+    return [name for name, _params in box['cdp']]
+
+
+def test_a_headless_session_is_disguised_as_a_desktop_window(captured_options):
+    """#148: a headless browser must not announce itself as headless.
+
+    Measured on this Chrome, the ONLY things a bare ``--headless=new`` reveals that a real
+    window does not are the ``HeadlessChrome`` token in the UA and an 800×600 virtual display.
+    Both are rewritten through CDP right after the session is built. Asserting the *names* of
+    the CDP commands (not their pixel values) keeps this browser-free: the values are pinned
+    against the visible window by the #148 probes and the live tier.
+    """
+    ZhihuCrawler(headless=True)
+    names = _cdp_names(captured_options)
+    assert 'Network.setUserAgentOverride' in names, names
+    assert 'Page.addScriptToEvaluateOnNewDocument' in names, names
+    ua_cmd = dict(captured_options['cdp'])['Network.setUserAgentOverride']
+    assert 'Headless' not in ua_cmd['userAgent'], 'the UA override must strip the headless token'
+    assert ua_cmd['userAgent'], 'an empty UA override would be worse than none'
+    # navigator.webdriver is NOT redefined — the blink flag already yields a real false, and
+    # forcing undefined was measured to open a NEW gap against a real window (docs #148).
+    injected = ' '.join(s for s in captured_options.get('scripts', [])) + ' '.join(
+        (p.get('source', '') for _n, p in captured_options['cdp'])
+    )
+    assert 'navigator.webdriver' not in injected
+
+
+def test_a_visible_window_is_left_alone(captured_options):
+    """The disguise is for headless only — a visible browser already is a real window, and
+    overriding its UA/metrics would fight what the user watches on screen."""
+    ZhihuCrawler(headless=False)
+    assert captured_options['cdp'] == [], f'a visible window must not be CDP-touched: {captured_options["cdp"]}'
