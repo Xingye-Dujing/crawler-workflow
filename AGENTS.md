@@ -1,10 +1,9 @@
 # AGENTS.md
 
 Guidance for the AI agent in this repository. This file is loaded into **every** session, so it stays
-short on purpose: a *rule* belongs here, the *evidence* for it belongs in `docs/crawler_notes.md`.
-When you are about to change a crawler, its columns, or a live-site assertion, read that file's
-section for the platform first — every such rule came from a measurement whose re-payment costs
-minutes of real crawling.
+short on purpose: a *rule* belongs here, *evidence* belongs in `docs/crawler_notes.md`. Before changing
+a crawler, its columns, or a live-site assertion, read that file's platform section first — every such
+rule came from a measurement whose re-payment costs minutes of real crawling.
 
 ## Project
 
@@ -22,22 +21,20 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   `backend/`** — it is the `sys.path` root, so imports are top-level (`from config import Config`). Never
   add a `backend.` prefix to imports.
 - Lint: `ruff check backend/` (fast gate) then `pylint <module>` (deeper); format `ruff format backend/`.
-- Deps: `.venv/Scripts/pip.exe install <pkg>` **and** list it in `requirements.txt` in the same change, no
-  exceptions. The rule is broader than installs: *every package imported directly by code must be declared
-  there*, even when it also arrives transitively. A new tool's caches go into `.gitignore` in the same
-  change that adds the tool.
+- Deps: *every package imported directly by code* is installed into `.venv/` **and** declared in
+  `requirements.txt` in the same change — even when it also arrives transitively. A new tool's caches go
+  into `.gitignore` in the same change that adds the tool.
 - `backend/test_*.py` are manual probe scripts, NOT pytest — the accepted place for a one-off measurement.
 - **Test tiers** (`pytest.ini` excludes the real tiers by default; that filter is pinned by
   `tests/unit/test_test_tiers.py`):
-  - Fast (~4k cases, ~2 min, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
+  - Fast (~4.3k cases, ~2 min, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
   - Device (real Chrome on `file://` fixtures + real Ollama): `... -m "integration or live_ollama"`.
-  - Live (REAL crawls, both modes, skip when a cookie is absent): `... -m live_quick` visits
-    each platform once and gates a change; `... -m live_site` is the full pass and belongs to
-    acceptance. **Never run a live tier unattended: it spends the user's accounts.** A copied
-    login is a second device, so the tier keeps its own profile root; only
-    `CIXI_LIVE_USE_USER_PROFILE=1` — his consent, which also exempts that subtree from the
-    isolation guard — crawls as he does. Weibo is asked once per pass. Both split by network
-    (`live_cn`, `live_os`); **ask which network he is on**, then run the other.
+  - Live (REAL crawls, skip when a cookie is absent): `... -m live_quick` visits each platform once and
+    gates a change; `... -m live_site` is the full acceptance pass. **Never run a live tier unattended:
+    it spends the user's accounts.** A copied login is a second device, so the tier keeps its own profile
+    root; only `CIXI_LIVE_USE_USER_PROFILE=1` (his consent, exempting that subtree from the isolation
+    guard) crawls as he does. Weibo is asked once per pass. Both split by network (`live_cn`, `live_os`);
+    **ask which network he is on**, then run the other.
   - **To run one device/live case, override the marker filter too**: naming the file alone reports
     `N deselected` and looks like it ran.
   - Layout: `tests/unit`, `tests/api` (tmp-isolated `test_client`), `tests/integration` (marked
@@ -51,10 +48,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **Isolation happens at conftest import, and the suite fails if `data/` or `logs/` gains a byte.**
   `tests/conftest.py` redirects every write path *before any test module is imported* — collection
   imports all of them before fixtures run, and `app.py` captures `Config.COOKIE_DIR` / `history.db`
-  into module-level singletons at its own import. Two incidents taught this (`docs/crawler_notes.md`):
-  a UI tier that wrote runs into the real `data/`, and a top-level `import app` that froze the real
-  cookie dir and destroyed the user's saved cookies. `test_test_tiers.py` refuses the import
-  statically; the session-finish snapshot refuses the write dynamically.
+  into module-level singletons at its own import. Two real-data incidents taught this
+  (`docs/crawler_notes.md`). `test_test_tiers.py` refuses the import statically; the session-finish
+  snapshot refuses the write dynamically.
 
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js` /
   `workflow.js` / `app.js` into a zero-dependency node `vm` (shared `harness_dom.mjs`) and are driven
@@ -72,16 +68,14 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   `params`, `_pushState()` skips a state equal to the current one, and `restoreState()` brackets
   itself with `_historySaving` so one restore is ONE undo point.
 - **The camera is not part of the model.** pan/zoom go in `serializeDraft()` (localStorage) and
-  `settings.view` (the file) so a reopen keeps the viewpoint 适应/自动排布 left, but NEVER in
-  `getState()` (else every pan is an undo step) — undo states carry no `view`, so `restoreState`
+  `settings.view` (the file) — NEVER in `getState()`, or every pan is an undo step; `restoreState`
   leaves the camera alone. A saved x/y of 0 is a position: `addNode` randomizes only for a
   non-finite value, never `x || …` (that scatters a 0-coordinate node).
-- **One page boot must not be a single point of failure.** It is one `DOMContentLoaded`
-  body, so a throw inside it skips every later step. Boot steps go through
+- **One page boot must not be a single point of failure.** One `DOMContentLoaded` body, so a throw
+  inside it skips every later step. Boot steps go through
   `boot(name, fn)`; `stats` declines on a missing library and says so.
-- **A dialog with an input is answered by the input.** `showDialog` resolves a clicked
-  button as `b.value !== undefined ? b.value : inputEl.value`, so a confirm button that
-  carries its own `value:` replaces whatever the user typed. Leave `value` off input dialogs.
+- **A dialog with an input is answered by the input.** A confirm button carrying its own `value:`
+  replaces whatever the user typed in `showDialog`'s resolution. Leave `value` off input dialogs.
 - **Five frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a
   top-level `const X` — guard the binding (`typeof X !== 'undefined'`) or export it. (2) The DOM
   stub's matcher is real (`harness_dom.mjs`); never fabricate a child when a query finds nothing.
@@ -96,7 +90,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   one the bug was about: for a record, a run or a panel row, list the dimensions first and cover the grid.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id**, never falls back to `<body>`, and
-  reports a per-container floor on what it counted. Resolve on-screen wording from `I18n` inside the
+  reports a per-container floor on what it counted. Resolve on-screen wording from `I18n` in the
   browser, not a pasted copy.
 - **The `integration` UI tier performs no server writes** — no data-dir switch exists, so a run
   or an upload lands in the user's real `data/` and `logs/`. Stub `fetch`.
@@ -109,15 +103,15 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **The crawl matrix (`backend/crawl_capabilities.py`) is the only answer to "what can this platform
   collect".** It declares each platform's modes, the fields each mode needs (widget, default, floor,
   ceiling, required-ness, and `fed_by` = the link field a wired upstream column may replace), which
-  crawler method runs, and `region` (`cn` / `overseas`), which the
-  overseas-VPN question and the `live_cn` / `live_os` markers read rather than a list of their own. `app.py::_execute_source_node` dispatches through it,
-  `engine/workflow.py::validate` refuses through it, and `GET /api/capabilities` hands the identical
-  description to the browser, whose Data Source panel is generated from it. So a new platform or mode is
-  **one matrix entry**, never an `if platform == '…'` branch in four files. It sits at the backend root
-  because `engine/workflow.py` reads it and must not import the crawler package. Field labels are
-  *frontend* keys and required-field names *backend* ones (`field.*`), both pinned by
+  crawler method runs, and `region` (`cn` / `overseas`) — the overseas-VPN question and the
+  `live_cn` / `live_os` markers read it rather than holding lists of their own. `_execute_source_node`
+  dispatches, `engine/workflow.py::validate` refuses, and `GET /api/capabilities` hands the browser the
+  identical description its Data Source panel is generated from. A new platform or mode is **one matrix
+  entry**, never an `if platform == '…'` branch in four files. It sits at the backend root because
+  `engine/workflow.py` reads it and must not import the crawler package. Field labels are *frontend*
+  keys and required-field names *backend* ones (`field.*`), both pinned by
   `test_frontend_contract.py::TestCrawlMatrixParity`. A field name reaches an inline handler, so one
-  that is not `/^[\w.-]{1,64}$/` is dropped whole, and the JS panel is tested against the matrix
+  not matching `/^[\w.-]{1,64}$/` is dropped whole, and the JS panel is tested against the matrix
   dumped from Python, never a copy checked in.
 - **A record whose worker is gone is settled by the panel, not by a restart.** `/api/runs/list`
   settles a row this process opened and never closed, once no worker is alive. Adding a run
@@ -151,17 +145,16 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **One profile is one browser, and a parallel canvas has to be told that.** chromedriver
   pre-writes the profile's `Preferences`, so two sessions in one directory cannot both come up:
   `browser_profiles.acquire_profile(dir)` is a plain, **non-reentrant** `Lock` held for the
-  crawler's whole life (non-reentrant because `_close_login_browser` releases it from a *side*
-  thread). The user answers 用 Profile per run as `use_profile`; 真排队 has answered it for the
-  whole program. **A site's rate limit is a second collision** — two throwaway browsers can still
-  be bounced as the *account* searching twice in one second — so `crawl_gate` lanes crawls by
-  (platform, account): one login takes turns, two logins run at once (真排队 holds a lane until
-  its crawl *finishes*, 错峰 only spaces its starts). A matrix `serial_only` platform is always
-  queued whatever the switch says; the
-  browser warns first. A wall met **before the first row** retries once after a back-off; a wall
-  met after rows is the cookie dying and must go to 继续 instead. **Absence means "follow the
-  setting" — never coerce missing to `False`,** or one dialog's answer becomes a global override.
-  `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and the node fails with the directory named.
+  crawler's whole life (a *side* thread releases it at close). The user answers 用 Profile per run
+  as `use_profile`; 真排队 has answered it for the whole program. **A site's rate limit is a second
+  collision** — two throwaway browsers can still be bounced as the *account* searching twice in one
+  second — so `crawl_gate` lanes crawls by (platform, account): one login takes turns, two logins run
+  at once (真排队 holds a lane until its crawl *finishes*, 错峰 only spaces its starts). A matrix
+  `serial_only` platform is always queued whatever the switch says; the browser warns first. A wall met
+  **before the first row** retries once after a back-off; a wall met after rows is the cookie dying and
+  must go to 继续 instead. **Absence means "follow the setting" — never coerce missing to `False`,**
+  or one dialog's answer becomes a global override. `Config.PROFILE_LOCK_TIMEOUT` bounds the wait and
+  the node fails with the directory named.
 - **A Stop is a request, not a verdict.** 停止 writes `stopping` into the record **on the request
   thread** (the worker's verdict replaces it) and `stop_requested()` reads that — never
   `not running`, which an idle server also answers. Each crawl asks it at its next row via
@@ -253,11 +246,11 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   data, or just describe the record?" — ids stay in, labels and switches out.
 - **A disabled node is not on the canvas.** `engine.workflow.effective_workflow` drops it (`enabled` off,
   type off, or all upstream gone — cascades down; fan-in survives on one live input); validate/naming/
-  fingerprint/execution run on that graph, so disabling a workflow is disabling its head node. README has detail.
-- **Reuse has four rules that are each easy to break.** `done` AND `restored` are reusable; a stored result
-  with **zero rows** is never reused (an empty parent may deliver this time, and reuse keys on fingerprint);
-  the source node is never adopted (it resumes by cursor); and `begin_node` reporting `dropped_stale`
-  cancels reuse, because those rows were deleted.
+  fingerprint/execution run on that graph, so disabling a workflow is disabling its head node.
+- **Reuse has four rules that are each easy to break.** `done` AND `restored` are reusable; a stored
+  result with **zero rows** is never reused (an empty parent may deliver this time); the source node
+  is never adopted (it resumes by cursor); and `begin_node` reporting `dropped_stale` cancels reuse,
+  because those rows were deleted.
 - **Startup recovery shares the end-of-run settlement.** A node leaves `running` only through
   `finish_node`, which a kill skips, so `node_runs.row_count` still holds the 0 `begin_node`
   wrote. `promote_stale_runs` must call `settle_nodes` (status *and* count from the rows):
@@ -268,10 +261,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   the canvas deleted), and a node 停止 cut short is counted in its own `stopped_node_ids`
   bucket — reporting the user's button press as 「1 个失败」 is.
 - **A resumed run re-describes itself.** `start_run`'s conflict update refreshes
-  `workflow_name`/`workflow_fingerprint`/`mode`/`headless`/`lang` (not `started_at`):
-  leaving them at their first-attempt values made the 并行/串行 and 无头/窗口 chips
-  describe a run that never happened, and the stale name is the key every
-  preview/chart/export probe uses, so the kept rows stopped being findable.
+  `workflow_name`/`workflow_fingerprint`/`mode`/`headless`/`lang` (not `started_at`): left at their
+  first-attempt values the 并行/串行 and 无头/窗口 chips describe a run that never happened, and the
+  stale name — the key every preview/chart/export probe uses — makes the kept rows unfindable.
 - **Retention must release what it destroyed.** `purge` deletes a run's rows, so it also
   calls `forget_run_items` — an `item_seen` entry whose rows are gone would make a later
   crawl under-collect silently, with no way back except 「重新采集」. An explicit `delete_run`
@@ -285,23 +277,22 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   `nextId` past it (a later drag must not collide); both restore paths (`canvas.restoreState`,
   `WorkflowManager.loadFromJSON`) pass file ids straight through — pinned by `harness_state.mjs`.
   That same id is the box's **DOM** id, so `getElementById(<node id>)` lets a workflow file address
-  chrome the node does not own: node elements are reached through `canvas._nodeEl(id)` (which reads
-  `nodes[id].el`), and the text guard in `test_frontend_state_js.py` fails any variable-argument
-  `getElementById` in canvas.js.
+  chrome the node does not own: node elements are reached through `canvas._nodeEl(id)` (reading
+  `nodes[id].el`), and `test_frontend_state_js.py` fails any variable-argument `getElementById` in
+  canvas.js.
 - **Recorded rows are addressed by workflow, never by bare node id.** `_durable_node_rows` (app.py) answers
   a preview/chart/export/studio probe after a refresh from `runs.db`; ids like `node-2` repeat on every
   canvas, so with no identity it returns nothing rather than guessing. The browser sends `workflow_name`
   from `workflow.runName()`, which mirrors the backend precedence: name-node label, then saved file name.
 - **Parallel is one record; serial is one record per workflow that started.** Parallel runs the
-  workflows together, so one row joins their labels with `' + '` in canvas order; that
-  string is also a **lookup key** (old rows stay inspectable, pinned by `TestRowLookupStillWorks`).
-  Serial runs take turns, so each workflow opens its own row **as it is reached** and an unreached
-  one leaves none. Two invariants make it safe: every row keeps the **canvas** fingerprint, which
-  is what the resume banner and `/api/runs/resumable` match on, and the id the HTTP response returns
-  is workflow zero's row (the browser polls it and resumes by it). 继续 then adopts each workflow's
-  own row by name. **A chip must describe what happened, not what the canvas held**:
-  `并行 ×N` only when `mode == 'parallel'`, and a serial row says `串行 ×1` because that row *is*
-  one workflow. Resume state stays **per workflow** (decided by `fingerprints_for_workflow`), so a
+  workflows together, so one row joins their labels with `' + '` in canvas order; that string is also a
+  **lookup key** (old rows stay inspectable, pinned by `TestRowLookupStillWorks`). Serial runs take
+  turns, so each workflow opens its own row **as it is reached** and an unreached one leaves none.
+  Every row keeps the **canvas** fingerprint (what the resume banner and `/api/runs/resumable` match
+  on), and the id the HTTP response returns is workflow zero's row (the browser polls and resumes by
+  it); 继续 adopts each workflow's own row by name. **A chip must describe what happened, not what the
+  canvas held**: `并行 ×N` only when `mode == 'parallel'`, and a serial row says `串行 ×1` because that
+  row *is* one workflow. Resume state stays **per workflow** (`fingerprints_for_workflow`), so a
   failure in B restores A.
 
 ## Console, messages and i18n
@@ -323,8 +314,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   `toWorkflowJSON`, and BOTH restore paths re-apply title + element text BEFORE `updateNodeDisplay`, whose
   re-stamp guard reads the element.
 - **The run console keeps its own history per view, because the server cannot give it back**
-  (it ships only the last 200 lines of the *whole* run, so a tab switch that blanks
-  `#console-output` would lose them). `consoleViews` in workflow.js holds
+  (it ships only the last 200 lines of the *whole* run). `consoleViews` in workflow.js holds
   `{seen, lines}` per view (`'all'` plus each workflow id), **every** view is fed on every poll, and
   `switchWfTab` repaints from that view's history without moving its cursor.
 - **Every thread that logs must pin its own language.** `set_lang` is thread-local and a
@@ -345,9 +335,9 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   (`data_analysis.validate_step`), an analyzer's `method`/`mode` (`app.enum_param`). **Read
   a switch, never compare it**: `utils.helpers.as_bool`; blank = the declared default. A form
   shows a stored value off the list (`selectOptionTags`), never option #0.
-- **`_push_log` stores one entry per physical line.** A multi-line payload (a driver
-  `Message:` block) rendered as several rows, so the browser's cursor skipped or repeated
-  content; the total advances by lines, not by `add_log` calls.
+- **`_push_log` stores one entry per physical line** — the total advances by lines, not by `add_log`
+  calls (a multi-line driver `Message:` block rendered as several rows and the browser's cursor
+  skipped or repeated content).
 - **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook.** Those
   nodes get no "Executing node …" or "Node … completed (n/N)" line, and progress counters still count
   them. Everything that states a fact still prints: the upload's own "Loaded … N rows", and any
