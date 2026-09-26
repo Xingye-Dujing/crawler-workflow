@@ -172,6 +172,35 @@ are build hashes.
 profile 被弹验证码、一次性浏览器读得通（2026-09-25，见 `_hot_mode` 处的注释与 #141）——
 所以这个标记只能是建议与提醒，绝不许变成强制，而 #142 也把"按形状分布到底怎样"留成了待查项。
 
+### 结果页右上角那个「筛选」：hover 开的菜单，URL 一个字符都不变（measured 2026-09-26，#143）
+
+`backend/test_douyin_probe_sort.py`（一次性探针，载荷 `scratchpad/douyin_sort_probe.json`），
+一条会话一次导航，读到的菜单是 **13 项、4 组**：
+
+| 组 | 项 |
+|---|---|
+| 排序 | **综合排序 / 最新发布 / 最多点赞** |
+| 发布时间 | 不限 / 一天内 / 一周内 / 半年内 |
+| 视频时长 | 1分钟以下 / 1-5分钟 / 5分钟以上 |
+| 观看状态 | 关注的人 / 最近看过 / 还未看过 |
+
+四条决定实现方式的事实：
+1. **菜单是 hover 触发的**：`move_to_element(筛选)` 才出得来；**点一下 筛选 反而把它关掉**
+   （点完再读，菜单项 0 个）。所以爬虫不能"点一下再看"，必须悬停。
+2. **URL 到永远不变**：选完 最新发布 / 最多点赞 / 一周内 之后地址仍是
+   `https://www.douyin.com/search/IU?type=video`。这否掉了"像热榜那样用字面量拼 URL"的省事路线 ——
+   排序**只能靠点**，也因此必须把选中值写进节点指纹与游标（它选数据，不是标签；见 AGENTS
+   "A label is not an input"），否则续跑会把两种排法混成一张表。
+3. **点下去确实换血**：`一周内` 与默认集合的重叠是 **0/16**（完全另一批），`最新发布`/`最多点赞`
+   都报 `changed=True`；`不限` 报 `changed=False`（正确，它本来就是这个值）；`5分钟以上` 只剩 2 行；
+   `关注的人`/`最近看过` 交出 **0 行**（这个账号没关注发 IU 内容的人）—— 所以"零行"对这些项是
+   合法答案，断言不能一律要求非空。
+4. **一次点完菜单就重挂**：连着点 `一天内`/`半年内`/`1分钟以下` 时报 `picked=False`，因为上一项
+   点完菜单关闭、旧句柄失效。爬虫每次选都得重新悬停、重新取节点，不能拿一个 element 连着点两项。
+
+**用户口述与站点的差别要记下来**：说的是"最新和最热"，站点写的是 **最新发布** 与 **最多点赞**
+（没有"最热"这个词）。矩阵里的选项值用哪个词，等用户确认之后再写 —— 别拿我的猜测当它的标签。
+
 **The profile header is not there when the session is being refused** (measured 2026-09-24, visible
 window): `backend/test_douyin_profile_probe.py` was answered 验证码中间页 by the *search* itself, and
 the live author case had been dying one step later with a raw
