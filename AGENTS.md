@@ -71,6 +71,11 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **History entries are snapshots, and identical ones are not entries.** `getState()` deep-copies
   `params`, `_pushState()` skips a state equal to the current one, and `restoreState()` brackets
   itself with `_historySaving` so one restore is ONE undo point.
+- **The camera is not part of the model.** pan/zoom go in `serializeDraft()` (localStorage) and
+  `settings.view` (the file) so a reopen keeps the viewpoint 适应/自动排布 left, but NEVER in
+  `getState()` (else every pan is an undo step) — undo states carry no `view`, so `restoreState`
+  leaves the camera alone. A saved x/y of 0 is a position: `addNode` randomizes only for a
+  non-finite value, never `x || …` (that scatters a 0-coordinate node).
 - **One page boot must not be a single point of failure.** It is one `DOMContentLoaded`
   body, so a throw inside it skips every later step. Boot steps go through
   `boot(name, fn)`; `stats` declines on a missing library and says so.

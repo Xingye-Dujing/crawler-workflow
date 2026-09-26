@@ -97,6 +97,8 @@ const canvas = sandbox.__canvas;
 const workflow = sandbox.__workflow;
 canvas.nodesContainer = sandbox.__byId('nodes-container');
 canvas.workspace = sandbox.__byId('workspace');
+/* _applyView ends in updateTransform, which writes onto the canvas container. */
+canvas.container = sandbox.__byId('canvas-inner');
 
 const out = {};
 for (const sc of scenarios) {
@@ -105,6 +107,12 @@ for (const sc of scenarios) {
     canvas.nextId = 1;
     canvas._history = [];
     canvas._historyIdx = -1;
+    /* Reset the camera too, so one scenario's loaded view cannot leak into the next
+       and a 'file with no view leaves the camera alone' test starts from a known
+       default. */
+    canvas.panX = 0;
+    canvas.panY = 0;
+    canvas.zoom = 1;
     workflow.currentFile = sc.currentFile ?? null;
     sandbox.__dialogAnswer = sc.dialogAnswer ?? null;
     sandbox.__loadResponse = sc.loadResponse ?? null;
@@ -115,12 +123,18 @@ for (const sc of scenarios) {
     for (const t of sc.add || []) canvas.addNode(t);
     if (sc.load) workflow.loadFromJSON(sc.load);
     if (sc.loadByName) await workflow._loadByName(sc.loadByName);
+    /* A scenario pans before it saves, so the SAVE body shows whether the camera
+       rides along with the file — which is what makes a saved 适应 survive reopen. */
+    if (sc.setView) canvas._applyView(sc.setView);
     if (sc.newFile) workflow.newFile();
     if (sc.save) await workflow.save();
     /* loadFromJSON fires reconcileDatasets() without awaiting; flush it so the
        upload node's dataset reconciliation is visible in the snapshot below. */
     await new Promise((r) => setImmediate(r));
     await new Promise((r) => setImmediate(r));
+
+    const rawDraft = sandbox.__stored.crawler_canvas;
+    const draftObj = typeof rawDraft === 'string' ? JSON.parse(rawDraft) : rawDraft || null;
 
     out[sc.id] = {
         nodes: Object.values(canvas.nodes).map((n) => ({
@@ -139,6 +153,9 @@ for (const sc of scenarios) {
         ),
         toasts: sandbox.__toasts.slice(),
         runState: sandbox.RunState._calls,
+        /* Where the camera sits after the action, and what the draft kept. */
+        view: canvas._viewState(),
+        draftView: (draftObj && draftObj.view) || null,
     };
 }
 process.stdout.write(JSON.stringify(out));

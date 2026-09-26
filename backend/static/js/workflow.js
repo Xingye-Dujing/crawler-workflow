@@ -95,7 +95,7 @@ const workflow = {
             const result = await resp.json();
             if (result.ok) {
                 showToast(I18n.t('toast.workflowSaved') + ': ' + name);
-                localStorage.setItem('crawler_canvas', JSON.stringify(canvas.getState()));
+                localStorage.setItem('crawler_canvas', JSON.stringify(canvas.serializeDraft()));
             } else {
                 showToast(I18n.t('toast.saveFailed') + ': ' + result.error);
             }
@@ -220,6 +220,13 @@ const workflow = {
             RunState.set('headless', settings.headless);
         }
         canvas.disabledTypes = Array.isArray(settings.disabledTypes) ? settings.disabledTypes.slice() : [];
+        /* …and the fifth read-back is the CAMERA. A file saved after 适应/自动排布
+           says where the author was looking; opening it without that line showed a
+           different workflow than the one on disk — and the draft written a few
+           lines above still held the PREVIOUS canvas's viewport, so the next
+           autosave would fossilise the wrong view into this file's draft. */
+        if (settings.view) canvas._applyView(settings.view);
+        canvas.saveState();
         canvas.scheduleRender();
         return true;
     },

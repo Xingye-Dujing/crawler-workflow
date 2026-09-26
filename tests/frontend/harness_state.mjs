@@ -54,6 +54,10 @@ vm.runInContext(src + '\n;globalThis.__canvas = canvas;', sandbox);
 const canvas = sandbox.__canvas;
 canvas.nodesContainer = sandbox.__byId('nodes-container');
 canvas.workspace = sandbox.__byId('workspace');
+/* _applyView ends in updateTransform, which writes the transform onto the canvas
+   container — the same element the page owns. Without it the view scenarios would
+   crash inside the product's own happy path. */
+canvas.container = sandbox.__byId('canvas-inner');
 
 /* Spies for the wired handlers: canvas.js calls these through `this.…`, so
    replacing the methods records exactly what a user click would have done. */
@@ -143,6 +147,11 @@ for (const sc of scenarios) {
         canvas.nodes[e.id].params[e.key] = e.value;
         canvas.saveState();
     }
+    /* The camera: a scenario pans/zooms (what the wheel/pan handlers do to the model
+       object) BEFORE the autosave/undo/redo steps below — the pair of questions is
+       "does the draft keep the view" and "does Ctrl+Z drag the view back with it"
+       (it must not: the user undid a node, not a look). */
+    if (sc.setView) canvas._applyView(sc.setView);
     /* The 30-second autosave in app.js calls saveState() with nothing changed; N of
        those stand in for half an idle hour at the keyboard. */
     for (let i = 0; i < (sc.autosaves || 0); i++) canvas.saveState();
@@ -182,6 +191,18 @@ for (const sc of scenarios) {
     for (const id of sc.toggle || []) canvas.toggleEnabled(id);
     for (const t of sc.toggleType || []) canvas.toggleTypeDisabled(t);
     canvas.applyDisabledVisuals();
+    const draft = (() => {
+        try {
+            return JSON.parse(sandbox.localStorage.getItem('crawler_canvas') || 'null');
+        } catch (e) {
+            return { parseError: String(e) };
+        }
+    })();
+    const elpos = {};
+    Object.keys(canvas.nodes).forEach((id) => {
+        const el = canvas.nodes[id].el;
+        elpos[id] = el ? { left: el.style.left, top: el.style.top } : null;
+    });
     const dclasses = {};
     Object.keys(canvas.nodes).forEach((id) => {
         const el = canvas.nodes[id].el;
@@ -193,6 +214,19 @@ for (const sc of scenarios) {
         effective: canvas.effectiveIds().slice().sort(),
         dclasses,
         savedDisabledTypes: canvas.getState().disabledTypes,
+        /* The camera at the canvas, in the localStorage draft, and in the serialized
+           file — plus the undo stack's own shape, which must NOT hold a view (or
+           Ctrl+Z would rewind the viewport like a node). */
+        view: canvas._viewState(),
+        draftView: draft && draft.view ? draft.view : null,
+        draftHasViewKey: !!draft && 'view' in draft,
+        historyHasView: canvas._history.some((s) => 'view' in s),
+        modelHasView: 'view' in canvas.getState(),
+        serializedView: canvas.toWorkflowJSON().settings.view,
+        /* Where each box actually stands, read off the ELEMENT: the random-fallback
+           bug only shows at x=0, and the report must not launder it through
+           addNode's own rounding by reading n.x instead. */
+        elpos,
         nodes: Object.values(canvas.nodes).map((n) => ({
             id: n.id,
             type: n.type,

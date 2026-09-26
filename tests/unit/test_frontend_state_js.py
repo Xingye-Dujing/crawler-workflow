@@ -327,6 +327,38 @@ def state(tmp_path_factory):
             'id': 'add_defaults_on',
             'add': ['source'],
         },
+        {
+            # A pan/zoom followed by the draft write the real handlers debounce into.
+            'id': 'draft_and_file_carry_the_camera',
+            'add': ['source'],
+            'setView': {'panX': 120, 'panY': -40, 'zoom': 1.5},
+            'autosaves': 1,
+        },
+        {
+            'id': 'undo_leaves_the_camera',
+            'initialPush': True,
+            'add': ['source'],
+            'setView': {'panX': 500, 'panY': 60, 'zoom': 2},
+            'undo': True,
+        },
+        {
+            # The draft a refresh hands back: a camera AND a node standing at 0,0.
+            'id': 'restored_draft_moves_the_camera',
+            'restore': {
+                'nodes': {
+                    'node-1': {
+                        'id': 'node-1',
+                        'type': 'source',
+                        'title': 'x',
+                        'params': {'platform': 'zhihu'},
+                        'x': 0,
+                        'y': 0,
+                    },
+                },
+                'connections': [],
+                'view': {'panX': -70, 'panY': 15, 'zoom': 0.5},
+            },
+        },
     ]
     return _run('harness_state.mjs', [JS_DIR / 'canvas.js'], scenarios, tmp)
 
@@ -547,6 +579,29 @@ def life(tmp_path_factory, capabilities_matrix):
     scenarios = [
         {'id': 'load_open', 'load': opened},
         {
+            # A file that also carries the camera its author arranged behind.
+            'id': 'load_with_view',
+            'load': {
+                'nodes': opened['nodes'],
+                'connections': opened['connections'],
+                'settings': {
+                    'mode': 'serial',
+                    'headless': False,
+                    'view': {'panX': -300, 'panY': -80, 'zoom': 0.8},
+                },
+            },
+        },
+        {
+            # A draft is hand-editable: a garbage camera must not throw or scatter —
+            # zoom stays inside the wheel's own clamp.
+            'id': 'load_with_broken_view',
+            'load': {
+                'nodes': opened['nodes'],
+                'connections': opened['connections'],
+                'settings': {'view': {'panX': 'wide', 'panY': None, 'zoom': 999}},
+            },
+        },
+        {
             # The same file the other way round: a canvas saved as 并行 + 无头.
             'id': 'load_parallel_headless',
             'load': {
@@ -562,6 +617,14 @@ def life(tmp_path_factory, capabilities_matrix):
         },
         {'id': 'newfile', 'add': ['source'], 'newFile': True},
         {'id': 'save_named', 'currentFile': 'wf1', 'save': True},
+        {
+            # The camera a person panned to must ride into the saved file.
+            'id': 'save_with_view',
+            'currentFile': 'wf-view',
+            'add': ['source'],
+            'setView': {'panX': 60, 'panY': -25, 'zoom': 1.25},
+            'save': True,
+        },
         {'id': 'save_cancel', 'dialogAnswer': None, 'save': True},
         {'id': 'save_prompt_ok', 'dialogAnswer': '新工作流', 'save': True},
         {'id': 'open_by_name', 'loadByName': '我的流程', 'loadResponse': {'ok': True, 'workflow': opened}},
@@ -649,6 +712,36 @@ class TestFileLifecycle:
     def test_a_file_without_settings_changes_neither(self, life):
         """An absent block is "leave the user's choice alone", not "reset it"."""
         assert life['load_without_settings']['runState'] == []
+
+    def test_opening_a_file_looks_through_the_camera_it_was_saved_with(self, life):
+        """「保存时的视角跟读取得到的视角不一样」 was the complaint: the file knew
+        where its author had been looking — the loader just never read it back.
+        And the draft re-saved after the open must hold THAT camera, not the one
+        the previous canvas had."""
+        r = life['load_with_view']
+        assert r['view'] == {'panX': -300, 'panY': -80, 'zoom': 0.8}, r['view']
+        assert r['draftView'] == r['view'], 'the next refresh owes the same viewpoint'
+
+    def test_a_file_without_a_camera_leaves_the_viewport_where_it_was(self, life):
+        """Old files predate the field; opening one must not yank the camera the
+        user is currently looking through just because the key is missing."""
+        assert life['load_open']['view'] == {'panX': 0, 'panY': 0, 'zoom': 1}
+        assert life['load_without_settings']['view'] == {'panX': 0, 'panY': 0, 'zoom': 1}
+
+    def test_a_broken_camera_cannot_crash_the_open_or_unclamp_the_zoom(self, life):
+        """A workflow file is hand-editable, so a string pan and a 999 zoom are
+        expected input: the open still works and the values land inside the
+        wheel's own clamp rather than being believed."""
+        r = life['load_with_broken_view']
+        assert r['view']['zoom'] == 3, r['view']
+        assert r['view']['panX'] == 0, 'a non-number pan is not applied'
+
+    def test_saving_a_workflow_carries_the_camera_into_the_file(self, life):
+        r = life['save_with_view']
+        body = json.loads(r['fetches'][0]['body'])
+        assert body['workflow']['settings']['view'] == {'panX': 60, 'panY': -25, 'zoom': 1.25}, body['workflow'][
+            'settings'
+        ]
 
     def test_a_dead_upload_file_is_cleared_with_a_toast(self, life):
         r = life['load_open']
@@ -773,3 +866,34 @@ class TestCanvasDisable:
         assert r['disableStates']['node-1'] == 'on', r['disableStates']
         assert r['effective'] == ['node-1']
         assert r['dclasses']['node-1']['off'] is False
+
+    def test_the_draft_and_the_file_carry_the_camera_and_undo_history_does_not(self, state):
+        """适应/自动排布 arranged the VIEW, not just the boxes.
+
+        The draft must hold the camera (or a refresh opens at a viewpoint nobody
+        chose), the serialized file must hold it too (or the exported workflow
+        forgets how its author left it) — while the undo stack must NOT: Ctrl+Z
+        rewinds a node, not a look, and a camera in every snapshot would also turn
+        every pan into an undo step and flood the 50-deep stack with drags.
+        """
+        r = state['draft_and_file_carry_the_camera']
+        assert r['view'] == {'panX': 120, 'panY': -40, 'zoom': 1.5}, r['view']
+        assert r['draftView'] == r['view'], 'a refresh must come back to this viewpoint'
+        assert r['serializedView'] == r['view'], 'the saved/exported file carries the view it was arranged behind'
+        assert r['draftHasViewKey'] is True
+        assert r['modelHasView'] is False, 'getState is the model snapshot; the camera lives beside it'
+        assert r['historyHasView'] is False, 'Ctrl+Z must not rewind the camera'
+
+    def test_an_undo_rearranges_nodes_without_yanking_the_viewport(self, state):
+        r = state['undo_leaves_the_camera']
+        assert [n['id'] for n in r['nodes']] == [], 'the undo itself must still have removed the node'
+        assert r['view'] == {'panX': 500, 'panY': 60, 'zoom': 2}, 'the camera the user set survived the rewind'
+
+    def test_a_restored_draft_reapplies_its_camera_and_zero_is_a_position(self, state):
+        """Two loss paths the same scenario used to hide: the camera was nowhere in
+        the draft, and a node whose saved x or y was exactly 0 hit the `x || random`
+        fallback and landed somewhere else — routine right after 自动排布 centers a
+        layout."""
+        r = state['restored_draft_moves_the_camera']
+        assert r['view'] == {'panX': -70, 'panY': 15, 'zoom': 0.5}, r['view']
+        assert r['elpos']['node-1'] == {'left': '0px', 'top': '0px'}, 'x=0 is a position, not an absence'

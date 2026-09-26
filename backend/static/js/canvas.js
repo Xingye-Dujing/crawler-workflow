@@ -156,6 +156,12 @@ const canvas = {
             if (this.isDragging && this.dragTarget) {
                 this.saveState();
             }
+            /* A pan moved the camera, not the model — but the camera is part of what
+               the draft owes the user, and an ended pan is the one moment that knows
+               the dragging actually stopped. */
+            if (this.isPanning && this.panWasDragging) {
+                this.scheduleViewSave();
+            }
             this.isPanning = false;
             this.workspace.style.cursor = 'default';
             this.isDragging = false;
@@ -369,7 +375,11 @@ const canvas = {
             this.zoom = newZoom;
             this.updateTransform();
             document.getElementById('status-zoom').textContent = Math.round(this.zoom * 100) + '%';
-            Settings.save();
+            /* The camera is part of what a draft (and later a saved file) owes the
+               user, so a wheel-zoom that is never written back is a viewpoint that
+               disappears on refresh. Debounced: a flick fires dozens of wheel events
+               and each redraws nothing but a localStorage write. */
+            this.scheduleViewSave();
         }, { passive: false });
 
         /* Drag from palette */
@@ -479,8 +489,13 @@ const canvas = {
         const el = document.createElement('div');
         el.className = 'node node-type-' + type;
         el.id = id;
-        el.style.left = (x || 100 + Math.random() * 200) + 'px';
-        el.style.top = (y || 100 + Math.random() * 200) + 'px';
+        /* A stored coordinate of 0 is a position, not an absence — `x || random`
+           used to re-roll any node whose saved x or y landed exactly on 0 (routine
+           after 自动排布's centering), so reopening a workflow scattered the very
+           layout the file had just recorded. Random is the fallback ONLY when no
+           finite number was given. */
+        el.style.left = (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : 100 + Math.random() * 200) + 'px';
+        el.style.top = (Number.isFinite(Number(y)) && y !== null && y !== '' ? Number(y) : 100 + Math.random() * 200) + 'px';
         const params = this.getDefaultParams(type);
         /* Markup and behaviour are kept apart on purpose. This template used to
            splice the id and the node summary into `onclick="canvas.editNode('<id>')"`
@@ -925,14 +940,14 @@ const canvas = {
         this.zoom = Math.min(3, this.zoom * 1.2);
         this.updateTransform();
         document.getElementById('status-zoom').textContent = Math.round(this.zoom * 100) + '%';
-        Settings.save();
+        this.scheduleViewSave();
     },
 
     zoomOut() {
         this.zoom = Math.max(0.2, this.zoom / 1.2);
         this.updateTransform();
         document.getElementById('status-zoom').textContent = Math.round(this.zoom * 100) + '%';
-        Settings.save();
+        this.scheduleViewSave();
     },
 
     resetView() {
@@ -957,10 +972,49 @@ const canvas = {
         }
         this.updateTransform();
         document.getElementById('status-zoom').textContent = '100%';
-        Settings.save();
+        this.scheduleViewSave();
     },
 
     /* ---- State ---- */
+
+    /* The camera. It is deliberately NOT inside getState(): that dict is also one
+       undo step, and rewinding an accidental node deletion must not also jump the
+       viewport somewhere the user never undid. The draft carries it beside the
+       model, and a saved file carries it in settings — "this is the view the
+       workflow was arranged in". */
+    _viewState() {
+        return { panX: this.panX, panY: this.panY, zoom: this.zoom };
+    },
+
+    _applyView(view) {
+        if (!view || typeof view !== 'object') return;
+        const parts = [
+            ['panX', view.panX, -Infinity, Infinity],
+            ['panY', view.panY, -Infinity, Infinity],
+            ['zoom', view.zoom, 0.2, 3],
+        ];
+        parts.forEach(([key, raw, min, max]) => {
+            const value = Number(raw);
+            if (Number.isFinite(value)) this[key] = Math.max(min, Math.min(max, value));
+        });
+        this.updateTransform();
+        document.getElementById('status-zoom').textContent = Math.round(this.zoom * 100) + '%';
+    },
+
+    /* Pan/zoom redraw at most once per gesture-trickle: a wheel flick fires dozens
+       of events, and each would otherwise pay a synchronous localStorage write. */
+    scheduleViewSave() {
+        if (this._viewSaveTimer) return;
+        this._viewSaveTimer = setTimeout(() => {
+            this._viewSaveTimer = null;
+            this.saveState();
+        }, 400);
+    },
+
+    serializeDraft() {
+        return Object.assign(this.getState(), { view: this._viewState() });
+    },
+
     getState() {
         const nodes = {};
         Object.keys(this.nodes).forEach(id => {
@@ -1043,6 +1097,12 @@ const canvas = {
             return null;
         }).filter(Boolean);
         this.disabledTypes = Array.isArray(state.disabledTypes) ? state.disabledTypes.slice() : [];
+        /* A draft carries the camera the user was looking through; an UNDO state
+           never does (getState is view-free), so rewinding a step rearranges nodes
+           without yanking the viewport — and a restore of a view-less draft leaves
+           the camera exactly where it is. Applied before the save below, so the
+           draft keeps the view it was handed rather than a stale one. */
+        if (state.view) this._applyView(state.view);
         this.scheduleRender();
         this._historySaving = outerSaving;
         if (!outerSaving) {
@@ -1143,7 +1203,7 @@ const canvas = {
     },
 
     saveState() {
-        localStorage.setItem('crawler_canvas', JSON.stringify(this.getState()));
+        localStorage.setItem('crawler_canvas', JSON.stringify(this.serializeDraft()));
         this._pushState();
     },
 
@@ -1445,6 +1505,10 @@ const canvas = {
                 headless: RunState.headless,
                 max_workers: 4,
                 disabledTypes: (this.disabledTypes || []).slice(),
+                /* The file owes the user the VIEW it was saved behind: 适应/自动排布
+                   arranged the camera as much as the nodes, and a saved workflow that
+                   drops it opens at a viewport its author never chose. */
+                view: this._viewState(),
             },
         };
     },

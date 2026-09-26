@@ -1653,3 +1653,69 @@ def test_an_option_longer_than_its_menu_is_cut_visibly(app_url, driver, lang):
     scroller = facts['menuScroll']
     assert scroller[0] <= scroller[1] + 1, f'the menu scrolls sideways instead of cutting: {facts}'
     assert facts['rowTitleIsFull'] is True, f'the cut option carries no tooltip: {facts}'
+
+
+def test_the_camera_and_a_zero_coordinate_survive_a_real_reload(app_url, driver):
+    """The one thing the node harness cannot prove: a viewpoint that lives in
+    localStorage and must be read back by a REAL page boot.
+
+    The user's bug was that 适应/自动排布 set the camera but a refresh opened the
+    workflow at the default view, and a node whose saved x was exactly 0 got
+    re-scattered by ``x || random``. Both only bite after a genuine reload — a fake
+    DOM that runs boot and assert in one tick cannot see a re-read that never
+    happened. So this writes the draft the product's own saveState writes, reloads
+    the page for real, and reads the camera and the node position back off the
+    re-booted canvas. Measured floor: 1 node and the three camera numbers.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {};
+        canvas.connections = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        // A node pinned at the origin — the exact case the old `x || random` scattered.
+        canvas.addNode('source', 0, 0);
+        // Pan and zoom the way a wheel/drag gesture leaves the fields.
+        canvas.panX = -320;
+        canvas.panY = -60;
+        canvas.zoom = 0.8;
+        canvas.saveState();
+        """,
+        [],
+    )
+    # The draft really captured the camera BEFORE the reload, or the next assertion
+    # below would only prove the reload returned a value that was never written.
+    drafted = driver.execute_script(
+        "return (JSON.parse(localStorage.getItem('crawler_canvas') || 'null') || {}).view || null;",
+        [],
+    )
+    assert drafted == {'panX': -320, 'panY': -60, 'zoom': 0.8}, f'the draft never captured the camera: {drafted}'
+    driver.refresh()
+    _kill_animations(driver)
+    facts = driver.execute_script(
+        """
+        const ids = Object.keys(canvas.nodes);
+        const el = ids.length ? canvas._nodeEl(ids[0]) : null;
+        return {
+            nodeCount: ids.length,
+            panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom,
+            left: el ? el.style.left : null,
+            top: el ? el.style.top : null,
+            transform: getComputedStyle(document.getElementById('canvas-inner')).transform,
+        };
+        """,
+        [],
+    )
+    assert facts['nodeCount'] == 1, f'the reload did not rebuild the one node: {facts}'
+    # The camera came back — not the init default of (0,0,1).
+    assert facts['zoom'] == 0.8, f'the zoom reset on reload: {facts}'
+    assert facts['panX'] == -320 and facts['panY'] == -60, f'the pan reset on reload: {facts}'
+    # …and it is actually painted, not just a JS field that nothing read.
+    assert 'matrix' in facts['transform'].lower() or 'translate' in facts['transform'].lower(), (
+        f'the restored camera never reached the canvas transform: {facts["transform"]}'
+    )
+    # The node at the origin stayed at the origin instead of scattering to random ~100-300.
+    assert facts['left'] == '0px' and facts['top'] == '0px', f'a 0-coordinate node moved on load: {facts}'
