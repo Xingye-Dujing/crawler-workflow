@@ -284,7 +284,7 @@ class TestMatrixFlag:
         """Pinned as a set: adding a platform here is a claim about a measurement,
         so it has to arrive deliberately and fail loudly if it drifts."""
         flagged = {cap.platform for cap in crawl_capabilities.CAPABILITIES if cap.profile_recommended}
-        assert flagged == {'weibo', 'xiaohongshu'}
+        assert flagged == {'weibo', 'xiaohongshu', 'douyin'}
 
     def test_the_payload_carries_it_per_platform(self):
         payload = crawl_capabilities.as_dict()

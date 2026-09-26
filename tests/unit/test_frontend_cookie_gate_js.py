@@ -149,6 +149,10 @@ NO_GATE = {
 AUTO = {
     'cookie_preflight_before_run': True,
     'ask_overseas_network': True,
+    # The profile notice is a different fork, and three of the platforms used below
+    # (douyin, weibo, xiaohongshu) are measured to fail a throwaway browser — leaving this
+    # unset would make every network scenario answer two dialogs at once.
+    'use_browser_profile': True,
 }
 
 SCENARIOS = [
@@ -344,6 +348,7 @@ SCENARIOS = [
         'settings': {
             'cookie_preflight_before_run': True,
             'ask_overseas_network': False,
+            'use_browser_profile': True,
         },
         **_canvas(_chain(1, 'douyin'), _chain(2, 'youtube')),
         'preflight': CLEAN,

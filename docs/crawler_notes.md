@@ -151,10 +151,26 @@ text and its 搜索 button is still clickable, but *neither the click nor Enter 
 address sits on `/jingxuan`; the user watching the window reported exactly this), while the
 `/search/<kw>?type=video` deep link — documented for a year as an empty shell of three `<ul>`s — now
 serves the result list. So `SEARCH_ENTRY` is the route, the keyword is percent-encoded into the path,
-and there is no router left to interrogate about which search ran. Cards are
+and there is no router left to interrogate about which search ran.（`type=general` 那条也被试过/提过：
+`/jingxuan/search/<kw>?type=general` 是页面自己在搜索框里跳转的形状，但**用户判定结果要按视频排，
+维持 `type=video`** —— 改回去之前先问他，别拿一次"看起来能用"当结论。）Cards are
 `[data-e2e="scroll-list"] a[href*="/video/"]` and the id comes out of the href — the old
 `div.discover-video-card-item[data-aweme-id]` matches **zero** nodes now and the class names beside it
 are build hashes.
+
+**Douyin punishes the session shape too — it is now flagged `profile_recommended`, like weibo**
+(measured 2026-09-26, one network, one account, keyword `IU`, the shape the only variable):
+
+| 会话形状 | 结果 |
+|---|---|
+| 一次性浏览器 + 种入保存的 Cookie | **8.8 秒被弹「验证码中间页」**（`verdict=blocked`，按规矩抛错点名而不是交空表） |
+| 该平台自己的 profile | **24.8 秒交出 5 行真数据**（标题/作者/粉丝/四个计数/发布时间齐） |
+
+载荷 `scratchpad/iu_search.json`（被拒那次）与 `iu_search_profile.json`（成功那次）。这条与微博
+"拷贝出去的登录态=第二台设备"是同一类问题，所以 `Capability.profile_recommended` 加上了 douyin：
+可见窗口是**必要不充分**，jar 得是站点自己一路滚下来的那份。**一个模式读到反方向**：热榜是
+profile 被弹验证码、一次性浏览器读得通（2026-09-25，见 `_hot_mode` 处的注释与 #141）——
+所以这个标记只能是建议与提醒，绝不许变成强制，而 #142 也把"按形状分布到底怎样"留成了待查项。
 
 **The profile header is not there when the session is being refused** (measured 2026-09-24, visible
 window): `backend/test_douyin_profile_probe.py` was answered 验证码中间页 by the *search* itself, and
