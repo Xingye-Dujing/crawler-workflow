@@ -2199,9 +2199,8 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     # No source node forces a visible window any more. Douyin and X used to (a headless browser
     # got a captcha/403), but a headless Chrome now reports a desktop fingerprint instead
     # (base.py, #148) — measured serving real rows on both, and on zhihu's author page — so the
-    # run's own 无头/窗口 choice is honoured as asked. (The comment engine still opens a window
-    # for panels that must be *scrolled* to fill — ``_comment_headless`` — a different rule about
-    # what a window is doing, not about a platform refusing headless.)
+    # run's own 无头/窗口 choice is honoured as asked. The comment engine makes the same choice
+    # verbatim now too: a headless Chrome even opens a scroll-only panel (see ``_execute_comment_node``).
 
     crawler = get_crawler(
         platform,
@@ -2943,22 +2942,6 @@ def _execute_visualize_node(node: dict, current_input: list):
     return spec
 
 
-def _comment_headless(run_headless: bool, kind: str) -> bool:
-    """Whether the comment crawler for *kind* may run headless inside a run that asked *run_headless*.
-
-    Two answers compose, each measured: the user's choice (a visible run stays visible everywhere),
-    and the matrix's ``collects`` — ``'fetch'`` means the panel is read by an in-page fetch and a
-    window would show nothing (weibo and bilibili answered a headless browser with the same rows,
-    ``backend/test_headless_comments.py`` 2026-09-25), while a ``'dom_scroll'`` panel (zhihu,
-    xiaohongshu, douyin) only fills by scrolling and keeps a real window. There is no longer a
-    third, captcha-driven answer: a headless Chrome carries a desktop fingerprint now (#148), so no
-    platform is excluded from headless by its class — douyin and X included, measured serving rows.
-    """
-    if not run_headless:
-        return False
-    return capabilities.shows_nothing(kind, 'comments')
-
-
 def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     """Comment crawler: article links in, comment rows out, batch by batch.
 
@@ -2967,11 +2950,11 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     (resume restores position), and PartWriter (every settled batch hits disk
     as a readable file while the run is still going; a resumed writer adopts
     the parts the crashed run left behind, so kept-elsewhere rows are exactly
-    the rows already in those files). The window is each link platform's own
-    answer (:func:`_comment_headless`) — fetch-read panels honour 无头, scrolled
-    or captcha-walled ones keep the window — and a switch inside a headless run
-    says so per platform, because a window appearing with no explanation reads
-    as the setting having been ignored.
+    the rows already in those files). The window is the run's own 无头/窗口 choice,
+    honoured verbatim for every link platform: a headless Chrome carries a desktop
+    fingerprint (#148) and even scroll-only panels were measured serving the same
+    rows headless (zhihu comments 5/5, 2026-09-26), so no comment panel forces a
+    window or rewrites the record.
     """
     from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
     from services.part_writer import PartWriter, safe_stem
@@ -3050,19 +3033,14 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 continue
             kind = platform_for(url)
             if kind not in sessions:
-                # The window is each platform's own answer (see _comment_headless), not
-                # the node's: a fetch-read panel honours 无头, a scrolled one or a
-                # captcha site keeps its window even inside a headless run — said out
-                # loud per platform, not as the blanket claim this line used to be.
-                want_headless = _comment_headless(headless, kind)
-                if headless and not want_headless:
-                    add_log(t('run.forcedVisibleComment', platform=kind))
-                    if ctx is not None:
-                        with contextlib.suppress(Exception):
-                            ctx['store'].mark_forced_visible(ctx['run_id'])
+                # The run's 无头/窗口 choice is honoured verbatim (#148). A headless Chrome now
+                # carries a desktop fingerprint, and a *scrolled* comment panel was measured
+                # serving the same rows in both shapes (zhihu comments 5/5 headless, real profile,
+                # 2026-09-26), so the old rule that forced a window onto scroll-only panels inside a
+                # headless run is gone: no comment panel overrides what the user asked for.
                 crawler = get_crawler(
                     kind,
-                    headless=want_headless,
+                    headless=headless,
                     cookie_dir=Config.COOKIE_DIR,
                     use_profile=(ctx or {}).get('use_profile'),
                     abort=stop_requested,

@@ -358,7 +358,7 @@ _ZH = {
         '3. 回到本面板点「已完成登录」\n'
         '提示：抖音网页版对自动化浏览器较敏感，若窗口里出现滑块验证，请在窗口内手动完成后再保存。'
     ),
-    'crawl.dy.start': '[抖音搜索] 开始搜索关键词: "{kw}"，目标 {n} 条（抖音只接受可见窗口，已自动改用可见窗口）',
+    'crawl.dy.start': '[抖音搜索] 开始搜索关键词: "{kw}"，目标 {n} 条',
     'crawl.dy.target_reached': '[抖音] 已达到目标数量 {n} 条，停止',
     'crawl.dy.round': '[抖音] 第 {i} 屏：{n} 张卡片（新 {fresh} 个，已收录 {done} 条）',
     'crawl.dy.processed': '[抖音] 已收录视频 {i}，当前有效数据: {n} 条',
@@ -752,9 +752,6 @@ _ZH = {
     # platform field is empty — the message must name what walled, and a hand-written
     # list of platforms the user never crawled reads worse than no list at all.
     'run.cookieAnyPlatform': '所采集的平台',
-    'run.forcedVisibleComment': (
-        '「{platform}」的评论区要真的滚动才能取全（或该站点拒绝无头浏览器），这个链接的评论改用可见窗口采集'
-    ),
     'run.platformQueued': (
         '{platform} 正在被另一条工作流采集，本轮改为排队：{n} 秒后开始，'
         '避免同一账号在同一秒内发出两次搜索而被弹到登录页'
@@ -1596,10 +1593,6 @@ _EN = {
     ),
     'net.speed': ' (measured about {speed} kB/s)',
     'run.cookieAnyPlatform': 'the platform being crawled',
-    'run.forcedVisibleComment': (
-        '"{platform}" comments must actually be scrolled to collect fully (or that site refuses '
-        'headless browsers), so this link\u2019s comments use a visible window'
-    ),
     'run.platformQueued': (
         '{platform} is being crawled by another workflow, so this one queued and starts in {n}s: two '
         'searches from one account in the same second are what gets bounced to the login page'

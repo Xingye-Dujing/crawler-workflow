@@ -376,12 +376,12 @@ class RunStore:
         ('runs', 'wf_count', 'INTEGER DEFAULT 1'),
         ('node_runs', 'component', 'INTEGER DEFAULT 0'),
         ('node_runs', 'component_name', "TEXT DEFAULT ''"),
-        # Whether the executor had to open a real window for a run the user asked to
-        # run 无头 (a captcha site, or a comment panel that must be scrolled). The
-        # 无头/窗口 chip would otherwise lie: it reads the REQUESTED value, so a run
-        # that was silently upgraded to a window would still say 无头 — the exact
-        # "chip must describe what happened, not what the canvas held" rule this column
-        # serves. Default 0 gives every pre-existing row an honest 「requested == ran」.
+        # Legacy: once a run could be silently upgraded from 无头 to a visible window (a captcha
+        # site, or a comment panel that "had to" be scrolled) and this recorded it so the chip told
+        # the truth. #148 gave a headless Chrome a desktop fingerprint and every such platform and
+        # panel was measured serving rows headless, so nothing forces a window any more and nothing
+        # writes this. The column stays (SQLite drop = table rebuild, and old rows still carry a
+        # meaningful 0/1) and the chip that read it is gone.
         ('runs', 'forced_visible', 'INTEGER DEFAULT 0'),
     )
 
@@ -512,16 +512,6 @@ class RunStore:
             'UPDATE runs SET status = ?, updated_at = ?, finished_at = ?, node_done = ?, note = ? WHERE run_id = ?',
             (status, stamp, stamp, done, note, run_id),
         )
-
-    def mark_forced_visible(self, run_id: str) -> None:
-        """Record that a 无头 run had to open a real window (see ``forced_visible``).
-
-        Set at the moment the executor switches, not at settlement: the run can still
-        be live for an hour after the first forced window, and a panel opened during
-        it should already tell the truth. Idempotent — a node that switched twice
-        writes the same 1.
-        """
-        self._execute('UPDATE runs SET forced_visible = 1 WHERE run_id = ?', (run_id,))
 
     def _finished_count(self, run_id: str) -> int:
         """Nodes this run really finished — the number the console prints.

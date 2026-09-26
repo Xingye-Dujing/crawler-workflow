@@ -656,12 +656,13 @@ def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_one():
 def _crawler_pairs():
     """(platform, mode key) for every crawler-backed (non-comments) mode.
 
-    A ``comments`` mode is out of scope by construction, never by a skip: it is answered
-    by the comment engine's own window rule (``_comment_headless``, pinned in
-    ``test_workflow_api.py``). There is no longer a ``never_headless`` or ``needs_window``
-    split to key on — #148 gave a headless Chrome a desktop fingerprint and measured every
-    platform serving rows headless, so the source node honours the run's choice for all of
-    them. This list is the whole grid that claim covers.
+    A ``comments`` mode is out of scope here by construction, not by a skip: it is answered by the
+    comment engine, which now honours the run's 无头 choice verbatim just like the source node — the
+    old scrolled-panel window forcing was measured unnecessary and removed (pinned in
+    ``test_workflow_api.py``'s ``TestACommentNodeHonoursHeadless``). There is no longer a
+    ``never_headless`` or ``needs_window`` split to key on — #148 gave a headless Chrome a desktop
+    fingerprint and measured every platform serving rows headless, so both executors honour the
+    run's choice for all of them. This list is the whole grid that claim covers.
     """
     out = []
     for cap in capabilities.CAPABILITIES:

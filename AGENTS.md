@@ -117,14 +117,13 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   settles a row this process opened and never closed, once no worker is alive. Adding a run
   status means updating `RESUMABLE_RUN_STATUS`, `purge`'s protection, the panel's `known` list
   and both app.js catalogs.
-- **A visible window must be doing something visible.**
-  Each `Mode` declares `collects` (fetch / DOM walk / per-row page); the panel note and the comment window
-  (`_comment_headless`) read it — only a **scrolled** panel forces a window (a fetch panel runs headless),
-  and that window sets `forced_visible` so the chip reads 无头→窗口. No class forces one now — headless carries
-  a desktop fingerprint (#148), so `never_headless`/`needs_window` are gone. A session
-  preference is *stored* in the profile (it outlives the crawl): a window that merely *omits* the image
-  blocker inherits it and shows a login page with no QR code, so 取 Cookie / 验证 Cookie and the pre-run
-  probe write 允许 explicitly (`_content_prefs`).
+- **A headless run stays headless — nothing forces a window (#148).** A headless Chrome carries a desktop
+  fingerprint, so every node and comment panel honours 无头/窗口 verbatim; `无头→窗口`/`forced_visible` are
+  retired and `collects` only feeds the panel note. Geometry trap: douyin's 筛选 hover menu hides its
+  opener's centre behind a sticky header, so `menu.hover` also fires enter events on the node (an
+  `ActionChains` move alone misses it). A session preference is *stored* in the profile and outlives the
+  crawl: a window that merely *omits* the image blocker inherits it and shows a login page with no QR code,
+  so 取 Cookie / 验证 Cookie and the pre-run probe write 允许 explicitly (`_content_prefs`).
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count`,
   `engine.wall` (the four page verdicts), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (finds what actually
@@ -195,7 +194,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   bounces); `/ajax/statuses/mymblog` is a per-session edge 403 → refuse loudly, never an empty table
   (`backend/test_weibo_recipe.py`).
 - **zhihu**: headless throttles day-by-day (risk 40362), so a headless search returning 0 rows is a legit
-  outcome — don't loosen the assertion; comments always open a visible browser. **A search card is an
+  outcome — don't loosen the assertion; comments run in either shape (#148). **A search card is an
   excerpt**, so the body arrives only by clicking: allowed where the row's own link says `/answer/`, and
   正文 is the only column replaced.
 - **xiaohongshu**: a replayed session is walled within minutes (profile required); author mode is dropped

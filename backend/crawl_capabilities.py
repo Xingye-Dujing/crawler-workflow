@@ -668,20 +668,6 @@ def serial_only_of(platform: str) -> bool:
 COLLECT_KINDS = ('fetch', 'dom_read', 'dom_scroll', 'page_per_row')
 
 
-def shows_nothing(platform: str, mode_key: str) -> bool:
-    """Whether a visible window of this crawl would show nothing worth watching.
-
-    True for the ``'fetch'`` kinds — a page loads and every row after that is read
-    from inside it, so a window just sits on the homepage. The comment executor and
-    the panel's note ask this rather than each holding their own opinion about which
-    platforms need a screen. There is no longer a second, captcha-driven gate: a
-    headless Chrome carries a desktop fingerprint now (#148), so no platform is
-    excluded from headless by its class — a fetch panel is run headless on every one.
-    """
-    mode = mode_for(platform, mode_key)
-    return bool(mode and mode.collects == 'fetch')
-
-
 def needs_session(platform: str, mode_key: str) -> bool:
     """Whether this crawl is a session crawl — the question the cookie gate asks.
 

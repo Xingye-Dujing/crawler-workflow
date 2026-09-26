@@ -51,6 +51,33 @@ PAGE = """<!doctype html>
 </body></html>
 """
 
+#: A second page where 筛选 sits under a sticky header that covers its geometric centre. This is the
+#: headless failure measured on douyin's live result page: ``move_to_element`` aims at the centre,
+#: the header takes the pointer, and the hover-wired panel never mounts. The JS dispatch inside
+#: :func:`crawlers.engine.menu.hover` reaches the node itself and is the only thing that opens it.
+PAGE_COVERED = """<!doctype html>
+<html><head><meta charset="utf-8"><title>covered hover menu fixture</title></head>
+<body>
+<div id="opener" style="position:absolute; top:40px; left:40px; width:120px; height:30px; z-index:1;">筛选</div>
+<div id="cover" style="position:absolute; top:0; left:0; width:600px; height:200px; z-index:2;"></div>
+<div id="list"><span class="row">a</span><span class="row">b</span></div>
+<script>
+  document.getElementById('opener').addEventListener('mouseover', function () {
+      if (document.getElementById('panel')) { return; }
+      var box = document.createElement('div');
+      box.id = 'panel';
+      ['综合排序', '最新发布', '最多点赞'].forEach(function (word) {
+          var item = document.createElement('span');
+          item.className = 'menuItem';
+          item.textContent = word;
+          box.appendChild(item);
+      });
+      document.body.appendChild(box);
+  });
+</script>
+</body></html>
+"""
+
 
 def rows(driver) -> list:
     return [element.text for element in driver.find_elements('css selector', '.row')]
@@ -77,6 +104,14 @@ def hovered_browser():
 def menu_page(hovered_browser, tmp_path):
     page = tmp_path / 'hover-menu.html'
     page.write_text(PAGE, encoding='utf-8')
+    hovered_browser.get(page.as_uri())
+    return hovered_browser
+
+
+@pytest.fixture
+def covered_page(hovered_browser, tmp_path):
+    page = tmp_path / 'hover-menu-covered.html'
+    page.write_text(PAGE_COVERED, encoding='utf-8')
     hovered_browser.get(page.as_uri())
     return hovered_browser
 
@@ -123,3 +158,28 @@ class TestTheHoverMenu:
         assert answer['ok'] is False and answer['reason'] == 'missing', answer
         assert answer['options'] == ['综合排序', '最新发布', '最多点赞'], answer['options']
         assert rows(menu_page) == ['a', 'b'], 'a refused choice must not have touched the list'
+
+
+class TestAHoverMenuWhoseWordIsCovered:
+    """The headless failure that :func:`crawlers.engine.menu.hover` now defends against.
+
+    Measured on douyin's live result page: an overlay can cover the opener's geometric centre, so
+    ``ActionChains.move_to_element`` — which dispatches a real pointer *at that coordinate* — reaches
+    the overlay instead, the hover-wired panel never mounts, and the crawler reads the one-shot
+    absence as "the menu does not offer 最多点赞". The fixture reproduces exactly that: same page,
+    same mouseover-mounted panel, but 筛选 is buried under a sticky cover. If the dispatch fallback
+    is stripped out of ``hover``, the second assertion here goes red.
+    """
+
+    def test_a_bare_pointer_move_to_the_centre_does_not_open_it(self, covered_page):
+        from selenium.webdriver.common.action_chains import ActionChains
+
+        ActionChains(covered_page).move_to_element(covered_page.find_element('css selector', '#opener')).perform()
+        assert menu.nodes_with_text(covered_page, '最新发布') == [], (
+            'this fixture is only worth running if the plain pointer really does miss the covered word'
+        )
+
+    def test_the_hover_reaches_the_word_anyway_and_choose_then_works(self, covered_page):
+        assert menu.hover(covered_page, '筛选') is True, 'the dispatch fallback must open the covered panel'
+        assert menu.nodes_with_text(covered_page, '最新发布'), 'hover should have mounted the panel'
+        assert menu.option_texts(covered_page, '综合排序') == ['综合排序', '最新发布', '最多点赞']

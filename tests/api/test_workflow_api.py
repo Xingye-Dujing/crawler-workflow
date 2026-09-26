@@ -1137,9 +1137,10 @@ class TestSourceCommentsMode:
                 pass
 
         def fake_get_crawler(kind, headless=True, cookie_dir=None, use_profile=None, abort=None):
-            # Comments mode must force a VISIBLE browser even though the source
-            # param says headless — zhihu content pages reject headless.
-            assert headless is False, 'comment crawl opens a visible window'
+            # The comment engine honours the run's 无头 choice verbatim (#148): a headless request
+            # builds a headless browser even for a scrolled comment panel — the old "content pages
+            # reject headless, force a window" rule is gone, measured zhihu comments 5/5 headless.
+            assert headless is True, 'a headless comment crawl stays headless'
             made['crawlers'] += 1
             return _FakeCrawler()
 
@@ -1722,50 +1723,24 @@ class TestCrawlableGuard:
         assert rows and seen['keyword'] == 'ai' and seen['target'] == 50
 
 
-class TestHeadlessIsNeverSilentlyIgnored:
-    """One crawl path still overrides the run's 无头 choice: comment panels that must be
-    *scrolled* to fill. A source node no longer does — a headless Chrome carries a desktop
-    fingerprint now (#148), so every platform serves headless and the run's own choice stands.
-    When the comment engine does switch, it says so in the console and on the run record; a
-    user who sees no such line is looking at a crawl that really did run headless.
+class TestACommentNodeHonoursHeadless:
+    """No crawl path overrides the run's 无头 choice any more (#148).
+
+    A source node stopped doing so when the disguise landed; the comment engine was the last
+    holdout — it forced a visible window for *scrolled* panels, logged a 「无头→窗口」 switch line and
+    set ``forced_visible``. A headless Chrome now carries a desktop fingerprint and a scrolled panel
+    was measured serving the same rows headless (zhihu comments 5/5, real profile, 2026-09-26), so
+    the comment node passes 无头 straight through: it builds the crawler exactly as asked, announces
+    no switch, and leaves the retired ``forced_visible`` flag at 0.
     """
 
-    @staticmethod
-    def _node(nid='src-1', title='源', platform='douyin'):
-        return {'id': nid, 'type': 'source', 'title': title, 'platform': platform, 'params': {'keyword': 'ai'}}
-
-    def test_the_comment_window_is_each_platforms_own_answer(self):
-        """#102 then #148: ``_comment_headless`` honours the user's choice and the matrix's
-        ``collects`` only. A fetch panel (weibo/bilibili/YouTube) runs headless; a scrolled
-        panel (zhihu/xiaohongshu/douyin) keeps the window because scrolling needs a painted
-        page — not because the platform refuses headless (no platform does now). The fetch
-        answer is measured: ``backend/test_headless_comments.py`` (2026-09-25), 15/15, 40/40.
-        """
-        import app as app_module
-
-        assert app_module._comment_headless(True, 'weibo') is True
-        assert app_module._comment_headless(True, 'bilibili') is True
-        assert app_module._comment_headless(True, 'zhihu') is False
-        assert app_module._comment_headless(True, 'xiaohongshu') is False
-        assert app_module._comment_headless(True, 'douyin') is False, 'a scrolled panel keeps its window'
-        assert app_module._comment_headless(True, 'twitter') is False
-        # A run that asked for a window never yields a headless comment crawl.
-        assert app_module._comment_headless(False, 'weibo') is False
-        # An unknown platform invents no answer.
-        assert app_module._comment_headless(True, 'nosuch') is False
-
-    def test_a_forced_comment_window_reaches_the_run_record(self, monkeypatch, tmp_path):
-        """The 无头→窗口 chip is still real, just comment-only: a zhihu comment panel
-        (scrolled) in a headless run must set ``forced_visible`` and log the switch, so the
-        chip describes the window that appeared rather than the 无头 that was asked (「a chip
-        must describe what happened」)."""
+    def test_a_scrolled_comment_panel_runs_headless_and_records_no_switch(self, monkeypatch, tmp_path):
         import app as app_module
 
         import crawlers.comments as comments_module
-        from i18n import t
         from services.run_store import RunStore
 
-        seen = {}
+        seen = {'headless': []}
 
         class _FakeCrawler:
             driver = object()
@@ -1781,11 +1756,11 @@ class TestHeadlessIsNeverSilentlyIgnored:
                 return [{'评论内容': 'kept'}], 'ok'
 
         def _make(platform, headless=True, **kwargs):
-            seen['headless'] = headless
+            seen['headless'].append(headless)
             return _FakeCrawler()
 
-        store = RunStore(str(tmp_path / 'chip.db'))
-        store.start_run('r-forced', 'wf', 'fp', headless=True)
+        store = RunStore(str(tmp_path / 'honour.db'))
+        store.start_run('r-h', 'wf', 'fp', headless=True)
         logs = []
         monkeypatch.setattr(app_module, 'get_crawler', _make)
         monkeypatch.setattr(comments_module, 'CommentSession', _FakeSession)
@@ -1796,10 +1771,8 @@ class TestHeadlessIsNeverSilentlyIgnored:
             'type': 'comment',
             'params': {'platform': 'zhihu', 'urls': 'https://www.zhihu.com/question/2'},
         }
-        app_module._execute_comment_node(
-            node, headless=True, ctx={'run_id': 'r-forced', 'store': store, 'nid': 'node-1'}
-        )
-        assert seen['headless'] is False, 'a scrolled comment panel must run in a window'
-        assert t('run.forcedVisibleComment', platform='zhihu') in logs
-        row = next(r for r in store.list_resumable(limit=10, include_finished=True) if r['run_id'] == 'r-forced')
-        assert row['forced_visible'] == 1, 'the forced window must reach the record the chip reads'
+        app_module._execute_comment_node(node, headless=True, ctx={'run_id': 'r-h', 'store': store, 'nid': 'node-1'})
+        assert seen['headless'] == [True], 'the comment crawler is built exactly as the run asked'
+        assert all('forcedVisible' not in m and '可见窗口' not in m for m in logs), logs
+        row = next(r for r in store.list_resumable(limit=10, include_finished=True) if r['run_id'] == 'r-h')
+        assert row['forced_visible'] == 0, 'no window was forced, so the retired flag stays 0'

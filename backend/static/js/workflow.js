@@ -4273,16 +4273,11 @@ var runsManager = {
             var key = r.mode === 'parallel' ? 'runsMgr.tagParallel' : 'runsMgr.tagSerial';
             out.push(I18n.t(key).replace('{n}', count));
         }
-        /* A chip must describe what RAN, not what was asked. 无头 means the whole run
-           stayed in a headless browser; when the executor had to open a real window
-           for part of it (a captcha site, or a comment panel that must be scrolled —
-           the forced_visible flag the backend sets at the switch) the record says
-           无头 but a Chrome was on screen, and only 「无头→窗口」 tells that honestly. */
-        if (r.headless && r.forced_visible) {
-            out.push(I18n.t('runsMgr.tagHeadlessMixed'));
-        } else {
-            out.push(I18n.t(r.headless ? 'runsMgr.tagHeadless' : 'runsMgr.tagWindow'));
-        }
+        /* 无头 / 窗口 says exactly what ran: a headless Chrome now carries a desktop
+           fingerprint (#148), so nothing ever forces a real window into a run the user
+           asked to keep headless. The record's requested value IS what ran, and no
+           mixed 「无头→窗口」 chip is needed. */
+        out.push(I18n.t(r.headless ? 'runsMgr.tagHeadless' : 'runsMgr.tagWindow'));
         return out;
     },
 

@@ -19,11 +19,26 @@ The site's own words are the selectors on purpose. The class names beside them a
 string here, not a rewritten crawler.
 """
 
+import contextlib
 import time
 
 #: An element whose *own* text node is the word — what a tab or a menu item is. Matching with
 #: ``contains`` instead would land on the section that holds the whole list.
 TEXT_XPATH = "//*[normalize-space(text())='%s']"
+
+#: Put the pointer's logical "arrive" onto the node itself, whatever sits on top of its centre.
+#: The events a hover-wired panel listens for; the geometry-independent way to reach the word when
+#: ``ActionChains`` aims at a centre a sticky header covers (see :func:`hover`).
+_ENTER_JS = """
+const el = arguments[0];
+const fire = (type, Ctor) =>
+    el.dispatchEvent(new Ctor(type, {bubbles: true, cancelable: true, view: window}));
+fire('pointerover', PointerEvent);
+fire('pointerenter', PointerEvent);
+fire('mouseover', MouseEvent);
+fire('mouseenter', MouseEvent);
+fire('mousemove', MouseEvent);
+"""
 
 
 def nodes_with_text(driver, text: str) -> list:
@@ -32,16 +47,27 @@ def nodes_with_text(driver, text: str) -> list:
 
 
 def hover(driver, text: str, settle: float = 1.2) -> bool:
-    """Put the pointer on *text* and give the panel time to mount. False if there is no such word."""
+    """Put the pointer on *text* and give the panel time to mount. False if there is no such word.
+
+    ``ActionChains.move_to_element`` aims at the element's geometric centre, and a sticky header can
+    cover that centre under a headless layout — measured on douyin's live result page (2026-09-26):
+    the hover returned True but the panel never mounted, because the pointer landed on the header,
+    not on 筛选. So the enter events are also dispatched straight onto the node, which is
+    geometry-independent and opens the same panel in both shapes. The pointer move is kept first as
+    the trusted-event path a visible window already relies on; either step is best-effort, so a page
+    is only reported as having no opener when the word itself is absent.
+    """
     from selenium.webdriver.common.action_chains import ActionChains
 
     nodes = nodes_with_text(driver, text)
     if not nodes:
         return False
-    try:
-        ActionChains(driver).move_to_element(nodes[0]).pause(settle).perform()
-    except Exception:
-        return False
+    node = nodes[0]
+    with contextlib.suppress(Exception):
+        ActionChains(driver).move_to_element(node).perform()
+    with contextlib.suppress(Exception):
+        driver.execute_script(_ENTER_JS, node)
+    time.sleep(settle)
     return True
 
 

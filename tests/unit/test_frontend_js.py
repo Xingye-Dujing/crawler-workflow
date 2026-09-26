@@ -822,11 +822,12 @@ class TestRunRecordsPanel:
         assert cases['serialHeadless'] == ['SERIAL(2)', 'HEADLESS']
         assert cases['singleParallel'] == ['HEADLESS'], 'one workflow is neither parallel nor serial'
         assert cases['singleSerial'] == ['WINDOW']
-        # forced_visible: a 无头 run the executor switched to a real window reads
-        # 「无头→窗口」, not a bare 无头 (「a chip must describe what happened」).
-        assert cases['headlessForcedWindow'] == ['MIXED'], cases['headlessForcedWindow']
+        # forced_visible is a retired column (#148: nothing forces a window into a headless run),
+        # so it must be inert — a legacy row carrying the flag still reads 「无头」, never a mixed
+        # chip. If tags() ever relabels a headless request on this flag again, this goes red.
+        assert cases['headlessForcedWindow'] == ['HEADLESS'], cases['headlessForcedWindow']
         assert cases['headlessClean'] == ['HEADLESS']
-        assert cases['windowIgnoringFlag'] == ['WINDOW'], 'the flag only matters under a headless request'
+        assert cases['windowIgnoringFlag'] == ['WINDOW'], 'a window run is 窗口 whatever the flag says'
 
     def test_a_serial_record_with_two_workflows_says_serial(self, runsmgr):
         rows = _rows(runsmgr['html'])

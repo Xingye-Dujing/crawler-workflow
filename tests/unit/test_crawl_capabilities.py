@@ -39,7 +39,6 @@ from crawl_capabilities import (
     needs_session,
     platform_ids,
     required_missing,
-    shows_nothing,
     unoffered_selections,
 )
 
@@ -541,11 +540,13 @@ class TestPayloadShape:
         ]
         assert not orphan, f'buttons with nowhere to sit: {orphan}'
 
-    def test_the_comment_modes_note_only_the_window_they_actually_open(self):
-        """A note that claims a window the executor won't open is the dishonesty #102
-        removes. The scrolled/captcha comment platforms keep 「opens a visible
-        window」 (commentHint); the fetch platforms (weibo/bilibili/YouTube — measured
-        headless) carry a note that says a headless run opens no window (commentFetchHint).
+    def test_the_comment_modes_note_describes_what_their_window_would_show(self):
+        """A note must not promise a window the executor no longer opens (#148).
+
+        The comment node honours the run's 无头 choice for every platform now, so the two notes
+        differ only in what a *windowed* run visibly does: a scrolled panel moves the feed
+        (commentHint), a fetch panel reads inside one loaded page (commentFetchHint). Neither says
+        a window is forced — that claim was removed with the forcing.
         """
         for platform in ('zhihu', 'xiaohongshu', 'douyin', 'twitter'):
             assert _mode(platform, 'comments').note_key == 'settings.commentHint', platform
@@ -554,13 +555,13 @@ class TestPayloadShape:
 
 
 class TestCollectionKind:
-    """`collects` is the matrix's answer to 「what does a visible window show」 (#102).
+    """`collects` is the matrix's answer to 「what does a visible window show」.
 
-    Not prose from the AGENTS rule but the field the comment executor and the panel
-    read, so the values are pinned against measurement:
-    ``backend/test_headless_comments.py`` (2026-09-25) proved weibo and bilibili
-    comment walks answer a HEADLESS browser with the same rows a window sees, which is
-    what makes them ``'fetch'`` and lets them honour 无头.
+    It drives the panel's note wording (and is exported to the browser), so the values stay pinned
+    against measurement. It is no longer an execution gate: since #148 a headless Chrome carries a
+    desktop fingerprint and the comment node honours 无头 for every platform, so ``'fetch'`` and
+    ``'dom_scroll'`` alike run headless when asked — the field only says what you will SEE if you
+    did choose a window (a fetch panel sits on the loaded page; a scrolled one moves the feed).
     """
 
     def test_every_mode_declares_a_kind_the_code_knows(self):
@@ -574,7 +575,7 @@ class TestCollectionKind:
 
     def test_the_fetch_modes_are_exactly_the_measured_list(self):
         """Reclassifying one of these must be a deliberate edit backed by a measurement,
-        because the comment executor lets a ``'fetch'`` platform run headless on it.
+        because it changes what the panel promises the user a visible window will show.
         """
         fetched = {(cap.platform, mode.key) for cap in CAPABILITIES for mode in cap.modes if mode.collects == 'fetch'}
         assert fetched == {
@@ -611,13 +612,19 @@ class TestCollectionKind:
         assert needs_session('kuaishou', 'hot') is True
         assert needs_session('weibo', 'nonsense') is True
 
-    def test_shows_nothing_follows_the_field_not_a_second_list(self):
-        assert shows_nothing('weibo', 'comments') is True
-        assert shows_nothing('bilibili', 'hot') is True
-        assert shows_nothing('zhihu', 'comments') is False
-        assert shows_nothing('douyin', 'posts') is False
-        # An unknown platform/mode is answered honestly, not with a guess.
-        assert shows_nothing('wechat', 'nonsense') is False
+    def test_a_mode_declares_what_its_window_would_show_by_its_field(self):
+        """``collects`` is the single source of truth for what a window does on screen.
+
+        The comment executor no longer forces a window onto any panel (#148: a headless Chrome
+        carries a desktop fingerprint and even a scroll-only panel was measured serving rows
+        headless), but the matrix still states what each crawl visibly does — a fetch panel reads
+        from inside one loaded page, a scrolled one moves the feed. This pins that the wording is
+        read from the field, never from a second list of platforms that would drift.
+        """
+        assert mode_for('weibo', 'comments').collects == 'fetch'
+        assert mode_for('bilibili', 'hot').collects == 'fetch'
+        assert mode_for('zhihu', 'comments').collects == 'dom_scroll'
+        assert mode_for('douyin', 'posts').collects != 'fetch'
 
     def test_wechat_states_its_limits_and_offers_the_reason(self):
         mode = _mode('wechat', 'posts')

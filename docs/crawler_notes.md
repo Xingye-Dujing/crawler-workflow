@@ -1470,6 +1470,30 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 伪装无头 author() 实跑 5 行 risk=False）。故 `wall.py` 原样保留，已 `git checkout` 回退我的删词尝试——
 这是"没取证就不动共享内核"的正当收手，不是遗漏。要修得引入"空内容 + 登录词"的佐证信号，独立调查。
 
+### 再落地（measured 2026-09-26，#148 续）：评论区强制窗口也拆了，并修好无头下的 hover 菜单
+
+上一节"不顺手拆"的评论强制窗口，这次在**用户真机 profile** 上重测过了，结论翻转：
+
+- **知乎评论区伪装无头 == 可见窗口**：`backend/test_disguise_parity.py` 先可见后伪装无头、各跑一遍，
+  两形状都是 `rows=5 status=ok`（抖音「最多点赞」搜索亦两形状各 3 行，见下）。所以"滚动面板必须开窗口"
+  不再成立。据此删掉评论执行器的强制降级：`_comment_headless` 整个删除、`_execute_comment_node` 把运行的
+  无头**原样透传**、`run.forcedVisibleComment` 文案删除、`mark_forced_visible` 无调用者即删，
+  `runs.forced_visible` 列保留（SQLite 去列=重建表，旧行仍有意义）但恒 0；前端 `无头→窗口` chip 与
+  `runsMgr.tagHeadlessMixed` 下线，chip 恒如实读请求的 `无头 / 窗口`。矩阵里 `collects` 不再是执行开关，
+  只决定面板 note 说"若选了窗口，这一屏会滚 / 只会停在加载好的页"。
+
+- **无头下的 hover 菜单是个几何坑，不是伪装坑**：`test_douyin_sort_probe.py` / `test_douyin_hover_probe.py`
+  （一次性诊断探针，已删）量到：可见窗口里 `筛选` 悬停秒开、伪装无头里**渲染更多卡（20 vs 16）却永远不开菜单**
+  （轮询 12 秒 `option_nodes=0`）——`hover` 返回 True，面板却不挂载。逐法试验只有 **JS 直接派发 enter 事件**
+  与 **CDP `Input.dispatchMouseEvent` 打到元素自身中心** 能开，`ActionChains.move_to_element`（打到元素几何中心，
+  无头布局下那个中心被吸顶搜索栏盖住）与"点一下"都不行。正解落进 `engine/menu.py::hover`：在移动指针之后，
+  额外把 `pointerover/pointerenter/mouseover/mouseenter/mousemove` 直接派发到节点（`_ENTER_JS`，几何无关），
+  两形状都开。设备层新增反证 `TestAHoverMenuWhoseWordIsCovered`：一个被 sticky 覆盖层压住的 `筛选` 上，
+  裸 `move_to_element` 断言开不了、`menu.hover` 断言能开——把派发回退掉后者即红。
+
+产品行为：无头工作流（源节点或评论节点）全程无窗、数据照常入库；运行记录不再出现"已自动改用可见窗口"，
+也不再打 `无头→窗口`。知乎作者/搜索、抖音搜索+排序、评论，与 X 搜索，均已两形状覆盖。
+
 
 
 

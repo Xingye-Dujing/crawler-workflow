@@ -71,8 +71,18 @@ def test_xhs_note_comments_live(live_crawler):
     assert all(re.sub(r'\s', '', r['评论内容']) for r in rows)
 
 
-def test_zhihu_answer_comments_live(live_crawler):
-    """zhihu needs the visible browser (content pages reject headless).
+@pytest.mark.parametrize(
+    'headless',
+    [pytest.param(True, marks=pytest.mark.live_quick, id='headless'), pytest.param(False, id='visible')],
+)
+def test_zhihu_answer_comments_live(live_crawler, headless):
+    """Zhihu comments are crawled in BOTH shapes — headless and window (headless #148).
+
+    This case used to pin 知乎 to a visible browser on the claim "content pages reject headless".
+    A headless Chrome now carries a desktop fingerprint and the comment walk was measured serving
+    the same rows headless (5/5 vs 5/5 on the real profile, 2026-09-26), so the panel is asserted
+    to open in either shape — the headless param is the one that would go red if a window were
+    quietly required again.
 
     The answer is picked by the comment count its own search card reports, exactly as
     ``_fetch`` does for weibo two tests up — NOT by "the first ``/answer/`` link on the page".
@@ -81,7 +91,7 @@ def test_zhihu_answer_comments_live(live_crawler):
     honest reading was "the panel never opened": measured 2026-09-26, when the case went red on
     a sample that simply had nothing to collect.
     """
-    crawler = live_crawler('zhihu', headless=False)
+    crawler = live_crawler('zhihu', headless=headless)
     try:
         answers = crawler.search('三亚', target_count=3)
         candidates = [row for row in answers if '/answer/' in str(row.get('链接') or '')]
