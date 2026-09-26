@@ -118,12 +118,11 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   status means updating `RESUMABLE_RUN_STATUS`, `purge`'s protection, the panel's `known` list
   and both app.js catalogs.
 - **A headless run stays headless — nothing forces a window (#148).** A headless Chrome carries a desktop
-  fingerprint, so every node and comment panel honours 无头/窗口 verbatim; `无头→窗口`/`forced_visible` are
-  retired and `collects` only feeds the panel note. Geometry trap: douyin's 筛选 hover menu hides its
-  opener's centre behind a sticky header, so `menu.hover` also fires enter events on the node (an
-  `ActionChains` move alone misses it). A session preference is *stored* in the profile and outlives the
-  crawl: a window that merely *omits* the image blocker inherits it and shows a login page with no QR code,
-  so 取 Cookie / 验证 Cookie and the pre-run probe write 允许 explicitly (`_content_prefs`).
+  fingerprint, so every node/comment panel honours 无头/窗口 verbatim; `无头→窗口`/`forced_visible` are retired
+  and `collects` only feeds the panel note. Geometry trap: a sticky header can cover douyin's 筛选 opener's
+  centre, so `menu.hover` also fires enter events on the node (`ActionChains` alone misses it). A *stored*
+  profile preference outlives the crawl: a window that only omits the image blocker inherits the block and
+  shows a QR-less login, so 取/验证 Cookie and the pre-run probe write 允许 explicitly (`_content_prefs`).
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count`,
   `engine.wall` (the four page verdicts), `engine.popup.Prompt` + a
   platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (finds what actually
@@ -241,16 +240,17 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   on purpose; the next free slot is `MAX(seq)+1`, **never `COUNT(*)`**; a **cursor records position,
   not content** — collected ids come from the seeded rows (`Crawler.seed`), so an id list must not go
   back into `mark_position`.
-- **A label is not an input.** A node's fingerprint feeds its children, and the crawl's
-  dedupe ledger is scoped by `'item:' + node_fingerprint`, so putting a *name* inside one
-  invalidates a whole chain and moves the other. `_VOLATILE_PARAMS`
-  (`dataset_name`, `row_count`, `workflow_name`) is therefore the answer to "does this
-  parameter choose data, or describe the record?" — ids stay in, labels stay out.
-- **Reuse has four rules that are each easy to break.** `done` AND `restored` are reusable
-  (a node that only replayed last time is just as settled); a stored result with **zero rows** is never reused
-  (a parent that came up empty may deliver this time, and reuse is decided by fingerprint);
-  the source node is never adopted, it resumes by cursor; and `begin_node` reporting
-  `dropped_stale` cancels reuse, because those rows were deleted.
+- **A label is not an input.** A node's fingerprint feeds its children and the dedupe ledger's scope
+  (`'item:' + node_fingerprint`), so a *name* inside one invalidates a whole chain and moves the other.
+  `_VOLATILE_PARAMS` (labels + switches like `recrawl`/`enabled`) is the answer to "does this parameter choose
+  data, or just describe the record?" — ids stay in, labels and switches out.
+- **A disabled node is not on the canvas.** `engine.workflow.effective_workflow` drops it (`enabled` off,
+  type off, or all upstream gone — cascades down; fan-in survives on one live input); validate/naming/
+  fingerprint/execution run on that graph, so disabling a workflow is disabling its head node. README has detail.
+- **Reuse has four rules that are each easy to break.** `done` AND `restored` are reusable; a stored result
+  with **zero rows** is never reused (an empty parent may deliver this time, and reuse keys on fingerprint);
+  the source node is never adopted (it resumes by cursor); and `begin_node` reporting `dropped_stale`
+  cancels reuse, because those rows were deleted.
 - **Startup recovery shares the end-of-run settlement.** A node leaves `running` only through
   `finish_node`, which a kill skips, so `node_runs.row_count` still holds the 0 `begin_node`
   wrote. `promote_stale_runs` must call `settle_nodes` (status *and* count from the rows):
