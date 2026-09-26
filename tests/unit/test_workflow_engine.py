@@ -239,6 +239,34 @@ class TestValidate:
         wf = _wf([_node('node-1', params={'platform': 'weibo', 'keyword': 'kw'})], [])
         assert WorkflowEngine(wf).validate() == []
 
+    def test_a_stored_account_is_accepted_and_a_missing_one_named(self, en, tmp_path, monkeypatch):
+        """账号's options live on disk, not in the matrix: the validation answer is
+        whatever cookie files exist RIGHT NOW (the same list the panel was offered).
+        A stored name passes; a name with no file is refused BY NAME — guessing the
+        default account instead would run one node as somebody else's login."""
+        import config as config_module
+        from services.cookie_manager import CookieManager
+
+        monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', str(tmp_path / 'cookies'))
+        CookieManager(str(tmp_path / 'cookies')).save('zhihu', [{'name': 'a', 'value': 'v'}], 'work')
+
+        def _source_with(account):
+            return _wf(
+                [
+                    _node('node-1', platform='zhihu', params={'keyword': '三亚', 'account': account}),
+                    _node('node-2', 'output', operation='csv'),
+                ],
+                [{'from': 'node-1', 'to': 'node-2'}],
+            )
+
+        assert WorkflowEngine(_source_with('work')).validate() == []
+        errors = WorkflowEngine(_source_with('ghost')).validate()
+        assert len(errors) == 1, errors
+        assert 'ghost' in errors[0], errors
+        assert 'account' in errors[0], 'the refusal must name the FIELD, not just the value'
+        # Blank is not a mistake: it is "never chose", which is the default account.
+        assert WorkflowEngine(_source_with('')).validate() == []
+
     def test_a_wire_to_a_missing_node_is_named_not_called_a_cycle(self, en):
         """A dangling endpoint used to be reported as a cycle with an empty node list.
 
