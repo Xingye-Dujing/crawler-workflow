@@ -522,7 +522,166 @@ def test_a_stopping_record_says_stopping_and_offers_nothing(app_url, driver, lan
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
-def test_a_workflow_row_survives_being_built_from_its_own_name(app_url, driver, lang):
+def test_a_record_that_skipped_workflows_names_them_on_screen(app_url, driver, lang):
+    """The 跳过 chip, measured where the user reads it.
+
+    A disabled workflow leaves no node rows anywhere, so without this chip a
+    record read back next week cannot tell "we chose not to run 凌晨热身" from
+    "凌晨热身 was deleted". The chip's wording comes from the REAL app.js catalog
+    (the node harness stubs I18n, so only the browser proves the key exists in
+    both languages), and the longer English label must still not clip or grow a
+    page-level bar.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        I18n.apply();
+        const panel = document.getElementById('runs-panel');
+        panel.classList.add('open');
+        panel.classList.remove('hidden');
+        runsManager.render([
+            {run_id: 'skip1', workflow_name: '白天榜', status: 'completed', resumable: false,
+             node_done: 2, node_total: 2, rows_kept: 10, started_at: '2026-09-26 03:00',
+             mode: 'serial', wf_count: 1, headless: 1, skipped_workflows: '凌晨热身 + 夜间增量'},
+            {run_id: 'clean1', workflow_name: '干净榜', status: 'completed', resumable: false,
+             node_done: 2, node_total: 2, rows_kept: 10, started_at: '2026-09-26 04:00',
+             mode: 'serial', wf_count: 1, headless: 1, skipped_workflows: ''},
+        ]);
+        """,
+        [lang],
+    )
+    facts = driver.execute_script(
+        """
+        const rows = Array.from(document.querySelectorAll('#runs-panel tbody tr'));
+        const of = (id) => rows.filter((r) => (r.getAttribute('data-run-id') || '') === id)[0];
+        const skip = of('skip1');
+        const clean = of('clean1');
+        if (!skip || !clean) return {found: false};
+        const chipTexts = (row) =>
+            Array.from(row.querySelectorAll('.runs-mgr-wf .runs-mgr-tag')).map((c) => c.textContent);
+        return {
+            found: true,
+            chips: chipTexts(skip),
+            cleanChips: chipTexts(clean),
+            label: I18n.t('runsMgr.skipped').replace('{names}', '凌晨热身 + 夜间增量'),
+            clipped: Array.from(skip.querySelectorAll('.runs-mgr-tag')).filter(function (c) {
+                return c.scrollWidth - c.clientWidth > 1;
+            }).length,
+            pageBar: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+        };
+        """,
+        [],
+    )
+    assert facts['found'] is True, 'the two rows rendered nothing, so nothing was measured'
+    assert 'runsMgr.' not in facts['label'], f'{lang} catalog has no word for runsMgr.skipped'
+    assert facts['label'] in facts['chips'], f'the skipping row must wear the named chip: {facts["chips"]}'
+    assert len(facts['chips']) == 2, f'a skip chip is a second chip beside the window one: {facts["chips"]}'
+    assert not any('凌晨' in c for c in facts['cleanChips']), f'the clean row grew a skip chip: {facts["cleanChips"]}'
+    assert facts['clipped'] == 0, f'a chip is silently cut off in {lang}: {facts["chips"]}'
+    assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, lang):
+    """The disable visuals, read from computed styles — not from the class list.
+
+    The node harness proves the classes land; only a real engine can prove the
+    user actually SEES them: the off box really renders greyed and translucent,
+    the starved box really wears a dashed frame and a named badge, the wire
+    between them really dims, and the power button on a live node carries a
+    resolved tooltip in this language. Toggling back must clear all of it. Two
+    connected nodes are drawn (floor: 2 boxes, 1 wire measured).
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    facts = driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        I18n.apply();
+        // The boot restore paints whatever the shared Chrome profile saved last —
+        // nodes, wires and type switches included. Measure on a canvas the page
+        // itself owns: empty, like a first visit.
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {};
+        canvas.connections = [];
+        canvas.disabledTypes = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        document.getElementById('svg-layer').innerHTML = '';
+        const idA = canvas.addNode('source', 120, 120);
+        const idB = canvas.addNode('process', 420, 120);
+        const ids = [idA, idB];
+        canvas.connections.push({ from: ids[0], to: ids[1] });
+        canvas.updateConnections();
+
+        const probe = () => {
+            const box = (id) => {
+                const el = canvas._nodeEl(id);
+                const cs = getComputedStyle(el);
+                const badge = el.querySelector('.node-state-badge');
+                return {
+                    opacity: parseFloat(cs.opacity),
+                    filter: cs.filter,
+                    classes: el.className,
+                    borderStyle: cs.borderTopStyle,
+                    badge: badge ? badge.textContent : null,
+                    badgeShown: badge ? getComputedStyle(badge).display !== 'none' : null,
+                    powerTitle: el.querySelector('.node-power-btn').title,
+                };
+            };
+            const wires = Array.from(document.querySelectorAll('#svg-layer path.conn-line'));
+            return {
+                head: box(ids[0]),
+                child: box(ids[1]),
+                wiresMeasured: wires.length,
+                wireDimmed: wires.filter((w) => w.classList.contains('conn-disabled')).length,
+            };
+        };
+        const onBefore = probe();
+        // Click the real power button — the same handler a drag-and-drop user reaches.
+        canvas._nodeEl(ids[0]).querySelector('.node-power-btn').click();
+        canvas.updateConnections();
+        canvas.applyDisabledVisuals();
+        const offAfter = probe();
+        canvas._nodeEl(ids[0]).querySelector('.node-power-btn').click();
+        canvas.updateConnections();
+        canvas.applyDisabledVisuals();
+        const onAgain = probe();
+        return {
+            onBefore,
+            offAfter,
+            onAgain,
+            disableWord: I18n.t('node.badgeDisabled'),
+            starveWord: I18n.t('node.badgeNoInput'),
+        };
+        """,
+        [lang],
+    )
+    before, disabled, again = facts['onBefore'], facts['offAfter'], facts['onAgain']
+    assert before['wiresMeasured'] >= 1 and disabled['wiresMeasured'] >= 1, 'no wire was measured, so dimming was not'
+    # live before: fully opaque, no grey filter, no dimmed wire
+    assert before['head']['opacity'] > 0.99 and before['child']['opacity'] > 0.99, before
+    assert before['wireDimmed'] == 0, f'a fresh wire reads as disabled: {before}'
+    assert disabled['head']['badge'] == facts['disableWord'], f'the off box badge fell back: {disabled["head"]}'
+    assert disabled['child']['badge'] == facts['starveWord'], f'the starved box badge fell back: {disabled["child"]}'
+    assert 'node.' not in facts['disableWord'], 'zh/en catalog gap on node.badgeDisabled'
+    assert 'node.' not in facts['starveWord'], 'zh/en catalog gap on node.badgeNoInput'
+    # disabled: grey + translucent, badge shown, downstream dashed, the wire dimmed
+    assert disabled['head']['opacity'] < 0.6, f'the disabled box is not visibly faded: {disabled["head"]}'
+    assert 'grayscale' in disabled['head']['filter'], f'the disabled box is not greyed: {disabled["head"]}'
+    assert disabled['head']['badgeShown'] is True and disabled['child']['badgeShown'] is True, disabled
+    assert disabled['child']['borderStyle'] == 'dashed', f'starvation is not drawn as a frame: {disabled["child"]}'
+    assert disabled['wireDimmed'] == 1, f'the wire to the disabled box did not dim: {disabled}'
+    # re-enabled: every visual cleared, and the button's tooltip speaks this language
+    assert again['head']['opacity'] > 0.99 and again['child']['opacity'] > 0.99, again
+    assert again['wireDimmed'] == 0, f'a re-enabled wire stayed dim: {again}'
+    assert again['head']['badge'] == '' and again['child']['badge'] == '', again
+    assert again['head']['powerTitle'] and 'ctx.' not in again['head']['powerTitle'], (
+        f'the power tooltip is untranslated in {lang}: {again["head"]["powerTitle"]!r}'
+    )
     """The 工作流文件 table draws a user-chosen stem twice: as text, and inside the
     ``onclick="wfFiles.rename('…')"`` attribute the row buttons are made of.
 

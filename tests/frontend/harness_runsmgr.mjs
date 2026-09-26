@@ -33,6 +33,7 @@ const I18n = {
             'runsMgr.groupDone': '{done}/{total} nodes',
             'runsMgr.tagParallel': 'PARALLEL({n})', 'runsMgr.tagSerial': 'SERIAL({n})',
             'runsMgr.tagHeadless': 'HEADLESS', 'runsMgr.tagWindow': 'WINDOW',
+            'runsMgr.skipped': 'SKIPPED({names})',
         },
         zh: {},
     },
@@ -168,6 +169,10 @@ const tagCases = {
     headlessForcedWindow: manager.tags({ mode: 'serial', wf_count: 1, headless: 1, forced_visible: 1 }),
     headlessClean: manager.tags({ mode: 'serial', wf_count: 1, headless: 1, forced_visible: 0 }),
     windowIgnoringFlag: manager.tags({ mode: 'serial', wf_count: 1, headless: 0, forced_visible: 1 }),
+    /* The disabled workflows a record deliberately did not run: the stored field
+       names them and the chip says so; an empty field grows no chip. */
+    skippedNames: manager.tags({ mode: 'serial', wf_count: 1, headless: 1, skipped_workflows: '热身 + 夜间' }),
+    skippedNone: manager.tags({ mode: 'serial', wf_count: 1, headless: 1, skipped_workflows: '' }),
 };
 
 /* The report button may name the run only by id: a workflow name is user text,
@@ -187,6 +192,7 @@ const GROUPED = {
         started_at: '2026-09-24T10:00:00',
         wf_count: 2,
         workflow_name: '热门榜 + 周排行榜',
+        skipped_workflows: '凌晨试跑',
         nodes: [
             { node_id: 'name-1', node_type: 'name', status: 'done', row_count: 0, component: 0, component_name: '热门榜' },
             { node_id: 'up-1', node_type: 'upload', status: 'done', row_count: 4, component: 0, component_name: '热门榜' },

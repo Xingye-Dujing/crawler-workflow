@@ -4298,6 +4298,12 @@ var runsManager = {
            asked to keep headless. The record's requested value IS what ran, and no
            mixed 「无头→窗口」 chip is needed. */
         out.push(I18n.t(r.headless ? 'runsMgr.tagHeadless' : 'runsMgr.tagWindow'));
+        /* Which workflows the record deliberately did NOT run. The console said it once
+           at the time; a record read back last week has to carry the same answer, or a
+           skipped workflow looks like it failed or was deleted. */
+        if (r.skipped_workflows) {
+            out.push(I18n.t('runsMgr.skipped').replace('{names}', r.skipped_workflows));
+        }
         return out;
     },
 
@@ -4606,6 +4612,11 @@ var runsManager = {
                 (run.finished_at ? ' &rarr; ' + escapeHtml(run.finished_at) : '') +
                 '</span>' +
                 (run.note ? '<span class="rm-meta-note">' + escapeHtml(run.note) + '</span>' : '') +
+                (run.skipped_workflows
+                    ? '<span class="rm-meta-note">' +
+                        escapeHtml(I18n.t('runsMgr.skipped').replace('{names}', run.skipped_workflows)) +
+                        '</span>'
+                    : '') +
                 '</div>' +
                 (multi
                     ? body

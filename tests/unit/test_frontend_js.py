@@ -657,6 +657,15 @@ class TestRunDetailGrouping:
             {'index': 1, 'name': '周排行榜', 'ids': ['name-2', 'out-2', 'p-2']},
         ], grouped['tally']
 
+    def test_the_expansion_names_the_workflows_the_run_skipped(self, runsmgr):
+        """A disabled workflow leaves no node rows, so the expansion alone would
+        read as "the canvas lost a workflow". The stored skipped list answers that
+        inside the record itself."""
+        assert 'SKIPPED(凌晨试跑)' in runsmgr['grouped']['html'], runsmgr['grouped']['html']
+        # A record written before the field existed carries nothing: inventing a
+        # skip line for it would claim a disable that never happened.
+        assert 'SKIPPED(' not in runsmgr['grouped']['legacyHtml']
+
     def test_the_tally_counts_a_replayed_node_as_finished(self, runsmgr):
         # 周排行榜 holds done + restored + partial: two of three. ``restored`` belongs
         # with ``done`` (AGENTS: reuse has four rules, and this is one of them) — a tally
@@ -828,6 +837,11 @@ class TestRunRecordsPanel:
         assert cases['headlessForcedWindow'] == ['HEADLESS'], cases['headlessForcedWindow']
         assert cases['headlessClean'] == ['HEADLESS']
         assert cases['windowIgnoringFlag'] == ['WINDOW'], 'a window run is 窗口 whatever the flag says'
+        # Disabled workflows must be NAMED on the record, not silently absent: a run
+        # read back later has to show what it deliberately skipped (and a clean run
+        # grows no chip from an empty field).
+        assert cases['skippedNames'] == ['HEADLESS', 'SKIPPED(热身 + 夜间)'], cases['skippedNames']
+        assert cases['skippedNone'] == ['HEADLESS']
 
     def test_a_serial_record_with_two_workflows_says_serial(self, runsmgr):
         rows = _rows(runsmgr['html'])

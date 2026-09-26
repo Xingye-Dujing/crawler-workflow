@@ -323,6 +323,10 @@ def state(tmp_path_factory):
             'add': ['source', 'process'],
             'toggleType': ['source'],
         },
+        {
+            'id': 'add_defaults_on',
+            'add': ['source'],
+        },
     ]
     return _run('harness_state.mjs', [JS_DIR / 'canvas.js'], scenarios, tmp)
 
@@ -758,3 +762,14 @@ class TestCanvasDisable:
         # each node to its individual enabled state.
         src = next(n for n in r['nodes'] if n['id'] == 'node-1')
         assert 'enabled' not in src['params'], 'toggleTypeDisabled must not write params.enabled'
+
+    def test_a_newly_added_node_comes_in_enabled(self, state):
+        """The add-time decision the user settled on: a dragged node is ON by default
+        (no dialog), and the header power button is the one-toggle away from off. If
+        addNode ever started writing enabled: False — or the effective-graph mirror
+        read an absent switch as off — every freshly dragged node would vanish from
+        its own workflow on arrival."""
+        r = state['add_defaults_on']
+        assert r['disableStates']['node-1'] == 'on', r['disableStates']
+        assert r['effective'] == ['node-1']
+        assert r['dclasses']['node-1']['off'] is False
