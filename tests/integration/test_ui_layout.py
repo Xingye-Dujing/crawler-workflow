@@ -29,6 +29,7 @@ Marked ``integration`` so it runs with ``-m integration`` on a machine with Chro
 import contextlib
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -1163,6 +1164,73 @@ def test_auto_layout_clears_a_wide_node_and_draws_its_wire_flat(app_url, driver)
     assert len(made['paths']) == 1, f'expected exactly the one wire measured, got {made["paths"]}'
     d = made['paths'][0]
     assert ' L ' in d and ' C ' not in d, f'the forward wire between centre-aligned ranks still bows: {d}'
+
+
+REFRESH_ALIGN_DRAFT = """
+const draft = {nodes: {
+    'node-1': {id: 'node-1', type: 'source', x: 80, y: 60, title: '',
+               params: {platform: 'douyin', keyword: '这个关键词特别长长长长长长长长长长长长长长', sort: '综合'}},
+    'node-2': {id: 'node-2', type: 'output', x: 520, y: 60, title: '', params: {}},
+}, connections: [{from: 'node-1', to: 'node-2'}], nextId: 3};
+localStorage.setItem('crawler_canvas', JSON.stringify(draft));
+"""
+
+REFRESH_ALIGN_MEASURE_JS = """
+const wires = Array.from(document.querySelectorAll('.conn-line:not(.temp)'))
+    .map((p) => p.getAttribute('d') || '');
+const ports = Array.from(document.querySelectorAll('.node-port')).map((p) => {
+    const n = p.closest('.node');
+    const isIn = p.classList.contains('node-port-in');
+    return {id: n.id, isIn,
+            x: isIn ? n.offsetLeft : n.offsetLeft + n.offsetWidth,
+            y: n.offsetTop + n.offsetHeight / 2};
+});
+const boxes = Object.keys(canvas.nodes).map((id) => [id, canvas.nodes[id].el.offsetHeight]);
+return {wires, ports, boxes, fonts: document.fonts.status};
+"""
+
+
+def _wait_for_id(driver, node_id, timeout=20.0):
+    """Poll for an element by id without importing selenium into this module —
+    the tier's driver fixture already speaks the whole browser API."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if driver.execute_script('return !!document.getElementById(arguments[0]);', [node_id]):
+            return
+        time.sleep(0.2)
+    pytest.fail(f'#{node_id} never appeared within {timeout}s')
+
+
+def test_a_wire_ends_on_its_port_after_a_bare_refresh(app_url, driver):
+    """The user's report, measured the only way it can be: a refresh boots the
+    page in the fallback font and with a node <select> still an EXPANDED list;
+    both resize every box AFTER the boot paint, and a wire's `d` holds literal
+    numbers. Without a resize observer the ends sit on yesterday's box — the
+    headless harness cannot see this because its stub never re-lays out.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _wait_for_id(driver, 'workspace')
+    driver.execute_script(REFRESH_ALIGN_DRAFT, [])
+    driver.refresh()
+    _wait_for_id(driver, 'node-1')
+    # Settle: the webfont's repaint and CustomSelect's collapse both land well
+    # inside this window; the assertion is about the END state, not the race.
+    time.sleep(3.0)
+    got = driver.execute_script(REFRESH_ALIGN_MEASURE_JS, [])
+    assert len(got['wires']) == 1, got
+    assert len(got['boxes']) == 2, got
+    for d in got['wires']:
+        nums = [float(v) for v in d.replace(',', ' ').split() if re.fullmatch(r'-?[\d.]+', v)]
+        end_y = nums[-1]
+        end_x = nums[-2]
+        # The wire's own ends: out-port of one box, in-port of the other.
+        outs = [p for p in got['ports'] if not p['isIn']]
+        ins = [p for p in got['ports'] if p['isIn']]
+        starts = [p for p in (outs + ins) if abs(p['y'] - nums[1]) <= 2 and abs(p['x'] - nums[0]) <= 2]
+        ends = [p for p in (outs + ins) if abs(p['y'] - end_y) <= 2 and abs(p['x'] - end_x) <= 2]
+        assert starts, f'wire start {nums[:2]} on no port centre: {got["ports"]}'
+        assert ends, f'wire end {[end_x, end_y]} on no port centre: {got["ports"]}'
 
 
 def test_the_markup_a_node_is_built_from_carries_no_inline_handler(app_url, driver):

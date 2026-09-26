@@ -52,6 +52,8 @@ const canvas = {
     connectingFrom: null,
     tempLine: null,
     _renderPending: false,
+    /* One observer for every node box, built on first use. See addNode. */
+    _nodeObserver: null,
     PORT_HIT_RADIUS: 400,
     /* ── Undo / Redo ── */
     _history: [],
@@ -549,6 +551,21 @@ const canvas = {
         });
         this.nodesContainer.appendChild(el);
         this.nodes[id] = { id: id, type: type, title: title, el: el, params: params, x: el.offsetLeft, y: el.offsetTop };
+        /* A wire's `d` freezes LITERAL coordinates, while the port dot it must meet
+           is CSS (`top:50%`) and follows the box forever. Boot proves the two drift
+           apart twice over: the webfont lands after the first paint and grows every
+           box, and CustomSelect collapses a node's raw <select> — rendered as an
+           EXPANDED list until the next boot step enhances it — only after the
+           font's own repaint. A resize fires no event, so the observer is the one
+           notice the wires get. updateConnections runs DIRECTLY, not via
+           scheduleRender: the callback lands after this frame's layout and before
+           its paint, where the fresh measurements are guaranteed — a queued rAF
+           could run before the next layout and re-measure the stale box again.
+           Repaint only: a page that merely loaded must not become an undo step. */
+        if (typeof ResizeObserver !== 'undefined') {
+            this._nodeObserver = this._nodeObserver || new ResizeObserver(() => this.updateConnections());
+            this._nodeObserver.observe(el);
+        }
 
         /* Make draggable */
         const header = el.querySelector('.node-header');

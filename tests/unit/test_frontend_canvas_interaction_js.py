@@ -375,6 +375,35 @@ class TestContextMenu:
         assert ix['context_menu']['outside_click_closes'] is False
 
 
+class TestNodeResizeRepaint:
+    """A wire's `d` holds LITERAL coordinates measured at paint time, while the
+    port dot it must meet is CSS (`top: 50%`) and follows the box forever. Two
+    boot steps resize every box AFTER the first paint — the webfont lands late,
+    and CustomSelect collapses a node's raw <select> (an EXPANDED list until
+    enhanced) — and a resize fires no event: the user's wires ended beside their
+    ports until a drag happened to re-measure."""
+
+    def test_a_box_that_grew_after_the_paint_redraws_its_wires(self, ix):
+        """The harness holds both boxes at 120 while the first paint runs, then
+        says 220: the port centres really move, so the frozen numbers are now
+        provably wrong for this page — and the observer is what fixes them."""
+        got = ix['resize_repaint']
+        assert got['wire_before'] == 'M 220 60 L 400 60', got
+        assert got['wire_after'] == 'M 220 110 L 400 110', got
+
+    def test_the_repaint_runs_in_the_callback_not_a_deferred_frame(self, ix):
+        """A ResizeObserver callback lands after this frame's layout and before
+        its paint — measuring THERE is guaranteed fresh. Relying on a queued rAF
+        instead re-measures a stale box, which is exactly how the fonts.ready
+        fix still missed the CustomSelect step."""
+        assert ix['resize_repaint']['no_frame_needed'] is True
+
+    def test_the_resize_repaint_touches_neither_history_nor_draft(self, ix):
+        """The page merely loading must not become an undo step or a save."""
+        assert ix['resize_repaint']['no_history_growth'] is True
+        assert ix['resize_repaint']['no_draft_rewrite'] is True
+
+
 class TestInitFromDraft:
     def test_a_stored_draft_comes_back_with_its_names_ids_and_order(self, ix):
         assert ix['init']['restored'] == ['node-9']

@@ -611,7 +611,11 @@ export function baseSandbox() {
                 transform: own.transform || 'none',
             };
         },
-        ResizeObserver: undefined,
+        /* A record-only observer: the browser fires resize callbacks on its own and
+           the stub has no layout to watch, so a scenario says WHEN one happened via
+           `__fireResizes()`. Product code guards on `typeof ResizeObserver`, so an
+           environment without it keeps the old behaviour. */
+        ResizeObserver: globalThis.ResizeObserver,
         matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
         URLSearchParams,
         URL: { createObjectURL: () => 'blob:stub', revokeObjectURL: () => {} },

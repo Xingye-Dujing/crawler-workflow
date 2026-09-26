@@ -90,6 +90,20 @@ const I18n = {
 const sandbox = {
     ...baseSandbox(),
     I18n,
+    /* The stub has no layout, so nothing resizes on its own: addNode's observer
+       registers each box here, and a scenario fires the callback to SAY "the box
+       just changed". Without a working observer the product's guard would skip
+       wiring, and the test would assert a branch the browser never takes. */
+    ResizeObserver: class ResizeObserver {
+        constructor(cb) { sandbox.__roCallbacks.push(cb); }
+        observe(el) { sandbox.__observed.push(el); }
+    },
+    __observed: [],
+    __roCallbacks: [],
+    __fireResizes() {
+        /* One batched delivery, the way a frame's resizes arrive together. */
+        sandbox.__roCallbacks.forEach((cb) => cb([], null));
+    },
     RunState: { parallel: false, headless: true, setRunning() {}, set() {} },
     resumeBar: { refresh() {} },
     LLMSettings: { payload: () => ({ provider: 'ollama', model: 'm', api_key: '' }) },
@@ -148,9 +162,17 @@ function freshWorld() {
     canvas.zoom = 1;
     canvas.panX = 0;
     canvas.panY = 0;
+    /* The observer is a page-level singleton in the product; a fresh scenario is
+       a fresh page, and leaving the old instance cached would make addNode's
+       `|| new` guard skip registering where __fireResizes can reach it. */
+    canvas._nodeObserver = null;
     toasts.length = 0;
     dialogs.length = 0;
     dialogAnswer = null;
+    /* Yesterday's boxes must not receive today's resize: the observer outlives
+       the page it was wired on, the scenario does not. */
+    sandbox.__observed.length = 0;
+    sandbox.__roCallbacks.length = 0;
     /* init() re-resolves the layer references AND wires every document/workspace
        listener against the now-empty page; skipping it leaves the pointer handlers
        attached to the previous scenario's elements. */
@@ -563,6 +585,7 @@ async function renameScenarios() {
         stamped: doc.getElementById(r2).querySelector('.node-title').textContent,
     };
     I18n.lang = 'en';
+    out.rename = results;
     return results;
 }
 
@@ -800,9 +823,38 @@ const cf1 = addNode('comment', 0, 0);
 canvas.editNode(cf1);
 out.comment_form = doc.getElementById('settings-content').innerHTML;
 
+/* ── the box that changes AFTER the wire was drawn ─────────────────── */
+function resizeRepaintScenario() {
+    freshWorld();
+    const fA = addNode('source', 0, 0);
+    const fB = addNode('output', 400, 0);
+    canvas.connections = [{ from: fA, to: fB }];
+    canvas.scheduleRender();
+    flushFrames(sandbox);
+    const before = wireDs()[0];
+    /* Both boxes grow — what the webfont does when it lands, and what
+       CustomSelect UNDOES when it collapses a node's raw <select> to a trigger.
+       The wire holds literal numbers, so its ends now sit 50px off the ports. */
+    doc.getElementById(fA).offsetHeight = 220;
+    doc.getElementById(fB).offsetHeight = 220;
+    const historyBefore = canvas._history.length;
+    const draftBefore = sandbox.localStorage.getItem('crawler_canvas');
+    sandbox.__fireResizes();
+    out.resize_repaint = {
+        wire_before: before,
+        wire_after: wireDs()[0],
+        /* The repaint happened IN the callback, not in a deferred frame: a queued
+           rAF can run before the next layout and re-measure the stale box — which
+           is exactly how the fonts.ready fix still missed the CustomSelect step. */
+        no_frame_needed: flushFrames(sandbox) === 0,
+        no_history_growth: canvas._history.length === historyBefore,
+        no_draft_rewrite: sandbox.localStorage.getItem('crawler_canvas') === draftBefore,
+    };
+}
+
 Math.random = realRandom;
-renameScenarios().then((renamed) => {
-    out.rename = renamed;
+resizeRepaintScenario();
+renameScenarios().then(() => {
     process.stdout.write(JSON.stringify(out));
 }).catch((err) => {
     process.stdout.write(JSON.stringify({ error: String(err && err.stack) }));

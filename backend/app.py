@@ -79,6 +79,21 @@ app.config['SECRET_KEY'] = Config.SECRET_KEY
 CORS(app)
 
 
+@app.after_request
+def _no_store_ui_assets(resp):
+    """Revalidate the DOCUMENT on every load. Flask's own static route already
+    answers its files with no-cache, but '/' goes through send_from_directory,
+    whose default freshness window is 12 hours — a plain refresh can boot
+    yesterday's index.html and every fix shipped since runs invisibly. The
+    /js/ and /css/ entries keep the promise explicit rather than inherited:
+    this is a local single-user tool, one revalidation per asset costs
+    nothing, a stale script costs a wrong diagnosis."""
+    path = request.path
+    if path == '/' or path == '/index.html' or path.startswith('/js/') or path.startswith('/css/'):
+        resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
 def _upload_limit_mb(default: int = 64) -> int:
     """Read MAX_UPLOAD_MB as a sane number of megabytes (clamped to 1 … 10 GiB).
 
