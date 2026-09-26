@@ -234,6 +234,66 @@ class TestDatasetActions:
         assert pa['dataset_remove_declined']['requested'] == 0
 
 
+class TestClearAllButtons:
+    """The three bulk 清空 buttons — the only actions here that destroy a whole set.
+
+    Each is pinned on four things, because a bulk delete is the one mistake a user cannot
+    spot row by row: it asks first; a declined answer sends nothing; the request carries the
+    explicit ``confirm`` the endpoint refuses without; and the panel reloads, so what is on
+    screen afterwards is what the server did. The toast's number is asserted too — a clear
+    that reports nothing looks exactly like a clear that removed nothing.
+    """
+
+    def test_declining_any_of_the_three_sends_no_request_at_all(self, pa):
+        assert pa['runs_clear_declined']['requested'] == 0
+        assert pa['exports_clear_declined']['requested'] == 0
+        assert pa['datasets_clear_declined']['requested'] == 0
+
+    def test_the_run_clear_is_one_bulk_call_that_carries_confirm_and_reloads(self, pa):
+        cleared = pa['runs_clear']
+        assert cleared['url'] == '/api/runs/clear' and cleared['method'] == 'POST'
+        assert cleared['body'] == {'confirm': True}
+        assert cleared['clears'] == 1, 'a loop of per-row deletes would leave the claims behind'
+        assert cleared['reloaded'] is True
+        assert '3' in cleared['toast'], cleared['toast']
+
+    def test_a_refused_run_clear_shows_the_servers_reason_and_still_repaints(self, pa):
+        refused = pa['runs_clear_refused']
+        assert refused['reloaded'] is True, 'the panel must not keep showing rows the server may have kept'
+        assert any('需要 confirm' in line for line in refused['toasts']), refused['toasts']
+
+    def test_the_export_clear_is_one_bulk_call_that_reloads_the_listing(self, pa):
+        cleared = pa['exports_clear']
+        assert cleared['url'] == '/api/exports/clear'
+        assert cleared['body'] == {'confirm': True}
+        assert cleared['clears'] == 1
+        assert cleared['reloaded'] is True
+        assert '2' in cleared['toast'], cleared['toast']
+
+    def test_a_busy_export_folder_is_reported_rather_than_shown_as_emptied(self, pa):
+        """The refusal is the case that matters most here: a running crawl writes into this
+        directory, and a toast saying 「已清空」 over files still being appended is a lie."""
+        assert any('正在运行' in line for line in pa['exports_clear_refused']['toasts'])
+
+    def test_the_dataset_clear_sends_the_boolean_the_endpoint_reads(self, pa):
+        """``{'all': '1'}`` and ``{'all': True}`` are not the same request.
+
+        The route reads a switch, and a text '1' from the browser would have answered the
+        wipe click with the orphan sweep instead — the panel reloads holding every referenced
+        file while the toast claims a clear that never happened.
+        """
+        cleared = pa['datasets_clear']
+        assert cleared['url'] == '/api/data/clear'
+        assert cleared['body'] == {'all': True}
+        assert cleared['reloaded'] is True
+        assert '4' in cleared['toast'], cleared['toast']
+
+    def test_a_refused_dataset_clear_says_so_instead_of_counting_zero_files(self, pa):
+        refused = pa['datasets_clear_refused']['toasts']
+        assert any('存储不可用' in line for line in refused), refused
+        assert not any('cleared' in line or '已清空' in line for line in refused), refused
+
+
 class TestProcessPanel:
     def test_an_open_panel_reports_every_thread_it_was_given(self, pa):
         fetched = pa['processes']

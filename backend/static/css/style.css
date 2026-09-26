@@ -1197,6 +1197,18 @@ body.style-menu-open #workspace #resume-banner {
   background: var(--hover);
 }
 
+/* A bulk destroy must not read like a bulk refresh. The per-row 删除 already reddens on
+   hover, so the header button that empties the whole list borrows that same colour instead
+   of inventing one: one panel, one vocabulary for "this takes data away". */
+.panel-close.danger {
+  color: rgba(160, 60, 60, 0.9);
+}
+.panel-close.danger:hover {
+  color: #8c2828;
+  border-color: rgba(140, 40, 40, 0.4);
+  background: rgba(140, 40, 40, 0.08);
+}
+
 /* ── Stats panel ────────────────────────────────────────────────────────── */
 #stats-panel {
   position: fixed;

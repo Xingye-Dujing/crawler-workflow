@@ -669,6 +669,14 @@ _ZH = {
     'analysis.join_need_keys': '合并失败：请填写左右两边的关联列',
     'analysis.join_missing_cols': '合并失败：这些列不存在：{cols}',
     'api.alreadyRunning': '已有工作流正在运行，请先停止或等它跑完',
+    'api.needConfirm': '这个操作会动到全部记录，请把 confirm 显式设为 true 再来',
+    # Two bulk deletions, each naming what it destroyed. The claims figure is not decoration:
+    # 清空运行记录 also hands back the "已采集" ledger, so the next crawl really will re-fetch
+    # what an earlier one collected — a user who reads 「清空了 3 条」 and then watches the same
+    # workflow crawl twice as much needs this line to know why.
+    'run.cleared': '已清空运行记录：{runs} 条，并交回 {claims} 条"已采集"认领（这些条目下次会重新爬）',
+    'exports.cleared': '已清空导出目录：删除 {n} 个文件',
+    'exports.clearBusy': '正在运行的那次会把分片文件写进导出目录，请先停止或等它跑完再清空',
     'api.needApiKey': 'OpenRouter API Key 未填写（设置 → AI）',
     'api.needModel': 'OpenRouter 模型未选择（设置 → AI）',
     'api.needOllamaModel': '未选择 Ollama 模型（设置 → AI → 模型，可点“刷新”读取本地模型）',
@@ -1492,6 +1500,10 @@ _EN = {
     'analysis.join_need_keys': 'Join failed: set both the left and the right key column',
     'analysis.join_missing_cols': 'Join failed — no such column: {cols}',
     'api.alreadyRunning': 'A workflow is already running — stop it or wait for it to finish',
+    'api.needConfirm': 'This acts on every record — send confirm=true explicitly to do it',
+    'run.cleared': 'Run records cleared: {runs} removed, and {claims} "already crawled" claims handed back',
+    'exports.cleared': 'Export folder cleared: {n} file(s) removed',
+    'exports.clearBusy': 'A live run is writing part files into the export folder — stop it or wait before clearing',
     'api.needApiKey': 'The OpenRouter API key is missing (Settings → AI)',
     'api.needModel': 'No OpenRouter model selected (Settings → AI)',
     'api.needOllamaModel': 'No Ollama model selected (Settings → AI → Model; hit Refresh to list local ones)',

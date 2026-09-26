@@ -4218,6 +4218,44 @@ def exports_delete():
     return jsonify({'ok': gone, 'deleted': gone, 'name': os.path.basename(name.strip())})
 
 
+@app.route('/api/exports/clear', methods=['POST'])
+def exports_clear():
+    """Empty the export folder — the panel's 清空 button.
+
+    One name at a time through :func:`delete_export_file`, over exactly the listing the panel
+    shows. That is deliberate: the rules which stop a workflow-authored name from reaching
+    outside ``data/exports`` (no sub-directories, no symlink pointing elsewhere, no prefix
+    match) are then a single implementation that cannot drift from a second bulk one.
+
+    Refused outright while a run is live — a streaming node is writing part files into this
+    very directory, and the panel cannot tell a finished artefact from one still being appended.
+    """
+    from services.export_browser import delete_export_file, list_exports
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    if data.get('confirm') is not True:
+        return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
+    if execution_state['running']:
+        return jsonify({'ok': False, 'error': t('exports.clearBusy')}), 409
+    removed = 0
+    # The listing is capped, so one pass is not necessarily the whole folder: keep going
+    # while it shrinks. The loop's exit is "a pass removed nothing", which is the honest
+    # answer for a file Excel still holds open — 清空 reports what is left rather than
+    # pretending, and cannot spin.
+    while True:
+        before = removed
+        for row in list_exports(Config.EXPORT_DIR):
+            if delete_export_file(Config.EXPORT_DIR, row['name']):
+                removed += 1
+        if removed == before:
+            break
+    left = len(list_exports(Config.EXPORT_DIR))
+    logger.warning(t('exports.cleared', n=removed))
+    return jsonify({'ok': True, 'removed': removed, 'left': left})
+
+
 # ─── One-click report ──────────────────────────────────────────
 
 
@@ -5288,7 +5326,11 @@ def clear_datasets():
     payload = _json_body()
     if payload is None:
         return _bad_body()
-    wipe = str(payload.get('all') or request.args.get('all') or '') in ('1', 'true', 'yes')
+    # Read as a switch, not against one spelling: the browser's 清空 sends a real JSON
+    # ``true``, and comparing against ``'1'`` would answer that request with the *orphan*
+    # sweep — a panel that then reloads still holding referenced files, reporting a wipe that
+    # never happened. The query-string form stays valid for a hand-typed call.
+    wipe = as_bool(payload.get('all')) or str(request.args.get('all') or '') in ('1', 'true', 'yes')
     if wipe:
         removed = store.clear()
         _dataset_cache.clear()
@@ -5860,6 +5902,30 @@ def runs_delete():
     if _reject_live_run(run_id):
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
     removed = get_run_store().delete_run(run_id)
+    return jsonify({'ok': True, 'removed': removed})
+
+
+@app.route('/api/runs/clear', methods=['POST'])
+def runs_clear():
+    """Empty the run records — the panel's 清空 button.
+
+    Refuses by name without ``confirm``: every other route in this file acts on a single id
+    the browser just showed the user, while this one acts on all of them at once, so a stray
+    POST (or a mistyped fetch from a console) must not be able to erase a history.
+
+    A run that is live right now keeps its record: ``RunStore.clear_all`` is handed its id,
+    because deleting rows a worker is still writing would destroy state mid-flight. What the
+    deleted runs claimed as "already crawled" goes with them — see ``clear_all`` for why the
+    bulk case releases claims where a single deletion keeps them.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    if data.get('confirm') is not True:
+        return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
+    live = str(execution_state.get('run_id') or '') if execution_state['running'] else ''
+    removed = get_run_store().clear_all(exclude_run_ids=[live] if live else ())
+    logger.warning(t('run.cleared', runs=removed['runs'], claims=removed['item_claims']))
     return jsonify({'ok': True, 'removed': removed})
 
 

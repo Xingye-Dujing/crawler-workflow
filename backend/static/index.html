@@ -625,6 +625,13 @@
         <span data-i18n="runsMgr.header">Run Records</span>
         <div class="console-actions">
           <button
+            class="panel-close danger"
+            onclick="runsManager.clearAll()"
+            data-i18n="runsMgr.clearAll"
+          >
+            Clear all
+          </button>
+          <button
             class="panel-close"
             onclick="runsManager.refresh()"
             data-i18n="btn.refresh"
@@ -657,6 +664,13 @@
             Report
           </button>
           <button
+            class="panel-close danger"
+            onclick="exportsManager.clearAll()"
+            data-i18n="exportsMgr.clearAll"
+          >
+            Clear all
+          </button>
+          <button
             class="panel-close"
             onclick="exportsManager.refresh()"
             data-i18n="btn.refresh"
@@ -681,6 +695,13 @@
       <div class="console-header">
         <span data-i18n="datasetMgr.header">Datasets</span>
         <div class="console-actions">
+          <button
+            class="panel-close danger"
+            onclick="datasetManager.clearAll()"
+            data-i18n="datasetMgr.clearAll"
+          >
+            Clear all
+          </button>
           <button
             class="panel-close"
             onclick="datasetManager.refresh()"

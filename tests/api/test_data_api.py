@@ -320,12 +320,23 @@ class TestClear:
         assert client.get(f'/api/data/datasets/{orphan}').status_code == 404
         assert client.get(f'/api/data/datasets/{wanted}').status_code == 200
 
-    def test_an_explicit_wipe_takes_referenced_files_too(self, client, app_module, paste):
+    @pytest.mark.parametrize('wanted', ['all', 'query'])
+    def test_an_explicit_wipe_takes_referenced_files_too(self, client, app_module, paste, wanted):
+        """Both spellings, because the panel and a hand-typed call are not the same caller.
+
+        The browser's 清空 sends a real JSON ``true``; a route that compared against the text
+        ``'1'`` would answer that click with the *orphan* sweep instead — and then reload a panel
+        that still holds every file, having reported a wipe that never happened.
+        """
         paste([{'a': 1}], name='still-referenced.csv')
         upload_node = {'id': 'node-1', 'type': 'upload', 'params': {'dataset_id': 'whatever', 'row_count': 1}}
         workflow = {'nodes': [upload_node], 'connections': [], 'settings': {'mode': 'serial'}}
         client.post('/api/workflow/save', json={'name': 'wipe-test', 'workflow': workflow})
-        assert client.post('/api/data/clear', json={'all': '1'}).get_json() == {
+        if wanted == 'all':
+            response = client.post('/api/data/clear', json={'all': True})
+        else:
+            response = client.post('/api/data/clear?all=1', json={})
+        assert response.get_json() == {
             'ok': True,
             'removed': 1,
             'orphans': 0,

@@ -19,6 +19,7 @@ no crawler has to die to produce a half-finished run.
 
 import pytest
 
+from i18n import t
 from services.run_store import (
     NODE_DONE,
     NODE_FAILED,
@@ -222,6 +223,66 @@ class TestRunHousekeeping:
     def test_delete_and_discard_need_a_run_id(self, client):
         for path in ('/api/runs/delete', '/api/runs/discard'):
             assert client.post(path, json={}).status_code == 400
+
+    def test_clear_empties_every_run_and_hands_back_what_they_claimed(self, client, app_module):
+        """The third housekeeping answer: 清空 is neither delete nor discard.
+
+        Deleting one record keeps its crawl claims (the crawl was paid for and another run may
+        still be continuing under them); emptying *every* record is a request to start from
+        nothing, so a surviving ``item_seen`` row would be a promise about data that no longer
+        exists anywhere — the next crawl of the same canvas would under-deliver with no table
+        left that could explain the gap. The answer cache is the deliberate survivor: an LLM
+        answer is paid for by its prompt, not by the run row.
+        """
+        store = app_module._RUN_STORE
+        _seed(store, 'one', name='wf-a', status=RUN_COMPLETED)
+        _seed(store, 'two', name='wf-b', status=RUN_INTERRUPTED)
+        for rid in ('one', 'two'):
+            store.begin_node(rid, 'node-1', 'source')
+            store.append_rows(rid, 'node-1', _rows(2), dedupe_scope=f'item:fp-{rid}')
+        store.cache_put('emotion|qwen', 'asked before', ['a stored answer'])
+        assert store.stats()['seen_keys'] == 4 and store.stats()['cache_entries'] == 1
+
+        body = client.post('/api/runs/clear', json={'confirm': True}).get_json()
+        assert body['ok'] is True
+        assert body['removed']['runs'] == 2
+        assert body['removed']['node_rows'] == 4
+        assert body['removed']['item_claims'] == 4, 'clearing history must release its dedupe ledger'
+        assert store.list_resumable(limit=10, include_finished=True) == []
+        stats = store.stats()
+        assert stats['seen_keys'] == 0
+        assert stats['cache_entries'] == 1, 'a cleared history must not make the next run re-pay the LLM'
+
+    @pytest.mark.parametrize('payload', [{}, {'confirm': False}, {'confirm': 'true'}, None])
+    def test_clear_refuses_without_an_explicit_confirm(self, client, app_module, payload):
+        """A stray POST must not be able to erase a history, so the flag is read as a boolean.
+
+        ``'true'`` is included because that is what a form-encoded or query-string caller sends,
+        and a truthy string is exactly the accident this route cannot afford to honour.
+        """
+        store = app_module._RUN_STORE
+        _seed(store, 'precious', status=RUN_COMPLETED)
+        kwargs = {'json': payload} if payload is not None else {}
+        response = client.post('/api/runs/clear', **kwargs)
+        assert response.status_code == 400
+        assert t('api.needConfirm') in response.get_json()['error']
+        assert store.get_run('precious') is not None, 'a refused clear must not have deleted anything'
+
+    def test_clear_spares_the_run_a_worker_is_still_writing(self, client, app_module):
+        """The panel's button is allowed while a run is live, so the live record has to be
+        excluded rather than the whole request refused — deleting rows under a worker would
+        destroy state mid-flight (the same reason ``purge`` takes ``exclude_run_id``)."""
+        store = app_module._RUN_STORE
+        _seed(store, 'finished-elsewhere', name='wf-a', status=RUN_COMPLETED)
+        _seed(store, 'in-flight', name='wf-b', status=RUN_RUNNING)
+        app_module.execution_state.update({'running': True, 'run_id': 'in-flight'})
+        try:
+            body = client.post('/api/runs/clear', json={'confirm': True}).get_json()
+        finally:
+            app_module.execution_state.update({'running': False, 'run_id': ''})
+        assert body['removed']['runs'] == 1
+        assert store.get_run('in-flight') is not None
+        assert store.get_run('finished-elsewhere') is None
 
     def test_purge_ages_out_runs_and_stale_cache_entries(self, client, app_module):
         store = app_module._RUN_STORE

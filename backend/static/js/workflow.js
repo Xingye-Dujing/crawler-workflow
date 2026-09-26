@@ -4430,6 +4430,39 @@ var runsManager = {
         if (window.resumeBar) resumeBar.refresh();
     },
 
+    /* Emptying the whole list is not "remove" called N times: the backend does it in one
+       transaction and, more importantly, hands back the crawl claims of every run it
+       deletes — a per-row loop would leave a ledger of "already collected" items pointing
+       at rows that are gone, and the next crawl would silently under-deliver. The dialog
+       has to say that out loud, because it is the one thing the user cannot un-see. */
+    async clearAll() {
+        var go = await showDialog({
+            message: I18n.t('runsMgr.confirmClearAll'),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('runsMgr.clearAll'), value: 'go', primary: true },
+            ],
+        });
+        if (go !== 'go') return;
+        try {
+            var resp = await fetch('/api/runs/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+                body: JSON.stringify({ confirm: true }),
+            });
+            var result = await resp.json();
+            if (result && result.ok) {
+                showToast(I18n.t('runsMgr.clearAllDone').replace('{n}', (result.removed || {}).runs || 0));
+            } else {
+                showToast(I18n.t('runsMgr.clearAllFailed') + ((result && result.error) ? ': ' + result.error : ''));
+            }
+        } catch (e) {
+            showToast(I18n.t('runsMgr.clearAllFailed'));
+        }
+        this.refresh();
+        if (window.resumeBar) resumeBar.refresh();
+    },
+
     /* Node status → badge colour class + i18n key. Node statuses are their
        own vocabulary (done/partial/skipped/restored …), distinct from the
        run statuses above. */
@@ -4945,6 +4978,38 @@ var exportsManager = {
         }
         this.refresh();
     },
+
+    /* The server deletes these one name at a time through the same resolver the per-row
+       button uses, so the rules that keep a name from reaching outside data/exports cannot
+       drift into a second bulk implementation. It also refuses outright while a run is
+       live — a streaming node is writing part files into this very directory — and that
+       refusal is shown rather than swallowed. */
+    async clearAll() {
+        var go = await showDialog({
+            message: I18n.t('exportsMgr.confirmClearAll'),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('exportsMgr.clearAll'), value: 'go', primary: true },
+            ],
+        });
+        if (go !== 'go') return;
+        try {
+            var resp = await fetch('/api/exports/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+                body: JSON.stringify({ confirm: true }),
+            });
+            var result = await resp.json();
+            if (result && result.ok) {
+                showToast(I18n.t('exportsMgr.clearAllDone').replace('{n}', result.removed || 0));
+            } else {
+                showToast(I18n.t('exportsMgr.clearAllFailed') + ((result && result.error) ? ': ' + result.error : ''));
+            }
+        } catch (e) {
+            showToast(I18n.t('exportsMgr.clearAllFailed'));
+        }
+        this.refresh();
+    },
 };
 
 /* ─── Dataset manager ───────────────────────────────────────────
@@ -5096,6 +5161,32 @@ var datasetManager = {
         if (!ok) return;
         var result = await fetchJSON('/api/data/datasets/' + encodeURIComponent(id), { method: 'DELETE' });
         showToast(result && result.ok ? I18n.t('datasetMgr.removeDone') : I18n.t('datasetMgr.removeFailed'));
+        this.refresh();
+    },
+
+    /* The per-row button refuses a file a saved workflow points at; a wipe has no such
+       guard, because "start from nothing" is exactly the case where the user wants those
+       gone too. That difference is the whole content of this dialog: an Upload node whose
+       file is deleted here does not break loudly, it just reads as an empty table later. */
+    async clearAll() {
+        var ok = await showDialog({
+            message: I18n.t('datasetMgr.confirmClearAll'),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: false },
+                { label: I18n.t('datasetMgr.clearAll'), value: true, primary: true },
+            ],
+        });
+        if (!ok) return;
+        var result = await fetchJSON('/api/data/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ all: true }),
+        });
+        if (result && result.ok) {
+            showToast(I18n.t('datasetMgr.clearAllDone').replace('{n}', result.removed || 0));
+        } else {
+            showToast(I18n.t('datasetMgr.clearAllFailed') + ((result && result.error) ? ': ' + result.error : ''));
+        }
         this.refresh();
     },
 };

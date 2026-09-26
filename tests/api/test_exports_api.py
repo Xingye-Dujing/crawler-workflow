@@ -1,10 +1,11 @@
-"""Tests for the export-artefact endpoints: /api/exports/list|download|delete.
+"""Tests for the export-artefact endpoints: /api/exports/list|download|delete|clear.
 
 The service module owns the path rules; what these tests pin is the HTTP
 contract on top of them — a traversal name must answer 404 rather than 500 or
 (worse) the file, a request without a ``name`` must be a 400 the caller can fix,
-and the listing must survive a directory that does not exist yet, because a
-fresh install has no exports and an empty panel is the correct answer there.
+the listing must survive a directory that does not exist yet, because a fresh
+install has no exports and an empty panel is the correct answer there, and the
+bulk 清空 must reach nothing the single-file button could not have reached.
 
 ``Config.EXPORT_DIR`` is repointed at a temp directory per test by the session
 fixture, so nothing here can touch the user's real ``data/exports``.
@@ -14,6 +15,8 @@ import os
 import time
 
 import pytest
+
+from i18n import t
 
 pytestmark = pytest.mark.api
 
@@ -111,3 +114,76 @@ class TestDelete:
 
     def test_a_malformed_body_is_a_400_not_a_500(self, client, export_dir):
         assert client.post('/api/exports/delete', data='not json', content_type='application/json').status_code == 400
+
+
+class TestClearAll:
+    """``/api/exports/clear`` — the panel's 清空, which must reuse the per-file rules."""
+
+    def test_every_listed_file_goes_and_nothing_outside_the_folder_follows(self, client, export_dir, tmp_path):
+        """The bulk route deletes by calling the same resolver the single button calls, over
+        exactly the listing the panel shows. That is what keeps the two from drifting: a name
+        in a sub-directory is not in the listing, and a sibling of the folder is not either.
+        """
+        nested = tmp_path / 'exports' / 'sub'
+        nested.mkdir()
+        (nested / 'deep.csv').write_text('a\n', encoding='utf-8')
+
+        body = client.post('/api/exports/clear', json={'confirm': True}).get_json()
+
+        assert body['ok'] is True
+        assert body['removed'] == 2 and body['left'] == 0
+        assert not os.path.exists(os.path.join(export_dir, 'run-a.csv'))
+        assert not os.path.exists(os.path.join(export_dir, 'script.py'))
+        assert (nested / 'deep.csv').exists(), '清空 is not a recursive delete'
+        assert (tmp_path / 'outside.csv').exists()
+
+    @pytest.mark.parametrize('payload', [{}, {'confirm': False}, {'confirm': 'yes'}])
+    def test_it_refuses_without_an_explicit_confirm(self, client, export_dir, payload):
+        assert client.post('/api/exports/clear', json=payload).status_code == 400
+        assert os.path.exists(os.path.join(export_dir, 'run-a.csv'))
+
+    def test_a_run_that_is_writing_part_files_here_is_refused_outright(self, client, app_module, export_dir):
+        """A streaming node appends into this very directory, and the panel cannot tell a
+        finished artefact from one still being written — so unlike the run records (which
+        spare the live row and clear the rest), this one declines the whole request."""
+        app_module.execution_state.update({'running': True, 'run_id': 'r-live'})
+        try:
+            response = client.post('/api/exports/clear', json={'confirm': True})
+        finally:
+            app_module.execution_state.update({'running': False, 'run_id': ''})
+        assert response.status_code == 409
+        assert t('exports.clearBusy') in response.get_json()['error']
+        assert os.path.exists(os.path.join(export_dir, 'run-a.csv'))
+
+    def test_an_empty_folder_is_a_clean_answer_rather_than_an_error(self, client, export_dir):
+        assert client.post('/api/exports/clear', json={'confirm': True}).get_json() == {
+            'ok': True,
+            'removed': 2,
+            'left': 0,
+        }
+        assert client.post('/api/exports/clear', json={'confirm': True}).get_json() == {
+            'ok': True,
+            'removed': 0,
+            'left': 0,
+        }
+
+    def test_a_folder_larger_than_the_listing_cap_is_still_emptied(self, client, export_dir):
+        """The panel's list is capped (``MAX_ENTRIES``) while 清空 promises the whole folder.
+
+        One pass over a truncated listing would delete the newest few hundred and reload a
+        panel that still holds files — reporting a clear that did not happen. So the clear
+        repeats until a pass removes nothing, and this proves it against the real cap.
+        """
+        from services.export_browser import MAX_ENTRIES
+
+        for index in range(MAX_ENTRIES + 3):
+            with open(os.path.join(export_dir, f'bulk-{index}.csv'), 'w', encoding='utf-8') as handle:
+                handle.write('a\n')
+        before = len(os.listdir(export_dir))
+        assert before > MAX_ENTRIES, 'the fixture must actually overflow the listing'
+
+        body = client.post('/api/exports/clear', json={'confirm': True}).get_json()
+
+        assert body['ok'] is True
+        assert body['removed'] == before and body['left'] == 0
+        assert os.listdir(export_dir) == []

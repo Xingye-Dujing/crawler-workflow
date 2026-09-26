@@ -95,6 +95,9 @@ const defaultRoutes = () => ({
     '/api/workflow/execute': { ok: true, run_id: 'newrun1' },
     '/api/runs/discard': { ok: true },
     '/api/runs/delete': { ok: true },
+    '/api/runs/clear': { ok: true, removed: { runs: 3 } },
+    '/api/exports/clear': { ok: true, removed: 2, left: 0 },
+    '/api/data/clear': { ok: true, removed: 4 },
     '/api/exports/delete': { ok: true },
     '/api/workflow/processes/kill': { ok: true, message: 'killed' },
 });
@@ -500,6 +503,90 @@ answers.dialog = false;
 requests.length = 0;
 await pa.datasetManager.remove('ds1', 'old.csv', false);
 out.dataset_remove_declined = { requested: requests.length };
+
+/* ── 清空: the three bulk buttons ──────────────────────────────────────
+   A bulk delete is the one action here whose mistake cannot be noticed row by row,
+   so each is pinned on four things: it asks first, an answer of "no" sends nothing,
+   the request carries the explicit confirm the endpoint refuses without, and the
+   panel reloads afterwards so what the user sees matches what the server did. */
+fresh();
+answers.confirm = false;
+requests.length = 0;
+await pa.runsManager.clearAll();
+out.runs_clear_declined = { requested: requests.length };
+fresh();
+answers.confirm = true;
+requests.length = 0;
+toasts.length = 0;
+await pa.runsManager.clearAll();
+out.runs_clear = {
+    url: requests[0].url,
+    method: requests[0].method,
+    body: JSON.parse(requests[0].body),
+    /* ONE clear call, whatever else a refresh re-reads: a loop over per-row deletes
+       would look identical here and be the wrong implementation. */
+    clears: requests.filter((r) => r.url.indexOf('/api/runs/clear') >= 0).length,
+    reloaded: requests.some((r) => r.url.indexOf('/api/runs/list') >= 0),
+    toast: toasts[0],
+};
+fresh();
+route('/api/runs/clear', { ok: false, error: '需要 confirm' });
+requests.length = 0;
+toasts.length = 0;
+await pa.runsManager.clearAll();
+out.runs_clear_refused = { toasts: toasts.slice(), reloaded: requests.some((r) => r.url.indexOf('/api/runs/list') >= 0) };
+
+fresh();
+answers.confirm = false;
+requests.length = 0;
+await pa.exportsManager.clearAll();
+out.exports_clear_declined = { requested: requests.length };
+fresh();
+requests.length = 0;
+toasts.length = 0;
+await pa.exportsManager.clearAll();
+out.exports_clear = {
+    url: requests[0].url,
+    body: JSON.parse(requests[0].body),
+    clears: requests.filter((r) => r.url.indexOf('/api/exports/clear') >= 0).length,
+    reloaded: requests.some((r) => r.url.indexOf('/api/exports/list') >= 0),
+    toast: toasts[0],
+};
+fresh();
+route('/api/exports/clear', { ok: false, error: '正在运行' });
+requests.length = 0;
+toasts.length = 0;
+await pa.exportsManager.clearAll();
+out.exports_clear_refused = { toasts: toasts.slice() };
+
+fresh();
+answers.dialog = false;
+requests.length = 0;
+await pa.datasetManager.clearAll();
+out.datasets_clear_declined = { requested: requests.length };
+fresh();
+answers.dialog = true;
+requests.length = 0;
+toasts.length = 0;
+await pa.datasetManager.clearAll();
+out.datasets_clear = {
+    url: requests[0].url,
+    /* The boolean, not the text '1': the endpoint reads it as a switch, and a body that
+       sent '1' would silently mean "sweep orphans only" while the toast claimed a wipe. */
+    body: JSON.parse(requests[0].body),
+    reloaded: requests.some((r) => r.url.indexOf('/api/data/datasets') >= 0),
+    toast: toasts[0],
+};
+fresh();
+route('/api/data/clear', { ok: false, error: '存储不可用' });
+/* This panel's dialog answers with a real boolean, so the stub cannot infer "pressed the
+   confirm button" from the first value-bearing button (the 取消 one carries `false`, which
+   is a value). Every dataset scenario states the click outright. */
+answers.dialog = true;
+requests.length = 0;
+toasts.length = 0;
+await pa.datasetManager.clearAll();
+out.datasets_clear_refused = { toasts: toasts.slice() };
 
 /* ── workflow-file panel (#115) ────────────────────────────────────── */
 fresh();
