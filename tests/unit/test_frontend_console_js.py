@@ -166,3 +166,23 @@ class TestRunEndReporting:
         assert case['statusText'] == 'STOPPING', 'the bar moved off 正在停止 without a verdict'
         assert case['stillPolling'] is False
         assert case['resumeRefreshed'] == 0, 'a continue offer was made for a run that had not settled'
+
+
+class TestClearConsoleBeforeRun:
+    """#177 — the option clears the console for a new run, and it must clear the
+    TABS and their retained histories too, not just the visible line list."""
+
+    def test_the_reset_drops_every_tab_and_history_and_moves_the_active_tab_back(self, console):
+        reset = console['resetForNewRun']
+        assert reset['wfTabCount'] == 0, 'per-workflow tabs survived the reset'
+        assert reset['allSeen'] == 0 and reset['allLines'] == 0, 'the 全部 cursor/history survived'
+        assert reset['tabsHtml'] == '', 'the tab bar markup survived, so the old run still shows its tabs'
+        assert reset['outputHtml'] == '', 'the console body was not emptied'
+        assert reset['activeTab'] == 'all', 'the reset left a now-nonexistent workflow tab active'
+
+    def test_the_gate_only_clears_when_the_user_asks(self, console):
+        # Absent settings (never pulled) and an explicit off must both leave the console
+        # alone; only an explicit true clears. Absence is "follow the default", not "clear".
+        assert console['clearDefaultFalse'] is True, 'an unpulled AppSettings must not force a clear'
+        assert console['clearOnTrue'] is True, 'clear_console_before_run=true must clear'
+        assert console['clearUnsetFalse'] is True, 'a valueless settings object must not clear'

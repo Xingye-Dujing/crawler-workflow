@@ -736,7 +736,13 @@ const workflow = {
                    Cleared only now: until this answer there was no run of ours. */
                 closeDockedPanels('console-panel');
                 document.getElementById('console-panel').classList.add('open');
-                document.getElementById('console-output').innerHTML = '';
+                if (_clearConsoleBeforeRun()) {
+                    /* The option is on: wipe everything the console owns — tabs and
+                       their retained histories included — so the new run opens blank. */
+                    resetConsoleForNewRun();
+                } else {
+                    document.getElementById('console-output').innerHTML = '';
+                }
                 showToast(I18n.t('toast.workflowStarted'));
                 this.pollStatus();
             } else {
@@ -3424,6 +3430,28 @@ function clearConsole() {
         consoleViews.wf[key].lines = [];
     });
     _wfActiveTab = 'all';
+}
+
+/* #177 — the "clear console before each run" option asks for a hard blank slate, not
+   the soft one clearConsole gives: a new run must not briefly show the PREVIOUS run's
+   per-workflow tabs. So the tab bar itself and every cursor go too. pollStatus rebuilds
+   tabs from the fresh run's data, and resetting `all.seen` to 0 is exactly the "server
+   buffer was zeroed, read from the start" state the poll already handles. */
+function resetConsoleForNewRun() {
+    var out = document.getElementById('console-output');
+    if (out) out.innerHTML = '';
+    var tabs = document.getElementById('console-tabs');
+    if (tabs) tabs.innerHTML = '';
+    consoleViews.all = { seen: 0, lines: [] };
+    consoleViews.wf = {};
+    _wfActiveTab = 'all';
+}
+
+function _clearConsoleBeforeRun() {
+    /* AppSettings is a top-level const (never on window), so guard the binding itself.
+       Unpulled settings answer false — a console nobody configured stays as before. */
+    return typeof AppSettings !== 'undefined' &&
+        !!(AppSettings._values && AppSettings._values.clear_console_before_run);
 }
 
 /* Workflow tab switching for parallel mode */

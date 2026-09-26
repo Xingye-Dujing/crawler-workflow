@@ -1352,7 +1352,15 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             settings = workflow.get('settings', {})
             mode = settings.get('mode', 'parallel')
             headless = settings.get('headless', True)
-            max_workers = _safe_int(settings.get('max_workers'), Config.DEFAULT_MAX_WORKERS, minimum=1, maximum=16)
+            # A parallel run holds at most one browser per concurrently-running workflow,
+            # so the pool width IS the "max simultaneous browsers" lever. It used to be
+            # the hardcoded Config.DEFAULT_MAX_WORKERS for both shapes; it is now a user
+            # setting chosen by how this run browses — headless is cheap and can go wide,
+            # a windowed run shows real Chrome windows the machine must paint. An explicit
+            # per-run max_workers from the request still wins (it is absent today).
+            _cap_key = 'max_headless_browsers' if as_bool(headless) else 'max_visible_browsers'
+            _cap_default = _safe_int(get_setting(_cap_key), Config.DEFAULT_MAX_WORKERS, minimum=1, maximum=16)
+            max_workers = _safe_int(settings.get('max_workers'), _cap_default, minimum=1, maximum=16)
             # Per-run answer to "use the browser profile this time?" — None means the
             # user was never asked (or the canvas has no same-platform collision), so
             # the stored setting decides. Absence must not read as False: a browser

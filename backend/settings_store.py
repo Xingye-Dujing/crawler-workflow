@@ -71,6 +71,17 @@ DEFAULTS = {
     # the user created *for this tool* — never their daily Chrome profile, which Chrome
     # locks while it runs and encrypts against other processes (see browser_profiles).
     'browser_profile_dir': '',
+    #: How many browsers a single parallel run may hold open at once, split by how the
+    #: run browses. It used to be one hardcoded constant for both. A headless run opens
+    #: nothing the eye has to paint and can go wide; a windowed run shows real Chrome
+    #: windows, so the same number costs the machine far more. The run's 无头/窗口 choice
+    #: picks which of the two applies (app.py::_begin_run); serial runs take turns anyway.
+    'max_visible_browsers': int(Config.DEFAULT_MAX_WORKERS),
+    'max_headless_browsers': int(Config.DEFAULT_MAX_WORKERS),
+    #: Wipe the console — every tab and its retained history, not just the visible one —
+    #: the instant a new run starts. Off keeps the last run's lines up until the next poll
+    #: overwrites them, which is what makes a fresh run look like it inherited old output.
+    'clear_console_before_run': False,
 }
 
 _values = None
@@ -83,6 +94,10 @@ _NUMERIC_RANGES = {
     'page_load_timeout': (5, 300),
     'element_timeout': (3, 600),
     'same_platform_stagger': (0, 600),
+    # Bounded to the executor's own ceiling (app.py caps a run at 16 workers), so the
+    # panel cannot promise a concurrency the server would silently clamp anyway.
+    'max_visible_browsers': (1, 16),
+    'max_headless_browsers': (1, 16),
 }
 
 
@@ -179,6 +194,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 'use_browser_profile',
                 'same_platform_queue',
                 'ask_overseas_network',
+                'clear_console_before_run',
             ):
                 # The browser may send a real bool or the 'true'/'false' string
                 # the checkbox helpers historically produced; anything else

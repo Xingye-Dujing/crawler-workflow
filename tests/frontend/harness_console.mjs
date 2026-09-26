@@ -55,7 +55,12 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(src + '\n;globalThis.__wf = { workflow, clearConsole, switchWfTab, consoleViews };', sandbox);
+vm.runInContext(
+    src +
+        '\n;globalThis.__wf = { workflow, clearConsole, switchWfTab, consoleViews, ' +
+        'resetConsoleForNewRun, _clearConsoleBeforeRun, getActiveTab: () => _wfActiveTab };',
+    sandbox,
+);
 /* Assigned after the load: workflow.js declares showToast itself, and a function
    declaration inside the script wins over anything seeded before it. */
 sandbox.showToast = (msg) => toasts.push(String(msg));
@@ -341,5 +346,34 @@ out.statusBarDuringRun = {
     text: sandbox.__byId('status-text').textContent,
     nodes: sandbox.__byId('status-nodes').textContent,
 };
+
+/* ── #177: the "clear console before each run" option wipes tabs + histories ── */
+const resetForNewRun = sandbox.__wf.resetConsoleForNewRun;
+const clearFlag = sandbox.__wf._clearConsoleBeforeRun;
+const tabsEl = sandbox.__byId('console-tabs');
+
+// Seed a run's worth of state: a per-workflow tab, its retained lines, a moved
+// cursor, an active non-default tab, and rendered markup in both panels.
+sandbox.__wf.consoleViews.all = { seen: 9, lines: ['y-old'] };
+sandbox.__wf.consoleViews.wf[7] = { seen: 3, lines: ['x-old'] };
+switchWfTab(7);
+tabsEl.innerHTML = '<div class="console-tab" data-wf="7">WF</div><div class="console-tab" data-wf="all">All</div>';
+
+resetForNewRun();
+out.resetForNewRun = {
+    wfTabCount: Object.keys(sandbox.__wf.consoleViews.wf).length,
+    allSeen: sandbox.__wf.consoleViews.all.seen,
+    allLines: sandbox.__wf.consoleViews.all.lines.length,
+    tabsHtml: tabsEl.innerHTML,
+    outputHtml: sandbox.__byId('console-output').innerHTML,
+    activeTab: sandbox.__wf.getActiveTab(),
+};
+
+// The gate itself: absent AppSettings never clears; only an explicit true does.
+out.clearDefaultFalse = clearFlag() === false;
+sandbox.AppSettings = { _values: { clear_console_before_run: true } };
+out.clearOnTrue = clearFlag() === true;
+sandbox.AppSettings = { _values: {} };
+out.clearUnsetFalse = clearFlag() === false;
 
 process.stdout.write(JSON.stringify(out));

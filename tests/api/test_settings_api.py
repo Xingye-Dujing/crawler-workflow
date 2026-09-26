@@ -208,6 +208,25 @@ class TestSettingsWrite:
         assert body['settings']['same_platform_stagger'] == settings_store.DEFAULTS['same_platform_stagger']
         assert any('same_platform_stagger' in warning for warning in body['warnings']), body['warnings']
 
+    @pytest.mark.parametrize('key', ['max_visible_browsers', 'max_headless_browsers'])
+    @pytest.mark.parametrize(('sent', 'expected'), [(1, 1), ('8', 8), (16, 16), (5.9, 5)])
+    def test_the_browser_cap_is_the_users_number(self, client, key, sent, expected):
+        """#184/#185: the simultaneous-browser ceiling is no longer a hardcoded constant
+        — it is per-run-mode and editable. It persists as an int and a GET reads it back."""
+        body = client.post('/api/settings', json={key: sent}).get_json()
+        assert body['warnings'] == [], body['warnings']
+        assert body['settings'][key] == expected
+        assert client.get('/api/settings').get_json()['settings'][key] == expected
+
+    @pytest.mark.parametrize('key', ['max_visible_browsers', 'max_headless_browsers'])
+    @pytest.mark.parametrize('sent', [0, -3, 17, 'many', None, '1e400'])
+    def test_an_unusable_browser_cap_falls_back_to_the_default_and_says_which(self, client, key, sent):
+        # 0 and 17 are the two bounds the panel cannot reach (min 1, max 16) but a crafted
+        # request can — they must refuse loudly, not silently widen the pool to 0 workers.
+        body = client.post('/api/settings', json={key: sent}).get_json()
+        assert body['settings'][key] == settings_store.DEFAULTS[key]
+        assert any(key in warning for warning in body['warnings']), body['warnings']
+
     def test_the_gate_reads_the_stagger_the_panel_saved(self, client, app_module):
         """The last mile: a number that lands in settings.json but is never read is a
         knob that does nothing, and only this round trip can tell that apart."""

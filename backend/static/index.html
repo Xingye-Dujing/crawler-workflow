@@ -1486,6 +1486,19 @@
         </span>
       </div>
       <div class="dd-item-row">
+        <span data-i18n="set.clearConsole">每次运行前清空控制台</span>
+        <span class="dd-ctrl">
+          <label class="settings-checkbox-label">
+            <input
+              type="checkbox"
+              id="set-clear-console"
+              onchange="onSettingInput('clear_console_before_run', this.checked)"
+            />
+            <span data-i18n="set.clearConsoleInline">新运行一开始就清空控制台，连各工作流标签页连同其历史一并删除</span>
+          </label>
+        </span>
+      </div>
+      <div class="dd-item-row">
         <span data-i18n="set.overseasAsk">海外平台运行前问一句外网</span>
         <span class="dd-ctrl">
           <label class="settings-checkbox-label">
@@ -1539,6 +1552,34 @@
             max="600"
             step="1"
             oninput="onSettingInput('same_platform_stagger', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.maxVisible">窗口运行最大并发浏览器</span>
+        <span class="dd-ctrl">
+          <input
+            type="number"
+            id="set-max-visible-browsers"
+            class="settings-input settings-input-sm"
+            min="1"
+            max="16"
+            step="1"
+            oninput="onSettingInput('max_visible_browsers', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.maxHeadless">无头运行最大并发浏览器</span>
+        <span class="dd-ctrl">
+          <input
+            type="number"
+            id="set-max-headless-browsers"
+            class="settings-input settings-input-sm"
+            min="1"
+            max="16"
+            step="1"
+            oninput="onSettingInput('max_headless_browsers', this.value)"
           />
         </span>
       </div>
