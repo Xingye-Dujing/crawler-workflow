@@ -495,6 +495,8 @@ const I18n = {
             'advice.parallel': 'Parallel recommended (two sessions measured to coexist): ',
             'advice.none': 'none',
             'advice.unavailable': 'The platform capability list is not loaded yet — retry it from the data-source panel',
+            'lock.lock': 'Lock: keep this through clear/delete',
+            'lock.unlock': 'Unlock: allow clearing/deleting this',
             'set.profileDir': 'Profile directory',
             'set.profileDirPlaceholder': 'empty = built-in data/chrome_profile/<platform>; or an absolute path',
             'set.profileStatus': 'Profiles by platform',
@@ -1232,6 +1234,8 @@ const I18n = {
             'advice.parallel': '推荐并行采集（两会话实测可共存）：',
             'advice.none': '无',
             'advice.unavailable': '平台能力清单还没加载——请到数据源面板重试加载',
+            'lock.lock': '锁定：清空/删除时保留这一项',
+            'lock.unlock': '解锁：允许被清空/删除',
             'set.profileDir': 'Profile 目录',
             'set.profileStatus': '各平台 Profile',
             'set.profileDirPlaceholder': '留空 = 内置 data/chrome_profile/平台；也可填绝对路径',
@@ -2197,6 +2201,20 @@ document.addEventListener('DOMContentLoaded', () => {
     /* An interrupted run may be waiting from before this page opened. */
     boot('resumeBar', () => {
         if (typeof resumeBar !== 'undefined' && resumeBar) resumeBar.refresh();
+    });
+    boot('locks', () => {
+        /* #182: fetch the lock set ONCE at startup, then repaint any docked panel that
+           is already open so a locked row shows its lock immediately. Loading here (not
+           in each panel refresh) keeps the per-refresh paths free of an extra request. */
+        if (typeof Locks === 'undefined') return Promise.resolve();
+        return Locks.load().then(function () {
+            var open = function (mgr) {
+                return mgr && mgr.panel && mgr.panel() && mgr.panel().classList.contains('open');
+            };
+            if (typeof exportsManager !== 'undefined' && open(exportsManager)) exportsManager.render();
+            if (typeof runsManager !== 'undefined' && open(runsManager)) runsManager.render(runsManager._shown || []);
+            if (typeof wfFiles !== 'undefined' && open(wfFiles) && wfFiles._last) wfFiles.render();
+        });
     });
     if (_bootSteps.length) {
         showToast(I18n.t('boot.partial').replace('{steps}', _bootSteps.length));

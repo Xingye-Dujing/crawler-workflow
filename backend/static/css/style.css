@@ -1746,6 +1746,12 @@ button.history-del:hover {
   background: rgba(140, 40, 40, 0.08);
   border-color: rgba(140, 40, 40, 0.4);
 }
+/* The lock is a state, not an action, so it is marked by the button's own colour:
+   a locked row's button reads as engaged. #182. */
+.runs-mgr-btn.lock.locked {
+  color: var(--accent-source);
+  border-color: var(--accent-source);
+}
 .runs-mgr-detail {
   background: var(--hover);
   border-left: 3px solid var(--line);

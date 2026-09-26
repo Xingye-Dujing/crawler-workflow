@@ -18,6 +18,66 @@
 var CONSOLE_VIEW_CAP = 500;
 var consoleViews = { all: { seen: 0, lines: [] }, wf: {} };
 
+/* #182 — per-item locks. The backend is the truth (清空/删除 respect it); this is a
+   client cache so the panels can paint a lock icon. It loads once (every panel calls
+   load(), which no-ops after the first fetch) and updates itself on a toggle, so the
+   icon flips without a round-trip and no panel polls /api/locks on every refresh. */
+var _locks = { exports: [], runs: [], history: [], workflows: [] };
+var Locks = {
+    _loaded: false,
+    isLocked(panel, key) {
+        return (_locks[panel] || []).indexOf(String(key)) >= 0;
+    },
+    load(force) {
+        if (this._loaded && !force) return Promise.resolve(_locks);
+        var self = this;
+        return fetch('/api/locks')
+            .then(function (resp) { return resp.json(); })
+            .then(function (j) {
+                if (j && j.ok && j.locks) _locks = j.locks;
+                self._loaded = true;
+                return _locks;
+            })
+            .catch(function () { return _locks; });
+    },
+    toggle(panel, key) {
+        var next = !this.isLocked(panel, key);
+        return fetch('/api/locks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': (typeof I18n !== 'undefined' && I18n.lang) || 'zh' },
+            body: JSON.stringify({ panel: panel, key: String(key), locked: next }),
+        })
+            .then(function (resp) { return resp.json(); })
+            .then(function (j) {
+                if (j && j.ok && Array.isArray(j.locks)) _locks[panel] = j.locks;
+                return Locks.isLocked(panel, key);
+            })
+            .catch(function () { return next; });
+    },
+};
+
+/* One button, three panels. panel is a fixed constant (never user text); the key is
+   rendered twice — attrJsArg for the inline handler (the engine hands the RAW key back
+   to onLockToggle, which is exactly what the cache is looked up by) and escapeHtml for
+   the plain text the handler receives, so a filename with a quote cannot break the
+   attribute or the JS literal. */
+function lockButtonHtml(panel, key) {
+    var locked = Locks.isLocked(panel, key);
+    var label = I18n.t(locked ? 'lock.unlock' : 'lock.lock');
+    return '<button class="runs-mgr-btn lock' + (locked ? ' locked' : '') + '" title="' + escapeHtml(label) +
+        '" aria-pressed="' + (locked ? 'true' : 'false') +
+        '" onclick="onLockToggle(\'' + panel + '\', \'' + attrJsArg(key) + '\')">' +
+        (locked ? '\uD83D\uDD12' : '\uD83D\uDD13') + '</button>';
+}
+
+function onLockToggle(panel, key) {
+    return Locks.toggle(panel, key).then(function () {
+        if (panel === 'exports' && typeof exportsManager !== 'undefined') exportsManager.render();
+        else if (panel === 'runs' && typeof runsManager !== 'undefined') runsManager.render(runsManager._shown || []);
+        else if (panel === 'workflows' && typeof wfFiles !== 'undefined' && wfFiles._last) wfFiles.render();
+    });
+}
+
 function consoleViewFor(key) {
     if (key === 'all') return consoleViews.all;
     if (!consoleViews.wf[key]) consoleViews.wf[key] = { seen: 0, lines: [] };
@@ -4522,6 +4582,7 @@ var runsManager = {
             }
             ops += '<button class="runs-mgr-btn del" onclick="runsManager.remove(\'' + r.run_id + '\', ' + (resumable ? 'true' : 'false') + ')">' + I18n.t('runsMgr.remove') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="runsManager.detail(\'' + r.run_id + '\')">' + I18n.t('runsMgr.detail') + '</button>';
+            ops += lockButtonHtml('runs', r.run_id);
             /* The stored tables are what a report needs, so a run from last week
                is reportable from here. Only the run id travels into the handler:
                a workflow name is user text, and a quote in it would close this
@@ -5077,6 +5138,7 @@ var exportsManager = {
                 ops += '<button class="runs-mgr-btn" onclick="exportsManager.view(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.view') + '</button>';
             }
             ops += '<button class="runs-mgr-btn del" onclick="exportsManager.remove(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.remove') + '</button>';
+            ops += lockButtonHtml('exports', row.name);
             return '<tr>' +
                 '<td class="runs-mgr-wf">' + name + '</td>' +
                 '<td>' + escapeHtml(row.kind || '') + '</td>' +
@@ -5508,6 +5570,7 @@ var wfFiles = {
                 I18n.t('wfMgr.rename') + '</button>';
             ops += '<button class="runs-mgr-btn del" onclick="wfFiles.remove(\'' + self._quote(name) + '\')">' +
                 I18n.t('wfMgr.remove') + '</button>';
+            ops += lockButtonHtml('workflows', name);
             var chip = name === current ? ' <span class="runs-mgr-cur">' + escapeHtml(I18n.t('wfMgr.current')) + '</span>' : '';
             var broken = row.broken ? ' <span class="runs-mgr-cur">' + escapeHtml(I18n.t('wfMgr.broken')) + '</span>' : '';
             return '<tr>' +

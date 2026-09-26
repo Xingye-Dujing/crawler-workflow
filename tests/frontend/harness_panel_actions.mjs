@@ -930,4 +930,23 @@ sandbox.setLang('en');
 await drain();
 out.language_reaches_builtin_tables = { before: beforeFlip, after: builtinHeaders() };
 
+/* #182 — the lock control. Toggling posts the panel+key+state to /api/locks and the
+   cache flips; the next export row must then render its lock button as engaged
+   (locked class + aria-pressed=true), which is the whole user-visible promise. */
+fresh();
+route('/api/locks', { ok: true, locks: ['keep.csv'] });
+requests.length = 0;
+await sandbox.onLockToggle('exports', 'keep.csv');
+const lockReq = requests.filter((r) => r.url === '/api/locks');
+pa.exportsManager._last = [{ name: 'keep.csv', kind: 'csv', size: 10, mtime: 1760000000, downloadable: true }];
+pa.exportsManager.render();
+const lockRowHtml = id('exports-mgr-body').innerHTML;
+out.lock = {
+    toggleMethod: lockReq.map((r) => r.method)[0],
+    toggleBody: lockReq.length ? JSON.parse(lockReq[0].body) : null,
+    cacheLocked: sandbox.Locks.isLocked('exports', 'keep.csv'),
+    rowShowsLocked: lockRowHtml.indexOf('runs-mgr-btn lock locked') >= 0,
+    rowAriaPressed: lockRowHtml.indexOf('aria-pressed="true"') >= 0,
+};
+
 process.stdout.write(JSON.stringify(out));

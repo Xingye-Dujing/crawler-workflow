@@ -527,3 +527,20 @@ class TestWorkflowFilePanel:
         got = pa[action]
         assert got['requested'] == 0, got
         assert len(got['toasts']) == 1 and 'run is live' in str(got['toasts'][0]), got['toasts']
+
+
+class TestItemLock:
+    """#182 — the lock button posts to /api/locks and the row repaints as engaged."""
+
+    def test_toggling_posts_the_panel_key_and_state(self, pa):
+        lock = pa['lock']
+        assert lock['toggleMethod'] == 'POST', lock
+        assert lock['toggleBody'] == {'panel': 'exports', 'key': 'keep.csv', 'locked': True}, lock['toggleBody']
+
+    def test_the_cache_flips_after_toggle(self, pa):
+        assert pa['lock']['cacheLocked'] is True
+
+    def test_the_row_repaints_with_the_lock_engaged(self, pa):
+        lock = pa['lock']
+        assert lock['rowShowsLocked'] is True, 'the row lost its engaged-lock styling'
+        assert lock['rowAriaPressed'] is True, 'the lock button does not expose its state'
