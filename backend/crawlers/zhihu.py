@@ -8,7 +8,7 @@ from urllib.parse import quote
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
-from i18n import t
+from i18n import stop_reason_label, t
 
 from .base import Crawler, as_index
 from .engine import feed, pagefetch
@@ -426,7 +426,9 @@ class ZhihuCrawler(Crawler):
             stuck_rounds=self.STUCK_ROUNDS,
             settle_wait=self.CARD_WAIT,
         )
-        logger.info(t('crawl.zhihu.authorTabDone', tab=tab, n=self.collected(), reason=result.stopped_reason))
+        logger.info(
+            t('crawl.zhihu.authorTabDone', tab=tab, n=self.collected(), reason=stop_reason_label(result.stopped_reason))
+        )
 
     def _profile_card(self, card, index: int = 0) -> dict | None:
         """One profile row → a row, with the body unclamped before it is read."""

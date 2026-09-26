@@ -1149,6 +1149,13 @@ app.js 为了拖拽把 `openCookieDialog` 又包了一层，包装函数的空�
 ≈ 4.5 秒，X 用 4.0 时约 12 秒）。据此**没有**给走查加"连续 N 轮读不到卡片"的上限——那条会误伤
 骨架屏（抖音 16 张空壳正是"有卡片容器、零张卡"的形状），买到的只是一个已经被 break 覆盖的场景。
 
+**这些结局词进控制台时是本地化的**（#148 续，measured 2026-09-26）：`engine/feed.py` 与 `engine/pager.py`
+仍返回机器 token（`target`/`end`/`no_new`/`stuck`/`no_cards`/`empty_page`/`fetch_failed`/`stopped`，单测按
+原词断言），但作者/搜索那条 `…authorDone`/`finished` 日志过 `i18n.stop_reason_label()` 把它们译成中文句子
+（`stuck` → "连续滚动没有新内容出现"），用户读不懂 `stuck` 这种代码词。未知 token 原样透传、不编造，
+所以引擎将来新增一个原因会在控制台露出原词、不会被静默吞掉；`test_i18n::TestStopReasonLabel` 扫两个引擎源码，
+凡有 token 没配 label 即红。
+
 真剩下的是**结局词**：抓取 honor 停止的方式是**返回**它已经采到的行，不是抛异常。而
 `_execute_source_node` 只在**进入节点前**查一次 `stop_requested()`（`_execute_node` 里那条
 `if stop_requested(): raise CrawlerStopped`），返回之后没人再问；`_run_node_durable` 的两条

@@ -57,7 +57,7 @@ from urllib.parse import quote
 from selenium.common.exceptions import JavascriptException, StaleElementReferenceException
 from selenium.webdriver.common.by import By
 
-from i18n import t
+from i18n import stop_reason_label, t
 
 from .base import Crawler
 from .engine import feed
@@ -389,7 +389,7 @@ class TwitterCrawler(Crawler):
             logger.info(t('crawl.x.no_cards', url=self._current_url()))
         if self.login_wall:
             logger.warning(t('crawl.loginWall', platform=self.domain, where=self._current_url()))
-        logger.info(t('crawl.x.finished', n=self.collected(), reason=result.stopped_reason))
+        logger.info(t('crawl.x.finished', n=self.collected(), reason=stop_reason_label(result.stopped_reason)))
         return self.results()
 
     def _row(self, card, seen: set) -> dict | None:

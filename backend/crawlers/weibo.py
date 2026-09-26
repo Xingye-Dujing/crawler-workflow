@@ -9,7 +9,7 @@ from urllib.parse import quote, unquote
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
-from i18n import t
+from i18n import stop_reason_label, t
 
 from .base import Crawler, as_index
 from .engine import pagefetch, pager
@@ -317,7 +317,7 @@ class WeiboCrawler(Crawler):
             # 200 with an empty list is a real fact about the account, not a
             # refusal — legal, exactly as a bilibili space with no uploads is.
             logger.info(t('crawl.weibo.authorNoPosts', uid=uid))
-        logger.info(t('crawl.weibo.authorDone', n=self.collected(), reason=walk.stopped_reason))
+        logger.info(t('crawl.weibo.authorDone', n=self.collected(), reason=stop_reason_label(walk.stopped_reason)))
         return self.results()
 
     @staticmethod

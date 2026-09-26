@@ -273,6 +273,7 @@ class TestKeyReachability:
     DYNAMIC_PREFIXES = (
         'cookie.',  # services/cookie_flow.py: t(f'cookie.{platform}.purpose')
         'comment.status.',  # app.py: t(f'comment.status.{status}')
+        'crawl.stopReason.',  # i18n.py: stop_reason_label maps a walk token through STOP_REASONS
     )
 
     @staticmethod
@@ -609,3 +610,31 @@ class TestTheOneSessionRuleIsSpoken:
             assert word in english, f'{key} lost {word!r} in English'
         for word in zh_words:
             assert word in chinese, f'{key} lost {word!r} in Chinese'
+
+
+class TestStopReasonLabel:
+    """A crawl walk ends on a machine token; the console must read a phrase, not ``stuck``."""
+
+    def test_every_engine_stop_token_has_a_user_phrase(self):
+        """The engines spell their stop tokens inline, so a new one added without a label here is
+        caught by scanning the source — otherwise it would print raw and the user sees a code word.
+        """
+        tokens = set()
+        for rel in ('crawlers/engine/feed.py', 'crawlers/engine/pager.py'):
+            src = (REPO / 'backend' / rel).read_text(encoding='utf-8')
+            tokens |= set(re.findall(r"stopped_reason[^']*'([a-z_]+)'", src))
+        assert tokens, 'no stop tokens found — the engines changed shape, update this test'
+        missing = sorted(tok for tok in tokens if tok not in i18n.STOP_REASONS)
+        assert not missing, f'engine stop token(s) with no user-readable phrase: {missing}'
+
+    def test_a_token_reads_as_a_phrase_not_the_code_word(self, restore_lang):
+        set_lang('en')
+        assert i18n.stop_reason_label('stuck') == 'scrolling produced nothing new'
+        set_lang('zh')
+        assert i18n.stop_reason_label('target') == '达到目标条数'
+        for tok in i18n.STOP_REASONS:
+            assert i18n.stop_reason_label(tok) != tok, f'{tok} leaked its code word into the console'
+
+    def test_an_unknown_token_is_passed_through_not_invented(self):
+        assert i18n.stop_reason_label('brand_new') == 'brand_new'
+        assert i18n.stop_reason_label('') == ''

@@ -51,7 +51,7 @@ import re
 import time
 from urllib.parse import quote
 
-from i18n import t
+from i18n import stop_reason_label, t
 
 from .base import Crawler, PageNotArrivedError, as_index
 from .engine import feed, menu, pagefetch, popup
@@ -326,7 +326,7 @@ class BilibiliCrawler(VideoCrawler):
             stuck_rounds=2,
             settle_wait=self.CARD_WAIT,
         )
-        logger.info(t('crawl.bili.authorDone', n=self.collected(), reason=result.stopped_reason))
+        logger.info(t('crawl.bili.authorDone', n=self.collected(), reason=stop_reason_label(result.stopped_reason)))
         return self.results()
 
     def hot(self, board: str = 'popular', target_count: int = 50, **kwargs):

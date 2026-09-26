@@ -836,6 +836,16 @@ _ZH = {
     ),
     'housekeeping.runStoreFailed': '运行记录自动清理失败（不影响本次运行）',
     'housekeeping.datasetStoreFailed': '孤立文件自动清理失败（不影响本次运行）',
+    # Why a crawl walk stopped, said to the user (engine/feed.py and engine/pager.py return the
+    # machine token; stop_reason_label() maps it to one of these).
+    'crawl.stopReason.target': '达到目标条数',
+    'crawl.stopReason.end': '已到列表末尾',
+    'crawl.stopReason.no_new': '翻了几页都没有新条目',
+    'crawl.stopReason.stuck': '连续滚动没有新内容出现',
+    'crawl.stopReason.no_cards': '页面没有渲染出列表',
+    'crawl.stopReason.empty_page': '某一页是空的',
+    'crawl.stopReason.fetch_failed': '列表接口取数失败',
+    'crawl.stopReason.stopped': '用户停止了运行',
 }
 
 _EN = {
@@ -1688,6 +1698,14 @@ _EN = {
     ),
     'housekeeping.runStoreFailed': 'Automatic run-record cleanup failed (the run itself is unaffected)',
     'housekeeping.datasetStoreFailed': 'Automatic orphan-file cleanup failed (the run itself is unaffected)',
+    'crawl.stopReason.target': 'reached the target count',
+    'crawl.stopReason.end': 'reached the end of the list',
+    'crawl.stopReason.no_new': 'no new rows after paging',
+    'crawl.stopReason.stuck': 'scrolling produced nothing new',
+    'crawl.stopReason.no_cards': 'the page rendered no list',
+    'crawl.stopReason.empty_page': 'a page came back empty',
+    'crawl.stopReason.fetch_failed': 'the list request failed',
+    'crawl.stopReason.stopped': 'the run was stopped',
 }
 
 MESSAGES = {'zh': _ZH, 'en': _EN}
@@ -1809,6 +1827,28 @@ def t(key: str, **params) -> str:
     except (KeyError, IndexError, ValueError):
         logger.debug(f'i18n: bad params for "{key}": {params!r}')
         return template
+
+
+#: Machine stop-tokens a crawl walk can end on (``engine/feed.py`` / ``engine/pager.py`` return
+#: these). The engine stays language-free; a log line wraps the token here so the console reads a
+#: reason, not a code word like ``stuck``. An unknown token falls through unchanged rather than
+#: inventing a sentence, so a new engine reason is visible, never silently swallowed.
+STOP_REASONS = {
+    'target': 'crawl.stopReason.target',
+    'end': 'crawl.stopReason.end',
+    'no_new': 'crawl.stopReason.no_new',
+    'stuck': 'crawl.stopReason.stuck',
+    'no_cards': 'crawl.stopReason.no_cards',
+    'empty_page': 'crawl.stopReason.empty_page',
+    'fetch_failed': 'crawl.stopReason.fetch_failed',
+    'stopped': 'crawl.stopReason.stopped',
+}
+
+
+def stop_reason_label(reason: str) -> str:
+    """Render a crawl walk's stop token as a user-readable phrase in the current language."""
+    key = STOP_REASONS.get(str(reason or '').strip())
+    return t(key) if key else str(reason)
 
 
 def missing_keys() -> dict:
