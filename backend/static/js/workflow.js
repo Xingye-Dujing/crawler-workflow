@@ -1189,6 +1189,39 @@ function reloadCapabilities() {
     });
 }
 
+/* A single screen that answers "which platform wants what" from the crawl matrix
+   alone (#181). It never keeps its own platform list: every line is generated from
+   the `profileRecommended` / `serialOnly` / `parallelRecommended` flags the backend
+   already sends, so a platform reclassified in the matrix changes this text with no
+   second place to edit. Split out as a pure message-builder (matrix in, string out)
+   so the node harness can drive it without a DOM. */
+function platformAdviceMessage(matrix) {
+    var caps = (matrix && Array.isArray(matrix.platforms)) ? matrix.platforms : [];
+    var names = function (predicate) {
+        var list = caps.filter(predicate).map(function (cap) { return cap.platform; });
+        return list.length ? platformLabels(list) : I18n.t('advice.none');
+    };
+    var wantsProfile = function (cap) { return !!cap.profileRecommended; };
+    return [
+        I18n.t('advice.title'),
+        '',
+        I18n.t('advice.profile') + names(wantsProfile),
+        I18n.t('advice.live') + names(wantsProfile),
+        I18n.t('advice.serial') + names(function (cap) { return !!cap.serialOnly; }),
+        I18n.t('advice.parallel') + names(function (cap) { return !!cap.parallelRecommended; }),
+    ].join('\n');
+}
+
+function showPlatformAdvice() {
+    /* Refuse to advise without the facts: a dialog that guesses "which platforms are
+       serial-only" from memory is exactly the second opinion this app forbids. */
+    if (!Capabilities.ready()) {
+        showToast(I18n.t('advice.unavailable'));
+        return;
+    }
+    showDialog({ message: platformAdviceMessage(Capabilities.data) });
+}
+
 /* How many platforms in this run want a persistent browser profile and are not
    getting one. Pure on purpose (nodes, settings, matrix in; a count out) so the node
    harness can drive every branch — a pre-run dialog that never appears because it

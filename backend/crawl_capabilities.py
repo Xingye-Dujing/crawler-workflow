@@ -181,6 +181,12 @@ class Capability:
     #: property of the site, not a preference: the gate forces 真排队 for such a
     #: platform, and the pre-run dialog says so before the canvas pays for it.
     serial_only: bool = False
+    #: The opposite advice to ``serial_only``, and derived from its own measurements,
+    #: not from the absence of a warning: on these platforms two sessions crawling at
+    #: once have been watched to coexist (zhihu search/comments, bilibili pages) while a
+    #: single account stays inside the site's tolerance, so the 建议弹窗 can say "并行推荐"
+    #: with evidence rather than leaving the user to infer it from what is NOT serial-only.
+    parallel_recommended: bool = False
 
 
 # ─── The shared tail: how the rows leave the crawl ───────────────────────
@@ -507,6 +513,10 @@ def _author_mode(
 CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         platform='zhihu',
+        # Two sessions crawling zhihu at once have been watched to coexist (search pages
+        # and either comment shape), so the advice panel calls parallel out by name
+        # rather than leaving it as "not marked serial-only".
+        parallel_recommended=True,
         modes=(
             _posts_mode(_FULL_BODY, collects='dom_scroll'),
             _author_mode(
@@ -611,6 +621,10 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     Capability(
         platform='bilibili',
+        # Paged search reads one account's pages independently and comments come from a
+        # reply API that tolerates two sessions crawling at once (measured), so parallel
+        # is the recommended shape here, named as such rather than inferred.
+        parallel_recommended=True,
         modes=(
             _posts_mode(label_key='settings.collectVideos', collects='dom_read'),
             _author_mode(
@@ -958,6 +972,7 @@ def as_dict() -> dict:
                 'profileRecommended': bool(cap.profile_recommended),
                 'region': cap.region,
                 'serialOnly': bool(cap.serial_only),
+                'parallelRecommended': bool(cap.parallel_recommended),
             }
         )
     return {'platforms': platforms, 'fileFields': [_field_as_dict(f) for f in FILE_FIELDS]}

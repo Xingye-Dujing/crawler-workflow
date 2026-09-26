@@ -42,13 +42,19 @@ function world() {
     fixWindow(vm, sandbox);
     sandbox.window.explainWechatLimits = () => {};
     vm.runInContext(fs.readFileSync(canvasPath, 'utf8') + '\n;globalThis.__canvas = canvas;', sandbox);
-    vm.runInContext(fs.readFileSync(wfPath, 'utf8') + '\n;globalThis.__workflow = workflow;', sandbox);
+    vm.runInContext(fs.readFileSync(wfPath, 'utf8') + '\n;globalThis.__workflow = workflow; globalThis.__platformAdviceMessage = platformAdviceMessage;', sandbox);
     return sandbox;
 }
 
 const out = {};
 for (const sc of scenarios) {
     const sandbox = world();
+    if ('adviceMatrix' in sc) {
+        /* #181: the advice screen is built straight from the matrix flags — no panel,
+           no fetch — so this branch feeds the message builder and skips the card work. */
+        out[sc.id] = sandbox.__platformAdviceMessage(sc.adviceMatrix);
+        continue;
+    }
     /* One fresh world per scenario: Capabilities caches what it fetched, so a
        shared one would answer every case with the first payload it ever saw. */
     sandbox.__routes['/api/capabilities'] =
@@ -87,4 +93,6 @@ for (const sc of scenarios) {
     }
 }
 
+/* #181 — the advice screen is generated entirely from the matrix flags, with no
+   platform list of its own. A scenario carrying `adviceMatrix` asks for it. */
 process.stdout.write(JSON.stringify(out));

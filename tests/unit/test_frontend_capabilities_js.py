@@ -324,6 +324,43 @@ class TestHostilePayload:
         assert 'settings.collect' not in html, 'a one-option select is a caption wearing a widget'
 
 
+class TestPlatformAdvice:
+    """#181 — the advice screen is generated from matrix flags only. It must classify
+    each platform by the flag the matrix set and name nothing a matrix did not."""
+
+    @pytest.fixture(scope='class')
+    def advice(self, tmp_path_factory):
+        tmp = tmp_path_factory.mktemp('caps-advice')
+        matrix = {
+            'platforms': [
+                {'platform': 'weibo', 'profileRecommended': True, 'serialOnly': True},
+                {'platform': 'douyin', 'profileRecommended': True},
+                {'platform': 'zhihu', 'parallelRecommended': True},
+                {'platform': 'bilibili', 'parallelRecommended': True},
+                {'platform': 'youtube'},
+            ]
+        }
+        return _run(tmp, [{'id': 'msg', 'adviceMatrix': matrix}, {'id': 'empty', 'adviceMatrix': {'platforms': []}}])
+
+    def test_each_line_names_exactly_the_flagged_platforms(self, advice):
+        msg = advice['msg']
+        assert 'advice.profile' in msg and 'advice.live' in msg
+        # weibo+douyin carry profileRecommended; both the "prefer profile" and the
+        # "testing must reuse one real session" line are answered from that same flag.
+        assert 'platform.weibo' in msg and 'platform.douyin' in msg
+        assert 'advice.serial' in msg
+        assert 'advice.parallel' in msg and 'platform.zhihu' in msg and 'platform.bilibili' in msg
+
+    def test_a_platform_that_asks_for_nothing_appears_in_none_of_the_lines(self, advice):
+        # youtube carries no flag, so it must not be listed under any recommendation.
+        assert 'platform.youtube' not in advice['msg']
+
+    def test_an_empty_matrix_still_labels_every_section_as_none(self, advice):
+        empty = advice['empty']
+        assert 'advice.title' in empty and 'advice.none' in empty
+        assert 'platform.' not in empty, 'a section named a platform the matrix never had'
+
+
 # ─── the node card, over every platform × every mode ──────────────────────
 
 
