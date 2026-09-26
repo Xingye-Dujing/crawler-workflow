@@ -17,6 +17,8 @@ ROWS = [
     {'标题': '海口', '正文': '李女士在开会', 'emotion': 'Anger'},
 ]
 
+PNG_BYTES = b'\x89PNG\r\n\x1a\n' + bytes(range(64))
+
 
 def _stored_run(app_module, run_id='run-rep-1', workflow_name='stored-wf'):
     """One finished run with two nodes' tables, written straight into the store.
@@ -225,6 +227,137 @@ class TestView:
         name = client.post('/api/report/generate', json={}).get_json()['name']
         assert client.post('/api/exports/delete', json={'name': name}).get_json()['ok'] is True
         assert client.get(f'/api/report/view?name={name}').status_code == 404
+
+
+class TestOptions:
+    """The ``options`` the report dialog sends travel into the document."""
+
+    def test_a_body_that_hides_the_tables_leaves_their_rows_out(self, client, app_module):
+        app_module.execution_state['results'] = {'node-1': ROWS}
+        name = client.post('/api/report/generate', json={'options': {'show_tables': False}}).get_json()['name']
+        text = _report_text(client, app_module, name)
+        assert '张先生在海边游泳' not in text
+
+    def test_only_the_named_nodes_are_written_out(self, client, app_module):
+        app_module.execution_state['results'] = {'node-1': ROWS, 'node-2': [{'标题': '另一张表'}]}
+        name = (
+            client.post(
+                '/api/report/generate',
+                json={'nodes': [{'id': 'node-1'}, {'id': 'node-2'}], 'options': {'node_ids': ['node-1']}},
+            )
+        ).get_json()['name']
+        text = _report_text(client, app_module, name)
+        assert '张先生在海边游泳' in text
+        assert '另一张表' not in text
+
+    def test_a_wrongly_typed_options_blob_is_a_400_named_by_field(self, client, app_module):
+        app_module.execution_state['results'] = {'node-1': ROWS}
+        response = client.post('/api/report/generate', json={'options': 'show_tables'})
+        assert response.status_code == 400
+        assert 'options' in response.get_json()['error']
+
+
+class TestStudioImages:
+    def test_only_images_are_offered_for_embedding(self, client, app_module):
+        # A report is an .html and a studio chart is a .png; the picker must
+        # offer the picture and never the document that would inline itself.
+        app_module.execution_state['results'] = {'node-1': ROWS}
+        report_name = client.post('/api/report/generate', json={}).get_json()['name']
+        import os
+
+        from config import Config
+
+        os.makedirs(Config.EXPORT_DIR, exist_ok=True)
+        with open(os.path.join(Config.EXPORT_DIR, 'scatter-abc.png'), 'wb') as handle:
+            handle.write(PNG_BYTES)
+        images = client.get('/api/report/studio-images').get_json()['images']
+        names = [row['name'] for row in images]
+        assert 'scatter-abc.png' in names
+        assert report_name not in names
+
+    def test_a_chosen_image_is_inlined_into_the_document(self, client, app_module):
+        app_module.execution_state['results'] = {'node-1': ROWS}
+        import os
+
+        from config import Config
+
+        os.makedirs(Config.EXPORT_DIR, exist_ok=True)
+        with open(os.path.join(Config.EXPORT_DIR, 'bar-xyz.png'), 'wb') as handle:
+            handle.write(PNG_BYTES)
+        name = client.post('/api/report/generate', json={'options': {'images': ['bar-xyz.png']}}).get_json()['name']
+        text = _report_text(client, app_module, name)
+        assert 'data:image/png;base64,' in text
+        assert 'bar-xyz' in text
+
+
+def _fake_print_run(writes_pdf, returncode=0, stderr=b''):
+    """A stand-in for ``subprocess.run`` that honours the --print-to-pdf target.
+
+    The PDF route is under test here, not Chrome: the fake reads the output path
+    off the command and creates (or refuses to create) that file, so the route's
+    own success/failure branches can be checked without a browser on PATH.
+    """
+    from types import SimpleNamespace
+
+    def run(command, *args, **kwargs):
+        for arg in command:
+            if arg.startswith('--print-to-pdf=') and writes_pdf:
+                with open(arg.split('=', 1)[1], 'wb') as handle:
+                    handle.write(b'%PDF-1.4 fake')
+        return SimpleNamespace(returncode=returncode, stderr=stderr)
+
+    return run
+
+
+class TestPdf:
+    def test_a_report_prints_to_a_pdf_next_to_it(self, client, app_module, monkeypatch):
+        app_module.execution_state['results'] = {'node-1': ROWS}
+        name = client.post('/api/report/generate', json={}).get_json()['name']
+        monkeypatch.setattr(app_module, '_find_chrome', lambda: 'C:/chrome.exe')
+        monkeypatch.setattr(app_module.subprocess, 'run', _fake_print_run(True))
+        body = client.post('/api/report/pdf', json={'name': name}).get_json()
+        assert body['ok'] is True
+        assert body['name'] == name[: -len('.html')] + '.pdf'
+        assert body['bytes'] > 0
+
+    def test_a_name_that_is_not_a_report_is_not_found(self, client, app_module, monkeypatch):
+        monkeypatch.setattr(app_module, '_find_chrome', lambda: 'C:/chrome.exe')
+        response = client.post('/api/report/pdf', json={'name': 'notes.html'})
+        assert response.status_code == 404
+
+    def test_no_chrome_is_a_refusal_not_a_crash(self, client, app_module, monkeypatch):
+        app_module.execution_state['results'] = {'node-1': ROWS}
+        name = client.post('/api/report/generate', json={}).get_json()['name']
+        monkeypatch.setattr(app_module, '_find_chrome', lambda: '')
+        response = client.post('/api/report/pdf', json={'name': name})
+        assert response.status_code == 500
+        assert 'Chrome' in response.get_json()['error']
+
+    def test_a_print_that_fails_leaves_no_half_written_pdf(self, client, app_module, monkeypatch):
+        app_module.execution_state['results'] = {'node-1': ROWS}
+        name = client.post('/api/report/generate', json={}).get_json()['name']
+        monkeypatch.setattr(app_module, '_find_chrome', lambda: 'C:/chrome.exe')
+        monkeypatch.setattr(app_module.subprocess, 'run', _fake_print_run(True, returncode=1, stderr=b'crash'))
+        response = client.post('/api/report/pdf', json={'name': name})
+        assert response.status_code == 500
+        import os
+
+        from config import Config
+
+        pdf_path = os.path.join(Config.EXPORT_DIR, name[: -len('.html')] + '.pdf')
+        assert not os.path.exists(pdf_path), 'a failed print left the stub PDF on disk'
+
+    def test_a_chrome_that_will_not_start_is_reported(self, client, app_module, monkeypatch):
+        app_module.execution_state['results'] = {'node-1': ROWS}
+        name = client.post('/api/report/generate', json={}).get_json()['name']
+        import subprocess as _sp
+
+        def boom(command, *args, **kwargs):
+            raise _sp.SubprocessError('chrome died')
+
+        monkeypatch.setattr(app_module, '_find_chrome', lambda: 'C:/chrome.exe')
+        monkeypatch.setattr(app_module.subprocess, 'run', boom)
+        assert client.post('/api/report/pdf', json={'name': name}).status_code == 500
 
 
 def _report_text(client, app_module, name: str) -> str:

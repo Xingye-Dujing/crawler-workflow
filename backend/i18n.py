@@ -847,6 +847,11 @@ _ZH = {
     'run.reportSaved': '报告已生成：{name}（{size} 字节）',
     'run.reportFailed': '报告生成失败：{err}',
     'run.reportConclusionFailed': '结论生成失败，报告已省略结论：{err}',
+    'run.reportPdfSaved': 'PDF 已导出：{name}（{size} 字节）',
+    'run.reportPdfFailed': 'PDF 导出失败：{err}',
+    'api.reportPdfNotFound': '找不到可导出为 PDF 的报告：{name}',
+    'api.reportPdfNoChrome': '找不到 Chrome 浏览器，无法导出 PDF（请在设置里指定浏览器路径）',
+    'api.reportPdfFailed': 'PDF 导出失败：{err}',
     # ── 自动清理（housekeeping） ──────────────────────────────
     'housekeeping.done': (
         '自动清理：删除 {runs} 条过期运行记录、{files} 个孤立文件（另回收 {cache} 条模型缓存、{seen} 条去重记录）'
@@ -1726,6 +1731,11 @@ _EN = {
     'run.reportSaved': 'Report written: {name} ({size} bytes)',
     'run.reportFailed': 'Report failed: {err}',
     'run.reportConclusionFailed': 'The conclusion could not be generated, so the report omits it: {err}',
+    'run.reportPdfSaved': 'PDF exported: {name} ({size} bytes)',
+    'run.reportPdfFailed': 'PDF export failed: {err}',
+    'api.reportPdfNotFound': 'No report to export as PDF: {name}',
+    'api.reportPdfNoChrome': 'Chrome was not found, so the PDF cannot be exported (set a browser path in Settings)',
+    'api.reportPdfFailed': 'PDF export failed: {err}',
     # ── housekeeping ──────────────────────────────────────────
     'housekeeping.done': (
         'Housekeeping: dropped {runs} expired run record(s) and {files} orphaned file(s) '

@@ -258,22 +258,28 @@ out.banner_dismiss = { candidate: pa.resumeBar.candidate, hidden: id('resume-ban
 fresh();
 pa.runsManager._shown = [{ run_id: 'r1', workflow_name: "It's 三亚" }];
 requests.length = 0;
-answer = { ok: true, run: { run_id: 'r1', nodes: [] } };
+answer = { ok: true, name: 'report-x.html' };
+answers.dialog = { value: 'go', input: '名字', toggles: {}, fields: {} };
 await pa.exportsManager.report('r1', "It's 三亚");
-out.report_dialog = { requested: requests.length };
+out.report_dialog = { requested: requests.filter((r) => r.method === 'POST').length };
 
 fresh();
-answers.dialog = { ok: true, format: 'html' };
-answer = { ok: true, file: { name: 'report.html' } };
+answers.dialog = { value: 'ai', input: '名字', toggles: { 'rpt-sec-charts': false }, fields: { 'rpt-rows': '8' } };
+answer = { ok: true, name: 'report-x.html' };
 requests.length = 0;
 await pa.exportsManager.report('r1', '名字');
-out.report_request = { url: requests[0] && requests[0].url, body: requests[0] && JSON.parse(requests[0].body) };
+// report() now reads the studio images first (a bodyless GET) before it asks, so
+// the generate request is found by url rather than assumed to be the first call.
+const generate = requests.find((r) => r.url.indexOf('/api/report/generate') === 0);
+out.report_request = { url: generate && generate.url, body: generate && JSON.parse(generate.body) };
 
 fresh();
 answers.dialog = null;
 requests.length = 0;
 await pa.exportsManager.report('r1', '名字');
-out.report_cancelled = { requested: requests.length };
+// A cancelled dialog makes no POST: the studio-images read it precedes the ask
+// is a GET, and "sends nothing" has always meant "sends no write".
+out.report_cancelled = { requested: requests.filter((r) => r.method === 'POST').length };
 
 /* continue / restart refuse to start a second attempt while one is going */
 fresh();

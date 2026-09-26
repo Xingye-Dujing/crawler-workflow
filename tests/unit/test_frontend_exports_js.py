@@ -134,14 +134,21 @@ class TestReportRow:
 
 
 class TestReportButton:
-    def test_the_dialog_offers_three_outcomes_and_remembers_the_typed_title(self, results):
+    def test_the_dialog_offers_a_form_and_remembers_the_typed_title(self, results):
         first = results['dialogs'][0]
         assert first['hasInput'] is True
-        # Cancel throws its answer away; the two creating buttons must not, or
-        # the title the user typed would be lost to the choice they made.
-        assert first['buttons'] == [['CANCEL', None, False], ['CREATE-AI', 'ai', True], ['CREATE', 'go', True]]
+        # Four outcomes now: cancel, plain, plain-with-AI, and plain-then-PDF.
+        # Every creating button collects the form; cancel throws it away.
+        assert first['buttons'] == [
+            ['CANCEL', None, False],
+            ['CREATE-AI', 'ai', True],
+            ['CREATE', 'go', True],
+            ['CREATE-PDF', 'pdf', True],
+        ]
+        assert first['toggles'] == ['rpt-sec-charts', 'rpt-sec-tables', 'rpt-sec-facts', 'rpt-img-0']
+        assert first['fields'] == ['rpt-rows']
 
-    def test_creating_from_the_page_sends_the_canvas_titles_and_no_run_id(self, results):
+    def test_creating_from_the_page_sends_the_canvas_titles_and_the_chosen_options(self, results):
         body = results['posts'][0]['body']
         assert body['title'] == '季度报告', 'the typed title must be trimmed and sent'
         assert body['include_conclusion'] is True
@@ -149,25 +156,61 @@ class TestReportButton:
         # A node with no title of its own travels as its id, which is the only
         # name the backend has for it.
         assert body['nodes'] == [{'id': 'node-1', 'title': '数据源'}, {'id': 'node-2', 'title': 'node-2'}]
+        # Every switch on, the typed row cap, and the one studio picture ticked.
+        assert body['options'] == {
+            'show_charts': True,
+            'show_tables': True,
+            'show_facts': True,
+            'max_rows': 12,
+            'images': ['scatter-abc.png'],
+        }
 
-    def test_creating_from_a_stored_run_sends_the_run_id_instead(self, results):
+    def test_a_toggle_left_off_reaches_the_server_off(self, results):
         body = results['posts'][1]['body']
         assert body['run_id'] == 'run-7'
         assert 'nodes' not in body, 'a stored run must not be described by this canvas'
         assert body['include_conclusion'] is False
         assert body['title'] == '', 'an empty title lets the server name it after the workflow'
+        # Charts were unticked and the studio picture was deselected on this call.
+        assert body['options']['show_charts'] is False
+        assert body['options']['show_tables'] is True
+        assert body['options']['max_rows'] == 30
+        assert body['options']['images'] == []
 
-    def test_the_request_language_travels_twice_as_every_other_call_does(self, results):
+    def test_a_dialog_that_names_no_switch_still_builds_a_full_report(self, results):
+        """A collect button answered without toggle/field state must default to
+        the whole document — a report that lost its tables to a missing checkbox
+        would read as a bug, not as a choice."""
+        body = results['posts'][2]['body']
+        assert body['title'] == 'minimal'
+        assert body['options']['show_charts'] is True
+        assert body['options']['show_tables'] is True
+        assert body['options']['show_facts'] is True
+        # No row cap was given, so the server keeps its own default.
+        assert 'max_rows' not in body['options']
+        # The only studio picture is checked by default.
+        assert body['options']['images'] == ['scatter-abc.png']
+
+    def test_the_pdf_button_prints_after_writing_the_html(self, results):
+        # The PDF call rides on the name the generate request just returned.
+        pdf = results['posts'][3]
+        assert pdf['url'] == '/api/report/pdf'
+        assert pdf['body'] == {'name': 'report-x.html'}
+        assert results['opens'] == ['/api/report/view?name=ENC(report-x.html)'] * 3
+
+    def test_the_request_language_travels_as_every_other_call_does(self, results):
         for post in results['posts']:
-            assert post['url'] == '/api/report/generate'
             assert post['method'] == 'POST'
-            assert post['lang'] == 'en'
-            assert post['body']['lang'] == 'en'
+            assert post['lang'] == 'en', 'the header carries the language on every call'
+        for post in results['posts']:
+            if post['url'] == '/api/report/generate':
+                assert post['body']['lang'] == 'en', 'and the body repeats it, as the report route reads it there'
 
     def test_cancel_requests_nothing(self, results):
-        assert len(results['posts']) == 2, 'the cancelled dialog must not have POSTed'
-        assert len(results['dialogs']) == 3
+        # Three create outcomes each hit generate; only the PDF one also printed.
+        assert len(results['posts']) == 4, 'the cancelled dialog must not have POSTed'
+        assert len(results['dialogs']) == 4
 
     def test_a_written_report_is_opened_and_the_panel_refreshed(self, results):
-        assert results['opens'] == ['/api/report/view?name=ENC(report-x.html)'] * 2
-        assert results['toasts'] == ['DONE', 'DONE']
+        # Two plain creates, then the PDF create (PDF toast, then the open toast).
+        assert results['toasts'] == ['DONE', 'DONE', 'PDFDONE', 'DONE']

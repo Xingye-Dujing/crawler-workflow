@@ -3732,6 +3732,58 @@ function showDialog(opts) {
             });
         }
 
+        /* A small form — checkboxes and one field or two — rendered into the
+           dialog instead of a bare button set (the report dialog is its only
+           user). Each control is read back by its own id, never by querying the
+           container, so a caller or a test can drive one switch on its own. A
+           toggle is a boolean the user chose; "which sections" and "how many
+           rows" therefore do not have to be enumerated as button combinations. */
+        var toggleIds = (opts.toggles || []).map(function (t) { return t.id; });
+        var fieldIds = (opts.fields || []).map(function (f) { return f.id; });
+        if (toggleIds.length) {
+            listArea.style.display = 'block';
+            opts.toggles.forEach(function (t) {
+                var label = document.createElement('label');
+                label.className = 'dialog-toggle';
+                var box = document.createElement('input');
+                box.type = 'checkbox';
+                box.id = t.id;
+                box.checked = t.checked !== false;
+                label.appendChild(box);
+                label.appendChild(document.createTextNode(' ' + t.label));
+                listArea.appendChild(label);
+            });
+        }
+        if (fieldIds.length) {
+            listArea.style.display = 'block';
+            opts.fields.forEach(function (f) {
+                var row = document.createElement('label');
+                row.className = 'dialog-field';
+                row.appendChild(document.createTextNode(f.label));
+                var box = document.createElement('input');
+                box.type = f.type || 'number';
+                box.id = f.id;
+                if (f.value !== undefined) box.value = f.value;
+                if (f.min !== undefined) box.min = f.min;
+                if (f.max !== undefined) box.max = f.max;
+                row.appendChild(box);
+                listArea.appendChild(row);
+            });
+        }
+        function collectForm() {
+            var toggles = {};
+            toggleIds.forEach(function (id) {
+                var el = document.getElementById(id);
+                toggles[id] = !!(el && el.checked);
+            });
+            var fields = {};
+            fieldIds.forEach(function (id) {
+                var el = document.getElementById(id);
+                fields[id] = el ? el.value : '';
+            });
+            return { toggles: toggles, fields: fields };
+        }
+
         if (opts.buttons) {
             opts.buttons.forEach(function (b) {
                 var btn = document.createElement('button');
@@ -3743,7 +3795,18 @@ function showDialog(opts) {
                        (the report: plain, or with an AI conclusion) would
                        otherwise lose one of them — resolving a declared `value`
                        throws the typed text away, and resolving the text loses
-                       which button was pressed. `withInput` returns both. */
+                       which button was pressed. `withInput` returns both, and
+                       `collect` returns the checkbox / field states on top. */
+                    if (b.collect) {
+                        var got = collectForm();
+                        resolve({
+                            value: b.value,
+                            input: opts.input ? inputEl.value : undefined,
+                            toggles: got.toggles,
+                            fields: got.fields,
+                        });
+                        return;
+                    }
                     if (b.withInput && opts.input) {
                         resolve({ value: b.value, input: inputEl.value });
                         return;
@@ -5195,26 +5258,72 @@ var exportsManager = {
         window.open('/api/report/view?name=' + encodeURIComponent(name), '_blank');
     },
 
-    /* One click, one HTML file. With a run id the tables are read back out of
+    /* One click, one HTML file — with the sections, row cap and Chart-Studio
+       pictures chosen on the way. With a run id the tables are read back out of
        the run store, so yesterday's run can be reported on from the 运行记录
        panel; without one the run this page is holding is used, and the canvas
        lends the node titles (the store is not the only thing worth a report). */
     async report(runId, suggestedTitle) {
+        var TOG = { charts: 'rpt-sec-charts', tables: 'rpt-sec-tables', facts: 'rpt-sec-facts' };
+        var ROWS_FIELD = 'rpt-rows';
+        /* The studio's saved pictures already live in the export folder; offer
+           each as a toggle so a report can carry a hand-tuned chart the
+           auto-drawn ones cannot reproduce. A folder with none still reports —
+           the picker is simply empty, never an error. */
+        var studioImages = [];
+        try {
+            var listResp = await fetch('/api/report/studio-images', { headers: { 'X-Lang': I18n.lang || 'zh' } });
+            var list = await listResp.json();
+            if (list && list.ok) studioImages = list.images || [];
+        } catch (e) {
+            studioImages = [];
+        }
+        var toggles = [
+            { id: TOG.charts, label: I18n.t('exportsMgr.reportTCharts'), checked: true },
+            { id: TOG.tables, label: I18n.t('exportsMgr.reportTTables'), checked: true },
+            { id: TOG.facts, label: I18n.t('exportsMgr.reportTFacts'), checked: true },
+        ];
+        studioImages.forEach(function (img, i) {
+            toggles.push({ id: 'rpt-img-' + i, label: img.name, checked: true });
+        });
         var answer = await showDialog({
             message: I18n.t('exportsMgr.reportHint'),
             input: { value: suggestedTitle || '', placeholder: I18n.t('exportsMgr.reportPlaceholder') },
+            toggles: toggles,
+            fields: [{ id: ROWS_FIELD, label: I18n.t('exportsMgr.reportRows'), type: 'number', value: '20', min: '1', max: '200' }],
             buttons: [
                 { label: I18n.t('dialog.cancel'), value: null },
-                { label: I18n.t('exportsMgr.reportAi'), value: 'ai', withInput: true },
-                { label: I18n.t('exportsMgr.reportGo'), value: 'go', withInput: true, primary: true },
+                { label: I18n.t('exportsMgr.reportAi'), value: 'ai', collect: true },
+                { label: I18n.t('exportsMgr.reportGo'), value: 'go', collect: true, primary: true },
+                { label: I18n.t('exportsMgr.reportPdf'), value: 'pdf', collect: true },
             ],
         });
-        if (!answer) return;
+        if (!answer || !answer.value) return;
+        var t = answer.toggles || {};
+        // A switch the answer does not name is left at its default rather than
+        // read as "off": an older or partial dialog must still yield a full
+        // report, not a document that quietly lost its tables.
+        function tog(id, def) {
+            return t[id] === undefined ? def : !!t[id];
+        }
+        var options = {
+            show_charts: tog(TOG.charts, true),
+            show_tables: tog(TOG.tables, true),
+            show_facts: tog(TOG.facts, true),
+        };
+        var rows = parseInt(answer.fields && answer.fields[ROWS_FIELD], 10);
+        if (!isNaN(rows)) options.max_rows = rows;
+        if (studioImages.length) {
+            options.images = studioImages
+                .filter(function (img, i) { return tog('rpt-img-' + i, true); })
+                .map(function (img) { return img.name; });
+        }
         var payload = {
             title: String(answer.input || '').trim(),
             include_conclusion: answer.value === 'ai',
             lang: I18n.lang || 'zh',
             llm: LLMSettings.payload(),
+            options: options,
         };
         if (runId) {
             payload.run_id = runId;
@@ -5232,11 +5341,30 @@ var exportsManager = {
             });
             var result = await resp.json();
             if (!result.ok) throw new Error(result.error || 'report failed');
+            if (answer.value === 'pdf') await this.printPdf(result.name);
             showToast(I18n.t('exportsMgr.reportDone'));
             this.view(result.name);
             this.refresh();
         } catch (e) {
             showToast(I18n.t('exportsMgr.reportFailed') + ': ' + (e.message || e));
+        }
+    },
+
+    /* Print an already-generated report with the user's own headless Chrome. The
+       HTML has already landed, so a PDF that will not come is a note, not a
+       lost report: the failure is shown and the caller still opens the HTML. */
+    async printPdf(name) {
+        try {
+            var resp = await fetch('/api/report/pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+                body: JSON.stringify({ name: name }),
+            });
+            var result = await resp.json();
+            if (!result.ok) throw new Error(result.error || 'pdf failed');
+            showToast(I18n.t('exportsMgr.reportPdfDone'));
+        } catch (e) {
+            showToast(I18n.t('exportsMgr.reportPdfFailed') + ': ' + (e.message || e));
         }
     },
 

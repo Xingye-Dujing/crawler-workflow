@@ -2656,6 +2656,36 @@ input:-webkit-autofill:focus {
   color: var(--text);
   border-color: var(--line);
 }
+/* A checkbox row and a labelled field, used by the report dialog's form. Each is
+   one line and never wider than the dialog, so a long studio-chart file name
+   wraps instead of pushing a horizontal scrollbar onto the page. */
+#dialog-list-area .dialog-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+#dialog-list-area .dialog-toggle input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+#dialog-list-area .dialog-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 2px 2px;
+  font-size: 12px;
+  color: var(--text);
+}
+#dialog-list-area .dialog-field input {
+  width: 84px;
+  max-width: 40%;
+  box-sizing: border-box;
+}
 #dialog-actions {
   display: flex;
   flex-wrap: wrap;

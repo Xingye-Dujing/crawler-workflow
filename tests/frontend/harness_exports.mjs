@@ -38,8 +38,15 @@ const I18n = {
             'exportsMgr.reportPlaceholder': 'PLACEHOLDER',
             'exportsMgr.reportGo': 'CREATE',
             'exportsMgr.reportAi': 'CREATE-AI',
+            'exportsMgr.reportPdf': 'CREATE-PDF',
+            'exportsMgr.reportTCharts': 'CHARTS',
+            'exportsMgr.reportTTables': 'TABLES',
+            'exportsMgr.reportTFacts': 'FACTS',
+            'exportsMgr.reportRows': 'ROWS',
             'exportsMgr.reportDone': 'DONE',
             'exportsMgr.reportFailed': 'FAILED',
+            'exportsMgr.reportPdfDone': 'PDFDONE',
+            'exportsMgr.reportPdfFailed': 'PDFFAILED',
             'exportsMgr.remove': 'Delete',
             'exportsMgr.confirmRemove': 'CONFIRM-REMOVE',
             'exportsMgr.removeDone': 'DELETED',
@@ -74,10 +81,16 @@ Object.assign(sandbox, {
         if (body) {
             captured.posts.push({ url, method: options.method, lang: options.headers['X-Lang'], body });
         }
-        const answer =
-            body
-                ? { ok: true, name: 'report-x.html' }
-                : { ok: true, exports: payload.exports, files: payload.files, bytes: payload.bytes };
+        let answer;
+        if (!body && url.indexOf('studio-images') >= 0) {
+            answer = { ok: true, images: [{ name: 'scatter-abc.png', size: 100, mtime: 1 }] };
+        } else if (body && url.indexOf('/report/pdf') >= 0) {
+            answer = { ok: true, name: 'report-x.pdf', bytes: 9 };
+        } else if (body) {
+            answer = { ok: true, name: 'report-x.html' };
+        } else {
+            answer = { ok: true, exports: payload.exports, files: payload.files, bytes: payload.bytes };
+        }
         return Promise.resolve({ json: () => Promise.resolve(answer) });
     },
     setTimeout: () => {},
@@ -139,16 +152,35 @@ sandbox.canvas.nodes = {
     'node-2': { id: 'node-2', type: 'output', title: '', params: {} },
 };
 
-dialogAnswer.value = { value: 'ai', input: '  季度报告  ' };
+/* The report button is a small form now, not just a text + two choices. Each
+   scenario drives the toggles and the row cap the dialog would hand back, so
+   what is proven is the payload the button POSTs for a given set of switches: */
+dialogAnswer.value = {
+    value: 'ai',
+    input: '  季度报告  ',
+    toggles: { 'rpt-sec-charts': true, 'rpt-sec-tables': true, 'rpt-sec-facts': true, 'rpt-img-0': true },
+    fields: { 'rpt-rows': '12' },
+};
 await exportsManager.report();
-dialogAnswer.value = { value: 'go', input: '' };
+dialogAnswer.value = {
+    value: 'go',
+    input: '',
+    toggles: { 'rpt-sec-charts': false, 'rpt-sec-tables': true, 'rpt-sec-facts': true, 'rpt-img-0': false },
+    fields: { 'rpt-rows': '30' },
+};
 await exportsManager.report('run-7', 'stored name');
+// A button that names no switch at all must still yield a full report — the
+// defaults, never a silently-thinned document.
+dialogAnswer.value = { value: 'pdf', input: 'minimal' };
+await exportsManager.report();
 dialogAnswer.value = null;
 await exportsManager.report();
 
 out.dialogs = captured.dialogs.map((opts) => ({
-    buttons: (opts.buttons || []).map((b) => [b.label, b.value, !!b.withInput]),
+    buttons: (opts.buttons || []).map((b) => [b.label, b.value, !!b.collect]),
     hasInput: !!opts.input,
+    toggles: (opts.toggles || []).map((tg) => tg.id),
+    fields: (opts.fields || []).map((f) => f.id),
 }));
 out.posts = captured.posts.slice();
 out.opens = captured.opens.slice();

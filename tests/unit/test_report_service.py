@@ -12,6 +12,7 @@ the internet, so the properties that matter are not layout details:
   it is meant to be emailed and printed.
 """
 
+import os
 import re
 
 import pytest
@@ -254,3 +255,89 @@ class TestSummary:
         assert '中文' in zh and 'rows: 3' in zh
         assert 'English' in en
         assert 'Do not explain why' in en
+
+
+PNG_BYTES = b'\x89PNG\r\n\x1a\n' + bytes(range(64))
+
+
+class TestCustomization:
+    """The ``options`` the dialog sends: which sections, which nodes, how many rows."""
+
+    def test_no_options_renders_the_whole_document(self, service):
+        markup = service.build('报告', NODES, {'workflow_name': 'wf'})
+        # Every heading is present when nothing chooses otherwise — the default
+        # is "show it", so an unreadable body never quietly drops a section.
+        assert '数据表' in markup or 'Tables' in markup
+        assert '图表' in markup or 'Charts' in markup
+
+    def test_hiding_the_tables_keeps_charts_and_drops_the_table_markup(self, service):
+        markup = service.build('报告', NODES, {}, options={'show_tables': False})
+        # The source node's body would only ever appear inside a table cell, and
+        # the empty node's "no rows" line is produced by the table block too.
+        assert '张先生在深圳' not in markup
+        assert '没有产出任何行' not in markup
+        # The charts are a different switch and stay drawn (the source has an
+        # ``emotion`` column), so hiding tables must not hide the pictures.
+        assert 'data:image/png;base64,' in markup
+
+    def test_hiding_the_charts_leaves_no_figure(self, service):
+        markup = service.build('报告', NODES, {}, options={'show_charts': False})
+        assert '<figure>' not in markup
+        assert 'data:image/png;base64' not in markup
+
+    def test_only_the_named_nodes_are_reported(self, service):
+        markup = service.build('报告', NODES, {}, options={'node_ids': ['node-1']})
+        assert '三亚' in markup
+        # node-2 is empty, so its "no rows" line is the tell that it was dropped.
+        assert '没有产出任何行' not in markup
+        assert '数据源' in markup
+
+    def test_a_single_node_id_sent_as_a_string_is_still_a_selection(self, service):
+        # A browser that sends 'node-1' rather than ['node-1'] is a normal thing
+        # to survive; it must select that node, not the whole set.
+        markup = service.build('报告', NODES, {}, options={'node_ids': 'node-2'})
+        assert '输出' in markup
+        assert '三亚' not in markup
+
+    def test_the_row_cap_is_honoured_and_the_omission_is_stated(self, service):
+        rows = [{'正文': f'row {i}'} for i in range(50)]
+        markup = service.build('报告', [{'id': 'n', 'title': 'T', 'rows': rows}], {}, options={'max_rows': 5})
+        assert 'row 4' in markup
+        assert 'row 5' not in markup
+        assert '共 50 行' in markup
+
+    def test_a_runaway_row_cap_is_clamped_not_followed(self, service):
+        # One node's whole table as markup is a document no one can open; the
+        # cap is a ceiling the writer enforces whatever the body claims.
+        from services.report_service import MAX_TABLE_ROWS_CAP, _normalize_options
+
+        assert _normalize_options({'max_rows': 999999})['max_rows'] == MAX_TABLE_ROWS_CAP
+        assert _normalize_options({'max_rows': 0})['max_rows'] == 1
+        assert _normalize_options({'max_rows': 'nonsense'})['max_rows'] == MAX_TABLE_ROWS
+
+    def test_a_saved_studio_picture_is_inlined_as_a_figure(self, service):
+        os.makedirs(service.export_dir, exist_ok=True)
+        with open(os.path.join(service.export_dir, 'scatter-abc123.png'), 'wb') as handle:
+            handle.write(PNG_BYTES)
+        markup = service.build(
+            '报告',
+            [{'id': 'n', 'title': 'T', 'rows': [{'正文': '只有一行'}]}],
+            {},
+            options={'images': ['scatter-abc123.png']},
+        )
+        assert 'data:image/png;base64,' in markup
+        assert 'scatter-abc123' in markup
+
+    def test_a_non_image_name_is_never_inlined(self, service):
+        # The picker only offers images, but a name is not a permission: a stray
+        # page or a spreadsheet is refused, and the report stays self-contained.
+        os.makedirs(service.export_dir, exist_ok=True)
+        with open(os.path.join(service.export_dir, 'notes.txt'), 'w', encoding='utf-8') as handle:
+            handle.write('hello')
+        markup = service.build('报告', NODES, {}, options={'images': ['notes.txt']})
+        assert 'hello' not in markup
+
+    def test_a_deleted_picture_is_skipped_rather_than_blanking_the_section(self, service):
+        markup = service.build('报告', NODES, {}, options={'images': ['gone-xyz.png']})
+        # No crash, and the built-in charts still render for the source node.
+        assert 'data:image/png;base64,' in markup

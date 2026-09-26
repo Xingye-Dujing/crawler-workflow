@@ -6,8 +6,10 @@ import logging
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -4483,6 +4485,9 @@ def report_generate():
     if title is not None and not isinstance(title, str):
         return _bad_param('title')
     include_conclusion = bool(data.get('include_conclusion'))
+    options = data.get('options')
+    if options is not None and not isinstance(options, dict):
+        return _bad_param('options')
 
     nodes, meta = _report_nodes(data)
     if nodes is None:
@@ -4521,6 +4526,7 @@ def report_generate():
         nodes,
         meta,
         conclusion=conclusion,
+        options=options,
     )
     try:
         saved = report.save(markup, name)
@@ -4561,6 +4567,108 @@ def report_view():
     )
     response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
+
+
+def _find_chrome() -> str:
+    """The Chrome (not chromedriver) binary used to print a report to PDF.
+
+    The browser is a separate executable from the driver the crawler drives, so
+    it is located on its own: an explicit ``browser_binary`` the user set first,
+    then a ``chrome.exe`` sitting beside a configured chromedriver, then the
+    platform default, then anything on PATH. Empty when none is found — PDF is
+    then refused with a reason, never a stack trace.
+    """
+    explicit = str(get_setting('browser_binary') or '').strip()
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    driver = str(get_setting('driver_path') or getattr(Config, 'DRIVER_PATH', '') or '').strip()
+    if driver:
+        sibling = os.path.join(os.path.dirname(driver), 'chrome.exe')
+        if os.path.isfile(sibling):
+            return sibling
+    for candidate in (
+        r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+        r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+    return shutil.which('chrome') or shutil.which('google-chrome') or shutil.which('chromium') or ''
+
+
+@app.route('/api/report/pdf', methods=['POST'])
+def report_pdf():
+    """Print an already-generated report to PDF with the user's own Chrome.
+
+    A report is HTML this writer built from crawled text, and the highest-
+    fidelity way to a PDF is the same engine a browser uses — so this drives a
+    throwaway headless Chrome rather than adding a rendering dependency. It is
+    best-effort: no Chrome, or a Chrome that will not print, becomes an error the
+    panel can show, never a crash and never a half-written file left behind. The
+    profile directory is fresh and deleted afterwards: a print must never touch a
+    platform's real login profile.
+    """
+    from pathlib import Path
+
+    from services.export_browser import resolve_report_path
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    name = str(data.get('name') or '').strip()
+    html_path = resolve_report_path(Config.EXPORT_DIR, name)
+    if not html_path:
+        return jsonify({'ok': False, 'error': t('api.reportPdfNotFound', name=name)}), 404
+    chrome = _find_chrome()
+    if not chrome:
+        return jsonify({'ok': False, 'error': t('api.reportPdfNoChrome')}), 500
+    pdf_name = os.path.splitext(os.path.basename(html_path))[0] + '.pdf'
+    pdf_path = os.path.join(os.path.dirname(html_path), pdf_name)
+    profile_dir = tempfile.mkdtemp(prefix='cixi-pdf-')
+    command = [
+        chrome,
+        '--headless=new',
+        '--disable-gpu',
+        '--no-sandbox',
+        '--no-pdf-header-footer',
+        f'--user-data-dir={profile_dir}',
+        f'--print-to-pdf={pdf_path}',
+        Path(html_path).as_uri(),
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, timeout=90)
+    except (subprocess.SubprocessError, OSError) as e:
+        shutil.rmtree(profile_dir, ignore_errors=True)
+        add_log(t('run.reportPdfFailed', err=e))
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    shutil.rmtree(profile_dir, ignore_errors=True)
+    if result.returncode != 0 or not os.path.isfile(pdf_path):
+        with contextlib.suppress(OSError):
+            if os.path.isfile(pdf_path):
+                os.remove(pdf_path)
+        detail = (result.stderr or b'').decode('utf-8', 'replace')[-300:]
+        add_log(t('run.reportPdfFailed', err=detail))
+        return jsonify({'ok': False, 'error': t('api.reportPdfFailed', err=detail)}), 500
+    add_log(t('run.reportPdfSaved', name=pdf_name, size=os.path.getsize(pdf_path)))
+    return jsonify({'ok': True, 'name': pdf_name, 'bytes': os.path.getsize(pdf_path)})
+
+
+@app.route('/api/report/studio-images', methods=['GET'])
+def report_studio_images():
+    """Saved Chart-Studio pictures the report may inline, newest first.
+
+    The picker offers only what the export folder actually holds as an image, so
+    a report never asks to inline a file it cannot read: a spreadsheet that
+    happens to live in the same folder is not a chart whatever the user clicked.
+    """
+    from services.export_browser import list_exports
+    from services.report_service import INLINE_IMAGE_EXT
+
+    rows = [
+        {'name': row['name'], 'size': row['size'], 'mtime': row['mtime']}
+        for row in list_exports(Config.EXPORT_DIR)
+        if os.path.splitext(row['name'])[1].lower() in INLINE_IMAGE_EXT
+    ]
+    return jsonify({'ok': True, 'images': rows})
 
 
 # ─── Stats API ─────────────────────────────────────────────────

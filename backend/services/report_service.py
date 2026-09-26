@@ -20,6 +20,7 @@ Three rules shape it:
   own and its failure becomes one line of text.
 """
 
+import base64
 import html
 import logging
 import os
@@ -30,6 +31,7 @@ import pandas as pd
 
 from analyzers.llm_client import ABORT_MARK
 from i18n import t
+from services.export_browser import resolve_export_file
 from services.visualizer import VisualizationService
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,75 @@ POSITION_COLUMNS = frozenset({'row', 'start', 'end'})
 #: A cell longer than this is trimmed for reading; the CSV export stays whole.
 MAX_CELL_CHARS = 300
 _SAFE_STEM = re.compile(r'[^0-9A-Za-z_\u4e00-\u9fa5.-]+')
+
+#: The optional parts of a report, every switch on by default. A request body
+#: that names nothing still produces the whole document: losing a section to a
+#: field the writer could not read is worse than showing one the user meant to
+#: hide, so the fallback is always "include it", never "drop it".
+DEFAULT_OPTIONS = {
+    'show_charts': True,
+    'show_tables': True,
+    'show_facts': True,
+    'show_conclusion': True,
+    'max_rows': None,
+    'node_ids': None,
+    'images': None,
+}
+#: The row cap the panel may raise to, and the floor it may drop to. Both bound
+#: a runaway request: one node's whole table printed as markup is a document no
+#: one can open, and zero rows printed is a document with a heading and nothing
+#: under it.
+MIN_TABLE_ROWS = 1
+MAX_TABLE_ROWS_CAP = 5000
+#: Extensions a report may inline as a picture. A name is handed to the report
+#: from the export listing, and the listing holds CSVs and pages too; only an
+#: image that resolves inside the export directory is ever read as bytes.
+INLINE_IMAGE_EXT = frozenset({'.png', '.jpg', '.jpeg', '.webp', '.gif'})
+_MIME_BY_EXT = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+}
+
+
+def _as_str_list(value):
+    """A list of strings from a value that may be a list, one string, or nothing.
+
+    ``None`` (the caller named nothing) stays ``None`` so the caller can tell
+    "everything" from "an explicit empty selection"; a browser that sends a
+    single id instead of a one-item list is normalised here rather than raising.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value if str(item or '').strip()]
+    return None
+
+
+def _normalize_options(options) -> dict:
+    """The caller's switches over :data:`DEFAULT_OPTIONS`, tolerating odd input.
+
+    The booleans, the row cap and the two lists are all read here so each reader
+    downstream can trust the shape: a report is a deliverable, and it must not
+    abort because a stray ``'7'`` arrived where an int belongs.
+    """
+    opts = dict(DEFAULT_OPTIONS)
+    if isinstance(options, dict):
+        opts.update(options)
+    for key in ('show_charts', 'show_tables', 'show_facts', 'show_conclusion'):
+        opts[key] = True if opts.get(key) is None else bool(opts.get(key))
+    try:
+        limit = int(opts['max_rows']) if opts['max_rows'] not in (None, '') else MAX_TABLE_ROWS
+    except (TypeError, ValueError):
+        limit = MAX_TABLE_ROWS
+    opts['max_rows'] = max(MIN_TABLE_ROWS, min(limit, MAX_TABLE_ROWS_CAP))
+    opts['node_ids'] = _as_str_list(opts.get('node_ids'))
+    opts['images'] = _as_str_list(opts.get('images'))
+    return opts
 
 
 def safe_stem(name: str, fallback: str = 'report') -> str:
@@ -196,36 +267,75 @@ class ReportService:
     def _histogram(df: pd.DataFrame, column: str) -> str:
         return VisualizationService.render_image(df, 'histogram', x=column)
 
-    def _chart_block(self, frames: list) -> str:
-        blocks = []
+    def _chart_block(self, frames: list, images=None) -> str:
+        """The matplotlib charts and any chosen Chart-Studio pictures, in order.
+
+        A picture the picker named but that no longer resolves is skipped rather
+        than blanking the section: one deleted file is a gap, not a lost report.
+        If drawing the built-in charts raises, the failure line still prints and
+        the studio pictures are attempted, because they cost nothing to inline.
+        """
+        figures = []
+        note = ''
         try:
             charts = self._charts(frames)
         except Exception as e:  # a chart must never take the report down
             logger.exception(t('report.chartsFailed'))
-            return f'<p class="warn">{html.escape(t("report.chart_failed", err=_text(e)))}</p>'
+            charts = []
+            note = f'<p class="warn">{html.escape(t("report.chart_failed", err=_text(e)))}</p>'
         for title, uri in charts:
-            block = f'<figure><img src="{uri}" alt="" loading="lazy"><figcaption>{_cell(title)}</figcaption></figure>'
-            blocks.append(block)
-        if not blocks:
-            return f'<p class="muted">{html.escape(t("report.no_charts"))}</p>'
-        return '<div class="charts">' + ''.join(blocks) + '</div>'
+            figures.append(
+                f'<figure><img src="{uri}" alt="" loading="lazy"><figcaption>{_cell(title)}</figcaption></figure>'
+            )
+        figures += self._image_figures(images)
+        if not figures:
+            return note or f'<p class="muted">{html.escape(t("report.no_charts"))}</p>'
+        return note + '<div class="charts">' + ''.join(figures) + '</div>'
+
+    def _image_figures(self, images) -> list:
+        """Saved Chart-Studio PNGs, base64-inlined so the report stays offline.
+
+        The picker hands back names from the export listing, and that listing
+        holds spreadsheets and stray pages too, so each name is resolved through
+        the same door the download route uses and accepted only as an image.
+        """
+        figures = []
+        for name in images or []:
+            path = resolve_export_file(self.export_dir, name)
+            ext = os.path.splitext(path)[1].lower() if path else ''
+            if ext not in INLINE_IMAGE_EXT:
+                continue
+            try:
+                with open(path, 'rb') as handle:
+                    payload = handle.read()
+            except OSError:
+                continue
+            if not payload:
+                continue
+            mime = _MIME_BY_EXT.get(ext, 'image/png')
+            uri = f'data:{mime};base64,' + base64.b64encode(payload).decode('ascii')
+            label = os.path.splitext(os.path.basename(path))[0]
+            figures.append(
+                f'<figure><img src="{uri}" alt="" loading="lazy"><figcaption>{_cell(label)}</figcaption></figure>'
+            )
+        return figures
 
     # ── tables ──────────────────────────────────────────────────
 
-    def _table_block(self, entry: dict) -> str:
+    def _table_block(self, entry: dict, row_limit: int = MAX_TABLE_ROWS) -> str:
         df = entry['frame']
         rows = len(df)
         if rows == 0:
             return f'<p class="muted">{_cell(entry["title"])} — {html.escape(t("report.no_rows"))}</p>'
-        shown = df.head(MAX_TABLE_ROWS)
+        shown = df.head(row_limit)
         head = ''.join(f'<th>{_cell(column)}</th>' for column in df.columns)
         body = ''.join(
             '<tr>' + ''.join(f'<td>{_cell(value)}</td>' for value in record) + '</tr>'
             for record in shown.astype(str).values.tolist()
         )
         note = ''
-        if rows > MAX_TABLE_ROWS:
-            note = f'<p class="muted">{html.escape(t("report.more_rows", shown=MAX_TABLE_ROWS, total=rows))}</p>'
+        if rows > row_limit:
+            note = f'<p class="muted">{html.escape(t("report.more_rows", shown=row_limit, total=rows))}</p>'
         return (
             f'<section><h3>{_cell(entry["title"])}</h3>'
             f'<p class="meta">{html.escape(t("report.row_count", n=rows, cols=len(df.columns)))}</p>'
@@ -234,13 +344,24 @@ class ReportService:
 
     # ── document ────────────────────────────────────────────────
 
-    def build(self, title: str, nodes: list, meta: dict = None, conclusion: str = '') -> str:
-        """The report as one HTML string. ``nodes`` is [{'title','rows'}]."""
+    def build(self, title: str, nodes: list, meta: dict = None, conclusion: str = '', options: dict = None) -> str:
+        """The report as one HTML string. ``nodes`` is [{'id','title','rows'}].
+
+        ``options`` chooses what the document shows — which sections, how many
+        rows per table, which nodes, and any Chart-Studio pictures to inline. It
+        is normalised first, so an empty or malformed body yields the full report
+        rather than a partial one (see :data:`DEFAULT_OPTIONS`).
+        """
+        opts = _normalize_options(options)
+        keep = opts['node_ids']
         frames = []
         for entry in nodes:
+            ident = _text(entry.get('id'))
+            if keep is not None and ident not in keep:
+                continue
             rows = entry.get('rows') or []
             frame = pd.DataFrame(rows) if rows else pd.DataFrame()
-            frames.append({'title': _text(entry.get('title')) or _text(entry.get('id')), 'frame': frame})
+            frames.append({'id': ident, 'title': _text(entry.get('title')) or ident, 'frame': frame})
         total_rows = sum(len(frame['frame']) for frame in frames)
         non_empty = sum(1 for frame in frames if not frame['frame'].empty)
         meta = meta or {}
@@ -257,7 +378,7 @@ class ReportService:
         )
         summary = f'<p>{html.escape(t("report.summary", nodes=len(frames), rows=total_rows, tables=non_empty))}</p>'
         conclusion_block = ''
-        if str(conclusion or '').strip():
+        if str(conclusion or '').strip() and opts['show_conclusion']:
             paragraphs = ''.join(f'<p>{_cell(part)}</p>' for part in str(conclusion).split('\n\n') if part.strip())
             conclusion_block = f'<section><h2>{html.escape(t("report.conclusion"))}</h2>{paragraphs}</section>'
         generated = _text(meta.get('generated_at')) or time.strftime('%Y-%m-%d %H:%M:%S')
@@ -265,16 +386,21 @@ class ReportService:
             f'<header><h1>{_cell(title)}</h1>'
             f'<p class="meta">{html.escape(t("report.generated"))} {html.escape(generated)}</p></header>'
         )
+        sections = ''
+        if opts['show_charts']:
+            charts_html = self._chart_block(frames, opts['images'])
+            sections += f'<section><h2>{html.escape(t("report.charts"))}</h2>{charts_html}</section>'
+        if opts['show_facts'] and fact_rows:
+            facts_html = f'<table class="facts">{fact_rows}</table>'
+            sections += f'<section><h2>{html.escape(t("report.run_facts"))}</h2>{facts_html}</section>'
+        if opts['show_tables']:
+            tables_html = ''.join(self._table_block(frame, opts['max_rows']) for frame in frames)
+            sections += f'<section><h2>{html.escape(t("report.tables"))}</h2>{tables_html}</section>'
         return (
             '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>{_cell(title)}</title><style>{_CSS}</style></head><body>'
-            f'{header}{summary}{conclusion_block}'
-            f'<section><h2>{html.escape(t("report.charts"))}</h2>{self._chart_block(frames)}</section>'
-            f'<section><h2>{html.escape(t("report.run_facts"))}</h2><table class="facts">{fact_rows}</table></section>'
-            f'<section><h2>{html.escape(t("report.tables"))}</h2>'
-            + ''.join(self._table_block(frame) for frame in frames)
-            + '</section></body></html>'
+            f'{header}{summary}{conclusion_block}{sections}</body></html>'
         )
 
     def save(self, markup: str, name: str) -> dict:
@@ -303,30 +429,38 @@ class ReportService:
 
 
 _CSS = """
-/* A report is opened to be read, printed and forwarded, and its pictures are
-   rendered for light paper. Following the OS dark-mode setting used to flip the
-   page to a black background while the charts kept their black axis text —
-   readable in neither. So the document decides its own colours. */
-body { font: 14px/1.6 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; margin: 0 auto; max-width: 1000px;
-       padding: 24px; color: #1c1c1e; background: #fff; }
-h1 { font-size: 22px; margin: 0 0 4px; }
-h2 { font-size: 16px; margin: 28px 0 10px; border-bottom: 1px solid #e2e2e6; padding-bottom: 6px; }
-h3 { font-size: 14px; margin: 20px 0 6px; }
-p.meta, .muted { color: #6b6b70; font-size: 12px; }
-.warn { color: #a4382b; font-size: 12px; }
-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
-th, td { border: 1px solid #d8d8dd; padding: 5px 7px; text-align: left; vertical-align: top;
+/* The report is the paper edition of the canvas, so it borrows the same design
+   tokens: paper-white ground, #1a1a1a ink (never pure black), hairline rules on
+   one rgba pair, and the single ochre accent the nodes are drawn with. A report
+   is opened to be read, printed and forwarded and its charts are rendered for
+   light paper, so the document fixes its own colours — following the OS dark-mode
+   setting flipped the page to black while the pictures kept black axis text,
+   readable in neither. */
+body { font: 14px/1.65 "Literata", Georgia, "Songti SC", "SimSun", system-ui, "Microsoft YaHei", serif;
+       margin: 0 auto; max-width: 960px; padding: 40px 28px 64px; color: #1a1a1a; background: #fff; }
+h1 { font-size: 26px; font-weight: 600; letter-spacing: .2px; margin: 0 0 6px; }
+header { border-bottom: 2px solid #1a1a1a; padding-bottom: 14px; margin-bottom: 22px; }
+h2 { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.4px;
+     margin: 34px 0 12px; color: #9a7740; border-bottom: 1px solid rgba(26,26,26,.15); padding-bottom: 6px; }
+h3 { font-size: 14px; font-weight: 600; margin: 22px 0 6px; }
+p { margin: 0 0 12px; }
+p.meta, .muted { color: rgba(26,26,26,.4); font-size: 12px; }
+.warn { color: #a85454; font-size: 12px; }
+table { border-collapse: collapse; width: 100%; table-layout: fixed; margin-bottom: 8px; }
+th, td { border: 1px solid rgba(26,26,26,.12); padding: 6px 9px; text-align: left; vertical-align: top;
          overflow-wrap: break-word; }
-thead th { background: #f3f3f6; }
+thead th { background: rgba(26,26,26,.05); font-weight: 600; }
+tbody tr:nth-child(even) td { background: rgba(26,26,26,.02); }
 table.facts { width: auto; }
-table.facts th { width: 120px; background: #f3f3f6; }
+table.facts th { width: 140px; background: rgba(26,26,26,.05); }
 /* A grid, not flexbox: with flex the leftover chart of an unfinished row grew
    to the whole width and dwarfed its siblings. Every cell is the same size now,
    whatever the window width is. */
-.charts { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-figure { margin: 0; min-width: 0; }
+.charts { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+figure { margin: 0; min-width: 0; border: 1px solid rgba(26,26,26,.08); border-radius: 6px; padding: 10px;
+         background: #fff; }
 figure img { width: 100%; height: auto; background: #fff; }
-figcaption { font-size: 12px; color: #6b6b70; margin-top: 4px; }
+figcaption { font-size: 12px; color: rgba(26,26,26,.4); margin-top: 6px; }
 @media print {
   body { max-width: none; padding: 0; }
   .charts { grid-template-columns: repeat(2, 1fr); }
