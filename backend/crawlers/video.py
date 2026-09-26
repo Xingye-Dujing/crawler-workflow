@@ -606,7 +606,13 @@ class DouyinCrawler(VideoCrawler):
                 raise PageNotArrivedError(t('crawl.dy.noCardsSlow', url=self._current_url()), **facts)
             raise PageNotArrivedError(t('crawl.dy.noCards', page=self._page_words(), url=self._current_url()), **facts)
         self._apply_sort(sort)
-        rounds = self._open_each(self._card_ids, self._scroll_results, done, target_count)
+        rounds = self._open_each(
+            self._card_ids,
+            self._scroll_results,
+            lambda: self._return_to_results(keyword, sort),
+            done,
+            target_count,
+        )
         logger.info(t('crawl.dy.finished', n=self.collected(), rounds=rounds, total=target_count))
         return self.results()
 
@@ -705,7 +711,13 @@ class DouyinCrawler(VideoCrawler):
         # Identity, not a resume blob: the rows carry their own 视频ID, so a resumed
         # run skips what it already paid for and the cursor stays a position.
         done = {str(row.get('视频ID') or '') for row in self.results() if row.get('视频ID')}
-        self._open_each(lambda: self._grid_ids(), self._scroll_profile, done, target_count)
+        self._open_each(
+            lambda: self._grid_ids(),
+            self._scroll_profile,
+            lambda: self._return_to_profile(url),
+            done,
+            target_count,
+        )
         if published >= 0:
             logger.info(t('crawl.dy.authorDone', n=self.collected(), works=published))
         else:
@@ -812,27 +824,36 @@ class DouyinCrawler(VideoCrawler):
 
     # ─── spending the list ─────────────────────────────────────────────
 
-    def _open_each(self, read_ids, scroll, done: set, target_count: int) -> int:
-        """Open one video page per id of a self-paging list, to the budget or the end.
+    def _open_each(self, read_ids, scroll, reopen, done: set, target_count: int) -> int:
+        """Take the whole list first, then spend one detail visit per id.
 
-        Both douyin walks are this shape, so the loop that spends the row budget is
-        written once: read the ids on screen, open the ones not yet opened, scroll
-        for the next batch.
+        Two passes and never interleaved, because a detail visit is a **whole navigation**:
+        measured 2026-09-26 on the user's own run (关键词 IU, 目标 50) the interleaved shape
+        read the first screen (26 cards), opened all 26, and then asked the page it was
+        standing on — which by then was the last **video** page — to hand it more result
+        cards. It never does, so a douyin search stopped at one screen however large the
+        target was, finishing as「翻了 2 屏」with 26 of 50 rows and no complaint. The fake
+        driver hid this for the whole time: it served the search cards from a fixed list no
+        matter which address was loaded.
 
-        A round whose ids are all already known is **not** the end of the list. That
-        is the resumed run's ordinary first round — the page reopens on the very ids
-        the dead run opened — so stopping there (which this loop used to do) made
-        断点续跑 hand back the dead run's rows and never advance past them. Only a
-        scroll that pays out nothing ends the walk.
+        *reopen* is what makes a pool that ran dry on blank detail pages recoverable: the
+        walk comes back to the list and keeps going from the ids ``done`` has not paid for
+        yet. A round whose ids are all already known is **not** the end of the list either —
+        that is the resumed run's ordinary first screen — so only a scroll that pays out
+        nothing ends the walk.
         """
-        rounds = 0
-        while self.collected() < target_count:
-            rounds += 1
-            ids = read_ids()
-            todo = [aweme_id for aweme_id in ids if aweme_id not in done]
-            logger.info(t('crawl.dy.round', i=rounds, n=len(ids), fresh=len(todo), done=self.collected()))
-            for aweme_id in todo:
-                if self.collected() >= target_count:
+        screens = 0
+        first = True
+        while not self.may_stop() and self.collected() < target_count:
+            if not first:
+                reopen()
+            first = False
+            pool, drained, taken = self._harvest_pool(read_ids, scroll, done, target_count - self.collected())
+            screens += taken
+            if not pool:
+                break
+            for aweme_id in pool:
+                if self.collected() >= target_count or self.may_stop():
                     break
                 done.add(aweme_id)
                 row = self._detail_row(aweme_id)
@@ -840,17 +861,39 @@ class DouyinCrawler(VideoCrawler):
                     logger.info(t('crawl.dy.processed', i=aweme_id, n=self.collected()))
                 # ``page`` is kept as the cursor key because runs saved before the
                 # shared walk already store the round number under it.
-                self.mark_position(page=rounds, done=self.collected(), opened=sorted(done)[-40:])
+                self.mark_position(page=screens, done=self.collected(), opened=sorted(done)[-40:])
                 self._polite_pause(0.6, 0.2)
-            if self.collected() >= target_count:
-                # The budget is met — do not go looking for the next batch. The
-                # check belongs here rather than being left to the loop condition,
-                # because scrolling first would wait out the settle for rows
-                # nobody asked for.
+            if drained:
+                # The list itself said it has nothing more, so every row this crawl can get is
+                # either collected already or one of the detail pages that published nothing.
+                break
+        return screens
+
+    def _harvest_pool(self, read_ids, scroll, done: set, need: int) -> tuple:
+        """Scroll the list — and nothing but the list — until it holds *need* unpaid-for ids.
+
+        Answers the ids in the order the list draws them, whether the list ran dry, and how
+        many screens that took — the last being the number the finish line quotes, so a crawl
+        that read two screens still says two. Nothing here may navigate anywhere except down
+        this page: once a detail page is open, *read_ids* and *scroll* are reading a document
+        that has nothing to do with this search.
+        """
+        pool: list = []
+        queued: set = set()
+        screens = 0
+        while not self.may_stop() and len(pool) < need:
+            screens += 1
+            on_screen = list(read_ids())
+            fresh = [aweme_id for aweme_id in on_screen if aweme_id not in done and aweme_id not in queued]
+            logger.info(t('crawl.dy.round', i=screens, n=len(on_screen), fresh=len(fresh), done=self.collected()))
+            for aweme_id in fresh:
+                queued.add(aweme_id)
+                pool.append(aweme_id)
+            if len(pool) >= need:
                 break
             if not scroll():
-                break
-        return rounds
+                return pool, True, screens
+        return pool, False, screens
 
     # ─── reaching and reading the result list ─────────────────────────
 
@@ -902,6 +945,21 @@ class DouyinCrawler(VideoCrawler):
         if wait.get('verdict') in ('login', 'blocked', 'wall') or self._is_walled():
             return self.CAPTCHA
         return self.NOT_MOUNTED
+
+    def _return_to_results(self, keyword: str, sort) -> None:
+        """Come back to the result list, in the order the user chose.
+
+        Called only by :meth:`_open_each` between two passes, when the last detail visit took
+        the driver away from this page. The chosen order lives in no address (measured: the
+        corner menu re-renders the list and leaves the URL alone), so a re-open that skipped it
+        would finish a walk filed under 最多点赞 having crawled its remaining rows in
+        综合排序. A list that does not come back — dying cookie, slow network — simply yields no
+        further ids and the walk ends with the rows it holds; the wall the navigation itself
+        latched is what the executor reports from there.
+        """
+        reached = self._open_results(keyword)
+        if self._page_outcome(reached) != self.CAPTCHA:
+            self._apply_sort(sort)
 
     def _is_walled(self) -> bool:
         """A refusal the page has already announced: captcha title, or a wall flag."""
@@ -1002,6 +1060,18 @@ class DouyinCrawler(VideoCrawler):
         settled = feed.wait_for(lambda: len(set(self._grid_ids())), before + 1, timeout=self.SCROLL_WAIT, tick=1.0)
         self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
         return bool(settled > before)
+
+    def _return_to_profile(self, url: str) -> None:
+        """Come back to the creator's grid, for the same reason a search re-open does.
+
+        The grid is a document, and opening one of its videos replaced it. Waiting for its first
+        post again is not ceremony: a page that has not mounted has no ids to harvest, and the
+        walk would read that as "this author has nothing more" — the exact silence
+        :meth:`_published_count` exists to refuse.
+        """
+        self.open(url)
+        self._dismiss_prompts()
+        self._wait_for_grid(timeout=self.MOUNT_WAIT)
 
     def _scroll_results(self) -> bool:
         """Step the window down and report whether the list handed over more rows.

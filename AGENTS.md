@@ -126,12 +126,13 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
   (`_content_prefs`).
 - **`crawlers/engine/` is mechanics, a platform module is the site.** `engine.counters.parse_count`,
   `engine.wall` (the four page verdicts), `engine.popup.Prompt` + a
-  platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (the scroll that finds the
-  element which actually moves), `engine.pager.walk_pages` and `engine.jsonpath` know nothing
+  platform's `prompts`, `engine.feed.walk_feed` / `wait_for` / `jump_to_bottom` (finds what actually
+  moves), `engine.pager.walk_pages` and `engine.jsonpath` know nothing
   about any platform; a platform module declares only selectors,
   endpoints and column names. New crawl logic goes through these helpers — a second copy of a scroll loop
   or a 万-parser is what this rule exists to prevent. No walk has a round/page budget: "how much"
-  is the user's target, never a constant. `Crawler.open(url)` is the only navigation entry point: it
+  is the user's target, never a constant. **A list is a document, not a bookmark:** a per-row page
+  navigates away, harvest the list before leaving it. `Crawler.open(url)` is the only navigation entry point: it
   survives a renderer timeout and **records whether the navigation settled** — a load that never
   finished is a slow network, not a refusal, and a refusal may name only what the code can see. It
   clears the dialog, and latches a wall only once it is still there after re-reading.
@@ -180,8 +181,7 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 
 - **douyin**: `never_headless = True` (验证码 on every navigation, and a visible window is
   necessary, **not sufficient**); search is DOM-only; **no 播放数 column exists**; don't block its
-  images; authors are opaque `sec_uid` only (the search route and the "page said nothing" sentinel
-  are measured in `docs/crawler_notes.md`).
+  images; authors are opaque `sec_uid` only (measured: `docs/crawler_notes.md`).
 - **X (twitter)**: `never_headless = True`; the timeline is virtualized, so progress is rows kept and
   resume identity is the **status-id set**, never an index; all five counters come from one
   `[role="group"]` aria-label and **浏览数 exists nowhere else**; one `execute_script` per card.

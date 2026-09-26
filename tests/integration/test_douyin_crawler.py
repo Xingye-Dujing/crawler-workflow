@@ -119,10 +119,21 @@ class FakeDriver:
         self._pending = list(cards) if fill_after else []
         self.fill_after = fill_after
         self.scroll_batches = list(scroll_batches or [])
+        # What a **fresh load of that document** shows, and how many times each has been loaded.
+        # Kept because the walk re-opens its list between passes; a fake that handed the
+        # scrolled-to state back on every navigation would let a walk re-read row 57 of a list it
+        # never actually paged down again.
+        self._first_screen = list(cards)
+        self._first_batches = list(self.scroll_batches)
+        self._search_loads = 0
+        self._reads = 0
+        self._profile_loads = 0
         # The author profile's own 作品 grid: the ids mounted in it, the batches a
         # container jump reveals, and the count the page publishes for itself.
         self.grid = list(grid or [])
         self.grid_batches = list(grid_batches or [])
+        self._first_grid = list(self.grid)
+        self._first_grid_batches = list(self.grid_batches)
         self.works = works
         self.facts = facts if facts is not None else _default_facts()
         # Facts per opened video, so a walk can be shown one page that published nothing but
@@ -154,10 +165,26 @@ class FakeDriver:
         # distinguishable from one that paged the list.
         self.window_scrolls = 0
         self.container_jumps = 0
+        # How many of those moves happened while the driver was standing on a video page —
+        # i.e. how much of the walk was paging something that is not the list it came from.
+        self.detail_scrolls = 0
 
     def get(self, url):
         self.visited.append(url)
         self.current_url = url
+        # A navigation is a document, not a bookmark: a list re-opened later comes back at its
+        # first screen and has to be paged down again. The FIRST load is left alone, because
+        # that is the scenario a test describes (a page still drawing its skeleton, a page that
+        # never hands over a card) rather than a re-open.
+        if '/search/' in url:
+            self._search_loads += 1
+            if self._search_loads > 1:
+                self.cards, self.scroll_batches = list(self._first_screen), list(self._first_batches)
+                self._pending, self._reads = [], 0
+        elif '/user/' in url:
+            self._profile_loads += 1
+            if self._profile_loads > 1:
+                self.grid, self.grid_batches = list(self._first_grid), list(self._first_grid_batches)
         if self.load_timeout:
             # What chromedriver answers when the document is still building at the end
             # of ``page_load_timeout`` — the page is not wrong, it is unfinished.
@@ -182,12 +209,20 @@ class FakeDriver:
             # number of looks this fixture records is how a test proves a provable death
             # was given up on at once rather than waited out to the budget.
             self.card_reads += 1
+            if '/video/' in self.current_url:
+                # THE POINT. A video page has no result list on it: opening one detail
+                # replaced the document, so any read of the search cards from there answers
+                # nothing. A fake that ignored the address is how the interleaved walk passed
+                # for a whole release while every real run stopped at its first screen (#146).
+                return []
             if self.fill_after and self._pending:
                 self._reads = getattr(self, '_reads', 0) + 1
                 if self._reads >= self.fill_after:
                     self.cards, self._pending = self._pending, []
             return [El('', {'href': f'//www.douyin.com/video/{aweme_id}'}) for aweme_id in self.cards]
         if selector == DouyinCrawler.PROFILE_ANCHOR:
+            if '/user/' not in self.current_url:
+                return []
             return [El('', {'href': f'https://www.douyin.com/video/{aweme_id}'}) for aweme_id in self.grid]
         if selector == '[data-e2e="comment-item"]':
             return list(self.comment_items)
@@ -201,6 +236,12 @@ class FakeDriver:
         if 'scrollBy' in script:
             self.scrolls += 1
             self.window_scrolls += 1
+            if '/video/' in self.current_url:
+                # Scrolling a video page reveals that player's recommendations, never more
+                # result cards — which is what the walk's second pass must not mistake for a
+                # list that kept paying out.
+                self.detail_scrolls += 1
+                return None
             if self.scroll_batches:
                 self.cards = self.cards + self.scroll_batches.pop(0)
             return None
@@ -211,7 +252,7 @@ class FakeDriver:
             self.scrolls += 1
             if 'scrollerFrom' in script:
                 self.container_jumps += 1
-                if self.grid_batches:
+                if '/user/' in self.current_url and self.grid_batches:
                     self.grid = self.grid + self.grid_batches.pop(0)
             return 'container'
         if 'video-player-digg' in script:
@@ -387,6 +428,41 @@ class TestSearch:
         assert [row['视频ID'] for row in rows] == [ID, '7665683746674183460', '7665683746674183461']
         assert driver.scrolls >= 1
 
+    def test_a_target_beyond_the_first_screen_is_paged_for_before_any_video_is_opened(self, make_crawler):
+        """#146, measured on the user's own run: 关键词 IU、目标 50、第一屏 26 条 — and the crawl
+        filed 26 rows and said「翻了 2 屏」as though that were the site's answer.
+
+        It was not. Opening one video is a **whole navigation**, so the interleaved walk asked
+        the page it was then standing on — the last video page — for more result cards, and a
+        video page has none. The row count is only half of this assertion; the other half is
+        that no scroll at all happened off the list's own document.
+        """
+        ids = [f'76656837466741834{i:03d}' for i in range(56)]
+        crawler, driver = make_crawler(cards=ids[:26], scroll_batches=[ids[26:36], ids[36:46], ids[46:56]])
+
+        rows = crawler.search('IU', target_count=50)
+
+        assert len(rows) == 50, f'the walk stopped at one screen again: {len(rows)} of 50 rows'
+        assert driver.detail_scrolls == 0, 'a document that is not the list was paged for more rows'
+        assert [u for u in driver.visited if '/search/' in u] == ['https://www.douyin.com/search/IU?type=video'], (
+            'one pass down this list is enough, so a second load means the walk left it too early'
+        )
+
+    def test_a_pool_that_ran_dry_on_blank_detail_pages_goes_back_to_the_list(self, make_crawler):
+        """Harvesting a pool is a promise about ids, never about rows: a detail page can still
+        publish nothing (measured 2026-09-26, and pinned above), and that shortfall is recovered
+        by paging the list further — which first needs the list document back under the driver.
+        """
+        crawler, driver = make_crawler(
+            cards=[ID],
+            scroll_batches=[[OTHER]],
+            facts_by_id={ID: {**_default_facts(), 'info': '', 'publish': '', 'related': ''}},
+        )
+        rows = crawler.search('人工智能', target_count=2)
+
+        assert [str(row['视频ID']) for row in rows] == [OTHER]
+        assert len([u for u in driver.visited if '/search/' in u]) == 2, 'the walk must return to the list'
+
     def test_a_captcha_interstitial_refuses_the_run(self, make_crawler):
         """A run answered by 验证码中间页 has to fail, not come back empty — an empty
         table reads as "this keyword has no videos", which is a claim about the
@@ -505,6 +581,19 @@ class TestAuthorProfile:
         crawler.author(SEC, target_count=2)
         assert driver.container_jumps >= 1
         assert driver.window_scrolls == 0, 'the window is the wrong surface on this page'
+
+    def test_the_grid_is_paged_up_before_the_first_video_takes_the_page_away(self, make_crawler):
+        """The author walk shares the search walk's failure (#146): its grid is a document too,
+        and opening one 作品 replaced it — so a target deeper than the mounted grid was unreachable.
+        """
+        third = '7684552351918689571'
+        crawler, driver = make_crawler(cards=[], grid=[ID, OTHER], grid_batches=[[third]], works='3')
+
+        rows = crawler.author(SEC, target_count=3)
+
+        assert [str(row['视频ID']) for row in rows] == [ID, OTHER, third]
+        assert driver.detail_scrolls == 0, 'the grid was paged from a video page, which has none'
+        assert driver.window_scrolls == 0, 'and it is still the container that pages a profile, not the window'
 
     def test_the_numbers_come_from_opening_the_video_not_from_the_card(self, make_crawler):
         crawler, _driver = make_crawler(cards=[], grid=[ID], works='1')
