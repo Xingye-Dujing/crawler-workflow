@@ -493,3 +493,27 @@ class TestChromeOfThePageItself:
         block = block[: block.index('}')]
         assert 'text-align: center' in block
         assert 'position: sticky' not in block, 'it is a summary, not a header that follows you down'
+
+
+class TestEveryServedScriptParses:
+    """A file that does not parse does not lose one widget; it loses every global in it.
+
+    Measured 2026-09-26: a Chinese panel note was added to ``app.js`` as three adjacent
+    string literals — which is how Python continues a line and how JS does not. The page
+    came up blank of behaviour and printed ``SyntaxError: Unexpected string``, then
+    ``I18n is not defined`` and ``Settings is not defined``, because the catalogue and the
+    ``Settings`` object live in the file that never finished evaluating. The harnesses only
+    parse the files they load, so this walks the whole served directory instead: a new JS
+    file is covered the moment it exists, with no list here to fall behind.
+    """
+
+    @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
+    def test_each_script_under_static_js_is_valid_javascript(self):
+        scripts = sorted(JS_DIR.glob('*.js'))
+        assert len(scripts) >= 7, f'expected the served scripts, found {[s.name for s in scripts]}'
+        broken = []
+        for script in scripts:
+            proc = run_node('--check', str(script))
+            if proc.returncode != 0:
+                broken.append(f'{script.name}: {(proc.stderr or proc.stdout).strip()[:300]}')
+        assert not broken, '\n'.join(broken)

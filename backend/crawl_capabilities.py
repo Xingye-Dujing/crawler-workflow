@@ -142,6 +142,16 @@ class Mode:
     #: cookie) is refused by a gate that was never about it. Default True: nearly every
     #: crawl here is a session crawl, and the exceptions are named by measurement.
     needs_session: bool = True
+    #: Whether *this form* is only answered by a browser that is actually on screen, while the
+    #: platform as a whole survives headless. Measured 2026-09-26 on zhihu: the same author
+    #: profile, same session, twice each — headless returned **0 rows with no wall, no risk flag
+    #: and a navigation that settled** (the worst shape this repo knows: it reads as "this
+    #: account wrote nothing"), visible returned 5 rows both times. The class flag
+    #: ``never_headless`` cannot carry that: zhihu's keyword search answers a headless browser
+    #: legitimately and its 0 is an honest answer (AGENTS 知乎红线), so forcing the platform
+    #: would disqualify a legal result to fix one mode. The executor pays for the window
+    #: instead, and says so on the console and on the run's 无头/窗口 chip.
+    needs_window: bool = False
 
 
 @dataclass(frozen=True)
@@ -423,6 +433,7 @@ def _author_mode(
     hint_key: str = 'settings.authorHint',
     collects: str = 'dom_scroll',
     note_key: str = '',
+    needs_window: bool = False,
 ) -> Mode:
     """One creator's own posts — the same walk, addressed by author instead of by
     keyword, so it needs its own entry rather than a wider keyword box.
@@ -440,6 +451,7 @@ def _author_mode(
         fields=(author, replace(_TARGET, default=target), *extra, _RECOLLECT),
         note_key=note_key,
         collects=collects,
+        needs_window=needs_window,
     )
 
 
@@ -452,6 +464,12 @@ CAPABILITIES: tuple[Capability, ...] = (
                 placeholder='https://www.zhihu.com/people/<id>',
                 hint_key='settings.authorHintZhihu',
                 collects='dom_scroll',
+                # Measured twice each way (docs/crawler_notes.md): headless answers this form
+                # with a settled page, no wall, no risk flag and **no rows at all** — which is
+                # the silence a user reads as "this person never posted". So the mode says out
+                # loud that it needs a screen, and the panel says it before the run, not after.
+                needs_window=True,
+                note_key='settings.zhihuAuthorWindowNote',
             ),
             # Measured: `hot-lists/total` answers 30 rows with every field inline, in
             # both a visible and a headless window, but NOT anonymously (401), and it
@@ -694,6 +712,18 @@ def needs_session(platform: str, mode_key: str) -> bool:
     return True if mode is None else bool(mode.needs_session)
 
 
+def needs_window(platform: str, mode_key: str) -> bool:
+    """Whether this form is only answered by a visible browser, though the platform survives headless.
+
+    Read by the executor before it buys the browser, so a 无头 run of zhihu's 某作者的作品 ends in a
+    window with a console line and an honest 窗口 chip rather than in a 0-row table nobody can
+    explain. An unknown platform or mode answers False: no answer is not evidence that a crawl
+    needs a screen, and opening windows on a guess costs every node time.
+    """
+    mode = mode_for(platform, mode_key)
+    return False if mode is None else bool(mode.needs_window)
+
+
 def split_regions(platforms) -> dict:
     """``{'cn': [...], 'overseas': [...]}`` for the platforms of one canvas.
 
@@ -887,6 +917,7 @@ def _mode_as_dict(mode: Mode) -> dict:
         'actionJs': mode.action_js,
         'collects': mode.collects,
         'needsSession': bool(mode.needs_session),
+        'needsWindow': bool(mode.needs_window),
         'fields': [_field_as_dict(f) for f in mode.fields],
     }
 

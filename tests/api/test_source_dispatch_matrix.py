@@ -651,3 +651,115 @@ def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_one():
         if (platform, key) == ('weibo', 'hot'):
             continue
         assert capabilities.needs_session(platform, key) is True, f'{platform}/{key} quietly stopped needing a cookie'
+
+
+def _window_pairs(wanted: bool):
+    """(platform, mode key) whose ``needs_window`` is exactly *wanted*, crawler paths only.
+
+    Two shapes are out of scope **by construction**, never by a skip: a ``comments`` mode
+    is answered by the comment engine's own window rule (``_comment_headless``, pinned in
+    ``test_workflow_api.py``), and a ``never_headless`` platform is downgraded on every mode
+    by its crawler class — so expecting it to honour 无头 here would assert the opposite of
+    a rule that already exists and is already tested.
+    """
+    from crawlers import crawler_class
+
+    out = []
+    for cap in capabilities.CAPABILITIES:
+        if getattr(crawler_class(cap.platform), 'never_headless', False):
+            continue
+        for mode in cap.modes:
+            if mode.handler == 'comments' or bool(mode.needs_window) is not wanted:
+                continue
+            out.append(pytest.param(cap.platform, mode.key, id=f'{cap.platform}-{mode.key}'))
+    return out
+
+
+@pytest.fixture
+def browser_asked(app_module, recorder, monkeypatch):
+    """The recorder again, keeping the arguments the executor handed to ``get_crawler``.
+
+    ``recorder`` throws those away because the tests above only ask which method ran, and
+    this pair of tests is about exactly one of them: whether the browser was asked to be
+    headless. Layered on top of ``recorder`` rather than replacing it, because that fixture
+    owns the ``running`` flag restore.
+    """
+    seen = {}
+
+    def _make(platform, headless=True, **kwargs):
+        seen['platform'] = platform
+        seen['headless'] = headless
+        return _RecordingCrawler()
+
+    monkeypatch.setattr(app_module, 'get_crawler', _make)
+    return seen
+
+
+@pytest.mark.parametrize('platform,mode_key', _window_pairs(True))
+def test_a_mode_that_needs_a_screen_is_never_built_headless(
+    app_module,
+    browser_asked,
+    monkeypatch,
+    tmp_path,
+    platform,
+    mode_key,
+):
+    """#144: zhihu's 某作者的作品 answers a headless browser with a **settled page, no wall,
+    no risk flag and 0 rows** — the exact shape a user reads as "this author never posted".
+
+    So the matrix says the mode needs a window and the executor pays for one. Both halves
+    are asserted: the crawler is built visible, and the run record says the window was not
+    the user's choice (「a chip must describe what happened」).
+    """
+    from services.run_store import RunStore
+
+    mode = capabilities.mode_for(platform, mode_key)
+    node = {
+        'id': 'node-1',
+        'type': 'source',
+        'title': '采集',
+        'params': _params_for(platform, mode),
+        'platform': platform,
+    }
+    store = RunStore(str(tmp_path / 'window.db'))
+    store.start_run('r-window', 'wf', 'fp-canvas', headless=True)
+    store.begin_node('r-window', 'node-1', 'source', title='采集', fingerprint='fp-node')
+    logs = []
+    monkeypatch.setattr(app_module, 'add_log', lambda m: logs.append(m))
+
+    rows = app_module._execute_source_node(
+        node, headless=True, ctx={'run_id': 'r-window', 'store': store, 'nid': 'node-1'}
+    )
+
+    assert rows, f'{platform}/{mode_key} produced nothing, so the switch below proves nothing'
+    assert browser_asked['headless'] is False, f'{platform}/{mode_key} demands a screen but got a headless browser'
+    from i18n import t
+
+    assert t('run.forcedVisible', label='采集 #node-1', platform=platform) in logs, (
+        'the console must say the 无头 choice was overridden, or an unexpected window reads as a broken setting'
+    )
+    record = next(r for r in store.list_resumable(limit=10, include_finished=True) if r['run_id'] == 'r-window')
+    assert record['forced_visible'] == 1, 'the run row the 无头/窗口 chip reads must say 窗口'
+
+
+@pytest.mark.parametrize('platform,mode_key', _window_pairs(False))
+def test_a_mode_that_declares_no_screen_is_built_exactly_as_asked(app_module, browser_asked, platform, mode_key):
+    """The other half of the rule: a window is never bought on a guess.
+
+    Opening one costs every node time and shows the user a browser they did not ask for, so
+    the downgrade has to stay confined to what the matrix (or a captcha class) actually
+    states — which is also what keeps zhihu's headless keyword search a legal 0-row answer.
+    """
+    mode = capabilities.mode_for(platform, mode_key)
+    node = {
+        'id': 'node-1',
+        'type': 'source',
+        'title': '采集',
+        'params': _params_for(platform, mode),
+        'platform': platform,
+    }
+
+    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+
+    assert rows, f'{platform}/{mode_key} produced nothing, so the flag below proves nothing'
+    assert browser_asked['headless'] is True, f'{platform}/{mode_key} opened a window the matrix never asked for'

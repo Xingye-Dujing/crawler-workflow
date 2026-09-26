@@ -193,6 +193,8 @@ const I18n = {
             'settings.profileGo': 'Open settings',
             'settings.authorHint': 'An @handle or a link to that author — not a display name to search for (YouTube also accepts a UC… channel id)',
             'settings.authorHintZhihu': 'A profile link, or the id after /people/ — a Zhihu answer page carries no link to the author profile, so a display name cannot be resolved',
+            'settings.zhihuAuthorWindowNote':
+                'Zhihu serves an author profile only to a browser that is really on screen: measured twice each way, headless answers a settled page with no rows and no wall or risk flag — which reads as "this person never posted" — while the same profile in a window returns rows. A run that asked for 无头 still opens a window for this node, and the run record says 窗口.',
             'settings.authorHintBili': 'A space.bilibili.com link, or the numeric UID — the upload list is read from the page itself (its API needs a per-request signature), so the number is what addresses it',
             'settings.authorHintDouyin': 'A douyin.com/user/… profile link, or the sec_uid inside it — a display name addresses nobody, and the list is read off the profile grid',
             'settings.authorHintWeibo': 'A weibo.com/u/<UID> profile link, or the numeric UID — the posts are read from the author page\u2019s own endpoint, which cannot be addressed by a display name',
@@ -897,6 +899,8 @@ const I18n = {
             'settings.profileGo': '打开设置',
             'settings.authorHint': '填 @handle、频道链接或 UC… ID；不是拿来搜索的显示名',
             'settings.authorHintZhihu': '填作者主页链接，或 /people/ 后面那段 id——知乎的回答页里没有指向主页的链接，按昵称找人不可行',
+            'settings.zhihuAuthorWindowNote':
+                '知乎的作者主页只答复真的在屏幕上的浏览器：两种形状各测两遍，无头给回一张「已经加载完成、0 行、既没弹登录墙也没风控标记」的空页——这看起来跟「这个人没发过作品」一模一样；同一个主页开窗口就交出行。所以即使这次勾了无头，这个节点也会改用可见窗口，运行记录上写「窗口」。',
             'settings.authorHintBili': '填 space.bilibili.com 链接或数字 UID——投稿列表读的是页面本身（它的接口要按请求算签名），所以能用的是这个号码',
             'settings.authorHintDouyin': '填 douyin.com/user/… 主页链接，或链接里那串 sec_uid——抖音 web 没有按昵称找人的入口，作品列表读的是主页那个网格',
             'settings.authorHintWeibo': '填 weibo.com/u/<UID> 主页链接或数字 UID——作品是从作者页自己的接口读的，昵称定位不到人',

@@ -2196,11 +2196,13 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
     # "this crawl ended where it was meant to" instead of inventing a target.
     target_count = crawl_args.get('target_count') or 0
 
-    if headless and getattr(crawler_class(platform), 'never_headless', False):
-        # Douyin answers a headless browser with 验证码中间页 on every
-        # navigation — measured, not assumed — so the run would end as a
-        # mysterious zero-row crawl. The platform declares the requirement on
-        # its class and the executor pays for the visible window instead.
+    if headless and (getattr(crawler_class(platform), 'never_headless', False) or mode.needs_window):
+        # Two different measurements arrive at the same action. Douyin answers a headless
+        # browser with 验证码中间页 on EVERY navigation, so the flag is on its class; zhihu's
+        # keyword search answers headless legitimately (its 0 is honest) while its 某作者的作品
+        # form returns a settled page with no wall, no risk flag and no rows at all — so that
+        # one is a fact about the mode and lives in the matrix (`needs_window`). Neither is a
+        # preference the run can outvote: the crawl would just look like an empty day.
         headless = False
         add_log(t('run.forcedVisible', label=node_label(node, str(node.get('id') or '')), platform=platform))
         if ctx is not None:

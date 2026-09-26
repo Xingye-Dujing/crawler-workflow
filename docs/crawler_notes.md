@@ -1317,6 +1317,33 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 于是三个说法现在有了次序：**"每轮重放"是第一层病因（#140 已修），"副本 = 第二台设备"是第二层
 （这个开关修）**；微博的已登录路径要自动化，必须跑在用户自己那份 jar 上。
 
+## 知乎「某作者的作品」：无头给的是静默空表，不是拒绝（measured 2026-09-26，#144）
+
+`backend/test_zhihu_author_headless.py`：同一个作者主页、同一份会话，无头与可见各跑两遍，
+把每遍的**行数 + `wall`/`risk`/`settled` 三个判据**都记下来。
+
+- `headless=True` round 1：rows=0 verdict=ok wall=False risk=False settled=True
+- `headless=True` round 2：rows=0 verdict=ok wall=False risk=False settled=True
+- `headless=False` round 1：rows=5 verdict=ok
+- `headless=False` round 2：rows=5 verdict=ok
+
+要点：无头这一侧**导航是完成的**（`settled=True`），既没弹登录墙也没打风控标记，`_wait_for_page()`
+判成 `ok`——它是本项目已知最坏的一种形状：**一张看起来"这个人没发过作品"的空页**。可见窗口两次
+都稳定交出行，所以差别只在窗口本身，不与会话形状、Cookie 新旧或站点限流混淆。
+
+这不是抖音那种"每次导航都被答验证码"的 `never_headless`：知乎的关键词搜索在无头下是**合法**的
+（它的 0 是真 0，见上面的知乎红线），所以整平台 `never_headless` 是过头的——它会把一个有界的
+单模式发现，写成本会话内每次抓取都开一个窗口。做法是把事实放回它所属的那一层：**矩阵按模式**
+声明 `needs_window`，执行器在建浏览器之前读到它、改用可见窗口，并在控制台说明；运行记录置
+`forced_visible=1`，于是 无头/窗口 chip 描述的是**发生了什么**而不是被请求了什么。
+
+被否掉的替代：**把知乎整个标成 `never_headless`**——过头，把知乎合法的无头空搜索也吞进开窗口那条路；
+**只在知乎 author 处理器里塞一句 `self.driver = ...visible`**——丢掉了让这件事可读的通用钩子（面板
+`note_key` 与那个 chip）；**把"要窗口"只留在 README**——AGENTS 说这类红线**必须**是代码事实，
+因为每个读到它的处理器都会重新发明一遍降级。`note_key='settings.zhihuAuthorWindowNote'` 是面板里
+运行**之前**说的那句，因为降级之后再说就太晚了。
+
+
 
 
 
