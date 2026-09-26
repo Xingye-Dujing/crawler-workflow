@@ -42,7 +42,7 @@ from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, effective_workflow, node_label
 from i18n import audit, get_lang, normalize, set_lang, t
-from services import StatsService
+from services import StatsService, lock_store
 from services import net_probe as network_probe
 from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
@@ -1099,7 +1099,10 @@ def delete_workflow():
     name = _request_workflow_name(data.get('name', ''))
     if name is None:
         return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
+    if lock_store.is_locked('workflows', name):
+        return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
     workflow_manager.delete(name)
+    lock_store.drop('workflows', name)
     # The files stay: another workflow may well read the same one, and an
     # orphan is cleaned up later rather than on a deletion the user may undo
     # by saving something else with the same name.
@@ -4332,7 +4335,11 @@ def exports_delete():
     name = data.get('name')
     if not isinstance(name, str) or not name.strip():
         return _bad_param('name')
+    if lock_store.is_locked('exports', name.strip()):
+        return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
     gone = delete_export_file(Config.EXPORT_DIR, name)
+    if gone:
+        lock_store.drop('exports', name.strip())
     return jsonify({'ok': gone, 'deleted': gone, 'name': os.path.basename(name.strip())})
 
 
@@ -4365,6 +4372,9 @@ def exports_clear():
     while True:
         before = removed
         for row in list_exports(Config.EXPORT_DIR):
+            if lock_store.is_locked('exports', row['name']):
+                # A locked artefact outlives 清空 — the user pinned it on purpose.
+                continue
             if delete_export_file(Config.EXPORT_DIR, row['name']):
                 removed += 1
         if removed == before:
@@ -4372,6 +4382,36 @@ def exports_clear():
     left = len(list_exports(Config.EXPORT_DIR))
     logger.warning(t('exports.cleared', n=removed))
     return jsonify({'ok': True, 'removed': removed, 'left': left})
+
+
+@app.route('/api/locks', methods=['GET'])
+def locks_list():
+    """Every locked key per panel, so a list panel can paint its lock icons on load.
+
+    One call for all four panels rather than four: the panels open one at a time but the
+    answer is tiny, and a single source means a row cannot be locked in one view and not
+    another.
+    """
+    return jsonify({'ok': True, 'locks': lock_store.all_locks()})
+
+
+@app.route('/api/locks', methods=['POST'])
+def locks_set():
+    """Lock or unlock one entry, and return that panel's full lock list.
+
+    Locking is a UI intent with no destructive consequence, so it needs no confirm; the
+    panels optimistically flip the icon and reconcile with the returned list.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    panel = data.get('panel')
+    key = data.get('key')
+    if panel not in lock_store.PANELS or not isinstance(key, str) or not key.strip():
+        return jsonify({'ok': False, 'error': t('lock.badKey')}), 400
+    locked = bool(data.get('locked'))
+    current = lock_store.set_locked(panel, key.strip(), locked)
+    return jsonify({'ok': True, 'panel': panel, 'key': key.strip(), 'locked': locked, 'locks': current})
 
 
 # ─── One-click report ──────────────────────────────────────────
@@ -6062,6 +6102,8 @@ def runs_discard():
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid=run_id)}), 404
     if _reject_live_run(run_id):
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
+    if lock_store.is_locked('runs', run_id):
+        return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
     removed = store.delete_run(run_id)
     removed['item_claims'] = store.forget_run_items(run_id)
     return jsonify({'ok': True, 'removed': removed})
@@ -6080,7 +6122,10 @@ def runs_delete():
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid='-')}), 400
     if _reject_live_run(run_id):
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 400
+    if lock_store.is_locked('runs', run_id):
+        return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
     removed = get_run_store().delete_run(run_id)
+    lock_store.drop('runs', run_id)
     return jsonify({'ok': True, 'removed': removed})
 
 
@@ -6103,7 +6148,10 @@ def runs_clear():
     if data.get('confirm') is not True:
         return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
     live = str(execution_state.get('run_id') or '') if execution_state['running'] else ''
-    removed = get_run_store().clear_all(exclude_run_ids=[live] if live else ())
+    # 清空 spares the live run AND every locked one — the user pinned those on purpose.
+    keep = [live] if live else []
+    keep.extend(lock_store.all_locks()['runs'])
+    removed = get_run_store().clear_all(exclude_run_ids=keep)
     logger.warning(t('run.cleared', runs=removed['runs'], claims=removed['item_claims']))
     return jsonify({'ok': True, 'removed': removed})
 
