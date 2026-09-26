@@ -5,9 +5,46 @@ from collections import defaultdict, deque
 
 import crawl_capabilities as capabilities
 from i18n import t
-from utils.helpers import platform_for
+from utils.helpers import as_bool, platform_for
 
 logger = logging.getLogger(__name__)
+
+
+def is_effectively_enabled(node: dict, disabled_types: set) -> bool:
+    """Whether *node* takes part in a run, or is treated as if it were not on the canvas.
+
+    A node is disabled two ways: its own ``enabled`` switch is off, or its node *type* is
+    switched off for the whole canvas. ``disabled_types`` is the type-level set. A missing
+    ``enabled`` reads as the default (on) through ``as_bool`` — never a ``== True`` test,
+    which would flip a real ``False`` JSON value the wrong way (see the rule this honours).
+    """
+    if not as_bool((node.get('params') or {}).get('enabled'), True):
+        return False
+    return str(node.get('type') or '') not in (disabled_types or set())
+
+
+def effective_workflow(workflow: dict) -> dict:
+    """The graph a run actually sees: every disabled node removed, and with it every wire
+    that touched one.
+
+    This is the single answer to "a disabled node is as if it were not there": validation,
+    topological order, component split and the structure fingerprint all read the result,
+    so a node whose only downstream are disabled is, here, a node with no downstream — the
+    same shape as if the user had deleted those boxes. It returns a fresh dict and never
+    mutates *workflow*, so the caller can still compare against the full canvas (which is
+    how the run record names the workflows that were skipped).
+    """
+    settings = workflow.get('settings') or {}
+    disabled_types = set(settings.get('disabledTypes') or [])
+    nodes = [n for n in (workflow.get('nodes') or []) if isinstance(n, dict)]
+    kept = [n for n in nodes if is_effectively_enabled(n, disabled_types)]
+    ids = {str(n.get('id')) for n in kept}
+    connections = [
+        c
+        for c in (workflow.get('connections') or [])
+        if isinstance(c, dict) and str(c.get('from')) in ids and str(c.get('to')) in ids
+    ]
+    return {'nodes': kept, 'connections': connections, 'settings': settings}
 
 
 def node_label(node: dict, nid: str) -> str:
@@ -38,12 +75,24 @@ class WorkflowEngine:
     def __init__(self, workflow: dict, executor=None):
         self.workflow = workflow
         self.executor = executor
-        self.nodes = {n['id']: n for n in workflow.get('nodes', [])}
-        self.connections = workflow.get('connections', [])
-        self.settings = workflow.get('settings', {})
+        # The whole canvas — disabled nodes and their wires included — is kept so the run
+        # record can name which workflows were switched off. Every decision the engine
+        # MAKES (validation, topological order, components, the structure fingerprint) is
+        # taken on the effective graph below, where a disabled node simply is not there.
+        self.all_nodes = {n['id']: n for n in workflow.get('nodes', [])}
+        self.all_connections = workflow.get('connections', [])
+        effective = effective_workflow(workflow)
+        self.settings = effective['settings']
+        self.disabled_types = set(self.settings.get('disabledTypes') or [])
+        self.nodes = {n['id']: n for n in effective['nodes']}
+        self.connections = effective['connections']
         self._adj = defaultdict(list)
         self._in_degree = defaultdict(int)
         self._build_graph()
+
+    def effective_workflow_dict(self) -> dict:
+        """The effective graph as a plain workflow dict, for structure fingerprinting."""
+        return {'nodes': list(self.nodes.values()), 'connections': self.connections, 'settings': self.settings}
 
     def _build_graph(self):
         # Both ends must be nodes this canvas actually holds. A connection naming a
@@ -63,8 +112,17 @@ class WorkflowEngine:
                 self._in_degree[f] = 0
 
     def dangling_connections(self) -> list[dict]:
-        """Wires that name a node the canvas does not contain."""
-        return [c for c in self.connections if c.get('from') not in self.nodes or c.get('to') not in self.nodes]
+        """Wires that name a node the canvas does not contain at all.
+
+        Computed against the FULL canvas, not the effective graph: a wire into a
+        *disabled* node is not broken (that node is on the canvas, just switched off —
+        it is dropped as-if-deleted, silently), but a wire into a node that is not on
+        the canvas is a hand-edited or stale file the user must be told about. Scanning
+        the effective graph instead would hide that bug behind the disable filter.
+        """
+        return [
+            c for c in self.all_connections if c.get('from') not in self.all_nodes or c.get('to') not in self.all_nodes
+        ]
 
     def topological_sort(self) -> list[str]:
         in_deg = defaultdict(int, self._in_degree)

@@ -40,7 +40,7 @@ from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
 from crawlers.base import CrawlerStopped, DeadDriver, PageNotArrivedError
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
-from engine.workflow import WorkflowEngine, node_label
+from engine.workflow import WorkflowEngine, effective_workflow, node_label
 from i18n import audit, get_lang, normalize, set_lang, t
 from services import StatsService
 from services import net_probe as network_probe
@@ -1024,7 +1024,7 @@ def load_workflow():
     # the workflow it returns is the runnable one.
     datasets = _restore_workflow_datasets(name, workflow)
     execution_state['workflow_name'] = str(workflow.get('name') or name or '')
-    execution_state['fingerprint'] = workflow_fingerprint(workflow)
+    execution_state['fingerprint'] = workflow_fingerprint(effective_workflow(workflow))
     return jsonify({'ok': True, 'workflow': workflow, 'datasets': datasets})
     name = _request_workflow_name(request.args.get('name'))
     if name is None:
@@ -1036,7 +1036,7 @@ def load_workflow():
     # the workflow it returns is the runnable one.
     datasets = _restore_workflow_datasets(name, workflow)
     execution_state['workflow_name'] = str(workflow.get('name') or name or '')
-    execution_state['fingerprint'] = workflow_fingerprint(workflow)
+    execution_state['fingerprint'] = workflow_fingerprint(effective_workflow(workflow))
     return jsonify({'ok': True, 'workflow': workflow, 'datasets': datasets})
 
 
@@ -1364,7 +1364,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # 周排行榜's record had been lost. The engine's validate() guarantees each
             # label is non-empty before a run is allowed to start.
             labels = []
-            for _node in workflow.get('nodes') or []:
+            # Only an ENABLED name node names the run: a workflow whose nodes are switched
+            # off is, to this run, not on the canvas (the engine's effective graph drops it),
+            # so its label must not appear in the record — and the skipped-name list below is
+            # exactly the complement.
+            for _node in effective_workflow(workflow).get('nodes') or []:
                 if _node.get('type') != 'name':
                     continue
                 _label = str((_node.get('params') or {}).get('workflow_name') or '').strip()
@@ -1377,7 +1381,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # live results are gone (a refresh, a restart) rather than guessing from a
             # node id alone — "node-2" exists in every workflow.
             execution_state['workflow_name'] = workflow_name
-            execution_state['fingerprint'] = workflow_fingerprint(workflow)
+            execution_state['fingerprint'] = workflow_fingerprint(effective_workflow(workflow))
 
             # AI transport chosen in the settings panel: 'ollama' (local daemon) or
             # 'openrouter' (API). The key only ever lives in the browser's
@@ -1602,12 +1606,17 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         created: list = []
         try:
             store = get_run_store()
-            wf_fp = workflow_fingerprint(workflow)
+            # Structure identity is taken on the effective graph, so it agrees with the key
+            # the resume banner matches on (:func:`effective_workflow`) — disabling a node and
+            # re-enabling it returns to the same identity, and a disabled node is absent from
+            # both this fingerprint and the per-node fingerprints below.
+            effective = effective_workflow(workflow)
+            wf_fp = workflow_fingerprint(effective)
             ctx = {
                 'store': store,
                 'run_id': run_id,
                 'resume': bool(resume_run_id),
-                'fingerprints': fingerprints_for_workflow(workflow),
+                'fingerprints': fingerprints_for_workflow(effective),
                 'statuses': {},
                 # The resume-node's "newest unfinished run" fallback must pick from
                 # THIS workflow's shape only — node ids repeat across workflows.
@@ -5755,7 +5764,7 @@ def runs_resumable():
     # Same repair as the panel's: a record its worker abandoned must become
     # continuable on a page load, not only once somebody opens 运行记录.
     _settle_orphaned_records()
-    found = get_run_store().list_resumable(workflow_fingerprint(workflow), limit=limit)
+    found = get_run_store().list_resumable(workflow_fingerprint(effective_workflow(workflow)), limit=limit)
     # A *live* run is never resumable — offering it invites 重新开始 to discard
     # the run that is still writing right now. Leftover 'running' rows from a
     # dead process were already promoted to 'interrupted' at startup.

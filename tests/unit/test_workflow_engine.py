@@ -13,7 +13,7 @@ contracts pinned here are the ones the executor silently relies on:
 
 import pytest
 
-from engine.workflow import WorkflowEngine, node_label
+from engine.workflow import WorkflowEngine, effective_workflow, is_effectively_enabled, node_label
 from i18n import get_lang, set_lang, t
 
 pytestmark = pytest.mark.unit
@@ -538,3 +538,108 @@ class TestValidateUsesLabels:
         errors = WorkflowEngine(_wf([empty], [])).validate()
         assert any('the required field article URLs is empty' in e for e in errors)
         assert not any('comments' in e for e in errors), 'wechat must not be routed through the comment engine'
+
+
+# ─── disabled nodes are as-if-absent ───────────────────────────────────
+
+
+class TestDisabledNodesAreAbsent:
+    """A disabled node — by its own switch or by its type — is not on the canvas.
+
+    The whole point of the feature is that 关闭 a node does the same thing the graph
+    sees as deleting it: it, its wires, and anything that only connected through it
+    vanish from validation, ordering and components. The example the user gave is the
+    load-bearing one — a name node whose only downstream is disabled — so it is pinned
+    here directly.
+    """
+
+    def test_a_disabled_node_and_its_wires_are_not_on_the_canvas(self, en):
+        wf = _wf(
+            [
+                _node('node-1', platform='zhihu'),
+                _node('node-2', 'output', operation='csv', params={'enabled': False}),
+                _node('node-3', 'analysis', params={'operation': 'emotion'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-3'}],
+        )
+        engine = WorkflowEngine(wf)
+        assert sorted(engine.nodes) == ['node-1', 'node-3'], 'the disabled middle node is gone'
+        assert engine.connections == [], 'every wire that touched the disabled node is gone'
+        # The node downstream of the removal simply loses an input — not an error here.
+        assert engine.validate() == []
+
+    def test_a_name_node_whose_only_downstream_is_disabled_is_refused(self, en):
+        wf = _wf(
+            [
+                _node('node-1', 'name', params={'workflow_name': '周报'}),
+                _node('node-2', 'output', operation='csv', params={'enabled': False}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        engine = WorkflowEngine(wf)
+        assert sorted(engine.nodes) == ['node-1']
+        assert engine.connections == []
+        assert any('must connect to a downstream node' in e for e in engine.validate()), engine.validate()
+
+    def test_disabling_a_node_type_removes_every_node_of_that_type(self, en):
+        wf = _wf(
+            [_node('node-1', platform='zhihu'), _node('node-2', 'analysis', params={'operation': 'emotion'})],
+            [{'from': 'node-1', 'to': 'node-2'}],
+            settings={'disabledTypes': ['source']},
+        )
+        engine = WorkflowEngine(wf)
+        assert sorted(engine.nodes) == ['node-2'], 'every source node is gone when its type is off'
+        assert engine.connections == []
+
+    def test_a_node_with_no_enabled_key_is_enabled(self, en):
+        # Absence must read as the default (on), never coerce a missing flag to False.
+        assert 'node-1' in WorkflowEngine(_wf([_node('node-1')], [])).nodes
+
+    def test_re_enabling_a_node_returns_it_to_the_canvas(self, en):
+        disabled = _node('node-2', 'output', operation='csv', params={'enabled': False})
+        wf = _wf([_node('node-1', platform='zhihu'), disabled], [{'from': 'node-1', 'to': 'node-2'}])
+        assert 'node-2' not in WorkflowEngine(wf).nodes
+        disabled['params']['enabled'] = True
+        assert 'node-2' in WorkflowEngine(wf).nodes
+
+    def test_the_full_canvas_is_kept_for_naming_skips(self, en):
+        wf = _wf(
+            [
+                _node('node-1', 'name', params={'workflow_name': '跑'}),
+                _node('node-2', 'output', operation='csv'),
+                _node('node-3', 'name', params={'workflow_name': '不跑', 'enabled': False}),
+                _node('node-4', 'analysis', params={'operation': 'emotion', 'enabled': False}),
+            ],
+            [{'from': 'node-3', 'to': 'node-4'}],
+        )
+        engine = WorkflowEngine(wf)
+        assert sorted(engine.all_nodes) == ['node-1', 'node-2', 'node-3', 'node-4']
+        assert sorted(engine.nodes) == ['node-1', 'node-2']
+        assert sorted(n['id'] for n in engine.effective_workflow_dict()['nodes']) == ['node-1', 'node-2']
+
+    def test_an_all_disabled_canvas_is_refused_as_empty(self, en):
+        # Nothing enabled is, to the engine, an empty canvas — and 0 nodes must refuse,
+        # not "complete" (the same rule test_an_empty_canvas_is_refused_not_completed pins).
+        wf = _wf([_node('node-1', params={'enabled': False})], [])
+        assert WorkflowEngine(wf).validate() == [t('engine.empty_canvas')]
+
+
+class TestEffectiveWorkflowHelper:
+    def test_drops_disabled_nodes_and_their_wires_without_mutating_the_input(self):
+        wf = _wf(
+            [_node('node-1', platform='zhihu'), _node('node-2', 'output', operation='csv', params={'enabled': False})],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        eff = effective_workflow(wf)
+        assert sorted(n['id'] for n in eff['nodes']) == ['node-1']
+        assert eff['connections'] == []
+        # The caller's dict is untouched — the run record still needs the disabled nodes.
+        assert len(wf['nodes']) == 2 and len(wf['connections']) == 1
+
+    def test_is_effectively_enabled_reads_the_switch_and_the_type_set(self):
+        on = {'type': 'source', 'params': {}}
+        off = {'type': 'source', 'params': {'enabled': False}}
+        assert is_effectively_enabled(on, set()) is True
+        assert is_effectively_enabled(off, set()) is False
+        assert is_effectively_enabled(on, {'source'}) is False
+        assert is_effectively_enabled(off, {'analysis'}) is False

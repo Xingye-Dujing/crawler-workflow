@@ -166,6 +166,36 @@ class TestFingerprints:
         other = _node(params={'keyword': '海口', 'target_count': 3})
         assert node_fingerprint(plain) != node_fingerprint(other)
 
+    def test_toggling_enabled_is_not_a_new_computation(self):
+        """``enabled`` is an on/off instruction, not a choice of data — so, like the 重新采集
+        switch, it must sit outside the node fingerprint: turning a still-present node off and
+        back on cannot invalidate its stored rows or move the dedupe ledger."""
+        on = _node(params={'keyword': '三亚', 'enabled': True})
+        off = _node(params={'keyword': '三亚', 'enabled': False})
+        absent = _node(params={'keyword': '三亚'})
+        assert node_fingerprint(on) == node_fingerprint(off) == node_fingerprint(absent)
+
+    def test_structure_fingerprint_treats_a_disabled_node_as_absent(self):
+        """The resume key is computed on the EFFECTIVE graph, so a disabled node is the same as a
+        deleted one — and re-enabling it returns to the original identity, keeping the interrupted
+        run resumable."""
+        from engine.workflow import effective_workflow
+
+        base = _wf([_node('node-1'), _node('node-2', ntype='analysis')], [{'from': 'node-1', 'to': 'node-2'}])
+        full_fp = workflow_fingerprint(effective_workflow(base))
+        disabled = _wf(
+            [_node('node-1'), _node('node-2', ntype='analysis', params={'enabled': False})],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        assert workflow_fingerprint(effective_workflow(disabled)) != full_fp
+        # With node-2 gone from the graph, its identity is that of the single-node canvas.
+        assert workflow_fingerprint(effective_workflow(disabled)) == workflow_fingerprint(_wf([_node('node-1')], []))
+        reenabled = _wf(
+            [_node('node-1'), _node('node-2', ntype='analysis', params={'enabled': True})],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        assert workflow_fingerprint(effective_workflow(reenabled)) == full_fp
+
     def test_parent_change_cascades_into_child_fingerprint(self):
         parent = _node('node-1')
         child = _node('node-2', ntype='analysis')

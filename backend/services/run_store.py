@@ -173,7 +173,14 @@ def item_key(item) -> str:
 # while collecting 4 rows, so the re-collection happened by accident on an empty new scope and
 # the claims the user had asked to forget stayed behind forever — which is the silent
 # under-collection retention exists to prevent.
-_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count', 'workflow_name', 'recrawl'})
+#
+# ``enabled`` (the node's on/off switch) belongs here for the same class of reason: it is an
+# instruction about whether a node runs, not a choice of what data it reads. Toggling a node off
+# and back on must not invalidate its stored rows or move the dedupe ledger. Whether a node is
+# *present at all* in the structure fingerprint is decided one level up — :func:`effective_workflow`
+# removes disabled nodes from the graph before the fingerprint is taken — so this only keeps the
+# surviving nodes' own data fingerprint free of the switch.
+_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count', 'workflow_name', 'recrawl', 'enabled'})
 
 
 def stable_params(params) -> dict:
