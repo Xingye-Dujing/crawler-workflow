@@ -1115,6 +1115,56 @@ def test_a_wide_node_is_bounded_and_its_title_says_it_was_cut(app_url, driver):
     assert made['pageScroll'][0] <= made['pageScroll'][1] + 1, 'a wide node grew the page sideways'
 
 
+AUTO_LAYOUT_JS = """
+canvas.nodes = {}; canvas.connections = [];
+document.getElementById('nodes-container').innerHTML = '';
+localStorage.removeItem('crawler_canvas');
+const wide = '这个关键词特别长长长长长长长长长长长长长长长长长长'.repeat(6);
+const a = canvas.addNode('source', 20, 20);
+canvas.nodes[a].params.platform = 'zhihu';
+canvas.nodes[a].params.keyword = wide;
+canvas.updateNodeDisplay(a);
+const b = canvas.addNode('output', 60, 500);
+canvas.nodes[b].params.operation = 'save';
+canvas.nodes[b].params.filename = 'x.csv';
+canvas.updateNodeDisplay(b);
+canvas.connections = [{from: a, to: b}];
+canvas.autoLayout();
+canvas.updateConnections();
+const rects = {};
+[a, b].forEach((id) => {
+    const r = document.getElementById(id).getBoundingClientRect();
+    rects[id] = [r.left, r.top, r.right, r.bottom];
+});
+const paths = Array.from(document.querySelectorAll('.conn-line:not(.temp)'))
+    .map((p) => p.getAttribute('d') || '');
+return { a, b, rects, paths };
+"""
+
+
+def test_auto_layout_clears_a_wide_node_and_draws_its_wire_flat(app_url, driver):
+    """The layout reads the REAL boxes now: a wide+tall source must not be overlapped
+    by its downstream, and a forward wire between centre-aligned ranks must be flat.
+
+    Both halves were browser-false before: the fixed 280×120 lattice put the next
+    rank inside a 340-wide node, and the equal-TOPS rule offset the port centres of
+    unequal heights, so the bezier bowed. The node harness fakes offsetWidth/Height —
+    this is the tier that measures pixels; it asserts on everything it counted.
+    """
+    driver.set_window_size(1366, 768)
+    _quiet_canvas(driver, app_url)
+    made = driver.execute_script(AUTO_LAYOUT_JS, [])
+    ra, rb = made['rects'][made['a']], made['rects'][made['b']]
+    overlap_x = min(ra[2], rb[2]) - max(ra[0], rb[0])
+    overlap_y = min(ra[3], rb[3]) - max(ra[1], rb[1])
+    assert not (overlap_x > 1 and overlap_y > 1), (
+        f'the downstream node sits {round(overlap_x)}x{round(overlap_y)}px inside the wide one: {made["rects"]}'
+    )
+    assert len(made['paths']) == 1, f'expected exactly the one wire measured, got {made["paths"]}'
+    d = made['paths'][0]
+    assert ' L ' in d and ' C ' not in d, f'the forward wire between centre-aligned ranks still bows: {d}'
+
+
 def test_the_markup_a_node_is_built_from_carries_no_inline_handler(app_url, driver):
     """The id and the summary used to be spliced into onclick="…('<id>')", so an id
     with a quote escaped its string literal and ran as code — from a workflow JSON

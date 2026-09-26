@@ -16,6 +16,14 @@ const NODE_ICON = {
         '<path d="M7.5 7.5a6 6 0 1 0 9 0"/></svg>'
 };
 
+/* How far apart two port centres may sit and still be called ALIGNED, in canvas px.
+   autoLayout rounds node tops and centres heights of differing parity, so its own
+   wires can end up a hair under a pixel off the shared centreline — 1.0 absorbs that
+   rounding (each Math.round is ≤0.5) so a laid-out straight chain really draws flat,
+   while anything a human dragged with a visible slope (over 1px across a 220–340px
+   node is a real angle) keeps its curve: the curve is geometry, not decoration. */
+const WIRE_ALIGN_EPS = 1.0;
+
 const canvas = {
     nodes: {},
     connections: [],
@@ -903,12 +911,16 @@ const canvas = {
             const to = this._getPortCenter(toPort);
             if (from.x == null || to.x == null) return;
             const dx = to.x - from.x;
+            const dy = to.y - from.y;
             const cp1x = from.x + Math.abs(dx) * 0.5;
             const cp2x = to.x - Math.abs(dx) * 0.5;
-            const d = [
-                'M', from.x, from.y,
-                'C', cp1x, from.y, ',', cp2x, to.y, to.x, to.y,
-            ].join(' ');
+            /* Straight where the geometry is straight, curved only where it cannot be:
+               aligned ports and a forward hop draw a flat line; fan-out/fan-in branches
+               (different centrelines), back-edges and user-dragged slopes keep the cubic,
+               whose control points bulge outward precisely to sweep around the boxes. */
+            const d = (Math.abs(dy) <= WIRE_ALIGN_EPS && dx > WIRE_ALIGN_EPS)
+                ? ['M', from.x, from.y, 'L', to.x, from.y].join(' ')
+                : ['M', from.x, from.y, 'C', cp1x, from.y, ',', cp2x, to.y, to.x, to.y].join(' ');
 
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.classList.add('conn-line');
@@ -1348,10 +1360,18 @@ const canvas = {
         this.saveState();
     },
 
-    /* ── Auto-layout using simple grid placement ── */
+    /* ── Auto-layout: topological ranks sized by the REAL boxes ── */
     autoLayout() {
-        const gapX = 280;
-        const gapY = 120;
+        /* The old fixed 280×120 lattice laid nodes out as if every box were that size.
+           .node grows to max-width 340 with content, and .node-content wraps a link list
+           into ever more height — so wide/tall nodes bled into the next rank and the one
+           below, and the equal-TOPS rule put port centres (each at its own half-height)
+           on different lines, which is what bowed the wires. Everything below advances by
+           the measured offsetWidth/offsetHeight of the rendered box, and a rank of one
+           node sits CENTRED on the shared local line so a plain chain draws flat.
+           A folded node measures 32 tall, so fold-awareness comes for free. */
+        const SP_X = 120;   // edge-to-edge between neighbouring ranks (a GAP, not a stride)
+        const SP_Y = 60;    // gap between stacked nodes inside one rank
 
         /* Step 1: find connected components (undirected) */
         const nodeIds = Object.keys(this.nodes);
@@ -1421,14 +1441,31 @@ const canvas = {
             }
             if (remaining.size > 0) levels.push(Array.from(remaining));
 
-            /* Compute node positions for this component */
+            /* Measure the boxes once; a node not on screen reports 0 and falls back
+               to a mid-size box rather than collapsing the rank against its neighbour. */
+            const size = {};
+            comp.forEach(function (nid) {
+                const el = this._nodeEl(nid);
+                size[nid] = { w: (el && el.offsetWidth) || 240, h: (el && el.offsetHeight) || 80 };
+            }, this);
+
+            /* Compute node positions for this component: each rank advances by its WIDEST
+               measured box, and each rank's stacked block is centred on the shared local
+               line 0 (a single-node rank sits exactly on it — equal CENTRES, not tops). */
             const positions = [];
-            levels.forEach(function (level, li) {
-                level.forEach(function (nid, ni) {
-                    const x = li * gapX;
-                    const y = ni * gapY - (level.length - 1) * gapY / 2;
-                    positions.push({ id: nid, x: x, y: y });
+            let rankX = 0;
+            levels.forEach(function (level) {
+                let blockH = 0;
+                level.forEach(function (nid) { blockH += size[nid].h + SP_Y; });
+                blockH -= SP_Y;
+                let y = -blockH / 2;
+                let maxW = 0;
+                level.forEach(function (nid) {
+                    positions.push({ id: nid, x: rankX, y: y });
+                    y += size[nid].h + SP_Y;
+                    if (size[nid].w > maxW) maxW = size[nid].w;
                 });
+                rankX += maxW + SP_X;
             });
 
             /* Find component's actual top and bottom edges in local coords */

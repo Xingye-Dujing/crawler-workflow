@@ -109,6 +109,22 @@ class TestRepaint:
     def test_a_wire_to_a_deleted_node_paints_nothing(self, ix):
         assert ix['repaint']['orphan']['lines'] == 0
 
+    def test_wires_on_one_centreline_are_drawn_flat(self, ix):
+        """rA→rB→rC sit at equal height on one line: the honest rendering is flat.
+
+        A ' C ' here is the old always-bezier behaviour — every wire bowed by a
+        hair even when the geometry promised a straight run.
+        """
+        ds = ix['repaint']['wire_ds']
+        assert len(ds) == 2, ds
+        for d in ds:
+            assert ' L ' in d and ' C ' not in d, d
+
+    def test_a_backwards_wire_keeps_its_curve(self, ix):
+        """The flat rule must exclude exactly what it claims to: a wire drawn back
+        leftward cannot be flat without cutting through the source box."""
+        assert ' C ' in ix['repaint']['back_edge_d'], ix['repaint']['back_edge_d']
+
     def test_deleting_a_node_prunes_the_wires_touching_it(self, ix):
         assert ix['delete_node_prunes'] == [], 'orphaned wires would render as a path to nowhere'
 
@@ -160,8 +176,21 @@ class TestAutoLayout:
     def test_the_layout_respects_the_wiring_order(self, ix):
         laid = ix['auto_layout']['positions']
         assert ix['auto_layout']['dependencyOrderPreserved'] is True
+        # noOverlap is a RECTANGLE test now, and the head node measures 340×300:
+        # the old fixed 280×120 lattice put the next rank inside it, which is the
+        # wide-node collision the user reported, invisible to distinct-coordinate
+        # checks while every stub box was 220 wide.
         assert ix['auto_layout']['noOverlap'] is True
         assert ix['auto_layout']['persisted'] == laid, 'a layout that is not saved is lost on reload'
+
+    def test_a_chain_of_unequal_heights_draws_flat_wires(self, ix):
+        """120 / 300 / 120 ranks: centre-aligned placement puts every port pair on
+        one shared line, so both wires must be ' L '. Under the old equal-TOPS rule
+        the middle node's centre sat 90px off and both wires bowed (' C ' → red)."""
+        ds = ix['auto_layout_straight']['wire_ds']
+        assert len(ds) == 2, ds
+        for d in ds:
+            assert ' L ' in d and ' C ' not in d, d
 
     def test_two_unconnected_components_are_stacked_not_piled(self, ix):
         assert ix['auto_layout_two_components']['separated'] is True

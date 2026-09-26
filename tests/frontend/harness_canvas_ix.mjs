@@ -157,22 +157,41 @@ function freshWorld() {
     canvas.init();
 }
 
-function addNode(type, x = 100, y = 100) {
+function addNode(type, x = 100, y = 100, w = 220, h = 120) {
     const nid = canvas.addNode(type, x, y);
-    /* The stub reports one fixed box for everything; give each node its own so
-       port centres, the hit radius and reset-view centring can tell them apart. */
+    /* The stub reports a per-node box so port centres, the hit radius, the
+       auto-layout rank advance and reset-view centring can tell sizes apart —
+       and so a wide/tall node can actually collide with a fixed lattice.
+       Defaults keep every older scenario's numbers byte-identical. */
     const el = doc.getElementById(nid);
     el.offsetLeft = x;
     el.offsetTop = y;
-    el.offsetWidth = 220;
-    el.offsetHeight = 120;
+    el.offsetWidth = w;
+    el.offsetHeight = h;
     el.querySelectorAll('.node-port').forEach((port) => {
-        const px = port.dataset.port === 'in' ? x : x + 220;
+        const px = port.dataset.port === 'in' ? x : x + w;
         port.getBoundingClientRect = () => ({
-            left: px - 5, top: y + 55, width: 10, height: 10, right: px + 5, bottom: y + 65,
+            left: px - 5, top: y + h / 2 - 5, width: 10, height: 10, right: px + 5, bottom: y + h / 2 + 5,
         });
     });
     return nid;
+}
+
+/* The browser tracks offsetLeft/Top from style automatically; the stub must be
+   told, so a layout that just wrote style can be measured through the same
+   _getPortCenter the wires use. */
+function syncGeometry(ids) {
+    ids.forEach((id) => {
+        const el = doc.getElementById(id);
+        el.offsetLeft = parseFloat(el.style.left) || 0;
+        el.offsetTop = parseFloat(el.style.top) || 0;
+    });
+}
+
+function wireDs() {
+    return canvas.svgLayer
+        .querySelectorAll('.conn-line:not(.temp)')
+        .map((l) => l.getAttribute('d') || '');
 }
 
 function portOf(id, which) {
@@ -296,7 +315,18 @@ out.repaint = {
     hits: hits().length,
     /* One repaint per frame, however many changes queued it. */
     pendingCleared: canvas._renderPending === false,
+    /* rA→rB→rC sit on one centreline, so the ONLY honest rendering is flat:
+       a curve here is the old always-bezier behaviour, not geometry. */
+    wire_ds: wireDs(),
 };
+/* A wire drawn BACKWARD (target left of source) cannot be flat: the straight
+   run would cut back through the source box, and the bezier bulge is the route
+   around. This pins that the flat rule excludes exactly what it must. */
+canvas.connections = [{ from: rA, to: rB }, { from: rB, to: rC }, { from: rC, to: rA }];
+canvas.updateConnections();
+out.repaint.back_edge_d = wireDs()[2];
+canvas.connections = [{ from: rA, to: rB }, { from: rB, to: rC }];
+canvas.updateConnections();
 canvas.scheduleRender();
 canvas.scheduleRender();
 flushFrames(sandbox);
@@ -390,7 +420,11 @@ out.reset_view_no_nodes = { panX: canvas.panX, panY: canvas.panY, zoom: canvas.z
 
 /* ── autoLayout ────────────────────────────────────────────────────── */
 freshWorld();
-const l1 = addNode('source', 5, 7);
+/* The head is deliberately 340 wide and 300 tall — the shape a comments source
+   grows into with a pasted link list. Under the old fixed 280×120 lattice it
+   bled into the next rank and the one below; that collision is what the
+   rectangle test below refuses to accept. */
+const l1 = addNode('source', 5, 7, 340, 300);
 const l2 = addNode('process', 900, 800);
 const l3 = addNode('output', 13, 41);
 canvas.connections = [{ from: l1, to: l2 }, { from: l2, to: l3 }];
@@ -400,13 +434,42 @@ const box = (ids) => ids.map((id) => {
     return [parseFloat(el.style.left), parseFloat(el.style.top)];
 });
 const laid = box([l1, l2, l3]);
+const laidRects = [l1, l2, l3].map((id) => {
+    const el = doc.getElementById(id);
+    const L = parseFloat(el.style.left);
+    const T = parseFloat(el.style.top);
+    return { L, T, R: L + el.offsetWidth, B: T + el.offsetHeight };
+});
+let rectOverlap = false;
+for (let i = 0; i < laidRects.length; i++) {
+    for (let j = i + 1; j < laidRects.length; j++) {
+        const a = laidRects[i];
+        const b = laidRects[j];
+        if (Math.min(a.R, b.R) - Math.max(a.L, b.L) > 1 && Math.min(a.B, b.B) - Math.max(a.T, b.T) > 1) {
+            rectOverlap = true;
+        }
+    }
+}
 out.auto_layout = {
     positions: laid,
     dependencyOrderPreserved: laid[0][0] < laid[1][0] && laid[1][0] < laid[2][0],
-    noOverlap: new Set(laid.map(String)).size === 3,
+    noOverlap: !rectOverlap,
     persisted: Object.values(draft().nodes).map((n) => [n.x, n.y]),
     toasts: toasts.slice(),
 };
+/* Straight wires must MATERIALISE from the layout, not by luck of equal boxes:
+   the three ranks have heights 120 / 300 / 120, so under the old equal-TOPS rule
+   the middle node's port centre sat 90px off the line and both wires bowed. With
+   centre-aligned ranks, both wires are flat. */
+freshWorld();
+const s1 = addNode('source', 0, 0, 220, 120);
+const s2 = addNode('process', 0, 0, 220, 300);
+const s3 = addNode('output', 0, 0, 220, 120);
+canvas.connections = [{ from: s1, to: s2 }, { from: s2, to: s3 }];
+canvas.autoLayout();
+syncGeometry([s1, s2, s3]);
+canvas.updateConnections();
+out.auto_layout_straight = { wire_ds: wireDs() };
 freshWorld();
 canvas.autoLayout();
 out.auto_layout_empty = { survived: true };
