@@ -16,7 +16,7 @@ name themselves in the DOM. Note the deliberate absence: a douyin row has no
 import pytest
 
 from crawlers.comments import BLOCKED, DEAD, OK, CommentSession
-from crawlers.video import DouyinCrawler, douyin_id
+from crawlers.douyin import DouyinCrawler, douyin_id
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 

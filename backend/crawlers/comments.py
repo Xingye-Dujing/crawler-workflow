@@ -603,7 +603,7 @@ class CommentSession:
         the walk stops on a page that carries no new ``rpid`` — which is also
         what makes a repeating server-side cursor harmless.
         """
-        from .video import CODE_GONE, bilibili_bvid
+        from .bilibili import CODE_GONE, bilibili_bvid
 
         self.driver.get(url)
         self.nap(3)
@@ -859,7 +859,7 @@ class CommentSession:
         rewrites the list under the next read, and the count is the fact the user
         needs (this comment has N replies) either way.
         """
-        from .video import douyin_id
+        from .douyin import douyin_id
 
         target = f'https://www.douyin.com/video/{douyin_id(url)}' if douyin_id(url) else url
         if not douyin_id(url):

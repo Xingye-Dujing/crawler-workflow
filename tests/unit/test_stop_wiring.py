@@ -86,11 +86,13 @@ class TestWalkWiring:
 
     def test_the_audit_actually_found_the_walks_it_claims_to_check(self):
         calls = _walk_calls()
-        # Measured over the platform modules: zhihu/x/video comment walks by feed,
+        # Measured over the platform modules: zhihu/x/bilibili comment walks by feed,
         # weibo and the comment pager by walk_pages. A lower count means the scan
         # broke, and a broken scan is what makes a green "all wired" assertion empty.
+        # (bilibili.py was inside video.py until the #178 split; the walk moved file, it
+        # did not go away — this list tracks files, so it tracked the rename.)
         assert len(calls) >= 6, f'only {len(calls)} walk call sites found: {sorted({c[0] for c in calls})}'
-        assert {'zhihu.py', 'twitter.py', 'video.py', 'weibo.py', 'comments.py'} <= {c[0] for c in calls}
+        assert {'zhihu.py', 'twitter.py', 'bilibili.py', 'weibo.py', 'comments.py'} <= {c[0] for c in calls}
 
     def test_every_walk_asks_the_crawler_whether_it_may_stop(self):
         missing = []

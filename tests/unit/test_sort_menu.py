@@ -5,7 +5,7 @@ Two separate claims are pinned here, because they fail differently:
 * :func:`crawlers.engine.menu.choose` decides *what to say* when a choice cannot be made — no
   opener on the page, the word is not in the menu, the menu item would not click, and "the page
   never turned over after a click that did land";
-* :meth:`crawlers.video.DouyinCrawler._apply_sort` decides *whether to ask at all* — the default
+* :meth:`crawlers.douyin.DouyinCrawler._apply_sort` decides *whether to ask at all* — the default
   order is what the page already shows, so 综合排序 must press nothing (waiting for a change that
   cannot come would burn the budget on a no-op) — and what the crawl records afterwards: the chosen
   order goes into the resume cursor, because **no URL carries it** (measured: the address stays
@@ -18,8 +18,8 @@ the helper's two primitives and the crawler's decisions.
 
 import pytest
 
+from crawlers.douyin import DouyinCrawler
 from crawlers.engine import menu
-from crawlers.video import DouyinCrawler
 
 pytestmark = pytest.mark.unit
 

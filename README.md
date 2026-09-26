@@ -760,7 +760,9 @@ crawler_workflow/
 │   │   ├── weibo.py              # 微博爬虫
 │   │   ├── xiaohongshu.py        # 小红书爬虫
 │   │   ├── wechat.py             # 微信公众号爬虫
-│   │   ├── video.py              # 哔哩哔哩 / 抖音（搜索、某作者、详情、评论）
+│   │   ├── video_base.py         # 视频平台共用基类（VideoCrawler + 通用行工具 _stamp/_as_int）
+│   │   ├── bilibili.py           # 哔哩哔哩：分页搜索 + 详情 API + 热榜（搜索、某作者、详情、评论）
+│   │   ├── douyin.py             # 抖音：搜索栏驱动 + 逐视频详情 + 热榜（搜索、某作者、详情、评论）
 │   │   ├── youtube.py            # YouTube：页内 innertube JSON（搜索 / 某作者 / 评论）
 │   │   ├── twitter.py            # X（推特）：可见窗口读虚拟时间线（搜索 / 某作者 / 回复）
 │   │   ├── comments.py           # 评论采集适配器（七个平台的链接可混粘贴）

@@ -26,14 +26,14 @@ from selenium.common.exceptions import TimeoutException
 import crawlers.base as base_module
 from crawlers.base import Crawler
 from crawlers.comments import BLOCKED, DEAD, OK, CommentSession, douyin_comment_fields, parse_douyin_comments
-from crawlers.engine.counters import parse_count
-from crawlers.video import (
+from crawlers.douyin import (
     DouyinCrawler,
     _author_from_related,
     _clean_publish,
     douyin_id,
     douyin_sec_uid,
 )
+from crawlers.engine.counters import parse_count
 from i18n import t
 from utils.helpers import platform_for
 

@@ -23,7 +23,7 @@ import pytest
 
 import crawlers.base as base_module
 from crawlers.base import Crawler
-from crawlers.video import BilibiliCrawler, bilibili_bvid, bilibili_mid, bilibili_search_url
+from crawlers.bilibili import BilibiliCrawler, bilibili_bvid, bilibili_mid, bilibili_search_url
 
 pytestmark = pytest.mark.unit
 

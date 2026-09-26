@@ -1,8 +1,9 @@
 import browser_profiles
 
+from crawlers.bilibili import BilibiliCrawler
+from crawlers.douyin import DouyinCrawler
 from crawlers.instagram import InstagramCrawler
 from crawlers.twitter import TwitterCrawler
-from crawlers.video import BilibiliCrawler, DouyinCrawler
 from crawlers.wechat import WechatCrawler
 from crawlers.weibo import WeiboCrawler
 from crawlers.xiaohongshu import XiaohongshuCrawler

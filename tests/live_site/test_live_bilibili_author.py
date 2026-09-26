@@ -15,7 +15,7 @@ search row except for belonging to one creator.
 
 import pytest
 
-from crawlers.video import bilibili_bvid, bilibili_mid
+from crawlers.bilibili import bilibili_bvid, bilibili_mid
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
