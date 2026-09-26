@@ -1026,18 +1026,6 @@ def load_workflow():
     execution_state['workflow_name'] = str(workflow.get('name') or name or '')
     execution_state['fingerprint'] = workflow_fingerprint(effective_workflow(workflow))
     return jsonify({'ok': True, 'workflow': workflow, 'datasets': datasets})
-    name = _request_workflow_name(request.args.get('name'))
-    if name is None:
-        return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
-    workflow = workflow_manager.load(name)
-    if not workflow:
-        return jsonify({'ok': False, 'error': 'Not found'}), 404
-    # Reconnect the nodes with their files *before* the canvas draws them, so
-    # the workflow it returns is the runnable one.
-    datasets = _restore_workflow_datasets(name, workflow)
-    execution_state['workflow_name'] = str(workflow.get('name') or name or '')
-    execution_state['fingerprint'] = workflow_fingerprint(effective_workflow(workflow))
-    return jsonify({'ok': True, 'workflow': workflow, 'datasets': datasets})
 
 
 @app.route('/api/workflow/list', methods=['GET'])

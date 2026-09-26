@@ -228,8 +228,6 @@ class XiaohongshuCrawler(Crawler):
     def _note_id(link: str) -> str:
         m = re.search(r'/(?:search_result|explore|item)/([0-9a-f]{16,})', link or '')
         return m.group(1) if m else ''
-        m = re.search(r'/(?:search_result|explore|item)/([0-9a-f]{16,})', link or '')
-        return m.group(1) if m else ''
 
     # ─── note detail ─────────────────────────────────────────────────
 
