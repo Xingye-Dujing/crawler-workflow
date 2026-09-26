@@ -294,6 +294,26 @@ _BOARD = Field(
     options=(('popular', 'settings.hotBoardPopular'), ('ranking', 'settings.hotBoardRanking')),
 )
 
+#: Which order the result page should serve. Douyin's corner 「筛选」 offers this and three more
+#: groups (measured 2026-09-26: 综合排序 / 最新发布 / 最多点赞, plus 发布时间 / 时长 / 观看状态),
+#: the menu is **hover**-wired, and **no choice changes the address** — so the crawler is the only
+#: record of the order it crawled, which is why the value is a data-choosing parameter: it enters
+#: the node fingerprint and the resume cursor, and an unknown one is refused by name rather than
+#: falling back to 综合排序. The labels are the site's own words, not ours: a user comparing the
+#: panel with the window has to find the same three phrases, and "最热" is not one of them.
+_SORT_FIELD = Field(
+    key='sort',
+    control='select',
+    label_key='settings.sortBy',
+    name_key='field.sort',
+    default='general',
+    options=(
+        ('general', 'settings.sortGeneral'),
+        ('newest', 'settings.sortNewest'),
+        ('most_liked', 'settings.sortMostLiked'),
+    ),
+)
+
 #: How many rows zhihu's board really holds. Measured at 30 with ``limit=50``,
 #: ``limit=100`` and ``offset=30`` all returning the SAME 30 (30/30 ids overlap) and
 #: ``paging.next`` empty — so the target box is capped by the site, not by us, and the
@@ -536,7 +556,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         # and why #142 keeps the question open instead of resolving it into one sentence.
         profile_recommended=True,
         modes=(
-            _posts_mode(collects='page_per_row'),
+            _posts_mode(_SORT_FIELD, collects='page_per_row'),
             _author_mode(
                 placeholder='https://www.douyin.com/user/<sec_uid>',
                 hint_key='settings.authorHintDouyin',

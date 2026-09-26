@@ -52,7 +52,7 @@ from urllib.parse import quote
 from i18n import t
 
 from .base import Crawler, PageNotArrivedError, as_index
-from .engine import feed, pagefetch, popup
+from .engine import feed, menu, pagefetch, popup
 from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
@@ -548,7 +548,16 @@ class DouyinCrawler(VideoCrawler):
     POLITE_BASE = 1.0
     POLITE_SPREAD = 0.4
 
-    def search(self, keyword: str, target_count: int = 50, **kwargs):
+    #: The corner word the result page hides its ordering behind, and the words inside it.
+    #: Measured 2026-09-26: the panel is **hover**-wired (clicking 筛选 closes it), no choice
+    #: changes the address, and the site's own words are 综合排序 / 最新发布 / 最多点赞 — there is
+    #: no 「最热」. The classes beside them are build hashes, so this table is text-driven, like
+    #: :mod:`crawlers.engine.popup`.
+    SORT_OPENER = '筛选'
+    SORTS = {'general': '综合排序', 'newest': '最新发布', 'most_liked': '最多点赞'}
+    SORT_DEFAULT = 'general'
+
+    def search(self, keyword: str, target_count: int = 50, sort: str = None, **kwargs):
         """Open the result route, then open each card for the numbers it lacks.
 
         A search card carries an address, a duration and one rounded figure — the
@@ -556,6 +565,11 @@ class DouyinCrawler(VideoCrawler):
         the row budget is the detail visit and the cursor records which ids have
         been opened: a resumed run picks up mid-list instead of re-paying for the
         head of it.
+
+        *sort* is that corner menu's choice, and it **selects data**: 一周内 vs the default
+        measured as a 0/16 id overlap. No URL carries it either, so an order that cannot be
+        applied is refused by name — carrying on with 综合排序 behind the user's back would file
+        a table under a claim this crawl never made.
         """
         resume = self.resume_of(kwargs)
         opened = [str(v) for v in (resume.get('opened') or []) if str(v)]
@@ -591,9 +605,55 @@ class DouyinCrawler(VideoCrawler):
             if not self.navigation_settled:
                 raise PageNotArrivedError(t('crawl.dy.noCardsSlow', url=self._current_url()), **facts)
             raise PageNotArrivedError(t('crawl.dy.noCards', page=self._page_words(), url=self._current_url()), **facts)
+        self._apply_sort(sort)
         rounds = self._open_each(self._card_ids, self._scroll_results, done, target_count)
         logger.info(t('crawl.dy.finished', n=self.collected(), rounds=rounds, total=target_count))
         return self.results()
+
+    #: Which sentence each of :mod:`crawlers.engine.menu`'s refusals deserves. The reasons are
+    #: mapped to whole keys rather than interpolated into one: a composed key that nobody added
+    #: to the catalogue prints itself into the console, which is the bug class this repo already
+    #: refuses elsewhere (see ``test_i18n.py``'s reachability walk).
+    SORT_REFUSALS = {
+        'no_opener': 'crawl.dy.sortNoOpener',
+        'missing': 'crawl.dy.sortMissing',
+        'no_handle': 'crawl.dy.sortNoHandle',
+    }
+
+    def _apply_sort(self, sort) -> None:
+        """Choose the corner menu's order, or name the part that could not be chosen.
+
+        综合排序 is what the page already shows, so the default presses nothing: clicking the item
+        that is already in force re-renders the list for no reason, and a walk that waits for a
+        change which cannot come would spend its budget on a no-op.
+        """
+        value = str(sort or '').strip() or self.SORT_DEFAULT
+        if value not in self.SORTS:
+            raise ValueError(t('crawl.dy.sortUnknown', sort=value, allowed='/'.join(sorted(self.SORTS))))
+        phrase = self.SORTS[value]
+        if value == self.SORT_DEFAULT:
+            return
+        answer = menu.choose(
+            self.driver,
+            self.SORT_OPENER,
+            phrase,
+            snapshot=self._card_ids,
+            # The always-present item, so a missing choice comes back with the menu's real words
+            # rather than with an empty list the user cannot act on.
+            sample_text=self.SORTS[self.SORT_DEFAULT],
+        )
+        if not answer['ok']:
+            raise RuntimeError(
+                t(
+                    self.SORT_REFUSALS.get(answer['reason'], 'crawl.dy.sortNoHandle'),
+                    sort=phrase,
+                    opener=self.SORT_OPENER,
+                )
+            )
+        # The cursor carries it because nothing else does: the address is unchanged by the choice,
+        # so a resume that did not record the order would continue a different crawl.
+        self.mark_position(sort=value)
+        logger.info(t('crawl.dy.sortApplied', sort=phrase, changed=answer['changed']))
 
     def author(self, author: str, target_count: int = 50, **kwargs):
         """One creator's own posts, read off their profile grid.

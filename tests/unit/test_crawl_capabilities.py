@@ -173,7 +173,7 @@ class TestSelectsAreHeldToTheirOptions:
     this very table, so only a hand-written or externally generated workflow gets here.
     """
 
-    def test_the_two_selects_the_matrix_declares_are_the_two_it_can_refuse(self):
+    def test_the_selects_the_matrix_declares_are_the_ones_it_can_refuse(self):
         declared = {
             (cap.platform, mode.key, f.key)
             for cap in CAPABILITIES
@@ -181,13 +181,25 @@ class TestSelectsAreHeldToTheirOptions:
             for f in mode.fields
             if f.control == 'select'
         }
-        assert declared == {('bilibili', 'hot', 'board')}, declared
+        assert declared == {('bilibili', 'hot', 'board'), ('douyin', 'posts', 'sort')}, declared
         # The shared file tail is the other one, and it is on every mode.
         assert [f.key for f in FILE_FIELDS if f.control == 'select'] == ['format']
 
     @pytest.mark.parametrize('value', ['popular', 'ranking'])
     def test_a_declared_option_is_accepted(self, value):
         assert unoffered_selections(_mode('bilibili', 'hot'), {'board': value}) == []
+
+    @pytest.mark.parametrize('value', ['general', 'newest', 'most_liked'])
+    def test_the_sort_order_the_crawler_understands_is_accepted(self, value):
+        """The values are the crawler's keys, not the panel's words: 最新发布 is what the user
+        reads, ``newest`` is what ``DouyinCrawler.SORTS`` looks up. Accepting the label here would
+        be the same "silently do something else" bug ``board`` was caught with."""
+        assert unoffered_selections(_mode('douyin', 'posts'), {'sort': value}) == []
+
+    @pytest.mark.parametrize('wrong', ['最热', '最新', 'Latest', 'NEWEST', 'popular', 'likes'])
+    def test_an_order_off_the_list_is_named_rather_than_crawled_as_the_default(self, wrong):
+        found = unoffered_selections(_mode('douyin', 'posts'), {'sort': wrong})
+        assert [(field.key, value) for field, value in found] == [('sort', wrong)], (wrong, found)
 
     @pytest.mark.parametrize('blank', [None, '', '   ', '\t'])
     def test_a_box_nobody_chose_is_the_declared_default_not_a_mistake(self, blank):
@@ -196,6 +208,10 @@ class TestSelectsAreHeldToTheirOptions:
         """
         params = {'board': blank} if blank is not None else {}
         assert unoffered_selections(_mode('bilibili', 'hot'), params) == []
+        # Same rule for the order: a canvas saved before 排序 existed runs the order the
+        # panel showed (综合排序), because that is the declared default, not a guess.
+        assert unoffered_selections(_mode('douyin', 'posts'), {'sort': blank} if blank is not None else {}) == []
+        assert crawl_kwargs(_mode('douyin', 'posts'), {})['sort'] == 'general'
 
     @pytest.mark.parametrize(
         'wrong',

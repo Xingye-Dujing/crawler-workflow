@@ -385,6 +385,15 @@ _ZH = {
         '[抖音] 视频 {i} 的详情页只渲染出计数条，作者与发布时间都没有，已跳过该行：'
         '一条说不出是谁、什么时候发的记录不是数据，只是把额度花在一个空行上'
     ),
+    'field.sort': '排序方式',
+    'crawl.dy.sortUnknown': (
+        '[抖音] 不认识的排序方式「{sort}」（能选的是 {allowed}）。排序决定了拿到的是哪一批行，'
+        '所以这一条按名字拒绝，不替你另挑一个'
+    ),
+    'crawl.dy.sortNoOpener': '[抖音] 结果页上找不到「{opener}」入口，选不了 {sort}：排序没有生效，本次不假装已经按它排',
+    'crawl.dy.sortMissing': '[抖音] 「{opener}」菜单里没有 {sort} 这一项：站点改了菜单，排序没有生效',
+    'crawl.dy.sortNoHandle': '[抖音] 菜单里看得到 {sort} 却点不着它：排序没有生效',
+    'crawl.dy.sortApplied': '[抖音] 已选 {sort}（列表是否换血：{changed}）',
     'crawl.dy.detailSlow': (
         '[抖音] 视频 {i} 的详情页在加载超时内没加载完，已跳过该行：这是网络或站点响应慢，稍后重试可能就拿到了'
     ),
@@ -1188,6 +1197,20 @@ _EN = {
         '[Douyin] video {i} rendered only its counter bar — no author and no publish time, row skipped: '
         'a record that cannot say whose it is or when it was posted is not data, just budget spent on a blank row'
     ),
+    'field.sort': 'sort order',
+    'crawl.dy.sortUnknown': (
+        '[Douyin] unknown sort order “{sort}” (the choices are {allowed}). The order decides which rows this '
+        'crawl gets, so it is refused by name instead of picking a different one for you'
+    ),
+    'crawl.dy.sortNoOpener': (
+        '[Douyin] the result page has no “{opener}” control, so {sort} could not be chosen: the order was not '
+        'applied and this run will not claim it was'
+    ),
+    'crawl.dy.sortMissing': (
+        '[Douyin] the “{opener}” menu has no {sort} entry: the site changed the menu and the order was not applied'
+    ),
+    'crawl.dy.sortNoHandle': '[Douyin] {sort} is in the menu but would not click: the order was not applied',
+    'crawl.dy.sortApplied': '[Douyin] chose {sort} (list turned over: {changed})',
     'crawl.dy.detailSlow': (
         '[Douyin] video {i} did not finish loading inside the page-load timeout, row skipped: that is the '
         'network or the site being slow, a retry may well get it'
