@@ -24,6 +24,12 @@ const NODE_ICON = {
    node is a real angle) keeps its curve: the curve is geometry, not decoration. */
 const WIRE_ALIGN_EPS = 1.0;
 
+/* 适应 (resetView) leaves this much SCREEN-pixel air around the node cluster and
+   never leaves the zoom band [0.2, 1]: fit means "everything visible", so a
+   graph that already fits stays at 100% instead of looming larger, and the floor
+   is the same one the zoom-out button stops at. */
+const VIEW_FIT_MARGIN = 40;
+
 const canvas = {
     nodes: {},
     connections: [],
@@ -991,27 +997,61 @@ const canvas = {
     },
 
     resetView() {
-        this.panX = 0;
-        this.panY = 0;
-        this.zoom = 1;
-        /* Center nodes in viewport */
+        /* 适应: fit EVERY node into the VISIBLE box, not just centre the mean. The
+           old behaviour pinned zoom to 100%, so a chain that autoLayout spreads
+           past the window left nodes off-screen — '适应' hid them instead of
+           revealing them. Zoom only ever shrinks here (max 1), so a graph that
+           already fits is re-centred at its own size and no node looms larger
+           than the user left it. The box is the workspace's own client rect, NOT
+           window.innerWidth: the canvas sits inside the app chrome, so the two
+           disagree (measured 1344x670 vs 1920x1080) and fitting to the larger
+           number leaves the cluster spilling past the real right/bottom edge.
+           The TOP of that box is the menu bar, not the workspace: a pinned/hovered
+           #top-menu overlays its height, so the top inset is menu height + margin —
+           the cluster sits below the bar and there is more air above it, exactly
+           when 100% cannot hold it. */
         const ids = Object.keys(this.nodes);
-        if (ids.length > 0) {
-            let cxSum = 0, cySum = 0;
-            ids.forEach((id) => {
-                const el = this._nodeEl(id);
-                if (el) {
-                    cxSum += el.offsetLeft + el.offsetWidth / 2;
-                    cySum += el.offsetTop + el.offsetHeight / 2;
-                }
-            });
-            const avgCx = cxSum / ids.length;
-            const avgCy = cySum / ids.length;
-            this.panX = window.innerWidth / 2 - avgCx;
-            this.panY = window.innerHeight / 2 - avgCy;
+        const vp = this.workspace || {};
+        const vw = vp.clientWidth || window.innerWidth;
+        const vh = vp.clientHeight || window.innerHeight;
+        const menu = document.getElementById('top-menu');
+        const topInset = (menu ? menu.offsetHeight : 0) + VIEW_FIT_MARGIN;
+        if (ids.length === 0) {
+            this.panX = 0;
+            this.panY = 0;
+            this.zoom = 1;
+            this.updateTransform();
+            document.getElementById('status-zoom').textContent = '100%';
+            this.scheduleViewSave();
+            return;
         }
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        ids.forEach((id) => {
+            const el = this._nodeEl(id);
+            if (!el) return;
+            minX = Math.min(minX, el.offsetLeft);
+            minY = Math.min(minY, el.offsetTop);
+            maxX = Math.max(maxX, el.offsetLeft + el.offsetWidth);
+            maxY = Math.max(maxY, el.offsetTop + el.offsetHeight);
+        });
+        const contentW = Math.max(1, maxX - minX);
+        const contentH = Math.max(1, maxY - minY);
+        const availW = Math.max(1, vw - 2 * VIEW_FIT_MARGIN);
+        const availH = Math.max(1, vh - topInset - VIEW_FIT_MARGIN);
+        const fit = Math.min(availW / contentW, availH / contentH);
+        this.zoom = Math.max(0.2, Math.min(1, fit));
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        this.panX = vw / 2 - cx * this.zoom;
+        /* Centre inside the band the menu does NOT cover, not inside the whole
+           height — so the top margin is (menu + VIEW_FIT_MARGIN), never 0. */
+        const bandCentreY = (topInset + (vh - VIEW_FIT_MARGIN)) / 2;
+        this.panY = bandCentreY - cy * this.zoom;
         this.updateTransform();
-        document.getElementById('status-zoom').textContent = '100%';
+        document.getElementById('status-zoom').textContent = Math.round(this.zoom * 100) + '%';
         this.scheduleViewSave();
     },
 

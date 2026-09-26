@@ -163,13 +163,27 @@ class TestViewTransform:
         """A sub-pixel pan smears node text; the readout is what a user notices."""
         assert ix['zoom']['pan_rounded'] == 'translate(11px, -3px) scale(0.2)'
 
-    def test_reset_view_centres_the_nodes_and_reports_one_hundred(self, ix):
+    def test_reset_view_keeps_a_cluster_that_already_fits_at_one_hundred(self, ix):
+        """A graph smaller than the window must NOT loom larger: fit re-centres it
+        at its own size. panX stays the old 650, but panY drops to 304 because the
+        band the menu does not cover starts below the 48px bar, not at y=0."""
         assert ix['reset_view']['zoom'] == 1
         assert ix['reset_view']['status'] == '100%'
-        assert (ix['reset_view']['panX'], ix['reset_view']['panY']) == (650, 280)
+        assert (ix['reset_view']['panX'], ix['reset_view']['panY']) == (650, 304)
 
     def test_reset_view_on_an_empty_canvas_moves_nothing(self, ix):
         assert ix['reset_view_no_nodes'] == {'panX': 0, 'panY': 0, 'zoom': 1}
+
+    def test_reset_view_shrinks_a_cluster_wider_than_the_window_into_view(self, ix):
+        """The bug 适应 is for: a node off the right/bottom edge. After fit EVERY
+        projected box must sit inside the 1920x1080 stub viewport below the menu,
+        and the readout must match the shrunk zoom (±1 for the JS/Python .5 tie)."""
+        fit = ix['reset_view_fit']
+        assert 0.2 <= fit['zoom'] < 1
+        assert abs(int(fit['status'][:-1]) - fit['zoom'] * 100) <= 1
+        for box in fit['boxes']:
+            assert box['left'] >= 0 and box['right'] <= 1920
+            assert box['top'] >= 0 and box['bottom'] <= 1080
 
 
 class TestAutoLayout:

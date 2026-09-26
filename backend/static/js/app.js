@@ -41,6 +41,7 @@ const I18n = {
             'bg.void': 'Void', 'bg.grid': 'Grid', 'bg.dots': 'Dots',
             'bg.cross': 'Cross', 'bg.diagonal': 'Diagonal',
             'palette.header': 'Node Library',
+            'palette.collapse': 'Collapse', 'palette.expand': 'Expand',
             'palette.cat.workflow': 'Workflow',
             'palette.cat.inputs': 'Data Inputs',
             'palette.cat.process': 'Processing',
@@ -778,6 +779,7 @@ const I18n = {
             'bg.void': '无', 'bg.grid': '网格', 'bg.dots': '点阵',
             'bg.cross': '十字', 'bg.diagonal': '斜纹',
             'palette.header': '节点库',
+            'palette.collapse': '收起', 'palette.expand': '展开',
             'palette.cat.workflow': '工作流',
             'palette.cat.inputs': '数据输入',
             'palette.cat.process': '数据处理',
@@ -2151,6 +2153,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.dataTransfer.effectAllowed = 'copy';
             });
         });
+        /* The panel boots expanded; label its toggle to say what the next click does. */
+        var palToggle = document.querySelector('#node-palette .palette-toggle');
+        if (palToggle) palToggle.title = I18n.t('palette.collapse');
     });
 
     /* Auto-save every 30 seconds */

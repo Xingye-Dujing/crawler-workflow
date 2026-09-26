@@ -425,13 +425,19 @@ canvas.updateTransform();
 out.zoom.pan_rounded = doc.getElementById('canvas-inner').style.transform;
 
 freshWorld();
+/* resetView now fits to the WORKSPACE's own box and keeps the top clear of the
+   menu bar (menu height + margin), not window.innerWidth — give the stub a known
+   viewport and menu height so the view scenarios measure against fixed numbers. */
+canvas.workspace.clientWidth = 1920;
+canvas.workspace.clientHeight = 1080;
+doc.getElementById('top-menu').offsetHeight = 48;
 const vA = addNode('source', 100, 100);
 const vB = addNode('output', 300, 300);
 canvas.resetView();
 out.reset_view = {
     zoom: canvas.zoom,
-    /* Two nodes centred at (210,160) and (410,360): the mean, pulled to the
-       middle of the 1920x1080 window the stub reports. */
+    /* A cluster that already fits stays at 100%; it is re-centred inside the band
+       below the 48px menu, so panY is pulled down from the naive 280 to 304. */
     panX: canvas.panX,
     panY: canvas.panY,
     status: doc.getElementById('status-zoom').textContent,
@@ -439,6 +445,33 @@ out.reset_view = {
 freshWorld();
 canvas.resetView();
 out.reset_view_no_nodes = { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom };
+
+/* A cluster wider than the viewport: the OLD resetView kept zoom at 100%, so the
+   far node sat off-screen and 适应 hid it. Fit must shrink so every projected box
+   lands inside the 1920x1080 box the scenario gives the workspace, below the menu. */
+freshWorld();
+canvas.workspace.clientWidth = 1920;
+canvas.workspace.clientHeight = 1080;
+doc.getElementById('top-menu').offsetHeight = 48;
+const fA = addNode('source', 0, 0);
+const fB = addNode('output', 4000, 3000);
+canvas.resetView();
+const projectFit = (id) => {
+    const el = doc.getElementById(id);
+    const l = canvas.panX + el.offsetLeft * canvas.zoom;
+    const t = canvas.panY + el.offsetTop * canvas.zoom;
+    return {
+        left: Math.round(l),
+        top: Math.round(t),
+        right: Math.round(l + el.offsetWidth * canvas.zoom),
+        bottom: Math.round(t + el.offsetHeight * canvas.zoom),
+    };
+};
+out.reset_view_fit = {
+    zoom: canvas.zoom,
+    status: doc.getElementById('status-zoom').textContent,
+    boxes: [projectFit(fA), projectFit(fB)],
+};
 
 /* ── autoLayout ────────────────────────────────────────────────────── */
 freshWorld();

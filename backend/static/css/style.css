@@ -1192,6 +1192,32 @@ body.style-menu-open #workspace #resume-banner {
   text-transform: uppercase;
   padding: 4px 6px 8px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* The library floats over the canvas, so a wide layout hides behind it. The toggle
+   collapses the panel to just its header row — the affordance must stay clickable,
+   so only the category/item list hides, never the header. */
+.palette-toggle {
+  flex: none;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 5px;
+}
+.palette-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+#node-palette.collapsed .palette-cat,
+#node-palette.collapsed .palette-item {
+  display: none;
 }
 .palette-cat {
   font-size: 9px;

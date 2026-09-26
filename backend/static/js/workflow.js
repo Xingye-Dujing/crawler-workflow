@@ -3314,6 +3314,18 @@ function toggleStats() {
     document.getElementById('stats-panel').classList.toggle('open');
 }
 
+/* Collapse / expand the node library. It floats over the canvas, so a wide layout
+   hides behind it; the toggle keeps the header row visible so there is always a way
+   back, and moves the glyph + the accessible label to say which way it will go. */
+function togglePalette() {
+    var panel = document.getElementById('node-palette');
+    var btn = panel.querySelector('.palette-toggle');
+    var collapsed = panel.classList.toggle('collapsed');
+    btn.textContent = collapsed ? '+' : '−';
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    btn.title = I18n.t(collapsed ? 'palette.expand' : 'palette.collapse');
+}
+
 /* Apply a canvas background. Called from the background swatches inside the
    View group of the flat bar, so the swatch that is current gets `.active`. */
 function setBg(bg, el) {

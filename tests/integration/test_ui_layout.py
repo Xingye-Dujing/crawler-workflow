@@ -1166,6 +1166,100 @@ def test_auto_layout_clears_a_wide_node_and_draws_its_wire_flat(app_url, driver)
     assert ' L ' in d and ' C ' not in d, f'the forward wire between centre-aligned ranks still bows: {d}'
 
 
+FIT_VIEW_JS = """
+canvas.nodes = {}; canvas.connections = [];
+document.getElementById('nodes-container').innerHTML = '';
+localStorage.removeItem('crawler_canvas');
+/* Two nodes spread past the laptop window in canvas-local coords; the OLD 适应
+   pinned zoom at 100%, so the far one landed off the right/bottom edge. The spread
+   stays inside the app's 0.2 minimum zoom, so what this proves is 适应 not fitting. */
+const a = canvas.addNode('source', 0, 0);
+const b = canvas.addNode('output', 3000, 1800);
+canvas.connections = [{from: a, to: b}];
+canvas.resetView();
+const work = document.getElementById('workspace').getBoundingClientRect();
+const boxes = {};
+[a, b].forEach((id) => {
+    const r = document.getElementById(id).getBoundingClientRect();
+    boxes[id] = [r.left, r.top, r.right, r.bottom];
+});
+return { a, b, boxes, zoom: canvas.zoom,
+         menuH: document.getElementById('top-menu').offsetHeight,
+         viewport: [work.left, work.top, work.right, work.bottom] };
+"""
+
+
+def test_fit_view_clears_the_menu_and_holds_the_whole_cluster(app_url, driver):
+    """The user's report about 适应: it only centred at 100%, so a wide layout left
+    nodes off-screen AND a pinned menu bar sat on top of them. After fit EVERY node
+    box must lie inside the workspace AND below the menu bar — measured in real
+    rendered pixels, the only tier that sees true offsetWidth and the true menu."""
+    driver.set_window_size(1366, 768)
+    _quiet_canvas(driver, app_url)
+    made = driver.execute_script(FIT_VIEW_JS, [])
+    wl, wt, wr, wb = made['viewport']
+    vp = made['viewport']
+    assert made['zoom'] < 1, f'fit did not shrink the far cluster: zoom {made["zoom"]}'
+    assert made['menuH'] > 0, 'the menu bar reported no height; the clearance assertion is vacuous'
+    for box in made['boxes'].values():
+        assert box[0] >= wl - 1 and box[2] <= wr + 1, f'node outside the viewport horizontally: {box} in {vp}'
+        assert box[1] >= wt - 1 and box[3] <= wb + 1, f'node outside the viewport vertically: {box} in {vp}'
+        assert box[1] >= wt + made['menuH'] - 1, f'node sits under the {made["menuH"]}px menu bar: top={box[1]}'
+
+
+PALETTE_COLLAPSE_JS = """
+function state() {
+    const panel = document.getElementById('node-palette');
+    const item = panel.querySelector('.palette-item');
+    const header = panel.querySelector('.palette-header');
+    const toggle = panel.querySelector('.palette-toggle');
+    return {
+        collapsed: panel.classList.contains('collapsed'),
+        itemShown: !!item && getComputedStyle(item).display !== 'none',
+        headerShown: getComputedStyle(header).display !== 'none' && header.offsetHeight > 0,
+        toggleShown: toggle.offsetHeight > 0,
+        panelHeight: panel.offsetHeight,
+        aria: toggle.getAttribute('aria-expanded'),
+        title: toggle.title,
+    };
+}
+const before = state();
+document.querySelector('.palette-toggle').click();
+const collapsed = state();
+document.querySelector('.palette-toggle').click();
+const expanded = state();
+return { before, collapsed, expanded };
+"""
+
+
+def test_the_node_library_collapses_out_of_the_way_and_reopens(app_url, driver):
+    """The library floats over the canvas, so a wide layout hid behind it. The toggle
+    must hide the item list but KEEP the header clickable (a way back), shrink the
+    panel, and flip its own state; a second click restores it byte-for-byte. Every
+    value below is measured on a real page — this is the tier that sees CSS."""
+    driver.set_window_size(1366, 768)
+    _quiet_canvas(driver, app_url)
+    got = driver.execute_script(PALETTE_COLLAPSE_JS, [])
+    before, collapsed, expanded = got['before'], got['collapsed'], got['expanded']
+
+    assert before['collapsed'] is False and before['itemShown'] is True, before
+    assert collapsed['collapsed'] is True, 'clicking the toggle did not mark the panel collapsed'
+    assert collapsed['itemShown'] is False, 'the item list is still visible when collapsed'
+    assert collapsed['headerShown'] is True and collapsed['toggleShown'] is True, (
+        'collapsing removed the only way back: ' + str(collapsed)
+    )
+    assert collapsed['panelHeight'] < before['panelHeight'], (
+        f'the collapsed panel did not shrink: {collapsed["panelHeight"]} vs {before["panelHeight"]}'
+    )
+    assert collapsed['aria'] == 'false' and before['aria'] == 'true', (
+        'aria-expanded did not follow the collapse: ' + str(before['aria']) + '→' + str(collapsed['aria'])
+    )
+    assert collapsed['title'] and collapsed['title'] != expanded['title'], (
+        'the toggle tooltip does not change with state (and is not localized): ' + str(collapsed['title'])
+    )
+    assert expanded == before, f'the second click did not restore the panel: {expanded} vs {before}'
+
+
 REFRESH_ALIGN_DRAFT = """
 const draft = {nodes: {
     'node-1': {id: 'node-1', type: 'source', x: 80, y: 60, title: '',
