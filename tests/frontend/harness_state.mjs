@@ -180,6 +180,7 @@ for (const sc of scenarios) {
        survives on one live branch — the same rule the backend computes. */
     if (sc.disabledTypes) canvas.disabledTypes = sc.disabledTypes.slice();
     for (const id of sc.toggle || []) canvas.toggleEnabled(id);
+    for (const t of sc.toggleType || []) canvas.toggleTypeDisabled(t);
     canvas.applyDisabledVisuals();
     const dclasses = {};
     Object.keys(canvas.nodes).forEach((id) => {

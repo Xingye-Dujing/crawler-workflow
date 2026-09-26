@@ -187,6 +187,7 @@ const canvas = {
                broken menu rather than as "there is nothing to paste". */
             document.getElementById('ctx-paste-node').style.display = this._clipboardData ? 'block' : 'none';
             const foldItem = document.getElementById('ctx-fold-node');
+            const typeItem = document.getElementById('ctx-toggle-type');
             if (node) {
                 /* The element `closest()` answered with IS the node box; looking it up
                    by id again used to resolve to whatever page element shared that id
@@ -195,8 +196,17 @@ const canvas = {
                 foldItem.style.display = 'block';
                 foldItem.textContent = folded ? I18n.t('canvas.unfold') : I18n.t('canvas.fold');
                 foldItem.dataset.action = folded ? 'ctxUnfoldNode' : 'ctxFoldNode';
+                /* Switching a node TYPE off is the one control no single node's header can
+                   express — it takes every box of this kind out of the run at once. Offered on
+                   any node, labelled by that node's type, and flipped by the same click. */
+                const thisType = (this.nodes[node.id] || {}).type || '';
+                const typeOff = (this.disabledTypes || []).indexOf(thisType) >= 0;
+                const key = typeOff ? 'ctx.enableType' : 'ctx.disableType';
+                typeItem.style.display = 'block';
+                typeItem.textContent = I18n.t(key).replace('{type}', I18n.t('node.' + thisType));
             } else {
                 foldItem.style.display = 'none';
+                typeItem.style.display = 'none';
             }
             /* Clamped by what the menu actually is, not by a guessed 200 px: the
                language changes its width and folding an item changes its height, so a
@@ -215,6 +225,19 @@ const canvas = {
             ctxMenu.style.left = Math.max(0, room.x) + 'px';
             ctxMenu.style.top = Math.max(0, room.y) + 'px';
             ctxMenu.classList.add('open');
+            /* A switched-off type is not offered in the new-node menu: adding a box that the run
+               will treat as absent is a dead control. Mapping the action to its type keeps the two
+               halves of "type off" — disable existing nodes, and stop creating new ones — in one
+               place, so they cannot drift apart. */
+            const newTypeByAction = {
+                ctxNewSource: 'source', ctxNewUpload: 'upload', ctxNewProcess: 'process',
+                ctxNewAnalysis: 'analysis', ctxNewVisualize: 'visualize', ctxNewTokenize: 'tokenize',
+                ctxNewOutput: 'output',
+            };
+            Object.keys(newTypeByAction).forEach((action) => {
+                const el = ctxMenu.querySelector('[data-action="' + action + '"]');
+                if (el) el.style.display = (this.disabledTypes || []).indexOf(newTypeByAction[action]) >= 0 ? 'none' : 'block';
+            });
         });
         document.addEventListener('click', (e) => {
             const ctxMenu = document.getElementById('context-menu');
@@ -308,6 +331,13 @@ const canvas = {
                 case 'ctxUnfoldNode':
                     if (this._contextNode) this.toggleFold(this._contextNode);
                     break;
+                case 'ctxToggleType': {
+                    if (this._contextNode) {
+                        const t = (this.nodes[this._contextNode] || {}).type;
+                        if (t) this.toggleTypeDisabled(t);
+                    }
+                    break;
+                }
                 case 'undo':
                     this.undo();
                     break;
@@ -1184,6 +1214,18 @@ const canvas = {
         this.saveState();
         this.scheduleRender();
         if (this._settingsNodeId === id) openSettings(id);
+    },
+
+    /* Switch a whole node type off (and back on). Off = every box of this kind is out of the run
+       and the type cannot be added again from the new-node menu; on = each node returns to its OWN
+       switch, because the type toggle never edits params.enabled. */
+    toggleTypeDisabled(type) {
+        const list = this.disabledTypes || (this.disabledTypes = []);
+        const i = list.indexOf(type);
+        if (i >= 0) list.splice(i, 1);
+        else list.push(type);
+        this.saveState();
+        this.scheduleRender();
     },
 
     applyDisabledVisuals() {

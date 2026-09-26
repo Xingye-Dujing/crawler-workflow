@@ -318,6 +318,11 @@ def state(tmp_path_factory):
             'add': ['source'],
             'toggle': ['node-1'],
         },
+        {
+            'id': 'type_toggle_off',
+            'add': ['source', 'process'],
+            'toggleType': ['source'],
+        },
     ]
     return _run('harness_state.mjs', [JS_DIR / 'canvas.js'], scenarios, tmp)
 
@@ -741,3 +746,15 @@ class TestCanvasDisable:
         assert r['savedDisabledTypes'] == []
         flipped = next(n for n in r['nodes'] if n['id'] == 'node-1')
         assert flipped['params'].get('enabled') is False, 'the switch lives in params.enabled (survives save/undo)'
+
+    def test_toggle_type_off_disables_every_box_of_that_kind(self, state):
+        r = state['type_toggle_off']
+        # node-1 is the source (type off), node-2 the process (its own type stays on).
+        assert r['disableStates']['node-1'] == 'off', 'the whole source type is switched off'
+        assert r['disableStates']['node-2'] == 'on', 'an unrelated type is untouched'
+        assert r['effective'] == ['node-2']
+        assert r['savedDisabledTypes'] == ['source'], 'the type set persists into the saved state'
+        # The type toggle never edits the node's own switch — so turning the type back on restores
+        # each node to its individual enabled state.
+        src = next(n for n in r['nodes'] if n['id'] == 'node-1')
+        assert 'enabled' not in src['params'], 'toggleTypeDisabled must not write params.enabled'
