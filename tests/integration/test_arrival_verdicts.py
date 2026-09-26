@@ -24,8 +24,13 @@ from crawlers.base import CrawlerStopped
 
 pytestmark = [pytest.mark.integration, pytest.mark.enable_socket]
 
-#: A name no resolver on earth has an answer for (RFC 6761's ``.invalid`` TLD).
-DEAD_HOST = 'http://no-host-for-arrival-evidence.invalid/'
+#: An address the browser refuses at the network layer itself, so the error
+#: document is Chrome's own (``net::ERR_…``) rather than something a proxy invents.
+#: A ``.invalid`` name was measured answering with a proxy-served HTTP 502 page
+#: under an outbound VPN — that is a real document (no ``ERR_`` token, so the
+#: console had nothing to quote) and it would read as "arrived". A closed loopback
+#: port is refused on the machine and never leaves it, so no proxy can rewrite it.
+DEAD_HOST = 'http://127.0.0.1:1/'
 #: The whole budget, plus a browser's own DNS failure. A wait that only notices the refused
 #: document at its deadline would blow through the tight bound below.
 FAST_BUDGET = 30.0
