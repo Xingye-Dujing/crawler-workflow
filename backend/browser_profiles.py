@@ -32,6 +32,7 @@ Two rules this module exists to keep honest:
 import contextlib
 import json
 import os
+import re
 import threading
 import time
 
@@ -42,6 +43,27 @@ from settings_store import get_setting
 #: the whole difference between "import the saved cookie file" and "leave this
 #: profile's own session alone".
 MARKER = '.crawler-profile.json'
+
+#: An account label nests a sub-directory, so it is held to the same shape as the
+#: cookie filename uses (see ``CookieManager``): a lowercase word that can never be a
+#: path escape or a separator. The blank account is the platform's default device and
+#: keeps the historical ``<root>/<platform>`` directory byte-for-byte.
+_ACCOUNT_RE = re.compile(r'^[a-z0-9_]{1,24}$')
+
+
+def _account_part(account: str) -> str:
+    """The validated account segment, or ``''`` for the default (no nesting).
+
+    Raises on a label that is neither blank nor a safe word — the same refusal the
+    cookie file makes, so a profile directory can never be walked out of the root.
+    """
+    account = str(account or '').strip()
+    if not account:
+        return ''
+    if not _ACCOUNT_RE.match(account):
+        raise ValueError(f'Invalid account: {account}')
+    return account
+
 
 # ─── one browser per profile ────────────────────────────────────
 #
@@ -146,11 +168,22 @@ def is_enabled() -> bool:
     return bool(get_setting('use_browser_profile'))
 
 
-def platform_dir(platform: str) -> str:
-    return os.path.join(root_dir(), str(platform or '').strip())
+def platform_dir(platform: str, account: str = '') -> str:
+    """The profile directory for a platform, or for one of its accounts.
+
+    The blank account is the platform's default device and keeps the historical
+    ``<root>/<platform>`` path byte-for-byte; a named account nests one level
+    (``<root>/<platform>/<account>``) so each account gets its own browser, its own
+    rotated cookies and — because ``lock_for`` keys on the directory path — its own
+    concurrency lane. That is the whole point of the feature: two accounts of one
+    platform are two devices to the site, so they can crawl at the same time.
+    """
+    base = str(platform or '').strip()
+    part = _account_part(account)
+    return os.path.join(root_dir(), base, part) if part else os.path.join(root_dir(), base)
 
 
-def profile_dir_for(platform: str, enabled: bool = None) -> str | None:
+def profile_dir_for(platform: str, enabled: bool = None, account: str = '') -> str | None:
     """The directory *platform* should run in, or None when profiles are switched off.
 
     ``enabled`` overrides the setting for one browser: a parallel canvas can be run
@@ -164,17 +197,17 @@ def profile_dir_for(platform: str, enabled: bool = None) -> str | None:
     active = is_enabled() if enabled is None else bool(enabled)
     if not active or not str(platform or '').strip():
         return None
-    path = platform_dir(platform)
+    path = platform_dir(platform, account)
     with contextlib.suppress(OSError):
         os.makedirs(path, exist_ok=True)
     return path
 
 
-def marker_path(platform: str) -> str:
-    return os.path.join(platform_dir(platform), MARKER)
+def marker_path(platform: str, account: str = '') -> str:
+    return os.path.join(platform_dir(platform, account), MARKER)
 
 
-def _marker(platform: str) -> dict:
+def _marker(platform: str, account: str = '') -> dict:
     """The marker document, or ``{}`` when it is missing or unreadable.
 
     An unparsable marker is treated as *no history at all*, which re-imports the
@@ -182,34 +215,34 @@ def _marker(platform: str) -> dict:
     session this profile was never given.
     """
     try:
-        with open(marker_path(platform), encoding='utf-8') as handle:
+        with open(marker_path(platform, account), encoding='utf-8') as handle:
             data = json.load(handle)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
 
 
-def is_used(platform: str) -> bool:
+def is_used(platform: str, account: str = '') -> bool:
     """Has this profile ever been handed to a browser?
 
     Three states matter and they are not two, which is why this is separate from
     :func:`is_imported`: a profile can be used without any import (the user logged
     in *inside* it), and a fresh one can be ready to import the saved file.
     """
-    return bool(_marker(platform).get('used_at'))
+    return bool(_marker(platform, account).get('used_at'))
 
 
-def is_imported(platform: str) -> bool:
+def is_imported(platform: str, account: str = '') -> bool:
     """Did the saved cookie file actually go into this profile?
 
     The panel says 已导入 vs 将首次导入 from this — and the answer comes from the
     marker's own field, not from the file existing, or every used profile would look
     like it holds a session it may never have been given.
     """
-    return bool(_marker(platform).get('imported_at'))
+    return bool(_marker(platform, account).get('imported_at'))
 
 
-def mark_used(platform: str, *, imported: bool = True, cookie_stamp: str = '') -> None:
+def mark_used(platform: str, *, imported: bool = True, cookie_stamp: str = '', account: str = '') -> None:
     """Record that the profile was handed to a browser, and whether cookies went in.
 
     A failed write leaves the profile "new", which re-imports the cookie file next
@@ -220,11 +253,11 @@ def mark_used(platform: str, *, imported: bool = True, cookie_stamp: str = '') -
     the panel answer "the saved Cookie is newer than what this profile holds" without
     re-reading the browser's own store, which no process but Chrome can do.
     """
-    path = marker_path(platform)
+    path = marker_path(platform, account)
     stamp = time.strftime('%Y-%m-%d %H:%M:%S')
     with contextlib.suppress(OSError):
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        existing = _marker(platform)
+        existing = _marker(platform, account)
         existing['used_at'] = stamp
         if imported and not existing.get('imported_at'):
             existing['imported_at'] = stamp
@@ -235,7 +268,7 @@ def mark_used(platform: str, *, imported: bool = True, cookie_stamp: str = '') -
             json.dump(existing, handle, ensure_ascii=False, indent=1)
 
 
-def remember_cookie(platform: str, cookie_path: str) -> None:
+def remember_cookie(platform: str, cookie_path: str, account: str = '') -> None:
     """Record that this file IS the profile's own session, without claiming a plant.
 
     The panel's 「把 Cookie 更新进 Profile」 hint answers one question: *did a different file go in
@@ -245,10 +278,10 @@ def remember_cookie(platform: str, cookie_path: str) -> None:
     overwrite a live session with a copy of itself, which is precisely what the import-once rule
     exists to prevent. ``imported_at`` stays where it is: nothing was imported.
     """
-    path = marker_path(platform)
+    path = marker_path(platform, account)
     with contextlib.suppress(OSError):
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        existing = _marker(platform)
+        existing = _marker(platform, account)
         existing['cookie_stamp'] = file_stamp(cookie_path)
         with open(path, 'w', encoding='utf-8') as handle:
             json.dump(existing, handle, ensure_ascii=False, indent=1)
@@ -268,7 +301,7 @@ def file_stamp(path: str) -> str:
     return f'{int(info.st_mtime)}:{info.st_size}'
 
 
-def needs_refresh(platform: str, cookie_path: str) -> bool:
+def needs_refresh(platform: str, cookie_path: str, account: str = '') -> bool:
     """Is the saved cookie file a *different* file than the one this profile was given?
 
     Three answers must stay separate, and two of them are "no":
@@ -284,9 +317,9 @@ def needs_refresh(platform: str, cookie_path: str) -> bool:
     live profile with an older snapshot is the harm the import-once rule exists to
     prevent; the user asking is the one thing that makes it a refresh.
     """
-    if not cookie_path or not is_used(platform):
+    if not cookie_path or not is_used(platform, account):
         return False
-    recorded = str(_marker(platform).get('cookie_stamp') or '')
+    recorded = str(_marker(platform, account).get('cookie_stamp') or '')
     if not recorded:
         return False
     return file_stamp(cookie_path) != recorded
@@ -301,7 +334,14 @@ def _dir_size_mb(path: str) -> int:
     return total // (1024 * 1024)
 
 
-def status(platform: str, *, recommended: bool = False, has_cookie: bool = False, cookie_path: str = '') -> dict:
+def status(
+    platform: str,
+    *,
+    recommended: bool = False,
+    has_cookie: bool = False,
+    cookie_path: str = '',
+    account: str = '',
+) -> dict:
     """One platform's profile state, shaped for the settings panel.
 
     ``imported`` is what the guidance sentence turns on: false with an existing
@@ -309,12 +349,16 @@ def status(platform: str, *, recommended: bool = False, has_cookie: bool = False
     ``needs_refresh`` is the other half of that story: the profile *was* given a
     session, and the file it came from has been saved over since, so the login the user
     just re-took is sitting in a file the browser will never look at again by itself.
+
+    ``account`` scopes the whole answer to one account's device; the blank account is
+    the platform's default device, unchanged from before multi-account existed.
     """
-    path = platform_dir(platform)
+    path = platform_dir(platform, account)
     exists = os.path.isdir(path)
-    marker = _marker(platform)
+    marker = _marker(platform, account)
     return {
         'platform': platform,
+        'account': str(account or '').strip(),
         'enabled': is_enabled(),
         'recommended': bool(recommended),
         'path': path,
@@ -323,5 +367,5 @@ def status(platform: str, *, recommended: bool = False, has_cookie: bool = False
         'used_at': str(marker.get('used_at') or ''),
         'size_mb': _dir_size_mb(path) if exists else 0,
         'has_saved_cookie': bool(has_cookie),
-        'needs_refresh': bool(cookie_path) and needs_refresh(platform, cookie_path),
+        'needs_refresh': bool(cookie_path) and needs_refresh(platform, cookie_path, account),
     }

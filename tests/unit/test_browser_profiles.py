@@ -21,6 +21,7 @@ The rules worth pinning are the ones that are invisible when they break:
 """
 
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -196,6 +197,62 @@ class TestFactoryPolicy:
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies')
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies', refresh_cookies=False)
         assert fake_crawler()['cookie_path'] is None
+
+
+class TestAccounts:
+    """Multi-account: one platform, several devices, none of them each other's.
+
+    The point of the feature is that a site's wall is per-*session*: two accounts of
+    one platform can crawl at the same time because they are genuinely two devices —
+    separate profile directories (and ``lock_for`` keys on the path, so separate
+    lanes), separate cookie files, separate markers. The blank account must keep the
+    pre-feature layout byte-for-byte: nobody's saved session moves because the code
+    learned a new parameter.
+    """
+
+    def test_the_default_account_keeps_the_historical_directory(self, profiles_on, tmp_path):
+        assert browser_profiles.platform_dir('zhihu') == str(tmp_path / 'profiles' / 'zhihu')
+
+    def test_a_named_account_nests_one_level_deeper(self, profiles_on, tmp_path):
+        assert browser_profiles.platform_dir('zhihu', 'work') == str(tmp_path / 'profiles' / 'zhihu' / 'work')
+
+    def test_an_account_that_is_not_a_plain_word_never_reaches_a_path(self, profiles_on):
+        for bad in ('../escape', 'a/b', 'UPPER', 'with space', 'x' * 25, 'q"uote'):
+            with pytest.raises(ValueError):
+                browser_profiles.platform_dir('zhihu', bad)
+
+    def test_two_accounts_do_not_share_a_marker(self, profiles_on):
+        """The import-once rule is per device: account A being used must not talk
+        account B out of importing its own saved cookie file."""
+        browser_profiles.mark_used('weibo', imported=True, cookie_stamp='s1', account='a')
+        assert browser_profiles.is_used('weibo', 'a') is True
+        assert browser_profiles.is_used('weibo', 'b') is False
+        assert browser_profiles.is_used('weibo') is False, 'the default account is its own device too'
+
+    def test_accounts_get_separate_locks_because_they_are_separate_paths(self, tmp_path):
+        first = browser_profiles.lock_for(browser_profiles.platform_dir('weibo', 'a'))
+        second = browser_profiles.lock_for(browser_profiles.platform_dir('weibo', 'b'))
+        default = browser_profiles.lock_for(browser_profiles.platform_dir('weibo'))
+        assert first is not second and first is not default
+
+    def test_the_factory_routes_the_account_to_its_file_and_device(self, profiles_on, fake_crawler, tmp_path):
+        crawlers_pkg.get_crawler('weibo', cookie_dir=str(tmp_path), account='work')
+        assert fake_crawler()['cookie_path'] == f'{tmp_path}/weibo@work_cookies.json'
+        assert fake_crawler()['profile_dir'] == browser_profiles.platform_dir('weibo', 'work')
+
+    def test_one_accounts_use_does_not_stop_another_importing(self, profiles_on, fake_crawler):
+        """Second crawl on account 'b' must still plant: 'a' being used is not 'b'
+        having a session."""
+        crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies', account='a')
+        crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies', account='b')
+        assert fake_crawler()['cookie_path'] == '/tmp/cookies/weibo@b_cookies.json'
+        crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies', account='b')
+        assert fake_crawler()['cookie_path'] is None, 'the same account plants only once'
+
+    def test_the_status_row_can_answer_per_account(self, profiles_on, tmp_path):
+        row = browser_profiles.status('weibo', account='work', has_cookie=True)
+        assert row['account'] == 'work'
+        assert row['path'].endswith(os.path.join('weibo', 'work'))
 
 
 class TestCookieFileIsNotTheProfileSession:

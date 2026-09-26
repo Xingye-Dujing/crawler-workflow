@@ -220,3 +220,65 @@ class TestSessionOnlyCount:
         nothing anywhere, so it must not be reported as a cookie about to be lost."""
         manager.save('zhihu', ['not-a-cookie'])
         assert manager.session_only_count('zhihu') == 0
+
+
+class TestAccounts:
+    """Several saved logins for one platform — the storage half of multi-account.
+
+    The naming rule is the whole contract: the blank account keeps the historical
+    ``<platform>_cookies.json`` byte-for-byte (nobody's existing login moves because
+    the code learned a parameter), and a named account adds exactly one ``@`` segment.
+    The account label enters a filename from a text box, so anything that is not a
+    plain lowercase word is refused the same way an unknown platform is — the
+    whitelist is about the path, not about taste.
+    """
+
+    def test_the_blank_account_is_the_historical_filename(self, manager):
+        assert manager._path_for('zhihu') == manager._path_for('zhihu', '')
+        assert manager._path_for('zhihu').endswith('zhihu_cookies.json')
+
+    def test_a_named_account_inserts_one_segment(self, manager):
+        assert manager._path_for('zhihu', 'work').endswith('zhihu@work_cookies.json')
+
+    @pytest.mark.parametrize('bad', ['../x', 'a/b', 'A', 'has space', 'x' * 25, '@', 'q"uote'])
+    def test_an_account_that_is_not_a_plain_word_is_refused(self, manager, bad):
+        with pytest.raises(ValueError):
+            manager._path_for('zhihu', bad)
+
+    def test_is_account_answers_usability_without_raising(self):
+        assert CookieManager.is_account('') is True
+        assert CookieManager.is_account('work_2') is True
+        assert CookieManager.is_account('Work') is False
+        assert CookieManager.is_account('../x') is False
+
+    def test_two_accounts_hold_two_sessions(self, manager):
+        manager.save('weibo', COOKIES, 'a')
+        manager.save('weibo', [], 'b')
+        assert manager.load('weibo', 'a') == COOKIES
+        assert manager.load('weibo', 'b') == []
+        assert manager.load('weibo') == [], 'the default account is neither of them'
+
+    def test_delete_removes_one_account_only(self, manager):
+        manager.save('weibo', COOKIES, 'a')
+        manager.save('weibo', COOKIES, 'b')
+        manager.delete('weibo', 'a')
+        assert manager.exists('weibo', 'a') is False
+        assert manager.exists('weibo', 'b') is True
+
+    def test_the_account_list_reads_filenames_not_sessions(self, manager):
+        """The panel and the matrix options ask "which accounts exist"; the answer
+        comes from the file listing, and no cookie value is opened for it."""
+        manager.save('zhihu', COOKIES)
+        manager.save('zhihu', COOKIES, 'work')
+        manager.save('zhihu', COOKIES, 'alt')
+        assert manager.account_files('zhihu') == ['alt', 'work']
+
+    def test_names_that_are_not_account_files_are_ignored(self, manager):
+        os.makedirs(manager.cookie_dir, exist_ok=True)
+        with open(os.path.join(manager.cookie_dir, 'zhihu_cookies.json'), 'w') as f:
+            f.write('[]')
+        with open(os.path.join(manager.cookie_dir, 'zhihu@_cookies.json'), 'w') as f:
+            f.write('[]')
+        with open(os.path.join(manager.cookie_dir, 'zhihu@Bad-Name_cookies.json'), 'w') as f:
+            f.write('[]')
+        assert manager.account_files('zhihu') == [], 'only well-formed named files count'

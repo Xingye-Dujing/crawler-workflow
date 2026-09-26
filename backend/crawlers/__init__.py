@@ -60,8 +60,17 @@ def get_crawler(
     use_profile: bool = None,
     abort=None,
     refresh_cookies: bool = False,
+    account: str = '',
 ):
     """Build the crawler for *platform*, in that platform's own browser profile.
+
+    ``account`` selects *which* login of the platform this browser is: the cookie
+    file and the profile directory both gain one variant per account (named account
+    reads ``<platform>@<account>_cookies.json`` from a nested ``<root>/<platform>/<account>``
+    profile), while the blank account is exactly what it always was. Two accounts are
+    then two devices — separate rate-limit buckets, separate profile locks, separate
+    sessions — which is the structural fix for a wall that is per-account (weibo),
+    instead of only ordering one account's crawls through the queue.
 
     ``abort`` is the executor's "this run is over" check, forwarded to the
     profile wait: a stopped run must abandon the queue for a busy profile
@@ -92,9 +101,11 @@ def get_crawler(
     cls = crawler_class(platform)
     if not cls:
         raise ValueError(f'Unknown platform: {platform}')
-    profile = browser_profiles.profile_dir_for(platform, enabled=use_profile)
-    saved = f'{cookie_dir}/{platform}_cookies.json' if cookie_dir else ''
-    planting = bool(saved) and (not profile or not browser_profiles.is_used(platform) or refresh_cookies)
+    account = str(account or '').strip()
+    profile = browser_profiles.profile_dir_for(platform, enabled=use_profile, account=account)
+    stem = f'{platform}@{account}' if account else str(platform)
+    saved = f'{cookie_dir}/{stem}_cookies.json' if cookie_dir else ''
+    planting = bool(saved) and (not profile or not browser_profiles.is_used(platform, account) or refresh_cookies)
     crawler = cls(
         headless=headless,
         cookie_path=saved if planting else None,
@@ -105,5 +116,7 @@ def get_crawler(
     if profile:
         # The stamp is *which* file went in, so the panel can tell a saved-over cookie
         # from a profile that already holds the current one.
-        browser_profiles.mark_used(platform, imported=planting, cookie_stamp=browser_profiles.file_stamp(saved))
+        browser_profiles.mark_used(
+            platform, imported=planting, cookie_stamp=browser_profiles.file_stamp(saved), account=account
+        )
     return crawler
