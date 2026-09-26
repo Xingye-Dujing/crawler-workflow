@@ -187,7 +187,18 @@ class LogBufferHandler(logging.Handler):
     """Feed all logger.info/error/warning calls into execution_state['logs'] for the frontend."""
 
     def emit(self, record):
-        if record.name.startswith('werkzeug'):
+        # Transport chatter that is none of the user's business. Werkzeug logs every
+        # request; urllib3 logs, per chromedriver HTTP call, "Connection pool is full,
+        # discarding connection" and "Retrying (Retry(total=…)) after connection broken
+        # by NewConnectionError(.../session/...)". Both fire while a browser is being
+        # torn down — killing the driver mid-command makes selenium's own pooled client
+        # retry the dead port — so a Stop used to spray several scary-looking red lines
+        # that described no real failure. A run that genuinely broke still says so once,
+        # through the executor's node-failed line, never through these loggers. The file
+        # log keeps every word (root handler's twin); only the UI console is filtered.
+        if record.name == 'werkzeug' or record.name.startswith('werkzeug.'):
+            return
+        if record.name == 'urllib3' or record.name.startswith('urllib3.'):
             return
         msg = self.format(record)
         stripped = msg.strip()

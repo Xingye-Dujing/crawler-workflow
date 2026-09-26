@@ -16,6 +16,7 @@ services to the user's real ``data/`` for the rest of the session.
 
 import ast
 import copy
+import logging
 from pathlib import Path
 
 import pytest
@@ -235,3 +236,41 @@ class TestLineShape:
         app.add_log(None)
         assert state['logs'] == []
         assert state['_log_total'] == 0
+
+
+class TestTransportNoiseFilter:
+    """The console is filtered by LOGGER NAME, not by message text (#186).
+
+    Killing a chromedriver mid-command makes selenium's own urllib3 client retry the
+    dead port and discard the pooled connection, so a Stop sprayed red lines that
+    described no real failure. Those come from the ``urllib3`` logger; a real failure
+    comes from the crawler/executor loggers and must survive. Pinning the boundary by
+    name means a re-worded urllib3 message can never smuggle itself back in.
+    """
+
+    @staticmethod
+    def _emit(app, name, msg):
+        app._log_handler.emit(logging.LogRecord(name, logging.WARNING, 'x.py', 1, msg, None, None))
+
+    def test_urllib3_retry_and_pool_noise_never_reach_the_console(self, console):
+        app, state = console
+        self._emit(
+            app,
+            'urllib3.connectionpool',
+            'Retrying (Retry(total=2, connect=None)) after connection broken by '
+            "'NewConnectionError(\"HTTPConnection(host='localhost', port=12332)\")': /session/abc",
+        )
+        self._emit(app, 'urllib3', 'Connection pool is full, discarding connection: localhost. Connection pool size: 1')
+        assert state['logs'] == []
+        assert state['_log_total'] == 0, 'the filtered lines must not even advance the cursor'
+
+    def test_werkzeug_request_log_stays_out_of_the_console(self, console):
+        app, state = console
+        self._emit(app, 'werkzeug', 'GET /api/workflow/status HTTP/1.1" 200')
+        assert state['logs'] == []
+
+    def test_a_real_crawler_failure_still_reaches_the_console(self, console):
+        app, state = console
+        self._emit(app, 'crawlers.douyin', '节点 3 执行失败：连接被拒')
+        assert len(state['logs']) == 1
+        assert '执行失败' in state['logs'][0]
