@@ -461,10 +461,16 @@ def _comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
     )
 
 
-def _posts_mode(*extra: Field, target: int = 50, collects: str = 'dom_scroll', note_key: str = '') -> Mode:
+def _posts_mode(
+    *extra: Field,
+    target: int = 50,
+    label_key: str = 'settings.collectPosts',
+    collects: str = 'dom_scroll',
+    note_key: str = '',
+) -> Mode:
     return Mode(
         key='posts',
-        label_key='settings.collectPosts',
+        label_key=label_key,
         fields=(_KEYWORD, replace(_TARGET, default=target), *extra, _ACCOUNT, _RECOLLECT),
         note_key=note_key,
         collects=collects,
@@ -606,7 +612,7 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         platform='bilibili',
         modes=(
-            _posts_mode(collects='dom_read'),
+            _posts_mode(label_key='settings.collectVideos', collects='dom_read'),
             _author_mode(
                 placeholder='https://space.bilibili.com/<UID>',
                 hint_key='settings.authorHintBili',
@@ -629,7 +635,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         # and why #142 keeps the question open instead of resolving it into one sentence.
         profile_recommended=True,
         modes=(
-            _posts_mode(_SORT_FIELD, collects='page_per_row'),
+            _posts_mode(_SORT_FIELD, label_key='settings.collectVideos', collects='page_per_row'),
             _author_mode(
                 placeholder='https://www.douyin.com/user/<sec_uid>',
                 hint_key='settings.authorHintDouyin',

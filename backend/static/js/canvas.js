@@ -1546,38 +1546,23 @@ const canvas = {
             cursorY = compBottom + shift + compGap;
         }, this);
 
-        /* Step 3: center everything in viewport using visual node centers */
-        let cxSum = 0, cySum = 0, count = 0;
-        allPositions.forEach((p) => {
-            const el = this._nodeEl(p.id);
-            if (!el) return;
-            cxSum += p.x + el.offsetWidth / 2;
-            cySum += p.y + el.offsetHeight / 2;
-            count++;
-        });
-        if (count === 0) return;
-        const layoutCenterX = cxSum / count;
-        const layoutCenterY = cySum / count;
-        const vpCenterX = window.innerWidth / 2;
-        const vpCenterY = window.innerHeight / 2;
-        const offsetX = vpCenterX - layoutCenterX;
-        const offsetY = vpCenterY - layoutCenterY;
-
         allPositions.forEach((p) => {
             const el = this._nodeEl(p.id);
             if (el) {
-                el.style.left = Math.round(p.x + offsetX) + 'px';
-                el.style.top = Math.round(p.y + offsetY) + 'px';
+                /* Positions land in rank-local coordinates rounded to whole pixels;
+                   the camera fit below reads these boxes and pans/zooms so the whole
+                   relayout is on screen at once. */
+                el.style.left = Math.round(p.x) + 'px';
+                el.style.top = Math.round(p.y) + 'px';
             }
         });
-
-        this.panX = 0;
-        this.panY = 0;
-        this.zoom = 1;
-        this.updateTransform();
-        document.getElementById('status-zoom').textContent = '100%';
         this.scheduleRender();
         this.saveState();
+        /* autoLayout is 重新排布 + 适应: after moving the nodes it hands the camera to
+           resetView, the same rule the 适应 button uses (measured workspace box, a
+           shrink-only zoom, top clearance for the menu bar). Keeping one fit routine
+           means a relayout and a 适应 press can never disagree about "everything visible". */
+        this.resetView();
         showToast(I18n.t('toast.layoutApplied'));
     },
 

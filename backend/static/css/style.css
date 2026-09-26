@@ -2530,7 +2530,7 @@ input:-webkit-autofill:focus {
   font-family: var(--font);
 }
 .proc-table th {
-  text-align: left;
+  text-align: center;
   color: var(--text-faint);
   font-weight: 500;
   font-size: 9px;
@@ -2540,6 +2540,7 @@ input:-webkit-autofill:focus {
   border-bottom: 1px solid var(--line);
 }
 .proc-table td {
+  text-align: center;
   padding: 3px 4px;
   border-bottom: 1px solid var(--line2);
   color: var(--text-dim);
@@ -2572,6 +2573,7 @@ input:-webkit-autofill:focus {
   font-size: 10px;
   color: var(--text-dim);
   display: flex;
+  justify-content: center;
   gap: 12px;
 }
 .proc-summary span {
@@ -2681,7 +2683,11 @@ input:-webkit-autofill:focus {
   right: -360px;
   top: 50%;
   transform: translateY(-50%);
-  width: 340px;
+  /* Wide enough that the eight-platform step guide — the tall part — wraps into a
+     box that fits a laptop window without a vertical scrollbar (#175). The node form
+     stays at 340px; this panel carries much more text, so it reads better broader. */
+  width: 600px;
+  max-width: calc(100vw - 24px);
   /* Same reason as #node-settings: the eight-platform guide is far taller than a
      short window, and an uncapped box scrolls the page instead of itself. */
   max-height: calc(100vh - 24px);

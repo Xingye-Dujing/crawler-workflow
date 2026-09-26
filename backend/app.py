@@ -5927,6 +5927,11 @@ def runs_resumable():
     tweaking a keyword should still find the interrupted attempt of this same
     workflow. The browser also gets the per-node breakdown it needs to say what
     is already paid for.
+
+    ``all`` flips the question the 断点续跑 node asks: it grafts a stored node's rows
+    into a graph that need not resemble the run they came from — adding the resume
+    node itself changes the canvas fingerprint — so it lists every run that still
+    holds data instead of only this canvas's own interrupted attempt.
     """
     data = _json_body()
     if data is None:
@@ -5938,7 +5943,10 @@ def runs_resumable():
     # Same repair as the panel's: a record its worker abandoned must become
     # continuable on a page load, not only once somebody opens 运行记录.
     _settle_orphaned_records()
-    found = get_run_store().list_resumable(workflow_fingerprint(effective_workflow(workflow)), limit=limit)
+    if data.get('all'):
+        found = get_run_store().list_resumable(None, limit=limit, include_finished=True)
+    else:
+        found = get_run_store().list_resumable(workflow_fingerprint(effective_workflow(workflow)), limit=limit)
     # A *live* run is never resumable — offering it invites 重新开始 to discard
     # the run that is still writing right now. Leftover 'running' rows from a
     # dead process were already promoted to 'interrupted' at startup.

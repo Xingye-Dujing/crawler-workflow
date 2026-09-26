@@ -1166,6 +1166,54 @@ def test_auto_layout_clears_a_wide_node_and_draws_its_wire_flat(app_url, driver)
     assert ' L ' in d and ' C ' not in d, f'the forward wire between centre-aligned ranks still bows: {d}'
 
 
+AUTO_LAYOUT_FIT_JS = """
+canvas.nodes = {}; canvas.connections = [];
+document.getElementById('nodes-container').innerHTML = '';
+localStorage.removeItem('crawler_canvas');
+/* A long chain autoLayout spreads past the laptop window: twelve ranks of
+   ~200px + 120px gaps run far wider than the 1344px workspace. Before this change
+   autoLayout centred its own result at 100%, leaving the tail off-screen; now it
+   delegates the camera to resetView, so a relayout must fit like 适应 does. */
+const ids = [];
+let prev = null;
+for (let i = 0; i < 12; i++) {
+    const id = canvas.addNode(i === 11 ? 'output' : 'process', 0, 0);
+    ids.push(id);
+    if (prev) canvas.connections.push({ from: prev, to: id });
+    prev = id;
+}
+canvas.autoLayout();
+const work = document.getElementById('workspace').getBoundingClientRect();
+const boxes = {};
+ids.forEach((id) => {
+    const r = document.getElementById(id).getBoundingClientRect();
+    boxes[id] = [r.left, r.top, r.right, r.bottom];
+});
+return { zoom: canvas.zoom, boxes,
+         menuH: document.getElementById('top-menu').offsetHeight,
+         viewport: [work.left, work.top, work.right, work.bottom] };
+"""
+
+
+def test_auto_layout_fits_the_camera_like_adapt(app_url, driver):
+    """The user's #171: 自动布局 = 重新排布 + 适应. After relaying a chain that no
+    longer fits at 100%, the camera must have SHRUNK (zoom<1) and every node must sit
+    inside the workspace and below the menu bar — the exact contract 适应 upholds,
+    because autoLayout now calls it rather than centre-at-100% on its own."""
+    driver.set_window_size(1366, 768)
+    _quiet_canvas(driver, app_url)
+    made = driver.execute_script(AUTO_LAYOUT_FIT_JS, [])
+    wl, wt, wr, wb = made['viewport']
+    vp = made['viewport']
+    assert len(made['boxes']) == 12, f'expected twelve relaid nodes, measured {len(made["boxes"])}'
+    assert made['zoom'] < 1, f'autoLayout left the wide chain at {made["zoom"]:.2f}, so the tail is off-screen'
+    assert made['menuH'] > 0, 'the menu bar reported no height; the clearance assertion is vacuous'
+    for box in made['boxes'].values():
+        assert box[0] >= wl - 1 and box[2] <= wr + 1, f'node outside the viewport horizontally: {box} in {vp}'
+        assert box[1] >= wt - 1 and box[3] <= wb + 1, f'node outside the viewport vertically: {box} in {vp}'
+        assert box[1] >= wt + made['menuH'] - 1, f'node sits under the {made["menuH"]}px menu bar: top={box[1]}'
+
+
 FIT_VIEW_JS = """
 canvas.nodes = {}; canvas.connections = [];
 document.getElementById('nodes-container').innerHTML = '';
@@ -1258,6 +1306,40 @@ def test_the_node_library_collapses_out_of_the_way_and_reopens(app_url, driver):
         'the toggle tooltip does not change with state (and is not localized): ' + str(collapsed['title'])
     )
     assert expanded == before, f'the second click did not restore the panel: {expanded} vs {before}'
+
+
+COOKIE_FIT_JS = """
+document.body.dataset.lang = 'zh';
+I18n.apply();
+const box = document.getElementById('cookie-dialog');
+const select = document.getElementById('cookie-platform');
+const opts = Array.prototype.map.call(select.options || [], (o) => o.value).filter((v) => v);
+const rows = [];
+opts.forEach((p) => {
+    select.value = p;
+    openCookieDialog(p);
+    rows.push({ platform: p, scroll: box.scrollHeight, client: box.clientHeight });
+    box.classList.remove('open');
+});
+return { count: rows.length, rows };
+"""
+
+
+def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_url, driver):
+    """The eight-platform step guide wrapped into a narrow column and pushed the panel
+    past the window, so every platform showed a vertical scrollbar. The panel was
+    widened (#175); the guide must now wrap into a height that fits WITHOUT the box
+    having to scroll itself. Asserted per platform — this is the only tier that sees
+    real text-wrap heights, and the assertion reports how many it measured."""
+    driver.set_window_size(1366, 768)
+    _quiet_canvas(driver, app_url)
+    got = driver.execute_script(COOKIE_FIT_JS, [])
+    assert got['count'] >= 8, f'expected the whole platform list to be measured, saw {got["count"]}'
+    for row in got['rows']:
+        assert row['scroll'] <= row['client'] + 1, (
+            f'the {row["platform"]} cookie guide still overflows: scrollHeight {row["scroll"]} '
+            f'vs clientHeight {row["client"]}'
+        )
 
 
 REFRESH_ALIGN_DRAFT = """

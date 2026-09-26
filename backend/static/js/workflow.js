@@ -1858,7 +1858,7 @@ function openSettings(nodeId) {
            server, so the panel fills them asynchronously below. */
         html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('resume.hint') + '</div>' +
             '<div id="resume-pick" data-node="' + nodeId + '">' +
-            '<span style="font-size:11px;color:var(--text-dim);">…</span></div>' +
+            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">…</div></div>' +
             '<div class="settings-group"><button class="menu-btn" onclick="renderResumeSettings(\'' + nodeId + '\')">' +
             I18n.t('resume.refresh') + '</button></div>';
     } else if (node.type === 'output') {
@@ -1903,7 +1903,7 @@ async function renderResumeSettings(nodeId) {
         var resp = await fetch('/api/runs/resumable', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workflow: canvas.toWorkflowJSON() }),
+            body: JSON.stringify({ workflow: canvas.toWorkflowJSON(), all: true }),
         });
         var result = await resp.json();
         runs = (result.ok && result.runs) || [];
@@ -1923,7 +1923,7 @@ async function renderResumeSettings(nodeId) {
     var holder = document.getElementById('resume-pick');
     if (!holder || holder.dataset.node !== nodeId) return;
     if (!runs.length) {
-        holder.innerHTML = '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('resume.none') + '</div>';
+        holder.innerHTML = '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('resume.none') + '</div>';
         return;
     }
     /* Whatever it was pointed at may have been purged since; falling back to

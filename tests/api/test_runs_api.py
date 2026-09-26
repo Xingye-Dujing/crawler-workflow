@@ -176,6 +176,37 @@ class TestResumableLookup:
         body = client.post('/api/runs/resumable', json={'workflow': _workflow(), 'limit': 2}).get_json()
         assert [run['run_id'] for run in body['runs']] == ['r2', 'r1']
 
+    def test_all_mode_lists_a_finished_run_of_a_different_shape(self, client, app_module):
+        """The 断点续跑 node grafts a stored node's rows into a graph that need not
+        resemble the run they came from — adding the node itself re-fingerprints the
+        canvas. So its list must ignore both the structure match and the
+        finished/unfinished split that the banner path enforces, or the node would
+        only ever show data when it happened to be disabled."""
+        store = app_module._RUN_STORE
+        _seed(
+            store,
+            'old-crawl',
+            fingerprint='a-completely-different-graph',
+            status=RUN_COMPLETED,
+            nodes=[('node-2', 'source', NODE_DONE, 4)],
+        )
+        # The banner path refuses it: wrong shape, and it finished.
+        assert client.post('/api/runs/resumable', json={'workflow': _workflow()}).get_json()['runs'] == []
+        # The node path (all=true) lists it, with the per-node rows it reads from.
+        body = client.post('/api/runs/resumable', json={'workflow': _workflow(), 'all': True}).get_json()
+        ids = [run['run_id'] for run in body['runs']]
+        assert ids == ['old-crawl']
+        node_ids = [(n['node_id'], n['row_count']) for n in body['runs'][0]['nodes']]
+        assert ('node-2', 4) in node_ids
+
+    def test_all_mode_still_hides_a_live_run(self, client, app_module):
+        """A run still writing is never a resume source — all=true widens *which*
+        past runs are visible, it does not offer to discard the in-flight one."""
+        store = app_module._RUN_STORE
+        _seed(store, 'live', status=RUN_RUNNING, nodes=[('node-1', 'source', NODE_DONE, 2)], total=1)
+        body = client.post('/api/runs/resumable', json={'workflow': _workflow(), 'all': True}).get_json()
+        assert body['runs'] == []
+
 
 class TestRunHousekeeping:
     def test_discard_throws_away_the_run_and_its_crawl_claims(self, client, app_module):
