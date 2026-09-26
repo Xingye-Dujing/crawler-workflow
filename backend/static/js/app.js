@@ -552,6 +552,9 @@ const I18n = {
             'settings.urls': 'Article URLs',
             'settings.urlsHint': 'One URL per line — WeChat crawls these articles',
             'settings.commentUrls': 'Article Links',
+            'settings.inputColumn': 'Upstream Column',
+            'settings.inputColumnHint':
+                'Name the wired table column to crawl one link per row; the box above is then ignored. Cells holding several links are split.',
             'settings.commentUrlsHintPlat': 'One article link per line — must match the selected platform ({plat})',
             'settings.wechatLimitsNote': 'WeChat: comments / likes / forwards cannot be collected — see why',
             'settings.wechatLimitsBtn': 'Why not WeChat comments / likes / forwards?',
@@ -603,6 +606,7 @@ const I18n = {
             'status.nodes': 'Nodes: ', 'status.progress': 'Progress: {done}/{total}',
             'toast.layoutApplied': 'Layout applied',
             'summary.tokenizeTop': ' | Top-{n}',
+            'summary.fedColumn': 'column "{col}"',
             'settings.textColumnPlaceholder': 'e.g. content text field',
             'toast.mlUpstreamNeeded': 'Please connect an upstream node with labeled data first',
             'toast.languageChanged': 'Language: {lang}',
@@ -615,6 +619,12 @@ const I18n = {
             'validate.capUnavailable': 'Source node "{title}": the platform capability list has not loaded, so its required fields cannot be checked — retry it in the settings panel',
             'validate.sourceFieldMissing': 'Source node "{title}": {field} cannot be empty',
             'validate.sourceDownstream': 'Source node "{title}": must connect to a downstream node',
+            'validate.sourceFeedNoMode':
+                'Source node "{title}": this collection mode cannot be fed from an upstream table — disconnect the wire or pick another mode',
+            'validate.sourceFeedNoColumn':
+                'Source node "{title}": an upstream table is wired in — name the column to read row by row for {field}',
+            'validate.sourceFeedNoInput':
+                'Source node "{title}": a fed column is named but no data table is wired in',
             'validate.sourceCommentPlat': 'Source node "{title}": {n} link(s) do not match the selected platform ({plat})',
             'validate.joinNeedsTwo': 'Analysis node "{title}": joining needs two input connections (left table, right table)',
             'validate.uploadFile': 'Upload node "{title}": no file uploaded yet',
@@ -1263,6 +1273,9 @@ const I18n = {
             'settings.urls': '文章链接',
             'settings.urlsHint': '每行一个链接，微信按这些文章逐个抓取',
             'settings.commentUrls': '文章链接',
+            'settings.inputColumn': '上游列名',
+            'settings.inputColumnHint':
+                '填上游表格的列名＝逐行读该列链接去爬（链接框此时失效、其内容被忽略）；一格多链接自动拆开；不接表格请留空',
             'settings.commentUrlsHintPlat': '每行一个文章链接，须与所选平台（{plat}）一致',
             'settings.wechatLimitsNote': '微信：留言 / 点赞数 / 转发数 无法采集——点击查看原因',
             'settings.wechatLimitsBtn': '为什么微信不能采集评论、点赞、转发？',
@@ -1311,6 +1324,7 @@ const I18n = {
             'status.nodes': '节点数：', 'status.progress': '进度：{done}/{total}',
             'toast.layoutApplied': '已应用自动布局',
             'summary.tokenizeTop': ' | Top-{n}',
+            'summary.fedColumn': '列「{col}」',
             'settings.textColumnPlaceholder': '例如：正文',
             'toast.mlUpstreamNeeded': '请先连接一个带标签数据的上游节点',
             'toast.languageChanged': '语言：{lang}',
@@ -1323,6 +1337,9 @@ const I18n = {
             'validate.capUnavailable': '数据源节点 "{title}"：平台能力清单尚未加载，无法核对它需要哪些字段——请到设置面板重试',
             'validate.sourceFieldMissing': '数据源节点 "{title}"：{field} 不能为空',
             'validate.sourceDownstream': '数据源节点 "{title}"：必须连接到下游节点',
+            'validate.sourceFeedNoMode': '数据源节点 "{title}"：这种采集内容不接受上游表格，请断开连线或改选采集内容',
+            'validate.sourceFeedNoColumn': '数据源节点 "{title}"：已接上游表格，请填写要逐行读取的列名（{field}）',
+            'validate.sourceFeedNoInput': '数据源节点 "{title}"：填写了上游列名但没有连接数据表格',
             'validate.sourceCommentPlat': '数据源节点 "{title}"：{n} 个链接与所选平台（{plat}）不符',
             'validate.joinNeedsTwo': '分析节点 "{title}"：合并表需要两条输入连线（左表、右表）',
             'validate.uploadFile': '上传节点 "{title}"：尚未上传文件',

@@ -732,3 +732,180 @@ def test_the_account_on_the_node_selects_the_browser(app_module, browser_asked):
     assert browser_asked['account'] == 'work'
     # and the crawl method itself was NOT given the account
     assert 'account' not in capabilities.crawl_kwargs(mode, params)
+
+
+# ─── Feed: an upstream table column becomes the link list ───────────────
+
+
+def _patch_session(monkeypatch, seen, fail_url=None):
+    """The comment engine's adapter seam: record (adapter, url, limit) per link.
+
+    ``fail_url`` raises once — which is how the resume test below leaves a real
+    stored cursor behind instead of pretending one exists.
+    """
+    import crawlers.comments as comments_module
+
+    class _Session:
+        def __init__(self, driver, log=None, **kwargs):
+            self._log = log
+
+        def __getattr__(self, name):
+            if not name.startswith('crawl_'):
+                raise AttributeError(name)
+
+            def crawl(url, limit):
+                seen.append((name, url, limit))
+                if fail_url == url:
+                    raise RuntimeError('wall at the fed article')
+                return [{'评论ID': f'c-{url}', '评论内容': '很好', '文章URL': url}], 'ok'
+
+            return crawl
+
+    monkeypatch.setattr(comments_module, 'CommentSession', _Session)
+
+
+def _comments_feed_node(platform, column='链接'):
+    mode = capabilities.mode_for(platform, 'comments')
+    params = _params_for(platform, mode)
+    params['input_column'] = column
+    return {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': platform}
+
+
+@pytest.mark.parametrize('platform,mode_key', _pairs(handlers={'comments'}))
+def test_a_fed_column_replaces_the_pasted_links(app_module, recorder, monkeypatch, platform, mode_key):
+    """The feed is a REPLACEMENT, not an addition: the textarea the user overrode by
+    naming a column must never crawl — merging would double-pay an article present in
+    both lists and make the positional url_index cursor unrebuildable on 继续."""
+    seen = []
+    _patch_session(monkeypatch, seen)
+    u1 = _SAMPLES[('urls', platform)]
+    node = _comments_feed_node(platform)
+    node['params']['urls'] = u1 + '-pasted'
+    rows_out = app_module._execute_source_node(
+        node,
+        headless=True,
+        ctx=None,
+        upstream=[('node-0', [{'链接': u1}, {'链接': u1 + '1'}])],
+    )
+    crawled = [url for _a, url, _l in seen]
+    assert crawled == [u1, u1 + '1'], f'{platform}: fed column did not drive the crawl: {crawled}'
+    assert all('-pasted' not in url for url in crawled), f'{platform} still crawled the pasted box'
+    assert len(rows_out) == 2, f'{platform}: rows must come back downstream, got {rows_out}'
+
+
+def test_the_fed_column_hands_the_crawler_its_list_in_order_with_blanks_and_dups(app_module, recorder, monkeypatch):
+    """Row order, blanks skipped (counted, not guessed), first-occurrence dedupe.
+
+    The dedupe leg is the resume contract: the comment engine counts links BY POSITION,
+    so a duplicate cell would consume a cursor slot and buy the same article twice.
+    """
+    from i18n import t
+
+    seen = []
+    _patch_session(monkeypatch, seen)
+    logs = []
+    monkeypatch.setattr(app_module, 'add_log', lambda m: logs.append(m))
+    u1 = _SAMPLES[('urls', 'zhihu')]
+    u2 = u1 + '2'
+    node = _comments_feed_node('zhihu')
+    node['params']['urls'] = ''
+    parent = [{'链接': u1}, {'链接': None}, {'链接': u1}, {'链接': '  '}, {}, {'链接': u2}]
+    app_module._execute_source_node(node, headless=True, ctx=None, upstream=[('node-0', parent)])
+    assert [url for _a, url, _l in seen] == [u1, u2]
+    assert t('source.feed_skipped', n=3) in logs, f'the skipped cells must be said, not silenced: {logs}'
+
+
+def test_a_missing_fed_column_fails_by_name_not_with_an_empty_table(app_module, recorder, monkeypatch):
+    seen = []
+    _patch_session(monkeypatch, seen)
+    node = _comments_feed_node('zhihu', column='不存在的列')
+    node['params']['urls'] = ''
+    u1 = _SAMPLES[('urls', 'zhihu')]
+    with pytest.raises(ValueError) as exc:
+        app_module._execute_source_node(node, headless=True, ctx=None, upstream=[('n0', [{'链接': u1}])])
+    assert '不存在的列' in str(exc.value), exc.value
+    assert seen == [], 'a refused feed must not crawl anything'
+
+
+def test_an_all_blank_feed_refuses_rather_than_crawling_nothing(app_module, recorder, monkeypatch):
+    seen = []
+    _patch_session(monkeypatch, seen)
+    node = _comments_feed_node('zhihu')
+    node['params']['urls'] = ''
+    with pytest.raises(ValueError) as exc:
+        app_module._execute_source_node(
+            node, headless=True, ctx=None, upstream=[('n0', [{'链接': None}, {'链接': ''}])]
+        )
+    assert seen == [], exc.value
+
+
+def test_a_name_wire_alone_is_not_a_feed(app_module, recorder, monkeypatch):
+    """``name → source`` is the labelling pattern this canvas has always had.
+
+    A name node produces [] — an empty list is not a table. If "any input" meant
+    "a feed", every labelled workflow would suddenly read a column that is not
+    there and stop crawling its pasted links.
+    """
+    seen = []
+    _patch_session(monkeypatch, seen)
+    u1 = _SAMPLES[('urls', 'zhihu')]
+    node = _comments_feed_node('zhihu')
+    node['params']['urls'] = u1
+    app_module._execute_source_node(node, headless=True, ctx=None, upstream=[('name-1', [])])
+    assert [url for _a, url, _l in seen] == [u1], 'the pasted box still rules when the only wire is a name label'
+
+
+def test_a_fed_wechat_column_reaches_the_article_reader(app_module, recorder):
+    """The non-comment half of the feed: wechat's reader takes the LIST itself."""
+    mode = capabilities.mode_for('wechat', 'posts')
+    params = _params_for('wechat', mode)
+    params['input_column'] = '链接'
+    params['urls'] = ''
+    node = {'id': 'node-1', 'type': 'source', 'title': '文章', 'params': params, 'platform': 'wechat'}
+    u1 = _SAMPLES[('urls', 'wechat')]
+    rows = app_module._execute_source_node(
+        node, headless=True, ctx=None, upstream=[('node-0', [{'链接': u1}, {'链接': u1 + '2'}])]
+    )
+    assert rows
+    called, kwargs = recorder[0]
+    assert called == 'search'
+    assert kwargs['urls'] == [u1, u1 + '2'], f'the fed column must be the crawler argument: {kwargs["urls"]}'
+    assert 'input_column' not in kwargs, "the column name is the executor's, not the crawler's"
+
+
+def test_a_fed_resume_rebuilds_the_list_and_crawls_only_the_missing_one(app_module, recorder, monkeypatch, tmp_path):
+    """The whole point of feeding: 继续 pays only for the articles the wall refused.
+
+    A real RunStore sits under this because the thing under test is the hand-off —
+    the list the second attempt rebuilds from the parent rows must be POSITIONALLY
+    identical to the first one's, or the stored ``url_index`` skips the wrong link.
+    """
+    from services.run_store import RunStore
+
+    u1 = _SAMPLES[('urls', 'zhihu')]
+    u2 = u1 + '1'
+    store = RunStore(str(tmp_path / 'feed-resume.db'))
+    store.start_run('r-feed', 'feedwf', 'fp-canvas', headless=True)
+    store.begin_node('r-feed', 'node-1', 'source', title='评论', fingerprint='fp-node')
+    parent = [{'链接': u1}, {'链接': u2}]
+
+    seen = []
+    _patch_session(monkeypatch, seen, fail_url=u2)
+    node = _comments_feed_node('zhihu')
+    node['params']['urls'] = ''
+    ctx = {'store': store, 'run_id': 'r-feed', 'fingerprints': {'node-1': 'fp-node'}, 'skipped_seen': {}}
+    with pytest.raises(RuntimeError):
+        app_module._execute_source_node(node, headless=True, ctx=ctx, upstream=[('node-0', parent)])
+    assert [url for _a, url, _l in seen] == [u1, u2], 'the first attempt must have reached the wall'
+    cursor = store.get_cursor('r-feed', 'node-1')
+    assert cursor.get('url_index') == 1, f'the interrupted attempt must leave its position: {cursor}'
+
+    # The wall is gone, the rows already paid are still stored, and the parent
+    # table is the same — the resume must crawl u2 ONLY.
+    seen2 = []
+    _patch_session(monkeypatch, seen2)
+    rows = app_module._execute_source_node(
+        node, headless=True, ctx=dict(ctx, resume=True), upstream=[('node-0', parent)]
+    )
+    assert [url for _a, url, _l in seen2] == [u2], f'继续 re-paid for a settled article: {seen2}'
+    assert len(rows) == 2, f'the resumed table must carry BOTH articles, got {rows}'

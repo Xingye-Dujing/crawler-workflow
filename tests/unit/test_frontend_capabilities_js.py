@@ -345,6 +345,11 @@ def _identifier_fields(mode: dict) -> list:
 def _filled(cap: dict, mode: dict) -> dict:
     params = {'platform': cap['platform'], 'collect': mode['key']}
     for field in mode['fields']:
+        if field['key'] == 'input_column':
+            # Left at its declared blank ON PURPOSE: a named fed column takes the
+            # card over (it prints the column, not the link count), and this sweep
+            # is about the unfed form. The fed card has its own scenario below.
+            continue
         if field['coerce'] == 'urls':
             params[field['key']] = 'first link\nsecond link\nthird link'
         elif field['control'] == 'select':
@@ -384,6 +389,21 @@ def cards(tmp_path_factory):
     refresh = {'id': 'redraw', 'payload': matrix, 'params': {'platform': 'zhihu', 'keyword': 'ai'}, 'refresh': True}
     scenarios.append(refresh)
     keys.append('redraw')
+    # The fed card, spelled: a comments node that named its upstream column. The
+    # paste it still holds will be ignored, so the card must say WHICH COLUMN runs
+    # instead of counting links nobody will crawl.
+    fed = {
+        'id': 'zhihu-fed',
+        'payload': matrix,
+        'params': {
+            'platform': 'zhihu',
+            'collect': 'comments',
+            'urls': 'first link\nsecond link',
+            'input_column': '链接',
+        },
+    }
+    scenarios.append(fed)
+    keys.append('zhihu-fed')
     tmp = tmp_path_factory.mktemp('caps-cards')
     results = _run(tmp, scenarios)
     return matrix, keys, results
@@ -460,6 +480,40 @@ class TestNodeCardFollowsTheMatrix:
                 assert ': 3' in summary, f'{cap["platform"]}/{mode["key"]} does not count its links: {summary}'
                 assert 'first link' not in summary, f'{cap["platform"]}/{mode["key"]} dumps the paste: {summary}'
         assert checked >= 5, f'only {checked} modes read links, so this assertion has gone vacuous'
+
+    def test_a_fed_column_owns_the_card_and_the_list_box(self, cards):
+        """Feeding replaces, so both faces must replace too.
+
+        The card prints the COLUMN (a count of a paste nobody crawls is a lie), and
+        the panel shows the list box DISABLED — the user sees the override inside the
+        form that set it, not only after a refused run.
+        """
+        _matrix, _keys, results = cards
+        fed = results['zhihu-fed']
+        assert 'summary.fedColumn' in fed['summary'], fed['summary']
+        assert ': 2' not in fed['summary'], f'the card still counts the ignored paste: {fed["summary"]}'
+        assert 'first link' not in fed['summary']
+        assert ' disabled>' in fed['html'], 'the fed list box still reads as editable'
+
+    def test_the_payload_says_which_fields_can_be_fed(self, cards):
+        # One declaration, every face: the browser may not guess feedability, so the
+        # dump must carry fedBy, and exactly the link-list fields carry it.
+        matrix, _keys, _results = cards
+        fed_fields = {
+            f'{cap["platform"]}/{mode["key"]}:{field["key"]}'
+            for cap in matrix['platforms']
+            for mode in cap['modes']
+            for field in mode['fields']
+            if field.get('fedBy')
+        }
+        link_fields = {
+            f'{cap["platform"]}/{mode["key"]}:{field["key"]}'
+            for cap in matrix['platforms']
+            for mode in cap['modes']
+            for field in mode['fields']
+            if field['coerce'] == 'urls'
+        }
+        assert fed_fields == link_fields, f'feed declaration and link fields disagree: {fed_fields ^ link_fields}'
 
     def test_a_card_drawn_before_the_matrix_arrives_claims_nothing(self, cards):
         """A restored draft paints its nodes on a cold page, and the matrix comes

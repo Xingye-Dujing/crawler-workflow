@@ -975,7 +975,7 @@ const workflow = {
    in the panel, executable by the backend — and unreachable from the UI, because
    a filled-in author or board node was refused 「缺少关键词」 and no request ever
    left the page. Same payload, one source: `/api/capabilities`. */
-function sourceNodeErrors(node, label) {
+function sourceNodeErrors(node, label, hasDataInput) {
     var params = node.params || {};
     var platform = node.platform || params.platform;
     if (!platform) {
@@ -1001,7 +1001,30 @@ function sourceNodeErrors(node, label) {
             .replace('{platform}', I18n.t('platform.' + platform))];
     }
     var errors = [];
+    /* Feed gate, matrix-driven like the rest of this function: a field the matrix
+       marks feedable (f.fedBy) reads an upstream table column, and a wired table
+       REPLACES the pasted list — its requiredness and ownership become runtime
+       facts about the parent's rows, not design-time claims about this node.
+       A wire that cannot feed and a column named with nothing wired are both
+       half-mistakes this gate refuses by name (backend validate agrees exactly). */
+    var feedFields = (mode.fields || []).filter(function (f) { return f.fedBy; });
+    if (hasDataInput && !feedFields.length) {
+        errors.push(I18n.t('validate.sourceFeedNoMode').replace('{title}', label));
+    }
+    if (!hasDataInput && feedFields.some(function (f) { return String(params[f.fedBy] || '').trim(); })) {
+        errors.push(I18n.t('validate.sourceFeedNoInput').replace('{title}', label));
+    }
     (mode.fields || []).forEach(function (field) {
+        if (field.fedBy && hasDataInput) {
+            if (!String(params[field.fedBy] || '').trim()) {
+                errors.push(
+                    I18n.t('validate.sourceFeedNoColumn')
+                        .replace('{title}', label)
+                        .replace('{field}', I18n.t(field.labelKey))
+                );
+            }
+            return;
+        }
         var raw = params[field.key];
         var text = String(raw === undefined || raw === null ? '' : raw);
         if (field.linksOf) {
@@ -1402,7 +1425,7 @@ function sourcePanelHtml(nodeId, p) {
     }
     var fields = Capabilities.fields(platform, mode.key);
     for (var i = 0; i < fields.length; i++) {
-        html += sourceFieldHtml(nodeId, fields[i], p[fields[i].key]);
+        html += sourceFieldHtml(nodeId, fields[i], p[fields[i].key], p);
     }
     /* Which platforms a throwaway browser actively fails on is a measured fact about
        the site, so it comes from the matrix (`profileRecommended`) rather than a list
@@ -1516,7 +1539,7 @@ function sourceSelectHtml(nodeId, labelKey, options, value, onChange) {
     return html + '</select></div>';
 }
 
-function sourceFieldHtml(nodeId, f, value) {
+function sourceFieldHtml(nodeId, f, value, allParams) {
     if (!ID_SHAPE.test(String(f.key))) return '';
     var v = value === undefined || value === null || value === '' ? f.default : value;
     var hint = sourceFieldHint(f);
@@ -1540,12 +1563,19 @@ function sourceFieldHtml(nodeId, f, value) {
     var label = '<label class="settings-label">' + I18n.t(f.labelKey) + '</label>';
     var input;
     if (f.control === 'textarea') {
+        /* A field whose list can be fed from an upstream column shows itself disabled
+           the moment the user names one: the executor crawls the table, not this box,
+           and grey says so before the run rather than after. Which fields can be fed
+           is the matrix's answer (f.fedBy), never a list the panel keeps by hand. */
+        var fedAway = f.fedBy && allParams && String(allParams[f.fedBy] || '').trim();
         input =
             '<textarea class="settings-input" rows="5" placeholder="' +
             escapeHtml(f.placeholder || '') +
             '" onchange="' +
             paramCall(nodeId, f.key, 'this.value') +
-            '">' +
+            '"' +
+            (fedAway ? ' disabled' : '') +
+            '>' +
             escapeHtml(v) +
             '</textarea>';
     } else if (f.control === 'number') {
@@ -4743,10 +4773,16 @@ workflow.validate = function () {
     var hasInput = {};
     var hasOutput = {};
     var inputCount = {};
+    /* A wire FROM a name node is the labelling pattern, not a data table — the
+       source feed gate must not see it as a feed (backend validate builds the same
+       distinction off the same rule: parent type !== 'name'). */
+    var dataInput = {};
     conns.forEach(function (c) {
         hasOutput[c.from] = true;
         hasInput[c.to] = true;
         inputCount[c.to] = (inputCount[c.to] || 0) + 1;
+        var src = nodes[c.from];
+        if (src && src.type !== 'name' && nodes[c.to]) dataInput[c.to] = true;
     });
 
     Object.keys(nodes).forEach(function (id) {
@@ -4758,7 +4794,7 @@ workflow.validate = function () {
         var label = node.title || I18n.t('node.' + type);
 
         if (type === 'source') {
-            errors.push.apply(errors, sourceNodeErrors(node, label));
+            errors.push.apply(errors, sourceNodeErrors(node, label, !!dataInput[id]));
             if (!hasOutput[id]) {
                 errors.push(I18n.t('validate.sourceDownstream').replace('{title}', label));
             }

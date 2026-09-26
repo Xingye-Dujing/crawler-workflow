@@ -1299,3 +1299,75 @@ class TestSelectsAndSwitchesAsNodes:
         )
         assert status['status'] == 'done', status.get('error')
         assert ('row' in rows[0]) is has_row, (merge, rows[:1])
+
+
+class TestFeedSourceFromUpload:
+    """upload → 链接模式（评论）: the wired column drives the crawl end to end.
+
+    The dispatch-matrix file calls the executor with a hand-made ``upstream``;
+    nothing but this path covers the FORWARDING leg — ``_execute_node`` handing the
+    parent pairs into ``_execute_source_node`` at all. Revert that one kwarg and
+    the fed crawl silently degrades to the old "wire is a lie" behaviour, which
+    only a whole-request run can see.
+    """
+
+    @staticmethod
+    def _fake_comment_engine(app_module, monkeypatch, seen):
+        import crawlers.comments as comments_module
+
+        class _Session:
+            def __init__(self, driver, log=None, **kwargs):
+                pass
+
+            def __getattr__(self, name):
+                if not name.startswith('crawl_'):
+                    raise AttributeError(name)
+
+                def crawl(url, limit):
+                    seen.append(url)
+                    return [{'评论ID': url, '评论内容': '好'}], 'ok'
+
+                return crawl
+
+        monkeypatch.setattr(comments_module, 'CommentSession', _Session)
+
+        class _NoWindow:
+            driver = object()
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: _NoWindow())
+
+    def test_the_fed_column_crawls_the_uploads_rows(self, client, app_module, paste, monkeypatch):
+        seen = []
+        self._fake_comment_engine(app_module, monkeypatch, seen)
+        links = [{'链接': 'https://www.zhihu.com/question/101'}, {'链接': 'https://www.zhihu.com/question/102'}]
+        run_id, status, rows = _run_node(
+            client,
+            app_module,
+            paste,
+            'source',
+            {'platform': 'zhihu', 'collect': 'comments', 'urls': '', 'input_column': '链接'},
+            records=links,
+        )
+        assert status['status'] == 'done', status
+        assert seen == ['https://www.zhihu.com/question/101', 'https://www.zhihu.com/question/102'], seen
+        assert len(rows) == 2, rows
+        assert app_module._RUN_STORE.row_count(run_id, 'node-target') == 2
+
+    def test_a_wrong_column_name_fails_the_node_naming_the_column(self, client, app_module, paste, monkeypatch):
+        seen = []
+        self._fake_comment_engine(app_module, monkeypatch, seen)
+        links = [{'链接': 'https://www.zhihu.com/question/101'}]
+        _run_id, status, rows = _run_node(
+            client,
+            app_module,
+            paste,
+            'source',
+            {'platform': 'zhihu', 'collect': 'comments', 'urls': '', 'input_column': '不存在的列'},
+            records=links,
+        )
+        assert status['status'] == 'failed', status
+        assert seen == [], 'a refused feed must not crawl anything'
+        assert '不存在的列' in str(status.get('error') or ''), status

@@ -2183,7 +2183,46 @@ def _page_not_arrived(platform: str, exc: PageNotArrivedError) -> ValueError:
     return ValueError(t('run.pagePending', page=str(exc), streak=streak, advice=advice))
 
 
-def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
+def _feed_parent_rows(upstream: list) -> list | None:
+    """The first parent that actually carries a data table, or None.
+
+    ``name → source`` is the labelling pattern this canvas has always had, and a
+    name node produces no rows — so "has any wire in" cannot mean "has a feed".
+    The feed is the first parent whose result is a non-empty list of dict rows,
+    whatever its position in the connection order.
+    """
+    for _pid, rows in upstream or ():
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            return rows
+    return None
+
+
+def _column_to_links(rows: list, column: str) -> tuple[list[str], int]:
+    """A column read row by row into a link list: (links, skipped-empty-cells).
+
+    Blank/missing cells are counted, not guessed at; a cell holding several links
+    is split exactly like the pasted textarea would be (one coercion, ``split_urls``).
+    First-occurrence dedupe is what keeps the resume cursor honest: the comment
+    engine stores ``url_index`` BY POSITION, so the list a resumed run rebuilds
+    from the same parent rows must be identical — and a duplicated link would
+    otherwise pay for the same article twice inside one node.
+    """
+    links: list[str] = []
+    seen: set[str] = set()
+    skipped = 0
+    for row in rows:
+        cells = split_urls(row.get(column))
+        if not cells:
+            skipped += 1
+            continue
+        for u in cells:
+            if u not in seen:
+                seen.add(u)
+                links.append(u)
+    return links, skipped
+
+
+def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: list = None):
     """Scrape a platform, one row at a time.
 
     With a run context the crawler streams into the database instead of
@@ -2210,6 +2249,37 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None):
         raise ValueError(
             t('engine.source_unknown_platform', nid=node_label(node, str(node.get('id') or '')), platform=platform)
         )
+    # A link-list mode fed from an upstream column: the column's values become the
+    # field's list here, once, so the comment engine and wechat's article reader
+    # crawl exactly the rows the user wired in without either knowing feeding exists.
+    # The matrix decides feedability (Field.fed_by) — this executor holds no second
+    # opinion about which modes take a feed, and validation already refused the
+    # mismatched shapes (wired-without-column, column-without-wire, non-fed mode
+    # with a table). Column wins over the pasted list: merging would make the
+    # positional url_index cursor unrebuildable on resume, and an article present in
+    # both lists would be paid for twice. Operating on copies never writes back —
+    # the node's stored params are the user's textarea, not this run's input set.
+    feed = capabilities.feed_of(mode)
+    parent_rows = _feed_parent_rows(upstream)
+    if feed and parent_rows is not None:
+        fed_field, col_key = feed[0]
+        column = str(params.get(col_key) or '').strip()
+        if column:
+            if column not in {str(c) for c in parent_rows[0]}:
+                # Fail BY NAME at the row source, like validate_step does for a
+                # process column: an empty table here would read as "the feed found
+                # nothing", not as "the user's column name is wrong".
+                raise ValueError(
+                    t('source.feed_column_missing', nid=node_label(node, str(node.get('id') or '')), col=column)
+                )
+            fed, skipped = _column_to_links(parent_rows, column)
+            if skipped:
+                add_log(t('source.feed_skipped', n=skipped))
+            if not fed:
+                raise ValueError(t('comment.no_urls', platforms=_COMMENT_PLATFORMS))
+            params = dict(params)
+            params[fed_field.key] = fed
+            node = dict(node, params=params)
     if mode.handler == 'comments':
         # Same engine as the standalone Comment node — which stays valid for the
         # canvases that used to own it.
@@ -3479,8 +3549,12 @@ def _execute_node(
         # SESSION searching twice, so two logins of one platform are two lanes and
         # may crawl at the same moment — which is the whole reason accounts exist here.
         account = str((node.get('params') or {}).get('account') or '').strip()
+        # ``upstream`` reaches the source node itself: a link-list mode fed by an
+        # upstream column reads the parent table here. Dropping it (the old behaviour)
+        # made the wire a lie — the canvas showed a feed and the crawl ran the pasted
+        # list nobody asked for.
         with crawl_gate.hold(platform, log=add_log, abort=lambda: not execution_state['running'], account=account):
-            return _execute_source_node(node, headless, ctx=ctx)
+            return _execute_source_node(node, headless, ctx=ctx, upstream=upstream)
     if ntype == 'upload':
         return _execute_upload_node(node)
     if ntype == 'resume':

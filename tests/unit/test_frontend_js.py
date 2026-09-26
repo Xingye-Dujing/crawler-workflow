@@ -64,6 +64,7 @@ _PANEL_SELECTORS = frozenset({'operation', 'platform', 'collect', 'mode', 'metho
 #: Every panel this file renders, as (scenario id, node type, params).
 _PANELS = [
     ('panel_zhihu_comments', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': ''}),
+    ('panel_zhihu_fed', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': 'x', 'input_column': '链接'}),
     (
         'panel_weibo_comments',
         'source',
@@ -213,6 +214,72 @@ def results(tmp_path_factory, capabilities_matrix):
             'nodes': [_node('n1', 'source', {'platform': 'zhihu', 'keyword': 'k'})],
             'connections': [],
         },
+        # ── the feed gate: a wired table must feed, a named column needs a table ──
+        # Same distinction the backend engine builds: parent type 'name' is a label,
+        # not data; and what can be fed at all is the payload's (field.fedBy), which
+        # is why these scenarios run against the matrix dumped from Python.
+        {
+            'id': 'feed_clean',
+            'nodes': [
+                _node('u1', 'upload', {'dataset_id': 'd1', 'dataset_name': 'links.csv'}),
+                _node('n1', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': '', 'input_column': '链接'}),
+                _save(),
+            ],
+            'connections': [{'from': 'u1', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
+        },
+        {
+            'id': 'feed_no_column',
+            'nodes': [
+                _node('u1', 'upload', {'dataset_id': 'd1', 'dataset_name': 'links.csv'}),
+                _node('n1', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': '', 'input_column': '  '}),
+                _save(),
+            ],
+            'connections': [{'from': 'u1', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
+        },
+        {
+            'id': 'feed_no_input',
+            'nodes': [
+                _node('n1', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': '', 'input_column': '链接'}),
+                _save(),
+            ],
+            'connections': [{'from': 'n1', 'to': 'out-1'}],
+        },
+        {
+            'id': 'feed_no_mode',
+            'nodes': [
+                _node('u1', 'upload', {'dataset_id': 'd1', 'dataset_name': 'links.csv'}),
+                _node('n1', 'source', {'platform': 'zhihu', 'keyword': 'k'}),
+                _save(),
+            ],
+            'connections': [{'from': 'u1', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
+        },
+        {
+            'id': 'feed_name_wire',
+            'nodes': [
+                _node('nm', 'name', {'workflow_name': '标注'}),
+                _node('n1', 'source', {'platform': 'zhihu', 'keyword': 'k'}),
+                _save(),
+            ],
+            'connections': [{'from': 'nm', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
+        },
+        {
+            'id': 'feed_owned_junk',
+            'nodes': [
+                _node('u1', 'upload', {'dataset_id': 'd1', 'dataset_name': 'links.csv'}),
+                _node(
+                    'n1',
+                    'source',
+                    {
+                        'platform': 'zhihu',
+                        'collect': 'comments',
+                        'urls': 'https://weibo.com/1/a',
+                        'input_column': '链接',
+                    },
+                ),
+                _save(),
+            ],
+            'connections': [{'from': 'u1', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
+        },
         {'id': 'empty', 'nodes': [], 'connections': []},
         {
             'id': 'titleless',
@@ -315,6 +382,35 @@ class TestValidateGate:
         keys = [_parse(m)[0] for m in results['validate']['no_terminal']]
         assert keys == ['validate.sourceDownstream', 'validate.noTerminal']
 
+    def test_a_fed_source_validates_without_pasted_links(self, results):
+        # Wired table + named column: the pasted box is neither required nor
+        # ownership-checked, and nothing else is missing.
+        assert results['validate']['feed_clean'] == [], results['validate']['feed_clean']
+
+    def test_a_wired_source_that_named_no_column_is_refused_once_by_name(self, results):
+        """One mistake, one line: the textarea must NOT also be demanded behind a
+        wire — "paste links" would contradict "name the column"."""
+        keys = [_parse(m)[0] for m in results['validate']['feed_no_column']]
+        assert keys == ['validate.sourceFeedNoColumn'], results['validate']['feed_no_column']
+
+    def test_a_column_named_without_a_wire_refuses_itself_and_asks_for_links(self, results):
+        keys = [_parse(m)[0] for m in results['validate']['feed_no_input']]
+        assert keys == ['validate.sourceFeedNoInput', 'validate.sourceFieldMissing'], keys
+
+    def test_a_form_that_cannot_be_fed_refuses_the_wired_table_by_name(self, results):
+        keys = [_parse(m)[0] for m in results['validate']['feed_no_mode']]
+        assert keys == ['validate.sourceFeedNoMode'], results['validate']['feed_no_mode']
+
+    def test_a_name_wire_is_not_a_data_input(self, results):
+        # The labelling pattern must not trip the feed gate: a name node carries no
+        # table, and every labelled workflow would otherwise read as half-fed.
+        assert results['validate']['feed_name_wire'] == [], results['validate']['feed_name_wire']
+
+    def test_a_fed_field_skips_the_pasted_ownership_check(self, results):
+        # Foreign links sit in a box that will be ignored; the parent's column is
+        # what runs, and runtime names foreign rows per article.
+        assert results['validate']['feed_owned_junk'] == [], results['validate']['feed_owned_junk']
+
     def test_an_empty_canvas_short_circuits(self, results):
         keys = [_parse(m)[0] for m in results['validate']['empty']]
         assert keys == ['validate.empty']
@@ -339,6 +435,16 @@ class TestSettingsPanel:
         assert 'weibo.com' not in html
         assert 'xiaohongshu.com' not in html
         assert 'settings.commentUrlsHintPlat' in html  # the selected-platform hint
+
+    def test_naming_a_fed_column_disables_the_pasted_box(self, results):
+        """The visible promise of the feed rule: once the column is named, the list
+        box says in its own face that it will not be crawled."""
+        fed = results['settings']['panel_zhihu_fed']
+        assert ' disabled>' in fed, fed
+        # the same panel without a column keeps the box editable — the disable is
+        # keyed off the fed column, not off comments mode in general
+        plain = results['settings']['panel_zhihu_comments']
+        assert ' disabled' not in plain
 
     def test_weibo_comments_panel_offers_only_weibo_links(self, results):
         html = results['settings']['panel_weibo_comments']

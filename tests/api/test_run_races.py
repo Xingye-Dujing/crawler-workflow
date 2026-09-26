@@ -716,7 +716,12 @@ class TestUploadNodeLosesItsFile:
     def _upload_then_crawl(self, dataset, name):
         upload = _node('node-1', 'upload', {'dataset_id': dataset, 'dataset_name': name, 'row_count': len(RECORDS)})
         source = _node('node-2', 'source', {'platform': 'zhihu', 'keyword': 'k', 'target_count': 9})
-        return _wf([upload, source], [{'from': 'node-1', 'to': 'node-2'}])
+        # Two disconnected boxes, not a wire: a keyword crawl behind a wired table is
+        # now refused by name (the feed gate — a wire must FEED, and this pair never
+        # exchanged data even when the wire was allowed). Disconnected keeps the run
+        # order this test measures (upload settles first, then the crawl) without the
+        # wire that would no longer validate.
+        return _wf([upload, source], [])
 
     def _crawl_then_upload(self, dataset, name):
         # Two disconnected components, ordered by node index: the crawl runs
@@ -878,7 +883,7 @@ class TestAStoppedRunOwnsItsThreads:
         entered = []  # {'node', 'thread', 'wf_idx', 'leave'} per node, in arrival order
         all_inside = threading.Barrier(4, timeout=20)  # 3 node threads + this test
 
-        def _gated_source(node, headless=True, ctx=None):
+        def _gated_source(node, headless=True, ctx=None, upstream=None):
             leave = threading.Event()
             with lock:
                 entered.append(

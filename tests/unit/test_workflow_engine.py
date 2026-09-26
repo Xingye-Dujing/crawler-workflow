@@ -382,12 +382,16 @@ class TestValidate:
         conns = [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-1'}]
         nodes = [_node('node-1', platform='zhihu'), _node('node-2', 'output', operation='csv')]
         errors = WorkflowEngine(_wf(nodes, conns)).validate()
-        assert len(errors) == 1
+        # Two lines, both true: the loop, and the posts source that the output node
+        # wires into — a keyword crawl behind a wired table is the same lie the feed
+        # gate refuses everywhere else (one keypress says all the canvas's problems).
+        assert len(errors) == 2, errors
         # Used to be one untranslated English exclamation with no node in it,
         # while every other validation message named its node in the console's
         # language — the loop is drawn on the canvas, so the message can point.
-        assert 'cycle' in errors[0]
-        assert 'Data Source #node-1' in errors[0] and 'Output #node-2' in errors[0]
+        cycle = next(e for e in errors if 'cycle' in e)
+        assert 'Data Source #node-1' in cycle and 'Output #node-2' in cycle
+        assert any('cannot be fed from an upstream table' in e for e in errors), errors
 
     def test_name_node_must_lead_and_have_a_downstream(self, en):
         wf = _wf(
@@ -566,6 +570,94 @@ class TestValidateUsesLabels:
         errors = WorkflowEngine(_wf([empty], [])).validate()
         assert any('the required field article URLs is empty' in e for e in errors)
         assert not any('comments' in e for e in errors), 'wechat must not be routed through the comment engine'
+
+
+class TestFeedValidation:
+    """A wired table and a feedable form must agree — every mismatch named.
+
+    The executor would happily crawl the pasted list behind a wire (it always did),
+    which is why validation, not the executor, owns the four shapes: fed (clean),
+    wired-but-no-column, column-but-no-wire, wire-into-a-form-that-cannot-take-it.
+    A name node's wire is NOT data — that distinction is what keeps the canvas's
+    oldest labelling pattern from being refused as a half-fed source.
+    """
+
+    @staticmethod
+    def _upload(nid='node-1'):
+        return {'id': nid, 'type': 'upload', 'params': {'dataset_id': 'ds-1', 'dataset_name': 'links.csv'}}
+
+    @staticmethod
+    def _comments_source(nid='node-2', **params):
+        base = {'platform': 'zhihu', 'collect': 'comments', 'urls': '', 'input_column': '链接'}
+        base.update(params)
+        return {'id': nid, 'type': 'source', 'params': base}
+
+    def test_a_fed_comments_source_validates_without_pasted_links(self):
+        wf = _wf([self._upload(), self._comments_source()], [{'from': 'node-1', 'to': 'node-2'}])
+        assert WorkflowEngine(wf).validate() == []
+
+    def test_a_wired_source_that_named_no_column_is_refused_by_name(self, en):
+        wf = _wf(
+            [self._upload(), self._comments_source(input_column='')],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        errors = WorkflowEngine(wf).validate()
+        # Exactly one line, naming the column box — the pasted textarea must NOT also
+        # be demanded behind a wire, or one mistake answers twice with two different
+        # repairs ("paste links" contradicts "name the column").
+        assert len(errors) == 1, errors
+        assert 'upstream table is wired in but no column was named' in errors[0]
+        assert 'article URLs' in errors[0]
+
+    def test_a_column_named_without_a_wired_table_is_refused_by_name(self, en):
+        wf = _wf([self._comments_source()], [])
+        errors = WorkflowEngine(wf).validate()
+        assert any('a fed column is named but this node has no data input' in e for e in errors)
+        # and the pasted box is still required when nothing feeds it
+        assert any('the required field article URLs is empty' in e for e in errors)
+
+    def test_a_form_that_cannot_be_fed_refuses_the_wire_by_name(self, en):
+        posts = {'id': 'node-2', 'type': 'source', 'params': {'platform': 'zhihu', 'keyword': '三亚'}}
+        wf = _wf([self._upload(), posts], [{'from': 'node-1', 'to': 'node-2'}])
+        errors = WorkflowEngine(wf).validate()
+        assert len(errors) == 1, errors
+        assert 'cannot be fed from an upstream table' in errors[0]
+
+    def test_a_name_wire_is_not_a_data_input(self, en):
+        # The labelling pattern this canvas has always had: name → source. If "any
+        # wire" counted as a feed, every labelled workflow would suddenly need a
+        # column for a table that carries no rows at all.
+        name = {'id': 'node-1', 'type': 'name', 'params': {'workflow_name': '标注'}}
+        posts = {'id': 'node-2', 'type': 'source', 'params': {'platform': 'zhihu', 'keyword': '三亚'}}
+        wf = _wf([name, posts], [{'from': 'node-1', 'to': 'node-2'}])
+        assert WorkflowEngine(wf).validate() == []
+
+    def test_a_fed_field_skips_the_design_time_ownership_check(self, en):
+        # The parent's column content is unknown now; the comment engine's runtime
+        # filter names foreign links per article. Refusing "weibo.com" here would be
+        # a second opinion about a table validation cannot see.
+        wf = _wf(
+            [self._upload(), self._comments_source(urls='https://weibo.com/123/AbC')],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        errors = WorkflowEngine(wf).validate()
+        assert errors == [], errors
+
+    def test_disabling_the_feed_parent_starves_the_fed_source(self, en):
+        # Disabled means absent: with its only parent gone the fed source is dropped
+        # by the cascade too — it neither runs nor complains about a table nobody is
+        # producing. The healthy workflow beside it stays valid and unburdened, which
+        # is what keeps this from just reading as an empty canvas.
+        healthy = {'id': 'node-3', 'type': 'source', 'params': {'platform': 'weibo', 'keyword': '三亚'}}
+        wf = _wf(
+            [
+                dict(self._upload(), params={**self._upload()['params'], 'enabled': False}),
+                self._comments_source(),
+                healthy,
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        assert WorkflowEngine(wf).validate() == []
 
 
 # ─── disabled nodes are as-if-absent ───────────────────────────────────

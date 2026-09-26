@@ -108,7 +108,8 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 
 - **The crawl matrix (`backend/crawl_capabilities.py`) is the only answer to "what can this platform
   collect".** It declares each platform's modes, the fields each mode needs (widget, default, floor,
-  ceiling, required-ness), which crawler method runs, and `region` (`cn` / `overseas`), which the
+  ceiling, required-ness, and `fed_by` = the link field a wired upstream column may replace), which
+  crawler method runs, and `region` (`cn` / `overseas`), which the
   overseas-VPN question and the `live_cn` / `live_os` markers read rather than a list of their own. `app.py::_execute_source_node` dispatches through it,
   `engine/workflow.py::validate` refuses through it, and `GET /api/capabilities` hands the identical
   description to the browser, whose Data Source panel is generated from it. So a new platform or mode is

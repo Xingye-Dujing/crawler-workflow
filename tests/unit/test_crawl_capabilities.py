@@ -29,6 +29,8 @@ from crawl_capabilities import (
     capability,
     crawl_kwargs,
     declared_defaults,
+    fed_keys,
+    feed_of,
     fields_for,
     has_platform,
     link_fields,
@@ -490,6 +492,7 @@ class TestPayloadShape:
             'coerce',
             'linksOf',
             'placeholder',
+            'fedBy',
         }
 
     def test_a_field_key_has_to_survive_being_written_into_a_handler(self):
@@ -766,3 +769,88 @@ class TestTheRecrawlSwitchIsOnEveryForm:
             body = inspect.getsource(getattr(app_module, name))
             assert "params.get('recrawl')" in body, f'{name} never reads 重新采集'
             assert 'forget_items' in body, f'{name} logs the switch but releases nothing'
+
+
+class TestFeed:
+    """Which forms accept an upstream table column, and what that costs the matrix.
+
+    A fed link list is the whole phase-1 feed: the comment engine and wechat's
+    article reader already crawl one link per row, so feeding is only "where do the
+    links come from". Keyword/author modes take a single scalar per crawl — feeding
+    one would need a second per-row loop engine, and declaring `fed_by` there
+    without that machinery would promise a crawl nothing runs. These tests pin the
+    feedable set to exactly the link-list fields.
+    """
+
+    def test_every_feed_declaration_names_a_sibling_field_on_the_same_mode(self):
+        # ``fed_by='input_column'`` points at the column-name box; a mode that declares
+        # the pointer without the box would have a panel that cannot be filled and a
+        # validation rule that can never be satisfied.
+        bad = []
+        for cap in CAPABILITIES:
+            for mode in cap.modes:
+                keys = {field.key for field in mode.fields}
+                for field, col in feed_of(mode):
+                    if col not in keys:
+                        bad.append(f'{cap.platform}/{mode.key}: {field.key} fed_by {col!r} not on the form')
+        assert bad == [], bad
+
+    def test_the_feedable_set_is_exactly_the_link_list_modes(self):
+        got = {f'{cap.platform}/{mode.key}' for cap in CAPABILITIES for mode in cap.modes if feed_of(mode)}
+        want = {f'{cap.platform}/comments' for cap in CAPABILITIES if any(m.key == 'comments' for m in cap.modes)}
+        want |= {'wechat/posts'}
+        assert got == want, f'link modes without a feed, or scalar modes with one: {got ^ want}'
+
+    def test_only_link_list_fields_may_be_fed(self):
+        # Feeding a scalar would silently crawl only the LAST cell: the stored param is
+        # one string, so each row's value would overwrite the previous one before the
+        # single crawl call — a green run that paid for one link of a hundred.
+        bad = [
+            f'{cap.platform}/{mode.key}:{field.key}'
+            for cap in CAPABILITIES
+            for mode in cap.modes
+            for field in mode.fields
+            if field.fed_by and not field.is_link_list()
+        ]
+        assert bad == [], bad
+
+    def test_the_column_box_is_on_every_feedable_form_and_nowhere_else(self):
+        on = {
+            f'{cap.platform}/{mode.key}'
+            for cap in CAPABILITIES
+            for mode in cap.modes
+            if 'input_column' in {f.key for f in mode.fields}
+        }
+        feedable = {f'{cap.platform}/{mode.key}' for cap in CAPABILITIES for mode in cap.modes if feed_of(mode)}
+        assert on == feedable, f'column box and feed declaration disagree: {on ^ feedable}'
+
+    def test_the_column_name_never_reaches_the_crawler_method(self):
+        # Wechat's search takes urls; the comment engine reads its own keys. An
+        # ``input_column`` in crawl_kwargs would be an unexpected keyword argument —
+        # a TypeError at crawl time for a name the crawler was never declared with.
+        for cap in CAPABILITIES:
+            for mode in cap.modes:
+                if feed_of(mode):
+                    assert 'input_column' not in crawl_kwargs(mode, {'input_column': '链接'})
+
+    def test_a_fed_field_is_no_longer_required_but_an_unfed_one_still_is(self):
+        mode = _mode('zhihu', 'comments')
+        assert [f.key for f in required_missing(mode, {'urls': ''})] == ['urls']
+        fed = fed_keys(mode, has_data_input=True)
+        assert fed == frozenset({'urls'})
+        assert required_missing(mode, {'urls': ''}, fed_keys=fed) == []
+        # A wired node that never named its column is still feed-EXPECTED (the textarea
+        # must not be re-required behind the wire; validation names the blank column
+        # itself). Without a data parent nothing is fed and the pasted box rules.
+        assert fed_keys(mode, has_data_input=False) == frozenset()
+
+    def test_feeding_does_not_change_what_the_crawler_is_called_with(self):
+        # The fed list replaces params['urls'] in the EXECUTOR's copy; the matrix's
+        # coercion of a real list must still pass through untouched (one opinion, no
+        # re-splitting, no silent reordering between validation and the crawl).
+        mode = _mode('zhihu', 'comments')
+        args = crawl_kwargs(mode, {'urls': 'https://www.zhihu.com/question/1\nhttps://www.zhihu.com/question/2'})
+        assert args['urls'] == [
+            'https://www.zhihu.com/question/1',
+            'https://www.zhihu.com/question/2',
+        ]

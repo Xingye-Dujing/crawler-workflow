@@ -272,7 +272,7 @@ class WorkflowEngine:
         return WorkflowEngine(sub_workflow, self.executor)
 
     @staticmethod
-    def _source_errors(node: dict, params: dict, platform, label: str) -> list[str]:
+    def _source_errors(node: dict, params: dict, platform, label: str, has_data_input: bool = False) -> list[str]:
         """Refuse a data source whose declared mode cannot run — using the matrix.
 
         This used to be a hand-written copy of "which platform wants what", with
@@ -280,6 +280,12 @@ class WorkflowEngine:
         executor. Two descriptions of one rule is how a node passed validation
         and then crawled something else, so there is now exactly one place that
         knows: :mod:`crawlers.capabilities`.
+
+        ``has_data_input`` is the feed's other half: the matrix says WHICH forms
+        can read an upstream column, the graph says whether a table actually
+        arrives, and every mismatch between the two is refused by name — because
+        "wired but unfed" would silently re-crawl the pasted list the user thinks
+        they replaced, and "fed but unwired" would read a table that is not there.
         """
         if not platform:
             return [t('engine.source_no_platform', nid=label)]
@@ -294,7 +300,17 @@ class WorkflowEngine:
             # asked for, not by the field the substituted mode happens to require.
             return [t('engine.source_unknown_mode', nid=label, platform=platform)]
         errors = []
-        for field in capabilities.required_missing(mode, params):
+        feed = capabilities.feed_of(mode)
+        fed = capabilities.fed_keys(mode, has_data_input)
+        if has_data_input and not feed:
+            errors.append(t('engine.source_feed_no_mode', nid=label))
+        elif has_data_input:
+            for field, col in feed:
+                if not str(params.get(col) or '').strip():
+                    errors.append(t('engine.source_feed_no_column', nid=label, field=t(field.name_key)))
+        elif feed and any(str(params.get(col) or '').strip() for _field, col in feed):
+            errors.append(t('engine.source_feed_no_input', nid=label))
+        for field in capabilities.required_missing(mode, params, fed_keys=fed):
             errors.append(t('engine.source_missing', nid=label, field=t(field.name_key)))
         # The 账号 options are whatever this machine has a saved file for RIGHT NOW —
         # the same list the panel was offered from. A stored name with no file is
@@ -304,6 +320,11 @@ class WorkflowEngine:
         for field, value in capabilities.unoffered_selections(mode, params, accounts=accounts):
             errors.append(t('engine.source_bad_option', nid=label, field=t(field.name_key), value=value))
         for field in capabilities.link_fields(mode):
+            if field.key in fed:
+                # The fed column's content is the parent's — unknown at design time, so
+                # ownership cannot be decided here. The comment engine filters and names
+                # foreign links at execution time; that is the net, not this check.
+                continue
             urls = field.value_from(params)
             bad = sum(1 for u in urls if platform_for(u) != field.links_of)
             if bad:
@@ -327,6 +348,15 @@ class WorkflowEngine:
             # outcome completed, toast 已完成. A run of nothing is not a success;
             # the browser's own gate says so, and the backend must too.
             return [t('engine.empty_canvas')]
+        # Which nodes a DATA table can reach: an incoming wire from anything other
+        # than a name node. ``name → source`` is the labelling pattern this canvas
+        # has always had, and a name node produces no rows — treating "any wire" as
+        # "a feed" would refuse every labelled workflow.
+        data_inputs = set()
+        for conn in self.connections:
+            src = self.nodes.get(conn.get('from'))
+            if src is not None and src.get('type') != 'name' and conn.get('to') in self.nodes:
+                data_inputs.add(conn.get('to'))
         for conn in self.dangling_connections():
             # Named by the ids, because the node they point at is exactly the thing
             # the canvas no longer has — no title exists to resolve.
@@ -339,7 +369,7 @@ class WorkflowEngine:
             label = node_label(node, nid)
             if ntype == 'source':
                 platform = node.get('platform') or params.get('platform')
-                errors.extend(self._source_errors(node, params, platform, label))
+                errors.extend(self._source_errors(node, params, platform, label, has_data_input=nid in data_inputs))
             if ntype == 'upload' and not params.get('dataset_id'):
                 errors.append(t('engine.upload_no_file', nid=label))
             if ntype == 'comment' and not str(params.get('urls') or '').strip():

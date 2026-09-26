@@ -656,6 +656,17 @@ const canvas = {
             var canvas = this;
             (mode.fields || []).forEach(function (f) {
                 if (f.control === 'number' || f.control === 'checkbox' || !f.required && f.control !== 'select') return;
+                if (f.fedBy && String(params[f.fedBy] || '').trim()) {
+                    /* Fed from a column: the pasted count would read 0 while the node
+                       plans to crawl the whole table — the column it reads is the
+                       honest line, and which fields can be fed is the matrix's
+                       declaration (f.fedBy), not a list the card keeps by hand. */
+                    lines.push(
+                        I18n.t(f.labelKey) + ': ' +
+                        I18n.t('summary.fedColumn').replace('{col}', String(params[f.fedBy]).trim())
+                    );
+                    return;
+                }
                 lines.push(canvas.sourceSummaryLine(f, params[f.key]));
             });
             return lines.join('\n');

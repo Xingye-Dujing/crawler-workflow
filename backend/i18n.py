@@ -585,6 +585,17 @@ _ZH = {
     'engine.source_missing': '节点 {nid}：必填项「{field}」还没有填写',
     'engine.source_bad_option': '节点 {nid}：「{field}」没有「{value}」这个选项，请在该节点的下拉里改选一个',
     'engine.source_link_mismatch': '节点 {nid}：{n} 个链接与所选平台（{platform}）不符',
+    # Feeding a link mode from an upstream table column: the wire is allowed only where
+    # the matrix declares a feed (Field.fed_by), and every mismatch is refused BY NAME —
+    # a wired-but-unfed crawl would silently re-crawl the pasted list the user thinks
+    # they replaced, and a fed crawl with no wire would read a table that is not there.
+    'engine.source_feed_no_mode': (
+        '节点 {nid}：这种采集内容不接受上游表格，逐行喂送只支持「链接列表」类表单，请断开这条连线或改选采集内容'
+    ),
+    'engine.source_feed_no_column': '节点 {nid}：已连接上游表格，但没有填写「{field}」要逐行读取的列名',
+    'engine.source_feed_no_input': ('节点 {nid}：填写了上游列名，但该节点没有连接任何数据表（标注用的「名称」线不算）'),
+    'source.feed_column_missing': '节点 {nid}：上游表格没有名为「{col}」的列',
+    'source.feed_skipped': '上游喂送：跳过 {n} 个空单元格（没有可读的链接）',
     'field.keyword': '关键词',
     'field.urls': '文章链接',
     'field.author': '作者',
@@ -1434,6 +1445,18 @@ _EN = {
     'engine.source_missing': 'Node {nid}: the required field {field} is empty',
     'engine.source_bad_option': 'Node {nid}: {field} has no option "{value}" — pick one of the choices in that node',
     'engine.source_link_mismatch': 'Node {nid}: {n} link(s) do not match the selected platform ({platform})',
+    'engine.source_feed_no_mode': (
+        'Node {nid}: this collection mode cannot be fed from an upstream table — '
+        'only link-list forms take a fed column; disconnect the wire or pick another mode'
+    ),
+    'engine.source_feed_no_column': (
+        'Node {nid}: an upstream table is wired in but no column was named for {field} to read row by row'
+    ),
+    'engine.source_feed_no_input': (
+        'Node {nid}: a fed column is named but this node has no data input wired (a name-label wire does not count)'
+    ),
+    'source.feed_column_missing': 'Node {nid}: the upstream table has no column named {col}',
+    'source.feed_skipped': 'upstream feed: skipped {n} empty cell(s) (no link to read)',
     'field.keyword': 'keyword',
     'field.urls': 'article URLs',
     'field.author': 'creator',

@@ -75,6 +75,14 @@ class Field:
     #: a required-field message needs its own word for 'keyword' / 'article
     #: URLs' — one per language, next to every other console sentence.
     name_key: str = ''
+    #: Set → this list field can be **fed from an upstream table column** instead
+    #: of the pasted value: its value names a sibling parameter on the same mode
+    #: that carries the column name (``input_column``). One declaration drives
+    #: panel (disable the textarea), validation (waive the pasted requiredness)
+    #: and executor (inject the column's values) — the matrix stays the only
+    #: answer to "which modes accept a feed", so no file can hold its own opinion.
+    #: A mode is feedable iff one of its fields sets this.
+    fed_by: str = ''
 
     def is_link_list(self) -> bool:
         return self.coerce == 'urls'
@@ -237,6 +245,20 @@ _ACCOUNT = Field(
     name_key='field.account',
     default='',
     options=(('', 'cookies.accountDefault'),),
+)
+#: The name of the upstream table's column to read row by row as a link list mode's
+#: link field (see ``Field.fed_by``). Free text for the same reason the process and
+#: tokenize panels type their column names by hand: the browser holds no parent
+#: table schema, so any dropdown would be a second opinion the frontend must not
+#: have. Executor-only (it is in ``_NOT_ARGS`` — the crawl method still receives its
+#: own field), but it CHOOSES DATA, so unlike ``recrawl`` it stays in the node
+#: fingerprint: renaming the fed column is a different input set, not a relabel.
+_INPUT_COLUMN = Field(
+    key='input_column',
+    control='text',
+    label_key='settings.inputColumn',
+    hint_key='settings.inputColumnHint',
+    default='',
 )
 _TIMES = (
     Field(key='start_time', control='text', label_key='settings.startTime', placeholder='2026-01-01'),
@@ -407,7 +429,9 @@ def _comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
                 coerce='urls',
                 links_of=platform,
                 placeholder=example,
+                fed_by='input_column',
             ),
+            _INPUT_COLUMN,
             _COMMENT_LIMIT,
             _PER_ARTICLE,
             # The comment walk keeps the same ledger a source crawl does — an
@@ -560,7 +584,9 @@ CAPABILITIES: tuple[Capability, ...] = (
                         hint_key='settings.urlsHint',
                         coerce='urls',
                         placeholder='https://mp.weixin.qq.com/s/...',
+                        fed_by='input_column',
                     ),
+                    _INPUT_COLUMN,
                     # An article URL already collected is skipped here too — the ledger is
                     # the source path's, not a per-platform choice — so the way back has to
                     # be on this form as well. It was missing because this mode is the one
@@ -795,7 +821,7 @@ def crawler_fields(mode: Mode) -> tuple[Field, ...]:
     return tuple(f for f in mode.fields if f.key not in _NOT_ARGS)
 
 
-_NOT_ARGS = frozenset({'recrawl', 'account'})
+_NOT_ARGS = frozenset({'recrawl', 'account', 'input_column'})
 
 
 def crawl_kwargs(mode: Mode, params: dict) -> dict:
@@ -818,11 +844,38 @@ def declared_defaults(platform: str) -> dict:
     return out
 
 
-def required_missing(mode: Mode, params: dict) -> list[Field]:
-    """Required fields the node leaves empty — the whole of source validation."""
+def feed_of(mode: Mode) -> list[tuple[Field, str]]:
+    """(feedable field, its column param key) pairs this mode declares.
+
+    The single answer to "can this form be fed from an upstream table": a mode is
+    feedable iff this list is non-empty. Panel, validation and executor all read
+    it, so none of them can disagree about which modes accept a feed.
+    """
+    return [(f, f.fed_by) for f in mode.fields if f.fed_by]
+
+
+def fed_keys(mode: Mode, has_data_input: bool) -> frozenset[str]:
+    """Field keys whose pasted value a wired-in parent table REPLACES.
+
+    Without a data-bearing parent the pasted value rules exactly as before. A wired
+    node is feed-expected even before it named the column: naming a missing column
+    is a separate refusal in validation, never a silent fall back to the textarea —
+    the user who wired a table means the table.
+    """
+    if not has_data_input:
+        return frozenset()
+    return frozenset(f.key for f, _col in feed_of(mode))
+
+
+def required_missing(mode: Mode, params: dict, fed_keys: frozenset[str] = frozenset()) -> list[Field]:
+    """Required fields the node leaves empty — the whole of source validation.
+
+    A field fed from an upstream column is not "empty" because its textarea is:
+    the values arrive at execution time, so its pasted requiredness is waived.
+    """
     out = []
     for f in mode.fields:
-        if not f.required:
+        if not f.required or f.key in fed_keys:
             continue
         value = f.value_from(params)
         empty = not value if f.is_link_list() else not str(value or '').strip()
@@ -933,4 +986,5 @@ def _field_as_dict(f: Field) -> dict:
         'coerce': f.coerce,
         'linksOf': f.links_of,
         'placeholder': f.placeholder,
+        'fedBy': f.fed_by,
     }
