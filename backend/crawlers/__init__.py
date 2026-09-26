@@ -1,6 +1,6 @@
 import browser_profiles
 
-from crawlers.overseas import InstagramCrawler
+from crawlers.instagram import InstagramCrawler
 from crawlers.twitter import TwitterCrawler
 from crawlers.video import BilibiliCrawler, DouyinCrawler
 from crawlers.wechat import WechatCrawler
@@ -23,7 +23,7 @@ CRAWLERS = {
     'twitter': TwitterCrawler,
     # Cookie capture only: the panel can save a login session for this one while
     # its crawl is not built yet, so the canvas and the execute endpoint refuse
-    # it (see crawlers/overseas.py) — and it stays out of the crawl matrix, which
+    # it (see crawlers/instagram.py) — and it stays out of the crawl matrix, which
     # is what the refusal is read from.
     'instagram': InstagramCrawler,
 }

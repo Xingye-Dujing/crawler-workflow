@@ -760,7 +760,7 @@ crawler_workflow/
 │   │   ├── youtube.py            # YouTube：页内 innertube JSON（搜索 / 某作者 / 评论）
 │   │   ├── twitter.py            # X（推特）：可见窗口读虚拟时间线（搜索 / 某作者 / 回复）
 │   │   ├── comments.py           # 评论采集适配器（七个平台的链接可混粘贴）
-│   │   ├── overseas.py           # Instagram：只做 Cookie 捕获，尚无抓取
+│   │   ├── instagram.py          # Instagram：只做 Cookie 捕获，尚无抓取
 │   │   └── engine/               # 与任何站点无关的机械层——新抓取一律先走这里，不在平台模块里复制循环
 │   │       ├── counters.py       # 一个解析器读遍 万/千/亿 与 K/M/B（「97 views」「1,027,710次观看」）
 │   │       ├── wall.py           # 登录墙 / 风控页 / 弹回首页三种拦截的判定

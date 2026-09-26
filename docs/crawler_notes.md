@@ -404,7 +404,7 @@ possible before the one-way flag exists.
 
 `CookieManager.PLATFORMS` (8) is who the panel can log in; `crawlers.is_crawlable()` (8: zhihu, weibo,
 xiaohongshu, wechat, bilibili, douyin, youtube, twitter) is who has a crawler. **Instagram is the one
-capture-only platform** (`overseas.py` registers it with `supports_crawl = False`; the account used for
+capture-only platform** (`instagram.py` registers it with `supports_crawl = False`; the account used for
 the measurement was banned, so no real crawl was ever possible), so `_execute_source_node` refuses it
 by node label (`run.notCrawlable`) and validation refuses it earlier still
 (`engine.source_unknown_platform`, because it is not in the matrix at all) — never let a not-yet-built
