@@ -554,6 +554,9 @@ class TestDisabledNodesAreAbsent:
     """
 
     def test_a_disabled_node_and_its_wires_are_not_on_the_canvas(self, en):
+        # node-2 is switched off, so node-1→node-2→node-3 loses the middle box AND the wire
+        # into node-3; node-3 is left with no way in and starves with it. node-1 has no
+        # upstream of its own, so it stays.
         wf = _wf(
             [
                 _node('node-1', platform='zhihu'),
@@ -563,10 +566,37 @@ class TestDisabledNodesAreAbsent:
             [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-3'}],
         )
         engine = WorkflowEngine(wf)
-        assert sorted(engine.nodes) == ['node-1', 'node-3'], 'the disabled middle node is gone'
-        assert engine.connections == [], 'every wire that touched the disabled node is gone'
-        # The node downstream of the removal simply loses an input — not an error here.
+        assert sorted(engine.nodes) == ['node-1'], 'the disabled box and the box it starved are both gone'
+        assert engine.connections == [], 'every wire that touched a removed node is gone'
         assert engine.validate() == []
+
+    def test_a_node_survives_if_any_upstream_is_live(self, en):
+        """Fan-in is not starvation: a join fed by two sources keeps working on the one live
+        branch. Disabling a single upstream must not take the consumer with it.
+        """
+        wf = _wf(
+            [
+                _node('node-1', platform='zhihu', params={'enabled': False}),
+                _node('node-2', 'upload', params={'dataset_id': 'd1'}),
+                _node('node-3', 'analysis', params={'operation': 'emotion'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-3'}, {'from': 'node-2', 'to': 'node-3'}],
+        )
+        engine = WorkflowEngine(wf)
+        assert 'node-1' not in engine.nodes, 'the disabled source is gone'
+        assert 'node-3' in engine.nodes, 'the join keeps its live input from node-2'
+
+    def test_a_node_starves_only_when_every_upstream_is_gone(self, en):
+        # Now both inputs are gone: node-3 has no way in left and is dropped too.
+        wf = _wf(
+            [
+                _node('node-1', platform='zhihu', params={'enabled': False}),
+                _node('node-2', 'upload', params={'dataset_id': 'd1', 'enabled': False}),
+                _node('node-3', 'analysis', params={'operation': 'emotion'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-3'}, {'from': 'node-2', 'to': 'node-3'}],
+        )
+        assert sorted(WorkflowEngine(wf).nodes) == [], 'with every input off, the join starves'
 
     def test_a_name_node_whose_only_downstream_is_disabled_is_refused(self, en):
         wf = _wf(
@@ -582,9 +612,11 @@ class TestDisabledNodesAreAbsent:
         assert any('must connect to a downstream node' in e for e in engine.validate()), engine.validate()
 
     def test_disabling_a_node_type_removes_every_node_of_that_type(self, en):
+        # node-2 is an independent upload (no upstream), so only the type switch removes node-1;
+        # node-2 stays, proving the type-level off does not depend on the starvation rule.
         wf = _wf(
-            [_node('node-1', platform='zhihu'), _node('node-2', 'analysis', params={'operation': 'emotion'})],
-            [{'from': 'node-1', 'to': 'node-2'}],
+            [_node('node-1', platform='zhihu'), _node('node-2', 'upload', params={'dataset_id': 'd1'})],
+            [],
             settings={'disabledTypes': ['source']},
         )
         engine = WorkflowEngine(wf)

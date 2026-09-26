@@ -390,6 +390,11 @@ class RunStore:
         # writes this. The column stays (SQLite drop = table rebuild, and old rows still carry a
         # meaningful 0/1) and the chip that read it is gone.
         ('runs', 'forced_visible', 'INTEGER DEFAULT 0'),
+        # The user-facing workflows that were switched OFF (node-disabled or their whole type
+        # disabled) for this attempt, joined by ' + '. They never run and own no node rows, so the
+        # record otherwise reads as "this canvas had fewer workflows than the user drew". Stored
+        # here so the panel can name them under 跳过 instead of leaving them silently absent.
+        ('runs', 'skipped_workflows', "TEXT DEFAULT ''"),
     )
 
     def _ensure_columns(self):
@@ -474,6 +479,7 @@ class RunStore:
         lang: str = 'zh',
         node_total: int = 0,
         wf_count: int = 1,
+        skipped_workflows: str = '',
     ):
         llm = llm or {}
         stamp = self.now()
@@ -487,13 +493,15 @@ class RunStore:
         # deliberately NOT refreshed: the record's date is when this work began.
         self._execute(
             'INSERT INTO runs (run_id, workflow_name, workflow_fingerprint, status, mode, headless, '
-            'llm_provider, llm_model, lang, node_total, node_done, wf_count, started_at, updated_at) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?) '
+            'llm_provider, llm_model, lang, node_total, node_done, wf_count, skipped_workflows, '
+            'started_at, updated_at) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) '
             'ON CONFLICT(run_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, '
             'llm_provider = excluded.llm_provider, llm_model = excluded.llm_model, '
             'workflow_name = excluded.workflow_name, workflow_fingerprint = excluded.workflow_fingerprint, '
             'mode = excluded.mode, headless = excluded.headless, lang = excluded.lang, '
             'node_total = excluded.node_total, wf_count = excluded.wf_count, '
+            'skipped_workflows = excluded.skipped_workflows, '
             'forced_visible = 0, finished_at = NULL, note = NULL',
             (
                 run_id,
@@ -507,6 +515,7 @@ class RunStore:
                 lang,
                 node_total,
                 max(1, int(wf_count or 1)),
+                skipped_workflows,
                 stamp,
                 stamp,
             ),

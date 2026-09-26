@@ -24,26 +24,53 @@ def is_effectively_enabled(node: dict, disabled_types: set) -> bool:
 
 
 def effective_workflow(workflow: dict) -> dict:
-    """The graph a run actually sees: every disabled node removed, and with it every wire
-    that touched one.
+    """The graph a run actually sees: a node is present only if it is switched on (its own
+    ``enabled`` and its type are both on) AND it still has a way in — at least one upstream that
+    is itself present, or no upstream at all.
 
-    This is the single answer to "a disabled node is as if it were not there": validation,
-    topological order, component split and the structure fingerprint all read the result,
-    so a node whose only downstream are disabled is, here, a node with no downstream — the
-    same shape as if the user had deleted those boxes. It returns a fresh dict and never
-    mutates *workflow*, so the caller can still compare against the full canvas (which is
-    how the run record names the workflows that were skipped).
+    This is the single answer to "a disabled node is as if it were not there". Removing a node
+    takes its wires with it, so its downstream lose an input; a downstream node that has no other
+    live input starves and is removed too, and that cascades. The point the user gave for the
+    feature: disabling the head node of a workflow starves the whole chain, so 禁用工作流 is just
+    禁用节点 applied to the first box — there is no separate workflow-switch to keep in sync. The
+    exception is fan-in: a node fed by several upstreams (a join) survives as long as ANY one of
+    them is live, because it still has a way to receive data. A wire whose far end is not a node
+    on the canvas is not an upstream at all (that is a dangling wire, reported by ``validate``).
+
+    It returns a fresh dict and never mutates *workflow*, so the caller can still compare against
+    the full canvas — that is how the run record names the workflows that were skipped.
     """
     settings = workflow.get('settings') or {}
     disabled_types = set(settings.get('disabledTypes') or [])
+    raw_connections = [c for c in (workflow.get('connections') or []) if isinstance(c, dict)]
     nodes = [n for n in (workflow.get('nodes') or []) if isinstance(n, dict)]
-    kept = [n for n in nodes if is_effectively_enabled(n, disabled_types)]
-    ids = {str(n.get('id')) for n in kept}
-    connections = [
-        c
-        for c in (workflow.get('connections') or [])
-        if isinstance(c, dict) and str(c.get('from')) in ids and str(c.get('to')) in ids
-    ]
+    ids = {str(n.get('id')) for n in nodes}
+
+    # Every present node needs a live way in: an incoming wire whose source is itself present,
+    # or no incoming wire at all. Removal is monotonic (a node only ever loses its 'present'
+    # flag), so iterating to a fixed point converges — including over a cycle, which validate
+    # rejects anyway but must not loop on here.
+    upstream = defaultdict(set)
+    for conn in raw_connections:
+        source, target = str(conn.get('from')), str(conn.get('to'))
+        if source in ids and target in ids:
+            upstream[target].add(source)
+
+    present = {str(n.get('id')): is_effectively_enabled(n, disabled_types) for n in nodes}
+    changed = True
+    while changed:
+        changed = False
+        for nid in ids:
+            if not present[nid]:
+                continue
+            parents = upstream.get(nid)
+            if parents and not any(present.get(p) for p in parents):
+                present[nid] = False
+                changed = True
+
+    kept = [n for n in nodes if present[str(n.get('id'))]]
+    kept_ids = {str(n.get('id')) for n in kept}
+    connections = [c for c in raw_connections if str(c.get('from')) in kept_ids and str(c.get('to')) in kept_ids]
     return {'nodes': kept, 'connections': connections, 'settings': settings}
 
 

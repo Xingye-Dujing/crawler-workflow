@@ -1364,11 +1364,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # 周排行榜's record had been lost. The engine's validate() guarantees each
             # label is non-empty before a run is allowed to start.
             labels = []
+            effective = effective_workflow(workflow)
             # Only an ENABLED name node names the run: a workflow whose nodes are switched
             # off is, to this run, not on the canvas (the engine's effective graph drops it),
             # so its label must not appear in the record — and the skipped-name list below is
             # exactly the complement.
-            for _node in effective_workflow(workflow).get('nodes') or []:
+            for _node in effective.get('nodes') or []:
                 if _node.get('type') != 'name':
                     continue
                 _label = str((_node.get('params') or {}).get('workflow_name') or '').strip()
@@ -1377,11 +1378,26 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             if labels:
                 workflow_name = ' + '.join(labels)
             execution_state['workflow_labels'] = labels
+            # The complement of the above over the FULL canvas: a name node the user drew but
+            # switched OFF (its own flag, or its whole type) is absent from the effective graph,
+            # so its workflow runs nothing and owns no node rows. Naming it on the record is what
+            # keeps 跳过 visible — otherwise the run reads as if the canvas had fewer workflows
+            # than the user actually built, and a switched-off one looks like it was never there.
+            # An unnamed disabled workflow has no label to show and so is not listed (it would
+            # only ever be reported as 工作流 N elsewhere, which already reflects the effective set).
+            full_labels = []
+            for _node in workflow.get('nodes') or []:
+                if _node.get('type') != 'name':
+                    continue
+                _label = str((_node.get('params') or {}).get('workflow_name') or '').strip()
+                if _label and _label not in full_labels:
+                    full_labels.append(_label)
+            execution_state['skipped_workflow_labels'] = [lab for lab in full_labels if lab not in labels]
             # Recorded so a preview can find this workflow's rows in the store once the
             # live results are gone (a refresh, a restart) rather than guessing from a
             # node id alone — "node-2" exists in every workflow.
             execution_state['workflow_name'] = workflow_name
-            execution_state['fingerprint'] = workflow_fingerprint(effective_workflow(workflow))
+            execution_state['fingerprint'] = workflow_fingerprint(effective)
 
             # AI transport chosen in the settings panel: 'ollama' (local daemon) or
             # 'openrouter' (API). The key only ever lives in the browser's
@@ -1666,6 +1682,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # on — separating the records without separating that key is what keeps
             # 继续 findable after the split.
             split_records = mode == 'serial' and wf_count > 1
+            # The named workflows the user switched off for this attempt. A disabled workflow is
+            # not an effective component, so it opens no row on its own — the record's only trace
+            # of it is this list, which is what lets the panel say "X ran, Y was skipped" instead
+            # of the canvas silently looking like it had one fewer workflow.
+            skipped_str = ' + '.join(execution_state.get('skipped_workflow_labels') or [])
             created = []  # rebind the outer pre-name so the finally always sees a list
             # THE SAME list object the claim put in `execution_state`: 停止 reads it from
             # the request thread, so a rebind here would leave it writing to a list
@@ -1682,6 +1703,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     lang=execution_state.get('lang'),
                     node_total=execution_state['total_nodes'],
                     wf_count=wf_count,
+                    skipped_workflows=skipped_str,
                 )
                 created.append(run_id)
                 ctx['open_records'].append(run_id)
@@ -1747,6 +1769,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     lang=execution_state.get('lang'),
                     node_total=len(sub_engine.nodes),
                     wf_count=1,
+                    skipped_workflows=skipped_str if index == 0 else '',
                 )
                 created.append(rid)
                 ctx['open_records'].append(rid)

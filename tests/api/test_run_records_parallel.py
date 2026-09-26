@@ -83,6 +83,33 @@ def _listed(client):
     return body['runs']
 
 
+class TestDisabledWorkflowIsSkipped:
+    """Disabling a workflow's head node drops the whole chain and names it as skipped.
+
+    This is the feature's promise: a switched-off workflow runs nothing, owns no record of
+    its own, and the run is labelled only with what really ran — with the skipped name kept
+    so the canvas does not silently look like it had fewer workflows than the user built.
+    """
+
+    def test_a_disabled_workflow_is_not_run_not_named_but_listed_as_skipped(self, client, app_module, paste):
+        workflow = _two_workflows(paste(RECORDS, name='ranks'))
+        # Switch off the head (name) node of the second workflow; its downstream starve with it.
+        for node in workflow['nodes']:
+            if node['id'] == 'name-2':
+                node['params']['enabled'] = False
+        _run(client, app_module, workflow, 'ranks')
+        runs = _listed(client)
+        assert len(runs) == 1, f'the disabled workflow owns no record, got {len(runs)}'
+        record = runs[0]
+        assert record['workflow_name'] == '热门榜', 'only the enabled workflow names the run'
+        assert record['wf_count'] == 1
+        assert record['skipped_workflows'] == '周排行榜', 'the switched-off name is recorded as skipped'
+
+    def test_nothing_disabled_leaves_the_skipped_field_empty(self, client, app_module, paste):
+        _run(client, app_module, _two_workflows(paste(RECORDS, name='both')), 'both')
+        assert _listed(client)[0]['skipped_workflows'] == ''
+
+
 class TestRecordedName:
     def test_a_parallel_run_is_labelled_with_every_workflow(self, client, app_module, paste):
         _run(client, app_module, _two_workflows(paste(RECORDS, name='ranks')), 'ranks')

@@ -348,6 +348,23 @@ class TestLifecycle:
         # The reset a resume needs, and the date the work began, which is not now.
         assert run['status'] == RUN_RUNNING and run['finished_at'] is None and run['note'] is None
 
+    def test_start_run_records_skipped_workflows(self, store):
+        """A named workflow the user switched off for this attempt owns no row of its own, so the
+        record's only trace of it is ``skipped_workflows`` — what the panel names under 跳过."""
+        store.start_run('r-skip', '跑', 'fp-s', wf_count=1, skipped_workflows='不跑 + 也不跑')
+        run = store.get_run('r-skip')
+        assert run['skipped_workflows'] == '不跑 + 也不跑'
+        listed = store.list_resumable('fp-s', include_finished=True)
+        assert any(r['run_id'] == 'r-skip' and r['skipped_workflows'] == '不跑 + 也不跑' for r in listed)
+
+    def test_skipped_workflows_defaults_empty_and_refreshes_on_resume(self, store):
+        # No switches → empty string, not None; a resume refreshes it like the other description
+        # fields (the same ON CONFLICT re-describe that fixes mode/headless/name).
+        store.start_run('r-empty', 'A', 'fp-e')
+        assert store.get_run('r-empty')['skipped_workflows'] == ''
+        store.start_run('r-empty', 'A', 'fp-e', skipped_workflows='B')
+        assert store.get_run('r-empty')['skipped_workflows'] == 'B'
+
     def test_finish_run_counts_only_nodes_that_really_finished(self, store):
         _start(store)
         store.begin_node('r1', 'a', 'source')
