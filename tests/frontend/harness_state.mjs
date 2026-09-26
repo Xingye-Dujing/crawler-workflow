@@ -107,6 +107,7 @@ for (const sc of scenarios) {
     canvas.nodes = {};
     canvas.connections = [];
     canvas.nextId = 1;
+    canvas.disabledTypes = [];
     canvas._history = [];
     canvas._historyIdx = -1;
     canvas._clipboardData = null;
@@ -173,8 +174,24 @@ for (const sc of scenarios) {
     if (sc.redo) canvas.redo();
     if (sc.setLang) I18n.lang = sc.setLang;
     for (const id of sc.refresh || []) canvas.updateNodeDisplay(id);
+    /* Disable/enable: type switches, per-node toggles, then the canvas-local mirror of the
+       effective graph (disableStates / effectiveIds) plus the classes applyDisabledVisuals put
+       on each box. This is the proof that a disabled head starves its chain and a fan-in node
+       survives on one live branch — the same rule the backend computes. */
+    if (sc.disabledTypes) canvas.disabledTypes = sc.disabledTypes.slice();
+    for (const id of sc.toggle || []) canvas.toggleEnabled(id);
+    canvas.applyDisabledVisuals();
+    const dclasses = {};
+    Object.keys(canvas.nodes).forEach((id) => {
+        const el = canvas.nodes[id].el;
+        dclasses[id] = el ? { off: el.classList.contains('node-off'), starved: el.classList.contains('node-starved') } : null;
+    });
 
     out[sc.id] = {
+        disableStates: canvas.disableStates(),
+        effective: canvas.effectiveIds().slice().sort(),
+        dclasses,
+        savedDisabledTypes: canvas.getState().disabledTypes,
         nodes: Object.values(canvas.nodes).map((n) => ({
             id: n.id,
             type: n.type,

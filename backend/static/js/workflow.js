@@ -219,6 +219,8 @@ const workflow = {
         if (typeof settings.headless === 'boolean') {
             RunState.set('headless', settings.headless);
         }
+        canvas.disabledTypes = Array.isArray(settings.disabledTypes) ? settings.disabledTypes.slice() : [];
+        canvas.scheduleRender();
         return true;
     },
 
@@ -243,9 +245,19 @@ const workflow = {
     runName() {
         var nodes = canvas.nodes || {};
         var labels = [];
+        /* Only the name nodes that still take part in a run label it — the same set the backend
+           records. A workflow whose head node is switched off is not on the canvas for this run,
+           so its label must be absent here too, or the composed name the preview looks rows up by
+           would not match the stored (effective) one and a multi-workflow run's data goes
+           invisible. `effectiveIds` is the canvas mirror of engine.effective_workflow. */
+        var alive = {};
+        (canvas.effectiveIds ? canvas.effectiveIds() : Object.keys(nodes)).forEach(function (id) {
+            alive[id] = true;
+        });
         for (var id in nodes) {
             if (!Object.prototype.hasOwnProperty.call(nodes, id)) continue;
             if (nodes[id].type !== 'name') continue;
+            if (!alive[id]) continue;
             var label = String((nodes[id].params || {}).workflow_name || '').trim();
             /* All of them, joined — the same composition the backend applies when it
                records the run. This string is how a preview finds the stored rows after
@@ -413,7 +425,15 @@ const workflow = {
            Comment nodes are always in: the comment engine reads a logged-in feed
            whatever the platform, and its mode is not on the node. */
         var found = [];
+        var alive = {};
+        (canvas.effectiveIds ? canvas.effectiveIds() : Object.keys(canvas.nodes)).forEach(function (id) {
+            alive[id] = true;
+        });
         Object.keys(canvas.nodes).forEach(function (id) {
+            /* A disabled node (its own switch, its type off, or starved by a disabled upstream)
+               runs nothing, so its cookie must never refuse the run — only platforms the run will
+               actually visit are asked. */
+            if (!alive[id]) return;
             var node = canvas.nodes[id];
             var p = node.params || {};
             if (node.type === 'source') {

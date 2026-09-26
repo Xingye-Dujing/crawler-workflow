@@ -224,6 +224,100 @@ def state(tmp_path_factory):
             'select': 'node-1',
             'key': {'key': 'f', 'target': 'DIV'},
         },
+        # ── disable / enable (canvas mirror of the backend effective graph) ──
+        {
+            'id': 'disable_head_cascades',
+            'restore': {
+                'nodes': {
+                    'name-1': {
+                        'id': 'name-1',
+                        'type': 'name',
+                        'title': 'A',
+                        'params': {'workflow_name': 'A'},
+                        'x': 1,
+                        'y': 1,
+                    },
+                    'src-1': {
+                        'id': 'src-1',
+                        'type': 'source',
+                        'title': 'x',
+                        'params': {'platform': 'zhihu'},
+                        'x': 2,
+                        'y': 1,
+                    },
+                    'out-1': {
+                        'id': 'out-1',
+                        'type': 'output',
+                        'title': 'x',
+                        'params': {'operation': 'save'},
+                        'x': 3,
+                        'y': 1,
+                    },
+                    'name-2': {
+                        'id': 'name-2',
+                        'type': 'name',
+                        'title': 'B',
+                        'params': {'workflow_name': 'B', 'enabled': False},
+                        'x': 1,
+                        'y': 2,
+                    },
+                    'src-2': {
+                        'id': 'src-2',
+                        'type': 'source',
+                        'title': 'x',
+                        'params': {'platform': 'zhihu'},
+                        'x': 2,
+                        'y': 2,
+                    },
+                },
+                'connections': [
+                    {'from': 'name-1', 'to': 'src-1'},
+                    {'from': 'src-1', 'to': 'out-1'},
+                    {'from': 'name-2', 'to': 'src-2'},
+                ],
+            },
+        },
+        {
+            'id': 'fan_in_keeps_join',
+            'restore': {
+                'nodes': {
+                    'sa': {
+                        'id': 'sa',
+                        'type': 'source',
+                        'title': 'x',
+                        'params': {'platform': 'zhihu', 'enabled': False},
+                        'x': 1,
+                        'y': 1,
+                    },
+                    'sb': {'id': 'sb', 'type': 'source', 'title': 'x', 'params': {'platform': 'weibo'}, 'x': 1, 'y': 2},
+                    'j': {
+                        'id': 'j',
+                        'type': 'analysis',
+                        'title': 'x',
+                        'params': {'operation': 'drop_null'},
+                        'x': 2,
+                        'y': 1,
+                    },
+                },
+                'connections': [{'from': 'sa', 'to': 'j'}, {'from': 'sb', 'to': 'j'}],
+            },
+        },
+        {
+            'id': 'type_off_starves_child',
+            'restore': {
+                'nodes': {
+                    's': {'id': 's', 'type': 'source', 'title': 'x', 'params': {'platform': 'zhihu'}, 'x': 1, 'y': 1},
+                    'p': {'id': 'p', 'type': 'process', 'title': 'x', 'params': {'operation': 'clean'}, 'x': 2, 'y': 1},
+                },
+                'connections': [{'from': 's', 'to': 'p'}],
+            },
+            'disabledTypes': ['source'],
+        },
+        {
+            'id': 'toggle_flips_enabled',
+            'add': ['source'],
+            'toggle': ['node-1'],
+        },
     ]
     return _run('harness_state.mjs', [JS_DIR / 'canvas.js'], scenarios, tmp)
 
@@ -611,3 +705,39 @@ class TestFileLifecycle:
         assert len(r['nodes']) == 1, 'the canvas on screen must survive the bad file'
         assert r['currentFile'] == 'good-name', 'the next Save must not overwrite the junk file as if it were loaded'
         assert any('toast.workflowFileInvalid' in msg for msg in r['toasts']), r['toasts']
+
+
+class TestCanvasDisable:
+    """The canvas mirror of the effective graph: grey-out and run-naming agree with the backend."""
+
+    def test_disabling_a_head_node_starves_its_whole_chain(self, state):
+        r = state['disable_head_cascades']
+        assert r['disableStates']['name-2'] == 'off', 'the switched-off head reads as disabled'
+        assert r['disableStates']['src-2'] == 'starved', 'the box that lost its only input starves'
+        assert r['disableStates']['name-1'] == 'on' and r['disableStates']['out-1'] == 'on', (
+            'the live workflow is untouched'
+        )
+        assert r['effective'] == ['name-1', 'out-1', 'src-1'], r['effective']
+        assert r['dclasses']['name-2']['off'] is True and r['dclasses']['name-2']['starved'] is False
+        assert r['dclasses']['src-2']['starved'] is True and r['dclasses']['src-2']['off'] is False
+
+    def test_a_join_survives_on_one_live_branch(self, state):
+        r = state['fan_in_keeps_join']
+        assert r['disableStates']['sa'] == 'off'
+        assert r['disableStates']['sb'] == 'on'
+        assert r['disableStates']['j'] == 'on', 'disabling ONE upstream must not kill a fan-in node'
+        assert 'j' in r['effective']
+
+    def test_a_disabled_type_takes_its_whole_chain(self, state):
+        r = state['type_off_starves_child']
+        assert r['disableStates']['s'] == 'off' and r['disableStates']['p'] == 'starved', r['disableStates']
+        assert r['effective'] == [], 'nothing survives when every source type is off'
+        assert r['savedDisabledTypes'] == ['source'], 'the type set persists into the saved state'
+
+    def test_toggling_a_node_off_flips_its_switch(self, state):
+        r = state['toggle_flips_enabled']
+        assert r['disableStates']['node-1'] == 'off'
+        assert r['effective'] == []
+        assert r['savedDisabledTypes'] == []
+        flipped = next(n for n in r['nodes'] if n['id'] == 'node-1')
+        assert flipped['params'].get('enabled') is False, 'the switch lives in params.enabled (survives save/undo)'

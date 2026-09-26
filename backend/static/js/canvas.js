@@ -10,12 +10,20 @@ const NODE_ICON = {
         '<path d="M4 7h16"/>' +
         '<path d="M9.5 7V5.3c0-.7.6-1.3 1.3-1.3h2.4c.7 0 1.3.6 1.3 1.3V7"/>' +
         '<path d="M6.6 7l.8 11.9a1.9 1.9 0 0 0 1.9 1.8h5.4a1.9 1.9 0 0 0 1.9-1.8L17.4 7"/>' +
-        '<path d="M10.4 11v5.5M13.6 11v5.5"/></svg>'
+        '<path d="M10.4 11v5.5M13.6 11v5.5"/></svg>',
+    power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">' +
+        '<path d="M12 4v7"/>' +
+        '<path d="M7.5 7.5a6 6 0 1 0 9 0"/></svg>'
 };
 
 const canvas = {
     nodes: {},
     connections: [],
+    /* Node types the user has switched off for the whole canvas (e.g. ['source']). A node of one
+       of these types is disabled, and so is anything that loses its last live input — the canvas
+       mirrors the backend's effective graph (:func:`effective_workflow`) ONLY to grey the boxes
+       and to name the run; what actually executes stays the backend's decision. */
+    disabledTypes: [],
     selectedNode: null,
     nextId: 1,
     panX: 0,
@@ -456,8 +464,10 @@ const canvas = {
             '  <div class="node-actions">',
             '    <button class="node-action-btn" type="button">' + NODE_ICON.settings + '</button>',
             '    <button class="node-action-btn del" type="button">' + NODE_ICON.del + '</button>',
+            '    <button class="node-power-btn" type="button">' + NODE_ICON.power + '</button>',
             '  </div>',
             '</div>',
+            '<div class="node-state-badge"></div>',
             '<div class="node-content"></div>',
             '<div class="node-port node-port-in" data-port="in"></div>',
             '<div class="node-port node-port-out" data-port="out"></div>',
@@ -473,6 +483,13 @@ const canvas = {
         actionBtns[0].addEventListener('click', () => this.editNode(id));
         actionBtns[1].title = I18n.t('ctx.delete');
         actionBtns[1].addEventListener('click', () => this.deleteNode(id));
+        /* The enable/disable toggle is its own class, not a third .node-action-btn, so the
+           settings/delete buttons keep the positions every caller and test assumes. */
+        const powerBtn = el.querySelector('.node-power-btn');
+        powerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleEnabled(id);
+        });
         el.querySelector('.node-content').textContent = this.getNodeSummary(type, params);
         el.querySelectorAll('.node-port').forEach((port) => {
             port.dataset.node = id;
@@ -812,12 +829,16 @@ const canvas = {
         requestAnimationFrame(() => {
             this._renderPending = false;
             this.updateConnections();
+            this.applyDisabledVisuals();
         });
     },
 
     updateConnections() {
         this.svgLayer.querySelectorAll('.conn-line:not(.temp)').forEach(l => l.remove());
         this.svgLayer.querySelectorAll('.conn-delete-hit').forEach(l => l.remove());
+        // A wire that feeds a node the run will not see reads faint, so "disconnected by a
+        // disable" is visible without deleting what the user drew.
+        const states = this.disableStates();
         this.connections.forEach((conn, idx) => {
             const fromPort = document.querySelector('[data-node="' + conn.from + '"][data-port="out"]');
             const toPort = document.querySelector('[data-node="' + conn.to + '"][data-port="in"]');
@@ -835,6 +856,7 @@ const canvas = {
 
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.classList.add('conn-line');
+            if (states[conn.from] !== 'on' || states[conn.to] !== 'on') path.classList.add('conn-disabled');
             path.setAttribute('d', d);
 
             const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -930,7 +952,12 @@ const canvas = {
                 folded: el ? el.classList.contains('node-folded') : false,
             };
         });
-        return { nodes: nodes, connections: this.connections, nextId: this.nextId };
+        return {
+            nodes: nodes,
+            connections: this.connections,
+            nextId: this.nextId,
+            disabledTypes: (this.disabledTypes || []).slice(),
+        };
     },
 
     restoreState(state) {
@@ -985,6 +1012,7 @@ const canvas = {
             }
             return null;
         }).filter(Boolean);
+        this.disabledTypes = Array.isArray(state.disabledTypes) ? state.disabledTypes.slice() : [];
         this.scheduleRender();
         this._historySaving = outerSaving;
         if (!outerSaving) {
@@ -1092,6 +1120,96 @@ const canvas = {
     updateStatus() {
         const count = Object.keys(this.nodes).length;
         document.getElementById('status-nodes').textContent = I18n.t('status.nodes') + count;
+    },
+
+    /* ── Enable / disable ── */
+    /* A canvas-local mirror of the backend's effective graph, used ONLY for grey-out and for
+       naming the run; it must agree with engine.workflow.effective_workflow, because the record
+       the browser looks up is keyed by that same effective name. A node is OFF if its own switch
+       or its type is switched off; it is STARVED if it is on but has at least one upstream and
+       none of those upstreams are alive. Starvation cascades, so switching off a workflow's head
+       node greys the whole chain — which is exactly why there is no separate "disable workflow"
+       control: it is just disabling the first box. */
+    _nodeDirectlyOn(id) {
+        const n = this.nodes[id];
+        if (!n) return false;
+        return (n.params || {}).enabled !== false;
+    },
+
+    _typeOn(type) {
+        return (this.disabledTypes || []).indexOf(type) < 0;
+    },
+
+    /* { id: 'on' | 'off' | 'starved' } for every node on the canvas. */
+    disableStates() {
+        const ids = Object.keys(this.nodes);
+        const upstream = {};
+        ids.forEach((id) => { upstream[id] = []; });
+        this.connections.forEach((c) => {
+            if (this.nodes[c.from] && this.nodes[c.to] && upstream[c.to]) upstream[c.to].push(c.from);
+        });
+        const alive = {};
+        ids.forEach((id) => { alive[id] = this._nodeDirectlyOn(id) && this._typeOn(this.nodes[id].type); });
+        let changed = true;
+        while (changed) {
+            changed = false;
+            ids.forEach((id) => {
+                if (!alive[id]) return;
+                const parents = upstream[id];
+                if (parents.length && !parents.some((p) => alive[p])) { alive[id] = false; changed = true; }
+            });
+        }
+        const states = {};
+        ids.forEach((id) => {
+            if (!alive[id]) {
+                states[id] = this._nodeDirectlyOn(id) && this._typeOn(this.nodes[id].type) ? 'starved' : 'off';
+            } else {
+                states[id] = 'on';
+            }
+        });
+        return states;
+    },
+
+    /* The ids that take part in a run — the same set the backend computes. */
+    effectiveIds() {
+        const states = this.disableStates();
+        return Object.keys(states).filter((id) => states[id] === 'on');
+    },
+
+    toggleEnabled(id) {
+        const n = this.nodes[id];
+        if (!n) return;
+        n.params = n.params || {};
+        n.params.enabled = n.params.enabled === false;
+        this.saveState();
+        this.scheduleRender();
+        if (this._settingsNodeId === id) openSettings(id);
+    },
+
+    applyDisabledVisuals() {
+        const states = this.disableStates();
+        Object.keys(this.nodes).forEach((id) => {
+            const el = this._nodeEl(id);
+            if (!el) return;
+            const state = states[id];
+            el.classList.toggle('node-off', state === 'off');
+            el.classList.toggle('node-starved', state === 'starved');
+            const btn = el.querySelector('.node-power-btn');
+            if (btn) {
+                const on = state === 'on';
+                btn.classList.toggle('power-off', !on);
+                btn.title = I18n.t(on ? 'ctx.disableNode' : 'ctx.enableNode');
+            }
+            const badge = el.querySelector('.node-state-badge');
+            if (badge) {
+                badge.textContent = state === 'off'
+                    ? I18n.t('node.badgeDisabled')
+                    : state === 'starved'
+                        ? I18n.t('node.badgeNoInput')
+                        : '';
+                badge.style.display = state === 'on' ? 'none' : '';
+            }
+        });
     },
 
     /* ── Node fold / unfold ── */
@@ -1284,6 +1402,7 @@ const canvas = {
                 mode: RunState.parallel ? 'parallel' : 'serial',
                 headless: RunState.headless,
                 max_workers: 4,
+                disabledTypes: (this.disabledTypes || []).slice(),
             },
         };
     },

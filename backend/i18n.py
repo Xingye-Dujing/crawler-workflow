@@ -769,6 +769,7 @@ _ZH = {
     'run.wallRetry': ('{platform} 在第一条数据之前就被弹到登录页，这更像同一账号被两次并发搜索撞了：{n} 秒后重试一次'),
     'crawl.profile_wait': '已排队 {seconds} 秒：这个 profile 同时只能开一个浏览器，{dir}',
     'run.profileOff': '本次执行不使用浏览器 Profile：每次都是全新设备（为让同平台的工作流真并行），Cookie 快照照常导入',
+    'run.skippedWorkflows': '本次跳过（已禁用，不参与运行）：{names}',
     'crawl.profile_stuck': (
         '等待 profile 释放超时（{seconds} 秒）：{dir} —— 可能有浏览器没被关闭，请在进程面板结束残留的 Chrome 后重试'
     ),
@@ -1629,6 +1630,7 @@ _EN = {
         'this run uses no browser profile: every crawl is a brand-new device (so same-platform workflows '
         'really do run side by side), and the saved cookie snapshot is planted as usual'
     ),
+    'run.skippedWorkflows': 'skipped this run (disabled, will not run): {names}',
     'crawl.profile_stuck': (
         'timed out waiting {seconds} s for the profile to free up: {dir} — a browser may have been left '
         'open; end the stray Chrome in the process panel and try again'

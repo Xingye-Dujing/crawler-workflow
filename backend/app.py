@@ -1687,6 +1687,10 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # of it is this list, which is what lets the panel say "X ran, Y was skipped" instead
             # of the canvas silently looking like it had one fewer workflow.
             skipped_str = ' + '.join(execution_state.get('skipped_workflow_labels') or [])
+            if skipped_str:
+                # Say it out loud: a run of fewer workflows than the canvas drew must name who is
+                # sitting this one out, or the user reads a silent omission as a lost record.
+                add_log(t('run.skippedWorkflows', names=skipped_str))
             created = []  # rebind the outer pre-name so the finally always sees a list
             # THE SAME list object the claim put in `execution_state`: 停止 reads it from
             # the request thread, so a rebind here would leave it writing to a list

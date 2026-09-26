@@ -1061,6 +1061,66 @@ body.style-menu-open #workspace #resume-banner {
   display: none;
 }
 
+/* ── Enable / disable ──────────────────────────────────────────────────── */
+/* The power toggle reuses the action-button look but is NOT a .node-action-btn, so the
+   settings/delete buttons keep the positions every caller and test relies on. */
+.node-power-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+}
+.node-power-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.node-power-btn:hover {
+  opacity: 1;
+}
+/* An off switch reads dim; a node the run will actually visit keeps a lit power glyph. */
+.node-power-btn.power-off {
+  opacity: 1;
+  color: #e5484d;
+}
+/* Directly disabled (own switch or its whole type): greyed and translucent. */
+.node.node-off {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+/* Starved by a disabled upstream: present but unable to run — a dashed frame says so. */
+.node.node-starved {
+  filter: grayscale(0.7);
+  opacity: 0.6;
+  border-style: dashed;
+}
+.node-state-badge {
+  position: absolute;
+  top: -9px;
+  right: 6px;
+  z-index: 35;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 8px;
+  color: #fff;
+  background: #8a8f98;
+  pointer-events: none;
+}
+.node.node-starved .node-state-badge {
+  background: #b58900;
+}
+#svg-layer .conn-line.conn-disabled {
+  stroke: #b9bdc4;
+  opacity: 0.4;
+}
+
 /* ── Ports ──────────────────────────────────────────────────────────────── */
 .node-port {
   position: absolute;
