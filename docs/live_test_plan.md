@@ -114,12 +114,20 @@
 | **知乎 posts 特别条款** | `crawl.zhihu.stuck`（Z6）**仍不算**合法：充足供给+窗口模式下的 stuck=bug 信号，等真机证明「连停 3 轮」确实是断供而非软风控再谈。**2026-09-27 已修**：旧代码首轮无增长就内层二次确认后 break（`stuck` 恒为 1，`STUCK_ROUNDS=3` 形同装饰，`crawl.zhihu.confirmed` 分支**不可达**=一条产品打不出来的行）；现改为**连续 3 轮**无增长才收工，`confirmed` 那句话说的是「内容已加载完毕」这种未经测量的断言，已随分支一并从双语目录删除 | 从严 D4/D6 |
 | hot 类 | `crawl.zhihu.hotCapped`、`crawl.dy.hotCapped`、`crawl.weibo.hotCapped`（≈52）、douyin 热榜≈51；B站 `ranking` ≤100 **无 cap 行=欠账**（修复项） | 榜单大小由网站决定 |
 | comments | `comment.status.blocked` 具名、`comment.zhihuNoPanels`、`comment.commentsClosed`、`comment.dyNone/dyNoPanel`、`comment.xNoList` | 关闭评论/真无评论/拒绝 |
+| **微博 posts/author 登记（2026-09-28 写矩阵时）** | posts：`crawl.weibo.no_result`（站点自己印「抱歉，未找到相关结果」，实测它**与 5 张不相干推荐卡同屏**，故它是唯一判据 U31）、`crawl.weibo.page_empty`（某页**真的一张卡都没有**——U36 修复后这句话才成立：旧代码把「整页都是台账里的旧行」也报成空页）、`crawl.weibo.authorNoPosts`（200 + 空 list 是对一个账号的事实）。author 另加四条**raise 型拒绝**：`authorRefused`（mymblog edge 403，per-session 节流）、`authorWall`、`authorMirror`、`authorEmpty`（uid 读不出→开浏览器之前就拒，绝不猜一个人）。**明确不算合法**：`crawl.weibo.walk_done`/`authorDone` 与它们的 `{reason}` 槽（`crawl.stopReason.end`/`no_new`/`no_cards`/`stuck`）——那是**代码对自己循环的总结**，「窗走完」既可能是供给干涸也可能是 pager 少读一页，白名单收它=把每条 posts 用例的 `!= SILENT_SHORT` 变成不可证伪（知乎那表只收「站点自己的标记」，同一纪律）；`crawl.stopReason.unreachable` 也不收（AGENTS：浏览器没取到页面**不是**站点的拒绝）；`crawl.weibo.target_reached` 照旧不收（自己给自己发满分） | 站点 plate / 账号事实 / 具名拒绝；总结行不免责 |
+| **微博 comments 登记** | `comment.weiboShowFailed`（statuses/show 取不回，带 URL）、`comment.status.dead`（逐文摘要里那格的 DEAD）、`comment.weiboReplay`（游标在动而整页复读）、`comment.weiboShort`（游标耗尽且 `total_number` 更高——差额是楼中楼 U33）、`comment.weiboFetchDied`（**新增**：某一页取数失败即收尾，带页数/本次条数/站点标注/差额，U37）。**不收** `comment.commentsClosed` 与 `comment.status.blocked`：`crawl_weibo` 没有墙判定，只可能返回 `OK`/`DEAD`，收进来就是 §5 末尾警告的那种「打死在名单里的行」（下一位读者会以为评论被墙是有判定的） | 具名拒绝/复读/分母差额；死链与墙分开说 |
 | 跨切 | `run.wallRetry`、`run.platformQueued`/`platformStaggered`/`serialForced`、`crawl.profile_wait`、`run.pagePending`+`net.*` | 排队/重试/页面未到达 |
 
 > 白名单是**闭集**：新增合法终局必须先在本文件登记出处（真机实测证据进 `docs/crawler_notes.md`）。
 > 已知「说了但说谎」的行（在场也算红并归因 §6）：Z6 虚报次数、Z8 高水位数、Z16 慢渲染报"他没发过"、
 > `crawl.bili.empty_page` 慢渲染报"没卡片"、`stopReason.stopped` 混判墙（E9）、`crawl.riskBlocked` 报在
-> `about:blank`（W1）、`crawl.zhihu.emptyOrBlocked` 一句三个原因（Z3）。
+> `about:blank`（W1）、`crawl.zhihu.emptyOrBlocked` 一句三个原因（Z3）、
+> `crawl.weibo.page_empty` 曾把「整页都是本次已采过的行」报成「这页没有卡片」（U36，**已修**：
+> `_harvest` 现在同时交出「看见几张卡」，收工只看卡片数为 0）。
+> **一条行能不能被观察到，取决于开关**：`run.serialForced` 只在 `same_platform_queue=False` 时打
+> （`crawl_gate.hold`：`forced_serial = serial_only and not 该开关`），排队开着时微博同样排队、但控制台说的是
+> `run.platformQueued`——那是「用户的开关生效了」，不是「平台红线没被投票掉」。G1/G2 因此必须显式改这两个
+> 全局开关（它们**不**从 run payload 读，写在 canvas `settings` 里的 `same_platform_stagger` 没人看），跑完还原。
 
 ---
 
@@ -171,6 +179,9 @@
 | U34 | 第 0 步未收口项 | 本轮三个页面样本里**没有转发卡**（`nested=0`、`.feed-forward-wrap`=0），所以「转发卡的引用内容 + 嵌套 `.card-wrap` 会不会让同一条被数两次」**仍未测**——不是已排除。同理 `_get_full_text` 在转发卡上取到的是引用还是原文，只有真卡能答 | 第 0 步补测项：换一个必然出转发卡的时间窗，量一次「卡片数 vs 行数」漏斗（一次导航） |
 
 | U35 | `weibo.py::_scrape_card` 的 转发数/评论数 选择器 | 一条批评意见（来自工作流的一路审查）说：热卡用另一套 woo 版式、计数是按钮的兄弟节点，于是**最有价值的行被存成 0**——依据是 pass 1 抓到的一张怪卡（`mid=5347502954124386`：卡内文本印着 714/1024/7274，而 `[action-type="feed_list_forward"]`/`..._comment"]` 读回裸词「转发」「评论」，只有 `.woo-like-count` 读对了 7274；`actionLabels` 顺序也不同）。**第 7 条探针按结构量完：这一版式假设未被支持**（整页 `.woo-count`/`.woo-forward-count`/`.woo-comment-count` = 0/0/0、`.woo-like-count` = 每卡一个；10 张卡的动作条全是旧 `menu s-fr`，有数的卡数就长在按钮自己的文本里）。零转发零评论的高赞帖本来就能长成那样，`714/1024` 更像那个视频号模块自己的数。**但也没有排除**：那次 `actionLabels` 顺序不同说明视频卡版式存在，只是这次没采到样本 → 结论：**没有样本就不改选择器** | 待测（换必然出视频卡的供给再量一次「动作条锚点文本 vs 卡内数字节点」；量到不一致才改）；测量出处 `backend/test_weibo_actionbar.py` → `scratchpad/weibo_actionbar.json` |
+
+| U36 | `crawlers/weibo.py::_scrape_single_search` 的翻页判据（**已修 2026-09-28，写微博矩阵时从代码读出**） | **续跑把被停那一窗的深层页永久丢掉**：页循环用「`collected()` 没涨」当「这页之后没有了」（`if self.collected() == before: page_empty; break`）。而 继续 恰恰必然造出这个形状——游标把 `url_index` 留在被停的那一窗、`card_index/page_index` 归零，于是重进窗口后第 1、2 页的卡**全在台账里**（0 新增），循环在第一页就 break，**比 停止 更深的页再也没被请求过**。控制台还会打「第 2 页无有效卡片」——一句关于站点的话，说的是我们自己的台账。这正是 §11 第 0 步警告的「假设自洽」型缺陷：表、游标、总结行三方都同意一个短数 | 产品修复：`_harvest` 改回 `(kept, cards_seen)` 两个数，**停页只看站点空（cards==0）**，「整页都是旧行」只报数不收工。代价写进 docstring：一个每页都复读的坏 pager 现在会走完 `total_pages`（实测 1..10），有界；反向代价是一张贴着分母的短表没人报警。快层钉：`tests/integration/test_weibo_crawler.py::TestPagingWalk::test_a_page_with_nothing_new_on_it_is_not_a_page_with_nothing_on_it`（退回旧判据即红，并当场印出那句假「无有效卡片」）；真机判据：`test_live_weibo_workflow.py` E1/E2 断 继续 打开**更深的页**，不只同一个 URL |
+| U37 | `crawlers/comments.py::crawl_weibo` 的 `ended='fetch'`（**已修**） | 评论游标三种收尾里**只有这一个不打字**：游标耗尽有 `comment.weiboShort`、站点复读有 `comment.weiboReplay`、用户上限刻意不打字（D5 钉住），而 `buildComments` 某页取数失败 → 直接 `break` 返回已有行，**控制台一个字没有** → 短表读起来像「这条微博就这么多评论」。审核微博矩阵时顺着「每种收尾都该留下一句话」查出来的 | 产品修复：新增 `comment.weiboFetchDied`（第几页失败 / 本次几条 / 站点标注几条 / 差额 / 游标停在失败页可继续）。快层钉：`tests/unit/test_comments.py::TestWeiboAdapter::test_a_failed_comment_page_names_itself_instead_of_looking_finished`（并钉住它**不得**同时打 `comment.weiboShort`——那句是替站点说话） |
 
 **滚动节奏（fake driver 数出来的 scroll 命令，不是真机测量；读控制台 `scroll_round` 前先记住它）**：
 `scroll_down(steps=3)` 一次发 **4** 条 scroll 命令（3 步 + 1 次底部跳转），所以搜索的一个 stalled round
@@ -346,7 +357,7 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
       + 设置轴两格已落地；**本机重测**快层 4475 passed / 220 deselected、ruff 两项干净
 - [x] 知乎真机全矩阵：**31/31 绿**（2026-09-28，6 轮跑完），逐例控制台审计 → §6 已销号 U3、U19(知乎格)、
       U22-U24、U26-U29；H1/H2/H3 原样跑通用户 `测试：知乎.json`；已提交 `dcfb126`+`0b8b4bc`+`d7215d6`+`e1bc3b0`
-- [ ] **微博**：按 §11「一个平台的完整复查流程」八步执行（**第 0-5 步已过，第 6-8 步等用户在场跑真机**）
+- [ ] **微博**：按 §11「一个平台的完整复查流程」八步执行（**第 0-5 步已过、矩阵 20 格已落地，第 6-8 步真机**）
       - [x] **第 0 步 读页面**（2026-09-28，八条一次性探针 `backend/test_weibo_{structure,gaps,child,child2,child3,child4,actionbar,cardcount}.py`
             → `scratchpad/weibo_*.json`；结论写进 `docs/crawler_notes.md` 微博节，判决登记为 §6 **U31-U35**）。
             四条旧疑点的下场：**U12 成立且量化**（小时窗第 2 页真有 6 条、mid 交集 0 → `_may_page` 静默丢 40%，
@@ -381,9 +392,34 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
                每 tick 问 停止、两次未交付就不再花预算的 `pending_waits` 断路）。
       - [x] **第 5 步 `@code-auditor` 审**（只读、未跑真机）：2 Blocker + 5 Major + 9 Minor，
             其中影响判决/采满的七条已全部回修（见上），并新增 8 例快层针（4501 passed / 220 deselected 零跳过）
-      - [ ] 第 6-8 步：微博 31 格形状的运行级矩阵（§7 微博行：`serial_only`、热搜匿名、时间窗四态、
-            mymblog 403 响亮拒、D9「先满即收工且剩余窗口零付费」）→ 用户在场时真机分批 → 逐例读控制台销号
-            → H 组跑 `data/workflows/测试：微博.json`
+      - [x] **第 3 步（补）运行级矩阵落地 20 格**（`tests/live_site/test_live_weibo_workflow.py`：A1-A6 关键词/时间窗、
+            B1-B3 作者、C1-C3 热搜、D1-D5 评论、E1+E2 停止续跑、G1-G2 `serial_only`；共用件抽进
+            `tests/live_run_driver.py`，知乎那份 433 行的重复就此消掉）。**F 组（preflight 三态）与 S 组（错峰节奏）**
+            在微博塌进 G1/G2 与 A2：这个平台 `serial_only`，错峰只能排在队列之内，测不出知乎那两条并行节奏；
+            热搜匿名由 C3 承担。H 组欠一件公版件：知乎那套「按文件自身发现组件 + 逐组件判决 + 三一致」的接受夹具
+            要先抽成共享模块，微博才不必抄第二份。
+      - [x] **第 4-5 步（第二轮）矩阵自查 + 审核 14 条回修**（真机之前，全部对着代码核实，未凭审核报告照抄）：
+            ① G1/G2 断的 `run.serialForced` 在默认开关下**根本打不出来**（`forced_serial = serial_only and not
+            same_platform_queue`），且 `same_platform_stagger` 写在 canvas settings 里没人读 → 两格改成显式改全局
+            开关 + `finally` 还原，两格这才不是同一个测试；② `楼层` 唯一性跨文章判（站点是**逐帖**编号，两帖各有
+            1 楼）→ 按 `文章URL` 分组判；③ D1/D2 用发明出来的 ask 判满（链接只有 3 条评论却按 5×N 判）→ 选链
+            下限抬到 ask、D2 的 ask 改由父表算，并要求「每个有评论的父链接都在评论表里出现或被具名」；
+            ④ 白名单里放进了 `walk_done`/`authorDone` 与 `crawl.stopReason.end/no_new/no_cards/stuck/unreachable`
+            —— 那是代码给自己循环写的总结，收进来等于每条 posts 用例的 `!= SILENT_SHORT` 不可证伪 → 全删，
+            只留站点自己的 plate；⑤ A5/B2 的回归检查写在 `if rows>` / `if offered>` 里，**恰好在 bug 在场时跳过**
+            → 改成无条件（A5 必 FULL 且必读到 >1 页、B2 非具名拒绝即必须 >28 行且游标 page>1）；
+            ⑥ E1/E2 只断「重开同一个 URL」而游标把页深度抹平 → 加「继续必须打开比 停止 所在页**更深**的一页」，
+            顺带在代码里查出并修掉 **U36**（见 §6）；⑦ C3 用 monkeypatch 假夺 cookie（app 不读那个函数），
+            实为登录态下断「匿名」→ 新增 `harness.no_jar` 真空目录 + `use_profile=False` + 断 `run.profileOff`；
+            ⑧ 文档里教人 `-k "A or C"` 分批，实际 pytest 是**子串**匹配 → 那一行选中全部 20 格，改成点名单元格；
+            ⑨ 无头用例接受具名墙时不再接受 `about:blank` 上的墙（W1 仍开着，由真机判）；⑩ 会话中途死在微博
+            是设计路径（间歇风控）→ `RunDriver.NAMED_DEATH_OK` 类属性，审计行照打 WARN，不静默；
+            ⑪ G 组两组件只写一行审计 → `_audit_component` 逐组件一行；⑫ D3 丢掉分母、`正文` 非空要求会冤杀
+            纯图卡、A6 断「还有窗没开」在供给刚好用完时假红 → 全部按可证说法改写。
+            新针：`_harvest` 的「无新增 ≠ 无卡片」（U36）与 `comment.weiboFetchDied`（U37，评论第三种收尾此前
+            一个字不打）各一枚快层钉，退回即红。
+      - [ ] 第 6-8 步：真机分批（用户 2026-09-28 授权自走：设计完矩阵即开跑，不再逐次询问）→ 逐例读完整控制台销号
+            → H 组跑 `data/workflows/测试：微博.json`（公版接受夹具抽出来之后）
 - [ ] 抖音 → B站 → 小红书 → 微信（同一套八步）
 - [ ] VPN 阶段：X → YouTube（先测反向用例：不可达必须报 `unreachable`，不许假空）
 - [ ] 全平台门过 → §6 剩余嫌疑（U1 通用 under-target、U2 walk 计数器从不打印等）收口提交

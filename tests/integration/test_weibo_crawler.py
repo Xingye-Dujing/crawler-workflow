@@ -263,7 +263,9 @@ class TestPagingWalk:
                 page_counter['n'] += 1
                 item = {'正文': f'p{page_counter["n"]}'}
                 crawler.emit(item)
-                return [item]
+                # ``(rows, cards)`` — the pair the page loop stops on. One card per page here, always
+                # fresh, so these tests stay about the URLs visited.
+                return [item], 1
 
             monkeypatch.setattr(crawler, '_harvest', harvest)
             return crawler, driver
@@ -300,6 +302,44 @@ class TestPagingWalk:
         scraped = crawler._scrape_single_search(window, WeiboCrawler.DEFAULT_TARGET)
         assert self._paged_urls(driver) == [f'{window}&page={n}' for n in (2, 3)], driver.visited
         assert len(scraped) == 3, 'page 1 plus the two deeper ones'
+
+    def test_a_page_with_nothing_new_on_it_is_not_a_page_with_nothing_on_it(self, make_crawler, monkeypatch, caplog):
+        """U36 — the 继续 shape, and the second silent under-collection this walk had.
+
+        A resume re-enters the hourly window 停止 died in, and every card on the pages *before* the kill is
+        already in the ledger. The loop broke the moment ``collected()`` stood still, so the pages deeper
+        than the kill — the only ones still owing rows — were never fetched, and the console printed
+        「某一页是空的」 about a page that was full. Stopping on the *site's* emptiness (no cards rendered)
+        is the discriminator; nothing-new is a fact about this run's ledger, never about the window.
+
+        The cost is stated rather than hidden: a pager whose every page repeats the previous one is now
+        walked to ``total_pages`` (measured 1..10 anchors on a window) instead of quitting at the first
+        repeat. That is a bounded number of navigations, and the alternative is a short table nobody named.
+        """
+        import i18n
+
+        crawler, driver = make_crawler(cards=True, total_pages=5)
+        monkeypatch.setattr(Crawler, '_polite_pause', staticmethod(lambda *a: None))
+        pages = {'n': 0}
+
+        def harvest(_target):
+            pages['n'] += 1
+            if pages['n'] <= 3:
+                # Pages 1-3: paid for before the kill, so the ledger refuses every row on them.
+                return [], 1
+            item = {'正文': f'p{pages["n"]}'}
+            crawler.emit(item)
+            return [item], 1
+
+        monkeypatch.setattr(crawler, '_harvest', harvest)
+        with caplog.at_level('INFO'):
+            scraped = crawler._scrape_single_search(FEED, WeiboCrawler.DEFAULT_TARGET)
+        assert self._paged_urls(driver) == [f'{FEED}&page={n}' for n in range(2, 6)], driver.visited
+        assert len(scraped) == 2, f'the rows past the kill are the ones the resume exists to fetch: {scraped}'
+        said = [record.getMessage() for record in caplog.records]
+        assert i18n.t('crawl.weibo.page_empty', i=2) not in said, (
+            f'a page full of already-known cards was reported as an empty one: {said[-6:]}'
+        )
 
     def test_the_walk_closes_with_rows_target_and_reason(self, make_walker, caplog):
         """U10: the search walk used to end mid-sentence, on every platform's worst console.

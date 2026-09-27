@@ -51,6 +51,12 @@ class RunDriver:
     PLATFORM = ''
     #: The wall-clock budget a case gets when it does not name one.
     DEFAULT_TIMEOUT = 1200.0
+    #: Set → a session death that the console *names* is this platform's ordinary answer, so the case
+    #: carries it as a WARN instead of convicting it. A per-file decision, not a per-case one: on a
+    #: platform measured to be bounced mid-crawl (weibo's intermittent risk wall), repeating
+    #: ``named_death_ok=True`` on every cell is how one cell forgets it and a red gets re-run as a
+    #: mystery. The strict checks below (one line per fact, no traceback, no lost console) stay on.
+    NAMED_DEATH_OK = False
 
     def __init__(
         self,
@@ -84,7 +90,7 @@ class RunDriver:
         self.target = target
         self.timeout = self.DEFAULT_TIMEOUT if timeout is None else timeout
         self.lang = lang
-        self._named_death_ok = bool(named_death_ok)
+        self._named_death_ok = bool(named_death_ok) or bool(self.NAMED_DEATH_OK)
         settings = workflow.get('settings') or {}
         self.headless = bool(settings.get('headless', True))
         self.use_profile = settings.get('use_profile')

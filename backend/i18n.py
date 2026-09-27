@@ -665,6 +665,10 @@ _ZH = {
         '[微博评论] 站点写着 {declared} 条，本表只有 {rows} 条（差 {gap} 条）'
         '—— 差额是楼中楼：这个接口在当前会话里不整批返回子评论，只有父行自带的那条预览已入表'
     ),
+    'comment.weiboFetchDied': (
+        '[微博评论] 第 {page} 页评论接口取数失败，就此收尾：本次 {rows} 条'
+        '（站点标注 {declared} 条，差额 {gap} 条未采到；游标停在失败的那一页，可继续）'
+    ),
     'comment.zhihuNoPanels': '[知乎评论] 这个回答页面上没有评论面板（可能已关闭或未加载）：{url}',
     'comment.zhihuNoAuthor': '[知乎评论] 本轮 {total} 条里有 {n} 条在自己的子树内没有作者链接（匿名或被折叠）',
     'comment.zhihuPanelCapped': '[知乎评论] 滚满 {n} 轮（含展开子回复）仍未走完，按轮次上限收工（本次 {rows} 条）',
@@ -1559,6 +1563,11 @@ _EN = {
         '[weibo comments] the page says {declared}, this table holds {rows} (a gap of {gap})'
         ' — the missing rows are nested replies: this endpoint does not return them as a list in the'
         ' current session, and only the one preview each parent row carries is in the table'
+    ),
+    'comment.weiboFetchDied': (
+        '[weibo comments] the comment request failed on page {page}, so the walk ended: {rows} rows kept'
+        ' (the thread is labelled {declared}, {gap} of them unfetched; the cursor stayed on the page that'
+        ' failed, so 继续 can pick it up)'
     ),
     'comment.zhihuNoPanels': '[zhihu comments] no comment panel on this answer (closed, or never loaded): {url}',
     'comment.zhihuNoAuthor': (

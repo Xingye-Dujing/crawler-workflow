@@ -155,6 +155,25 @@ def real_jar(monkeypatch, module=None) -> str:
     return str(COOKIE_DIR)
 
 
+def no_jar(monkeypatch, module, root) -> str:
+    """Point the application at an **empty** cookie directory: the anonymous-session experiment.
+
+    :func:`real_jar`'s mirror, needing the same two patches for the same reason — the crawler resolves
+    ``Config.COOKIE_DIR`` when it is built, while the code that decides *whether* to run reads the
+    directory frozen into ``app.cookie_manager`` at import. Withholding both is what lets a case claim
+    「this mode asked for no login and still produced rows」 instead of claiming it while a saved session
+    rides along in the browser. Pair it with an explicit ``use_profile=False``, because a *profile* keeps
+    its own session no matter what the cookie directory holds.
+    """
+    empty = Path(root) / 'no_cookies'
+    empty.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(Config, 'COOKIE_DIR', str(empty))
+    manager = getattr(module, 'cookie_manager', None) if module is not None else None
+    if manager is not None:
+        monkeypatch.setattr(manager, 'cookie_dir', str(empty))
+    return str(empty)
+
+
 # ─── language: every assertion is rendered, none is pasted ──────────────
 
 

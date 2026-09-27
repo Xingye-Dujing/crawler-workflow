@@ -498,7 +498,7 @@ class WeiboCrawler(Crawler):
             logger.info(t('crawl.weibo.waiting'))
             if not self._await_search_page(base_url):
                 return scraped
-            scraped.extend(self._harvest(target))
+            scraped.extend(self._harvest(target)[0])
             if self.collected() >= target:
                 return scraped
 
@@ -521,10 +521,12 @@ class WeiboCrawler(Crawler):
                 if not self._await_search_page(f'{page_url}{page_num}'):
                     break
                 self.mark_position(page_index=page_num, card_index=0)
-                before = self.collected()
-                found = self._harvest(target)
+                found, cards = self._harvest(target)
                 scraped.extend(found)
-                if self.collected() == before:
+                if not cards:
+                    # The page rendered no list at all — the site's own end. A page that was full of
+                    # cards this crawl had already paid for is NOT that: it says so below (新增 0) and
+                    # keeps going, because on a 继续 the pages before the kill all look like this.
                     logger.warning(t('crawl.weibo.page_empty', i=page_num))
                     break
                 logger.info(t('crawl.weibo.page_done', i=page_num, n=len(found), total=self.collected()))
@@ -616,12 +618,20 @@ class WeiboCrawler(Crawler):
 
     # ─── card harvest ─────────────────────────────────────────────────
 
-    def _harvest(self, target: int) -> list:
-        """Scrape and emit the cards of whichever page is loaded right now.
+    def _harvest(self, target: int) -> tuple[list, int]:
+        """Scrape and emit the cards of whichever page is loaded right now → ``(rows kept, cards seen)``.
 
         Rows go to the sink per card, so they are on disk before the next card
         is looked at, and the window's card cursor lets a kill inside a window
         resume at the card it died on.
+
+        **Two numbers, because the pager has to stop on the site's emptiness and never on our own
+        duplication.** The caller used to read ``collected()`` standing still as "this window is done",
+        and on a 继续 that is false by construction: the resume re-enters the interrupted window at page 1,
+        every card there is already in the ledger, and the loop quit after the first such page — so the
+        pages deeper than the one 停止 died on were never fetched. That is the silent 漏采 this walk exists
+        to prevent, and it looked like a complete crawl because 「某一页是空的」 was printed for a page that
+        was full.
         """
         cards = self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR)
         logger.info(t('crawl.weibo.page_cards', n=len(cards)))
@@ -640,7 +650,7 @@ class WeiboCrawler(Crawler):
             if item is not None and self.emit(item):
                 kept.append(item)
             self.mark_position(card_index=idx, done=self.collected())
-        return kept
+        return kept, len(cards)
 
     def _scrape_card(self, card, idx: int) -> dict | None:
         author = self._text_of(card, '.name')
@@ -817,7 +827,8 @@ class WeiboCrawler(Crawler):
 
     def _scrape_page(self):
         """Scrape every card of the page that is loaded right now."""
-        return self._harvest(self.DEFAULT_TARGET)
+        rows, _cards = self._harvest(self.DEFAULT_TARGET)
+        return rows
 
     def get_detail(self, url: str) -> dict | None:
         return None

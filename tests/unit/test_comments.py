@@ -311,6 +311,28 @@ class TestWeiboAdapter:
         # The shortfall line is about the SITE, so it stays quiet when our own exit ended the walk.
         assert not [line for line in said if 'weiboShort' in line or '写着' in line], said
 
+    def test_a_failed_comment_page_names_itself_instead_of_looking_finished(self):
+        """The one exit of this walk that used to print nothing at all.
+
+        A thread that walked to page 2 and had the request die there handed back its page-1 rows and left
+        the console empty: ``comment.weiboShort`` stayed silent *by design*, because that line speaks for
+        the cursor running out and the cursor had not — a transport failure had. So the short table read
+        exactly like a thread that had no more comments, which is the shape this campaign exists to catch.
+        Naming the failure is also what makes 继续 the right advice: the walk's cursor is on the page that
+        died, not past it.
+        """
+        said = []
+        page1 = json.dumps({'data': [{'id': f'c{i}', 'text': 'x'} for i in range(20)], 'max_id': 99})
+        driver = FakeDriver(
+            fetch_queue=[json.dumps({'id': '555', 'comments_count': 60}), page1], start_url='https://weibo.com/'
+        )
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=0)
+        assert status == OK and len(rows) == 20, rows
+        assert i18n.t('comment.weiboFetchDied', page=1, rows=20, declared=60, gap=40) in said, said
+        # One line, not two: the cursor never ran out, so the site-blaming sentence must not also print.
+        assert not [line for line in said if '写着' in line], said
+
     def test_the_ask_is_not_reported_as_a_shortfall(self):
         """评论上限 20 on a 749-comment post is the user's number, not the thread's absence.
 

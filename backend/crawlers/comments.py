@@ -196,6 +196,22 @@ class CommentSession:
         table = rows[:limit] if limit else rows
         if ended == 'cursor' and declared and len(table) < declared:
             self.log(t('comment.weiboShort', declared=declared, rows=len(table), gap=declared - len(table)))
+        if ended == 'fetch':
+            # The one exit of this walk that used to say nothing at all. Every other ending is either the
+            # site's answer (the cursor ran out, and ``comment.weiboShort`` names the gap against its own
+            # number) or the user's ask (``limit``); a request that died mid-thread is neither, and the
+            # table it leaves behind is shorter than the thread with no line anywhere to point at. Naming
+            # it is also the difference between 「继续」 and a re-crawl: the cursor already holds the page
+            # this walk reached.
+            self.log(
+                t(
+                    'comment.weiboFetchDied',
+                    page=page,
+                    rows=len(table),
+                    declared=declared or '?',
+                    gap=(declared - len(table)) if declared and len(table) < declared else 0,
+                )
+            )
         return table, OK
 
     # -- xiaohongshu --------------------------------------------------------
