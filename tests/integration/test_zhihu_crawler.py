@@ -125,9 +125,26 @@ class FakeCard:
 
 class FakeDriver:
     """Returns a fixed card list, or one that grows on every scroll round (the
-    interleaved harvest is only observable if the page can gain cards)."""
+    interleaved harvest is only observable if the page can gain cards).
 
-    def __init__(self, cards, grow_by=0, max_cards=200, no_more=None, body_text=''):
+    ``grow_after`` is how many scroll commands pass between two batches. Its default
+    keeps every existing scenario in step with the round length; a larger number makes
+    the page *slow* rather than *steady*, which is the only way to watch the walk spend
+    the patience ``STUCK_ROUNDS`` declares instead of quitting on the first flat round.
+    """
+
+    def __init__(
+        self,
+        cards,
+        grow_by=0,
+        max_cards=200,
+        no_more=None,
+        body_text='',
+        grow_after=0,
+        heights=None,
+        grow_at=0,
+        grow_spots=None,
+    ):
         self.cards = list(cards)
         self.grow_by = grow_by
         self.max_cards = max_cards
@@ -135,6 +152,19 @@ class FakeDriver:
         self.scrolls = 0
         self._no_more = no_more
         self._body = body_text
+        self.grow_after = grow_after or ZhihuCrawler.SCROLL_STEPS + 1
+        # Which scroll commands bring a new batch. ``grow_spots`` names them outright, because a
+        # page that is late twice and then answers is a different page from one that pages steadily
+        # — and "late twice, then answers" is exactly the shape a walk must survive.
+        self._grow_at = set(grow_spots) if grow_spots else {self.grow_after * k for k in range(1, 200)}
+        # ``heights`` is what the page answers a ``scrollHeight`` read with, consumed one per read
+        # (the last value then holds). ``grow_at`` is the steadier story: the document starts gaining
+        # height only *after* that many scroll commands, which is the shape 展开全文 makes — the
+        # page gets taller while no new card mounts, and a walk that reads "no new cards" as "the
+        # list is over" quits in the middle of a long page.
+        self._heights = list(heights or [])
+        self._height = 5000
+        self.grow_at = grow_at
 
     def get(self, url):
         self.visited.append(url)
@@ -156,10 +186,19 @@ class FakeDriver:
         # and answering it with a text would hide the fact that a card was clicked.
         if '阅读全文' in script and args:
             return args[0].expand()
-        if 'scroll' in script:
+        if 'return document.body.scrollHeight' in script:
+            if self._heights:
+                self._height = self._heights.pop(0) if len(self._heights) > 1 else self._heights[0]
+            return self._height
+        if 'scrollBy' in script or 'scrollTo' in script:
+            # Not ``'scroll' in script``: that also matches the height read above, and counting a
+            # measurement as a scroll would let the growth schedule run on reads.
             self.scrolls += 1
-            # One harvest round is `SCROLL_STEPS` steps plus the bottom jump.
-            if self.grow_by and self.scrolls % (ZhihuCrawler.SCROLL_STEPS + 1) == 0:
+            if self.grow_at and self.scrolls > self.grow_at:
+                self._height += 4000
+            # Cards arrive on their own schedule: a fixed period reads as "this page pages
+            # steadily", which is a different page from the one being modelled here.
+            if self.grow_by and self.scrolls in self._grow_at:
                 room = max(0, self.max_cards - len(self.cards))
                 self.cards.extend(self.cards[: min(room, self.grow_by)])
             return None
@@ -358,13 +397,77 @@ class TestZhihuSearch:
         assert timeline[0][0] < driver.max_cards
         assert rows[-1] is not None
 
-    def test_stuck_pages_end_the_loop(self, make_crawler):
+    def test_stuck_pages_end_the_loop(self, make_crawler, caplog):
         crawler, driver = make_crawler([_card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS)], no_more=None)
-        rows = crawler.search('三亚', target_count=50)
+        with caplog.at_level('INFO'):
+            rows = crawler.search('三亚', target_count=50)
         assert len(rows) == 1
         # Three fruitless rounds is the ceiling; a runaway 150-scroll loop is the
-        # bug this guards against.
-        assert driver.scrolls <= ZhihuCrawler.SCROLL_STEPS * (ZhihuCrawler.STUCK_ROUNDS + 1) + 6
+        # bug this guards against. One stalled round spends two scroll passes — the
+        # round's own, then the extra confirming pass that catches a late-rendering
+        # screen — and each pass ends in a bottom jump; the final round gives up
+        # *before* paying its confirming pass, so the count below is the declared
+        # patience measured exactly, not a bound picked to fit whatever the loop does.
+        passes = (ZhihuCrawler.STUCK_ROUNDS - 1) * 2 + 1
+        assert driver.scrolls == passes * (ZhihuCrawler.SCROLL_STEPS + 1), (
+            f'the walk spent {driver.scrolls} scrolls on a page that never grew, where '
+            f'STUCK_ROUNDS={ZhihuCrawler.STUCK_ROUNDS} declares {passes} scroll passes'
+        )
+        # …and the ceiling really is the declared one, named with the patience it spent.
+        # The loop used to end on its FIRST flat round while logging 「未增长 (1/3)」 on its
+        # way out: the number in that sentence and the number the walk honoured were two
+        # different numbers, and 「采到 1 条」 was indistinguishable from a slow machine.
+        assert i18n.t('crawl.zhihu.stuck', n=ZhihuCrawler.STUCK_ROUNDS) in _lines(caplog)
+
+    def test_a_page_that_grows_late_is_not_called_exhausted(self, make_crawler):
+        """The patience ``STUCK_ROUNDS`` promises, actually paid for (§6 U3 of the plan).
+
+        Two cards render and the next batch only arrives after eight scroll commands —
+        the shape a slowly-mounting screen takes, and the shape a search results page
+        takes while its own pagination is still in flight. The walk used to spend one
+        flat round (scroll, wait, harvest, one confirming scroll) and then end, so a
+        keyword that would have answered six rows came back with two. Nothing in the
+        console could tell 「这个关键词只这么多」 from 「这台机器刚才慢」, which is the
+        under-collection the user reports on every platform.
+        """
+        crawler, driver = make_crawler(
+            [
+                _card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS),
+                _card(CARD_2, CARD_2_BUTTONS, CARD_2_HREFS),
+            ],
+            grow_by=2,
+            max_cards=6,
+            grow_after=12,
+            no_more=None,
+        )
+        rows = crawler.search('三亚', target_count=6, full_body=False)
+        assert len(rows) == 6, f'the walk gave up at {len(rows)} while the page still had cards to give'
+        assert driver.scrolls > ZhihuCrawler.SCROLL_STEPS, 'it got there by scrolling past a flat round'
+
+    def test_a_tall_page_is_not_read_as_the_end_of_the_list(self, make_crawler):
+        """The 「展开全文 makes the page too tall to scroll」 misjudgement, pinned.
+
+        展开全文 opens bodies in place, so the document grows by thousands of pixels while the card
+        count holds still — and :meth:`Crawler.scroll_down` ends its round with a jump to the
+        bottom, which on a tall page flies past the observers that would have asked for the next
+        batch. Two stalled-looking rounds then precede the next batch, and a walk that counts
+        "no new cards" alone declares the keyword exhausted. The page getting taller is the second
+        opinion that says otherwise, so these four rows must arrive.
+        """
+        crawler, driver = make_crawler(
+            [_card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS), _card(CARD_2, CARD_2_BUTTONS, CARD_2_HREFS)],
+            grow_by=2,
+            max_cards=8,
+            grow_at=12,
+            grow_spots={20, 26, 32},
+            no_more=None,
+        )
+        rows = crawler.search('三亚', target_count=8, full_body=False)
+        assert len(rows) == 8, (
+            f'the walk called the list over at {len(rows)} rows on a page that was still growing '
+            'taller; 「没有更多了」 was never printed either'
+        )
+        assert driver.scrolls >= 20, 'it had to keep scrolling past the tall page to get there'
 
 
 class TestLinkFallback:

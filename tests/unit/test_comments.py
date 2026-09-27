@@ -12,6 +12,9 @@ import re
 
 import pytest
 
+# Imported as a module, not as ``t``: this file names a text column 文本, and a bare ``t`` would
+# collide with it in exactly the tests that compare console wording.
+import i18n
 from crawlers.comments import (
     BLOCKED,
     DEAD,
@@ -55,7 +58,7 @@ class El:
 
 
 class FakeDriver:
-    def __init__(self, body='', pages=None, fetch_queue=None, start_url='https://x.test/'):
+    def __init__(self, body='', pages=None, fetch_queue=None, start_url='https://x.test/', panel_pages=None):
         self.body = body
         self.pages = pages or {}
         self.fetch_queue = list(fetch_queue or [])
@@ -63,6 +66,11 @@ class FakeDriver:
         self.visited = []
         self.current_url = start_url
         self.scripts = []
+        # What the in-page zhihu panel read answers, page by page. The JS itself is a page-side
+        # contract (measured by backend/test_zhihu_comment_dom.py); this fake supplies its OUTPUT
+        # so the Python half — row building, dedupe, the authorless and cap lines — is what is
+        # actually under test here.
+        self.panel_pages = list(panel_pages or [])
 
     def get(self, url):
         self.visited.append(url)
@@ -81,6 +89,16 @@ class FakeDriver:
 
     def execute_script(self, script, *args):
         self.scripts.append(script)
+        # The pump script also mentions ``.CommentContent`` (it looks for the box that holds them),
+        # so the scroll ask is answered first or it would swallow a panel page.
+        if 'scrollTop' in script:
+            return 120
+        if 'CommentContent' in script:
+            if not self.panel_pages:
+                return []
+            # The last page repeats: a panel that stopped changing is what the product's own
+            # dedupe and 「更多」 check have to notice, so the supply must not run out under them.
+            return self.panel_pages.pop(0) if len(self.panel_pages) > 1 else self.panel_pages[0]
 
     def execute_async_script(self, script, *args):
         m = re.search(r'fetch\(\"(.*?)\"', script)
@@ -208,21 +226,15 @@ class TestXhsAdapter:
 # ─── zhihu adapter (DOM, panels behind buttons) ─────────────────────────
 
 
-def _zh_content(author, text, href='https://www.zhihu.com/people/x'):
-    parent = El(kids={'a[href*="/people/"]': [El(author, attrs={'href': href})]})
-    content = El(text)
-    # _comment_author walks ./ancestor::div[3] — fake it via find_element on the xpath.
-    content._ancestors = {0: parent}
+def _zh_row(author, text, href='https://www.zhihu.com/people/x', when='3 天前'):
+    """One comment as the in-page panel read reports it.
 
-    def finder(by, selector):
-        if selector.startswith('./ancestor'):
-            return parent
-        from selenium.common.exceptions import NoSuchElementException
-
-        raise NoSuchElementException(selector)
-
-    content.find_element = finder
-    return content
+    The fake answers the page-side script with its own output format, so these tests cover the
+    Python half — row building, dedupe, the two console lines. The climb itself (stop at the
+    ancestor that still holds exactly one ``.CommentContent``) is a page contract, measured by
+    ``backend/test_zhihu_comment_dom.py`` and re-measured by the live tier's D group.
+    """
+    return {'author': author, 'href': href, 'text': text, 'time': when}
 
 
 class TestZhihuAdapter:
@@ -232,15 +244,121 @@ class TestZhihuAdapter:
             body='正常回答',
             pages={
                 'button': [btn, El('举报')],
-                '.CommentContent': [_zh_content('陈博涵', '三亚最南所以火'), _zh_content('路人', '秦皇岛外打鱼船')],
                 'button, a': [El('举报')],  # no 更多 → single round
             },
+            panel_pages=[[_zh_row('陈博涵', '三亚最南所以火'), _zh_row('路人', '秦皇岛外打鱼船')]],
         )
         session = CommentSession(driver, nap=lambda s: None)
         rows, status = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
         assert status == OK and len(rows) == 2
         assert getattr(btn, 'clicked', False), 'comment panel must be opened'
         assert rows[0]['评论者'] == '陈博涵' and rows[0]['评论者主页'].endswith('/people/x')
+
+    def test_the_time_is_the_pages_and_the_like_column_is_not_invented(self):
+        """Both columns used to be written without asking: 评论时间 as ``''`` and 点赞数 as ``0``.
+
+        A zero in a count column is a fact the user reads ("nobody liked this") and acts on in a
+        chart; the panel was measured (22 items over 2 answers) to expose no like count at all, so
+        the honest value is the one that says nothing was read.
+        """
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': [El('5 条评论')], 'button, a': []},
+            panel_pages=[[_zh_row('甲', 'a', when='2019-08-15')]],
+        )
+        session = CommentSession(driver, nap=lambda s: None)
+        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        assert rows[0]['评论时间'] == '2019-08-15', 'the page names the moment; the row must carry it'
+        assert rows[0]['点赞数'] == '', 'a column this crawler never reads may not publish a zero'
+
+    def test_an_authorless_comment_is_kept_and_counted_out_loud(self):
+        """An empty 评论者 is either the site's answer (anonymous) or a dead read, and the only
+        thing that tells them apart later is a line with a number in it."""
+        said = []
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': [El('5 条评论')], 'button, a': []},
+            panel_pages=[[_zh_row('', '匿名的一条'), _zh_row('乙', '两条')]],
+        )
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        assert len(rows) == 2, 'an anonymous comment is still a comment the user asked for'
+        assert rows[0]['评论者'] == ''
+        assert i18n.t('comment.zhihuNoAuthor', n=1, total=2) in said
+
+    def test_the_panel_is_pumped_and_the_walk_follows_it(self):
+        """The regression the user named: 知乎 has no 「更多」 button, so button-hunting stops at 12.
+
+        Measured (``backend/test_zhihu_comment_structure.py``): one answer declares 261 comments and
+        the panel holds 12 until its OWN box is scrolled (then 36, and 41 after the reply threads).
+        The walk therefore pumps the container each round and re-reads, and it must keep going while
+        the page keeps answering with new comments.
+        """
+        pages = [[_zh_row('甲', f'{r}-{i}') for i in range(4)] for r in range(3)]
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': [El('261 条评论')], 'button, a': []},
+            panel_pages=pages,
+        )
+        session = CommentSession(driver, nap=lambda s: None)
+        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        assert len(rows) == 12, f'the walk stopped while the panel was still filling: {len(rows)}'
+        assert any('scrollTop' in script for script in driver.scripts), 'the container must be scrolled'
+
+    def test_nested_replies_are_opened_and_keep_their_parent(self):
+        """A reply does not exist in the DOM until 「展开其中 N 条回复」 is clicked. Not clicking it
+        is 漏采 by construction, and losing which comment it belongs to makes the thread unreadable
+        even when the text was taken."""
+        opener = El('展开其中 2 条回复')
+        pages = [
+            [
+                _zh_row('甲', '顶层一条'),
+                _zh_row('乙', '子回复', when=''),  # parent index 0 → 父楼层 1
+            ]
+        ]
+        pages[0][1]['parent'] = 0
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': [El('44 条评论')], 'button, a': [opener]},
+            panel_pages=pages,
+        )
+        session = CommentSession(driver, nap=lambda s: None)
+        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        assert getattr(opener, 'clicked', False), 'the reply thread was never opened'
+        assert [row['父楼层'] for row in rows] == ['', 1], rows
+
+    def test_a_shortfall_against_the_pages_own_number_is_said(self):
+        """The button says 261. If the walk files 3, the console must hold both numbers — 「面板就这些」
+        and 「我们只走到这些」 cannot be allowed to look alike in the export."""
+        said = []
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': [El('261 条评论')], 'button, a': []},
+            panel_pages=[[_zh_row('甲', '唯一一条')]],
+        )
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        assert len(rows) == 1
+        assert i18n.t('comment.zhihuPanelShort', declared=261, rows=1) in said
+
+    def test_the_round_budget_is_named_when_a_panel_never_settles(self):
+        """A budget the crawler imposes has to announce itself, or "we stopped" reads as "it ended"."""
+        said = []
+        endless = [[_zh_row('甲', f'r{i}', when='')] for i in range(40)]
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': [El('999 条评论')], 'button, a': []},
+            panel_pages=endless,
+        )
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        previous = CommentSession.ZHIHU_PANEL_ROUNDS
+        try:
+            CommentSession.ZHIHU_PANEL_ROUNDS = 4
+            rows, _ = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 0)
+        finally:
+            CommentSession.ZHIHU_PANEL_ROUNDS = previous
+        assert len(rows) == 4
+        assert i18n.t('comment.zhihuPanelCapped', n=4, rows=4) in said
 
     def test_blocked_page_reports_blocked(self):
         driver = FakeDriver(body='您当前请求存在异常，暂时限制本次访问。40362', pages={})
@@ -256,8 +374,11 @@ class TestZhihuAdapter:
 
     def test_limit_stops_panel_iteration(self):
         btns = [El('5 条评论'), El('6 条评论'), El('7 条评论')]
-        contents = [_zh_content('甲', 'a'), _zh_content('乙', 'b')]
-        driver = FakeDriver(body='正常', pages={'button': btns, '.CommentContent': contents, 'button, a': []})
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': btns, 'button, a': []},
+            panel_pages=[[_zh_row('甲', 'a'), _zh_row('乙', 'b')]],
+        )
         session = CommentSession(driver, nap=lambda s: None)
         rows, status = session.crawl_zhihu('https://www.zhihu.com/question/1/answer/2', 1)
         assert status == OK and len(rows) == 1

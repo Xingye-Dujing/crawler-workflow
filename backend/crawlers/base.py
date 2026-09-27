@@ -1062,6 +1062,20 @@ class Crawler(ABC):
         self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
         time.sleep(wait)
 
+    def page_height(self) -> int:
+        """How tall the document is right now, as one number to compare against the last round's.
+
+        A walk that asks only "did any new item mount?" cannot tell a finished list from a list it
+        stopped feeding itself: :meth:`scroll_down` ends on a jump to the bottom, and once the rows
+        already opened have made the page tall, that jump flies past the intersection observers in
+        between — no new cards, and a page that is still growing. The height is the second opinion,
+        and it costs one script call.
+        """
+        try:
+            return int(self.driver.execute_script('return document.body.scrollHeight;') or 0)
+        except Exception:
+            return 0
+
     @abstractmethod
     def search(self, keyword: str, **_kwargs):
         pass

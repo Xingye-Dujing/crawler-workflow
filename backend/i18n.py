@@ -170,9 +170,8 @@ _ZH = {
     'crawl.zhihu.no_more': '检测到"没有更多了"，停止滚动（滚动 {i} 次）',
     'crawl.zhihu.scroll_round': '滚动第 {i} 次完成，当前卡片数: {n} 条（目标: {total} 条）',
     'crawl.zhihu.target_reached': '已达到目标数量 {n} 条，停止滚动',
-    'crawl.zhihu.stuck': '连续 {n} 次滚动未加载新内容，停止滚动',
+    'crawl.zhihu.stuck': '连续 {n} 轮滚动既无新卡片、页面也不再变高，且未出现「没有更多了」，停止滚动',
     'crawl.zhihu.no_growth': '卡片数未增长 ({n}/3)，再次滚动确认...',
-    'crawl.zhihu.confirmed': '二次确认后卡片数仍为 {n}，内容已加载完毕',
     'crawl.zhihu.phase_done': '滚动加载阶段完成，最终获取 {n} 个卡片',
     # One fact, one line: what the 正文 column actually holds. The search page only ever
     # carries an excerpt, so a crawl that did not expand has to say so once at the end.
@@ -650,6 +649,10 @@ _ZH = {
     'comment.dyNone': '该视频计有 {n} 条评论，页面未展开评论列表：{url}',
     'comment.weiboShowFailed': '[微博评论] 评论接口取不回来（Cookie 可能失效或被限流）：{url}',
     'comment.zhihuNoPanels': '[知乎评论] 这个回答页面上没有评论面板（可能已关闭或未加载）：{url}',
+    'comment.zhihuNoAuthor': '[知乎评论] 本轮 {total} 条里有 {n} 条在自己的子树内没有作者链接（匿名或被折叠）',
+    'comment.zhihuPanelCapped': '[知乎评论] 滚满 {n} 轮（含展开子回复）仍未走完，按轮次上限收工（本次 {rows} 条）',
+    'comment.zhihuRound': '[知乎评论] 第 {r} 轮新增 {n} 条（累计 {total}）',
+    'comment.zhihuPanelShort': '[知乎评论] 页面写着 {declared} 条，本次取到 {rows} 条（差额未采到）',
     'comment.prefix': '[评论]',
     'comment.platformMismatch': '已忽略 {n} 个与所选平台（{platform}）不符的链接',
     'comment.allMismatched': '所有链接都与所选平台（{platform}）不符，请检查文章链接',
@@ -1007,9 +1010,10 @@ _EN = {
     'crawl.zhihu.no_more': 'Reached "no more content", stopping (after {i} scrolls)',
     'crawl.zhihu.scroll_round': 'Scroll #{i} done, {n} cards so far (target: {total})',
     'crawl.zhihu.target_reached': 'Target of {n} reached, stopping scroll',
-    'crawl.zhihu.stuck': '{n} scrolls loaded nothing new, stopping',
+    'crawl.zhihu.stuck': (
+        '{n} rounds with no new cards and no taller page, and no "no more content" marker seen — stopping the scroll'
+    ),
     'crawl.zhihu.no_growth': 'Card count did not grow ({n}/3), scrolling once more to confirm...',
-    'crawl.zhihu.confirmed': 'Still {n} cards after the second check — content fully loaded',
     'crawl.zhihu.phase_done': 'Scroll phase done, {n} cards in total',
     'crawl.zhihu.excerpt_only': (
         'Bodies left collapsed: every 正文 is a search-page excerpt (tick "Expand full text" on the data source node)'
@@ -1516,6 +1520,15 @@ _EN = {
     'comment.dyNone': 'this video reports {n} comments but the list did not open: {url}',
     'comment.weiboShowFailed': '[weibo comments] the comment endpoint answered nothing (dead cookie, limited): {url}',
     'comment.zhihuNoPanels': '[zhihu comments] no comment panel on this answer (closed, or never loaded): {url}',
+    'comment.zhihuNoAuthor': (
+        '[zhihu comments] {n} of {total} rows carry no author link inside their own subtree (anonymous or collapsed)'
+    ),
+    'comment.zhihuPanelCapped': (
+        '[zhihu comments] stopped after {n} scroll rounds (reply threads opened) with the panel still '
+        'growing; took {rows} rows'
+    ),
+    'comment.zhihuRound': '[zhihu comments] round {r} added {n} rows ({total} so far)',
+    'comment.zhihuPanelShort': '[zhihu comments] the page says {declared} comments, {rows} were taken',
     'comment.prefix': '[comments]',
     'comment.platformMismatch': 'skipped {n} link(s) that do not match the selected platform ({platform})',
     'comment.allMismatched': 'every link conflicts with the selected platform ({platform}) — check the article URLs',

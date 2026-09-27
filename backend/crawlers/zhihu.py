@@ -231,6 +231,7 @@ class ZhihuCrawler(Crawler):
 
         rounds = 0
         stuck = 0
+        last_height = self.page_height()
         while self.collected() < target_count:
             rounds += 1
             self.scroll_down(steps=self.SCROLL_STEPS)
@@ -238,6 +239,7 @@ class ZhihuCrawler(Crawler):
             # one still gets its 1.5 s.
             before = cursor['total']
             cursor['total'] = self._wait_for_count(self._card_count, before + 1, timeout=self.CARD_WAIT)
+            height = self.page_height()
             logger.info(t('crawl.zhihu.scrolling', i=rounds))
             logger.info(t('crawl.zhihu.scroll_round', i=rounds, n=cursor['total'], total=target_count))
 
@@ -249,20 +251,32 @@ class ZhihuCrawler(Crawler):
                 logger.info(t('crawl.zhihu.no_more', i=rounds))
                 break
 
-            if cursor['total'] <= before:
-                stuck += 1
-                if stuck >= self.STUCK_ROUNDS:
-                    logger.info(t('crawl.zhihu.confirmed', n=before))
-                    break
-                logger.info(t('crawl.zhihu.no_growth', n=stuck))
+            if cursor['total'] > before:
+                stuck = 0
+            else:
+                # Nothing mounted this round — which is NOT the same fact as 「the list is over」,
+                # and conflating them is how a search comes back short. The bodies this crawl opens
+                # make the document taller, and ``scroll_down`` lands its round with a jump to the
+                # bottom: on a tall page that jump flies past the intersection observers that would
+                # have asked for the next batch, so the card count sits still while the page is
+                # still growing. A round only counts against the walk when the page refused to grow
+                # too, and every stalled round gets one more progressive pass before any judgement.
+                if height <= last_height:
+                    stuck += 1
+                    if stuck >= self.STUCK_ROUNDS:
+                        # The only give-up this loop may claim, naming what it actually observed:
+                        # {n} really is STUCK_ROUNDS by now, and 「没有更多了」 was never seen — so
+                        # this line reports a walk that stopped, not a list that ended.
+                        logger.info(t('crawl.zhihu.stuck', n=stuck))
+                        break
+                    logger.info(t('crawl.zhihu.no_growth', n=stuck))
                 self.scroll_down(steps=self.SCROLL_STEPS)
                 cursor['total'] = self._wait_for_count(self._card_count, before + 1, timeout=self.CARD_WAIT)
                 self._harvest(cursor, target_count, expand)
-                if cursor['total'] <= before:
-                    logger.info(t('crawl.zhihu.stuck', n=stuck))
-                    break
-            else:
-                stuck = 0
+                if cursor['total'] > before:
+                    stuck = 0
+                height = max(height, self.page_height())
+            last_height = height
             # Politeness between network-driving rounds — this is what keeps a
             # long crawl off zhihu's rate-limit page.
             self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
