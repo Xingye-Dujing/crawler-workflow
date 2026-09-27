@@ -332,10 +332,25 @@ class TestColumns:
         assert pd.isna(out['点赞'].tolist()[2])
 
     def test_convert_type_datetime(self):
-        frame = pd.DataFrame({'d': ['2024-01-01', 'nonsense']})
-        out = D.convert_type(frame, 'd', 'datetime')
-        assert out['d'].iloc[0].year == 2024
-        assert pd.isna(out['d'].iloc[1])
+        """A column whose rows were written by different hands must convert, and must not lecture.
+
+        Two things are pinned here. The first is the shape a 转换类型 datetime actually meets: a
+        scraped/cleaned table carries a full timestamp in one row and a bare date in the next, so there is
+        **no single format** for pandas to apply — it infers one, fails, and then parses element by
+        element anyway while warning that it did. That fallback is the behaviour, so it is now declared
+        (``format='mixed'``) instead of discovered by accident, and the warning the user cannot act on is
+        gone. The second is the junk row: an unparseable value becomes missing, never a raised node.
+        """
+        import warnings
+
+        frame = pd.DataFrame({'d': ['2024-01-01', '2024-01-02 03:04:05', 'nonsense']})
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', UserWarning)
+            out = D.convert_type(frame, 'd', 'datetime')
+        assert out['d'].iloc[0].year == 2024 and out['d'].iloc[0].day == 1
+        assert out['d'].iloc[1].day == 2 and out['d'].iloc[1].hour == 3
+        assert pd.isna(out['d'].iloc[1]) is False, 'a real timestamp must not be coerced away'
+        assert pd.isna(out['d'].iloc[2])
 
     @pytest.mark.parametrize(
         'raw, expected',

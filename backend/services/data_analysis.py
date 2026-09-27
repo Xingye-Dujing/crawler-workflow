@@ -365,7 +365,21 @@ class DataAnalysisService:
             elif dtype == 'bool':
                 work[column] = work[column].map(_to_bool)
             elif dtype == 'datetime':
-                work[column] = pd.to_datetime(work[column], errors='coerce')
+                # ``format='mixed'`` is not a fix for a wrong guess, it is the guess being *said out
+                # loud*: without a format pandas tries one for the whole column, fails on a table
+                # whose rows came from different sources, and then parses every element individually
+                # with dateutil anyway — while warning that it did. Declaring the per-element path
+                # keeps the behaviour identical and removes the noise the user cannot act on
+                # (pandas >= 2.0; the project venv carries 3.x).
+                # ``format='mixed'`` is not a fix for a wrong guess, it is the guess being *said out
+                # loud*: without a format pandas tries one for the whole column, fails on a table
+                # whose rows came from different sources, and then parses every element individually
+                # with dateutil anyway — while warning that it did. Measured, the undeclared path was
+                # worse than noisy: on ``['2024-01-01', '2024-01-02 03:04:05']`` it inferred
+                # ``%Y-%m-%d`` from row one and coerced row two to ``NaT``, so the timestamps simply
+                # disappeared from the user's table. Declaring the per-element path keeps every row
+                # and removes the noise the user cannot act on (pandas >= 2.0; the venv has 3.x).
+                work[column] = pd.to_datetime(work[column], errors='coerce', format='mixed')
             else:
                 work[column] = work[column].astype(str)
         except (ValueError, TypeError) as e:
