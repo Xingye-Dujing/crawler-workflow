@@ -141,7 +141,11 @@ class WeiboCrawler(Crawler):
             if idx <= start_index:
                 continue
             if self.collected() >= target:
-                logger.info(t('crawl.weibo.target_reached', n=target))
+                # Debug, not console: the fact itself was announced where the target was *crossed*
+                # (``_harvest``), and ``walk_done`` names 「达到目标条数」 as its reason, so a second INFO
+                # line here is the same sentence on the way out. Measured on the live resume: one
+                # 50-row walk printed it three times (here, in the page loop, and in ``_harvest``).
+                logger.debug(t('crawl.weibo.target_reached', n=target))
                 break
             logger.info('')
             logger.info('=' * 80)
@@ -549,7 +553,9 @@ class WeiboCrawler(Crawler):
             page_url = self._page_url(base_url)
             for page_num in range(2, total_pages + 1):
                 if self.collected() >= target:
-                    logger.info(t('crawl.weibo.target_reached', n=target))
+                    # Unwinding again: ``_harvest`` is where a target gets crossed and where the console
+                    # says so, and the window's closing line names 「达到目标条数」 as its reason.
+                    logger.debug(t('crawl.weibo.target_reached', n=target))
                     break
                 # Politeness *between* requests: this is the path that reaches
                 # s.weibo.com's rate limiter, so the pause is the fix.

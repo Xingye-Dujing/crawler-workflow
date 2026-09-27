@@ -1356,7 +1356,11 @@ def test_g1_a_parallel_weibo_canvas_is_forced_into_the_queue(client, app_module,
             {'platform': PLATFORM, 'mode': 'posts', 'label': '甲', 'params': {'keyword': first, 'target_count': 8}},
             {'platform': PLATFORM, 'mode': 'posts', 'label': '乙', 'params': {'keyword': second, 'target_count': 8}},
         ],
-        settings=harness.run_settings('parallel', True),
+        # ``use_profile=False`` is plan decision D3, not a preference: one profile locks one browser, so a
+        # parallel canvas crawling the user's own directory contends on the *profile* before it ever
+        # reaches the platform lane — and then the queue line this cell asserts can only arrive after a
+        # 900-second profile wait. The cookie snapshot is still imported into each throwaway browser.
+        settings=harness.run_settings('parallel', True, use_profile=False),
     )
     with (
         _lane_switches(queue=False, stagger=0),
@@ -1402,7 +1406,9 @@ def test_g2_the_stagger_switch_does_not_unlock_a_serial_only_platform(client, ap
             {'platform': PLATFORM, 'mode': 'posts', 'label': '丙', 'params': {'keyword': first, 'target_count': 6}},
             {'platform': PLATFORM, 'mode': 'posts', 'label': '丁', 'params': {'keyword': second, 'target_count': 6}},
         ],
-        settings=harness.run_settings('parallel', True),
+        # D3 again: parallel means throwaway profiles, or the two components fight for one browser lock
+        # before they ever reach the platform lane this cell is about.
+        settings=harness.run_settings('parallel', True, use_profile=False),
     )
     with (
         _lane_switches(queue=False, stagger=15),

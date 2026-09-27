@@ -359,6 +359,12 @@ class TestPagingWalk:
             i18n.t('crawl.weibo.walk_done', n=2, walked=1, total=1, target=2, reason=i18n.stop_reason_label('target'))
             in said
         ), said
+        # One fact, one console line. The walk crossed its target inside a page, and three loops noticed
+        # it on the way out — the live resume printed 「已达到目标数量」 three times for one stop. Only the
+        # crossing point may say it at INFO now, and this shape (target met mid-window, two loops unwinding)
+        # is exactly the one that used to double up.
+        reached = [line for line in said if i18n.t('crawl.weibo.target_reached', n=2) in line]
+        assert len(reached) <= 1, f'one stop printed {len(reached)} console lines: {reached}'
 
     def test_a_window_met_by_a_wall_reports_the_wall_as_the_reason(self, make_walker, caplog):
         """The reason slot must name the refusal, not leave 「target」 to be inferred from a short table."""
