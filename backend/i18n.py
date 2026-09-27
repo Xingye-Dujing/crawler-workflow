@@ -221,7 +221,13 @@ _ZH = {
     'crawl.weibo.page_empty': '  第 {i} 页无有效卡片，跳过',
     'crawl.weibo.page_done': '  第 {i} 页爬取完成，共 {n} 条，累计 {total} 条',
     'crawl.weibo.link_error': '处理搜索链接时出错: {err}',
-    'crawl.weibo.page_timeout': '    页面加载超时，可能无内容',
+    'crawl.weibo.page_timeout': (
+        '    等了 {secs} 秒：这一页既没有给出卡片，也没有给出「无结果」牌（导航{settled}）'
+        '—— 这一句只说代码看得见的东西，不能据此断定窗口里没有内容'
+    ),
+    'crawl.weibo.navSettled': '已完成',
+    'crawl.weibo.navUnsettled': '未完成，那是慢网络而不是站点的拒绝',
+    'crawl.weibo.walk_done': '微博搜索的全部窗口走完：{n} 条（目标 {target}，走过 {total} 个窗口，原因：{reason}）',
     'crawl.weibo.max_page': '最大页码: {n}',
     'crawl.weibo.pages_fail': '获取总页数失败: {err}',
     'crawl.weibo.page_cards': '    本页共发现 {n} 个卡片',
@@ -648,6 +654,13 @@ _ZH = {
     'comment.dyNoPanel': '评论区没有渲染出来（可能被折叠或需要登录）：{url}',
     'comment.dyNone': '该视频计有 {n} 条评论，页面未展开评论列表：{url}',
     'comment.weiboShowFailed': '[微博评论] 评论接口取不回来（Cookie 可能失效或被限流）：{url}',
+    'comment.weiboPagesCapped': (
+        '[微博评论] 翻满 {pages} 页预算时游标仍是活的：站点写着 {declared} 条，本次取到 {rows} 条'
+    ),
+    'comment.weiboShort': (
+        '[微博评论] 站点写着 {declared} 条，本表只有 {rows} 条（差 {gap} 条）'
+        '—— 差额是楼中楼：这个接口在当前会话里不整批返回子评论，只有父行自带的那条预览已入表'
+    ),
     'comment.zhihuNoPanels': '[知乎评论] 这个回答页面上没有评论面板（可能已关闭或未加载）：{url}',
     'comment.zhihuNoAuthor': '[知乎评论] 本轮 {total} 条里有 {n} 条在自己的子树内没有作者链接（匿名或被折叠）',
     'comment.zhihuPanelCapped': '[知乎评论] 滚满 {n} 轮（含展开子回复）仍未走完，按轮次上限收工（本次 {rows} 条）',
@@ -873,6 +886,7 @@ _ZH = {
     'crawl.stopReason.empty_page': '某一页是空的',
     'crawl.stopReason.fetch_failed': '列表接口取数失败',
     'crawl.stopReason.stopped': '用户停止了运行',
+    'crawl.stopReason.wall': '登录墙拦住了后面的窗口',
 }
 
 _EN = {
@@ -1071,7 +1085,15 @@ _EN = {
     'crawl.weibo.page_empty': '  Page {i} has no usable cards, skipping',
     'crawl.weibo.page_done': '  Page {i} done: {n} rows, {total} accumulated',
     'crawl.weibo.link_error': 'Error processing search link: {err}',
-    'crawl.weibo.page_timeout': '    Page load timed out, possibly empty',
+    'crawl.weibo.page_timeout': (
+        '    Waited {secs}s: this page gave neither a card nor the "no result" plate (navigation {settled})'
+        ' — that is all this line can say; it does not mean the window holds nothing'
+    ),
+    'crawl.weibo.navSettled': 'settled',
+    'crawl.weibo.navUnsettled': 'did not settle, which is a slow network, not a refusal',
+    'crawl.weibo.walk_done': (
+        'Weibo search walk finished: {n} rows (target {target}, {total} windows walked, reason: {reason})'
+    ),
     'crawl.weibo.max_page': 'Max page number: {n}',
     'crawl.weibo.pages_fail': 'Could not determine page count: {err}',
     'crawl.weibo.page_cards': '    Found {n} cards on this page',
@@ -1519,6 +1541,15 @@ _EN = {
     'comment.dyNoPanel': 'the comment panel never rendered (collapsed, or login required): {url}',
     'comment.dyNone': 'this video reports {n} comments but the list did not open: {url}',
     'comment.weiboShowFailed': '[weibo comments] the comment endpoint answered nothing (dead cookie, limited): {url}',
+    'comment.weiboPagesCapped': (
+        '[weibo comments] the page budget of {pages} ran out while the cursor was still live: '
+        'the page says {declared}, this crawl kept {rows}'
+    ),
+    'comment.weiboShort': (
+        '[weibo comments] the page says {declared}, this table holds {rows} (a gap of {gap})'
+        ' — the missing rows are nested replies: this endpoint does not return them as a list in the'
+        ' current session, and only the one preview each parent row carries is in the table'
+    ),
     'comment.zhihuNoPanels': '[zhihu comments] no comment panel on this answer (closed, or never loaded): {url}',
     'comment.zhihuNoAuthor': (
         '[zhihu comments] {n} of {total} rows carry no author link inside their own subtree (anonymous or collapsed)'
@@ -1768,6 +1799,7 @@ _EN = {
     'crawl.stopReason.empty_page': 'a page came back empty',
     'crawl.stopReason.fetch_failed': 'the list request failed',
     'crawl.stopReason.stopped': 'the run was stopped',
+    'crawl.stopReason.wall': 'a login wall stopped the walk',
 }
 
 MESSAGES = {'zh': _ZH, 'en': _EN}
@@ -1907,6 +1939,9 @@ STOP_REASONS = {
     'empty_page': 'crawl.stopReason.empty_page',
     'fetch_failed': 'crawl.stopReason.fetch_failed',
     'stopped': 'crawl.stopReason.stopped',
+    # Not an engine token: a walk over a *list of URLs* (weibo's hourly windows) ends on the wall
+    # itself, not on one page's shape, and it must still read as a reason rather than as a code word.
+    'wall': 'crawl.stopReason.wall',
 }
 
 

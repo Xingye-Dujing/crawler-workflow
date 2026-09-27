@@ -32,6 +32,16 @@ class FakeEl:
         return ''
 
 
+class FakeLink:
+    """A pager anchor: ``_get_total_pages`` reads only its ``href``."""
+
+    def __init__(self, href):
+        self._href = href
+
+    def get_attribute(self, name):
+        return self._href if name == 'href' else ''
+
+
 class FakeWeiboDriver:
     """One search page with a switchable final state.
 
@@ -45,7 +55,15 @@ class FakeWeiboDriver:
     """
 
     def __init__(
-        self, final_url=PASSPORT, cards=True, no_result=False, appear_after=0, total_pages=50, wall_from_get=None
+        self,
+        final_url=PASSPORT,
+        cards=True,
+        no_result=False,
+        appear_after=0,
+        total_pages=50,
+        wall_from_get=None,
+        page_info=True,
+        page_links=(),
     ):
         self.current_url = final_url
         self._cards = cards
@@ -56,6 +74,12 @@ class FakeWeiboDriver:
         self._wall_from_get = wall_from_get
         self._gets = 0
         self.visited = []
+        # Measured 2026-09-28: inside a ``timescope`` window the site prints no 「共N页」 plate
+        # (``page_info=False``) while its pager links are still there (``page_links``) — the shape
+        # ``_get_total_pages``' href fallback exists for, and the shape ``_may_page`` used to refuse
+        # to consult at all.
+        self._page_info = page_info
+        self._page_links = list(page_links)
 
     def get(self, url):
         self._gets += 1
@@ -84,7 +108,7 @@ class FakeWeiboDriver:
                 return FakeEl()
             raise NoSuchElementException(selector)
         if selector == '.page-info':
-            if not self._cards:
+            if not self._cards or not self._page_info:
                 raise NoSuchElementException(selector)
             return FakeEl(f'共{self._total_pages}页/{self._total_pages * 10}条')
         if selector in ('body', 'html'):
@@ -94,6 +118,13 @@ class FakeWeiboDriver:
                 return FakeEl('扫描二维码登录 手机号登录')
             return FakeEl('微博搜索 结果列表')
         raise NoSuchElementException(selector)
+
+    def find_elements(self, by, selector):
+        if selector in ('ul.page-list li a, .m-page2 a', 'ul.page-list li a'):
+            return [FakeLink(h) for h in self._page_links]
+        if selector == WeiboCrawler.CARD_SELECTOR:
+            return [FakeEl() for _ in range(1)] if self._cards else []
+        return []
 
     def quit(self):
         pass
@@ -150,6 +181,46 @@ class TestAwaitSearchPage:
         crawler._await_search_page(FEED)
         assert driver.visited == [FEED]
 
+    def test_a_plate_beside_foreign_cards_is_still_an_empty_window(self, make_crawler):
+        """The window says 未找到结果 and the SAME page shows five other people's posts.
+
+        Measured 2026-09-28 with a keyword that exists nowhere: ``.card-no-result`` was on screen
+        *together with* five ``.card-wrap`` rows carrying a ``.name`` — weibo's own recommendations,
+        timestamped outside the asked hour and hung on the very same ``#pl_feedlist_index`` chain, with
+        no ``mark``/``card-type`` attribute to tell them apart. The card-first order therefore filled a
+        keyword's table with content that never matched the keyword, which is worse than an empty
+        result: the user cannot see which rows the search did not answer for. The plate is the only
+        answer, so it is read first.
+        """
+        crawler, _ = make_crawler(final_url=FEED, cards=True, no_result=True)
+        assert crawler._await_search_page(FEED) is False
+        assert crawler.login_wall is False, 'an empty window is a result, not a refusal'
+
+    def test_the_walk_navigates_through_open_not_past_it(self, make_crawler):
+        """A bare ``driver.get`` here would be the platform's one navigation outside ``Crawler.open``.
+
+        The reason this call does not simply judge the wall on arrival is ``judge=False``: weibo's
+        passport frame is a stage the site walks every visitor through, and a wall latched from it is
+        the bug these tests were written for. What the platform still gets from ``open`` is the dialog
+        dismissal and the settled-flag.
+        """
+        crawler, driver = make_crawler(final_url=FEED, cards=True)
+        seen = {}
+
+        def spy(url, judge=True):
+            seen['judge'] = judge
+            return Crawler.open(crawler, url, judge=judge)
+
+        monkeypatch_open = getattr(crawler, 'open', None)
+        assert monkeypatch_open is not None
+        crawler.open = spy
+        try:
+            assert crawler._await_search_page(FEED) is True
+        finally:
+            crawler.open = monkeypatch_open
+        assert seen['judge'] is False, 'the arrival verdict is what this platform cannot afford'
+        assert driver.visited == [FEED]
+
 
 class TestPagingWalk:
     """How deep ``_scrape_single_search`` walks a keyword feed.
@@ -197,6 +268,51 @@ class TestPagingWalk:
         crawler._scrape_single_search(FEED, 4)
         assert crawler.collected() == 4
         assert self._paged_urls(driver) == [f'{FEED}&page={n}' for n in (2, 3, 4)]
+
+    def test_a_time_window_is_paged_like_any_other_window(self, make_walker):
+        """An hour is not "everything it holds is on page 1" — the site disagrees.
+
+        Measured 2026-09-28 on one hourly ``timescope`` URL: page 1 rendered 9 cards, page 2 rendered
+        6 more with **no mid in common**, and the only reason the old code never asked was
+        ``_may_page``'s assumption. Such a window prints no 「共N页」 text either, so the depth has to
+        come from the pager anchors — which is what ``page_info=False`` plus ``page_links`` models.
+        """
+        window = FEED.replace('Refer=g', 'timescope=custom%3A2026-09-26-20%3A2026-09-26-21&Refer=g')
+        links = [f'{window}&page={n}' for n in range(1, 4)]
+        crawler, driver = make_walker(WeiboCrawler.DEFAULT_TARGET, total_pages=1, page_info=False, page_links=links)
+        scraped = crawler._scrape_single_search(window, WeiboCrawler.DEFAULT_TARGET)
+        assert self._paged_urls(driver) == [f'{window}&page={n}' for n in (2, 3)], driver.visited
+        assert len(scraped) == 3, 'page 1 plus the two deeper ones'
+
+    def test_the_walk_closes_with_rows_target_and_reason(self, make_walker, caplog):
+        """U10: the search walk used to end mid-sentence, on every platform's worst console.
+
+        ``author()`` has always closed with ``rows / target / reason``; ``search()`` printed a line per
+        window and returned, so a date-range crawl that stopped at window 12 of 6432 — wall, target, or
+        the end of the list, the user cannot tell which — left the console holding only 「第 12/6432
+        个链接完成」. The closing line is what makes 「采满了」 and 「没采满」 different sentences.
+        """
+        import i18n
+
+        crawler, _driver = make_walker(2, total_pages=50)
+        with caplog.at_level('INFO'):
+            crawler.search(keyword='三亚', target_count=2)
+        said = [record.getMessage() for record in caplog.records]
+        assert (
+            i18n.t('crawl.weibo.walk_done', n=2, total=1, target=2, reason=i18n.stop_reason_label('target')) in said
+        ), said
+
+    def test_a_window_met_by_a_wall_reports_the_wall_as_the_reason(self, make_walker, caplog):
+        """The reason slot must name the refusal, not leave 「target」 to be inferred from a short table."""
+        import i18n
+
+        crawler, _driver = make_walker(WeiboCrawler.DEFAULT_TARGET, total_pages=50, wall_from_get=2)
+        with caplog.at_level('INFO'):
+            crawler.search(keyword='三亚', target_count=0)
+        said = [record.getMessage() for record in caplog.records]
+        assert (
+            i18n.t('crawl.weibo.walk_done', n=1, total=1, target='∞', reason=i18n.stop_reason_label('wall')) in said
+        ), said
 
     def test_a_wall_met_while_paging_keeps_the_rows_and_stops_the_walk(self, make_walker):
         # The parallel-session refusal: pages 2 answers, page 3 parks on passport.

@@ -12,7 +12,7 @@ from selenium.webdriver.common.by import By
 from i18n import stop_reason_label, t
 
 from .base import Crawler, as_index
-from .engine import pagefetch, pager
+from .engine import pagefetch, pager, times
 from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
@@ -166,6 +166,27 @@ class WeiboCrawler(Crawler):
             if idx < total_urls and self.collected() < target:
                 self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
 
+        # The walk says good-bye. Per-window lines tell the user what each window did; without this
+        # one the console of a date-range crawl ends mid-sentence — the user sees 第 12/6432 个链接
+        # 完成 and nothing states the total, the target, or why the walking stopped (`author()` has
+        # carried that triple since it was written; search was the only path that never did).
+        if self.may_stop():
+            reason = 'stopped'
+        elif self.login_wall:
+            reason = 'wall'
+        elif self.collected() >= target:
+            reason = 'target'
+        else:
+            reason = 'end'
+        logger.info(
+            t(
+                'crawl.weibo.walk_done',
+                n=self.collected(),
+                total=total_urls,
+                target='∞' if target == math.inf else target,
+                reason=stop_reason_label(reason),
+            )
+        )
         return self.results()
 
     # ─── the site's own board ─────────────────────────────────────────
@@ -365,17 +386,13 @@ class WeiboCrawler(Crawler):
 
     @staticmethod
     def _normalise_weibo_time(value) -> str:
-        # The endpoint stamps 'Wed Sep 24 15:42:51 +0800 2026'; the search page
-        # shows a relative label. Two shapes in one column is the documented defect,
-        # so normalise the absolute time to a readable absolute form rather than
-        # shipping an English stamp beside a Chinese one.
-        text = str(value or '').strip()
-        if not text:
-            return ''
-        try:
-            return datetime.strptime(text, '%a %b %d %H:%M:%S %z %Y').strftime('%Y-%m-%d %H:%M')
-        except ValueError:
-            return text
+        # The endpoint stamps 'Wed Sep 24 15:42:51 +0800 2026'; the search page shows a
+        # relative label. Two shapes in one column is the documented defect, so normalise
+        # the absolute time to a readable absolute form rather than shipping an English
+        # stamp beside a Chinese one. The comment engine parses the same stamp, so the
+        # format lives in engine/times.py — a second copy here is what the helper exists
+        # to prevent.
+        return times.normalise_rfc822(value)
 
     @staticmethod
     def _strip_html(text: str) -> str:
@@ -437,9 +454,18 @@ class WeiboCrawler(Crawler):
         """Harvest one search window: the feed that is already loaded first.
 
         Returns the rows this window produced. The page walk is a fallback for
-        a keyword feed that has not reached the target yet, never the first
-        thing the crawl does — re-reading the loaded page as ``page=1`` is the
-        request that gets the session thrown at the login wall.
+        a window that has not reached the target yet, never the first thing the
+        crawl does — re-reading the loaded page as ``page=1`` is the request that
+        gets the session thrown at the login wall.
+
+        The walk runs on **any** window, including a ``timescope`` one. It used to be
+        refused there on the theory that "an hour is already narrow, so everything it
+        holds is on the page it renders" — measured 2026-09-28, that is not what the
+        site does: one hourly window served 9 cards on page 1 and **6 more on page 2
+        with no mid in common**, and its ``ul.page-list`` offers ``page=1..10`` even
+        though ``.page-info`` prints nothing there. So the depth is whatever the
+        pager shows (`_get_total_pages` reads the hrefs for exactly this case) and
+        refusing it silently cost ~40% of a window.
         """
         scraped = []
         try:
@@ -448,10 +474,12 @@ class WeiboCrawler(Crawler):
             if not self._await_search_page(base_url):
                 return scraped
             scraped.extend(self._harvest(target))
-            if self.collected() >= target or not self._may_page(base_url):
+            if self.collected() >= target:
                 return scraped
 
             total_pages = self._get_total_pages()
+            if total_pages <= 1:
+                return scraped
             logger.info(t('crawl.weibo.total_pages', n=total_pages))
             page_url = self._page_url(base_url)
             for page_num in range(2, total_pages + 1):
@@ -486,40 +514,51 @@ class WeiboCrawler(Crawler):
         illusion the site stages, not a wall: a URL read taken the instant
         ``get()`` returns lands on the intermediate frame and kills a crawl that
         was about to produce rows. So poll for one of the *terminal* states
-        before judging anything:
+        before judging anything, **in the order the page's own words outrank its
+        cards**:
 
-        - feed cards present → crawlable, return True;
-        - the explicit "no result" plate → a genuine empty window, False;
-        - timeout with cards never arriving → only now consult the login wall
-          (a truly dead session parks on passport forever), False either way.
+        - the "no result" plate → a genuine empty window, False. This is checked
+          FIRST because measured 2026-09-28 a window that matches nothing still
+          renders **five posts under the same ``#pl_feedlist_index``** (the site's
+          recommendations: 超话/演唱会 rows carrying a ``.name`` and a 「35分钟前」
+          timestamp outside the asked hour). The card-first order harvested those
+          five as keyword hits, so a search could hand back a table of content that
+          never matched the keyword; there is no container or attribute that tells
+          the two apart, so only the plate can decide.
+        - feed cards and no plate → crawlable, True;
+        - the budget running out with neither → consult the login wall (a truly dead
+          session parks on passport forever), then name **what the code saw**, which
+          is "no card and no plate within the wait", never a guess about whether the
+          window holds anything.
 
-        Works identically headless and visible; both modes show the same DOM
-        transition, the visible one just lets the user watch it happen.
+        Navigation goes through `Crawler.open` like every other crawl — a bare
+        ``driver.get`` lets one renderer timeout raise past the crawler and throws
+        away the "did this load settle" fact that separates a slow network from a
+        refusal — but with ``judge=False``, because *this* platform's arrival frame is
+        the passport page the site shows everyone and the wall flag it would set is a
+        lie. The judgement is made below from the document instead, and the wall is
+        consulted only on a page that produced neither cards nor plate. Works
+        identically headless and visible.
         """
-        self.driver.get(url)
+        opened = self.open(url, judge=False)
         poll = 0.5
         rounds = max(1, int(self.PAGE_WAIT * 3 / poll))
         for _ in range(rounds):
-            if self._element_or_none(self.CARD_SELECTOR) is not None:
-                logger.info(t('crawl.weibo.page_loaded'))
-                return True
             if self._element_or_none('.card-no-result') is not None:
                 logger.info(t('crawl.weibo.no_result'))
                 return False
+            if self._element_or_none(self.CARD_SELECTOR) is not None:
+                logger.info(t('crawl.weibo.page_loaded'))
+                return True
             time.sleep(poll)
         if self.check_login_wall(url):
             return False
-        logger.warning(t('crawl.weibo.page_timeout'))
+        # The slot answers with a word, not with a token: ``settle`` would print as English inside a
+        # Chinese console, and the sentence's whole job is to say what the code can see (a load that
+        # finished but showed neither cards nor plate) without naming a refusal it cannot observe.
+        settled = t('crawl.weibo.navSettled') if opened else t('crawl.weibo.navUnsettled')
+        logger.warning(t('crawl.weibo.page_timeout', secs=int(self.PAGE_WAIT * 3), settled=settled))
         return False
-
-    def _may_page(self, base_url: str) -> bool:
-        """Paging exists only on an open keyword feed.
-
-        A ``timescope`` window is already narrow — everything it holds is on the
-        page it renders — so a deeper request there buys nothing and spends wall
-        risk for nothing.
-        """
-        return 'timescope=' not in base_url
 
     @staticmethod
     def _page_url(base_url: str) -> str:

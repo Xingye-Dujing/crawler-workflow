@@ -170,6 +170,8 @@
 | U33 | `comments.py::crawl_weibo` | **楼中楼拿不到，且差额从不可见**：`total_number=30` 的微博走游标只有 22 行，缺席楼层正好 8 个 = 子评论；五种形状全试错（`id=<父>`、`is_mix=1&sub=1&import_id`、`rootid=` 被忽略、`comment/hotFlowByIds` 是 HTML、带 `config=`/`rootid=` 直挂 → **400 Bad Request**），`m.weibo.cn/comments/hotflow?id&mid=<父>` 答 `{"ok":0}`。唯一在手里的是父行 `comments[]` 的**一条预览子评论**（749 条那帖第一页 3/22 行带）。另注：信封 `trendsText` 在只给 22/30 时仍写「**已加载全部评论**」→ **站点这句文案不可采信**，判据只能对 `total_number` 打 | 产品修复：收编行内预览子评论 + 新增 `父楼层` + 差额具名（`comment.weibo*`）；U19 微博那一格同时修（30 页预算 ≈600 行 < 分母 749/763，撞到即具名） |
 | U34 | 第 0 步未收口项 | 本轮三个页面样本里**没有转发卡**（`nested=0`、`.feed-forward-wrap`=0），所以「转发卡的引用内容 + 嵌套 `.card-wrap` 会不会让同一条被数两次」**仍未测**——不是已排除。同理 `_get_full_text` 在转发卡上取到的是引用还是原文，只有真卡能答 | 第 0 步补测项：换一个必然出转发卡的时间窗，量一次「卡片数 vs 行数」漏斗（一次导航） |
 
+| U35 | `weibo.py::_scrape_card` 的 转发数/评论数 选择器 | 一条批评意见（来自工作流的一路审查）说：热卡用另一套 woo 版式、计数是按钮的兄弟节点，于是**最有价值的行被存成 0**——依据是 pass 1 抓到的一张怪卡（`mid=5347502954124386`：卡内文本印着 714/1024/7274，而 `[action-type="feed_list_forward"]`/`..._comment"]` 读回裸词「转发」「评论」，只有 `.woo-like-count` 读对了 7274；`actionLabels` 顺序也不同）。**第 7 条探针按结构量完：这一版式假设未被支持**（整页 `.woo-count`/`.woo-forward-count`/`.woo-comment-count` = 0/0/0、`.woo-like-count` = 每卡一个；10 张卡的动作条全是旧 `menu s-fr`，有数的卡数就长在按钮自己的文本里）。零转发零评论的高赞帖本来就能长成那样，`714/1024` 更像那个视频号模块自己的数。**但也没有排除**：那次 `actionLabels` 顺序不同说明视频卡版式存在，只是这次没采到样本 → 结论：**没有样本就不改选择器** | 待测（换必然出视频卡的供给再量一次「动作条锚点文本 vs 卡内数字节点」；量到不一致才改）；测量出处 `backend/test_weibo_actionbar.py` → `scratchpad/weibo_actionbar.json` |
+
 **滚动节奏（fake driver 数出来的 scroll 命令，不是真机测量；读控制台 `scroll_round` 前先记住它）**：
 `scroll_down(steps=3)` 一次发 **4** 条 scroll 命令（3 步 + 1 次底部跳转），所以搜索的一个 stalled round
 = 2 次 `scroll_down`（轮首 + 轮内那次确认）= 8 条；连停 3 轮收工共 **20 条**，时间成本 ≈ 每轮 2×`CARD_WAIT`

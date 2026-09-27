@@ -470,6 +470,22 @@ class TestAWallMustSurviveBeingJudged:
         crawler.open('https://www.zhihu.com/search?q=x')
         assert (crawler.risk_blocked, crawler.login_wall) == (True, False)
 
+    def test_judging_can_be_handed_to_a_caller_that_reads_the_document(self, monkeypatch):
+        """``open(judge=False)``: the other two services, without the arrival verdict.
+
+        weibo's search walk needs exactly this. A passport page that *stays* on screen is, for every
+        other platform, the wall; here the same frame is what the site shows a logged-in visitor for a
+        moment on the way to the results, so the only honest judge is the poll that later finds cards,
+        a 「no result」 plate, or neither. The flag exists so that reasoning is one argument at one
+        call site rather than a second navigation path that also drops the settled-flag.
+        """
+        crawler, driver = self._weibo([(self.PASSPORT, '')] * 8, monkeypatch)
+        assert crawler.open(self.RESULTS, judge=False) is True
+        assert (crawler.login_wall, crawler.risk_blocked) == (False, False), 'it judged anyway'
+        assert driver.step == 0, f'the settle window was spent ({driver.step} readings) on a verdict nobody asked for'
+        assert crawler.requests == [self.RESULTS], 'the navigation is still accounted for'
+        assert crawler.navigation_settled is True
+
 
 #: Every navigation the shipped code still issues straight at the driver instead of
 #: through :meth:`Crawler.open` — which owns surviving a slow renderer, dismissing the
@@ -483,9 +499,12 @@ BARE_NAVIGATIONS = {
     'backend/crawlers/base.py': 2,  # ``open`` itself and cookie planting (the cookie probe now goes through open)
     'backend/crawlers/comments.py': 7,
     'backend/crawlers/wechat.py': 1,
-    'backend/crawlers/weibo.py': 1,
     'backend/crawlers/zhihu.py': 2,
 }
+# weibo left this table on 2026-09-28: its search walk navigated through the bare
+# ``driver.get`` the redirect-facade docstring excuses ("wait for the bounce"), which also threw
+# away the settled-flag and the dialog dismissal. It now calls ``open(judge=False)`` — the flag is
+# the honest form of "this site's arrival frame is a stage, judge it from the document instead".
 
 
 class TestNavigationGoesThroughOpen:

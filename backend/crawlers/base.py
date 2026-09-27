@@ -537,7 +537,7 @@ class Crawler(ABC):
 
     # ─── navigation ─────────────────────────────────────────────
 
-    def open(self, url: str) -> bool:
+    def open(self, url: str, judge: bool = True) -> bool:
         """Navigate to *url*, clear any first-run dialog, and report a wall.
 
         Every platform's entry point goes through here so the three things that
@@ -550,6 +550,17 @@ class Crawler(ABC):
         to the user as an empty search. It is recorded on the instance as well as
         returned, so a caller that reached this through a helper (rather than
         calling ``open`` itself) can still tell a slow network from a refusal.
+
+        ``judge=False`` buys the other two services and *not* the arrival verdict.
+        One surface needs that: weibo's search answers with a passport frame and
+        bounces the browser back a moment later, so a verdict read the instant the
+        navigation returns latches a wall the site only staged. The caller that
+        passes False takes that judgement over and must make it from the document —
+        poll to a terminal state, and consult the wall only if nothing arrived.
+        The choice is an argument rather than a second navigation path on purpose:
+        a crawler that reached for a bare ``driver.get`` to dodge the verdict would
+        lose the settled-flag and the dialog dismissal with it, and would not be
+        re-united with this one by anything in the test suite.
         """
         timed_out = False
         self.requests.append(str(url))
@@ -561,7 +572,8 @@ class Crawler(ABC):
         self.navigation_settled = not timed_out
         if self.prompts:
             self._dismiss_prompts()
-        self._judge_arrival(url)
+        if judge:
+            self._judge_arrival(url)
         return not timed_out
 
     def _judge_arrival(self, request_url: str = '') -> str:

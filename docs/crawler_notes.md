@@ -173,6 +173,31 @@ buildComments 信封 `total_number=30` 三处一致），走完游标只有 **22
 **热搜仍匿名可取，榜大小会变：** `ajax/side/hotSearch` `ok=1`、`realtime` **51** 条（本文更早写 52——
 这是榜单自己的大小，不是我们的上限；`hotCapped` 那句报的就是它），信封另有 `hotgov` / `hotgovs` 两块未采。
 
+### 那张"数字在页上、读回来是 0"的卡：结构量完之后是**否证**（measured 2026-09-28，第 7 条探针）
+
+pass 1 留下一张怪卡：`mid=5347502954124386`，卡片文本尾巴里有 `714 / 1024 / 7274` 三个数，
+而 `_scrape_card` 从 `[action-type="feed_list_forward"]` / `[action-type="feed_list_comment"]` 读回来的是
+**裸词**「转发」「评论」（`parse_count` → 0），偏偏点赞（读的是另一个选择器 `.woo-like-count`）拿到了
+7274。它 `actionLabels` 的顺序也和别的卡不一样（`feed_list_like` 排在 `feed_list_forward` 前面）。
+一个批评意见据此说：**热卡用的是另一套 woo 版式，计数是按钮的兄弟节点，所以我们把最有价值的那些行的
+转发数/评论数存成了 0**——如果是真的，这是搜索侧最贵的一类造假（图表里「没人转发」）。
+
+`backend/test_weibo_actionbar.py` 把动作条当**结构**读了一遍（一次导航，零 API；载荷
+`scratchpad/weibo_actionbar.json`），答案是**这一页没有那套版式**：
+
+* 整页 `.woo-count` / `.woo-forward-count` / `.woo-comment-count` 计数 = **0、0、0**，
+  `.woo-like-count` = 10（每卡一个）；`[action-type="feed_list_like"] .woo-panel-main` = 0。
+* 10 张卡的动作条 `className` 全是旧的 `menu s-fr`，**有数的卡数就长在按钮自己的文本里**
+  （`fwd='16' cmt='30' like='3'`、`fwd='41' cmt='14' like='35'`），没数的卡才是 `转发/评论/赞` 三个词。
+* 这一轮 10 张卡 `nameCount` 全是 1，那张怪卡（微博视频号卡）没有再出现。
+
+所以"计数读错选择器"这个说法**未被支持**：一张同时有许多点赞、零转发、零评论的帖子本来就能长成那样，
+而 `714/1024` 更像那个视频号模块自己的播放/互动数（它们印在时间戳之前，不在动作条里）。
+**但也别把它当已排除**：pass 1 确实抓到过一次不同的 `actionLabels` 顺序，说明带视频卡的版式存在，
+只是这次没采到样本。登记的判据是 §6 **U35**：要用必然出视频卡供给（热榜词 + 最近窗）再量一次
+"同一张卡里，动作条锚点文本 vs 卡内所有数字节点"，量到不一致才改选择器——**没有样本就不写选择器**，
+那正是「读页面先于读代码」这条规矩存在的原因。
+
 ## Zhihu
 
 Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens a

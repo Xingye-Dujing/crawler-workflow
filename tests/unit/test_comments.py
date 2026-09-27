@@ -143,8 +143,90 @@ class TestHelpers:
         rows = parse_weibo_comments(payload, 'https://weibo.com/1/a')
         assert rows[0]['评论内容'] == '好棒' and rows[0]['点赞数'] == 3 and rows[0]['楼层'] == 1
         assert rows[1]['评论者'] == '' and rows[1]['点赞数'] == 0
-        # Identity-safe columns: none of the dedupe-ledger URL/author/body names.
-        assert set(rows[0]) == {'平台', '文章URL', '评论者', '评论者主页', '评论内容', '评论时间', '点赞数', '楼层'}
+        # A row the payload gives no id for is still a row: 评论ID exists to de-duplicate pages, and an
+        # empty one may not delete a comment the site showed.
+        assert rows[1]['评论ID'] == ''
+        # Identity-safe columns: none of the dedupe-ledger URL/author/body names. 父楼层 joins the set
+        # because weibo hands back one nested reply per parent row, and 评论ID because the walker needs
+        # an id to keep the pages apart (docs/crawler_notes.md 微博第 0 步).
+        assert set(rows[0]) == {
+            '平台',
+            '文章URL',
+            '评论者',
+            '评论者主页',
+            '评论内容',
+            '评论时间',
+            '点赞数',
+            '楼层',
+            '父楼层',
+            '评论ID',
+        }
+
+    def test_weibo_parser_reads_the_sites_own_floor_likes_and_home(self):
+        """The four columns this adapter used to guess, pinned against the measured payload.
+
+        Measured 2026-09-28 (``scratchpad/weibo_structure.json``): the desktop row carries
+        ``like_counts`` (the old code read ``like_count``, so every comment stored 0 likes),
+        ``floor_number`` numbered across the whole thread (the old per-page ``enumerate`` restarted at
+        1 on page 2), ``created_at`` as ``'Sun Jul 26 09:49:46 +0800 2026'`` (stored raw beside the
+        search path's ``09月26日 21:00``), and BOTH ``profile_url`` and ``profile_image_url`` — the
+        column is 评论者主页, so the avatar was the wrong answer, not a worse-format one.
+        """
+        rows = parse_weibo_comments(
+            {
+                'data': [
+                    {
+                        'id': 5324866577500964,
+                        'floor_number': 28,
+                        'like_counts': 4,
+                        'created_at': 'Sun Jul 26 09:49:46 +0800 2026',
+                        'rootid': 5324866577500964,
+                        'text': '主楼',
+                        'user': {
+                            'screen_name': '甲',
+                            'profile_url': '/u/5893846418',
+                            'profile_image_url': 'https://tvax.sinaimg.cn/avatar.jpg',
+                        },
+                    }
+                ]
+            },
+            'https://weibo.com/1/a',
+        )
+        assert rows[0]['楼层'] == 28, rows
+        assert rows[0]['点赞数'] == 4, 'the desktop key is like_counts, not like_count'
+        assert rows[0]['评论时间'] == '2026-07-26 09:49', rows
+        assert rows[0]['评论者主页'] == 'https://weibo.com/u/5893846418'
+        assert rows[0]['父楼层'] == '', 'rootid equal to its own id means a top-level comment'
+
+    def test_weibo_parser_keeps_the_parent_preview_reply(self):
+        """One nested reply per parent row is in the payload already, and used to be thrown away."""
+        payload = {
+            'data': [
+                {
+                    'id': 1,
+                    'floor_number': 254,
+                    'rootid': 1,
+                    'text': '父',
+                    'user': {'screen_name': '甲', 'profile_url': '/u/1'},
+                    'total_number': 6,
+                    'comments': [
+                        {
+                            'id': 2,
+                            'floor_number': 0,
+                            'rootid': 1,
+                            'text': '子',
+                            'like_counts': 9,
+                            'user': {'screen_name': '乙', 'profile_url': '/u/2'},
+                        }
+                    ],
+                }
+            ]
+        }
+        rows = parse_weibo_comments(payload, 'https://weibo.com/1/a')
+        assert [r['评论内容'] for r in rows] == ['父', '子'], rows
+        assert [r['父楼层'] for r in rows] == ['', 254], rows
+        assert rows[1]['楼层'] == 1, "the child's own floor_number is 0, so the position answers"
+        assert rows[1]['点赞数'] == 9
 
 
 # ─── weibo adapter (in-page ajax) ───────────────────────────────────────
@@ -183,6 +265,58 @@ class TestWeiboAdapter:
         session, _ = self._session([])
         rows, status = session.crawl_weibo('https://weibo.com/', limit=0)
         assert rows == [] and status == DEAD
+
+    def _pages(self, count, declared):
+        """``count`` pages of one fresh row each, always handing back a live cursor."""
+        show = json.dumps({'id': '555', 'comments_count': declared})
+        return [show] + [
+            json.dumps({'data': [{'id': f'c{i}', 'text': f'c{i}'}], 'max_id': 900 + i}) for i in range(count)
+        ]
+
+    def test_the_pages_own_number_names_a_shortfall(self):
+        """22 of 30 must not read like a complete thread.
+
+        Measured 2026-09-28 on a live post: the search card, ``statuses/show.comments_count`` and the
+        page's ``total_number`` all said 30, the cursor walk returned 22, and the eight missing floors
+        were its nested replies. The walk ended on ``max_id=0`` — a clean exhaustion — so only the
+        denominator can tell 「这些就是全部」 from 「还差 8 条」, and the user must not have to notice.
+        """
+        said = []
+        page1 = json.dumps({'data': [{'id': f'p1-{i}', 'text': 'x'} for i in range(20)], 'max_id': 99})
+        page2 = json.dumps({'data': [{'id': f'p2-{i}', 'text': 'y'} for i in range(2)], 'max_id': 0})
+        driver = FakeDriver(
+            fetch_queue=[json.dumps({'id': '555', 'comments_count': 30}), page1, page2], start_url='https://weibo.com/'
+        )
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=0)
+        assert status == OK and len(rows) == 22, rows
+        assert i18n.t('comment.weiboShort', declared=30, rows=22, gap=8) in said, said
+
+    def test_the_page_budget_says_so_instead_of_looking_finished(self):
+        """U19's weibo cell: 30 pages of ~20 rows is ~600, and a hot thread really has more.
+
+        The exit used to be a bare ``break``, which made a capped crawl indistinguishable from one the
+        site finished — the worst shape a table can have, because the user reads the shorter number as
+        the thread's size. The measured thread this budget was checked against was still handing out a
+        live cursor after 6 pages (749 comments declared).
+        """
+        said = []
+        driver = FakeDriver(
+            fetch_queue=self._pages(CommentSession.WEIBO_COMMENT_PAGES, 900), start_url='https://weibo.com/'
+        )
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=0)
+        assert status == OK
+        assert len(rows) == CommentSession.WEIBO_COMMENT_PAGES, rows
+        assert (
+            i18n.t(
+                'comment.weiboPagesCapped',
+                pages=CommentSession.WEIBO_COMMENT_PAGES,
+                rows=len(rows),
+                declared=900,
+            )
+            in said
+        ), said
 
 
 # ─── xiaohongshu adapter (DOM) ──────────────────────────────────────────

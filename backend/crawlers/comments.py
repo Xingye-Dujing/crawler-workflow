@@ -57,6 +57,18 @@ from .engine.wall import looks_blocked
 # needs the same table without importing any crawler.
 
 
+def _as_count(value) -> int:
+    """A count the site may send as a number, as digits, or as 「1.2万」 text.
+
+    ``parse_count`` is the engine's one answer for the last shape, so a denominator read from a payload
+    goes through it rather than through a second ``int(...)`` that would raise on 「赞」 and be caught,
+    hiding the fact that the page never gave a number.
+    """
+    if isinstance(value, (int, float)):
+        return int(value)
+    return parse_count(str(value or ''))
+
+
 class CommentSession:
     """One browser session per platform; the node handler owns lifecycle."""
 
@@ -103,6 +115,12 @@ class CommentSession:
 
     # -- weibo -------------------------------------------------------------
 
+    #: The comment API's page budget. It is a *budget*, not a depth answer — the depth is
+    #: ``total_number`` and the target — and reaching it is reported (``comment.weiboPagesCapped``)
+    #: because a hot thread really runs past it: measured 2026-09-28, a 749-comment post returned
+    #: ~19-22 rows per page and was still handing out a live cursor after 6 pages.
+    WEIBO_COMMENT_PAGES = 30
+
     def crawl_weibo(self, url: str, limit: int) -> tuple:
         bid = weibo_bid(url)
         if not bid:
@@ -126,19 +144,43 @@ class CommentSession:
         mid = str(show.get('id') or show.get('mid') or '')
         if not mid:
             return [], DEAD
-        rows, max_id, page = [], 0, 0
+        # The site's own denominator for this thread. Measured 2026-09-28 the three places that print it
+        # agree (the search card 「30」, ``statuses/show.comments_count``, the page's ``total_number``), so
+        # a table that comes back shorter is knowable *while crawling* — which is the whole reason to read
+        # it. ``trendsText`` also says 「已加载全部评论」 on a 22-of-30 walk, so that sentence is not a
+        # verdict and is never consulted.
+        declared = _as_count(show.get('comments_count'))
+        rows, seen, max_id, page, capped = [], set(), 0, 0, False
         while True:
             try:
                 batch = json.loads(self._in_page_fetch(weibo_comments_js(mid, max_id)))
             except Exception:
                 break
             items = batch.get('data') or []
-            rows.extend(parse_weibo_comments({'data': items}, url))
+            for row in parse_weibo_comments({'data': items}, url):
+                key = str(row.get('评论ID') or '')
+                if key and key in seen:
+                    continue
+                seen.add(key)
+                rows.append(row)
             page += 1
+            declared = declared or _as_count(batch.get('total_number'))
             max_id = batch.get('max_id') or 0
-            if not items or not max_id or (limit and len(rows) >= limit) or page >= 30:
+            if not items or not max_id or (limit and len(rows) >= limit):
+                break
+            if page >= self.WEIBO_COMMENT_PAGES:
+                # A budget reached is a fact the console must carry: 30 pages of ~20 rows is ~600, and the
+                # 749-comment thread this was measured on never ran out of cursor, so this exit is the one
+                # that used to end a hot thread's table silently and look complete.
+                capped = True
                 break
             self.nap(0.8)  # polite page interval on the comment API
+        if capped:
+            self.log(
+                t('comment.weiboPagesCapped', pages=self.WEIBO_COMMENT_PAGES, rows=len(rows), declared=declared or '?')
+            )
+        if declared and len(rows) < declared:
+            self.log(t('comment.weiboShort', declared=declared, rows=len(rows), gap=declared - len(rows)))
         return (rows[:limit] if limit else rows), OK
 
     # -- xiaohongshu --------------------------------------------------------
