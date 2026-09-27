@@ -473,6 +473,17 @@ class Crawler(ABC):
         # headless stay headless instead. See _disguise_headless_as_desktop.
         if self.headless:
             self._disguise_headless_as_desktop()
+        # Apply the configured 窗口大小 to the *live* window, not just the launch hint.
+        # ``--window-size`` is only a startup argument: a persistent profile restores its
+        # own saved window bounds and overrides it, and a visible Chrome may open at a
+        # default size — so the value the user set in 设置 never resized a real crawl
+        # window until set_window_size is called on the session itself.
+        try:
+            self.driver.set_window_size(*self._desktop_metrics())
+        except Exception as e:
+            # A driver that rejects the resize (a mid-teardown session) keeps the launch
+            # size; a crawl must not die over window geometry.
+            logger.debug('set_window_size failed, keeping the launch size: %s', e)
         # A timeout the driver rejects (bad value, dead session) must not kill
         # the session — the crawl can still run on the default timeout.
         with contextlib.suppress(Exception):
@@ -779,12 +790,18 @@ class Crawler(ABC):
         facts = {'platform': self.domain, 'url': '', 'login_wall': False, 'unreachable': False}
         if not target:
             return facts
-        self.driver.get(target)
+        # Navigate and judge through :meth:`open` — the same settling :meth:`_judge_arrival`
+        # a real crawl uses — not a raw ``driver.get`` + single ``check_login_wall``.
+        # weibo and xiaohongshu answer a valid session with a passport/risk page that
+        # *flashes* on the way to content; one reading latched it as a refusal, and the
+        # pre-flight caches that verdict, so a false "expired" blocked a working cookie
+        # for minutes. ``open`` only latches a wall that survives its re-reads.
+        self.open(target)
         try:
             facts['url'] = self.driver.current_url or ''
         except Exception:
             facts['url'] = target
-        facts['login_wall'] = self.check_login_wall(target)
+        facts['login_wall'] = bool(self.login_wall)
         # Read after the judgement, which is what latches it. A probe whose browser wrote
         # its own error page never showed the site this session at all, so the honest
         # answer about the cookie is "could not check" — and the pre-flight caches

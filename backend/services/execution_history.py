@@ -181,3 +181,23 @@ class ExecutionHistoryService:
         conn.close()
         logger.info(t('history.run_deleted', rid=run_id, n=cur.rowcount))
         return int(cur.rowcount or 0)
+
+    def purge_older_than(self, days: int) -> int:
+        """Forget metric rows older than *days*, so the table cannot grow forever.
+
+        A run's history is recorded under its own id and is never aged by the
+        ``runs.db`` retention sweep, so without this the chart backend accumulates
+        points for crawls long after their records (and the data behind them) are
+        gone. Timestamps are the same ``%Y-%m-%dT%H:%M:%S`` strings ``now()`` writes,
+        so a lexicographic ``<`` on an identically-formatted cutoff is correct.
+        ``days <= 0`` keeps everything (aging disabled), matching the run-retention
+        switch.
+        """
+        if not days or days <= 0:
+            return 0
+        cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - days * 86400))
+        conn = self._conn()
+        cur = conn.execute('DELETE FROM execution_history WHERE timestamp < ?', (cutoff,))
+        conn.commit()
+        conn.close()
+        return int(cur.rowcount or 0)

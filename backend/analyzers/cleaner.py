@@ -130,6 +130,9 @@ string format."""
             skip_value=('删除', None),
             fail_value=('删除', None),
             build_prompt=lambda text: self.build_prompt(text, topic),
+            # The lambda only forwards; the version that invalidates the cache is
+            # the real template method, whose source a wording edit changes.
+            prompt_template=self.build_prompt,
             parse=self.parse_model_output,
             ctx=ctx,
             label=t('label.clean'),

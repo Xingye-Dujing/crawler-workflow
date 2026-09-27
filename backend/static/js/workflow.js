@@ -64,10 +64,20 @@ var Locks = {
 function lockButtonHtml(panel, key) {
     var locked = Locks.isLocked(panel, key);
     var label = I18n.t(locked ? 'lock.unlock' : 'lock.lock');
+    // A drawn padlock, not the Unicode emoji (U+1F512 / U+1F513): those render in the
+    // OS's fixed colours
+    // and ignore CSS, so they never match the page palette. stroke="currentColor" makes
+    // the icon take the button's own (grey / accent) colour. The shackle is the state:
+    // seated and centred when locked, swung open when not. aria-hidden because the
+    // button already carries the state in title + aria-pressed.
+    var svg =
+        '<svg class="lock-svg" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" focusable="false">' +
+        '<rect x="5" y="11" width="14" height="9" rx="2"/>' +
+        (locked ? '<path d="M8 11V8a4 4 0 0 1 8 0v3"/>' : '<path d="M8 11V8a4 4 0 0 1 7.6-2.1"/>') +
+        '</svg>';
     return '<button class="runs-mgr-btn lock' + (locked ? ' locked' : '') + '" title="' + escapeHtml(label) +
         '" aria-pressed="' + (locked ? 'true' : 'false') +
-        '" onclick="onLockToggle(\'' + panel + '\', \'' + attrJsArg(key) + '\')">' +
-        (locked ? '\uD83D\uDD12' : '\uD83D\uDD13') + '</button>';
+        '" onclick="onLockToggle(\'' + panel + '\', \'' + attrJsArg(key) + '\')">' + svg + '</button>';
 }
 
 function onLockToggle(panel, key) {
@@ -444,6 +454,7 @@ const workflow = {
             message: I18n.t('dialog.profileClash')
                 .replace('{platforms}', platformLabels(shared))
                 .replace('{n}', shared.length),
+            showClose: false,
             buttons: [
                 { label: I18n.t('dialog.profileClashUse'), value: 'use' },
                 { label: I18n.t('dialog.profileClashSkip'), value: 'skip', primary: true },
@@ -1279,7 +1290,7 @@ function showPlatformAdvice() {
         showToast(I18n.t('advice.unavailable'));
         return;
     }
-    showDialog({ message: platformAdviceMessage(Capabilities.data) });
+    showDialog({ message: platformAdviceMessage(Capabilities.data), showClose: true });
 }
 
 /* How many platforms in this run want a persistent browser profile and are not
@@ -3698,13 +3709,51 @@ function processesPoll() {
 
 /* Custom Dialog - replaces browser prompt() */
 function showDialog(opts) {
-    return new Promise(function (resolve) {
+    return new Promise(function (_resolve) {
         var overlay = document.getElementById('dialog-overlay');
         var msgEl = document.getElementById('dialog-message');
         var inputArea = document.getElementById('dialog-input-area');
         var inputEl = document.getElementById('dialog-input');
         var listArea = document.getElementById('dialog-list-area');
         var actionsEl = document.getElementById('dialog-actions');
+
+        /* The dialog is dismissable like a modal: a drawn close (X), a click on the
+           backdrop, and Esc all resolve the "no answer" value. The cancel result
+           defaults to null so a caller that awaits a typed string or a chosen value
+           sees a clean non-answer (never a stray false that a `=== 'x'` check might
+           treat as a pick). A dialog may opt out with `dismissable: false`. While a
+           login browser is in flight (cookieJob.active) dismissal is refused — those
+           Done/Cancel buttons are the only safe exit, or the login window orphans. */
+        var dismissable = opts.dismissable !== false;
+        // The drawn close (X) can be hidden independently of backdrop/Esc: an
+        // information dialog (采集建议) or one that already has its own buttons
+        // (the Profile-clash prompt) reads cleaner without a corner X, yet stays
+        // dismissable by clicking outside or Esc.
+        // The corner X is opt-in: only an information dialog with no buttons of its
+        // own (采集建议) needs it. Every other dialog already carries its own action
+        // buttons, so it stays X-free; backdrop/Esc still dismiss any dialog.
+        var showClose = opts.showClose === true && dismissable;
+        var cancelValue = opts.cancelValue !== undefined ? opts.cancelValue : null;
+        var dismissed = false;
+        var closeBtn = null;
+        function onBackdrop(e) {
+            if (e.target === overlay && !cookieJob.active) {
+                // Do not let this click reach the top-menu outside-click handler,
+                // which would also collapse the submenu the dialog was opened from.
+                e.stopPropagation();
+                resolve(cancelValue);
+            }
+        }
+        function onEsc(e) { if (e.key === 'Escape' && !cookieJob.active) resolve(cancelValue); }
+        function resolve(value) {
+            if (dismissed) return;
+            dismissed = true;
+            overlay.classList.remove('open');
+            overlay.removeEventListener('click', onBackdrop);
+            document.removeEventListener('keydown', onEsc);
+            if (closeBtn && closeBtn.parentNode) closeBtn.parentNode.removeChild(closeBtn);
+            _resolve(value);
+        }
 
         msgEl.textContent = opts.message || '';
         actionsEl.innerHTML = '';
@@ -3817,6 +3866,33 @@ function showDialog(opts) {
             });
         }
 
+        var box = document.getElementById('dialog-box');
+        if (box) {
+            var stale = box.querySelector('.dialog-close');
+            if (stale) stale.parentNode.removeChild(stale);
+        }
+        if (showClose && box) {
+            closeBtn = document.createElement('button');
+            closeBtn.className = 'dialog-close';
+            closeBtn.type = 'button';
+            closeBtn.setAttribute('data-i18n-title', 'settings.close');
+            closeBtn.setAttribute('aria-label', 'Close');
+            closeBtn.innerHTML =
+                '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">' +
+                '<path d="M6 6l12 12M18 6L6 18"/></svg>';
+            closeBtn.addEventListener('click', function (e) {
+                if (e) e.stopPropagation();
+                if (cookieJob.active) return;
+                resolve(cancelValue);
+            });
+            // Insert first so DOM order matches the visual corner position too,
+            // not just the absolute CSS placement.
+            box.insertBefore(closeBtn, box.firstChild);
+        }
+        if (dismissable) {
+            overlay.addEventListener('click', onBackdrop);
+            document.addEventListener('keydown', onEsc);
+        }
         overlay.classList.add('open');
         if (opts.input) setTimeout(function () { inputEl.focus(); inputEl.select(); }, 100);
     });
@@ -4598,11 +4674,13 @@ var runsManager = {
     tags(r) {
         var out = [];
         var count = r.wf_count || 1;
-        if (count > 1) {
+        if (count > 1 || r.mode === 'serial') {
             /* The mode is the fact; the count alone is not. A canvas can hold several
                workflows and still be run 串行, and labelling that 并行 claims a
-               concurrency that never happened — which is exactly the kind of thing a
-               record from last week is read for. */
+               concurrency that never happened. Conversely a serial run IS one workflow
+               per record, so its row says 串行 ×1 — the user asked for the mode to be
+               stated even for a single one, not silently dropped. 并行 keeps needing
+               count>1, because a lone workflow ran with no concurrency to report. */
             var key = r.mode === 'parallel' ? 'runsMgr.tagParallel' : 'runsMgr.tagSerial';
             out.push(I18n.t(key).replace('{n}', count));
         }

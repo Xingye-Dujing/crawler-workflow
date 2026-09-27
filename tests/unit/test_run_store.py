@@ -403,6 +403,38 @@ class TestLifecycle:
         assert run['node_done'] == 2
         assert run['status'] == RUN_FAILED
 
+    def test_finish_run_scoped_to_attempted_drops_a_deleted_node(self, store):
+        """A ``继续`` after a finished node was removed from the canvas must not report
+        that ghost as done: its ``node_runs`` row survives (the record keeps deleted
+        nodes) but it was never attempted this pass, so an ``n/N`` over all rows reads
+        past ``node_total`` — the panel's 「4/3」. Scoping to the visited set fixes it."""
+        _start(store)
+        store.begin_node('r1', 'keep', 'source')
+        store.finish_node('r1', 'keep', NODE_DONE)
+        store.begin_node('r1', 'gone', 'analysis')
+        store.finish_node('r1', 'gone', NODE_DONE)  # done in an earlier attempt
+        # Unscoped whole-record count sees both; scoped to this attempt sees one.
+        store.finish_run('r1', RUN_COMPLETED)
+        assert store.get_run('r1')['node_done'] == 2
+        store.finish_run('r1', RUN_COMPLETED, attempted={'keep'})
+        assert store.get_run('r1')['node_done'] == 1
+
+    def test_begin_node_stale_clears_the_cursor(self, store):
+        """The cursor is the position of the rows that survived. When a node's
+        definition changes its rows are dropped, so the old offset describes a
+        different crawl and must go too — else a re-keyed source resumes at the
+        previous keyword's page over an empty seed and under-collects."""
+        _start(store)
+        store.begin_node('r1', 'n1', 'source', fingerprint='fp-a')
+        store.finish_node('r1', 'n1', NODE_DONE, cursor={'page': 8})
+        assert store.get_cursor('r1', 'n1') == {'page': 8}
+        # Same definition: the position is still meaningful, keep it.
+        assert store.begin_node('r1', 'n1', 'source', fingerprint='fp-a') is False
+        assert store.get_cursor('r1', 'n1') == {'page': 8}
+        # Re-keyed: rows are gone, so the cursor must be cleared for a clean restart.
+        assert store.begin_node('r1', 'n1', 'source', fingerprint='fp-b') is True
+        assert store.get_cursor('r1', 'n1') is None
+
     def test_begin_node_same_fingerprint_keeps_rows(self, store, sample_rows):
         _start(store)
         store.begin_node('r1', 'n1', 'source', fingerprint='fp')

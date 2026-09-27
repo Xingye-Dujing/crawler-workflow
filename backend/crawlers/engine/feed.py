@@ -174,6 +174,12 @@ def walk_feed(
         for index in range(first, len(cards)):
             if collected() >= target:
                 break
+            # Re-ask the stop predicate per card, not only per screen: a wall can
+            # latch mid-screen (a scrape that navigates, a session that dies), and
+            # without this the loop keeps reading the rest of that screen's cards.
+            if stopped is not None and stopped():
+                result.stopped_reason = result.stopped_reason or 'stopped'
+                break
             row = scrape(cards[index], index)
             result.scanned = index + 1
             if row is None:

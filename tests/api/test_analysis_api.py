@@ -226,7 +226,38 @@ class TestVisualizeRender:
         # Re-parsing with a strict parser is what the browser does.
         assert json.loads(json.dumps(option)) == option
 
-    def test_a_missing_value_becomes_null_instead_of_nan(self, client, paste):
+    def test_a_renderer_that_was_not_chosen_is_refused_by_name(self, client, paste):
+        """An ``engine`` off the option list used to render via the browser library and
+        report ``echarts`` as if picked. The named refusal is the point (#187)."""
+        dataset_id = paste(VIZ_RECORDS, name='viz-engine.csv')
+        for bogus in ('mpl', 'Matplotlib', 'matplotlibx'):
+            response = client.post(
+                '/api/visualize/render',
+                json={
+                    'dataset_id': dataset_id,
+                    'chart_type': 'bar',
+                    'x_field': 'city',
+                    'y_field': 'likes',
+                    'engine': bogus,
+                },
+            )
+            assert response.status_code == 400
+            assert 'engine' in response.get_json()['error']
+        # The valid spellings still answer, so the refusal is about the unknown name only.
+        assert (
+            client.post(
+                '/api/visualize/render',
+                json={
+                    'dataset_id': dataset_id,
+                    'chart_type': 'bar',
+                    'x_field': 'city',
+                    'y_field': 'likes',
+                    'engine': 'matplotlib',
+                },
+            ).get_json()['engine']
+            == 'matplotlib'
+        )
+
         dataset_id = paste([{'city': 'Sanya', 'likes': None}, {'city': 'Haikou', 'likes': 4}], name='holes.csv')
         response = client.post(
             '/api/visualize/render',
@@ -486,6 +517,25 @@ class TestMlTraining:
             'label_count': 2,
         }
         assert (tmp_path / 'emotion.pkl').exists()
+
+    @pytest.mark.parametrize('bogus', ['../../evil', 'Matplotlib', 'mpl', ''])
+    def test_a_model_name_that_chooses_a_file_is_refused_by_name(self, client, paste, tmp_path, monkeypatch, bogus):
+        """``model_type`` became ``MODEL_DIR/<name>.pkl`` and was read back with joblib,
+        so a traversal wrote (then loaded) an arbitrary pickle. It must be refused by
+        name and must never reach the filesystem (#187)."""
+        from analyzers import ml_base
+
+        monkeypatch.setattr(ml_base, 'MODEL_DIR', str(tmp_path))
+        dataset_id = paste(_labeled_records(), name='evil-model.csv')
+        response = client.post(
+            '/api/analysis/train',
+            json={'dataset_id': dataset_id, 'model_type': bogus, 'text_column': 'text', 'label_column': 'label'},
+        )
+        assert response.status_code == 400
+        assert 'model_type' in response.get_json()['error']
+        # Nothing was fitted, so no file exists — not in MODEL_DIR, not via ``..``.
+        assert list(tmp_path.glob('*.pkl')) == []
+        assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.parametrize(
         ('text_column', 'label_column'),

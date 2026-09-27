@@ -533,15 +533,15 @@ class RunStore:
             ),
         )
 
-    def finish_run(self, run_id: str, status: str, note: str = ''):
+    def finish_run(self, run_id: str, status: str, note: str = '', attempted=None):
         stamp = self.now()
-        done = self._finished_count(run_id)
+        done = self._finished_count(run_id, attempted)
         self._execute(
             'UPDATE runs SET status = ?, updated_at = ?, finished_at = ?, node_done = ?, note = ? WHERE run_id = ?',
             (status, stamp, stamp, done, note, run_id),
         )
 
-    def _finished_count(self, run_id: str) -> int:
+    def _finished_count(self, run_id: str, attempted=None) -> int:
         """Nodes this run really finished — the number the console prints.
 
         ``failed`` and ``partial`` are excluded on purpose: a node that died or
@@ -550,11 +550,24 @@ class RunStore:
         and ``node_done`` is what the run-records table renders as ``n/N`` — so
         one answer, not the two the record and the console used to disagree about.
         ``restored`` counts: those rows are in hand, which is the whole test.
+
+        ``attempted`` scopes the count to the node ids this attempt actually ran.
+        A ``node_runs`` row survives a canvas edit (AGENTS: the record also keeps
+        nodes the canvas deleted), so on a ``继续`` after a node was removed or
+        disabled, its old ``done`` row would otherwise push ``node_done`` past a
+        ``node_total`` re-set to the smaller graph — the panel reading ``4/3``.
+        ``None`` keeps the whole-record count (used by startup recovery, where no
+        attempt was re-run to have shrunk the graph).
         """
-        rows = self._query(
-            'SELECT COUNT(*) AS n FROM node_runs WHERE run_id = ? AND status NOT IN (?, ?, ?, ?)',
-            (run_id, NODE_PENDING, NODE_SKIPPED, NODE_FAILED, NODE_PARTIAL),
-        )
+        sql = 'SELECT COUNT(*) AS n FROM node_runs WHERE run_id = ? AND status NOT IN (?, ?, ?, ?)'
+        params: list = [run_id, NODE_PENDING, NODE_SKIPPED, NODE_FAILED, NODE_PARTIAL]
+        if attempted is not None:
+            ids = list(attempted)
+            if not ids:
+                return 0
+            sql += ' AND node_id IN (' + ', '.join('?' * len(ids)) + ')'
+            params.extend(ids)
+        rows = self._query(sql, tuple(params))
         return int(rows[0]['n']) if rows else 0
 
     def get_run(self, run_id: str) -> dict | None:
@@ -599,6 +612,11 @@ class RunStore:
             run['rows_kept'] = sum(int(n.get('row_count') or 0) for n in nodes)
             out.append(run)
         return out
+
+    def run_ids(self) -> set[str]:
+        """Every run id currently in the table — for reconciling the 置顶 locks
+        against records that actually exist (a lock whose run is gone is a dead key)."""
+        return {str(row['run_id']) for row in self._query('SELECT run_id FROM runs')}
 
     def delete_run(self, run_id: str) -> dict:
         """Drop a run and its rows. Crawled-item claims are deliberately kept:
@@ -758,7 +776,8 @@ class RunStore:
             'ON CONFLICT(run_id, node_id) DO UPDATE SET status = excluded.status, node_type = excluded.node_type, '
             'title = excluded.title, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at, '
             'component = excluded.component, component_name = excluded.component_name, '
-            'row_count = CASE WHEN ? THEN 0 ELSE node_runs.row_count END',
+            'row_count = CASE WHEN ? THEN 0 ELSE node_runs.row_count END, '
+            'cursor_json = CASE WHEN ? THEN NULL ELSE node_runs.cursor_json END',
             (
                 run_id,
                 node_id,
@@ -770,6 +789,11 @@ class RunStore:
                 str(component_name or ''),
                 stamp,
                 stamp,
+                1 if stale else 0,
+                # A cursor is the position *of the rows that survived*. When the node's
+                # definition changed the rows are dropped and the count reset, so the old
+                # offset now describes a different crawl: leaving it made a re-keyed source
+                # resume at the previous keyword's page over an empty seed and under-collect.
                 1 if stale else 0,
             ),
         )

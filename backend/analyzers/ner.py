@@ -289,6 +289,10 @@ class NamedEntityRecognizer:
             skip_value=('',),
             fail_value=('',),
             build_prompt=build_prompt,
+            # The closure above only forwards (labels are a captured value, already
+            # in ``extra_key``); hash the real template method so a rule edit
+            # invalidates the cache instead of replaying answers to the old prompt.
+            prompt_template=self.build_ner_prompt,
             parse=self.parse_ner_response,
             ctx=cfg,
             label=t('label.ner'),

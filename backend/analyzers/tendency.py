@@ -134,7 +134,9 @@ Analyze strictly and output only the required plain string."""
     # ── ML mode ─────────────────────────────────────────────────
 
     def _ml_predict(self, texts: list[str]) -> list[tuple[str, float]]:
-        return self._ml.predict(texts)
+        # 'Objective Statement' is tendency's own neutral (a valid label in its set);
+        # the shared classifier defaults to 'Neutral', which is NOT one of them.
+        return self._ml.predict(texts, neutral='Objective Statement')
 
     # ── Main entry ──────────────────────────────────────────────
 

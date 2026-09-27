@@ -72,9 +72,12 @@ from services.workflow_manager import WorkflowManager
 from settings_store import all_settings, get_setting, save_settings
 from utils.helpers import as_bool, comment_platforms, platform_for, sanitize_filename, split_names, split_urls
 
-#: The comment router's supported platforms, spelled for the console. Read once
-#: because the table is a module constant; a test asserts it stays in step.
-_COMMENT_PLATFORMS = '/'.join(comment_platforms())
+#: The comment router's supported platforms, as raw keys. They go into a
+#: ``{platforms}`` slot that localizes *and joins* them, so they must arrive as a
+#: sequence — a value pre-joined with '/' reached the console verbatim because the
+#: localizer only splits on ',', '、' (never '/', which would mangle a quoted path).
+#: Read once because the table is a module constant; a test asserts it stays in step.
+_COMMENT_PLATFORMS = tuple(comment_platforms())
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
@@ -599,6 +602,28 @@ def get_housekeeper() -> Housekeeping:
     return _HOUSEKEEPER
 
 
+def _as_run_ids(value) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value else []
+    return [str(v) for v in (value or []) if str(v)]
+
+
+def _locked_run_ids() -> set[str]:
+    """Run ids the user pinned (置顶). Retention — automatic *or* manual — must spare
+    them, exactly as 清空/删除 already do; otherwise a lock silently dies to age."""
+    return {str(k) for k in (lock_store.all_locks().get('runs') or [])}
+
+
+def _prune_orphan_run_locks() -> None:
+    """Forget 置顶 keys whose run row no longer exists. A record can be removed by a
+    path that did not drop its lock; without this, locks.json accumulates dead ids."""
+    with contextlib.suppress(Exception):
+        existing = get_run_store().run_ids()
+        for key in _locked_run_ids():
+            if key not in existing:
+                lock_store.drop('runs', key)
+
+
 def _housekeep(exclude_run_id='', force: bool = False):
     """Apply the retention settings, containing every failure.
 
@@ -606,13 +631,20 @@ def _housekeep(exclude_run_id='', force: bool = False):
     here propagates. ``exclude_run_id`` protects the record the caller is still
     writing — dropping its rows mid-run would destroy live state. It takes a
     sequence too, because a serial multi-workflow run closes one record per
-    workflow and all of them are the state that was just built.
-    """
+    workflow and all of them are the state that was just built. The automatic
+    sweep also spares every 置顶 record (the user's directive: a pin that only
+    stopped a manual delete but not the age-based sweep is not a pin)."""
+    keep = _as_run_ids(exclude_run_id) + sorted(_locked_run_ids())
     with contextlib.suppress(Exception):
         if force:
-            get_housekeeper().run_now(exclude_run_id=exclude_run_id)
+            get_housekeeper().run_now(exclude_run_id=keep)
         else:
-            get_housekeeper().maybe_run(exclude_run_id=exclude_run_id)
+            get_housekeeper().maybe_run(exclude_run_id=keep)
+        # The chart backend is never touched by the runs.db sweep (it keys on its own
+        # id), so age its metric rows here — otherwise it grows forever and plots
+        # trends for crawls whose data is long gone.
+        history_service.purge_older_than(Config.RUN_KEEP_DAYS)
+    _prune_orphan_run_locks()
 
 
 def _close_run(ctx: dict, outcome: str):
@@ -638,10 +670,12 @@ def _close_run(ctx: dict, outcome: str):
     # all after the split, and re-writing a verdict over a workflow that already
     # got its own would be the worse mistake).
     records = ctx.get('open_records')
+    with _completed_lock:
+        attempted = set(execution_state['attempted_nodes'])
     for run_id in records if records is not None else [ctx['run_id']]:
         try:
             ctx['store'].settle_nodes(run_id)
-            ctx['store'].finish_run(run_id, outcome)
+            ctx['store'].finish_run(run_id, outcome, attempted=attempted)
         except Exception as e:
             add_log(t('run.recordWriteFailed', rid=run_id, err=e))
     if records is not None:
@@ -764,6 +798,13 @@ def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
         # Only the store is lent — see the docstring on why the row runner
         # builds the cache scope itself.
         run_ctx['store_for_cache'] = ctx['store']
+        # A run-level, per-node cancellation ledger the executor also reads. The
+        # direct analyzers leave 未处理 in their rows for the executor's scan, but
+        # NER transforms that marker away; the shared dict (identity survives the
+        # analyzer's shallow ``dict(ctx)`` copy) lets the row runner report "this
+        # node was stopped mid-way" so no LLM node settles DONE on skipped rows.
+        run_ctx['node_id'] = node_id
+        run_ctx['cancel_book'] = ctx.setdefault('node_cancelled', {})
     return run_ctx
 
 
@@ -1844,7 +1885,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     if nid in visited and state.get('status') in (NODE_FAILED, NODE_PARTIAL)
                 )
                 outcome = RUN_INTERRUPTED if not still_running else (RUN_FAILED if broken else RUN_COMPLETED)
-                store.finish_run(rid, outcome)
+                store.finish_run(rid, outcome, attempted=visited)
                 with contextlib.suppress(ValueError):
                     ctx['open_records'].remove(rid)
 
@@ -2052,8 +2093,27 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             execution_state['thread'] = None
             _start_next_queued()
 
-    execution_state['thread'] = threading.Thread(target=run, daemon=True)
-    execution_state['thread'].start()
+    # Named 'run' so the process-monitor's kill guard (see ``kill_process``) actually
+    # matches: it refuses to inject SystemExit into ('MainThread', 'run'), but an
+    # unnamed thread reported as "Thread-N" and a stray click on the live run worker
+    # could raise SystemExit between acquiring a browser and registering it, orphaning
+    # a Chrome and holding its profile lock for the full timeout.
+    try:
+        execution_state['thread'] = threading.Thread(target=run, daemon=True, name='run')
+        execution_state['thread'].start()
+    except Exception as e:
+        # A thread that never started never runs its finally, so the claim would stay
+        # held: ``running`` stuck True, ``_settle_orphaned_records`` (which skips a
+        # running slot) never helps, and every later 运行 parks forever. Give the slot
+        # back and let the queue drain instead.
+        execution_state['thread'] = None
+        execution_state['running'] = False
+        execution_state['stopping'] = False
+        # One console line, localized; logger.exception keeps the traceback in the
+        # file. add_log of the same text here would print the failure twice.
+        logger.exception(t('run.start_failed', err=e))
+        _start_next_queued()
+        return {'status': 500, 'body': {'ok': False, 'error': str(e)}}
 
     return {'status': 200, 'body': {'ok': True, 'message': 'Workflow started', 'run_id': run_id}}
 
@@ -3036,7 +3096,6 @@ def _execute_visualize_node(node: dict, current_input: list):
     """
     params = node.get('params', {})
     chart_type = params.get('chart_type', 'bar')
-    engine = params.get('engine', 'echarts')
     x_field = params.get('x_field')
     y_field = params.get('y_field')
     value_field = params.get('value_field')
@@ -3051,6 +3110,10 @@ def _execute_visualize_node(node: dict, current_input: list):
     df = pd.DataFrame(current_input)
 
     try:
+        # ``chart_engine`` refuses an off-list renderer by name; branching on the raw
+        # value here (as both paths used to) handed 'mpl' / 'Matplotlib' to the browser
+        # library and reported it as if the user had chosen it.
+        engine = chart_engine(params.get('engine'))
         if engine == 'matplotlib':
             image = VisualizationService.render_image(
                 df, chart_type, x=x_field, y=y_field, value_field=value_field, agg=agg, title=title
@@ -3279,7 +3342,9 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     if blocked_seen:
         # Failed (not done) → the run lands in the resume banner and 继续
         # retries exactly the articles the wall refused.
-        named = '/'.join(dict.fromkeys(blocked_by))
+        # A sequence, not a '/'.join(): the {platform} slot localizes+joins only
+        # list values and comma-joined strings, so a slash string printed raw keys.
+        named = list(dict.fromkeys(blocked_by))
         raise ValueError(t('run.cookieExpired', platform=named or want or t('run.cookieAnyPlatform')))
     return rows_out
 
@@ -3540,8 +3605,12 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         # Source rows are already in the store — the sink put every item there
         # as it was scraped, and re-writing them here would only renumber.
         store.replace_rows(run_id, nid, result, label=label)
-    if isinstance(result, list) and any(
-        isinstance(r, dict) and any(v == ABORT_MARK for v in r.values()) for r in result
+    # ``node_cancelled`` is the row runner's channel for an LLM node the Stop cut
+    # short whose returned rows no longer carry the 未处理 marker (NER explodes it
+    # away). pop() reads-and-clears so a node id cannot inherit a stale verdict.
+    cancelled = bool(ctx.get('node_cancelled', {}).pop(nid, False)) if ctx else False
+    if isinstance(result, list) and (
+        cancelled or any(isinstance(r, dict) and any(v == ABORT_MARK for v in r.values()) for r in result)
     ):
         # A cancelled LLM node returns what it managed to answer; recording it
         # DONE would let resume restore it and the 未处理 gaps would stay
@@ -3705,41 +3774,48 @@ def _settle_orphaned_records() -> int:
 
 @app.route('/api/workflow/stop', methods=['POST'])
 def stop_workflow():
-    thread = execution_state.get('thread')
-    if not execution_state['running'] and not (thread is not None and thread.is_alive()):
-        # Nothing is running and nothing is unwinding. Answering as if a stop had been
-        # honoured would leave `stopping` standing with no run behind it — and
-        # `stop_requested()` hands that flag to every crawl, so the next one would
-        # answer "the user stopped me" to a button nobody pressed.
-        return jsonify({'ok': True, 'browsers': 0, 'records': [], 'idle': True})
-    if execution_state['executor']:
-        execution_state['executor'].stop()
-    # Tell any row-by-row LLM loop to bail out at the next row boundary —
-    # finished rows are already checkpointed and stay in results.
-    execution_state['cancel_event'].set()
-    # The run is over as far as the browser is concerned; the verdict is not. The
-    # worker thread still owes `settle`/`finish_run`, and until it pays the record
-    # reads "stopping" — not "running", which is what made a stop look ignored, and
-    # not an outcome the run has not written yet.
-    execution_state['stopping'] = True
-    execution_state['running'] = False
-    _mark_records_stopping()
-    crawlers = list(execution_state['active_crawlers'])
-    execution_state['active_crawlers'].clear()
+    # Hold the claim lock across the guard-and-write. ``_begin_run`` claims a run under
+    # this same lock, so a run finishing right now cannot hand off to a queued one and
+    # then have ``running=False``/``stopping=True`` land on that brand-new run — the
+    # interleaving that made a stop aimed at run A silently kill run B. The idle check
+    # and every state write below are therefore one atomic decision.
+    with _execute_lock:
+        thread = execution_state.get('thread')
+        if not execution_state['running'] and not (thread is not None and thread.is_alive()):
+            # Nothing is running and nothing is unwinding. Answering as if a stop had been
+            # honoured would leave `stopping` standing with no run behind it — and
+            # `stop_requested()` hands that flag to every crawl, so the next one would
+            # answer "the user stopped me" to a button nobody pressed.
+            return jsonify({'ok': True, 'browsers': 0, 'records': [], 'idle': True})
+        if execution_state['executor']:
+            execution_state['executor'].stop()
+        # Tell any row-by-row LLM loop to bail out at the next row boundary —
+        # finished rows are already checkpointed and stay in results.
+        execution_state['cancel_event'].set()
+        # The run is over as far as the browser is concerned; the verdict is not. The
+        # worker thread still owes `settle`/`finish_run`, and until it pays the record
+        # reads "stopping" — not "running", which is what made a stop look ignored, and
+        # not an outcome the run has not written yet.
+        execution_state['stopping'] = True
+        execution_state['running'] = False
+        _mark_records_stopping()
+        crawlers = list(execution_state['active_crawlers'])
+        execution_state['active_crawlers'].clear()
+        # A daemon thread starts with a fresh (default) language; capture the request's
+        # so every line this stop path prints — including run.browserStuck below — reads
+        # in the UI's own language, not Chinese in an English panel.
+        lang = get_lang()
+
+    def _reap(c):
+        set_lang(lang)
+        _close_login_browser(c, quit_timeout=STOP_QUIT_GRACE)
 
     def _finish_stop():
+        set_lang(lang)
         # One thread per browser. Reaping them in series made the LAST crawl of a
         # parallel run wait behind every earlier reap, and the run record cannot be
         # written until all of them are over (`pool.shutdown` waits by design).
-        reapers = [
-            threading.Thread(
-                target=_close_login_browser,
-                args=(c,),
-                kwargs={'quit_timeout': STOP_QUIT_GRACE},
-                daemon=True,
-            )
-            for c in crawlers
-        ]
+        reapers = [threading.Thread(target=_reap, args=(c,), daemon=True) for c in crawlers]
         for r in reapers:
             r.start()
         for r in reapers:
@@ -3774,26 +3850,37 @@ def stop_workflow():
 
 @app.route('/api/workflow/status', methods=['GET'])
 def workflow_status():
-    # Build per-workflow progress lists from _wf_logs keys
-    wf_list = []
+    # One atomic snapshot of every console buffer. The tail and its total must be
+    # read together (and under the same lock the writers hold): a concurrent
+    # _push_log that advanced ``_log_total`` between reading the tail and the total
+    # would hand the browser a pair that disagree, and its delta cursor then marks
+    # the gap already-seen and silently drops a few lines off the console.
     mode = execution_state.get('_mode', 'serial')
     with _completed_lock:
-        wf_keys = sorted(execution_state['_wf_logs'].keys())
-    for wk in wf_keys:
-        wf_logs = execution_state['_wf_logs'][wk]
-        wf_list.append(
-            {
-                'id': wk,
-                # The console tab bar speaks the workflow's name (set by the
-                # 工作流命名 node), not a positional 'WF2' the user cannot map
-                # back to a canvas.
-                'name': execution_state['_wf_names'].get(wk) or f'#{wk + 1}',
-                'logs': wf_logs[-200:],
-                # How many lines exist in total, so the browser can compute the
-                # delta even after the tail truncation above.
-                'total': execution_state['_wf_log_total'].get(wk, len(wf_logs)),
-            }
-        )
+        global_logs = execution_state['logs'][-200:]
+        global_total = execution_state['_log_total']
+        wf_view = [
+            (
+                wk,
+                execution_state['_wf_logs'][wk][-200:],
+                execution_state['_wf_log_total'].get(wk, len(execution_state['_wf_logs'][wk])),
+            )
+            for wk in sorted(execution_state['_wf_logs'].keys())
+        ]
+    wf_list = [
+        {
+            'id': wk,
+            # The console tab bar speaks the workflow's name (set by the
+            # 工作流命名 node), not a positional 'WF2' the user cannot map
+            # back to a canvas.
+            'name': execution_state['_wf_names'].get(wk) or f'#{wk + 1}',
+            'logs': logs,
+            # How many lines exist in total, so the browser can compute the
+            # delta even after the tail truncation above.
+            'total': total,
+        }
+        for wk, logs, total in wf_view
+    ]
 
     chart_results = {}
     # One snapshot for both loops below: the run publishes node rows as they
@@ -3818,8 +3905,8 @@ def workflow_status():
             # worker's own finally clears it, so it never outlives the run.
             'stopping': bool(execution_state.get('stopping')),
             'settling': bool(not execution_state['running'] and thread is not None and thread.is_alive()),
-            'logs': execution_state['logs'][-200:],
-            'log_total': execution_state['_log_total'],
+            'logs': global_logs,
+            'log_total': global_total,
             'workflows': wf_list,
             'mode': mode,
             'results': list(results.keys()),
@@ -3889,6 +3976,14 @@ def kill_process():
 
     if target.name in ('MainThread', 'run'):
         return jsonify({'ok': False, 'error': f'Cannot kill protected thread: {target.name}'}), 403
+
+    # A live run's crawls execute on the executor's pool threads (parallel mode), not
+    # on 'run'. Killing one injects SystemExit between acquiring a browser and
+    # registering it, orphaning Chrome and holding its profile lock — the very harm the
+    # 'run' guard exists for. While a run is live those threads are off-limits; Stop is
+    # the graceful door.
+    if execution_state['running'] and target.name.startswith('ThreadPoolExecutor'):
+        return jsonify({'ok': False, 'error': 'This is a live crawl worker; use Stop rather than killing it'}), 403
 
     if not target.is_alive():
         return jsonify({'ok': False, 'error': 'Thread is not alive'}), 400
@@ -4152,6 +4247,13 @@ def run_analysis():
     )
 
 
+#: The classifiers ``/api/analysis/train`` may fit — derived from the analyzers that
+#: consume them so a train name can never drift from what ``mode='ml'`` loads. Each
+#: maps to ``data/models/<name>.pkl``, so an un-listed value was a filesystem write
+#: (and a later ``joblib.load``) under an attacker-chosen path, not a choice to guess.
+_ML_MODEL_TYPES = (EmotionAnalyzer._ML_MODEL_NAME, TendencyAnalyzer._ML_MODEL_NAME)
+
+
 @app.route('/api/analysis/train', methods=['POST'])
 def train_ml_model():
     """Train a traditional ML classifier (emotion or tendency) from existing
@@ -4166,6 +4268,21 @@ def train_ml_model():
         return error
 
     model_type = data.get('model_type', 'emotion')
+    if model_type not in _ML_MODEL_TYPES:
+        # A name that chooses a file is refused by name, never collapsed to option #0:
+        # this value became ``MODEL_DIR/<name>.pkl`` and was read back with joblib.
+        return jsonify(
+            {
+                'ok': False,
+                'error': t(
+                    'analysis.bad_option',
+                    op='train',
+                    param='model_type',
+                    value=str(model_type),
+                    allowed=', '.join(_ML_MODEL_TYPES),
+                ),
+            }
+        ), 400
     text_column = data.get('text_column', '正文')
     label_column = data.get('label_column', 'emotion')
 
@@ -4210,7 +4327,6 @@ def render_visualization():
         return error
 
     chart_type = data.get('chart_type', 'bar')
-    engine = data.get('engine', 'echarts')
     x_field = data.get('x_field')
     y_field = data.get('y_field')
     value_field = data.get('value_field')
@@ -4220,6 +4336,7 @@ def render_visualization():
     wordcloud_style = data.get('wordcloud_style')
 
     try:
+        engine = chart_engine(data.get('engine'))
         if engine == 'matplotlib':
             image = VisualizationService.render_image(
                 df, chart_type, x=x_field, y=y_field, value_field=value_field, agg=agg, title=title
@@ -4484,7 +4601,7 @@ def report_generate():
     title = data.get('title')
     if title is not None and not isinstance(title, str):
         return _bad_param('title')
-    include_conclusion = bool(data.get('include_conclusion'))
+    include_conclusion = as_bool(data.get('include_conclusion'))
     options = data.get('options')
     if options is not None and not isinstance(options, dict):
         return _bad_param('options')
@@ -6185,9 +6302,14 @@ def _reject_live_run(run_id: str):
 @app.route('/api/runs/purge', methods=['POST'])
 def runs_purge():
     """Housekeeping. Interrupted runs are the last to go — they are the ones
-    somebody may still want to continue. The live run, if any, is exempt."""
-    exclude = str(execution_state.get('run_id') or '') if execution_state['running'] else ''
-    removed = get_run_store().purge(exclude_run_id=exclude)
+    somebody may still want to continue. The live run, if any, is exempt, and so
+    is every 置顶 record (a manual purge must not silently undo a pin either)."""
+    keep: list[str] = []
+    if execution_state['running']:
+        keep = _as_run_ids(execution_state.get('run_id') or '')
+    keep += sorted(_locked_run_ids())
+    removed = get_run_store().purge(exclude_run_id=keep)
+    _prune_orphan_run_locks()
     return jsonify({'ok': True, 'removed': removed})
 
 

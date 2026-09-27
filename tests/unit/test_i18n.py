@@ -154,6 +154,22 @@ class TestTranslation:
         joined = t('comment.no_urls', platforms='zhihu,douyin')
         assert joined == rendered, 'a half-translated list is the same bug with a comma in it'
 
+    def test_a_supported_platform_list_never_leaks_raw_keys(self):
+        """The comment router hands the ``{platforms}`` slot the *supported platforms*.
+        When that arrived pre-joined with '/', the localizer (which only splits on ','
+        and '、') treated it as one unknown token and printed raw English keys into a
+        Chinese console. A sequence is the contract; the English joiner must be ', '."""
+        from utils.helpers import comment_platforms
+
+        set_lang('zh')
+        zh = t('comment.no_urls', platforms=comment_platforms())
+        set_lang('en')
+        en = t('comment.no_urls', platforms=comment_platforms())
+        for key in comment_platforms():
+            assert key not in zh and key not in en, f'{key} reached the console untranslated'
+        assert '、' not in en and ', ' in en  # English enumeration, not the CJK comma
+        set_lang('zh')
+
     def test_a_value_that_is_not_a_platform_key_passes_through(self):
         """Domains, paths and free text must not be judged: `weibo.com` is a real thing to
         print, and a refusal that quotes a rejected value (`../x`) back mangled is a refusal

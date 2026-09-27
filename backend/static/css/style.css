@@ -502,6 +502,17 @@ body.style-menu-open #top-menu {
 #settings-menu .menu-btn {
   flex: 0 0 auto;
 }
+/* A row with no label (a lone button — 采集建议 / 保存设置 / model refresh): the
+   fixed 92px label gutter would shove the button right and leave dead space left.
+   Collapse the empty gutter and centre the button across the row. */
+#ai-menu .dd-item-row:has(> span:first-child:empty),
+#settings-menu .dd-item-row:has(> span:first-child:empty) {
+  justify-content: center;
+}
+#ai-menu .dd-item-row:has(> span:first-child:empty) > span:first-child,
+#settings-menu .dd-item-row:has(> span:first-child:empty) > span:first-child {
+  display: none;
+}
 /* A lone action button in a control column (the 采集建议 / 保存设置 rows). The
    rows above give the empty label column its 92px, which squeezed the button; a
    long nowrap label — and in English the advice caption is far wider — then
@@ -1760,9 +1771,23 @@ button.history-del:hover {
 }
 /* The lock is a state, not an action, so it is marked by the button's own colour:
    a locked row's button reads as engaged. #182. */
+.runs-mgr-btn.lock {
+  color: var(--text-dim);
+}
 .runs-mgr-btn.lock.locked {
-  color: var(--accent-source);
-  border-color: var(--accent-source);
+  /* A pinned/locked row reads as engaged in red (the lock glyph is currentColor). */
+  color: #8c2828;
+  border-color: #8c2828;
+}
+/* The drawn padlock inherits the button's colour (currentColor) and is an outline,
+   so it matches the grey palette the emoji never could. */
+.runs-mgr-btn.lock .lock-svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -1px;
 }
 .runs-mgr-detail {
   background: var(--hover);
@@ -2628,12 +2653,40 @@ input:-webkit-autofill:focus {
   display: flex;
 }
 #dialog-box {
+  position: relative;
   background: var(--bg);
   border: 1px solid var(--ink);
   padding: 20px;
   min-width: 360px;
   max-width: 480px;
   box-shadow: var(--shadow);
+}
+.dialog-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: var(--radius);
+  line-height: 0;
+}
+.dialog-close:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.dialog-close svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 #dialog-message {
   font-size: 12px;

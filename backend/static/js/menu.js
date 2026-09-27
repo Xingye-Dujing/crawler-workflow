@@ -56,6 +56,10 @@ var TopMenu = {
 
         /* Style / AI / 设置 submenus close on an outside click, Esc, or resize. */
         document.addEventListener('click', (e) => {
+            /* A click that belongs to an open dialog (its backdrop or box) is the
+               dialog's business — dismiss the dialog, do not also collapse the
+               submenu it was opened from (e.g. 采集建议 from the 设置 panel). */
+            if (e.target.closest && e.target.closest('#dialog-overlay')) return;
             var m = document.getElementById('style-menu');
             if (m && m.classList.contains('open') &&
                 !e.target.closest('#style-menu') && !e.target.closest('#btn-style')) {
@@ -73,6 +77,9 @@ var TopMenu = {
             }
         });
         document.addEventListener('keydown', (e) => {
+            // While a dialog is open, Esc dismisses the DIALOG (its own handler) and
+            // must not tear down the submenu it was opened from.
+            if (e.key === 'Escape' && document.getElementById('dialog-overlay').classList.contains('open')) return;
             if (e.key === 'Escape') { closeStyleMenu(); closeAiMenu(); closeSettingsMenu(); }
         });
         window.addEventListener('resize', function () {

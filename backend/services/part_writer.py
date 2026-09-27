@@ -159,8 +159,17 @@ class SnapshotWriter:
                 if key not in self._columns:
                     self._columns.append(key)
         tmp = f'{self.path}.tmp'
-        dump_rows(rows, tmp, self._columns, self.fmt)
-        os.replace(tmp, self.path)
+        try:
+            dump_rows(rows, tmp, self._columns, self.fmt)
+            os.replace(tmp, self.path)
+        except Exception:
+            # The atomic replace never happened, so the half-written temp would
+            # linger as a phantom "export" in the listing — remove it. On success
+            # ``os.replace`` already moved it, so this branch is the only leak path.
+            with contextlib.suppress(OSError):
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            raise
         return self.path
 
 

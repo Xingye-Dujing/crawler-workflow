@@ -334,6 +334,23 @@ class TestDataframeRunner:
             assert df.loc[idx, '情感'] == ABORT_MARK
         assert df.loc[1, '情感'] == '跳过'
 
+    def test_cancel_marks_the_node_on_the_cancellation_ledger(self, df_for_llm):
+        """NER explodes the 未处理 rows away, so the executor cannot see them in the
+        returned table. The row runner records the cancellation on a shared per-node
+        ledger instead — the only signal that survives that transform."""
+        import threading
+
+        ev = threading.Event()
+        ev.set()
+        book = {}
+        run_df(df_for_llm, cancel_event=ev, node_id='nX', cancel_book=book)
+        assert book == {'nX': True}
+
+    def test_a_clean_run_leaves_the_ledger_alone(self, df_for_llm):
+        book = {}
+        run_df(df_for_llm, client=ScriptedClient(), node_id='nY', cancel_book=book)
+        assert book == {}
+
     def test_missing_text_column_raises_instead_of_an_empty_success(self, df_for_llm):
         # Returning a blank-filled frame used to make a misconfigured column look
         # like a DONE node whose answers happened to be empty; the executor now
@@ -434,6 +451,22 @@ class TestAnswerScope:
         client = LLMClient(model='m')
         assert answer_scope('emotion', client, '正文', '', build_prompt) != answer_scope(
             'emotion', client, '正文', '', build_prompt_reworded
+        )
+
+    def test_prompt_template_decouples_the_key_from_a_forwarding_wrapper(self):
+        """The clean/ner bug: a one-line lambda that only forwards to the real
+        template hashes to a constant, so editing the template never invalidated the
+        cache. ``prompt_template`` makes the underlying method's source the version."""
+        client = LLMClient(model='m')
+        # Two distinct wrapper objects, byte-identical bodies → same wrapper digest.
+        fwd_one = lambda text: build_prompt(text)  # noqa: E731
+        fwd_two = lambda text: build_prompt(text)  # noqa: E731
+        assert answer_scope('ner', client, '正文', '', fwd_one, prompt_template=build_prompt) == answer_scope(
+            'ner', client, '正文', '', fwd_two, prompt_template=build_prompt
+        )
+        # The real template — not the wrapper — is what flips the key.
+        assert answer_scope('ner', client, '正文', '', fwd_one, prompt_template=build_prompt) != answer_scope(
+            'ner', client, '正文', '', fwd_one, prompt_template=build_prompt_reworded
         )
 
 

@@ -37,6 +37,13 @@ pytestmark = pytest.mark.unit
         ('1.2w', 12000),
         ('3K', 3000),
         ('12M', 12000000),
+        # Real YouTube label: M must still multiply even though clean() welds it to
+        # the next word — this is the case a unit-boundary "tightening" wrongly broke.
+        ('1.2M views', 1200000),
+        # A negative is never a real counter; it must not become a positive.
+        ('-50', 0),
+        (-50, 0),
+        ('-1,234', 0),
         ('分享', 0),
         ('', 0),
         (None, 0),

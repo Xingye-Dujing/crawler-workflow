@@ -578,6 +578,7 @@ _ZH = {
     'chart.count': '数量',
     'ml.no_training_rows': '没有可用的训练数据：所有行的文本或标签都是空的',
     'ml.need_two_labels': '训练至少需要 2 个不同的标签，当前只有：{label}',
+    'ml.bad_model_name': '模型名「{name}」不合法：必须是单个路径安全的组件，不含分隔符',
     'cluster.no_features': '文本无法分词（可能只有符号），已跳过聚类：{err}',
     'engine.source_no_platform': '节点 {nid}：数据源节点没有选择平台',
     'engine.source_unknown_platform': '节点 {nid}：{platform} 还没有可用的采集实现，请改用已支持的平台',
@@ -725,6 +726,7 @@ _ZH = {
     'run.promoted': '发现 {n} 条上次没跑完的记录，已标记为「可续跑」',
     'run.reconciled': '发现 {n} 条线程已结束却没写下结论的记录，已判定为「已中断」',
     'run.recordWriteFailed': '记录 {rid} 的结论没能写进数据库（{err}）：运行记录会在下次刷新时自动补上判定',
+    'run.start_failed': '运行线程启动失败（{err}）：本次运行已放弃，队列继续处理下一个',
     'run.nodeStopped': '节点 {nid} 已按「停止」结束：本次保留 {n} 行',
     'run.finished.stopped': '，{n} 个被停止',
     'crawl.stopped': '收到「停止」，本次抓取到此为止',
@@ -1445,6 +1447,7 @@ _EN = {
     'chart.count': 'count',
     'ml.no_training_rows': 'No training data: every row has an empty text or label',
     'ml.need_two_labels': 'Training needs at least 2 distinct labels; this data only has: {label}',
+    'ml.bad_model_name': 'Model name "{name}" is invalid: must be one path-safe component, no separators',
     'cluster.no_features': 'Text could not be segmented (symbols only?) — clustering skipped: {err}',
     'engine.source_no_platform': 'Node {nid}: source node has no platform',
     'engine.source_unknown_platform': 'Node {nid}: {platform} has no crawler yet — pick a supported platform',
@@ -1583,6 +1586,7 @@ _EN = {
     'run.recordWriteFailed': (
         'Could not write the verdict for record {rid} ({err}): the run list settles it on the next refresh'
     ),
+    'run.start_failed': 'Could not start the run worker ({err}): this run is dropped and the queue moves to the next',
     'run.nodeStopped': 'Node {nid} ended on Stop: {n} row(s) kept',
     'run.finished.stopped': ', {n} stopped',
     'crawl.stopped': 'Stop received — this crawl ends here',
@@ -1834,6 +1838,9 @@ def _name_platforms(params: dict) -> dict:
     reason) is passed through untouched.
     """
     named = dict(params)
+    # The enumeration comma is language-specific: '、' reads right in Chinese and wrong
+    # in English ("Zhihu、Weibo"). Pick the joiner by the reader's language.
+    sep = '、' if get_lang() == 'zh' else ', '
     for slot in ('platform', 'platforms'):
         value = named.get(slot)
         if isinstance(value, str):
@@ -1842,11 +1849,11 @@ def _name_platforms(params: dict) -> dict:
             # (`../x`) came back mangled, and a sentence would have been re-joined with
             # 、. An unknown token is passed through whole, which is the safe answer for
             # every value that was never a platform key.
-            named[slot] = '、'.join(
+            named[slot] = sep.join(
                 platform_label(part.strip()) for part in re.split(r'[,、]', value.strip()) if part.strip()
             )
         elif isinstance(value, (list, tuple, set)):
-            named[slot] = '、'.join(platform_label(item) for item in value)
+            named[slot] = sep.join(platform_label(item) for item in value)
     return named
 
 

@@ -579,7 +579,10 @@ def test_a_record_that_skipped_workflows_names_them_on_screen(app_url, driver, l
     assert facts['found'] is True, 'the two rows rendered nothing, so nothing was measured'
     assert 'runsMgr.' not in facts['label'], f'{lang} catalog has no word for runsMgr.skipped'
     assert facts['label'] in facts['chips'], f'the skipping row must wear the named chip: {facts["chips"]}'
-    assert len(facts['chips']) == 2, f'a skip chip is a second chip beside the window one: {facts["chips"]}'
+    # A one-workflow 串行 record now also wears the 串行 ×1 chip (user directive), so the
+    # skip row reads three: mode + window + skipped. The skip chip is the one under test.
+    assert len(facts['chips']) == 3, f'expected 串行×1 + window + skip chips: {facts["chips"]}'
+    assert any('串行' in c or 'serial' in c.lower() for c in facts['chips']), f'no serial chip: {facts["chips"]}'
     assert not any('凌晨' in c for c in facts['cleanChips']), f'the clean row grew a skip chip: {facts["cleanChips"]}'
     assert facts['clipped'] == 0, f'a chip is silently cut off in {lang}: {facts["chips"]}'
     assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
@@ -819,6 +822,100 @@ def test_a_dialog_never_asks_the_browser_to_overflow_it(app_url, driver, lang):
     over = [w for w in report['worst'] if w['over'] > 1]
     assert not over, f'{lang}: button text escapes the {report["boxWidth"]}px dialog box: {over}'
     assert report['actionsBottom'] <= 1, f'the button row hangs below the box: {report}'
+
+
+def test_the_dialog_dismisses_by_x_backdrop_and_esc(app_url, driver):
+    """The corner X is OPT-IN (only an info dialog with no buttons — 采集建议 — draws
+    it), but every dialog is still dismissable by backdrop click and Esc, resolving
+    the "no answer" value (null). A dismissable:false dialog (cookie login) must ignore
+    all of it. Measured in the real browser: only a real event dispatch proves the
+    backdrop-target check and the keydown handler fire, and that dismissing a dialog
+    removes its close button so it cannot leak across dialogs."""
+    driver.set_window_size(1000, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+
+    # Default dialog: NO corner X (opt-in policy), yet the backdrop dismisses it.
+    driver.execute_script(
+        """
+        window.__r = '__pending__';
+        showDialog({ message: 'd' }).then(v => { window.__r = (v === null ? 'null' : String(v)); });
+        window.__hadClose = !!document.querySelector('#dialog-box .dialog-close');
+        document.getElementById('dialog-overlay').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        """,
+        [],
+    )
+    default_no_x = driver.execute_script(
+        'return { hadClose: window.__hadClose, resolved: window.__r, '
+        "open: document.getElementById('dialog-overlay').classList.contains('open') };",
+        [],
+    )
+    assert default_no_x['hadClose'] is False, 'a default dialog must not draw the X (opt-in only)'
+    assert default_no_x['resolved'] == 'null' and not default_no_x['open'], (
+        f'backdrop must dismiss a default dialog: {default_no_x}'
+    )
+
+    # showClose:true (the advice dialog): a drawn SVG X, clicking it resolves null + is removed.
+    present = driver.execute_script(
+        """
+        window.__r = '__pending__';
+        showDialog({ message: 'x', showClose: true }).then(v => { window.__r = (v === null ? 'null' : String(v)); });
+        const c = document.querySelector('#dialog-box .dialog-close');
+        return { hasClose: !!c, hasSvg: !!(c && c.querySelector('svg')) };
+        """,
+        [],
+    )
+    assert present['hasClose'], 'showClose:true must draw a close (X) button'
+    assert present['hasSvg'], 'the dialog close is not a drawn SVG'
+
+    driver.execute_script("document.querySelector('#dialog-box .dialog-close').click();")
+    xres = driver.execute_script(
+        """
+        return {
+            resolved: window.__r,
+            open: document.getElementById('dialog-overlay').classList.contains('open'),
+            gone: !document.querySelector('#dialog-box .dialog-close'),
+        };
+        """,
+        [],
+    )
+    assert xres['resolved'] == 'null', f'the X resolved {xres["resolved"]!r}, not "no answer" (null)'
+    assert not xres['open'], 'the overlay stayed open after the X'
+    assert xres['gone'], 'the close button must be removed on dismiss (no leak across dialogs)'
+
+    # Esc dismisses a default dialog too.
+    driver.execute_script(
+        """
+        window.__r = '__pending__';
+        showDialog({ message: 'e' }).then(v => { window.__r = (v === null ? 'null' : String(v)); });
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        """,
+        [],
+    )
+    esc = driver.execute_script(
+        "return { resolved: window.__r, open: document.getElementById('dialog-overlay').classList.contains('open') };",
+        [],
+    )
+    assert esc['resolved'] == 'null' and not esc['open'], f'Esc did not dismiss: {esc}'
+
+    # A dialog that opts out (cookie login) must NOT be dismissable: no X, backdrop/Esc inert.
+    noauto = driver.execute_script(
+        """
+        window.__r = '__pending__';
+        showDialog({ message: 'lock', dismissable: false }).then(
+            v => { window.__r = (v === null ? 'null' : String(v)); });
+        const before = !!document.querySelector('#dialog-box .dialog-close');
+        document.getElementById('dialog-overlay').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const stillOpen = document.getElementById('dialog-overlay').classList.contains('open');
+        document.getElementById('dialog-overlay').classList.remove('open');  // manual teardown
+        return { hadClose: before, resolved: window.__r, stillOpen: stillOpen };
+        """,
+        [],
+    )
+    assert noauto['hadClose'] is False, 'a dismissable:false dialog must not show an X'
+    assert noauto['stillOpen'] is True, 'a dismissable:false dialog must ignore backdrop/Esc'
+    assert noauto['resolved'] == '__pending__', 'a dismissable:false dialog must not resolve on dismiss'
 
 
 def test_the_resume_banner_gets_out_of_the_pinned_menu_s_way(app_url, driver):

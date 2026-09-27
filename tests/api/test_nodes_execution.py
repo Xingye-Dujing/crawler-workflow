@@ -632,6 +632,43 @@ class TestStopAndKill:
         t.join(timeout=5)
         assert not t.is_alive(), 'the killed thread must actually die'
 
+    def test_kill_protects_the_run_supervisor_and_live_pool_workers(self, client, app_module):
+        import threading
+
+        started = threading.Event()
+
+        def _idle():
+            started.set()
+            try:
+                for _ in range(3000):
+                    time.sleep(0.01)
+            except SystemExit:
+                return
+
+        # The supervisor thread named 'run' is protected by name — the whole point of
+        # naming it. Before the fix it reported as "Thread-N" and was freely killable.
+        run_thread = threading.Thread(target=_idle, name='run', daemon=True)
+        run_thread.start()
+        assert started.wait(5)
+        resp = client.post('/api/workflow/processes/kill', json={'ident': run_thread.ident})
+        assert resp.status_code == 403, 'the live run supervisor must never be killable'
+
+        # A parallel run crawls on executor pool threads; while a run is live those are
+        # off-limits too (a SystemExit there can orphan a browser / hold its profile).
+        pool = threading.Thread(target=_idle, name='ThreadPoolExecutor-0_1', daemon=True)
+        pool.start()
+        app_module.execution_state['running'] = True
+        try:
+            resp = client.post('/api/workflow/processes/kill', json={'ident': pool.ident})
+            assert resp.status_code == 403, 'a live crawl worker must not be killable'
+        finally:
+            app_module.execution_state['running'] = False
+        # Once no run is live, a stuck pool thread is disposable again (use Stop otherwise).
+        resp = client.post('/api/workflow/processes/kill', json={'ident': pool.ident})
+        assert resp.status_code == 200
+        run_thread.join(timeout=5)
+        pool.join(timeout=5)
+
 
 class TestQuietNodesInConsole:
     """A 工作流命名 or 上传文件 node has no work to announce.

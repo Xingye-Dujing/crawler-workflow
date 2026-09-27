@@ -480,7 +480,7 @@ class TestAWallMustSurviveBeingJudged:
 #: stale entry once a site has been moved onto ``open``.
 BARE_NAVIGATIONS = {
     'backend/app.py': 2,
-    'backend/crawlers/base.py': 3,  # ``open`` itself, cookie planting, the cookie probe
+    'backend/crawlers/base.py': 2,  # ``open`` itself and cookie planting (the cookie probe now goes through open)
     'backend/crawlers/comments.py': 7,
     'backend/crawlers/wechat.py': 1,
     'backend/crawlers/weibo.py': 1,

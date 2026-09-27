@@ -544,3 +544,9 @@ class TestItemLock:
         lock = pa['lock']
         assert lock['rowShowsLocked'] is True, 'the row lost its engaged-lock styling'
         assert lock['rowAriaPressed'] is True, 'the lock button does not expose its state'
+        # The glyph is a drawn SVG (so it follows the page's grey/accent), never the
+        # fixed-colour Unicode padlock — the reason 🔒/🔓 were replaced.
+        assert lock['lockedIsSvg'] is True and lock['lockedNoEmoji'] is True, 'locked glyph is still emoji'
+        assert lock['unlockedIsSvg'] is True and lock['unlockedNoEmoji'] is True, 'unlocked glyph is still emoji'
+        assert lock['lockedClosed'] is True, 'locked must draw a seated shackle'
+        assert lock['unlockedOpen'] is True, 'unlocked must draw a swung-open shackle'

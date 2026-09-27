@@ -947,12 +947,21 @@ const lockReq = requests.filter((r) => r.url === '/api/locks');
 pa.exportsManager._last = [{ name: 'keep.csv', kind: 'csv', size: 10, mtime: 1760000000, downloadable: true }];
 pa.exportsManager.render();
 const lockRowHtml = id('exports-mgr-body').innerHTML;
+const unlockedBtn = sandbox.lockButtonHtml('runs', 'not-locked-key');
 out.lock = {
     toggleMethod: lockReq.map((r) => r.method)[0],
     toggleBody: lockReq.length ? JSON.parse(lockReq[0].body) : null,
     cacheLocked: sandbox.Locks.isLocked('exports', 'keep.csv'),
     rowShowsLocked: lockRowHtml.indexOf('runs-mgr-btn lock locked') >= 0,
     rowAriaPressed: lockRowHtml.indexOf('aria-pressed="true"') >= 0,
+    // The glyph must be a drawn SVG (inherits the page colour), never the fixed-colour
+    // Unicode padlock emoji — which is why 🔒/🔓 had to go (#196).
+    lockedIsSvg: lockRowHtml.indexOf('class="lock-svg"') >= 0,
+    lockedNoEmoji: !/[🔒🔓]/.test(lockRowHtml),
+    unlockedIsSvg: unlockedBtn.indexOf('class="lock-svg"') >= 0,
+    unlockedNoEmoji: !/[🔒🔓]/.test(unlockedBtn),
+    unlockedOpen: unlockedBtn.indexOf('M8 11V8a4 4 0 0 1 7.6') >= 0,
+    lockedClosed: lockRowHtml.indexOf('M8 11V8a4 4 0 0 1 8 0v3') >= 0,
 };
 
 process.stdout.write(JSON.stringify(out));

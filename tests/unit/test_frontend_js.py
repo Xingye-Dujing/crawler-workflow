@@ -935,19 +935,20 @@ class TestRunRecordsPanel:
         assert cases['parallelHeadless'] == ['PARALLEL(2)', 'HEADLESS']
         assert cases['parallelVisible'] == ['PARALLEL(3)', 'WINDOW']
         assert cases['serialHeadless'] == ['SERIAL(2)', 'HEADLESS']
-        assert cases['singleParallel'] == ['HEADLESS'], 'one workflow is neither parallel nor serial'
-        assert cases['singleSerial'] == ['WINDOW']
+        assert cases['singleParallel'] == ['HEADLESS'], 'a lone parallel workflow had no concurrency to report'
+        # A serial record IS one workflow, so it names the mode even at ×1 (user directive).
+        assert cases['singleSerial'] == ['SERIAL(1)', 'WINDOW'], cases['singleSerial']
         # forced_visible is a retired column (#148: nothing forces a window into a headless run),
         # so it must be inert — a legacy row carrying the flag still reads 「无头」, never a mixed
         # chip. If tags() ever relabels a headless request on this flag again, this goes red.
-        assert cases['headlessForcedWindow'] == ['HEADLESS'], cases['headlessForcedWindow']
-        assert cases['headlessClean'] == ['HEADLESS']
-        assert cases['windowIgnoringFlag'] == ['WINDOW'], 'a window run is 窗口 whatever the flag says'
+        assert cases['headlessForcedWindow'] == ['SERIAL(1)', 'HEADLESS'], cases['headlessForcedWindow']
+        assert cases['headlessClean'] == ['SERIAL(1)', 'HEADLESS'], cases['headlessClean']
+        assert cases['windowIgnoringFlag'] == ['SERIAL(1)', 'WINDOW'], cases['windowIgnoringFlag']
         # Disabled workflows must be NAMED on the record, not silently absent: a run
         # read back later has to show what it deliberately skipped (and a clean run
         # grows no chip from an empty field).
-        assert cases['skippedNames'] == ['HEADLESS', 'SKIPPED(热身 + 夜间)'], cases['skippedNames']
-        assert cases['skippedNone'] == ['HEADLESS']
+        assert cases['skippedNames'] == ['SERIAL(1)', 'HEADLESS', 'SKIPPED(热身 + 夜间)'], cases['skippedNames']
+        assert cases['skippedNone'] == ['SERIAL(1)', 'HEADLESS'], cases['skippedNone']
 
     def test_a_serial_record_with_two_workflows_says_serial(self, runsmgr):
         rows = _rows(runsmgr['html'])

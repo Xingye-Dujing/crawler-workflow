@@ -445,7 +445,11 @@ class CommentSession:
         candidates: list[str] = []
 
         def fetch(token):
-            order = [candidate for candidate in [token, *candidates] if candidate][:3]
+            # dict.fromkeys keeps first-seen order while dropping the duplicate the
+            # first round used to make: with no alternates yet, ``token`` and the
+            # seeded ``candidates`` were the same continuation, so the identical
+            # token was POSTed twice before giving up.
+            order = list(dict.fromkeys(candidate for candidate in [token, *candidates] if candidate))[:3]
             for candidate in order:
                 payload = innertube.call(self.driver, 'next', key, context, {'continuation': candidate})
                 if innertube.refused(payload):

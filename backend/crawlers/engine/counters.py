@@ -29,6 +29,11 @@ _UNITS = {
     'b': 1_000_000_000,
 }
 
+# NOTE: ``clean`` collapses whitespace before this runs, so a unit letter is always
+# adjacent to the following word ('1.2M views' → '1.2Mviews'). A lookahead forbidding
+# a trailing letter would reject that real case too, so the shorthand-vs-word trap
+# ('10 Months') is deliberately NOT guarded here — no live counter surface produces
+# it, and the alternative breaks the common 'K/M/B' path.
 _NUMBER_RE = re.compile(r'(\d+(?:[.,]\d+)?\s*)([万亿千wkmb]?)', re.IGNORECASE)
 _DIGITS_RE = re.compile(r'\d+')
 
@@ -59,6 +64,11 @@ def parse_count(text) -> int:
     :func:`has_count` first.
     """
     cleaned = clean(text)
+    # A leading minus is never a real counter (likes/views are non-negative); a diff
+    # or an odd negative label must not collapse to a positive. Cover the unicode
+    # minus forms some renderers emit, not just ASCII hyphen.
+    if cleaned.lstrip()[:1] in ('-', '−', '－', '﹣'):
+        return 0
     match = _NUMBER_RE.search(cleaned)
     if not match:
         return 0
@@ -67,7 +77,7 @@ def parse_count(text) -> int:
         value = float(digits)
     except ValueError:
         return 0
-    unit = match.group(2).lower()
+    unit = (match.group(2) or '').lower()
     if unit in _UNITS:
         value *= _UNITS[unit]
     return int(value)

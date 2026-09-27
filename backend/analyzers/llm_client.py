@@ -257,7 +257,10 @@ class LLMClient:
                 if last.kind == 'model':
                     # Missing model / bad tag: deterministic, retrying is noise.
                     raise LLMError(t('llm.ollama_failed', model=self.model, err=last), last.kind) from e
-            self._sleep(0.5 * attempt)
+            if attempt < max_retries:
+                # Don't nap on the final failure: the loop is about to raise, and a
+                # backoff after the last attempt only delays reporting the death.
+                self._sleep(0.5 * attempt)
         kind = last.kind if isinstance(last, LLMError) else 'network'
         if kind == 'network':
             # "Connection refused" alone is unactionable — name the address,
@@ -431,7 +434,7 @@ def prompt_version(builder) -> str:
     return version
 
 
-def answer_scope(op: str, client, text_column: str, extra_key: str, build_prompt) -> str:
+def answer_scope(op: str, client, text_column: str, extra_key: str, build_prompt, prompt_template=None) -> str:
     """The cache key prefix for one analyzer's answers.
 
     Everything that changes what an answer *means* has to be in here, or the
@@ -444,7 +447,15 @@ def answer_scope(op: str, client, text_column: str, extra_key: str, build_prompt
     extra_key                           — the analyzer's own extra scope, e.g. the
                                           cleaner's topic, which the prompt
                                           builder only sees as a closure value;
-    prompt_version(build_prompt)        — the template itself.
+    prompt_version(build_prompt)        — the template itself. ``prompt_template``
+                                          overrides *whose* source is hashed: when
+                                          ``build_prompt`` is a thin lambda/closure
+                                          that only forwards to the real template
+                                          method (clean, ner), hashing the wrapper
+                                          would key the cache to a constant line and
+                                          a template edit would silently replay the
+                                          old answers. Pass the underlying bound
+                                          method so its source is the version.
     """
     return '|'.join(
         str(part)
@@ -456,7 +467,7 @@ def answer_scope(op: str, client, text_column: str, extra_key: str, build_prompt
             client.max_chars,
             client.host,
             extra_key,
-            prompt_version(build_prompt),
+            prompt_version(prompt_template if prompt_template is not None else build_prompt),
         )
     )
 
@@ -741,6 +752,7 @@ def run_llm_dataframe(
     min_len: int = 10,
     default_model: str = '',
     extra_key: str = '',
+    prompt_template=None,
 ):
     """Run a row-by-row LLM job over a DataFrame with the loss-containment rules
     the three analyzers share.
@@ -815,7 +827,7 @@ def run_llm_dataframe(
         # module — a module-level import here would close that cycle.
         from services.run_store import RowCache
 
-        checkpoint = RowCache(store, answer_scope(op, client, text_column, extra_key, build_prompt))
+        checkpoint = RowCache(store, answer_scope(op, client, text_column, extra_key, build_prompt, prompt_template))
     if checkpoint is None and checkpoint_dir:
         # Keyed by node + operation + transport + the dataset's own content:
         # a different table, model or column starts a fresh file, the same one
@@ -893,6 +905,13 @@ def run_llm_dataframe(
         checkpoint.discard()  # clean finish — the real outputs own the data now
     if unfinished:
         logger.warning(t('llm.unfinished', label=label, n=unfinished, mark=ABORT_MARK))
+        # A Stop cut this node short. The direct analyzers keep 未处理 in the rows
+        # they return, so the executor's ABORT_MARK scan settles the node PARTIAL;
+        # NER's ``_explode`` drops those cells, so the marker never reaches the
+        # table. Record the cancellation on a channel the executor also reads, so
+        # no LLM node can settle DONE over rows the model was never asked about.
+        if ctx and ctx.get('cancel_book') is not None and ctx.get('node_id'):
+            ctx['cancel_book'][ctx['node_id']] = True
     return df
 
 

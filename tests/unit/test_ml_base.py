@@ -80,6 +80,12 @@ class TestFallback:
         classifier = MLClassifier(model_name=_unique_name('untrained'))
         assert classifier.predict(['随便一句话', '另一句']) == [('Neutral', 0.5), ('Neutral', 0.5)]
 
+    def test_an_untrained_model_honours_the_caller_neutral(self, model_dir):
+        """tendency has no 'Neutral' label; the missing-model fallback must use the
+        label the analyzer supplies, or an out-of-vocabulary class leaks into charts."""
+        classifier = MLClassifier(model_name=_unique_name('tendency-ish'))
+        assert classifier.predict(['一句话'], neutral='Objective Statement') == [('Objective Statement', 0.5)]
+
     def test_no_text_means_no_answers(self, model_dir):
         assert MLClassifier(model_name=_unique_name('empty')).predict([]) == []
 
@@ -110,6 +116,19 @@ class TestTrainingGuards:
         with pytest.raises(ValueError):
             classifier.fit(['文本'], ['pos'])
         assert not os.path.exists(os.path.join(model_dir, 'nowrite.pkl'))
+
+    @pytest.mark.parametrize('bogus', ['../../escape', 'sub/dir/x', '..', ''])
+    def test_a_model_name_cannot_escape_the_model_dir(self, model_dir, bogus):
+        """The name becomes ``MODEL_DIR/<name>.pkl`` and is read back with joblib, so a
+        path component here is an arbitrary pickle write/load. The constructor refuses any
+        name that is not already one safe component (#187)."""
+        with pytest.raises(ValueError):
+            MLClassifier(model_name=bogus)
+        assert os.listdir(model_dir) == []
+
+    def test_a_plain_component_is_accepted_unchanged(self, model_dir):
+        # The guard must not punish ordinary names — that is what every analyzer uses.
+        assert MLClassifier(model_name='emotion').model_name == 'emotion'
 
     def test_the_default_pipeline_can_be_saved(self, model_dir):
         classifier = MLClassifier(model_name=_unique_name('default-pipeline'))

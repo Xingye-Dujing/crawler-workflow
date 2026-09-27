@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 
 from config import Config
 from i18n import t
+from utils.helpers import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +59,20 @@ def build_tfidf_pipeline(classifier=None, max_features: int = 5000):
 
 class MLClassifier:
     def __init__(self, model_name: str = 'default', pipeline=None):
-        self.model_name = model_name
+        # ``model_name`` reaches the filesystem: ``fit`` joblib-dumps to this path and
+        # ``predict`` joblib-loads it back. A value that is not one safe component would
+        # let ``../x`` escape MODEL_DIR — a write anywhere, then an arbitrary pickle read
+        # on the next predict (code execution). Collapse it to a single safe name and
+        # refuse anything the sanitizer had to change, so the containment cannot be bypassed
+        # even if an upstream caller forgets its own allow-list.
+        safe = sanitize_filename(model_name)
+        if not safe or safe != str(model_name):
+            raise ValueError(t('ml.bad_model_name', name=model_name))
+        self.model_name = safe
         self.pipeline = pipeline or build_tfidf_pipeline()
         self._fitted = False
         self._label_map = {}
-        self._path = os.path.join(MODEL_DIR, f'{model_name}.pkl')
+        self._path = os.path.join(MODEL_DIR, f'{safe}.pkl')
 
     def fit(self, texts: list[str], labels: list[str]):
         if not texts:
@@ -81,7 +91,7 @@ class MLClassifier:
         joblib.dump({'pipeline': self.pipeline, 'label_map': self._label_map}, self._path)
         return self
 
-    def predict(self, texts: list[str]) -> list[tuple[str, float]]:
+    def predict(self, texts: list[str], neutral: str = 'Neutral') -> list[tuple[str, float]]:
         if not self._fitted:
             if os.path.exists(self._path):
                 data = joblib.load(self._path)
@@ -89,8 +99,11 @@ class MLClassifier:
                 self._label_map = data['label_map']
                 self._fitted = True
             else:
+                # An untrained model must answer with the *caller's* neutral, not a
+                # fixed 'Neutral': tendency has no such label, and one leaked here
+                # became an out-of-vocabulary class its charts treated as real.
                 logger.warning(t('ml.model_missing', name=self.model_name))
-                return [('Neutral', 0.5) for _ in texts]
+                return [(neutral, 0.5) for _ in texts]
         tokenized = [_tokenize(t) for t in texts]
         probs = self.pipeline.predict_proba(tokenized)
         indices = np.argmax(probs, axis=1)

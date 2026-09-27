@@ -153,6 +153,28 @@ class TestClearing:
         assert len(stamp) == 19 and stamp[4] == '-' and stamp[10] == 'T'
 
 
+class TestAging:
+    def test_purge_older_than_drops_expired_and_keeps_recent(self, history):
+        history.record_many(
+            [
+                _row('old', 'wf', 'n1', 'rows', '', 1.0, '2000-01-01T00:00:00'),
+                _row('new', 'wf', 'n1', 'rows', '', 2.0, history.now()),
+            ]
+        )
+        removed = history.purge_older_than(30)
+        assert removed == 1
+        assert {r['run_id'] for r in history.series().to_dict('records')} == {'new'}
+
+    @pytest.mark.parametrize('days', [0, -1, None])
+    def test_disabling_aging_keeps_everything(self, history, days):
+        history.record_many([_row('old', 'wf', 'n1', 'rows', '', 1.0, '2000-01-01T00:00:00')])
+        assert history.purge_older_than(days) == 0
+        assert len(history.series()) == 1
+
+    def test_purge_of_an_empty_ledger_is_zero(self, history):
+        assert history.purge_older_than(30) == 0
+
+
 class TestTheFileMayBeDeleted:
     """``history.db`` is a file the user is entitled to remove.
 
