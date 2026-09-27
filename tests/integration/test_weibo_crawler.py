@@ -14,8 +14,9 @@ from urllib.parse import quote
 import pytest
 from selenium.common.exceptions import NoSuchElementException
 
+import crawlers.base as base_module
 import crawlers.weibo as weibo_module
-from crawlers.base import Crawler
+from crawlers.base import Crawler, CrawlerStopped
 from crawlers.weibo import WeiboCrawler
 
 pytestmark = pytest.mark.unit
@@ -75,7 +76,7 @@ class FakeWeiboDriver:
         self._gets = 0
         self.visited = []
         # Measured 2026-09-28: inside a ``timescope`` window the site prints no 「共N页」 plate
-        # (``page_info=False``) while its pager links are still there (``page_links``) — the shape
+        # (``page_info='empty'``) while its pager links are still there (``page_links``) — the shape
         # ``_get_total_pages``' href fallback exists for, and the shape ``_may_page`` used to refuse
         # to consult at all.
         self._page_info = page_info
@@ -108,8 +109,14 @@ class FakeWeiboDriver:
                 return FakeEl()
             raise NoSuchElementException(selector)
         if selector == '.page-info':
-            if not self._cards or not self._page_info:
+            if not self._cards or self._page_info == 'absent':
                 raise NoSuchElementException(selector)
+            if self._page_info == 'empty':
+                # The measured timescope shape: the node IS on the page and its text carries no 「共N页」
+                # (scratchpad/weibo_structure.json → window.pageInfo=""), which is a different branch of
+                # ``_get_total_pages`` than "no node at all" — model the wrong one and a regression back
+                # to "one page" would still read green.
+                return FakeEl('')
             return FakeEl(f'共{self._total_pages}页/{self._total_pages * 10}条')
         if selector in ('body', 'html'):
             # A real page's body reflects where it actually is: the QR screen
@@ -133,7 +140,17 @@ class FakeWeiboDriver:
 @pytest.fixture
 def make_crawler(monkeypatch):
     """WeiboCrawler whose _create_driver installs a FakeWeiboDriver and whose
-    poll sleeps are instant. Returns (crawler, driver)."""
+    poll sleeps are instant. Returns (crawler, driver).
+
+    The sleep is patched on :mod:`crawlers.base`, not on the platform module: the wait for a page's
+    first content is the *shared* one now (``wait_for_first_content``), and a platform-local patch left
+    the real helper ticking once a second through its whole budget — a "unit" test that quietly took
+    minutes and proved nothing about the timing.
+    """
+    # Two modules hold a wait sleep now: the platform's own poll (weibo's redirect facade cannot
+    # use the shared helper — see ``WeiboCrawler._await_search_page``) and the shared helpers in
+    # ``crawlers.base``. Patching only one leaves a "unit" test sleeping in real time.
+    monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
     monkeypatch.setattr(weibo_module.time, 'sleep', lambda s: None)
 
     def _make(**driver_kwargs):
@@ -275,11 +292,11 @@ class TestPagingWalk:
         Measured 2026-09-28 on one hourly ``timescope`` URL: page 1 rendered 9 cards, page 2 rendered
         6 more with **no mid in common**, and the only reason the old code never asked was
         ``_may_page``'s assumption. Such a window prints no 「共N页」 text either, so the depth has to
-        come from the pager anchors — which is what ``page_info=False`` plus ``page_links`` models.
+        come from the pager anchors — which is what ``page_info='empty'`` plus ``page_links`` models.
         """
         window = FEED.replace('Refer=g', 'timescope=custom%3A2026-09-26-20%3A2026-09-26-21&Refer=g')
         links = [f'{window}&page={n}' for n in range(1, 4)]
-        crawler, driver = make_walker(WeiboCrawler.DEFAULT_TARGET, total_pages=1, page_info=False, page_links=links)
+        crawler, driver = make_walker(WeiboCrawler.DEFAULT_TARGET, total_pages=1, page_info='empty', page_links=links)
         scraped = crawler._scrape_single_search(window, WeiboCrawler.DEFAULT_TARGET)
         assert self._paged_urls(driver) == [f'{window}&page={n}' for n in (2, 3)], driver.visited
         assert len(scraped) == 3, 'page 1 plus the two deeper ones'
@@ -299,7 +316,8 @@ class TestPagingWalk:
             crawler.search(keyword='三亚', target_count=2)
         said = [record.getMessage() for record in caplog.records]
         assert (
-            i18n.t('crawl.weibo.walk_done', n=2, total=1, target=2, reason=i18n.stop_reason_label('target')) in said
+            i18n.t('crawl.weibo.walk_done', n=2, walked=1, total=1, target=2, reason=i18n.stop_reason_label('target'))
+            in said
         ), said
 
     def test_a_window_met_by_a_wall_reports_the_wall_as_the_reason(self, make_walker, caplog):
@@ -311,7 +329,8 @@ class TestPagingWalk:
             crawler.search(keyword='三亚', target_count=0)
         said = [record.getMessage() for record in caplog.records]
         assert (
-            i18n.t('crawl.weibo.walk_done', n=1, total=1, target='∞', reason=i18n.stop_reason_label('wall')) in said
+            i18n.t('crawl.weibo.walk_done', n=1, walked=1, total=1, target='∞', reason=i18n.stop_reason_label('wall'))
+            in said
         ), said
 
     def test_a_wall_met_while_paging_keeps_the_rows_and_stops_the_walk(self, make_walker):
@@ -323,6 +342,140 @@ class TestPagingWalk:
         assert self._paged_urls(driver) == [f'{FEED}&page={n}' for n in (2, 3)], (
             'the walk may pay for the request that discovers the wall, never one past it'
         )
+
+    def test_a_page_that_shows_neither_is_reported_as_that_and_not_as_emptiness(self, make_crawler, caplog):
+        """The line may only say what the code saw (U11's second half).
+
+        The old wording was 「页面加载超时，可能无内容」 — a guess about the window's content, printed by
+        code that cannot see the window at all: it saw a load that produced no cards and no plate. On a
+        slow network that sentence tells the user the hour was empty, which is the one thing they cannot
+        un-see in the table. The replacement carries the seconds actually waited and whether the
+        navigation settled, because both are facts.
+        """
+        import i18n
+
+        crawler, _driver = make_crawler(final_url=FEED, cards=False)
+        with caplog.at_level('WARNING'):
+            assert crawler._await_search_page(FEED) is False
+        said = [record.getMessage() for record in caplog.records]
+        assert not [line for line in said if '无内容' in line], said
+        assert any(line.startswith('    等了') or 'Waited' in line for line in said), said
+        assert i18n.t('crawl.weibo.navSettled') in ''.join(said), said
+
+    def test_an_unsettled_load_says_so_instead_of_blaming_the_site(self, make_crawler, caplog, monkeypatch):
+        """The other half of the same sentence: a load that never finished is a slow network."""
+        import i18n
+
+        crawler, _driver = make_crawler(final_url=FEED, cards=False)
+        monkeypatch.setattr(crawler, 'open', lambda url, judge=True: False)
+        with caplog.at_level('WARNING'):
+            assert crawler._await_search_page(FEED) is False
+        said = ''.join(record.getMessage() for record in caplog.records)
+        assert i18n.t('crawl.weibo.navUnsettled') in said, said
+
+    def test_the_wait_is_patient_and_hears_stop_every_tick(self, make_crawler, monkeypatch):
+        """The budget is the shared one, and 停止 is heard inside the wait.
+
+        A platform-local timeout is how a crawl ends up blaming a site for its own machine
+        (``PAGE_WAIT * 3`` was nine seconds on a surface measured delivering in under a second and a
+        half), and a wait that ignores 停止 is the longest thing in the program — the user's only exit
+        would have to wait for it.
+        """
+        from config import Config
+
+        crawler, _driver = make_crawler(final_url=FEED, cards=False)
+        ticks = []
+
+        def _counting_stop():
+            ticks.append(1)
+            return len(ticks) > 40
+
+        monkeypatch.setattr(crawler, 'may_stop', _counting_stop)
+        with pytest.raises(CrawlerStopped):
+            crawler._await_search_page(FEED)
+        assert 40 < len(ticks) < int(Config.PAGE_WAIT_TIMEOUT), (
+            f'the wait ran {len(ticks)} ticks against a budget of {Config.PAGE_WAIT_TIMEOUT}s'
+        )
+
+    def test_a_parked_browser_is_not_charged_a_whole_budget_per_window(self, make_crawler, monkeypatch):
+        """The shared breaker, taken on directly because this wait cannot be the shared helper.
+
+        Two pages that delivered nothing and this crawler stops spending
+        :attr:`~crawlers.base.Crawler.MAX_PENDING_WAITS` budgets on further windows: a date range is
+        thousands of windows wide, and "the network is down" must cost two waits, not two hours.
+        """
+        crawler, _driver = make_crawler(final_url=FEED, cards=False)
+        crawler.pending_waits = Crawler.MAX_PENDING_WAITS
+        monkeypatch.setattr(crawler, 'may_stop', lambda: False)
+        assert crawler._await_search_page(FEED) is False
+        assert crawler.pending_waits == Crawler.MAX_PENDING_WAITS, 'it still waited and charged another'
+
+
+class TestTheWindowWalkStopsOnAnyRefusal:
+    """A refusal of any kind ends a walk over windows, and the closing line says which kind.
+
+    The loop used to break on ``login_wall`` alone. Risk control and a browser that fetched nothing at
+    all set *other* flags — so a session answered 风控 at window 13 of 6432 kept navigating windows, and
+    the summary called that 「已到列表末尾」. Three different answers, three different reasons, and the
+    user reads which one happened.
+    """
+
+    @pytest.fixture
+    def make_walk(self, make_crawler, monkeypatch):
+        def _make(flag, urls=3):
+            crawler, driver = make_crawler(cards=True)
+            monkeypatch.setattr(Crawler, '_polite_pause', staticmethod(lambda *a: None))
+            crawler._build_urls = lambda keyword, start, end: [f'{FEED}&w={i}' for i in range(urls)]
+            asked = []
+
+            def _window(base_url, _target):
+                asked.append(base_url)
+                setattr(crawler, flag, True)
+                return []
+
+            monkeypatch.setattr(crawler, '_scrape_single_search', _window)
+            return crawler, asked
+
+        return _make
+
+    @pytest.mark.parametrize('flag,token', [('risk_blocked', 'risk'), ('unreachable', 'unreachable')])
+    def test_a_refusal_that_is_not_a_login_wall_stops_the_walk(self, make_walk, caplog, flag, token):
+        import i18n
+
+        crawler, asked = make_walk(flag)
+        with caplog.at_level('INFO'):
+            crawler.search(keyword='三亚', target_count=0)
+        assert len(asked) == 1, f'{flag} did not stop the walk: {asked}'
+        said = ''.join(record.getMessage() for record in caplog.records)
+        assert i18n.stop_reason_label(token) in said, said
+
+    def test_a_kill_inside_a_window_leaves_the_cursor_on_the_previous_one(self, make_crawler, monkeypatch):
+        """A window is behind the cursor only once it has been walked (M4).
+
+        Marking it done before entering was harmless when a window was one page; now that a window is up
+        to ten pages deep, a 停止 or a cookie death mid-window would have 继续 skip the pages it had not
+        reached and the summary would still say the list ended. Re-entering costs requests, never rows —
+        the ledger de-dupes by 微博ID.
+        """
+        crawler, _driver = make_crawler(cards=True)
+        monkeypatch.setattr(Crawler, '_polite_pause', staticmethod(lambda *a: None))
+        crawler._build_urls = lambda keyword, start, end: [f'{FEED}&w=1', f'{FEED}&w=2']
+        asked = []
+
+        def _window(url, _target):
+            asked.append(url)
+            if len(asked) > 1:
+                # 停止 lands during the SECOND window's page walk; the first one is finished and paid for.
+                raise CrawlerStopped('stopped')
+            item = {'正文': url}
+            crawler.emit(item)
+            return [item]
+
+        crawler._scrape_single_search = _window
+        with pytest.raises(CrawlerStopped):
+            crawler.search(keyword='三亚', target_count=50)
+        assert asked == [f'{FEED}&w=1', f'{FEED}&w=2']
+        assert crawler.position.get('url_index') == 1, f'the interrupted window was marked done: {crawler.position}'
 
 
 # ─── the author walk: mymblog read from inside the profile page ───────────────
@@ -410,6 +563,10 @@ class FakeMymblogDriver:
 
 @pytest.fixture
 def make_author(monkeypatch):
+    # Two modules hold a wait sleep now: the platform's own poll (weibo's redirect facade cannot
+    # use the shared helper — see ``WeiboCrawler._await_search_page``) and the shared helpers in
+    # ``crawlers.base``. Patching only one leaves a "unit" test sleeping in real time.
+    monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
     monkeypatch.setattr(weibo_module.time, 'sleep', lambda s: None)
 
     def _make(pages, uid='6302837173', wall=False):
@@ -599,6 +756,10 @@ def _board(items):
 
 @pytest.fixture
 def make_board(monkeypatch):
+    # Two modules hold a wait sleep now: the platform's own poll (weibo's redirect facade cannot
+    # use the shared helper — see ``WeiboCrawler._await_search_page``) and the shared helpers in
+    # ``crawlers.base``. Patching only one leaves a "unit" test sleeping in real time.
+    monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
     monkeypatch.setattr(weibo_module.time, 'sleep', lambda s: None)
 
     def _make(payload):

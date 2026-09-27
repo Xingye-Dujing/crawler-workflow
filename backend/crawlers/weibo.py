@@ -9,9 +9,10 @@ from urllib.parse import quote, unquote
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 
+from config import Config
 from i18n import stop_reason_label, t
 
-from .base import Crawler, as_index
+from .base import Crawler, CrawlerStopped, as_index
 from .engine import pagefetch, pager, times
 from .engine.counters import parse_count
 
@@ -133,6 +134,7 @@ class WeiboCrawler(Crawler):
 
         start_index = as_index(resume.get('url_index'))
         total_urls = len(urls)
+        walked = start_index
         self.mark_position(keyword=keyword, urls=urls, url_index=start_index, url_total=total_urls, done=have)
 
         for idx, url in enumerate(urls, start=1):
@@ -147,20 +149,28 @@ class WeiboCrawler(Crawler):
             logger.info(t('crawl.weibo.url', url=url))
             logger.info('=' * 80)
 
-            # The card/page cursor restarts per window: it only means anything
-            # against the page that is loaded right now.
-            self.mark_position(url_index=idx, card_index=0, page_index=0, done=self.collected())
+            # The card/page cursor restarts per window: it only means anything against the page that
+            # is loaded right now. ``url_index`` is deliberately NOT advanced here — a window is only
+            # behind the cursor once it has been walked, and since a window turned out to be up to ten
+            # pages deep (measured), marking it done before entering it would let 继续 skip the pages
+            # the kill happened in front of. The ledger de-dupes by 微博ID, so re-entering the window
+            # costs requests, never rows.
+            self.mark_position(card_index=0, page_index=0, done=self.collected())
             page_data = self._scrape_single_search(url, target)
+            walked = idx
             logger.info(t('crawl.weibo.link_done', i=idx, n=len(page_data)))
             logger.info(t('crawl.weibo.accumulated', n=self.collected()))
             # Position after each window: a kill here costs at most the window
             # in flight, never the windows already walked.
             self.mark_position(url_index=idx, done=self.collected())
 
-            if self.login_wall:
-                # Every further window would meet the same wall; stopping is
-                # both faster and kinder to the session than walking into it
-                # another hundred times.
+            if self._refused():
+                # Every further window would meet the same answer. This used to test `login_wall`
+                # alone, which meant a session answered by risk control — or a browser whose network
+                # died, giving a document the browser wrote for itself — kept walking thousands of
+                # remaining windows at one navigation each while the closing line called it 「已到列表
+                # 末尾」. A refusal of any kind is the reason the walk stopped, and it is the reason
+                # the user needs to hear.
                 break
 
             if idx < total_urls and self.collected() < target:
@@ -174,6 +184,10 @@ class WeiboCrawler(Crawler):
             reason = 'stopped'
         elif self.login_wall:
             reason = 'wall'
+        elif self.risk_blocked:
+            reason = 'risk'
+        elif self.unreachable:
+            reason = 'unreachable'
         elif self.collected() >= target:
             reason = 'target'
         else:
@@ -182,12 +196,23 @@ class WeiboCrawler(Crawler):
             t(
                 'crawl.weibo.walk_done',
                 n=self.collected(),
+                walked=walked,
                 total=total_urls,
                 target='∞' if target == math.inf else target,
                 reason=stop_reason_label(reason),
             )
         )
         return self.results()
+
+    def _refused(self) -> bool:
+        """Any page verdict the site or the browser already gave, not just a dead cookie.
+
+        Three flags, three different answers — ``login_wall`` (re-save the cookie), ``risk_blocked``
+        (wait; the session is fine, the request rate is not) and ``unreachable`` (the browser refused
+        to fetch, the site never saw the session) — and all three end a walk over windows, because
+        the next window pays the same answer. They stay separate so the closing line can say which.
+        """
+        return bool(self.login_wall or self.risk_blocked or self.unreachable)
 
     # ─── the site's own board ─────────────────────────────────────────
 
@@ -478,9 +503,12 @@ class WeiboCrawler(Crawler):
                 return scraped
 
             total_pages = self._get_total_pages()
+            # Said even when the answer is "one page": that is a fact about the window the user can
+            # check against the page they open in a browser, and the only line that distinguishes a
+            # one-page window from a pager this crawl could not read.
+            logger.info(t('crawl.weibo.total_pages', n=total_pages))
             if total_pages <= 1:
                 return scraped
-            logger.info(t('crawl.weibo.total_pages', n=total_pages))
             page_url = self._page_url(base_url)
             for page_num in range(2, total_pages + 1):
                 if self.collected() >= target:
@@ -541,23 +569,44 @@ class WeiboCrawler(Crawler):
         identically headless and visible.
         """
         opened = self.open(url, judge=False)
-        poll = 0.5
-        rounds = max(1, int(self.PAGE_WAIT * 3 / poll))
-        for _ in range(rounds):
+        # Why this page keeps its own poll while every other wait in the program is shared: the shared
+        # :meth:`Crawler.wait_for_first_content` leaves early when it sees a *wall* — and a wall is
+        # precisely what s.weibo.com shows every visitor for a moment on the way to the results, so
+        # using it here would re-create the bug this function exists to prevent (measured: the bounce
+        # lands 0.42-0.85 s after ``get`` returns). What the shared helper guarantees is still owed to
+        # the user, so the three properties are taken on directly: the same patient budget
+        # (``Config.PAGE_WAIT_TIMEOUT``, not a platform-local guess about how long a page needs), the
+        # same 停止 check every tick, and the same pending-wait breaker that keeps a dead network from
+        # spending the whole budget once per window of a 6432-window range.
+        if self.pending_waits >= self.MAX_PENDING_WAITS:
+            logger.warning(t('crawl.weibo.page_gave_up', waits=self.pending_waits))
+            return False
+        started = time.monotonic()
+        ticks = max(1, int(Config.PAGE_WAIT_TIMEOUT / self.FIRST_CONTENT_TICK))
+        for _ in range(ticks):
+            if self.may_stop():
+                raise CrawlerStopped(t('crawl.stopped'))
             if self._element_or_none('.card-no-result') is not None:
+                self.pending_waits = 0
                 logger.info(t('crawl.weibo.no_result'))
                 return False
             if self._element_or_none(self.CARD_SELECTOR) is not None:
+                self.pending_waits = 0
                 logger.info(t('crawl.weibo.page_loaded'))
                 return True
-            time.sleep(poll)
+            time.sleep(self.FIRST_CONTENT_TICK)
+        self.pending_waits += 1
         if self.check_login_wall(url):
+            # The wall line already names the answer; a second line here would print the same event
+            # twice with two different explanations (and this one would explain it as nothing).
             return False
-        # The slot answers with a word, not with a token: ``settle`` would print as English inside a
-        # Chinese console, and the sentence's whole job is to say what the code can see (a load that
-        # finished but showed neither cards nor plate) without naming a refusal it cannot observe.
+        # Nothing arrived and no refusal said why. The slots carry only what the code can see: how long
+        # it actually waited (measured, not the budget it hoped to spend), and whether the navigation
+        # settled — an unsettled load is a slow network, and a settled page with no cards is not
+        # thereby a refusal either.
         settled = t('crawl.weibo.navSettled') if opened else t('crawl.weibo.navUnsettled')
-        logger.warning(t('crawl.weibo.page_timeout', secs=int(self.PAGE_WAIT * 3), settled=settled))
+        waited = int(round(time.monotonic() - started))
+        logger.warning(t('crawl.weibo.page_timeout', secs=waited, settled=settled))
         return False
 
     @staticmethod

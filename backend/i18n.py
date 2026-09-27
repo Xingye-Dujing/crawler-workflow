@@ -227,7 +227,11 @@ _ZH = {
     ),
     'crawl.weibo.navSettled': '已完成',
     'crawl.weibo.navUnsettled': '未完成，那是慢网络而不是站点的拒绝',
-    'crawl.weibo.walk_done': '微博搜索的全部窗口走完：{n} 条（目标 {target}，走过 {total} 个窗口，原因：{reason}）',
+    'crawl.weibo.page_gave_up': (
+        '    这台浏览器已经有 {waits} 个搜索页一次内容都没交付：不再把整段预算花在新的窗口上'
+        '（这是「取不到页面」，不是「这个窗口没有内容」）'
+    ),
+    'crawl.weibo.walk_done': '微博搜索收尾：{n} 条（目标 {target}，窗口走到第 {walked}/{total} 个，原因：{reason}）',
     'crawl.weibo.max_page': '最大页码: {n}',
     'crawl.weibo.pages_fail': '获取总页数失败: {err}',
     'crawl.weibo.page_cards': '    本页共发现 {n} 个卡片',
@@ -654,8 +658,8 @@ _ZH = {
     'comment.dyNoPanel': '评论区没有渲染出来（可能被折叠或需要登录）：{url}',
     'comment.dyNone': '该视频计有 {n} 条评论，页面未展开评论列表：{url}',
     'comment.weiboShowFailed': '[微博评论] 评论接口取不回来（Cookie 可能失效或被限流）：{url}',
-    'comment.weiboPagesCapped': (
-        '[微博评论] 翻满 {pages} 页预算时游标仍是活的：站点写着 {declared} 条，本次取到 {rows} 条'
+    'comment.weiboReplay': (
+        '[微博评论] 第 {page} 页没有交出新的一条（游标仍在动）：按「站点在重复同一批」收工，本次 {rows} 条'
     ),
     'comment.weiboShort': (
         '[微博评论] 站点写着 {declared} 条，本表只有 {rows} 条（差 {gap} 条）'
@@ -887,6 +891,8 @@ _ZH = {
     'crawl.stopReason.fetch_failed': '列表接口取数失败',
     'crawl.stopReason.stopped': '用户停止了运行',
     'crawl.stopReason.wall': '登录墙拦住了后面的窗口',
+    'crawl.stopReason.risk': '站点风控拦住了后面的窗口（不是 Cookie 失效）',
+    'crawl.stopReason.unreachable': '浏览器根本没取到页面（网络或域名不可达，站点从未见到这个会话）',
 }
 
 _EN = {
@@ -1091,8 +1097,12 @@ _EN = {
     ),
     'crawl.weibo.navSettled': 'settled',
     'crawl.weibo.navUnsettled': 'did not settle, which is a slow network, not a refusal',
+    'crawl.weibo.page_gave_up': (
+        '    This browser has already watched {waits} search pages deliver nothing: the budget is'
+        ' not being spent on another window (that is "no page fetched", not "this window is empty")'
+    ),
     'crawl.weibo.walk_done': (
-        'Weibo search walk finished: {n} rows (target {target}, {total} windows walked, reason: {reason})'
+        'Weibo search walk closed: {n} rows (target {target}, window {walked} of {total} reached, reason: {reason})'
     ),
     'crawl.weibo.max_page': 'Max page number: {n}',
     'crawl.weibo.pages_fail': 'Could not determine page count: {err}',
@@ -1541,9 +1551,9 @@ _EN = {
     'comment.dyNoPanel': 'the comment panel never rendered (collapsed, or login required): {url}',
     'comment.dyNone': 'this video reports {n} comments but the list did not open: {url}',
     'comment.weiboShowFailed': '[weibo comments] the comment endpoint answered nothing (dead cookie, limited): {url}',
-    'comment.weiboPagesCapped': (
-        '[weibo comments] the page budget of {pages} ran out while the cursor was still live: '
-        'the page says {declared}, this crawl kept {rows}'
+    'comment.weiboReplay': (
+        '[weibo comments] page {page} added no new row while the cursor was still live: '
+        'the walk calls the thread replayed and stops, at {rows} rows'
     ),
     'comment.weiboShort': (
         '[weibo comments] the page says {declared}, this table holds {rows} (a gap of {gap})'
@@ -1800,6 +1810,9 @@ _EN = {
     'crawl.stopReason.fetch_failed': 'the list request failed',
     'crawl.stopReason.stopped': 'the run was stopped',
     'crawl.stopReason.wall': 'a login wall stopped the walk',
+    'crawl.stopReason.risk': "the site's risk control stopped the walk (not a dead cookie)",
+    'crawl.stopReason.unreachable': 'the browser never fetched a page at all (network or DNS),'
+    ' so the site never saw this session',
 }
 
 MESSAGES = {'zh': _ZH, 'en': _EN}
@@ -1942,6 +1955,8 @@ STOP_REASONS = {
     # Not an engine token: a walk over a *list of URLs* (weibo's hourly windows) ends on the wall
     # itself, not on one page's shape, and it must still read as a reason rather than as a code word.
     'wall': 'crawl.stopReason.wall',
+    'risk': 'crawl.stopReason.risk',
+    'unreachable': 'crawl.stopReason.unreachable',
 }
 
 

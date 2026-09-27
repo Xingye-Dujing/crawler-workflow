@@ -41,12 +41,16 @@ def _one_row(item: dict, article_url: str, fallback_floor: int, parent_floor: in
     * **楼层** came from a per-page ``enumerate``, and the walker calls this adapter **once per page**, so
       page 2 restarted at 1 and a 119-row table held six rows called "1". The site prints its own
       ``floor_number`` (a whole-thread number: measured, a 30-comment thread's 22 top-level rows cover
-      floors 1..30 minus exactly the 8 nested ones), so that is the value and the index is only a fallback.
+      floors 1..30 minus exactly the 8 nested ones), so that is the value. The index survives only as a
+      fallback for a top-level row that carries no floor at all — and NOT for a reply, because a reply's
+      ``floor_number`` is measured ``0``: the site is saying it has no floor, and substituting "position
+      inside its parent's preview" would re-create the six-rows-called-1 defect this bullet describes,
+      one column meaning two numbering systems.
     * **评论时间** was stored verbatim, which on this endpoint is ``'Sun Jul 26 09:49:46 +0800 2026'`` —
-      an English stamp sitting in a column the search path fills with ``09月26日 21:00``. The author path
-      already normalised it; ``engine/times.py`` is now the one place that shape is read.
-    * **父楼层** is new: ``rootid`` equals the row's own ``id`` on a top-level comment and its parent's on a
-      reply, so the two shapes can be told apart from the payload alone.
+      an English stamp in a column that must sort and chart as one thing. The author path already
+      normalised it; ``engine/times.py`` is now the one place that shape is read.
+    * **父楼层** is new: ``is_sub_cmt`` (measured on a preview child) and ``rootid != id`` both mark a
+      reply, so the two shapes are told apart from the payload rather than by call-site position.
     """
     if not isinstance(item, dict):
         return None
@@ -55,12 +59,18 @@ def _one_row(item: dict, article_url: str, fallback_floor: int, parent_floor: in
     # this walker fetches (and to key the parent link), and an empty one simply opts out of that —
     # it may not delete a comment the site showed.
     cid = str(item.get('id') or '')
-    floor = _as_int(item.get('floor_number')) or fallback_floor
+    root = str(item.get('rootid') or '')
+    is_child = bool(item.get('is_sub_cmt')) or bool(parent_floor) or bool(root and cid and root != cid)
+    site_floor = _as_int(item.get('floor_number'))
+    if site_floor:
+        floor = site_floor
+    elif is_child:
+        floor = ''
+    else:
+        floor = fallback_floor
     likes = item.get('like_counts')
     if likes is None:
         likes = item.get('like_count')
-    root = str(item.get('rootid') or '')
-    is_child = bool(parent_floor) or (root and root != cid)
     return {
         '平台': 'weibo',
         '文章URL': article_url,

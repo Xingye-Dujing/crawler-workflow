@@ -115,11 +115,12 @@ class CommentSession:
 
     # -- weibo -------------------------------------------------------------
 
-    #: The comment API's page budget. It is a *budget*, not a depth answer — the depth is
-    #: ``total_number`` and the target — and reaching it is reported (``comment.weiboPagesCapped``)
-    #: because a hot thread really runs past it: measured 2026-09-28, a 749-comment post returned
-    #: ~19-22 rows per page and was still handing out a live cursor after 6 pages.
-    WEIBO_COMMENT_PAGES = 30
+    #: How many consecutive pages may add nothing new before the walk calls it finished.
+    #: This is NOT a page budget — the repo has none any more (README, and the 2026-09-25 entry in
+    #: ``docs/crawler_notes.md`` that deleted every backend round/page ceiling). It answers one specific
+    #: cursor failure measured here: this API hands back a live ``max_id`` whose rows are already in the
+    #: table, and a walk that noticed that only through a constant would keep paying round trips.
+    WEIBO_EMPTY_ROUNDS = 2
 
     def crawl_weibo(self, url: str, limit: int) -> tuple:
         bid = weibo_bid(url)
@@ -150,13 +151,19 @@ class CommentSession:
         # it. ``trendsText`` also says 「已加载全部评论」 on a 22-of-30 walk, so that sentence is not a
         # verdict and is never consulted.
         declared = _as_count(show.get('comments_count'))
-        rows, seen, max_id, page, capped = [], set(), 0, 0, False
+        rows, seen, max_id, page, empty_rounds = [], set(), 0, 0, 0
+        # Which exit ended the walk decides what may be SAID about its length. Three of these endings are
+        # this code's own doing or the user's ask, and none of them is a statement about the thread: the
+        # shortfall may only be attributed to the site when the cursor itself ran out.
+        ended = 'cursor'
         while True:
             try:
                 batch = json.loads(self._in_page_fetch(weibo_comments_js(mid, max_id)))
             except Exception:
+                ended = 'fetch'
                 break
             items = batch.get('data') or []
+            before = len(rows)
             for row in parse_weibo_comments({'data': items}, url):
                 key = str(row.get('评论ID') or '')
                 if key and key in seen:
@@ -166,22 +173,30 @@ class CommentSession:
             page += 1
             declared = declared or _as_count(batch.get('total_number'))
             max_id = batch.get('max_id') or 0
-            if not items or not max_id or (limit and len(rows) >= limit):
+            if not items or not max_id:
                 break
-            if page >= self.WEIBO_COMMENT_PAGES:
-                # A budget reached is a fact the console must carry: 30 pages of ~20 rows is ~600, and the
-                # 749-comment thread this was measured on never ran out of cursor, so this exit is the one
-                # that used to end a hot thread's table silently and look complete.
-                capped = True
+            if len(rows) == before:
+                # The cursor moved and the page refilled rows already in the table. Named, because the
+                # alternative is a table that quietly stopped growing while the console said nothing —
+                # and this API really does hand back a live ``max_id`` over replayed rows.
+                empty_rounds += 1
+                if empty_rounds >= self.WEIBO_EMPTY_ROUNDS:
+                    ended = 'replay'
+                    self.log(t('comment.weiboReplay', page=page, rows=len(rows)))
+                    break
+            else:
+                empty_rounds = 0
+            if limit and len(rows) >= limit:
+                # The user's own number, not the site's. Reporting the gap against ``total_number`` here
+                # would blame the thread for the ask: 评论上限 20 on a 749-comment post is not a
+                # shortfall, and the table is exactly as long as the node was told to make it.
+                ended = 'limit'
                 break
             self.nap(0.8)  # polite page interval on the comment API
-        if capped:
-            self.log(
-                t('comment.weiboPagesCapped', pages=self.WEIBO_COMMENT_PAGES, rows=len(rows), declared=declared or '?')
-            )
-        if declared and len(rows) < declared:
-            self.log(t('comment.weiboShort', declared=declared, rows=len(rows), gap=declared - len(rows)))
-        return (rows[:limit] if limit else rows), OK
+        table = rows[:limit] if limit else rows
+        if ended == 'cursor' and declared and len(table) < declared:
+            self.log(t('comment.weiboShort', declared=declared, rows=len(table), gap=declared - len(table)))
+        return table, OK
 
     # -- xiaohongshu --------------------------------------------------------
 

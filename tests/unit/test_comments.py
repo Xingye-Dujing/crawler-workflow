@@ -225,7 +225,11 @@ class TestHelpers:
         rows = parse_weibo_comments(payload, 'https://weibo.com/1/a')
         assert [r['评论内容'] for r in rows] == ['父', '子'], rows
         assert [r['父楼层'] for r in rows] == ['', 254], rows
-        assert rows[1]['楼层'] == 1, "the child's own floor_number is 0, so the position answers"
+        # A reply has NO floor of its own — the measured payload says ``floor_number: 0`` on a child, which
+        # is the site saying "the whole-thread numbering does not apply to me". Substituting its position
+        # inside its parent's preview would put two numbering systems in one column and re-create the
+        # six-rows-called-1 defect the test above pins.
+        assert rows[1]['楼层'] == '', rows
         assert rows[1]['点赞数'] == 9
 
 
@@ -266,13 +270,6 @@ class TestWeiboAdapter:
         rows, status = session.crawl_weibo('https://weibo.com/', limit=0)
         assert rows == [] and status == DEAD
 
-    def _pages(self, count, declared):
-        """``count`` pages of one fresh row each, always handing back a live cursor."""
-        show = json.dumps({'id': '555', 'comments_count': declared})
-        return [show] + [
-            json.dumps({'data': [{'id': f'c{i}', 'text': f'c{i}'}], 'max_id': 900 + i}) for i in range(count)
-        ]
-
     def test_the_pages_own_number_names_a_shortfall(self):
         """22 of 30 must not read like a complete thread.
 
@@ -292,31 +289,44 @@ class TestWeiboAdapter:
         assert status == OK and len(rows) == 22, rows
         assert i18n.t('comment.weiboShort', declared=30, rows=22, gap=8) in said, said
 
-    def test_the_page_budget_says_so_instead_of_looking_finished(self):
-        """U19's weibo cell: 30 pages of ~20 rows is ~600, and a hot thread really has more.
+    def test_a_replayed_page_ends_the_walk_and_says_so(self):
+        """U19's weibo cell, fixed without a page budget.
 
-        The exit used to be a bare ``break``, which made a capped crawl indistinguishable from one the
-        site finished — the worst shape a table can have, because the user reads the shorter number as
-        the thread's size. The measured thread this budget was checked against was still handing out a
-        live cursor after 6 pages (749 comments declared).
+        A constant number of pages was the old exit: a bare ``break`` that made a capped crawl
+        indistinguishable from one the site finished, so the user read the shorter number as the thread's
+        size. The repo has no page budgets any more, and this thread really does run past 600 rows
+        (measured: ~19-22 per page, 749 declared, cursor still live at page 6) — so what ends the walk is
+        the cursor dying or the site replaying, and the replay is *named*.
         """
         said = []
+        replay = json.dumps({'data': [{'id': 'p1-0', 'text': 'x'}], 'max_id': 99})
         driver = FakeDriver(
-            fetch_queue=self._pages(CommentSession.WEIBO_COMMENT_PAGES, 900), start_url='https://weibo.com/'
+            fetch_queue=[json.dumps({'id': '555', 'comments_count': 900}), replay, replay, replay],
+            start_url='https://weibo.com/',
         )
         session = CommentSession(driver, log=said.append, nap=lambda s: None)
         rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=0)
-        assert status == OK
-        assert len(rows) == CommentSession.WEIBO_COMMENT_PAGES, rows
-        assert (
-            i18n.t(
-                'comment.weiboPagesCapped',
-                pages=CommentSession.WEIBO_COMMENT_PAGES,
-                rows=len(rows),
-                declared=900,
-            )
-            in said
-        ), said
+        assert status == OK and len(rows) == 1, rows
+        assert i18n.t('comment.weiboReplay', page=3, rows=1) in said, said
+        # The shortfall line is about the SITE, so it stays quiet when our own exit ended the walk.
+        assert not [line for line in said if 'weiboShort' in line or '写着' in line], said
+
+    def test_the_ask_is_not_reported_as_a_shortfall(self):
+        """评论上限 20 on a 749-comment post is the user's number, not the thread's absence.
+
+        Attributing that gap to 楼中楼 would blame the site for the ask — and this is exactly the shape the
+        live tier drives (``test_live_comments.py`` asks for 5), so the wrong line would be printed on
+        every run of that matrix.
+        """
+        said = []
+        big = json.dumps({'data': [{'id': f'c{i}', 'text': 'x'} for i in range(20)], 'max_id': 99})
+        driver = FakeDriver(
+            fetch_queue=[json.dumps({'id': '555', 'comments_count': 749}), big], start_url='https://weibo.com/'
+        )
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, _ = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=8)
+        assert len(rows) == 8, rows
+        assert said == [], f'the user set the number; nothing about the thread is missing: {said}'
 
 
 # ─── xiaohongshu adapter (DOM) ──────────────────────────────────────────

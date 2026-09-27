@@ -141,9 +141,9 @@
 | U7 | `base.py:355-361`（B6） | sink 写失败的行**计入 collected 但没入库**→ 报满实际缺 | 产品修复：计数与库内对账 |
 | U8 | `run_store.py:907-909` vs `app.py:2536-2546` | 去重逐行静默；聚合行只在 app 运行路径打 | 测试判据+文档说明即可 |
 | U9 | `bilibili.py:149-161,216-225`（BL2/BL7） | `fetch_json→{}`→`code is None`→**零行日志丢行**，最干净的一条静默欠采 | 产品修复 |
-| U10 | `weibo.py:138-169`（WB1） | 全窗走完**无最终总结行**（n/目标/原因全无）——八平台最差控制台。**已证实（代码事实）**：同文件 `author()` 有 `crawl.weibo.authorDone`（n+reason），搜索路径收尾只有逐窗的 `link_done`/`accumulated` | 产品修复（补一条带目标的收尾行） |
-| U11 | `weibo.py:480-513`（WB5） | 「每窗 9 s 预算不够」这个前提**今天没复现**：实测三种 URL 都是 `driver.get` 0.42-0.85 s 返回、首卡 0.42-0.85 s、卡片数 2.47-2.92 s 稳定（`docs/crawler_notes.md`）。**成立的是另外两半**：① 该函数用裸 `driver.get`，绕开 `Crawler.open` → 不记「导航是否 settled」、renderer 超时直接抛；② 超时那句打成「页面加载超时，**可能无内容**」——把网络判断说成内容判断 | 产品修复（改走 `self.open`；超时行只许说代码看得见的东西） |
-| U12 | `weibo.py:515-522`（WB8） | **已量化证实**（2026-09-28 第 0 步）：同一个 timescope 小时窗第 1 页 9 张卡、**第 2 页 6 张、mid 交集 0**，`.page-info` 虽空但 `ul.page-list a` 给到 page=1..10 → `_may_page`「窗口已经窄了」的前提被否证，**一窗静默丢 40%**；而 `_get_total_pages` 的 href 回退本来就读得到第 2 页，只是永远走不到 | 产品修复（**允许窗口翻页**，不是"声明上限"）；测量出处 `backend/test_weibo_gaps.py` |
+| U10 | `weibo.py:138-169`（WB1，**已修 2026-09-28**） | 全窗走完**无最终总结行**（n/目标/原因全无）——八平台最差控制台。**已证实（代码事实）**：同文件 `author()` 有 `crawl.weibo.authorDone`（n+reason），搜索路径收尾只有逐窗的 `link_done`/`accumulated` | 产品修复（补一条带目标的收尾行） |
+| U11 | `weibo.py:480-513`（WB5，**已修**） | 「每窗 9 s 预算不够」这个前提**今天没复现**：实测三种 URL 都是 `driver.get` 0.42-0.85 s 返回、首卡 0.42-0.85 s、卡片数 2.47-2.92 s 稳定（`docs/crawler_notes.md`）。**成立的是另外两半**：① 该函数用裸 `driver.get`，绕开 `Crawler.open` → 不记「导航是否 settled」、renderer 超时直接抛；② 超时那句打成「页面加载超时，**可能无内容**」——把网络判断说成内容判断 | 产品修复（改走 `self.open`；超时行只许说代码看得见的东西） |
+| U12 | `weibo.py:515-522`（WB8，**已修**） | **已量化证实**（2026-09-28 第 0 步）：同一个 timescope 小时窗第 1 页 9 张卡、**第 2 页 6 张、mid 交集 0**，`.page-info` 虽空但 `ul.page-list a` 给到 page=1..10 → `_may_page`「窗口已经窄了」的前提被否证，**一窗静默丢 40%**；而 `_get_total_pages` 的 href 回退本来就读得到第 2 页，只是永远走不到 | 产品修复（**允许窗口翻页**，不是"声明上限"）；测量出处 `backend/test_weibo_gaps.py` |
 | U13 | `douyin.py:410-411,607-651`（DY5-DY8） | 列表重开为空/滚动 JS 异常 suppress→`drained=True`→报「列表翻完了」 | 产品修复 |
 | U14 | `youtube.py:422-437,374,438`（YT6/YT7） | author 无原因行；`finished` 不带目标（全平台最安静收尾之一） | 产品修复 |
 | U15 | `twitter.py:372-387`（TX3） | settle 预算 3×4s，对自己「一屏 ~12s」的测量偏紧；`finished` 无目标 | 产品修复（预算校准） |
@@ -165,9 +165,9 @@
 
 **微博第 0 步新登记的（2026-09-28，全部有 `scratchpad/weibo_*.json` 载荷为证；正文见 `docs/crawler_notes.md` 微博节）：**
 
-| U31 | `weibo.py:499-513`（`_await_search_page` 的判据顺序） | **一个真·无结果的窗口会同时给 `.card-no-result`（「抱歉，未找到相关结果」）和 5 张带作者的不相干帖子**（穆祉丞超话/凤凰传奇演唱会…，时间戳在窗口之外）。祖先链量过：结果卡与推荐卡**同构**（都挂在 `div#pl_feedlist_index.main-full` 下，`mark`/`card-type` 两边都是 None）→ **没有容器可用来区分**，而函数**先查卡片**才查 plate → 这 5 条会被当作关键词结果存进表（违反「不漏采、不重采、完全符合要求」的第三条） | 产品修复：plate 优先；断言用「空窗必须 0 行」 |
-| U32 | `comments_weibo.py::parse_weibo_comments` | **四列在造假**（探针确认键名）：① 载荷里赞数键是 `like_counts`，代码读 `like_count` → **点赞数恒 0**（知乎 U23 同一形状）；② `楼层` 用 `enumerate(...,1)` 而 `crawl_weibo` **每页调一次解析** → 每页楼层都从 1 重数，站点自己印 `floor_number`；③ `评论时间` 原样塞 `"Sun Jul 26 09:49:46 +0800 2026"`，同文件作者路径的 `_normalise_weibo_time` 没用上 → 一列两种形状；④ `评论者主页` 填 `user.profile_image_url`（**头像图片地址**），同一 user 对象里就有 `profile_url='/u/<uid>'` | 产品修复（四列全改真读） |
-| U33 | `comments.py::crawl_weibo` | **楼中楼拿不到，且差额从不可见**：`total_number=30` 的微博走游标只有 22 行，缺席楼层正好 8 个 = 子评论；五种形状全试错（`id=<父>`、`is_mix=1&sub=1&import_id`、`rootid=` 被忽略、`comment/hotFlowByIds` 是 HTML、带 `config=`/`rootid=` 直挂 → **400 Bad Request**），`m.weibo.cn/comments/hotflow?id&mid=<父>` 答 `{"ok":0}`。唯一在手里的是父行 `comments[]` 的**一条预览子评论**（749 条那帖第一页 3/22 行带）。另注：信封 `trendsText` 在只给 22/30 时仍写「**已加载全部评论**」→ **站点这句文案不可采信**，判据只能对 `total_number` 打 | 产品修复：收编行内预览子评论 + 新增 `父楼层` + 差额具名（`comment.weibo*`）；U19 微博那一格同时修（30 页预算 ≈600 行 < 分母 749/763，撞到即具名） |
+| U31 | `weibo.py:499-513`（`_await_search_page` 的判据顺序，**已修**） | **一个真·无结果的窗口会同时给 `.card-no-result`（「抱歉，未找到相关结果」）和 5 张带作者的不相干帖子**（穆祉丞超话/凤凰传奇演唱会…，时间戳在窗口之外）。祖先链量过：结果卡与推荐卡**同构**（都挂在 `div#pl_feedlist_index.main-full` 下，`mark`/`card-type` 两边都是 None）→ **没有容器可用来区分**，而函数**先查卡片**才查 plate → 这 5 条会被当作关键词结果存进表（违反「不漏采、不重采、完全符合要求」的第三条） | 产品修复：plate 优先；断言用「空窗必须 0 行」 |
+| U32 | `comments_weibo.py::parse_weibo_comments`（**已修**） | **四列在造假**（探针确认键名）：① 载荷里赞数键是 `like_counts`，代码读 `like_count` → **点赞数恒 0**（知乎 U23 同一形状）；② `楼层` 用 `enumerate(...,1)` 而 `crawl_weibo` **每页调一次解析** → 每页楼层都从 1 重数，站点自己印 `floor_number`；③ `评论时间` 原样塞 `"Sun Jul 26 09:49:46 +0800 2026"`，同文件作者路径的 `_normalise_weibo_time` 没用上 → 一列两种形状；④ `评论者主页` 填 `user.profile_image_url`（**头像图片地址**），同一 user 对象里就有 `profile_url='/u/<uid>'` | 产品修复（四列全改真读） |
+| U33 | `comments.py::crawl_weibo`（**已修**） | **楼中楼拿不到，且差额从不可见**：`total_number=30` 的微博走游标只有 22 行，缺席楼层正好 8 个 = 子评论；五种形状全试错（`id=<父>`、`is_mix=1&sub=1&import_id`、`rootid=` 被忽略、`comment/hotFlowByIds` 是 HTML、带 `config=`/`rootid=` 直挂 → **400 Bad Request**），`m.weibo.cn/comments/hotflow?id&mid=<父>` 答 `{"ok":0}`。唯一在手里的是父行 `comments[]` 的**一条预览子评论**（749 条那帖第一页 3/22 行带）。另注：信封 `trendsText` 在只给 22/30 时仍写「**已加载全部评论**」→ **站点这句文案不可采信**，判据只能对 `total_number` 打 | 产品修复：收编行内预览子评论 + 新增 `父楼层` + 差额具名（`comment.weibo*`）；U19 微博那一格同时修（30 页预算 ≈600 行 < 分母 749/763，撞到即具名） |
 | U34 | 第 0 步未收口项 | 本轮三个页面样本里**没有转发卡**（`nested=0`、`.feed-forward-wrap`=0），所以「转发卡的引用内容 + 嵌套 `.card-wrap` 会不会让同一条被数两次」**仍未测**——不是已排除。同理 `_get_full_text` 在转发卡上取到的是引用还是原文，只有真卡能答 | 第 0 步补测项：换一个必然出转发卡的时间窗，量一次「卡片数 vs 行数」漏斗（一次导航） |
 
 | U35 | `weibo.py::_scrape_card` 的 转发数/评论数 选择器 | 一条批评意见（来自工作流的一路审查）说：热卡用另一套 woo 版式、计数是按钮的兄弟节点，于是**最有价值的行被存成 0**——依据是 pass 1 抓到的一张怪卡（`mid=5347502954124386`：卡内文本印着 714/1024/7274，而 `[action-type="feed_list_forward"]`/`..._comment"]` 读回裸词「转发」「评论」，只有 `.woo-like-count` 读对了 7274；`actionLabels` 顺序也不同）。**第 7 条探针按结构量完：这一版式假设未被支持**（整页 `.woo-count`/`.woo-forward-count`/`.woo-comment-count` = 0/0/0、`.woo-like-count` = 每卡一个；10 张卡的动作条全是旧 `menu s-fr`，有数的卡数就长在按钮自己的文本里）。零转发零评论的高赞帖本来就能长成那样，`714/1024` 更像那个视频号模块自己的数。**但也没有排除**：那次 `actionLabels` 顺序不同说明视频卡版式存在，只是这次没采到样本 → 结论：**没有样本就不改选择器** | 待测（换必然出视频卡的供给再量一次「动作条锚点文本 vs 卡内数字节点」；量到不一致才改）；测量出处 `backend/test_weibo_actionbar.py` → `scratchpad/weibo_actionbar.json` |
@@ -360,9 +360,27 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
             而信封 `trendsText` 在 22/30 时仍写「已加载全部评论」（U33 → 判据只许吃 `total_number`）。
             否证一条：微博正文**不被截断**（带「展开」的卡 DOM 里就有 `feed_list_content_full`，153→759 字）
             → 知乎那病在微博不存在。未收口：转发卡这一轮无样本（U34）。
-      - [ ] 第 1-4 步：按 U31-U33 改产品码（`_may_page`/plate 顺序/`self.open`/收尾行/评论四列/差额具名）
-            + i18n 双语言新键 + 快层假驱动针（每条"退回即红"当场验一次）
-      - [ ] 第 5 步：`@code-auditor` 审（只读、禁真机层）
+      - [x] **第 1-4 步 改码 + 快层同步**（提交 `01db2f4` 与其后的审计修复）：plate 优先、窗口允许翻页、
+            导航走 `Crawler.open(url, judge=False)`（引擎新增该参数：留下 settled 与弹窗清理，把墙的判决交回
+            按文档判定的调用方）、收尾行 `crawl.weibo.walk_done`（行数/目标/走到第几个窗口/原因）、
+            评论四列改真读 + `父楼层` + 差额具名 `comment.weiboShort`。
+            **`@code-auditor` 抓到我自己四处新错，全部回修**：
+            ① `walk_done` 把 `len(urls)` 说成「走完」——改成「窗口走到第 {walked}/{total} 个」；
+            ② 差额行把**任何**短表都归因给楼中楼（评论上限、取数失败也算）——改为只有游标耗尽才报，
+               且用**交给用户的那张表**的长度；③ 30 页常量与 README「后端无任何翻页上限」冲突，
+               且新加的按 ID 去重会让 limit 永不触发、只剩常量能收工——删掉常量，改成
+               「某页没交出新的一条」具名收工 `comment.weiboReplay`；
+            ④ 子评论的 `楼层` 用了它在父行预览里的位置（正是同一提交谴责的"六行都叫 1"）——改为留空，
+               并用站点自己的 `is_sub_cmt`/`rootid` 判父子；
+            ⑤ 窗口循环只对 `login_wall` 收手：风控与「浏览器根本没取到页面」会一路走完 6432 个窗
+               而收尾行说「已到列表末尾」——改为一律收手并分出三种原因（新增 `stopReason.risk`/`unreachable`）；
+            ⑥ 窗口在**进入之前**就被游标记为已完成：一窗现在深至 10 页，中途停止会让续跑跳过没走的页
+               ——游标改为只在窗口走完后推进（台账按 `微博ID` 去重，重入只花请求不重复存行）；
+            ⑦ 等待挪用了共享 `wait_for_first_content` 是错的：它「见到墙就早退」，而 passport 帧正是墙形状
+               ——退回本平台自己的轮询，但把共享助手承诺的三件事原样接过来（`PAGE_WAIT_TIMEOUT` 预算、
+               每 tick 问 停止、两次未交付就不再花预算的 `pending_waits` 断路）。
+      - [x] **第 5 步 `@code-auditor` 审**（只读、未跑真机）：2 Blocker + 5 Major + 9 Minor，
+            其中影响判决/采满的七条已全部回修（见上），并新增 8 例快层针（4501 passed / 220 deselected 零跳过）
       - [ ] 第 6-8 步：微博 31 格形状的运行级矩阵（§7 微博行：`serial_only`、热搜匿名、时间窗四态、
             mymblog 403 响亮拒、D9「先满即收工且剩余窗口零付费」）→ 用户在场时真机分批 → 逐例读控制台销号
             → H 组跑 `data/workflows/测试：微博.json`
