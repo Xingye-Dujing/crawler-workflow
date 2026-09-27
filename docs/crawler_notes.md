@@ -96,6 +96,83 @@ page* with `credentials: 'include'` — the same shape bilibili comments and You
   Reading counts from JSON is cheaper and steadier than the DOM walk the search mode uses, so a profile
   crawl must not copy the card scraper.
 
+## 微博第 0 步：把页面模型重读一遍（measured 2026-09-28，五条一次性探针）
+
+`docs/live_test_plan.md` §11 的第 0 步。探针（gitignored，载荷同名 .json 在 `scratchpad/`）：
+`backend/test_weibo_structure.py`（搜索窗/翻页/容器/正文/时序）、`test_weibo_gaps.py`（绝对 URL 的第 2 页、
+卡片祖先链、评论信封与游标）、`test_weibo_child.py` / `_child2.py` / `_child3.py` / `_child4.py`（楼中楼的五种形状）。
+用的都是用户自己那份 `data/chrome_profile/weibo`（**副本=第二台设备**那条判决，见上面的 06:14 分岔），
+全程 5 次导航 + 8 次同站 fetch，没有第二次 burst。
+
+**列表靠 URL 翻页，不靠滚动，站点自己印分母。** 关键词搜索页 `.page-info` = 「共50页/500条」，
+本页 10 张 `.card-wrap`；窗口滚动 4×1600px 之后卡片数 10→10、`body.scrollHeight` 4750→4750（resource
+条目 59→68 只是图片懒加载）→ **滚动不带来新行**。转发卡这一轮没出现（`nested=0`、`.feed-forward-wrap`=0），
+所以"一张转发卡被数两次"仍是**未测**，不是已排除。
+
+**一个 timescope 小时窗自己也有分页（U12 由代码事实升级为量化事实）。** 2026-09-26 20:00-21:00 那一窗：
+第 1 页 9 张卡、第 2 页 6 张、**mid 交集 0**、`.page-info` 是空的但 `ul.page-list a` 给出 page=1..10。
+`WeiboCrawler._may_page` 认定"窗口已经窄了，深处的请求白付风控"，于是这一小时实有 15 条只采 9 条——
+**静默丢 40%**，且 `_get_total_pages` 的 href 回退本来就能读到第 2 页，只是永远走不到。
+（第一次测这格时我把站点给的**相对 href** 直接喂 `driver.get`，抛异常，`page2` 那行数字全是 None——
+相对 URL 不是导航目标，这是探针自己的坑，不是站点的。）
+
+**空窗会同时给你「未找到结果」和五条不相干的帖子（新缺陷，不重采/完全符合要求）。** 故意用一个不存在的
+关键词配同一小时窗：页面既有 `.card-no-result`（「抱歉，未找到相关结果」）又有 5 张**带作者**的卡（穆祉丞超话、
+凤凰传奇演唱会…，时间戳写「35分钟前」而不是窗口内的小时）。祖先链量过了，**不相干卡和结果卡同构**：
+`div.card-wrap > div > div#pl_feedlist_index.main-full > div#pl_feed_main.woo-box-flex`（plate 是
+`#pl_feedlist_index` 的直接子节点，`mark` / `card-type` 属性两边都是 None）→ **没有可用的容器隔离**。
+而 `_await_search_page` 先查卡片再查 plate，于是这 5 条会被当作关键词结果采走。修法只能是**判据顺序**
+（先看 plate），不是换选择器。
+
+**正文不截断——这条否证了我自己的假设。** 预览尾巴带「展开」的卡片，DOM 里**已经**有
+`[node-type="feed_list_content_full"]`（10 张里 8 张；最长一张 153→759 字，另有一张 150→5308 字），
+没有该节点的那 2 张正文本来就短（34 / 48 字，不带「展开」）。所以 `_get_full_text` 注释里"两种形状都在
+DOM 里，取展开那份"是真的，微博没有知乎那种"必须点开才拿到正文"的病。旧锚点
+`[node-type="feed_list_extend"]` 整页 0 命中（而「展开」字样 8 处）→ 我探针里的 expander 计数作废。
+整页 `浏览` 字样 0 处 → 搜索卡上没有浏览数（与 X 那条并列）。
+
+**时序：本机 9 s 窗预算不是瓶颈，但那句超时日志是谎。** `driver.get` 0.42-0.85 s 返回、首卡 0.42-0.85 s、
+卡片数稳定在 2.47-2.92 s（三种 URL 都一样，包括 plate 那张）。所以 U11 的前提"慢网整窗丢"今天**没复现**；
+成立的是另外两半：`_await_search_page` 用裸 `driver.get`，绕开 `Crawler.open` → 不记"导航是否settled"、
+renderer 超时会直接抛；而超时分支打的 `crawl.weibo.page_timeout`「页面加载超时，可能无内容」把网络判断
+写成内容判断——AGENTS 说的正是"只有拒绝才许被命名为拒绝"。
+
+**评论：`flow=0&fetch_level=0` 只给主楼，站点印的分母比表大。** 一条印着「30」的微博（`comments_count=30`、
+buildComments 信封 `total_number=30` 三处一致），走完游标只有 **22 行**：页 1 `max_id=1446393191822` → 20 行，
+页 2 → 2 行 + `max_id=0` 收工。**缺席的楼层正好 8 个 [13,16,18,20,22,23,25,29]**，而 `floor_number` 是
+**全楼层号**——那 8 条就是楼中楼。另外：`count=100` 被服务端无视（仍 20/页）；`fetch_level=2` 返回同一批
+（新增 0 行）；`flow=1`（按时间）第 1 页只给 13 条、游标也不同。信封里 `trendsText` 写「已加载全部评论」
+而它只给了 22/30 → **站点这句文案不能采信**，判据只能吃 `total_number`。
+
+**楼中楼在这条会话里拿不到整批；能白拿的只有行内预览。** 试过的形状全记在载荷里：
+`id=<父>&is_mix=1&sub=1&import_id=<mid>` → `ok:1` 0 行；`id=<父>` → 0 行；
+`comment/hotFlowByIds?ids=…` → 一段 HTML（无此端点）；带 `uid=&config=` 或 `&rootid=` 直挂 →
+**`<h2>400 Bad Request</h2>`**（edge 拒，同 mymblog 那一格的味道）；`&rootid=<父>` 挂在 `id=<mid>` 上 →
+**参数被忽略**，返回同一批 22 行（我的判据差点把它读成"成功"）。父行自带的 `max_id` 也**不是子游标**：
+拿数字游标 `142605857239039` 去翻页会推进主楼（多出 19 条 rootid 各不相同的新主楼），
+拿评论 id 形游标 → 1 条新主楼，加 `max_id_type=1` → 空表。`m.weibo.cn/comments/hotflow?id=<mid>&mid=<父>`
+答 `{"ok":0}`，`mid=<mid>` 则返回**与桌面同一批** 20 行（overlap=20）。
+**唯一已经在手里的子评论**是父行的 `comments[]` 预览（749 条那帖第一页 22 行里 3 行带，各 1 条，字段
+`is_sub_cmt` / `rootid=父id` / `floor_number=0` / `like_counts`）→ 零额外请求就能把这部分捡回表里；
+其余的只能**具名报差额**（「站点说 30，主楼 22，另有 N 条子评论本站端点不给」）。
+顺带：小帖那 22 行**每行 `total_number=0`**，也就是说"谁有子评论"这件事并非总是声明的——
+差额只能对信封的 `total_number` 报，不能对行报。
+
+**30 页硬预算对热帖是真会撞的（U19 微博格）。** 同一条帖走 6 页 → 119 行、`max_floor=548`、
+分母 749→763（这期间作者还在被回复），每页 ~19-22 条 ⇒ `page >= 30` 大约在 600 行处封顶，
+而 `crawl_weibo` 撞到它只是 `break`，一声不响。
+
+**四列在造假（都是代码事实，探针确认了键名）。** ① 载荷里的赞数键是 **`like_counts`**，
+`parse_weibo_comments` 读的是 `like_count` → **点赞数恒 0**（与知乎刚修的同一形状；讽刺的是
+`m.weibo.cn` 那份用的正是 `like_count`）。② `楼层` 用 `enumerate(payload,1)` 而 `crawl_weibo`
+每页调一次解析 → **每页楼层都从 1 重数**，站点自己就印 `floor_number`。③ `评论时间` 原样塞
+`"Sun Jul 26 09:49:46 +0800 2026"`，而作者模式路径有 `_normalise_weibo_time` 没用上 → 同一列两种形状。
+④ `评论者主页` 填 `user.profile_image_url`（**头像图片**），同一 user 对象里就有
+`profile_url='/u/5893846418'`（相对，需拼 `https://weibo.com`）。
+
+**热搜仍匿名可取，榜大小会变：** `ajax/side/hotSearch` `ok=1`、`realtime` **51** 条（本文更早写 52——
+这是榜单自己的大小，不是我们的上限；`hotCapped` 那句报的就是它），信封另有 `hotgov` / `hotgovs` 两块未采。
+
 ## Zhihu
 
 Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens a

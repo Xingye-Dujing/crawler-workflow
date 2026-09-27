@@ -8,7 +8,8 @@
  * that paged past the end, a preview that said "failed" over an empty table, and a
  * cell that reached the page as markup instead of text (a crawled column value
  * carries HTML, per `data_cleaner`'s own docstring, and a table of that without
- * `escapeHtml` runs it — see AGENTS.md rule 48).
+ * `escapeHtml` runs it — see the AGENTS.md rule that a name inside an inline handler
+ * spans two grammars and must be escaped for both).
  *
  * Usage: node harness_data_preview.mjs <jsDir> <scenarios.json> <panelMarkupFile>
  * scenarios = [ { "id", "payload", "columns", "rows", "steps": [...], "lang",
