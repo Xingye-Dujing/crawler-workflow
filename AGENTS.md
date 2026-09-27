@@ -91,7 +91,12 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id**, never falls back to `<body>`, and
   reports a per-container floor on what it counted. Resolve on-screen wording from `I18n` in the
-  browser, not a pasted copy.
+  browser, not a pasted copy. **And state the viewport you measured in:** on Windows,
+  `set_window_size`/`set_window_rect` are silently ignored (a dialog's `calc(100vh - …)` cap is taken
+  once, at the moment it first opens), so an audit that says "fits a 1366×768 laptop" can be measuring
+  a 1920×1080 window wearing another test's cap. Emulate it
+  (`Emulation.setDeviceMetricsOverride`) and assert the size CSS actually sees — a `100vh` probe
+  element, because `window.innerHeight` keeps reporting the un-emulated one.
 - **The `integration` UI tier performs no server writes** — no data-dir switch exists, so a run
   or an upload lands in the user's real `data/` and `logs/`. Stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`: a valid
@@ -100,6 +105,18 @@ local Ollama LLMs and scikit-learn, and renders a drag-and-drop workflow canvas.
 
 ## Crawler architecture
 
+- **Read the page before reviewing the code.** Any audit, fix or extension of a crawl starts by
+  re-measuring the surface it reads (a throwaway `backend/test_<platform>_<thing>.py`, payload to
+  `scratchpad/`): what the list is paged *by* — a button, the window, or one element's own scroll box;
+  whether nested content (replies to comments, merged cards) exists only behind an expander; which
+  container actually holds the rows; and which columns the page really shows. Two zhihu defects passed
+  every code review and a green test suite, and were caught by one console line (「新增 12 条」 under an
+  opener reading 261 条评论): the comment panel has **no 「更多」 control** — it lazy-fills by scrolling its
+  own fixed overlay (measured 12 → 36 → 41) — and its nested replies sit behind 「展开其中 N 条回复」 that
+  nothing clicked. Both assumptions came from an unread page, and because the tests were written against
+  the same assumptions, the short table was *internally consistent*: summary, store and preview all
+  agreed on 12. A wrong page model does not fail loudly, it makes every downstream judgement agree
+  with itself. Ask the page for a denominator (its own printed count) and grade against that.
 - **The crawl matrix (`backend/crawl_capabilities.py`) is the only answer to "what can this platform
   collect".** It declares each platform's modes, the fields each mode needs (widget, default, floor,
   ceiling, required-ness, and `fed_by` = the link field a wired upstream column may replace), which
