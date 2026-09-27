@@ -34,28 +34,20 @@ learned the expensive way on 2026-09-26 (evidence in ``docs/crawler_notes.md``):
 """
 
 import contextlib
-import json
 import time
 from pathlib import Path
 
 import isolation_guard
 import pytest
+from real_paths import COOKIE_DIR, has_cookie
 
 import settings_store
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COOKIE_DIR = REPO_ROOT / 'data' / 'cookies'
 
-
-def has_cookie(platform: str) -> bool:
-    path = COOKIE_DIR / f'{platform}_cookies.json'
-    if not path.exists():
-        return False
-    try:
-        data = json.loads(path.read_text(encoding='utf-8'))
-    except (OSError, ValueError):
-        return False
-    return isinstance(data, list) and len(data) > 0
+#: The jar the user actually saved, and the one answer to "does this platform have a session":
+#: both come from :mod:`tests.real_paths`, because the live harness asks the same question and
+#: two owners of a storage path disagree the week ``Config`` moves it.
 
 
 #: Where this tier's browsers keep their own session, and it has to OUTLIVE the run.
@@ -177,6 +169,10 @@ def live_crawler(cookie_dir_str):
         # WeChat is the one platform crawled without a session: its article bodies
         # are public, and it has no cookie row in the panel at all. Requiring one
         # here would skip the only tier that proves that crawl still works.
+        # These two ``pytest.skip`` calls, with these two reasons, are the tier's whole skip
+        # allowance — pinned by name in ``tests/unit/test_test_tiers.py``. A run-level case that
+        # wants to refuse to be skipped (``test_live_zhihu_workflow.py``) takes this fixture
+        # lazily, through ``request.getfixturevalue``, behind its own precondition assert.
         if platform != 'wechat' and not has_cookie(platform):
             pytest.skip(f'no saved cookies for {platform}')
         # A test that asks for a second browser of a platform it is still holding would

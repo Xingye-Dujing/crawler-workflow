@@ -16,18 +16,17 @@ answers on a given afternoon is the site's choice — a cookie can genuinely be 
 here, and the tier's job is to prove the check *works*, not to vouch for the session.
 """
 
-from pathlib import Path
-
 import cookie_preflight
 import pytest
+from real_paths import COOKIE_DIR, has_cookie
 
 import i18n
 from config import Config
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-COOKIE_DIR = REPO_ROOT / 'data' / 'cookies'
+#: The real jar and the "does it hold a session" question come from :mod:`tests.real_paths`,
+#: so the live tier cannot disagree with itself about whether somebody is logged in.
 
 #: A platform whose saved session is the ordinary case on this machine, and whose
 #: login page is a plain page load: bilibili answers a logged-out visitor with
@@ -58,7 +57,7 @@ def real_jar(monkeypatch):
     ``tests/conftest`` redirects ``Config.COOKIE_DIR`` into a throwaway directory,
     which is right for the fast tiers and would mean "nobody has a cookie" here.
     """
-    if not (COOKIE_DIR / f'{PLATFORM}_cookies.json').exists():
+    if not has_cookie(PLATFORM):
         pytest.skip(f'no saved cookies for {PLATFORM}')
     monkeypatch.setattr(Config, 'COOKIE_DIR', str(COOKIE_DIR))
     return str(COOKIE_DIR)
