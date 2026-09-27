@@ -173,6 +173,27 @@ buildComments 信封 `total_number=30` 三处一致），走完游标只有 **22
 **热搜仍匿名可取，榜大小会变：** `ajax/side/hotSearch` `ok=1`、`realtime` **51** 条（本文更早写 52——
 这是榜单自己的大小，不是我们的上限；`hotCapped` 那句报的就是它），信封另有 `hotgov` / `hotgovs` 两块未采。
 
+**但「匿名」是有到场条件的（measured 2026-09-28，`backend/test_weibo_hot_anon.py`）。** 一条真机用例
+（空 cookie 目录 + `use_profile=False`）4 秒就红，控制台说「微博热搜接口没有给出榜单（返回 empty）」。
+探针把两件事分开量：
+
+* 一台站点从没见过的设备请求 `https://weibo.com/`，浏览器**并不落在 weibo.com**，而是被答
+  `passport.weibo.com/visitor/visitor`（标题「Sina Visitor System」），**0.69 s 之后**自己跳到
+  `weibo.com/newlogin`。此时 `login_wall/risk/unreachable` 三个旗子**都没立**（不是墙，也不需要
+  `judge=False`）——它只是一个还没走完的引导。
+* 从 `weibo.com/newlogin` 那一帧发同源 `fetch(ajax/side/hotSearch)`：**`{"ok":1,"data":{"realtime":[…]}}`
+  实测 52 条**，浏览器里 0 个 cookie。同一时刻立刻从 passport 帧发同一个请求：**`TypeError: Failed to fetch`**
+  ——跨源，浏览器自己拒的，站点根本没看到这个请求。
+
+于是结论有两层，都要记：① **`needs_session=False` 是对的**（不需要登录态，也不需要任何匿名 cookie），
+所以别为了这格红去给热搜加登录要求；② **问的时机是产品码的问题**，`hot()` 必须等引导把浏览器送回
+weibo.com 再发请求（`_await_home_frame`，本平台自己的 9 s 预算、每 tick 问 停止），等不到就报
+`crawl.weibo.hotNoHost` 并打出**那个帧**——「接口没给榜单」是一句关于站点的断言，站不住。
+
+**推广到别的平台**：凡是「在已加载页面里 fetch 一个 JSON」的模式（bilibili 评论、YouTube innertube、
+微博评论），都要问一句 *发请求的那一帧是谁*。页面还在引导/跳转途中，同源策略会替站点拒绝你，
+而拒绝长得跟「站点不给数据」一模一样。
+
 ### 「这一页没有新增」不是「这一页没有内容」：续跑把被停那窗的深页永久丢掉（代码事实 2026-09-28，写矩阵时查出）
 
 微博小时窗现在最多有 10 页（见上一条 U12），于是**游标语义**从「一窗一行」变成了「一窗 N 页」，

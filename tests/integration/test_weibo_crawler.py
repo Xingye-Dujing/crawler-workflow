@@ -794,6 +794,43 @@ def _board(items):
     return {'ok': 1, 'data': {'realtime': list(items)}, 'logs': [], 'topLogs': []}
 
 
+class FakeVisitorDriver(FakeBoardDriver):
+    """The board bridge again, but with the frames the site actually serves a stranger.
+
+    ``visitor_frames`` is what ``current_url`` answers on each read, repeating the last entry — so
+    ``[VISITOR]`` is "the bootstrap never hands the browser back" and ``[VISITOR, LANDED]`` is the
+    measured shape, where the visitor system finishes on its own and leaves the browser on a weibo.com
+    frame. ``get`` records the ask without claiming the landing: that is exactly the mistake U38 was, and
+    a fake that let ``open(weibo.com)`` set the URL would make the bug unrepresentable here.
+    """
+
+    def __init__(self, payload, visitor_frames):
+        super().__init__(payload)
+        self._frames = list(visitor_frames)
+        self.url_reads = 0
+
+    def get(self, url):
+        self.visited.append(url)
+
+    @property
+    def current_url(self):
+        one = self._frames[min(self.url_reads, len(self._frames) - 1)]
+        self.url_reads += 1
+        return one
+
+    @current_url.setter
+    def current_url(self, value):
+        # Ignored on purpose, and not because the fake is sloppy: on this platform the *site* decides where
+        # a navigation landed (U38), so letting ``open()`` write the URL would make the bug unrepresentable.
+        pass
+
+
+#: Both measured 2026-09-28 with no cookie file at all (``backend/test_weibo_hot_anon.py``): the redirect
+#: the site serves a stranger, and the frame its visitor bootstrap hands you back to ~0.7 s later.
+VISITOR = 'https://passport.weibo.com/visitor/visitor?entry=miniblog&a=enter'
+LANDED = 'https://weibo.com/newlogin?url=https%3A%2F%2Fweibo.com%2F'
+
+
 @pytest.fixture
 def make_board(monkeypatch):
     # Two modules hold a wait sleep now: the platform's own poll (weibo's redirect facade cannot
@@ -802,8 +839,8 @@ def make_board(monkeypatch):
     monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
     monkeypatch.setattr(weibo_module.time, 'sleep', lambda s: None)
 
-    def _make(payload):
-        driver = FakeBoardDriver(payload)
+    def _make(payload, visitor_frames=None):
+        driver = FakeVisitorDriver(payload, visitor_frames) if visitor_frames is not None else FakeBoardDriver(payload)
 
         def fake_create(self, *a, **kw):
             self.driver = driver
@@ -815,6 +852,36 @@ def make_board(monkeypatch):
 
 
 class TestWeiboHotBoard:
+    def test_a_board_asked_from_the_visitor_frame_refuses_the_frame_not_the_endpoint(self, make_board):
+        """U38: a device the site has never seen is answered the visitor system first (measured).
+
+        ``weibo.com/`` redirects to ``passport.weibo.com/visitor/visitor``, and a same-origin fetch to
+        ``weibo.com/ajax`` issued from *there* is refused by the browser itself (``TypeError: Failed to
+        fetch``). The old code called that 「微博热搜接口没有给出榜单（返回 empty）」 — a verdict on an endpoint
+        that was never reached, which made a working anonymous mode look like a site refusal and sent the
+        user to re-save a cookie he never needed. So the refusal now names the doorway it is standing in,
+        and — the part that matters for the next person who reads this — **no board is asked for at all**.
+        """
+        crawler, driver = make_board(_board([_hot_item()]), visitor_frames=[VISITOR])
+        with pytest.raises(RuntimeError) as raised:
+            crawler.hot(target_count=10)
+        said = str(raised.value)
+        assert VISITOR in said, f'the refusal must name the frame the browser was on, not the endpoint: {said}'
+        assert driver.fetched == [], f'the board was asked anyway, from the wrong doorway: {driver.fetched}'
+
+    def test_the_board_is_asked_once_the_bootstrap_has_handed_the_browser_back(self, make_board):
+        """The other half of U38: the hop finishes on its own in 0.69 s, and then the request goes out.
+
+        ``weibo.com/newlogin`` is a weibo.com frame, and measured with **no cookie file at all** it answers
+        ``ok=1`` carrying the whole ``realtime`` list — so 「this mode needs no session」 stayed true the
+        entire time; what was missing was waiting for the frame the request has to leave from.
+        """
+        crawler, driver = make_board(_board([_hot_item(), _hot_item(word='第二条')]), visitor_frames=[VISITOR, LANDED])
+        rows = crawler.hot(target_count=10)
+        assert [row['标题'] for row in rows] == ['中美元首华盛顿会晤', '第二条'], rows
+        assert len(driver.fetched) == 1, driver.fetched
+        assert driver.visited == ['https://weibo.com/'], f'one navigation is this mode: {driver.visited}'
+
     def test_the_board_rows_carry_only_what_the_answer_really_fills(self, make_board):
         """A 热搜 row is a TOPIC. The post vocabulary (正文/发布者/发布时间) is not in the
         answer, so a row that grew those columns would be inventing them."""

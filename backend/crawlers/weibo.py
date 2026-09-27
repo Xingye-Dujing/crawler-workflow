@@ -238,6 +238,10 @@ class WeiboCrawler(Crawler):
         """
         logger.info(t('crawl.weibo.hotStart', n=target_count))
         self.open('https://weibo.com/')
+        # Asked from the wrong frame, this endpoint cannot answer at all: see :meth:`_await_home_frame`.
+        frame = self._await_home_frame()
+        if not frame.startswith('https://weibo.com'):
+            raise RuntimeError(t('crawl.weibo.hotNoHost', where=frame or '?'))
         payload = pagefetch.fetch_json(self.driver, self.HOT_API, requests=self.requests)
         rows = None
         if isinstance(payload, dict) and payload.get('ok') == 1:
@@ -262,6 +266,39 @@ class WeiboCrawler(Crawler):
         if self.collected() < target_count:
             logger.info(t('crawl.weibo.hotCapped', board=len(rows)))
         return self.results()
+
+    def _await_home_frame(self) -> str:
+        """Wait for the visitor bootstrap to hand the browser back to a weibo.com frame; return that frame.
+
+        A device the site has never seen is not served the home page. Measured 2026-09-28 with no cookie
+        file at all (``backend/test_weibo_hot_anon.py``): ``weibo.com/`` answers
+        ``passport.weibo.com/visitor/visitor`` (title 「Sina Visitor System」), that hop takes **0.69 s**, and
+        it lands on ``weibo.com/newlogin`` — from which ``ajax/side/hotSearch`` replies ``ok=1`` with the
+        board, still with no cookie. So the matrix's 「热搜 needs no session」 is true and was always true;
+        what was missing is that the request must be issued **after** the hop.
+
+        It used to be issued immediately, from the passport origin, where a same-origin fetch to
+        ``weibo.com/ajax`` is refused by the browser itself (``TypeError: Failed to fetch``). The console
+        then printed 「微博热搜接口没有给出榜单（返回 empty）」 — a sentence about an endpoint that was never reached,
+        and the failure looked like the site withholding a board rather than like this browser standing in
+        the wrong doorway. AGENTS' rule is the reason for the separate line: only what the code can see may
+        be named, and the frame is what it can see.
+
+        The budget is the platform's own page wait (three seconds' worth of half-second ticks), the same
+        shape ``_await_search_page`` uses for the same class of site-staged redirect — and 停止 is asked on
+        every tick, because a walk that will not settle is the user's call to cut, not a loop to finish.
+        """
+        poll = 0.5
+        rounds = max(1, int(self.PAGE_WAIT * 3 / poll))
+        url = ''
+        for _ in range(rounds):
+            url = str(self.driver.current_url or '')
+            if url.startswith('https://weibo.com'):
+                return url
+            if self.may_stop():
+                return url
+            time.sleep(poll)
+        return url
 
     @staticmethod
     def _hot_row(item: dict, rank: int) -> dict | None:

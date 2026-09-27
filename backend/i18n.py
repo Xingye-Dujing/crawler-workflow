@@ -203,6 +203,11 @@ _ZH = {
     'crawl.weibo.hotDone': '热搜采集结束：{n} 条（目标 {total} 条）',
     'crawl.weibo.hotCapped': '热搜榜本次只有 {board} 条，已按实际条数收尾（榜单大小由网站决定）',
     'crawl.weibo.hotRefused': '微博热搜接口没有给出榜单（返回 {answer}）',
+    # Said when the request was never issuable: the browser was left on a frame that is not weibo.com, so
+    # the same-origin fetch had no host to ask. Blaming the endpoint there would convict it of an answer
+    # it never gave.
+    'crawl.weibo.hotNoHost': '微博热搜未采集：浏览器还停在「{where}」，没回到 weibo.com（访客引导未完成，'
+    '页面内请求发不出去；这是到场帧的问题，不是接口拒绝）',
     'crawl.weibo.authorEmpty': '「{author}」不是微博作者地址：填 weibo.com/u/<UID> 主页链接或数字 UID',
     'crawl.weibo.authorWall': '微博把 UID {uid} 的主页弹回了登录页：这个会话进不去作者页',
     'crawl.weibo.authorMirror': (
@@ -1071,6 +1076,11 @@ _EN = {
         'The hot board held only {board} rows this time, so the walk stopped there (the site sets the board size)'
     ),
     'crawl.weibo.hotRefused': 'The weibo hot-search endpoint gave no board (answered {answer})',
+    # Said when the request was never issuable: the browser sat on a frame that is not weibo.com, so the
+    # same-origin fetch had no host to ask. Blaming the endpoint there convicts it of an answer it never gave.
+    'crawl.weibo.hotNoHost': 'weibo hot board not collected: the browser was still on 「{where}」 and never '
+    'came back to weibo.com (the visitor bootstrap did not finish, so the in-page '
+    'request had no host — an arrival-frame fact, not an endpoint refusal)',
     'crawl.weibo.authorEmpty': (
         '"{author}" is not a weibo author address: give a weibo.com/u/<UID> profile link or the numeric UID'
     ),
