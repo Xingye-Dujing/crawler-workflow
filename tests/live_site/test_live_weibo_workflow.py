@@ -245,14 +245,12 @@ MEASURED_FIRST_SCREEN_CARDS = 9
 #: The shared search's own target (the ``weibo_windowed`` fixture crawls 三亚 over a week for the cells that
 #: need post links), and the comment counts it must beat to be usable as a comment target.
 #:
-#: ``PROBE_MIN_COMMENTS`` is the D1 ask (5), not a round number: a thread with fewer comments than the
-#: limit hands back everything it has, ``ended='cursor'`` prints no shortfall (there is none), and the run
-#: is graded ``SILENT_SHORT`` for a crawl that did everything right. §11 step 3's 「评论格按真实 ask 判满」
-#: means the ask must be one the chosen link can answer. ``PROBE_GOOD_COMMENTS`` is the thread the
-#: gap-naming cells (D3/D4/D5) need: long enough that the site's own ``total_number`` outruns what this
-#: session can fetch (measured 22-of-30 on a live thread).
-PROBE_MIN_COMMENTS = 5
-PROBE_GOOD_COMMENTS = 12
+#: The shared search's own target (the ``weibo_windowed`` fixture crawls 三亚 over a week for the cells that
+#: need post links). ``PROBE_MIN_COMMENTS`` is only 「有评论可读」 — D1 needs two such threads and picks the
+#: two richest, while D3/D4/D5 take the single richest one via :func:`_richest_link` and scale their asks to
+#: what it reports. Any *threshold* here would be a number the site is not obliged to fit, which is the
+#: mistake each of those two drafts has already paid for with a live re-run.
+PROBE_MIN_COMMENTS = 1
 
 #: The account the author cells crawl, as a profile URL — the form the panel takes and the uid the user's
 #: own acceptance canvas names (``data/workflows/测试：微博.json``, node-2), so the live matrix and the
@@ -484,6 +482,36 @@ def _commented_links(windowed: dict, *, need: int, min_comments: int) -> list[tu
         'crawl comments against, and asking again would be the second burst this fixture exists to avoid'
     )
     return scored[:need]
+
+
+def _richest_link(windowed: dict) -> tuple[str, int]:
+    """The thread this pass's shared search found with the **most** comments, and its number.
+
+    No threshold, on purpose. The first draft asked this fixture for a post with ``>= 12`` comments and
+    went red on a day when the hottest of its 12 posts carried single digits — the same mistake as D1's
+    fixed ``5 × links`` ask, in the other direction: **the site's supply is not required to fit a number
+    this file picked**. So the cells read what the richest available thread reports and scale their own
+    asks to it, which keeps each of them a real assertion (see each cell for what it can and cannot
+    exercise at that size), and the audit row says which branch ran.
+
+    A search with no commented post at all is still the honest red: there is no denominator to grade
+    against, and the flag goes into the message rather than into a skip.
+    """
+    rows = windowed.get('rows') or []
+    digits = re.compile(r'\d+')
+    best = ('', 0)
+    for row in rows:
+        link = str(row.get('链接') or '')
+        found = digits.search(str(row.get('评论数') or ''))
+        count = int(found.group()) if found else 0
+        if link and count > best[1]:
+            best = (link, count)
+    assert best[1] > 0, (
+        f'the shared search returned {len(rows)} rows and not one of them reports a single comment '
+        f'(login_wall={windowed.get("login_wall")!r}); the comment cells have no denominator, and asking '
+        'the search endpoint again would be the second burst this fixture exists to prevent'
+    )
+    return best
 
 
 # ─── A · 关键词搜索 (posts) ─────────────────────────────────────────────
@@ -930,29 +958,39 @@ def test_c3_the_board_is_answered_without_a_session(client, app_module, monkeypa
 
 
 def test_d1_two_posts_carry_comments_the_columns_actually_read(client, app_module, monkeypatch, weibo_windowed):
-    """D1 — comments of two known posts, with the four fabricated columns asserted as read.
+    """D1 — comments of two known posts, with the fabricated columns asserted as read.
 
-    ``comment_limit`` is *per article*, so the ask is ``5 × links`` — grading it as 5 records a 2-of-10
-    crawl as FULL and puts 1 in the artifact's target column (§11: comment cells judge the real ask).
+    ``comment_limit`` is *per article*, so the ask is ``sum(min(limit, 评论数))`` over the links actually
+    chosen — read off the card's own number, which is the site's denominator for that thread. A fixed
+    ``5 × links`` was this cell's first shape and it is wrong twice over: it grades a 2-of-10 crawl FULL
+    when the threads only had two comments each, and it *reds* an honest one when they had fewer than the
+    limit. Either way the number being asserted is arithmetic the test invented rather than a promise the
+    product made (§11 step 3: 评论格按真实 ask 判满).
     """
     harness.real_jar(monkeypatch, app_module)
+    limit = 5
     pairs = _commented_links(weibo_windowed, need=2, min_comments=PROBE_MIN_COMMENTS)
     links = [link for link, _count in pairs]
+    ask = sum(min(limit, count) for _link, count in pairs)
     with LiveRun(
         client,
         app_module,
-        comments_canvas(links, limit=5),
+        comments_canvas(links, limit=limit),
         case_id='D1',
         mode='comments',
-        target=5 * len(links),
+        target=ask,
         timeout=COMMENT_TIMEOUT,
     ) as run:
         run.wait()
         rows = run.preview('node-1')
         _assert_comment_rows(rows, minimum=1)
-        answer = run.verdict(rows=len(rows), target=5 * len(links))
+        answer = run.verdict(rows=len(rows))
         assert answer['verdict'] != harness.SILENT_SHORT, f'a comment crawl that said nothing: {answer}'
-        run.finish(answer=answer, rows=len(rows), target=5 * len(links), warn=answer['verdict'] == harness.NAMED_SHORT)
+        assert len(rows) <= ask or answer['verdict'] == harness.NAMED_SHORT, (
+            f'the two threads report {ask} comments between them and the table holds {len(rows)}: '
+            f'that is 多采, and only a named line may excuse it'
+        )
+        run.finish(answer=answer, rows=len(rows), target=ask, warn=answer['verdict'] == harness.NAMED_SHORT)
 
 
 def test_d2_a_wired_comments_node_crawls_the_links_its_parent_found(client, app_module, monkeypatch):
@@ -1034,15 +1072,14 @@ def _post_vocabulary(run) -> dict:
 def test_d3_headless_comments_match_the_windowed_shape(client, app_module, monkeypatch, weibo_windowed):
     """D3 — ``collects=fetch`` on this mode says a window buys nothing; the rows must agree.
 
-    The card's own 评论数 is the denominator this assertion needs, and it is why the link is chosen with a
-    floor under it: a headless comment crawl that returns fewer rows than that number *and* names no
-    shortfall has contradicted the matrix's word, which is also the note the Data Source panel shows the
-    user. An equal-or-better result is what ``collects='fetch'`` promises, so anything short of
-    ``min(limit, 评论数)`` has to be excused by a line about this thread, not by the shape of the run.
+    The card's own 评论数 is the denominator: a headless comment crawl that returns fewer rows than the
+    thread reports *and* names no shortfall has contradicted the matrix's word — which is also the note the
+    Data Source panel shows the user. The ask is ``min(limit, 评论数)`` of the richest thread this pass
+    found, so the claim is exercisable on a two-comment thread and on a seven-hundred-comment one alike.
     """
     harness.real_jar(monkeypatch, app_module)
     limit = 8
-    link, reported = _commented_links(weibo_windowed, need=1, min_comments=PROBE_GOOD_COMMENTS)[0]
+    link, reported = _richest_link(weibo_windowed)
     ask = min(limit, reported)
     with LiveRun(
         client,
@@ -1077,9 +1114,15 @@ def test_d4_no_limit_names_the_gap_the_site_printed(client, app_module, monkeypa
     product's promise here is not "get them all", it is "**say** the site counted more than you got".
     ``trendsText`` printing 「已加载全部评论」 on exactly that crawl is why the line reads ``total_number``
     and never the sentence.
+
+    On a thread small enough that the cursor does reach its end, the same cell asserts the **other** side:
+    no gap line. Either way it is a real claim, and which one ran is visible in the numbers the row
+    carries (``rows`` against ``target``), because a cell that only ever tested the gap would go vacuously
+    green on a quiet day — and quietly red on one too, which is how the fixed ``>= 12`` selection gate in
+    this file's first draft behaved.
     """
     harness.real_jar(monkeypatch, app_module)
-    link, reported = _commented_links(weibo_windowed, need=1, min_comments=PROBE_GOOD_COMMENTS)[0]
+    link, reported = _richest_link(weibo_windowed)
     with LiveRun(
         client,
         app_module,
@@ -1093,13 +1136,18 @@ def test_d4_no_limit_names_the_gap_the_site_printed(client, app_module, monkeypa
         rows = run.preview('node-1')
         _assert_comment_rows(rows, minimum=1)
         named = [line for line in run.rec.lines if harness.names_key(line, 'comment.weiboShort')]
-        assert named or len(rows) >= reported, (
-            f'the site reported {reported} comments, {len(rows)} arrived, and nothing named the gap: '
-            f'{run.rec.lines[-8:]}'
-        )
-        if named:
+        if len(rows) < reported:
+            assert named, (
+                f'the site reported {reported} comments, {len(rows)} arrived, and nothing named the gap: '
+                f'{run.rec.lines[-8:]}'
+            )
             slots = harness.numbers_from(run.rec.lines, 'comment.weiboShort', 'declared')
             assert slots and slots[-1] >= reported, f'the shortfall line lost the site number: {named}'
+        else:
+            assert not named, (
+                f'the cursor delivered all {reported} comments the thread reports, yet the console blamed '
+                f'a gap: {named}'
+            )
         answer = run.verdict()
         run.finish(answer=answer, rows=len(rows), warn=answer['verdict'] == harness.NAMED_SHORT)
 
@@ -1112,23 +1160,27 @@ def test_d5_an_ask_of_five_is_not_reported_as_a_shortfall(client, app_module, mo
     tier drives exactly this shape (a small per-article limit). So the cell requires *silence*.
     """
     harness.real_jar(monkeypatch, app_module)
-    link, reported = _commented_links(weibo_windowed, need=1, min_comments=PROBE_GOOD_COMMENTS)[0]
+    link, reported = _richest_link(weibo_windowed)
+    # The ask is one **below what the thread reports**, by construction: at ``limit == 评论数`` there is no
+    # gap for the bug to misattribute and the cell proves nothing. Two comments is the smallest thread this
+    # can be said of, and the number it uses is in the row.
+    limit = max(1, min(5, reported - 1))
     with LiveRun(
         client,
         app_module,
-        comments_canvas([link], limit=5),
+        comments_canvas([link], limit=limit),
         case_id='D5',
         mode='comments',
-        target=5,
+        target=limit,
         timeout=COMMENT_TIMEOUT,
     ) as run:
         run.wait()
         rows = run.preview('node-1')
-        assert len(rows) <= 5, f'comment_limit is per article and was not honoured: {len(rows)}'
+        assert len(rows) <= limit, f'comment_limit is per article and was not honoured: {len(rows)} > {limit}'
         lied = [line for line in run.rec.lines if harness.names_key(line, 'comment.weiboShort')]
-        assert not lied, f'the ask was 5 of {reported} and the console blamed the thread: {lied}'
+        assert not lied, f'the ask was {limit} of {reported} and the console blamed the thread: {lied}'
         answer = run.verdict()
-        run.finish(answer=answer, rows=len(rows), warn=answer['verdict'] == harness.NAMED_SHORT)
+        run.finish(answer=answer, rows=len(rows), target=limit, warn=answer['verdict'] == harness.NAMED_SHORT)
 
 
 # ─── E · 停止 then 继续 (the cursor must not walk past an unfinished window) ─

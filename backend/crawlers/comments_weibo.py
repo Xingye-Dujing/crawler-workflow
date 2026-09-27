@@ -49,6 +49,11 @@ def _one_row(item: dict, article_url: str, fallback_floor: int, parent_floor: in
     * **评论时间** was stored verbatim, which on this endpoint is ``'Sun Jul 26 09:49:46 +0800 2026'`` —
       an English stamp in a column that must sort and chart as one thing. The author path already
       normalised it; ``engine/times.py`` is now the one place that shape is read.
+    * **评论内容** was read out of ``text`` and stripped, which is right for a text comment and **destroys
+      an emoji-only one**: measured, such a row's ``text`` is a run of ``<img alt="[可怜]" …>`` tags and the
+      strip leaves ``''`` — an empty row that still carries an id, an author and a timestamp, so no count,
+      summary or preview can see that content was lost. The payload's own ``text_raw`` (``'[可怜][鼓掌][黑线]'``)
+      is the text, and it is now what the column reads, exactly as ``_author_row`` has always done.
     * **父楼层** is new: ``is_sub_cmt`` (measured on a preview child) and ``rootid != id`` both mark a
       reply, so the two shapes are told apart from the payload rather than by call-site position.
     """
@@ -71,12 +76,22 @@ def _one_row(item: dict, article_url: str, fallback_floor: int, parent_floor: in
     likes = item.get('like_counts')
     if likes is None:
         likes = item.get('like_count')
+    # The body is read from ``text_raw`` first, with the stripped HTML only as a fallback (U40, caught by a
+    # live comment table). An emoji-only comment arrives as a run of image tags —
+    # ``<img alt="[可怜]" src="…png" />`` — so ``_strip_tags`` eats the comment's entire content and the row
+    # keeps its author, its time and its id while 评论内容 comes back empty. Measured in
+    # ``scratchpad/weibo_*.json``: the same object carries ``text_raw='[可怜][鼓掌][黑线]'``, and **every** real
+    # comment with a stripped-empty ``text`` had a non-empty ``text_raw`` (17 of 17; the four lacking that
+    # key entirely are DOM records an earlier probe saved, not comments). This platform's post rows have
+    # read it this way all along (``WeiboCrawler._author_row`` prefers ``text_raw`` then strips); the
+    # comment adapter never copied the rule, and an empty row is the half of 漏采 nobody sees in a summary.
+    body = str(item.get('text_raw') or '').strip() or _strip_tags(str(item.get('text') or ''))
     return {
         '平台': 'weibo',
         '文章URL': article_url,
         '评论者': str(user.get('screen_name') or ''),
         '评论者主页': _user_home(user),
-        '评论内容': _strip_tags(str(item.get('text') or '')),
+        '评论内容': body,
         '评论时间': times.normalise_rfc822(item.get('created_at')),
         '点赞数': _as_int(likes),
         '楼层': floor,

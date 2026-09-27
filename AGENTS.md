@@ -81,6 +81,11 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   by id) or the write lands in an orphan.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the one the bug
   was about: for a record, a run or a panel row, list the dimensions first and cover the grid.
+- **A live case's numbers are computed from the site, never chosen.** An ask, a selection threshold or a supply
+  floor the site is not obliged to fit reds an honest crawl (and greens one when the cell only fires "if the thread
+  is big enough"): derive it from what the crawl reported — the card's 评论数, the page's own count, the board's
+  size — and make the assertion two-sided so a thin day still proves something. Two D-cells of
+  `tests/live_site/test_live_weibo_workflow.py` each cost a live re-run for breaking this.
 - **A browser-measured assertion must report how much it measured, or it is not an assertion.**
   `tests/integration/test_ui_layout.py` audits containers **by id**, never falls back to `<body>`, reports a
   per-container floor, and resolves on-screen wording from `I18n` in the browser. **State the viewport too:** on

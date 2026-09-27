@@ -194,8 +194,16 @@ class CommentSession:
                 break
             self.nap(0.8)  # polite page interval on the comment API
         table = rows[:limit] if limit else rows
-        if ended == 'cursor' and declared and len(table) < declared:
-            self.log(t('comment.weiboShort', declared=declared, rows=len(table), gap=declared - len(table)))
+        # **The gap is measured against what the walk received, never against the truncated table** (U41,
+        # caught by the live D5 cell). A thread that reports 3 comments, hands all 3 to the walker, and is
+        # then cut to 评论上限 2 used to print 「站点写着 3 条，本表只有 2 条 —— 差额是楼中楼」: the cursor
+        # died on the same page that crossed the limit, so ``ended`` stayed ``'cursor'`` and the sentence
+        # blamed the site for the user's own number — the exact thing the branch above exists to prevent,
+        # arriving by a path that branch does not see. ``len(rows)`` is the only number that answers
+        # "did the site give less than it said"; when the user's limit then shortens the table, that is
+        # not a gap and nothing is said about it.
+        if ended == 'cursor' and declared and len(rows) < declared:
+            self.log(t('comment.weiboShort', declared=declared, rows=len(rows), gap=declared - len(rows)))
         if ended == 'fetch':
             # The one exit of this walk that used to say nothing at all. Every other ending is either the
             # site's answer (the cursor ran out, and ``comment.weiboShort`` names the gap against its own
@@ -207,9 +215,9 @@ class CommentSession:
                 t(
                     'comment.weiboFetchDied',
                     page=page,
-                    rows=len(table),
+                    rows=len(rows),
                     declared=declared or '?',
-                    gap=(declared - len(table)) if declared and len(table) < declared else 0,
+                    gap=(declared - len(rows)) if declared and len(rows) < declared else 0,
                 )
             )
         return table, OK

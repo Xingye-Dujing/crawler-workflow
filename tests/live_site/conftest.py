@@ -331,7 +331,12 @@ def weibo_windowed(cookie_dir_str):
 
     from crawlers import get_crawler
 
-    target = 8
+    # 12, not the 8 this fixture started with: the comment cells pick their threads by the card's own
+    # 评论数, and the cells that name a gap (``test_live_weibo_workflow.py`` D3/D4/D5) need one thread
+    # rich enough for the site's ``total_number`` to outrun what this session can fetch. Candidates are
+    # the only thing that limits that, and widening them costs **no extra burst** — the walk still stops
+    # on its target inside the first window or two, on the same single search.
+    target = 12
     end = date.today()
     start = end - timedelta(days=7)
     rows: list = []

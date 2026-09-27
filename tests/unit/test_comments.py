@@ -198,6 +198,40 @@ class TestHelpers:
         assert rows[0]['评论者主页'] == 'https://weibo.com/u/5893846418'
         assert rows[0]['父楼层'] == '', 'rootid equal to its own id means a top-level comment'
 
+    def test_an_emoji_only_comment_keeps_its_text(self):
+        """U40: a comment that is nothing but emoji used to be stored as an empty row.
+
+        The payload's ``text`` for such a row is a run of face images — ``<img alt="[可怜]" src="…png" />`` —
+        and the adapter read *only* that field and stripped it, so the row kept its id, author, floor and
+        timestamp while 评论内容 came back ``''``. Nothing downstream can see that: the table has the right
+        number of rows, the summary agrees, and the analysis node gets a blank to weight. The plain text the
+        user actually typed is sitting in the same object as ``text_raw`` (measured 17-of-17 on the saved
+        payloads), which is what this platform's post rows have read all along.
+        """
+        payload = {
+            'data': [
+                {
+                    'id': 1,
+                    'floor_number': 4,
+                    'rootid': 1,
+                    'text': '<img alt="[可怜]" title="[可怜]" src="https://face.t.sinajs.cn/x.png" />'
+                    '<img alt="[鼓掌]" title="[鼓掌]" src="https://face.t.sinajs.cn/y.png" />',
+                    'text_raw': '[可怜][鼓掌]',
+                    'user': {'screen_name': '甲', 'profile_url': '/u/1'},
+                },
+                {
+                    'id': 2,
+                    'floor_number': 5,
+                    'rootid': 2,
+                    'text': '普通一条',
+                    'user': {'screen_name': '乙', 'profile_url': '/u/2'},
+                },
+            ]
+        }
+        rows = parse_weibo_comments(payload, 'https://weibo.com/1/a')
+        assert [row['评论内容'] for row in rows] == ['[可怜][鼓掌]', '普通一条'], rows
+        assert all(str(row['评论内容']).strip() for row in rows), rows
+
     def test_weibo_parser_keeps_the_parent_preview_reply(self):
         """One nested reply per parent row is in the payload already, and used to be thrown away."""
         payload = {
@@ -310,6 +344,26 @@ class TestWeiboAdapter:
         assert i18n.t('comment.weiboReplay', page=3, rows=1) in said, said
         # The shortfall line is about the SITE, so it stays quiet when our own exit ended the walk.
         assert not [line for line in said if 'weiboShort' in line or '写着' in line], said
+
+    def test_a_limit_crossed_on_the_last_page_does_not_blame_the_thread(self):
+        """U41, caught by the live D5 cell: the same page can cross the limit *and* end the cursor.
+
+        评论上限 2 on a thread that reports 3 comments and hands all 3 over on its first (and only) page:
+        the loop breaks on ``max_id == 0`` before it ever reaches the limit branch, so ``ended`` stays
+        ``'cursor'`` — and the old comparison was made against the **truncated** table, which produced
+        「站点写着 3 条，本表只有 2 条 —— 差额是楼中楼」. That sentence is about the site, printed because the
+        user typed a smaller number, which is the exact opposite of the branch above it. The measurement is
+        against what the walk *received*; if that already equals the thread's number, nothing is missing.
+        """
+        said = []
+        page = json.dumps({'data': [{'id': f'c{i}', 'text': 'x'} for i in range(3)], 'max_id': 0})
+        driver = FakeDriver(
+            fetch_queue=[json.dumps({'id': '555', 'comments_count': 3}), page], start_url='https://weibo.com/'
+        )
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, status = session.crawl_weibo('https://weibo.com/1/RhYNar0R1', limit=2)
+        assert status == OK and len(rows) == 2, rows
+        assert said == [], f'the ask was 2 and the site sent all 3 it has: {said}'
 
     def test_a_failed_comment_page_names_itself_instead_of_looking_finished(self):
         """The one exit of this walk that used to print nothing at all.
