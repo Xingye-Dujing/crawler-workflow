@@ -346,9 +346,9 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
       + 设置轴两格已落地；**本机重测**快层 4475 passed / 220 deselected、ruff 两项干净
 - [x] 知乎真机全矩阵：**31/31 绿**（2026-09-28，6 轮跑完），逐例控制台审计 → §6 已销号 U3、U19(知乎格)、
       U22-U24、U26-U29；H1/H2/H3 原样跑通用户 `测试：知乎.json`；已提交 `dcfb126`+`0b8b4bc`+`d7215d6`+`e1bc3b0`
-- [ ] **微博**：按 §11「一个平台的完整复查流程」八步执行
-      - [x] **第 0 步 读页面**（2026-09-28，五条探针 `backend/test_weibo_{structure,gaps,child,child2,child3,child4}.py`
-            → `scratchpad/weibo_*.json`；结论写进 `docs/crawler_notes.md` 微博节，判决登记为 §6 **U31-U34**）。
+- [ ] **微博**：按 §11「一个平台的完整复查流程」八步执行（**第 0-5 步已过，第 6-8 步等用户在场跑真机**）
+      - [x] **第 0 步 读页面**（2026-09-28，八条一次性探针 `backend/test_weibo_{structure,gaps,child,child2,child3,child4,actionbar,cardcount}.py`
+            → `scratchpad/weibo_*.json`；结论写进 `docs/crawler_notes.md` 微博节，判决登记为 §6 **U31-U35**）。
             四条旧疑点的下场：**U12 成立且量化**（小时窗第 2 页真有 6 条、mid 交集 0 → `_may_page` 静默丢 40%，
             修法是**允许窗口翻页**而不是"声明上限"）；**U11 前提被否证**（本机首卡 0.42-0.85 s、稳定 2.47-2.92 s，
             9 s 够用），成立的是「裸 `driver.get` 绕开 `Crawler.open`」+「超时行说『可能无内容』」那两半；
@@ -364,7 +364,7 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
             导航走 `Crawler.open(url, judge=False)`（引擎新增该参数：留下 settled 与弹窗清理，把墙的判决交回
             按文档判定的调用方）、收尾行 `crawl.weibo.walk_done`（行数/目标/走到第几个窗口/原因）、
             评论四列改真读 + `父楼层` + 差额具名 `comment.weiboShort`。
-            **`@code-auditor` 抓到我自己四处新错，全部回修**：
+            **`@code-auditor` 抓到我自己七处新错，全部回修**（提交 `6f46dcb`）：
             ① `walk_done` 把 `len(urls)` 说成「走完」——改成「窗口走到第 {walked}/{total} 个」；
             ② 差额行把**任何**短表都归因给楼中楼（评论上限、取数失败也算）——改为只有游标耗尽才报，
                且用**交给用户的那张表**的长度；③ 30 页常量与 README「后端无任何翻页上限」冲突，
