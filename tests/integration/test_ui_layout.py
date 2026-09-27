@@ -1418,7 +1418,33 @@ opts.forEach((p) => {
     rows.push({ platform: p, scroll: box.scrollHeight, client: box.clientHeight });
     box.classList.remove('open');
 });
-return { count: rows.length, rows };
+const content = document.getElementById('cookie-content');
+const kids = (content ? Array.prototype.map.call(content.children,
+    (k) => [k.id || k.className, k.offsetHeight]) : []).sort((a, b) => b[1] - a[1]);
+// The viewport as CSS sees it, read off a ``100vh`` probe: under an emulated device metric
+// ``window.innerHeight`` keeps reporting the OS window (measured 1080 while the layout viewport
+// was 768), and it is the layout viewport that every ``max-height: calc(100vh - …)`` in this
+// panel is built from. Asserting the JS number would test the wrong instrument.
+const probe = document.createElement('div');
+probe.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;visibility:hidden';
+document.body.appendChild(probe);
+const viewport = [probe.offsetWidth, probe.offsetHeight];
+probe.remove();
+return {
+    count: rows.length,
+    rows,
+    // What is actually tall inside the panel, tallest first: an overflow verdict that cannot say
+    // which block costs the height sends someone to read 200 lines of CSS instead of fixing it.
+    kids,
+    viewport,
+    // The viewport is part of the measurement, not background context: the panel's own
+    // max-height is derived from ``window.innerHeight`` (app.js's resizable dialog), so a
+    // "content overflows" verdict without the viewport it was measured in cannot be told apart
+    // from a window that is simply not the one this test claims to be testing.
+    inner: [window.innerWidth, window.innerHeight],
+    outer: [window.outerWidth, window.outerHeight],
+    maxH: getComputedStyle(box).maxHeight
+};
 """
 
 
@@ -1427,15 +1453,37 @@ def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_
     past the window, so every platform showed a vertical scrollbar. The panel was
     widened (#175); the guide must now wrap into a height that fits WITHOUT the box
     having to scroll itself. Asserted per platform — this is the only tier that sees
-    real text-wrap heights, and the assertion reports how many it measured."""
+    real text-wrap heights, and the assertion reports how many it measured.
+
+    ``set_window_size``/``set_window_rect`` are not how this measures a laptop: the window
+    manager answers neither (measured — the page reported a 1920×1080 viewport while the dialog
+    still carried a 646 px ``max-height`` written when its own box was first opened at a
+    different size, so the audit compared content against a viewport it did not have). The
+    viewport is therefore *emulated*, which is the one thing a page cannot disagree with, and
+    the check below fails loudly if the emulated size did not take effect.
+    """
     driver.set_window_size(1366, 768)
-    _quiet_canvas(driver, app_url)
-    got = driver.execute_script(COOKIE_FIT_JS, [])
+    driver.execute_cdp_cmd(
+        'Emulation.setDeviceMetricsOverride',
+        {'width': 1366, 'height': 768, 'deviceScaleFactor': 1, 'mobile': False},
+    )
+    try:
+        _quiet_canvas(driver, app_url)
+        got = driver.execute_script(COOKIE_FIT_JS, [])
+    finally:
+        driver.execute_cdp_cmd('Emulation.clearDeviceMetricsOverride', {})
+    inner_w, inner_h = got['viewport'][0], got['viewport'][1]
+    assert abs(inner_w - 1366) <= 2 and abs(inner_h - 768) <= 2, (
+        f'this case audits a 1366×768 laptop window and CSS measured it as {got["viewport"]} '
+        f'(cap {got["maxH"]}); the emulation did not take effect, so nothing measured below '
+        'is a statement about a laptop'
+    )
     assert got['count'] >= 8, f'expected the whole platform list to be measured, saw {got["count"]}'
     for row in got['rows']:
         assert row['scroll'] <= row['client'] + 1, (
             f'the {row["platform"]} cookie guide still overflows: scrollHeight {row["scroll"]} '
-            f'vs clientHeight {row["client"]}'
+            f'vs clientHeight {row["client"]} (viewport {got["inner"]}, cap {got["maxH"]}, '
+            f'tallest blocks {got["kids"][:4]})'
         )
 
 
