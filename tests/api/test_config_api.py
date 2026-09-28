@@ -24,14 +24,14 @@ from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.api
 
-CONFIG_KEYS = {'ollama_model', 'default_headless', 'max_workers'}
+CONFIG_KEYS = {'ollama_model', 'default_headless', 'max_workers', 'cloud_mode'}
 # The cookie panel's platform set is the manager's own list — mirroring it here
 # would only ever record the last time someone forgot the other side.
 COOKIE_PLATFORMS = set(CookieManager.PLATFORMS)
 
 
 class TestConfigEndpoint:
-    def test_config_exposes_exactly_three_keys(self, client):
+    def test_config_exposes_exactly_the_keys_the_panel_needs(self, client):
         response = client.get('/api/config')
         assert response.status_code == 200
         assert set(response.get_json()) == CONFIG_KEYS
@@ -41,6 +41,7 @@ class TestConfigEndpoint:
         assert body['ollama_model'] == Config.OLLAMA_MODEL
         assert body['default_headless'] is Config.DEFAULT_HEADLESS
         assert body['max_workers'] == Config.DEFAULT_MAX_WORKERS
+        assert body['cloud_mode'] is Config.CLOUD_MODE, 'the whole Ollama/headless UI hiding reads this flag'
 
     def test_config_is_not_cached_at_import_time(self, client, monkeypatch):
         monkeypatch.setattr(Config, 'OLLAMA_MODEL', 'patched-model:1')
@@ -49,10 +50,26 @@ class TestConfigEndpoint:
             'ollama_model': 'patched-model:1',
             'default_headless': True,
             'max_workers': 9,
+            'cloud_mode': Config.CLOUD_MODE,
         }
 
     def test_config_is_read_only(self, client):
         assert client.post('/api/config', json={}).status_code == 405
+
+    @pytest.mark.parametrize('argv', [['cloud'], ['--cloud'], ['CLOUD'], [' run', '--cloud-mode'], ['cloud', '5000']])
+    def test_the_command_line_can_raise_the_cloud_switch(self, app_module, argv):
+        """``python app.py cloud`` is the launcher line a systemd unit or a shell alias writes,
+
+        so it has to be recognised in the shapes people actually type. The switch matters twice
+        over: it is read at import time, and it is the only thing standing between a public
+        server and a page that offers a local model, a visible window and a browser-generated
+        cookie to whoever opens the URL.
+        """
+        assert app_module._cloud_requested(argv) is True
+
+    @pytest.mark.parametrize('argv', [[], ['5000'], ['--host', 'cloud.example'], ['work']])
+    def test_nothing_else_on_the_command_line_means_cloud(self, app_module, argv):
+        assert app_module._cloud_requested(argv) is False
 
 
 class TestCapabilitiesEndpoint:

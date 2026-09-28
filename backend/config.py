@@ -18,6 +18,15 @@ class Config:
 
     SECRET_KEY = os.environ.get('SECRET_KEY', 'crawler-workflow-secret-key')
 
+    #: Cloud deployment switch. On a public server there is no local model to talk to, no
+    #: display to open a window on, and no browser to click 「生成 Cookie」 with — and the user
+    #: in front of the page is a stranger, not the machine's owner. So one flag decides all of
+    #: it: the Ollama UI, the headless setting (forced headless), the cookie-generating button,
+    #: and the first-entry privacy notice that says what is stored where.
+    #: Set it with ``CRAWLER_CLOUD=1`` or ``python app.py cloud`` — app.py raises the variable
+    #: *before* importing this module, because a class attribute is read once at import time.
+    CLOUD_MODE = str(os.environ.get('CRAWLER_CLOUD') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
     # Paths
     DATA_DIR = os.path.join(DATA_ROOT, 'data')
     COOKIE_DIR = os.path.join(DATA_DIR, 'cookies')

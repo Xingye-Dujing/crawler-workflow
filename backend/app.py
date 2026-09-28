@@ -79,6 +79,22 @@ from utils.helpers import as_bool, comment_platforms, platform_for, sanitize_fil
 #: Read once because the table is a module constant; a test asserts it stays in step.
 _COMMENT_PLATFORMS = tuple(comment_platforms())
 
+
+def _cloud_requested(argv) -> bool:
+    """Whether the command line asked for the cloud shape of this app.
+
+    ``python app.py cloud`` (also ``--cloud``) is the line a systemd unit or a shell alias
+    writes, so it is honoured next to the ``CRAWLER_CLOUD=1`` environment variable. Setting it
+    here rather than before the imports is safe because every reader asks at CALL time — the
+    config payload, the forced headless, the hidden Ollama UI — and nothing freezes it while
+    this module is still being imported. A future import-time reader would have to move this up.
+    """
+    return any(str(arg).strip().lower() in ('cloud', '--cloud', 'cloud-mode', '--cloud-mode') for arg in argv)
+
+
+if _cloud_requested(sys.argv[1:]):
+    Config.CLOUD_MODE = True
+
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
 CORS(app)
@@ -5601,7 +5617,12 @@ def get_config():
             'ollama_model': Config.OLLAMA_MODEL,
             'default_headless': Config.DEFAULT_HEADLESS,
             'max_workers': Config.DEFAULT_MAX_WORKERS,
-        }
+            # The browser hides what cannot work here (the whole Ollama UI, the headless switch,
+            # the cookie-generating button) and shows what a stranger on a shared server has to be
+            # told once: where its own data lands. It is a fact about the server, so the server
+            # says it — a frontend guess would be a second opinion about the deployment.
+            'cloud_mode': Config.CLOUD_MODE,
+        },
     )
 
 
