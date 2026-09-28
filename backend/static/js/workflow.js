@@ -668,22 +668,17 @@ const workflow = {
         opts = opts || {};
         /* Validate before running */
         var validationErrors = this.validate();
-        /* Async cookie check */
-        try {
-            var cookieResp = await fetch('/api/cookies/status');
-            var cookieResult = await cookieResp.json();
-            if (cookieResult.ok) {
-                Object.keys(canvas.nodes).forEach(function (id) {
-                    var node = canvas.nodes[id];
-                    if (node.type === 'source') {
-                        var platform = node.params.platform;
-                        if (platform && cookieResult.cookies && !cookieResult.cookies[platform]) {
-                            validationErrors.push(I18n.t('toast.cookiesMissing') + ' ' + platform);
-                        }
-                    }
-                });
-            }
-        } catch (e) { /* skip cookie check if API fails */ }
+        /* NO cookie check here. This used to ask /api/cookies/status and push 「缺少 Cookie」 for
+           every source node whose platform was not in its `cookies` map — a second, weaker opinion
+           about the same question the run gate already answers, and wrong in three ways measured on
+           the user's own canvas: that map is keyed by platform and answers only for the DEFAULT
+           account (app.py:4841), so a node on a saved named account was refused for a cookie it has;
+           it is built from CookieManager.PLATFORMS, so wechat — a platform with no cookie row at all —
+           read as "missing" and could never run; and it walked every node instead of the live ones, so
+           a disabled node blocked the press. `validate()` owns the shape (the matrix refuses a stored
+           account that has no file, BY NAME), and `_cookieGateBeforeRun` owns the question of whether
+           the login still works, per (platform, account) — AGENTS: the frontend holds no second
+           opinion about a crawl, and 「无法核对」 never blocks. */
         if (validationErrors.length > 0) {
             /* ONE toast for one press of the button. `#toast` is a single element whose
                text is replaced, so the loop that used to run over these errors left the

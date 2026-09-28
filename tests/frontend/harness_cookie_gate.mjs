@@ -50,7 +50,10 @@ function world(sc) {
     fixWindow(vm, sandbox);
     const routes = sandbox.__routes;
     routes['/api/settings'] = { ok: true, settings: sc.settings || {} };
-    routes['/api/cookies/status'] = ALL_COOKIES;
+    /* A scenario can answer 「no cookie anywhere」; `execute()` used to refuse on that map
+       (default account only), so the realistic answer has to be reachable to prove it no
+       longer decides anything. */
+    routes['/api/cookies/status'] = sc.status || ALL_COOKIES;
     routes['/api/cookies/flow'] = { ok: true, flows: [] };
     routes['/api/cookies/generate/status'] = { ok: true, active: false };
     routes['/api/workflow/execute'] = { ok: true, run_id: 'r1' };
@@ -144,6 +147,13 @@ for (const sc of scenarios) {
     const executed = posts.find((post) => post.url === '/api/workflow/execute');
     entry.asked = Boolean(asked);
     entry.askedBody = asked && asked.body ? JSON.parse(asked.body) : null;
+    /* Did `execute()` ask a cookie question of its own? It used to fetch
+       /api/cookies/status and refuse on the DEFAULT account's boolean no matter which
+       account the node had selected — and for wechat, a platform with no cookie row at
+       all, `cookies['wechat']` is simply absent, which read as "missing" and made the
+       crawl impossible to start. The only session question left is the preflight, which
+       is asked per (platform, account) and is off when the switch is off. */
+    entry.statusAsked = posts.some((post) => post.url === '/api/cookies/status');
     entry.ran = Boolean(executed);
     entry.sentProfile = executed && executed.body ? String(JSON.parse(executed.body).workflow.settings.use_profile) : 'no-request';
     entry.dialogs = sandbox.__dialogs.slice();

@@ -635,12 +635,19 @@ class TestCollectionKind:
 
     def test_only_the_measured_board_answers_an_anonymous_browser(self):
         """`needs_session` is what stops the cookie gate refusing a crawl the site would
-        have served. Exactly one mode is measured doing that, so exactly one is exempt —
-        a second False would be a claim nobody re-measured."""
+        have served. Exactly two modes are exempt, for two different measured reasons, and
+        a third False would be a claim nobody re-measured.
+
+        ``weibo/hot`` is anonymous *while the platform can hold a session* (the board answers
+        a visitor). ``wechat/posts`` has no session to have: wechat has never been in
+        ``CookieManager.PLATFORMS``, carries no ``login_url``, and its article bodies are
+        served to anyone — so demanding a cookie there refuses a crawl that cannot use one.
+        """
         anonymous = {(cap.platform, mode.key) for cap in CAPABILITIES for mode in cap.modes if not mode.needs_session}
-        assert anonymous == {('weibo', 'hot')}, anonymous
+        assert anonymous == {('weibo', 'hot'), ('wechat', 'posts')}, anonymous
         assert needs_session('weibo', 'hot') is False
         assert needs_session('weibo', 'posts') is True, 'the same platform, a different answer'
+        assert needs_session('wechat', 'posts') is False
         assert needs_session('zhihu', 'hot') is True, 'the zhihu board is 401 without a session'
         # No answer is not evidence of anonymity: an unknown platform or mode keeps
         # the probe on.

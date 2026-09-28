@@ -980,8 +980,11 @@ pager 自报页底，排队交棒无恙。红条分三类：
 * **三种会话都答**：插 Cookie 的一次性浏览器、平台 profile、**完全无 Cookie**（匿名会话
   同样 `ok:1`）。这条决定了矩阵新增的 `Mode.needs_session`：Cookie 预检是按**平台**问的，
   如果只看平台，一个只挂「微博热搜」节点的画布会因为没 Cookie 被拒 —— 而站点本来就把榜单
-  给了匿名浏览器。所以现在只有 `('weibo','hot')` 是 `needs_session=False`，
-  `test_only_the_measured_board_answers_an_anonymous_browser` 钉住"恰好这一个"，
+  给了匿名浏览器。所以 `('weibo','hot')` 是 `needs_session=False`（2026-09-28 之后另一个是
+  `('wechat','posts')`，理由**不同**：热搜是「有登录态但站点也答匿名」，微信是「根本没有会话可要」——
+  它从来不在 `CookieManager.PLATFORMS` 里、也没有 `login_url`，把它算成需要 Cookie 会让一个
+  永远不可能有 Cookie 的采集被闸门挡死），
+  `test_only_the_measured_board_answers_an_anonymous_browser` 钉住"恰好这两个"，
   多一个就是需要重新测量的主张；
 * 备用路径（已实测、未使用）：`https://s.weibo.com/top/summary` 的 DOM 表在三种会话下也
   都出表（每行 3 格：序号 / 关键词 / 热度，行链是 `/weibo?q=<词>&t=31&band_rank=N`）。

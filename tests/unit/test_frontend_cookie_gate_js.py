@@ -50,10 +50,15 @@ MATRIX = capabilities.as_dict()
 DEFAULT_MODE = {entry['platform']: entry['modes'][0]['key'] for entry in MATRIX['platforms']}
 
 
-def _source(node_id, platform, mode=None, account=None):
+def _source(node_id, platform, mode=None, account=None, **extra):
     params = {'platform': platform, 'keyword': '三亚', 'collect': mode or DEFAULT_MODE[platform]}
     if account is not None:
         params['account'] = account
+    # A mode whose required field is not the keyword (wechat takes 文章链接) has to be
+    # filled the way the panel would fill it, or the canvas refuses the run for a shape
+    # error and the scenario reports "the gate let it through" about a run that never got
+    # to the gate.
+    params.update(extra)
     return {
         node_id: {
             'id': node_id,
@@ -91,7 +96,7 @@ def _output(node_id='o1'):
     }
 
 
-def _chain(index, platform, kind='source', urls=None, mode=None, account=None):
+def _chain(index, platform, kind='source', urls=None, mode=None, account=None, **extra):
     """One complete workflow: a crawler node wired into an output node.
 
     A crawler with nothing downstream is refused by ``validate()`` before the gate is
@@ -100,7 +105,14 @@ def _chain(index, platform, kind='source', urls=None, mode=None, account=None):
     absence.
     """
     src_id, out_id = f'w{index}-s', f'w{index}-o'
-    src = _source(src_id, platform, mode, account) if kind == 'source' else _comment(src_id, urls)
+    # ``urls`` means two different things by node kind: the Comment node's link list, and a
+    # source node whose mode takes links instead of a keyword (wechat). Feeding it only to
+    # the Comment branch is how a wechat canvas validated as 「文章链接不能为空」 in a scenario
+    # that meant to test a cookie gate.
+    if kind == 'source':
+        src = _source(src_id, platform, mode, account, **({'urls': urls} if urls else {}), **extra)
+    else:
+        src = _comment(src_id, urls)
     return {**src, **_output(out_id)}, [{'from': src_id, 'to': out_id}]
 
 
@@ -418,6 +430,27 @@ SCENARIOS = [
         },
         'answers': {'expired': 'update'},
     },
+    {
+        # 微信 is crawled from article links and has never had a cookie row (it is not in
+        # ``CookieManager.PLATFORMS``), so the status map has no key for it at all — which is
+        # exactly what a second cookie check inside ``execute()`` read as 「missing」 and made
+        # this platform impossible to start. No session is asked, the run starts.
+        'id': 'wechat-has-no-session-to-be-asked-about',
+        'settings': AUTO,
+        **_canvas(_chain(1, 'wechat', urls='https://mp.weixin.qq.com/s/abcdefghij')),
+        'preflight': CLEAN,
+        'status': {'ok': True, 'cookies': {}},
+    },
+    {
+        # A node on a NAMED account while the default account holds nothing. The status map
+        # answers per platform for the blank account only, so this payload is the honest
+        # shape of ``zhihu@work_cookies.json`` existing and ``zhihu_cookies.json`` not — and
+        # it must not be the reason the press does nothing.
+        'id': 'a-named-account-is-not-answered-for-by-the-default-slot',
+        'settings': NO_GATE,
+        **_canvas(_chain(1, 'zhihu', account='work')),
+        'status': {'ok': True, 'cookies': {'zhihu': False}},
+    },
 ]
 
 #: Every scenario needs the crawl matrix: the canvas validates required fields
@@ -598,6 +631,32 @@ class TestSerialOnlyPlatforms:
         serial = [dialog for dialog in case['dialogs'] if 'serial' in dialog['values']]
         assert serial == [], 'one crawl queues behind nobody — the warning would be noise'
         assert case['ran'] is True
+
+
+class TestNoSecondCookieGate:
+    """``execute()`` holds no cookie opinion of its own — AGENTS forbids both a second
+    opinion about a crawl and a second, weaker start path.
+
+    It used to fetch ``/api/cookies/status`` and refuse any source node whose platform was
+    not ``true`` there. That map is keyed by platform and answers for the DEFAULT account
+    only (``app.py``: ``cookie_manager.exists(platform)``), and it is built from
+    ``CookieManager.PLATFORMS`` — so it refused a node on a saved named account, and
+    refused wechat for a key that does not exist at all.
+    """
+
+    def test_wechat_is_neither_asked_about_nor_refused(self, gate):
+        case = gate['wechat-has-no-session-to-be-asked-about']
+        assert case['asked'] is False, 'a platform with no session to test was sent to the preflight'
+        assert case['ran'] is True, f'the canvas refused its own wechat crawl: {case}'
+
+    def test_the_cookie_status_map_starts_nothing_and_blocks_nothing(self, gate):
+        for scenario in (
+            'wechat-has-no-session-to-be-asked-about',
+            'a-named-account-is-not-answered-for-by-the-default-slot',
+        ):
+            case = gate[scenario]
+            assert case['statusAsked'] is False, f'{scenario} fetched the cookie map: the second gate is back'
+            assert case['ran'] is True, f'{scenario} was refused with no cookie map in the way: {case}'
 
 
 class TestTheGateFollowsTheModeNotJustThePlatform:

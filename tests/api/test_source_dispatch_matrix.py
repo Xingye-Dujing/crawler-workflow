@@ -633,7 +633,7 @@ def test_the_board_a_site_does_offer_reaches_the_crawler_as_a_value(app_module, 
     assert kwargs.get('board') == 'ranking', f'{platform}/{mode_key} sent board={kwargs.get("board")!r}'
 
 
-def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_one():
+def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_two():
     """``needs_session`` decides what a canvas may run without a cookie, so it is
     answered pair by pair — never by "this platform is usually logged in".
 
@@ -646,9 +646,13 @@ def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_one():
     """
     pairs = [(cap.platform, mode.key) for cap in capabilities.CAPABILITIES for mode in cap.modes]
     anonymous = [(platform, key) for platform, key in pairs if not capabilities.needs_session(platform, key)]
-    assert anonymous == [('weibo', 'hot')], f'of {len(pairs)} pairs these asked for no session: {anonymous}'
+    # Two exemptions, for two different measured reasons: weibo's board answers an anonymous
+    # browser, while wechat has no session to have at all (it has never been a cookie platform).
+    assert anonymous == [('weibo', 'hot'), ('wechat', 'posts')], (
+        f'of {len(pairs)} pairs these asked for no session: {anonymous}'
+    )
     for platform, key in pairs:
-        if (platform, key) == ('weibo', 'hot'):
+        if (platform, key) in {('weibo', 'hot'), ('wechat', 'posts')}:
             continue
         assert capabilities.needs_session(platform, key) is True, f'{platform}/{key} quietly stopped needing a cookie'
 

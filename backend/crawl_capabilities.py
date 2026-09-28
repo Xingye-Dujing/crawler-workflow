@@ -590,6 +590,12 @@ CAPABILITIES: tuple[Capability, ...] = (
             Mode(
                 key='posts',
                 label_key='settings.articleUrls',
+                # The article bodies are served anonymously by mp.weixin.qq.com (the crawler says
+                # so, and wechat has never been in ``CookieManager.PLATFORMS``, so the panel holds no
+                # row for it): there is no login this crawl can be asked for. Leaving the flag True
+                # made the pre-run gate buy a browser to test a session that does not exist and then
+                # refuse a crawl that needs no cookie at all.
+                needs_session=False,
                 fields=(
                     Field(
                         key='urls',

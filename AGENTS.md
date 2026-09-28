@@ -211,10 +211,16 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   a fact still prints: the upload's own "Loaded … N rows", and any failure/skip/restore line — with `node_label`, or a
   silenced node that fails is undiagnosable.
 - Run-gating UX lives in `workflow.js execute()` → `_cookieGateBeforeRun`: `cookie_preflight_before_run` probes each
-  canvas platform **whose mode needs a session** (`Mode.needs_session`; weibo's 热搜 answers anonymously) and a login
+  canvas platform **whose mode needs a session** (`Mode.needs_session`; weibo's 热搜 answers anonymously, wechat has no
+  session to want — it is not a cookie platform at all) and a login
   wall **refuses it** (no "run anyway"); 「无法核对」 — timeout, captcha, busy profile — never blocks, because no answer
   is not evidence of a dead cookie. Off asks and blocks nothing; a resume or a crawl-free canvas skips the probe, and a
-  cookie write drops the cached verdict. **A new settings key needs all four:** the bool branch in
+  cookie write drops the cached verdict. **`execute()` asks no cookie question of its own** — the shape this had in
+  2026-09 was a `/api/cookies/status` loop inside it that refused on each platform's *default-account* boolean: it
+  blocked a node on a saved named account, and blocked wechat entirely because that map holds no key for a platform
+  with no cookie row. **A named cookie and a named profile belong together**: one account = one
+  `data/cookies/<platform>@<account>.json` *and* one `chrome_profile/<platform>/<account>` (own device, own rotated
+  session, own concurrency lane), so nothing that answers "does this crawl have a login" may drop the account. **A new settings key needs all four:** the bool branch in
   `settings_store.save_settings`, both app.js catalogs, and the `AppSettings` wiring.
 
 ## Style (differs from defaults)
