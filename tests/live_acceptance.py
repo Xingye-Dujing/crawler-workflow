@@ -290,6 +290,38 @@ def named_refusals(text: str, keys) -> list:
     return [key for key in keys if harness.names_key(text, key)]
 
 
+def assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
+    """Each component's exported file holds exactly the rows the store holds — per component, not in total.
+
+    His canvas ends every chain in an 输出 node, which makes this the one shape in the whole tier that can
+    walk the plan's L2 三一致 (file == store == preview) for every crawl of a multi-component run at once.
+    Matching by the prefix the 输出 node writes is the point, twice over: a row count that ties only **in
+    total** can hide a component that wrote nothing while another wrote twice, and a loose *substring*
+    match hands the search component one of the comment files (``per_article_file`` names its files
+    ``<record>-<source>-<index>.csv``, and a parallel record's name is every label joined with ' + ') and
+    then reports a disagreement that is this file's own arithmetic — §11 caught it that way on weibo's
+    first live run of the cell, so it lives here rather than in one platform's program file.
+    """
+    import live_run_harness as harness
+
+    from config import Config
+
+    assert fresh, f'the canvas wires an output node to every component and {Config.EXPORT_DIR} gained no file'
+    for part in found:
+        mine = [path for path in fresh if part['label'] and path.name.startswith(f'{part["label"]}-')]
+        assert mine, f'no export file names the component {part["label"]!r}: {[p.name for p in fresh]}'
+        count, _header = csv_row_count(mine[0])
+        kept = harness.stored_rows(records[part['label']], part['source'])
+        assert count == kept, f'{mine[0].name} holds {count} rows while the store holds {kept} for {part["label"]}'
+        if part['mode'] == 'comments' and part['urls']:
+            # §3-C's 「文件数 == 文章数」: he switched 每篇一个文件 on, so each pasted link owes its own file.
+            per_article = [path for path in fresh if f'-{part["source"]}-' in path.name]
+            assert len(per_article) == len(part['urls']), (
+                f'per_article_file is on for {len(part["urls"])} pasted link(s) and '
+                f'{len(per_article)} per-article files arrived: {[p.name for p in per_article]}'
+            )
+
+
 def export_dir_entries() -> set:
     """The export directory's current names — the baseline a 三一致 check reads before a run starts."""
     from config import Config

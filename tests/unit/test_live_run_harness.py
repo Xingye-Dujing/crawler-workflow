@@ -814,6 +814,64 @@ class TestRunSettings:
         assert harness.run_settings(mode='serial', headless=True)['mode'] == 'serial'
 
 
+class TestLaneSwitches:
+    """``lane_switches`` is the only way a cell can say which lane it measured.
+
+    Both switches are read through ``settings_store`` by ``crawl_gate``, never from the canvas, so a case
+    that wants real overlap has to change the machine's settings — and put them back, because the tier's
+    settings file is session-wide: a leaked ``same_platform_queue=False`` would have a later platform
+    crawling two-at-a-time and blaming the site when it answers with a wall.
+    """
+
+    def test_the_two_switches_are_set_for_the_block_and_restored_after(self, monkeypatch):
+        import settings_store
+
+        writes = []
+        monkeypatch.setattr(settings_store, 'get_setting', lambda key: 'saved-value')
+        monkeypatch.setattr(
+            settings_store,
+            'save_settings',
+            lambda payload: writes.append(dict(payload)) or (payload, []),
+        )
+        with harness.lane_switches(queue=False, stagger=0):
+            pass
+        assert [sorted(one) for one in writes] == [
+            sorted(['same_platform_queue', 'same_platform_stagger']),
+            sorted(['same_platform_queue', 'same_platform_stagger']),
+        ], f'the block set or restored something other than the two lane switches: {writes}'
+        assert writes[0]['same_platform_queue'] is False and writes[0]['same_platform_stagger'] == 0
+        assert all(one['same_platform_queue'] == 'saved-value' for one in writes[1:]), (
+            f"the restore did not put the user's own values back: {writes}"
+        )
+
+    def test_a_case_that_dies_inside_the_block_still_restores_it(self, monkeypatch):
+        """Containment is the point: a failed assertion must not leave the lane switched off."""
+        import settings_store
+
+        writes = []
+        monkeypatch.setattr(settings_store, 'get_setting', lambda key: 'saved-value')
+        monkeypatch.setattr(
+            settings_store,
+            'save_settings',
+            lambda payload: writes.append(dict(payload)) or (payload, []),
+        )
+        with pytest.raises(RuntimeError), harness.lane_switches(queue=False, stagger=0):
+            raise RuntimeError('the crawl refused mid-cell')
+        assert writes[-1]['same_platform_queue'] == 'saved-value', writes
+
+    def test_a_rejected_write_is_refused_loudly_instead_of_running_the_wrong_test(self, monkeypatch):
+        """``save_settings`` returns warnings when a key is off its allowed shape.
+
+        Swallowing them would let a cell measure the default lane while its docstring claimed the other.
+        """
+        import settings_store
+
+        monkeypatch.setattr(settings_store, 'get_setting', lambda key: True)
+        monkeypatch.setattr(settings_store, 'save_settings', lambda payload: (payload, ['bad value']))
+        with pytest.raises(AssertionError, match='bad value'), harness.lane_switches(queue=False, stagger=0):
+            pass
+
+
 # ─── records and the wire ───────────────────────────────────────────────
 
 

@@ -72,6 +72,7 @@ class RunDriver:
         queue=None,
         lang='zh',
         named_death_ok=False,
+        llm=None,
     ):
         """*named_death_ok* is a decision about what a dead session convicts.
 
@@ -110,7 +111,9 @@ class RunDriver:
         self._resume_proof = harness.read_record(client, resume_run_id) if resume_run_id else None
         self._resumed = bool(resume_run_id)
         try:
-            self.accepted = harness.start(client, workflow, resume_run_id=resume_run_id, queue=queue, lang=lang)
+            self.accepted = harness.start(
+                client, workflow, resume_run_id=resume_run_id, queue=queue, lang=lang, llm=llm
+            )
         except BaseException:
             self.rec.close()
             self._closed = True
@@ -160,6 +163,35 @@ class RunDriver:
     def refresh(self) -> dict:
         self.record = harness.read_record(self.client, self.run_id)
         return self.record
+
+    def wait_refused(self, *, key: str) -> dict:
+        """Watch a run the app must refuse **before anything is crawled**, and return its status.
+
+        A canvas whose ``select`` holds a value the matrix does not offer is refused by
+        :meth:`WorkflowEngine.validate` inside the run thread, which returns before ``run.started``
+        books the console, before a node executes, before a profile is taken and before a record row
+        exists (``app.py``, right after ``engine.validate()``). So :meth:`assert_l3`'s four sentences
+        were never owed here — this case's evidence is the opposite shape: the refusal names itself,
+        and **nothing was paid for**. A run that got through validation is reported as the failed
+        premise it is, rather than graded on a table the case never asked for.
+        """
+        self.status = self.rec.pump(self.timeout, run_id=self.run_id)
+        left = max(60.0, self.timeout - self.rec.elapsed())
+        harness.wait_run_finished(self.app, timeout=left)
+        self.status = self.rec.drain()
+        outcome = str(self.status.get('outcome') or '')
+        assert outcome == 'rejected', (
+            f'the canvas was not refused before it crawled (outcome={outcome!r}), '
+            f'so the console ended with the crawl it should not have started: {self.rec.lines[-6:]!r}'
+        )
+        assert harness.names_key(self.rec.text, key), f'the refusal did not name {key!r}: {self.rec.lines[-6:]!r}'
+        assert not harness.mentions(self.rec.text, 'run.started', rid=self.run_id), (
+            f'run {self.run_id} was refused yet still booked a console, so its crawler reached the site'
+        )
+        assert not harness.names_key(self.rec.text, 'wf.executing_node'), (
+            'a refused canvas still executed a node: the table it filed is one the user was told not to ask for'
+        )
+        return self.status
 
     def rows(self, node_id: str = 'node-1') -> int:
         return harness.stored_rows(self.refresh(), node_id)

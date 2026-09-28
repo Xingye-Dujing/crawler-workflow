@@ -913,6 +913,7 @@ def start(
     resume_run_id: str | None = None,
     queue: bool | None = None,
     lang: str = 'zh',
+    llm: dict | None = None,
 ) -> dict:
     """``POST /api/workflow/execute``, and hand the response body back.
 
@@ -920,8 +921,15 @@ def start(
     case to notice: the one thing a live matrix must not do is go on polling a run that
     never started. ``queue=False`` is what the 继续 banner sends — a *queued* resume would
     spend its whole read budget on somebody else's console, so this helper refuses one.
+
+    ``llm`` is the transport block the panel builds from the user's own settings. It is only
+    needed by a canvas that holds an AI node — ``app.py`` refuses such a run with
+    ``api.needOllamaModel`` before anything starts — and a program file must then say which
+    model it asked for rather than editing the canvas to drop the node.
     """
     body: dict = {'workflow': workflow, 'lang': lang}
+    if llm is not None:
+        body['llm'] = dict(llm)
     if workflow_name is not None:
         body['workflow_name'] = workflow_name
     if resume_run_id:
@@ -935,6 +943,32 @@ def start(
     assert not payload.get('queued'), f'the server was busy, so this run only got in line: {payload}'
     assert payload.get('run_id'), f'no run id came back: {payload}'
     return payload
+
+
+@contextlib.contextmanager
+def lane_switches(*, queue: bool, stagger: int):
+    """Set the two global lane switches for one cell, and put them back afterwards.
+
+    Both are read through ``settings_store.get_setting`` by :func:`crawl_gate.hold` and
+    :func:`crawl_gate.stagger` — **never** from a run's ``settings`` block, so a canvas carrying
+    ``same_platform_stagger`` is stating a number nobody reads. And they are restored, because the tier's
+    settings file is session-wide: leaving the queue off would have a later platform's cells crawling
+    two-at-a-time and blaming the platform when the site answers with a wall.
+
+    This lives with the shared harness rather than in one platform's program file because a cell that
+    measures overlap has to state the lane it measured, and the second copy of a settings dance is where
+    one platform starts quietly testing a different configuration than another.
+    """
+    import settings_store
+
+    keys = ('same_platform_queue', 'same_platform_stagger')
+    before = {key: settings_store.get_setting(key) for key in keys}
+    _saved, warnings = settings_store.save_settings({'same_platform_queue': queue, 'same_platform_stagger': stagger})
+    assert not warnings, warnings
+    try:
+        yield
+    finally:
+        settings_store.save_settings({key: before[key] for key in keys})
 
 
 def read_record(client, run_id: str) -> dict:

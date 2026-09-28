@@ -61,7 +61,6 @@ narrow, so that cell would re-run H1's four crawls to assert what G1/G2 already 
 allowance is a closed list this file does not extend.
 """
 
-import contextlib
 import copy
 import re
 from datetime import date, timedelta
@@ -71,8 +70,6 @@ import live_acceptance as accept
 import live_run_driver as driver
 import live_run_harness as harness
 import pytest
-
-import settings_store
 
 pytestmark = [
     pytest.mark.live_site,
@@ -1314,27 +1311,6 @@ def test_e1_stop_inside_a_window_then_continue_re_enters_it(client, app_module, 
 # ─── G · serial_only (this platform's own axis) ─────────────────────────
 
 
-@contextlib.contextmanager
-def _lane_switches(*, queue: bool, stagger: int):
-    """Set the two global lane switches for one cell, and put them back afterwards.
-
-    Both are read through ``settings_store.get_setting`` by :func:`crawl_gate.hold` and
-    :func:`crawl_gate.stagger` — **never** from a run's ``settings`` block, so a canvas carrying
-    ``same_platform_stagger`` is stating a number nobody reads (that mistake was in this file's first
-    draft, and it made G1 and G2 the same test). And they are restored, because the tier's settings file is
-    session-wide: leaving the queue off would have a later platform's cells crawling two-at-a-time and
-    blaming the platform when the site answers with a wall.
-    """
-    keys = ('same_platform_queue', 'same_platform_stagger')
-    before = {key: settings_store.get_setting(key) for key in keys}
-    _saved, warnings = settings_store.save_settings({'same_platform_queue': queue, 'same_platform_stagger': stagger})
-    assert not warnings, warnings
-    try:
-        yield
-    finally:
-        settings_store.save_settings({key: before[key] for key in keys})
-
-
 def _audit_component(run, case_id: str, label: str, record: dict, node_id: str, *, target: int, mode: str) -> dict:
     """One component's own row: its verdict, its count, its transcript slice.
 
@@ -1387,7 +1363,7 @@ def test_g1_a_parallel_weibo_canvas_is_forced_into_the_queue(client, app_module,
         settings=harness.run_settings('parallel', True, use_profile=False),
     )
     with (
-        _lane_switches(queue=False, stagger=0),
+        harness.lane_switches(queue=False, stagger=0),
         LiveRun(client, app_module, canvas, case_id='G1', mode='posts', target=16, timeout=DEEP_TIMEOUT) as run,
     ):
         run.wait()
@@ -1435,7 +1411,7 @@ def test_g2_the_stagger_switch_does_not_unlock_a_serial_only_platform(client, ap
         settings=harness.run_settings('parallel', True, use_profile=False),
     )
     with (
-        _lane_switches(queue=False, stagger=15),
+        harness.lane_switches(queue=False, stagger=15),
         LiveRun(client, app_module, canvas, case_id='G2', mode='posts', target=12, timeout=DEEP_TIMEOUT) as run,
     ):
         run.wait()
@@ -1492,38 +1468,6 @@ def _grade_component(run, part, record) -> dict:
     return run.component_verdict(part['label'], record, part['source'], target=part['ask'], mode=part['mode'])
 
 
-def _assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
-    """Each component's exported file holds exactly the rows the store holds — per component, not in total.
-
-    His canvas ends every chain in an 输出 node, which makes this the one shape in the whole tier that can
-    walk the plan's L2 三一致 (file == store == preview) for all four crawls at once. Matching by the label
-    each file is named after is the point: a row count that ties only **in total** can hide a component
-    that wrote nothing while another wrote twice.
-    """
-    from config import Config
-
-    assert fresh, f'the canvas wires an output node to every component and {Config.EXPORT_DIR} gained no file'
-    for part in found:
-        # Match the prefix the 输出 node writes, not the label anywhere in the name. His comments node has
-        # ``per_article_file`` on, which writes one file per article named
-        # ``<record name>-<source node>-<index>.csv`` — and a parallel record's name is every component's
-        # label joined with ' + '. A loose substring match therefore hands the search component a comment
-        # file and reports a row-count disagreement that is the test's own arithmetic (§11 caught it that
-        # way on the first live run of this cell).
-        mine = [path for path in fresh if part['label'] and path.name.startswith(f'{part["label"]}-')]
-        assert mine, f'no export file names the component {part["label"]!r}: {[p.name for p in fresh]}'
-        count, _header = accept.csv_row_count(mine[0])
-        kept = harness.stored_rows(records[part['label']], part['source'])
-        assert count == kept, f'{mine[0].name} holds {count} rows while the store holds {kept} for {part["label"]}'
-        if part['mode'] == 'comments' and part['urls']:
-            # §3-C's 「文件数 == 文章数」: he switched 每篇一个文件 on, so each pasted link owes its own file.
-            per_article = [path for path in fresh if f'-{part["source"]}-' in path.name]
-            assert len(per_article) == len(part['urls']), (
-                f'per_article_file is on for {len(part["urls"])} pasted link(s) and '
-                f'{len(per_article)} per-article files arrived: {[p.name for p in per_article]}'
-            )
-
-
 def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module, monkeypatch):
     """H1 — 测试：微博.json as he left it, four components, minus the 6432-window range (D9).
 
@@ -1576,7 +1520,7 @@ def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module,
             f'the walk says it reached window {walked} of {offered} but opened a page for {paid}: '
             '剩余窗口零付费 failed, and the table cannot say which windows it paid for'
         )
-        _assert_canvas_exports(found, accept.new_exports(exported_before), records)
+        accept.assert_canvas_exports(found, accept.new_exports(exported_before), records)
         # The record itself: his canvas is parallel, so it is ONE row joining the four labels in canvas
         # order (AGENTS' 「并行是一条记录」), and every component still has to appear in that name — a label
         # that silently drops out of the joined name is a row the panel lists short.
