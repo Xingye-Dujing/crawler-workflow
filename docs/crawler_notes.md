@@ -702,6 +702,23 @@ an expired cookie sends the probe to the login page and the panel then tells the
 `tests/integration/test_browser_profile_launch.py` measures the whole round trip, including the claim
 above about the file on disk, so if Chrome ever stops persisting it the test says so by name.
 
+**A blank first run of Chrome already writes the files that look like a login (measured 2026-09-28,
+`tests/integration/test_profile_template.py`).** An account directory that has never opened a page still
+gets `Cookies`, `Login Data`, `History`, `Web Data`, `Favicons` and `Preferences` — every one of them an
+empty store. The template check therefore reads **row counts, not file names** (`browser_profiles.
+_SESSION_TABLES` + `_store_row_count`), which is the only question that separates Chrome's own scaffolding
+from somebody's session; a name-based verdict would have called every template this program can build
+dirty and seeded nothing. Two further measured consequences: the walk has to go *into* the tree (the cookie
+store is `Default/Network/Cookies`, not a top-level entry), and an unreadable non-empty store is reported as
+material rather than passed, because "I could not open it" is not evidence of an empty profile. The device
+case also asserts **how many stores it looked at**, so a clean answer that came from an empty directory
+cannot be mistaken for a checked one.
+
+**Opening a profile directory twice at once is the crash, so seeding is a first-creation-only act.**
+`profile_dir_for` calls `os.makedirs(exist_ok=False)` and seeds only the branch that just created the
+directory: `exist_ok=True` cannot tell "I made this" from "someone else's browser is already writing here",
+and re-copying into a live device would overwrite the session that device earned.
+
 **Do not block image loading on douyin** (measured the wrong way first): the class sets no
 `needs_images`, the base default blocks images for speed, and that is fine for every other platform —
 but re-tested with the dialog handled, images-on vs images-off produced identical screens (22-24 vs

@@ -371,6 +371,21 @@ class TestMatrixFlag:
         assert set(by_platform) == {cap.platform for cap in crawl_capabilities.CAPABILITIES}
 
 
+def _make_waiting_crawler(profile_dir: str):
+    """A real crawler class pointed at a busy profile with a run already stopped.
+
+    Only the profile claim runs — the browser is never reached — so no Chrome and
+    no monkeypatched driver are needed to exercise the give-up path.
+
+    Module level on purpose: a helper that is not a test must not sit inside the class,
+    or the methods written after it become its body and stop running (three of them did,
+    which is how the cross-thread release rule below went unnoticed for a month).
+    """
+    from crawlers.weibo import WeiboCrawler
+
+    return WeiboCrawler(headless=True, profile_dir=profile_dir, abort=lambda: True)
+
+
 class TestOneBrowserPerProfile:
     """A profile directory holds one Chrome at a time — and that has to be enforced.
 
@@ -467,17 +482,6 @@ class TestOneBrowserPerProfile:
         text = str(caught.value)
         assert '停止' in text or 'stopped' in text.lower(), f'not the gave-up line: {text}'
         assert '超时' not in text and 'timed out' not in text.lower(), 'a Stop was reported as a stuck profile'
-
-
-def _make_waiting_crawler(profile_dir: str):
-    """A real crawler class pointed at a busy profile with a run already stopped.
-
-    Only the profile claim runs — the browser is never reached — so no Chrome and
-    no monkeypatched driver are needed to exercise the give-up path.
-    """
-    from crawlers.weibo import WeiboCrawler
-
-    return WeiboCrawler(headless=True, profile_dir=profile_dir, abort=lambda: True)
 
     def test_a_claim_taken_on_one_thread_can_be_released_from_another(self, tmp_path):
         """The browser is closed on a helper thread, so the lock has to survive that.

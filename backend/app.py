@@ -39,7 +39,7 @@ from analyzers import (
 from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
-from crawlers.base import CrawlerStopped, DeadDriver, PageNotArrivedError
+from crawlers.base import CrawlerStopped, DeadDriver, PageNotArrivedError, warm_profile_dir
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, effective_workflow, node_label
@@ -5076,9 +5076,17 @@ def _plant_saved_cookie_into_profile(platform: str, account: str) -> str | None:
     crawl: one cookie, one profile, and a login sitting in a file its own browser has never read
     is exactly the state the panel used to leave behind (the directory comes from
     ``profile_dir_for``, which ``get_crawler`` calls before Chrome starts).
+
+    On a cloud host the pristine template is made here first, before that directory exists:
+    it is the one thing that has to precede a new account, and this is the one moment the
+    user is present to ask for a device. It costs one extra blank browser — once per
+    server, never again while the template stands — and on a machine with no
+    「浏览器生成」 button that browser is how the directory gets made at all.
     """
     if not browser_profiles.is_enabled():
         return None
+    if Config.CLOUD_MODE:
+        ensure_profile_template()
     profile = browser_profiles.platform_dir(platform, account)
     if browser_profiles.is_busy(profile) or execution_state['running']:
         # The file is newer than the session in that browser, and `needs_refresh` is what the
@@ -5764,6 +5772,47 @@ def set_runtime_settings():
 
 # ─── Browser profiles API ──────────────────────────────────────
 
+_TEMPLATE_BUILD_LOCK = threading.Lock()
+
+
+def ensure_profile_template(force: bool = False) -> dict:
+    """Make the pristine device directory, unless a clean one already exists.
+
+    One process at a time, because two blank Chromes pointed at the same
+    ``user-data-dir`` is the crash the profile module documents (Chrome pre-writes that
+    directory's preference file), and the answer the second caller wants is the same
+    directory, not a second one.
+
+    An existing-but-dirty template is rebuilt rather than trusted: :func:`build_template`
+    destroys it first, because copying a directory that someone logged into would hand
+    that session to every account created afterwards — which is the one outcome this
+    feature exists to avoid.
+    """
+    with _TEMPLATE_BUILD_LOCK:
+        if browser_profiles.template_exists() and not force and not browser_profiles.verify_pristine():
+            return {'ok': True, 'built': False, 'existed': True}
+        return browser_profiles.build_template(launch=warm_profile_dir)
+
+
+@app.route('/api/browser/profiles/template', methods=['POST'])
+def build_profile_template():
+    """One blank Chrome, once, to make the directory every new account starts from.
+
+    On a cloud host this is how a device comes into the world at all: the button that
+    used to create one by logging in is not offered there. The cookie-save path calls
+    the same function by itself (see :func:`_plant_saved_cookie_into_profile`), so this
+    route exists for an operator who wants to rebuild it now — and for a machine where
+    no cookie has been pasted yet.
+    """
+    body = _json_body()
+    if body is None:
+        return _bad_body()
+    force = as_bool(body.get('force'))
+    result = ensure_profile_template(force=force)
+    # 502, not 200-with-a-lie: the directory was asked for and does not exist, and the
+    # reason (no chromedriver, Chrome refused) is what the caller has to act on.
+    return jsonify(result), (200 if result.get('ok') else 502)
+
 
 @app.route('/api/browser/profiles', methods=['GET'])
 def get_browser_profiles():
@@ -5784,6 +5833,14 @@ def get_browser_profiles():
       guidance sentence in the panel.
     """
     rows = {'ok': True, 'enabled': browser_profiles.is_enabled(), 'root': browser_profiles.root_dir()}
+    # The template's own row, because "no new account can be made without it" is the
+    # thing a cloud operator needs to see before they paste a cookie. The walk is over a
+    # first-run skeleton (hundreds of files at most), not over a used profile — which is
+    # why this may check the contents while the per-account rows below pass ``size=False``.
+    rows['template'] = {
+        'exists': browser_profiles.template_exists(),
+        'pristine': not browser_profiles.find_session_material(),
+    }
     rows['profiles'] = []
     for cap in capabilities.CAPABILITIES:
         platform = cap.platform

@@ -85,6 +85,19 @@
   `browser_profiles.needs_refresh` (file stamp newer than the marker's). **Never write the browser's live jar back to a
   saved cookie file.** `Capability.profile_recommended` is the single source for "this platform punishes a throwaway
   browser"; a second list of platforms anywhere else will drift.
+- **A new account's device directory is generated, never copied.** Cloud has no login window and the user's daily
+  Chrome is off-limits (copying it ships his whole life to a server), so the program makes its own blank directory
+  once — `data/chrome_profile/_template`, created by launching an empty headless Chrome in it
+  (`crawlers.base.warm_profile_dir`) — and every account directory created afterwards is cloned from it. Four rules
+  hold that together, each pinned by `tests/unit/test_profile_template_policy.py` and measured by
+  `tests/integration/test_profile_template.py`: **"pristine" is answered by row counts, not by file names** (a blank
+  first run writes `Cookies`/`Login Data`/`History`/`Preferences` empty, so names prove nothing); **the copy refuses
+  its own denylist** — every store that can hold a session, `Local State` (the machine-bound key), and
+  `.crawler-profile.json` (a seeded marker tells the import-once rule the account already has a session, so the
+  cookie the user just pasted is never planted); **seeding is first-creation-only** (`os.makedirs(exist_ok=False)`,
+  and a non-empty directory is left alone); **a template that stopped being pristine is destroyed and rebuilt before
+  any account uses it**, not quietly copied. `_template` is a reserved platform name because it *is* a directory
+  under the same root.
 
 ## Platform red lines (full evidence in `docs/crawler_notes.md`)
 

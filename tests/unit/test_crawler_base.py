@@ -496,7 +496,10 @@ class TestAWallMustSurviveBeingJudged:
 #: stale entry once a site has been moved onto ``open``.
 BARE_NAVIGATIONS = {
     'backend/app.py': 2,
-    'backend/crawlers/base.py': 2,  # ``open`` itself and cookie planting (the cookie probe now goes through open)
+    # ``open`` itself, cookie planting, and the template warmer — the last one enters
+    # ``about:blank``, which is not a site: there is no slow renderer to outwait, no first-run
+    # dialog to dismiss and no page whose arrival the crawl would have to account for.
+    'backend/crawlers/base.py': 3,
     'backend/crawlers/comments.py': 7,
     'backend/crawlers/wechat.py': 1,
     'backend/crawlers/zhihu.py': 2,

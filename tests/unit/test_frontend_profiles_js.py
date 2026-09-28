@@ -108,7 +108,7 @@ def _two_crawls(*platforms):
     return nodes, conns
 
 
-def _profiles_rows(enabled=True):
+def _profiles_rows(enabled=True, template=None):
     rows = []
     for platform in PLATFORMS:
         rows.append(
@@ -124,7 +124,12 @@ def _profiles_rows(enabled=True):
                 'has_saved_cookie': platform == 'weibo',
             }
         )
-    return {'ok': True, 'enabled': enabled, 'root': '/tmp', 'profiles': rows}
+    payload = {'ok': True, 'enabled': enabled, 'root': '/tmp', 'profiles': rows}
+    # ``None`` is the OLDER payload, not a statement about the template: a server that never
+    # answered the question must not be rendered as 「模板缺失」.
+    if template is not None:
+        payload['template'] = template
+    return payload
 
 
 SCENARIOS = [
@@ -292,6 +297,36 @@ SCENARIOS = [
         'canvasSettings': {'mode': 'parallel'},
         'clashChoice': 'use',
     },
+    # ── the template line: one sentence about the directory every NEW account clones from
+    {
+        'id': 'tpl-ready',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': _nodes(('source', 'weibo')),
+        'profiles': _profiles_rows(enabled=True, template={'exists': True, 'pristine': True}),
+    },
+    {
+        'id': 'tpl-missing',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': _nodes(('source', 'weibo')),
+        'profiles': _profiles_rows(enabled=True, template={'exists': False, 'pristine': True}),
+    },
+    {
+        'id': 'tpl-dirty',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': True},
+        'nodes': _nodes(('source', 'weibo')),
+        'profiles': _profiles_rows(enabled=True, template={'exists': True, 'pristine': False}),
+    },
+    # Profiles switched off: the template is a device nothing will use, so it is not said.
+    {
+        'id': 'tpl-off',
+        'matrix': MATRIX,
+        'settings': {'use_browser_profile': False},
+        'nodes': _nodes(('source', 'weibo')),
+        'profiles': _profiles_rows(enabled=False, template={'exists': True, 'pristine': True}),
+    },
 ]
 
 
@@ -375,6 +410,45 @@ class TestSettingsTable:
     def test_a_server_that_lists_no_platforms_is_not_a_green_bill(self, ui):
         rows = ui['empty-table']['rows']
         assert len(rows) == 1 and rows[0]['kind'] == 'unavailable', rows
+
+
+class TestTemplateLine:
+    """The settings panel's one sentence about the directory a new account is cloned from.
+
+    On a server nobody can watch a browser start, and the template is created by the
+    program rather than by any click, so this line is the only place its state is said.
+    The three states must be three different sentences, and a payload that never answered
+    must add no claim at all.
+    """
+
+    @staticmethod
+    def _template_row(case):
+        rows = [row for row in case['rows'] if row['kind'] == 'template']
+        assert len(rows) <= 1, case['rows']
+        return rows[0] if rows else None
+
+    def test_a_clean_template_says_so_and_says_it_once(self, ui):
+        row = self._template_row(ui['tpl-ready'])
+        assert row is not None, 'a ready template went unreported, so the user cannot tell it from none'
+        assert 'clean' in row['state'], row
+
+    def test_the_three_states_are_three_different_sentences(self, ui):
+        said = {case: self._template_row(ui[case])['state'] for case in ('tpl-ready', 'tpl-missing', 'tpl-dirty')}
+        assert len(set(said.values())) == 3, said
+        assert 'none yet' in said['tpl-missing'] and 'rebuilt' in said['tpl-dirty'], said
+
+    def test_a_missing_template_promises_a_browser_rather_than_a_failure(self, ui):
+        """It really is generated on demand, so 「缺失」 must not read as something broken."""
+        assert 'create' in self._template_row(ui['tpl-missing'])['state']
+
+    def test_profiles_off_has_nothing_to_say_about_a_device_nothing_will_use(self, ui):
+        assert self._template_row(ui['tpl-off']) is None, ui['tpl-off']['rows']
+        assert len(ui['tpl-off']['rows']) == len(PLATFORMS)
+
+    def test_a_payload_that_never_answered_adds_no_claim(self, ui):
+        """The older server and 「there is no template」 are different facts."""
+        assert self._template_row(ui['off-flagged']) is None
+        assert len(ui['off-flagged']['rows']) == len(PLATFORMS)
 
 
 class TestPanelHint:

@@ -532,6 +532,9 @@ const I18n = {
             'set.profileReady': 'in use — it keeps its own session',
             'set.profileWillImport': 'will import the saved cookie on first use',
             'set.profileNeedsLogin': 'not logged in yet — log in through the Cookie panel',
+            'set.templateReady': 'New-device template: clean — every account made later is cloned from it',
+            'set.templateMissing': 'New-device template: none yet — one blank browser will create it the first time an account needs it',
+            'set.templateDirty': 'New-device template: it picked up a session — it is destroyed and rebuilt before any account uses it again',
             'dialog.profileOff': 'This workflow crawls {n} platform(s) where a throwaway browser is known to fail (their session rotates, or a replayed one is refused within minutes). Switch on Settings → Persistent browser profile and log into that profile once through the Cookie panel. Carrying that login into a second browser makes it a second device — measured, and the answer is the login page. You can also run anyway.',
             'dialog.profileGoOn': 'Run anyway',
             'dialog.profileSetup': 'Open settings first',
@@ -1291,6 +1294,9 @@ const I18n = {
             'set.profileReady': '已在使用，会话由它自己保存',
             'set.profileWillImport': '首次使用时导入已存 Cookie',
             'set.profileNeedsLogin': '尚未在其中登录，请到 Cookie 面板登录一次',
+            'set.templateReady': '新设备初始模板：干净——之后新建的账号都从它克隆',
+            'set.templateMissing': '新设备初始模板：还没有——第一次需要新账号时由一个空白浏览器当场生成',
+            'set.templateDirty': '新设备初始模板：里面出现了登录痕迹——任何账号再用它之前会先销毁重建',
             'dialog.profileOff': '本次工作流包含 {n} 个已知会被"一次性浏览器"刁难的平台（它们的会话会换票，或重放的票几分钟内就被拒）。请到「设置」打开持久浏览器 Profile，并在 Cookie 面板里往那个 profile 登录一次；把同一份登录态拷进第二个浏览器，站点看到的就是第二台设备——实测直接弹回登录页。也可以无视上面这句继续运行。',
             'dialog.profileGoOn': '继续运行',
             'dialog.profileSetup': '先去设置',
@@ -2240,6 +2246,12 @@ const BrowserProfiles = {
         return I18n.t('set.profileNeedsLogin');
     },
 
+    _templateState(template) {
+        if (!template.exists) return I18n.t('set.templateMissing');
+        if (!template.pristine) return I18n.t('set.templateDirty');
+        return I18n.t('set.templateReady');
+    },
+
     async refresh() {
         const box = document.getElementById('profile-status');
         if (!box) return;
@@ -2270,6 +2282,14 @@ const BrowserProfiles = {
         this.data.profiles.forEach(function (entry) {
             box.appendChild(BrowserProfiles._row(entry));
         });
+        /* One line for the template, because it is the state this panel cannot be given
+           any other way: the directory every NEW account is cloned from is made by the
+           program, on the server, and nobody clicked anything to create it. A payload
+           without the field says nothing — an older server that never answered the
+           question is not evidence that the answer is 「缺失」. */
+        if (this.data.enabled && this.data.template && typeof this.data.template.exists === 'boolean') {
+            box.appendChild(BrowserProfiles._noteRow(BrowserProfiles._templateState(this.data.template), 'template'));
+        }
     },
 };
 

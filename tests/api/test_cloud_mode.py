@@ -7,6 +7,8 @@ case below therefore checks a refusal that NAMES what it refused — the failure
 repo keeps paying for is a run that quietly does the other thing and reports success.
 """
 
+import os
+
 import pytest
 
 from config import Config
@@ -188,3 +190,145 @@ class TestEverythingRunsHeadless:
         # The column is an INTEGER (0/1), and the console's chip reads it as a bool: the
         # point of the assertion is which of the two the record holds.
         assert bool(run['headless']) is True, 'the record says what this host can actually do'
+
+
+class TestThePristineTemplateOnACloudBoot:
+    """Where a device directory comes from when nobody can press 「浏览器生成」.
+
+    The launcher is the browser seam, so no Chrome is started here; the real one is the
+    device tier's case (``tests/integration/test_profile_template.py``).
+    """
+
+    @pytest.fixture
+    def profiles_root(self, tmp_path, monkeypatch):
+        import browser_profiles
+
+        root = tmp_path / 'profiles'
+        values = {'use_browser_profile': True, 'browser_profile_dir': str(root)}
+        monkeypatch.setattr(browser_profiles, 'get_setting', lambda key: values[key])
+        return root
+
+    @staticmethod
+    def _launcher(calls, *, dirty=False, broken=False):
+        """A stand-in for "start a blank Chrome here": it writes what Chrome would.
+
+        ``dirty`` puts a store with a ROW in it, not a file with a login-shaped name —
+        a blank first run creates those names itself, so only the content tells the two
+        cases apart (see ``browser_profiles._SESSION_TABLES``).
+        """
+
+        def launch(path):
+            calls.append(path)
+            if broken:
+                raise RuntimeError('chromedriver missing')
+            os.makedirs(path, exist_ok=True)
+            with open(os.path.join(path, 'First Run'), 'w', encoding='utf-8') as handle:
+                handle.write('x')
+            if dirty:
+                import sqlite3
+
+                store = os.path.join(path, 'Default', 'Login Data')
+                os.makedirs(os.path.dirname(store), exist_ok=True)
+                db = sqlite3.connect(store)
+                try:
+                    db.execute('CREATE TABLE logins (id INTEGER PRIMARY KEY, username_value TEXT)')
+                    db.execute("INSERT INTO logins (username_value) VALUES ('someone')")
+                    db.commit()
+                finally:
+                    db.close()
+
+        return launch
+
+    def test_the_route_builds_it_once_and_then_reports_that_it_existed(
+        self, client, cloud, app_module, monkeypatch, profiles_root
+    ):
+        calls = []
+        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher(calls))
+        first = client.post('/api/browser/profiles/template')
+        assert first.status_code == 200, first.get_json()
+        assert first.get_json()['built'] is True, first.get_json()
+        second = client.post('/api/browser/profiles/template')
+        assert second.get_json() == {'ok': True, 'built': False, 'existed': True}, second.get_json()
+        assert len(calls) == 1, f'the second call bought another browser: {calls}'
+
+    def test_force_rebuilds_it(self, client, cloud, app_module, monkeypatch, profiles_root):
+        calls = []
+        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher(calls))
+        client.post('/api/browser/profiles/template')
+        assert client.post('/api/browser/profiles/template', json={'force': True}).status_code == 200
+        assert len(calls) == 2, calls
+
+    def test_a_browser_that_will_not_start_is_a_502_with_its_reason(
+        self, client, cloud, app_module, monkeypatch, profiles_root
+    ):
+        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher([], broken=True))
+        response = client.post('/api/browser/profiles/template')
+        assert response.status_code == 502, response.get_json()
+        assert 'chromedriver' in response.get_json()['reason'], response.get_json()
+
+    def test_a_template_someone_logged_into_is_never_shipped(
+        self, client, cloud, app_module, monkeypatch, profiles_root
+    ):
+        calls = []
+        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher(calls, dirty=True))
+        response = client.post('/api/browser/profiles/template')
+        assert response.status_code == 502, response.get_json()
+        assert 'not-pristine' in response.get_json()['reason'], response.get_json()
+
+    def test_saving_a_cookie_makes_it_first_when_there_is_none(
+        self, client, cloud, app_module, monkeypatch, profiles_root
+    ):
+        """The one moment the user is present to ask for a device is the paste.
+
+        The template has to exist BEFORE the account directory is created, because that
+        creation is what seeds it — so this asserts the order, not merely that both
+        happened.
+        """
+        import browser_profiles
+
+        calls = []
+        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher(calls))
+        # The plant still needs a browser; record that the template was already there when
+        # the account directory was made, instead of letting this test launch a Chrome.
+        order = []
+
+        def spy_factory(platform, **kwargs):
+            order.append(('crawler', bool(browser_profiles.template_exists())))
+            raise RuntimeError('no browser in the fast tier')
+
+        monkeypatch.setattr(app_module, 'get_crawler', spy_factory)
+        payload = {'platform': 'zhihu', 'cookies': [{'name': 'a', 'value': 'v'}], 'account': 'work'}
+        assert client.post('/api/cookies/save', json=payload).status_code == 200
+        assert calls == [str(profiles_root / '_template')], calls
+        assert order == [('crawler', True)], f'the account browser ran before the template existed: {order}'
+
+    def test_the_panel_can_ask_whether_a_template_is_there(self, client, cloud, app_module, monkeypatch, profiles_root):
+        body = client.get('/api/browser/profiles').get_json()
+        assert body['template'] == {'exists': False, 'pristine': True}, body['template']
+        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher([]))
+        client.post('/api/browser/profiles/template')
+        assert client.get('/api/browser/profiles').get_json()['template'] == {'exists': True, 'pristine': True}
+
+    def test_a_template_that_picked_up_a_session_is_reported_as_dirty(
+        self, client, cloud, app_module, monkeypatch, profiles_root
+    ):
+        """The row is the panel's only way to see this, and the sentence has to be true.
+
+        ``build_template`` destroys and rebuilds a dirty directory on its own, so nothing
+        breaks either way — what would break is the panel claiming 「干净」 about a
+        directory that holds somebody's login while it waits to be rebuilt.
+        """
+        import sqlite3
+
+        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher([]))
+        client.post('/api/browser/profiles/template')
+        store = str(profiles_root / '_template' / 'Default' / 'Network' / 'Cookies')
+        os.makedirs(os.path.dirname(store), exist_ok=True)
+        db = sqlite3.connect(store)
+        try:
+            db.execute('CREATE TABLE cookies (id INTEGER PRIMARY KEY, name TEXT)')
+            db.execute("INSERT INTO cookies (name) VALUES ('SUB')")
+            db.commit()
+        finally:
+            db.close()
+        assert client.get('/api/browser/profiles').get_json()['template'] == {'exists': True, 'pristine': False}

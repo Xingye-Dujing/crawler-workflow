@@ -1119,3 +1119,41 @@ class Crawler(ABC):
 
     def __exit__(self, *args):
         self.close()
+
+
+class ProfileWarmer(Crawler):
+    """A browser with no platform: it exists to make Chrome fill a profile directory.
+
+    :class:`Crawler` is abstract because a crawl needs a site to read, and there is no
+    site here — the deliverable is the *directory*. Both crawl methods answer "nothing",
+    and nothing may call them: :func:`warm_profile_dir` loads ``about:blank`` and stops.
+
+    Building the profile with Chrome rather than writing files ourselves is the whole
+    design. A ``user-data-dir`` is Chrome's private format (its cookie store is locked
+    while it runs and its cookies are app-bound-encrypted — measured on Chrome 148, see
+    ``browser_profiles``), so anything we hand-assemble is a profile that only we believe
+    in, and the one directory guaranteed to be a real, un-logged-in device is the one a
+    blank Chrome produced.
+    """
+
+    def search(self, keyword=None, **_kwargs):
+        return []
+
+    def get_detail(self, url):
+        return None
+
+
+def warm_profile_dir(path: str, headless: bool = True) -> None:
+    """Start one browser in *path*, load a blank page, shut down. Raises if Chrome won't.
+
+    No cookie file is passed, so nothing is planted: the directory that comes out the
+    other side is pristine because nothing was ever put into it. The profile claim, the
+    headless disguise and the bounded close are the base class's — reusing them is the
+    point, since a second option-building path would be a browser configuration nobody
+    reads.
+    """
+    crawler = ProfileWarmer(headless=headless, profile_dir=path)
+    try:
+        crawler.driver.get('about:blank')
+    finally:
+        crawler.close()

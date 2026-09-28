@@ -88,7 +88,13 @@ def _sweep(client, app_module):
     seen = []
     for rule in _get_rules(app_module.app):
         path = _probe_path(rule)
-        body = client.get(path).get_data(as_text=True)
+        # ``with``, because the page routes hand back a file response: dropping it without
+        # closing leaks the open handle until the garbage collector gets round to it, and it
+        # then complains during whichever test happens to be running — a sweep that walks
+        # every GET rule is exactly the kind of caller that pays for it on someone else's
+        # behalf. The same reason the export and report cases read ``with client.get(...)``.
+        with client.get(path) as response:
+            body = response.get_data(as_text=True)
         seen.append((path, body))
         assert MARKER not in body, f'{path} answered the cookie VALUE'
         assert COOKIE_NAME not in body, f'{path} answered the cookie NAME'
