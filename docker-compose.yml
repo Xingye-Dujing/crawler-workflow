@@ -1,0 +1,22 @@
+services:
+  crawler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: crawler-workflow:latest
+    container_name: crawler-workflow
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "5000"
+      CRAWLER_DATA_ROOT: "/app"
+      FLASK_DEBUG: "0"
+    volumes:
+      - crawler-data:/app/data
+      - crawler-logs:/app/logs
+
+volumes:
+  crawler-data:
+  crawler-logs:
