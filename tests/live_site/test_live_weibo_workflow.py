@@ -52,21 +52,22 @@ domestic network, never unattended::
     # One weibo *search burst* per pass is the discipline (see below), so the A batches and the D batch
     # should not share a session unless the shared fixture is what is being tested.
 
-**Not yet here** (tracked in §11's board, deliberately not stubbed): H — the user's own
-``data/workflows/测试：微博.json``, run exactly as saved. Its assertions are the acceptance machinery
-:mod:`tests.live_site.test_live_zhihu_workflow` already proved (component discovery out of the file, one
-verdict per component against that component's own console slice, the store/preview/export three-way
-check), and that machinery is being lifted into the shared driver before this platform uses it — copying
-it into a second file is the thing AGENTS refuses, and a fourth platform would then copy the copy.
+**The H group is here too** (H1 his canvas with its window narrowed per D9, H2 the same file 串行), built on
+the shared :mod:`tests.live_acceptance` rather than on a second copy of zhihu's. H3 is declined with a
+stated reason at the bottom of this file: on a ``serial_only`` platform the browser pool has nothing to
+narrow, so that cell would re-run H1's four crawls to assert what G1/G2 already do.
 
 **No case skips.** A refusal that names itself is the site's answer and is asserted; the tier's skip
 allowance is a closed list this file does not extend.
 """
 
 import contextlib
+import copy
 import re
 from datetime import date, timedelta
+from pathlib import Path
 
+import live_acceptance as accept
 import live_run_driver as driver
 import live_run_harness as harness
 import pytest
@@ -161,6 +162,23 @@ COMMENT_NAMED = ('comment.weiboShowFailed', 'comment.status.dead')
 #: The walls a *headless* crawl may answer with. This account gets bounced by burst, not by window shape
 #: (docs 微博的墙是间歇风控), so a named wall is the site's answer here.
 HEADLESS_REFUSALS = ('crawl.riskBlocked', 'crawl.loginWall')
+
+#: The lines that make a **failed run** an honest one. H1/H2 assert per component that a record which did
+#: not settle ``completed`` said why somewhere in *its own* slice — a run going red is fine, a run going
+#: red that the console cannot explain is the thing the user cannot act on. These are the weibo shapes of
+#: that: the dead-session line, the two page verdicts, the comment link that died, and the three ways the
+#: author endpoint refuses.
+WEIBO_NAMED_DEATHS = (
+    'run.cookieExpired',
+    'crawl.loginWall',
+    'crawl.riskBlocked',
+    'comment.weiboShowFailed',
+    'crawl.weibo.authorRefused',
+    'crawl.weibo.authorWall',
+    'crawl.weibo.authorMirror',
+    'crawl.weibo.hotRefused',
+    'crawl.weibo.hotNoHost',
+)
 
 #: The 14 columns ``WeiboCrawler.search``/``author`` emit for one post, the 5 the board emits, and the 10
 #: the comment adapter emits. The crawl matrix carries no column names, so this tier is where they are
@@ -536,28 +554,34 @@ def test_a1_windowed_serial_search_delivers_ten_rows_with_bodies(client, app_mod
         run.finish(answer=answer)
 
 
-def _walked_windows(run) -> tuple[int, int]:
-    """``(windows reached, windows offered)`` from the walk's own closing line."""
-    lines = run.rec.lines
-    walked = harness.numbers_from(lines, 'crawl.weibo.walk_done', 'walked')
-    total = harness.numbers_from(lines, 'crawl.weibo.walk_done', 'total')
+def _walked_windows(run, lines: list | None = None) -> tuple[int, int]:
+    """``(windows reached, windows offered)`` from the walk's own closing line.
+
+    *lines* scopes the reading to one component's slice: a shipped canvas holds two searches in one run,
+    and the second's closing line is not the first's answer.
+    """
+    own = run.rec.lines if lines is None else lines
+    walked = harness.numbers_from(own, 'crawl.weibo.walk_done', 'walked')
+    total = harness.numbers_from(own, 'crawl.weibo.walk_done', 'total')
     return (walked[-1] if walked else -1), (total[-1] if total else -1)
 
 
-def _visited_windows(run) -> list[str]:
+def _visited_windows(run, lines: list | None = None) -> list[str]:
     """The hourly URLs this walk opened a page for, in the order it opened them.
 
     ``crawl.weibo.visiting`` is printed once per navigation into a window, so this list is the crawl's
     own record of what it paid for — A3 counts its length against the windows the walk says exist, and
     E1/E2 compare the *last* entry of the interrupted run with the *first* of the resume, which is the
     only console-side proof that 继续 re-opened the window 停止 was inside rather than the next one.
+    *lines* scopes the reading to one component's slice, as in :func:`_walked_windows`.
     """
-    return harness.slots_from(run.rec.lines, 'crawl.weibo.visiting', 'url')
+    own = run.rec.lines if lines is None else lines
+    return harness.slots_from(own, 'crawl.weibo.visiting', 'url')
 
 
-def _paid_windows(run) -> int:
+def _paid_windows(run, lines: list | None = None) -> int:
     """How many windows the crawl actually opened a page for — the count D9 asserts against."""
-    return len(_visited_windows(run))
+    return len(_visited_windows(run, lines))
 
 
 def test_a2_headless_search_is_full_or_names_the_refusal(client, app_module, monkeypatch):
@@ -1430,3 +1454,217 @@ def test_g2_the_stagger_switch_does_not_unlock_a_serial_only_platform(client, ap
         kept = harness.stored_rows(record, 'node-1') + harness.stored_rows(record, 'node-3')
         answer = run.verdict(rows=kept, target=12)
         run.finish(answer=answer, rows=kept, warn=answer['verdict'] == harness.NAMED_SHORT)
+
+
+# ─── H · the user's own acceptance canvas ───────────────────────────────
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: His weibo canvas, run as he saved it apart from the one thing §1's D9 carved out. Read-only; the path
+#: is absolute because ``Config.WORKFLOW_DIR`` is redirected into a throwaway root by the harness.
+ACCEPTANCE_FILE = REPO_ROOT / 'data' / 'workflows' / '测试：微博.json'
+
+#: Four components, taken one at a time on this platform (``serial_only``), each buying its own pages: a
+#: 50-row windowed search (measured: fills inside one window), a 50-row author walk (3 ``mymblog`` pages),
+#: the 51-topic board, and **all** the comments of one post. The comment leg is the unbounded one, so the
+#: budget is the comment cells' budget plus the rest.
+ACCEPTANCE_TIMEOUT = COMMENT_TIMEOUT + DEEP_TIMEOUT
+
+
+def _acceptance_copy(**post_params) -> dict:
+    """His canvas, deep-copied with the search window narrowed — and the file on disk left alone.
+
+    The saved 文章 node asks 2026-01-01 → 2026-09-26, which is ~6432 hourly windows. Running it as written
+    would not be a harder test: the walk stops at its target and pays for none of the rest, so the long
+    range exercises nothing a two-day one does not, at a cost the user did not agree to per pass. D9
+    decided that, and the assertion runs the other way — the copy proves 「目标先满、剩余窗口零付费」 (H1).
+    The file is never rewritten (D5): the variant is what the test wanted, the file is what he wrote.
+    """
+    opened = copy.deepcopy(accept.workflow_file(ACCEPTANCE_FILE))
+    for node in opened['nodes']:
+        if (node.get('params') or {}).get(harness.MODE_KEY) == 'posts':
+            node.setdefault('params', {}).update(post_params)
+    return opened
+
+
+def _grade_component(run, part, record) -> dict:
+    """One component's verdict, on its own console slice with its own mode's vocabulary."""
+    return run.component_verdict(part['label'], record, part['source'], target=part['ask'], mode=part['mode'])
+
+
+def _assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
+    """Each component's exported file holds exactly the rows the store holds — per component, not in total.
+
+    His canvas ends every chain in an 输出 node, which makes this the one shape in the whole tier that can
+    walk the plan's L2 三一致 (file == store == preview) for all four crawls at once. Matching by the label
+    each file is named after is the point: a row count that ties only **in total** can hide a component
+    that wrote nothing while another wrote twice.
+    """
+    from config import Config
+
+    assert fresh, f'the canvas wires an output node to every component and {Config.EXPORT_DIR} gained no file'
+    for part in found:
+        # Match the prefix the 输出 node writes, not the label anywhere in the name. His comments node has
+        # ``per_article_file`` on, which writes one file per article named
+        # ``<record name>-<source node>-<index>.csv`` — and a parallel record's name is every component's
+        # label joined with ' + '. A loose substring match therefore hands the search component a comment
+        # file and reports a row-count disagreement that is the test's own arithmetic (§11 caught it that
+        # way on the first live run of this cell).
+        mine = [path for path in fresh if part['label'] and path.name.startswith(f'{part["label"]}-')]
+        assert mine, f'no export file names the component {part["label"]!r}: {[p.name for p in fresh]}'
+        count, _header = accept.csv_row_count(mine[0])
+        kept = harness.stored_rows(records[part['label']], part['source'])
+        assert count == kept, f'{mine[0].name} holds {count} rows while the store holds {kept} for {part["label"]}'
+        if part['mode'] == 'comments' and part['urls']:
+            # §3-C's 「文件数 == 文章数」: he switched 每篇一个文件 on, so each pasted link owes its own file.
+            per_article = [path for path in fresh if f'-{part["source"]}-' in path.name]
+            assert len(per_article) == len(part['urls']), (
+                f'per_article_file is on for {len(part["urls"])} pasted link(s) and '
+                f'{len(per_article)} per-article files arrived: {[p.name for p in per_article]}'
+            )
+
+
+def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module, monkeypatch):
+    """H1 — 测试：微博.json as he left it, four components, minus the 6432-window range (D9).
+
+    The flagship of the platform's eight steps: not a synthetic canvas but the one he clicks Run on.
+    Every component gets its own record, its own console slice, its own audit row and its own exported
+    file, and the case's index row is derived from those four verdicts — never written as FULL by hand.
+
+    And the claim D9 turned into an assertion: the search component fills its stored 50, and the walk's own
+    closing line shows it stopped **before** the range ran out, with no per-window navigation after the
+    ceiling. 「剩余窗口零付费」 is what makes a narrow table and an early stop distinguishable in the
+    console, which is the whole complaint this round started from.
+    """
+    harness.real_jar(monkeypatch, app_module)
+    end = date.today() - timedelta(days=1)
+    start = end - timedelta(days=1)
+    workflow = _acceptance_copy(start_time=f'{start}', end_time=f'{end}')
+    _on, _off, found = accept.parts(workflow, file_name=ACCEPTANCE_FILE.name)
+    assert len(found) == 4, f'this case is written against the four components he saved: {found}'
+    exported_before = accept.export_dir_entries()
+    with LiveRun(
+        client,
+        app_module,
+        workflow,
+        case_id='H1',
+        mode='mixed',
+        target=sum(part['ask'] for part in found),
+        timeout=ACCEPTANCE_TIMEOUT,
+    ) as run:
+        run.wait()
+        run.assert_l3()
+        records = accept.records_by_node(client, found)
+        silent, kept, asked, answers = accept.audit_components(
+            run,
+            records=records,
+            case_id='H1',
+            found=found,
+            grade=lambda part, record, console: _grade_component(run, part, record),
+        )
+        assert not silent, f'components under target with no honest reason named: {silent}'
+        posts = next(part for part in found if part['mode'] == 'posts')
+        own = run._slice(posts['label']).splitlines()
+        walked, offered = _walked_windows(run, own)
+        assert 0 < walked < offered, (
+            f'the search component filled {harness.stored_rows(records[posts["label"]], posts["source"])} '
+            f'rows and reported window {walked}/{offered}: D9 is about a walk that STOPS EARLY, so either '
+            'the range ran out (this copy is the two-day one) or the ceiling did not steer it'
+        )
+        paid = _paid_windows(run, own)
+        assert paid == walked, (
+            f'the walk says it reached window {walked} of {offered} but opened a page for {paid}: '
+            '剩余窗口零付费 failed, and the table cannot say which windows it paid for'
+        )
+        _assert_canvas_exports(found, accept.new_exports(exported_before), records)
+        # The record itself: his canvas is parallel, so it is ONE row joining the four labels in canvas
+        # order (AGENTS' 「并行是一条记录」), and every component still has to appear in that name — a label
+        # that silently drops out of the joined name is a row the panel lists short.
+        assert int(run.record.get('wf_count') or 0) == len(found), (
+            f'four components in one parallel record, and the row says wf_count={run.record.get("wf_count")}'
+        )
+        for part in found:
+            assert part['label'] in str(run.record.get('workflow_name') or ''), (
+                f'{part["label"]!r} is missing from the record name {run.record.get("workflow_name")!r}'
+            )
+        if run.record['status'] != 'completed':
+            refusals = accept.named_refusals(run.rec.text, WEIBO_NAMED_DEATHS)
+            assert refusals, (
+                f'the run settled {run.record["status"]} without naming a reason anywhere: {run.rec.text[-1500:]}'
+            )
+        summary = accept.summary_row(run, case_id='H1', found=found, answers=answers, kept=kept, asked=asked)
+        assert summary == harness.FULL, f'his own canvas must work end to end on a normal day: {answers}'
+        # No ``run.finish`` here on purpose: the case's index row is ``summary_row``'s, derived from the
+        # four component verdicts. A second write under the same case id would leave the artifact holding
+        # two answers for one run, and the later one is the arithmetic of a mixed-mode guess.
+        run.close()
+
+
+def test_h2_the_shipped_canvas_completes_in_series(client, app_module, monkeypatch):
+    """H2 — the same canvas switched to 串行, which is what weibo crawls are in anyway.
+
+    Parallel is what the file stores, and on this platform the queue makes it one-at-a-time regardless
+    (G1/G2 convict any switch that tries to unlock it). So H2 asks the question that is still open: when
+    the canvas itself says 串行, does each component still open **its own record**, under its own name,
+    with its own rows and its own console slice? A merged or mis-named record is a reporting bug the user
+    reads as 「跑丢了」, and it is the shape 串行 ×N chips exist to describe.
+    """
+    harness.real_jar(monkeypatch, app_module)
+    end = date.today() - timedelta(days=1)
+    start = end - timedelta(days=1)
+    workflow = accept.all_enabled(_acceptance_copy(start_time=f'{start}', end_time=f'{end}'))
+    workflow['settings']['mode'] = 'serial'
+    _on, _off, found = accept.parts(workflow, file_name=ACCEPTANCE_FILE.name)
+    with LiveRun(
+        client,
+        app_module,
+        workflow,
+        case_id='H2',
+        mode='mixed',
+        target=sum(part['ask'] for part in found),
+        timeout=ACCEPTANCE_TIMEOUT,
+    ) as run:
+        run.wait()
+        run.assert_l3()
+        records = accept.records_by_node(client, found)
+        for part in found:
+            record = records[part['label']]
+            assert record['mode'] == 'serial', f'{part["label"]} was filed as {record["mode"]!r}'
+            assert record['workflow_name'] == part['label'], (
+                f'a record named {record["workflow_name"]!r} instead of the component {part["label"]!r} '
+                'is a row the panel cannot match to a workflow'
+            )
+            # 串行 means each workflow opened its own row **as it was reached**, so each one is one
+            # workflow: a record here that claims four is the parallel naming leaking into a serial run,
+            # and the 串行 ×N chip would then describe a run that never happened.
+            assert int(record.get('wf_count') or 0) == 1, f'{part["label"]} carries wf_count={record.get("wf_count")}'
+        silent, kept, asked, answers = accept.audit_components(
+            run,
+            records=records,
+            case_id='H2',
+            found=found,
+            grade=lambda part, record, console: _grade_component(run, part, record),
+        )
+        assert not silent, f'components under target with no honest reason named: {silent}'
+        for part in found:
+            record = records[part['label']]
+            if record['status'] != 'completed':
+                refusals = accept.named_refusals(run._slice(part['label']), WEIBO_NAMED_DEATHS)
+                assert refusals, (
+                    f'{part["label"]} settled {record["status"]} and its own slice names no reason: '
+                    f'{run._slice(part["label"])[-800:]}'
+                )
+        summary = accept.summary_row(run, case_id='H2', found=found, answers=answers, kept=kept, asked=asked)
+        # The same four crawls as H1, one switch away: 串行 is the shape the user gets when he ticks it, so
+        # it must also fill. Naming and record-per-component are what this cell is *about*; a green there
+        # over tables nobody filled would be the same hollow pass §2 refuses.
+        assert summary == harness.FULL, f'his canvas must work in 串行 too: {answers}'
+        run.close()
+
+
+# **H3 is deliberately absent here**, and the reason is a cost claim rather than a shortcut. Zhihu's third
+# acceptance cell runs its canvas again as parallel+headless to prove the *browser pool* narrows to one
+# walk. On weibo the pool cannot narrow, because ``serial_only`` already holds the lane — that is what
+# G1/G2 measure — so the cell would repeat H1's four crawls to assert something this platform has no way
+# to fail. The next platform with a real parallel axis gets it; §11's board carries this note so the
+# absence is a decision someone can disagree with, not a gap nobody notices.

@@ -394,12 +394,17 @@ class RunDriver:
             f'{self.target} rows of anything'
         )
 
-    def audit(self, case_id: str, *, verdict, reasons, rows, target, warn=False) -> Path:
-        """One audit row plus one transcript, for one crawl. A case with four components writes four."""
+    def audit(self, case_id: str, *, verdict, reasons, rows, target, warn=False, mode=None) -> Path:
+        """One audit row plus one transcript, for one crawl. A case with four components writes four.
+
+        *mode* overrides this run's own word for a component row: an acceptance canvas runs four modes in
+        one process, and a ledger whose four rows all say the case's ``mode`` cannot be matched back to the
+        crawl each of them describes.
+        """
         payload = {
             'recorder': self.rec,
             'platform': self.PLATFORM,
-            'mode': self.mode,
+            'mode': str(mode or self.mode),
             'headless': self.headless,
             'use_profile': '' if self.use_profile is None else self.use_profile,
             'lang': self.lang,
