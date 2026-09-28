@@ -233,7 +233,7 @@ sandbox.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ bg: 'bg-grid', paral
    the real apply() leaves behind — every [data-i18n] element stamped in the new
    language. That is the observable effect, and it cannot drift from the real dict. */
 const labelled = doc.createElement('span');
-labelled.dataset.i18n = 'btn.lang';
+labelled.dataset.i18n = 'btn.execute';
 labelled.textContent = 'stale';
 const titled = doc.createElement('button');
 titled.dataset.i18nTitle = 'pin.title';
@@ -244,6 +244,10 @@ out.settings_applied = {
     languageTag: doc.body.dataset.lang,
     stampedLabel: labelled.textContent,
     stampedTitle: titled.title,
+    // The dictionary's own words for the sampled key, so the driver asserts equality against
+    // the shipped catalogue instead of a pasted string that drifts when the wording changes.
+    expectedZh: app.I18n.dict.zh['btn.execute'],
+    expectedEn: app.I18n.dict.en['btn.execute'],
     background: Array.from(doc.body._classes).filter((c) => c.startsWith('bg-')),
     parallel: RunState.parallel,
     headless: RunState.headless,

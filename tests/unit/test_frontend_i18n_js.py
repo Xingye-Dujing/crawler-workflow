@@ -257,6 +257,84 @@ class TestCatalogueShape:
                 assert all(n == 1 for n in slots.values()), f'{key}/{lang} repeats a slot: {template}'
 
 
+def _dead_app_keys(en_keys, app_text, other_js, html, backend):
+    """Every ``app.js`` catalogue key no app surface renders.
+
+    A key is reachable when some file spells it — ``I18n.t('k')`` / an inline handler in the JS,
+    a ``data-i18n*`` in index.html, or a literal in the backend that ships it over the wire (a
+    server-sent ``label_key`` such as ``cookies.accountDefault``) — OR when it is built at runtime
+    off a ``'prefix.' +`` root the JS actually uses (``nodeType.``, ``op.``, ``platform.`` …).
+    ``app.js`` holds BOTH the dictionary and the app logic, so its own keys count as used only when
+    they appear more than the two catalogue definitions (one per language)."""
+    all_js = app_text + '\n' + other_js
+    dyn_roots = {root for root in re.findall(r"['\"]([A-Za-z][\w.]*\.)['\"]\s*\+", all_js)}
+
+    def qcount(text, key):
+        return text.count(f"'{key}'") + text.count(f'"{key}"')
+
+    dead = []
+    for key in en_keys:
+        if any(f'{attr}="{key}"' in html for attr in ('data-i18n', 'data-i18n-title', 'data-i18n-placeholder')):
+            continue
+        if any(key.startswith(root) and len(key) > len(root) for root in dyn_roots):
+            continue
+        if qcount(other_js, key) or qcount(html, key) or qcount(backend, key):
+            continue
+        if qcount(app_text, key) > 2:  # 2 catalogue definitions; a 3rd is app.js's own logic
+            continue
+        dead.append(key)
+    return sorted(dead)
+
+
+def _app_surfaces():
+    app_text = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+    other_js = '\n'.join(p.read_text(encoding='utf-8') for p in sorted(JS_DIR.glob('*.js')) if p.name != 'app.js')
+    html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
+    backend = '\n'.join(
+        p.read_text(encoding='utf-8', errors='replace')
+        for p in sorted((ROOT / 'backend').rglob('*.py'))
+        if p.name != 'i18n.py'
+    )
+    return app_text, other_js, html, backend
+
+
+class TestJsCatalogueParity:
+    """The two browser catalogues must hold the SAME keys.
+
+    The Python side has guarded this forever (``missing_keys`` / same-size); the ``app.js`` word
+    list only checked *slot* parity, so a key added to one language and not the other slipped
+    through and printed raw the moment the interface switched. English is the table the call-site
+    scans read, so a ``zh``-only hole is the silent one — this closes both directions."""
+
+    def test_both_languages_define_the_same_keys(self):
+        catalogs = _catalogs()
+        en, zh = set(catalogs['en']), set(catalogs['zh'])
+        assert en - zh == set(), f'keys in en but not zh: {sorted(en - zh)}'
+        assert zh - en == set(), f'keys in zh but not en: {sorted(zh - en)}'
+
+
+class TestJsKeyReachability:
+    """A browser word nothing renders is a removed feature waiting to be resurrected (AGENTS:
+    a dead key is how a deleted button comes back). Mirrors ``TestKeyReachability`` on the Python
+    side; the reference universe is the app (JS + index.html + the backend that ships label keys),
+    NOT the tests — a key the test suite references but no screen paints is still dead in product."""
+
+    def test_no_browser_key_is_unreachable(self):
+        catalogs = _catalogs()
+        app_text, other_js, html, backend = _app_surfaces()
+        dead = _dead_app_keys(catalogs['en'], app_text, other_js, html, backend)
+        assert dead == [], f'app.js holds keys nothing renders: {dead}'
+
+    def test_the_reachability_rule_rejects_a_stray_key(self):
+        """A guard that cannot fail is not a guard. Feed a key that exists in no surface and prove
+        the same predicate calls it dead, while one the app really renders stays reachable."""
+        app_text, other_js, html, backend = _app_surfaces()
+        dead = _dead_app_keys(['zzz.no.screen.paints.this'], app_text, other_js, html, backend)
+        assert dead == ['zzz.no.screen.paints.this'], dead
+        # And a genuinely used key is NOT flagged — otherwise the rule would pass by finding nothing.
+        assert _dead_app_keys(['btn.execute'], app_text, other_js, html, backend) == []
+
+
 class TestTheScanFires:
     """A guard that cannot fail is not a guard (the Python side pins its own scan the same way)."""
 

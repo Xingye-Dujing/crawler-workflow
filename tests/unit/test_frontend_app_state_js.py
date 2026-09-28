@@ -179,9 +179,10 @@ class TestSettingsDraft:
     def test_applying_translates_the_page_through_the_real_dictionary(self, st):
         """`[data-i18n]` stamping is what a language switch visibly does; asserting
         on the shipped dict means this cannot drift from it."""
-        assert st['settings_applied']['stampedLabel'] == '中文'
-        assert st['settings_applied']['stampedTitle']
-        assert st['settings_applied']['englishLabel'] == 'EN'
+        applied = st['settings_applied']
+        assert applied['stampedLabel'] == applied['expectedZh'], 'apply() did not stamp the zh word'
+        assert applied['stampedTitle']
+        assert applied['englishLabel'] == applied['expectedEn'], 'apply() did not restamp in English'
 
     def test_a_first_run_gets_the_documented_defaults(self, st):
         assert st['settings_first_run']['load']['parallel'] is True
