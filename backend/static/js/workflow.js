@@ -3829,6 +3829,12 @@ function showDialog(opts) {
                 row.className = 'dialog-field';
                 row.appendChild(document.createTextNode(f.label));
                 var box = document.createElement('input');
+                /* The report dialog's 行数 box is a number input; without the house class it
+                   rendered as OS chrome (a bevelled white box) beside a text input that already
+                   wears .settings-input, so one form had two skins. Same class, same border,
+                   same focus ring, transparent ground — the number spinners are already stripped
+                   by the global ``input[type=number]`` rule. */
+                box.className = 'settings-input';
                 box.type = f.type || 'number';
                 box.id = f.id;
                 if (f.value !== undefined) box.value = f.value;

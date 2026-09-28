@@ -1811,6 +1811,62 @@ def test_switching_language_restamps_the_badge_and_the_saved_login_dock(app_url,
     assert en['dockButtons'] != zh['dockButtons'], en
 
 
+def test_the_report_rows_field_wears_the_same_skin_as_the_text_field(app_url, driver):
+    """The report dialog's 「行数」 number box (``#rpt-rows``) must read as a site input, not OS
+    chrome, sitting beside a text field that already wore the house class.
+
+    ``showDialog`` built every ``field`` row as a bare ``<input>`` while its text ``input`` and the
+    node-panel numbers carry ``.settings-input`` — so one form had two skins. This is measured, not
+    eyeballed: the rows box's computed border, ground, text colour and size are read against the
+    dialog's own text input (a known ``.settings-input``), and a divergence is exactly the OS default
+    creeping back. (measured: 2 inputs × 4 computed properties)
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    got = driver.execute_script(
+        """
+        document.body.dataset.lang = 'zh';
+        I18n.apply();
+        showDialog({
+            message: 'x',
+            input: {value: 'T', placeholder: 'p'},
+            fields: [{id: 'rpt-rows', label: '行数', type: 'number', value: '20', min: '1', max: '200'}],
+            buttons: [{label: 'go', value: 'go'}],
+        });
+        const rows = document.getElementById('rpt-rows');
+        const text = document.getElementById('dialog-input');
+        if (!rows || !text) return {error: 'the dialog did not build both fields, so nothing was measured'};
+        const cs = (el) => {
+            const s = getComputedStyle(el);
+            return {border: s.borderTopWidth + ' ' + s.borderTopStyle + ' ' + s.borderTopColor,
+                    bg: s.backgroundColor, color: s.color, font: s.fontSize};
+        };
+        return {
+            measured: 2,
+            rowsClass: rows.className,
+            rows: cs(rows),
+            text: cs(text),
+            // The compact width that makes it a field, not a full row — must survive the class.
+            rowsWidth: getComputedStyle(rows).width,
+        };
+        """,
+        [],
+    )
+    assert 'error' not in got, got
+    assert got['measured'] == 2, got
+    assert 'settings-input' in got['rowsClass'], f'the rows box lost the house class: {got}'
+    # Same skin as the text field it sits beside — this is the whole point of the fix.
+    assert got['rows']['border'] == got['text']['border'], f'the number box border diverges from the text field: {got}'
+    assert got['rows']['bg'] == got['text']['bg'], f'the number box ground diverges: {got}'
+    assert got['rows']['color'] == got['text']['color'], f'the number box text colour diverges: {got}'
+    assert got['rows']['font'] == got['text']['font'], f'the number box font diverges: {got}'
+    # The house style must actually paint a border (0px would mean the rule never applied).
+    assert got['rows']['border'].startswith('1px solid'), got['rows']['border']
+    # And the dialog-field width override must win over .settings-input's width:100%.
+    assert got['rowsWidth'] not in ('', 'auto'), got['rowsWidth']
+
+
 REFRESH_ALIGN_DRAFT = """
 const draft = {nodes: {
     'node-1': {id: 'node-1', type: 'source', x: 80, y: 60, title: '',
