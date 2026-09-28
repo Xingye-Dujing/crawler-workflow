@@ -1,0 +1,12 @@
+.git
+.gitignore
+data
+logs
+.venv
+__pycache__
+*.pyc
+scratchpad
+tests
+docs
+ml_train
+*.md

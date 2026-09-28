@@ -1,0 +1,6 @@
+# 采析绘 crawler_workflow — 反向代理配置
+# 部署时写入宿主机 /etc/caddy/Caddyfile，将 80 端口反代到容器映射的 5000。
+:80 {
+    encode gzip
+    reverse_proxy 127.0.0.1:5000
+}
