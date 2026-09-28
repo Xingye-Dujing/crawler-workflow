@@ -252,6 +252,7 @@ PANELS = [
     'exports-panel',
     'dataset-panel',
     'workflows-panel',
+    'cookies-panel',
     'processes-panel',
     'status-bar',
     'context-menu',
@@ -295,6 +296,10 @@ MIN_MEASURED = {
     # 7 counted in a real Chrome in both languages with the list still empty; 6
     # leaves one element of slack for a state that shows fewer chrome parts.
     'workflows-panel': 6,
+    # 7 counted in a real Chrome in both languages with the list still empty (header, its
+    # two buttons, the resize handle, the body and the panel itself); 6 keeps one element of
+    # slack, the same convention as the other docks.
+    'cookies-panel': 6,
     'processes-panel': 4,
     'status-bar': 7,
     'context-menu': 13,
@@ -1485,6 +1490,325 @@ def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_
             f'vs clientHeight {row["client"]} (viewport {got["inner"]}, cap {got["maxH"]}, '
             f'tallest blocks {got["kids"][:4]})'
         )
+
+
+def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
+    """The 已保存的登录 dock, measured in the DOM where a person actually reads it.
+
+    Two defects live here that **no scripted test can see**:
+
+    * the platform select is one CustomSelect has enhanced — the native control sits in the DOM
+      at 1px and opacity 0 while the words on screen are a span it paints. Starting the panel on
+      ``weibo`` and reading only ``select.value`` would pass while the visible label stayed on
+      yesterday's platform; this case reads the **label**, and starts somewhere else so a no-op
+      cannot pass by accident;
+    * every word and cell in the dock is built by JavaScript from catalogue keys, so a selector
+      that no longer exists (the deleted 「打开」 button, the profile-state cells) is only caught
+      by querying the real table.
+
+    Pinned here: the dock renders one row per (platform, account) addressed by that login's key,
+    the default row offers a rename that is visibly refused rather than absent, 「打开」 and the
+    profile cells are gone, the dock shuts the other bottom panel, and the account box's
+    candidates are a dropdown that exists only while the box is in use.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    seeded = driver.execute_script(
+        """
+        document.body.dataset.lang = 'zh';
+        I18n.apply();
+        const ROWS = [
+            {platform: 'zhihu', account: 'default', label_key: 'cookies.accountDefault', label_args: {},
+             entries: 12, session_only: 0, saved_at: '2026-09-28 10:00',
+             profiles_on: true, profile_exists: true, profile_used: true, profile_imported: true,
+             needs_refresh: false},
+            {platform: 'zhihu', account: 'work', label_key: '', label_args: {},
+             entries: 2, session_only: 1, saved_at: '2026-09-27 09:00',
+             profiles_on: true, profile_exists: true, profile_used: true, profile_imported: true,
+             needs_refresh: false}
+        ];
+        window.fetch = function (url) {
+            let payload = {ok: true};
+            if (String(url).indexOf('/api/cookies/status') === 0) {
+                payload = {ok: true, cookies: {zhihu: true}, accounts: {zhihu: ['default', 'work']}, rows: ROWS};
+            } else if (String(url).indexOf('/api/cookies/flow') === 0) {
+                payload = {ok: true, flows: []};
+            } else if (String(url).indexOf('/api/browser/profiles') === 0) {
+                payload = {
+                    ok: true, enabled: true, root: '/tmp',
+                    template: {exists: false, pristine: true}, profiles: []
+                };
+            } else if (String(url).indexOf('/api/cookies/generate/status') === 0) {
+                payload = {ok: true, active: false};
+            }
+            // ``fetchJSON`` reads the BODY AS TEXT and parses it (it must answer a non-JSON
+            // reply without throwing), so a stub that only hands back ``json()`` is answered
+            // with 「HTTP undefined」 — the shape this case needed to be written against.
+            const body = JSON.stringify(payload);
+            return Promise.resolve({
+                json: () => Promise.resolve(payload),
+                text: () => Promise.resolve(body),
+                status: 200,
+            });
+        };
+        const select = document.getElementById('cookie-platform');
+        if (!select.closest('.cselect')) {
+            return {error: 'the platform select is not enhanced, so no visible label exists to measure'};
+        }
+        // Start the panel somewhere else, then shut it: the click has to MOVE it.
+        openCookieDialog('weibo');
+        document.getElementById('cookie-dialog').classList.remove('open');
+        document.getElementById('console-panel').classList.add('open');
+        toggleCookiesPanel();
+        return {
+            dialogOpen: document.getElementById('cookie-dialog').classList.contains('open'),
+            label: select.closest('.cselect').querySelector('.cselect-value').textContent,
+            expected: I18n.t('platform.zhihu'),
+            weiboWord: I18n.t('platform.weibo'),
+        };
+        """,
+        [],
+    )
+    assert 'error' not in seeded, seeded
+    assert seeded['dialogOpen'] is False, seeded
+    assert seeded['label'] == seeded['weiboWord'], f'the panel did not start on weibo: {seeded}'
+
+    deadline = time.monotonic() + 15
+    rows = 0
+    while time.monotonic() < deadline:
+        rows = driver.execute_script("return document.querySelectorAll('#cookies-mgr-body .cookie-row').length;", [])
+        if rows == 2:
+            break
+        time.sleep(0.2)
+    assert rows == 2, f'the dock rendered {rows} saved logins, not the two the stub sent — nothing was clicked'
+
+    report = driver.execute_script(
+        """
+        const cards = Array.prototype.slice.call(document.querySelectorAll('#cookies-mgr-body .cookie-row'));
+        const byKey = (k) => cards.filter((c) => c.getAttribute('data-account') === k)[0] || null;
+        const opsOf = (row) => Array.prototype.slice
+            .call(row.querySelectorAll('.runs-mgr-ops button'))
+            .map((b) => ({label: b.textContent, disabled: !!b.disabled, title: b.title || ''}));
+        const defaultRow = byKey('default');
+        const workRow = byKey('work');
+        if (!defaultRow || !workRow) {
+            const keys = cards.map((c) => c.getAttribute('data-account')).join(', ');
+            return {error: `a row is not addressed by its own login key: ${keys}`};
+        }
+        return {
+            measured: cards.length,
+            // The dock shut the other bottom panel (one slot, 互斥).
+            consoleOpen: document.getElementById('console-panel').classList.contains('open'),
+            defaultAccount: defaultRow.querySelector('.cookie-cell-account').textContent,
+            workAccount: workRow.querySelector('.cookie-cell-account').textContent,
+            defaultOps: opsOf(defaultRow),
+            workOps: opsOf(workRow),
+            // 「打开」 is gone; the profile cells the user deleted must not have come back.
+            openButtons: document.querySelectorAll('#cookies-mgr-body .cookie-row-actions').length,
+            stateCells: document.querySelectorAll('#cookies-mgr-body .cookie-row-state').length,
+            meta: Array.prototype.slice
+                .call(document.querySelectorAll('#cookies-mgr-body .cookie-row-meta'))
+                .map((m) => m.textContent),
+            renameWord: I18n.t('cookies.renameOne'),
+            deleteWord: I18n.t('cookies.deleteOne'),
+            defaultAccountWord: I18n.t('cookies.accountDefault'),
+        };
+        """,
+        [],
+    )
+    assert 'error' not in report, report
+    assert report['measured'] == 2, report
+    assert report['consoleOpen'] is False, f'two docked panels are open at once: {report}'
+    # Each row names its own login; the default one is spoken as a word, a typed one verbatim.
+    assert report['defaultAccount'] == report['defaultAccountWord'], report
+    assert report['workAccount'] == 'work', report
+    # Rename + delete, in that order, and the default row's rename is visibly refused (disabled
+    # with a reason) rather than offered as a control that cannot do the thing (user: 「哪有同一个
+    # 东西不同规范的」 — 默认账号 owns no directory to move).
+    assert [o['label'] for o in report['workOps']] == [report['renameWord'], report['deleteWord']], report
+    assert report['workOps'][0]['disabled'] is False, report
+    assert [o['label'] for o in report['defaultOps']] == [report['renameWord'], report['deleteWord']], report
+    assert report['defaultOps'][0]['disabled'] is True and report['defaultOps'][0]['title'], report['defaultOps']
+    assert report['openButtons'] == 0, f'the 「打开」 button came back: {report}'
+    assert report['stateCells'] == 0, f'a profile-state cell came back: {report}'
+    assert not any(('profile' in m.lower() or '关窗口' in m or '失效' in m) for m in report['meta']), report
+
+    popup = driver.execute_script(
+        """
+        // Land the panel on zhihu so the two zhihu logins are what the box offers, and type a
+        // name into the box directly — the candidate dropdown is narrowed by TYPING, not by any
+        // row action (the deleted 「打开」 used to be what left `work` here).
+        openCookieDialog('zhihu');
+        const input = document.getElementById('cookie-account');
+        input.value = 'work';
+        const openMenu = () => {
+            const menus = Array.prototype.slice.call(document.body.children)
+                .filter((el) => el.classList.contains('cand-menu'));
+            return menus.filter((m) => m.classList.contains('open'))[0] || null;
+        };
+        const read = (m) => (m ? Array.prototype.slice.call(m.children).map((b) => b.textContent) : []);
+
+        input.dispatchEvent(new FocusEvent('focus'));
+        const narrowed = read(openMenu());
+
+        // Empty box: every saved login of this platform is offered.
+        input.value = '';
+        input.dispatchEvent(new FocusEvent('focus'));
+        const menu = openMenu();
+        const offered = read(menu);
+        const picked = menu && menu.children.length ? menu.children[menu.children.length - 1] : null;
+        if (picked) picked.click();
+        return {
+            narrowed: narrowed,
+            offered: offered,
+            afterPick: input.value,
+            stillOpen: !!document.querySelector('body > .cand-menu.open'),
+            chips: document.querySelectorAll('.cookie-candidate').length,
+        };
+        """,
+        [],
+    )
+    assert popup['chips'] == 0, f'the flat candidate row is back beside the dropdown: {popup}'
+    assert popup['offered'] and len(popup['offered']) == 2, f'focusing an empty box did not offer both logins: {popup}'
+    assert popup['narrowed'] == popup['offered'][-1:], f'typing did not narrow the offer: {popup}'
+    assert popup['afterPick'] == 'work' and popup['stillOpen'] is False, popup
+
+
+def test_switching_language_restamps_the_badge_and_the_saved_login_dock(app_url, driver):
+    """#30, measured in the only engine that can see it: a language switch re-stamps the
+    ``.node-state-badge`` and the JS-built 已保存的登录 dock — neither is reached by ``I18n.apply()``.
+
+    Both surfaces are built entirely by JavaScript from catalogue keys (the badge word by
+    ``applyDisabledVisuals``, the dock's platform/account/button words by ``renderCookieManager``),
+    so ``I18n.apply()`` — which only walks ``[data-i18n]`` nodes — never touches them. A real
+    ``setLang`` call has to drive the two extra repaints; the node harnesses cannot prove that
+    wiring because each loads only one file (the canvas harness has no ``setLang``, the cookie
+    harness has no canvas). Here the browser runs the whole app, so ``setLang`` is the shipped
+    function and the words read back are the ones a person sees.
+
+    The assertion compares the **rendered DOM text before and after**, not a freshly computed
+    ``I18n.t`` — a stale badge that happened to hold the right key would pass a value-only
+    check. Everything runs in ONE ``execute_script`` (seed, measure zh, ``setLang``, measure en)
+    because the page's own async boot rebuilds the canvas between separate calls, which is why the
+    sibling badge test keeps to a single script too. The dock is painted from a seeded
+    ``cookieRows`` rather than a fetch, so nothing here races the disk; the "no second request"
+    half of this rule is pinned in the node harness, which can count them exactly.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    measured = driver.execute_script(
+        """
+        const ROWS = [
+            {platform: 'zhihu', account: 'default', label_key: 'cookies.accountDefault', label_args: {},
+             entries: 12, session_only: 0, saved_at: '2026-09-28 10:00',
+             profiles_on: true, profile_exists: true, profile_used: true, profile_imported: true,
+             needs_refresh: false},
+            {platform: 'zhihu', account: 'work', label_key: '', label_args: {},
+             entries: 2, session_only: 1, saved_at: '2026-09-27 09:00',
+             profiles_on: true, profile_exists: true, profile_used: true, profile_imported: true,
+             needs_refresh: false},
+        ];
+        // The integration tier performs no server writes and the app's own boot fires fetches:
+        // route every endpoint this path can reach (``setLang`` repaints the Cookie guide, which
+        // reads /api/cookies/flow and /api/browser/profiles) so a missing array cannot throw and
+        // take the whole script down — the same crash the node harness would have hit.
+        window.fetch = function (url) {
+            const path = String(url).split('?')[0];
+            let payload = {ok: true};
+            if (path.indexOf('/api/cookies/status') === 0) {
+                payload = {ok: true, cookies: {zhihu: true}, accounts: {zhihu: ['default', 'work']}, rows: ROWS};
+            } else if (path.indexOf('/api/cookies/flow') === 0) {
+                payload = {ok: true, flows: []};
+            } else if (path.indexOf('/api/browser/profiles') === 0) {
+                payload = {ok: true, enabled: true, root: '/tmp', profiles: [], template: {exists: false}};
+            }
+            const text = JSON.stringify(payload);
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(payload),
+                text: () => Promise.resolve(text),
+                status: 200,
+            });
+        };
+        // A canvas the page owns, empty like a first visit (the shared profile's restore would
+        // paint yesterday's nodes) — then two connected nodes, the head disabled through its own
+        // power button so the head is 「已禁用」 and the child 「无有效输入」.
+        document.body.dataset.lang = 'zh';
+        I18n.apply();
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {};
+        canvas.connections = [];
+        canvas.disabledTypes = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        document.getElementById('svg-layer').innerHTML = '';
+        const idA = canvas.addNode('source', 120, 120);
+        const idB = canvas.addNode('process', 420, 120);
+        canvas.connections.push({from: idA, to: idB});
+        canvas.updateConnections();
+        canvas._nodeEl(idA).querySelector('.node-power-btn').click();
+        canvas.updateConnections();
+        canvas.applyDisabledVisuals();
+        // The dock is painted from a seeded cache (renderCookieManager reads the global
+        // cookieRows — the very value cookiesManager.onLanguageChange repaints from), so this
+        // script never races the app's boot tail or re-reads the disk. Everything below is
+        // synchronous: the switch and both measurements happen in ONE script, because the page's
+        // own async boot can rebuild the canvas between separate execute_script calls (which is how
+        // the sibling badge test keeps to a single script too).
+        window.cookieRows = ROWS;
+        document.getElementById('cookies-panel').classList.add('open');
+        renderCookieManager();
+
+        const measure = () => {
+            const elA = canvas._nodeEl(idA);
+            const elB = canvas._nodeEl(idB);
+            const workRow = document.querySelector('#cookies-mgr-body .cookie-row[data-account="work"]');
+            const platformCell = document.querySelector('#cookies-mgr-body .cookie-row .cookie-cell-platform');
+            const buttonWords = workRow
+                ? Array.prototype.slice.call(workRow.querySelectorAll('.runs-mgr-ops button')).map((b) => b.textContent)
+                : [];
+            return {
+                ok: !!elA && !!elB && !!workRow,
+                badgesMeasured: document.querySelectorAll('.node-state-badge').length,
+                shownBadges: Array.prototype.slice
+                    .call(document.querySelectorAll('.node-state-badge'))
+                    .filter((b) => getComputedStyle(b).display !== 'none' && b.textContent).length,
+                disabledBadge: elA ? elA.querySelector('.node-state-badge').textContent : null,
+                starvedBadge: elB ? elB.querySelector('.node-state-badge').textContent : null,
+                dockPlatform: platformCell ? platformCell.textContent : null,
+                dockButtons: buttonWords,
+                expectDisabled: I18n.t('node.badgeDisabled'),
+                expectStarved: I18n.t('node.badgeNoInput'),
+                expectPlatform: I18n.t('platform.zhihu'),
+                expectRename: I18n.t('cookies.renameOne'),
+                expectDelete: I18n.t('cookies.deleteOne'),
+            };
+        };
+        const zh = measure();
+        setLang('en');
+        const en = measure();
+        return {zh, en};
+        """,
+        [],
+    )
+    zh, en = measured['zh'], measured['en']
+    assert zh['ok'] and en['ok'], f'a node or the dock vanished before it could be measured: {zh} / {en}'
+    # Browser-measured floor (AGENTS): report how much was actually on screen.
+    assert zh['badgesMeasured'] >= 2 and zh['shownBadges'] >= 2, f'no badge was on screen to measure: {zh}'
+    assert zh['disabledBadge'] == zh['expectDisabled'] and zh['starvedBadge'] == zh['expectStarved'], zh
+    assert zh['dockPlatform'] == zh['expectPlatform'], zh
+
+    # The badge is a JS word: after the switch it must READ English AND have CHANGED off the
+    # Chinese string (a value-only check would pass on a stale badge that still held the key).
+    assert en['disabledBadge'] == en['expectDisabled'], f'the 已禁用 badge did not re-stamp: {en}'
+    assert en['disabledBadge'] != zh['disabledBadge'], 'the badge kept the old language word'
+    assert en['starvedBadge'] == en['expectStarved'] and en['starvedBadge'] != zh['starvedBadge'], en
+    # Same for the dock — its whole table is JS-built from keys.
+    assert en['dockPlatform'] == en['expectPlatform'], f'the dock platform word kept the old language: {en}'
+    assert en['dockPlatform'] != zh['dockPlatform'], en
+    assert en['dockButtons'] == [en['expectRename'], en['expectDelete']], f'the row buttons kept the old language: {en}'
+    assert en['dockButtons'] != zh['dockButtons'], en
 
 
 REFRESH_ALIGN_DRAFT = """

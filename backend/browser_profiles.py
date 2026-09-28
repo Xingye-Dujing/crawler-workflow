@@ -37,6 +37,7 @@ import threading
 import time
 
 from config import Config
+from services.cookie_manager import ACCOUNT_RE, CookieManager
 from settings_store import get_setting
 
 #: Written inside a platform's directory the first time it is used. Its presence is
@@ -45,10 +46,15 @@ from settings_store import get_setting
 MARKER = '.crawler-profile.json'
 
 #: An account label nests a sub-directory, so it is held to the same shape as the
-#: cookie filename uses (see ``CookieManager``): a lowercase word that can never be a
-#: path escape or a separator. The blank account is the platform's default device and
-#: keeps the historical ``<root>/<platform>`` directory byte-for-byte.
-_ACCOUNT_RE = re.compile(r'^[a-z0-9_]{1,24}$')
+#: cookie filename uses: letters, digits, ``_`` and ``-``, up to 24 of them. This is
+#: ``services.cookie_manager.ACCOUNT_RE`` — the SAME compiled object, not a copy — because
+#: a label the jar accepts and the directory refuses would save a login whose device can
+#: never be opened, and that split is invisible from either side alone.
+#:
+#: The blank account is the platform's default device and keeps the historical
+#: ``<root>/<platform>`` directory byte-for-byte; ``default`` is that same account's name
+#: (the fold lives in ``CookieManager.key``), so it nests nothing either.
+_ACCOUNT_RE = ACCOUNT_RE
 
 
 def _account_part(account: str) -> str:
@@ -57,8 +63,8 @@ def _account_part(account: str) -> str:
     Raises on a label that is neither blank nor a safe word — the same refusal the
     cookie file makes, so a profile directory can never be walked out of the root.
     """
-    account = str(account or '').strip()
-    if not account:
+    account = str(account or '').strip().lower()
+    if not account or account == CookieManager.DEFAULT_ACCOUNT:
         return ''
     if not _ACCOUNT_RE.match(account):
         raise ValueError(f'Invalid account: {account}')
@@ -107,6 +113,19 @@ def lock_for(path: str) -> threading.Lock:
             lock = threading.Lock()
             _LOCKS[key] = lock
         return lock
+
+
+def forget_lock(path: str) -> None:
+    """Drop the lane registered for a directory that no longer exists.
+
+    Only a rename needs this today: the map is keyed on an absolute path, so a directory
+    that moved leaves its old key behind. Nothing breaks by keeping it (an unheld ``Lock``
+    answers any later acquirer), but a rename done twice with the same name would otherwise
+    hand back the lane of a device that was replaced — and the whole point of the key is that
+    one path is one device.
+    """
+    with _LOCKS_GUARD:
+        _LOCKS.pop(_dir_key(path), None)
 
 
 def acquire_profile(path: str, timeout: float = None, abort=None):
@@ -162,6 +181,41 @@ def root_dir() -> str:
     """Where the per-platform directories live (settings can move it)."""
     configured = str(get_setting('browser_profile_dir') or '').strip()
     return configured or Config.BROWSER_PROFILE_DIR
+
+
+def rename_account(platform: str, account: str, to: str) -> bool:
+    """Move a named account's DEVICE directory to a new label. True when it moved.
+
+    The cookie file and the profile are one account seen from two sides: renaming only the
+    file would leave the new label pointing at a device that does not exist, and the first
+    crawl with it would silently open a brand-new browser and report 「已登录」 about a
+    session that is not there. So a rename moves both, or neither — and both refusals here
+    are the same ones the cookie side makes, checked before anything is touched:
+
+    * the blank account has no directory of its own to move (it IS ``<root>/<platform>``,
+      the parent of every named account of that platform), so it is never renamed;
+    * a live browser holding the directory is refused — moving a ``user-data-dir`` out from
+      under a running Chrome leaves that process writing into a path that no longer resolves.
+
+    An occupied target is refused rather than merged: two profile trees in one directory is
+    not a rename, it is a corrupt device.
+    """
+    account = str(account or '').strip()
+    to = _account_part(str(to or '').strip().lower())
+    if not account or not to:
+        raise ValueError('Only a named account can be renamed')
+    source = platform_dir(platform, account)
+    if not os.path.isdir(source):
+        return False
+    if os.path.exists(platform_dir(platform, to)):
+        raise ValueError(f'Target profile already exists: {to}')
+    if is_busy(source):
+        raise ValueError('Profile is in use')
+    os.rename(source, platform_dir(platform, to))
+    # The lane this directory owned dies with the name: ``lock_for`` keys on the path, and a
+    # stale entry would let two crawls believe they hold different devices.
+    forget_lock(source)
+    return True
 
 
 def is_enabled() -> bool:

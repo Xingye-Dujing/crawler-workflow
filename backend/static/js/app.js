@@ -109,22 +109,25 @@ const I18n = {
                the browser cannot answer is a raw string on screen, which is why
                ``test_every_account_label_the_server_sends_has_a_word_in_both_languages`` walks them. */
             'cookies.accountDefaultNumbered': 'Default account {n}',
-            'cookies.accountDefaultHint': 'Leave the box empty for this login',
+            'cookies.accountDefaultHint': 'This login is named default',
             'cookies.accountStatusHead': '{platform} · {account}',
             'cookies.accountStatusNone': 'no cookie saved for it yet',
             'cookies.accountStatusSaved': '{n} entries, saved {when}',
-            'cookies.accountStatusSessionOnly': '{n} of them die with the window',
-            'cookies.profileOff': 'browser profiles are off',
-            'cookies.profileUnused': 'its browser has never been opened',
-            'cookies.profileNoLogin': 'its browser is open but holds no login yet',
-            'cookies.profileStale': 'its browser is still holding an older cookie',
-            'cookies.profileCurrent': 'its browser holds this cookie',
+            'cookies.chosen': 'Selected login: {platform} · {account}',
+            'cookies.listFailed': 'Could not read the saved logins (the server did not answer)',
             'cookies.manageTitle': 'Saved logins',
             'cookies.noneSaved': 'Nothing is saved yet — paste a Cookie and it appears here.',
             'cookies.unknownWhen': 'unknown',
-            'cookies.rowMeta': '{n} entries · saved {when}',
-            'cookies.rowSessionOnly': '{n} die with the window',
-            'cookies.useInPanel': 'Open',
+            'cookies.renameOne': 'Rename',
+            'cookies.renamePlaceholder': 'a new name for this login',
+            'cookies.renameSame': 'That is already its name, so nothing was renamed',
+            'cookies.renameDefaultRefused':
+                'The default account cannot be renamed: its browser directory IS this platform’s directory, with every other account inside it',
+            'cookies.colPlatform': 'Platform',
+            'cookies.colAccount': 'Account',
+            'cookies.colEntries': 'Entries',
+            'cookies.colSavedAt': 'Saved',
+            'cookies.colActions': 'Actions',
             'cookies.deleteOne': 'Delete',
             /* The first-entry notice on a cloud host. The headline is the first line of the
                body because this page's dialog has no title slot — inventing one for one
@@ -140,16 +143,16 @@ const I18n = {
             'privacy.gotIt': 'Got it',
             'privacy.never': 'Stop showing this',
             'cookies.account': 'Account',
-            'cookies.accountPlaceholder': 'blank = the default login; type a new name to create one',
+            'cookies.accountPlaceholder': 'default = the default login; type a new name to create one',
             'field.account': 'Account',
             'dialog.cookieDelete': 'Delete the Cookie file saved for {platform}? If this platform is crawled inside its own browser profile, its login lives in that profile: deleting this file does not sign the profile out, it only removes the snapshot a throwaway browser is planted from. The answer says which of the two applies to {platform}.',
             'dialog.cookieDeleteYes': 'Delete the file',
+            'dialog.cookieRename': 'Rename the login “{account}” of {platform}? Its cookie file and its own browser directory move together.',
+            'toast.cookieRenamed': 'Login renamed',
             'toast.cookieDeleted': 'Cookie file deleted for {platform}',
-            'cookies.refreshExplain':
-                'A profile is one account’s own browser directory, and the crawl runs on the login inside it. '
-                + 'Saving a cookie — pasted in here or produced by 「Generate via Browser」 — now plants it into '
-                + 'that account’s profile by itself, because the file you just saved is the newest session there '
-                + 'is. There is nothing to press a second time.',
+            /* No ``cookies.refreshExplain`` any more (user, 2026-09-28): a standing paragraph
+               about how a profile relates to a cookie file is the implementation's history,
+               not a choice the user makes. The setting row says the benefit instead. */
             'cookie.refreshHint':
                 'That profile still holds an older cookie: it was busy when this one was saved, so the next '
                 + 'crawl of this account brings the new one in on its own',
@@ -508,13 +511,16 @@ const I18n = {
             'set.stagger': 'Same-platform start gap (seconds)',
             'set.staggerInline': 'How far apart two crawls of one platform start; 0 adds no gap',
             'set.useProfile': 'Persistent browser profile',
-            'set.useProfileInline': 'One profile per platform, so the crawl and the cookie login are the same device',
+            'set.useProfileInline':
+                'One browser directory per platform and account, so the site keeps seeing one continuing device — '
+                + 'that is what weibo, xiaohongshu and douyin ask for, and it means the cookie you take is the '
+                + 'session the crawl runs on. Off, every crawl starts as a brand-new device replaying a saved snapshot.',
             'set.maxVisible': 'Max browsers, windowed run',
             'set.maxHeadless': 'Max browsers, headless run',
             'set.clearConsole': 'Clear console before each run',
             'set.clearConsoleInline': 'A new run wipes the console immediately — every workflow tab and its retained history included',
             'set.adviceButton': 'Collection advice (profile / parallel / serial)',
-            'advice.title': 'What each platform prefers (read from the crawl matrix)',
+            'advice.title': 'What each platform prefers',
             'advice.profile': 'Prefer a persistent profile (a throwaway/old-snapshot session is punished): ',
             'advice.live': 'Automation testing must reuse ONE real profile session (a copied login is a second device): ',
             'advice.serial': 'Serial-only — never parallel (one account paging two sessions hits the wall): ',
@@ -893,23 +899,25 @@ const I18n = {
             'cookies.delete': '删除已存 Cookie',
             'cookies.accountDefault': '默认账号',
             'cookies.accountDefaultNumbered': '默认账号{n}',
-            'cookies.accountDefaultHint': '这个登录＝账号框留空',
+            'cookies.accountDefaultHint': '这个登录的名字就是 default',
             'cookies.accountStatusHead': '{platform} · {account}',
             'cookies.accountStatusNone': '这个账号还没有保存过 Cookie',
             'cookies.accountStatusSaved': '{n} 条，存于 {when}',
-            'cookies.accountStatusSessionOnly': '其中 {n} 条关掉窗口就失效',
-            'cookies.profileOff': '未启用浏览器 Profile',
-            'cookies.profileUnused': '这个账号的浏览器还没打开过',
-            'cookies.profileNoLogin': '浏览器打开过，但里面还没有登录',
-            'cookies.profileStale': '它的浏览器里还是旧的那份 Cookie',
-            'cookies.profileCurrent': '它的浏览器里就是这份 Cookie',
+            'cookies.chosen': '已选择登录：{platform} · {account}',
+            'cookies.listFailed': '读不到已保存的登录（服务未响应）',
             'cookies.manageTitle': '已保存的登录',
             'cookies.noneSaved': '还没有任何已保存的登录——粘贴一份 Cookie 后会出现在这里。',
             'cookies.unknownWhen': '时间未知',
-            'cookies.useInPanel': '打开',
+            'cookies.renameOne': '重命名',
+            'cookies.renamePlaceholder': '给这个登录起个新名字',
+            'cookies.renameSame': '名字没变，所以什么都没改',
+            'cookies.renameDefaultRefused': '默认账号不能改名：它的浏览器目录就是该平台目录本身，其它账号都装在里面',
+            'cookies.colPlatform': '平台',
+            'cookies.colAccount': '账号',
+            'cookies.colEntries': '条数',
+            'cookies.colSavedAt': '存于',
+            'cookies.colActions': '操作',
             'cookies.deleteOne': '删除',
-            'cookies.rowMeta': '{n} 条 · 存于 {when}',
-            'cookies.rowSessionOnly': '其中 {n} 条关窗口即失效',
             'privacy.body':
                 '这个应用跑在服务器上，不在你这台电脑里。\n'
                 + '存在服务器上的：你粘贴进来的 Cookie、你上传或采集到的每一张表、你的工作流文件与运行记录。'
@@ -919,14 +927,13 @@ const I18n = {
             'privacy.gotIt': '知道了',
             'privacy.never': '不再提醒',
             'cookies.account': '账号',
-            'cookies.accountPlaceholder': '留空=默认登录；输入一个新名字即另存一份',
+            'cookies.accountPlaceholder': 'default＝默认登录；输入一个新名字即另存一份',
             'field.account': '登录账号',
             'dialog.cookieDelete': '删除 {platform} 已保存的 Cookie 文件？如果该平台的抓取是在它自己的浏览器 profile 里跑的，登录态存在那个 profile 里：删这个文件不会把它登出，只是清掉「一次性浏览器」用来植入的快照。删除后的那一行会说明 {platform} 属于哪种情况。',
             'dialog.cookieDeleteYes': '删除文件',
+            'dialog.cookieRename': '把 {platform} 的登录「{account}」改名？它的 Cookie 文件与它自己的浏览器目录会一起搬过去。',
+            'toast.cookieRenamed': '登录已改名',
             'toast.cookieDeleted': '已删除 {platform} 的 Cookie 文件',
-            'cookies.refreshExplain':
-                'Profile 就是「一个账号一个浏览器目录」，抓取用的是那个目录里的登录态。保存 Cookie 的这一刻'
-                + '就已经把它种进该账号自己的 profile 了（刚粘贴进来的这份就是最新会话），不需要再按第二个按钮。',
             'cookie.refreshHint':
                 '这个 profile 里还是旧的那份 Cookie：保存时它的浏览器正被占用，下一次抓取这个账号会自动带上新的',
             'toast.cookieChecking': '运行前先验证 {platforms} 的 Cookie…',
@@ -1270,13 +1277,15 @@ const I18n = {
             'set.stagger': '同平台错峰间隔（秒）',
             'set.staggerInline': '同一平台两次采集至少隔多久发车；0 = 不再额外隔',
             'set.useProfile': '持久浏览器 Profile',
-            'set.useProfileInline': '每个平台用自己的浏览器目录，抓取与取 Cookie 是同一台设备',
+            'set.useProfileInline':
+                '一个平台/账号一台自己的浏览器目录：站点看到的始终是同一台连续设备——微博、小红书、抖音要的就是这个，'
+                + '而你取的 Cookie 就是抓取用的那份会话。关掉之后，每次采集都是一台全新设备带着一个旧快照。',
             'set.maxVisible': '窗口运行最大并发浏览器',
             'set.maxHeadless': '无头运行最大并发浏览器',
             'set.clearConsole': '每次运行前清空控制台',
             'set.clearConsoleInline': '新运行一开始就清空控制台，连各工作流标签页连同其历史一并删除',
             'set.adviceButton': '采集建议（Profile / 并行 / 串行）',
-            'advice.title': '各平台的建议（全部读自采集矩阵）',
+            'advice.title': '各平台的建议',
             'advice.profile': '建议启用持久 Profile（一次性浏览器/旧快照会被拒）：',
             'advice.live': '自动化测试必须复用同一个真实 Profile 会话（复制的登录＝第二台设备）：',
             'advice.serial': '只能串行、不能并行（同一账号两开即撞登录墙）：',
@@ -2649,6 +2658,9 @@ initDockResize('runs-resize-handle', 'runs-panel');
 initDockResize('exports-resize-handle', 'exports-panel');
 initDockResize('dataset-resize-handle', 'dataset-panel');
 initDockResize('workflows-resize-handle', 'workflows-panel');
+/* The saved-logins dock is a dock like these: same bottom slot, same one-handle-to-resize,
+   and ``closeDockedPanels`` already lists it, so opening it shuts the other five. */
+initDockResize('cookies-resize-handle', 'cookies-panel');
 
 /* ── Cookie dialog: close on outside click ──
    The platform dropdown is a CustomSelect: its menu is rendered into <body>,
@@ -2721,12 +2733,17 @@ document.addEventListener('mousedown', (e) => {
 
 /* Patch openCookieDialog to init drag+resize on first open */
 const _origOpenCookie = window.openCookieDialog;
-window.openCookieDialog = function (platform) {
-    /* The argument is forwarded, not dropped: app.js patches this function to add
-       drag and resize, and a wrapper that swallowed parameters would silently make
-       「open the Cookie panel on the platform that just refused the run」 open it on
-       whoever happened to be selected before — the refusal then pointed nowhere. */
-    _origOpenCookie(platform);
+window.openCookieDialog = function (...args) {
+    /* EVERY argument is forwarded, as a list, on purpose. This wrapper exists to hang
+       drag/resize off the first open, and it used to declare `function (platform)` and call
+       `_origOpenCookie(platform)` — which silently dropped the SECOND argument the day the
+       account landed there: the pre-run block and the saved-logins row both ask for
+       「this platform, this account」, and in a browser the wrapper is the function they get.
+       Measured in real Chrome (tests/integration/test_ui_layout.py): the panel opened on the
+       right platform and the account box stayed on whatever the user had typed, so 「打开」
+       looked half-dead. Restating the parameter list is exactly how this breaks again, so
+       the list is passed through untouched. */
+    _origOpenCookie(...args);
     const dialog = document.getElementById('cookie-dialog');
     if (dialog.classList.contains('open') && !dialog.dataset._uiInit) {
         dialog.dataset._uiInit = '1';

@@ -226,31 +226,61 @@ class TestSessionOnlyCount:
 class TestAccounts:
     """Several saved logins for one platform — the storage half of multi-account.
 
-    The naming rule is the whole contract: the blank account keeps the historical
-    ``<platform>_cookies.json`` byte-for-byte (nobody's existing login moves because
-    the code learned a parameter), and a named account adds exactly one ``@`` segment.
-    The account label enters a filename from a text box, so anything that is not a
-    plain lowercase word is refused the same way an unknown platform is — the
-    whitelist is about the path, not about taste.
+    The naming rule is the whole contract, and since 2026-09-28 it is ONE rule: every
+    account has a name, the platform's own included (``default``), and the name is what
+    enters a path segment. The blank spelling stays accepted because it is that account's
+    historical identity — ``<platform>_cookies.json`` must not move because the code
+    learned a parameter — but it is folded to the name at the door, so nothing downstream
+    compares against ``''``. What is refused is what cannot be a path segment, not what
+    looks unfashionable: letters, digits, ``_`` and ``-`` up to 24, case folded.
     """
 
     def test_the_blank_account_is_the_historical_filename(self, manager):
         assert manager.path_for('zhihu') == manager.path_for('zhihu', '')
         assert manager.path_for('zhihu').endswith('zhihu_cookies.json')
 
+    def test_the_default_name_and_the_blank_spelling_are_one_file(self, manager):
+        """One account, one path — the name and the historical blank cannot disagree.
+
+        This is the assertion that keeps the fold honest: were ``default`` to reach the
+        filename, the platform's own login would appear to vanish for every user who ever
+        saved it the old way, and the panel would offer two accounts that are one session.
+        """
+        assert manager.path_for('zhihu', 'default') == manager.path_for('zhihu')
+        assert manager.path_for('zhihu', 'DEFAULT') == manager.path_for('zhihu', 'default')
+        assert manager.key('') == CookieManager.DEFAULT_ACCOUNT
+        assert manager.key(None) == CookieManager.DEFAULT_ACCOUNT
+
     def test_a_named_account_inserts_one_segment(self, manager):
         assert manager.path_for('zhihu', 'work').endswith('zhihu@work_cookies.json')
 
-    @pytest.mark.parametrize('bad', ['../x', 'a/b', 'A', 'has space', 'x' * 25, '@', 'q"uote'])
-    def test_an_account_that_is_not_a_plain_word_is_refused(self, manager, bad):
+    def test_a_hyphen_is_a_ordinary_character_in_a_name(self, manager):
+        """``-`` is legal in a path segment, so refusing it was taste, not safety (#117's rule
+        widened on 2026-09-28 after the user asked what the objection actually was)."""
+        assert manager.path_for('zhihu', 'work-2').endswith('zhihu@work-2_cookies.json')
+
+    @pytest.mark.parametrize('bad', ['../x', 'a/b', 'has space', 'x' * 25, '@', 'q"uote', 'a\\b', '.', 'a.b'])
+    def test_an_account_that_cannot_be_a_path_segment_is_refused(self, manager, bad):
         with pytest.raises(ValueError):
             manager.path_for('zhihu', bad)
+
+    def test_capitals_are_usable_and_fold_to_one_account(self, manager):
+        """``Work`` is accepted, and it is the same account as ``work`` — because on this OS
+        they are the same FILE. Two names for one login is the thing refused here, and a
+        silently-different account is what an unfolded comparison would have produced."""
+        assert manager.path_for('zhihu', 'Work') == manager.path_for('zhihu', 'work')
+        manager.save('zhihu', COOKIES, 'Work')
+        assert manager.load('zhihu', 'work') == COOKIES
+        assert manager.account_files('zhihu') == ['work']
 
     def test_is_account_answers_usability_without_raising(self):
         assert CookieManager.is_account('') is True
         assert CookieManager.is_account('work_2') is True
-        assert CookieManager.is_account('Work') is False
+        assert CookieManager.is_account('work-2') is True
+        assert CookieManager.is_account('default') is True
+        assert CookieManager.is_account('Work') is True, 'usable: it folds, it is not refused'
         assert CookieManager.is_account('../x') is False
+        assert CookieManager.is_account('has space') is False
 
     def test_two_accounts_hold_two_sessions(self, manager):
         manager.save('weibo', COOKIES, 'a')
@@ -268,9 +298,12 @@ class TestAccounts:
         manager.save('weibo', COOKIES, 'work')
         manager.save('weibo', COOKIES)
         names = manager.accounts_in_order('weibo')
-        assert '' in names and 'work' in names, names
+        # The default login is named ``default`` here rather than listed as a blank, so the
+        # panel's first option is a value a node can store and the user can read.
+        assert CookieManager.DEFAULT_ACCOUNT in names and 'work' in names, names
         assert len(names) == 2, f'the list invented or dropped an account: {names}'
         assert manager.accounts_in_order('zhihu') == [], 'a platform with nothing saved lists nothing'
+        assert '' not in names, 'the list still speaks the historical blank'
 
     def test_has_any_answers_for_the_platform_without_naming_an_account(self, manager):
         """The status cell used to ask ``exists(platform)`` — the blank file only — so a user who
@@ -284,7 +317,9 @@ class TestAccounts:
         """Two paste actions with an empty name cannot be told apart (same cookie names, and the
         value that distinguishes them is the one that rotates), so the safe reading is "a new
         login" — overwriting would destroy a session the user paid for."""
-        assert manager.next_free_account('weibo') == ''
+        # A platform with no default login yet is offered the NAME of that slot, not a blank:
+        # the answer to 「哪个账号」 is always a name that fits the same rule as every other.
+        assert manager.next_free_account('weibo') == CookieManager.DEFAULT_ACCOUNT
         manager.save('weibo', COOKIES)
         assert manager.next_free_account('weibo') == 'default2'
         manager.save('weibo', COOKIES, 'default2')

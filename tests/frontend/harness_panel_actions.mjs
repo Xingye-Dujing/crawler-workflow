@@ -90,7 +90,12 @@ sandbox.showDialog = async (spec) => {
  * scenario would report "no request" for a click that works in the browser. So the
  * stub routes by URL, with defaults that let a run reach the POST. */
 const defaultRoutes = () => ({
-    '/api/cookies/status': { ok: true, cookies: { zhihu: true } },
+    '/api/cookies/status': { ok: true, cookies: { zhihu: true }, accounts: {}, rows: [] },
+    // `setLang` repaints the Cookie guide and the account status line (both are JS-built from
+    // catalogue keys), so these endpoints are now reached on a language switch — an answer with
+    // no `flows`/`profiles` makes `renderCookieGuide` throw and take the whole module fixture down.
+    '/api/cookies/flow': { ok: true, flows: [] },
+    '/api/browser/profiles': { ok: true, profiles: [] },
     '/api/settings': { ok: true, settings: { cookie_preflight_before_run: false } },
     '/api/workflow/execute': { ok: true, run_id: 'newrun1' },
     '/api/runs/discard': { ok: true },

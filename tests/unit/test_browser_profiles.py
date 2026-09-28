@@ -237,8 +237,21 @@ class TestAccounts:
     def test_a_named_account_nests_one_level_deeper(self, profiles_on, tmp_path):
         assert browser_profiles.platform_dir('zhihu', 'work') == str(tmp_path / 'profiles' / 'zhihu' / 'work')
 
-    def test_an_account_that_is_not_a_plain_word_never_reaches_a_path(self, profiles_on):
-        for bad in ('../escape', 'a/b', 'UPPER', 'with space', 'x' * 25, 'q"uote'):
+    def test_the_default_name_nests_nothing_either(self, profiles_on, tmp_path):
+        """``default`` is the platform's own login BY NAME, so it keeps the same directory the
+        blank spelling always had — the file and the device fold together or a renamed-looking
+        account would crawl on a device that has never been opened."""
+        assert browser_profiles.platform_dir('zhihu', 'default') == str(tmp_path / 'profiles' / 'zhihu')
+        assert browser_profiles.platform_dir('zhihu', '') == browser_profiles.platform_dir('zhihu', 'DEFAULT')
+
+    def test_a_hyphen_reaches_a_path_like_any_letter(self, profiles_on, tmp_path):
+        assert browser_profiles.platform_dir('zhihu', 'work-2') == str(tmp_path / 'profiles' / 'zhihu' / 'work-2')
+
+    def test_an_account_that_cannot_be_a_path_segment_never_reaches_a_path(self, profiles_on):
+        """The refusal list is about the filesystem, not about case: capitals are folded (one
+        login cannot have two spellings on a case-insensitive disk), and everything below is
+        something that would leave the profile root."""
+        for bad in ('../escape', 'a/b', 'with space', 'x' * 25, 'q"uote', 'a\\b', '.', 'a.b'):
             with pytest.raises(ValueError):
                 browser_profiles.platform_dir('zhihu', bad)
 

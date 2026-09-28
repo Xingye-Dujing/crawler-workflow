@@ -554,6 +554,8 @@ _ZH = {
     'api.stepsMustBeObjects': 'steps 必须是对象列表，每项含 "op" 与可选 "params"',
     'api.noCookieJob': '当前没有进行中的登录窗口',
     'cookie.deleted': '已删除 {platform} 的 Cookie',
+    'cookie.renamed': '已把 {platform} 的登录改名：{old} → {new}（Cookie 文件与浏览器目录一起搬）',
+    'cookie.renamedFileOnly': '已把 {platform} 的登录改名：{old} → {new}（该账号还没开过浏览器，只动了文件）',
     'store.workflow_saved': '工作流已保存：{path}',
     'store.dataset_saved': '文件已持久化：{name}（{rows} 行，id {did}）',
     'store.datasets_bound': '工作流 {wf} 已绑定 {n} 个上传文件',
@@ -763,7 +765,15 @@ _ZH = {
     'api.platformRequired': '平台不能为空',
     'api.cookiesRequired': 'Cookies 数据不能为空',
     'api.unsupportedPlatform': '不支持的平台：{platform}',
-    'api.badAccount': '账号名不合法：{account}（只能用小写字母、数字、下划线，1-24 个字符）',
+    'api.badAccount': '账号名不合法：{account}（字母、数字、下划线或连字符，1-24 个；统一按小写保存）',
+    'api.cookieRenameEmptyTarget': '新名字不能留空',
+    'api.cookieRenameBadName': '新名字不合法：字母、数字、下划线或连字符，1-24 个（统一按小写保存）',
+    'api.cookieRenameDefault': '默认账号不能改名：它的浏览器目录就是该平台目录本身，其它账号都装在里面',
+    'api.cookieRenameSameName': '新旧名字一样，没有改任何东西',
+    'api.cookieRenameNoSource': '这个账号没有已保存的登录，改不了名',
+    'api.cookieRenameTaken': '这个名字已经有另一份登录了，换一个个别的名字',
+    'api.cookieRenameBusy': '这个账号的浏览器正在被占用，请等当前采集结束后再改名',
+    'api.cookieRenameFailed': '改名失败：{err}',
     'api.llmModelsFailed': '获取 OpenRouter 模型列表失败：{err}',
     'api.ollamaModelsFailed': '读取本地 Ollama 模型列表失败：{host}（请确认 ollama 已启动、服务地址正确）：{err}',
     'api.parseFailed': '文件解析失败：{err}',
@@ -1494,6 +1504,13 @@ _EN = {
     'api.stepsMustBeObjects': 'steps must be a list of objects, each with an "op" and optional "params"',
     'api.noCookieJob': 'No cookie login is currently active',
     'cookie.deleted': 'Cookies deleted for {platform}',
+    'cookie.renamed': (
+        'Renamed the {platform} login “{old}” to “{new}” (its cookie file and its own browser directory moved together)'
+    ),
+    'cookie.renamedFileOnly': (
+        'Renamed the {platform} login “{old}” to “{new}” — that account has never opened a '
+        'browser of its own, so only the cookie file moved'
+    ),
     'store.workflow_saved': 'Workflow saved: {path}',
     'store.dataset_saved': 'File stored: {name} ({rows} rows, id {did})',
     'store.datasets_bound': 'Workflow {wf} bound to {n} uploaded file(s)',
@@ -1704,7 +1721,24 @@ _EN = {
     'api.platformRequired': 'Platform is required',
     'api.cookiesRequired': 'Cookies data is required',
     'api.unsupportedPlatform': 'Unsupported platform: {platform}',
-    'api.badAccount': 'Invalid account name: {account} (a-z, 0-9 and _ only, 1-24 characters)',
+    'api.badAccount': (
+        'Invalid account name: {account} (letters, digits, _ and -, 1-24 of them; case does not '
+        'make a second account — names are stored lowercase)'
+    ),
+    'api.cookieRenameEmptyTarget': 'The new name cannot be blank',
+    'api.cookieRenameBadName': (
+        'Invalid new name: letters, digits, _ and -, 1-24 of them (case does not make a second '
+        'account — names are stored lowercase)'
+    ),
+    'api.cookieRenameDefault': (
+        'The default account cannot be renamed: its browser directory IS the platform’s '
+        'directory, with every other account inside it'
+    ),
+    'api.cookieRenameSameName': 'The old and new names are the same, so nothing was renamed',
+    'api.cookieRenameNoSource': 'That account has no saved login to rename',
+    'api.cookieRenameTaken': 'Another login already uses that name — pick a different one',
+    'api.cookieRenameBusy': 'That account’s browser is in use; rename it after the current crawl ends',
+    'api.cookieRenameFailed': 'Renaming failed: {err}',
     'api.llmModelsFailed': 'Could not fetch the OpenRouter model list: {err}',
     'api.ollamaModelsFailed': 'Could not list local Ollama models at {host} (running? address right?): {err}',
     'api.parseFailed': 'Could not parse the file: {err}',

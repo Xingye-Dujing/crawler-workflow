@@ -252,8 +252,13 @@ _ACCOUNT = Field(
     control='select',
     label_key='field.account',
     name_key='field.account',
-    default='',
-    options=(('', 'cookies.accountDefault'),),
+    # The default login has a name like every other account, so the field declares it rather
+    # than declaring "nothing chosen": a select whose first row is a blank is a select whose
+    # stored value is nothing, and an empty account on a node used to be indistinguishable
+    # from a node that never had the field. Both spellings mean this account — the fold is in
+    # ``CookieManager.key``, so a workflow saved before the name still runs unchanged.
+    default='default',
+    options=(('default', 'cookies.accountDefault'),),
 )
 #: The name of the upstream table's column to read row by row as a link list mode's
 #: link field (see ``Field.fed_by``). Free text for the same reason the process and

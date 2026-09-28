@@ -88,14 +88,18 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   every later step. Boot steps go through `boot(name, fn)`; `stats` declines on a missing library and says so.
 - **A dialog with an input is answered by the input:** a confirm button carrying its own `value:` replaces whatever
   the user typed in `showDialog`, so leave `value` off input dialogs.
-- **Five frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a top-level
+- **Six frontend rules that each cost a feature when forgotten.** (1) `if (window.X)` cannot see a top-level
   `const X` — guard the binding (`typeof X !== 'undefined'`) or export it. (2) The DOM stub's matcher is real
   (`harness_dom.mjs`); never fabricate a child when a query finds nothing. (3) A wrapper must forward its arguments
   — an empty parameter list acts on whatever was selected before, not on what just failed. (4) A name inside
   `onclick="fn('…')"` spans two grammars: `attrJsArg` JS-escapes the literal, *then* HTML-escapes the attribute;
   JS-escaping alone lets one `"` end the attribute. (5) A node captured before an `await` is not on the page after
   it — settings panels and run-list refreshes rebuild the markup, so re-look the element up (`_rowFor`, the holder
-  by id) or the write lands in an orphan.
+  by id) or the write lands in an orphan. (6) **A wrapper installed in another file is not the function your
+  harness loads**: `app.js` re-assigns `window.openCookieDialog` to add drag/resize, and that patch declared one
+  parameter while the real function took two — so the account argument died *in the browser only*, because every
+  cookie harness runs `workflow.js` alone and stayed green. Forward the whole list (`(...args)`), and measure a
+  change that lands behind a patched global in the browser tier too, not just in the single-file harness.
 - **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the one the bug
   was about: for a record, a run or a panel row, list the dimensions first and cover the grid.
 - **A live case's numbers are computed from the site, never chosen.** An ask, a selection threshold or a supply
@@ -241,7 +245,11 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   **A node's 账号 is a session question, and it is asked once**: `engine.workflow._account_session_errors` refuses a
   crawl that `Mode.needs_session` says needs a login when `cookie_preflight.has_session_to_test` cannot find that
   account's cookie file *or* a profile still carrying it — blank included, because blank IS an account (默认账号), not
-  a wildcard. `unoffered_selections` must not answer it too: one failure, one line. Letting it through is not a
+  a wildcard. **Every account has one name and one spelling of it**: the default login is named `default` (the box shows
+  it, never a blank), the blank is only its historical filename, and both halves are folded at the ONE point
+  `CookieManager.key` / `path_segment` (`''` ⇄ `default`, lowercase always) — a name typed `Work` and `work` are the same
+  session, because a case-insensitive filesystem cannot hold two logins under one spelling, so `browser_profiles`, the
+  preflight cache and the JS box all route through that same fold rather than each testing for `''`. `unoffered_selections` must not answer it too: one failure, one line. Letting it through is not a
   harmless crawl — it walks into a login wall, files an empty table and reports 完成. The candidate list and the
   preselection a new node gets are both `CookieManager.accounts_in_order`, so the first row listed is the account a
   node starts on. **A new settings key needs all four:** the bool branch in

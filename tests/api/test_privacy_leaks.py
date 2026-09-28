@@ -164,11 +164,13 @@ class TestTheSweepItself:
         names, entry counts, dates — and said nothing else.
         """
         rows = {row['account']: row for row in client.get('/api/cookies/status').get_json()['rows']}
-        assert set(rows) >= {'', 'work'}, rows
+        # The default login is now NAMED (``default``), not a blank row — the row it produces is
+        # the platform's own cookie file, and an account that has a name is keyed by that name.
+        assert set(rows) >= {'default', 'work'}, rows
         for row in rows.values():
             assert row['entries'] == 1 and row['saved_at'], row
             assert row['platform'] == 'zhihu'
-        assert sorted(rows['']) == sorted(
+        assert sorted(rows['default']) == sorted(
             [
                 'account',
                 'entry_key',

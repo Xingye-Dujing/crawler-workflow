@@ -3462,6 +3462,12 @@ function setLang(nextLang) {
     Object.keys(canvas.nodes).forEach(function (id) {
         canvas.updateNodeDisplay(id);
     });
+    /* The 已禁用/无输入 badge is worded by ``applyDisabledVisuals``, which per-node
+       ``updateNodeDisplay`` never touches — so a language switch re-stamped the title, the
+       summary and the tooltips and left 「DISABLED」 sitting on the corner of a node that
+       had just turned Chinese. One call, because the state is computed for the whole canvas
+       at once and asking per node would recompute the same answer N times. */
+    canvas.applyDisabledVisuals();
     if (canvas._settingsNodeId) openSettings(canvas._settingsNodeId);
     /* Keep the flat bar's active-language marker truthful. */
     if (window.TopMenu) TopMenu.refresh();
@@ -3478,6 +3484,15 @@ function setLang(nextLang) {
        of only after the next open. */
     if (window.runsManager) runsManager.onLanguageChange();
     if (window.exportsManager) exportsManager.onLanguageChange();
+    /* The saved-logins dock is JS-rendered like those two, and so are the lines the Cookie
+       dialog paints under the account box — same bug class, same one-call fix. The dialog's
+       own repaint is cheap (cached rows, no request) and it is the panel a user is most
+       likely to be looking at when he switches language to read a platform's steps. */
+    if (typeof cookiesManager !== 'undefined') cookiesManager.onLanguageChange();
+    if (typeof renderCookieAccountStatus === 'function' && document.getElementById('cookie-account-status')) {
+        renderCookieAccountStatus();
+        renderCookieGuide();
+    }
     /* Both of these had the method and never got the call, so their tables kept the
        old language while the rest of the page re-stamped around them. `datasetManager`
        is a top-level `var`, which does make it a window property — but the guard is
@@ -4066,27 +4081,30 @@ function refreshCookieStatus() {
 
 function cookieRowFor(platform, account) {
     /* The row for exactly this pair, or null when nothing is saved under it.
-       Matched on the RAW account and never on the label: the blank account is the
-       platform's default file, and 「默认账号」 is how that one account is worded —
-       a label match would also answer for a login the user typed that name as. */
-    var want = String(account || '');
+       Matched on the account KEY and never on the label: 「默认账号」 is how one account is
+       worded, and a label match would also answer for a login the user happened to name
+       that. Both spellings of the default fold to the same key, so a row written before
+       multi-account and one named ``default`` are found by either. */
+    var want = cookieAccountKey(account);
     for (var i = 0; i < cookieRows.length; i++) {
         var row = cookieRows[i];
-        if (row.platform === platform && String(row.account || '') === want) return row;
+        if (row.platform === platform && cookieAccountKey(row.account) === want) return row;
     }
     return null;
 }
 
 function cookieAccountLabel(row) {
     if (!row) return '';
-    // The backend knows which names IT generated (默认账号, 默认账号2) and sends a
+    // The backend knows which names IT generated (default, default2) and sends a
     // catalogue key with its arguments; anything else the user typed is shown exactly
     // as typed, because a name they chose is not this program's word to translate.
-    return row.label_key ? I18n.t(row.label_key, row.label_args || {}) : String(row.account || '');
+    return row.label_key ? I18n.t(row.label_key, row.label_args || {}) : cookieAccountKey(row.account);
 }
 
 function cookieAccountWord(account) {
-    return account ? String(account) : I18n.t('cookies.accountDefault');
+    /* The WORD for an account key, in both of its spellings: the default has a name like any
+       other account, and what the user reads for it is 默认账号. */
+    return cookieAccountKey(account) === COOKIE_DEFAULT_ACCOUNT ? String(I18n.t('cookies.accountDefault')) : cookieAccountKey(account);
 }
 
 function renderCookieAccountStatus() {
@@ -4109,27 +4127,18 @@ function renderCookieAccountStatus() {
         parts.push(I18n.t('cookies.accountStatusNone'));
     } else {
         parts.push(I18n.t('cookies.accountStatusSaved', { n: row.entries, when: row.saved_at }));
-        if (row.session_only) {
-            parts.push(I18n.t('cookies.accountStatusSessionOnly', { n: row.session_only }));
-        }
-        parts.push(cookieProfileWord(row));
     }
     el.textContent = parts.join(' — ');
 }
 
-function cookieProfileWord(row) {
-    /* Four states, and the marker is what decides them — NOT whether the directory is
-       there. A named account's device lives one level INSIDE the platform's directory, so
-       the default account's path exists as soon as any sibling was opened, and a panel
-       that asked ``exists`` first would tell the user a device had been built for a login
-       that never had one. ``profile_exists`` still travels: it is true, it just is not the
-       question. */
-    if (!row.profiles_on) return I18n.t('cookies.profileOff');
-    if (!row.profile_used) return I18n.t('cookies.profileUnused');
-    if (!row.profile_imported) return I18n.t('cookies.profileNoLogin');
-    if (row.needs_refresh) return I18n.t('cookies.profileStale');
-    return I18n.t('cookies.profileCurrent');
-}
+/* The profile sentence is gone (user, 2026-09-28): an account, its cookie file and its
+   browser directory are one thing now — saving a cookie plants it into that account's own
+   profile by itself — so 「它的浏览器里就是这份 Cookie」 described a state the panel is
+   responsible for, not one the user can act on. Same for 「其中 N 条关窗口即失效」: since
+   #148 every crawl runs in a headless browser that carries a desktop fingerprint, and a
+   session cookie's lifetime is not a fact anybody chooses. What stays readable is the one
+   case that is still the user's to know about: a cookie re-saved while its profile was
+   held by a running crawl (``cookie.refreshHint``). */
 
 function setCookieJobUI(on) {
     var actions = document.getElementById('cookie-job-actions');
@@ -4204,14 +4213,19 @@ function openCookieDialog(platform, account) {
         if (known) {
             select.value = platform;
             landed = true;
+            /* The visible half of an enhanced select is a span CustomSelect paints from the
+               option text (the native control is kept at 1px and opacity 0), and it re-reads
+               itself only on a pick or a refresh. Setting ``value`` alone lands the answer
+               for every button below while the user still sees the platform they came in
+               with — which is how 「打开」 in the saved-logins list read as doing nothing. */
+            if (window.CustomSelect) CustomSelect.refreshAll();
         }
     }
     /* The account FOLLOWS the platform. Writing the box while the select refused to move
        would leave the panel showing one platform and naming another one's login — and
        every button below acts on the pair, so a half-landing is worse than none. */
     if (landed && account !== undefined) {
-        var box = document.getElementById('cookie-account');
-        if (box) box.value = String(account || '');
+        setCookieAccountBox(account);
     }
     if (platform) {
         /* Naming a platform is never a toggle: the toolbar button opens and shuts
@@ -4247,6 +4261,9 @@ function closeCookieDialog() {
         return;
     }
     document.getElementById('cookie-dialog').classList.remove('open');
+    /* The candidate popup lives on <body>, outside the dialog it belongs to: closing the
+       panel over an open popup would leave a list of accounts floating on the canvas. */
+    hideCookieAccountCandidates();
 }
 
 function saveCookieConfig() {
@@ -4332,19 +4349,87 @@ async function deleteCookie(platform, account) {
     }
 }
 
+async function renameCookieAccount(platform, account) {
+    /* Give one saved login a new name. The box is prefilled with the name it carries now, so
+       what the user edits is the thing being renamed — and the answer is sent as the pair
+       (platform, account), never as "whatever is typed in the panel's box", because that box
+       is a different control on a different panel and may name another account by now.
+
+       The server moves the cookie file AND that account's own browser directory, or neither,
+       and says which of the two happened; a name that only half-moved would leave the account
+       pointing at a device that is still called the old one. */
+    var from = cookieAccountKey(account);
+    if (!platform || from === COOKIE_DEFAULT_ACCOUNT) {
+        showToast(I18n.t('cookies.renameDefaultRefused'));
+        return;
+    }
+    var answer = await showDialog({
+        message: I18n.t('dialog.cookieRename', { account: cookieAccountWord(from), platform: I18n.t('platform.' + platform) }),
+        input: { value: from, placeholder: I18n.t('cookies.renamePlaceholder') },
+        buttons: [
+            { label: I18n.t('dialog.confirm'), primary: true },
+            { label: I18n.t('dialog.cancel'), value: null },
+        ],
+    });
+    // An input dialog answers with the TYPED text (the confirm button carries no value of its
+    // own — that is the rule in AGENTS), so a dismissed dialog is the only null here.
+    if (!answer) return;
+    var to = cookieAccountKey(answer);
+    if (to === from) {
+        showToast(I18n.t('cookies.renameSame'));
+        return;
+    }
+    var result = await fetchJSON('/api/cookies/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: platform, account: from, to: to }),
+    });
+    var statusEl = document.getElementById('cookie-status');
+    if (result.ok) {
+        showToast(result.message || I18n.t('toast.cookieRenamed'));
+        if (statusEl) statusEl.textContent = result.message || '';
+        // The box follows the name: a panel still typing the old one would save a NEW login
+        // under the name that was just freed, which is the opposite of what was asked for.
+        setCookieAccountBox(result.account);
+        refreshCookieStatus();
+    } else if (statusEl) {
+        statusEl.textContent = result.error || I18n.t('cookie.failed').replace('{err}', '');
+        showToast(result.error || I18n.t('cookie.failed').replace('{err}', ''));
+    }
+}
+
 function cookieEntryUrl() {
     var el = document.getElementById('cookie-entry');
     return el ? String(el.value || '').trim() : '';
 }
 
+/* One account, one name, one rule (user, 2026-09-28: 「哪有同一个东西不同规范的」). The default
+   login is named ``default`` like any other account; the empty string is only its historical
+   spelling, and it is folded HERE, at the one place the box is read, so no other code path has
+   to know that the same account was once addressed by leaving a field blank. A name typed with
+   capitals is lowercased for the same reason: the jar's key on this OS cannot tell ``Work``
+   from ``work``, and two spellings of one login is what this refuses to keep. */
+var COOKIE_DEFAULT_ACCOUNT = 'default';
+
+function cookieAccountKey(text) {
+    var key = String(text || '').trim().toLowerCase();
+    return key === '' ? COOKIE_DEFAULT_ACCOUNT : key;
+}
+
 function cookieAccount() {
-    /* Which login the panel's actions speak for. Free text, lowercase-normalized —
-       the shape the backend validates before it ever reaches a filename, and blank
-       is the platform's default account (the only one that existed before
-       multi-account). Typing a NEW name here is how a second login is created:
-       生成/保存 then write that account's file, and every node can pick it. */
+    /* Which login the panel's actions speak for, as the server knows it. Free text, folded to
+       the canonical key: blank means the default account and arrives as ``default``, so what
+       the user sees and what the file is named are one thing said one way.
+
+       Typing a NEW name here is how a second login is created: 生成/保存 then write that
+       account's file, and every node can pick it. */
+    return cookieAccountKey(document.getElementById('cookie-account') ? document.getElementById('cookie-account').value : '');
+}
+
+function setCookieAccountBox(account) {
+    /* Write the box from an account key: a name as saved, the default as ``default``. */
     var el = document.getElementById('cookie-account');
-    return el ? String(el.value || '').trim().toLowerCase() : '';
+    if (el) el.value = cookieAccountKey(account);
 }
 
 /* The per-(platform, account) rows, cached from the one status read the panel makes.
@@ -4358,118 +4443,265 @@ function cookieRowsOf(platform) {
     });
 }
 
-function renderCookieAccounts() {
-    /* The candidates for the platform on screen, in the WORDS the user reads: a typed
-       name as typed, a generated one as 默认账号 / 默认账号2. Buttons, not a datalist —
-       a <datalist> prints its VALUE, so the blank account could only ever have appeared
-       as an empty row, and an empty row is not a candidate the user can choose to trust.
-       Nothing saved, nothing shown: an offer of 「默认账号」 for a file that does not
-       exist is how a node ends up naming a login this machine cannot produce. */
-    var host = document.getElementById('cookie-account-candidates');
+/* The account box's own candidate popup, appended to <body> like CustomSelect's two popups:
+   the Cookie panel is a fixed box that scrolls, so a popup living inside it would be clipped
+   by the panel's own overflow. ``_csSource`` is what makes ``CustomSelect.ownsPopup`` count a
+   click inside it as "still inside the dialog" — without that field an outside-click guard
+   would close the panel the moment the user picked a candidate. */
+var cookieCand = null;
+
+function cookieCandMenu() {
+    if (cookieCand && document.body.contains(cookieCand)) return cookieCand;
+    var input = document.getElementById('cookie-account');
+    if (!input) return null;
+    var menu = document.createElement('div');
+    menu.className = 'cand-menu';
+    menu._csSource = input;
+    document.body.appendChild(menu);
+    cookieCand = menu;
+    return menu;
+}
+
+function hideCookieAccountCandidates() {
+    if (cookieCand) cookieCand.classList.remove('open');
+}
+
+function renderCookieAccounts(show) {
+    /* The saved logins of the platform on screen, as the WORDS the user reads (a typed name
+       as typed, a generated one as 默认账号 / 默认账号2), offered as a dropdown on the account
+       box instead of a row of buttons permanently under it — the box is where the choice is
+       made, and a permanent row made the panel taller for a choice made once per login.
+
+       It stays a hand-built popup rather than the browser's own because the value it carries
+       is the empty string: a <datalist> prints the VALUE, so the default account could only
+       ever have appeared as a blank row, and a blank row is not a candidate anybody can
+       decide to trust. Nothing saved, nothing shown — offering 「默认账号」 for a file that
+       does not exist is how a node ends up naming a login this machine cannot produce. */
+    var menu = cookieCandMenu();
+    var input = document.getElementById('cookie-account');
     var select = document.getElementById('cookie-platform');
-    if (!host) return;
+    if (!menu || !input) return;
     var rows = cookieRowsOf(select ? select.value : '');
-    if (!rows.length) {
-        host.textContent = '';
+    var typed = String(input.value || '').toLowerCase();
+    var items = rows.filter(function (row) {
+        if (!typed) return true;
+        return cookieAccountLabel(row).toLowerCase().indexOf(typed) >= 0 || String(row.account || '').toLowerCase() === typed;
+    });
+    if (!show || !items.length) {
+        menu.classList.remove('open');
+        menu.textContent = '';
         return;
     }
-    host.innerHTML = rows
-        .map(function (row) {
-            return (
-                '<button type="button" class="cookie-candidate" onclick="pickCookieAccount(\'' +
-                attrJsArg(row.account) +
-                '\')" title="' +
-                escapeHtml(row.account || I18n.t('cookies.accountDefaultHint')) +
-                '">' +
-                escapeHtml(cookieAccountLabel(row)) +
-                '</button>'
-            );
-        })
-        .join('');
+    /* Listeners, not an inline onclick: the account name is user text, and putting it in an
+       attribute means spanning two escaping grammars for a value that is only ever read back
+       as a string. */
+    menu.textContent = '';
+    items.forEach(function (row) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'cand-option';
+        b.dataset.account = cookieAccountKey(row.account);
+        b.textContent = cookieAccountLabel(row);
+        b.title = row.account || I18n.t('cookies.accountDefaultHint');
+        b.addEventListener('mousedown', function (e) {
+            e.preventDefault();  // keep the focus on the box so the click lands before blur hides it
+        });
+        b.addEventListener('click', function () {
+            pickCookieAccount(b.dataset.account);
+        });
+        menu.appendChild(b);
+    });
+    var rect = input.getBoundingClientRect();
+    menu.classList.add('open');
+    menu.style.minWidth = rect.width + 'px';
+    var wanted = menu.scrollWidth || rect.width;
+    menu.style.width = Math.max(rect.width, wanted) + 'px';
+    var top = rect.bottom + 3;
+    if (top + menu.offsetHeight > window.innerHeight - 6) top = Math.max(6, rect.top - menu.offsetHeight - 3);
+    menu.style.left = Math.max(6, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+    menu.style.top = top + 'px';
 }
 
 function pickCookieAccount(account) {
     /* Fill the box, not just the label: the box IS the answer every action below sends,
        so a candidate that only repainted the line under it would save under a different
-       account than the one that was clicked. */
-    var el = document.getElementById('cookie-account');
-    if (el) el.value = String(account || '');
+       account than the one that was clicked. The box gets the account's NAME — ``default``
+       for the platform's own login, which is why picking it no longer looks like a click that
+       did nothing (reported 2026-09-28: the box went blank exactly when the right account was
+       chosen, because blank used to be that account's spelling). */
+    setCookieAccountBox(account);
+    hideCookieAccountCandidates();
     renderCookieAccountStatus();
     renderCookieManager();
+    showToast(
+        I18n.t('cookies.chosen', {
+            platform: I18n.t('platform.' + cookiePlatform()),
+            account: cookieAccountWord(String(account || '')),
+        })
+    );
+}
+
+function cookieRowCells(row) {
+    /* One row of the dock's table, built from the same classes 运行记录/导出产物 use, so a
+       dock that is a different shape in every panel is not one panel but five. Elements, not
+       a markup string: the account name is user text, and an inline
+       ``onclick="fn('…','…')"`` would put it across two escaping grammars to reach a function
+       that is right there anyway. */
+    var cells = [
+        { cls: 'runs-mgr-wf cookie-cell-platform', text: I18n.t('platform.' + row.platform) },
+        { cls: 'runs-mgr-wf cookie-cell-account', text: cookieAccountLabel(row) },
+        { cls: 'runs-mgr-id cookie-cell-entries', text: String(row.entries) },
+        { cls: 'runs-mgr-time cookie-cell-saved', text: row.saved_at || I18n.t('cookies.unknownWhen') },
+    ];
+    var td = document.createElement('td');
+    td.className = 'runs-mgr-ops';
+    var ops = [{ label: 'cookies.renameOne', cls: 'cookie-mini runs-mgr-btn', go: function () { renameCookieAccount(row.platform, row.account); } }];
+    if (cookieAccountKey(row.account) === COOKIE_DEFAULT_ACCOUNT) {
+        /* 「重命名」 is offered for the other accounts only, and the reason is the directory
+           layout rather than the name: 默认账号 owns no folder of its own — it IS
+           ``<root>/<platform>``, the directory every other account of that platform is nested
+           in. Naming it would move them with it. The row says that instead of offering a
+           button that cannot do the thing. */
+        ops[0].title = I18n.t('cookies.renameDefaultRefused');
+        ops[0].cls += ' disabled';
+        ops[0].disabled = true;
+        ops[0].go = function () {
+            showToast(I18n.t('cookies.renameDefaultRefused'));
+        };
+    }
+    ops.push({ label: 'cookies.deleteOne', cls: 'cookie-mini runs-mgr-btn del', go: function () { deleteCookie(row.platform, row.account); } });
+    ops.forEach(function (spec) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = spec.cls;
+        b.textContent = I18n.t(spec.label);
+        if (spec.title) b.title = spec.title;
+        if (spec.disabled) b.disabled = true;
+        b.addEventListener('click', spec.go);
+        td.appendChild(b);
+    });
+    return { cells: cells, ops: td };
 }
 
 function renderCookieManager() {
-    /* Every saved login on this machine, one CARD per (platform, account): what it holds,
-       when it was taken, and whether that account's own browser is holding the same
-       session. Metadata only — a cookie value is the login itself, and this is the one
-       surface a stranger could stand in front of on a cloud deploy.
+    /* Every saved login on this machine, one TABLE ROW per (platform, account): which platform,
+       which account, how many entries, when it was taken, and the two actions. Metadata only —
+       a cookie value is the login itself, and this is the one surface a stranger could stand
+       in front of on a cloud deploy.
 
-       Cards rather than a table on purpose: the panel is a narrow fixed box whose width is
-       audited against a laptop window (a horizontal scrollbar the user cannot switch off is
-       a failed layout), and seven columns of Chinese words do not fit in it. A row that
-       wraps is a row that still reads. */
-    var host = document.getElementById('cookie-manager');
+       It docks in the bottom slot with 控制台/运行记录/导出产物 (see ``toggleCookiesPanel``)
+       rather than living inside the Cookie dialog: the list is the read side of a whole
+       machine, and it used to push the paste box — the thing the user came to DO — off the
+       bottom of a panel that only scrolls because of it. */
+    var host = document.getElementById('cookies-mgr-body');
     if (!host) return;
+    host.textContent = '';
     if (!cookieRows.length) {
-        host.innerHTML = '<div class="cookie-row-empty">' + escapeHtml(I18n.t('cookies.noneSaved')) + '</div>';
+        return void cookieListNote(host, 'cookies.noneSaved');
+    }
+    var table = document.createElement('table');
+    table.className = 'data-preview-table runs-mgr-table';
+    var head = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    ['cookies.colPlatform', 'cookies.colAccount', 'cookies.colEntries', 'cookies.colSavedAt', 'cookies.colActions'].forEach(
+        function (key) {
+            var th = document.createElement('th');
+            th.textContent = I18n.t(key);
+            headRow.appendChild(th);
+        }
+    );
+    head.appendChild(headRow);
+    table.appendChild(head);
+    var body = document.createElement('tbody');
+    cookieRows.forEach(function (row) {
+        var built = cookieRowCells(row);
+        var tr = document.createElement('tr');
+        /* The row carries its own account key: 「this row's delete/rename means THIS login」 has
+           to be readable off the row it was clicked on, not inferred from what the dialog box
+           happens to hold, and a test that presses the button must be able to say which row it
+           pressed. */
+        tr.className = 'cookie-row';
+        tr.dataset.account = cookieAccountKey(row.account);
+        tr.dataset.platform = String(row.platform || '');
+        built.cells.forEach(function (cell) {
+            var td = document.createElement('td');
+            td.className = cell.cls;
+            td.textContent = cell.text;
+            tr.appendChild(td);
+        });
+        tr.appendChild(built.ops);
+        body.appendChild(tr);
+    });
+    table.appendChild(body);
+    host.appendChild(table);
+}
+
+function cookieListNote(host, key) {
+    /* The empty answer and the failed answer are two different sentences and both are said
+       the same way: one element, one textContent, no markup assembled from a response. */
+    var note = document.createElement('div');
+    note.className = 'cookie-row-empty';
+    note.textContent = I18n.t(key);
+    host.appendChild(note);
+    return note;
+}
+
+/* ─── Saved logins panel (the bottom dock) ────────────────────── */
+function toggleCookiesPanel() {
+    var panel = document.getElementById('cookies-panel');
+    if (!panel) return;
+    if (panel.classList.contains('open')) {
+        cookiesManager.close();
         return;
     }
-    host.innerHTML = cookieRows
-        .map(function (row) {
-            var meta = I18n.t('cookies.rowMeta', { n: row.entries, when: row.saved_at || I18n.t('cookies.unknownWhen') });
-            if (row.session_only) {
-                meta += ' · ' + I18n.t('cookies.rowSessionOnly', { n: row.session_only });
-            }
-            var args = "'" + attrJsArg(row.platform) + "', '" + attrJsArg(row.account) + "'";
-            return (
-                '<div class="cookie-row">' +
-                '<div class="cookie-row-head">' +
-                escapeHtml(I18n.t('platform.' + row.platform) + ' · ' + cookieAccountLabel(row)) +
-                '</div>' +
-                '<div class="cookie-row-meta">' +
-                escapeHtml(meta) +
-                '</div>' +
-                '<div class="cookie-row-state">' +
-                escapeHtml(cookieProfileWord(row)) +
-                '</div>' +
-                '<div class="cookie-row-actions">' +
-                '<button type="button" class="cookie-mini" onclick="useCookieAccount(' +
-                args +
-                ')">' +
-                escapeHtml(I18n.t('cookies.useInPanel')) +
-                '</button>' +
-                '<button type="button" class="cookie-mini" onclick="deleteCookie(' +
-                args +
-                ')">' +
-                escapeHtml(I18n.t('cookies.deleteOne')) +
-                '</button>' +
-                '</div></div>'
-            );
-        })
-        .join('');
+    closeDockedPanels('cookies-panel');
+    panel.classList.add('open');
+    cookiesManager.refresh();
 }
 
-function useCookieAccount(platform, account) {
-    /* Point the panel at one saved login instead of making the user retype it: the
-       platform select and the account box are the two halves every action reads, so a row
-       that only filled the box would delete a DIFFERENT login than the one clicked.
+var cookiesManager = {
+    panel() {
+        return document.getElementById('cookies-panel');
+    },
 
-       Both halves move together or neither does — the same rule the pre-run landing
-       keeps, because a box naming `work` under a platform that never asked for it is a
-       delete pointed at somebody else's session. */
-    var select = document.getElementById('cookie-platform');
-    var known = false;
-    if (select) {
-        known = Array.prototype.some.call(select.options || [], function (option) {
-            return option.value === platform;
-        });
-        if (known) select.value = platform;
-    }
-    if (!known) return;
-    var box = document.getElementById('cookie-account');
-    if (box) box.value = String(account || '');
-    renderCookieGuide();
-}
+    close() {
+        var panel = this.panel();
+        if (!panel) return;
+        panel.classList.remove('open');
+        /* The dock resize handle leaves an inline height behind, and an inline height
+           overrides the CSS ``height: 0`` — without this, Close looks dead. */
+        panel.style.height = '';
+    },
+
+    refresh() {
+        /* Ask the server, then paint: the dialog's own read is a different moment (it fires
+           when a panel opens), and a list of what is on disk that answers from a cache the
+           last paste left behind would be a list of what used to be on disk. */
+        var self = this;
+        return fetchJSON('/api/cookies/status')
+            .then(function (result) {
+                if (!result || !result.ok) throw new Error('status failed');
+                cookieRows = result.rows || [];
+                renderCookieManager();
+            })
+            .catch(function () {
+                var body = document.getElementById('cookies-mgr-body');
+                if (body) {
+                    body.textContent = '';
+                    cookieListNote(body, 'cookies.listFailed');
+                }
+            });
+    },
+
+    onLanguageChange() {
+        /* Every word in this table is built by JS from a catalogue key — the platform name,
+           the account's word, 「时间未知」, the two buttons — so ``I18n.apply()`` never reaches
+           any of it, and the panel kept speaking the old language after a switch. Repainted
+           from the rows already in hand: a language change is not new information about the
+           disk, and asking the server for it would make the switch cost a directory listing. */
+        renderCookieManager();
+    },
+};
 
 function cookiePlatform() {
     var el = document.getElementById('cookie-platform');
@@ -5376,7 +5608,7 @@ workflow.validate = function () {
    leaves it visually expanded — two panels then overlap in the same slot. All
    three toggles live in this file, so the helper is called directly rather than
    reached for through `window`. */
-var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel'];
+var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel'];
 
 function closeDockedPanels(exceptId) {
     DOCKED_PANELS.forEach(function (id) {

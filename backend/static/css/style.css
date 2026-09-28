@@ -2455,7 +2455,8 @@ input:-webkit-autofill:focus {
 #runs-panel,
 #exports-panel,
 #dataset-panel,
-#workflows-panel {
+#workflows-panel,
+#cookies-panel {
   position: fixed;
   bottom: var(--barH);
   left: 0;
@@ -2472,7 +2473,8 @@ input:-webkit-autofill:focus {
 #runs-panel.open,
 #exports-panel.open,
 #dataset-panel.open,
-#workflows-panel.open {
+#workflows-panel.open,
+#cookies-panel.open {
   height: 240px;
 }
 #runs-panel.open ~ #status-bar {
@@ -2481,7 +2483,8 @@ input:-webkit-autofill:focus {
 #runs-resize-handle,
 #exports-resize-handle,
 #dataset-resize-handle,
-#workflows-resize-handle {
+#workflows-resize-handle,
+#cookies-resize-handle {
   position: absolute;
   top: 0;
   left: 0;
@@ -2498,13 +2501,16 @@ input:-webkit-autofill:focus {
 #dataset-resize-handle:hover,
 #dataset-resize-handle.active,
 #workflows-resize-handle:hover,
-#workflows-resize-handle.active {
+#workflows-resize-handle.active,
+#cookies-resize-handle:hover,
+#cookies-resize-handle.active {
   background: var(--line);
 }
 #runs-mgr-body,
 #exports-mgr-body,
 #dataset-mgr-body,
-#workflows-mgr-body {
+#workflows-mgr-body,
+#cookies-mgr-body {
   flex: 1;
   overflow: auto;
   padding: 0 8px 8px;
@@ -2513,7 +2519,8 @@ input:-webkit-autofill:focus {
   #runs-panel.open,
   #exports-panel.open,
   #dataset-panel.open,
-  #workflows-panel.open {
+  #workflows-panel.open,
+  #cookies-panel.open {
     height: 140px;
   }
 }
@@ -2793,34 +2800,18 @@ html[data-cloud='1'] #btn-headless,
 html[data-cloud='1'] .ai-only-ollama {
   display: none !important;
 }
-/* The account candidates: real buttons, because a <datalist> prints its value and the
-   default account's value is the empty string — it could only ever have looked like a
-   blank row. They wrap rather than overflow: this panel's width is audited against a
-   laptop window, and a scrollbar the user cannot switch off is a failed layout (#175). */
-.cookie-candidates {
+/* The account candidates are CustomSelect's own popup shape (``.cand-menu`` / ``.cand-option``
+   in custom-select.js), not a rule here: a list permanently under the box made this panel
+   taller for a choice made once per login, and a popup that lives inside a scrolling dialog
+   gets clipped by it. What stays is the card list. */
+/* One card per saved login: metadata about eight platforms and their accounts is a list of
+   wrapping lines, not a table with columns — a row that wraps is a row that still reads. */
+.cookie-manager {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
 }
-.cookie-candidate {
-  font-size: 11px;
-  line-height: 1.4;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius, 6px);
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-.cookie-candidate:hover {
-  color: var(--text);
-  border-color: var(--accent);
-}
-/* One card per saved login. Same reason as above: metadata about eight platforms and
-   their accounts is a list of wrapping lines, not a table with columns. */
 .cookie-row {
   border-top: 1px solid var(--border);
   padding: 6px 0;
@@ -2832,8 +2823,7 @@ html[data-cloud='1'] .ai-only-ollama {
   color: var(--text);
   overflow-wrap: anywhere;
 }
-.cookie-row-meta,
-.cookie-row-state {
+.cookie-row-meta {
   overflow-wrap: anywhere;
 }
 .cookie-row-actions {

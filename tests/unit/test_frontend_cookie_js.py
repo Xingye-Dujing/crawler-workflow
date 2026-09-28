@@ -45,6 +45,15 @@ def _body(report, url):
     raise AssertionError(f'{url} was never called in {report["calls"]}')
 
 
+def _all_text(report):
+    """Every string the harness brought back, in one haystack.
+
+    Used where the claim is 「this sentence is nowhere on the panel」: reading only the cell it
+    used to be written into would miss it arriving by another route.
+    """
+    return json.dumps(report, ensure_ascii=False)
+
+
 class TestGuide:
     def test_the_selected_platforms_steps_are_rendered_in_order(self, panel):
         report = panel['guideBilibiliFirstCall']
@@ -84,7 +93,7 @@ class TestGenerate:
             'platform': 'bilibili',
             'wait_seconds': 45,
             'url': 'https://www.bilibili.com/video/BV1xx411c7mD',
-            'account': '',
+            'account': 'default',
         }
 
     def test_the_typed_account_is_sent_with_the_login_request(self, panel):
@@ -161,14 +170,16 @@ class TestDeleteCookie:
         """
         dialog = panel['deleteCancelled']['dialog']
         assert dialog['values'] == ['delete', 'null'], dialog
-        assert dialog['message'] == 'dialog.cookieDelete - platform.bilibili', dialog
+        # The confirmation names the login it will remove — platform AND account — because
+        # one platform now holds several sessions and 「删除知乎的 Cookie」 would not say which.
+        assert dialog['message'] == 'dialog.cookieDelete - platform.bilibili@default', dialog
         assert '{' not in dialog['message'], 'a slot reached the screen unfilled'
 
     def test_confirming_deletes_the_platform_that_is_selected(self, panel):
         requests = panel['deleteConfirmed']['requests']
         posted = [item for item in requests if item['url'] == '/api/cookies/delete']
         assert len(posted) == 1, requests
-        assert json.loads(posted[0]['body']) == {'platform': 'bilibili', 'account': ''}
+        assert json.loads(posted[0]['body']) == {'platform': 'bilibili', 'account': 'default'}
 
     def test_a_deletion_refreshes_the_status_line_it_just_changed(self, panel):
         """The panel shows which platforms hold a cookie; after a delete that answer
@@ -230,27 +241,42 @@ class TestSavePlantsItsOwnProfile:
         assert 'cookie.refreshHint' not in current, current
         assert current == ['PURPOSE', 'STEP-1'], current
 
-    def test_the_panel_explains_the_profile_without_advertising_a_button(self):
-        """The sentence under the paste box explains what a profile IS, in the page rather
-        than in a dialog — and it must no longer tell the user to press anything, because
-        the button it described is gone.
+    def test_the_profile_explainer_is_gone_and_the_benefit_lives_on_the_switch(self):
+        """What a profile IS stopped being panel copy (user, 2026-09-28).
+
+        ``#cookie-explain`` described how the tool wires an account to a directory — our
+        implementation history, not a decision anybody makes at that box. The place a reason
+        belongs is next to the switch that turns the feature on, so ``set.useProfileInline``
+        now says what opening it buys, in both languages, and the deleted paragraph's key is
+        gone rather than kept in case something wants it.
         """
         html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
-        assert 'refreshProfileCookie' not in html, 'the deleted button is wired back in'
-        note = html.index('data-i18n="cookies.refreshExplain"')
-        assert note < html.index('id="cookie-job-actions"'), 'the note moved off the paste area it explains'
         app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        assert app.count("'cookies.refreshExplain'") == 2, 'both catalogues must carry the sentence'
+        assert 'refreshProfileCookie' not in html, 'the deleted button is wired back in'
+        # Asked for the ELEMENT, not the word: the comment that records why it went away
+        # names it, and a guard that fires on its own eulogy is a guard nobody can read.
+        assert 'id="cookie-explain"' not in html, 'the explainer came back above the paste box'
+        assert 'data-i18n="cookies.refreshExplain"' not in html, 'the explainer is back under another id'
+        assert "'cookies.refreshExplain'" not in app, 'a key whose only user is gone'
+        assert app.count("'set.useProfileInline'") == 2, 'both catalogues carry the switch line'
+        # The line says what opening the switch BUYS, which is the one thing worth writing
+        # next to a checkbox; a bare restatement of the label teaches nobody anything.
+        for benefit in ('weibo', 'xiaohongshu', 'douyin'):
+            assert benefit in app, f'the switch line stopped naming the platforms it helps: {benefit}'
+        assert "'advice.title': 'What each platform prefers'" in app, 'the en heading carries the note again'
+        assert '全部读自采集矩阵' not in app, 'the zh heading tells the user where we read it from'
         for dead in ("'cookies.refresh':", "'cookie.refreshWorking':", "'cookie.refreshed':", "'dialog.cookieRefresh'"):
             assert dead not in app, f'the button is gone but its catalogue entry ({dead}) stayed'
 
 
 class TestAccountCandidatesAndManager:
-    """The account box, its candidates, and the list of what this machine holds.
+    """The account box, its candidate dropdown, and the docked table of saved logins.
 
-    One platform carries several logins, so the panel has to say WHICH ones exist in the
-    words a user reads, answer for the account currently typed without asking the server
-    again per keystroke, and delete the login a row names rather than the one last typed.
+    One platform carries several logins, so the panel has to say WHICH ones exist, answer for
+    the account currently typed without asking the server again per keystroke, and rename or
+    delete the login a row NAMES rather than the one the box last held. Every account has a
+    name, the platform's own included (user, 2026-09-28: 「哪有同一个东西不同规范的」), so the
+    box shows ``default`` instead of going blank.
     """
 
     def test_a_candidate_is_said_in_the_users_words(self, panel):
@@ -260,13 +286,16 @@ class TestAccountCandidatesAndManager:
             'cookies.accountDefaultNumbered - 2',
             'work',
         ], cases
-        # The label is wording; the ACCOUNT is the argument. A chip that carried its own
-        # label would save under 「默认账号」 — a name the backend would reject as a path.
-        assert [case['onclick'] for case in cases] == [
-            "pickCookieAccount('')",
-            "pickCookieAccount('default2')",
-            "pickCookieAccount('work')",
-        ], cases
+        # The label is wording; the ACCOUNT is what a pick must carry — and the default one
+        # carries a name now, not an empty string.
+        assert [case['account'] for case in cases] == ['default', 'default2', 'work'], cases
+        assert all(case['open'] is True for case in cases), 'the popup was built but never opened'
+
+    def test_typing_narrows_the_offers_to_what_is_left(self, panel):
+        """One box, two jobs: type a name nobody has and the list empties (the next save
+        BORN that login); type a name that exists and it is offered again."""
+        assert panel['ghostCandidates'] == [], panel['ghostCandidates']
+        assert [case['account'] for case in panel['workCandidates']] == ['work'], panel['workCandidates']
 
     def test_the_summary_never_prints_an_empty_account_name(self, panel):
         """Joined raw, the default account came out as a hole in the brackets."""
@@ -282,38 +311,162 @@ class TestAccountCandidatesAndManager:
         assert 'cookies.accountStatusSaved' not in ghost, ghost
         # Typed in mixed case and matched anyway: the box is normalized, the file is not.
         work = panel['lineForWork']
-        assert 'work' in work and 'cookies.profileUnused' in work, work
-        assert 'cookies.accountStatusSessionOnly - 2' in work, work
+        assert 'work' in work and 'cookies.accountStatusSaved - 2' in work, work
+
+    def test_the_saved_logins_say_nothing_about_browsers_or_window_closing(self, panel):
+        """The two sentences were deleted, and this is the pin that keeps them out.
+
+        An account, its cookie file and its browser directory are one thing in this tool, and
+        since #148 every crawl runs headless behind a desktop fingerprint — so 「它的浏览器里
+        就是这份 Cookie」 and 「其中 N 条关窗口即失效」 described states the user neither
+        chooses nor can act on. The row's own cells are what would re-appear if the copy came
+        back, so they are read, not assumed away.
+        """
+        rows = panel['managerRows']
+        assert len(rows) == 3, rows
+        for row in rows:
+            assert row['hasStateCell'] is False, row
+            assert 'profile' not in row['account'].lower(), row
+            for button in row['buttons']:
+                assert 'profile' not in button['label'] and '失效' not in button['label'], row
+        for key in (
+            'cookies.profileCurrent',
+            'cookies.profileStale',
+            'cookies.profileNoLogin',
+            'cookies.profileUnused',
+            'cookies.profileOff',
+            'cookies.rowSessionOnly',
+            'cookies.accountStatusSessionOnly',
+        ):
+            assert key not in _all_text(panel), f'{key} is still being printed somewhere'
+
+    def test_the_deleted_keys_left_both_catalogues(self):
+        """A sentence nobody renders must not stay in the word list either — a dead key is
+        how a removed feature gets resurrected by the next person who finds it."""
+        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        for key in (
+            "'cookies.profileOff'",
+            "'cookies.profileUnused'",
+            "'cookies.profileNoLogin'",
+            "'cookies.profileStale'",
+            "'cookies.profileCurrent'",
+            "'cookies.rowSessionOnly'",
+            "'cookies.accountStatusSessionOnly'",
+        ):
+            assert key not in app, key
 
     def test_the_live_line_cost_no_second_request(self, panel):
         """Three different accounts were answered from the one status read."""
         assert panel['rowsAskedAgain'] == 1, panel['rowsAskedAgain']
 
-    def test_a_candidate_fills_the_box_every_action_sends(self, panel):
-        case = panel['afterPick']
-        assert case['box'] == 'default2', case
-        assert 'cookies.accountStatusSaved - 4' in case['line'], case
-        # The card list says what only the server knows: this profile holds an OLDER
-        # cookie than the file, which is the one state no user can see from outside.
-        assert case['profileWord'] is True, case
+    def test_a_candidate_click_fills_the_box_every_action_sends(self, panel):
+        """Reached through the button's own listener, not by calling the function.
+
+        The candidate is a real element now; a popup whose buttons never got attached would
+        still answer `pickCookieAccount('work')` when a test calls it by hand, and the user
+        would see nothing happen.
+        """
+        assert panel['workChipSeen'] is True, panel
+        case = panel['afterCandidateClick']
+        assert case['box'] == 'work', case
+        assert case['popupClosed'] is True, f'the popup stayed open over the panel: {case}'
+        picked = panel['afterPick']
+        assert picked['box'] == 'default2' and 'cookies.accountStatusSaved - 4' in picked['line'], picked
+
+    def test_the_default_login_is_offered_by_name_and_picks_by_name(self, panel):
+        """「它也要填值」 — the default account is a login like any other, so its candidate carries
+        ``default`` and clicking it lands that word in the box instead of a blank.
+
+        The pick is reached through the chip's own listener: a popup whose buttons were never
+        attached would still answer a hand-called ``pickCookieAccount('default')`` while the
+        user saw the box stay empty.
+        """
+        assert panel['defaultChipSeen'] is True, panel
+        case = panel['afterDefaultPick']
+        assert case['box'] == 'default', case
+        assert case['toast'] == ['cookies.chosen - platform.zhihu | cookies.accountDefault'], case
+
+    def test_a_named_row_renames_the_login_it_was_clicked_on(self, panel):
+        """A rename is the one row action that can point at the wrong session (a delete that
+        reused the box would just destroy a different login), so the name the row was BUILT
+        with is what is sent — not whatever the box happens to hold — and the answer says so.
+
+        The box follows the new name: leaving it on the old one would make the next action
+        address a login that no longer exists."""
+        case = panel['renamed']
+        assert case['posted'] == [{'platform': 'zhihu', 'account': 'work', 'to': 'office'}], case
+        assert case['box'] == 'office', case
+        assert case['toasts'] == ['RENAMED'], case
+
+    def test_the_default_row_shows_a_rename_that_refuses_in_place(self, panel):
+        """The default row does not hide its rename — it shows 「重命名」 dead, with the reason as
+        the title and again when pressed.
+
+        A silent absence is how a disabled control reads as broken; this is the same lesson the
+        「打开」 button taught (the refusal must be spoken), applied to a row that legitimately
+        cannot be renamed because its browser directory IS the platform's.
+        """
+        rename = panel['rowButtons']['defaultRow'][0]
+        assert rename['label'] == 'cookies.renameOne', rename
+        assert rename['disabled'] is True, rename
+        assert rename['title'] == 'cookies.renameDefaultRefused', rename
+        # Pressing it is refused before anything goes to the server.
+        refused = panel['renameDefault']
+        assert refused['posted'] == 0, refused
+        assert refused['toasts'] == ['cookies.renameDefaultRefused'], refused
+
+    def test_typing_the_same_name_back_sends_no_round_trip(self, panel):
+        """Renaming to the name it already has moves nothing, so the panel says so locally
+        rather than POSTing a success the disk never earned."""
+        same = panel['renameSame']
+        assert same['posted'] == 0, same
+        assert same['toasts'] == ['cookies.renameSame'], same
+
+    def test_the_list_docks_in_the_bottom_slot_with_the_other_five(self, panel):
+        """One bottom slot, and opening it has to shut the others (the user asked for it
+        互斥 with 控制台/历史记录), and it reads the server rather than the dialog's cache."""
+        case = panel['docked']
+        assert case['cookiesOpen'] is True, case
+        assert case['othersLeftOpen'] == [], f'two docked panels opened at once: {case}'
+        assert case['asked'] == 1, case
+        assert case['rows'] == 3, case
+        assert panel['dockedAfterClose'] == {'cookiesOpen': False, 'height': ''}, panel['dockedAfterClose']
+
+    def test_switching_language_rewrites_the_dock_without_a_second_request(self, panel):
+        """#30: the dock is built entirely by JS from catalogue keys, so ``I18n.apply()`` never
+        reached it — a switch left English words on a panel that had just turned Chinese.
+
+        The harness tags every word with the language it was read in (the shipped ``t`` answers
+        with a bare, language-blind key, so a repaint would otherwise be invisible here); the
+        assertion is that the tags moved AND that no second ``/api/cookies/status`` was bought —
+        a language change is not new information about the disk.
+        """
+        case = panel['languageRepaint']
+        assert case['before']['platform'].endswith('@en'), case
+        assert case['after']['platform'].endswith('@zh'), 'the platform word was not re-read'
+        assert all(label.endswith('@zh') for label in case['after']['buttons']), case['after']['buttons']
+        assert case['askedDuringSwitch'] == 0, case
 
     def test_a_row_deletes_its_own_login_not_the_boxes(self, panel):
-        """The box said `default2` when the `work` card was clicked.
+        """The box said `default2` when the `work` card's button was clicked.
 
         A per-row delete that reused the panel's own selection would remove a login the
         user never pointed at, which on this panel is the difference between tidying up
         and losing a session.
         """
+        assert panel['workCardFound'] is True, 'the card was not built, so nothing below was measured'
         case = panel['rowDelete']
         assert case['posted'] == [{'platform': 'zhihu', 'account': 'work'}], case
         assert case['boxStill'] == 'default2', case
 
     def test_nothing_saved_offers_nothing(self, panel):
         """An empty candidate area is the honest answer when no file exists; a 「默认账号」
-        chip for a missing file is how a node ends up naming a login that is not here."""
+        chip for a missing file is how a node ends up naming a login that is not here.
+        The docked table shows a single note row, not a header over zero rows."""
         case = panel['nothingSaved']
         assert case['chips'] == [], case
-        assert 'cookies.noneSaved' in case['manager'], case
+        assert case['manager'] == [], case
+        assert case['note'] == ['cookies.noneSaved'], case
 
     def test_being_sent_here_lands_on_the_broken_login(self, panel):
         assert panel['openedOnAccount'] == {'platform': 'weibo', 'box': 'work'}, panel['openedOnAccount']
@@ -330,25 +483,25 @@ class TestAccountCandidatesAndManager:
 
     def test_the_box_repaints_the_line_and_the_hosts_are_wired(self):
         """The wiring is half the feature: an unwired handler is a panel that answers the
-        last fetch instead of the last keystroke."""
-        html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
-        account_input = html[html.index('id="cookie-account"') : html.index('id="cookie-account-candidates"')]
-        assert 'oninput="renderCookieAccountStatus()"' in account_input, account_input
-        for host in ('id="cookie-account-candidates"', 'id="cookie-account-status"', 'id="cookie-manager"'):
-            assert host in html, host
-        # The datalist is gone rather than left empty: two candidate mechanisms, one of
-        # which can only ever show the default account as a blank row, is two answers.
-        assert 'cookie-account-options' not in html, 'the datalist came back beside the chips'
+        last fetch instead of the last keystroke.
 
-    def test_the_profile_word_asks_the_marker_not_the_directory(self, panel):
-        """A named account's device lives one level inside the platform's directory, so the
-        default account has a path the moment any sibling was opened. Reading ``exists``
-        first would tell the user a device had been built for a login that never had one.
+        The candidates open on focus, click and typing — and close on blur — because the
+        popup lives on ``<body>``: a list permanently under the field is what this replaced.
         """
-        words = panel['profileWords']
-        assert words['off'] == 'cookies.profileOff', words
-        assert words['neverOpened'] == 'cookies.profileUnused', words
-        assert words['existsButUnused'] == 'cookies.profileUnused', words
-        assert words['openedNoLogin'] == 'cookies.profileNoLogin', words
-        assert words['stale'] == 'cookies.profileStale', words
-        assert words['current'] == 'cookies.profileCurrent', words
+        html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
+        account_input = html[html.index('id="cookie-account"') : html.index('/>', html.index('id="cookie-account"'))]
+        assert 'oninput="renderCookieAccountStatus(); renderCookieAccounts(true)"' in account_input, account_input
+        for handler in (
+            'onfocus="renderCookieAccounts(true)"',
+            'onclick="renderCookieAccounts(true)"',
+            'onblur="hideCookieAccountCandidates()"',
+        ):
+            assert handler in account_input, handler
+        assert 'id="cookie-account-status"' in html and 'id="cookies-mgr-body"' in html, (
+            'a host the panel writes to is gone'
+        )
+        # The flat chip row and the in-dialog list are deleted, not merely unused: two
+        # candidate mechanisms is two answers to one question.
+        for gone in ('id="cookie-account-candidates"', 'id="cookie-manager"', 'cookies.refreshExplain'):
+            assert gone not in html, f'{gone} came back'
+        assert 'cookie-account-options' not in html, 'the datalist came back beside the dropdown'

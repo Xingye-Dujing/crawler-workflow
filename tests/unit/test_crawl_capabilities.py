@@ -546,11 +546,13 @@ class TestPayloadShape:
                         continue
                     if field.key == 'account':
                         # Its real options are per-machine (they come from the cookie
-                        # files at payload time), so the STATIC matrix carries exactly
-                        # one choice: the empty default — '' is not a mistake here but
-                        # "the platform's own login", and the label is a cookies.* panel
-                        # word because it names the cookie subsystem.
-                        assert field.options == (('', 'cookies.accountDefault'),)
+                        # files at payload time), so the STATIC matrix carries exactly one
+                        # choice: the platform's own login, named ``default`` like any other
+                        # account. It is not '' any more — one account with two spellings is
+                        # what the uniform naming rule removed — and the label stays a
+                        # cookies.* panel word because it names the cookie subsystem.
+                        assert field.options == (('default', 'cookies.accountDefault'),)
+                        assert field.default == 'default', 'a new node logs in as the platform itself'
                         continue
                     assert field.options, f'{field.key} offers nothing to pick'
                     for value, label in field.options:

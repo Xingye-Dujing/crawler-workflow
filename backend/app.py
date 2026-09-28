@@ -5191,6 +5191,92 @@ def save_cookies():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@app.route('/api/cookies/rename', methods=['POST'])
+def rename_cookie_account():
+    """Give a saved login a new label — its cookie file AND that account's browser directory.
+
+    Each refusal names what it refused, because the alternative is a panel that says
+    「已重命名」 about a session still filed under the old name. The blank account is refused
+    structurally: 默认账号 owns no directory of its own (it IS the platform's), so naming it
+    would move the parent of every other account of that platform — and since the user is told
+    an account and its profile are one thing, the two halves move together or nothing moves.
+    """
+    body = _json_body()
+    if body is None:
+        return _bad_body()
+    platform = str(body.get('platform') or '').strip()
+    # Folded through the manager's own key, so 「the default account」 has ONE meaning here:
+    # a blank from an old caller and the name ``default`` are the same login, and the checks
+    # below cannot be stepped around by spelling it the other way.
+    account = CookieManager.key(body.get('account'))
+    to = CookieManager.key(body.get('to'))
+    if not CookieManager.is_supported(platform):
+        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+    if body.get('to') is None or str(body.get('to')).strip() == '':
+        return jsonify({'ok': False, 'error': t('api.cookieRenameEmptyTarget')}), 400
+    if not CookieManager.is_account(account) or not CookieManager.is_account(to):
+        return jsonify({'ok': False, 'error': t('api.cookieRenameBadName')}), 400
+    if account == CookieManager.DEFAULT_ACCOUNT:
+        return jsonify({'ok': False, 'error': t('api.cookieRenameDefault')}), 400
+    if to == CookieManager.DEFAULT_ACCOUNT:
+        # Renaming ONTO the default name would aim a named account at the platform's own
+        # file — the same topology problem as renaming the default away from it, seen from
+        # the other side, and it must be said rather than quietly overwriting a login.
+        return jsonify({'ok': False, 'error': t('api.cookieRenameTaken')}), 409
+    if account == to:
+        return jsonify({'ok': False, 'error': t('api.cookieRenameSameName')}), 400
+    manager = CookieManager(Config.COOKIE_DIR)
+    if not manager.exists(platform, account):
+        return jsonify({'ok': False, 'error': t('api.cookieRenameNoSource')}), 404
+    try:
+        # The device first: a profile that will not move (a browser is inside it, or the name
+        # is taken) must stop the file too — otherwise the new label is born pointing at a
+        # directory that is still called the old one, and the next crawl opens a stranger.
+        profile_moved = browser_profiles.rename_account(platform, account, to)
+        manager.rename(platform, account, to)
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': _rename_refusal(e)}), 409
+    except OSError as e:
+        return jsonify({'ok': False, 'error': t('api.cookieRenameFailed', err=str(e)[:160])}), 500
+    # A rename changes which file answers 「does this account have a login」, so a cached
+    # verdict about the old name is now a statement about a file that is not there.
+    cookie_preflight.invalidate(platform)
+    return jsonify(
+        {
+            'ok': True,
+            'platform': platform,
+            'account': to,
+            'profile_moved': profile_moved,
+            # Which of the two sentences, by what actually moved: an account whose browser was
+            # never opened has no directory to take along, and 「一起搬过去了」 would be a claim
+            # about a device that does not exist.
+            'message': t(
+                'cookie.renamed' if profile_moved else 'cookie.renamedFileOnly',
+                platform=platform,
+                old=manager.label_of(account),
+                new=manager.label_of(to),
+            ),
+        }
+    )
+
+
+def _rename_refusal(error: ValueError) -> str:
+    """Say which refusal happened, because the three want three different actions.
+
+    Waiting for a crawl, choosing another name and finding the file gone are not one
+    「失败」 — and the ValueError text is this module's own (see ``CookieManager.rename`` and
+    ``browser_profiles.rename_account``), so matching it is matching code, not a site.
+    """
+    text = str(error)
+    if 'in use' in text:
+        return t('api.cookieRenameBusy')
+    if 'already exists' in text:
+        return t('api.cookieRenameTaken')
+    if 'Invalid account' in text or 'cannot be renamed' in text:
+        return t('api.cookieRenameBadName')
+    return t('api.cookieRenameFailed', err=text[:160])
+
+
 @app.route('/api/cookies/delete', methods=['POST'])
 def delete_cookies():
     """Throw away the saved cookie *file* for one platform.
@@ -5725,17 +5811,21 @@ def get_capabilities():
         # Creation order, not alphabetical: the list the node picks from is "which logins does this
         # machine have", and a user who added work-then-home expects home to still be second.
         accounts = cookie_manager.accounts_in_order(cap.get('platform') or '')
-        # One order for both the list and the preselection: creation order, from the same
-        # listing the panel reads. The blank row IS the default account, so it sits where
-        # that login was born rather than at the top of the list — a select whose first
-        # row is not the account a new node picks is a select that lies about its default.
-        # A name with no file is not offered at all: it names a login this machine cannot
-        # produce, and validation refuses a node that still asks for it (#28).
-        options = [{'value': account, 'labelKey': account or 'cookies.accountDefault'} for account in accounts]
+        # Creation order, not alphabetical: the list the node picks from is "which logins does this
+        # machine have", and a user who added work-then-home expects home to still be second.
+        # Every entry is a NAME now — the default account included — and the words for the ones
+        # this program named (default, default2) come from the catalogue while a typed name is
+        # shown as typed, which is the same rule the cookie rows travel by. A name with no
+        # file is not offered at all: it names a login this machine cannot produce, and
+        # validation refuses a node that still asks for it (#28).
+        options = []
+        for account in accounts:
+            label_key, _args = CookieManager.account_label_key(account)
+            options.append({'value': CookieManager.key(account), 'labelKey': label_key or account})
         if not options:
             # Nothing is saved anywhere: the row stays, because a structurally empty select
             # cannot show the account the user is about to save, and it is that account.
-            options = [{'value': '', 'labelKey': 'cookies.accountDefault'}]
+            options = [{'value': CookieManager.DEFAULT_ACCOUNT, 'labelKey': 'cookies.accountDefault'}]
         for mode in cap.get('modes', []):
             for field in mode.get('fields', []):
                 if field.get('key') == 'account':
@@ -5743,7 +5833,10 @@ def get_capabilities():
                     # A node added now logs in as the first login this machine has, rather
                     # than as "not chosen" — which used to mean the default file, existing
                     # or not, and then a crawl that silently hit a wall it could not open.
-                    field['default'] = accounts[0] if accounts else ''
+                    # With nothing saved the answer is still a name: the default account is
+                    # the account that save would create, so a node never carries a blank
+                    # where a later comparison has to guess what it meant.
+                    field['default'] = CookieManager.key(accounts[0]) if accounts else CookieManager.DEFAULT_ACCOUNT
     return jsonify(payload)
 
 

@@ -294,6 +294,30 @@ export function makeEl(tag = 'div', id = '') {
         child.parentNode = null;
         return child;
     };
+    /* `contains` is the relation both popups in this app are built on: CustomSelect and the
+       account-candidate list hang off <body> (a panel that scrolls would clip them), so
+       "did this click land inside the panel" is answered by walking the ancestry the stub
+       already keeps — never by assuming a body-level popup belongs to the panel that opened
+       it. A missing `contains` used to make any harness that reached `ownsPopup` throw. */
+    el.contains = (other) => {
+        for (let node = other; node; node = node.parentElement || node.parentNode) {
+            if (node === el) return true;
+        }
+        return false;
+    };
+    /* Connected means "reachable from the page", and in this stub the page is the body.
+       `CustomSelect.refreshAll` prunes instances whose wrapper is gone, so the answer has
+       to change when an element is removed — a stub that always said true would let it
+       keep painting a popup nobody can see. */
+    Object.defineProperty(el, 'isConnected', {
+        get: () => {
+            for (let node = el; node; node = node.parentElement || node.parentNode) {
+                if (node.__isBody) return true;
+            }
+            return false;
+        },
+        configurable: true,
+    });
     /* Real descendants only. `innerHTML` is parsed into a real subtree (see
        _parseMarkup), so the markup the product writes is what its own selectors
        find — and a query that matches nothing answers with nothing. An earlier
@@ -407,6 +431,7 @@ export function makeDocument() {
         return registry.get(id);
     };
     const body = byId('__body');
+    body.__isBody = true;
     body.dataset.lang = 'en';
     const find = (sel, root) => world.filter((el) => (root === undefined || el === root || _descendants(root, []).includes(el)) && matches(el, sel));
     const doc = {

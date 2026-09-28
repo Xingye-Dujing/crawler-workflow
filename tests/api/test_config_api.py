@@ -17,6 +17,9 @@ Two read/write surfaces live here and neither one should surprise the frontend:
   browser and sleeps.
 """
 
+import os
+
+import browser_profiles
 import pytest
 
 from config import Config
@@ -158,8 +161,10 @@ class TestCapabilitiesEndpoint:
         )
         account_field = _field()
         listed = [o['value'] for o in account_field['options']]
-        assert sorted(listed) == ['', 'work'], account_field
-        assert next(o for o in account_field['options'] if o['value'] == '')['labelKey'] == 'cookies.accountDefault'
+        assert sorted(listed) == ['default', 'work'], account_field
+        assert (
+            next(o for o in account_field['options'] if o['value'] == 'default')['labelKey'] == 'cookies.accountDefault'
+        )
         assert account_field['default'] == listed[0], 'a new node starts on the FIRST login listed'
         # anonymous forms carry no account field at all, and the static matrix did not move
         weibo = next(p for p in client.get('/api/capabilities').get_json()['platforms'] if p['platform'] == 'weibo')
@@ -204,12 +209,12 @@ class TestCookieEndpoints:
         app_module.cookie_manager.save('zhihu', [{'name': 'SUB', 'value': marker, 'expiry': 9_999_999_999}], 'work')
         body = client.get('/api/cookies/status').get_json()
         rows = {row['account']: row for row in body['rows'] if row['platform'] == 'zhihu'}
-        assert set(rows) == {'', 'work'}, body['rows']
-        assert rows['']['entries'] == 2 and rows['']['session_only'] == 2, rows['']
+        assert set(rows) == {'default', 'work'}, body['rows']
+        assert rows['default']['entries'] == 2 and rows['default']['session_only'] == 2, rows['default']
         # The named login has one entry WITH an expiry, so exactly none of it dies with a
         # window — the count is the difference between the two rows, not a repeated total.
         assert rows['work']['entries'] == 1 and rows['work']['session_only'] == 0, rows['work']
-        assert rows['']['saved_at'], 'a saved login always knows when it was taken'
+        assert rows['default']['saved_at'], 'a saved login always knows when it was taken'
         assert marker not in str(body), 'a cookie value left the process'
         assert 'name' not in str([row.keys() for row in body['rows']]), 'a cookie NAME is session data too'
 
@@ -229,7 +234,7 @@ class TestCookieEndpoints:
         second = client.post('/api/cookies/save', json={'platform': 'weibo', 'cookies': [{'name': 'a', 'value': 'v'}]})
         assert second.get_json()['account'] == 'default2', second.get_json()
         rows = {row['account']: row for row in client.get('/api/cookies/status').get_json()['rows']}
-        assert rows['']['label_key'] == 'cookies.accountDefault', rows['']
+        assert rows['default']['label_key'] == 'cookies.accountDefault', rows['default']
         assert rows['default2']['label_key'] == 'cookies.accountDefaultNumbered', rows['default2']
         assert rows['default2']['label_args'] == {'n': 2}, rows['default2']
         assert rows['work']['label_key'] == '', "a typed name is not this program's word to translate"
@@ -241,7 +246,6 @@ class TestCookieEndpoints:
         「这个 profile 里还是旧的那份 Cookie」 was read off the wrong device whenever the
         login had a name. Each row now carries its own account's directory.
         """
-        import browser_profiles
 
         app_module.cookie_manager.save('douyin', [{'name': 'a', 'value': 'v'}])
         app_module.cookie_manager.save('douyin', [{'name': 'a', 'value': 'v'}], 'work')
@@ -254,8 +258,8 @@ class TestCookieEndpoints:
         # The DEFAULT account's directory exists too — a named device is stored one level
         # inside it, so ``os.path.isdir`` alone can never answer "has THIS account been
         # opened". The marker is what answers it, and the panel reads the marker.
-        assert rows['']['profile_exists'] is True, rows['']
-        assert rows['']['profile_used'] is False, 'the default device was never opened, and says so'
+        assert rows['default']['profile_exists'] is True, rows['default']
+        assert rows['default']['profile_used'] is False, 'the default device was never opened, and says so'
         # A file newer than what that profile was planted from is the one state nobody can
         # see from outside — and it is per account, not per platform.
         assert rows['work']['needs_refresh'] is True, rows['work']
@@ -340,3 +344,180 @@ class TestCookieEndpoints:
         # an unsupported one — neither inside the cookie dir nor above it.
         assert not (data_root / 'data' / 'cookies' / 'escape_cookies.json').exists()
         assert not (data_root / 'escape_cookies.json').exists()
+
+
+class TestRenameAccount:
+    """POST /api/cookies/rename — give a saved login a new label: its cookie file AND that
+    account's own browser directory, together or not at all.
+
+    The refusal grid IS the feature: the two halves move as one (an account and its device are
+    the same login seen from two sides, so a rename that moves only the file births a label
+    aimed at a directory that keeps the old name), the default login is refused *structurally*
+    (it owns no directory — it IS the platform's, the parent of every other account), and the
+    device is moved FIRST so a busy or occupied directory leaves the jar exactly where it was.
+    Every case also pins the case fold: ``WORK`` and ``work`` are one login, never two files.
+
+    ``root_dir`` is redirected into the test's own ``tmp_path`` so a device directory is neither
+    read from nor written into the shared machine's profile tree.
+    """
+
+    def _point(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(browser_profiles, 'root_dir', lambda: str(tmp_path))
+
+    def _login(self, client, platform, account):
+        response = client.post(
+            '/api/cookies/save',
+            json={'platform': platform, 'account': account, 'cookies': [{'name': 'k', 'value': 'v'}]},
+        )
+        assert response.get_json()['ok'] is True, response.get_json()
+
+    def _rename(self, client, platform, account, to):
+        return client.post('/api/cookies/rename', json={'platform': platform, 'account': account, 'to': to})
+
+    def test_renaming_a_named_login_moves_both_the_file_and_the_device(
+        self, client, app_module, profiles_off, tmp_path, monkeypatch
+    ):
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', 'work')
+        device = browser_profiles.platform_dir('zhihu', 'work')
+        os.makedirs(os.path.join(device, 'Default'))
+        with open(os.path.join(device, 'Default', 'state'), 'w', encoding='utf-8') as fh:
+            fh.write('session')
+        body = self._rename(client, 'zhihu', 'work', 'office').get_json()
+        assert body['ok'] is True and body['profile_moved'] is True, body
+        assert body['account'] == 'office'
+        # The jar moved and still holds the SAME login (a rename is a file move, never a rewrite).
+        assert app_module.cookie_manager.exists('zhihu', 'work') is False
+        assert app_module.cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
+        # So did the device, with its contents — an account renamed onto a name with no browser
+        # would open a brand-new one and claim 「已登录」 about a session that is not there.
+        assert not os.path.isdir(device)
+        assert os.path.isfile(os.path.join(browser_profiles.platform_dir('zhihu', 'office'), 'Default', 'state'))
+        assert 'moved together' in body['message'], body['message']
+        accounts = {
+            row['account'] for row in client.get('/api/cookies/status').get_json()['rows'] if row['platform'] == 'zhihu'
+        }
+        assert 'office' in accounts and 'work' not in accounts, accounts
+
+    def test_an_account_with_no_device_moves_only_the_file(
+        self, client, app_module, profiles_off, tmp_path, monkeypatch
+    ):
+        """No 「一起搬过去了」 about a device that does not exist: which of the two sentences is
+        returned is decided by what actually moved, not by a guess."""
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', 'solo')
+        body = self._rename(client, 'zhihu', 'solo', 'solo2').get_json()
+        assert body['ok'] is True and body['profile_moved'] is False, body
+        assert app_module.cookie_manager.load('zhihu', 'solo2') == [{'name': 'k', 'value': 'v'}]
+        assert 'only the cookie file moved' in body['message'], body['message']
+
+    def test_a_target_typed_in_caps_is_folded_to_one_lowercase_name(
+        self, client, app_module, profiles_off, tmp_path, monkeypatch
+    ):
+        """Both the source and the target are keyed through the manager's one fold: a filesystem
+        that ignores case cannot hold two spellings of one login."""
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', 'work')
+        body = self._rename(client, 'zhihu', 'WORK', 'Office').get_json()
+        assert body['ok'] is True, body
+        assert body['account'] == 'office', 'stored lowercase — one login, one spelling'
+        assert app_module.cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
+
+    def test_a_hyphen_is_a_legal_name_for_both_sides(self, client, app_module, profiles_off, tmp_path, monkeypatch):
+        """(user, 2026-09-28: 「为什么大写字母和-不被允许，没有理由也要允许」) — the character rule is
+        letters, digits, ``_`` and ``-``, and the default account obeys it like any other."""
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', 'my_login')
+        body = self._rename(client, 'zhihu', 'my_login', 'my-login').get_json()
+        assert body['ok'] is True, body
+        assert body['account'] == 'my-login'
+        assert app_module.cookie_manager.load('zhihu', 'my-login') == [{'name': 'k', 'value': 'v'}]
+
+    def test_the_default_login_is_refused_by_name_and_by_the_old_blank(
+        self, client, app_module, profiles_off, tmp_path, monkeypatch
+    ):
+        """Refusing only the word ``default`` would leave the historical blank spelling a way
+        around the rule — both mean the platform's own login, which owns no directory to detach.
+        """
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', '')
+        for spelling in ('default', ''):
+            response = self._rename(client, 'zhihu', spelling, 'boss')
+            assert response.status_code == 400, spelling
+            assert 'default account cannot be renamed' in response.get_json()['error'], spelling
+        assert app_module.cookie_manager.load('zhihu', '') == [{'name': 'k', 'value': 'v'}]
+        assert app_module.cookie_manager.exists('zhihu', 'boss') is False
+
+    def test_renaming_onto_the_default_name_is_refused(self, client, app_module, profiles_off, tmp_path, monkeypatch):
+        """The same topology problem seen from the other side: aiming a named account at the
+        unsuffixed file would overwrite the platform's own login."""
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', 'work')
+        self._login(client, 'zhihu', '')
+        response = self._rename(client, 'zhihu', 'work', 'default')
+        assert response.status_code == 409, response.get_json()
+        assert app_module.cookie_manager.exists('zhihu', 'work') is True, 'the named login must not be half-moved'
+
+    def test_a_login_that_is_not_there_is_refused_as_missing(self, client, profiles_off, tmp_path, monkeypatch):
+        self._point(monkeypatch, tmp_path)
+        response = self._rename(client, 'zhihu', 'ghost', 'office')
+        assert response.status_code == 404, response.get_json()
+        assert 'no saved login' in response.get_json()['error']
+
+    def test_a_name_another_login_already_holds_is_refused(
+        self, client, app_module, profiles_off, tmp_path, monkeypatch
+    ):
+        """The silent loser of a rename-over is the session nobody asked to delete, so the
+        occupied target is refused and BOTH logins survive untouched."""
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', 'work')
+        self._login(client, 'zhihu', 'office')
+        response = self._rename(client, 'zhihu', 'work', 'office')
+        assert response.status_code == 409, response.get_json()
+        assert 'already uses' in response.get_json()['error']
+        assert app_module.cookie_manager.load('zhihu', 'work') == [{'name': 'k', 'value': 'v'}]
+        assert app_module.cookie_manager.load('zhihu', 'office') == [{'name': 'k', 'value': 'v'}]
+
+    def test_an_illegal_or_blank_new_name_is_refused(self, client, app_module, profiles_off, tmp_path, monkeypatch):
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', 'work')
+        for bad in ('bad name!', 'a' * 25, ''):
+            response = self._rename(client, 'zhihu', 'work', bad)
+            assert response.status_code == 400, bad
+            assert response.get_json()['ok'] is False, bad
+        assert app_module.cookie_manager.exists('zhihu', 'work') is True
+
+    def test_renaming_a_login_to_the_name_it_already_has_sends_nothing(
+        self, client, app_module, profiles_off, tmp_path, monkeypatch
+    ):
+        """A round trip that reported success about a rename that moved nothing would be a lie
+        the panel tells about the disk, so it is refused before any device or file is touched."""
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', 'work')
+        response = self._rename(client, 'zhihu', 'work', 'work')
+        assert response.status_code == 400, response.get_json()
+        assert 'same' in response.get_json()['error']
+        assert app_module.cookie_manager.exists('zhihu', 'work') is True
+
+    def test_a_device_in_use_stops_the_file_from_moving(self, client, app_module, profiles_off, tmp_path, monkeypatch):
+        """The ordering proof: the browser directory is tried FIRST, so a crawl holding it open
+        leaves the cookie file exactly where it was rather than birthing a label aimed at a
+        directory still called the old one (which the next crawl would open as a stranger)."""
+        self._point(monkeypatch, tmp_path)
+        self._login(client, 'zhihu', 'work')
+        os.makedirs(browser_profiles.platform_dir('zhihu', 'work'))
+        monkeypatch.setattr(browser_profiles, 'is_busy', lambda path: True)
+        response = self._rename(client, 'zhihu', 'work', 'office')
+        assert response.status_code == 409, response.get_json()
+        assert 'in use' in response.get_json()['error']
+        assert app_module.cookie_manager.exists('zhihu', 'work') is True
+        assert app_module.cookie_manager.exists('zhihu', 'office') is False
+
+    def test_an_unsupported_platform_is_refused_out_right(self, client, profiles_off, tmp_path, monkeypatch):
+        """The platform becomes a path component, so the refusal is a security boundary before
+        it is a nicety — and the account checks below it must never run for a name that could
+        escape the directory."""
+        self._point(monkeypatch, tmp_path)
+        response = self._rename(client, 'escape', 'work', 'office')
+        assert response.status_code == 400, response.get_json()
+        assert 'Unsupported platform' in response.get_json()['error']

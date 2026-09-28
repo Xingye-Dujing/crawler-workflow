@@ -348,10 +348,14 @@ def entry_key(platform: str, account: str = '') -> str:
     test that ever keyed results by platform stays true — while a named account
     gains its own slot. The browser computes the same key (``preflightEntryKey`` in
     workflow.js) so a request, its verdict and the blocked list are one name.
+
+    ``default`` is that same first account's NAME, so it keys identically: two spellings of
+    one login landing in two cache slots is how a probe runs a browser twice and answers
+    「没有登录」 from the slot nobody filled.
     """
     platform = str(platform or '').strip()
-    account = str(account or '').strip()
-    return f'{platform}@{account}' if account else platform
+    segment = CookieManager.path_segment(account)
+    return f'{platform}@{segment}' if segment else platform
 
 
 def entry_of(value) -> tuple:
@@ -359,10 +363,14 @@ def entry_of(value) -> tuple:
 
     A bare string is the old shape and still legal: this endpoint is also what a
     hand-made request hits, and refusing a platform-only question because the account
-    dimension is new would punish exactly the callers the feature did not change.
+    dimension is new would punish exactly the callers the feature did not change. The
+    account comes back folded, so every later reader of this pair sees one spelling.
     """
     if isinstance(value, dict):
-        return str(value.get('platform') or '').strip(), str(value.get('account') or '').strip()
+        return (
+            str(value.get('platform') or '').strip(),
+            CookieManager.path_segment(value.get('account') or ''),
+        )
     return str(value or '').strip(), ''
 
 

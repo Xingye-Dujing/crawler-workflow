@@ -663,6 +663,31 @@
       <div id="runs-mgr-body" class="data-preview-table-wrap"></div>
     </div>
 
+    <!-- Saved logins panel — the read side of data/cookies (metadata only) -->
+    <div id="cookies-panel">
+      <div id="cookies-resize-handle"></div>
+      <div class="console-header">
+        <span data-i18n="cookies.manageTitle">Saved logins</span>
+        <div class="console-actions">
+          <button
+            class="panel-close"
+            onclick="cookiesManager.refresh()"
+            data-i18n="btn.refresh"
+          >
+            Refresh
+          </button>
+          <button
+            class="panel-close"
+            onclick="toggleCookiesPanel()"
+            data-i18n="stats.close"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <div id="cookies-mgr-body" class="cookie-manager"></div>
+    </div>
+
     <!-- Export Artefacts Panel — the read side of data/exports -->
     <div id="exports-panel">
       <div id="exports-resize-handle"></div>
@@ -811,6 +836,14 @@
         data-i18n="exportsMgr.header"
       >
         Export Files
+      </button>
+      <button
+        class="status-btn"
+        id="btn-cookies"
+        onclick="toggleCookiesPanel()"
+        data-i18n="cookies.manageTitle"
+      >
+        Saved logins
       </button>
       <button
         class="status-btn"
@@ -1021,10 +1054,12 @@
         <!-- One platform can hold several logins (the rate limit a crawl hits is
              per ACCOUNT). The box is free text on purpose: typing a name that has
              no file yet is how a second login is BORN — every action below saves,
-             logs in or deletes exactly what is written here. The list under it is
-             the candidates: what already exists, said in the words the user reads
-             (默认账号 for the blank one, which a dropdown could only show as an
-             empty row), and clicking one fills this box. -->
+             logs in or deletes exactly what is written here. What already exists is
+             offered as a DROPDOWN on the box (focus, click or typing opens it; a click
+             elsewhere shuts it), because a row of buttons permanently under the field
+             made the panel taller for a choice made once per login — and the labels are
+             ours to say, not the browser's: a <datalist> prints the VALUE, so 默认账号
+             (the blank account) could only ever have appeared as an empty row. -->
         <div class="settings-group">
           <label class="settings-label" data-i18n="cookies.account"
             >Account</label
@@ -1035,9 +1070,14 @@
             type="text"
             data-i18n-placeholder="cookies.accountPlaceholder"
             placeholder="work"
-            oninput="renderCookieAccountStatus()"
+            data-noautofill="1"
+            autocomplete="off"
+            spellcheck="false"
+            oninput="renderCookieAccountStatus(); renderCookieAccounts(true)"
+            onfocus="renderCookieAccounts(true)"
+            onclick="renderCookieAccounts(true)"
+            onblur="hideCookieAccountCandidates()"
           />
-          <div id="cookie-account-candidates" class="cookie-candidates"></div>
         </div>
         <!-- Filled from /api/cookies/flow: which page to log in on and why.
              Server-side text on purpose — the guidance must stay translated and
@@ -1104,14 +1144,12 @@
           </button>
           <!-- No 「把 Cookie 更新进 Profile」 button: saving one already plants it into that
                account's own browser, and the one case that cannot happen on the spot (the
-               profile is held by a running crawl) is said by the save reply itself. -->
-        </div>
-        <!-- What that button is for, said in the panel rather than in the dialog: a
-             dialog has to be opened to teach anything, and the word "Profile" is one
-             this interface otherwise never defines. -->
-        <div class="settings-hint" id="cookie-explain" data-i18n="cookies.refreshExplain">
-          A profile is this platform's own browser directory, and a crawl runs on the
-          login inside it.
+               profile is held by a running crawl) is said by the save reply itself.
+               And no standing paragraph explaining what a Profile is (this was
+               ``#cookie-explain``): an account, its cookie file and its browser directory are
+               one thing here, so the sentence described how the tool works — our history, not
+               a decision the user has to make. The setting row next to the switch is where the
+               benefit belongs. -->
         </div>
         <!-- Login-job actions: only visible while a login browser is open.
              The dialog refuses to close while they wait — closing it used to
@@ -1158,14 +1196,10 @@
             style="font-size: 11px; color: var(--text-dim)"
           ></span>
         </div>
-        <!-- Every login this machine has saved, one row per (platform, account): what
-             it holds, when it was taken and whether its own browser is holding that
-             same session. Metadata only by design — a cookie value is the thing itself,
-             and this panel is the one surface a stranger could stand in front of. -->
-        <div class="settings-group">
-          <label class="settings-label" data-i18n="cookies.manageTitle">Saved logins</label>
-          <div id="cookie-manager" class="cookie-manager"></div>
-        </div>
+        <!-- The saved-logins list moved out of this dialog and into the bottom dock
+             (``#cookies-panel``, next to 控制台/运行记录/导出产物): it is the read side of the
+             whole machine, and sitting above the paste box it pushed the thing the user came
+             to do below the fold of a panel that only scrolled because of it. -->
       </div>
     </div>
 
