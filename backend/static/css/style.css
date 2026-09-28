@@ -2779,6 +2779,20 @@ input:-webkit-autofill:focus {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* ─── Cloud deployment ─────────────────────────────────────────────────────
+   ``html[data-cloud]`` is set from the SERVER's own answer (/api/config → cloud_mode),
+   not from a guess about the machine: these are the controls that ask for something a
+   cloud host does not have — a display to open a window on, an Ollama daemon running on
+   the same machine as the crawl.
+
+   Hiding is presentation only. Every route behind one of these controls still answers a
+   request (a saved workflow, an old tab, a hand-written POST) and refuses it by name,
+   because a button that disappeared is not a permission. */
+html[data-cloud='1'] .cloud-hide,
+html[data-cloud='1'] #btn-headless,
+html[data-cloud='1'] .ai-only-ollama {
+  display: none !important;
+}
 /* The account candidates: real buttons, because a <datalist> prints its value and the
    default account's value is the empty string — it could only ever have looked like a
    blank row. They wrap rather than overflow: this panel's width is audited against a

@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { addOptions, baseSandbox, fixWindow } from './harness_dom.mjs';
 
 const wfPath = process.argv[2];
 const src = fs.readFileSync(wfPath, 'utf8');
@@ -546,7 +546,12 @@ out.nothingSaved = {
    it. The stub has no option collection of its own, so the two platforms this harness
    speaks are given to it here — otherwise the guard below would be measuring a select
    that could never match anything. */
-doc.getElementById('cookie-platform').options = [{ value: 'zhihu' }, { value: 'weibo' }];
+/* The real <select> carries one option per cookie platform, and both
+   ``openCookieDialog`` and ``useCookieAccount`` refuse to name a platform that is not on
+   it. The stub derives ``.options`` from real <option> children, so the platforms this
+   harness speaks are BUILT here rather than assigned — an assigned list would let the
+   guard pass while nothing on the page resembled a select. */
+addOptions(doc, doc.getElementById('cookie-platform'), ['zhihu', 'weibo']);
 doc.getElementById('cookie-account').value = 'keepme';
 sandbox.openCookieDialog('weibo', 'work');
 await flush();

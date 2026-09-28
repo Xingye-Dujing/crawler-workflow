@@ -1848,7 +1848,7 @@ function openSettings(nodeId) {
                 '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'mode\',this.value)">' +
                 selectOptionTags(
                     [
-                        { value: 'llm', label: I18n.t('mode.llm') },
+                        { value: 'llm', label: llmModeLabel() },
                         { value: 'ml', label: I18n.t('mode.ml') },
                     ],
                     p.mode,
@@ -1882,7 +1882,7 @@ function openSettings(nodeId) {
            both, so asking for persons only costs persons only. */
         if (p.operation === 'ner') {
             html += renderParamSelect(nodeId, p, 'mode', 'settings.mode', 'regex',
-                [{ v: 'regex', l: I18n.t('mode.regex') }, { v: 'llm', l: I18n.t('mode.llm') }]);
+                [{ v: 'regex', l: I18n.t('mode.regex') }, { v: 'llm', l: llmModeLabel() }]);
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.entityTypes') +
                 '</label><input class="settings-input" value="' + escapeHtml(p.entity_types || '') + '" placeholder="' +
                 I18n.t('settings.entityTypesPlaceholder') + '" ' +
@@ -2092,6 +2092,15 @@ function onOutputFormatChange(nodeId, fmt) {
  * unless told not to, NER uses its rules unless told otherwise. The second
  * argument is the node's own ``operation``, which toWorkflowJSON also carries:
  * the backend reads that one first, so this has to as well. */
+function llmModeLabel() {
+    /* Which transport the 「大模型」 option names. Guarded on the BINDING, not on
+       `window.CloudMode`: app.js declares it at top level, so it is a global lexical
+       binding that never appears on window, and `if (window.X)` would read as "no flag"
+       forever — which is the mistake this repo already documents once. */
+    var cloud = typeof CloudMode !== 'undefined' && CloudMode.on;
+    return I18n.t(cloud ? 'mode.llmCloud' : 'mode.llm');
+}
+
 function nodeNeedsLlm(params, nodeOperation) {
     var p = params || {};
     var op = p.operation || nodeOperation || '';

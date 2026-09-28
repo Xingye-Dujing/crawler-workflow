@@ -752,6 +752,14 @@ _ZH = {
     'api.needApiKey': 'OpenRouter API Key 未填写（设置 → AI）',
     'api.needModel': 'OpenRouter 模型未选择（设置 → AI）',
     'api.needOllamaModel': '未选择 Ollama 模型（设置 → AI → 模型，可点“刷新”读取本地模型）',
+    'api.cloudNoLocalModel': (
+        '这台服务器没有本地模型可连（「{provider}」需要宿主自己跑一个 Ollama 守护进程）：'
+        '云端部署只支持 OpenRouter，请在「设置 → AI」里改选 OpenRouter 并填入模型与 API Key'
+    ),
+    'api.cloudNoLoginWindow': (
+        '这台服务器没有可以登录的窗口：请在「Cookie」面板里粘贴 Cookies JSON 保存，'
+        '系统会在保存时替该账号建好 Profile 并种进去'
+    ),
     'api.platformRequired': '平台不能为空',
     'api.cookiesRequired': 'Cookies 数据不能为空',
     'api.unsupportedPlatform': '不支持的平台：{platform}',
@@ -1684,6 +1692,15 @@ _EN = {
     'api.needApiKey': 'The OpenRouter API key is missing (Settings → AI)',
     'api.needModel': 'No OpenRouter model selected (Settings → AI)',
     'api.needOllamaModel': 'No Ollama model selected (Settings → AI → Model; hit Refresh to list local ones)',
+    'api.cloudNoLocalModel': (
+        'This server has no local model to talk to ("{provider}" wants an Ollama daemon on its own '
+        'host): a cloud deployment only supports OpenRouter — pick OpenRouter under Settings → AI and '
+        'fill in the model and API key'
+    ),
+    'api.cloudNoLoginWindow': (
+        'This server has no window to log into: paste the Cookies JSON into the Cookie panel and save, '
+        "which builds that account's profile and plants the session into it"
+    ),
     'api.platformRequired': 'Platform is required',
     'api.cookiesRequired': 'Cookies data is required',
     'api.unsupportedPlatform': 'Unsupported platform: {platform}',

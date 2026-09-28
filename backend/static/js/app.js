@@ -427,6 +427,9 @@ const I18n = {
             'history.removeFailed': 'Delete failed',
             'settings.mode': 'Analysis Mode',
             'mode.llm': 'LLM (local Ollama / OpenRouter)',
+            // On a cloud host the first half of that name is a transport with no daemon
+            // behind it, so the option says what will actually be called.
+            'mode.llmCloud': 'LLM (OpenRouter)',
             'mode.ml': 'Traditional ML (sklearn)',
             'mode.regex': 'Rule-based regex (no model)',
             'settings.entityTypes': 'Entity types',
@@ -1181,6 +1184,7 @@ const I18n = {
             'history.removeFailed': '删除失败',
             'settings.mode': '分析模式',
             'mode.llm': '大模型（本地 Ollama / OpenRouter）',
+            'mode.llmCloud': '大模型（OpenRouter）',
             'mode.ml': '传统机器学习 (sklearn)',
             'mode.regex': '正则规则（无需模型）',
             'settings.entityTypes': '实体类型',
@@ -1703,6 +1707,44 @@ const Settings = {
     },
 };
 
+/* ── What this server can serve ─────────────────────────────────────────────
+   The cloud flag is the SERVER's fact (`python app.py cloud`), read once from
+   /api/config, and it decides which controls exist: a cloud host has no display to
+   open a window on and no Ollama daemon on its own machine.
+
+   Hiding is only the visible half. Every route behind one of these controls still
+   answers a request — a saved workflow, an old tab, a hand-written POST — and each of
+   those refuses by name server-side. A button that disappeared is not a permission. */
+const CloudMode = {
+    on: false,
+    applied: false,
+
+    /* Fed by the one /api/config read the page already makes at boot
+       (``LLMSettings.loadDefaults``) — this module does not fetch, because a second
+       request for the same payload would be a second answer to keep in sync. */
+    set(flag) {
+        this.on = !!flag;
+        this.apply();
+        /* The AI panel is filled from localStorage, which may name a transport this
+           host cannot serve. Re-apply it from the truth instead of leaving a selected
+           「本地 Ollama」 on a server that has none. */
+        if (typeof LLMSettings !== 'undefined' && LLMSettings.applyToPanel) LLMSettings.applyToPanel();
+    },
+
+    apply() {
+        document.documentElement.dataset.cloud = this.on ? '1' : '0';
+        if (this.on) {
+            /* The transport is taken OUT of the select, not merely styled away: a hidden
+               <option> is still a value the element can be asked for (keyboard, a stale
+               restore, an autofill), and this host cannot serve it. */
+            var sel = document.getElementById('ai-provider');
+            var local = sel && sel.querySelector('option[value="ollama"]');
+            if (local && sel.removeChild) sel.removeChild(local);
+        }
+        this.applied = true;
+    },
+};
+
 /* ── AI (LLM) settings — transport, model, key, batching ────────────────────
    The two transports keep *separate* settings blocks. They used to share one
    `model` field, so a local Ollama run inherited whatever OpenRouter id was
@@ -1750,8 +1792,15 @@ const LLMSettings = {
         if (!s.openrouter.api_key && raw.api_key) s.openrouter.api_key = raw.api_key;
         /* Anything but a known transport normalises to the local one, so a
            hand-edited localStorage entry cannot desync the panel and the
-           backend (which treats every non-OpenRouter provider as Ollama). */
-        if (s.provider !== 'openrouter') s.provider = 'ollama';
+           backend (which treats every non-OpenRouter provider as Ollama).
+
+           On a cloud host the same normalization runs the other way, and for the same
+           reason: there is no local daemon here, so a stored 「ollama」 — one that came
+           from a desktop profile, or from before the flag was set — must not stay the
+           active transport. The server refuses that transport by name anyway; this is
+           what makes the panel ask for the key it actually needs. */
+        if (typeof CloudMode !== 'undefined' && CloudMode.on) s.provider = 'openrouter';
+        else if (s.provider !== 'openrouter') s.provider = 'ollama';
         return s;
     },
 
@@ -1822,10 +1871,15 @@ const LLMSettings = {
         this._defaultsPulled = true;
         try {
             const cfg = await (await fetch('/api/config')).json();
+            /* The server states its own shape before anything else reads it: the AI panel
+               is applied from localStorage right after this, and on a cloud host that
+               stored value is allowed to name a transport with no daemon behind it. */
+            if (typeof CloudMode !== 'undefined') CloudMode.set(cfg && cfg.cloud_mode);
             const input = document.getElementById('ai-ollama-model');
             if (input && cfg && cfg.ollama_model) input.placeholder = cfg.ollama_model;
         } catch (e) {
-            /* Unreachable server: the built-in placeholder stands. */
+            /* Unreachable server: the built-in placeholder stands, and the flag stays
+               "not cloud" — stripping controls on no answer is not this page's job. */
         }
     },
 

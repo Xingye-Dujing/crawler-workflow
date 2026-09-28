@@ -1368,6 +1368,27 @@ def workflow_queue_clear():
     return jsonify({'ok': True, 'cleared': clear_queue()})
 
 
+def _local_transport_refusal(provider: str) -> str:
+    """Why a cloud host answers 「没有这种传输」, or '' when the choice is one it can honor.
+
+    The flag is the server's (`python app.py cloud`), because the panel only hides the
+    Ollama controls — a request still arrives from a saved workflow, an old tab, or a
+    hand-written POST, and hiding a button is not the same as permitting the thing it
+    does. Every transport that wants a daemon on the machine that hosts the crawl is
+    refused BY NAME here rather than being re-labelled or silently answered with one
+    model name: the other shape of this bug is a run that "succeeds" with no analysis
+    because nothing was ever listening on 11434.
+    """
+    if not Config.CLOUD_MODE or str(provider or '') == 'openrouter':
+        return ''
+    return t('api.cloudNoLocalModel', provider=str(provider or ''))
+
+
+def _cloud_refusal_response(provider: str) -> dict:
+    """The 400 body for :func:`_local_transport_refusal`, shaped per caller."""
+    return {'status': 400, 'body': {'ok': False, 'error': _local_transport_refusal(provider)}}
+
+
 def _begin_run(data: dict, lang_header: str) -> dict:
     """Claim the run slot and start the worker, or put this request in the queue.
 
@@ -1413,7 +1434,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             workflow = data.get('workflow', {})
             settings = workflow.get('settings', {})
             mode = settings.get('mode', 'parallel')
-            headless = settings.get('headless', True)
+            # A cloud host has no display, so headless is not a preference here — the
+            # browser would never come up. The panel hides the switch (it is told the
+            # server's shape by /api/config), but the run record is written from THIS
+            # value, and a record that said 「窗口」 for a crawl that could only have run
+            # headless would be a chip describing a run that never happened.
+            headless = True if Config.CLOUD_MODE else settings.get('headless', True)
             # A parallel run holds at most one browser per concurrently-running workflow,
             # so the pool width IS the "max simultaneous browsers" lever. It used to be
             # the hardcoded Config.DEFAULT_MAX_WORKERS for both shapes; it is now a user
@@ -1506,6 +1532,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # to the local daemon — and neither is demanded by a run that never calls
             # a model.
             if _workflow_needs_llm(workflow):
+                # Refused BEFORE the requirements below: on a cloud host a missing key is
+                # not the problem worth reporting, the transport is. Asking the user for an
+                # OpenRouter key while running their local-daemon request against a port
+                # nothing listens on is how a run "completes" with no analysis at all.
+                if _local_transport_refusal(llm['provider']):
+                    return _cloud_refusal_response(llm['provider'])
                 if llm['provider'] == 'openrouter':
                     if not llm['api_key']:
                         return {'status': 400, 'body': {'ok': False, 'error': t('api.needApiKey')}}
@@ -4634,22 +4666,30 @@ def report_generate():
         if not isinstance(cfg, dict):
             return _bad_param('llm')
         provider = str(cfg.get('provider') or 'ollama')
-        try:
-            client = LLMClient(
-                provider=provider,
-                model=str(cfg.get('model') or ''),
-                api_key=str(cfg.get('api_key') or ''),
-                max_tokens=600,
-                # A report request is its own call: it must not inherit the stop
-                # flag of a run that ended (or is running) in this process.
-                cancel_event=None,
-                host=(str(cfg.get('ollama_host') or '') if provider == 'ollama' else ''),
-            )
-            conclusion = client.chat(build_conclusion_prompt(summarize(nodes), normalize(data.get('lang'))))
-        except Exception as e:
-            # The report is the deliverable; a missing paragraph is a note in it.
-            add_log(t('run.reportConclusionFailed', err=e))
-            conclusion = ''
+        refusal = _local_transport_refusal(provider)
+        if refusal:
+            # Named rather than attempted. A connection error against a port nothing
+            # listens on would be logged as 「结论生成失败」 and send the user to retry a
+            # paragraph this host can never write; the report itself still ships, because
+            # the deliverable was never the paragraph.
+            add_log(refusal)
+        else:
+            try:
+                client = LLMClient(
+                    provider=provider,
+                    model=str(cfg.get('model') or ''),
+                    api_key=str(cfg.get('api_key') or ''),
+                    max_tokens=600,
+                    # A report request is its own call: it must not inherit the stop
+                    # flag of a run that ended (or is running) in this process.
+                    cancel_event=None,
+                    host=(str(cfg.get('ollama_host') or '') if provider == 'ollama' else ''),
+                )
+                conclusion = client.chat(build_conclusion_prompt(summarize(nodes), normalize(data.get('lang'))))
+            except Exception as e:
+                # The report is the deliverable; a missing paragraph is a note in it.
+                add_log(t('run.reportConclusionFailed', err=e))
+                conclusion = ''
 
     workflow_name = meta.get('workflow_name') or 'workflow'
     report = ReportService(Config.EXPORT_DIR)
@@ -5404,7 +5444,14 @@ def generate_cookies():
     One login at a time, machine-wide: two windows racing on the same profile
     (or on the user's attention) saved half-cookies and confusion. A second
     request is refused with the platform of the live one.
+
+    Refused outright on a cloud host: this route opens a window **for a person to log
+    into**, and there is nobody at this server's screen. The panel hides the button, but a
+    stale tab or a hand-written POST still reaches here, and the answer they get has to
+    say why rather than hang on a browser nobody can see.
     """
+    if Config.CLOUD_MODE:
+        return jsonify({'ok': False, 'error': t('api.cloudNoLoginWindow')}), 400
     data = _json_body()
     if data is None:
         return _bad_body()
@@ -5787,6 +5834,11 @@ def llm_ollama_models():
     """
     host = str(get_setting('ollama_host') or '')
     shown = host or 'http://localhost:11434'
+    if Config.CLOUD_MODE:
+        # Named, not empty: a 502 saying "connection refused on 11434" reads as a broken
+        # button, and this deployment has no button to break — the panel is told not to
+        # offer one, and a saved workflow or a stale tab that asks anyway gets the reason.
+        return jsonify({'ok': False, 'error': _local_transport_refusal('ollama'), 'models': []}), 400
     try:
         models = list_ollama_models(host, timeout=8)
         return jsonify({'ok': True, 'models': models, 'host': shown})
@@ -5806,6 +5858,12 @@ def llm_test():
     if data is None:
         return _bad_body()
     provider = data.get('provider') or 'ollama'
+    refusal = _local_transport_refusal(provider)
+    if refusal:
+        # Refused before a client is built: the point of this route is to tell the user
+        # whether a transport answers, and on a cloud host the answer to a local-daemon
+        # request is known before the request — nothing is listening on this machine.
+        return jsonify({'ok': False, 'error': refusal}), 400
     client = LLMClient(
         provider=provider,
         model=data.get('model') or '',

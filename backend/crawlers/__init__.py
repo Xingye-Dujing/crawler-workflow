@@ -1,5 +1,6 @@
 import browser_profiles
 
+from config import Config
 from crawlers.bilibili import BilibiliCrawler
 from crawlers.douyin import DouyinCrawler
 from crawlers.instagram import InstagramCrawler
@@ -93,16 +94,22 @@ def get_crawler(
     is planted from the saved file exactly as before the feature existed.
 
     ``refresh_cookies`` is the one exception, and it is only ever set by the user
-    asking for it (``POST /api/cookies/refresh-profile``, the panel's
-    「把 Cookie 更新进 Profile」 button): a re-taken session that cannot reach the
-    profile it will be crawled from is a session the user paid to fetch for nothing.
-    Nothing automatic opens this door, because *this function* runs at the start of
-    every crawl.
+    asking for it — which today means *saving* a cookie: ``app.py`` plants the paste
+    straight into that account's profile, because a session the user just re-took has to
+    reach the browser it will be crawled from. Nothing on a crawl path opens this door,
+    because *this function* runs at the start of every crawl, and a crawl that re-planted
+    by itself would undo the import-once rule above.
     """
     cls = crawler_class(platform)
     if not cls:
         raise ValueError(f'Unknown platform: {platform}')
     account = str(account or '').strip()
+    # A cloud host has no display, so a caller that asked for a window gets a headless
+    # browser: since #148 a headless session carries a desktop UA and real window metrics,
+    # which is what makes this a working answer rather than a silently empty page. The
+    # login browser that this used to force visible is refused by name at its route
+    # instead — a person cannot scan a QR code nobody can see.
+    headless = True if Config.CLOUD_MODE else headless
     profile = browser_profiles.profile_dir_for(platform, enabled=use_profile, account=account)
     stem = f'{platform}@{account}' if account else str(platform)
     saved = f'{cookie_dir}/{stem}_cookies.json' if cookie_dir else ''

@@ -23,7 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 
-import { baseSandbox, fixWindow } from './harness_dom.mjs';
+import { addOptions, baseSandbox, fixWindow } from './harness_dom.mjs';
 
 const jsDir = process.argv[2];
 const scenarios = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
@@ -114,7 +114,10 @@ function world(sc) {
        platform selector is a <select> with the real option list, because the block
        dialog is supposed to land the user on the platform that is broken. */
     const platform = sandbox.__byId('cookie-platform');
-    platform.options = ['zhihu', 'weibo', 'bilibili'].map((value) => ({ value }));
+    /* Real <option> children, not an assigned array: the stub derives ``.options`` from
+       the tree, and the guard under test reads that list to decide whether the blocked
+       platform is even on the panel. */
+    addOptions(sandbox.document, platform, ['zhihu', 'weibo', 'bilibili']);
     platform.value = 'bilibili';
     sandbox.__byId('cookie-dialog');
     sandbox.__byId('cookie-status');

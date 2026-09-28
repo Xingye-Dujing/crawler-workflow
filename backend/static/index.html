@@ -150,6 +150,9 @@
         >
           Parallel
         </button>
+        <!-- No `cloud-hide` here on purpose: this button's className is rewritten whole
+             by TopMenu.sync() on every state change (pinned as a feature), so a marker
+             class put here would be erased. style.css hides it by id instead. -->
         <button
           class="menu-btn toggle-on"
           type="button"
@@ -1072,8 +1075,11 @@
           >
             Save Cookies
           </button>
+          <!-- `cloud-hide`: on a server there is no window for a person to log into, so
+               the only way in is the paste box above. The route refuses the request by
+               name as well — hiding a button is not a permission. -->
           <button
-            class="menu-btn"
+            class="menu-btn cloud-hide"
             onclick="generateCookie()"
             data-i18n="cookies.generate"
           >
@@ -1469,7 +1475,7 @@
           />
         </span>
       </div>
-      <div class="dd-item-row">
+      <div class="dd-item-row cloud-hide">
         <span data-i18n="set.ollamaHost">Ollama 服务地址</span>
         <span class="dd-ctrl">
           <input

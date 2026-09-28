@@ -27,14 +27,23 @@ function _matchesPart(el, part) {
         if (token[0] === '[') {
             const inner = token.slice(1, -1);
             const eq = inner.indexOf('=');
+            const raw = eq < 0 ? inner : inner.slice(0, eq);
+            const isData = raw.startsWith('data-');
+            const key = isData ? _camelize(raw.slice(5)) : _camelize(raw);
             /* A `[data-port="out"]` selector addresses `dataset.port`, not
                `dataset.dataPort` — the prefix the author writes is the prefix the
-               browser strips. */
-            const raw = eq < 0 ? inner : inner.slice(0, eq);
-            const key = raw.startsWith('data-') ? _camelize(raw.slice(5)) : _camelize(raw);
-            if (eq < 0) return el.dataset && el.dataset[key] !== undefined;
+               browser strips. A plain `[value="ollama"]` addresses the ATTRIBUTE, and
+               this stub keeps attributes where the browser keeps them: both
+               `setAttribute` and the markup parser write `el[key]`. Reading only
+               `dataset` made every non-data attribute answer "no match", so a product
+               query that looks an option up by value seemed to run while it was
+               matching nothing at all. */
+            let held;
+            if (isData) held = el.dataset ? el.dataset[key] : undefined;
+            else held = el[key] !== undefined ? el[key] : el.dataset ? el.dataset[key] : undefined;
+            if (eq < 0) return held !== undefined;
             const want = inner.slice(eq + 1).replace(/^["']|["']$/g, '');
-            return String(el.dataset ? el.dataset[key] : '') === want;
+            return String(held === undefined ? '' : held) === want;
         }
         return String(el.tagName || '').toUpperCase() === token.toUpperCase();
     });
@@ -42,6 +51,24 @@ function _matchesPart(el, part) {
 
 function _camelize(name) {
     return String(name).replace(/-([a-z])/g, (_m, c) => c.toUpperCase());
+}
+
+/**
+ * Put real `<option>` children on a select, built element by element.
+ *
+ * A test's own setup is not the place to parse a markup string: `innerHTML` would make
+ * the fixture depend on the same parser the product is under test uses, and a scanner
+ * (rightly) asks who put data into that string. Nothing here is data — but building the
+ * element is both shorter to reason about and the shape the browser actually has, which
+ * is what `.options` and `[value="…"]` are now derived from.
+ */
+export function addOptions(doc, select, values) {
+    values.forEach((value) => {
+        const option = doc.createElement('option');
+        option.value = value;
+        select.appendChild(option);
+    });
+    return select;
 }
 
 /* Attach `child` under `parent`, carrying the document's element index with it.
@@ -275,6 +302,16 @@ export function makeEl(tag = 'div', id = '') {
        tell apart from a real one. */
     el.querySelectorAll = (sel) => _descendants(el, []).filter((child) => matches(child, sel));
     el.querySelector = (sel) => el.querySelectorAll(sel)[0] || null;
+    /* `<select>.options` is the one collection product code reads to ask "is this value
+       even on this list" — `openCookieDialog` and `useCookieAccount` refuse to write a
+       platform the panel does not hold, and `LLMSettings` decides which transports exist.
+       Without it every such guard answered "no", so a test could only ever prove the
+       refusal path. Derived from the real children (never a fabricated list): an empty
+       select still has no options, exactly as in the browser. */
+    Object.defineProperty(el, 'options', {
+        get: () => _descendants(el, []).filter((child) => child.tagName === 'OPTION'),
+        configurable: true,
+    });
     /* Listeners are kept, not dropped: some handlers (the canvas right-click
        menu) hang off a specific element rather than the document, and a harness
        that cannot fire them would have to fake the surrounding logic by hand. */
