@@ -435,7 +435,49 @@ moves on to the next card, so the budget buys rows that say something. **The gat
 prose**: a caption-less clip keeps its author and its date, so it stays a row with an empty 正文 —
 refusing on an empty 标题 would drop real data over one column.
 
+### 抖音第 0 步重读（measured 2026-09-28，探针 `backend/test_dy_page_model.py` → `scratchpad/dy_page_model.json`）
+
+一次搜索（关键词 IU、`sort=most_liked`）+ 三次详情页 + 一次作者主页，逐条对着代码里的主张量：
+
+* **列表挂载比代码写的更快**：`t=2 s` 就有 **15 张** `/video/` 卡并且到 14 s 不再变（代码注释是
+  「16 张骨架 → 4-6 s 填实」；骨架期已经看不到了，但 `MOUNT_WAIT=45` 仍是无害的宽限）。
+  **窗口仍然就是分页器**：连滚三下 39 → 59 → 60（60 那一屏只多出 1 条，说明这一屏接近尾部）。
+* **图文/note 卡没找到**：结果列表里 `a[href]` 的 kind 直方图**只有 `video`**。所以
+  「`CARD_ANCHOR` 只认 `/video/` 会漏掉图文帖」这个假设**在这一天这个关键词下不成立**——按
+  「没有样本就不改选择器」记着，别凭想象放宽。第一张卡的文本带着 **「合集」** 前缀
+  （`合集 | 00:17 | 8.1万 | 心跳漏了一拍#iu… | @IU'ㅅ' | 1天前`），合集卡仍是 `/video/` 锚点，
+  所以它不会被漏掉，但**同一合集的多条会不会被算重**仍未测（要一个必然出多条同合集的关键词）。
+* **右上角筛选菜单**：入口找得到，词仍是 `综合排序 / 最新发布 / 最多点赞`（+ 组标题 `排序依据`），
+  点选不改地址 ✓。但面板里还出现了一个 **`发布时间` 标签**——抖音自己似乎还有第二条筛选轴
+  （时间范围），产品从未暴露它。**这是未测项**，不是「代码有 bug」：要量到那组可选项才能决定
+  要不要给矩阵加一个字段。
+* **详情页确实只在自己的 DOM 里给数**：`detail-video-info`（文案）+ `detail-video-publish-time`
+  （`发布时间：2026-09-26 18:53`）+ `video-share-icon-container`（一个数）。四个计数
+  （`video-player-digg` 等）在 `[data-e2e]` 遍历里**没有文本节点**，但 `_driver_facts` 的
+  `querySelector(...).innerText` 读得到值（存下来的行是 `点赞 81000 / 评论 281 / 收藏 2419 / 转发 12000`）
+  ——所以那四个选择器**没坏**，是我的探针遍历方式看不到它们；别据此「修」什么。
+  仍然成立的老事实：**没有播放数**（页面上没有任何自述为播放量的数）。
+* **作者主页那一屏没长大**（探针自己拖 `scrollTop`：20 → 20 → 20 → 20，而页面自报 `作品 145`）。
+  代码走的是 `feed.jump_to_bottom(PROFILE_GRID)` + 等新行。**用产品自己走一遍才算数**：
+  `backend/test_dy_funnel.py` 跑 `author(target=40)` → **40 行、40 个不同 视频ID、一次 `authorDone`**，
+  所以网格分页仍然工作，探针那次是**方法不对**（拖错盒子）。教训写进这里是为了下次别拿探针的
+  失败去改产品：产品路径的结论优先，探针只负责提出疑问。
+* **搜索的行预算≈1.5 倍导航**：目标 8 行实际开了 12 个详情页，其中 2 张「没有渲染出数据」、
+  2 张「只渲染出计数条」——**两种都有具名句**（`crawl.dy.detailEmpty` / `detailNoIdentity`），
+  所以这条路不欠「静默丢行」；但 `finished` 那句只报 `n/rounds/total`，不报「拒了几张详情页」，
+  对着 U2 的账（扫X留Y拒Z）还差这一格。
+
+* **作者列整列为空（U42，已修）**：见 §6。要点是**页面改版把数据搬了家**——`related-video` 那块
+  不再渲染，而作者一直在页面上，就在 `a[href*="/user/<sec_uid>"]` 的链接文字里（探针取到
+  `白水鉴心`、`IU'ㅅ'`）；粉丝数/获赞数则**页面不发布**（整页只有「粉丝」「获赞」两个导航词，旁边没有数），
+  所以那两列改成留空而不是 0。同一次探针还证伪了一件事：`_driver_facts` 的四个计数选择器
+  **没坏**（存下来的行是 `点赞 279000 / 评论 1473 / 收藏 13000 / 转发 40000`），
+  是 `[data-e2e]` 遍历看不到它们（数在兄弟节点上），别照着探针「修」读数。
+
+
 ## Bilibili
+
+
 
 **Its two paging contracts are measured, not guessed — keep them exactly.**
 

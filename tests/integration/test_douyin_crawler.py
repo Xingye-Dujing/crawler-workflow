@@ -485,6 +485,33 @@ class TestSearch:
         assert row['正文'] == '归墟第十二集 #归墟 #末日 #科幻'
         assert row['链接'] == f'https://www.douyin.com/video/{ID}'
 
+    def test_a_page_that_names_its_author_by_link_still_fills_the_column(self, make_crawler):
+        """U42: this build names its author on a link and drops the related-video block.
+
+        Measured 2026-09-28 (``backend/test_dy_author.py``): a video page carries
+        ``a[href="https://www.douyin.com/user/MS4w…"]`` whose text is the nickname, and
+        ``[data-e2e="related-video"]`` — the only place the old reader looked — is **not rendered**.
+        So every row stored ``作者=''`` and the nameless-page guard never fired, because the publish
+        time is present. A blank column nobody announces is the same failure as a zero nobody notices.
+
+        The two creator totals are asserted as ``''`` on purpose: the page publishes the *words*
+        粉丝/获赞 as nav labels and no figure, so 0 would be a count of something nobody counted.
+        """
+        crawler, _driver = make_crawler(
+            cards=[ID],
+            facts_by_id={
+                ID: {
+                    **_default_facts(),
+                    'related': '',
+                    'author': '泫九',
+                }
+            },
+        )
+        row = crawler.search('人工智能', target_count=1)[0]
+        assert row['作者'] == '泫九', row
+        assert row['粉丝数'] == '' and row['获赞数'] == '', f'a missing figure must not be filed as 0: {row}'
+        assert row['点赞数'] == 59000, 'the counters that ARE on the page keep reading'
+
     def test_no_play_count_column_exists_on_douyin(self, make_crawler):
         """Measured: detail-video-info's second number IS the like counter, and
         the web player never shows plays. Publishing 播放数 would be a wrong

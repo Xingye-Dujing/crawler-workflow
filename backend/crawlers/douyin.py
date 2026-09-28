@@ -686,7 +686,14 @@ class DouyinCrawler(VideoCrawler):
         info_lines = [line.strip() for line in str(facts.get('info') or '').split('\n') if line.strip()]
         text = info_lines[0] if info_lines else ''
         publish = _clean_publish(facts.get('publish'))
-        author, followers, liked = _author_from_related(str(facts.get('related') or ''))
+        related = _author_from_related(str(facts.get('related') or ''))
+        # Measured 2026-09-28: the video page names its own creator as ``a[href*="/user/MS4w…"]`` whose
+        # text is the nickname, and **no longer renders** the ``related-video`` block the reader above
+        # used as its only source. Every row was therefore stored with ``作者=''`` while the guard below
+        # stayed silent (the publish time *is* on the page), so a whole column came back blank and nobody
+        # said so — the douyin shape of weibo's恒 0 点赞数.
+        author = str(facts.get('author') or '').strip() or related[0]
+        followers, liked = related[1], related[2]
         if not author and not publish:
             # Measured 2026-09-26 on a live run: the video page handed over its counter bar and
             # nothing else — an id, 点赞 300, 评论 11, no author, no publish time, no 文案. That is
@@ -699,8 +706,13 @@ class DouyinCrawler(VideoCrawler):
             '标题': (self._title().removesuffix(' - 抖音').strip() or text)[:120],
             '正文': text,
             '作者': author,
-            '粉丝数': followers,
-            '获赞数': liked,
+            # The creator's totals are not on a video page — measured, only the *words* 粉丝/获赞 appear,
+            # as nav labels with no figure beside them. A 0 there would be a count that says 「这个账号
+            # 没人关注」, i.e. a wrong number under a plausible column name, which is exactly why 播放数
+            # was never added. So the columns say nothing when the page says nothing; the block that used
+            # to carry both still fills them when a build renders it.
+            '粉丝数': followers or '',
+            '获赞数': liked or '',
             '发布时间': publish,
             '视频ID': str(aweme_id),
             '点赞数': parse_count(facts.get('digg')),
@@ -717,6 +729,18 @@ class DouyinCrawler(VideoCrawler):
           var el = document.querySelector(sel);
           return el ? (el.innerText || '').trim() : '';
         }
+        function author() {
+          // The nav's 「我的」 entry is a /user/ link too, and the related-video rail links a dozen
+          // more; the creator's own is the one that carries the opaque sec_uid with **no query**
+          // and has a name written on it (measured: two such anchors, the icon and the label).
+          var links = document.querySelectorAll('a[href*="/user/"]');
+          for (var i = 0; i < links.length; i++) {
+            var href = links[i].href || '';
+            var name = (links[i].innerText || '').trim();
+            if (name && /^https:\\/\\/www\\.douyin\\.com\\/user\\/[A-Za-z0-9_-]{20,}$/.test(href)) return name;
+          }
+          return '';
+        }
         return {
           digg: txt('[data-e2e="video-player-digg"]'),
           comment: txt('[data-e2e="feed-comment-icon"]'),
@@ -724,6 +748,7 @@ class DouyinCrawler(VideoCrawler):
           share: txt('[data-e2e="video-player-share"]'),
           info: txt('[data-e2e="detail-video-info"]'),
           publish: txt('[data-e2e="detail-video-publish-time"]'),
+          author: author(),
           related: txt('[data-e2e="related-video"]')
         };
         """

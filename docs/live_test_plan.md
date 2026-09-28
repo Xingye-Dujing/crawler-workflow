@@ -190,6 +190,8 @@
 
 | U41 | `crawlers/comments.py::crawl_weibo` 的差额归因（**已修 2026-09-28，真机 D5 抓到**） | **把用户填的上限说成站点的缺额**：一条报 3 条评论的微博，首页一次给满 3 条且游标同时归零 → 循环在 `not max_id` 处 break，`ended` 还是 `'cursor'`（永远走不到 `'limit'` 那格），而差额比较用的是**被上限截过的表**（2 行）→ 打出「站点写着 3 条，本表只有 2 条（差 1 条）—— 差额是楼中楼」。这句话是替站点说话，起因却是用户自己填了个小的数，正上方那条分支要防的就是它 | 产品修复：差额只对**游标收到的行数**（`len(rows)`）判，收到的 == 站点报的数就一句不说；快层针 `test_a_limit_crossed_on_the_last_page_does_not_blame_the_thread`。同一段的 `comment.weiboFetchDied` 也一并改成按收到的行数报，免得同一类错位搬进新句子里 |
 
+| U42 | `crawlers/douyin.py::_detail_row` 的 作者 / 粉丝数 / 获赞数（**已修 2026-09-28，抖音第 0 步探针抓到**） | **整列作者空白，而且没人说**：三个字段全靠 `_author_from_related` 从 `[data-e2e="related-video"]` 那块面板的文字里切（`泫九粉丝167.0万获赞1157.5万`）。实测这一版详情页**不渲染那块节点**（探针把页面上所有 `[data-e2e]` 遍历了一遍，没有；`backend/test_dy_author.py` → `scratchpad/dy_author.json`），于是每行 `作者=''`、`粉丝数=0`、`获赞数=0`；而守卫写的是 `if not author and not publish` —— 发布时间在，守卫永远不响。**真机闸门 `test_live_douyin.py:47` 那句「至少一行要有作者」今天本来就是红的**（说明这一格自站点改版后没再跑过——测试腐烂的教科书样子）。作者其实就在页面上：`a[href="https://www.douyin.com/user/MS4w…"]` 的链接文字（`白水鉴心`、`IU'ㅅ'`）；粉丝/获赞则**页面根本不发布**（满页只有那两个词的导航标签，没有数） | 产品修复：作者改读那条锚点（JS 里排除导航的 `/user/self` 与带 query 的推荐位，取「有文字的裸 sec_uid 链接」）；粉丝/获赞**留空不再填 0**（与不放 播放数 同一条规矩：没有一个可数的数，就不许有一列看起来在数），旧版若渲染那块面板仍照旧填。快层针 `tests/integration/test_douyin_crawler.py::test_a_page_that_names_its_author_by_link_still_fills_the_column`；真机验证：同一条探针改后 `作者='白水鉴心' / 'IU'ㅅ'`、两列为 `''`。**另记**：一次搜索 8 行实际开了 12 个详情页（2 张 `没有渲染出数据` + 2 张 `只渲染出计数条`，两种都具名、都不算行）——行预算≈1.5 倍导航，抖音的 target 就是这个价 |
+
 **滚动节奏（fake driver 数出来的 scroll 命令，不是真机测量；读控制台 `scroll_round` 前先记住它）**：
 `scroll_down(steps=3)` 一次发 **4** 条 scroll 命令（3 步 + 1 次底部跳转），所以搜索的一个 stalled round
 = 2 次 `scroll_down`（轮首 + 轮内那次确认）= 8 条；连停 3 轮收工共 **20 条**，时间成本 ≈ 每轮 2×`CARD_WAIT`
