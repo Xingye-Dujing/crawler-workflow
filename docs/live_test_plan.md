@@ -576,7 +576,49 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
 - [ ] VPN 阶段：X → YouTube（先测反向用例：不可达必须报 `unreachable`，不许假空）
 - [ ] 全平台门过 → §6 剩余嫌疑（U1 通用 under-target、U2 walk 计数器从不打印等）收口提交
 
-### 交接状态（2026-09-28，**知乎已收口、微博第 0 步已读完页面**）
+### 交接状态（2026-09-28 晚，**Cookie 多账号 / 微信 / i18n / 云端部署**；抖音第 8 步仍未收口）
+
+**工作树干净**，闸门：**快层 4552 passed / 261 deselected、设备层 129 passed（exit 0 复核过）、
+`ruff check` + `format --check` 干净**。今天这七笔（`git log` 可查，未 push）：
+
+- `05ee245` 问题修复：抖音采集与评论九处静默欠采/误责（每枚针做过「退回即红」）
+- `a7475f8` 功能更新：抖音运行级真机矩阵 17 格 + 验收共享件（`lane_switches` / `wait_refused` / `cursor_of` / `component_verdict`）
+- `d35921d` 问题修复：**微信根本不让爬**的真凶是 `execute()` 里第二段弱闸门——它读 `/api/cookies/status`
+  的 `cookies[platform]`，而那张表按平台只对**默认账号**求值且不含 wechat（不在 `CookieManager.PLATFORMS`），
+  于是「选了账号仍说没 Cookie」与「微信永远起不动」同源；该段整删，矩阵改 `wechat/posts needs_session=False`
+- `0639298` 问题修复：`dialog.cookieDelete` 模板有**两处** `{platform}` 而 `.replace` 只填第一处（屏幕上露原文，
+  且贴的是裸键）→ `I18n.t(key, vars)` 全量填 + 新增 **JS 守护** `tests/unit/test_frontend_i18n_js.py`
+  （占位符出现次数必须由调用点覆盖、`{platform}` 不许填裸键、zh/en 占位符计数须相等）；守护顺手抓出两处没被报告的：
+  `settings.liveExportHint` 的 `{node}` 从未填过、`dialog.serialWarn` 英文重复占位符。同笔删掉
+  「把 Cookie 更新进 Profile」按钮 + `/api/cookies/refresh-profile` + 四句拒绝文案，保存即种进 Profile
+- `019a274` 功能更新：多账号后端——状态按 `(platform, account)` 回答、候选与校验按**创建顺序**
+  （`accounts_in_order`，空白只在默认文件真存在时出现）、留空第二次保存自动 `default2`（显示 **默认账号2**）、
+  保存的日志/回复报出是哪个账号
+- `3d19ab7` 功能更新：保存时该账号**还没有 Profile 就当场建好并种进去**（没启用 profile 时不买浏览器也不谎报；
+  被占用则明说，靠 `needs_refresh` 下次抓取自动带上）；`has_session_to_test` 改公开名
+- `828b838` 功能更新：云端旗标 `CRAWLER_CLOUD=1` / `python app.py cloud`（`--cloud` 同），`/api/config` 回 `cloud_mode`
+
+**明确没做/主动回退的（下一次从这里接）**：
+1. 任务 **#28**：「节点选的账号没有 Cookie → 按名字拒绝执行」代码与双语键已写好，但跑出 84 格红后**在提交前
+   回退**。真因是测试夹具顺序，不是规则：新增的 `seeded_cookies`（tests/conftest.py）只依赖 `app_module`，
+   `client` 夹具随后重建 tmp 数据根，种下的 Cookie 被换掉 → 表现为"运行根本没起来"（`get_run` 返回 None、
+   `logs == []`、`total_nodes == 0`）。修法：让 `seeded_cookies` 依赖 `data_root`（或 `client`）再写文件，
+   写完自证一次 `exists()`；只对 9 个真起爬取的模块 `usefixtures`，**不要全局 autouse**
+   （`test_cookie_preflight` / `test_config_api` 要靠"没有 Cookie"说话）。
+2. 任务 **#25/#26/#27**：云端隐藏 Ollama 与无头设置（**注意知乎评论区/内容页实测拒绝无头会话，云端这些模式
+   要按名字拒绝，不许默默跑成空表**）、隐私审查 + 首次隐私声明弹窗、**pristine Profile 模板**。
+3. **不复制用户日常 Chrome 目录**做模板：`data/` 是 gitignore 而仓库有 remote，手工剥离 `Login Data`/`History`/
+   `Local Storage`/`Preferences` 极易漏；且 `browser_profiles.py` 记着实测（目录独占、Cookie 应用绑定加密、
+   Chrome 136 起默认禁远程调试）。云端模板由**程序自启一次空白 Chrome** 生成，天生不含登录。
+4. 抖音：第 0-7 步已逐例读控制台收口；**第 8 步 H1 不能按原样收口**（两条排序腿在用户判定暂停的搜索线上），
+   A7/A8 是"写好了、没跑过"，§11 记的就是这个状态。
+
+**给下一段的提醒（本轮真实发生过）**：一次子代理审计给出的多条 Python 结论（`reached()`/`logged()`、
+`comment.gapFound`、重名测试、"已提交的 deploy 外壳"）在仓库里**并不存在**，我也曾把没发生的提交当成已完成汇报过。
+凡是准备据此动手的结论，先自己读一遍文件/`git log`；闸门数字要带退出码取，别凭记忆。
+
+
+#### 上一阶段的交接（2026-09-28 早，**知乎已收口、微博第 0 步已读完页面**）
 
 **已提交**（`git log` 可查，工作树只剩用户自己的 `.gitignore`，他已自行提交）：
 
