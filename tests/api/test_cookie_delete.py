@@ -47,9 +47,17 @@ def clean_jar(app_module):
 
 @pytest.fixture
 def saved(app_module):
-    """Put a cookie file on disk, as the panel's save button would."""
+    """Put a cookie file on disk for the DEFAULT account, on a clean platform.
+
+    The suite shares one cookie dir, and a sibling module mints 默认账号2 through the panel's
+    save on purpose — a named account left behind would make 「delete the default, the platform
+    now has nothing」 false for reasons that have nothing to do with this test. Status answers
+    per platform as "any account has a login", so the precondition has to be *no* account.
+    """
 
     def _save(platform='zhihu', count=2):
+        for name in ['', *app_module.cookie_manager.account_files(platform)]:
+            app_module.cookie_manager.delete(platform, name)
         app_module.cookie_manager.save(platform, [{'name': f'c{i}', 'value': 'v'} for i in range(count)])
         return platform
 

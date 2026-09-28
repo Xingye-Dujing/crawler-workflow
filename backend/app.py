@@ -4838,11 +4838,36 @@ COOKIE_PLATFORMS = CookieManager.PLATFORMS
 
 @app.route('/api/cookies/status', methods=['GET'])
 def cookie_status():
-    status = {platform: cookie_manager.exists(platform) for platform in COOKIE_PLATFORMS}
-    # The named accounts each platform already holds — the panel lists them to
-    # switch or delete, and no file's CONTENT is read for it (names off the listing).
-    accounts = {platform: cookie_manager.account_files(platform) for platform in COOKIE_PLATFORMS}
-    return jsonify({'ok': True, 'cookies': status, 'accounts': accounts})
+    """What the panel is allowed to know about saved logins: names, and whether one exists.
+
+    ``cookies[platform]`` used to be ``cookie_manager.exists(platform)`` — the BLANK account's
+    file only. A user who keeps every login under a name therefore saw 「没有 Cookie」 for a
+    platform he crawls with daily, and the status line could not answer the question he was
+    actually asking, which is about the account in the box. ``saved`` is that answer: keyed by
+    the same ``(platform, account)`` entry the pre-flight uses.
+
+    No file is opened and no value is read — the names come off the directory listing, which is
+    also why the management view can show counts and dates without ever carrying a session.
+    """
+    accounts = {platform: cookie_manager.accounts_in_order(platform) for platform in COOKIE_PLATFORMS}
+    saved, session_only = {}, {}
+    for platform, names in accounts.items():
+        for account in names:
+            key = cookie_preflight.entry_key(platform, account)
+            saved[key] = True
+            # How many entries are session-only, so the panel can say what will not outlive a
+            # window — without the management view ever having to open the jar.
+            session_only[key] = cookie_manager.session_only_count(platform, account)
+    return jsonify(
+        {
+            'ok': True,
+            # 「this platform has a login somewhere」 — not "the blank file exists".
+            'cookies': {platform: bool(names) for platform, names in accounts.items()},
+            'accounts': accounts,
+            'saved': saved,
+            'session_only': session_only,
+        }
+    )
 
 
 @app.route('/api/cookies/flow', methods=['GET'])
@@ -5034,6 +5059,13 @@ def save_cookies():
             add_log(t('cookie.droppedForeign', platform=platform, n=dropped))
         if not kept:
             return jsonify({'ok': False, 'error': t('cookie.allForeign', platform=platform)}), 400
+        # 留空 = 「一个还没起名字的登录」：第一份是默认账号，第二份是默认账号2, never an overwrite.
+        # A second blank paste cannot be told apart from re-pasting the first one (two logins of one
+        # platform carry the same cookie *names*, and the value that would tell them apart is the one
+        # that rotates), so the only reading that cannot destroy a paid-for login is "this is a new
+        # one". Overwriting a specific account is what choosing that account in the box means.
+        if not account and cookie_manager.exists(platform):
+            account = cookie_manager.next_free_account(platform)
         cookie_manager.save(platform, kept, account)
         # The file this platform would be planted from just changed, so the cached
         # verdict about the previous one has to go with it.
@@ -5044,12 +5076,17 @@ def save_cookies():
         # One cookie, one profile: the browser that will crawl with this login takes the
         # new file in now, instead of the user pressing a second button to say so.
         planted = _plant_saved_cookie_into_profile(platform, account)
-        message = t('cookie.saved', platform=platform)
+        # 「已保存」 is not the whole answer any more: a blank name can have become 默认账号2, and
+        # the panel has to say which login it just wrote — otherwise the user cannot tell whether
+        # the account he meant is the one that changed.
+        message = t('cookie.savedAccount', platform=platform, account=cookie_manager.label_of(account))
         return jsonify(
             {
                 'ok': True,
                 'message': f'{message}\n{planted}' if planted else message,
                 'count': len(kept),
+                'account': account,
+                'account_label': cookie_manager.label_of(account),
                 'profile_note': planted or '',
             }
         )
@@ -5581,7 +5618,9 @@ def get_capabilities():
     """
     payload = capabilities.as_dict()
     for cap in payload.get('platforms', []):
-        saved = cookie_manager.account_files(cap.get('platform') or '')
+        # Creation order, not alphabetical: the list the node picks from is "which logins does this
+        # machine have", and a user who added work-then-home expects home to still be second.
+        saved = [a for a in cookie_manager.accounts_in_order(cap.get('platform') or '') if a]
         for mode in cap.get('modes', []):
             for field in mode.get('fields', []):
                 if field.get('key') == 'account':

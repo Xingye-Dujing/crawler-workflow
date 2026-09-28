@@ -69,9 +69,66 @@ def factory(monkeypatch, app_module, tmp_path):
 
 
 def _save(client, platform='weibo', account='', cookies=None):
-    return client.post(
-        '/api/cookies/save', json={'platform': platform, 'account': account, 'cookies': cookies or _PASTE}
-    )
+    body = {'platform': platform, 'account': account, 'cookies': cookies or _PASTE}
+    return client.post('/api/cookies/save', json=body)
+
+
+class TestTheSecondUnnamedLogin:
+    """A blank name is 「a login with no name yet」, so a second one is a NEW login (#R2).
+
+    Two logins of one platform carry the same cookie names, and the value that would tell them
+    apart is the one that rotates (weibo's SUB), so nothing in the paste says "this is the same
+    device again". Overwriting on that guess would destroy a login the user paid for, and asking
+    every time is the extra click he has already refused. The reading that is safe in both
+    directions: blank + taken default = 默认账号2. Replacing a known login is what selecting
+    that account in the box means.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean_default(self, app_module):
+        """The suite shares one cookie dir per import, and a sibling test mints these labels on
+        purpose — so the precondition is set here rather than assumed from execution order.
+        """
+        for name in ('', 'default2', 'default3'):
+            app_module.cookie_manager.delete('weibo', name)
+
+    def test_the_first_blank_save_is_the_default_account(self, client, factory, app_module):
+        factory()
+        answer = _save(client)
+        assert answer.status_code == 200
+        assert answer.get_json()['account'] == ''
+        assert app_module.cookie_manager.exists('weibo', '')
+        assert not app_module.cookie_manager.exists('weibo', 'default2')
+
+    def test_a_second_blank_save_becomes_default2_and_keeps_the_first(self, client, factory, app_module):
+        factory()
+        _save(client, cookies=[{'name': 'SUB', 'value': 'one', 'domain': '.weibo.com'}])
+        second = _save(client, cookies=[{'name': 'SUB', 'value': 'two', 'domain': '.weibo.com'}])
+        assert second.status_code == 200, 'the save must not ask, and must not refuse'
+        assert second.get_json()['account'] == 'default2'
+        assert app_module.cookie_manager.load('weibo', '')[0]['value'] == 'one', 'the first login was clobbered'
+        assert app_module.cookie_manager.load('weibo', 'default2')[0]['value'] == 'two'
+
+    def test_the_third_one_counts_on_rather_than_reusing_default2(self, client, factory, app_module):
+        factory()
+        for value in ('one', 'two', 'three'):
+            _save(client, cookies=[{'name': 'SUB', 'value': value, 'domain': '.weibo.com'}])
+        assert app_module.cookie_manager.load('weibo', 'default3')[0]['value'] == 'three'
+
+    def test_the_generated_label_is_a_word_not_the_file_segment(self, client, factory, app_module):
+        factory()
+        _save(client)
+        label = _save(client).get_json()['account_label']
+        assert 'default2' not in label, f'the panel showed the machine label: {label}'
+        assert label, 'an unnamed login still has to be named'
+
+    def test_choosing_an_account_still_overwrites_that_account(self, client, factory, app_module):
+        """Selecting the login IS the explicit act — no numbering, no second file."""
+        factory()
+        _save(client, account='work', cookies=[{'name': 'SUB', 'value': 'one', 'domain': '.weibo.com'}])
+        _save(client, account='work', cookies=[{'name': 'SUB', 'value': 'two', 'domain': '.weibo.com'}])
+        assert app_module.cookie_manager.entry_count('weibo', 'work') == 1
+        assert app_module.cookie_manager.load('weibo', 'work')[0]['value'] == 'two'
 
 
 class TestThePlantItself:

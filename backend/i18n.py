@@ -338,6 +338,12 @@ _ZH = {
     'ml.emotion_done': '[ML] 情感分类完成，共处理 {n} 行，模式: ML',
     'ml.tendency_done': '[ML] 倾向性分析完成，共处理 {n} 行，模式: ML',
     'cookie.saved': '已保存 {platform} 的 Cookie',
+    # 一个平台可以多份登录：那句保存的话必须说出是**哪一份**，否则控制台里「已保存 微博 的 Cookie」
+    # 指的是哪一个账号无从判断（用户要的正是逐个 Cookie 管理）。{account} 由 CookieManager 先取好
+    # 词（空白=默认账号、default2=默认账号2、自己起的名字原样），这里只负责成句。
+    'cookie.savedAccount': '已保存 {platform} 的 Cookie（账号：{account}）',
+    'cookies.accountDefault': '默认账号',
+    'cookies.accountDefaultNumbered': '默认账号{n}',
     'cookie.started': '已启动登录浏览器，请在弹出的窗口完成登录，然后点「已完成登录」',
     'cookie.jobCancelled': '{platform} 登录已取消',
     'cookie.windowClosed': '登录窗口被关闭，未捕获 Cookie；请重新发起登录',
@@ -1228,6 +1234,11 @@ _EN = {
     'ml.emotion_done': '[ML] Emotion classification done, {n} rows, mode: ML',
     'ml.tendency_done': '[ML] Tendency analysis done, {n} rows, mode: ML',
     'cookie.saved': 'Cookies saved for {platform}',
+    # {account} is already a word by the time it reaches here (blank → "default account",
+    # default2 → "default account 2", a typed label verbatim), so the sentence never prints a key.
+    'cookie.savedAccount': 'Cookies saved for {platform} (account: {account})',
+    'cookies.accountDefault': 'default account',
+    'cookies.accountDefaultNumbered': 'default account {n}',
     'cookie.started': 'Login browser opened — finish the login in that window, then press Done',
     'cookie.jobCancelled': '{platform} login cancelled',
     'cookie.windowClosed': 'The login window was closed before cookies could be captured; start again',

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import time
 
 from i18n import t
 
@@ -83,8 +84,8 @@ class CookieManager:
 
         Read off the filenames only — no file is opened, so this answers "which
         accounts can be chosen" without touching any session value. The default
-        (blank) account is not listed here; it is always a valid choice and the
-        caller offers it separately.
+        (blank) account is not listed here; use :meth:`accounts_in_order` for the
+        list a human chooses from, which includes it when its file exists.
         """
         if not self.is_supported(platform):
             return []
@@ -99,11 +100,90 @@ class CookieManager:
                     out.append(account)
         return sorted(out)
 
+    def accounts_in_order(self, platform: str) -> list:
+        """Every account that HAS a file, oldest save first — ``''`` for the default included.
+
+        Two questions the sorted list cannot answer, both asked by the user:
+
+        * which login did this machine get first (「节点使用的账号默认都是第一个创建的账号」), and
+        * does the platform have any cookie at all when the only one is a NAMED account
+          (``exists(platform)`` is the blank file, and a ``zhihu@work_cookies.json`` is not it).
+
+        Creation order is read from the filesystem rather than kept in a manifest: a manifest is
+        a second source of truth that can be edited out of step with the files it describes, and
+        these files are never renamed under us. ``st_ctime`` is the *creation* time on Windows
+        (this is a local single-user tool, and the deploy branch is not) and an inode-change time
+        elsewhere, so ``mtime`` is folded in as the tie-break and the answer degrades to "oldest
+        known", never to alphabetical.
+        """
+        if not self.is_supported(platform):
+            return []
+        named = self.account_files(platform)
+        entries = [''] if self.exists(platform) else []
+        entries += named
+
+        def _born(account: str) -> tuple:
+            try:
+                info = os.stat(self._path_for(platform, account))
+            except OSError:
+                return (float('inf'), account)
+            return (min(info.st_ctime, info.st_mtime), account)
+
+        return sorted(entries, key=_born)
+
+    def has_any(self, platform: str) -> bool:
+        """Whether this platform has a saved login for ANY account.
+
+        The panel and the pre-run gate ask "is there a cookie here", and the blank file is not
+        the whole answer: a user who saved every account under a name has nothing at
+        ``zhihu_cookies.json`` and everything to crawl with.
+        """
+        return bool(self.accounts_in_order(platform))
+
+    def next_free_account(self, platform: str) -> str:
+        """The label to give a save that was asked to be the default while one already exists.
+
+        「如果有多个留空就需要默认账号后面自动加数字」: the blank account is one file, and a second
+        unnamed save would otherwise overwrite the first login with no sentence saying so. The
+        generated label is ASCII (``default2``, ``default3``…) because it enters a filename — the
+        *display* of it is 「默认账号2」, which is what the user reads (``account_label_key``).
+        """
+        if not self.exists(platform):
+            return ''
+        step = 2
+        while self.exists(platform, f'default{step}'):
+            step += 1
+        return f'default{step}'
+
+    @classmethod
+    def account_label_key(cls, account: str) -> tuple:
+        """``(i18n_key, extra)`` for how an account should be WORDed, never the bare label.
+
+        ``''`` is 默认账号 and a generated ``default2`` is 默认账号2 — both are display names, so a
+        machine label is only ever printed as-is when the user typed it themselves.
+        """
+        account = str(account or '').strip()
+        if not account:
+            return 'cookies.accountDefault', {}
+        generated = re.fullmatch(r'default(\d+)', account)
+        if generated:
+            return 'cookies.accountDefaultNumbered', {'n': int(generated.group(1))}
+        return None, {}
+
     def save(self, platform: str, cookies: list, account: str = ''):
+        account = str(account or '').strip()
         path = self._path_for(platform, account)
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(cookies, f, ensure_ascii=False, indent=2)
-        logger.info(t('cookie.saved', platform=platform))
+        # The account belongs in the sentence: with one platform holding several logins, a line
+        # that says only 「已保存 微博 的 Cookie」 leaves the user unable to tell which login he
+        # just overwrote — and the console is the only record of the write.
+        logger.info(t('cookie.savedAccount', platform=platform, account=self.label_of(account)))
+
+    def label_of(self, account: str) -> str:
+        """The WORD for an account in the current language (a typed label is already a word)."""
+        label_key, label_args = self.account_label_key(account)
+        return t(label_key, **label_args) if label_key else str(account or '').strip()
 
     def load(self, platform: str, account: str = '') -> list:
         try:
@@ -117,6 +197,23 @@ class CookieManager:
         if not self.is_supported(platform):
             return False
         return os.path.exists(self._path_for(platform, account))
+
+    def saved_at(self, platform: str, account: str = '') -> str:
+        """When this login was last written, as a wall-clock string — or ``''`` if it is not there.
+
+        The management view has to say WHICH of two accounts is the stale one, and a name alone
+        cannot; the timestamp is metadata off the directory entry, so answering it never opens
+        the jar.
+        """
+        try:
+            stamp = os.path.getmtime(self._path_for(platform, account))
+        except (OSError, ValueError):
+            return ''
+        return time.strftime('%Y-%m-%d %H:%M', time.localtime(stamp))
+
+    def entry_count(self, platform: str, account: str = '') -> int:
+        """How many cookie rows are saved, counted without showing any of them."""
+        return len(self.load(platform, account))
 
     def session_only_count(self, platform: str, account: str = '') -> int:
         """How many saved entries carry no expiry, which is how long they will live.

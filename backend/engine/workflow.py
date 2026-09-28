@@ -316,7 +316,7 @@ class WorkflowEngine:
         # the same list the panel was offered from. A stored name with no file is
         # refused by name (it says "crawl as a login that is not here"); guessing the
         # default instead would hand one node another account's session.
-        accounts = CookieManager(Config.COOKIE_DIR).account_files(str(platform))
+        accounts = CookieManager(Config.COOKIE_DIR).accounts_in_order(str(platform))
         for field, value in capabilities.unoffered_selections(mode, params, accounts=accounts):
             errors.append(t('engine.source_bad_option', nid=label, field=t(field.name_key), value=value))
         for field in capabilities.link_fields(mode):

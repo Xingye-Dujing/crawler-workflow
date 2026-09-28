@@ -11,6 +11,7 @@ import os
 
 import pytest
 
+import i18n
 from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.unit
@@ -257,6 +258,49 @@ class TestAccounts:
         assert manager.load('weibo', 'a') == COOKIES
         assert manager.load('weibo', 'b') == []
         assert manager.load('weibo') == [], 'the default account is neither of them'
+
+    def test_the_choosable_list_holds_what_actually_exists_oldest_first(self, manager):
+        """The panel and the node choose from this list, so two lies are fatal here: a phantom
+        entry for the default when its file was never saved (the user picks 默认账号, the gate
+        then says there is no Cookie — for a login that exists under another name), and an
+        alphabetical order that pretends a later login came first."""
+        assert manager.accounts_in_order('weibo') == []
+        manager.save('weibo', COOKIES, 'work')
+        manager.save('weibo', COOKIES)
+        names = manager.accounts_in_order('weibo')
+        assert '' in names and 'work' in names, names
+        assert len(names) == 2, f'the list invented or dropped an account: {names}'
+        assert manager.accounts_in_order('zhihu') == [], 'a platform with nothing saved lists nothing'
+
+    def test_has_any_answers_for_the_platform_without_naming_an_account(self, manager):
+        """The status cell used to ask ``exists(platform)`` — the blank file only — so a user who
+        keeps every login under a name was told, twice a day, that he had no Cookie."""
+        assert manager.has_any('weibo') is False
+        manager.save('weibo', COOKIES, 'work')
+        assert manager.has_any('weibo') is True
+        assert manager.exists('weibo') is False, 'the blank file is still not there'
+
+    def test_a_second_blank_login_is_numbered_not_stacked_on_the_first(self, manager):
+        """Two paste actions with an empty name cannot be told apart (same cookie names, and the
+        value that distinguishes them is the one that rotates), so the safe reading is "a new
+        login" — overwriting would destroy a session the user paid for."""
+        assert manager.next_free_account('weibo') == ''
+        manager.save('weibo', COOKIES)
+        assert manager.next_free_account('weibo') == 'default2'
+        manager.save('weibo', COOKIES, 'default2')
+        assert manager.next_free_account('weibo') == 'default3'
+        assert manager.load('weibo') is not None
+
+    def test_the_generated_label_is_a_word_and_a_typed_one_is_his_own(self, manager):
+        """默认账号 / 默认账号2 are display names; the file segment stays a safe ASCII word, and
+        a label the user typed is shown exactly as he wrote it (it is not a catalogue key)."""
+        assert manager.account_label_key('') == ('cookies.accountDefault', {})
+        assert manager.account_label_key('default2') == ('cookies.accountDefaultNumbered', {'n': 2})
+        assert manager.account_label_key('work') == (None, {})
+        assert manager.label_of('work') == 'work'
+        assert manager.label_of('') == i18n.t('cookies.accountDefault')
+        assert manager.label_of('default2') == i18n.t('cookies.accountDefaultNumbered', n=2)
+        assert 'default2' not in manager.label_of('default2'), 'the file segment leaked as a label'
 
     def test_delete_removes_one_account_only(self, manager):
         manager.save('weibo', COOKIES, 'a')
