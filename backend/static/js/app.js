@@ -104,10 +104,10 @@ const I18n = {
             'cookies.verify': 'Verify cookie',
             'cookies.delete': 'Delete saved Cookie',
             'cookies.accountDefault': 'Default account',
-            // Sent as a labelKey by /api/cookies/status for a login this program named
-            // (the second blank save is `default2` on disk). A key the server hands the
-            // browser and the browser cannot answer is a raw string on screen — which is
-            // why the account-label test walks exactly these.
+            /* Sent as a labelKey by /api/cookies/status for a login this program named: the
+               SECOND blank save is `default2` on disk. A key the server hands the browser and
+               the browser cannot answer is a raw string on screen, which is why
+               ``test_every_account_label_the_server_sends_has_a_word_in_both_languages`` walks them. */
             'cookies.accountDefaultNumbered': 'Default account {n}',
             'cookies.accountDefaultHint': 'Leave the box empty for this login',
             'cookies.accountStatusHead': '{platform} · {account}',
@@ -122,10 +122,23 @@ const I18n = {
             'cookies.manageTitle': 'Saved logins',
             'cookies.noneSaved': 'Nothing is saved yet — paste a Cookie and it appears here.',
             'cookies.unknownWhen': 'unknown',
-            'cookies.useInPanel': 'Open',
-            'cookies.deleteOne': 'Delete',
             'cookies.rowMeta': '{n} entries · saved {when}',
             'cookies.rowSessionOnly': '{n} die with the window',
+            'cookies.useInPanel': 'Open',
+            'cookies.deleteOne': 'Delete',
+            /* The first-entry notice on a cloud host. The headline is the first line of the
+               body because this page's dialog has no title slot — inventing one for one
+               dialog would be a second way to render a dialog. */
+            'privacy.body':
+                'This app is running on a server, not on your computer.\n' +
+                'Stored on the server: the cookies you paste in, every table you upload or crawl, ' +
+                'your workflow files and run records. Cookie VALUES are never sent back to a browser ' +
+                "or shown on screen, but they live on this server's disk.\n" +
+                'Stored only in this browser: your OpenRouter API key, the canvas draft and the ' +
+                'interface settings. The key is used inside one request and never written to a ' +
+                'server file.',
+            'privacy.gotIt': 'Got it',
+            'privacy.never': 'Stop showing this',
             'cookies.account': 'Account',
             'cookies.accountPlaceholder': 'blank = the default login; type a new name to create one',
             'field.account': 'Account',
@@ -489,7 +502,6 @@ const I18n = {
                 + 'Is your overseas connection up?',
             'dialog.overseasNetworkYes': 'It is up — run',
             'dialog.overseasNetworkNo': 'Not yet — do not run',
-            'set.cookiePreflightInline': 'Ask each platform of this canvas whether its Cookie still works',
             'set.cookiePreflightInline': 'Ask each platform of this canvas whether its Cookie still works',
             'set.sameQueue': 'Fully queue same-platform crawls',
             'set.sameQueueInline': '真排队: one platform runs one crawl at a time, start to finish',
@@ -895,6 +907,14 @@ const I18n = {
             'cookies.deleteOne': '删除',
             'cookies.rowMeta': '{n} 条 · 存于 {when}',
             'cookies.rowSessionOnly': '其中 {n} 条关窗口即失效',
+            'privacy.body':
+                '这个应用跑在服务器上，不在你这台电脑里。\n'
+                + '存在服务器上的：你粘贴进来的 Cookie、你上传或采集到的每一张表、你的工作流文件与运行记录。'
+                + 'Cookie 的值永远不会发回浏览器、也不显示在任何界面上，但它们就放在这台服务器的磁盘里。\n'
+                + '只存在你这个浏览器里的：OpenRouter API Key、画布草稿和界面设置。'
+                + 'Key 只在一次请求里被用到，绝不写进服务器的文件。',
+            'privacy.gotIt': '知道了',
+            'privacy.never': '不再提醒',
             'cookies.account': '账号',
             'cookies.accountPlaceholder': '留空=默认登录；输入一个新名字即另存一份',
             'field.account': '登录账号',
@@ -1241,7 +1261,6 @@ const I18n = {
                 + '跟「什么都没搜到」一模一样。你的外网已经开了吗？',
             'dialog.overseasNetworkYes': '已开，继续运行',
             'dialog.overseasNetworkNo': '还没开，先别跑',
-            'set.cookiePreflightInline': '运行前用本次真要用的浏览器各加载一次该平台，问它 Cookie 还认不认',
             'set.cookiePreflightInline': '运行前用本次真要用的浏览器各加载一次该平台，问它 Cookie 还认不认',
             'set.sameQueue': '同平台真排队',
             'set.sameQueueInline': '真排队：同一平台一次只跑一条，前一条跑完才轮到下一条',
@@ -1725,10 +1744,13 @@ const CloudMode = {
     set(flag) {
         this.on = !!flag;
         this.apply();
-        /* The AI panel is filled from localStorage, which may name a transport this
+        /* The panel is filled from localStorage, which may name a transport this
            host cannot serve. Re-apply it from the truth instead of leaving a selected
            「本地 Ollama」 on a server that has none. */
         if (typeof LLMSettings !== 'undefined' && LLMSettings.applyToPanel) LLMSettings.applyToPanel();
+        /* And say, once, what this kind of host keeps on its own disk. The flag landing
+           is the moment the page knows it is standing in front of a stranger. */
+        if (this.on && typeof PrivacyNotice !== 'undefined') PrivacyNotice.maybeShow();
     },
 
     apply() {
@@ -1742,6 +1764,64 @@ const CloudMode = {
             if (local && sel.removeChild) sel.removeChild(local);
         }
         this.applied = true;
+    },
+};
+
+/* ── The first-entry notice on a cloud host ────────────────────────────────
+   On a desktop the person IN FRONT of the page is the machine's owner. On a server they
+   may be a stranger, and the two things they are about to hand over — a paste of cookies
+   and an uploaded table — land in the SAME `data/` the operator's own runs use. So the
+   page says, once, what is stored where.
+
+   It rides `showDialog` rather than getting its own markup: that dialog already handles
+   the backdrop click, Esc, and the button values this needs, and a second modal would be
+   a second implementation of "how does this box close" to get wrong.
+
+   The ack lives in localStorage — it is this BROWSER declining to be told again, not a
+   server-side preference about a person the server cannot identify. */
+const PrivacyNotice = {
+    KEY: 'crawler_privacy_ack',
+    shown: false,
+
+    maybeShow() {
+        if (this.shown || this.acked()) return;
+        this.shown = true;
+        showDialog({
+            message: I18n.t('privacy.body'),
+            buttons: [
+                { label: I18n.t('privacy.never'), value: 'never' },
+                { label: I18n.t('privacy.gotIt'), value: null, primary: true },
+            ],
+        }).then((answer) => {
+            if (answer === 'never') {
+                try {
+                    localStorage.setItem(this.KEY, '1');
+                } catch (e) {
+                    /* A browser that refuses localStorage (private mode with storage
+                       blocked) is asked again next visit. Saying so in a toast would be
+                       noise; the notice reappearing is the honest answer. */
+                }
+            }
+        });
+    },
+
+    acked() {
+        try {
+            return localStorage.getItem(this.KEY) === '1';
+        } catch (e) {
+            return false;
+        }
+    },
+
+    /* Test seam and a genuine product need: 「我在本机重新看看这条说明」 is how a user
+       unsends an ack they clicked in passing. */
+    reset() {
+        try {
+            localStorage.removeItem(this.KEY);
+        } catch (e) {
+            /* Nothing to undo — an unreadable storage never held an ack. */
+        }
+        this.shown = false;
     },
 };
 

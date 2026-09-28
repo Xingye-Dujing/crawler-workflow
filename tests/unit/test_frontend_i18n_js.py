@@ -213,6 +213,50 @@ class TestJsCallSitePlaceholders:
         )
 
 
+class TestCatalogueShape:
+    """Two ways a catalogue can be wrong that a parity scan cannot see.
+
+    Both were found while writing the account list: the browser catalogue was missing the
+    key the server sends for 「默认账号2」 (so the panel would have printed
+    `cookies.accountDefaultNumbered` on screen), and one pre-existing key was simply
+    written twice in each language.
+    """
+
+    def test_no_key_is_written_twice_in_one_language(self):
+        """A repeated key in an object literal is legal JavaScript and the LAST wins.
+
+        The parity harness reads a parsed dictionary, which has already collapsed the pair —
+        so a duplicated key is invisible to every "same keys, same slots" check while one of
+        the two answers is dead code that the next editor will wonder about.
+        """
+        source = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        counts = Counter(re.findall(r"^\s+'([A-Za-z][\w.]*)':", source, re.M))
+        wrong = {key: n for key, n in counts.items() if n != 2}
+        assert wrong == {}, f'each key belongs to exactly one catalogue per language: {wrong}'
+
+    def test_every_account_label_the_server_sends_has_a_word_in_both_languages(self):
+        """``labelKey`` crosses the wire as a KEY; the browser is the one that must own it.
+
+        A generated account name is this program's word, so it travels as a catalogue key —
+        and a key the browser cannot answer is printed raw. A name the user typed is the
+        other half of the rule: it carries NO key and is shown exactly as typed.
+        """
+        from services.cookie_manager import CookieManager
+
+        catalogs = _catalogs()
+        for account in ('', 'default2', 'default10', 'work'):
+            key, args = CookieManager.account_label_key(account)
+            if not key:
+                assert account == 'work', f'{account} is generated, so it must have a key'
+                continue
+            for lang, table in catalogs.items():
+                template = table.get(key)
+                assert template is not None, f'{lang} browser catalogue has no {key} the server sends'
+                slots = Counter(SLOT_RE.findall(template))
+                assert set(slots) == set(args), f'{key}/{lang}: template slots {dict(slots)} vs sent {args}'
+                assert all(n == 1 for n in slots.values()), f'{key}/{lang} repeats a slot: {template}'
+
+
 class TestTheScanFires:
     """A guard that cannot fail is not a guard (the Python side pins its own scan the same way)."""
 

@@ -33,12 +33,12 @@ vm.createContext(sandbox);
 fixWindow(vm, sandbox);
 vm.runInContext(
     `${src}
-     ;globalThis.__cloud = { CloudMode, LLMSettings, llmModeLabel, I18n };`,
+     ;globalThis.__cloud = { CloudMode, LLMSettings, llmModeLabel, I18n, PrivacyNotice };`,
     sandbox,
 );
 /* `const` bindings are lexical, not properties of the context object, so the only way
    out here is the export line above — reaching for `sandbox.CloudMode` reads as missing. */
-const { CloudMode, LLMSettings, llmModeLabel, I18n } = sandbox.__cloud;
+const { CloudMode, LLMSettings, llmModeLabel, I18n, PrivacyNotice } = sandbox.__cloud;
 sandbox.fetch = () => {
     requests.push('/api/config');
     return Promise.resolve({
@@ -50,6 +50,19 @@ sandbox.fetch = () => {
                 cloud_mode: cloudAnswer,
             }),
     });
+};
+
+/* Every dialog the page raised, with what its buttons would resolve to. Installed after
+   the sources run: app.js calls `showDialog` by name, so the stub has to be what the
+   context resolves at call time. */
+const dialogs = [];
+sandbox.showDialog = (spec) => {
+    dialogs.push({
+        message: String(spec.message || ''),
+        labels: (spec.buttons || []).map((b) => b.label),
+        values: (spec.buttons || []).map((b) => ('value' in b ? String(b.value) : '<absent>')),
+    });
+    return Promise.resolve(sandbox.__answer === undefined ? null : sandbox.__answer);
 };
 
 const doc = sandbox.document;
@@ -109,6 +122,9 @@ out.desktop = {
     payload: LLMSettings.payload().provider,
     label: llmModeLabel(),
     configAsked: requests.length,
+    /* The notice is a cloud thing or it is noise: on the machine whose owner is standing
+       in front of it, "your cookies live on this disk" says nothing they can act on. */
+    dialogs: dialogs.slice(),
 };
 
 /* ── the same page booted on a server ─────────────────────────────────── */
@@ -143,6 +159,45 @@ out.cloud = {
     label: llmModeLabel(),
     ollamaRowDisplay: Array.prototype.map.call(doc.querySelectorAll('.ai-only-ollama'), (el) => el.style.display),
 };
+
+/* ── the notice: asked once, and 「不再提醒」 means this browser ───────── */
+const NOTICE_KEY = 'crawler_privacy_ack';
+
+dialogs.length = 0;
+PrivacyNotice.reset();
+sandbox.localStorage.setItem(NOTICE_KEY, '1');
+CloudMode.set(true);
+await flush();
+out.ackedBrowser = { dialogs: dialogs.slice(), storage: sandbox.localStorage.getItem(NOTICE_KEY) };
+
+dialogs.length = 0;
+PrivacyNotice.reset();
+CloudMode.set(true);
+await flush();
+out.firstVisit = {
+    dialogs: dialogs.slice(),
+    /* 「知道了」 is the ordinary close: it dismisses this visit and promises nothing about
+       the next one. Only 「不再提醒」 writes the ack. */
+    afterGotIt: sandbox.localStorage.getItem(NOTICE_KEY),
+};
+
+dialogs.length = 0;
+PrivacyNotice.reset();
+sandbox.__answer = 'never';
+CloudMode.set(true);
+await flush();
+await flush();
+out.afterNeverAgain = {
+    dialogs: dialogs.slice(),
+    stored: sandbox.localStorage.getItem(NOTICE_KEY),
+    acked: PrivacyNotice.acked(),
+};
+/* A second flag landing must not stack a second notice on the same page. */
+dialogs.length = 0;
+CloudMode.set(true);
+await flush();
+out.secondLanding = { dialogs: dialogs.slice() };
+sandbox.__answer = undefined;
 
 /* ── both languages: the word must not name a transport this host lacks ── */
 const labels = {};

@@ -143,3 +143,55 @@ class TestTheChromeIsMarked:
         app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
         assert app.count("'mode.llmCloud'") == 2, 'both catalogues must carry the cloud wording'
         assert 'CloudMode' in app, 'the flag stopped being read from /api/config'
+
+
+class TestTheFirstEntryNotice:
+    """What a stranger on a shared server is told, and what their answer means."""
+
+    def test_a_desktop_boot_never_shows_it(self, booted):
+        """The person in front of a desktop IS the machine's owner; 「your cookies live on
+        this disk」 is not news to them, and a dialog that appears where it explains nothing
+        trains the user to dismiss the one that matters."""
+        assert booted['desktop']['dialogs'] == [], booted['desktop']
+
+    def test_the_first_cloud_visit_is_told_once(self, booted):
+        dialogs = booted['firstVisit']['dialogs']
+        assert len(dialogs) == 1, dialogs
+        # Asserted as "a word, not a key" rather than as the English text: this harness
+        # loads app.js's REAL dictionary, so pinning the sentence would make the test
+        # track translations, while a raw `privacy.*` on screen is the defect.
+        for label in dialogs[0]['labels']:
+            assert label and not label.startswith('privacy.'), f'the button printed a key: {label}'
+        # The button values are the contract: 「不再提醒」 is the only one that writes an ack,
+        # and the ordinary close resolves null. A `value` on the close button would make
+        # dismissing the notice silently mean "never ask me again".
+        assert dialogs[0]['values'] == ['never', 'null'], dialogs
+
+    def test_the_message_names_both_places_things_are_kept(self, booted):
+        """Not a generic privacy note: it has to say which half is on the server's disk and
+        which half stays in this browser, because that is the asymmetry the user cannot
+        infer from the interface."""
+        message = booted['firstVisit']['dialogs'][0]['message']
+        for needle in ('server', 'Cookie', 'OpenRouter', 'browser'):
+            assert needle in message, f'{needle} missing from the notice: {message}'
+
+    def test_an_acked_browser_is_not_asked_again(self, booted):
+        assert booted['ackedBrowser']['dialogs'] == [], booted['ackedBrowser']
+        assert booted['ackedBrowser']['storage'] == '1', booted['ackedBrowser']
+
+    def test_only_no_more_reminders_writes_the_ack(self, booted):
+        """The notice is dismissed by 知道了 / the backdrop / Esc all the same way: this
+        visit ends, next visit is asked again."""
+        assert booted['firstVisit']['afterGotIt'] is None, booted['firstVisit']
+        assert booted['afterNeverAgain']['stored'] == '1', booted['afterNeverAgain']
+        assert booted['afterNeverAgain']['acked'] is True, booted['afterNeverAgain']
+
+    def test_a_second_config_answer_does_not_stack_a_second_notice(self, booted):
+        assert booted['secondLanding']['dialogs'] == [], booted['secondLanding']
+
+    def test_the_notice_text_exists_in_both_languages(self):
+        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        # Count the CATALOGUE entries (a key followed by a colon), not every mention of
+        # the string: the call site `I18n.t('privacy.body')` also names the key.
+        for key in ('privacy.body', 'privacy.gotIt', 'privacy.never'):
+            assert app.count(f"'{key}':") == 2, f'{key} must be in the English and the Chinese catalogue'
