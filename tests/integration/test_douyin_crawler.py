@@ -19,6 +19,7 @@ every change:
 """
 
 import json
+import logging
 
 import pytest
 from selenium.common.exceptions import TimeoutException
@@ -34,7 +35,7 @@ from crawlers.douyin import (
     douyin_sec_uid,
 )
 from crawlers.engine.counters import parse_count
-from i18n import t
+from i18n import stop_reason_label, t
 from utils.helpers import platform_for
 
 pytestmark = pytest.mark.unit
@@ -86,6 +87,9 @@ class FakeDriver:
         facts_by_id=None,
         video_body=INFO_TEXT,
         comment_items=None,
+        comment_pages=None,
+        redirects=None,
+        moves_on_scroll='',
         comment_count='2099',
         dialog=False,
         fill_after=0,
@@ -98,6 +102,7 @@ class FakeDriver:
         load_timeout=False,
         document_uri='',
         body=None,
+        list_body='',
     ):
         # What the *document* says it is. Measured: after a navigation the browser itself
         # refuses, this is ``chrome-error://chromewebdata`` while ``current_url`` goes on
@@ -107,6 +112,11 @@ class FakeDriver:
         # The whole-page body text, when a test needs the page to say something other than
         # what the video/search fixtures hold (an error page's own words, for instance).
         self.body = body
+        # What the RESULT list's body says (the video page's own body is ``video_body``). The list's
+        # end-of-line sentence 「暂时没有更多了」 decides whether a walk that stops short is the site out
+        # of supply or our scroll failing, so a case has to be able to state it — and ``body`` cannot
+        # carry it, because that overrides every page including the detail one.
+        self.list_body = list_body
         # A navigation that never settles: measured on a real run (and named by the user
         # watching the window), this is what a slow network looks like from inside the
         # crawler, and the refusal it produces must say so rather than blame the site.
@@ -155,6 +165,17 @@ class FakeDriver:
         self.comment_items = (
             comment_items if comment_items is not None else [El(COMMENT_BLOCK), El('路人\n第二条评论\n3天前·广东\n1')]
         )
+        # What the panel holds after each of its own scrolls: ``[screen0, screen1, …]``, the last one
+        # repeating. A fixture that always answers the same list can prove dedupe but cannot prove the
+        # walk keeps COUNTING once the panel lazy-fills, which is the shape a 2000-comment video has.
+        self.comment_pages = list(comment_pages or [])
+        # ``{asked_url: served_url}`` — the address the browser ends up on. Empty means every navigation
+        # keeps the address it was asked for, which is the shape every other case in this file assumes.
+        self.redirects = dict(redirects or {})
+        # An address that moves **while the panel is being walked** — the second substitution shape the
+        # audit pointed at: the site serves the pasted video, mounts its panel, and only then slides to
+        # another one. Without this knob the mid-walk check cannot be expressed at all.
+        self.moves_on_scroll = moves_on_scroll
         self.comment_count = comment_count
         self.visited = []
         self.current_url = 'https://www.douyin.com/'
@@ -171,7 +192,11 @@ class FakeDriver:
 
     def get(self, url):
         self.visited.append(url)
-        self.current_url = url
+        # The site answers some addresses by showing a DIFFERENT page — measured 2026-09-28: a video id
+        # that cannot exist leaves /video/<id> for /jingxuan?modal_id=<some other video>, a different
+        # substitute on every visit. A fake that always keeps the asked address cannot express that, and
+        # the comment adapter's substitution check would be untestable here.
+        self.current_url = self.redirects.get(url, url)
         # A navigation is a document, not a bookmark: a list re-opened later comes back at its
         # first screen and has to be paged down again. The FIRST load is left alone, because
         # that is the scenario a test describes (a page still drawing its skeleton, a page that
@@ -194,7 +219,7 @@ class FakeDriver:
         if selector == 'body':
             if self.body is not None:
                 return El(self.body)
-            return El(self.video_body if '/video/' in self.current_url else '')
+            return El(self.video_body if '/video/' in self.current_url else self.list_body)
         if selector == '[data-e2e="comment-list"]':
             return El('')
         if selector == '[data-e2e="feed-comment-icon"]':
@@ -225,6 +250,11 @@ class FakeDriver:
                 return []
             return [El('', {'href': f'https://www.douyin.com/video/{aweme_id}'}) for aweme_id in self.grid]
         if selector == '[data-e2e="comment-item"]':
+            if self.comment_pages:
+                # The panel lazy-fills: what it holds is a function of how many times it has been
+                # scrolled, so the walk sees screen 2 only after its own scroll moved it.
+                screen = min(self.scrolls, len(self.comment_pages) - 1)
+                return list(self.comment_pages[screen])
             return list(self.comment_items)
         return []
 
@@ -250,6 +280,8 @@ class FakeDriver:
             # panel is walked by DOM), and the profile grid's, which is what
             # ``engine.feed.jump_to_bottom`` hunts for.
             self.scrolls += 1
+            if self.moves_on_scroll and self.scrolls == 1:
+                self.current_url = self.moves_on_scroll
             if 'scrollerFrom' in script:
                 self.container_jumps += 1
                 if '/user/' in self.current_url and self.grid_batches:
@@ -345,6 +377,32 @@ class TestPureHelpers:
         author, content, when, region, likes, subs = douyin_comment_fields('路人\n只有一句话')
         assert (author, content, when, likes, subs) == ('路人', '只有一句话', '', 0, 0)
         assert douyin_comment_fields('') == ('', '', '', '', 0, 0)
+
+    def test_a_wrapped_comment_keeps_every_line_and_its_own_numbers(self):
+        """A comment that wraps is one comment, not a first line plus a lost tail.
+
+        The text used to be ``lines[1]``, so the second line of a wrapped comment disappeared (「不漏采」
+        is the whole purpose of this table) and a number the commenter typed on its own line was read as
+        点赞数 by the bare-digit rule — a figure under a plausible column name that nobody on the page
+        ever claimed was a like count.
+        """
+        author, content, when, region, likes, subs = douyin_comment_fields(
+            '路人\n第一行\n114514\n第二行\n1天前·广东\n7'
+        )
+        assert content == '第一行\n114514\n第二行', content
+        assert (author, when, region, likes, subs) == ('路人', '1天前', '广东', 7, 0)
+
+    def test_a_timestamp_is_never_filed_as_the_comment_text(self):
+        """The block shape that used to write 「1天前·北京」 into 评论内容: the time line is the anchor.
+
+        An author whose name renders empty collapses its line (the docstring's own case), and index-based
+        reading then shifted every field up one — the row kept a plausible 楼层 while its text column held
+        a timestamp. Nothing is invented in its place: the text stays empty and the caller drops the row,
+        which costs a line and does not buy a lie.
+        """
+        author, content, when, region, likes, subs = douyin_comment_fields('路人\n1天前·北京\n5')
+        assert (when, region, likes) == ('1天前', '北京', 5)
+        assert content == '', f'the anchor line was filed as the comment: {content!r}'
 
     def test_douyin_links_route_to_the_douyin_adapter(self):
         assert platform_for(f'https://www.douyin.com/video/{ID}') == 'douyin'
@@ -545,6 +603,48 @@ class TestSearch:
         assert rows == []
         assert t('crawl.dy.detailNoIdentity', i=ID) in ' '.join(_lines(caplog)), _lines(caplog)
 
+    def test_a_name_is_not_identity_when_the_page_published_nothing(self, make_crawler, caplog):
+        """The 2026-09-28 half of the same measurement: a *named* blank row is still a blank row.
+
+        Live cell A1 filed ``7687166416143123826`` with no 标题, no 正文, no 发布时间 and four zero
+        counters, and counted it as 「当前有效数据: 7 条」 — the page was still hydrating, the author reader
+        had picked up a recommendation-rail account, and the old guard accepted any row carrying an author
+        **or** a date. Probing that same address seconds later returned a caption, an author and a date, so
+        the blank was a race, and a race must cost a retry, not a row of the user's target.
+        """
+        blank = {**_default_facts(), 'info': '', 'publish': '', 'author': '青小鲜三门青蟹 海鲜礼包'}
+        crawler, _driver = make_crawler(cards=[ID], facts=blank)
+        rows = crawler.search('人工智能', target_count=2)
+        assert rows == [], f'a row whose only content is somebody else name is not data: {rows}'
+        assert t('crawl.dy.detailNoIdentity', i=ID) in ' '.join(_lines(caplog)), _lines(caplog)
+
+    def test_a_short_sorted_list_is_reported_as_the_site_s_end_not_as_a_stalled_scroll(self, make_crawler, caplog):
+        """「暂时没有更多了」 is the difference between supply and a broken pager (U48).
+
+        Measured 2026-09-28: 最新发布 and 最多点赞 on 「IU」 stop at 14 cards and the page writes that
+        sentence at the foot of the list, while 综合排序 on the same keyword grows to 107. A walk that ends
+        at 14 of 50 saying only 「搜索完成」 makes the two indistinguishable in the console — which is how
+        this first surfaced, as a suspected scroll bug on live cell H1.
+        """
+        crawler, _driver = make_crawler(cards=[ID, OTHER], list_body='结果列表 暂时没有更多了')
+        caplog.set_level(logging.INFO, logger='crawlers.douyin')
+        rows = crawler.search('人工智能', target_count=50)
+        assert len(rows) == 2, f'two cards is all this list hands over: {len(rows)}'
+        said = ' '.join(_lines(caplog))
+        assert t('crawl.dy.noMore', screens=1, cards=2) in said, said
+
+    def test_a_scroll_that_grows_nothing_without_the_marker_stays_unnamed(self, make_crawler, caplog):
+        """The control. Without the marker we cannot claim the site ran out, so nothing may say it did."""
+        crawler, _driver = make_crawler(cards=[ID, OTHER], list_body='结果列表 加载中')
+        # INFO captured here too, or the absence asserted below proves nothing: the line lives at INFO.
+        caplog.set_level(logging.INFO, logger='crawlers.douyin')
+        rows = crawler.search('人工智能', target_count=50)
+        assert len(rows) == 2
+        said = ' '.join(_lines(caplog))
+        assert t('crawl.dy.noMore', screens=1, cards=2) not in said, (
+            f'the walk declared the list finished without the page ever saying so: {said}'
+        )
+
     def test_the_walk_spends_the_target_on_rows_that_say_something(self, make_crawler):
         """One blank page must not cost the user a row of their target: the walk moves on to the
         next card rather than stopping at a count that is really one row short."""
@@ -555,6 +655,42 @@ class TestSearch:
         )
         rows = crawler.search('人工智能', target_count=1)
         assert [str(row['视频ID']) for row in rows] == [OTHER]
+
+    def test_a_detail_page_that_answers_with_another_video_files_nothing(self, make_crawler, caplog):
+        """Asked for one video, served another: the row is refused, not filed under the asked link.
+
+        Measured 2026-09-28 on ``7664182466315794939`` (a 图文 id): the browser ended on
+        ``/video/7029265830722489634`` — a fully-published, entirely unrelated video — so every field the
+        reader would have taken (文案, 发布时间, the four counters, the author) belonged to somebody else.
+        The table would have claimed it was the link the list handed over. The user saw this on screen
+        before any test did.
+        """
+        other = '7678996507694094827'
+        asked = f'https://www.douyin.com/video/{ID}'
+        crawler, _driver = make_crawler(
+            cards=[ID],
+            redirects={asked: f'https://www.douyin.com/video/{other}'},
+        )
+        rows = crawler.search('人工智能', target_count=2)
+        assert rows == [], f'a swapped page must not be filed under the asked id: {rows}'
+        said = ' '.join(_lines(caplog))
+        assert t('crawl.dy.detailSwapped', i=ID, shown=other) in said, said
+
+    def test_a_row_the_captcha_interstitial_refuses_says_so_and_does_not_accuse_the_session(self, make_crawler, caplog):
+        """A per-row wall is named as a wall, and it does not latch ``login_wall``.
+
+        Measured 2026-09-28: 15 of 39 detail pages on one keyword were 图文 posts the site answers with
+        「验证码中间页」, while the video pages around them round-trip fine. Saying 「没有渲染出数据» about that
+        points the repair at the parser; latching the session flag about it would settle the whole node as
+        「COOKIE 可能过期」. Both are wrong, and this row is the difference.
+        """
+        crawler, driver = make_crawler(cards=[ID], title='验证码中间页', video_body='')
+        rows = crawler.search('人工智能', target_count=1)
+        assert rows == [], f'a captcha plate is not a row: {rows}'
+        assert crawler.login_wall is False, 'one refused card must not be read as the session dying'
+        said = ' '.join(_lines(caplog))
+        assert t('crawl.dy.detailWalled', i=ID) in said, said
+        assert t('crawl.dy.detailEmpty', i=ID) not in said, f'the wall was reported as an empty page: {said}'
 
     def test_a_video_with_no_caption_is_still_one_row(self, make_crawler):
         """The gate is identity, not prose: a clip with no 文案 has nothing to put in that column,
@@ -603,6 +739,28 @@ class TestAuthorProfile:
         assert [str(row['视频ID']) for row in rows] == [ID, OTHER]
         assert driver.visited[0] == DouyinCrawler.PROFILE_ENTRY.format(sec=SEC)
         assert len([u for u in driver.visited if '/user/' in u]) == 1, 'the grid is one navigation, then scrolls'
+
+    def test_the_harvest_loop_waits_on_its_own_list_not_on_the_search_route(self, make_crawler, monkeypatch):
+        """A remount wait belongs to the list being read, not to whichever route mounted first.
+
+        :meth:`_wait_for_page` is the search route's mount wait — it polls the **search** anchors and is
+        prepared to spend ``Config.PAGE_WAIT_TIMEOUT`` doing it. The first version of the empty-screen
+        retry called it from the shared harvest loop, so an author grid whose first read came back empty
+        would park for minutes on a page that cannot answer it, and the loop re-reads through its own
+        ``read_ids`` afterwards anyway: the wait bought nothing even when it returned.
+        """
+        crawler, _driver = make_crawler(cards=[ID])
+        monkeypatch.setattr(
+            DouyinCrawler,
+            '_wait_for_page',
+            lambda self: pytest.fail("the harvest loop borrowed the search route's patient mount wait"),
+        )
+        # The first read is the empty one; every later read (including the ones the remount wait itself
+        # makes) sees the card, which is what the wait is for.
+        reads = iter([[], *([[ID]] * 8)])
+        pool, drained, screens = crawler._harvest_pool(lambda: list(next(reads)), lambda: False, set(), 1)
+        assert pool == [ID], pool
+        assert screens == 1, f'the empty read cost a screen: {screens}'
 
     def test_the_container_is_jumped_because_the_window_moves_nothing_here(self, make_crawler):
         """Measured: a window scroll on a profile page grows the footer's
@@ -741,6 +899,210 @@ class TestComments:
         session = self._session(driver)
         rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 5)
         assert rows == [] and status == BLOCKED
+
+    def test_the_floor_number_runs_across_the_panel_not_down_one_screen_at_a_time(self, make_crawler):
+        """The panel lazy-fills; 楼层 is a running number over the whole thread.
+
+        ``parse_douyin_comments`` counts from 1 inside whatever batch it is handed, and the walk used to
+        hand it one scroll round at a time — so a video read across two screens stored ``1,2,1,2`` and
+        nothing in the table said which screen a row came from. Measured shape (live site, 2026-09-28):
+        the second screen *contains* the first, because the list is a document, not a page.
+        """
+        first = [El(COMMENT_BLOCK), El('路人\n第二条评论\n3天前·广东\n1')]
+        second = first + [El('第三个人\n第三条内容\n2天前·上海\n4'), El('第四个人\n第四条内容\n1天前·广州\n2')]
+        crawler, driver = make_crawler(cards=[], comment_pages=[first, second])
+        session = self._session(driver)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert status == OK
+        assert [row['楼层'] for row in rows] == [1, 2, 3, 4], f'楼层 restarted per screen: {rows}'
+        assert len({str(row['评论内容']) for row in rows}) == 4, 'the second screen re-filed the first'
+
+    def test_a_thread_is_walked_to_its_end_not_to_a_round_count(self, make_crawler):
+        """No walk carries a budget (AGENTS) — measured against the live site as U43.
+
+        The panel loop used to be ``for _round in range(40)``. On a video whose own counter reads 3388 the
+        live walk stopped at 406 rows because its fortieth screen came and went, and returned ``OK``:
+        the site never said the thread was over, this file's constant did.
+        """
+        screens = []
+        for total in range(1, 46):
+            screens.append([El(f'路人{i}\n第{i}条内容\n1天前·北京\n0') for i in range(total)])
+        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='0')
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert status == OK
+        assert len(rows) == 45, f'the walk stopped at {len(rows)} of 45 screens — a round budget is back'
+        assert [row['楼层'] for row in rows] == list(range(1, 46)), '楼层 must run with the screens'
+
+    def test_a_panel_that_ends_short_of_the_counters_number_names_the_gap(self, make_crawler):
+        """The gap is said with the site's own denominator, and the nested replies are not stolen from it.
+
+        Measured 2026-09-28: 3388 declared, 406 rows, Σ子回复数 1062 — so a completion test that compared
+        rows with 3388 would cry 「还差 2982 条」 on a walk that had read every top-level comment the panel
+        gives. The line therefore reports all four figures and compares against ``declared - nested``.
+        """
+        screens = [[El('路人1\n第一条\n1天前·北京\n0'), El('路人2\n第二条\n1天前·上海\n3\n展开3条回复')]]
+        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='99')
+        said: list = []
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, _status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert len(rows) == 2 and rows[1]['子回复数'] == 3
+        # The scroll that grew nothing ended this walk (single screen, so the panel never grew), and the
+        # line says so: a gap without its exit reason reads as 「the site has no more」 either way.
+        assert t(
+            'comment.dyShort',
+            url=f'https://www.douyin.com/video/{ID}',
+            declared=99,
+            rows=2,
+            nested=3,
+            gap=94,
+            reason=stop_reason_label('stuck'),
+        ) in ' '.join(said), said
+
+    def test_a_walk_cut_short_by_the_stop_button_blames_the_stop_not_the_site(self, make_crawler):
+        """The user's 停止 is a different fact about the same gap, and the line must carry it.
+
+        Measured shape: a 3388-comment thread whose panel is still growing when 停止 arrives. The gap is
+        real in both cases, but only one of them says the site ran dry — and the second round of the audit
+        found the sentence claiming the panel had stopped producing new rows on a walk that stopped because
+        the user pressed the button.
+        """
+        screens = [
+            [El(f'路人{i}\n第{i}条\n1天前·北京\n0') for i in range(1, 4)],
+            [El(f'路人{i}\n第{i}条\n1天前·北京\n0') for i in range(4, 7)],
+        ]
+        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='99')
+        said: list = []
+        session = CommentSession(driver, log=said.append, nap=lambda s: None, abort=lambda: True)
+        rows, _status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert len(rows) == 3
+        assert not driver.scrolls, f'the walk scrolled after the stop: {driver.scrolls}'
+        assert t(
+            'comment.dyShort',
+            url=f'https://www.douyin.com/video/{ID}',
+            declared=99,
+            rows=3,
+            nested=0,
+            gap=96,
+            reason=stop_reason_label('stopped'),
+        ) in ' '.join(said), said
+
+    def test_an_ask_that_is_met_does_not_complain_about_the_thread(self, make_crawler):
+        """``limit`` is the user's ask: stopping on it is obeying, not a hole in the table."""
+        screens = [[El(f'路人{i}\n第{i}条\n1天前·北京\n0') for i in range(1, 6)]]
+        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='99')
+        said: list = []
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, _status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 5)
+        assert len(rows) == 5
+        assert not any('comment.dyShort' in str(one) or '条未采到' in one or 'not collected' in one for one in said), (
+            said
+        )
+
+    def test_a_walk_that_reads_everything_says_nothing_about_a_gap(self, make_crawler):
+        screens = [[El(f'路人{i}\n第{i}条\n1天前·北京\n0') for i in range(1, 4)]]
+        crawler, driver = make_crawler(cards=[], comment_pages=screens, comment_count='3')
+        said: list = []
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, _status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert len(rows) == 3
+        assert not any('未采到' in one or 'not collected' in one for one in said), said
+
+    def test_a_video_the_site_swaps_for_another_one_is_dead_not_walled(self, make_crawler):
+        """An address the site answers with a DIFFERENT video is a dead link, not a refused session.
+
+        Measured 2026-09-28 on ``7000000000000000001`` (three visits): the browser left
+        ``/video/7000000000000000001`` for ``/jingxuan?modal_id=…``, a different substitute each time, and
+        the panel never mounted. The old read logged 「该视频计有 1214 条评论」 — the *substitute's* counter —
+        as BLOCKED, and the node then accused the user's cookie of expiring in the same run that crawled the
+        next link's eight comments. The address is the stable half of that measurement: the 「视频不存在」
+        plate appeared on one visit out of three, so it is not what the product may key on.
+        """
+        asked = 'https://www.douyin.com/video/7000000000000000001'
+        shown = 'https://www.douyin.com/jingxuan?modal_id=7668278352603630898'
+        crawler, driver = make_crawler(cards=[], comment_items=[], comment_count='1214', redirects={asked: shown})
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(asked, 8)
+        assert rows == [] and status == DEAD, f'a substituted page must be DEAD, not a wall: {status!r}'
+        assert driver.visited == [asked], f'the substitute was crawled as its own link: {driver.visited}'
+
+    def test_a_real_page_that_mounts_no_panel_is_still_the_blocked_shape(self, make_crawler):
+        """The contrast, so the new branch cannot swallow the old one.
+
+        Same address, no panel, no counter: that IS the shape meaning "this session is not getting in",
+        and it is what feeds 继续 and the cookie banner.
+        """
+        crawler, driver = make_crawler(cards=[], video_body='正在加载', comment_items=[], comment_count='')
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 8)
+        assert rows == [] and status == BLOCKED, f'no panel and no substitution is a wall: {status!r}'
+
+    def test_a_substitution_is_refused_before_the_panel_is_walked(self, make_crawler):
+        """The address test runs ahead of the mount branch, not inside the 「没挂载」 arm.
+
+        The first version of the fix only fired when the panel failed to mount, so a substituted page that
+        mounted its own panel happily was still walked — and every comment of the stranger's video would
+        have been stored under the link the user pasted. This is that case: items ARE present.
+        """
+        asked = 'https://www.douyin.com/video/7000000000000000001'
+        shown = 'https://www.douyin.com/jingxuan?modal_id=7668278352603630898'
+        crawler, driver = make_crawler(cards=[], redirects={asked: shown})
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(asked, 8)
+        assert rows == [] and status == DEAD, f'a mounted substitute must not be walked: {status!r}'
+        assert driver.scrolls == 0, 'the panel was scrolled before the address was checked'
+
+    def test_a_panel_that_moves_halfway_through_loses_its_rows(self, make_crawler):
+        """The other half: the address moves *while* the walk is running.
+
+        Nothing collected after that belongs to the pasted link, so the whole batch is thrown away and the
+        link is reported dead — a discarded walk is a re-runnable cost, filed rows under the wrong URL are
+        bad data with no way back.
+        """
+        asked = f'https://www.douyin.com/video/{ID}'
+        moved = 'https://www.douyin.com/jingxuan?modal_id=7668278352603630898'
+        crawler, driver = make_crawler(cards=[], moves_on_scroll=moved)
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(asked, 40)
+        assert rows == [] and status == DEAD, f"the substitute's comments were kept: {status!r} {rows[:1]}"
+
+    def test_a_growing_panel_is_read_by_its_new_tail_not_from_the_top(self, make_crawler, monkeypatch):
+        """Removing the 40-round ceiling must not make the walk O(n²).
+
+        Every mounted node used to be read again on every round, so a long thread cost a Selenium round
+        trip per already-seen comment per screen. The tail-read is only safe while the panel appends, which
+        is what the next test attacks.
+        """
+        reads: list = []
+        monkeypatch.setattr(CommentSession, '_safe_text', lambda self, item: reads.append(item.text[:4]) or item.text)
+        screens = []
+        for total in range(2, 12):
+            screens.append([El(f'路人{i}\n第{i}条内容\n1天前·北京\n0') for i in range(total)])
+        crawler, driver = make_crawler(cards=[], comment_pages=screens)
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert status == OK and len(rows) == 11, (status, len(rows))
+        mounted = sum(len(one) for one in screens)
+        assert len(reads) < mounted, (
+            f'the walk read {len(reads)} nodes against {mounted} mounted across {len(screens)} screens: '
+            'it is re-reading the whole panel every round again'
+        )
+
+    def test_a_recycled_panel_is_re_read_from_the_top(self, make_crawler):
+        """The case the tail-read may not assume: the panel grew **and changed its head**.
+
+        A virtualized list can add a node at the bottom while dropping one at the top, so the count says
+        "keep going" while the cached offset now points past comments nobody parsed. The sentinel is the
+        head's own text for exactly that: a changed head restarts the read, and nothing is skipped.
+        """
+        first = [El(f'路人{i}\n第{i}条内容\n1天前·北京\n0') for i in range(6)]
+        recycled = [El(f'路人{i}\n第{i}条内容\n1天前·北京\n0') for i in range(3, 10)]
+        crawler, driver = make_crawler(cards=[], comment_pages=[first, recycled, recycled])
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert status == OK
+        got = {str(row['评论内容']) for row in rows}
+        assert '第8条内容' in got, f'the nodes past the cached offset were skipped: {sorted(got)}'
 
     def test_identity_columns_stay_out_of_the_dedupe_field_lists(self):
         from services.run_store import _AUTHOR_FIELDS, _BODY_FIELDS, _URL_FIELDS

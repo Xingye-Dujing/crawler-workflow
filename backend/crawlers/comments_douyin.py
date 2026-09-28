@@ -22,23 +22,33 @@ def douyin_comment_fields(text: str) -> tuple:
     a bare number, a 展开N条回复 label) rather than by index. That is also what
     keeps a truncated preview (``展开更多`` inserts a literal ``...`` line) from
     becoming comment text.
+
+    The time line is the anchor, not just another field. The text used to be
+    ``lines[1]`` unconditionally, which filed ``1天前·北京`` as the comment when the
+    author line had absorbed it — a row whose 评论内容 is a timestamp is a lie in the
+    column the user reads — and it dropped every line after the first on a comment
+    that wraps, so a two-line comment lost its second line (「不漏采」 is the whole
+    point of this table). Lines between the author and the anchor are therefore the
+    text, joined; a number standing there is part of what someone wrote, not the
+    like count, which only ever sits below the anchor.
     """
     lines = [line.strip() for line in str(text or '').split('\n') if line.strip() and line.strip() != '...']
     author = lines[0] if lines else ''
-    content = lines[1] if len(lines) > 1 else ''
     when, region, likes, subs = '', '', 0, 0
-    for line in lines[2:]:
+    anchor = next((i for i, one in enumerate(lines[1:], 1) if _DOUYIN_WHEN_RE.match(one)), None)
+    head = lines[1:anchor] if anchor is not None else lines[1:2]
+    content = '\n'.join(head)
+    tail_start = (anchor + 1) if anchor is not None else 2
+    for line in lines[tail_start:]:
         match = _DOUYIN_SUBS_RE.search(line)
         if match and not subs:
             subs = int(match.group(1))
             continue
-        if not when and _DOUYIN_WHEN_RE.match(line):
-            when, _, region = line.partition('·')
-            when = when.strip()
-            region = region.strip()
-            continue
         if line.isdigit() and not likes:
             likes = int(line)
+    if anchor is not None:
+        when, _, region = lines[anchor].partition('·')
+        when, region = when.strip(), region.strip()
     return author, content, when, region, likes, subs
 
 

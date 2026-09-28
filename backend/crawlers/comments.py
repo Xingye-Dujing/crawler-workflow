@@ -32,7 +32,7 @@ import time
 
 from selenium.common.exceptions import JavascriptException, StaleElementReferenceException
 
-from i18n import t
+from i18n import stop_reason_label, t
 
 from .comments_base import BLOCKED, DEAD, OK, _json_or_none
 from .comments_bilibili import bilibili_reply_js, bilibili_view_js, parse_bilibili_comments
@@ -747,6 +747,25 @@ return (function () {
         if looks_blocked(self._body_head()):
             return [], BLOCKED
         reported = self._node_text('[data-e2e="feed-comment-icon"]')
+        # The substitution test runs **before** the panel branch, not inside the 「没挂载」 arm: measured
+        # 2026-09-28, the address can move to another video while the substitute's own panel mounts
+        # happily, and a check that only fires on a failed mount would then walk the substitute's thread
+        # and file every one of its comments under the link the user pasted. Same accident the detail
+        # reader already refuses (``crawl.dy.detailSwapped``), same rule: a row nobody asked for is worse
+        # than a missing one.
+        shown = douyin_id(self.driver.current_url or '')
+        if shown and shown != douyin_id(target):
+            # The site served **another video**. Measured 2026-09-28, three visits to an id that cannot
+            # exist: the address left ``/video/7000000000000000001`` for ``/jingxuan?modal_id=<other id>``
+            # — a different substitute on every visit, and once the page printed 「你要观看的视频不存在」
+            # for a moment before bouncing, so the plate is not a reliable read while the address is.
+            # The old shape called this BLOCKED and logged 「该视频计有 1214 条评论」 — a figure belonging
+            # to the substitute — which the node then reported as 「登录态疑似失效：COOKIE 可能过期」 for a
+            # batch whose next link crawled its comments one line later. A link the site cannot serve is
+            # DEAD: that row is lost, the session is not accused, and nobody's counts are filed under
+            # the address the user pasted.
+            self.log(t('comment.dyGone', url=target, shown=shown))
+            return [], DEAD
         if not mounted:
             if not reported:
                 # Neither a panel nor the counter that would explain its absence:
@@ -761,29 +780,92 @@ return (function () {
             # The video says it has comments and the list never opened — a page
             # we could not read, which must never arrive as an empty table.
             return [], BLOCKED
-        seen, rows = set(), []
-        for _round in range(40):
+        seen, collected = set(), []
+        read = 0
+        # No round budget. The loop used to be ``for _round in range(40)``, which decided the size of a
+        # thread: measured 2026-09-28 on a video whose own counter reads 3388, the walk stopped at 406 rows
+        # because its fortieth screen came and went, and returned ``OK`` as though the thread were finished.
+        # 「怎么采不满」 is exactly this shape, so what ends a douyin panel walk is the panel itself — a
+        # screen with nothing new, a scroll that moved nothing — or the user's 停止 / his 评论条数.
+        #
+        # ``read`` is what makes removing that ceiling affordable. The panel is append-only while it grows
+        # (measured 16 → 56 mounted items), so re-reading every mounted node each round cost a Selenium
+        # round trip per already-seen comment — on the 3388-comment thread that is ~1M reads, hours. The
+        # tail is only safe while the nodes are the same ones, and a *count* is not the proof: a recycled
+        # panel can hand back the same number of items with a different head. So the head's own text is the
+        # sentinel — one extra read per round, and any change to it sends the walk back to the top rather
+        # than letting it skip comments it has never parsed.
+        head_marker = object()
+        exit_reason = 'no_new'
+        while True:
             found = []
-            for item in self.driver.find_elements('css selector', '[data-e2e="comment-item"]'):
+            items = self.driver.find_elements('css selector', '[data-e2e="comment-item"]')
+            head = self._safe_text(items[0])[:40] if items else None
+            if head != head_marker:
+                read = 0
+            head_marker = head
+            batch = items[read:]
+            read += len(batch)
+            for item in batch:
                 author, content, when, region, likes, subs = douyin_comment_fields(self._safe_text(item))
                 key = (author, content, when)
                 if not content or key in seen:
                     continue
                 seen.add(key)
                 found.append((target, author, content, when, region, likes, subs))
-            rows.extend(parse_douyin_comments(found))
+            collected.extend(found)
+            # Each exit names itself, because the gap line below quotes it: 「还差 3000 条」 means
+            # something different when the panel ran dry than when the user pressed 停止, and a sentence
+            # that blames the site for our own early exit is the lying-summary shape §5 refuses.
             if not found:
+                exit_reason = 'no_new'
                 break
-            if limit and len(rows) >= limit:
+            if limit and len(collected) >= limit:
+                exit_reason = 'target'
+                break
+            if self.may_stop():
+                exit_reason = 'stopped'
                 break
             if not self._scroll_douyin_panel():
+                exit_reason = 'stuck'
                 break
             self.nap(1.5)
+        # Numbered once, over the whole thread. ``parse_douyin_comments`` counts from 1 inside the batch it
+        # is handed, so calling it per scroll round made 楼层 restart at 1 on every screen — a table where
+        # twelve rows claim floor 1 and nothing says which screen they came from. The panel is a list, not
+        # a set of pages (AGENTS: a list is a document), so the enumeration belongs after the walk.
+        rows = parse_douyin_comments(collected)
+        moved = douyin_id(self.driver.current_url or '')
+        if rows and moved and moved != douyin_id(target):
+            # The address moved while the panel was being walked, so every row above belongs to a video
+            # nobody pasted. Discarded rather than filed: this is the same rule the hoisted check before
+            # the walk applies, at the moment the walk is over and the cost already paid.
+            self.log(t('comment.dyGone', url=target, shown=moved))
+            return [], DEAD
         if not rows:
             # A panel of items that produced nothing is a parser or page problem,
             # never a fact about the video.
             self.log(t('comment.dyNoPanel', url=target))
             return [], BLOCKED
+        declared = parse_count(reported)
+        nested = sum(int(row.get('子回复数') or 0) for row in rows)
+        if declared and len(rows) + nested < declared and not (limit and len(rows) >= limit):
+            # The denominator is the video's own number, and the gap says what the table cannot hold:
+            # 「展开N条回复」 is counted and never clicked (expanding rewrites the list under the next
+            # read), so replies are owed to the count but not to the rows. Saying the three figures is
+            # what keeps 「这条视频就这么多」 from being this walk's answer when it is not — and saying
+            # *why the walk ended* keeps the gap from being blamed on the site when the user stopped it.
+            self.log(
+                t(
+                    'comment.dyShort',
+                    url=target,
+                    declared=declared,
+                    rows=len(rows),
+                    nested=nested,
+                    gap=declared - len(rows) - nested,
+                    reason=stop_reason_label(exit_reason),
+                )
+            )
         return (rows[:limit] if limit else rows), OK
 
     def _wait_for_douyin_panel(self, timeout: float = 24.0) -> bool:

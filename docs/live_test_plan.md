@@ -118,6 +118,9 @@
 | **微博 posts/author 登记（2026-09-28 写矩阵时）** | posts：`crawl.weibo.no_result`（站点自己印「抱歉，未找到相关结果」，实测它**与 5 张不相干推荐卡同屏**，故它是唯一判据 U31）、`crawl.weibo.page_empty`（某页**真的一张卡都没有**——U36 修复后这句话才成立：旧代码把「整页都是台账里的旧行」也报成空页）、`crawl.weibo.authorNoPosts`（200 + 空 list 是对一个账号的事实）。author 另加四条**raise 型拒绝**：`authorRefused`（mymblog edge 403，per-session 节流）、`authorWall`、`authorMirror`、`authorEmpty`（uid 读不出→开浏览器之前就拒，绝不猜一个人）。**明确不算合法**：`crawl.weibo.walk_done`/`authorDone` 与它们的 `{reason}` 槽（`crawl.stopReason.end`/`no_new`/`no_cards`/`stuck`）——那是**代码对自己循环的总结**，「窗走完」既可能是供给干涸也可能是 pager 少读一页，白名单收它=把每条 posts 用例的 `!= SILENT_SHORT` 变成不可证伪（知乎那表只收「站点自己的标记」，同一纪律）；`crawl.stopReason.unreachable` 也不收（AGENTS：浏览器没取到页面**不是**站点的拒绝）；`crawl.weibo.target_reached` 照旧不收（自己给自己发满分） | 站点 plate / 账号事实 / 具名拒绝；总结行不免责 |
 | **微博 comments 登记** | `comment.weiboShowFailed`（statuses/show 取不回，带 URL）、`comment.status.dead`（逐文摘要里那格的 DEAD）、`comment.weiboReplay`（游标在动而整页复读）、`comment.weiboShort`（游标耗尽且 `total_number` 更高——差额是楼中楼 U33）、`comment.weiboFetchDied`（**新增**：某一页取数失败即收尾，带页数/本次条数/站点标注/差额，U37）。**不收** `comment.commentsClosed` 与 `comment.status.blocked`：`crawl_weibo` 没有墙判定，只可能返回 `OK`/`DEAD`，收进来就是 §5 末尾警告的那种「打死在名单里的行」（下一位读者会以为评论被墙是有判定的） | 具名拒绝/复读/分母差额；死链与墙分开说 |
 | 跨切 | `run.wallRetry`、`run.platformQueued`/`platformStaggered`/`serialForced`、`crawl.profile_wait`、`run.pagePending`+`net.*` | 排队/重试/页面未到达 |
+| **抖音 posts/author/hot 登记（2026-09-28 写矩阵时）** | posts/author/hot 共用：`crawl.dy.noCards`（那一屏到底是墙/502/没加载完，页面自己写着）、**`crawl.dy.noMore`**（列表底部印着「暂时没有更多了」，并把这次翻了几屏、最后一屏几张卡一起报出来——U48：`最新发布`/`最多点赞` 在「IU」上就是 14 张，`综合排序` 同一关键词能长到 107，所以「排序后的列表短」是站点的供给而不是滚动的失败，但这句话必须**由页面自己说**才算；没有这句标记就一句不说、真机继续红）、`authorNoWorks`（主页自报 0 作品）、`authorNoCards`（网格什么都没挂）、`hotCapped`（榜单大小由站点决定，带 `{board}`）、`hotRefused`（接口答了但不是榜）、`hotWall`（进门就被验证码中间页挡）、**加 `crawl.dy.wall`**（走路中途遇到的墙：抖音的墙在**标题**里，`check_intercept()` 在这种页面上会说 `ok`，而 `_record` 那条通用登录墙句**根本不打印**——审核第 3 条实测出来，不加它 A2 遇墙必红）。author 另加 **`crawl.dy.authorEmpty`**（raise 型：作者框是自由文本，粘一个昵称谁也不指向，`sec_uid` 才是地址；开浏览器之前就拒，绝不猜一个人）。**明确不算合法**：`crawl.dy.finished`/`processed`/`round`/`target_reached`/`authorDone`（代码对自己循环的总结，自己给自己发满分）；四条**逐行**拒绝 `detailEmpty`/`detailNoIdentity`/`detailWalled`/`detailSwapped` 也不进名单——它们在一次走路里几乎必然出现（实测 8 行问 12 次导航、39 次里 15 次是图文页），收进来等于给任何欠采发通行证，A1/E2 改成**按行计数**核账。**`crawl.dy.sortUnknown` 也被排除，并记原因**：`sort` 是 select，off-list 的值在 `engine.workflow.validate` 就被 `engine.source_bad_option` 拒了、`app.py` 在建 record 之前就 return（真机 A4 量到的就是这条路径），爬虫那句只是直接调用时的纵深防御 → 收进闭集就是 §5 末尾警告的「打死在名单里的行」 | 站点的答复 / 输入的事实；总结行与逐行句不免责 |
+| **抖音 comments 登记** | `comment.dyNone`（页面挂着、计数也写着，列表就是没展开）、`comment.dyNoPanel`（面板始终不出现，带 URL）、**`comment.dyGone`**（**新增**：站点把这条链接换成**另一条视频**，替身 id 一起报出来——U47，按 DEAD 处理，不再是「拦截」）、**`comment.dyShort`**（**新增**：面板停止长大而站点自报的数仍更高，`declared/rows/nested/gap` 四个数一起报，U43；**并带上是哪个收尾**——`{reason}` 由走路自己记下的是「滚动不再出新行」还是「用户停止了运行」，否则一次 停止 会被念成站点的欠额，URL 也在句子里，一行多链接的控制台才知道差额属于哪条视频）、`comment.status.dead`/`comment.status.blocked`（逐链接摘要那格）。**不收** `comment.commentsClosed`：抖音这条路径没有任何判定会打印它（那是 B 站/X/YouTube 的句子），收进来=教读者以为「抖音评论被关闭」是有判定的 | 具名拒绝/差额/失效；关闭评论在抖音无判定 |
+
 
 > 白名单是**闭集**：新增合法终局必须先在本文件登记出处（真机实测证据进 `docs/crawler_notes.md`）。
 > 已知「说了但说谎」的行（在场也算红并归因 §6）：Z6 虚报次数、Z8 高水位数、Z16 慢渲染报"他没发过"、
@@ -190,7 +193,26 @@
 
 | U41 | `crawlers/comments.py::crawl_weibo` 的差额归因（**已修 2026-09-28，真机 D5 抓到**） | **把用户填的上限说成站点的缺额**：一条报 3 条评论的微博，首页一次给满 3 条且游标同时归零 → 循环在 `not max_id` 处 break，`ended` 还是 `'cursor'`（永远走不到 `'limit'` 那格），而差额比较用的是**被上限截过的表**（2 行）→ 打出「站点写着 3 条，本表只有 2 条（差 1 条）—— 差额是楼中楼」。这句话是替站点说话，起因却是用户自己填了个小的数，正上方那条分支要防的就是它 | 产品修复：差额只对**游标收到的行数**（`len(rows)`）判，收到的 == 站点报的数就一句不说；快层针 `test_a_limit_crossed_on_the_last_page_does_not_blame_the_thread`。同一段的 `comment.weiboFetchDied` 也一并改成按收到的行数报，免得同一类错位搬进新句子里 |
 
-| U42 | `crawlers/douyin.py::_detail_row` 的 作者 / 粉丝数 / 获赞数（**已修 2026-09-28，抖音第 0 步探针抓到**） | **整列作者空白，而且没人说**：三个字段全靠 `_author_from_related` 从 `[data-e2e="related-video"]` 那块面板的文字里切（`泫九粉丝167.0万获赞1157.5万`）。实测这一版详情页**不渲染那块节点**（探针把页面上所有 `[data-e2e]` 遍历了一遍，没有；`backend/test_dy_author.py` → `scratchpad/dy_author.json`），于是每行 `作者=''`、`粉丝数=0`、`获赞数=0`；而守卫写的是 `if not author and not publish` —— 发布时间在，守卫永远不响。**真机闸门 `test_live_douyin.py:47` 那句「至少一行要有作者」今天本来就是红的**（说明这一格自站点改版后没再跑过——测试腐烂的教科书样子）。作者其实就在页面上：`a[href="https://www.douyin.com/user/MS4w…"]` 的链接文字（`白水鉴心`、`IU'ㅅ'`）；粉丝/获赞则**页面根本不发布**（满页只有那两个词的导航标签，没有数） | 产品修复：作者改读那条锚点（JS 里排除导航的 `/user/self` 与带 query 的推荐位，取「有文字的裸 sec_uid 链接」）；粉丝/获赞**留空不再填 0**（与不放 播放数 同一条规矩：没有一个可数的数，就不许有一列看起来在数），旧版若渲染那块面板仍照旧填。快层针 `tests/integration/test_douyin_crawler.py::test_a_page_that_names_its_author_by_link_still_fills_the_column`；真机验证：同一条探针改后 `作者='白水鉴心' / 'IU'ㅅ'`、两列为 `''`。**另记**：一次搜索 8 行实际开了 12 个详情页（2 张 `没有渲染出数据` + 2 张 `只渲染出计数条`，两种都具名、都不算行）——行预算≈1.5 倍导航，抖音的 target 就是这个价 |
+| U42 | `crawlers/douyin.py::_detail_row` 的 作者 / 粉丝数 / 获赞数（**已修 2026-09-28，抖音第 0 步探针抓到**） | **整列作者空白，而且没人说**：三个字段全靠 `_author_from_related` 从 `[data-e2e="related-video"]` 那块面板的文字里切（`泫九粉丝167.0万获赞1157.5万`）。实测这一版详情页**不渲染那块节点**（探针把页面上所有 `[data-e2e]` 遍历了一遍，没有；`backend/test_dy_author.py` → `scratchpad/dy_author.json`）**——这句当天 12 点被自己的第二次探针推翻**：同一条视频页 `related-video` 与 `user-info` 都在，里面就是 `白水鉴心 |  | 粉丝4399获赞341.9万`（`backend/test_dy_dead_video.py` → `scratchpad/dy_dead_video.json`）。早上那次「没有」是**在页面还没注水完时读的**（同一 id 相隔几分钟两次读数完全不同，见 U44），所以「整列为空」是真的、原因不是改版搬家，而是**作者读数取错了范围**（全文档第一个 `sec_uid` 锚点，会抓到推荐栏的别人）。下面这行按审计意见改写，别再拿旧结论当真。，于是每行 `作者=''`、`粉丝数=0`、`获赞数=0`；而守卫写的是 `if not author and not publish` —— 发布时间在，守卫永远不响。**真机闸门 `test_live_douyin.py:47` 那句「至少一行要有作者」今天本来就是红的**（说明这一格自站点改版后没再跑过——测试腐烂的教科书样子）。作者其实就在页面上：`a[href="https://www.douyin.com/user/MS4w…"]` 的链接文字（`白水鉴心`、`IU'ㅅ'`）；粉丝/获赞则**页面根本不发布**（满页只有那两个词的导航标签，没有数） | 产品修复：作者改读那条锚点（JS 里排除导航的 `/user/self` 与带 query 的推荐位，取「有文字的裸 sec_uid 链接」）；粉丝/获赞**留空不再填 0**（与不放 播放数 同一条规矩：没有一个可数的数，就不许有一列看起来在数），旧版若渲染那块面板仍照旧填。快层针 `tests/integration/test_douyin_crawler.py::test_a_page_that_names_its_author_by_link_still_fills_the_column`；真机验证：同一条探针改后 `作者='白水鉴心' / 'IU'ㅅ'`、两列为 `''`。**另记**：一次搜索 8 行实际开了 12 个详情页（2 张 `没有渲染出数据` + 2 张 `只渲染出计数条`，两种都具名、都不算行）——行预算≈1.5 倍导航，抖音的 target 就是这个价 |
+
+| U43 | `crawlers/comments.py::crawl_douyin` 的轮次上限（**已修 2026-09-28，抖音 D 组第 0 步探针抓到**） | **评论面板带着 40 轮预算，而它自己报 OK**：`for _round in range(40)` 决定了「一条 thread 有多大」。探针（`backend/test_dy_comment_denominator.py` → `scratchpad/dy_comment_denominator.json`）在用户自己粘的那条视频上量到：站点写着 **3388** 条评论，走满 40 轮停在 **406 行**（第 40 屏照常返回），状态 `ok`，一句「还差多少」都不说。这正是 AGENTS「没有哪条走路带轮次预算」那条红线在这里的形状：用户问「怎么采不满」，答案是一行代码里的常数 | 产品修复：`while True` + 只有三件事能让它收工（这一屏没有新行、滚动盒子不再长大、用户的 停止/评论条数）。同段补 `comment.dyShort`（`declared/rows/nested/gap` 四个数一起报）——**分母是站点自己写的数**，且按 `declared - Σ子回复数` 判（实测 406 行 + 1062 条子回复 ≠ 3388，所以差额确实还没采到，而不是「楼中楼不算」）。快层三枚针：`test_a_thread_is_walked_to_its_end_not_to_a_round_count`（45 屏必须 45 行；把 `range(40)` 放回去立刻红在 `40 != 45`）、`…_names_the_gap`、`test_an_ask_that_is_met_does_not_complain_about_the_thread` |
+
+| U44 | `crawlers/douyin.py::_detail_row` 的行身份 + `_driver_facts` 的作者读数（**已修 2026-09-28，真机 A1 抓到**） | **空行被当有效数据，而且作者还是别人的**：A1 把 `7687166416143123826` 存成 `标题='' 正文='' 发布时间='' 四个计数=0`，控制台却念「已收录…当前有效数据: 7 条」。探针连打同一地址（`backend/test_dy_dead_video.py` → `scratchpad/dy_dead_video.json`）：稍后再访问同一 id 是**完整的一行**（`吻#邓恩熙…`、`2026-09-19 16:51`、作者 `白水鉴心`）——所以那次是**详情页还没注水完就被读**；而 `作者` 那格填进来的是**推荐栏里另一个人的名字**（`青小鲜三门青蟹 海鲜礼包`、上一次是另一家商铺），因为 U42 的读法是「全文档第一个裸 sec_uid 锚点」，页面头部还没挂载时先出现的是推荐位。两条错叠加：旧守卫 `if not author and not publish` 永远不响（author 有值），守卫的「身份」用错了列 | 产品修复：①身份=**文案或发布时间**，作者不算身份（`if not text and not publish` → 具名 `detailNoIdentity`）；②等待只认页面自己的 `发布时间`（旧写法把导航文字 `评论` 也算到场，正是它让读数的时机提前了）；③作者改在 `[data-e2e="user-info"]` 里读，读不到就留空，`related-video` 那块的开头仍是同一作者块（实测两次都一样）。快层三枚针：`test_a_name_is_not_identity_when_the_page_published_nothing`（把守卫换回旧写法立刻红）、`tests/integration/test_douyin_detail_dom.py` 两枚**真 Chrome + 本地页**的选择器范围针（头部必须赢过 DOM 里更早出现的推荐锚点；没有头部就一句不填）|
+
+| U45 | 抖音结果列表里藏着的**图文页**（`/video/<id>` → `/note/<id>`）（**已定性 2026-09-28，真机 E2 抓到**） | 同一格「旅行攻略」两轮真机（每行在控制台与镜像里各出现一次，下面按**页数**计）：**09:56 那轮开 39 次详情页、21 次报「详情页没有渲染出数据」、只交 18 行**；改完具名句后的 **10:08 那轮同样 18 行、13 次改成报「验证码中间页」**——不是解析坏了：那些 id 打开后被站点重定向到 `/note/<id>`（图文帖），而这台设备访问 note 页拿到的标题就是 **「验证码中间页」**，整页没有 `[data-e2e]`（探针 `backend/test_dy_note_card.py` → `scratchpad/dy_note_card.json`，两次三访全是这个结果；定向复测 `backend/test_dy_dead_video.py`、`scratchpad/dy_wall_cause.out`：被拒的 6 个 id 慢速重开 **6/6 仍是 note + 墙**，同期成功的 6 个视频 id **6/6 正常**）。**顺带否掉了 2026-09-26 那条记录**：它说「图文卡没找到」，因为它只看卡片 `href` 的直方图（16/16 都是 `/video/`）——锚点确实是 `/video/`，是**服务端按 id 重定向**，不打开就看不见。这是「页面模型读错了不会报错，只会让所有账一起同意一张缺的表」的抖音版本 | 记账，不改读法：这类行**站点侧确实拿不到**（视频页照常），但话要说对——新增 `crawl.dy.detailWalled` 逐行报名「这一条被站点挡在验证码中间页（图文页）」，并且**不 latch `login_wall`**（一次会话级判定会把整个节点判成「COOKIE 可能过期」，而同一轮下一条视频爬得好好的，D2 那次的误责就是这类）。它是**逐行**句，因此既不进合法收尾也不进说谎名单，A1/E2 按行计数 |
+
+| U46 | `crawlers/comments.py::crawl_douyin` 的 楼层 编号（**已修 2026-09-28，`code-auditor` 报出、探针证实**） | **楼层每滚一屏就从 1 重数**：`parse_douyin_comments` 在**它拿到的那一批**里 `enumerate(…, 1)`，而走路是「每一轮解析一次再 extend」→ 40 屏的 thread 存下 40 个「1 楼」。§3-B 那条「评论列集含楼层连续性」在抖音一直是破的，且三方（表、汇总、预览）自洽看不见 | 产品修复：先把元组收完（`collected`），走完再统一解析编号——**列表是一份文档，不是一叠书签**（AGENTS 同条）。快层两枚针：`test_the_floor_number_runs_across_the_panel_not_down_one_screen_at_a_time`、`test_a_thread_is_walked_to_its_end_not_to_a_round_count`（顺带断言 1..45）；真机 D1 把 ask 从 15 提到 **40**：一屏 ~16 条，15 行的问法永远走不出第一轮，那句断言就没有牙齿（审核第 17 条点名过这件事） |
+
+| U47 | `crawlers/comments.py::crawl_douyin` 把**换页**读成**拦截**（**已修 2026-09-28，真机 D2 抓到**） | 粘一条不可能存在的视频 id：站点把它换成**另一条视频**（`/jingxuan?modal_id=…`，每次换的还不一样；实测某次还先印了一瞬「你要观看的视频不存在」再跳走）。面板自然挂不起来，旧读法报 BLOCKED 并念出「该视频计有 **1214** 条评论」——**那个数是替身视频的**；BLOCKED 再被节点判成「登录态疑似失效：COOKIE 可能过期」，而**同一次运行下一行刚从那篇真链接采到 8 条评论**。一句替站点说谎的话，附带把用户的好 cookie 定了罪 | 产品修复：面板挂不起来时先比 `current_url` 里的 id 与要的那个（地址是这三次测量里稳定的一半），不同即 `comment.dyGone`（报出替身 id）+ **DEAD**；`looks_blocked` 的判定与「无面板」的 `dyNoPanel`/`dyNone` 原样保留。快层两枚针对着假件补了 `redirects` 映射（不给这个能力，这条产品分支在假件里根本无法表达）：`test_a_video_the_site_swaps_for_another_one_is_dead_not_walled`（并断言替身没被当成自己的链接再访问一次）、`test_a_real_page_that_mounts_no_panel_is_still_the_blocked_shape`（反向对照，防新分支吞掉旧分支）；真机 D2 现在断言 `not run.cookieExpired` |
+
+| U48 | 抖音「排序之后的列表到底有多长」被走成了「滚动没生效」（**已修 2026-09-28，真机 H1 抓到**） | **14 行对 50 行的缺口，没有任何一句解释它**：H1 那次六个组件里，`最新发布` 与 `最多点赞` 两条搜索都只交了 **14 行**（目标 50），而 `综合排序` 交满 50 行。两条不同排序给出**一模一样的 14** 不可能是巧合，所以这个数字是这次走路对页面的读法，而不是站点的供给——第一版判断因此指向「排序后的列表换了滚动盒子」。三条探针把这件事量清（`backend/test_dy_sorted_length.py`、`test_dy_sorted_scroller.py`、以及逐轮比 id 的 turnover 测量 → `scratchpad/dy_sorted_*.json`）：`综合排序` 连滚 8 轮 16→25→34→62→107 照常长大；两个排序视图**停在 14 张、八次滚动后连 id 都不换一个**，而且列表底部写着 **`暂时没有更多了`**——所以 14 就是这张榜给的东西，**错的是我们没把这句话读出来**。旧写法只把「这次滚动没让卡片变多」当成 `drained=True` 就收尾，控制台最后一句是 `搜索完成，共获取 14 条（目标 50 条，翻了 2 屏）`：说数字、不说原因，按 §5 那条「给自己发满分的总结行不算合法收尾」，这就是 SILENT_SHORT | 产品修复：`_harvest_pool` 在「滚动不再长大」的那一刻去读页面自己的收尾句（`LIST_END_MARKS=('暂时没有更多了','没有更多了')`，从可见正文里读，不认 class 名），读到才打 `crawl.dy.noMore`（带上这次走了几屏、最后一屏几张卡）；**没读到就一句不说**——那仍然归因到本机的读法，真机层该红。它因此是**合法收尾**（站点自己的标记，与知乎 `crawl.zhihu.no_more` 同族），也是这次真机能区分「站点给这么多」与「我们少读一页」的那句话。**同日 12:28 复测把话说回来一半**：同一关键词同一排序再跑，页面**这一次没印**那句话（`A6` 14/40 → SILENT_SHORT，`body_len≈800` 里 marker 不在），而 hook 住 `fetch`/`XHR` 之后**一个搜索请求都没抓到**（列表随文档一次性给到，滚动不再触发翻页），所以「14 就是这张榜给的东西」这句**当时写过头了**——正确说法是「本站点对本会话给到这么多，且它的收尾句不是每次都印」；用户随后自己复测判定**抖音搜索本身就是浅的**（换号也一样），故搜索线暂停，不再拿它的行数当采集缺陷追。快层两枚针互为对照：`test_a_short_sorted_list_is_reported_as_the_site_s_end_not_as_a_stalled_scroll` / `test_a_scroll_that_grows_nothing_without_the_marker_stays_unnamed`；真机新增 **A6**（`IU` + 最新发布、问 40）：实测 13 行 + `列表自己写了「暂时没有更多了」：翻了 2 屏，最后一屏 13 张…` → NAMED_SHORT/WARN。**另一件事顺带记下**：同一天用 `宠物` 跑 A6 时，结果页五分钟一张卡都没挂载，最后由 `crawl.dy.noCards` 具名收场（页面自报 `502 Bad Gateway`）——那条路径的判词本来就是对的，这里只记下它发生过 |
+
+
+| U49 | 我在**今天的修复里**引入的两个新缺陷（`code-auditor` 二轮抓出，均已修） | ① **共享走路借用了搜索页的耐心等待**：`_harvest_pool` 的「空屏先等列表重挂」分支调了 `_wait_for_page()`，那是搜索路由的挂载等待（轮询搜索锚点、上限 `Config.PAGE_WAIT_TIMEOUT`=300 s），从作者网格走进去就是**在一张永远答不上来的页面上等五分钟**，而且等完还要用 `read_ids` 重读一遍——等等本身没有收益。② **换链接的守卫只在「面板没挂载」分支里**：若站点先挂好自己那条面板再把地址换走，旧位置就漏判，替身视频的整批评论会以用户粘的那个 URL 入库（与 `crawl.dy.detailSwapped` 同一条红线，注释里我自己写的原则被代码漏了一半） | ①改成只等**这条列表自己**（`feed.wait_for(lambda: len(read_ids()), 1, …SCROLL_WAIT)`）；快层针 `TestAuthorProfile::test_the_harvest_loop_waits_on_its_own_list_not_on_the_search_route`（把 `_wait_for_page` 换成 `pytest.fail`，走进去就红；并断言那次空读不占屏数）。②守卫**提到分支之前**（挂没挂都先比地址），并补**走完再比一次**（走路中途被换掉就整批丢弃 + `comment.dyGone`/DEAD）；快层两枚针 `test_a_substitution_is_refused_before_the_panel_is_walked`（断言一次滚动都没发生）与 `test_a_panel_that_moves_halfway_through_loses_its_rows`（假件新增 `moves_on_scroll`，没这个旋钮这条分支在假件里无法表达）。 |
+| U50 | 去掉评论面板 40 轮上限后，走路变成 **O(n²)** 且没人说（同一轮审计抓出） | 每轮都重新 `find_elements` 并把**所有已挂载节点**逐条 `_safe_text` 读一遍（每次一个 JS 往返）。3388 条的 thread 就是 ~1M 次读数、按小时计——**修掉「采不满」的同时把「采得完」变成了跑不完**，而且慢下来时没有任何一句提示 | 只读**新增的尾巴**（面板是追加式的，实测 16→56）；但**追加不是可以从数量推出来的**：虚拟化列表可以「同样多、头一个变了」，所以哨兵用**头节点的文字**而不是计数，头一变就回到 0 重读。快层两枚针：`test_a_growing_panel_is_read_by_its_new_tail_not_from_the_top`（数 `_safe_text` 次数 < 挂载总量）、`test_a_recycled_panel_is_re_read_from_the_top`（同数量换头 → 新条仍要被读到）；把哨兵换回「按数量判断」立刻红（已实测：`'第8条内容'` 被跳过）。 |
+| U51 | `crawlers/comments.py::crawl_douyin` 的差额句替站点说话（**已修 2026-09-28，同日二轮复查抓出**） | 让走路收工的四件事里，「你按了 停止」与「滚动不再出新行」是**两种相反的事实**，而 `comment.dyShort` 那句把后者写死在模板里（「面板滚到不再出新行即收尾」）——于是一次 停止 中断的走路被念成「站点就给了这么多」，正是 §5 拒的自证形状（同一件事在运行级已有对照：`run.finished.stopped` 报「1 个被停止」而不是「1 个失败」）。这句还漏了 `{url}`：调用一直传、模板里没有，一行多链接的控制台不知道差额属于哪条视频。修：走路自己记下出口（`no_new`/`target`/`stopped`/`stuck`），差额句按既有词表 `crawl.stopReason.*` 说出是哪一个，URL 回到句首。快层两枚针互为对照：`test_a_panel_that_ends_short_of_the_counters_number_names_the_gap`（`stuck`）、`test_a_walk_cut_short_by_the_stop_button_blames_the_stop_not_the_site`（`stopped`，并断言停止之后**一次都没再滚**） |
+| U52 | `crawlers/comments_douyin.py::douyin_comment_fields` 按位置取正文（**已修 2026-09-28，同日二轮复查抓出**） | 正文写死 `lines[1]`，两件事随之而来：① 评论换行时第二行之后**整段丢掉**（这张表的目的就是「不漏采」），而正文里自成一行的纯数字会被下面 `line.isdigit()` 那条读成 点赞数——一个挂在看起来对的列名下的错数；② 作者名渲染为空而塌行时（本模块 docstring 自己承认的形状）每个字段整体前移一格，「1天前·北京」被写进 评论内容，楼层与行号照样好看。修：把面板自己的「时间·地区」那行当锚点——锚点之前全是正文（多行按换行拼接），点赞数只认锚点之后的裸数字；锚点之前没有正文就是没有正文，这行由调用方丢掉，**宁可少一行也不存一句时间戳**。快层 `test_a_wrapped_comment_keeps_every_line_and_its_own_numbers`、`test_a_timestamp_is_never_filed_as_the_comment_text`；退回即红实测：把 `head` 改回 `lines[1:2]` → 两枚同时红（`'1天前·北京' == ''`） |
+
 
 **滚动节奏（fake driver 数出来的 scroll 命令，不是真机测量；读控制台 `scroll_round` 前先记住它）**：
 `scroll_down(steps=3)` 一次发 **4** 条 scroll 命令（3 步 + 1 次底部跳转），所以搜索的一个 stalled round
@@ -486,7 +508,71 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
               而微博 `serial_only` 本来就一条，G1/G2 已经测过——同样的钱买不到新的判据。
             * 知乎的 H 组仍用它自己那份同名函数：搬运已经真机跑过的判决代码，代价是要再跑一次知乎四组件
               真爬，所以 §8 记成明确欠账，知乎下次真机触碰时一并折叠；**新平台一律 `import live_acceptance`**。
-- [ ] 抖音 → B站 → 小红书 → 微信（同一套八步）
+- [ ] **抖音（2026-09-28，第 1–7 步过、第 8 步未过）** —— 逐例读数与判据同微博；**H1 两次都红**，所以这一格没勾：
+
+            * **第 0 步（先读页面）**：四枚探针 —— `test_dy_page_model.py`（列表挂载比注释写的更快、
+              窗口就是分页器）、`test_dy_funnel.py`（8 行付 12 次导航，两种拒绝都具名）、
+              `test_dy_author.py` + `test_dy_dead_video.py`（作者块的位置与「没注水完就读」的空行）、
+              `test_dy_comment_denominator.py`（面板 406 行 / 站点写 3388 / Σ子回复 1062）、
+              `test_dy_note_card.py`（`/video/` 锚点里藏着 `/note/`，本机一律验证码中间页）。
+              结论都写进了 `docs/crawler_notes.md` 抖音一节，并**否掉**了 2026-09-26 那条「图文卡没找到」。
+            * **真机 17 格**（`tests/live_site/test_live_douyin_workflow.py`）：**A1-A6、B1-B2、C1-C2、D1-D2、
+              E1/E2、G1 共 14 格跑过并逐行读过控制台**；**A7/A8 还没跑过真机**（补写于当日审计之后；A7 的
+              三条排序性质今天改成**两侧都有话**：行数不足 3 时必须由站点自己的收尾句免责，
+              否则红——旧写法 `or len(likes) < 3` 会让只回来 2 行的 最新发布 空过。这两格不再补跑，因为它们的
+              搜索腿属于用户已判定暂停的抖音搜索线，所以这里只记「写好了、没跑过」，不记成通过），
+              H1 跑过三轮、三轮都没过（见下）。每格判据以其台账行为准：
+              A1 ✅ FULL 10/10（11:42 那一轮；早前一轮 12 开 1 拒，U44 修复前是 10 行里混 1 张空行）；
+              A2 ✅ FULL（伪装无头 10 行，`crawl.dy.wall` 因此进了白名单：抖音的墙在标题里，通用那句不打印）；
+              A3 ✅ FULL（`已选 最新发布（列表是否换血：True)`，随后 `第 1 屏：0 张`→`第 2 屏：28 张`，
+              正是刚点完在换血的那一瞬；审核第 7 条要求这句只核**菜单**那三条 liar）；
+              A4 ✅ **REFUSED**（off-list 的 `sort` 由 `engine.source_bad_option` 点名「节点 采集 #node-1：
+              「排序方式」没有「最热」这个选项」，2 行控制台、2 秒、**没有 record**、没有 `crawl.dy.start`
+              ——所以 `crawl.dy.sortUnknown` 是打不出来的，白名单里不收它并记了原因）；
+              A5 ✅ FULL（问 5 存 5，`翻了 1 屏`）；
+              B1 ✅ FULL 12/12（`主页自报 145 条`；审核第 8 条：先断 `works >= asked` 再断 FULL，
+              供给侧哪天变了这格会说出是供给没了，而不是判走路有罪）；
+              B2 ✅ NAMED_SHORT（`[抖音作者] 没有给出作者…：泫九`，4 秒，浏览器根本没指过去）；
+              C1 ✅ FULL 40 条、C2 ✅ NAMED_SHORT `榜单本次只有 51 条`（`{board}=51` == 表行数）；
+              **C 组第一次跑是红的，报的是 `hotWall`**：用户自己的 profile 在 `/hot` 上被答验证码中间页，
+              这正是本文件 §7 记了两天的**反向语义**那一格——热榜要用一次性浏览器（`use_profile=False`），
+              矩阵与 `docs/crawler_notes.md` 的说法被真机复核为**仍然成立**，用例因此显式要求该形状；
+              D1 ✅ FULL 40 条（问 15 时那格没有牙：一屏 ~16 条，永远走不出第一轮，故提到 40；
+              **楼层现在实测 1..40 连续**，且封顶的问法**不该**抱怨差额）；
+              D2 ✅ NAMED_SHORT/WARN（`comment.dyGone` + `comment.status.dead`，替身 id 印在句子里，
+              **`run.cookieExpired` 断言为不存在** —— 修之前这里打的是「登录态疑似失效」，
+              而同一次运行下一行刚采到 8 条）；
+              E1 ✅ NAMED_SHORT（2 行即停，`1 个被停止` 而不是 `1 个失败`）+ E2 ✅ FULL（续跑 20/20：
+              按行核账 `filed + refused`，`run.dedupe_skipped` 必须不出现——去重台账会把重付的导航
+              悄悄抹平成「行不重复」，所以行不重复**不是**省钱的证据，这一格改成了它原本该有的形状）；
+              G1 ✅（两组件并行，`lane_switches(queue=False, stagger=0)` 显式改全局开关再还原；
+              审核第 6 条：默认 `same_platform_queue=True` 时这格测的是排队而不是重叠）。
+            * **修掉的产品缺陷 9 项**（§6 的 U43–U52：评论面板 40 轮预算 / 空行冒充有效数据 + 作者张冠李戴 /
+              图文页被说成「没渲染数据」 / 楼层每屏重数 / 死链接被说成登录墙 / 我的修复自己引入的两个新坑
+              U49——走路借了搜索页的 300 秒等待、替换检查挂在面板分支之后 / U50——去掉轮次上限把走路做成
+              O(n²) / U51——差额句把「用户按了停止」说成站点欠额、URL 还在调用里传着却没进模板 /
+              U52——评论拆行器按位置取正文，换行评论丢掉第二行、正文里的纯数字被读成点赞数、塌掉的作者行
+              把「1天前·北京」当成评论），每枚都有快层针并做过**「退回即红」**实测：把 `range(40)` 放回去 →
+              `40 != 45` 红；把旧守卫放回去 → 空行被存下来红；把 `_wait_for_page` 放回去 → 作者腿红在等待上；
+              把 `head` 放回 `lines[1:2]` → U52 那两枚同时红。
+              作者读数那处的范围只能在浏览器里证，故新增设备层 `tests/integration/test_douyin_detail_dom.py`
+              （真 Chrome + 本地页，推荐锚点故意排在作者块之前）。
+            * **共享件按审核意见收口**：`harness.lane_switches()`（微博文件里那份搬进 harness，两边共用）、
+              `RunDriver.wait_refused()`（为「运行前就被校验拒绝、根本不建 record」这类格子准备的路径——
+              它连 `run.started` 都不该有，所以 `assert_l3` 那四句在这里不是欠账而是无关）。
+              `comment.dyShort` / `comment.dyGone` / `crawl.dy.detailWalled` 三个新键双语齐。
+            * **H 组（用户画布 `data/workflows/测试：抖音.json`）：三轮全红，没收口**。逐轮读控制台后的账：
+              ① 10:31 那轮根本没跑起来（`records_by_node` 找不到组件行，原因是我先把「按标签找记录」写错了）；
+              ② 11:27 那轮六格跑完但三格 SILENT：作者 2/50 的真相是 `invalid session id`——**我在验收跑没结束时
+              另开了一个探针进程，用的是同一个 profile 目录，Chrome 一个目录只容一个进程，是我抢死了它**；
+              评论 27/50 是同一件事的连带（浏览器死了，站点那 3388 的计数也读不到）；综合排序 46/50 则抓到
+              一个真 bug（见下 U49）；③ 12:09 按用户要求**全串行**复跑，车道开 `same_platform_queue=True`、
+              全程只有它一个浏览器：**作者 50/50、评论 50/50、综合排序 50/50 三格补满**（用户的并行判断
+              在这一点上成立），两个排序腿却因为我自己写的 `self.nap`（爬虫上没有这个方法）直接崩成 0 行；
+              修好后单独复测排序腿 = 14/40 且这次页面没印收尾句 → 仍然红（搜索线按用户判定暂停）。
+              **所以第 8 步没过的原因有三类，已各自归因**：并发抢 profile（操作纪律）、`nap` 崩溃（已修+已针）、
+              抖音搜索供给浅（用户判定，不追）。
+- [ ] B站 → 小红书 → 微信（同一套八步）
 - [ ] VPN 阶段：X → YouTube（先测反向用例：不可达必须报 `unreachable`，不许假空）
 - [ ] 全平台门过 → §6 剩余嫌疑（U1 通用 under-target、U2 walk 计数器从不打印等）收口提交
 

@@ -100,6 +100,14 @@ class DouyinCrawler(VideoCrawler):
     POLITE_BASE = 1.0
     POLITE_SPREAD = 0.4
 
+    #: What the result list writes when it is done. Measured 2026-09-28 with 最新发布 chosen on 「IU」:
+    #: the page carries 14 cards, the window scroll stops changing anything, and at the foot of the list
+    #: sits 「暂时没有更多了」 — the site's own end-of-list sentence, twice in the document. Without reading
+    #: it, a walk that ended at 14 of 50 said only 「搜索完成，共获取 14 条」, and a short table caused by
+    #: the site is indistinguishable in the console from one caused by our scroll loop (which is the exact
+    #: complaint this round exists to answer).
+    LIST_END_MARKS = ('暂时没有更多了', '没有更多了')
+
     #: The corner word the result page hides its ordering behind, and the words inside it.
     #: Measured 2026-09-26: the panel is **hover**-wired (clicking 筛选 closes it), no choice
     #: changes the address, and the site's own words are 综合排序 / 最新发布 / 最多点赞 — there is
@@ -440,7 +448,23 @@ class DouyinCrawler(VideoCrawler):
         pool: list = []
         queued: set = set()
         screens = 0
+        waited_for_swap = False
         while not self.may_stop() and len(pool) < need:
+            on_screen = list(read_ids())
+            if not on_screen and not waited_for_swap:
+                # An empty read is the list being rewritten, not the list being empty — and the two used to
+                # be indistinguishable in the console. Measured 2026-09-28: right after an order is chosen
+                # the same address re-mounts its cards from scratch (~2.0 s for 最新发布, 0.1 s for the
+                # default that needs no click), so the walk's first round read 0 and counted itself as a
+                # screen: 「翻了 2 屏」 really meant 「一次换血空档 + 一屏内容」. Wait for the remount once
+                # (bounded, 停止-aware) and do not spend a screen number on it. This waits on *read_ids*
+                # rather than on :meth:`_wait_for_page`: that helper is the search route's patient mount
+                # wait (``Config.PAGE_WAIT_TIMEOUT`` = 300 s, anchored on the search cards), so calling it
+                # from the shared walk burned five minutes on an author grid whose cards it cannot see —
+                # and threw the answer away, because this loop re-reads through ``read_ids`` anyway.
+                waited_for_swap = True
+                feed.wait_for(lambda: len(read_ids()), 1, timeout=self.SCROLL_WAIT, tick=1.0)
+                continue
             screens += 1
             on_screen = list(read_ids())
             fresh = [aweme_id for aweme_id in on_screen if aweme_id not in done and aweme_id not in queued]
@@ -451,6 +475,14 @@ class DouyinCrawler(VideoCrawler):
             if len(pool) >= need:
                 break
             if not scroll():
+                # Two different endings, and only one of them is the site's. A list that wrote
+                # 「暂时没有更多了」 is done; a scroll that moved nothing while the marker is absent is
+                # our read of the page (a slow batch, a box that is not the list's box), and that one must
+                # stay un-named so the live tier keeps convicting it. Measured 2026-09-28: 最新发布 on
+                # 「IU」 ends at 14 cards *with* the marker, which is why a 50-row ask there is a named
+                # shortfall and not the bug it looked like.
+                if self._list_says_end():
+                    logger.info(t('crawl.dy.noMore', screens=screens, cards=len(on_screen)))
                 return pool, True, screens
         return pool, False, screens
 
@@ -632,6 +664,15 @@ class DouyinCrawler(VideoCrawler):
         self._dismiss_prompts()
         self._wait_for_grid(timeout=self.MOUNT_WAIT)
 
+    def _list_says_end(self) -> bool:
+        """Is the site's own end-of-list sentence on screen? Read from the rendered text.
+
+        Checked only when a scroll failed to grow the list, so the cost is one body read at the moment the
+        walk is already deciding whether to stop — and the marker is searched in the same text the user
+        would see if he looked at the window, not in a node the build might rename.
+        """
+        return any(mark in self._body_text(limit=6000) for mark in self.LIST_END_MARKS)
+
     def _scroll_results(self) -> bool:
         """Step the window down and report whether the list handed over more rows.
 
@@ -647,6 +688,18 @@ class DouyinCrawler(VideoCrawler):
         with contextlib.suppress(Exception):
             self.driver.execute_script(step, self.SCROLL_STEP)
         grown = feed.wait_for(lambda: len(self._card_ids()), before + 1, timeout=self.SCROLL_WAIT, tick=1.0) > before
+        if not grown:
+            # One unread growth is not the end of a list. Measured 2026-09-28 (live cell H1, 综合排序 leg):
+            # the walk re-opened its result page, the batch was still in flight, the growth poll timed out,
+            # and the whole crawl ended at 46 of 50 — while the same list went on to hand over 85 cards on
+            # the next attempt. So the scroll is given one more settle-and-reach: a list that is really done
+            # costs one extra wait, and a batch that was merely late stops costing the user rows.
+            time.sleep(2.0)
+            with contextlib.suppress(Exception):
+                self.driver.execute_script(step, self.SCROLL_STEP)
+            grown = (
+                feed.wait_for(lambda: len(self._card_ids()), before + 1, timeout=self.SCROLL_WAIT, tick=1.0) > before
+            )
         self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
         return bool(grown)
 
@@ -672,8 +725,19 @@ class DouyinCrawler(VideoCrawler):
         # below may navigate again, and by the time the line is written the stored fact
         # would no longer be about this page.
         settled = self.open(f'https://www.douyin.com/video/{aweme_id}')
-        if not self._wait_for_text(('发布时间', '评论'), timeout=15.0):
+        if not self._wait_for_text(('发布时间',), timeout=20.0):
             self.check_login_wall(f'https://www.douyin.com/video/{aweme_id}')
+            if self._is_walled() and not self.login_wall:
+                # One row's wall, said as a wall. Measured 2026-09-28: a search of 「旅行攻略」 opened 39
+                # detail pages and 15 came back 「验证码中间页」 — those ids are 图文 posts, whose route the
+                # site refuses for this browser while the video pages round it answer perfectly (the card
+                # itself always links ``/video/<id>``; the redirect to ``/note/<id>`` is what gives it away).
+                # 「没有渲染出数据」 was therefore a wrong sentence about a real event, and the wrong sentence
+                # invites the wrong repair. It is NOT the session either: latching ``login_wall`` here would
+                # hand the whole node to 「COOKIE 可能过期」 while the next card crawls fine, so the flag is
+                # read but not set, and the walk keeps going.
+                logger.warning(t('crawl.dy.detailWalled', i=aweme_id))
+                return None
             # Two different complaints. "No data rendered" says the page arrived and
             # published nothing; "the page never finished loading" says the request is
             # still owed — which is what a slow connection actually produces, and the
@@ -682,35 +746,51 @@ class DouyinCrawler(VideoCrawler):
                 t('crawl.dy.detailSlow', i=aweme_id) if not settled else t('crawl.dy.detailEmpty', i=aweme_id)
             )
             return None
+        shown = douyin_id(self.driver.current_url or '')
+        if shown and shown != str(aweme_id):
+            # The address the browser ended on is not the video this row was asked for. Measured 2026-09-28
+            # on ``7664182466315794939`` (a 图文 id): the walk landed on ``/video/7029265830722489634`` — a
+            # real, fully-published video that has nothing to do with the search — and every field on that
+            # page (文案, 发布时间, the four counters, the author) belonged to somebody else's post. Filed
+            # anyway, the table would claim 「this is the video the list linked」 under a link that opens
+            # another one; the user watched that happen on screen before any test described it. Read after
+            # the wait and before anything is taken from the page, so the address, the settled content and
+            # this judgement are all about the same document. Refused by name with both ids: a missing row
+            # is a gap the walk can still be asked about, a wrong row is data.
+            logger.warning(t('crawl.dy.detailSwapped', i=aweme_id, shown=shown))
+            return None
         facts = self._driver_facts()
         info_lines = [line.strip() for line in str(facts.get('info') or '').split('\n') if line.strip()]
         text = info_lines[0] if info_lines else ''
         publish = _clean_publish(facts.get('publish'))
         related = _author_from_related(str(facts.get('related') or ''))
-        # Measured 2026-09-28: the video page names its own creator as ``a[href*="/user/MS4w…"]`` whose
-        # text is the nickname, and **no longer renders** the ``related-video`` block the reader above
-        # used as its only source. Every row was therefore stored with ``作者=''`` while the guard below
-        # stayed silent (the publish time *is* on the page), so a whole column came back blank and nobody
-        # said so — the douyin shape of weibo's恒 0 点赞数.
+        # Measured twice on 2026-09-28, and the second reading corrected the first: the creator's name is
+        # the text of ``[data-e2e="user-info"] a[href*="/user/<sec_uid>"]``, and the ``related-video`` block
+        # *begins* with that same block (``白水鉴心 |  | 粉丝4399获赞341.9万 |  | 关注``), so it is the fallback
+        # that also carries the two account totals. The morning's read — that the block had stopped
+        # rendering — was taken on a page still hydrating, which is the same condition that filled 作者 with
+        # a rail creator and let an empty row through the old guard; hence the scoping in
+        # :meth:`_driver_facts` and the identity test below.
         author = str(facts.get('author') or '').strip() or related[0]
         followers, liked = related[1], related[2]
-        if not author and not publish:
-            # Measured 2026-09-26 on a live run: the video page handed over its counter bar and
-            # nothing else — an id, 点赞 300, 评论 11, no author, no publish time, no 文案. That is
-            # a page still hydrating, not a caption-less video (one of those keeps its author and
-            # its date), and filing it spends a row of the user's target on a line an export then
-            # has to explain away.
+        if not text and not publish:
+            # Identity is the caption or its date — **not** the author. Measured 2026-09-28 (live cell A1
+            # and the probe behind it): a page still hydrating handed over an id, four zero counters and a
+            # 作者 read off the recommendation rail, and this guard let it through because ``author`` was
+            # non-empty; the row was then counted as 「当前有效数据: 7 条」 and consumed a slot of the user's
+            # target. An empty row is not data no matter whose name is on the page, and the walk says so
+            # rather than the export having to explain the line afterwards.
             logger.warning(t('crawl.dy.detailNoIdentity', i=aweme_id))
             return None
         return {
             '标题': (self._title().removesuffix(' - 抖音').strip() or text)[:120],
             '正文': text,
             '作者': author,
-            # The creator's totals are not on a video page — measured, only the *words* 粉丝/获赞 appear,
-            # as nav labels with no figure beside them. A 0 there would be a count that says 「这个账号
-            # 没人关注」, i.e. a wrong number under a plausible column name, which is exactly why 播放数
-            # was never added. So the columns say nothing when the page says nothing; the block that used
-            # to carry both still fills them when a build renders it.
+            # The creator's totals come from that one block and nowhere else on the page: measured, the
+            # words 粉丝/获赞 also appear as bare nav labels with no figure beside them, so a 0 read from
+            # one of those would be a count saying 「这个账号没人关注」 — a wrong number under a plausible
+            # column name, which is the same reason 播放数 was never added. Blank is therefore the answer
+            # for "the page did not publish it", and :func:`_author_from_related` fills both when it did.
             '粉丝数': followers or '',
             '获赞数': liked or '',
             '发布时间': publish,
@@ -730,10 +810,16 @@ class DouyinCrawler(VideoCrawler):
           return el ? (el.innerText || '').trim() : '';
         }
         function author() {
-          // The nav's 「我的」 entry is a /user/ link too, and the related-video rail links a dozen
-          // more; the creator's own is the one that carries the opaque sec_uid with **no query**
-          // and has a name written on it (measured: two such anchors, the icon and the label).
-          var links = document.querySelectorAll('a[href*="/user/"]');
+          // The creator block, by its own name. A document-wide ``a[href*=\"/user/\"]`` scan is NOT that:
+          // measured 2026-09-28 on a page still hydrating, the first bare sec_uid anchor with text on the
+          // document belonged to the recommendation rail, so the row was stored with a stranger's shop
+          // account as its 作者 (「青小鲜三门青蟹 海鲜礼包」 on a video by 白水鉴心). The rail is rendered
+          // before the header on a slow page, so the order that saves the caption's owner can also hand
+          // over somebody else's name — and a wrong figure under a plausible column is the harm this
+          // repo refuses elsewhere (see why there is no 播放数).
+          var scope = document.querySelector('[data-e2e="user-info"]');
+          if (!scope) return '';
+          var links = scope.querySelectorAll('a[href*="/user/"]');
           for (var i = 0; i < links.length; i++) {
             var href = links[i].href || '';
             var name = (links[i].innerText || '').trim();

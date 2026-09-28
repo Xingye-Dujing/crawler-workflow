@@ -375,6 +375,10 @@ _ZH = {
     'crawl.dy.start': '[抖音搜索] 开始搜索关键词: "{kw}"，目标 {n} 条',
     'crawl.dy.target_reached': '[抖音] 已达到目标数量 {n} 条，停止',
     'crawl.dy.round': '[抖音] 第 {i} 屏：{n} 张卡片（新 {fresh} 个，已收录 {done} 条）',
+    'crawl.dy.noMore': (
+        '[抖音] 列表自己写了「暂时没有更多了」：翻了 {screens} 屏，最后一屏 {cards} 张卡片，'
+        '这一轮的供给就到这儿（不是滚动没生效）'
+    ),
     'crawl.dy.processed': '[抖音] 已收录视频 {i}，当前有效数据: {n} 条',
     'crawl.dy.finished': '[抖音搜索] 搜索完成，共获取 {n} 条有效结果（目标 {total} 条，翻了 {rounds} 屏）',
     'crawl.dy.authorStart': '[抖音作者] 开始采集该作者的作品，目标 {n} 条（计数要逐条打开视频页取）',
@@ -395,6 +399,14 @@ _ZH = {
         '请确认已在 Cookie 面板用「可见窗口」登录并保存，稍后再重试本关键词'
     ),
     'crawl.dy.detailEmpty': '[抖音] 视频 {i} 的详情页没有渲染出数据，已跳过该行',
+    'crawl.dy.detailWalled': (
+        '[抖音] 视频 {i} 这一条被站点挡在「验证码中间页」（图文页在这台设备上就是这样，视频页不受影响）'
+        '，已跳过该行：它不是「站点没内容」，也不是登录态失效'
+    ),
+    'crawl.dy.detailSwapped': (
+        '[抖音] 要打开的是 {i}，浏览器却给了另一条视频 {shown}（站点自己换了内容）'
+        ' —— 这一行不入库：宁可少一行，也不把别人的文案和计数挂在这个链接下'
+    ),
     'crawl.dy.detailNoIdentity': (
         '[抖音] 视频 {i} 的详情页只渲染出计数条，作者与发布时间都没有，已跳过该行：'
         '一条说不出是谁、什么时候发的记录不是数据，只是把额度花在一个空行上'
@@ -661,7 +673,12 @@ _ZH = {
     'comment.biliBadAnswer': '哔哩哔哩评论接口未返回数据（code={code}）：{url}',
     'comment.dyNoId': '链接里没有视频 ID，无法抓评论：{url}',
     'comment.dyNoPanel': '评论区没有渲染出来（可能被折叠或需要登录）：{url}',
+    'comment.dyGone': '[抖音评论] 站点把这条链接换成了另一条视频（{shown}），这条按失效处理：{url}',
     'comment.dyNone': '该视频计有 {n} 条评论，页面未展开评论列表：{url}',
+    'comment.dyShort': (
+        '[抖音评论] {url}：站点写着 {declared} 条，本表 {rows} 条 + 子回复 {nested} 条（还差 {gap} 条未采到）'
+        ' —— 本次收尾原因是「{reason}」，所以差额不是「这条视频就这么多」'
+    ),
     'comment.weiboShowFailed': '[微博评论] 评论接口取不回来（Cookie 可能失效或被限流）：{url}',
     'comment.weiboReplay': (
         '[微博评论] 第 {page} 页没有交出新的一条（游标仍在动）：按「站点在重复同一批」收工，本次 {rows} 条'
@@ -1259,6 +1276,10 @@ _EN = {
     'crawl.dy.start': '[Douyin search] keyword "{kw}", target {n} rows (Douyin only answers a visible window)',
     'crawl.dy.target_reached': '[Douyin] target of {n} rows reached, stop',
     'crawl.dy.round': '[Douyin] screen {i}: {n} cards ({fresh} new, {done} collected)',
+    'crawl.dy.noMore': (
+        '[Douyin] the list wrote its own "no more for now": {screens} screens read, last screen held '
+        '{cards} cards — that is the supply for this order, not a scroll that failed'
+    ),
     'crawl.dy.processed': '[Douyin] stored video {i}, {n} valid rows so far',
     'crawl.dy.finished': '[Douyin search] done, {n} valid rows (target {total}, {rounds} screens walked)',
     'crawl.dy.authorStart': "[Douyin author] one creator's posts, target {n} (counters cost a page each)",
@@ -1281,6 +1302,14 @@ _EN = {
         'and retry this keyword a little later'
     ),
     'crawl.dy.detailEmpty': '[Douyin] video {i} rendered no detail data, row skipped',
+    'crawl.dy.detailWalled': (
+        '[Douyin] video {i} was answered with the captcha interstitial (image-text posts are refused for this '
+        'device; video pages are not) — row skipped: the site did not run out of content and the session is not dead'
+    ),
+    'crawl.dy.detailSwapped': (
+        '[Douyin] asked for video {i} but the browser served a different one, {shown} (the site swapped the content)'
+        " — row not stored: one row short beats somebody else's caption and counters filed under this link"
+    ),
     'crawl.dy.detailNoIdentity': (
         '[Douyin] video {i} rendered only its counter bar — no author and no publish time, row skipped: '
         'a record that cannot say whose it is or when it was posted is not data, just budget spent on a blank row'
@@ -1563,7 +1592,16 @@ _EN = {
     'comment.biliBadAnswer': 'bilibili comment endpoint returned no data (code={code}): {url}',
     'comment.dyNoId': 'the link carries no video id, so comments cannot be fetched: {url}',
     'comment.dyNoPanel': 'the comment panel never rendered (collapsed, or login required): {url}',
+    'comment.dyGone': (
+        '[douyin comments] the site answered this link with a different video ({shown}); '
+        'this link counts as dead, not as a wall: {url}'
+    ),
     'comment.dyNone': 'this video reports {n} comments but the list did not open: {url}',
+    'comment.dyShort': (
+        '[douyin comments] {url}: the page says {declared}, this table holds {rows} plus {nested} counted '
+        'replies ({gap} still not collected) — this walk ended because: {reason}, so the gap is not a claim '
+        'that the thread is that short'
+    ),
     'comment.weiboShowFailed': '[weibo comments] the comment endpoint answered nothing (dead cookie, limited): {url}',
     'comment.weiboReplay': (
         '[weibo comments] page {page} added no new row while the cursor was still live: '
