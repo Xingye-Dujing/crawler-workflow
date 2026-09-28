@@ -14,9 +14,11 @@ Design notes that the code cannot shout later:
   page* (same session, cookie-authenticated) — the desktop DOM is a maze of
   hashed class names, and for bilibili's comment panel there is no DOM at all:
   ``.reply-item`` renders nothing, so the endpoint is the only path.
-* zhihu blocks headless sessions on content pages (answer/question), so the
-  caller must give this platform a visible window; that requirement is
-  declared here as ``NEVER_HEADLESS`` and honoured by the node handler.
+* headless is honoured everywhere, including zhihu's answer/question pages: the
+  ``NEVER_HEADLESS`` exception this bullet used to declare was deleted with #148,
+  which gives a headless session a desktop UA and real window metrics (measured:
+  知乎评论区伪装无头 5/5 == 可见窗口 5/5). A visible window is what the user asked
+  for, never something this module substitutes.
 * douyin is the mirror image of bilibili: its comment panel renders DOM but its
   endpoint is signed (``a_bogus``), so the crawl scrolls a container that
   ``window.scrollTo`` cannot move — and both the mount and every scroll settle

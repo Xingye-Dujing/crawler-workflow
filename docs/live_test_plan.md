@@ -605,8 +605,12 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
    `logs == []`、`total_nodes == 0`）。修法：让 `seeded_cookies` 依赖 `data_root`（或 `client`）再写文件，
    写完自证一次 `exists()`；只对 9 个真起爬取的模块 `usefixtures`，**不要全局 autouse**
    （`test_cookie_preflight` / `test_config_api` 要靠"没有 Cookie"说话）。
-2. 任务 **#25/#26/#27**：云端隐藏 Ollama 与无头设置（**注意知乎评论区/内容页实测拒绝无头会话，云端这些模式
-   要按名字拒绝，不许默默跑成空表**）、隐私审查 + 首次隐私声明弹窗、**pristine Profile 模板**。
+2. 任务 **#25/#26/#27**：云端隐藏 Ollama 与「无头」设置项（隐藏后一律无头跑）、隐私审查 + 首次隐私声明弹窗、
+   **pristine Profile 模板**。这里我先前写了一条错误的告诫（"知乎评论区/内容页拒绝无头，云端要按名字拒绝"）——
+   那是从 `comments.py` 一段**过期 docstring** 读来的：`NEVER_HEADLESS` 早在 #148 就随"无头带桌面指纹"一起删了
+   （README 记着实测：知乎评论区伪装无头 5/5 == 可见窗口 5/5），代码里除了那句注释再无此物。该注释今天已改正，
+   平台该无头就无头、该开窗口就开窗口，**云端不需要为任何模式加拒绝**。教训同下一条：结论要从代码取，
+   文档也会过期。
 3. **不复制用户日常 Chrome 目录**做模板：`data/` 是 gitignore 而仓库有 remote，手工剥离 `Login Data`/`History`/
    `Local Storage`/`Preferences` 极易漏；且 `browser_profiles.py` 记着实测（目录独占、Cookie 应用绑定加密、
    Chrome 136 起默认禁远程调试）。云端模板由**程序自启一次空白 Chrome** 生成，天生不含登录。
