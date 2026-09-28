@@ -199,14 +199,20 @@ class TestWhatItNeverDoes:
         assert made == []
         assert answer.get_json()['profile_note'] == '', 'it promised a profile update that never happened'
 
-    def test_no_browser_for_a_profile_that_has_never_been_used(self, client, factory):
-        """Never used means the next crawl imports the file by itself. Saying 「已更新」 for
-        something that has not happened is the exact thing this panel lost trust over."""
+    def test_a_profile_that_has_never_been_opened_is_created_and_planted_now(self, client, factory):
+        """One cookie, one profile — and the profile has to exist to be the account's own.
+
+        Waiting for "the first crawl will import it" left the login in a file its browser had
+        never read, which is the state the deleted button existed to patch. Creating the
+        directory is what ``profile_dir_for`` does before Chrome starts, so the save owns both
+        halves: the file and the device that will use it.
+        """
         made = factory(used=False)
-        answer = _save(client)
+        answer = _save(client, account='work')
         assert answer.status_code == 200
-        assert made == []
-        assert answer.get_json()['profile_note'] == ''
+        assert len(made) == 1, 'the account got a cookie and no browser'
+        assert made[0]['account'] == 'work'
+        assert made[0]['use_profile'] is True
 
     def test_a_busy_profile_is_deferred_out_loud_rather_than_queued(self, client, factory, monkeypatch):
         """Waiting on a profile lock can cost ``PROFILE_LOCK_TIMEOUT`` (900 s) inside an HTTP

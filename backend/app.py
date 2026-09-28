@@ -4988,12 +4988,17 @@ def _plant_saved_cookie_into_profile(platform: str, account: str) -> str | None:
     for that made the user re-take a session, watch it get saved, and then get crawled with
     the previous one.
 
-    ``None`` means nothing to do and nothing to say: profiles are switched off (every crawl is
-    planted from the file already), or this account's profile has never been opened, so its
-    first crawl imports the file by itself. Anything else gets a sentence, because 「保存成功」
-    and 「这次没能进到 Profile」 look identical from a paste box otherwise.
+    ``None`` means nothing to do and nothing to say: profiles are switched off, and then every
+    crawl is planted from the file in a throwaway browser, so buying one to change nothing would
+    cost a browser and claim a thing that did not happen. Anything else gets a sentence, because
+    「保存成功」 and 「这次没能进到 Profile」 look identical from a paste box otherwise.
+
+    A profile that has never been opened is *created and planted now*, not left for the first
+    crawl: one cookie, one profile, and a login sitting in a file its own browser has never read
+    is exactly the state the panel used to leave behind (the directory comes from
+    ``profile_dir_for``, which ``get_crawler`` calls before Chrome starts).
     """
-    if not browser_profiles.is_enabled() or not browser_profiles.is_used(platform, account):
+    if not browser_profiles.is_enabled():
         return None
     profile = browser_profiles.platform_dir(platform, account)
     if browser_profiles.is_busy(profile) or execution_state['running']:
