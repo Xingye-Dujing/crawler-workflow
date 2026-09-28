@@ -294,18 +294,22 @@
   且默认 profile 禁止远程调试，实测拿不到也带不进去）。
   **"用过之后不再种"留下过一个洞**：粘贴进来（或直接写进 `data/cookies/*.json`）的 Cookie 只落在文件里，
   而真正用来抓取的那个 profile 永远不再读它——于是"更新登录态"这件事根本没有入口。
-  现在 Cookie 面板多了一个按钮**「把 Cookie 更新进 Profile」**（POST `/api/cookies/refresh-profile`）：
-  **只有粘贴/手建这条路需要它**——「浏览器生成」是在那个 profile 自己的浏览器里登录再导出的，
-  profile 本来就有这份会话，导出后系统会记下"文件就是它自己"（`browser_profiles.remember_cookie`），
-  面板因此不会再劝你按（按了等于拿副本盖掉活会话，正是"不再种"要防的事）。
-  按钮下面**常驻一句说明**——Profile 是该平台自己的浏览器目录、抓取用的是它里面的登录态，而面板存的
-  Cookie 只是它旁边的一个文件，只在 profile 第一次被使用时导入过一次（这一句是因为用户直接问
+  **现在保存即更新**：粘贴成功的那一刻，app.py 就把这份 Cookie 种进该账号自己的 profile
+  （`_plant_saved_cookie_into_profile`），不再需要用户按第二个按钮——按钮与
+  `POST /api/cookies/refresh-profile` 已删除。刚粘贴的这份是当下最新的会话，"旧快照盖活会话"那种伤害
+  只可能来自自动导入，不可能来自一次粘贴。唯一当场做不到的情形是那个浏览器正被占用（有抓取在跑），
+  这时保存仍然成功、回复里明确说出"这次没进到 profile"，而 `browser_profiles.needs_refresh`（文件比
+  profile 里那份新）会让**下一次抓取自动带上它**——所以延后不是丢失。
+  「浏览器生成」这条路本来就在该 profile 自己的浏览器里登录再导出，导出后系统记下"文件就是它自己"
+  （`browser_profiles.remember_cookie`），因此不会被重复种一遍。
+  粘贴框下面**常驻一句说明**——Profile 是该平台自己的浏览器目录、抓取用的是它里面的登录态，而面板存的
+  Cookie 只是它旁边的一个文件（这一句是因为用户直接问
   「什么意思我怎么没看懂」才加的：确认框里的话要先把框打开才看得见，教不了人）。
-  它先弹确认（这件事会覆盖该 profile 里同名的 Cookie，若你是先在窗口里登录、之后才保存的文件，
-  就别按），然后开一次该平台自己的浏览器、用浏览器把文件里的 Cookie 种进去（这是唯一能写进
-  Chrome Cookie 库的途径——那个库被应用绑定加密，外部进程写不了）、记下"种的是哪一份"，再把浏览器关掉。
-  面板据此能说出**「这个 profile 导入的不是现在这份 Cookie」**这一行提示（`/api/browser/profiles`
-  里每平台的 `needs_refresh`），点完按钮后提示会自己消失。profile 从没被用过、没启用 profile、
+  种进去这个动作开一次该平台自己的浏览器、用浏览器把文件里的 Cookie 种进去（这是唯一能写进
+  Chrome Cookie 库的途径——那个库被应用绑定加密，外部进程写不了）、记下"种的是哪一份"，再把浏览器关掉；
+  现在它由**保存**触发，不再由按钮触发。
+  面板据此仍能说出**「这个 profile 导入的不是现在这份 Cookie」**这一行提示（`/api/browser/profiles`
+  里每平台的 `needs_refresh`），它只在当场种不进去（浏览器被占用）时提醒用户下一次抓取会带上它。profile 从没被用过、没启用 profile、
   浏览器被占用、有运行在跑——这四种情况各回各的话，不会假装"已更新"。
 - **同一平台多账号（限流的结构性解法）**：站点踢人踢的是**账号会话**，不是这台机器——一个账号撞上的
   墙，换个账号就是平行的第二条路。Cookie 面板多了一个**「账号」**输入框：留空＝默认那份（历史文件名
@@ -1003,7 +1007,6 @@ crawler_workflow/
 | `/api/cookies/generate` | POST | 打开浏览器引导扫码登录并捕获 Cookie；可选 `url` 指定入口链接（仅限该平台域名），取 Cookie 前先把浏览器带回本平台页面 |
 | `/api/cookies/verify` | POST | 用已存 Cookie 实地探测该平台还放行什么（结论逐条回显：可用 / 仍被挡在登录页 / 回的是验证码·风控所以**没有结论**） |
 | `/api/cookies/delete` | POST | 删除该平台的 Cookie 快照文件；回话里说清该平台的浏览器 profile 是否仍持有登录态（删文件不会把 profile 登出） |
-| `/api/cookies/refresh-profile` | POST | 把已保存的 Cookie 种进该平台**正在使用的**浏览器 profile（一次性、由用户点）：profile 平时只首次导入，之后重取的 Cookie 进不去，这个端点就是那条唯一的入口；profile 未启用 / 从未使用 / 被占用 / 有运行在跑时各自拒绝，不谎报"已更新" |
 | `/api/cookies/preflight` | POST | 运行前一次性验证画布要用到的多个平台：`{platforms, use_profile?, fresh?}` → 逐平台 `valid/expired/unknown/nocookie/nologin/notcrawlable` + 已渲染文案 + `blocked`/`unclear` 两个清单（结果按 `COOKIE_PREFLIGHT_TTL` 缓存） |
 | `/api/settings` | GET / POST | 读取 / 修改运行时设置（data/settings.json） |
 | `/api/browser/profiles` | GET | 每个平台的持久浏览器 Profile 状态（是否启用、目录是否已建、是否已导入过 Cookie、占用空间、是否建议开启） |

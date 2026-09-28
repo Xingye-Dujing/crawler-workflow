@@ -110,24 +110,14 @@ const I18n = {
             'dialog.cookieDelete': 'Delete the Cookie file saved for {platform}? If this platform is crawled inside its own browser profile, its login lives in that profile: deleting this file does not sign the profile out, it only removes the snapshot a throwaway browser is planted from. The answer says which of the two applies to {platform}.',
             'dialog.cookieDeleteYes': 'Delete the file',
             'toast.cookieDeleted': 'Cookie file deleted for {platform}',
-            'cookies.refresh': 'Plant cookies into profile',
             'cookies.refreshExplain':
-                'A profile is this platform’s own browser directory, and a crawl runs on the login inside it. '
-                + 'Cookies taken with 「Generate via Browser」 came out of that directory already, so the button '
-                + 'above is not for them. Press 「Plant cookies into profile」 only when you pasted a cookie in '
-                + 'yourself (or edited that platform’s data/cookies/<platform>_cookies.json by hand) — that is '
-                + 'the one case where the browser the crawl actually uses never sees it.',
+                'A profile is one account’s own browser directory, and the crawl runs on the login inside it. '
+                + 'Saving a cookie — pasted in here or produced by 「Generate via Browser」 — now plants it into '
+                + 'that account’s profile by itself, because the file you just saved is the newest session there '
+                + 'is. There is nothing to press a second time.',
             'cookie.refreshHint':
-                'This profile was given a different cookie file than the one now saved: press '
-                + '「Plant cookies into profile」 to make the crawl use the one you re-took',
-            'cookie.refreshWorking': 'Opening the platform browser to plant the saved cookies…',
-            'cookie.refreshed': 'Saved cookies planted into the {platform} profile',
-            'dialog.cookieRefresh':
-                'Plant the saved {platform} cookie into that platform\u2019s browser profile? '
-                + 'Its own session for those cookie names is overwritten by the file. '
-                + 'If you logged in inside the profile window more recently than you saved this '
-                + 'file, do NOT do this — the profile already holds the newer session.',
-            'dialog.cookieRefreshYes': 'Plant into the profile',
+                'That profile still holds an older cookie: it was busy when this one was saved, so the next '
+                + 'crawl of this account brings the new one in on its own',
             'toast.cookieChecking': 'Checking the Cookie for {platforms} before the run…',
             'toast.cookieUncheckable': 'The Cookie check could not run for {platforms} — that is not a pass, and the run is starting anyway',
             'toast.cookieUnclear': 'Could not verify the Cookie for {platforms} (captcha, timeout or a profile already in use) — no answer is not a failure, so the run is not blocked',
@@ -519,8 +509,8 @@ const I18n = {
             'dialog.profileClashSkip': 'No profile this run',
             'dialog.serialWarn':
                 '{platforms} crawls are forced to run one at a time: parallel paging on one account is always '
-                + 'answered by the login wall (measured), so a second {platforms} crawl queues until the first '
-                + 'finishes and parallelism buys nothing there. This is the site\'s rule, not a setting. '
+                + 'answered by the login wall (measured), so a second crawl on these platforms queues until the '
+                + 'first finishes and parallelism buys nothing there. This is the site\'s rule, not a setting. '
                 + 'Start the run anyway?',
             'dialog.serialWarnGo': 'Run anyway (they queue)',
             'set.save': 'Save settings',
@@ -593,7 +583,7 @@ const I18n = {
             'settings.partSizeHint': '0 = no part files, one merged file',
             'settings.sourcePartSizeHint': '0 = off. Above 0, every N crawled rows flush to a numbered part file you can open during the run; parts merge into one at the end.',
             'settings.liveExport': 'Live export (per batch)',
-            'settings.liveExportHint': 'Rewrites a {node}.live file after every batch so you can watch results before the node finishes.',
+            'settings.liveExportHint': 'Rewrites this node\'s .live file after every batch so you can watch results before the node finishes.',
             'settings.perArticleFile': 'One output file per article',
             'settings.keepParts': 'Keep part files after merge',
             'settings.commentHint': 'The comments load by scrolling the page. A windowed run scrolls visibly; a headless run opens no window and collects the same rows (#148). Every part_size comments are written as a part file into the export directory.',
@@ -868,23 +858,11 @@ const I18n = {
             'dialog.cookieDelete': '删除 {platform} 已保存的 Cookie 文件？如果该平台的抓取是在它自己的浏览器 profile 里跑的，登录态存在那个 profile 里：删这个文件不会把它登出，只是清掉「一次性浏览器」用来植入的快照。删除后的那一行会说明 {platform} 属于哪种情况。',
             'dialog.cookieDeleteYes': '删除文件',
             'toast.cookieDeleted': '已删除 {platform} 的 Cookie 文件',
-            'cookies.refresh': '把 Cookie 更新进 Profile',
             'cookies.refreshExplain':
-                'Profile 是这个平台自己的浏览器目录，抓取用的是它里面的登录态。用「浏览器生成」拿到的 Cookie 本来就出自这个目录，'
-                + '不用再按上面这个按钮；只有当你把自己复制的 Cookie 粘贴进来（或直接改那个平台的 '
-                + 'data/cookies/<平台>_cookies.json 文件）时，才需要按一次「把 Cookie 更新进 Profile」，'
-                + '让它进到抓取真正在用的那个浏览器里。',
+                'Profile 就是「一个账号一个浏览器目录」，抓取用的是那个目录里的登录态。保存 Cookie 的这一刻'
+                + '就已经把它种进该账号自己的 profile 了（刚粘贴进来的这份就是最新会话），不需要再按第二个按钮。',
             'cookie.refreshHint':
-                '这个 profile 当初导入的不是现在这份 Cookie：按「把 Cookie 更新进 Profile」，'
-                + '让抓取真正用上你刚重取的那一份',
-            'cookie.refreshWorking': '正在打开该平台浏览器，把保存的 Cookie 植入…',
-            'cookie.refreshed': '已把保存的 Cookie 植入 {platform} 的 profile',
-            'dialog.cookieRefresh':
-                '把已保存的 {platform} Cookie 植入该平台的浏览器 profile？'
-                + '这些同名 Cookie 在 profile 里原有的值会被覆盖。'
-                + '如果你是在 profile 窗口里登录后又保存了这份文件，请不要这样做——'
-                + '那时 profile 里的会话更新。',
-            'dialog.cookieRefreshYes': '植入该 profile',
+                '这个 profile 里还是旧的那份 Cookie：保存时它的浏览器正被占用，下一次抓取这个账号会自动带上新的',
             'toast.cookieChecking': '运行前先验证 {platforms} 的 Cookie…',
             'toast.cookieUncheckable': '{platforms} 的 Cookie 没能验证成功——这不是「有效」，本次仍然开始运行',
             'toast.cookieUnclear': '{platforms} 的 Cookie 无法核对（风控、超时或 profile 被占用）——这不算失效，所以不拦截本次运行',
@@ -1333,7 +1311,7 @@ const I18n = {
             'settings.partSizeHint': '0 表示不生成分片文件，仅输出合并后的单个文件',
             'settings.sourcePartSizeHint': '0 表示关闭。大于 0 时，每爬满 N 行写入一个带编号的分片文件，运行中即可打开查看，结束时合并为一个文件。',
             'settings.liveExport': '实时导出（按批）',
-            'settings.liveExportHint': '每处理完一批就重写一次 {node}.live 文件，节点未跑完也能查看当前结果。',
+            'settings.liveExportHint': '每处理完一批就重写一次本节点的 .live 文件，节点未跑完也能查看当前结果。',
             'settings.perArticleFile': '每篇文章单独输出文件',
             'settings.keepParts': '合并后保留分片文件',
             'settings.commentHint': '评论区靠滚动页面加载。选窗口运行会可见地滚动；选无头运行则不弹窗，采集到的行数一样（#148）。每 part_size 条评论写入一个分片文件到导出目录。',
@@ -1529,18 +1507,34 @@ const I18n = {
        I18n.missing()) so a gap can never hide again. */
     _missing: new Set(),
 
-    t(key) {
+    t(key, vars) {
         const d = this.dict[this.lang] || this.dict.en;
-        if (d[key] !== undefined) return d[key];
-        /* Show the other language before showing the raw key — a missing
-           translation should still read as a sentence ("Upload File"), not as
-           an identifier ("palette.upload"). */
-        const other = this.dict[this.lang === 'zh' ? 'en' : 'zh'] || {};
-        if (!this._missing.has(key)) {
-            this._missing.add(key);
-            console.warn('[i18n] missing ' + this.lang + ' string: ' + key);
+        let text = d[key];
+        if (text === undefined) {
+            /* Show the other language before showing the raw key — a missing
+               translation should still read as a sentence ("Upload File"), not as
+               an identifier ("palette.upload"). */
+            const other = this.dict[this.lang === 'zh' ? 'en' : 'zh'] || {};
+            if (!this._missing.has(key)) {
+                this._missing.add(key);
+                console.warn('[i18n] missing ' + this.lang + ' string: ' + key);
+            }
+            text = other[key] !== undefined ? other[key] : key;
         }
-        return other[key] !== undefined ? other[key] : key;
+        return vars ? I18n.fill(text, vars) : text;
+    },
+
+    /* Fill EVERY occurrence of each slot. `String.prototype.replace` with a string needle
+       replaces the FIRST occurrence only, and the cookie-delete template names the platform
+       twice — so `.replace('{platform}', …)` left a literal `{platform}` inside a Chinese
+       sentence the user read (measured 2026-09-28). A call site that formats through here
+       cannot half-fill a sentence again. */
+    fill(text, vars) {
+        let out = String(text);
+        Object.keys(vars || {}).forEach(function (name) {
+            out = out.split('{' + name + '}').join(String(vars[name]));
+        });
+        return out;
     },
 
     missing() {

@@ -106,7 +106,17 @@ def get_crawler(
     profile = browser_profiles.profile_dir_for(platform, enabled=use_profile, account=account)
     stem = f'{platform}@{account}' if account else str(platform)
     saved = f'{cookie_dir}/{stem}_cookies.json' if cookie_dir else ''
-    planting = bool(saved) and (not profile or not browser_profiles.is_used(platform, account) or refresh_cookies)
+    # Import-once protects a *rotating* session from an older snapshot; it must not swallow a
+    # newer one. When the panel saves a cookie whose profile is busy or mid-run, the plant is
+    # deferred and this is where it still happens: `needs_refresh` compares the file's stamp
+    # against the one recorded at the last plant, so a file nobody re-saved never re-plants
+    # (weibo's SUB/SUBP stay inside the browser that rotated them) while a paste the user just
+    # made always reaches the browser that will crawl with it. One cookie, one profile, and the
+    # profile holds that cookie.
+    stale = bool(profile) and browser_profiles.needs_refresh(platform, saved, account)
+    planting = bool(saved) and (
+        not profile or not browser_profiles.is_used(platform, account) or refresh_cookies or stale
+    )
     crawler = cls(
         headless=headless,
         cookie_path=saved if planting else None,

@@ -72,10 +72,17 @@
   comment, not a ceiling:** `ollama.Client` defaults to `None` (never), so pass the run's timeout there; and the
   panel's post-stop watch must outlast the measured tail (`docs/crawler_notes.md`).
 - **A crawl runs in the platform's own Chrome profile, and the profile owns its cookies.** `get_crawler` passes
-  `data/chrome_profile/<platform>` (or the user's override) as `--user-data-dir`, so the login window and the crawl
-  are the same device. Consequence: **the saved cookie file is imported once** (first use of the directory) and
-  **never planted again** — overwriting a live profile with an old snapshot is the harm, not the fix; the only
-  exception is `get_crawler(refresh_cookies=True)`, panel button only. **Never write the browser's live jar back to a
+  `data/chrome_profile/<platform>[/<account>]` as `--user-data-dir`, so the login window and the crawl are the same
+  device — **one cookie, one profile**: an account's label enters both the file name and the directory, and `lock_for`
+  keys on the path, so two accounts of one platform are two devices that can crawl at the same time. Consequence:
+  **the saved cookie file is imported once** (first use of the directory) and is not re-planted by a crawl —
+  overwriting a live profile with an old snapshot is the harm, not the fix. What changed (2026-09-28): **saving a
+  cookie is itself the update**. A paste is the newest session there is, so `POST /api/cookies/save` plants it into
+  that account's profile on the spot (`app.py::_plant_saved_cookie_into_profile`, the only caller of
+  `get_crawler(refresh_cookies=True)`); the panel's 「把 Cookie 更新进 Profile」 button and
+  `POST /api/cookies/refresh-profile` were deleted with it. When that browser is held, the save still succeeds, says
+  so, and the next crawl of that account imports the newer file because `planting` also honours
+  `browser_profiles.needs_refresh` (file stamp newer than the marker's). **Never write the browser's live jar back to a
   saved cookie file.** `Capability.profile_recommended` is the single source for "this platform punishes a throwaway
   browser"; a second list of platforms anywhere else will drift.
 

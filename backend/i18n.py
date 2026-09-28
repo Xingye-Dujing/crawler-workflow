@@ -521,12 +521,12 @@ _ZH = {
     'cookie.verify.unreachable': '{platform} 无法验证：浏览器自己没能打开这个地址（本机网络或 DNS），未检验到 Cookie',
     'cookie.delete.none': '{platform} 没有已保存的 Cookie 可删除',
     'cookie.delete.profileHolds': '注意：{platform} 的浏览器 profile 仍是登录状态，删这个文件不会把它登出',
-    # Each refusal its own sentence, because from a button "nothing needed doing" and
-    # "nothing could be done" look exactly alike.
-    'cookie.refresh.noFile': '{platform} 还没有已保存的 Cookie，没有可更新进 profile 的内容',
-    'cookie.refresh.noProfile': '当前未启用「使用浏览器 profile」，每次抓取本来就是从这份 Cookie 文件植入的，无需更新',
-    'cookie.refresh.notYet': '{platform} 的 profile 还没被用过，下一次抓取会自动导入这份 Cookie，无需现在更新',
-    'cookie.refresh.busy': '{platform} 的浏览器正被占用（可能有抓取在跑），请先结束后再更新',
+    # 保存即更新：粘贴成功的这一刻就把这份 Cookie 送进它自己的 profile，不再要用户按第二个按钮
+    # （原来那个 /api/cookies/refresh-profile 与它的四句拒绝一起删掉了）。只有一种情况当场做不到——
+    # 那个浏览器正被占用——而这句话必须说：「保存成功」与「这次没进到 profile」在粘贴框里长得一样。
+    'cookie.plant.deferred': (
+        '{platform} 的浏览器正被占用（可能有抓取在跑），这次没能更新进 profile；Cookie 已保存，下一次抓取会自动带上它'
+    ),
     'cookie.refresh.failed': '更新 profile 登录态失败：打不开该平台的浏览器（{err}）',
     'cookie.refresh.done': '已把保存的 {platform} Cookie 更新进它的浏览器 profile（{n} 条）',
     # Measured: a cookie without an expiry is never written to the profile store, so it
@@ -1442,15 +1442,14 @@ _EN = {
     'cookie.delete.none': 'There is no saved {platform} cookie to delete',
     'cookie.delete.profileHolds': 'Note: {platform}\u2019s browser profile stays logged in — deleting this '
     'file does not sign that device out',
-    # Each refusal its own sentence, because from a button "nothing needed doing" and
-    # "nothing could be done" look exactly alike.
-    'cookie.refresh.noFile': 'There is no saved {platform} cookie to put into the profile',
-    'cookie.refresh.noProfile': 'Using a browser profile is switched off, so every crawl is already planted '
-    'from this file — nothing to update',
-    'cookie.refresh.notYet': '{platform}\u2019s profile has never been used, so the next crawl imports '
-    'this cookie by itself',
-    'cookie.refresh.busy': '{platform}\u2019s browser is held by something else (a crawl may be running); '
-    'retry after it ends',
+    # Saving IS the update now: the paste plants itself into that account's profile, and the
+    # /api/cookies/refresh-profile route with its four refusal sentences went away with the
+    # button. One case cannot be done on the spot — that browser is held — and it has to say so,
+    # because 「saved」 and 「saved but not in the profile」 look identical from a paste box.
+    'cookie.plant.deferred': (
+        "{platform}'s browser is held by something else (a crawl may be running), so this cookie "
+        'could not be planted into its profile yet — it is saved, and the next crawl will bring it in'
+    ),
     'cookie.refresh.failed': 'Could not update the profile session: this platform\u2019s browser did not open ({err})',
     'cookie.refresh.done': 'Saved {platform} cookies were planted into its browser profile ({n} entries)',
     # Measured: a cookie without an expiry is never written to the profile store, so it

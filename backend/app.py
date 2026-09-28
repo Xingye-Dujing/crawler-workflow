@@ -4948,6 +4948,66 @@ def preflight_cookies():
     )
 
 
+#: One plant at a time: two browsers writing the same profile would each report a session
+#: count that the other had already overwritten.
+_PROFILE_REFRESH_LOCK = threading.Lock()
+
+
+def _plant_saved_cookie_into_profile(platform: str, account: str) -> str | None:
+    """Give this account's own browser the file that was just saved, and say what happened.
+
+    The import-once rule is right for a crawl — planting an older snapshot over a live,
+    rotating session is how weibo's ``SUB``/``SUBP`` get thrown away — but a paste in this
+    panel is not an older snapshot: it is the newest login the user has, and the browser that
+    will do the crawling is the only place it can still be used. Requiring a separate button
+    for that made the user re-take a session, watch it get saved, and then get crawled with
+    the previous one.
+
+    ``None`` means nothing to do and nothing to say: profiles are switched off (every crawl is
+    planted from the file already), or this account's profile has never been opened, so its
+    first crawl imports the file by itself. Anything else gets a sentence, because 「保存成功」
+    and 「这次没能进到 Profile」 look identical from a paste box otherwise.
+    """
+    if not browser_profiles.is_enabled() or not browser_profiles.is_used(platform, account):
+        return None
+    profile = browser_profiles.platform_dir(platform, account)
+    if browser_profiles.is_busy(profile) or execution_state['running']:
+        # The file is newer than the session in that browser, and `needs_refresh` is what the
+        # next crawl reads to decide — so this is a wait, not a lost update.
+        return t('cookie.plant.deferred', platform=platform)
+    if not _PROFILE_REFRESH_LOCK.acquire(blocking=False):
+        return t('cookie.plant.deferred', platform=platform)
+    try:
+        try:
+            crawler = get_crawler(
+                platform,
+                # The plant is one page load on that site, and a headless Chrome now carries the
+                # desktop fingerprint (#148) so every platform — douyin and X included — serves it.
+                headless=True,
+                cookie_dir=Config.COOKIE_DIR,
+                use_profile=True,
+                refresh_cookies=True,
+                account=account,
+            )
+        except Exception as e:
+            logger.debug('the plant browser for %s did not come up: %s', platform, e)
+            return t('cookie.refresh.failed', err=str(e)[:160])
+        try:
+            planted = int(getattr(crawler, 'cookies_loaded', 0))
+        finally:
+            _close_login_browser(crawler)
+    finally:
+        _PROFILE_REFRESH_LOCK.release()
+    # The profile now holds a different session than the one the last probe looked at.
+    cookie_preflight.invalidate(platform)
+    # Measured on a real Chrome: a cookie without an expiry is not written to the profile store
+    # at all, so it dies with the window that was opened to plant it. Saying only 「已更新」 would
+    # promise a transfer that partly did not happen.
+    fading = cookie_manager.session_only_count(platform, account)
+    message = t('cookie.refresh.done', platform=platform, n=planted)
+    return message + '\n' + t('cookie.refresh.sessionOnly', n=fading) if fading else message
+
+
 @app.route('/api/cookies/save', methods=['POST'])
 def save_cookies():
     data = _json_body()
@@ -4981,7 +5041,18 @@ def save_cookies():
         # No ``add_log`` beside this: ``CookieManager.save`` logs the same sentence and
         # ``LogBufferHandler`` forwards every logger call into the console, so the
         # narration the panel wanted was already there — twice, for one paste.
-        return jsonify({'ok': True, 'message': t('cookie.saved', platform=platform), 'count': len(kept)})
+        # One cookie, one profile: the browser that will crawl with this login takes the
+        # new file in now, instead of the user pressing a second button to say so.
+        planted = _plant_saved_cookie_into_profile(platform, account)
+        message = t('cookie.saved', platform=platform)
+        return jsonify(
+            {
+                'ok': True,
+                'message': f'{message}\n{planted}' if planted else message,
+                'count': len(kept),
+                'profile_note': planted or '',
+            }
+        )
     except (OSError, ValueError) as e:
         # One line for one failure. ``LogBufferHandler`` forwards every logger call to
         # the console (its ``format`` is the message alone, so the traceback still goes
@@ -5033,87 +5104,6 @@ def delete_cookies():
         message += '\n' + extra
         add_log(extra)
     return jsonify({'ok': True, 'message': message, 'profile_holds': holds})
-
-
-#: One refresh at a time: two browsers planting the same profile would each report a
-#: session count that the other had already overwritten.
-_PROFILE_REFRESH_LOCK = threading.Lock()
-
-
-@app.route('/api/cookies/refresh-profile', methods=['POST'])
-def refresh_profile_cookies():
-    """Plant the saved cookie file into the profile that crawls with it.
-
-    The import-once rule is right for a crawl — planting an older snapshot over a live,
-    rotating session is how weibo's ``SUB``/``SUBP`` get thrown away — but it left the
-    other half of the story with no door at all: a user who re-took a cookie in this panel
-    held a file, and the browser that will actually do the crawling would never read it
-    again. This is that door, and only a press of the button opens it.
-
-    Refusing is the common answer and each refusal is its own sentence, because "nothing
-    changed" and "there was nothing to change" look identical from a button. The residual
-    race — a run claiming the profile between the check and the browser — is bounded by
-    the profile wait rather than by luck: a local tool has one panel and one run, and the
-    panel is open precisely when nothing is crawling.
-    """
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    platform = str(data.get('platform', ''))
-    account = str(data.get('account') or '').strip()
-    if not cookie_manager.is_supported(platform):
-        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
-    if account and not cookie_manager.is_account(account):
-        return jsonify({'ok': False, 'error': t('api.badAccount', account=account)}), 400
-    if not cookie_manager.exists(platform, account):
-        return jsonify({'ok': False, 'error': t('cookie.refresh.noFile', platform=platform)}), 400
-    if not browser_profiles.is_enabled():
-        # Without a profile every crawl is already planted from this file, so a browser
-        # would be bought to change nothing.
-        return jsonify({'ok': False, 'error': t('cookie.refresh.noProfile')}), 400
-    if not browser_profiles.is_used(platform, account):
-        # Never used means the next crawl imports the file by itself. Reporting 「已更新」
-        # for something that has not happened is the exact thing this panel lost trust over.
-        return jsonify({'ok': False, 'error': t('cookie.refresh.notYet', platform=platform)}), 400
-    profile = browser_profiles.platform_dir(platform, account)
-    if browser_profiles.is_busy(profile) or execution_state['running']:
-        return jsonify({'ok': False, 'error': t('cookie.refresh.busy', platform=platform)}), 409
-    if not _PROFILE_REFRESH_LOCK.acquire(blocking=False):
-        return jsonify({'ok': False, 'error': t('cookie.refresh.busy', platform=platform)}), 409
-    try:
-        try:
-            crawler = get_crawler(
-                platform,
-                # The plant is one page load on that site, and a headless Chrome now carries the
-                # desktop fingerprint (#148) so every platform — douyin and X included — serves it;
-                # no cookie refresh needs a visible window any more.
-                headless=True,
-                cookie_dir=Config.COOKIE_DIR,
-                use_profile=True,
-                refresh_cookies=True,
-                account=account,
-            )
-        except Exception as e:
-            logger.debug('the refresh browser for %s did not come up: %s', platform, e)
-            return jsonify({'ok': False, 'error': t('cookie.refresh.failed', err=str(e)[:160])}), 500
-        try:
-            planted = int(getattr(crawler, 'cookies_loaded', 0))
-        finally:
-            _close_login_browser(crawler)
-    finally:
-        _PROFILE_REFRESH_LOCK.release()
-    # The profile now holds a different session than the one the last probe looked at.
-    cookie_preflight.invalidate(platform)
-    message = t('cookie.refresh.done', platform=platform, n=planted)
-    # Measured on a real Chrome: a cookie without an expiry is not written to the profile
-    # store at all, so it dies with the window that was opened to plant it. Saying only
-    # 「已更新」 would promise a transfer that partly did not happen.
-    fading = cookie_manager.session_only_count(platform, account)
-    if fading:
-        message += '\n' + t('cookie.refresh.sessionOnly', n=fading)
-    # ``_load_cookies`` already says what went in, and the console shows every logger
-    # call, so this handler only answers the button.
-    return jsonify({'ok': True, 'message': message, 'count': planted, 'session_only': fading})
 
 
 _COOKIE_JOB_LOCK = threading.Lock()

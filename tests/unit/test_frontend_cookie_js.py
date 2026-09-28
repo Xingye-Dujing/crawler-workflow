@@ -152,10 +152,17 @@ class TestDeleteCookie:
     def test_the_confirmation_is_a_two_button_dialog_not_an_input(self, panel):
         """An input dialog is answered by its input; a confirm button that carries a
         ``value`` would replace whatever the user typed. Here there is nothing to type,
-        so the two values are the whole contract."""
+        so the two values are the whole contract.
+
+        The message is checked as a RENDERED sentence because this test used to assert the
+        bare key — and the stub answered with the key too, so the dialog shipped a literal
+        ``{platform}`` (its template names the platform twice and ``.replace`` filled one)
+        while this line stayed green.
+        """
         dialog = panel['deleteCancelled']['dialog']
         assert dialog['values'] == ['delete', 'null'], dialog
-        assert dialog['message'] == 'dialog.cookieDelete'
+        assert dialog['message'] == 'dialog.cookieDelete - platform.bilibili', dialog
+        assert '{' not in dialog['message'], 'a slot reached the screen unfilled'
 
     def test_confirming_deletes_the_platform_that_is_selected(self, panel):
         requests = panel['deleteConfirmed']['requests']
@@ -186,50 +193,36 @@ class TestDeleteCookie:
         assert 'profile' in case['toasts'][0] and 'logged in' in case['toasts'][0], case['toasts']
 
 
-class TestRefreshProfileCookie:
-    """「把 Cookie 更新进 Profile」 (#108) — the button that re-plants a saved cookie
-    into the browser profile that crawls with it.
+class TestSavePlantsItsOwnProfile:
+    """Saving a cookie IS the plant (#108's button, deleted).
 
-    The panel imports a cookie file once, so this is the only way a re-taken session
-    reaches a live profile, and it is also the only place the app can *overwrite* a
-    session the site has already refreshed. Both halves are why the button asks first
-    and why the hint that advertises it has to come from the server.
+    One cookie, one profile: the paste is the newest session there is, so the browser that
+    crawls with that account takes it in on the spot — no second button, and no second
+    request the app could get wrong. The one case the server cannot do immediately (that
+    profile is held) has to reach the screen, because 「已保存」 alone would hide it.
     """
 
-    def test_the_button_asks_before_it_overwrites_anything(self, panel):
-        case = panel['refreshCancelled']
-        assert case['calls'] == [], f'a refused confirmation still planted: {case["calls"]}'
+    def test_saving_asks_no_refresh_route_at_all(self, panel):
+        urls = panel['savePlants']['urls']
+        assert '/api/cookies/save' in urls, urls
+        assert not any('refresh' in url for url in urls), f'the old button is back: {urls}'
 
-    def test_the_confirmation_names_the_risk_it_carries(self, panel):
-        dialog = panel['refreshCancelled']['dialog']
-        assert dialog['values'] == ['refresh', 'null'], dialog
-        assert dialog['message'] == 'dialog.cookieRefresh'
-        assert dialog['labels'] == ['dialog.cookieRefreshYes', 'dialog.cancel'], dialog
+    def test_the_save_names_the_account_it_was_planted_for(self, panel):
+        posted = panel['savePlants']['saveBody']
+        assert posted == [
+            {'platform': 'weibo', 'account': 'work', 'cookies': [{'name': 'SUB', 'value': 'v', 'domain': '.weibo.com'}]}
+        ], 'a paste must say which account it belongs to, or it overwrites the default login'
 
-    def test_confirming_plants_the_selected_platform(self, panel):
-        requests = panel['refreshConfirmed']['requests']
-        posted = [item for item in requests if item['url'] == '/api/cookies/refresh-profile']
-        assert len(posted) == 1, requests
-        assert json.loads(posted[0]['body']) == {'platform': 'weibo', 'account': ''}
+    def test_the_servers_plant_sentence_stands_on_the_status_line(self, panel):
+        case = panel['savePlants']
+        assert 'DEFERRED-PROFILE' in case['statusText'], case
+        assert case['toasts'] == ['toast.cookiesSaved - platform.weibo@work'], case
 
-    def test_a_successful_plant_re_reads_the_profile_table(self, panel):
-        """The profile now holds a different session, so the answer behind the hint is
-        stale — and a hint that keeps offering the button after it succeeded is the panel
-        contradicting something it just caused."""
-        urls = [item['url'] for item in panel['refreshConfirmed']['requests']]
-        assert '/api/browser/profiles' in urls, urls
-
-    def test_the_server_word_is_what_the_user_sees(self, panel):
-        case = panel['refreshConfirmed']
-        assert case['toasts'] == ['PLANTED-3'], case
-        assert case['statusText'] == 'PLANTED-3'
-
-    def test_a_refusal_is_not_toasted_as_a_success(self, panel):
-        case = panel['refreshRefused']
-        assert case['statusText'] == 'BUSY-PROFILE'
-        assert case['toasts'] == [], case
+    def test_a_refused_save_is_the_servers_word_not_a_success_toast(self, panel):
+        assert panel['saveRefused']['toasts'] == ['cookie.failed - BAD-JSON'], panel['saveRefused']
 
     def test_the_hint_appears_only_when_the_server_measured_a_newer_file(self, panel):
+        """The panel never guesses which file a Chrome profile was planted from."""
         stale = panel['hintWhenStale']
         assert 'cookie.refreshHint' in stale, stale
         assert 'PURPOSE' in stale and 'STEP-1' in stale, f'the hint replaced the guidance: {stale}'
@@ -237,19 +230,16 @@ class TestRefreshProfileCookie:
         assert 'cookie.refreshHint' not in current, current
         assert current == ['PURPOSE', 'STEP-1'], current
 
-    def test_the_panel_explains_the_button_without_opening_the_dialog(self):
-        """Asked directly by the user: 「把 Cookie 更新进 Profile 什么意思我怎么没看懂」.
-
-        The explanation cannot live only in the confirmation, because a dialog has to be
-        opened to teach anything and the word "Profile" is one this interface otherwise
-        never defines. So the sentence sits under the button, in the page, and this test
-        keeps it there: it must come AFTER that button (it explains that button, not the
-        delete above it) and BEFORE the login-job actions (which are a different question).
+    def test_the_panel_explains_the_profile_without_advertising_a_button(self):
+        """The sentence under the paste box explains what a profile IS, in the page rather
+        than in a dialog — and it must no longer tell the user to press anything, because
+        the button it described is gone.
         """
         html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
-        button = html.index('onclick="refreshProfileCookie()"')
+        assert 'refreshProfileCookie' not in html, 'the deleted button is wired back in'
         note = html.index('data-i18n="cookies.refreshExplain"')
-        job_actions = html.index('id="cookie-job-actions"')
-        assert button < note < job_actions, f'the note is not attached to the button it explains: {note}'
+        assert note < html.index('id="cookie-job-actions"'), 'the note moved off the paste area it explains'
         app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
         assert app.count("'cookies.refreshExplain'") == 2, 'both catalogues must carry the sentence'
+        for dead in ("'cookies.refresh':", "'cookie.refreshWorking':", "'cookie.refreshed':", "'dialog.cookieRefresh'"):
+            assert dead not in app, f'the button is gone but its catalogue entry ({dead}) stayed'

@@ -1094,17 +1094,9 @@
           >
             Delete saved Cookie
           </button>
-          <!-- The other direction, and it asks first: a profile imports the saved
-               cookie ONCE, so a cookie re-taken here would otherwise sit in a file the
-               crawling browser never reads again. Planting it is deliberate, not
-               automatic -- an old snapshot over a live session is the harm. -->
-          <button
-            class="menu-btn"
-            onclick="refreshProfileCookie()"
-            data-i18n="cookies.refresh"
-          >
-            Plant cookies into profile
-          </button>
+          <!-- No 「把 Cookie 更新进 Profile」 button: saving one already plants it into that
+               account's own browser, and the one case that cannot happen on the spot (the
+               profile is held by a running crawl) is said by the save reply itself. -->
         </div>
         <!-- What that button is for, said in the panel rather than in the dialog: a
              dialog has to be opened to teach anything, and the word "Profile" is one

@@ -20,10 +20,19 @@ const src = fs.readFileSync(wfPath, 'utf8');
 
 const sandbox = {
     ...baseSandbox(),
-    /* I18n.t answers with the KEY: a panel that renders the wrong string is a
-       wrong string no matter what language it is in, and the assertions must
-       not track translation. */
-    I18n: { lang: 'en', t: (k) => k },
+    /* I18n.t answers with the KEY, plus the values it was handed: a panel that renders the
+       wrong string is wrong in any language, and the assertions must not track translation.
+       It used to drop the arguments entirely — so every placeholder bug was invisible here,
+       including the delete dialog that shipped a literal {platform} while these tests passed
+       on the bare key. Slots are filled the way the real formatter fills them: all of them. */
+    I18n: {
+        lang: 'en',
+        t: (k, vars) => {
+            const names = Object.keys(vars || {});
+            if (!names.length) return String(k);
+            return String(k) + ' - ' + names.map((name) => String(vars[name])).join(' | ');
+        },
+    },
     __toasts: [],
     __calls: [],
     __responses: {},
@@ -308,46 +317,45 @@ sandbox.refreshCookieStatus();
 await flush();
 out.savedStatus = doc.getElementById('cookie-status').textContent;
 
-/* ── 9. the profile refresh asks first, and only the confirmation sends anything ─
-   The button overwrites a live profile session with the saved file, which is the one
-   thing the import-once rule exists to prevent — so it may never fire on a click alone. */
+/* ── 9. saving a cookie IS the plant: no second button, no second request ──────
+   The paste is the newest session there is, so the browser that crawls with this
+   account has to receive it without the user having to notice anything — and the one
+   case that cannot happen on the spot (that profile is held by a running crawl) has to
+   be VISIBLE, because a bare 「已保存」 would hide exactly the half the user acts on. */
 for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
 sandbox.cookieJob.active = false;
-sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: {} };
 setPlatform('weibo');
-sandbox.__dialogAnswer = null;
-sandbox.__toasts.length = 0;
-before = sandbox.__calls.length;
-await sandbox.refreshProfileCookie();
-await flush();
-out.refreshCancelled = {
-    calls: sandbox.__calls.slice(before).map((call) => call.url),
-    dialog: dialogs[dialogs.length - 1] || null,
+sandbox.__byId('cookie-account').value = 'work';
+sandbox.__byId('cookie-json').value = JSON.stringify([{ name: 'SUB', value: 'v', domain: '.weibo.com' }]);
+sandbox.__responses['/api/cookies/save'] = {
+    ok: true,
+    message: 'SAVED\nDEFERRED-PROFILE',
+    count: 1,
+    profile_note: 'DEFERRED-PROFILE',
 };
-
-before = sandbox.__calls.length;
-sandbox.__dialogAnswer = 'refresh';
-sandbox.__responses['/api/cookies/refresh-profile'] = { ok: true, message: 'PLANTED-3', count: 3 };
+sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: {}, accounts: { weibo: ['work'] } };
 sandbox.__toasts.length = 0;
-await sandbox.refreshProfileCookie();
+before = sandbox.__calls.length;
+sandbox.saveCookieConfig();
 await flush();
-out.refreshConfirmed = {
-    requests: sandbox.__calls.slice(before).map((call) => ({ url: call.url, body: call.opts && call.opts.body })),
-    toasts: sandbox.__toasts.slice(),
+out.savePlants = {
+    urls: sandbox.__calls.slice(before).map((call) => call.url),
+    saveBody: sandbox.__calls
+        .slice(before)
+        .filter((call) => call.url === '/api/cookies/save' && call.opts && call.opts.body)
+        .map((call) => JSON.parse(call.opts.body)),
     statusText: doc.getElementById('cookie-status').textContent,
+    toasts: sandbox.__toasts.slice(),
 };
 
-/* ── 10. a refusal is shown as the server worded it ─────────────────────── */
+/* ── 10. a refusal is shown as the server worded it ─────────────────────────── */
 for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
-sandbox.__responses['/api/cookies/refresh-profile'] = { ok: false, error: 'BUSY-PROFILE' };
-sandbox.__dialogAnswer = 'refresh';
+sandbox.__responses['/api/cookies/save'] = { ok: false, error: 'BAD-JSON' };
 sandbox.__toasts.length = 0;
-await sandbox.refreshProfileCookie();
+sandbox.__byId('cookie-json').value = JSON.stringify([{ name: 'SUB', value: 'v', domain: '.weibo.com' }]);
+sandbox.saveCookieConfig();
 await flush();
-out.refreshRefused = {
-    statusText: doc.getElementById('cookie-status').textContent,
-    toasts: sandbox.__toasts.slice(),
-};
+out.saveRefused = { toasts: sandbox.__toasts.slice() };
 
 /* ── 11. the panel says "your file is newer than the profile" only when the
    server measured that ───────────────────────────────────────────────────

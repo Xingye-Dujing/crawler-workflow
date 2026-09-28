@@ -198,6 +198,27 @@ class TestFactoryPolicy:
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies', refresh_cookies=False)
         assert fake_crawler()['cookie_path'] is None
 
+    def test_a_cookie_resaved_after_the_profile_plants_on_the_next_crawl(self, profiles_on, fake_crawler, tmp_path):
+        """The deferred half of "saving is the update" — and the harm is the only thing
+        still kept out.
+
+        The panel's save plants on the spot, but when that account's browser is held the
+        plant cannot happen there. The paste must then still reach the profile, or the user
+        re-took a session for nothing; ``needs_refresh`` (file stamp newer than the marker's)
+        is what says "this file is not the one that went in", and it is a *newer* file — not
+        the old snapshot weibo measures being destroyed by a re-plant.
+        """
+        cookie_dir = tmp_path / 'cookies'
+        cookie_dir.mkdir()
+        saved = cookie_dir / 'weibo_cookies.json'
+        saved.write_text('[]', encoding='utf-8')
+        crawlers_pkg.get_crawler('weibo', cookie_dir=str(cookie_dir))
+        crawlers_pkg.get_crawler('weibo', cookie_dir=str(cookie_dir))
+        assert fake_crawler()['cookie_path'] is None, 'a second ordinary crawl planted an unchanged file'
+        saved.write_text('[{"name": "SUB", "value": "new"}]', encoding='utf-8')
+        crawlers_pkg.get_crawler('weibo', cookie_dir=str(cookie_dir))
+        assert Path(fake_crawler()['cookie_path']) == saved, 'the re-saved cookie never reached its browser'
+
 
 class TestAccounts:
     """Multi-account: one platform, several devices, none of them each other's.

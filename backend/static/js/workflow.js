@@ -1060,9 +1060,7 @@ function sourceNodeErrors(node, label, hasDataInput) {
         return [I18n.t('validate.capUnavailable').replace('{title}', label)];
     }
     if (!Capabilities.platform(platform)) {
-        return [I18n.t('validate.sourceUnknownPlatform')
-            .replace('{title}', label)
-            .replace('{platform}', String(platform))];
+        return [I18n.t('validate.sourceUnknownPlatform', { title: label, platform: String(platform) })];
     }
     var wanted = String(params.collect || params.mode || '');
     var offered = Capabilities.modes(platform);
@@ -4073,7 +4071,7 @@ function pollCookieJob() {
                 statusEl.textContent =
                     cookieJob.kind === 'verify'
                         ? I18n.t('cookie.verifying')
-                        : I18n.t('cookie.waiting').replace('{platform}', s.platform);
+                        : I18n.t('cookie.waiting', { platform: platformLabels([s.platform]) });
             }
             return;
         }
@@ -4089,13 +4087,13 @@ function pollCookieJob() {
         setCookieJobUI(false);
         if (!statusEl) return;
         if (s.phase === 'saved') {
-            statusEl.textContent = I18n.t('cookie.savedN').replace('{platform}', s.platform).replace('{n}', s.count);
-            showToast(I18n.t('toast.cookiesSaved') + ' - ' + s.platform);
+            statusEl.textContent = I18n.t('cookie.savedN', { platform: platformLabels([s.platform]), n: s.count });
+            showToast(I18n.t('toast.cookiesSaved') + ' - ' + platformLabels([s.platform]));
             refreshCookieStatus();
         } else if (s.phase === 'verified') {
             statusEl.textContent = (s.lines || []).join('\n');
         } else if (s.phase === 'cancelled') {
-            statusEl.textContent = I18n.t('cookie.cancelledMsg').replace('{platform}', s.platform);
+            statusEl.textContent = I18n.t('cookie.cancelledMsg', { platform: platformLabels([s.platform]) });
         } else if (s.phase === 'error') {
             statusEl.textContent = I18n.t('cookie.failed').replace('{err}', s.error || '');
         }
@@ -4166,14 +4164,26 @@ function saveCookieConfig() {
         })
             .then(function (result) {
                 if (result.ok) {
-                    showToast(I18n.t('toast.cookiesSaved') + ' - ' + platform);
+                    var savedWho = entryLabels([{ platform: platform, account: cookieAccount() }]);
+                    showToast(I18n.t('toast.cookiesSaved') + ' - ' + savedWho);
                     document.getElementById('cookie-json').value = '';
+                    /* The reply says what happened to the browser that crawls with this login —
+                       planted, or deferred because that account's profile is held right now.
+                       Showing only my own 「已保存」 toast hides the half the user acts on, and the
+                       status refresh must not run first either: it answers asynchronously and
+                       would overwrite this sentence a moment later. */
+                    var statusEl = document.getElementById('cookie-status');
+                    if (result.profile_note && statusEl) {
+                        statusEl.textContent = result.message || '';
+                    } else {
+                        refreshCookieStatus();
+                    }
                 } else {
-                    showToast(I18n.t('cookie.failed').replace('{err}', result.error || ''));
+                    showToast(I18n.t('cookie.failed', { err: result.error || '' }));
                 }
             });
     } catch (e) {
-        showToast(I18n.t('cookie.invalidJson').replace('{err}', e.message));
+        showToast(I18n.t('cookie.invalidJson', { err: e.message }));
     }
 }
 
@@ -4188,8 +4198,15 @@ async function deleteCookie() {
     var statusEl = document.getElementById('cookie-status');
     var platform = select ? select.value : '';
     if (!platform) return;
+    /* Two fixes in one line. The template names the platform TWICE and the old call used
+       `.replace('{platform}', …)`, which fills the first occurrence only — so the user read a
+       literal `{platform}` in the middle of a Chinese sentence, next to a raw `zhihu` key.
+       And the dialog has to name the SESSION it is about to delete: one platform holds
+       several logins, and 「删除 知乎 的 Cookie 文件」 while the account box says `work`
+       describes a file this request does not touch. */
+    var who = entryLabels([{ platform: platform, account: cookieAccount() }]);
     var answer = await showDialog({
-        message: I18n.t('dialog.cookieDelete').replace('{platform}', platform),
+        message: I18n.t('dialog.cookieDelete', { platform: who }),
         buttons: [
             { label: I18n.t('dialog.cookieDeleteYes'), value: 'delete', primary: true },
             { label: I18n.t('dialog.cancel'), value: null },
@@ -4202,7 +4219,7 @@ async function deleteCookie() {
         body: JSON.stringify({ platform: platform, account: cookieAccount() }),
     });
     if (result.ok) {
-        showToast(result.message || I18n.t('toast.cookieDeleted').replace('{platform}', platform));
+        showToast(result.message || I18n.t('toast.cookieDeleted', { platform: who }));
         if (statusEl) statusEl.textContent = result.message || '';
         refreshCookieStatus();
     } else if (statusEl) {
@@ -4242,46 +4259,12 @@ function renderCookieAccounts() {
         .join('');
 }
 
-async function refreshProfileCookie() {
-    /* Put the saved file INTO the profile this platform crawls with.
-
-       The panel imports a cookie file once and never re-plants it, because overwriting a
-       live profile with an older snapshot destroys a session the site has already
-       refreshed. That is right for a crawl and wrong for a person who has just re-taken a
-       cookie: the file is newer than what the profile holds, and nothing would ever read
-       it again. So this button exists, it asks first, and the backend answers with its own
-       refusal sentence when there is nothing to do (never-used profile → the next crawl
-       imports it anyway; no profile switched on → every crawl already plants from the
-       file; browser busy → say so rather than queue a fifteen-minute wait). */
-    var select = document.getElementById('cookie-platform');
-    var statusEl = document.getElementById('cookie-status');
-    var platform = select ? select.value : '';
-    if (!platform) return;
-    var answer = await showDialog({
-        message: I18n.t('dialog.cookieRefresh').replace('{platform}', platform),
-        buttons: [
-            { label: I18n.t('dialog.cookieRefreshYes'), value: 'refresh', primary: true },
-            { label: I18n.t('dialog.cancel'), value: null },
-        ],
-    });
-    if (answer !== 'refresh') return;
-    if (statusEl) statusEl.textContent = I18n.t('cookie.refreshWorking');
-    var result = await fetchJSON('/api/cookies/refresh-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: platform, account: cookieAccount() }),
-    });
-    if (result.ok) {
-        showToast(result.message || I18n.t('cookie.refreshed').replace('{platform}', platform));
-        if (statusEl) statusEl.textContent = result.message || '';
-        /* The profile now holds a different session, so the cached "is this file newer
-           than what went in?" answer has to be re-read, not edited here. */
-        cookieProfilesLoaded = false;
-        renderCookieGuide();
-    } else if (statusEl) {
-        statusEl.textContent = result.error || I18n.t('cookie.failed').replace('{err}', '');
-    }
-}
+/* No 「把 Cookie 更新进 Profile」 button any more: saving a cookie now plants it into that
+   account's own profile by itself (``app.py::_plant_saved_cookie_into_profile``), which is what
+   the paste already meant. The one case the browser cannot take on the spot — its profile is
+   held by a running crawl — is answered by the save message and by ``needs_refresh``, so the
+   next crawl of that account brings the cookie in. A button that asked the user to notice a
+   state the product is responsible for was itself the defect. */
 
 function startCookiePolling() {
     cookieJob.active = true;
@@ -4295,9 +4278,10 @@ function generateCookie() {
     var platform = document.getElementById('cookie-platform').value;
     var waitSeconds = parseInt(document.getElementById('cookie-wait').value) || 120;
     var statusEl = document.getElementById('cookie-status');
-    statusEl.textContent = I18n.t('cookie.opening')
-        .replace('{platform}', platform)
-        .replace('{s}', waitSeconds);
+    statusEl.textContent = I18n.t('cookie.opening', {
+        platform: entryLabels([{ platform: platform, account: cookieAccount() }]),
+        s: waitSeconds,
+    });
     fetchJSON('/api/cookies/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
