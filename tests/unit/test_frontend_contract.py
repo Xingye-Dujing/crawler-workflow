@@ -57,8 +57,13 @@ def _catalog_keys():
 class TestCanvasSerialization:
     """toWorkflowJSON is the browser→backend wire; its shape is a real contract."""
 
+    @classmethod
     @pytest.fixture(scope='class')
-    def payload(self):
+    def payload(cls):
+        """A class-scoped fixture has to be a classmethod: defined as an instance method,
+        the one instance it fills is thrown away before the first test runs, so every
+        ``self.`` it set would be invisible to the tests it was built for.
+        """
         node = shutil.which('node')
         if not node:
             pytest.skip('node not available')
@@ -120,11 +125,12 @@ class TestLlmGateParity:
         ('node_level_ner_llm', {'text_column': '正文'}, 'ner'),
     ]
 
+    @classmethod
     @pytest.fixture(scope='class')
-    def js_answers(self, tmp_path_factory):
+    def js_answers(cls, tmp_path_factory):
         if shutil.which('node') is None:
             pytest.skip('node not available')
-        scenarios = [{'id': name, 'needsLlm': params, 'operation': operation} for name, params, operation in self.CASES]
+        scenarios = [{'id': name, 'needsLlm': params, 'operation': operation} for name, params, operation in cls.CASES]
         path = tmp_path_factory.mktemp('gate') / 'scenarios.json'
         path.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
         proc = run_node(VALIDATE_HARNESS, JS_DIR / 'workflow.js', path)

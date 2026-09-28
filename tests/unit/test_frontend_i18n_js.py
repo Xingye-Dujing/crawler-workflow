@@ -199,7 +199,10 @@ class TestJsCallSitePlaceholders:
     def test_the_dialog_that_shipped_a_raw_placeholder_is_filled_through_the_formatter(self):
         """The exact regression, pinned at the call site rather than only by the scan."""
         source = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
-        assert 'var who = entryLabels([{ platform: platform, account: cookieAccount() }]);' in source, (
+        # The account is a PARAMETER of the delete now (a management row deletes its own
+        # login, not whatever is typed), so the pinned line names the argument it forwards.
+        # What may not regress is that the dialog is told WHICH session is about to go.
+        assert 'var who = entryLabels([{ platform: platform, account: account }]);' in source, (
             'the delete dialog stopped naming the ACCOUNT whose file is about to go — one platform '
             'holds several logins, and 「删除 知乎 的 Cookie 文件」 while the box says `work` describes '
             'a file this request does not touch'

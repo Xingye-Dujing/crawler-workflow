@@ -117,7 +117,7 @@ class TestDelete:
         assert len(said) == 2, f'deletion plus the one fact it cannot carry: {said}'
         assert any('logged in' in line or 'profile' in line for line in said), said
 
-    def test_one_line_for_one_save_too(self, client, app_module):
+    def test_one_line_for_one_save_too(self, client, app_module, profiles_off):
         """The same pair shipped in the save path years ago: the service logs the
         success and the handler narrated it again, so 「已保存」 printed twice for one
         paste of one JSON blob."""
@@ -177,7 +177,7 @@ class TestDelete:
         body = client.post('/api/cookies/delete', json={'platform': 'zhihu'}).get_json()
         assert body['profile_holds'] is False
 
-    def test_a_deleted_cookie_can_be_saved_again(self, client, app_module, saved):
+    def test_a_deleted_cookie_can_be_saved_again(self, client, app_module, saved, profiles_off):
         """The panel's own loop: delete, paste, save. A removal that left the platform
         un-writable (a directory deleted along with the file) would strand it."""
         saved('zhihu')

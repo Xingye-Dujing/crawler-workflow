@@ -72,6 +72,7 @@ class TestConfigEndpoint:
         assert app_module._cloud_requested(argv) is False
 
 
+@pytest.mark.usefixtures('profiles_off')
 class TestCapabilitiesEndpoint:
     """``/api/capabilities`` is the panel's whole vocabulary, so the two things
     worth pinning are that it is the matrix (not a second list someone maintains)
@@ -166,6 +167,7 @@ class TestCapabilitiesEndpoint:
         assert 'account' not in [f['key'] for f in hot['fields']], hot['fields']
 
 
+@pytest.mark.usefixtures('profiles_off')
 class TestCookieEndpoints:
     def test_status_answers_for_every_supported_platform(self, client):
         body = client.get('/api/cookies/status').get_json()
@@ -186,6 +188,83 @@ class TestCookieEndpoints:
         assert all(isinstance(names, list) for names in body['accounts'].values())
         assert all(isinstance(n, str) for names in body['accounts'].values() for n in names)
         assert 'secret' not in str(body['accounts']), 'a cookie value leaked into the listing'
+
+    def test_the_rows_answer_for_each_account_with_metadata_only(self, client, app_module):
+        """The management view's whole payload, and the rule it is built under.
+
+        One row per saved login: how many entries, how many of them expire, when the file
+        was written, and what that account's OWN browser directory holds. A cookie value is
+        the login itself, so the sentence this endpoint exists to answer is asked without
+        ever carrying one — which is what the marker below is for: it is a string that
+        exists only inside the jar, so its absence from the response is measured, not
+        assumed.
+        """
+        marker = 'VALUE-THAT-MUST-NEVER-LEAVE-THE-JAR'
+        app_module.cookie_manager.save('zhihu', [{'name': 'SUB', 'value': marker}, {'name': 'zh-s', 'value': 'x'}])
+        app_module.cookie_manager.save('zhihu', [{'name': 'SUB', 'value': marker, 'expiry': 9_999_999_999}], 'work')
+        body = client.get('/api/cookies/status').get_json()
+        rows = {row['account']: row for row in body['rows'] if row['platform'] == 'zhihu'}
+        assert set(rows) == {'', 'work'}, body['rows']
+        assert rows['']['entries'] == 2 and rows['']['session_only'] == 2, rows['']
+        # The named login has one entry WITH an expiry, so exactly none of it dies with a
+        # window — the count is the difference between the two rows, not a repeated total.
+        assert rows['work']['entries'] == 1 and rows['work']['session_only'] == 0, rows['work']
+        assert rows['']['saved_at'], 'a saved login always knows when it was taken'
+        assert marker not in str(body), 'a cookie value left the process'
+        assert 'name' not in str([row.keys() for row in body['rows']]), 'a cookie NAME is session data too'
+
+    def test_a_generated_account_name_travels_as_a_key(self, client):
+        """默认账号 and 默认账号2 are words this program chose, so they travel as catalogue
+        keys; ``work`` is a word the user typed, and it is shown exactly as typed.
+
+        The second blank login is made through the ROUTE, because numbering is the route's
+        decision: saving twice into the same account on purpose overwrites, and a test that
+        called the manager directly would be asserting a rule it never exercised.
+        """
+        for account in (None, 'work'):
+            payload = {'platform': 'weibo', 'cookies': [{'name': 'a', 'value': 'v'}]}
+            if account is not None:
+                payload['account'] = account
+            assert client.post('/api/cookies/save', json=payload).get_json()['ok'] is True
+        second = client.post('/api/cookies/save', json={'platform': 'weibo', 'cookies': [{'name': 'a', 'value': 'v'}]})
+        assert second.get_json()['account'] == 'default2', second.get_json()
+        rows = {row['account']: row for row in client.get('/api/cookies/status').get_json()['rows']}
+        assert rows['']['label_key'] == 'cookies.accountDefault', rows['']
+        assert rows['default2']['label_key'] == 'cookies.accountDefaultNumbered', rows['default2']
+        assert rows['default2']['label_args'] == {'n': 2}, rows['default2']
+        assert rows['work']['label_key'] == '', "a typed name is not this program's word to translate"
+
+    def test_the_profile_half_answers_for_that_account_s_own_directory(self, client, app_module, monkeypatch):
+        """The fact the panel could not get before: profiles are per ACCOUNT.
+
+        ``/api/browser/profiles`` answers one row per platform against the DEFAULT file, so
+        「这个 profile 里还是旧的那份 Cookie」 was read off the wrong device whenever the
+        login had a name. Each row now carries its own account's directory.
+        """
+        import browser_profiles
+
+        app_module.cookie_manager.save('douyin', [{'name': 'a', 'value': 'v'}])
+        app_module.cookie_manager.save('douyin', [{'name': 'a', 'value': 'v'}], 'work')
+        # A stamp from BEFORE this file was written: ``needs_refresh`` compares the two, and
+        # a marker that recorded no stamp at all answers False on purpose (it cannot claim
+        # to know which file the profile was planted from).
+        browser_profiles.mark_used('douyin', imported=True, cookie_stamp='1:1', account='work')
+        rows = {row['account']: row for row in client.get('/api/cookies/status').get_json()['rows']}
+        assert rows['work']['profile_used'] is True and rows['work']['profile_exists'] is True, rows['work']
+        # The DEFAULT account's directory exists too — a named device is stored one level
+        # inside it, so ``os.path.isdir`` alone can never answer "has THIS account been
+        # opened". The marker is what answers it, and the panel reads the marker.
+        assert rows['']['profile_exists'] is True, rows['']
+        assert rows['']['profile_used'] is False, 'the default device was never opened, and says so'
+        # A file newer than what that profile was planted from is the one state nobody can
+        # see from outside — and it is per account, not per platform.
+        assert rows['work']['needs_refresh'] is True, rows['work']
+
+    def test_no_login_saved_answers_with_no_rows_at_all(self, client):
+        """Empty, not a table of zeros: the panel shows 「还没有任何已保存的登录」 because that
+        is the answer, and a row per platform with nothing in it would read as eight
+        logins that are each somehow missing."""
+        assert client.get('/api/cookies/status').get_json()['rows'] == []
 
     def test_save_persists_into_the_isolated_cookie_dir(self, client, app_module, data_root):
         payload = {'platform': 'weibo', 'cookies': [{'name': 'SUB', 'value': 'x'}]}

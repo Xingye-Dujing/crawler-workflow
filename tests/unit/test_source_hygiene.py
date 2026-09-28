@@ -59,8 +59,9 @@ class TestLoadWorkflowWritesStateOnce:
     """The dead copy reset the ambient run name and fingerprint a second time;
     the live handler must own exactly one write of each."""
 
+    @classmethod
     @pytest.fixture(scope='class')
-    def load_fn(self):
+    def load_fn(cls):
         tree = ast.parse((BACKEND_DIR / 'app.py').read_text(encoding='utf-8'))
         for fn in ast.walk(tree):
             if isinstance(fn, ast.FunctionDef) and fn.name == 'load_workflow':

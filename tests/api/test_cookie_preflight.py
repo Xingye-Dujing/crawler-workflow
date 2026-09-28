@@ -236,7 +236,9 @@ class TestCache:
         cookie_preflight.probe('zhihu')
         assert probe_zhihu.platforms == ['zhihu', 'zhihu']
 
-    def test_saving_a_cookie_drops_the_verdict_it_could_only_invalidate(self, client, probes, with_cookie, app_module):
+    def test_saving_a_cookie_drops_the_verdict_it_could_only_invalidate(
+        self, client, probes, with_cookie, app_module, profiles_off
+    ):
         """The dangerous direction of the bug: the cached answer was 「失效」, the user
         has now pasted a fresh cookie, and a gate quoting the old verdict would refuse
         the run they just fixed."""

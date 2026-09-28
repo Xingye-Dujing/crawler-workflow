@@ -407,4 +407,182 @@ sandbox.generateCookie();
 await flush();
 out.account = report();
 
+/* ── the account candidates, the line that follows the box, the saved-login cards ──
+   One platform holds several logins, so the panel has to SAY which ones exist (in the
+   words the user reads — 默认账号, not an empty row), answer for the account currently in
+   the box without refetching the world, and offer a delete that removes the row it was
+   clicked on rather than whatever happens to be typed. */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.cookieJob.active = false;
+sandbox.cookieJob.known = false;
+sandbox.__calls.length = 0;
+sandbox.__toasts.length = 0;
+const ACCOUNT_ROWS = [
+    {
+        platform: 'zhihu',
+        account: '',
+        label_key: 'cookies.accountDefault',
+        label_args: {},
+        entries: 12,
+        session_only: 0,
+        saved_at: '2026-09-28 10:00',
+        profiles_on: true,
+        profile_exists: true,
+        profile_used: true,
+        profile_imported: true,
+        needs_refresh: false,
+    },
+    {
+        platform: 'zhihu',
+        account: 'default2',
+        label_key: 'cookies.accountDefaultNumbered',
+        label_args: { n: 2 },
+        entries: 4,
+        session_only: 3,
+        saved_at: '2026-09-27 08:00',
+        profiles_on: true,
+        profile_exists: true,
+        profile_used: true,
+        profile_imported: true,
+        needs_refresh: true,
+    },
+    {
+        platform: 'zhihu',
+        account: 'work',
+        label_key: '',
+        label_args: {},
+        entries: 2,
+        session_only: 2,
+        saved_at: '',
+        profiles_on: true,
+        profile_exists: false,
+        profile_used: false,
+        profile_imported: false,
+        needs_refresh: false,
+    },
+];
+const STATUS_ROWS = {
+    ok: true,
+    cookies: { zhihu: true, weibo: false },
+    accounts: { zhihu: ['', 'default2', 'work'], weibo: [] },
+    rows: ACCOUNT_ROWS,
+};
+sandbox.__responses['/api/cookies/status'] = STATUS_ROWS;
+setPlatform('zhihu');
+doc.getElementById('cookie-account').value = '';
+sandbox.refreshCookieStatus();
+await flush();
+
+const chips = () =>
+    (doc.getElementById('cookie-account-candidates').children || []).map((child) => ({
+        text: child.textContent,
+        onclick: child.getAttribute('onclick'),
+    }));
+/* The cards are reported as the markup string they were handed: the shared stub parses a
+   flat child list (which is why the chips above can be read as elements), and the card is
+   a nested block. The string is also what the browser receives, so this is the level at
+   which the escaping it is worth pinning lives. */
+const managerHtml = () => String(doc.getElementById('cookie-manager').innerHTML || '');
+const accountLine = () => doc.getElementById('cookie-account-status').textContent;
+
+out.candidates = chips();
+out.summaryLine = doc.getElementById('cookie-status').textContent;
+out.lineForDefault = accountLine();
+out.managerHtml = managerHtml();
+
+/* The box is the subject: typing a name the machine does not have must change the answer
+   WITHOUT another request (the rows are already cached), and typing one it does have must
+   change it back. */
+doc.getElementById('cookie-account').value = 'ghost';
+sandbox.renderCookieAccountStatus();
+out.lineForGhost = accountLine();
+doc.getElementById('cookie-account').value = 'WORK';
+sandbox.renderCookieAccountStatus();
+out.lineForWork = accountLine();
+out.rowsAskedAgain = sandbox.__calls.filter((c) => c.url === '/api/cookies/status').length;
+
+/* A candidate click fills the BOX, not just the line — every action below sends what the
+   box holds, so a chip that only repainted would save under another account. */
+sandbox.pickCookieAccount('default2');
+out.afterPick = {
+    box: doc.getElementById('cookie-account').value,
+    line: accountLine(),
+    profileWord: managerHtml().includes('cookies.profileStale'),
+};
+
+/* A row's delete names its OWN login. The box says default2 now; clicking the card for
+   `work` must post `work`. */
+sandbox.__responses['/api/cookies/delete'] = { ok: true, message: 'gone', profile_holds: false };
+sandbox.__dialogAnswer = 'delete';
+sandbox.__calls.length = 0;
+sandbox.deleteCookie('zhihu', 'work');
+await flush();
+out.rowDelete = {
+    posted: sandbox.__calls
+        .filter((c) => c.url === '/api/cookies/delete')
+        .map((c) => JSON.parse(c.opts.body)),
+    boxStill: doc.getElementById('cookie-account').value,
+};
+
+/* Nothing saved: no candidates, and the manager says so rather than showing a table of
+   nothing. */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: {}, accounts: {}, rows: [] };
+sandbox.refreshCookieStatus();
+await flush();
+out.nothingSaved = {
+    chips: chips(),
+    manager: managerHtml(),
+    line: accountLine(),
+};
+
+/* ── being sent here by the pre-run block lands on the BROKEN login ───────
+   One platform holds several accounts, so naming the platform alone left the box on
+   whoever was last typed — and the user was asked to fix a login they were not looking
+   at. The account arrives only when the caller names one: the toolbar button takes no
+   argument and must not wipe the box. */
+/* The real <select> carries one option per cookie platform, and both
+   ``openCookieDialog`` and ``useCookieAccount`` refuse to name a platform that is not on
+   it. The stub has no option collection of its own, so the two platforms this harness
+   speaks are given to it here — otherwise the guard below would be measuring a select
+   that could never match anything. */
+doc.getElementById('cookie-platform').options = [{ value: 'zhihu' }, { value: 'weibo' }];
+doc.getElementById('cookie-account').value = 'keepme';
+sandbox.openCookieDialog('weibo', 'work');
+await flush();
+out.openedOnAccount = {
+    platform: doc.getElementById('cookie-platform').value,
+    box: doc.getElementById('cookie-account').value,
+};
+doc.getElementById('cookie-account').value = 'keepme';
+sandbox.openCookieDialog('weibo');
+await flush();
+out.openedWithoutAccount = {
+    platform: doc.getElementById('cookie-platform').value,
+    box: doc.getElementById('cookie-account').value,
+};
+/* A platform that is not on the panel is not selected, and its account is not written
+   either: half a landing is worse than none, because the box would then name a login on a
+   platform the panel is not showing. */
+doc.getElementById('cookie-account').value = 'keepme';
+sandbox.openCookieDialog('youtube', 'work');
+await flush();
+out.openedOnUnknownPlatform = {
+    platform: doc.getElementById('cookie-platform').value,
+    box: doc.getElementById('cookie-account').value,
+};
+
+/* The profile word is chosen from the MARKER, not from whether the path exists: a named
+   device lives inside the platform directory, so the default account's path exists as soon
+   as any sibling was opened. These five shapes are every answer the panel can print. */
+out.profileWords = {
+    off: sandbox.cookieProfileWord({ profiles_on: false, profile_exists: true, profile_used: true, profile_imported: true, needs_refresh: false }),
+    neverOpened: sandbox.cookieProfileWord({ profiles_on: true, profile_exists: false, profile_used: false, profile_imported: false, needs_refresh: false }),
+    // The trap: a directory that exists only because a sibling account was built inside it.
+    existsButUnused: sandbox.cookieProfileWord({ profiles_on: true, profile_exists: true, profile_used: false, profile_imported: false, needs_refresh: false }),
+    openedNoLogin: sandbox.cookieProfileWord({ profiles_on: true, profile_exists: true, profile_used: true, profile_imported: false, needs_refresh: false }),
+    stale: sandbox.cookieProfileWord({ profiles_on: true, profile_exists: true, profile_used: true, profile_imported: true, needs_refresh: true }),
+    current: sandbox.cookieProfileWord({ profiles_on: true, profile_exists: true, profile_used: true, profile_imported: true, needs_refresh: false }),
+};
+
 process.stdout.write(JSON.stringify(out));

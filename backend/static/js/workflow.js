@@ -657,9 +657,11 @@ const workflow = {
            opens the panel: closing the dialog with 取消 and finding a panel the user
            did not ask for is the difference between refusing and nagging. */
         if (choice === 'update') {
-            /* Land them on the platform that is broken rather than on a selector
-               still showing whoever was last picked. */
-            openCookieDialog(unpackEntryKey(blocked[0]).platform);
+            /* Land them on the login that is broken rather than on a selector still showing
+               whoever was last picked — which, on a platform with several accounts, is a
+               different file than the one the run was refused for. */
+            var broken = unpackEntryKey(blocked[0]);
+            openCookieDialog(broken.platform, broken.account);
         }
         return false;
     },
@@ -4015,31 +4017,109 @@ function refreshCookieStatus() {
     fetchJSON('/api/cookies/status').then(function (result) {
         var statusEl = document.getElementById('cookie-status');
         if (!statusEl || cookieJob.active) return;
-        if (result.ok) {
-            var lines = [];
-            Object.keys(result.cookies).forEach(function (p) {
-                /* Both halves come from the catalog. Written raw this line read
-                   "zhihu: OK" in a Chinese interface — and a bare "OK" overstates
-                   the fact anyway: what is known here is that a jar is saved,
-                   not that the session inside it still opens pages (that is what
-                   验证 Cookie and the pre-run probe answer). */
-                var saved = result.cookies[p];
-                // A named account is said by name: "知乎: 未存（work）" tells the
-                // default file is empty while a second login exists — two facts
-                // the old boolean could not separate.
-                var names = (result.accounts && result.accounts[p]) || [];
-                var tag = names.length ? ' (' + names.join(', ') + ')' : '';
-                lines.push(
-                    I18n.t('platform.' + p) + tag + ': ' + I18n.t(saved ? 'cookie.savedYes' : 'cookie.savedNo')
-                );
-            });
-            statusEl.textContent = lines.join('  |  ');
-            cookieAccountsByPlatform = result.accounts || {};
-            renderCookieAccounts();
-        } else {
+        if (!result.ok) {
             statusEl.textContent = I18n.t('cookie.unreachable');
+            return;
         }
+        /* One read, four renderers. The rows answer per (platform, account), and the
+           account line has to repaint on every keystroke in the box — refetching for a
+           character typed would make the panel ask the server eight file listings per
+           name. */
+        cookieRows = result.rows || [];
+        var lines = [];
+        Object.keys(result.cookies).forEach(function (p) {
+            /* Both halves come from the catalog. Written raw this line read
+               "zhihu: OK" in a Chinese interface — and a bare "OK" overstates
+               the fact anyway: what is known here is that a jar is saved,
+               not that the session inside it still opens pages (that is what
+               验证 Cookie and the pre-run probe answer). */
+            var saved = result.cookies[p];
+            // A named account is said by its WORD: "知乎: 未存（work）" tells the
+            // default file is empty while a second login exists — two facts
+            // the old boolean could not separate. Joined raw, the default
+            // account came out as an empty name ("知乎: 已存（, work）").
+            var names = cookieRows
+                .filter(function (row) {
+                    return row.platform === p;
+                })
+                .map(cookieAccountLabel);
+            var tag = names.length ? ' (' + names.join(', ') + ')' : '';
+            lines.push(
+                I18n.t('platform.' + p) + tag + ': ' + I18n.t(saved ? 'cookie.savedYes' : 'cookie.savedNo')
+            );
+        });
+        statusEl.textContent = lines.join('  |  ');
+        renderCookieAccounts();
+        renderCookieAccountStatus();
+        renderCookieManager();
     });
+}
+
+function cookieRowFor(platform, account) {
+    /* The row for exactly this pair, or null when nothing is saved under it.
+       Matched on the RAW account and never on the label: the blank account is the
+       platform's default file, and 「默认账号」 is how that one account is worded —
+       a label match would also answer for a login the user typed that name as. */
+    var want = String(account || '');
+    for (var i = 0; i < cookieRows.length; i++) {
+        var row = cookieRows[i];
+        if (row.platform === platform && String(row.account || '') === want) return row;
+    }
+    return null;
+}
+
+function cookieAccountLabel(row) {
+    if (!row) return '';
+    // The backend knows which names IT generated (默认账号, 默认账号2) and sends a
+    // catalogue key with its arguments; anything else the user typed is shown exactly
+    // as typed, because a name they chose is not this program's word to translate.
+    return row.label_key ? I18n.t(row.label_key, row.label_args || {}) : String(row.account || '');
+}
+
+function cookieAccountWord(account) {
+    return account ? String(account) : I18n.t('cookies.accountDefault');
+}
+
+function renderCookieAccountStatus() {
+    /* The line under the box: what THIS account holds, changing as the box changes.
+       It answers from the cached rows, so it is a re-render and not a request — the
+       question "have I saved a login under that name" is already in the payload. */
+    var el = document.getElementById('cookie-account-status');
+    if (!el) return;
+    var select = document.getElementById('cookie-platform');
+    var platform = select ? select.value : '';
+    var account = cookieAccount();
+    var row = cookieRowFor(platform, account);
+    var parts = [
+        I18n.t('cookies.accountStatusHead', {
+            platform: I18n.t('platform.' + platform),
+            account: cookieAccountWord(account),
+        }),
+    ];
+    if (!row) {
+        parts.push(I18n.t('cookies.accountStatusNone'));
+    } else {
+        parts.push(I18n.t('cookies.accountStatusSaved', { n: row.entries, when: row.saved_at }));
+        if (row.session_only) {
+            parts.push(I18n.t('cookies.accountStatusSessionOnly', { n: row.session_only }));
+        }
+        parts.push(cookieProfileWord(row));
+    }
+    el.textContent = parts.join(' — ');
+}
+
+function cookieProfileWord(row) {
+    /* Four states, and the marker is what decides them — NOT whether the directory is
+       there. A named account's device lives one level INSIDE the platform's directory, so
+       the default account's path exists as soon as any sibling was opened, and a panel
+       that asked ``exists`` first would tell the user a device had been built for a login
+       that never had one. ``profile_exists`` still travels: it is true, it just is not the
+       question. */
+    if (!row.profiles_on) return I18n.t('cookies.profileOff');
+    if (!row.profile_used) return I18n.t('cookies.profileUnused');
+    if (!row.profile_imported) return I18n.t('cookies.profileNoLogin');
+    if (row.needs_refresh) return I18n.t('cookies.profileStale');
+    return I18n.t('cookies.profileCurrent');
 }
 
 function setCookieJobUI(on) {
@@ -4100,17 +4180,29 @@ function pollCookieJob() {
     });
 }
 
-function openCookieDialog(platform) {
+function openCookieDialog(platform, account) {
     var dialog = document.getElementById('cookie-dialog');
-    /* An optional platform: the pre-run block sends the user here with the dead
-       session already selected, because a panel that opens on whatever was last
-       picked makes them hunt for the one platform that is broken. */
+    /* An optional platform AND account: the pre-run block sends the user here with the dead
+       session already selected, because a panel that opens on whatever was last picked makes
+       them hunt for the one login that is broken — and on a platform that holds several,
+       naming the platform alone still leaves the wrong account in the box. */
     var select = document.getElementById('cookie-platform');
+    var landed = false;
     if (platform && select) {
         var known = Array.prototype.some.call(select.options || [], function (option) {
             return option.value === platform;
         });
-        if (known) select.value = platform;
+        if (known) {
+            select.value = platform;
+            landed = true;
+        }
+    }
+    /* The account FOLLOWS the platform. Writing the box while the select refused to move
+       would leave the panel showing one platform and naming another one's login — and
+       every button below acts on the pair, so a half-landing is worse than none. */
+    if (landed && account !== undefined) {
+        var box = document.getElementById('cookie-account');
+        if (box) box.value = String(account || '');
     }
     if (platform) {
         /* Naming a platform is never a toggle: the toolbar button opens and shuts
@@ -4187,24 +4279,28 @@ function saveCookieConfig() {
     }
 }
 
-async function deleteCookie() {
-    /* Remove this platform's saved cookie file. The confirmation has to be honest
-       about what a file is: since a browser profile imports it once and is never
-       re-planted, a platform that has logged in inside its own profile keeps that
-       session, and deleting the snapshot does not sign it out. Saying 「已删除，等于
-       退出登录」 here would send the user to re-log in a session that is still live —
-       the response's own profile_holds line says which of the two just happened. */
-    var select = document.getElementById('cookie-platform');
+async function deleteCookie(platform, account) {
+    /* Remove ONE saved cookie file. Called with nothing it speaks for the panel's own
+       selection; a management row calls it WITH its row, because deleting whatever happens
+       to be typed in the box is a different login than the one that was clicked.
+
+       The confirmation has to be honest about what a file is: since a browser profile
+       imports it once and is never re-planted, a platform that has logged in inside its own
+       profile keeps that session, and deleting the snapshot does not sign it out. Saying
+       「已删除，等于退出登录」 here would send the user to re-log in a session that is still
+       live — the response's own profile_holds line says which of the two just happened. */
     var statusEl = document.getElementById('cookie-status');
-    var platform = select ? select.value : '';
+    var named = platform !== undefined && platform !== null && platform !== '';
+    if (!named) platform = cookiePlatform();
     if (!platform) return;
+    if (account === undefined || account === null) account = cookieAccount();
     /* Two fixes in one line. The template names the platform TWICE and the old call used
        `.replace('{platform}', …)`, which fills the first occurrence only — so the user read a
        literal `{platform}` in the middle of a Chinese sentence, next to a raw `zhihu` key.
        And the dialog has to name the SESSION it is about to delete: one platform holds
        several logins, and 「删除 知乎 的 Cookie 文件」 while the account box says `work`
        describes a file this request does not touch. */
-    var who = entryLabels([{ platform: platform, account: cookieAccount() }]);
+    var who = entryLabels([{ platform: platform, account: account }]);
     var answer = await showDialog({
         message: I18n.t('dialog.cookieDelete', { platform: who }),
         buttons: [
@@ -4216,7 +4312,7 @@ async function deleteCookie() {
     var result = await fetchJSON('/api/cookies/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: platform, account: cookieAccount() }),
+        body: JSON.stringify({ platform: platform, account: String(account || '') }),
     });
     if (result.ok) {
         showToast(result.message || I18n.t('toast.cookieDeleted', { platform: who }));
@@ -4242,21 +4338,133 @@ function cookieAccount() {
     return el ? String(el.value || '').trim().toLowerCase() : '';
 }
 
-var cookieAccountsByPlatform = {};
+/* The per-(platform, account) rows, cached from the one status read the panel makes.
+   Everything under the account box renders from here — the candidates, the live line and
+   the management table — because a keystroke must not buy a directory listing. */
+var cookieRows = [];
+
+function cookieRowsOf(platform) {
+    return cookieRows.filter(function (row) {
+        return row.platform === platform;
+    });
+}
 
 function renderCookieAccounts() {
-    /* Offer the names that already have a file for the platform on screen. A
-       datalist, not a select: the honest answer to "which account?" includes names
-       that do not exist yet — that is how one gets created. */
-    var dl = document.getElementById('cookie-account-options');
+    /* The candidates for the platform on screen, in the WORDS the user reads: a typed
+       name as typed, a generated one as 默认账号 / 默认账号2. Buttons, not a datalist —
+       a <datalist> prints its VALUE, so the blank account could only ever have appeared
+       as an empty row, and an empty row is not a candidate the user can choose to trust.
+       Nothing saved, nothing shown: an offer of 「默认账号」 for a file that does not
+       exist is how a node ends up naming a login this machine cannot produce. */
+    var host = document.getElementById('cookie-account-candidates');
     var select = document.getElementById('cookie-platform');
-    if (!dl) return;
-    var list = cookieAccountsByPlatform[select ? select.value : ''] || [];
-    dl.innerHTML = list
-        .map(function (a) {
-            return '<option value="' + escapeHtml(a) + '"></option>';
+    if (!host) return;
+    var rows = cookieRowsOf(select ? select.value : '');
+    if (!rows.length) {
+        host.textContent = '';
+        return;
+    }
+    host.innerHTML = rows
+        .map(function (row) {
+            return (
+                '<button type="button" class="cookie-candidate" onclick="pickCookieAccount(\'' +
+                attrJsArg(row.account) +
+                '\')" title="' +
+                escapeHtml(row.account || I18n.t('cookies.accountDefaultHint')) +
+                '">' +
+                escapeHtml(cookieAccountLabel(row)) +
+                '</button>'
+            );
         })
         .join('');
+}
+
+function pickCookieAccount(account) {
+    /* Fill the box, not just the label: the box IS the answer every action below sends,
+       so a candidate that only repainted the line under it would save under a different
+       account than the one that was clicked. */
+    var el = document.getElementById('cookie-account');
+    if (el) el.value = String(account || '');
+    renderCookieAccountStatus();
+    renderCookieManager();
+}
+
+function renderCookieManager() {
+    /* Every saved login on this machine, one CARD per (platform, account): what it holds,
+       when it was taken, and whether that account's own browser is holding the same
+       session. Metadata only — a cookie value is the login itself, and this is the one
+       surface a stranger could stand in front of on a cloud deploy.
+
+       Cards rather than a table on purpose: the panel is a narrow fixed box whose width is
+       audited against a laptop window (a horizontal scrollbar the user cannot switch off is
+       a failed layout), and seven columns of Chinese words do not fit in it. A row that
+       wraps is a row that still reads. */
+    var host = document.getElementById('cookie-manager');
+    if (!host) return;
+    if (!cookieRows.length) {
+        host.innerHTML = '<div class="cookie-row-empty">' + escapeHtml(I18n.t('cookies.noneSaved')) + '</div>';
+        return;
+    }
+    host.innerHTML = cookieRows
+        .map(function (row) {
+            var meta = I18n.t('cookies.rowMeta', { n: row.entries, when: row.saved_at || I18n.t('cookies.unknownWhen') });
+            if (row.session_only) {
+                meta += ' · ' + I18n.t('cookies.rowSessionOnly', { n: row.session_only });
+            }
+            var args = "'" + attrJsArg(row.platform) + "', '" + attrJsArg(row.account) + "'";
+            return (
+                '<div class="cookie-row">' +
+                '<div class="cookie-row-head">' +
+                escapeHtml(I18n.t('platform.' + row.platform) + ' · ' + cookieAccountLabel(row)) +
+                '</div>' +
+                '<div class="cookie-row-meta">' +
+                escapeHtml(meta) +
+                '</div>' +
+                '<div class="cookie-row-state">' +
+                escapeHtml(cookieProfileWord(row)) +
+                '</div>' +
+                '<div class="cookie-row-actions">' +
+                '<button type="button" class="cookie-mini" onclick="useCookieAccount(' +
+                args +
+                ')">' +
+                escapeHtml(I18n.t('cookies.useInPanel')) +
+                '</button>' +
+                '<button type="button" class="cookie-mini" onclick="deleteCookie(' +
+                args +
+                ')">' +
+                escapeHtml(I18n.t('cookies.deleteOne')) +
+                '</button>' +
+                '</div></div>'
+            );
+        })
+        .join('');
+}
+
+function useCookieAccount(platform, account) {
+    /* Point the panel at one saved login instead of making the user retype it: the
+       platform select and the account box are the two halves every action reads, so a row
+       that only filled the box would delete a DIFFERENT login than the one clicked.
+
+       Both halves move together or neither does — the same rule the pre-run landing
+       keeps, because a box naming `work` under a platform that never asked for it is a
+       delete pointed at somebody else's session. */
+    var select = document.getElementById('cookie-platform');
+    var known = false;
+    if (select) {
+        known = Array.prototype.some.call(select.options || [], function (option) {
+            return option.value === platform;
+        });
+        if (known) select.value = platform;
+    }
+    if (!known) return;
+    var box = document.getElementById('cookie-account');
+    if (box) box.value = String(account || '');
+    renderCookieGuide();
+}
+
+function cookiePlatform() {
+    var el = document.getElementById('cookie-platform');
+    return el ? String(el.value || '') : '';
 }
 
 /* No 「把 Cookie 更新进 Profile」 button any more: saving a cookie now plants it into that

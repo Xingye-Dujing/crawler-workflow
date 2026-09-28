@@ -91,10 +91,10 @@ class TestPlatformWhitelist:
     @pytest.mark.parametrize('platform', ['../../evil', 'zhihu/../../x', '', 'Weibo'])
     def test_path_for_refuses_unknown_platforms(self, manager, platform):
         with pytest.raises(ValueError, match='Unsupported platform'):
-            manager._path_for(platform)
+            manager.path_for(platform)
 
     def test_file_name_follows_the_platform(self, manager):
-        assert manager._path_for('weibo') == os.path.join(manager.cookie_dir, 'weibo_cookies.json')
+        assert manager.path_for('weibo') == os.path.join(manager.cookie_dir, 'weibo_cookies.json')
 
 
 class TestRoundTrip:
@@ -104,7 +104,7 @@ class TestRoundTrip:
 
     def test_save_writes_readable_json(self, manager):
         manager.save('bilibili', COOKIES)
-        with open(manager._path_for('bilibili'), encoding='utf-8') as handle:
+        with open(manager.path_for('bilibili'), encoding='utf-8') as handle:
             assert json.load(handle) == COOKIES
 
     @pytest.mark.parametrize('platform', CookieManager.PLATFORMS)
@@ -155,14 +155,14 @@ class TestDamagedFiles:
     @pytest.mark.parametrize('content', ['{not json', '', '[1,2,'])
     def test_corrupt_json_reads_as_no_cookies(self, manager, content):
         manager.save('zhihu', COOKIES)
-        with open(manager._path_for('zhihu'), 'w', encoding='utf-8') as handle:
+        with open(manager.path_for('zhihu'), 'w', encoding='utf-8') as handle:
             handle.write(content)
         assert manager.load('zhihu') == []
 
     @pytest.mark.parametrize('payload', [{'a': 1}, ['x'], 'text', 3])
     def test_a_json_document_is_not_a_cookie_list(self, manager, payload):
         manager.save('zhihu', COOKIES)
-        with open(manager._path_for('zhihu'), 'w', encoding='utf-8') as handle:
+        with open(manager.path_for('zhihu'), 'w', encoding='utf-8') as handle:
             handle.write(json.dumps(payload))
         expected = ['x'] if payload == ['x'] else []
         assert manager.load('zhihu') == expected
@@ -235,16 +235,16 @@ class TestAccounts:
     """
 
     def test_the_blank_account_is_the_historical_filename(self, manager):
-        assert manager._path_for('zhihu') == manager._path_for('zhihu', '')
-        assert manager._path_for('zhihu').endswith('zhihu_cookies.json')
+        assert manager.path_for('zhihu') == manager.path_for('zhihu', '')
+        assert manager.path_for('zhihu').endswith('zhihu_cookies.json')
 
     def test_a_named_account_inserts_one_segment(self, manager):
-        assert manager._path_for('zhihu', 'work').endswith('zhihu@work_cookies.json')
+        assert manager.path_for('zhihu', 'work').endswith('zhihu@work_cookies.json')
 
     @pytest.mark.parametrize('bad', ['../x', 'a/b', 'A', 'has space', 'x' * 25, '@', 'q"uote'])
     def test_an_account_that_is_not_a_plain_word_is_refused(self, manager, bad):
         with pytest.raises(ValueError):
-            manager._path_for('zhihu', bad)
+            manager.path_for('zhihu', bad)
 
     def test_is_account_answers_usability_without_raising(self):
         assert CookieManager.is_account('') is True

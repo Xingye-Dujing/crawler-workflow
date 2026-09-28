@@ -70,7 +70,15 @@ class CookieManager:
         account = str(account or '').strip()
         return account == '' or bool(cls._ACCOUNT_RE.match(account))
 
-    def _path_for(self, platform: str, account: str = '') -> str:
+    def path_for(self, platform: str, account: str = '') -> str:
+        """Where this account's session lives — the one answer to that question.
+
+        Public because the API layer has to ask it too (the management view reports
+        whether a profile still matches the file it was planted from), and a filename
+        built twice is a naming rule that can drift into two different accounts. It
+        refuses an unsupported platform and a malformed account for exactly that reason:
+        a path handed to a caller that never checked is how ``../`` becomes a session.
+        """
         if not self.is_supported(platform):
             raise ValueError(f'Unsupported platform: {platform}')
         account = str(account or '').strip()
@@ -124,7 +132,7 @@ class CookieManager:
 
         def _born(account: str) -> tuple:
             try:
-                info = os.stat(self._path_for(platform, account))
+                info = os.stat(self.path_for(platform, account))
             except OSError:
                 return (float('inf'), account)
             return (min(info.st_ctime, info.st_mtime), account)
@@ -172,7 +180,7 @@ class CookieManager:
 
     def save(self, platform: str, cookies: list, account: str = ''):
         account = str(account or '').strip()
-        path = self._path_for(platform, account)
+        path = self.path_for(platform, account)
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(cookies, f, ensure_ascii=False, indent=2)
         # The account belongs in the sentence: with one platform holding several logins, a line
@@ -187,7 +195,7 @@ class CookieManager:
 
     def load(self, platform: str, account: str = '') -> list:
         try:
-            with open(self._path_for(platform, account), encoding='utf-8') as f:
+            with open(self.path_for(platform, account), encoding='utf-8') as f:
                 cookies = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError, ValueError):
             return []
@@ -196,7 +204,7 @@ class CookieManager:
     def exists(self, platform: str, account: str = '') -> bool:
         if not self.is_supported(platform):
             return False
-        return os.path.exists(self._path_for(platform, account))
+        return os.path.exists(self.path_for(platform, account))
 
     def saved_at(self, platform: str, account: str = '') -> str:
         """When this login was last written, as a wall-clock string — or ``''`` if it is not there.
@@ -206,7 +214,7 @@ class CookieManager:
         the jar.
         """
         try:
-            stamp = os.path.getmtime(self._path_for(platform, account))
+            stamp = os.path.getmtime(self.path_for(platform, account))
         except (OSError, ValueError):
             return ''
         return time.strftime('%Y-%m-%d %H:%M', time.localtime(stamp))
@@ -229,7 +237,7 @@ class CookieManager:
         return sum(1 for row in self.load(platform, account) if isinstance(row, dict) and not _has_expiry(row))
 
     def delete(self, platform: str, account: str = ''):
-        path = self._path_for(platform, account)
+        path = self.path_for(platform, account)
         if os.path.exists(path):
             os.remove(path)
             logger.info(t('cookie.deleted', platform=platform))

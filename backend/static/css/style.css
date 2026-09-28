@@ -2779,6 +2779,73 @@ input:-webkit-autofill:focus {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* The account candidates: real buttons, because a <datalist> prints its value and the
+   default account's value is the empty string — it could only ever have looked like a
+   blank row. They wrap rather than overflow: this panel's width is audited against a
+   laptop window, and a scrollbar the user cannot switch off is a failed layout (#175). */
+.cookie-candidates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.cookie-candidate {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.cookie-candidate:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+/* One card per saved login. Same reason as above: metadata about eight platforms and
+   their accounts is a list of wrapping lines, not a table with columns. */
+.cookie-row {
+  border-top: 1px solid var(--border);
+  padding: 6px 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.cookie-row-head {
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.cookie-row-meta,
+.cookie-row-state {
+  overflow-wrap: anywhere;
+}
+.cookie-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.cookie-mini {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.cookie-mini:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.cookie-row-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 4px 0;
+}
 #cookie-dialog {
   position: fixed;
   right: -360px;

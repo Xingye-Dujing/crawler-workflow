@@ -20,15 +20,20 @@ class TestUiCaching:
     @pytest.mark.parametrize('path', BOOT_ASSETS)
     def test_boot_assets_forbid_freshness_without_revalidating(self, client, path):
         """`no-cache` allows storing but demands a revalidation; `no-store`
-        would refetch the whole bundle on every navigation for nothing."""
-        resp = client.get(path)
-        assert resp.status_code == 200, path
-        assert resp.headers.get('Cache-Control') == 'no-cache', path
+        would refetch the whole bundle on every navigation for nothing.
+
+        The response is a file the server opened, so it is closed here rather than left
+        for the garbage collector: an unclosed handle is a ResourceWarning, and this suite
+        treats a warning as a test that noticed something and passed anyway.
+        """
+        with client.get(path) as resp:
+            assert resp.status_code == 200, path
+            assert resp.headers.get('Cache-Control') == 'no-cache', path
 
     def test_the_document_is_the_asset_this_hook_exists_for(self, client):
         """Without the hook this one answers 12 hours of freshness — the proof
         the whitelist is not decoration. (An asset Flask's static route already
         revalidates cannot show the difference, which is why this, not the
         scripts, is the pinned regression.)"""
-        resp = client.get('/')
-        assert 'max-age' not in (resp.headers.get('Cache-Control') or ''), resp.headers.get('Cache-Control')
+        with client.get('/') as resp:
+            assert 'max-age' not in (resp.headers.get('Cache-Control') or ''), resp.headers.get('Cache-Control')

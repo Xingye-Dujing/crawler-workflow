@@ -50,6 +50,18 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   before fixtures run, and `app.py` captures `Config.COOKIE_DIR` / `history.db` into module-level singletons at its
   own import). `test_test_tiers.py` refuses the import statically; the session-finish snapshot refuses the write
   dynamically.
+- **A warning is a test that noticed something and passed anyway, so the thing it noticed gets
+  fixed — never muted.** `pytest.ini` has no `filterwarnings` section at all, and adding an
+  `ignore` line is not how a warning is closed here. What fixing looks like, from the set this
+  suite actually had: four class-scoped fixtures written as instance methods (the instance they
+  fill is discarded before the first test runs, so any `self.` they set is invisible to the tests
+  that asked for them — `@classmethod` is the documented shape), file responses read without
+  closing them, and seven cookie saves that opened a **real Chrome inside the fast tier** because
+  saving plants the session into that account's profile — the plant swallowed the socket failure,
+  answered 「种入失败」 and left one `UserWarning` as the only trace. A test that wants no browser
+  says so (`profiles_off` in `tests/api/conftest.py`); a test that reads a file response closes it.
+  Something unfixable from inside this repo (a dependency leaking its own handle) is reported to
+  the user, not filtered.
 - **A stateful rule needs a stateless suite.** The suite shares ONE cookie directory, so `quiet_jar`
   (`tests/conftest.py`) snapshots it per test and puts it back — a login another test saved is a precondition this
   test never set up, and "is this account's cookie here?" is exactly the kind of question that passes for the wrong

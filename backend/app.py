@@ -4854,34 +4854,57 @@ COOKIE_PLATFORMS = CookieManager.PLATFORMS
 
 @app.route('/api/cookies/status', methods=['GET'])
 def cookie_status():
-    """What the panel is allowed to know about saved logins: names, and whether one exists.
+    """What the panel is allowed to know about saved logins: which accounts exist, and how fresh.
 
     ``cookies[platform]`` used to be ``cookie_manager.exists(platform)`` — the BLANK account's
     file only. A user who keeps every login under a name therefore saw 「没有 Cookie」 for a
     platform he crawls with daily, and the status line could not answer the question he was
-    actually asking, which is about the account in the box. ``saved`` is that answer: keyed by
-    the same ``(platform, account)`` entry the pre-flight uses.
+    actually asking, which is about the account in the box.
 
-    No file is opened and no value is read — the names come off the directory listing, which is
-    also why the management view can show counts and dates without ever carrying a session.
+    ``rows`` answers it per ``(platform, account)``: how many entries, how many of them will
+    not outlive a window, when it was saved, and what that account's own browser directory
+    knows. Labels travel as catalogue keys because 默认账号 / 默认账号2 are words this program
+    generated, while ``work`` is a word the user typed and must be shown exactly as typed —
+    so the row carries ``label_key`` (empty for a typed name) plus its arguments, and the
+    browser translates one and prints the other.
+
+    **No cookie value ever leaves this endpoint**, and the sentence is worth stating because
+    the panel is the one surface a stranger could stand in front of on a cloud deploy: the
+    counts are lengths, the date is a ``stat``, the profile half is one marker file, and the
+    directory walk that would cost real time is switched off here (``size=False``) — a
+    management row is not worth reading a browser's cache index.
     """
     accounts = {platform: cookie_manager.accounts_in_order(platform) for platform in COOKIE_PLATFORMS}
-    saved, session_only = {}, {}
+    rows = []
     for platform, names in accounts.items():
         for account in names:
-            key = cookie_preflight.entry_key(platform, account)
-            saved[key] = True
-            # How many entries are session-only, so the panel can say what will not outlive a
-            # window — without the management view ever having to open the jar.
-            session_only[key] = cookie_manager.session_only_count(platform, account)
+            path = cookie_manager.path_for(platform, account)
+            profile = browser_profiles.status(platform, has_cookie=True, cookie_path=path, account=account, size=False)
+            label_key, label_args = cookie_manager.account_label_key(account)
+            rows.append(
+                {
+                    'platform': platform,
+                    'account': account,
+                    'entry_key': cookie_preflight.entry_key(platform, account),
+                    'label_key': label_key or '',
+                    'label_args': label_args,
+                    'entries': cookie_manager.entry_count(platform, account),
+                    'session_only': cookie_manager.session_only_count(platform, account),
+                    'saved_at': cookie_manager.saved_at(platform, account),
+                    'profiles_on': profile['enabled'],
+                    'profile_exists': profile['exists'],
+                    'profile_used': bool(profile['used_at']),
+                    'profile_imported': profile['imported'],
+                    'needs_refresh': profile['needs_refresh'],
+                }
+            )
     return jsonify(
         {
             'ok': True,
             # 「this platform has a login somewhere」 — not "the blank file exists".
             'cookies': {platform: bool(names) for platform, names in accounts.items()},
             'accounts': accounts,
-            'saved': saved,
-            'session_only': session_only,
+            'rows': rows,
         }
     )
 
@@ -5355,7 +5378,7 @@ def _cookie_login_worker(platform: str, wait_seconds: int, entry_url: str = '', 
         # a button that here would overwrite a live session with a copy of itself. Only when a
         # profile really exists — a run that chose 本次不用 Profile has no live session to spare.
         if browser_profiles.is_enabled() and browser_profiles.is_used(platform, account):
-            browser_profiles.remember_cookie(platform, cookie_manager._path_for(platform, account), account)
+            browser_profiles.remember_cookie(platform, cookie_manager.path_for(platform, account), account)
         # A capture replaces the session, so any verdict the pre-run gate cached about
         # the old one is now not just stale but wrong in the dangerous direction.
         cookie_preflight.invalidate(platform)

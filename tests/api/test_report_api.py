@@ -177,15 +177,15 @@ class TestView:
     def test_a_report_is_served_with_script_forbidden(self, client, app_module):
         app_module.execution_state['results'] = {'node-1': ROWS}
         name = client.post('/api/report/generate', json={}).get_json()['name']
-        response = client.get(f'/api/report/view?name={name}')
-        assert response.status_code == 200
-        assert response.mimetype == 'text/html'
-        policy = response.headers['Content-Security-Policy']
-        assert 'sandbox' in policy, 'a crawled document must not be able to run'
-        assert 'script-src' not in policy and 'allow-scripts' not in policy
-        assert response.headers['X-Content-Type-Options'] == 'nosniff'
-        assert response.headers['Content-Disposition'].startswith('inline')
-        assert b'<script' not in response.data
+        with client.get(f'/api/report/view?name={name}') as response:
+            assert response.status_code == 200
+            assert response.mimetype == 'text/html'
+            policy = response.headers['Content-Security-Policy']
+            assert 'sandbox' in policy, 'a crawled document must not be able to run'
+            assert 'script-src' not in policy and 'allow-scripts' not in policy
+            assert response.headers['X-Content-Type-Options'] == 'nosniff'
+            assert response.headers['Content-Disposition'].startswith('inline')
+            assert b'<script' not in response.data
 
     def test_a_report_named_in_chinese_is_served_whole(self, client, app_module):
         """A user types a Chinese title, so this is the normal case, not an edge.
@@ -198,12 +198,12 @@ class TestView:
         app_module.execution_state['results'] = {'node-1': ROWS}
         name = client.post('/api/report/generate', json={'title': '季度报告'}).get_json()['name']
         assert not name.isascii(), 'the fixture stopped testing what it was written for'
-        response = client.get('/api/report/view', query_string={'name': name})
-        assert response.status_code == 200
-        assert len(response.data) > 500, 'a truncated body reads as a broken page'
-        disposition = response.headers['Content-Disposition']
-        assert disposition.startswith('inline')
-        assert "filename*=UTF-8''" in disposition
+        with client.get('/api/report/view', query_string={'name': name}) as response:
+            assert response.status_code == 200
+            assert len(response.data) > 500, 'a truncated body reads as a broken page'
+            disposition = response.headers['Content-Disposition']
+            assert disposition.startswith('inline')
+            assert "filename*=UTF-8''" in disposition
 
     @pytest.mark.parametrize(
         'name',
@@ -361,7 +361,12 @@ class TestPdf:
 
 
 def _report_text(client, app_module, name: str) -> str:
-    """The report body, read back through the route that is allowed to serve it."""
-    response = client.get(f'/api/report/view?name={name}')
-    assert response.status_code == 200
-    return response.get_data(as_text=True)
+    """The report body, read back through the route that is allowed to serve it.
+
+    The response is closed on the way out: a report is served from a file the route
+    opened, and an unclosed handle surfaces as a ResourceWarning at garbage-collection
+    time — which this suite counts as a test that noticed something and passed anyway.
+    """
+    with client.get(f'/api/report/view?name={name}') as response:
+        assert response.status_code == 200
+        return response.get_data(as_text=True)

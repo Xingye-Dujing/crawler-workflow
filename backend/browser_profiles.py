@@ -341,6 +341,7 @@ def status(
     has_cookie: bool = False,
     cookie_path: str = '',
     account: str = '',
+    size: bool = True,
 ) -> dict:
     """One platform's profile state, shaped for the settings panel.
 

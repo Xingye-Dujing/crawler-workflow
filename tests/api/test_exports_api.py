@@ -66,10 +66,13 @@ class TestList:
 
 class TestDownload:
     def test_a_real_export_is_sent_as_an_attachment(self, client, export_dir):
-        response = client.get('/api/exports/download', query_string={'name': 'run-a.csv'})
-        assert response.status_code == 200
-        assert 'attachment' in response.headers.get('Content-Disposition', '')
-        assert '三亚' in response.get_data(as_text=True)
+        """The response is closed because the route served it from an open file: left to
+        the garbage collector it surfaces as a ResourceWarning, and a warning here is a
+        test that noticed something and passed anyway."""
+        with client.get('/api/exports/download', query_string={'name': 'run-a.csv'}) as response:
+            assert response.status_code == 200
+            assert 'attachment' in response.headers.get('Content-Disposition', '')
+            assert '三亚' in response.get_data(as_text=True)
 
     @pytest.mark.parametrize(
         'name',
@@ -86,7 +89,8 @@ class TestDownload:
         assert client.get('/api/exports/download', query_string={'name': 'script.py'}).status_code == 404
 
     def test_the_file_survives_a_download(self, client, export_dir):
-        client.get('/api/exports/download', query_string={'name': 'run-a.csv'})
+        with client.get('/api/exports/download', query_string={'name': 'run-a.csv'}):
+            pass
         assert os.path.exists(os.path.join(export_dir, 'run-a.csv'))
 
 

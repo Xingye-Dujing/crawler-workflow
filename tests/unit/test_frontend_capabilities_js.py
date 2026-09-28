@@ -328,8 +328,9 @@ class TestPlatformAdvice:
     """#181 — the advice screen is generated from matrix flags only. It must classify
     each platform by the flag the matrix set and name nothing a matrix did not."""
 
+    @classmethod
     @pytest.fixture(scope='class')
-    def advice(self, tmp_path_factory):
+    def advice(cls, tmp_path_factory):
         tmp = tmp_path_factory.mktemp('caps-advice')
         matrix = {
             'platforms': [

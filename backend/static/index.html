@@ -1018,8 +1018,10 @@
         <!-- One platform can hold several logins (the rate limit a crawl hits is
              per ACCOUNT). The box is free text on purpose: typing a name that has
              no file yet is how a second login is BORN — every action below saves,
-             logs in or deletes exactly what is written here. The datalist only
-             offers what already exists; it never limits the answer. -->
+             logs in or deletes exactly what is written here. The list under it is
+             the candidates: what already exists, said in the words the user reads
+             (默认账号 for the blank one, which a dropdown could only show as an
+             empty row), and clicking one fills this box. -->
         <div class="settings-group">
           <label class="settings-label" data-i18n="cookies.account"
             >Account</label
@@ -1028,11 +1030,11 @@
             id="cookie-account"
             class="settings-input"
             type="text"
-            list="cookie-account-options"
             data-i18n-placeholder="cookies.accountPlaceholder"
             placeholder="work"
+            oninput="renderCookieAccountStatus()"
           />
-          <datalist id="cookie-account-options"></datalist>
+          <div id="cookie-account-candidates" class="cookie-candidates"></div>
         </div>
         <!-- Filled from /api/cookies/flow: which page to log in on and why.
              Server-side text on purpose — the guidance must stay translated and
@@ -1138,10 +1140,25 @@
           />
         </div>
         <div class="settings-group">
+          <!-- Two different questions, two lines. The first is about the account typed
+               in the box and repaints as the box is typed in; the second is the
+               platform-wide summary of what this machine holds. -->
+          <span
+            id="cookie-account-status"
+            style="font-size: 11px; color: var(--text-dim); display: block"
+          ></span>
           <span
             id="cookie-status"
             style="font-size: 11px; color: var(--text-dim)"
           ></span>
+        </div>
+        <!-- Every login this machine has saved, one row per (platform, account): what
+             it holds, when it was taken and whether its own browser is holding that
+             same session. Metadata only by design — a cookie value is the thing itself,
+             and this panel is the one surface a stranger could stand in front of. -->
+        <div class="settings-group">
+          <label class="settings-label" data-i18n="cookies.manageTitle">Saved logins</label>
+          <div id="cookie-manager" class="cookie-manager"></div>
         </div>
       </div>
     </div>

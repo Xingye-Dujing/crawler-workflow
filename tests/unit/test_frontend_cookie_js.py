@@ -243,3 +243,112 @@ class TestSavePlantsItsOwnProfile:
         assert app.count("'cookies.refreshExplain'") == 2, 'both catalogues must carry the sentence'
         for dead in ("'cookies.refresh':", "'cookie.refreshWorking':", "'cookie.refreshed':", "'dialog.cookieRefresh'"):
             assert dead not in app, f'the button is gone but its catalogue entry ({dead}) stayed'
+
+
+class TestAccountCandidatesAndManager:
+    """The account box, its candidates, and the list of what this machine holds.
+
+    One platform carries several logins, so the panel has to say WHICH ones exist in the
+    words a user reads, answer for the account currently typed without asking the server
+    again per keystroke, and delete the login a row names rather than the one last typed.
+    """
+
+    def test_a_candidate_is_said_in_the_users_words(self, panel):
+        cases = panel['candidates']
+        assert [case['text'] for case in cases] == [
+            'cookies.accountDefault',
+            'cookies.accountDefaultNumbered - 2',
+            'work',
+        ], cases
+        # The label is wording; the ACCOUNT is the argument. A chip that carried its own
+        # label would save under 「默认账号」 — a name the backend would reject as a path.
+        assert [case['onclick'] for case in cases] == [
+            "pickCookieAccount('')",
+            "pickCookieAccount('default2')",
+            "pickCookieAccount('work')",
+        ], cases
+
+    def test_the_summary_never_prints_an_empty_account_name(self, panel):
+        """Joined raw, the default account came out as a hole in the brackets."""
+        line = panel['summaryLine']
+        assert '(,' not in line and ', )' not in line, line
+        assert 'cookies.accountDefault' in line and 'work' in line, line
+
+    def test_the_line_under_the_box_follows_what_is_typed(self, panel):
+        saved = panel['lineForDefault']
+        assert 'cookies.accountStatusSaved - 12 | 2026-09-28 10:00' in saved, saved
+        ghost = panel['lineForGhost']
+        assert 'ghost' in ghost and 'cookies.accountStatusNone' in ghost, ghost
+        assert 'cookies.accountStatusSaved' not in ghost, ghost
+        # Typed in mixed case and matched anyway: the box is normalized, the file is not.
+        work = panel['lineForWork']
+        assert 'work' in work and 'cookies.profileUnused' in work, work
+        assert 'cookies.accountStatusSessionOnly - 2' in work, work
+
+    def test_the_live_line_cost_no_second_request(self, panel):
+        """Three different accounts were answered from the one status read."""
+        assert panel['rowsAskedAgain'] == 1, panel['rowsAskedAgain']
+
+    def test_a_candidate_fills_the_box_every_action_sends(self, panel):
+        case = panel['afterPick']
+        assert case['box'] == 'default2', case
+        assert 'cookies.accountStatusSaved - 4' in case['line'], case
+        # The card list says what only the server knows: this profile holds an OLDER
+        # cookie than the file, which is the one state no user can see from outside.
+        assert case['profileWord'] is True, case
+
+    def test_a_row_deletes_its_own_login_not_the_boxes(self, panel):
+        """The box said `default2` when the `work` card was clicked.
+
+        A per-row delete that reused the panel's own selection would remove a login the
+        user never pointed at, which on this panel is the difference between tidying up
+        and losing a session.
+        """
+        case = panel['rowDelete']
+        assert case['posted'] == [{'platform': 'zhihu', 'account': 'work'}], case
+        assert case['boxStill'] == 'default2', case
+
+    def test_nothing_saved_offers_nothing(self, panel):
+        """An empty candidate area is the honest answer when no file exists; a 「默认账号」
+        chip for a missing file is how a node ends up naming a login that is not here."""
+        case = panel['nothingSaved']
+        assert case['chips'] == [], case
+        assert 'cookies.noneSaved' in case['manager'], case
+
+    def test_being_sent_here_lands_on_the_broken_login(self, panel):
+        assert panel['openedOnAccount'] == {'platform': 'weibo', 'box': 'work'}, panel['openedOnAccount']
+
+    def test_opening_the_panel_from_the_toolbar_keeps_the_box(self, panel):
+        """No account named, nothing rewritten: the toolbar button is a toggle, not a
+        navigation, and wiping the box would change which login the next click means."""
+        assert panel['openedWithoutAccount']['box'] == 'keepme', panel['openedWithoutAccount']
+
+    def test_a_platform_the_panel_does_not_hold_moves_nothing(self, panel):
+        """Half a landing — one select still on its old platform with the new account in
+        the box — is a delete pointed at somebody else's session."""
+        assert panel['openedOnUnknownPlatform'] == {'platform': 'weibo', 'box': 'keepme'}, panel
+
+    def test_the_box_repaints_the_line_and_the_hosts_are_wired(self):
+        """The wiring is half the feature: an unwired handler is a panel that answers the
+        last fetch instead of the last keystroke."""
+        html = (JS_DIR.parent / 'index.html').read_text(encoding='utf-8')
+        account_input = html[html.index('id="cookie-account"') : html.index('id="cookie-account-candidates"')]
+        assert 'oninput="renderCookieAccountStatus()"' in account_input, account_input
+        for host in ('id="cookie-account-candidates"', 'id="cookie-account-status"', 'id="cookie-manager"'):
+            assert host in html, host
+        # The datalist is gone rather than left empty: two candidate mechanisms, one of
+        # which can only ever show the default account as a blank row, is two answers.
+        assert 'cookie-account-options' not in html, 'the datalist came back beside the chips'
+
+    def test_the_profile_word_asks_the_marker_not_the_directory(self, panel):
+        """A named account's device lives one level inside the platform's directory, so the
+        default account has a path the moment any sibling was opened. Reading ``exists``
+        first would tell the user a device had been built for a login that never had one.
+        """
+        words = panel['profileWords']
+        assert words['off'] == 'cookies.profileOff', words
+        assert words['neverOpened'] == 'cookies.profileUnused', words
+        assert words['existsButUnused'] == 'cookies.profileUnused', words
+        assert words['openedNoLogin'] == 'cookies.profileNoLogin', words
+        assert words['stale'] == 'cookies.profileStale', words
+        assert words['current'] == 'cookies.profileCurrent', words
