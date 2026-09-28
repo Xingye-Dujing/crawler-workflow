@@ -210,8 +210,9 @@ def _needs_session(platform: str) -> bool:
 def has_session_to_test(platform: str, use_profile: bool = None, account: str = '') -> bool:
     """Whether anything could carry this platform's login.
 
-    Public because the validator asks the same question before a run starts (「节点选的账号没有
-    Cookie」 must be refused BY NAME, not answered by quietly crawling as someone else), and a
+    Public because the validator asks the same question before a run starts (a node that
+    names a login this machine does not have must be refused BY NAME, not answered by
+    quietly crawling as somebody else), and a
     second copy of "is a session here" is how the two answers drift apart.
 
     The saved file is the obvious source, but a *used profile* is a second one: since

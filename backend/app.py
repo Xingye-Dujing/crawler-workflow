@@ -5646,11 +5646,26 @@ def get_capabilities():
     for cap in payload.get('platforms', []):
         # Creation order, not alphabetical: the list the node picks from is "which logins does this
         # machine have", and a user who added work-then-home expects home to still be second.
-        saved = [a for a in cookie_manager.accounts_in_order(cap.get('platform') or '') if a]
+        accounts = cookie_manager.accounts_in_order(cap.get('platform') or '')
+        # One order for both the list and the preselection: creation order, from the same
+        # listing the panel reads. The blank row IS the default account, so it sits where
+        # that login was born rather than at the top of the list — a select whose first
+        # row is not the account a new node picks is a select that lies about its default.
+        # A name with no file is not offered at all: it names a login this machine cannot
+        # produce, and validation refuses a node that still asks for it (#28).
+        options = [{'value': account, 'labelKey': account or 'cookies.accountDefault'} for account in accounts]
+        if not options:
+            # Nothing is saved anywhere: the row stays, because a structurally empty select
+            # cannot show the account the user is about to save, and it is that account.
+            options = [{'value': '', 'labelKey': 'cookies.accountDefault'}]
         for mode in cap.get('modes', []):
             for field in mode.get('fields', []):
                 if field.get('key') == 'account':
-                    field['options'] = field['options'] + [{'value': a, 'labelKey': a} for a in saved]
+                    field['options'] = options
+                    # A node added now logs in as the first login this machine has, rather
+                    # than as "not chosen" — which used to mean the default file, existing
+                    # or not, and then a crawl that silently hit a wall it could not open.
+                    field['default'] = accounts[0] if accounts else ''
     return jsonify(payload)
 
 

@@ -27,6 +27,7 @@ file fails the run — loudly, with the paths named, even if every single test p
 """
 
 import contextlib
+import logging
 import os
 import shutil
 import sys
@@ -188,6 +189,98 @@ def app_module(data_root):
     import app
 
     return app
+
+
+@pytest.fixture
+def seeded_logins(data_root):
+    """One saved login per cookie platform, as that platform's default account.
+
+    Validation refuses a session crawl whose account holds no cookie (#28), so a test
+    that is about some other rule — which board was picked, which crawler method a node
+    reaches, how two crawls share a profile — has to be standing on a machine that has
+    logins. Real files, never a stubbed answer, so the refusal rule stays live in every
+    test that is not talking about it; and only the platforms this fixture had to add
+    are removed again, because the suite shares one cookie directory and a file left
+    behind is the next test's unexplained precondition.
+
+    The writes are **muted**: :meth:`CookieManager.save` reports which account it saved,
+    and that line goes into the run console like every other logger call does. A
+    precondition that narrates is a precondition the next test reads as "a run nobody
+    started" — which is exactly how two quiet-console cases failed the first time this
+    fixture ran beside them.
+    """
+    from config import Config
+    from services.cookie_manager import CookieManager
+
+    manager = CookieManager(Config.COOKIE_DIR)
+    saver = logging.getLogger('services.cookie_manager')
+    added = [p for p in CookieManager.PLATFORMS if not manager.exists(p)]
+    before = saver.level
+    saver.setLevel(logging.WARNING)
+    try:
+        for platform in added:
+            manager.save(platform, [{'name': 'seeded', 'value': '1'}])
+        yield manager
+    finally:
+        for platform in added:
+            with contextlib.suppress(FileNotFoundError):
+                manager.delete(platform)
+        saver.setLevel(before)
+
+
+def _cookie_snapshot(directory: str) -> dict:
+    """Every saved-login file in *directory*, held as bytes under its own name.
+
+    Bytes and not parsed rows, because this is a restore of a directory, not a read of
+    a session — and no cookie value ever has to be understood to put it back.
+    """
+    snapshot = {}
+    with contextlib.suppress(OSError):
+        for name in os.listdir(directory):
+            if not name.endswith('_cookies.json'):
+                continue
+            with contextlib.suppress(OSError), open(os.path.join(directory, name), 'rb') as handle:
+                snapshot[name] = handle.read()
+    return snapshot
+
+
+def _cookie_restore(directory: str, snapshot: dict) -> None:
+    """Back to *snapshot*: what a test added goes, what it removed comes back.
+
+    Both halves matter. Deleting only the additions would let one test's save answer
+    another test's precondition, and restoring only the removals would let one test's
+    「delete this login」 leak forward as a missing cookie.
+    """
+    if not os.path.isdir(directory):
+        return
+    for name in os.listdir(directory):
+        if name.endswith('_cookies.json') and name not in snapshot:
+            with contextlib.suppress(OSError):
+                os.remove(os.path.join(directory, name))
+    for name, payload in snapshot.items():
+        path = os.path.join(directory, name)
+        if not os.path.isfile(path):
+            with open(path, 'wb') as handle:
+                handle.write(payload)
+
+
+@pytest.fixture(autouse=True)
+def quiet_jar(data_root):
+    """Each test starts from the same set of saved logins — the ones isolation left.
+
+    The suite shares ONE cookie directory (the app captures ``Config.COOKIE_DIR`` at
+    import, so a per-test dir would be invisible to it), and a file another test saved
+    is a precondition this test never set up. That is not only untidy: a rule as stateful
+    as "a session crawl with no cookie is refused" reads that directory, so an inherited
+    file makes one test pass for the wrong reason and the next fail for nobody's — which
+    is how a whole class of engine cases looked green between two cookie tests. Whatever
+    a test added is deleted afterwards and whatever it removed is written back.
+    """
+    from config import Config
+
+    snapshot = _cookie_snapshot(Config.COOKIE_DIR)
+    yield
+    _cookie_restore(Config.COOKIE_DIR, snapshot)
 
 
 @pytest.fixture(autouse=True)

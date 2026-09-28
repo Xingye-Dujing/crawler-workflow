@@ -30,7 +30,7 @@ from run_wait import run_finished
 from i18n import t
 from services.run_store import NODE_FAILED, RunStore
 
-pytestmark = [pytest.mark.api, pytest.mark.serial]
+pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 
 RECORDS = [{'标题': f'文{i}', '正文': f'正文{i}', '点赞': i} for i in range(1, 5)]
 #: The same table with one figure corrected: still 4 rows, still the same file

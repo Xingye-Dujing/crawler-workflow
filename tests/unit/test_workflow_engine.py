@@ -16,7 +16,12 @@ import pytest
 from engine.workflow import WorkflowEngine, effective_workflow, is_effectively_enabled, node_label
 from i18n import get_lang, set_lang, t
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures('seeded_logins')]
+#: Almost every case in this file builds a crawl node, and a node whose account has no
+#: cookie is now refused before it runs (#28) — so "this machine has logins" is a
+#: precondition of the file, not of one case. The cases that DO talk about the rule point
+#: ``Config.COOKIE_DIR`` at their own tmp directory, which is why seeding them changes
+#: nothing they assert.
 
 
 @pytest.fixture
@@ -240,15 +245,28 @@ class TestValidate:
         assert WorkflowEngine(wf).validate() == []
 
     def test_a_stored_account_is_accepted_and_a_missing_one_named(self, en, tmp_path, monkeypatch):
-        """账号's options live on disk, not in the matrix: the validation answer is
-        whatever cookie files exist RIGHT NOW (the same list the panel was offered).
-        A stored name passes; a name with no file is refused BY NAME — guessing the
-        default account instead would run one node as somebody else's login."""
+        """账号's real options live on disk, not in the matrix: validation asks whether
+        the account this node names can carry a session RIGHT NOW.
+
+        A name with no file is refused, and so is the default account when no default
+        file exists — the case that used to pass validation and then crawl a login wall
+        into an empty table, reporting a completed run that collected nothing. Nothing
+        may quietly borrow another account's session either, which is what "blank means
+        whatever is here" would have done.
+        """
         import config as config_module
         from services.cookie_manager import CookieManager
 
-        monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', str(tmp_path / 'cookies'))
-        CookieManager(str(tmp_path / 'cookies')).save('zhihu', [{'name': 'a', 'value': 'v'}], 'work')
+        jar = str(tmp_path / 'cookies')
+        monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', jar)
+        # The question here is the FILE. A profile that is still holding a session is a
+        # second, legitimate way to answer "is a login here" — the case below it — so this
+        # test switches that half off rather than trusting whatever marker the shared
+        # profile root happens to hold.
+        import browser_profiles
+
+        monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: False)
+        CookieManager(jar).save('zhihu', [{'name': 'a', 'value': 'v'}], 'work')
 
         def _source_with(account):
             return _wf(
@@ -259,13 +277,62 @@ class TestValidate:
                 [{'from': 'node-1', 'to': 'node-2'}],
             )
 
+        # The account that has a file validates clean, named or not.
         assert WorkflowEngine(_source_with('work')).validate() == []
         errors = WorkflowEngine(_source_with('ghost')).validate()
         assert len(errors) == 1, errors
         assert 'ghost' in errors[0], errors
         assert 'account' in errors[0], 'the refusal must name the FIELD, not just the value'
-        # Blank is not a mistake: it is "never chose", which is the default account.
+        # Blank is the DEFAULT ACCOUNT, an account with a file of its own — and here it
+        # has none, so the node names a login this machine cannot produce.
+        errors = WorkflowEngine(_source_with('')).validate()
+        assert len(errors) == 1, errors
+        assert 'default account' in errors[0], errors
+        assert 'Zhihu' in errors[0], 'the refusal names the platform it has no login for'
+        # Save the default login and the very same canvas is accepted: this is a question
+        # about the machine's state, not about the node's shape.
+        CookieManager(jar).save('zhihu', [{'name': 'a', 'value': 'v'}])
         assert WorkflowEngine(_source_with('')).validate() == []
+        # A mode the matrix says needs no session is never asked (WeChat's article list,
+        # weibo's 热搜 board): refusing those is how a crawlable platform got blocked.
+        wf = _wf([_node('node-1', params={'platform': 'weibo', 'mode': 'hot'})], [])
+        assert WorkflowEngine(wf).validate() == []
+
+    def test_a_profile_still_holding_its_login_is_a_session(self, en, tmp_path, monkeypatch):
+        """Deleting the cookie file does not log a browser profile out.
+
+        ``has_session_to_test`` also answers for a profile that was planted once and is
+        never re-planted, so a node whose snapshot was removed still has a way in — and
+        refusing it would be the validator contradicting the crawler.
+        """
+        import browser_profiles
+
+        import config as config_module
+
+        monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', str(tmp_path / 'cookies'))
+        monkeypatch.setattr(browser_profiles, 'is_enabled', lambda: True)
+        monkeypatch.setattr(browser_profiles, 'is_used', lambda platform, account='': True)
+        wf = _wf([_node('node-1', platform='zhihu', params={'keyword': '三亚', 'account': 'work'})], [])
+        assert WorkflowEngine(wf).validate() == []
+
+    def test_a_comment_node_names_the_account_it_cannot_use(self, en, tmp_path, monkeypatch):
+        """Comment links are always logged-in crawls, and one node walks several feeds
+        with the single account on its form — so each platform its own links name is
+        asked, and a missing login is refused once per platform rather than crawled into."""
+        import config as config_module
+        from services.cookie_manager import CookieManager
+
+        jar = str(tmp_path / 'cookies')
+        monkeypatch.setattr(config_module.Config, 'COOKIE_DIR', jar)
+        CookieManager(jar).save('zhihu', [{'name': 'a', 'value': 'v'}])
+
+        def _comment(urls):
+            return _wf([_node('node-1', 'comment', params={'urls': urls})], [])
+
+        assert WorkflowEngine(_comment('https://www.zhihu.com/question/1')).validate() == []
+        errors = WorkflowEngine(_comment('https://www.zhihu.com/question/1\nhttps://x.com/a/status/1')).validate()
+        assert len(errors) == 1, errors
+        assert 'X' in errors[0] and 'zhihu' not in errors[0], errors
 
     def test_a_wire_to_a_missing_node_is_named_not_called_a_cycle(self, en):
         """A dangling endpoint used to be reported as a cycle with an empty node list.

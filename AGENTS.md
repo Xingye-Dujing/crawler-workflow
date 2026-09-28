@@ -50,6 +50,11 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   before fixtures run, and `app.py` captures `Config.COOKIE_DIR` / `history.db` into module-level singletons at its
   own import). `test_test_tiers.py` refuses the import statically; the session-finish snapshot refuses the write
   dynamically.
+- **A stateful rule needs a stateless suite.** The suite shares ONE cookie directory, so `quiet_jar`
+  (`tests/conftest.py`) snapshots it per test and puts it back — a login another test saved is a precondition this
+  test never set up, and "is this account's cookie here?" is exactly the kind of question that passes for the wrong
+  reason when the answer is inherited. A test that starts a crawl says so with `seeded_logins`; a test *about* the
+  login rule points `Config.COOKIE_DIR` at its own tmp dir instead of trusting the shared one.
 - **Frontend JS is under test too.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js` / `workflow.js` /
   `app.js` into a zero-dependency node `vm` (shared `harness_dom.mjs`), driven by `tests/unit/test_frontend_*`. Any
   JS change to result-affecting logic must sync a scenario there; `urlPlatform` is contract-pinned against
@@ -220,7 +225,14 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   blocked a node on a saved named account, and blocked wechat entirely because that map holds no key for a platform
   with no cookie row. **A named cookie and a named profile belong together**: one account = one
   `data/cookies/<platform>@<account>.json` *and* one `chrome_profile/<platform>/<account>` (own device, own rotated
-  session, own concurrency lane), so nothing that answers "does this crawl have a login" may drop the account. **A new settings key needs all four:** the bool branch in
+  session, own concurrency lane), so nothing that answers "does this crawl have a login" may drop the account.
+  **A node's 账号 is a session question, and it is asked once**: `engine.workflow._account_session_errors` refuses a
+  crawl that `Mode.needs_session` says needs a login when `cookie_preflight.has_session_to_test` cannot find that
+  account's cookie file *or* a profile still carrying it — blank included, because blank IS an account (默认账号), not
+  a wildcard. `unoffered_selections` must not answer it too: one failure, one line. Letting it through is not a
+  harmless crawl — it walks into a login wall, files an empty table and reports 完成. The candidate list and the
+  preselection a new node gets are both `CookieManager.accounts_in_order`, so the first row listed is the account a
+  node starts on. **A new settings key needs all four:** the bool branch in
   `settings_store.save_settings`, both app.js catalogs, and the `AppSettings` wiring.
 
 ## Style (differs from defaults)

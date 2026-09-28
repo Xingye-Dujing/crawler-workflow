@@ -20,7 +20,7 @@ import pytest
 
 from crawlers.base import Crawler, as_index
 
-pytestmark = [pytest.mark.api, pytest.mark.serial]
+pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 
 
 class SimCrawler(Crawler):

@@ -33,7 +33,10 @@ from run_wait import run_finished
 
 from crawlers.base import Crawler
 
-pytestmark = [pytest.mark.api, pytest.mark.serial]
+pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
+#: Every case in this file starts real crawl sessions, and a session crawl is now refused
+#: before it runs when the account it names holds no cookie (#28). "This machine has a
+#: login" is therefore a precondition of the whole file, not of one case.
 
 PAGE = [{'作者': f'a{i}', '正文': f'b{i}'} for i in range(3)]
 

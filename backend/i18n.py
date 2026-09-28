@@ -617,6 +617,10 @@ _ZH = {
     'engine.source_unknown_mode': '节点 {nid}：{platform} 没有这种采集内容，请在该节点的「采集内容」里改选一种',
     'engine.source_missing': '节点 {nid}：必填项「{field}」还没有填写',
     'engine.source_bad_option': '节点 {nid}：「{field}」没有「{value}」这个选项，请在该节点的下拉里改选一个',
+    'engine.source_no_cookie_account': (
+        '节点 {nid}：{platform} 的账号「{account}」没有可用的 Cookie——请先到 Cookie 面板为该账号保存一份，'
+        '或在该节点改用已有 Cookie 的账号（不会借用别的账号登录，也不会静默少采）'
+    ),
     'engine.source_link_mismatch': '节点 {nid}：{n} 个链接与所选平台（{platform}）不符',
     # Feeding a link mode from an upstream table column: the wire is allowed only where
     # the matrix declares a feed (Field.fed_by), and every mismatch is refused BY NAME —
@@ -1543,6 +1547,11 @@ _EN = {
     'engine.source_unknown_mode': 'Node {nid}: {platform} has no such collection mode — pick one under Collect',
     'engine.source_missing': 'Node {nid}: the required field {field} is empty',
     'engine.source_bad_option': 'Node {nid}: {field} has no option "{value}" — pick one of the choices in that node',
+    'engine.source_no_cookie_account': (
+        'Node {nid}: no cookie for the {platform} account "{account}" — save one in the Cookie panel, '
+        'or pick an account that has a login (this never borrows another account and never '
+        'silently under-collects)'
+    ),
     'engine.source_link_mismatch': 'Node {nid}: {n} link(s) do not match the selected platform ({platform})',
     'engine.source_feed_no_mode': (
         'Node {nid}: this collection mode cannot be fed from an upstream table — '

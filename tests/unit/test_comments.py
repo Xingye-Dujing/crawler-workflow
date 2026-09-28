@@ -787,7 +787,9 @@ class TestBilibiliParser:
 
 
 class TestEngineAndIdentity:
-    def test_engine_requires_urls(self):
+    def test_engine_requires_urls(self, seeded_logins):
+        # The login is not what this case is about, but a comment crawl IS a logged-in
+        # one, and validation now refuses the ones this machine cannot serve (#28).
         wf = {'nodes': [{'id': 'node-1', 'type': 'comment', 'params': {'urls': '   '}}], 'connections': []}
         errors = WorkflowEngine(wf).validate()
         assert any('node-1' in e for e in errors)

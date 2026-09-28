@@ -57,7 +57,7 @@ from services.run_store import (
     workflow_fingerprint,
 )
 
-pytestmark = [pytest.mark.api, pytest.mark.serial]
+pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 
 ROWS = [{'作者': f'a{i}', '正文': f'body {i}'} for i in range(6)]
 

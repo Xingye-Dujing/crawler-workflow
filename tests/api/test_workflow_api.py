@@ -24,7 +24,7 @@ import pandas as pd
 import pytest
 from run_wait import run_finished
 
-pytestmark = pytest.mark.api
+pytestmark = [pytest.mark.api, pytest.mark.usefixtures('seeded_logins')]
 
 
 # Six rows, two of which exist only to be removed: one has no score (a null step

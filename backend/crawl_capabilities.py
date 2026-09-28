@@ -240,10 +240,13 @@ _RECOLLECT = Field(
 #: ``recrawl`` it is an executor-only field: it never reaches the crawler method — the
 #: executor reads it to pick the cookie file and the profile directory (see
 #: ``get_crawler(account=…)``) — but unlike ``recrawl`` it DOES choose data, so it is
-#: deliberately not volatile in the run fingerprint. Declared with only the default
-#: option; ``GET /api/capabilities`` appends the accounts that really have a saved
-#: file when it sends the payload, so the panel lists exactly what can be chosen and
-#: a stale hand-written account is refused by name at validation.
+#: deliberately not volatile in the run fingerprint. Declared with only the blank
+#: option so the select is never empty; ``GET /api/capabilities`` appends the accounts
+#: that really have a saved file (in creation order) and moves ``default`` onto the
+#: first of them, which is why a node added today logs in as the login that exists
+#: rather than as an empty string. Whether the chosen account can actually carry a
+#: session is refused at validation — see :func:`unoffered_selections`' note on the
+#: account field.
 _ACCOUNT = Field(
     key='account',
     control='select',
@@ -910,7 +913,7 @@ def required_missing(mode: Mode, params: dict, fed_keys: frozenset[str] = frozen
     return out
 
 
-def unoffered_selections(mode: Mode, params: dict, with_files: bool = True, accounts=()) -> list[tuple[Field, str]]:
+def unoffered_selections(mode: Mode, params: dict, with_files: bool = True) -> list[tuple[Field, str]]:
     """Select fields whose stored value names an option the matrix does not declare.
 
     A select is a choice from a fixed list, so a value off that list is not a variant
@@ -922,30 +925,27 @@ def unoffered_selections(mode: Mode, params: dict, with_files: bool = True, acco
     else. Refusing it by name is the same rule :func:`requested_mode_key` enforces for
     the mode selector, extended to the choices inside a mode.
 
-    ``accounts`` is the one list that is not fixed: the 账号 selector is declared with
-    only the default option, because WHICH accounts exist is whatever cookie files the
-    user has saved *right now* (the same list the panel is offered at payload time).
-    A stored account outside it is refused by name for the same reason as any stale
-    option — it names a session that does not exist — and nothing may quietly fall
-    back to the default account and crawl as somebody else's login.
+    The 账号 selector is deliberately **not** decided here, because "is this account a
+    valid choice" has a stronger and completely different answer: it is not a member of
+    a declared list but a session this machine either has or does not. That question is
+    asked once, against the cookie file and the profile together, in
+    ``engine.workflow._source_errors`` — and this function must not answer it as well, or
+    one missing login prints two console lines about one failure.
 
     A blank is not a mistake but "never chose", which the declared default answers —
     so it is skipped, exactly as an empty mode key is. Case is deliberately **not**
     folded: an option value is a storage key, and the user has to see what they wrote
     rather than have a near miss guessed into a different crawl.
     """
-    allowed_accounts = {str(a) for a in accounts}
     out: list[tuple[Field, str]] = []
     for field in list(mode.fields) + (list(FILE_FIELDS) if with_files else []):
-        if field.control != 'select' or not field.options:
+        if field.control != 'select' or not field.options or field.key == 'account':
             continue
         raw = params.get(field.key)
         if raw is None:
             continue
         value = str(raw).strip()
         offered = {stored for stored, _label in field.options}
-        if field.key == 'account':
-            offered |= allowed_accounts
         if not value or value in offered:
             continue
         out.append((field, value))

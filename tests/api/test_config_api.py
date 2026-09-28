@@ -120,24 +120,48 @@ class TestCapabilitiesEndpoint:
         assert client.post('/api/capabilities', json={}).status_code == 405
 
     def test_saved_accounts_join_the_fields_options_at_send_time(self, client):
-        """账号's real options are per-machine: the matrix declares only the default,
-        and the payload adds whatever cookie files exist NOW. The panel therefore lists
-        exactly what can be chosen — and a name saved after the page loaded simply
-        appears on the next pull, with no browser code of its own."""
+        """账号's real options are per-machine: the matrix declares the shape, and the
+        payload lists whatever cookie files exist NOW, oldest login first. The panel
+        therefore lists exactly what can be chosen — and the account a NEW node starts
+        on is the first one this machine holds, not "not chosen"."""
         saved = client.post(
             '/api/cookies/save', json={'platform': 'zhihu', 'cookies': [{'name': 'a', 'value': 'v'}], 'account': 'work'}
         )
         assert saved.get_json()['ok'] is True, saved.get_json()
-        body = client.get('/api/capabilities').get_json()
-        zhihu = next(p for p in body['platforms'] if p['platform'] == 'zhihu')
-        posts = next(m for m in zhihu['modes'] if m['key'] == 'posts')
-        account_field = next(f for f in posts['fields'] if f['key'] == 'account')
-        assert [o['value'] for o in account_field['options']] == ['', 'work'], account_field
+
+        def _field():
+            body = client.get('/api/capabilities').get_json()
+            zhihu = next(p for p in body['platforms'] if p['platform'] == 'zhihu')
+            posts = next(m for m in zhihu['modes'] if m['key'] == 'posts')
+            return next(f for f in posts['fields'] if f['key'] == 'account')
+
+        account_field = _field()
+        assert [o['value'] for o in account_field['options']] == ['work'], account_field
         # the label of a real account IS its name — the catalogue has no word for it,
         # and I18n.t answers an unknown key verbatim, which is the intent.
-        assert account_field['options'][1]['labelKey'] == 'work'
+        assert account_field['options'][0]['labelKey'] == 'work'
+        # A node added to this canvas logs in as the only login there is. Leaving the
+        # default '' meant "the 默认账号 file", which on this machine does not exist —
+        # the crawl would then hit a wall and hand back an empty table.
+        assert account_field['default'] == 'work', account_field
+        # 默认账号 is itself an account, with a file of its own: it joins the list the
+        # moment that file exists. WHICH of the two is listed first is creation order —
+        # measured in ``test_cookie_manager.py``, where the stamps can be set; two saves
+        # inside one second here would make the order a coin toss, so this pins the
+        # invariant instead: both are offered, the blank one by its catalogue word.
+        assert (
+            client.post(
+                '/api/cookies/save', json={'platform': 'zhihu', 'cookies': [{'name': 'a', 'value': 'v'}]}
+            ).get_json()['ok']
+            is True
+        )
+        account_field = _field()
+        listed = [o['value'] for o in account_field['options']]
+        assert sorted(listed) == ['', 'work'], account_field
+        assert next(o for o in account_field['options'] if o['value'] == '')['labelKey'] == 'cookies.accountDefault'
+        assert account_field['default'] == listed[0], 'a new node starts on the FIRST login listed'
         # anonymous forms carry no account field at all, and the static matrix did not move
-        weibo = next(p for p in body['platforms'] if p['platform'] == 'weibo')
+        weibo = next(p for p in client.get('/api/capabilities').get_json()['platforms'] if p['platform'] == 'weibo')
         hot = next(m for m in weibo['modes'] if m['key'] == 'hot')
         assert 'account' not in [f['key'] for f in hot['fields']], hot['fields']
 

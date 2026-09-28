@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 from run_wait import run_finished
 
-pytestmark = [pytest.mark.api, pytest.mark.serial]
+pytestmark = [pytest.mark.api, pytest.mark.serial, pytest.mark.usefixtures('seeded_logins')]
 
 RECORDS = [
     {'标题': '三亚湾日落', '城市': 'Sanya', '分数': 3, '正文': '三亚的海滩很美 三亚湾日落真棒'},

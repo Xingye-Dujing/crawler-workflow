@@ -3,11 +3,13 @@
 import logging
 from collections import defaultdict, deque
 
+import cookie_preflight
+
 import crawl_capabilities as capabilities
 from config import Config
 from i18n import t
 from services.cookie_manager import CookieManager
-from utils.helpers import as_bool, platform_for
+from utils.helpers import as_bool, platform_for, split_urls
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +98,41 @@ def node_label(node: dict, nid: str) -> str:
     if title and title != nid:
         return f'{title} #{nid}'
     return nid
+
+
+def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
+    """Refuse a node whose account holds no login — named, never guessed around.
+
+    The 账号 field is not a choice from a fixed list, so :func:`
+    capabilities.unoffered_selections` cannot judge it: it names a *session*, and the
+    question is whether this machine can produce that session right now. Answered by
+    :func:`cookie_preflight.has_session_to_test`, the same question the pre-run probe
+    asks, because two definitions of "is a login here" is how a valid session gets
+    called missing on one side and a dead one accepted on the other.
+
+    A blank means the **default account** — an account with a real file of its own, not
+    a wildcard. Falling back to "whichever login exists" would hand this node somebody
+    else's session (and their rate limit, and their risk profile), while crawling on
+    with no login at all returns a wall read as an empty table: the run looks done and
+    collected nothing. Both are refused by name instead.
+
+    ``platforms`` is every platform the node will visit, because a comment node crawls
+    several feeds with the single account on its form.
+    """
+    account = str(params.get('account') or '').strip()
+    manager = CookieManager(Config.COOKIE_DIR)
+    out = []
+    for platform in dict.fromkeys(str(p or '').strip() for p in platforms if str(p or '').strip()):
+        if not cookie_preflight.has_session_to_test(platform, account=account):
+            out.append(
+                t(
+                    'engine.source_no_cookie_account',
+                    nid=label,
+                    platform=platform,
+                    account=manager.label_of(account),
+                )
+            )
+    return out
 
 
 class WorkflowEngine:
@@ -312,13 +349,14 @@ class WorkflowEngine:
             errors.append(t('engine.source_feed_no_input', nid=label))
         for field in capabilities.required_missing(mode, params, fed_keys=fed):
             errors.append(t('engine.source_missing', nid=label, field=t(field.name_key)))
-        # The 账号 options are whatever this machine has a saved file for RIGHT NOW —
-        # the same list the panel was offered from. A stored name with no file is
-        # refused by name (it says "crawl as a login that is not here"); guessing the
-        # default instead would hand one node another account's session.
-        accounts = CookieManager(Config.COOKIE_DIR).accounts_in_order(str(platform))
-        for field, value in capabilities.unoffered_selections(mode, params, accounts=accounts):
+        for field, value in capabilities.unoffered_selections(mode, params):
             errors.append(t('engine.source_bad_option', nid=label, field=t(field.name_key), value=value))
+        # A session crawl is refused here when the account its node names holds no login.
+        # Anonymous modes (weibo's 热搜 board, a WeChat article body) declare
+        # ``needs_session=False`` and are not asked — refusing them would be the same bug
+        # that once stopped WeChat crawling entirely.
+        if mode.needs_session:
+            errors.extend(_account_session_errors([platform], params, label))
         for field in capabilities.link_fields(mode):
             if field.key in fed:
                 # The fed column's content is the parent's — unknown at design time, so
@@ -374,6 +412,14 @@ class WorkflowEngine:
                 errors.append(t('engine.upload_no_file', nid=label))
             if ntype == 'comment' and not str(params.get('urls') or '').strip():
                 errors.append(t('engine.comment_no_urls', nid=label))
+            elif ntype == 'comment':
+                # A comment crawl is always a logged-in one (its rate limit is per ACCOUNT,
+                # which is the reason accounts exist), and one node walks several feeds with
+                # the single account on its form — so every platform those links name has to
+                # be able to answer for it. Unknown until the links are read, so this is the
+                # node's own text only: nothing is inferred about an upstream table.
+                links = split_urls(str(params.get('urls') or ''))
+                errors.extend(_account_session_errors([platform_for(u) for u in links], params, label))
             # The canvas writes ``operation`` on the node *and* in its params, and
             # every executor reads either. Validation has to accept the same pair,
             # or a hand-edited file that would run perfectly is refused as
