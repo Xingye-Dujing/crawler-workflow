@@ -75,6 +75,29 @@ class PlantDriver:
         pass
 
 
+class ColdLaunchPlant(PlantDriver):
+    """A cold browser whose first ``get`` never commits: it stays parked and throws.
+
+    Models the measured ``spins forever until I press Enter`` launch. The first
+    navigation leaves ``current_url`` on ``chrome://new-tab-page`` and raises the driver's
+    renderer timeout; the re-drive :meth:`_drive_off_internal_page` now issues commits the
+    host on the second ``get``, so a page whose origin can accept the cookies is on screen.
+    """
+
+    def __init__(self, park_first=1):
+        super().__init__(start='chrome://new-tab-page/')
+        self.park_first = park_first  # this many ``get``s park; every later one commits
+
+    def get(self, url):
+        # The navigation that never commits: the tab stays where it was and the renderer
+        # times out — the same shape that used to make ``_plant`` write into a chrome://
+        # document whose origin matches nothing. ``super().get`` records the committed one.
+        if len(self.visited) < self.park_first:
+            self.visited.append(url)
+            raise RuntimeError('Timed out receiving message from renderer: -0.001')
+        super().get(url)
+
+
 class Probe(Crawler):
     """A concrete platform with no behaviour of its own.
 
@@ -213,6 +236,27 @@ class TestCookiePlanting:
         crawler = bare(driver, cookie_path=write_cookies([PARENT_COOKIE, SIBLING_COOKIE]))
         crawler._load_cookies()
         assert 'sid' in driver.planted
+
+
+class TestColdLaunchCookiePlant:
+    """The session-carrying first navigation is now covered by the same re-drive ``open`` uses.
+
+    A cold throwaway/fresh-profile launch can leave the browser's *very first* ``get``
+    parked on ``chrome://new-tab-page`` (never commits, throws the renderer timeout). When
+    that first ``get`` is ``_load_cookies`` reaching the host, the old code planted onto the
+    new-tab page — its origin matches nothing, so every ``add_cookie`` raised, ``applied``
+    was 0, and the crawl started ANONYMOUS into a login wall: the same root cause as the
+    false-风控 search, one layer earlier and on the navigation that carries the session.
+    """
+
+    def test_a_first_navigation_that_parks_is_redriven_so_the_cookies_land(self, write_cookies, monkeypatch):
+        monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
+        driver = ColdLaunchPlant()
+        crawler = bare(driver, cookie_path=write_cookies([PARENT_COOKIE]), cookie_domains=())
+        crawler._load_cookies()
+        assert driver.planted == ['sid'], 'the cookies must land on the host, not be offered to the parked tab'
+        assert crawler.cookies_loaded == 1, 'a re-drive that committed is not a failed seed'
+        assert len(driver.visited) == Crawler.NAV_RETRY + 1, 'exactly the bound of re-drives, no more'
 
 
 class TestNavigation:
@@ -496,10 +540,12 @@ class TestAWallMustSurviveBeingJudged:
 #: stale entry once a site has been moved onto ``open``.
 BARE_NAVIGATIONS = {
     'backend/app.py': 2,
-    # ``open`` itself, cookie planting, and the template warmer — the last one enters
-    # ``about:blank``, which is not a site: there is no slow renderer to outwait, no first-run
-    # dialog to dismiss and no page whose arrival the crawl would have to account for.
-    'backend/crawlers/base.py': 3,
+    # ``_navigate`` (the one driver call ``open`` and the cookie planter share) and the
+    # template warmer — the last one enters ``about:blank`` ON PURPOSE: that internal page
+    # is the goal, not a failed navigation, so it must never be re-driven off itself, and
+    # there is no slow renderer to outwait, no first-run dialog to dismiss, no arrival to
+    # account for. Cookie planting moved onto the shared re-drive, so it left this table.
+    'backend/crawlers/base.py': 2,
     'backend/crawlers/comments.py': 7,
     'backend/crawlers/wechat.py': 1,
     'backend/crawlers/zhihu.py': 2,

@@ -156,13 +156,58 @@ class GridDriver:
         pass
 
 
+class RecoverDriver:
+    """A cold-launch browser whose FIRST navigation never commits, then does.
+
+    The measured ``spins forever until I press Enter`` shape, in BOTH its halves: the
+    first ``get`` leaves the window parked on ``chrome://new-tab-page`` AND throws the
+    renderer timeout — the document never swapped in, so nothing reached the site. The
+    second ``get`` — the re-drive :meth:`Crawler.open` now issues — commits the search
+    page without throwing, exactly what a manual Enter does. ``body_text`` after the
+    commit is ordinary grid chrome, not a wall, so the crawl continues rather than
+    latching a false 风控 off a page the browser wrote for itself.
+    """
+
+    def __init__(self, commit_after=1):
+        self.current_url = 'chrome://new-tab-page/'
+        self.visited = []
+        self.commit_after = commit_after
+
+    def get(self, url):
+        self.visited.append(url)
+        # A navigation that never committed keeps the address bar on the previous page
+        # and raises the driver's own renderer timeout — the shape that used to fall
+        # through to ``_plant``/``classify`` as if the site had refused.
+        if len(self.visited) <= self.commit_after:
+            raise TimeoutException(RENDERER_TIMEOUT)
+        self.current_url = url
+
+    def find_element(self, by, selector):
+        if selector == 'body' and not self.current_url.startswith('chrome://'):
+            return _TextElement('笔记 / 最热 / 最新')
+        raise NoSuchElementException(selector)
+
+    def find_elements(self, by, selector):
+        return []
+
+    def execute_script(self, script, *args):
+        for arg in args:
+            text = getattr(arg, 'text', None)
+            if text:
+                return text
+        return ''
+
+    def quit(self):
+        pass
+
+
 @pytest.fixture
 def make_crawler(monkeypatch):
     """Build a real :class:`Xhs` over a fake driver, with every wait instant."""
     monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
 
-    def _make(**driver_attrs):
-        driver = SlowDriver(**driver_attrs)
+    def _make(driver_cls=SlowDriver, **driver_attrs):
+        driver = driver_cls(**driver_attrs)
 
         def fake_create(self, *args, **kwargs):
             self.driver = driver
@@ -252,10 +297,33 @@ class TestRiskControlStopsTheCrawl:
         'ok' there would file an empty grid as a result. The internal page now classifies
         as a refusal the search gate stops on.
         """
-        crawler, _driver = make_crawler(url='chrome://new-tab-page/')
+        crawler, driver = make_crawler(url='chrome://new-tab-page/')
         crawler.search('三亚', target_count=3)
         assert crawler.risk_blocked is True, 'a browser parked on its own page never arrived'
         assert crawler.login_wall is False, 'nothing asked for a login; the user must not be sent to re-save a cookie'
+        # The re-drive is BOUNDED: exactly ``NAV_RETRY`` extra attempts, no more. A loop
+        # that kept driving while parked (``while not arrived``) would pass the two
+        # assertions above just as happily and burn a browser on a dead session forever.
+        assert len(driver.visited) == Crawler.NAV_RETRY + 1, 'the retry must stop at its bound, not spin'
+
+    def test_the_parked_page_is_redriven_before_it_is_called_a_wall(self, make_crawler):
+        """A first navigation that never committed is a launch hiccup, not 风控.
+
+        The user's window: it opened on an empty spinning address bar (browser still on
+        ``chrome://new-tab-page``) and only a manual Enter took it to the page. Reading
+        that parked tab as a refusal filed a keyword that plainly has notes behind a false
+        风控 line. :meth:`Crawler.open` now re-drives the URL while the browser is on its
+        own page, so the committed grid is crawled and no refusal is latched. The commit
+        is placed on the LAST allowed re-drive (``commit_after=NAV_RETRY``) so this cell
+        fails if the bound is ever lowered below what the measurement supports.
+        """
+        crawler, driver = make_crawler(driver_cls=RecoverDriver, commit_after=Crawler.NAV_RETRY)
+        crawler.search('三亚', target_count=3)
+        assert crawler.risk_blocked is False, 'a navigation that committed on the redrive was never refused'
+        assert crawler.login_wall is False, 'nothing asked for a login'
+        assert crawler.navigation_settled is True, 'the re-drive committed, so the page is not "slow" either'
+        assert len(driver.visited) == Crawler.NAV_RETRY + 1, 'exactly the bound of re-drives, no more'
+        assert not driver.current_url.startswith('chrome://'), 'the browser reached the site before being judged'
 
 
 class TestNoteNavigation:

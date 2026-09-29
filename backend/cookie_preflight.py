@@ -245,7 +245,12 @@ def knows(platform: str) -> bool:
 
 
 def _probe_live(platform: str, *, use_profile: bool = None, account: str = '') -> dict:
-    """One bounded page load in the browser the run would have used.
+    """One bounded navigation in the browser the run would have used.
+
+    Normally a single page load; a cold launch whose first navigation never committed
+    is re-driven a bounded few times by :meth:`Crawler.open` before it judges, so a
+    parked ``chrome://`` tab is not cached as a false wall. Whatever does not fit the
+    deadline answers 「无法核对」, which never blocks a run.
 
     Isolated as a function so the whole of ``check`` below — the cache, the deadline,
     the parallelism — is testable without a browser, while the crawler facts still

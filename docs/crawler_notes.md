@@ -762,6 +762,50 @@ this once per row), and only a suspected wall pays the ~1.2 s window. `verdict()
 without the write, and `_record()` the write without the judgement — split because a re-read must be
 possible before the one-way flag exists.
 
+## A navigation that never committed is not a wall either (measured 2026-09-29)
+
+The same false-wall family, one layer earlier. Watching an xiaohongshu window on a cold launch, the
+user reported: the tab opened with an **empty address bar that kept spinning**, and a manual click into
+the address bar + Enter took him straight to the results — but left alone it spun forever. `driver.get`
+had not committed a document; `current_url` stayed on the browser's own `chrome://new-tab-page`, and
+`wall.classify` maps an internal page to `blocked`. So the search gate saw a 风控 that the site never
+issued and filed an empty grid behind a false refusal line — the mirror of the "found nothing" bug, this
+time blaming the site for a launch that did not fire.
+
+`Crawler.open` now re-issues the same `get` while the browser is still on one of its own pages
+(`wall.never_arrived`), up to `Crawler.NAV_RETRY` times, *before* judging anything: that is exactly what
+the manual Enter does. It is bounded and shape-specific — a committed page, a real wall, and the
+browser's own `chrome-error://` document are each judged once, so a session the site genuinely refuses
+is still named after the retries. The transient case gets a second chance; the real refusal keeps its
+word. Pinned by `test_the_parked_page_is_redriven_before_it_is_called_a_wall` (a first `get` parked on
+`chrome://`, a re-drive commits → no `risk_blocked`) and, on the other side, the existing
+`test_a_browser_that_never_left_its_own_page_is_a_named_refusal` (a browser that *stays* parked is still
+named) — the pair is what makes the retry a second chance rather than a wall-eraser.
+
+**The re-drive lives in one helper, `_drive_off_internal_page`, and the session seed uses it too.**
+An audit of the change caught that `_load_cookies` opens each host with a bare `driver.get` — and on a
+cold throwaway/fresh-profile launch that is the *first* navigation, the one that carries the login. A
+parked first `get` there made `_plant` offer every cookie to the `chrome://new-tab-page` document, whose
+origin matches nothing: all `add_cookie` raise, `applied=0`, and the crawl starts **anonymous** into a
+login wall — the same root cause, one layer earlier. It now reaches the host through the same helper, and
+if the browser is *still* parked after the retry it skips that host rather than plant into the void
+(pinned by `test_a_first_navigation_that_parks_is_redriven_so_the_cookies_land`). `NAV_RETRY` is measured
+to **1**, not 2: the user's own fix was a single Enter, and one re-drive keeps the pre-flight probe's
+page loads inside `COOKIE_PREFLIGHT_TIMEOUT` (the budget comments are re-derived from `NAV_RETRY + 1`).
+
+**Two things must NOT be re-driven, and both are guarded by the shape alone.** A *committed* page — even
+a slow one like douyin's `视频页` — is on an `http` address, so `never_arrived` is false and the loop
+breaks before it ever fires; the healthy path pays no extra address-bar read because the retry is gated on
+the navigation not settling *and* the page being internal. And the template warmer `warm_profile_dir`
+navigates to `about:blank` **on purpose** — that internal page is the goal, not a failed navigation — so it
+stays a bare `driver.get`; routing it through the re-drive would spin a deliberate parked tab and then
+classify it as a wall. The count that separates them is pinned by `BARE_NAVIGATIONS` (base.py drops to 2:
+the shared `_navigate`, and the warmer).
+
+A re-drive that fires logs one `crawl.redrive` line (the parked address it is leaving) and stops there; a
+machine whose every cold launch parks-and-recovers is a broken launch the console can now name, rather
+than a silent reload the user watches with no explanation.
+
 ## Cookie capture vs crawling
 
 `CookieManager.PLATFORMS` (8) is who the panel can log in; `crawlers.is_crawlable()` (8: zhihu, weibo,

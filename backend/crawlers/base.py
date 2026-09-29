@@ -18,7 +18,7 @@ from i18n import t
 from settings_store import get_setting
 
 from .engine import feed, popup
-from .engine.wall import bounced_to_root, classify, error_token, unreachable_page
+from .engine.wall import bounced_to_root, classify, error_token, never_arrived, unreachable_page
 
 logger = logging.getLogger(__name__)
 
@@ -190,11 +190,29 @@ class Crawler(ABC):
     WALL_PROOFS = 5
     WALL_POLL = 0.3
 
-    #: Whether the most recent :meth:`open` saw its navigation finish inside the
+    #: Extra times to re-drive a navigation the browser never committed. Measured on a
+    #: cold launch, the very first :meth:`open` can leave the window spinning with an
+    #: empty address bar and ``current_url`` still ``chrome://new-tab-page`` — no
+    #: document swapped in (the user watched one spin forever until he clicked into the
+    #: address bar and pressed Enter, and the ONE Enter took it to the page). Both
+    #: :func:`classify` (reads that parked page as ``blocked``) and :meth:`_plant`
+    #: (offers cookies to a document whose origin matches nothing) act on a navigation
+    #: that did not happen. Re-issuing the same ``get`` is what that Enter does, and one
+    #: re-drive is what the measurement supports; bound it (a wall would be unbounded
+    #: loss) and gate it on the shape alone, so a session the site genuinely refuses is
+    #: still named after the retry. It also bounds the pre-flight probe's page loads,
+    #: which :data:`Config.COOKIE_PREFLIGHT_TIMEOUT` is sized against.
+    NAV_RETRY = 1
+    NAV_SETTLE = 0.4
+
+    #: Whether the *last* navigation of the most recent :meth:`open` finished inside the
     #: page-load timeout. Measured, and confirmed by the user watching the window: a
     #: slow connection leaves a douyin 视频页 unfinished, and a refusal that then says
-    #: "blocked or a broken page" blames the site for the machine's network. Read this
-    #: only where nothing navigates in between; a caller that may (``check_login_wall``
+    #: "blocked or a broken page" blames the site for the machine's network. ``open`` may
+    #: hold more than one navigation when a first one parked (see :attr:`NAV_RETRY`); the
+    #: flag keeps the final one, which is the page the caller then polls — a re-drive that
+    #: committed is not "slow," and douyin's ``noCardsSlow`` must read the settled page.
+    #: Read this only where nothing navigates in between; a caller that may (``check_login_wall``
     #: does) takes ``open``'s return value instead.
     navigation_settled = True
 
@@ -561,20 +579,73 @@ class Crawler(ABC):
         a crawler that reached for a bare ``driver.get`` to dodge the verdict would
         lose the settled-flag and the dialog dismissal with it, and would not be
         re-united with this one by anything in the test suite.
+
+        The URL is re-driven while the browser is still on one of *its own* pages
+        (see :attr:`NAV_RETRY` and :meth:`_drive_off_internal_page`): a first navigation
+        that never committed is not the site's answer, and judging a wall off a parked
+        ``chrome://`` page files a false 风控. That is the one refusal the retry is for —
+        a committed page, a real wall, and the browser's own error document are each
+        answered once.
         """
-        timed_out = False
         self.requests.append(str(url))
-        try:
-            self.driver.get(url)
-        except Exception as e:
-            timed_out = True
-            logger.debug('navigation did not settle for %s: %s', url, e)
-        self.navigation_settled = not timed_out
+        settled = self._drive_off_internal_page(url, self._navigate(url))
         if self.prompts:
             self._dismiss_prompts()
         if judge:
             self._judge_arrival(url)
-        return not timed_out
+        return settled
+
+    def _drive_off_internal_page(self, url: str, settled: bool) -> bool:
+        """Re-issue ``get`` while the browser is parked on one of ITS OWN pages.
+
+        A navigation that never committed leaves the tab on ``chrome://new-tab-page`` —
+        empty address bar, spinning — and neither :func:`wall.classify` nor :meth:`_plant`
+        can act on it: one names a refusal the site never issued, the other writes cookies
+        into a document whose origin matches nothing. Both the crawl entry (:meth:`open`)
+        and the session seed (:meth:`_load_cookies`) reach the page through here, so the
+        two never disagree about whether the browser actually got there.
+
+        Gated on the shape alone: it fires only when the navigation did **not** settle
+        *and* the address bar is an internal page. A healthy load therefore pays no extra
+        address-bar read, and a committed page, a real wall and the browser's own error
+        document are each answered once. Bounded by :attr:`NAV_RETRY` — a session the site
+        genuinely refuses stays parked on every attempt and is still named after this
+        returns. Returns the last navigation's settled-flag.
+        """
+        for _ in range(self.NAV_RETRY):
+            if settled or not self._parked_on_internal_page():
+                break
+            logger.info(t('crawl.redrive', platform=self.domain, where=self._current_url()))
+            time.sleep(self.NAV_SETTLE)
+            settled = self._navigate(url)
+        return settled
+
+    def _navigate(self, url: str) -> bool:
+        """One ``driver.get``, surviving the timeout a still-building document throws.
+
+        A timeout is not fatal — the page keeps loading and the caller's own poll
+        decides readiness — but it is recorded on :attr:`navigation_settled` and
+        returned, so a caller can tell a slow renderer from a refusal. A navigation that
+        did not settle is what :meth:`_drive_off_internal_page` inspects for a parked tab.
+        """
+        try:
+            self.driver.get(url)
+        except Exception as e:
+            self.navigation_settled = False
+            logger.debug('navigation did not settle for %s: %s', url, e)
+            return False
+        self.navigation_settled = True
+        return True
+
+    def _parked_on_internal_page(self) -> bool:
+        """True when the browser still shows one of ITS OWN pages after a navigation.
+
+        ``current_url`` on ``chrome://new-tab-page`` means no document committed and
+        the site was never reached, so any wall read from here would be an artifact of
+        a navigation that did not happen. A driver that cannot answer is treated as
+        arrived: there is nothing to re-drive blind.
+        """
+        return never_arrived(self._current_url())
 
     def _judge_arrival(self, request_url: str = '') -> str:
         """Classify the page this navigation landed on, believing only a lasting refusal.
@@ -672,12 +743,20 @@ class Crawler(ABC):
         for host in [h for h in hosts if h]:
             if not outstanding:
                 break
-            try:
-                self.driver.get(f'https://{host}')
-            except Exception as e:
-                # A slow / blocked landing page must not kill the session before
-                # the crawl even starts — the next host may still take cookies.
-                logger.warning(t('crawl.cookies_failed', platform=host, err=e))
+            host_url = f'https://{host}'
+            # Re-drive a navigation that never committed (see :attr:`NAV_RETRY`): this is
+            # the session-carrying first ``get`` of a cold throwaway/fresh-profile launch,
+            # and planting onto the browser's OWN page would offer every cookie to a
+            # document whose origin matches nothing — the whole list rejects, ``applied=0``,
+            # and the crawl then starts anonymous into a login wall. It reaches the page
+            # through the same helper :meth:`open` uses, so the two never disagree.
+            self._drive_off_internal_page(host_url, self._navigate(host_url))
+            if self._parked_on_internal_page():
+                # Still on ``chrome://`` after the re-drive: this host was never reached,
+                # so no document here can accept the cookies. A slow / blocked landing page
+                # must not kill the session before the crawl starts — the next host may
+                # still take them.
+                logger.warning(t('crawl.cookies_failed', platform=host, err='navigation did not commit'))
                 continue
             applied, rejected = self._plant(outstanding)
             self.cookies_loaded = max(self.cookies_loaded, applied)

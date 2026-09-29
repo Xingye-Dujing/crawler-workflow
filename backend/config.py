@@ -137,10 +137,12 @@ class Config:
     PLATFORM_GATE_TIMEOUT = 900
 
     #: The outer bound on the pre-run cookie check (``cookie_preflight``) — the wait a
-    #: user pays for pressing 执行. Each platform's probe is one page load, and the
+    #: user pays for pressing 执行. Each platform's probe is normally one page load, but
+    #: a cold launch that never commits its first navigation re-drives it up to
+    #: ``Crawler.NAV_RETRY`` extra times before judging (see ``crawler_rules.md``); the
     #: driver's own ceiling (the ``page_load_timeout`` setting, 40 s by default) applies
-    #: *inside* this one, so it is deliberately a little above it: a platform that
-    #: overruns answers 「无法核对」 instead of holding the whole run.
+    #: *inside* this one. A probe whose loads cannot all fit answers 「无法核对」 — which
+    #: never blocks a run — rather than caching a verdict off a page that was never shown.
     COOKIE_PREFLIGHT_TIMEOUT = 45
 
     #: How many probe browsers may be open at once. Capped rather than one-per-platform

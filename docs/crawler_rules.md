@@ -45,7 +45,17 @@
   per-row page navigates away, harvest the list before leaving it. `Crawler.open(url)` is the only navigation entry
   point: it survives a renderer timeout and **records whether the navigation settled** — a load that never finished
   is a slow network, not a refusal, and a refusal may name only what the code can see. It clears the dialog, and
-  latches a wall only once it is still there after re-reading.
+  latches a wall only once it is still there after re-reading. **A navigation that never committed is re-driven, not
+  refused:** after a cold launch the very first `get` can leave the tab parked on its own `chrome://new-tab-page`
+  (empty address bar, spinning forever until a manual Enter), and `wall.classify` reads that internal page as
+  `blocked` — filing a keyword that plainly has results behind a false 风控; the same parked page makes
+  `_load_cookies` plant every cookie into a document whose origin matches nothing, so the session itself rides on a
+  launch that did not fire. `Crawler._drive_off_internal_page` re-issues the `get` while the browser is on one of its
+  own pages (`never_arrived`) and is shared by `open` *and* `_load_cookies` so the two never disagree about whether
+  the site was actually reached. `NAV_RETRY` is measured to 1 (the user's fix was one Enter, and it keeps the probe's
+  page loads inside `COOKIE_PREFLIGHT_TIMEOUT`). It fires on that shape only — a committed page, a real wall and the
+  browser's own `chrome-error://` are each answered once — and a *deliberate* internal navigation stays outside it:
+  the template warmer enters `about:blank` on purpose, so it is a bare `driver.get`, never re-driven off itself.
 - **A slow network is not a refusal, and only a refusal may be named one.** One page's *first content* gets
   `Config.PAGE_WAIT_TIMEOUT` via `Crawler.wait_for_first_content` — stop-aware, out early on evidence, refused once
   this browser has watched two expire; "any new rows?" keeps its short budget, because stretching a progress

@@ -1612,6 +1612,8 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
                 .map((m) => m.textContent),
             renameWord: I18n.t('cookies.renameOne'),
             deleteWord: I18n.t('cookies.deleteOne'),
+            deleteProfileWord: I18n.t('cookies.deleteProfileOne'),
+            profileRefuseWord: I18n.t('cookies.profileDeleteDefaultRefused'),
             defaultAccountWord: I18n.t('cookies.accountDefault'),
         };
         """,
@@ -1623,13 +1625,27 @@ def test_the_saved_login_dock_names_each_row_and_keeps_the_box(app_url, driver):
     # Each row names its own login; the default one is spoken as a word, a typed one verbatim.
     assert report['defaultAccount'] == report['defaultAccountWord'], report
     assert report['workAccount'] == 'work', report
-    # Rename + delete, in that order, and the default row's rename is visibly refused (disabled
-    # with a reason) rather than offered as a control that cannot do the thing (user: 「哪有同一个
-    # 东西不同规范的」 — 默认账号 owns no directory to move).
-    assert [o['label'] for o in report['workOps']] == [report['renameWord'], report['deleteWord']], report
+    # Rename + delete + 「删除 Profile」, in that order, for a row that HAS a profile directory.
+    # Both the rename and the profile-delete are visibly refused on the default row (disabled with
+    # a reason) rather than offered as a control that cannot do the thing (user: 「哪有同一个东西不同
+    # 规范的」 — 默认账号 owns no folder to move, and its browser data is the platform root that nests
+    # every named account, so a delete there would over-reach). A named account gets all three live.
+    assert [o['label'] for o in report['workOps']] == [
+        report['renameWord'],
+        report['deleteWord'],
+        report['deleteProfileWord'],
+    ], report
     assert report['workOps'][0]['disabled'] is False, report
-    assert [o['label'] for o in report['defaultOps']] == [report['renameWord'], report['deleteWord']], report
+    assert report['workOps'][2]['disabled'] is False, report
+    assert [o['label'] for o in report['defaultOps']] == [
+        report['renameWord'],
+        report['deleteWord'],
+        report['deleteProfileWord'],
+    ], report
     assert report['defaultOps'][0]['disabled'] is True and report['defaultOps'][0]['title'], report['defaultOps']
+    assert (
+        report['defaultOps'][2]['disabled'] is True and report['defaultOps'][2]['title'] == report['profileRefuseWord']
+    ), report['defaultOps']
     assert report['openButtons'] == 0, f'the 「打开」 button came back: {report}'
     assert report['stateCells'] == 0, f'a profile-state cell came back: {report}'
     assert not any(('profile' in m.lower() or '关窗口' in m or '失效' in m) for m in report['meta']), report
@@ -1783,6 +1799,7 @@ def test_switching_language_restamps_the_badge_and_the_saved_login_dock(app_url,
                 expectPlatform: I18n.t('platform.zhihu'),
                 expectRename: I18n.t('cookies.renameOne'),
                 expectDelete: I18n.t('cookies.deleteOne'),
+                expectDeleteProfile: I18n.t('cookies.deleteProfileOne'),
             };
         };
         const zh = measure();
@@ -1807,7 +1824,9 @@ def test_switching_language_restamps_the_badge_and_the_saved_login_dock(app_url,
     # Same for the dock — its whole table is JS-built from keys.
     assert en['dockPlatform'] == en['expectPlatform'], f'the dock platform word kept the old language: {en}'
     assert en['dockPlatform'] != zh['dockPlatform'], en
-    assert en['dockButtons'] == [en['expectRename'], en['expectDelete']], f'the row buttons kept the old language: {en}'
+    assert en['dockButtons'] == [en['expectRename'], en['expectDelete'], en['expectDeleteProfile']], (
+        f'the row buttons kept the old language: {en}'
+    )
     assert en['dockButtons'] != zh['dockButtons'], en
 
 

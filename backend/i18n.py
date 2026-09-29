@@ -146,6 +146,7 @@ _ZH = {
         '请在执行设置中关闭无头模式，或稍后重试；已采集的数据不受影响'
     ),
     'crawl.cookiesSeeded': 'Cookie 预置：{host} 接受 {n}/{total} 条',
+    'crawl.redrive': '页面没落到站点（停在 {where}），重发一次导航',
     # Observation only — never a claim about what the crawl then did. This line is
     # written by ``check_login_wall``, which cannot know the caller's policy: weibo
     # and zhihu stop, while WeChat's batch skips that one article and carries on to
@@ -1072,6 +1073,7 @@ _EN = {
         'turn off headless mode in the run settings, or retry later; collected data is safe'
     ),
     'crawl.cookiesSeeded': 'Cookies seeded: {host} accepted {n}/{total}',
+    'crawl.redrive': 'page did not reach the site (parked on {where}), re-driving once',
     'crawl.loginWall': 'Login wall: {platform} redirected {where} to a login page',
     'crawl.riskBlocked': 'Risk control: {platform} answered {where} with a security check instead of content',
     # Neither of the two above: the browser wrote this page itself, so the site never saw
