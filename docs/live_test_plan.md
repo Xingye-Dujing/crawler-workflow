@@ -586,8 +586,13 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
         `SpaceDriver` 重写为换屏模型 + `test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end`（退回即红）。
       * **排行榜 `target>100` 补 `crawl.bili.rankingCapped`**（§7「无 cap 行=修复项」）。
       * 闸门：快层 **4696 passed / 0 skipped**、设备层 `-m integration` **131 passed / 0 skipped**、ruff 两项干净。
-      * **未做（需你与浏览器在场）**：`tests/live_site/test_live_bilibili_workflow.py` 运行级矩阵（抄知乎 §4 模板）
-        + §10 真机八步 + H 组用户画布 `测试：哔哩哔哩.json` 终验。
+      * **运行级矩阵已离线落地**：`tests/live_site/test_live_bilibili_workflow.py` 13 格（A1/A2/A3/A5 posts、
+        B1/B2 author、C1/C2 hot、D1/D2 comments、E1/E2 停止续跑、G1 并行、H1 用户画布），抄抖音那份共享件
+        （`live_run_driver`/`live_acceptance`/`live_run_harness`，零 skip），标记 `[live_site, live_cn, enable_socket, serial]`。
+        **B1 直接是真机验 U53 的那一格**：向投稿过百的 37974444 问 50，`>40` 才算走穿了 `下一页`（退回滚动即红）。
+        离线验证到此为止——全树 collect 干净（4696/4979，283 条真机层被 deselect），快层 4696 passed / 0 skipped。
+      * **未做（需你与浏览器在场）**：`-m "live_site and live_cn"` 真机跑这 13 格 + §10 逐例读控制台归因
+        + H 组 `测试：哔哩哔哩.json` 终验。**绝不无人值守跑**（花账号，B站 `parallel_recommended` 可开真并行）。
 - [ ] 小红书 → 微信（同一套八步）
 - [ ] VPN 阶段：X → YouTube（先测反向用例：不可达必须报 `unreachable`，不许假空）
 - [ ] 全平台门过 → §6 剩余嫌疑（U1 通用 under-target、U2 walk 计数器从不打印等）收口提交
