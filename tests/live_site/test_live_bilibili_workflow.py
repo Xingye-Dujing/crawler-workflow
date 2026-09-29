@@ -526,6 +526,14 @@ def test_d1_the_reply_cursor_walks_the_thread_and_every_row_is_real(client, app_
     counter (a replaying cursor would store the same 19 rows forever; §6's silent-under-collect family). The
     walk stops on ``is_end`` or a page with no new rpid. What this cell proves is the *reporting*: 楼层 runs
     across the whole thread (not restarts per page), 评论ID is unique, and every row carries content.
+
+    The ask is 40, but the **count is the site's to give, not the test's to choose** (AGENTS: live numbers are
+    read off the site, never hardcoded — this cell used to demand ``>= 40`` outright and red a honest crawl on
+    a throttled day, which the U54 measurements say happens on a worn profile). So: reaching the ask is FULL;
+    falling short is accepted ONLY when the walk *names* the throttle (``comment.biliShort`` /
+    ``comment.status.blocked`` / ``comment.biliBadAnswer``). A short that names nothing is a SILENT_SHORT and
+    stays red — that is exactly the silent under-collect this tier exists to catch, so the relaxation is one
+    direction only.
     """
     harness.real_jar(monkeypatch, app_module)
     limit = 40
@@ -540,11 +548,15 @@ def test_d1_the_reply_cursor_walks_the_thread_and_every_row_is_real(client, app_
     ) as run:
         run.wait()
         rows = run.preview('node-1')
+        assert rows, f'the reply cursor walked zero pages: {run.rec.lines[-8:]!r}'
+        _assert_comment_rows(rows, minimum=len(rows))
+        assert {str(row.get('文章URL') or '').rstrip('/') for row in rows} == {COMMENT_URL.rstrip('/')}, rows[:2]
         answer = run.verdict(rows=len(rows))
-        assert len(rows) >= limit, f'a heavily-commented video must supply the capped ask of {limit}: {len(rows)}'
-        _assert_comment_rows(rows, minimum=limit)
-        assert {str(row.get('文章URL') or '') for row in rows} == {COMMENT_URL, COMMENT_URL.rstrip('/')}, rows[:2]
-        run.finish(answer=answer, rows=len(rows))
+        assert answer['verdict'] in (harness.FULL, harness.NAMED_SHORT), (
+            f'kept {len(rows)} of {limit} with neither a full walk nor a named throttle '
+            f'(a silent short): {answer} {run.rec.lines[-8:]!r}'
+        )
+        run.finish(answer=answer, rows=len(rows), warn=answer['verdict'] != harness.FULL)
 
 
 def test_d2_a_link_that_refused_is_named_per_link(client, app_module, monkeypatch):
