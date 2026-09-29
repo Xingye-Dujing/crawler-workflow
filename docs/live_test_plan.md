@@ -810,3 +810,19 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
 - [ ] 微博 → 抖音 → B站 → 小红书 → 微信（每平台同流程）
 - [ ] VPN 阶段：X → YouTube（含为两者补建验收工作流文件）
 - [ ] 全部门过 → 收尾提交
+
+## #7 supervised live 运行手册（须用户在场、逐格、绝不无人值守）
+
+U1 现状：许可侧已接（douyin、zhihu-search + zhihu.hot、weibo.hot、youtube.search-drained、bilibili.hot），
+**判欠采一格未触发**——滚动/游标的「没再增长」与「正常续跑重放」同形，误判会毁正常断点续跑。要安全上判据，
+须先真机为每平台拿到一个**正向「确实没采完」信号**（不是「滚不动了」这种自述）：
+
+- **douyin 作者**：主页 作品数 vs 实采数 差额可否作正向「未完」（`published>collected` 且无结束标记 → 可判未完）；`_list_says_end` 之外的标记。
+- **zhihu 搜索 / xiaohongshu / twitter / bilibili 搜索·作者**：找各站自己的「没有更多/到底」DOM 文案（像 douyin「暂时没有更多了」）；测到才上 `UNDER_TARGET`，测不到就长期许可/None。
+- **weibo 搜索**：`reason=='end'` 是循环兜底、非站点事实（页超时/熔断也走到它）——须区分「所有小时窗真扫完」vs「某窗读页失败提前收」，仅前者可判「到底」。
+- 每格跑法（国内网、本人在场、一遇风控即停、不连跑）：
+  `.venv/Scripts/python.exe -m pytest -q -m "live_site and live_cn" tests/live_site/test_live_<平台>_workflow.py -k "h1" -p no:cacheprovider`
+  先跑旗舰 h1（他 `data/workflows/测试：<平台>.json`，逐组件审计 + 数量核对），再补矩阵各模式。
+- 判据接入前提：某平台拿到正向信号后，在其 handler 对「短 + 无许可 + 正向未完」emit `UNDER_TARGET`，并同步：
+  live 白名单把 `run.underTargetShort` 认作具名短收（非 SILENT）、加「续跑重放不触发判据」回归测（即修游标不前进那条）。
+- #7 完成判据（不可无人值守、用户在场再勾）：每 CN 平台旗舰 + 矩阵全绿、数量达标、控制台无 SILENT_SHORT。X/YouTube 走 VPN 阶段另开。
