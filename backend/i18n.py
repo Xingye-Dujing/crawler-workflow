@@ -674,7 +674,7 @@ _ZH = {
     'crawl.yt.drained': '[YouTube] 接口不再给出下一页游标，列表已到末尾',
     'crawl.yt.replay': '[YouTube] 第 {page} 轮没有新增，判定列表已耗尽',
     'crawl.yt.noResults': '[YouTube] 关键词「{kw}」没有匹配的公开视频（或本次会话被限制）',
-    'crawl.yt.finished': '[YouTube] 本次共采集 {n} 条',
+    'crawl.yt.finished': '[YouTube] 本次共采集 {n} 条（目标 {total} 条）',
     # X（推特）只渲染一个虚拟列表：卡片数不增长而推文一直换血，所以它的日志说
     # 「留住了多少」，不说「页面上有几张卡」。
     'crawl.x.start': '[X] 关键词「{kw}」，目标 {n} 条（最新优先）',
@@ -1628,7 +1628,7 @@ _EN = {
     'crawl.yt.drained': '[YouTube] the API stopped handing out a cursor, the list is exhausted',
     'crawl.yt.replay': '[YouTube] round {page} added nothing new, list treated as exhausted',
     'crawl.yt.noResults': '[YouTube] no public video matches "{kw}" (or this session is throttled)',
-    'crawl.yt.finished': '[YouTube] collected {n} rows in this run',
+    'crawl.yt.finished': '[YouTube] collected {n} rows (target {total})',
     # X renders a virtualized timeline: the card count never grows while tweets
     # stream through it, so its log lines speak of rows kept, not cards on screen.
     'crawl.x.start': '[X] keyword "{kw}", target {n} posts (latest first)',

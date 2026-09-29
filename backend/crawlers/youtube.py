@@ -371,7 +371,7 @@ class YouTubeCrawler(Crawler):
                 break
         if not self.collected():
             self._explain_zero(keyword)
-        logger.info(t('crawl.yt.finished', n=self.collected()))
+        logger.info(t('crawl.yt.finished', n=self.collected(), total=target_count))
         return self.results()
 
     def author(self, author: str, target_count: int = 50, with_facts: bool = True, **kwargs) -> list[dict]:
@@ -435,7 +435,14 @@ class YouTubeCrawler(Crawler):
                 break
             token = page_token(payload)
             self._polite()
-        logger.info(t('crawl.yt.finished', n=self.collected()))
+        # Author mode's only short stop is the channel's continuation running out
+        # (the loop breaks on `not token`), which §6 U14 said was invisible: a full
+        # crawl and one that hit the end of the uploads both printed just `finished n`.
+        # Naming it means a thin author table reads as "this channel has no more",
+        # not as a silently-truncated crawl. (The target on `finished` is the other half.)
+        if self.collected() < target_count:
+            logger.info(t('crawl.yt.drained'))
+        logger.info(t('crawl.yt.finished', n=self.collected(), total=target_count))
         return self.results()
 
     def get_detail(self, url: str) -> dict | None:

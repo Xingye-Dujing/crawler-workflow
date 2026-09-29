@@ -157,7 +157,7 @@
 | U11 | `weibo.py:480-513`（WB5，**已修**） | 「每窗 9 s 预算不够」这个前提**今天没复现**：实测三种 URL 都是 `driver.get` 0.42-0.85 s 返回、首卡 0.42-0.85 s、卡片数 2.47-2.92 s 稳定（`docs/crawler_notes.md`）。**成立的是另外两半**：① 该函数用裸 `driver.get`，绕开 `Crawler.open` → 不记「导航是否 settled」、renderer 超时直接抛；② 超时那句打成「页面加载超时，**可能无内容**」——把网络判断说成内容判断 | 产品修复（改走 `self.open`；超时行只许说代码看得见的东西） |
 | U12 | `weibo.py:515-522`（WB8，**已修**） | **已量化证实**（2026-09-28 第 0 步）：同一个 timescope 小时窗第 1 页 9 张卡、**第 2 页 6 张、mid 交集 0**，`.page-info` 虽空但 `ul.page-list a` 给到 page=1..10 → `_may_page`「窗口已经窄了」的前提被否证，**一窗静默丢 40%**；而 `_get_total_pages` 的 href 回退本来就读得到第 2 页，只是永远走不到 | 产品修复（**允许窗口翻页**，不是"声明上限"）；测量出处 `backend/test_weibo_gaps.py` |
 | U13 | `douyin.py:410-411,607-651`（DY5-DY8） | 列表重开为空/滚动 JS 异常 suppress→`drained=True`→报「列表翻完了」 | 产品修复 |
-| U14 | `youtube.py:422-437,374,438`（YT6/YT7） | author 无原因行；`finished` 不带目标（全平台最安静收尾之一） | 产品修复 |
+| U14 | `youtube.py:374,438`（YT6/YT7，**已修 2026-09-29**） | `finished` 不带目标（author 与 search 都只 `n=`）、**author 无收尾原因行**——满采与「频道翻完了」印同一句裸 `finished n`（全平台最安静收尾之一） | 产品修复：`crawl.yt.finished` 补 `{total}`（双语，两调用点传 target）；author 结束若 `collected<target` 打现成的 `crawl.yt.drained`（author 唯一短停=游标耗尽，语义无歧义、不双打）。快层 `tests/integration/test_youtube_crawler.py::TestAuthorWalk::test_a_short_author_run_names_the_channel_running_out`（撤 drained 或去 `{total}` 即红） |
 | U15 | `twitter.py:372-387`（TX3） | settle 预算 3×4s，对自己「一屏 ~12s」的测量偏紧；`finished` 无目标 | 产品修复（预算校准） |
 | U16 | `twitter.py:390-391`（TX7） | `crawl.loginWall` 双打（违反 one failure one line） | 产品修复 |
 | U17 | `engine/wall.py:175-182,254-258` → 五个 walk 谓词（W1/E9） | `about:blank`/`chrome://`→blocked→risk latch→整场 walk 收工；行还谎称风控；墙在 walk 谓词里被报成「用户停止」 | 产品修复（unreachable 与 blocked 分流；reason 拆分） |

@@ -25,6 +25,7 @@ import crawlers.base as base_module
 from crawlers.base import Crawler
 from crawlers.comments import OK, CommentSession
 from crawlers.youtube import YouTubeCrawler
+from i18n import t
 
 pytestmark = pytest.mark.unit
 
@@ -421,6 +422,24 @@ class TestAuthorWalk:
         driver = FakeDriver({'player': [{'videoDetails': {}}]}, initial=channel_document([lockup(VIDEO_A)]))
         crawler = make_crawler(driver)
         assert crawler.author('@NASA', target_count=5)[0]['作者'] == 'NASA'
+
+    def test_a_short_author_run_names_the_channel_running_out(self, make_crawler, caplog):
+        """§6 U14: a thin author table must say the cursor ran out, not just print `finished n`.
+
+        A full crawl and one that hit the end of the uploads used to end on the identical
+        bare `crawl.yt.finished`. Here the fake hands one video then no continuation token,
+        so the walk stops short of its ask (5): it must emit `crawl.yt.drained` AND carry the
+        target on the finish line, so the console cannot read a 1-of-5 channel as a normal run.
+        Reverting the drained line or dropping `{total}` from the template goes red here.
+        """
+        driver = FakeDriver({'player': [player(VIDEO_A, author='NASA')]}, initial=channel_document([lockup(VIDEO_A)]))
+        crawler = make_crawler(driver)
+        with caplog.at_level('INFO'):
+            rows = crawler.author('@NASA', target_count=5)
+        assert len(rows) == 1
+        messages = [r.getMessage() for r in caplog.records]
+        assert t('crawl.yt.drained') in messages, 'a short author walk must say the cursor ran out, not end silent'
+        assert t('crawl.yt.finished', n=1, total=5) in messages, 'the finish line must carry the target it missed'
 
     @pytest.mark.parametrize(
         ('typed', 'expected'),
