@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from i18n import t
 
-from .base import PageNotArrivedError
+from .base import UNDER_TARGET, PageNotArrivedError
 from .engine import feed, popup
 from .engine.counters import parse_count
 from .video_base import VideoCrawler, _stamp
@@ -125,8 +125,11 @@ class DouyinCrawler(VideoCrawler):
         grid = self._wait_for_grid(timeout=self.MOUNT_WAIT if published == 0 else None)
         if not grid['arrived']:
             if published == 0:
-                # The page says it holds nothing, which is a fact about the creator.
+                # The page says it holds nothing, which is a fact about the creator —
+                # the site published its own 作品 count of 0, so an empty table here is
+                # attested, not a silent under-collect.
                 logger.info(t('crawl.dy.authorNoWorks'))
+                self.note_end('empty')
                 return self.results()
             # Anything else is a page that did not answer: quoting the site is the
             # only way the user can tell a wall from a quiet zero.
@@ -146,6 +149,7 @@ class DouyinCrawler(VideoCrawler):
         # Identity, not a resume blob: the rows carry their own 视频ID, so a resumed
         # run skips what it already paid for and the cursor stays a position.
         done = {str(row.get('视频ID') or '') for row in self.results() if row.get('视频ID')}
+        self._list_end_attested = False
         self._open_each(
             lambda: self._grid_ids(),
             self._scroll_profile,
@@ -159,6 +163,18 @@ class DouyinCrawler(VideoCrawler):
             # No count on the page is not a count of zero: the line says so instead
             # of printing a number the site never published.
             logger.info(t('crawl.dy.authorDoneNoCount', n=self.collected()))
+        # U1: a short the crawl simply returned (no wall/risk/stop — those are the
+        # executor's own paths) must be licensed ONLY by something the SITE said. The
+        # profile's own 作品 total reached, or the list's 「暂时没有更多了」 marker, are
+        # attested; a grid that just stopped growing with no marker is §6's silent
+        # under-collect and is handed to the gate as ``UNDER_TARGET``.
+        if self.collected() < target_count and not (self._is_walled() or self.risk_blocked or self.may_stop()):
+            if published >= 0 and self.collected() >= published:
+                self.note_end('capped')
+            elif self._list_end_attested:
+                self.note_end('site_end')
+            else:
+                self.note_end(UNDER_TARGET)
         return self.results()
 
     # ─── the site's own hot board ──────────────────────────────────────
@@ -217,7 +233,10 @@ class DouyinCrawler(VideoCrawler):
             self.mark_position(board='hot', done=self.collected())
         logger.info(t('crawl.dy.hotDone', n=self.collected(), total=target_count))
         if self.collected() < target_count:
+            # The board IS the site's whole list (one answer, all entries); a short here
+            # is the board's size, an attested end — not an under-collect to convict.
             logger.info(t('crawl.dy.hotCapped', board=len(words)))
+            self.note_end('capped')
         return self.results()
 
     @staticmethod
@@ -347,11 +366,13 @@ class DouyinCrawler(VideoCrawler):
             if not scroll():
                 # Two different endings, and only one of them is the site's. A list that wrote
                 # 「暂时没有更多了」 is done; a scroll that moved nothing while the marker is absent is
-                # our read of the page (a slow batch, a box that is not the list's box), and that one must
-                # stay un-named so the live tier keeps convicting it. Measured 2026-09-28: 最新发布 on
-                # 「IU」 ends at 14 cards *with* the marker, which is why a 50-row ask there is a named
-                # shortfall and not the bug it looked like.
-                if self._list_says_end():
+                # our read of the page (a slow batch, a box that is not the list's box). Record
+                # which, so ``author`` can license a site-attested drain but let the executor
+                # convict the un-attested one (U1). Measured 2026-09-28: 最新发布 on 「IU」 ends at 14
+                # cards *with* the marker, so a 50-row ask there is a named shortfall, not a bug.
+                attested = self._list_says_end()
+                self._list_end_attested = attested
+                if attested:
                     logger.info(t('crawl.dy.noMore', screens=screens, cards=len(on_screen)))
                 return pool, True, screens
         return pool, False, screens

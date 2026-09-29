@@ -10,7 +10,7 @@ from selenium.webdriver.common.by import By
 
 from i18n import stop_reason_label, t
 
-from .base import Crawler, as_index
+from .base import UNDER_TARGET, Crawler, as_index
 from .engine import feed, pagefetch
 from .engine.counters import parse_count
 
@@ -232,6 +232,7 @@ class ZhihuCrawler(Crawler):
         rounds = 0
         stuck = 0
         last_height = self.page_height()
+        ended = 'target'
         while self.collected() < target_count:
             rounds += 1
             self.scroll_down(steps=self.SCROLL_STEPS)
@@ -249,6 +250,7 @@ class ZhihuCrawler(Crawler):
                 break
             if self._end_marker_present():
                 logger.info(t('crawl.zhihu.no_more', i=rounds))
+                ended = 'site_end'
                 break
 
             if cursor['total'] > before:
@@ -268,6 +270,7 @@ class ZhihuCrawler(Crawler):
                         # {n} really is STUCK_ROUNDS by now, and 「没有更多了」 was never seen — so
                         # this line reports a walk that stopped, not a list that ended.
                         logger.info(t('crawl.zhihu.stuck', n=stuck))
+                        ended = 'under'
                         break
                     logger.info(t('crawl.zhihu.no_growth', n=stuck))
                 self.scroll_down(steps=self.SCROLL_STEPS)
@@ -291,6 +294,14 @@ class ZhihuCrawler(Crawler):
             elif expand['short']:
                 logger.info(t('crawl.zhihu.bodies_short', n=expand['short']))
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
+        # U1: the loop broke on 「没有更多」 = the site's own marker → licensed; it broke on
+        # STUCK_ROUNDS of no growth WITHOUT the marker → a walk give-up, not proof of an empty
+        # list, so it goes to the gate as UNDER_TARGET (§6's silent short). Target met never
+        # fires the gate; a mid-loop wall/risk is settled by the executor first.
+        if ended == 'site_end':
+            self.note_end('site_end')
+        elif ended == 'under':
+            self.note_end(UNDER_TARGET)
         return self.results()
 
     # ─── the site's own board ─────────────────────────────────────────
@@ -352,6 +363,8 @@ class ZhihuCrawler(Crawler):
             # The one promise this mode cannot keep is the number in the box, and the
             # site is the reason — say it once, in the console, where the user is.
             logger.info(t('crawl.zhihu.hotCapped', board=len(rows)))
+            # A fixed board that is shorter than the ask is the SITE's size → licensed.
+            self.note_end('capped')
         return self.results()
 
     @staticmethod
