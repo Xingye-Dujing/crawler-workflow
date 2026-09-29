@@ -913,3 +913,49 @@ def test_a_fed_resume_rebuilds_the_list_and_crawls_only_the_missing_one(app_modu
     )
     assert [url for _a, url, _l in seen2] == [u2], f'继续 re-paid for a settled article: {seen2}'
     assert len(rows) == 2, f'the resumed table must carry BOTH articles, got {rows}'
+
+
+def test_a_repeated_comment_run_names_the_ledger_skip(app_module, recorder, monkeypatch, tmp_path):
+    """A comment node that files 0 rows because the ledger owns every comment must SAY so.
+
+    The source-crawl path already prints ``run.dedupe_skipped`` / ``..._all_skipped`` on a re-run (the
+    ``_execute_source_node`` tail reads ``ctx['skipped_seen'][nid]``). The comment path has the SAME ledger
+    (``_source_stream``'s row_sink refuses an item_key it already owns) but printed only 「共 0 条评论」 —
+    a silent zero that reads exactly like a thread with no comments. Measured live 2026-09-29 on YouTube:
+    the second run of one video's comments filed nothing and named nothing. Two runs against one store,
+    the same comment id: the first pass must file it, the second must grow both narration lines.
+    """
+    from i18n import t
+    from services.run_store import RunStore
+
+    u1 = _SAMPLES[('urls', 'zhihu')]
+    mode = capabilities.mode_for('zhihu', 'comments')
+    params = _params_for('zhihu', mode)
+    params['urls'] = u1
+    # ``input_column`` stays empty: this is the pasted-URL shape, not a fed one.
+    node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'zhihu'}
+
+    store = RunStore(str(tmp_path / 'comment-dedupe.db'))
+    store.start_run('r-cc', 'ccwf', 'fp-cc', headless=True)
+    store.begin_node('r-cc', 'node-1', 'source', title='评论', fingerprint='fp-node')
+    ctx = {'store': store, 'run_id': 'r-cc', 'fingerprints': {'node-1': 'fp-node'}, 'skipped_seen': {}}
+
+    seen: list = []
+    _patch_session(monkeypatch, seen)
+    logs: list = []
+    monkeypatch.setattr(app_module, 'add_log', lambda m: logs.append(m))
+
+    first = app_module._execute_source_node(node, headless=True, ctx=ctx)
+    assert len(first) == 1, f'the first pass must file the comment before a repeat means anything: {first}'
+    assert seen, 'the comment engine was never reached, so nothing was actually deduped'
+    # A first run files everything it read; nothing was skipped, so the narration stays silent.
+    assert t('run.dedupe_skipped', n=1) not in logs, f'a first run named a ledger skip it did not pay: {logs}'
+    assert t('run.dedupe_all_skipped') not in logs, logs
+
+    logs.clear()
+    again = app_module._execute_source_node(node, headless=True, ctx=ctx)
+    assert again == [], f'the repeat re-filed a comment the ledger already owns: {again}'
+    assert t('run.dedupe_skipped', n=1) in logs, f'a re-run that skipped 1 named nothing: {logs}'
+    assert t('run.dedupe_all_skipped') in logs, (
+        f'a re-run whose whole thread was ledger-owned must say the row budget is empty and what to do next: {logs}'
+    )

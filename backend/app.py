@@ -3387,6 +3387,19 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             files=len(files),
         )
     )
+    # The source-crawl path names a ledger-skip (``run.dedupe_skipped`` / ``..._all_skipped``) so a re-run
+    # that stored nothing is not read as an empty table; the comment node dedupes through the VERY SAME
+    # ``row_sink``, which tallies each refused item into ``ctx['skipped_seen'][nid]``. Reading that one tally
+    # (never re-deriving it) keeps a single definition with the source path, and it already excludes what this
+    # run genuinely stored. Measured live 2026-09-29: a repeat of one video's comments filed nothing, printed
+    # 「共 0 条评论」 and named nothing — indistinguishable from a thread that has no comments. Skipped on a
+    # resume (there the ledger IS the resume machinery and the result is prefilled); a wall is left to raise
+    # its own single line, so a run that both skipped and was blocked is not silenced.
+    skipped = (ctx.get('skipped_seen') or {}).get(nid) if ctx is not None else None
+    if skipped and not ctx.get('resume'):
+        add_log(t('run.dedupe_skipped', n=skipped))
+        if not rows_out:
+            add_log(t('run.dedupe_all_skipped'))
     if blocked_seen:
         # Failed (not done) → the run lands in the resume banner and 继续
         # retries exactly the articles the wall refused.

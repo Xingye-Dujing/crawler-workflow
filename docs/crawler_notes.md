@@ -603,6 +603,37 @@ images stay on (nothing is read from pixels). Two rules that only measurement co
 `lockupViewModel` (the 2025+ view model) and `videoRenderer` coexist — search is the former's absence,
 channel tabs the latter's — and a reader for one is silently empty on the other.
 
+### YouTube 第 0 步 / run-level 复查 (2026-09-29, VPN live_os)
+
+The 11-cell run-level matrix `tests/live_site/test_live_youtube_workflow.py` is now green against the
+real site, and it cost three measurements worth keeping:
+
+- **A channel's `/@handle/videos` document ROTATES its batch between loads** — asking NASA twice gave two
+  different 10-row windows, seconds apart. This is §6 U26 (search rotates) **on the author tab too**, so
+  neither search nor author is a legal cross-run dedupe supply. The only stable supply YouTube offers is
+  one video's cursor-walked **comment thread**; the dedupe-repeat cell (C1) runs on that, and its assertion
+  is `kept < limit` (not `== 0`) because a brand-new comment can land in the top window between the two
+  runs — a couple of genuinely-fresh rows is the site's answer, while re-filing the whole thread is the bug.
+- **A live case may not assume a music video is playable.** The flagship's own comment leg
+  (`jGwWNGJdvx8`, Ed Sheeran / VEVO) loaded the watch page cleanly (innertube ready) but the body printed
+  「该视频无法再播放」 and the comment walk honestly answered `comment.commentsClosed` → 0 rows. On a VEVO
+  licensing region the same URL is fine; on this exit it is not. So the comment cells point at
+  `jNQXAC9IVRw` (YouTube's own first video, ~20 y up, tens of millions of comments, no licensing story,
+  no region wall). A 0 from a *playable* thread is the cursor; a 0 from a geo-blocked one is the site.
+- **The comment node had the ledger but not its voice.** `_execute_source_node` names a re-run whose whole
+  result was already collected (`run.dedupe_skipped` / `..._all_skipped`), but `_execute_comment_node` —
+  which dedupes comments through the *same* `row_sink` — printed only 「共 0 条评论」. Measured live 2026-09-29:
+  the second run of one video's comments filed nothing and named nothing, reading exactly like an empty
+  thread. Fixed in `app.py` (count `seen_total` against the stored total and emit the same two lines);
+  pinned in the fast tier by `test_a_repeated_comment_run_names_the_ledger_skip`. The narration is gated
+  off a **resume** (there the ledger *is* the resume machinery) and off a **wall** (the cookie-death raise
+  is that run's one true line), per §「one failure, one line」.
+
+The `driver.get` vs `Crawler.open` question raised itself but does not bite here: YouTube registers **no**
+first-run `prompts`, and a cold throwaway browser reached a *playable* watch page's innertube identically
+by either navigation (probed 2026-09-29), so the comment engine keeps its bare `get` — §6 U5 (enter a
+slow/consent wall through `open`) is a real rule, it just is not this platform's failure.
+
 ## X (twitter)
 
 **Visible-window, virtualized, and slow to paint — three measured facts, each one a line of code.** A

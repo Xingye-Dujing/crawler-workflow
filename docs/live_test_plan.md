@@ -218,6 +218,7 @@
 | U54 | `crawlers/comments.py::bilibili` 的 reply/main 游标（**待查，真机 D1 抓到 2026-09-29**） | 一条 2194 评论的视频（step-0 自己读到的 `stat.reply`），评论节点**只交 9 行**却报 `1/1 节点完成`——既无 `comment.status.blocked`、也无 `biliBadAnswer`、更无按分母具名的差额。§6「沉默欠采」最难看见的形状：表、汇总、完成三方同意，唯独没和**站点自印的分母**对账。也可能是匿名/一次性设备下 reply 深翻页被限流（站点行为）——两者必须靠探针分清，不在热账号上瞎判 | 待真机复现归因：账号冷却后用 `backend/test_bili_comment_cursor.py` 逐 cursor 页量 `replies/total/is_end/code`。`test_live_bilibili_workflow.py::test_d1` 现挂 `xfail(strict=False)` 记录，**不许放宽成「9 也算过」**；查明是产品即补差额具名行（仿 `comment.weiboShort`）后去标 |
 | U55 | `crawlers/comments.py::bilibili` 把不存在的视频判成登录墙（**待查，真机 D2 抓到 2026-09-29**） | 一个形状合法但不存在的 BV（`BV00000000000`）：评论路径**取不到 aid → 本应 DEAD**，却被归成「登录墙/触发风控」→ latches `login_wall` → 节点 `执行失败：…COOKIE 可能过期`，而**同一次运行下一条真链接刚采到 8 条评论**。与抖音 U47 同形：一个读不通的死链接把整条会话定了罪。| 待真机复现归因 + 产品修复（死 id 与墙分流，只按其 OWN 状态记 DEAD，绝不 latch 会话级 cookieExpired）；`test_d2` 现挂 `xfail(strict=False)` 记录，修好即绿即去标 |
 | U56 | `crawlers/wechat.py::get_detail` 的导航入口（**观察，微信第 0 步 2026-09-29**） | 详情页取正文用 `self.driver.get(url)`，**绕开了 `Crawler.open`**——`crawler_rules.md` 明说「`Crawler.open(url)` 是唯一的导航入口，它记 settled、清 dialog、并复读后再判墙」。微信正文匿名可读，墙判据本身用不上，所以这一格**不是漏采**；但 settled 记录被丢了，「页面没到」与「页面到了但列空」在此平台不可分——正是 §6 警告的「三方同意一张缺表」的形状的前半。低优先：改成 `self.open(url, judge=False)` 就能把 settled 找回来又不引入墙判据 | 记录，暂不改（改一行、无功能变化、下次真机触碰该平台一并做）；测处 `backend/test_wechat_step0.py` → `scratchpad/wechat_step0.json`（三条正文全到齐：2903/2332/93 字符，五个字段选择器一 URL 一次全命中，正文完整未被截断） |
+| U57 | `app.py::_execute_comment_node` 的去重具名（**已修 2026-09-29，YouTube 运行级 C1 真机抓到**） | 评论节点用**同一个** `row_sink` 账本去重（`item_key` 命中即 `False`，不落库），但只有 `_execute_source_node` 的收尾会打 `run.dedupe_skipped`/`..._all_skipped`；评论节点只念「共 0 条评论」。一次重跑采了 10 条**全是已有** → kept 0、无一句具名，读起来跟「这条视频没评论」一模一样——正是 §6「三方同意一张缺表」里被静默的那半。**不是 YouTube 独有**：任何平台的评论节点重复跑都会这样 | 产品修复：`_execute_comment_node` 里累计 `seen_total`，非续跑且 `row_sink` 在场时按 `seen_total - len(rows_out)` 补打现成的 `run.dedupe_skipped(n)`；若 `rows_out` 全空再补 `run.dedupe_all_skipped`。续跑不打（账本即续跑机制）、墙不打（`cookieExpired` 那句是本运行的唯一真句，§「一失败一行」）。快层针 `test_a_repeated_comment_run_names_the_ledger_skip`（同 store 同 id 跑两遍，第二遍必须两句齐出）；真机 C1（`jNQXAC9IVRw` 跑两遍）验证 |
 
 
 **滚动节奏（fake driver 数出来的 scroll 命令，不是真机测量；读控制台 `scroll_round` 前先记住它）**：
@@ -649,9 +650,18 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
         （search 出行、per-row `player` 回 点赞数/时长秒/正文、cursor 翻过首屏≥16、频道 id 从页面读、评论游标翻过 20、
         不存在视频/非视频链接具名拒付）。**YouTube 侧无 §6 U14 之外的数据正确性问题**；U14（author 无收尾原因行、
         `finished` 不带目标）是控制台诚实度，留待**运行级矩阵 + 逐行读控制台**时按 §5 白名单具名处理。
-      - **YouTube 剩余（#18）**：运行级矩阵 `test_live_youtube_workflow.py`（抄共享件）+ with_facts 2×2 轴 + §7 专轴
-        （游标选择按「是哪个列表的元素」）+ H 组 `测试：YouTube.json` 终验。**X 侧未测**：twitter cookie 同为 09-26，
-        X 会话比 YouTube 短得多、且 headless 被弹注册页（crawler_rules），#18 X 大概率要先**重新登录**才能跑 live。
+      - **2026-09-29 运行级矩阵落地并全绿（YouTube #18 收口）**：`tests/live_site/test_live_youtube_workflow.py`
+        11 格（A1 采满+摘要=表、A2 with_facts=False 快道 点赞数全 0、A3 恰好 5=1 轮不越界、A4 无头尊重、B1 作者
+        browse 游标越过首文档>30（U14 drained 面）、B2 空作者具名拒付、C1 唯一稳定供给=评论线程去重、D1 评论游标
+        >20、D2 非视频链接按 DEAD 具名不误判会话、E1 停止/继续按 token 游标且游标不夹 id 列表、H1 旗舰三腿逐组件判决 +
+        空腿无幽灵导出）逐格真机读控制台，`-m "live_site and live_os"` **11 passed**；快层 +4698、设备层 +132 复核过。
+        **抓到并修掉 §6 U57**（评论节点有账本却没嗓子——见下）。顺带记：频道 `/@handle/videos` 首文档**两次加载换批**
+        （U26 也打在作者模式，去重重复只能用评论线程），旗舰锚的 `jGwWNGJdvx8`（VEVO）在本出口被「该视频无法再播放」→
+        评论走诚实答 `commentsClosed` 0 行，故矩阵改用 `jNQXAC9IVRw`（站内无地区墙）。`driver.get` vs `open` 探针
+        证明 YouTube 无 prompts、冷浏览器两法都能到可播视频的 innertube，评论引擎**保持原样**（U5 是规则，不是本平台故障）。
+      - **X 侧未测**：twitter cookie 同为 09-26，X 会话比 YouTube 短得多、且 headless 被弹注册页（crawler_rules），
+        #18 X 大概率要先**重新登录**才能跑 live。
+
 - [ ] 全平台门过 → §6 剩余嫌疑（U1 通用 under-target、U2 walk 计数器从不打印等）收口提交
 
 ### 交接状态（2026-09-28 晚，**Cookie 多账号 / 微信 / i18n / 云端部署**；抖音第 8 步仍未收口）
