@@ -218,6 +218,43 @@ def rename_account(platform: str, account: str, to: str) -> bool:
     return True
 
 
+def delete(platform: str, account: str = '') -> str:
+    """Remove one NAMED account's browser directory. Returns ``'deleted'`` or ``'absent'``.
+
+    This is the one action that actually signs a profile-device out — deleting the cookie
+    file does not (the profile keeps its own session), so the panel needs a separate lever
+    and the account's whole tree is what goes. It mirrors :func:`rename_account`'s discipline:
+
+    * the **default** account is refused: it owns no directory of its own — its data *is*
+      ``<root>/<platform>``, the folder that nests every named account of that platform — so
+      deleting it would silently wipe them all. The panel disables the button for the same
+      reason ``rename_cookie_account`` refuses to rename the default; this is the belt behind
+      that suspenders, so a hand-built request cannot reach the platform root either;
+    * a **live browser** inside the directory is refused — ``rmtree`` under a running Chrome
+      leaves the process writing into a path that no longer resolves (and on Windows the open
+      handle makes the walk fail partway, half-deleting the device);
+    * a missing directory is ``'absent'``, not a silent success, so the handler can say
+      「没有可删除的 profile」 rather than 「已删除」 about a device that was never there.
+
+    The used/imported marker lives inside the directory, so it is gone with the tree —
+    ``is_used``/``status`` read the deletion with no extra bookkeeping.
+    """
+    import shutil
+
+    part = _account_part(str(account or '').strip().lower())
+    if not part:
+        raise ValueError('Default account owns no separate profile directory')
+    path = platform_dir(platform, part)
+    if not os.path.isdir(path):
+        return 'absent'
+    if is_busy(path):
+        raise ValueError('Profile is in use')
+    shutil.rmtree(path)
+    # The concurrency lane this directory owned dies with it (``lock_for`` keys on the path).
+    forget_lock(path)
+    return 'deleted'
+
+
 def is_enabled() -> bool:
     return bool(get_setting('use_browser_profile'))
 

@@ -559,6 +559,8 @@ _ZH = {
     'cookie.deleted': '已删除 {platform} 的 Cookie',
     'cookie.renamed': '已把 {platform} 的登录改名：{old} → {new}（Cookie 文件与浏览器目录一起搬）',
     'cookie.renamedFileOnly': '已把 {platform} 的登录改名：{old} → {new}（该账号还没开过浏览器，只动了文件）',
+    'cookie.profileDeleted': '已删除 {platform} · {account} 的浏览器 Profile（该设备已登出；Cookie 文件不动）',
+    'cookie.profileDelete.none': '{platform} · {account} 没有可删除的浏览器 Profile',
     'store.workflow_saved': '工作流已保存：{path}',
     'store.dataset_saved': '文件已持久化：{name}（{rows} 行，id {did}）',
     'store.datasets_bound': '工作流 {wf} 已绑定 {n} 个上传文件',
@@ -778,6 +780,9 @@ _ZH = {
     'api.cookieRenameTaken': '这个名字已经有另一份登录了，换一个个别的名字',
     'api.cookieRenameBusy': '这个账号的浏览器正在被占用，请等当前采集结束后再改名',
     'api.cookieRenameFailed': '改名失败：{err}',
+    'api.profileDeleteBadName': '账号名不合法，无法定位要删除的 Profile：{account}',
+    'api.profileDeleteDefault': '默认账号没有可删除的浏览器 Profile：它的数据就是平台目录本身，其它账号都在里面',
+    'api.profileDeleteBusy': '{platform} · {account} 的浏览器正在被占用，请等当前采集结束后再删除它的 Profile',
     'api.llmModelsFailed': '获取 OpenRouter 模型列表失败：{err}',
     'api.ollamaModelsFailed': '读取本地 Ollama 模型列表失败：{host}（请确认 ollama 已启动、服务地址正确）：{err}',
     'api.parseFailed': '文件解析失败：{err}',
@@ -1518,6 +1523,11 @@ _EN = {
         'Renamed the {platform} login “{old}” to “{new}” — that account has never opened a '
         'browser of its own, so only the cookie file moved'
     ),
+    'cookie.profileDeleted': (
+        'Deleted the browser profile for {platform} · {account} — that device is signed out; '
+        'the saved cookie file is untouched'
+    ),
+    'cookie.profileDelete.none': 'There is no browser profile to delete for {platform} · {account}',
     'store.workflow_saved': 'Workflow saved: {path}',
     'store.dataset_saved': 'File stored: {name} ({rows} rows, id {did})',
     'store.datasets_bound': 'Workflow {wf} bound to {n} uploaded file(s)',
@@ -1747,6 +1757,17 @@ _EN = {
     'api.cookieRenameTaken': 'Another login already uses that name — pick a different one',
     'api.cookieRenameBusy': 'That account’s browser is in use; rename it after the current crawl ends',
     'api.cookieRenameFailed': 'Renaming failed: {err}',
+    'api.profileDeleteBadName': (
+        'Invalid account name: {account} (the default account has no separate profile directory to delete; '
+        'letters, digits, underscore or hyphen, 1-24, stored lowercase)'
+    ),
+    'api.profileDeleteDefault': (
+        'The default account has no browser profile to delete — its browser data IS the platform directory, '
+        'and every other account is nested inside it'
+    ),
+    'api.profileDeleteBusy': (
+        '{platform} · {account}’s browser is in use — wait for the running crawl to finish before deleting its profile'
+    ),
     'api.llmModelsFailed': 'Could not fetch the OpenRouter model list: {err}',
     'api.ollamaModelsFailed': 'Could not list local Ollama models at {host} (running? address right?): {err}',
     'api.parseFailed': 'Could not parse the file: {err}',

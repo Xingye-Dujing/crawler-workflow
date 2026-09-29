@@ -328,7 +328,12 @@ class TestAccountCandidatesAndManager:
             assert row['hasStateCell'] is False, row
             assert 'profile' not in row['account'].lower(), row
             for button in row['buttons']:
-                assert 'profile' not in button['label'] and '失效' not in button['label'], row
+                # A cookie row may carry exactly the three actions, keyed — not free text. The
+                # removed profile-STATE chips (cookies.profileCurrent/Stale/Off/…) described a
+                # state the user cannot act on and stay banned; 「删除 Profile」 is different, it
+                # is a real action, and a stray un-keyed chip would still fail this line.
+                assert button['label'] in ('cookies.renameOne', 'cookies.deleteOne', 'cookies.deleteProfileOne'), row
+                assert '失效' not in button['label'], row
         for key in (
             'cookies.profileCurrent',
             'cookies.profileStale',
@@ -414,6 +419,29 @@ class TestAccountCandidatesAndManager:
         refused = panel['renameDefault']
         assert refused['posted'] == 0, refused
         assert refused['toasts'] == ['cookies.renameDefaultRefused'], refused
+
+    def test_the_delete_profile_button_tracks_the_profile_and_the_account(self, panel):
+        """「删除 Profile」 appears exactly where it can do something, and is honest where it cannot.
+
+        A row with no profile directory has no device to retire, so it gets no button (not a dead
+        one). A named account whose profile exists gets a live one. The 默认账号 row shows the
+        button greyed with the shared-root reason as its title — its browser data IS the platform
+        folder, so deleting it there would silently wipe every sibling, and a greyed control that
+        says why beats a missing button that leaves the user hunting for it (the same lesson the
+        rename default teaches).
+        """
+        rows = {r['key']: r for r in panel['managerRows']}
+
+        def prof(key):
+            return [b for b in rows[key]['buttons'] if b['label'] == 'cookies.deleteProfileOne']
+
+        assert prof('work') == [], 'the work row has profile_exists false, so it must offer nothing'
+        named = prof('default2')
+        assert len(named) == 1 and named[0]['disabled'] is False, 'a named account with a profile can retire it'
+        default = prof('default')
+        assert len(default) == 1, default
+        assert default[0]['disabled'] is True, 'the default device is the platform root — not deletable here'
+        assert default[0]['title'] == 'cookies.profileDeleteDefaultRefused', default
 
     def test_typing_the_same_name_back_sends_no_round_trip(self, panel):
         """Renaming to the name it already has moves nothing, so the panel says so locally

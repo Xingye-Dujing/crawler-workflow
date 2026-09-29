@@ -4355,6 +4355,48 @@ async function deleteCookie(platform, account) {
     }
 }
 
+async function deleteCookieProfile(platform, account) {
+    /* Throw away one account's browser PROFILE directory — the device itself, not the cookie
+       file. The two are independent on purpose: 「删除 Cookie」 removes only the snapshot a
+       throwaway browser is planted from, and a platform crawled inside its own profile keeps
+       its live session in that profile, so retiring the device needs this separate action.
+
+       The default account is refused here as well as in the panel button: its browser data is
+       the platform root folder that nests every named account, so deleting it would silently
+       wipe them all — the same structural reason rename refuses the default. The server repeats
+       the refusal, so a hand-built request cannot reach the platform root either. */
+    var from = cookieAccountKey(account);
+    if (!platform || from === COOKIE_DEFAULT_ACCOUNT) {
+        showToast(I18n.t('cookies.profileDeleteDefaultRefused'));
+        return;
+    }
+    var answer = await showDialog({
+        message: I18n.t('dialog.profileDelete', {
+            platform: I18n.t('platform.' + platform),
+            account: cookieAccountWord(from),
+        }),
+        buttons: [
+            { label: I18n.t('dialog.profileDeleteYes'), value: 'delete', primary: true },
+            { label: I18n.t('dialog.cancel'), value: null },
+        ],
+    });
+    if (answer !== 'delete') return;
+    var result = await fetchJSON('/api/profiles/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: platform, account: from }),
+    });
+    var statusEl = document.getElementById('cookie-status');
+    if (result.ok) {
+        showToast(result.message || I18n.t('toast.profileDeleted'));
+        if (statusEl) statusEl.textContent = result.message || '';
+        // The device is gone, so the profile chip and the whole row state must be re-read.
+        refreshCookieStatus();
+    } else if (statusEl) {
+        statusEl.textContent = result.error || '';
+    }
+}
+
 async function renameCookieAccount(platform, account) {
     /* Give one saved login a new name. The box is prefilled with the name it carries now, so
        what the user edits is the thing being renamed — and the answer is sent as the pair
@@ -4576,6 +4618,21 @@ function cookieRowCells(row) {
         };
     }
     ops.push({ label: 'cookies.deleteOne', cls: 'cookie-mini runs-mgr-btn del', go: function () { deleteCookie(row.platform, row.account); } });
+    /* 「删除 Profile」 only where there IS a profile directory to remove. The default account's
+       row shows it greyed, not hidden — its browser data is the platform root that nests every
+       named account, so the delete would over-reach; the tooltip says why, the same structural
+       reason rename disables the default. A named account gets a working device-retire. */
+    if (row.profile_exists) {
+        var profOp = { label: 'cookies.deleteProfileOne', cls: 'cookie-mini runs-mgr-btn del', go: function () { deleteCookieProfile(row.platform, row.account); } };
+        if (cookieAccountKey(row.account) === COOKIE_DEFAULT_ACCOUNT) {
+            profOp.disabled = true;
+            profOp.title = I18n.t('cookies.profileDeleteDefaultRefused');
+            profOp.go = function () {
+                showToast(I18n.t('cookies.profileDeleteDefaultRefused'));
+            };
+        }
+        ops.push(profOp);
+    }
     ops.forEach(function (spec) {
         var b = document.createElement('button');
         b.type = 'button';

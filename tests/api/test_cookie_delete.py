@@ -185,3 +185,62 @@ class TestDelete:
         body = {'platform': 'zhihu', 'cookies': [{'name': 'z_c0', 'value': 'fresh'}]}
         assert client.post('/api/cookies/save', json=body).status_code == 200
         assert [c['name'] for c in app_module.cookie_manager.load('zhihu')] == ['z_c0']
+
+
+class TestDeleteProfile:
+    """``/api/profiles/delete`` retires a named account's browser device — the counterpart the
+    cookie-delete above can never be. It removes the profile directory and LEAVES the cookie file,
+    refuses the default account (its folder is the shared platform root), backs off a busy device,
+    and says so for a device that is not there rather than reporting a reset that never happened.
+    """
+
+    def _named_login(self, app_module, platform='zhihu', account='work'):
+        app_module.cookie_manager.delete(platform, account)
+        app_module.cookie_manager.save(platform, [{'name': 'z_c0', 'value': 'v'}], account=account)
+        return account
+
+    def test_the_named_profile_dir_goes_and_the_cookie_file_stays(self, client, app_module):
+        """The independence that makes this a separate action: profile deleted, login file intact."""
+        self._named_login(app_module)
+        browser_profiles.mark_used('zhihu', imported=False, account='work')
+        path = browser_profiles.platform_dir('zhihu', 'work')
+        assert os.path.isdir(path)
+        response = client.post('/api/profiles/delete', json={'platform': 'zhihu', 'account': 'work'})
+        assert response.status_code == 200, response.get_json()
+        assert response.get_json()['profile_deleted'] is True
+        assert not os.path.isdir(path), 'the device directory must be gone'
+        assert not browser_profiles.is_used('zhihu', account='work')
+        assert app_module.cookie_manager.load('zhihu', 'work'), 'delete-Profile must not touch the cookie file'
+
+    def test_the_default_account_is_refused_because_its_folder_is_the_platform_root(self, client, app_module):
+        app_module.cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'v'}])
+        for blank in ('', 'default'):
+            response = client.post('/api/profiles/delete', json={'platform': 'zhihu', 'account': blank})
+            assert response.status_code == 400, response.get_json()
+            assert i18n._EN['api.profileDeleteDefault'].split('{platform}')[0][:12] in response.get_json()['error']
+
+    def test_a_device_that_was_never_created_is_answered_as_absent(self, client, app_module):
+        self._named_login(app_module, account='neveropened')
+        path = browser_profiles.platform_dir('zhihu', 'neveropened')
+        assert not os.path.isdir(path), 'this test is about a profile that does not exist'
+        response = client.post('/api/profiles/delete', json={'platform': 'zhihu', 'account': 'neveropened'})
+        assert response.status_code == 404
+        assert i18n._EN['cookie.profileDelete.none'].split('{platform}')[0].strip() in response.get_json()['error']
+
+    def test_a_profile_held_by_a_live_browser_is_not_torn_out(self, client, app_module):
+        self._named_login(app_module, account='busy')
+        browser_profiles.mark_used('zhihu', imported=False, account='busy')
+        path = browser_profiles.platform_dir('zhihu', 'busy')
+        held = browser_profiles.lock_for(path)
+        assert held.acquire(blocking=False)
+        try:
+            response = client.post('/api/profiles/delete', json={'platform': 'zhihu', 'account': 'busy'})
+            assert response.status_code == 409, response.get_json()
+            assert os.path.isdir(path), 'a refused delete leaves the device whole'
+        finally:
+            held.release()
+
+    def test_an_unsafe_platform_is_refused_by_name(self, client):
+        response = client.post('/api/profiles/delete', json={'platform': '../x', 'account': 'work'})
+        assert response.status_code == 400
+        assert '../x' in response.get_json()['error'], 'the refusal names what it refused'

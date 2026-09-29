@@ -5334,6 +5334,63 @@ def delete_cookies():
     return jsonify({'ok': True, 'message': message, 'profile_holds': holds})
 
 
+@app.route('/api/profiles/delete', methods=['POST'])
+def delete_profile():
+    """Throw away one account's browser PROFILE directory — the device, not the cookie file.
+
+    This is the counterpart the cookie-delete cannot be: ``delete_cookies`` removes only the
+    snapshot a throwaway browser is planted from, and a platform crawled inside its own profile
+    keeps its live session in ``data/chrome_profile/<platform>[/<account>]`` — so signing that
+    device out needs this separate action. The two stay independent by design: a user may retire
+    the saved cookie and keep logging the profile in, or reset the device and keep the file.
+
+    Every refusal names itself, and the **default** account is refused structurally (the panel
+    disables it too): its browser data is the platform root that nests every named account, so
+    「delete」 there would silently wipe them all — the same reason ``rename_cookie_account``
+    refuses to rename it. A live browser holding the directory is refused so a running crawl is
+    never pulled out from under.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    platform = str(data.get('platform') or '').strip()
+    account = CookieManager.key(data.get('account'))
+    if not cookie_manager.is_supported(platform):
+        return jsonify({'ok': False, 'error': t('api.unsupportedPlatform', platform=platform)}), 400
+    if not CookieManager.is_account(account):
+        bad = str(data.get('account') or '')
+        return jsonify({'ok': False, 'error': t('api.profileDeleteBadName', account=bad)}), 400
+    if account == CookieManager.DEFAULT_ACCOUNT:
+        return jsonify({'ok': False, 'error': t('api.profileDeleteDefault', platform=platform)}), 400
+    try:
+        result = browser_profiles.delete(platform, account)
+    except ValueError as e:
+        text = str(e)
+        if 'in use' in text:
+            return jsonify({'ok': False, 'error': t('api.profileDeleteBusy', platform=platform, account=account)}), 409
+        return jsonify({'ok': False, 'error': t('api.profileDeleteDefault', platform=platform)}), 400
+    except OSError as e:
+        logger.exception(t('cookie.delete.failed', err=str(e)[:120]))
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    if result == 'absent':
+        # Not a silent success: the panel asked to remove a device that is not there, and
+        # 「已删除」 would report a reset that did not happen.
+        return jsonify({'ok': False, 'error': t('cookie.profileDelete.none', platform=platform, account=account)}), 404
+    # The device that held a live session is gone, so a cached "does this account have a login"
+    # verdict about that profile is now a statement about a browser that no longer exists.
+    cookie_preflight.invalidate(platform)
+    add_log(t('cookie.profileDeleted', platform=platform, account=account))
+    return jsonify(
+        {
+            'ok': True,
+            'platform': platform,
+            'account': account,
+            'profile_deleted': True,
+            'message': t('cookie.profileDeleted', platform=platform, account=account),
+        }
+    )
+
+
 _COOKIE_JOB_LOCK = threading.Lock()
 _COOKIE_JOB = {
     'active': False,

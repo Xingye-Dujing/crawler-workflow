@@ -94,6 +94,52 @@ class TestPaths:
         assert browser_profiles.profile_dir_for('') is None
 
 
+class TestDelete:
+    """``delete`` removes one NAMED account's device directory and nothing else.
+
+    This is the action that actually signs a profile out (deleting the cookie file does not), so
+    its scope is the whole point: a named account's own folder goes, the platform root and every
+    other account survive, a live browser is refused, and the default account — whose folder *is*
+    the platform root — is refused rather than allowed to wipe its siblings.
+    """
+
+    def test_a_named_account_directory_is_removed_and_no_longer_used(self, profiles_on):
+        browser_profiles.mark_used('weibo', imported=False, account='work')
+        path = browser_profiles.platform_dir('weibo', 'work')
+        assert os.path.isdir(path) and browser_profiles.is_used('weibo', account='work')
+        assert browser_profiles.delete('weibo', 'work') == 'deleted'
+        assert not os.path.isdir(path), 'the device directory must be gone'
+        assert not browser_profiles.is_used('weibo', account='work'), 'the marker died with the tree'
+
+    def test_deleting_only_touches_that_account(self, profiles_on):
+        """Siblings and the platform root are not in this action's blast radius."""
+        browser_profiles.mark_used('weibo', imported=False, account='work')
+        browser_profiles.mark_used('weibo', imported=False, account='other')
+        browser_profiles.delete('weibo', 'work')
+        assert os.path.isdir(browser_profiles.platform_dir('weibo', 'other')), 'a sibling account survives'
+        assert os.path.isdir(browser_profiles.platform_dir('weibo')), 'the platform root survives'
+
+    def test_a_missing_directory_is_absent_not_an_error_or_a_fake_success(self, profiles_on):
+        assert browser_profiles.delete('weibo', 'ghost') == 'absent'
+
+    def test_the_default_account_is_refused_because_its_folder_is_the_platform_root(self, profiles_on):
+        for spelling in ('', 'default', 'DEFAULT'):
+            with pytest.raises(ValueError, match='Default account'):
+                browser_profiles.delete('weibo', spelling)
+
+    def test_a_profile_with_a_live_browser_is_not_torn_out_from_under_it(self, profiles_on):
+        browser_profiles.mark_used('weibo', imported=False, account='work')
+        path = browser_profiles.platform_dir('weibo', 'work')
+        held = browser_profiles.lock_for(path)
+        assert held.acquire(blocking=False)
+        try:
+            with pytest.raises(ValueError, match='in use'):
+                browser_profiles.delete('weibo', 'work')
+            assert os.path.isdir(path), 'a refused delete must leave the directory whole'
+        finally:
+            held.release()
+
+
 class TestMarker:
     def test_a_fresh_profile_is_marked_as_needing_an_import(self, profiles_on):
         assert browser_profiles.is_imported('xiaohongshu') is False
