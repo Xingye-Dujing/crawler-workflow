@@ -859,6 +859,42 @@ load, measured at ~2.3 s on douyin — and one of the three was a pure redirect.
 The driver runs with `page_load_strategy='eager'` and image loading blocked unless a class sets
 `needs_images = True`, because a crawler reads text and attributes, never pixels.
 
+**The page-visible automation surface is masked on every browser (measured 2026-09-29, #18).** The launch
+long ago made `navigator.webdriver` false (`--disable-blink-features=AutomationControlled`) and dropped the
+`--enable-automation` banner — the banner is proven against `chrome://version` in `test_driver_surface.py`,
+webdriver against a real loaded page there. But X's cookie-capture window still hit 「意外错误」 on **both**
+Sign in with Google and Sign in with Apple, while the user's everyday Chrome passed. A modern detector
+(Google BotGuard) reads more than webdriver: the chromedriver-injected bare `window.cdc_…` globals — present
+on a *driven visible* window too, which is why #148's headless-vs-desktop comparison never caught them. The
+repo had *enumerated* them in the throwaway probe `backend/test_automation_surface.py` but never *masked*
+them or tested them. `_create_driver` now registers a new-document script (`_AUTOMATION_STEALTH_JS`) that
+**deletes those globals only**, on every browser. It deliberately does NOT redefine webdriver or languages,
+and does NOT fabricate `window.chrome.runtime`: measured (`scratchpad/automation_surface.json`,
+`headless_fingerprint.json`) a normal driven page's `chrome.runtime` is already `undefined` (it exists only
+in extension contexts), so inventing `{}` is a NEW mismatch and could make a page that gates an extension
+bridge on `chrome.runtime` enter that branch and throw. The device test
+`test_the_page_visible_automation_surface_is_masked` reads the surface on real Chrome (webdriver false, no
+`cdc_` globals, languages clean, no `;q`) with a **positive control** (`_apply_automation_stealth` disabled →
+the globals are visible, so the empty list is the mask's doing, not a vacuous page) and a blink-flag control
+(webdriver reads `true`) — measured, not assumed.
+
+Three ceilings this masking **cannot** cross, so the next reader does not re-assume stealth is a guaranteed
+unlock: (1) the **CDP-attached debugger** — Selenium drives Chrome over CDP and a detector can sense the
+`Runtime.enable` handshake; JS masking does not remove that, only `undetected-chromedriver` (deferred
+follow-up) meaningfully reduces it. (2) **per-target scope** — `addScriptToEvaluateOnNewDocument` reaches the
+tab this driver launched, NOT a popup a site opens on click; Google/Apple SSO opens in exactly such a popup,
+so this mask does not reach the page that actually errors. (3) a **brand-new untrusted profile** and
+**Apple's device attestation** — the login browser opens a freshly-cloned pristine profile (no history, no
+prior Google trust), and Sign in with Apple needs attestation desktop Chrome cannot provide. So the mask is
+anti-bot hygiene for the launched page (and helps a driven browser look less automated to any site's page
+bot-check), **not** a promised X-login fix; the reliable routes stay **X-native email/password login** (no
+IdP hop) or a **cookie import** (log in in the user's own Chrome, bring cookies over). This supersedes the
+earlier standing note ("no UA forgery, no cdc_ clearing") — the cdc_ deletion is now the one thing that IS
+done; see below.
+
+**A session preference written into a persistent profile stays there (measured 2026-09-24).** After one
+weibo crawl, `data/chrome_profile/weibo/Default/Preferences` held
+
 **A session preference written into a persistent profile stays there (measured 2026-09-24).** After one
 weibo crawl, `data/chrome_profile/weibo/Default/Preferences` held
 `profile.managed_default_content_settings = {"images": 2}` — and 4 of the 7 platform directories on this
@@ -1144,6 +1180,9 @@ pager 自报页底，排队交棒无恙。红条分三类：
 * **伪装不是决定性的**：同一晚、同一台机器、同一套 `cdc_*` 表面上，一个会话被挡回登录墙而
   另一个把 51 条数据交了回来；抖音那条风控滑块也在用户手工通过后立刻可爬。因此这次只修拼写，
   不做 UA 伪造、不清 `cdc_*`、不碰验证码——那是把"我们可能被识别"换成"我们确定在违反条款"。
+  **（2026-09-29 修正，#18：本条仍坚持不做 UA 伪造、不碰验证码；但「不清 `cdc_*`」已被推翻——现在删掉
+  chromedriver 注入的 `cdc_` 全局（见上「自动化遮罩」节）。删注入的全局属去自动化痕迹、与既有的
+  webdriver 掩码同类，不是伪造身份、不违反条款；且「伪装不是决定性的」这句照旧成立——见下三道上限。）**
 
 浏览器侧的自证在 `tests/integration/test_driver_surface.py`：读 `chrome://version` 的命令行
 （标签是本地化的，开关串不是），一次断言 `--enable-automation` **不在**，另一次把

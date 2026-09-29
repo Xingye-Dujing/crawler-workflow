@@ -118,13 +118,16 @@ class PageNotArrivedError(RuntimeError):
 
 #: Rewrites the screen/window geometry a headless Chrome reports before any site script runs.
 #: A bare ``--headless=new`` sits on an 800×600 virtual display, which — together with the
-#: ``HeadlessChrome`` token in its UA — is the whole fingerprint that gives a headless crawler
-#: away (measured 2026-09-26 in the #148 probes; everything else, incl. navigator.webdriver and
-#: the WebGL renderer, already matches a real window on this Chrome). ``__METRICS__`` is replaced
-#: with the crawler's configured desktop size, so the window only ever reports those numbers.
+#: ``HeadlessChrome`` token in its UA — is the whole fingerprint that gives a headless crawler away
+#: against a REAL desktop window (measured 2026-09-26 in the #148 probes; navigator.webdriver and the
+#: WebGL renderer already match a real window on this Chrome). ``__METRICS__`` is replaced with the
+#: crawler's configured desktop size, so the window only ever reports those numbers.
 #: It deliberately does NOT touch navigator.webdriver or navigator.languages: the blink flag
 #: already makes webdriver a real ``false``, and a languages override leaked ``;q=0.9`` into
 #: ``navigator.languages`` (measured) — both would *add* a mismatch instead of removing one.
+#: The chromedriver ``cdc_`` globals were a SEPARATE leak (present on a driven VISIBLE window too,
+#: so #148's headless-vs-desktop axis did not see them); they are stripped by ``_AUTOMATION_STEALTH_JS``
+#: below, which runs on every browser.
 _DESKTOP_GEOMETRY_JS = r"""
 (function () {
     var M = __METRICS__;
@@ -136,6 +139,33 @@ _DESKTOP_GEOMETRY_JS = r"""
     rd(window.screen, 'availWidth', sw); rd(window.screen, 'availHeight', sh);
     rd(window, 'outerWidth', sw); rd(window, 'outerHeight', sh);
     rd(window, 'innerWidth', sw); rd(window, 'innerHeight', sh);
+})();
+"""
+
+#: The chromedriver-injected automation globals a modern bot-detector can read off ``window``,
+#: masked on EVERY browser before its first page. It deletes ONLY those (this build injects bare
+#: ``cdc_…`` properties a ``for…in`` scan sees; deleting them degrades Selenium's own wrappers to
+#: their documented fallback). It deliberately does NOT: redefine ``navigator.webdriver`` (the blink
+#: launch flag already yields a real ``false``); touch ``navigator.languages`` (``--lang`` already
+#: yields a genuine list, and a JS override was measured to leak ``;q=0.9``); or fabricate
+#: ``window.chrome.runtime`` — a normal page's ``chrome.runtime`` is **undefined** (it exists only in
+#: extension contexts), so inventing it is a NEW mismatch and could trip a page gating an extension
+#: bridge on ``chrome.runtime``. The measured headless-vs-visible fingerprints confirm ``chrome``/
+#: ``runtime`` already match a real window; only ``cdc_`` was ever a leak. **Scope: the tab this
+#: driver launched — not a popup a site opens later** (``addScriptToEvaluateOnNewDocument`` is
+#: per-target), so this is anti-bot hygiene for the main page, not a promise that a Google/Apple SSO
+#: popup will pass.
+_AUTOMATION_STEALTH_JS = r"""
+(function () {
+    var named = ['__driver_unwrapped', '__selenium_unwrapped', '__fxdriver_unwrapped', '_Selenium_IDE_Recorder'];
+    function leaky(key) { return key.indexOf('cdc_') >= 0 || named.indexOf(key) >= 0; }
+    var found = [];
+    for (var k in window) {
+        try { if (leaky(k)) found.push(k); } catch (e) {}
+    }
+    for (var i = 0; i < found.length; i++) {
+        try { delete window[found[i]]; } catch (e) {}
+    }
 })();
 """
 
@@ -491,6 +521,10 @@ class Crawler(ABC):
         # headless stay headless instead. See _disguise_headless_as_desktop.
         if self.headless:
             self._disguise_headless_as_desktop()
+        # Hide the page-visible automation tells on EVERY browser (the visible login window
+        # included), before any navigation — the cookie plant at the end of this method is the
+        # first one, and the hook must already be installed when it runs.
+        self._apply_automation_stealth()
         # Apply the configured 窗口大小 to the *live* window, not just the launch hint.
         # ``--window-size`` is only a startup argument: a persistent profile restores its
         # own saved window bounds and overrides it, and a visible Chrome may open at a
@@ -528,6 +562,28 @@ class Crawler(ABC):
         width = positive(parts[0] if parts else '', 1920)
         height = positive(parts[1] if len(parts) > 1 else '', 1080)
         return width, height
+
+    def _apply_automation_stealth(self) -> None:
+        """Hide the page-visible automation tells on EVERY browser, before its first page.
+
+        The launch already makes ``navigator.webdriver`` false (blink flag) and a real
+        ``navigator.languages`` (``--lang``); what a modern bot-detector can still read from the page
+        is the bare ``cdc_…`` chromedriver globals this build injects onto ``window``. This registers a
+        new-document script that deletes them. It runs for the VISIBLE login window too — the browser
+        that has to face a site's risk control — which is the reason this exists (``docs/crawler_notes.md``).
+
+        It is deliberately NOT redefining webdriver or languages, and NOT fabricating
+        ``window.chrome.runtime`` (a normal page's is undefined; inventing one is a new mismatch) —
+        each of those was measured or argued to ADD a tell, not remove one. Scope: the tab this driver
+        launched; a popup a site opens on click (Google/Apple SSO) is a different CDP target the mask
+        does not reach, so this is not a promise that third-party login passes. A CDP failure (an old
+        driver, a session mid-teardown) degrades to "still the blink-flag browser" and only logs — a
+        fingerprint helper must never tear down a browser that came up correctly.
+        """
+        try:
+            self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': _AUTOMATION_STEALTH_JS})
+        except Exception as e:
+            logger.debug('automation stealth not applied for %s: %s', self.domain, e)
 
     def _disguise_headless_as_desktop(self) -> None:
         """Remove the two headless tells (UA, virtual-display metrics) on the live session.

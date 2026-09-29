@@ -61,6 +61,16 @@
   可见窗口**——无头就是无头。历史上那句「可见窗口只是必要条件、不是充分条件」仍成立（同一账号偶尔
   连窗口都被答验证码），但今天判墙要读抖音自己的 `_wait_for_page()`（`captcha`/`not_mounted`/`ok`），
   通用 `check_intercept()` 在这种标题下会说 `ok`
+- **登录/生成的浏览器删掉「页面上能读到的 chromedriver 痕迹」（每一台浏览器，含可见窗口）**（2026-09-29，#18 X
+  登录被谷歌/苹果「意外错误」挡住时加的）：启动早把 `navigator.webdriver` 变假、去掉了「受自动测试软件控制」
+  横幅；但现代风控（谷歌 BotGuard）还从**页面里**读 chromedriver 注入的 `window.cdc_…` 全局。`base.py` 现用
+  一段 new-document 脚本把这些全局删掉，**对所有浏览器**生效（设备层 `test_driver_surface.py` 真 Chrome 两侧验
+  证：加遮罩后 `globals==[]`、关掉遮罩能读到它们、去掉 blink flag 时 `navigator.webdriver` 读 `true`）。**它
+  刻意不改** `navigator.webdriver`（blink flag 已给真 `false`）、`navigator.languages`（`--lang` 已给真列表，
+  JS 改写实测漏 `;q=0.9`）、也**不伪造** `window.chrome.runtime`（普通页面它本就 `undefined`，硬造反而多一处
+  破绽、会触发按扩展网桥分支的页脚抛错）。**三道这遮不住的上限**：CDP 调试器附加（要 `undetected-chromedriver`，
+  列为后续）、全新未受信任设备、以及**站点另开的弹窗是另一个 CDP target、这段脚本够不到**——谷歌/苹果的 SSO
+  正是弹窗。所以**这不保证 X 登录一定通过**：顽固 SSO 仍走**邮箱密码登录**或**导入 Cookie**，详见 `docs/crawler_notes.md`
 - **抖音搜索可选排序**（2026-09-26 实测）：结果页右上角「筛选」里藏着 **综合排序 / 最新发布 /
   最多点赞**（站点没有"最热"这个词），菜单是 **hover 才挂载**、**点那个词反而关掉它**，
   且**选完地址一个字符都不变**。所以这三件事都是设计后果：每次选择都要重新悬停（`engine/menu.py`）；

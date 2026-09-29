@@ -185,8 +185,41 @@ def test_a_headless_session_is_disguised_as_a_desktop_window(captured_options):
     assert 'navigator.webdriver' not in injected
 
 
-def test_a_visible_window_is_left_alone(captured_options):
-    """The disguise is for headless only — a visible browser already is a real window, and
-    overriding its UA/metrics would fight what the user watches on screen."""
+def test_a_visible_window_gets_the_mask_but_not_the_headless_disguise(captured_options):
+    """The UA/geometry disguise stays headless-only — a visible browser already IS a real window,
+    and overriding its UA would fight what the user watches. The automation-tell MASK, however,
+    runs on every browser: the visible login window is the one that has to face Google/Apple."""
     ZhihuCrawler(headless=False)
-    assert captured_options['cdp'] == [], f'a visible window must not be CDP-touched: {captured_options["cdp"]}'
+    names = _cdp_names(captured_options)
+    assert 'Network.setUserAgentOverride' not in names, f'a visible window must not be UA-overridden: {names}'
+    assert names == ['Page.addScriptToEvaluateOnNewDocument'], (
+        f'the only CDP call on a visible window is the mask: {names}'
+    )
+
+
+def test_the_blink_flag_still_hides_the_automation(captured_options):
+    """navigator.webdriver is made false by the launch flag, not a JS override — the flag must stay
+    in the command line for every mode (the mask deliberately does not redefine webdriver)."""
+    for headless in (True, False):
+        ZhihuCrawler(headless=headless)
+        assert '--disable-blink-features=AutomationControlled' in captured_options['options'].arguments, headless
+
+
+@pytest.mark.parametrize('headless', [True, False])
+def test_the_automation_mask_runs_on_every_browser_and_cannot_self_defeat(captured_options, headless):
+    """The mask strips the chromedriver ``cdc_`` globals and must NOT re-add the tells measured worse
+    than none: no ``navigator.webdriver`` redefine (blink flag owns it), no ``navigator.languages``
+    override (that leaked ``;q=0.9``), and NO fabricated ``chrome.runtime`` (a normal page's is
+    undefined — inventing it is a new mismatch). Runs in BOTH modes (headless crawls and the visible
+    login window)."""
+    ZhihuCrawler(headless=headless)
+    sources = ' '.join(
+        params.get('source', '')
+        for name, params in captured_options['cdp']
+        if name == 'Page.addScriptToEvaluateOnNewDocument'
+    )
+    assert "indexOf('cdc_')" in sources, f'the mask must strip the chromedriver globals, headless={headless}'
+    assert 'navigator.webdriver' not in sources, 'the mask must not redefine webdriver (the blink flag owns it)'
+    assert 'navigator.languages' not in sources, 'the mask must not redefine languages (the --lang leak)'
+    assert ';q' not in sources, 'a languages q-value must never reappear in the mask'
+    assert 'chrome.runtime' not in sources, 'the mask must not fabricate window.chrome.runtime'
