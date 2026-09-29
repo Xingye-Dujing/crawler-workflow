@@ -214,7 +214,9 @@
 | U52 | `crawlers/comments_douyin.py::douyin_comment_fields` 按位置取正文（**已修 2026-09-28，同日二轮复查抓出**） | 正文写死 `lines[1]`，两件事随之而来：① 评论换行时第二行之后**整段丢掉**（这张表的目的就是「不漏采」），而正文里自成一行的纯数字会被下面 `line.isdigit()` 那条读成 点赞数——一个挂在看起来对的列名下的错数；② 作者名渲染为空而塌行时（本模块 docstring 自己承认的形状）每个字段整体前移一格，「1天前·北京」被写进 评论内容，楼层与行号照样好看。修：把面板自己的「时间·地区」那行当锚点——锚点之前全是正文（多行按换行拼接），点赞数只认锚点之后的裸数字；锚点之前没有正文就是没有正文，这行由调用方丢掉，**宁可少一行也不存一句时间戳**。快层 `test_a_wrapped_comment_keeps_every_line_and_its_own_numbers`、`test_a_timestamp_is_never_filed_as_the_comment_text`；退回即红实测：把 `head` 改回 `lines[1:2]` → 两枚同时红（`'1天前·北京' == ''`） |
 
 
-| U53 | `crawlers/bilibili.py::author` 的分页假设（**已修 2026-09-29，B站第 0 步抓到**） | **投稿页把「换页」当成「滚动加载」**：第 0 步在生产同款托管 Profile 上量到——高产 UP 首屏 40 卡，**窗口滚动与元素滚动一个都不加**，而 `下一页` 一点整屏换成另外 40 张（交集 0、URL 不变）。旧 `author()` 走 `feed.walk_feed(scroll=window-scroll)` 且用默认**卡片数**哨兵，滚动不加 → `stuck` → 收工，于是**任何投稿过百的 UP 都被采到首屏就停，还替站点打 `已到列表末尾`**。与 §6 反复警告的「页面模型错了不会报错，只会让表/游标/总结三方同意一张缺的表」同形状 | 产品修复：`scroll=self._click_next_page`（点 `下一页`）+ `window=self._on_screen_key`（当前屏 BV 集合当哨兵，换页计数仍是 40，故不能用卡片数）；快层 `SpaceDriver` 重写为「只在点 `下一页` 脚本时换屏」，新增 `test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end`（把 `window=` 撤掉或 scroll 换回 `scroll_down` 当场红）；测量出处 `backend/test_bili_{step0,author_dom,author_pager}.py` → `scratchpad/bili_*.json`。**排行榜 `target>100` 无 cap 行（§7）同轮补 `crawl.bili.rankingCapped`** |
+| U53 | `crawlers/bilibili.py::author` 的分页假设（**已修 2026-09-29，B站第 0 步抓到**） | **投稿页把「换页」当成「滚动加载」**：第 0 步在生产同款托管 Profile 上量到——高产 UP 首屏 40 卡，**窗口滚动与元素滚动一个都不加**，而 `下一页` 一点整屏换成另外 40 张（交集 0、URL 不变）。旧 `author()` 走 `feed.walk_feed(scroll=window-scroll)` 且用默认**卡片数**哨兵，滚动不加 → `stuck` → 收工，于是**任何投稿过百的 UP 都被采到首屏就停，还替站点打 `已到列表末尾`**。与 §6 反复警告的「页面模型错了不会报错，只会让表/游标/总结三方同意一张缺的表」同形状 | 产品修复：`scroll=self._click_next_page`（点 `下一页`）+ `window=self._on_screen_key`（当前屏 BV 集合当哨兵，换页计数仍是 40，故不能用卡片数）；快层 `SpaceDriver` 重写为「只在点 `下一页` 脚本时换屏」，新增 `test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end`（把 `window=` 撤掉或 scroll 换回 `scroll_down` 当场红）；测量出处 `backend/test_bili_{step0,author_dom,author_pager}.py` → `scratchpad/bili_*.json`。**真机 B1 已验（2026-09-29）**：问投稿过百的 37974444 要 50、实得 50（>40 一屏），U53 修复在真站成立。**排行榜 `target>100` 无 cap 行（§7）同轮补 `crawl.bili.rankingCapped`** |
+| U54 | `crawlers/comments.py::bilibili` 的 reply/main 游标（**待查，真机 D1 抓到 2026-09-29**） | 一条 2194 评论的视频（step-0 自己读到的 `stat.reply`），评论节点**只交 9 行**却报 `1/1 节点完成`——既无 `comment.status.blocked`、也无 `biliBadAnswer`、更无按分母具名的差额。§6「沉默欠采」最难看见的形状：表、汇总、完成三方同意，唯独没和**站点自印的分母**对账。也可能是匿名/一次性设备下 reply 深翻页被限流（站点行为）——两者必须靠探针分清，不在热账号上瞎判 | 待真机复现归因：账号冷却后用 `backend/test_bili_comment_cursor.py` 逐 cursor 页量 `replies/total/is_end/code`。`test_live_bilibili_workflow.py::test_d1` 现挂 `xfail(strict=False)` 记录，**不许放宽成「9 也算过」**；查明是产品即补差额具名行（仿 `comment.weiboShort`）后去标 |
+| U55 | `crawlers/comments.py::bilibili` 把不存在的视频判成登录墙（**待查，真机 D2 抓到 2026-09-29**） | 一个形状合法但不存在的 BV（`BV00000000000`）：评论路径**取不到 aid → 本应 DEAD**，却被归成「登录墙/触发风控」→ latches `login_wall` → 节点 `执行失败：…COOKIE 可能过期`，而**同一次运行下一条真链接刚采到 8 条评论**。与抖音 U47 同形：一个读不通的死链接把整条会话定了罪。| 待真机复现归因 + 产品修复（死 id 与墙分流，只按其 OWN 状态记 DEAD，绝不 latch 会话级 cookieExpired）；`test_d2` 现挂 `xfail(strict=False)` 记录，修好即绿即去标 |
 
 
 **滚动节奏（fake driver 数出来的 scroll 命令，不是真机测量；读控制台 `scroll_round` 前先记住它）**：
@@ -593,6 +595,14 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
         离线验证到此为止——全树 collect 干净（4696/4979，283 条真机层被 deselect），快层 4696 passed / 0 skipped。
       * **未做（需你与浏览器在场）**：`-m "live_site and live_cn"` 真机跑这 13 格 + §10 逐例读控制台归因
         + H 组 `测试：哔哩哔哩.json` 终验。**绝不无人值守跑**（花账号，B站 `parallel_recommended` 可开真并行）。
+      * **真机第一轮（2026-09-29，国内网络，隔离 live profile + 种入 Cookie）**：posts/author/hot 全绿——
+        **A1**(10 行，processed 集合==表内 BV号)、**A2**(无头 full-or-named)、**A3**(问 5 存 5)、**B1**(要 50 得 50，
+        **U53 修复真站坐实**)、**B2**(非 mid 具名拒付)、**C1**(热门分页)、**C2**/**A5**(修正后过：A5 改用稳定榜单
+        验去重、C2 容忍具名风控)、修好的白名单把 `crawl.bili.blocked` 计入合法。**抓到两枚评论层新疑点 U54/U55**
+        （D1 一条 2194 评论的视频只交 9 且三方自洽；D2 一个不存在的 BV 被读成登录墙、连带判死会话——抖音 U47 同形），
+        已各挂 `xfail(strict=False, reason=product bug …)` 如实记录，**不许放宽**。连续多爬后账号进入 `code=-352`
+        间歇风控（C2/D 撞上过），故 **E/G/H 未续跑**：需账号冷却、按 §10 分批、有人盯。评论两层待用
+        `backend/test_bili_comment_cursor.py` 探针在凉账号上分清「产品欠采」vs「匿名深翻页限流」再修产品码。
 - [ ] 小红书 → 微信（同一套八步）
 - [ ] VPN 阶段：X → YouTube（先测反向用例：不可达必须报 `unreachable`，不许假空）
 - [ ] 全平台门过 → §6 剩余嫌疑（U1 通用 under-target、U2 walk 计数器从不打印等）收口提交
