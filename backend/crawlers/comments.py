@@ -532,7 +532,10 @@ return (function () {
         aid = data.get('aid')
         if not aid:
             return [], DEAD
-        if not int((data.get('stat') or {}).get('reply') or 0):
+        #: The site's own comment count — the denominator the user reads off the page. Kept so a clean-end
+        #: walk far under it can be named (U54), not just counted silently into a finished crawl.
+        declared = _as_count((data.get('stat') or {}).get('reply'))
+        if not declared:
             # The author closed the comment section: that is an answer, not a
             # failure, and it has to read as 无评论 rather than as a dead link.
             self.log(t('comment.commentsClosed', url=url))
@@ -578,6 +581,15 @@ return (function () {
             return rows, BLOCKED
         if first_page_unreadable:
             return [], DEAD
+        # U54 (measured live 2026-09-29, H1 comment leg): a 2194-comment thread delivered only 7 rows and
+        # ENDED on is_end/empty page → the old code returned OK silently, so table+summary+completion all
+        # agreed on a short count that no line explained. A clean end far under the site's OWN denominator
+        # is not "the thread is short" — it is what an anonymous deep-page bucket does when throttled. Name
+        # the gap against ``declared`` (mirror comment.weiboShort / comment.zhihuPanelShort); a thread that
+        # really holds that many (rows==declared) or that met the user's ask says nothing (two-sided).
+        met_ask = bool(limit) and len(rows) >= limit
+        if not met_ask and len(rows) < declared:
+            self.log(t('comment.biliShort', url=url, rows=len(rows), declared=declared))
         return (rows[:limit] if limit else rows), OK
 
     # -- twitter (X) ------------------------------------------------------------

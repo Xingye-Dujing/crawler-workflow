@@ -585,10 +585,15 @@ Reaching for the search loop's one-request-per-row here would produce the same t
 
 评论节点两枚疑点都用真机数据分了类，**没在热账号上瞎判**：
 
-- **U54 = 限流，不是游标 bug。** 冷却后逐 cursor 页量 `x/v2/reply/main`（分母 `stat.reply=47268`）：页 0→24
-  每页 20/19/18 条、`cursor.next` 2→3→4→… 一路推进、累计 **494 条新行跨 26 页**，`is_end` 始终 False。所以
-  先前那条「2194 评论的视频只交 9 行」**是一次性设备深翻页被限流**（站点行为），游标本身是对的。D1 冷却后
-  ≥40 全绿。**不加差额具名行**：游标停在 `is_end`/无新 rpid 是站点的合法收尾，不该被读成欠采。
+- **U54 = 限流，不是游标 bug；但收尾上报有真缺陷（已修）。** 冷却后逐 cursor 页量 `x/v2/reply/main`（分母
+  `stat.reply=47268`）：每页 20/19/18、`next` 2→3→4→… 一路推进、累计 **494 条新行跨 26 页**、`is_end` 始终 False
+  → 游标本身对。先前「2194→9 行」是一次性设备深翻页被限流（站点行为）。但真机 H1 评论腿暴露另一半才是 bug：被限流
+  时 `reply/main` 回 `is_end=True`/空页，旧代码把 7 行按「线程结束」静默返 OK——表+汇总+完成三方同意一张短表、
+  无一字解释（§6「沉默欠采」本尊）。修：收尾处把已读到的 `stat.reply` 当分母，未达用户上限 **且** 收到<分母 →
+  打 `comment.biliShort`（rows/declared，仿 `comment.weiboShort`/`zhihuPanelShort`）具名差额；收到==分母 或达上限
+  则一字不说（两侧留活口，绝不误念用户填的小数）。中途 risk/unknown 页另走 BLOCKED+停跑（见 U55 分类）。快层两枚针
+  `test_a_clean_end_under_the_denominator_is_named_short`（2194→7 必须具名）、
+  `test_a_thread_that_holds_what_it_reports_says_nothing`（7→7 不说）。
 - **U55 = 死链被判成会话墙（已修）。** 探针喂一个形状合法但不存在的 BV（`BV00000000000`）：
   `x/web-interface/view` 回 **`code=-400`**（不是 `-404`），而 `crawl_bilibili` 旧默认把「所有非 `CODE_GONE`
   的非零码」一律归 `BLOCKED` → `_execute_comment_node` latches `cookieExpired` → 整个运行被一条读不通的死链

@@ -686,6 +686,7 @@ _ZH = {
     'crawl.x.no_cards': '[X] 时间线里一条推文都没有渲染出来（被拦截、关键词过窄或账号无推文）：{url}',
     'crawl.x.finished': '[X] 共保留 {n} 条（结束原因：{reason}）',
     'comment.biliBadAnswer': '哔哩哔哩评论接口未返回数据（code={code}）：{url}',
+    'comment.biliShort': '[B站评论] 游标收到 {rows} 条，站点标注 {declared} 条（匿名深翻页被限流）：{url}',
     'comment.dyNoId': '链接里没有视频 ID，无法抓评论：{url}',
     'comment.dyNoPanel': '评论区没有渲染出来（可能被折叠或需要登录）：{url}',
     'comment.dyGone': '[抖音评论] 站点把这条链接换成了另一条视频（{shown}），这条按失效处理：{url}',
@@ -1640,6 +1641,7 @@ _EN = {
     'crawl.x.no_cards': '[X] no tweet rendered at all (blocked, too narrow, or an empty account): {url}',
     'crawl.x.finished': '[X] kept {n} posts (stopped because: {reason})',
     'comment.biliBadAnswer': 'bilibili comment endpoint returned no data (code={code}): {url}',
+    'comment.biliShort': '[bilibili] cursor got {rows} of {declared} per the site (deep-page throttling): {url}',
     'comment.dyNoId': 'the link carries no video id, so comments cannot be fetched: {url}',
     'comment.dyNoPanel': 'the comment panel never rendered (collapsed, or login required): {url}',
     'comment.dyGone': (

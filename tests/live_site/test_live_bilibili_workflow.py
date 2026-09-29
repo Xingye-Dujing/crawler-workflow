@@ -35,12 +35,16 @@ coexist)::
 closed list this file does not extend.
 """
 
+import csv
+import os
 from pathlib import Path
 
 import live_acceptance as accept
 import live_run_driver as driver
 import live_run_harness as harness
 import pytest
+
+from utils.helpers import sanitize_filename
 
 pytestmark = [
     pytest.mark.live_site,
@@ -183,8 +187,9 @@ def _vocabulary(mode: str, headless: bool) -> tuple[tuple, tuple]:
             + (
                 'comment.commentsClosed',  # the author closed the section: an answer, not a failure
                 'comment.biliBadAnswer',  # reply/main refused with no rows collected
+                'comment.biliShort',  # U54: a clean end far under the site's own denominator (throttle), named
                 'comment.status.blocked',  # the reply endpoint refused mid-thread
-                'comment.status.dead',  # the link is unreadable (no aid came back)
+                'comment.status.dead',  # the link is unreadable (no aid, or a transport-failed first page)
             ),
             (),
         )
@@ -707,6 +712,27 @@ ACCEPTANCE_FILE = REPO_ROOT / 'data' / 'workflows' / '测试：哔哩哔哩.json
 ACCEPTANCE_TIMEOUT = 2 * DEEP_TIMEOUT + COMMENT_TIMEOUT
 
 
+def _output_stems(workflow: dict) -> dict:
+    """``{source_node_id: export filename stem}`` for the output node each source feeds.
+
+    ``assert_canvas_exports`` matches a fresh file by the workflow *label* prefix, which is the wrong key for
+    this canvas: his 输出 nodes name their own files (``测试：哔哩哔哩 关键词搜索爬取.csv``), and the fullwidth
+    '：' in the label is sanitised to ``_`` on the way to disk, so ``{label}-`` never matches (the weibo/微信/
+    YouTube finding, re-recorded here). So the acceptance leg ties file→store→preview through the filename the
+    node actually wrote — the only identity that survives the exporter's own sanitising.
+    """
+    nodes = {str(node.get('id')): node for node in workflow.get('nodes') or []}
+    stems: dict = {}
+    for conn in workflow.get('connections') or []:
+        target = nodes.get(str(conn.get('to')))
+        if target is not None and target.get('type') == 'output':
+            declared = (target.get('params') or {}).get('filename') or ''
+            stem = os.path.splitext(sanitize_filename(declared))[0].strip()
+            if stem:
+                stems[str(conn.get('from'))] = stem
+    return stems
+
+
 def _llm_block() -> dict:
     """The AI transport block his panel would send, with the model read off the local daemon.
 
@@ -765,13 +791,42 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
             ),
         )
         assert not silent, f'components under target with no honest reason named: {silent}'
-        accept.assert_canvas_exports(found, accept.new_exports(exported_before), records)
+        stems = _output_stems(workflow)
+        fresh = accept.new_exports(exported_before)
         for part in found:
             rows = run.preview(part['source'], workflow_name=part['label'])
             if part['mode'] == 'comments':
                 if rows:
                     _assert_comment_rows(rows, minimum=1)
-            else:
+            elif rows:
                 _assert_post_rows(rows, minimum=1, source=f'H1 {part["label"]}')
+            # Per-component L2 three-consistency (file == store == preview) tied by the output node's own
+            # filename stem. The exporter writes either `stem.csv` (bare, ``filename_timestamp`` off) or
+            # `stem-<stamp>.csv` (stamped, on) — the flagship canvas mixes both. Accept either shape. A leg
+            # that honestly filed nothing (a named throttle) writes no export: the output node returns before
+            # saving on empty input. So an empty leg must have NO file and a named verdict; a leg that stored
+            # rows owes the file that ties store to preview.
+            stem = stems.get(part['source'])
+            mine = [
+                path
+                for path in fresh
+                if stem and (path.name.startswith(f'{stem}.') or path.name.startswith(f'{stem}-'))
+            ]
+            stored = harness.stored_rows(records[part['label']], part['source'])
+            if stored == 0:
+                answer = next(a for label, a in answers if label == part['label'])
+                assert answer['verdict'] == harness.NAMED_SHORT, (
+                    f'leg {part["label"]!r} filed nothing; only a reason the site said makes that legal: {answer}'
+                )
+                assert not mine, f'a leg that filed 0 rows still wrote an export {mine} for {part["label"]}'
+                continue
+            assert mine, (
+                f'no export file names the component {part["label"]!r} (stem {stem!r}): {[p.name for p in fresh]}'
+            )
+            with mine[0].open(encoding='utf-8-sig', newline='') as handle:
+                exported_rows = sum(1 for _ in csv.reader(handle)) - 1
+            assert exported_rows == stored == len(rows), (
+                f'{mine[0].name} file {exported_rows} / store {stored} / preview {len(rows)} for {part["label"]}'
+            )
         summary = accept.summary_row(run, case_id='H1', found=found, answers=answers, kept=kept, asked=asked)
         run.finish(rows=kept, target=asked, warn=summary != harness.FULL)

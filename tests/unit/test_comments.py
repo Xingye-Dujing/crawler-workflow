@@ -715,6 +715,43 @@ class TestBilibiliAdapter:
         assert rows == [] and status == OK
         assert not [u for u in driver.fetched if 'reply/main' in u], 'nothing to page once reply=0'
 
+    def test_a_clean_end_under_the_denominator_is_named_short(self):
+        """U54 (live H1, 2026-09-29): a thread that ENDS far under the site's own count must NAME the gap.
+
+        A 2194-comment video whose ``reply/main`` pages stop at 7 with ``is_end`` read back as a clean end —
+        the old code returned those 7 with status OK and NO line, so table+summary+completion all agreed on a
+        short count the site never actually said (the silent-under-collect). Now the walk compares what it got
+        against the ``stat.reply`` denominator it already read and logs ``comment.biliShort``. Two-sided by
+        construction: a thread that genuinely holds what it reports (next test) says nothing.
+        """
+        url = 'https://www.bilibili.com/video/BV1atCRYsE7x/'
+        said = []
+        seven = [_bili_reply(str(i)) for i in range(7)]
+        driver = FakeDriver(fetch_queue=[_bili_view(reply_total=2194), _bili_page(seven, is_end=True)])
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, status = session.crawl_bilibili(url, limit=50)
+        assert status == OK and len(rows) == 7, (rows, status)
+        assert i18n.t('comment.biliShort', url=url, rows=7, declared=2194) in said, (
+            f'a 7-of-2194 clean end must name the gap, not complete silently: {said!r}'
+        )
+
+    def test_a_thread_that_holds_what_it_reports_says_nothing(self):
+        """The other half of the U54 line: rows == denominator is a real end, so NO shortfall is claimed.
+
+        Without the ``len(rows) < declared`` guard this line would fire on every short-but-honest thread and
+        blame the user's own small number — the weibo 「收到的等于站点报的数就不说」 rule.
+        """
+        url = 'https://www.bilibili.com/video/BV1atCRYsE7x/'
+        said = []
+        seven = [_bili_reply(str(i)) for i in range(7)]
+        driver = FakeDriver(fetch_queue=[_bili_view(reply_total=7), _bili_page(seven, is_end=True)])
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        rows, status = session.crawl_bilibili(url, limit=50)
+        assert status == OK and len(rows) == 7
+        assert i18n.t('comment.biliShort', url=url, rows=7, declared=7) not in said, (
+            f'a 7-comment thread that returned all 7 must not be called short: {said!r}'
+        )
+
     def test_a_view_code_is_classified_by_who_it_blames(self):
         """A bad ``view`` code is DEAD (this link); a risk or unrecognised code is BLOCKED (this session).
 
