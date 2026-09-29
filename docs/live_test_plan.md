@@ -644,6 +644,14 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
         确认 XHS 仍能正常浏览（notes 记着用户本人浏览器当时还好、只有拷贝的测试会话被弹）后再单次探针；
         每次重试都在花这个登录，须由用户点头，不自动排。
 - [ ] VPN 阶段：X → YouTube（先测反向用例：不可达必须报 `unreachable`，不许假空）
+      - **2026-09-29 12:4x（VPN 实测 204/200 可达）YouTube 低层 live 9/9 全绿**（`test_live_youtube.py`，~100 s，
+        headless 与 visible 各测）：09-26 的 youtube cookie **仍有效**；innertube 页内 JSON-first 页面模型今日复核为真
+        （search 出行、per-row `player` 回 点赞数/时长秒/正文、cursor 翻过首屏≥16、频道 id 从页面读、评论游标翻过 20、
+        不存在视频/非视频链接具名拒付）。**YouTube 侧无 §6 U14 之外的数据正确性问题**；U14（author 无收尾原因行、
+        `finished` 不带目标）是控制台诚实度，留待**运行级矩阵 + 逐行读控制台**时按 §5 白名单具名处理。
+      - **YouTube 剩余（#18）**：运行级矩阵 `test_live_youtube_workflow.py`（抄共享件）+ with_facts 2×2 轴 + §7 专轴
+        （游标选择按「是哪个列表的元素」）+ H 组 `测试：YouTube.json` 终验。**X 侧未测**：twitter cookie 同为 09-26，
+        X 会话比 YouTube 短得多、且 headless 被弹注册页（crawler_rules），#18 X 大概率要先**重新登录**才能跑 live。
 - [ ] 全平台门过 → §6 剩余嫌疑（U1 通用 under-target、U2 walk 计数器从不打印等）收口提交
 
 ### 交接状态（2026-09-28 晚，**Cookie 多账号 / 微信 / i18n / 云端部署**；抖音第 8 步仍未收口）
