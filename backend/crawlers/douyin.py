@@ -1,4 +1,4 @@
-"""Douyin (抖音): DOM-only search (signed API is not callable), scroll-and-dedupe comments.
+"""Douyin (抖音): DOM-only reads (signed API is not callable), scroll-and-dedupe comments.
 
 Split out of the former ``crawlers/video.py``; the shared video base and the two
 generic row helpers live in :mod:`crawlers.video_base`. Measurements in ``docs/crawler_notes.md``.
@@ -13,7 +13,7 @@ from urllib.parse import quote
 from i18n import t
 
 from .base import PageNotArrivedError
-from .engine import feed, menu, popup
+from .engine import feed, popup
 from .engine.counters import parse_count
 from .video_base import VideoCrawler, _stamp
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class DouyinCrawler(VideoCrawler):
-    """Douyin (抖音 web): search-bar driven, one video page per row, visible window only."""
+    """Douyin (抖音 web): one video page per row, visible window only."""
 
     domain = 'www.douyin.com'
     cookie_domains = ('douyin.com', 'www.iesdouyin.com')
@@ -34,8 +34,8 @@ class DouyinCrawler(VideoCrawler):
     #: declining is both the safe answer and the one that keeps the session alone.
     prompts = (popup.DOUYIN_TRUST_LOGIN,)
 
-    #: Outcomes of the "reach the result list" step — kept as names because the
-    #: caller has to treat them differently (see ``_open_results``).
+    #: Outcomes of the "reach the page" step — kept as names because the caller has to
+    #: treat them differently (see :meth:`_page_outcome`, which ``hot`` branches on).
     OK = 'ok'
     NOT_MOUNTED = 'not_mounted'
     CAPTCHA = 'captcha'
@@ -61,13 +61,6 @@ class DouyinCrawler(VideoCrawler):
     #: What the page says its own 作品 count is — the only honest yardstick for
     #: "did we reach the end of this list" when the list has no end marker.
     WORK_COUNT = '[data-e2e="user-tab-count"]'
-    #: The search box still takes the text and its 搜索 button is still clickable,
-    #: but neither routes any more (measured, and confirmed by the user watching the
-    #: window: the words appear, the click does nothing, and Enter does not either).
-    #: So the result page is entered through its own address, which has the extra
-    #: merit that the keyword the user asked for is the keyword the URL carries —
-    #: there is no router left to interrogate about it.
-    SEARCH_ENTRY = 'https://www.douyin.com/search/{kw}?type=video'
     #: The board page and its own endpoint. Measured twice today
     #: (``scratchpad/douyin_hot_static.json``): asked from inside a loaded ``/hot``
     #: document with a URL built **from literals** — no ``a_bogus``, no ``msToken``, no
@@ -94,9 +87,6 @@ class DouyinCrawler(VideoCrawler):
     MOUNT_WAIT = 45.0
     #: How long one scroll is allowed to take to pay out new rows.
     SCROLL_WAIT = 14.0
-    #: Measured: the window scrolling does page the list now (16 → 26 → 36 → 46 → 56
-    #: cards), so the pager is the window and not only the detail visit.
-    SCROLL_STEP = 0.9
     POLITE_BASE = 1.0
     POLITE_SPREAD = 0.4
 
@@ -108,132 +98,12 @@ class DouyinCrawler(VideoCrawler):
     #: complaint this round exists to answer).
     LIST_END_MARKS = ('暂时没有更多了', '没有更多了')
 
-    #: The corner word the result page hides its ordering behind, and the words inside it.
-    #: Measured 2026-09-26: the panel is **hover**-wired (clicking 筛选 closes it), no choice
-    #: changes the address, and the site's own words are 综合排序 / 最新发布 / 最多点赞 — there is
-    #: no 「最热」. The classes beside them are build hashes, so this table is text-driven, like
-    #: :mod:`crawlers.engine.popup`.
-    SORT_OPENER = '筛选'
-    SORTS = {'general': '综合排序', 'newest': '最新发布', 'most_liked': '最多点赞'}
-    SORT_DEFAULT = 'general'
-
-    def search(self, keyword: str, target_count: int = 50, sort: str = None, **kwargs):
-        """Open the result route, then open each card for the numbers it lacks.
-
-        A search card carries an address, a duration and one rounded figure — the
-        four counters and the real publish time come only from the video page, so
-        the row budget is the detail visit and the cursor records which ids have
-        been opened: a resumed run picks up mid-list instead of re-paying for the
-        head of it.
-
-        *sort* is that corner menu's choice, and it **selects data**: 一周内 vs the default
-        measured as a 0/16 id overlap. No URL carries it either, so an order that cannot be
-        applied is refused by name — carrying on with 综合排序 behind the user's back would file
-        a table under a claim this crawl never made.
-        """
-        # Identity, not a resume blob: the rows a resumed run reloaded carry their
-        # own 视频ID, so the skip-set is derived from them — exactly what the author
-        # grid below already does. The cursor used to also carry an id list
-        # truncated to the last forty; resuming a run that had collected more than
-        # that re-opened every already-collected video past the cut, buying a paid
-        # navigation per stale head-card. (AGENTS: a cursor records position, not
-        # content.)
-        done = {str(row.get('视频ID') or '') for row in self.results() if row.get('视频ID')}
-        if self.collected() >= target_count:
-            logger.info(t('crawl.dy.target_reached', n=target_count))
-            return self.results()
-        logger.info(t('crawl.dy.start', kw=keyword, n=target_count))
-        reached = self._open_results(keyword)
-        if self._page_outcome(reached) == self.CAPTCHA:
-            raise RuntimeError(t('crawl.dy.wall'))
-        if not reached['arrived']:
-            # Zero cards is never an empty answer here. Measured: a keyword that
-            # cannot exist still came back with 16 related videos, because douyin
-            # fills the list in rather than showing an empty plate — so an empty
-            # page means blocked (验证码中间页), broken (``502 Bad Gateway``) or a
-            # load that never finished, and reporting 0 rows would blame the keyword.
-            # The third of those is said by its own sentence: it is the machine's
-            # network, not the site refusing, and the user watching the window told us
-            # so after a run blamed douyin for exactly this.
-            #
-            # And when the browser wrote the page itself, that is said instead: there
-            # is no slower wait that would change a refused address into a page, which
-            # is why the shared wait leaves it as soon as it sees it. Every branch
-            # raises :class:`PageNotArrivedError` with its own numbers so the executor can
-            # add what only a probe of this machine can tell — the three sentences on
-            # their own are observations, not advice.
-            facts = {'waited': reached['waited'], 'verdict': reached['verdict'], 'gave_up': reached['gave_up']}
-            if reached['verdict'] == 'unreachable':
-                raise PageNotArrivedError(
-                    t('crawl.dy.noPageRefused', url=self._current_url(), detail=self._error_detail()), **facts
-                )
-            if not self.navigation_settled:
-                raise PageNotArrivedError(t('crawl.dy.noCardsSlow', url=self._current_url()), **facts)
-            raise PageNotArrivedError(t('crawl.dy.noCards', page=self._page_words(), url=self._current_url()), **facts)
-        self._apply_sort(sort)
-        rounds = self._open_each(
-            self._card_ids,
-            self._scroll_results,
-            lambda: self._return_to_results(keyword, sort),
-            done,
-            target_count,
-        )
-        logger.info(t('crawl.dy.finished', n=self.collected(), rounds=rounds, total=target_count))
-        return self.results()
-
-    #: Which sentence each of :mod:`crawlers.engine.menu`'s refusals deserves. The reasons are
-    #: mapped to whole keys rather than interpolated into one: a composed key that nobody added
-    #: to the catalogue prints itself into the console, which is the bug class this repo already
-    #: refuses elsewhere (see ``test_i18n.py``'s reachability walk).
-    SORT_REFUSALS = {
-        'no_opener': 'crawl.dy.sortNoOpener',
-        'missing': 'crawl.dy.sortMissing',
-        'no_handle': 'crawl.dy.sortNoHandle',
-    }
-
-    def _apply_sort(self, sort) -> None:
-        """Choose the corner menu's order, or name the part that could not be chosen.
-
-        综合排序 is what the page already shows, so the default presses nothing: clicking the item
-        that is already in force re-renders the list for no reason, and a walk that waits for a
-        change which cannot come would spend its budget on a no-op.
-        """
-        value = str(sort or '').strip() or self.SORT_DEFAULT
-        if value not in self.SORTS:
-            raise ValueError(t('crawl.dy.sortUnknown', sort=value, allowed='/'.join(sorted(self.SORTS))))
-        phrase = self.SORTS[value]
-        if value == self.SORT_DEFAULT:
-            return
-        answer = menu.choose(
-            self.driver,
-            self.SORT_OPENER,
-            phrase,
-            snapshot=self._card_ids,
-            # The always-present item, so a missing choice comes back with the menu's real words
-            # rather than with an empty list the user cannot act on.
-            sample_text=self.SORTS[self.SORT_DEFAULT],
-        )
-        if not answer['ok']:
-            raise RuntimeError(
-                t(
-                    self.SORT_REFUSALS.get(answer['reason'], 'crawl.dy.sortNoHandle'),
-                    sort=phrase,
-                    opener=self.SORT_OPENER,
-                )
-            )
-        # The cursor carries it because nothing else does: the address is unchanged by the choice,
-        # so a resume that did not record the order would continue a different crawl.
-        self.mark_position(sort=value)
-        logger.info(t('crawl.dy.sortApplied', sort=phrase, changed=answer['changed']))
-
     def author(self, author: str, target_count: int = 50, **kwargs):
         """One creator's own posts, read off their profile grid.
 
-        The row budget is the detail visit here exactly as in a keyword search: the
-        grid's card carries an address, a 置顶 mark and one bare figure, and that
-        figure measures equal to the **like** count — so the counters come from
-        opening the video, and a row from this mode is indistinguishable from a row
-        from the search mode.
+        The row budget is the detail visit: the grid's card carries an address, a 置顶
+        mark and one bare figure, and that figure measures equal to the **like** count —
+        so every counter but the like comes from opening the video, not from the card.
         """
         sec = douyin_sec_uid(author)
         if not sec:
@@ -299,8 +169,8 @@ class DouyinCrawler(VideoCrawler):
         The page is opened for two reasons and neither is the rows: it is the same-origin
         document the endpoint is asked from, and it is where a session that has died is
         seen being answered the 验证码中间页 (measured: the wall arrives *after* the
-        navigation settles, which is why this waits the way ``search`` does rather than
-        checking the URL once).
+        navigation settles, which is why this waits for the page rather than checking the
+        URL once).
 
         There is no paging and no per-row visit: measured, the one answer carries all 51
         entries with their own figures, so asking again would replay the board and
@@ -486,36 +356,12 @@ class DouyinCrawler(VideoCrawler):
                 return pool, True, screens
         return pool, False, screens
 
-    # ─── reaching and reading the result list ─────────────────────────
+    # ─── reading the page ─────────────────────────────────────────────
 
     def _title(self) -> str:
         with contextlib.suppress(Exception):
             return self.driver.title or ''
         return ''
-
-    def _open_results(self, keyword: str) -> dict:
-        """Enter the result page through its own address; report how the wait ended.
-
-        Measured 2026-09: the search box takes the text, the 搜索 button is present
-        and clickable, and neither routes — the address sits on ``/jingxuan``
-        through a click *and* through Enter, which is exactly what the user reported
-        watching the window. The ``/search/<kw>`` deep link, which used to leave three
-        empty ``<ul>``s behind, now serves the result list, and it carries the keyword
-        in its own path: the search the user asked for and the search that ran cannot
-        disagree.
-
-        The dict is :meth:`Crawler.wait_for_first_content`'s own answer, because which
-        of the three endings this is changes what the caller may claim: ``ok`` /
-        ``captcha`` / ``not_mounted`` — and none of them is "no results". A nonsense
-        keyword still drew 16 related cards, so this page has no empty state to report;
-        see ``search`` for why the third ending raises.
-        """
-        url = self.SEARCH_ENTRY.format(kw=quote(str(keyword or '')))
-        self.open(url)
-        # The 「保存登录信息」 mask mounts seconds after the page and covers the
-        # list; it is dismissed on arrival rather than after a failed click.
-        self._dismiss_prompts()
-        return self._wait_for_page()
 
     def _wait_for_page(self) -> dict:
         """Wait for the result list's first card, under the shared patient clock.
@@ -536,21 +382,6 @@ class DouyinCrawler(VideoCrawler):
         if wait.get('verdict') in ('login', 'blocked', 'wall') or self._is_walled():
             return self.CAPTCHA
         return self.NOT_MOUNTED
-
-    def _return_to_results(self, keyword: str, sort) -> None:
-        """Come back to the result list, in the order the user chose.
-
-        Called only by :meth:`_open_each` between two passes, when the last detail visit took
-        the driver away from this page. The chosen order lives in no address (measured: the
-        corner menu re-renders the list and leaves the URL alone), so a re-open that skipped it
-        would finish a walk filed under 最多点赞 having crawled its remaining rows in
-        综合排序. A list that does not come back — dying cookie, slow network — simply yields no
-        further ids and the walk ends with the rows it holds; the wall the navigation itself
-        latched is what the executor reports from there.
-        """
-        reached = self._open_results(keyword)
-        if self._page_outcome(reached) != self.CAPTCHA:
-            self._apply_sort(sort)
 
     def _is_walled(self) -> bool:
         """A refusal the page has already announced: captcha title, or a wall flag."""
@@ -591,10 +422,10 @@ class DouyinCrawler(VideoCrawler):
 
         The id comes out of the card's own href (``/video/7688240192020385070``),
         which is the one thing on a card that is both stable and addressable: a card
-        that has not been filled in yet — the skeleton rows the search list mounts
-        first — has no anchor and contributes nothing, which is why the mount wait
-        counts these rather than counting nodes. *anchor* switches which list is
-        read: the search result or a creator's own grid.
+        that has not been filled in yet — the skeleton rows this site mounts first —
+        has no anchor and contributes nothing, which is why the mount wait counts these
+        rather than counting nodes. *anchor* switches which list is read: the on-screen
+        ``scroll-list`` (the page's arrival check) or a creator's own grid.
         """
         out = []
         for el in self.driver.find_elements('css selector', anchor or self.CARD_ANCHOR):
@@ -672,36 +503,6 @@ class DouyinCrawler(VideoCrawler):
         would see if he looked at the window, not in a node the build might rename.
         """
         return any(mark in self._body_text(limit=6000) for mark in self.LIST_END_MARKS)
-
-    def _scroll_results(self) -> bool:
-        """Step the window down and report whether the list handed over more rows.
-
-        Measured on the current build: 16 → 26 → 36 → 46 → 56 cards, one batch of
-        ten per scroll. The previous shape of this method hunted for the page's
-        largest scrollable element and jumped it to its bottom, because on that
-        build the window never moved at all — the measurement is what decides which
-        of the two is right, and returning "nothing new" is how a walk stops
-        pretending a one-screen list paged when it did not.
-        """
-        before = len(self._card_ids())
-        step = 'window.scrollBy(0, document.body.scrollHeight * arguments[0]);'
-        with contextlib.suppress(Exception):
-            self.driver.execute_script(step, self.SCROLL_STEP)
-        grown = feed.wait_for(lambda: len(self._card_ids()), before + 1, timeout=self.SCROLL_WAIT, tick=1.0) > before
-        if not grown:
-            # One unread growth is not the end of a list. Measured 2026-09-28 (live cell H1, 综合排序 leg):
-            # the walk re-opened its result page, the batch was still in flight, the growth poll timed out,
-            # and the whole crawl ended at 46 of 50 — while the same list went on to hand over 85 cards on
-            # the next attempt. So the scroll is given one more settle-and-reach: a list that is really done
-            # costs one extra wait, and a batch that was merely late stops costing the user rows.
-            time.sleep(2.0)
-            with contextlib.suppress(Exception):
-                self.driver.execute_script(step, self.SCROLL_STEP)
-            grown = (
-                feed.wait_for(lambda: len(self._card_ids()), before + 1, timeout=self.SCROLL_WAIT, tick=1.0) > before
-            )
-        self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
-        return bool(grown)
 
     # ─── one video ────────────────────────────────────────────────────
 

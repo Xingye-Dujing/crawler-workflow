@@ -30,7 +30,7 @@ class _DyingCrawler(Crawler):
     """Streams what it is given, then watches the next page fail to arrive.
 
     The message it raises is the platform's own observation (the shape
-    ``crawl.dy.noCardsSlow`` has); the numbers ride on the exception because the
+    ``crawl.dy.authorNoCards`` has); the numbers ride on the exception because the
     executor, not the platform, owns the sentence about this machine's network.
     """
 

@@ -4,22 +4,22 @@ Every assertion here encodes a measurement that contradicts the obvious
 implementation, which is exactly why it needs to be pinned where it runs on
 every change:
 
-* the result page is entered through **its own address** (``/search/<kw>?type=video``),
-  because the search box and its 搜索 button no longer route anywhere — measured, and
-  confirmed by watching the window: the words appear, the click does nothing, Enter
-  included. The list also mounts as **skeleton rows** (no anchor, no text) and fills
-  in seconds later, so "cards exist" is not yet "results exist";
-* the window scrolling is the pager (measured 16 → 26 → 36 cards per scroll), so a
-  walk that stopped after one screen would report the head of the list as the search;
+* a list (the author grid, or the page a hot/arrival check waits on) mounts as
+  **skeleton rows** first — no anchor, no text — and fills in seconds later, so
+  "cards exist" is not yet "results exist"; the wait is for an anchor, not a node
+  count;
+* a creator's 作品 grid pages **off its own scrollable container**, because the
+  window moves none of it (measured: a window scroll grows the footer's
+  recommendations and leaves the grid untouched), so a walk that scrolled the
+  window would report the head of the grid as the whole of it;
 * a row's numbers come from the ``data-e2e`` counters that name themselves on the
   video page, and the row has **no 播放数 column at all**, because the web player's
   second number is the like count, not plays — a plausible-wrong figure is worse
-  than none (the search card's own bare figure measures equal to that like count);
+  than none (a grid card's own bare figure measures equal to that like count);
 * comments are DOM-scrolled (douyin's endpoint is signed with ``a_bogus``).
 """
 
 import json
-import logging
 
 import pytest
 from selenium.common.exceptions import TimeoutException
@@ -423,119 +423,18 @@ class TestPureHelpers:
         assert douyin_sec_uid('') == ''
 
 
-class TestSearch:
-    def test_the_result_page_is_entered_through_its_own_address(self, make_crawler):
-        """The keyword is in the address the crawler asked for, so there is no
-        router left to interrogate about which search actually ran.
+class TestVideoDetail:
+    """One video page read straight through :meth:`get_detail`.
 
-        Measured 2026-09: the search box still takes the text and its 搜索 button is
-        still clickable and does nothing — the address sits on ``/jingxuan`` through
-        a click *and* through Enter — while ``/search/<kw>?type=video``, which used to
-        be an empty shell, now serves the list.
-        """
-        crawler, driver = make_crawler(cards=[ID])
-        rows = crawler.search('人工智能', target_count=1)
-        assert rows and rows[0]['视频ID'] == ID
-        assert driver.visited[0] == 'https://www.douyin.com/search/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD?type=video'
-        assert all('/jingxuan' not in url for url in driver.visited), 'the box-and-button entry is gone'
-
-    def test_a_list_still_drawing_its_skeleton_is_waited_out(self, make_crawler):
-        """The rows exist before their content does.
-
-        Measured: 16 ``<li>`` with no anchor and no text first, and the same 16
-        holding video addresses a few seconds later. A walk that counted nodes would
-        take the first state for results; the wait is for an anchor, so an undrawn
-        page is never mistaken for a keyword that found nothing.
-        """
-        crawler, driver = make_crawler(cards=[ID, '7665683746674183460'], fill_after=2)
-        rows = crawler.search('人工智能', target_count=2)
-        assert [row['视频ID'] for row in rows] == [ID, '7665683746674183460']
-        assert driver.scrolls == 0, 'the page was waited on rather than scrolled past'
-
-    def test_a_page_that_never_hands_over_a_card_refuses_rather_than_reporting_zero(self, make_crawler):
-        """Zero cards is never "no results" on this site.
-
-        Measured: a keyword that cannot exist still came back with 16 related videos,
-        because douyin fills the list in rather than showing an empty plate — so an
-        empty list is the page failing (blocked, or its own ``502 Bad Gateway``), and
-        a 0-row success would be a claim about the user's keyword. The refusal quotes
-        what the page said, because "nothing" is not something to act on.
-        """
-        crawler, driver = make_crawler(cards=[], title='502 Bad Gateway')
-        with pytest.raises(RuntimeError) as err:
-            crawler.search('人工智能', target_count=3)
-        assert '502 Bad Gateway' in str(err.value)
-        assert driver.scrolls == 0 and len(driver.visited) == 1, 'nothing was paid for on the way'
-
-    def test_the_mask_is_cleared_on_arrival(self, make_crawler):
-        """The 「保存登录信息超过5天」 dialog still mounts seconds after the page and
-        covers the list. Only 取消 is ever pressed: the user reports 保存 leads to a
-        phone-verification step, so declining is both the safe answer and the one
-        that leaves the session alone.
-        """
-        crawler, driver = make_crawler(cards=[ID], dialog=True)
-        assert crawler.search('人工智能', target_count=1)
-        assert driver.dismissals == 1, 'the dialog is cleared by us, on arrival'
-
-    def test_scrolling_pays_out_the_next_batch_of_rows(self, make_crawler):
-        """Measured: 16 → 26 → 36 cards per window scroll, so the window *is* the
-        pager now. A walk that stopped after one screen would hand back the head of
-        the list and read as a complete search."""
-        crawler, driver = make_crawler(cards=[ID], scroll_batches=[['7665683746674183460', '7665683746674183461']])
-        rows = crawler.search('人工智能', target_count=3)
-        assert [row['视频ID'] for row in rows] == [ID, '7665683746674183460', '7665683746674183461']
-        assert driver.scrolls >= 1
-
-    def test_a_target_beyond_the_first_screen_is_paged_for_before_any_video_is_opened(self, make_crawler):
-        """#146, measured on the user's own run: 关键词 IU、目标 50、第一屏 26 条 — and the crawl
-        filed 26 rows and said「翻了 2 屏」as though that were the site's answer.
-
-        It was not. Opening one video is a **whole navigation**, so the interleaved walk asked
-        the page it was then standing on — the last video page — for more result cards, and a
-        video page has none. The row count is only half of this assertion; the other half is
-        that no scroll at all happened off the list's own document.
-        """
-        ids = [f'76656837466741834{i:03d}' for i in range(56)]
-        crawler, driver = make_crawler(cards=ids[:26], scroll_batches=[ids[26:36], ids[36:46], ids[46:56]])
-
-        rows = crawler.search('IU', target_count=50)
-
-        assert len(rows) == 50, f'the walk stopped at one screen again: {len(rows)} of 50 rows'
-        assert driver.detail_scrolls == 0, 'a document that is not the list was paged for more rows'
-        assert [u for u in driver.visited if '/search/' in u] == ['https://www.douyin.com/search/IU?type=video'], (
-            'one pass down this list is enough, so a second load means the walk left it too early'
-        )
-
-    def test_a_pool_that_ran_dry_on_blank_detail_pages_goes_back_to_the_list(self, make_crawler):
-        """Harvesting a pool is a promise about ids, never about rows: a detail page can still
-        publish nothing (measured 2026-09-26, and pinned above), and that shortfall is recovered
-        by paging the list further — which first needs the list document back under the driver.
-        """
-        crawler, driver = make_crawler(
-            cards=[ID],
-            scroll_batches=[[OTHER]],
-            facts_by_id={ID: {**_default_facts(), 'info': '', 'publish': '', 'related': ''}},
-        )
-        rows = crawler.search('人工智能', target_count=2)
-
-        assert [str(row['视频ID']) for row in rows] == [OTHER]
-        assert len([u for u in driver.visited if '/search/' in u]) == 2, 'the walk must return to the list'
-
-    def test_a_captcha_interstitial_refuses_the_run(self, make_crawler):
-        """A run answered by 验证码中间页 has to fail, not come back empty — an empty
-        table reads as "this keyword has no videos", which is a claim about the
-        data. The wall here lives in the page title, not in any URL pattern — and it
-        arrives *after* the navigation settled (measured), so it has to be watched for
-        during the mount wait: a single check on arrival walked straight past it into a
-        0-row success, which is the bug this now pins."""
-        crawler, _driver = make_crawler(cards=[ID], fill_after=99, title='验证码中间页')
-        with pytest.raises(RuntimeError) as err:
-            crawler.search('人工智能', target_count=3)
-        assert '验证码' in str(err.value) or 'captcha' in str(err.value).lower()
+    These are the row-level facts the *author* and comment paths share (the counters
+    that name themselves, the author-by-link fallback, the swapped-page and per-row-wall
+    refusals), so they stay pinned after the keyword-search mode was removed — driven by
+    the entry point that still exists rather than by a walk through the search list.
+    """
 
     def test_rows_carry_only_the_counters_that_name_themselves(self, make_crawler):
         crawler, _driver = make_crawler(cards=[ID])
-        row = crawler.search('人工智能', target_count=1)[0]
+        row = crawler.get_detail(f'https://www.douyin.com/video/{ID}')
         assert row['点赞数'] == 59000 and row['评论数'] == 2099
         assert row['收藏数'] == 9241 and row['转发数'] == 7839
         assert row['发布时间'] == '2026-08-04 16:32'
@@ -565,7 +464,7 @@ class TestSearch:
                 }
             },
         )
-        row = crawler.search('人工智能', target_count=1)[0]
+        row = crawler.get_detail(f'https://www.douyin.com/video/{ID}')
         assert row['作者'] == '泫九', row
         assert row['粉丝数'] == '' and row['获赞数'] == '', f'a missing figure must not be filed as 0: {row}'
         assert row['点赞数'] == 59000, 'the counters that ARE on the page keep reading'
@@ -575,20 +474,12 @@ class TestSearch:
         the web player never shows plays. Publishing 播放数 would be a wrong
         figure wearing a plausible column name."""
         crawler, _driver = make_crawler(cards=[ID])
-        row = crawler.search('人工智能', target_count=1)[0]
+        row = crawler.get_detail(f'https://www.douyin.com/video/{ID}')
         assert '播放数' not in row
-
-    def test_target_count_stops_opening_more_videos(self, make_crawler):
-        crawler, driver = make_crawler(cards=[ID, '7678996507694094827', '7684552351918689571'])
-        rows = crawler.search('人工智能', target_count=1)
-        assert len(rows) == 1
-        opened = [u for u in driver.visited if '/video/' in u]
-        assert len(opened) == 1
 
     def test_a_video_that_renders_nothing_is_skipped_not_stored(self, make_crawler):
         crawler, _driver = make_crawler(cards=[ID, '7678996507694094827'], video_body='加载中')
-        rows = crawler.search('人工智能', target_count=5)
-        assert rows == []
+        assert crawler.get_detail(f'https://www.douyin.com/video/{ID}') is None
 
     def test_a_page_that_published_only_its_counter_bar_is_not_data(self, make_crawler, caplog):
         """Measured live 2026-09-26: the opened video page gave its counter bar and nothing
@@ -599,8 +490,7 @@ class TestSearch:
         """
         blank = {**_default_facts(), 'info': '', 'publish': '', 'related': ''}
         crawler, _driver = make_crawler(cards=[ID], facts=blank)
-        rows = crawler.search('人工智能', target_count=2)
-        assert rows == []
+        assert crawler.get_detail(f'https://www.douyin.com/video/{ID}') is None
         assert t('crawl.dy.detailNoIdentity', i=ID) in ' '.join(_lines(caplog)), _lines(caplog)
 
     def test_a_name_is_not_identity_when_the_page_published_nothing(self, make_crawler, caplog):
@@ -614,47 +504,8 @@ class TestSearch:
         """
         blank = {**_default_facts(), 'info': '', 'publish': '', 'author': '青小鲜三门青蟹 海鲜礼包'}
         crawler, _driver = make_crawler(cards=[ID], facts=blank)
-        rows = crawler.search('人工智能', target_count=2)
-        assert rows == [], f'a row whose only content is somebody else name is not data: {rows}'
+        assert crawler.get_detail(f'https://www.douyin.com/video/{ID}') is None, 'a named blank row is still blank'
         assert t('crawl.dy.detailNoIdentity', i=ID) in ' '.join(_lines(caplog)), _lines(caplog)
-
-    def test_a_short_sorted_list_is_reported_as_the_site_s_end_not_as_a_stalled_scroll(self, make_crawler, caplog):
-        """「暂时没有更多了」 is the difference between supply and a broken pager (U48).
-
-        Measured 2026-09-28: 最新发布 and 最多点赞 on 「IU」 stop at 14 cards and the page writes that
-        sentence at the foot of the list, while 综合排序 on the same keyword grows to 107. A walk that ends
-        at 14 of 50 saying only 「搜索完成」 makes the two indistinguishable in the console — which is how
-        this first surfaced, as a suspected scroll bug on live cell H1.
-        """
-        crawler, _driver = make_crawler(cards=[ID, OTHER], list_body='结果列表 暂时没有更多了')
-        caplog.set_level(logging.INFO, logger='crawlers.douyin')
-        rows = crawler.search('人工智能', target_count=50)
-        assert len(rows) == 2, f'two cards is all this list hands over: {len(rows)}'
-        said = ' '.join(_lines(caplog))
-        assert t('crawl.dy.noMore', screens=1, cards=2) in said, said
-
-    def test_a_scroll_that_grows_nothing_without_the_marker_stays_unnamed(self, make_crawler, caplog):
-        """The control. Without the marker we cannot claim the site ran out, so nothing may say it did."""
-        crawler, _driver = make_crawler(cards=[ID, OTHER], list_body='结果列表 加载中')
-        # INFO captured here too, or the absence asserted below proves nothing: the line lives at INFO.
-        caplog.set_level(logging.INFO, logger='crawlers.douyin')
-        rows = crawler.search('人工智能', target_count=50)
-        assert len(rows) == 2
-        said = ' '.join(_lines(caplog))
-        assert t('crawl.dy.noMore', screens=1, cards=2) not in said, (
-            f'the walk declared the list finished without the page ever saying so: {said}'
-        )
-
-    def test_the_walk_spends_the_target_on_rows_that_say_something(self, make_crawler):
-        """One blank page must not cost the user a row of their target: the walk moves on to the
-        next card rather than stopping at a count that is really one row short."""
-        crawler, _driver = make_crawler(
-            cards=[ID],
-            scroll_batches=[[OTHER]],
-            facts_by_id={ID: {**_default_facts(), 'info': '', 'publish': '', 'related': ''}},
-        )
-        rows = crawler.search('人工智能', target_count=1)
-        assert [str(row['视频ID']) for row in rows] == [OTHER]
 
     def test_a_detail_page_that_answers_with_another_video_files_nothing(self, make_crawler, caplog):
         """Asked for one video, served another: the row is refused, not filed under the asked link.
@@ -671,8 +522,7 @@ class TestSearch:
             cards=[ID],
             redirects={asked: f'https://www.douyin.com/video/{other}'},
         )
-        rows = crawler.search('人工智能', target_count=2)
-        assert rows == [], f'a swapped page must not be filed under the asked id: {rows}'
+        assert crawler.get_detail(asked) is None, 'a swapped page must not be filed under the asked id'
         said = ' '.join(_lines(caplog))
         assert t('crawl.dy.detailSwapped', i=ID, shown=other) in said, said
 
@@ -684,9 +534,8 @@ class TestSearch:
         points the repair at the parser; latching the session flag about it would settle the whole node as
         「COOKIE 可能过期」. Both are wrong, and this row is the difference.
         """
-        crawler, driver = make_crawler(cards=[ID], title='验证码中间页', video_body='')
-        rows = crawler.search('人工智能', target_count=1)
-        assert rows == [], f'a captcha plate is not a row: {rows}'
+        crawler, _driver = make_crawler(cards=[ID], title='验证码中间页', video_body='')
+        assert crawler.get_detail(f'https://www.douyin.com/video/{ID}') is None, 'a captcha plate is not a row'
         assert crawler.login_wall is False, 'one refused card must not be read as the session dying'
         said = ' '.join(_lines(caplog))
         assert t('crawl.dy.detailWalled', i=ID) in said, said
@@ -696,34 +545,9 @@ class TestSearch:
         """The gate is identity, not prose: a clip with no 文案 has nothing to put in that column,
         and refusing those would drop real data over one empty cell."""
         crawler, _driver = make_crawler(cards=[ID], facts={**_default_facts(), 'info': ''})
-        rows = crawler.search('人工智能', target_count=1)
-        assert len(rows) == 1, 'an author and a publish time make this a row'
-        assert rows[0]['正文'] == '' and (rows[0]['作者'] or '').strip()
-
-    def test_the_cursor_records_position_not_an_id_list(self, make_crawler):
-        """A resumed search skips what its stored rows already hold, and the cursor
-        carries no ``opened`` blob (AGENTS: position, not content). A truncated id
-        list was the bug: resuming past its cut re-opened the videos before it."""
-        crawler, _driver = make_crawler(cards=[ID, '7678996507694094827'])
-        crawler.search('人工智能', target_count=2)
-        assert 'opened' not in crawler.position, 'the cursor must not carry a content id-list'
-        reopened, second = make_crawler(cards=[ID, '7678996507694094827'])
-        # The resume reloads this row (视频ID and all); that id alone decides the skip.
-        reopened.seed([{'视频ID': ID, '链接': f'https://www.douyin.com/video/{ID}'}])
-        reopened.search('人工智能', target_count=2)
-        assert len([u for u in second.visited if f'/video/{ID}' in u]) == 0, 'must not re-open a paid-for video'
-
-    def test_a_resumed_run_walks_past_the_screen_it_already_paid_for(self, make_crawler):
-        """The resumed page reopens on the very ids the dead run opened, so "every
-        id on screen is known" is that run's *ordinary first round* — not the end of
-        the list. Breaking there (which the walk used to do) made 断点续跑 hand back
-        the dead run's rows and quietly stop, with the target unmet and no complaint."""
-        other = '7678996507694094827'
-        crawler, driver = make_crawler(cards=[ID], scroll_batches=[[other]])
-        crawler.seed([{'视频ID': ID, '链接': f'https://www.douyin.com/video/{ID}'}])
-        rows = crawler.search('人工智能', target_count=2, resume={'opened': [ID]})
-        assert driver.window_scrolls >= 1, 'an exhausted-looking first screen must be scrolled, not obeyed'
-        assert {str(row['视频ID']) for row in rows} == {ID, other}
+        row = crawler.get_detail(f'https://www.douyin.com/video/{ID}')
+        assert row is not None, 'an author and a publish time make this a row'
+        assert row['正文'] == '' and (row['作者'] or '').strip()
 
 
 SEC = 'MS4wLjABAAAAehSj560Se_lTjmmy0imDx_2qKW_Lj8zS45rbZriU62h5ADwatvOxdaZ8lu_SjOGD'
@@ -1267,28 +1091,6 @@ class TestSlowNetworkIsNotBlamedOnTheSite:
     were throwing the answer away.
     """
 
-    def test_a_result_page_still_loading_says_the_network_not_the_site(self, make_crawler):
-        crawler, driver = make_crawler(cards=[], load_timeout=True)
-        with pytest.raises(RuntimeError) as err:
-            crawler.search('美食', target_count=3)
-        assert t('crawl.dy.noCardsSlow', url=driver.current_url) in str(err.value)
-        # The old sentence did not merely name a cause, it claimed exclusivity
-        # (「只可能是…」) and sent the user to re-save a cookie that was fine.
-        assert '只可能是' not in str(err.value), str(err.value)
-
-    def test_a_result_page_that_did_finish_but_mounted_nothing_still_quotes_the_page(self, make_crawler):
-        # The old sentence is not deleted, only narrowed to the case it was measured on:
-        # the navigation completed, the list stayed empty, and douyin does fill even a
-        # nonsense keyword — so THAT one really is a block or a broken page.
-        crawler, _driver = make_crawler(cards=[], title='502 Bad Gateway')
-        with pytest.raises(RuntimeError) as err:
-            crawler.search('美食', target_count=3)
-        assert '502 Bad Gateway' in str(err.value), str(err.value)
-        assert '加载超时' not in str(err.value), str(err.value)
-        # The two sentences are told apart by what they may claim: this one may name a
-        # cause exclusively, the slow-load one may not.
-        assert '只可能是' in str(err.value), str(err.value)
-
     def test_a_detail_page_still_loading_is_not_reported_as_having_no_data(self, make_crawler, caplog):
         crawler, _driver = make_crawler(cards=[ID], video_body='', load_timeout=True)
         with caplog.at_level('WARNING'):
@@ -1303,13 +1105,13 @@ class TestSlowNetworkIsNotBlamedOnTheSite:
         assert t('crawl.dy.detailEmpty', i=ID) in ' '.join(_lines(caplog)), _lines(caplog)
 
     def test_the_open_verdict_is_recorded_for_the_caller_that_cannot_take_it(self, make_crawler):
-        # ``search`` reaches the refusal through ``_open_results``, so it cannot take the
-        # return value; the recorded flag is what lets it say the true thing.
+        # A walk that opens a page through ``_wait_for_grid`` / ``_wait_for_page`` cannot take
+        # ``open``'s return value; the recorded flag is what lets the refusal say the true thing.
         crawler, _driver = make_crawler(cards=[], load_timeout=True)
-        crawler.open('https://www.douyin.com/search/x')
+        crawler.open('https://www.douyin.com/video/x')
         assert crawler.navigation_settled is False
         crawler, _driver = make_crawler(cards=[])
-        crawler.open('https://www.douyin.com/search/x')
+        crawler.open('https://www.douyin.com/video/x')
         assert crawler.navigation_settled is True
 
 
@@ -1325,14 +1127,14 @@ class TestTheBrowserRefusedThePage:
     Measured: a navigation Chrome itself refuses leaves a committed document that calls
     itself ``chrome-error://chromewebdata`` and prints its own token, while the address
     bar — and ``driver.current_url`` — keep showing the URL that was asked for. Read as
-    an ordinary page, that is 「结果页没有给出任何视频卡片」: a sentence about douyin,
-    said about this machine.
+    an ordinary page that would blame the platform for this machine's network, so the
+    refusal names the browser instead.
     """
 
     def test_a_refusal_names_the_browser_and_leaves_the_session_alone(self, make_crawler):
-        crawler, driver = make_crawler(cards=[], document_uri=REFUSED_URI, body=DNS_PAGE)
+        crawler, driver = make_crawler(cards=[], board=None, document_uri=REFUSED_URI, body=DNS_PAGE)
         with pytest.raises(RuntimeError) as err:
-            crawler.search('美食', target_count=3)
+            crawler.hot(target_count=3)
         message = str(err.value)
         assert 'ERR_NAME_NOT_RESOLVED' in message, message
         # The two sentences this one must not be confused with: the exclusivity claim
@@ -1342,14 +1144,6 @@ class TestTheBrowserRefusedThePage:
         assert 'Cookie' not in message and '登录' not in message, message
         assert (crawler.unreachable, crawler.login_wall, crawler.risk_blocked) == (True, False, False)
         assert not driver.fetched, 'a refused page was still charged for an in-page read'
-
-    def test_a_provable_death_is_given_up_on_at_once(self, make_crawler):
-        """Patience is for a page that may still be coming. This one is not, and the
-        number of looks at the list is how a test can tell the two waits apart."""
-        crawler, driver = make_crawler(cards=[], document_uri=REFUSED_URI, body=DNS_PAGE)
-        with pytest.raises(RuntimeError):
-            crawler.search('美食', target_count=3)
-        assert driver.card_reads == 1, f'a provable death was waited out for {driver.card_reads} looks'
 
     def test_a_hot_board_behind_a_refused_page_is_not_read_as_an_empty_board(self, make_crawler):
         crawler, driver = make_crawler(cards=[], board=None, document_uri=REFUSED_URI, body=DNS_PAGE)

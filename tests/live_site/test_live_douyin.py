@@ -7,9 +7,10 @@ forces a window and this tier now exercises BOTH shapes — visible and headless
 test asserts the honest rule either way: real rows, or a refusal that names the wall, never a
 silent empty table.
 
-Videos are discovered live rather than bookmarked, because an aweme id can be
-withdrawn and a search page cannot, and every assertion is on the counters that
-name themselves in the DOM. Note the deliberate absence: a douyin row has no
+The keyword-search mode was removed (its feed is shallow and lazily throttled), so a video is
+discovered through **author mode** instead — the profile's own 作品 grid, read live rather than
+bookmarked, because an aweme id can be withdrawn and a profile page cannot. Every assertion is on
+the counters that name themselves in the DOM. Note the deliberate absence: a douyin row has no
 播放数 column, because the web player never shows plays.
 """
 
@@ -20,7 +21,8 @@ from crawlers.douyin import DouyinCrawler, douyin_id
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
-KEYWORD = '人工智能'
+#: A creator with a rich 作品 grid, so a short ask (2-8) never lands on an empty profile.
+AUTHOR_URL = 'https://www.douyin.com/user/MS4wLjABAAAA6xlnmUuddUZ7zQhYvd4TlOiLlEn2rQgY3Xjm-FAShgo'
 
 
 def _assert_real_rows(rows, minimum=1):
@@ -35,10 +37,10 @@ def _assert_real_rows(rows, minimum=1):
 
 
 @pytest.mark.live_quick
-def test_visible_search_resolves_each_video(live_crawler):
+def test_author_mode_resolves_each_video(live_crawler):
     crawler = live_crawler('douyin', headless=False)
     try:
-        rows = crawler.search(KEYWORD, target_count=2)
+        rows = crawler.author(AUTHOR_URL, target_count=2)
     finally:
         crawler.close()
     _assert_real_rows(rows, minimum=2)
@@ -54,21 +56,20 @@ def test_a_headless_attempt_never_files_a_silent_empty_success(live_crawler):
     Since #148 a headless Chrome carries a desktop fingerprint, so the expected live
     outcome here is rows — but the contract is stronger than any single expectation: it
     is "a headless run never returns an empty table as if it had succeeded". Both live
-    outcomes are asserted and neither is skipped: refused, it must name the wall or the
-    missing search box; allowed through, it must actually deliver rows. Zero rows without
-    a refusal is the one shape that would mislead a user, and it fails.
+    outcomes are asserted and neither is skipped: refused, it must name the wall; allowed
+    through, it must actually deliver rows. Zero rows without a refusal is the one shape
+    that would mislead a user, and it fails.
     """
     crawler = live_crawler('douyin', headless=True)
     try:
         try:
-            rows = crawler.search(KEYWORD, target_count=2)
+            rows = crawler.author(AUTHOR_URL, target_count=2)
         except (RuntimeError, ValueError) as refused:
-            message = str(refused)
-            assert '验证' in message or '搜索框' in message, f'unexpected refusal text: {message}'
+            assert str(refused), 'a refusal must say where it happened'
             return
         assert rows, (
             'a headless session returned 0 rows without refusing: that reads as '
-            '"this keyword has no videos", which is the false answer this test exists to catch'
+            '"this author posted nothing", which is the false answer this test exists to catch'
         )
         _assert_real_rows(rows, minimum=1)
     finally:
@@ -76,24 +77,24 @@ def test_a_headless_attempt_never_files_a_silent_empty_success(live_crawler):
 
 
 def test_comments_scroll_past_the_first_screen(live_crawler):
-    """Paging proof, sized by the video the search actually returned.
+    """Paging proof, sized by the video the author grid actually returned.
 
     The threshold comes from the platform's own reported number rather than from a
     constant, and the sample is widened to eight videos so "no video here has
     enough comments to demonstrate a scroll walk" is a finding about the crawl,
-    not a reason to skip: a hot douyin keyword that returns only dead videos, or
+    not a reason to skip: a busy profile that returns only dead videos, or
     a 评论数 column that stopped being read, is exactly what this test should fail
     on. Nothing here is skipped, and nothing here is satisfied by an empty table.
     """
     crawler = live_crawler('douyin', headless=False)
     try:
-        rows = crawler.search(KEYWORD, target_count=8)
+        rows = crawler.author(AUTHOR_URL, target_count=8)
         assert rows, 'no video to comment on was found live'
         best = max(rows, key=lambda row: int(row['评论数'] or 0))
         link, reported = best['链接'], int(best['评论数'] or 0)
         assert reported >= 30, (
             f'none of the {len(rows)} live videos reported enough comments to page (max {reported}): '
-            'either the keyword stopped returning live videos or 评论数 is no longer being read'
+            'either the profile stopped returning live videos or 评论数 is no longer being read'
         )
         session = CommentSession(crawler.driver, log=print, nap=lambda s: None)
         comments, status = session.crawl_douyin(link, limit=40)
@@ -131,7 +132,7 @@ def test_comments_scroll_past_the_first_screen(live_crawler):
 def test_detail_read_of_one_live_video(live_crawler):
     crawler = live_crawler('douyin', headless=False)
     try:
-        rows = crawler.search(KEYWORD, target_count=1)
+        rows = crawler.author(AUTHOR_URL, target_count=1)
         assert rows, 'nothing was found live'
         row = crawler.get_detail(rows[0]['链接'])
     finally:

@@ -4,17 +4,22 @@ Visible window only (headless is answered 验证码中间页 on every navigation
 skip branch in this file: turning a refusal into a skip is how a mode stops being
 tested while the suite stays green.
 
-The creator is **discovered during this run**: the search walk already opens a video
-page, and that page carries ``a[href*="/user/"]`` — so the ``sec_uid`` is read off
-the live site rather than pasted from a note. A written-down token rots, and a walk
-that finds nothing on a dead profile still looks like a passing test.
+The creator is the **acceptance profile** — the same ``sec_uid`` the workflow tier
+(``test_live_douyin_workflow.py`` ``AUTHOR_URL``) and the flagship canvas crawl, so the
+live matrix and this file ask the same page of the site. (It used to be discovered off a
+live search's video page; the keyword-search mode was removed for being too shallow, and no
+single remaining crawler call bootstraps an arbitrary author token, so the one the project
+already trusts is used and the identity checks below run against the live rows rather than
+against a pasted claim.)
 
-What is pinned is the measurement the handler was written against: the 作品 grid
-pages off its own scrollable container (a window scroll moves the footer's
-recommended videos instead, which a count-based walk reads as an exhausted list), and
-every number still comes from opening the video — the grid's card carries one bare
-figure that measures equal to the **like** count, so a row that reported it as 播放数
-would be a wrong figure with a plausible column name.
+What is uniquely pinned here — beyond what the workflow tier's B1 asserts — is the **cost
+model**: the 作品 grid is walked on ONE profile navigation, then container scrolls. A handler
+that re-navigated per screen would pay a full page load for every batch, and that count is
+what this file's last cell refuses to let drift. The grid also pages off its own scrollable
+container (a window scroll moves the footer's recommended videos instead), and every number
+still comes from opening the video — the grid's card carries one bare figure that measures
+equal to the **like** count, so a row that reported it as 播放数 would be a wrong figure with a
+plausible column name.
 """
 
 import re
@@ -23,30 +28,9 @@ import pytest
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
 
-KEYWORD = '风景'
+#: The acceptance creator's opaque ``sec_uid`` — the only address douyin's web app routes.
+SEC = 'MS4wLjABAAAA6xlnmUuddUZ7zQhYvd4TlOiLlEn2rQgY3Xjm-FAShgo'
 _VIDEO = re.compile(r'^https://www\.douyin\.com/video/\d{15,20}$')
-#: Discovery is a live search plus a video page; the tests below ask about the same
-#: creator, so the token is kept for the module. (A module-scoped *fixture* cannot
-#: do this: ``live_crawler`` is function-scoped and closes every crawler it made.)
-_FOUND: dict = {}
-
-
-def _discover_author(live_crawler) -> str:
-    """A ``sec_uid`` taken off a video page the search actually opened."""
-    if 'sec' in _FOUND:
-        return str(_FOUND['sec'])
-    crawler = live_crawler('douyin', headless=False)
-    try:
-        rows = crawler.search(KEYWORD, target_count=2)
-        assert rows, f'the search crawl produced nothing for {KEYWORD}, so there is no author to ask about'
-        found = crawler.driver.find_elements('css selector', 'a[href*="/user/"]')
-        anchors = [str(element.get_attribute('href') or '') for element in found]
-        tokens = [m.group(1) for href in anchors if (m := re.search(r'/user/([A-Za-z0-9_.-]{30,})', href))]
-        assert tokens, f'no author link on the video page: {anchors[:3]}'
-        _FOUND['sec'] = tokens[0]
-        return tokens[0]
-    finally:
-        crawler.close()
 
 
 def _profile_nickname(live_crawler, sec: str) -> str:
@@ -72,7 +56,7 @@ def _profile_nickname(live_crawler, sec: str) -> str:
 
 
 def test_one_creators_own_posts_are_collected(live_crawler):
-    sec = _discover_author(live_crawler)
+    sec = SEC
     nickname = _profile_nickname(live_crawler, sec)
     crawler = live_crawler('douyin', headless=False)
     try:
@@ -111,7 +95,7 @@ def test_the_grid_is_walked_on_one_navigation(live_crawler):
     """One profile open, then scrolls. A handler that re-navigated per screen would
     pay a full page load for every batch of 18 rows, and the user would watch the
     same page reload for the whole run."""
-    sec = _discover_author(live_crawler)
+    sec = SEC
     crawler = live_crawler('douyin', headless=False)
     navigated = []
     original = crawler.open

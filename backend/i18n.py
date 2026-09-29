@@ -379,7 +379,6 @@ _ZH = {
         '3. 回到本面板点「已完成登录」\n'
         '提示：抖音网页版对自动化浏览器较敏感，若窗口里出现滑块验证，请在窗口内手动完成后再保存。'
     ),
-    'crawl.dy.start': '[抖音搜索] 开始搜索关键词: "{kw}"，目标 {n} 条',
     'crawl.dy.target_reached': '[抖音] 已达到目标数量 {n} 条，停止',
     'crawl.dy.round': '[抖音] 第 {i} 屏：{n} 张卡片（新 {fresh} 个，已收录 {done} 条）',
     'crawl.dy.noMore': (
@@ -387,7 +386,6 @@ _ZH = {
         '这一轮的供给就到这儿（不是滚动没生效）'
     ),
     'crawl.dy.processed': '[抖音] 已收录视频 {i}，当前有效数据: {n} 条',
-    'crawl.dy.finished': '[抖音搜索] 搜索完成，共获取 {n} 条有效结果（目标 {total} 条，翻了 {rounds} 屏）',
     'crawl.dy.authorStart': '[抖音作者] 开始采集该作者的作品，目标 {n} 条（计数要逐条打开视频页取）',
     'crawl.dy.authorEmpty': '[抖音作者] 没有给出作者（粘贴 douyin.com/user/… 链接或那串 sec_uid）：{author}',
     'crawl.dy.authorNoWorks': '[抖音作者] 该作者的主页自报作品数为 0，本就没有可采集的内容',
@@ -418,26 +416,8 @@ _ZH = {
         '[抖音] 视频 {i} 的详情页只渲染出计数条，作者与发布时间都没有，已跳过该行：'
         '一条说不出是谁、什么时候发的记录不是数据，只是把额度花在一个空行上'
     ),
-    'field.sort': '排序方式',
-    'crawl.dy.sortUnknown': (
-        '[抖音] 不认识的排序方式「{sort}」（能选的是 {allowed}）。排序决定了拿到的是哪一批行，'
-        '所以这一条按名字拒绝，不替你另挑一个'
-    ),
-    'crawl.dy.sortNoOpener': '[抖音] 结果页上找不到「{opener}」入口，选不了 {sort}：排序没有生效，本次不假装已经按它排',
-    'crawl.dy.sortMissing': '[抖音] 「{opener}」菜单里没有 {sort} 这一项：站点改了菜单，排序没有生效',
-    'crawl.dy.sortNoHandle': '[抖音] 菜单里看得到 {sort} 却点不着它：排序没有生效',
-    'crawl.dy.sortApplied': '[抖音] 已选 {sort}（列表是否换血：{changed}）',
     'crawl.dy.detailSlow': (
         '[抖音] 视频 {i} 的详情页在加载超时内没加载完，已跳过该行：这是网络或站点响应慢，稍后重试可能就拿到了'
-    ),
-    'crawl.dy.noCards': (
-        '[抖音] 结果页始终没有给出任何视频卡片，本次未采集。页面自报：{page}；地址：{url}。'
-        '抖音对根本不存在的关键词也会用相关视频兜底，所以「零卡片」只可能是被拦截、页面出错或站点响应过慢，'
-        '不是「这个关键词没有结果」'
-    ),
-    'crawl.dy.noCardsSlow': (
-        '[抖音] 结果页在加载超时内没有加载完，因此始终没有视频卡片（地址：{url}）。'
-        '这通常是本机网络或站点响应慢，稍后重试即可；既不是「这个关键词没有结果」，也不是被拦截'
     ),
     # The one refusal on this page that needs no waiting and no probing: the document is
     # the browser's own, and it says which address it refused.
@@ -1317,7 +1297,6 @@ _EN = {
         'Note: Douyin is quick to raise a slider captcha for automated browsers \u2014 finish it in that '
         'window before saving.'
     ),
-    'crawl.dy.start': '[Douyin search] keyword "{kw}", target {n} rows (Douyin only answers a visible window)',
     'crawl.dy.target_reached': '[Douyin] target of {n} rows reached, stop',
     'crawl.dy.round': '[Douyin] screen {i}: {n} cards ({fresh} new, {done} collected)',
     'crawl.dy.noMore': (
@@ -1325,7 +1304,6 @@ _EN = {
         '{cards} cards — that is the supply for this order, not a scroll that failed'
     ),
     'crawl.dy.processed': '[Douyin] stored video {i}, {n} valid rows so far',
-    'crawl.dy.finished': '[Douyin search] done, {n} valid rows (target {total}, {rounds} screens walked)',
     'crawl.dy.authorStart': "[Douyin author] one creator's posts, target {n} (counters cost a page each)",
     'crawl.dy.authorEmpty': '[Douyin author] no author given (paste a douyin.com/user/… link or the sec_uid): {author}',
     'crawl.dy.authorNoWorks': '[Douyin author] the profile publishes 0 posts, so there is nothing to collect',
@@ -1358,34 +1336,9 @@ _EN = {
         '[Douyin] video {i} rendered only its counter bar — no author and no publish time, row skipped: '
         'a record that cannot say whose it is or when it was posted is not data, just budget spent on a blank row'
     ),
-    'field.sort': 'sort order',
-    'crawl.dy.sortUnknown': (
-        '[Douyin] unknown sort order “{sort}” (the choices are {allowed}). The order decides which rows this '
-        'crawl gets, so it is refused by name instead of picking a different one for you'
-    ),
-    'crawl.dy.sortNoOpener': (
-        '[Douyin] the result page has no “{opener}” control, so {sort} could not be chosen: the order was not '
-        'applied and this run will not claim it was'
-    ),
-    'crawl.dy.sortMissing': (
-        '[Douyin] the “{opener}” menu has no {sort} entry: the site changed the menu and the order was not applied'
-    ),
-    'crawl.dy.sortNoHandle': '[Douyin] {sort} is in the menu but would not click: the order was not applied',
-    'crawl.dy.sortApplied': '[Douyin] chose {sort} (list turned over: {changed})',
     'crawl.dy.detailSlow': (
         '[Douyin] video {i} did not finish loading inside the page-load timeout, row skipped: that is the '
         'network or the site being slow, a retry may well get it'
-    ),
-    'crawl.dy.noCards': (
-        '[Douyin] the result page never handed over a single video card, so nothing was collected. '
-        'The page said: {page}; URL: {url}. Douyin fills the list with related videos even for a keyword '
-        'that cannot exist, so zero cards means blocked, broken, or the site answering far too slowly — '
-        'never "this keyword found nothing"'
-    ),
-    'crawl.dy.noCardsSlow': (
-        '[Douyin] the result page did not finish loading inside the page-load timeout, so no video card ever '
-        'appeared (URL: {url}). That is normally the network on this machine or a site answering slowly; '
-        'retry later. It is neither "this keyword found nothing" nor a block'
     ),
     # The one refusal on this page that needs no waiting and no probing: the document is
     # the browser's own, and it says which address it refused.

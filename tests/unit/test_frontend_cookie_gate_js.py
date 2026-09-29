@@ -51,13 +51,26 @@ DEFAULT_MODE = {entry['platform']: entry['modes'][0]['key'] for entry in MATRIX[
 
 
 def _source(node_id, platform, mode=None, account=None, **extra):
-    params = {'platform': platform, 'keyword': '三亚', 'collect': mode or DEFAULT_MODE[platform]}
+    params = {
+        'platform': platform,
+        'collect': mode or DEFAULT_MODE[platform],
+        # A gate scenario must reach the gate, so it carries every input a required field
+        # might want. The panel fills whichever field the selected mode asks for: a keyword
+        # mode wants 关键词, an author mode wants 作者 (a sec_uid or profile link — its shape
+        # is only checked by the crawler at run time, not by the pre-run gate), a link mode
+        # wants 文章链接. Filling all three is mode-agnostic and harmless — ``crawl_kwargs``
+        # and ``required_missing`` look only at the selected mode's own fields — so removing
+        # or adding a mode never leaves a fixture validating as "missing input".
+        'keyword': '三亚',
+        'author': 'https://www.douyin.com/user/MS4wLjABAAAAehSj560Se_lTjmmy0imDx_2qKW_Lj8zS45rbZriU62h5ADwatvOxdaZ8lu_SjOGD',
+        'urls': 'https://www.douyin.com/video/7665683746674183459',
+    }
     if account is not None:
         params['account'] = account
-    # A mode whose required field is not the keyword (wechat takes 文章链接) has to be
-    # filled the way the panel would fill it, or the canvas refuses the run for a shape
-    # error and the scenario reports "the gate let it through" about a run that never got
-    # to the gate.
+    # A mode whose required field is not the keyword (wechat takes 文章链接) can still be
+    # overridden through ``urls``/``extra`` the way the panel would fill it, so the canvas
+    # validates rather than reporting 「the gate let it through」 about a run the canvas had
+    # already rejected.
     params.update(extra)
     return {
         node_id: {

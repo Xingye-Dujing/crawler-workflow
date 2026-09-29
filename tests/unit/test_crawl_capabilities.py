@@ -149,7 +149,7 @@ class TestCoercion:
         assert 'start_time' in crawl_kwargs(_mode('weibo', 'posts'), {'keyword': 'k'})
         assert 'start_time' not in crawl_kwargs(_mode('zhihu', 'posts'), {'keyword': 'k'})
         assert 'comment_preview' in crawl_kwargs(_mode('xiaohongshu', 'posts'), {'keyword': 'k'})
-        assert 'comment_preview' not in crawl_kwargs(_mode('douyin', 'posts'), {'keyword': 'k'})
+        assert 'comment_preview' not in crawl_kwargs(_mode('douyin', 'author'), {'keyword': 'k'})
 
     def test_the_handler_is_not_an_argument(self):
         # `resume` is written by the executor from the store; a matrix field with
@@ -182,7 +182,7 @@ class TestSelectsAreHeldToTheirOptions:
             for f in mode.fields
             if f.control == 'select' and f.key != 'account'
         }
-        assert declared == {('bilibili', 'hot', 'board'), ('douyin', 'posts', 'sort')}, declared
+        assert declared == {('bilibili', 'hot', 'board')}, declared
         # The shared file tail is the other one, and it is on every mode.
         assert [f.key for f in FILE_FIELDS if f.control == 'select'] == ['format']
 
@@ -213,18 +213,6 @@ class TestSelectsAreHeldToTheirOptions:
     def test_a_declared_option_is_accepted(self, value):
         assert unoffered_selections(_mode('bilibili', 'hot'), {'board': value}) == []
 
-    @pytest.mark.parametrize('value', ['general', 'newest', 'most_liked'])
-    def test_the_sort_order_the_crawler_understands_is_accepted(self, value):
-        """The values are the crawler's keys, not the panel's words: 最新发布 is what the user
-        reads, ``newest`` is what ``DouyinCrawler.SORTS`` looks up. Accepting the label here would
-        be the same "silently do something else" bug ``board`` was caught with."""
-        assert unoffered_selections(_mode('douyin', 'posts'), {'sort': value}) == []
-
-    @pytest.mark.parametrize('wrong', ['最热', '最新', 'Latest', 'NEWEST', 'popular', 'likes'])
-    def test_an_order_off_the_list_is_named_rather_than_crawled_as_the_default(self, wrong):
-        found = unoffered_selections(_mode('douyin', 'posts'), {'sort': wrong})
-        assert [(field.key, value) for field, value in found] == [('sort', wrong)], (wrong, found)
-
     @pytest.mark.parametrize('blank', [None, '', '   ', '\t'])
     def test_a_box_nobody_chose_is_the_declared_default_not_a_mistake(self, blank):
         """Same rule as an empty mode key: a canvas saved before the field existed must
@@ -232,10 +220,6 @@ class TestSelectsAreHeldToTheirOptions:
         """
         params = {'board': blank} if blank is not None else {}
         assert unoffered_selections(_mode('bilibili', 'hot'), params) == []
-        # Same rule for the order: a canvas saved before 排序 existed runs the order the
-        # panel showed (综合排序), because that is the declared default, not a guess.
-        assert unoffered_selections(_mode('douyin', 'posts'), {'sort': blank} if blank is not None else {}) == []
-        assert crawl_kwargs(_mode('douyin', 'posts'), {})['sort'] == 'general'
 
     @pytest.mark.parametrize(
         'wrong',
@@ -322,7 +306,7 @@ class TestModeResolution:
         # test was written; it shipped once its own answer was measured end to end.
         assert mode_keys_for('zhihu') == ('posts', 'author', 'hot', 'comments')
         assert mode_keys_for('weibo') == ('posts', 'author', 'hot', 'comments')
-        assert mode_keys_for('douyin') == ('posts', 'author', 'hot', 'comments')
+        assert mode_keys_for('douyin') == ('author', 'hot', 'comments')
         assert mode_keys_for('wechat') == ('posts',), 'WeChat has no comment adapter'
         assert 'hot' not in mode_keys_for('xiaohongshu'), '小红书 has no measurable board'
 
@@ -668,7 +652,7 @@ class TestCollectionKind:
         assert mode_for('weibo', 'comments').collects == 'fetch'
         assert mode_for('bilibili', 'hot').collects == 'fetch'
         assert mode_for('zhihu', 'comments').collects == 'dom_scroll'
-        assert mode_for('douyin', 'posts').collects != 'fetch'
+        assert mode_for('douyin', 'author').collects != 'fetch'
 
     def test_wechat_states_its_limits_and_offers_the_reason(self):
         mode = _mode('wechat', 'posts')

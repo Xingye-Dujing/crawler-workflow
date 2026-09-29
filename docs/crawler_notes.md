@@ -312,7 +312,13 @@ that was never measured as a length question. It was wrong in both directions:
 
 ## Douyin
 
-**Visible-window-only, DOM-only, entered through its URL, and has no play count.**
+> **关键词搜索（posts）模式与右上角「筛选」排序菜单已于 2026-09-30 移除。** 实测搜索供给本身就浅（同一
+> 关键词两次复测只给 26 / 16 条，都没到站点自己的「暂时没有更多了」收尾，非账号被标记也非少读），用户判定
+> 「只能爬一点，完全没有用」，故连 `search()`、`engine/menu.py`、`_SORT_FIELD`/`SORTS` 与相应真站用例一并删。
+> **抖音保留 作者 / 热榜 / 评论。** 下面凡是讲「搜索框 / `/search/<kw>` 路由 / 筛选排序 / 结果页卡片翻页」
+> 的段落都是**已移除功能的保留证据**（读法：这段量当时成立，功能没了），作者/热榜/详情/评论各条仍是现状。
+
+**DOM-only, entered through its URL, and has no play count.**
 
 A headless browser is answered by 验证码中间页 on *every* navigation (measured), so the class sets
 `never_headless = True` and `_execute_source_node` downgrades to a visible window before buying the
@@ -345,7 +351,7 @@ are build hashes.
 profile 被弹验证码、一次性浏览器读得通（2026-09-25，见 `_hot_mode` 处的注释与 #141）——
 所以这个标记只能是建议与提醒，绝不许变成强制，而 #142 也把"按形状分布到底怎样"留成了待查项。
 
-### 结果页右上角那个「筛选」：hover 开的菜单，URL 一个字符都不变（measured 2026-09-26，#143）
+### （已移除）结果页右上角那个「筛选」：hover 开的菜单，URL 一个字符都不变（measured 2026-09-26，#143）
 
 `backend/test_douyin_probe_sort.py`（一次性探针，载荷 `scratchpad/douyin_sort_probe.json`），
 一条会话一次导航，读到的菜单是 **13 项、4 组**：
