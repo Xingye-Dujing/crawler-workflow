@@ -104,10 +104,6 @@ class BilibiliCrawler(VideoCrawler):
     #: The site's own pager answers how deep the search goes; the walk stops on the
     #  user's target, an empty page or risk control — nothing caps it here.
     CARD_WAIT = 12.0
-    #: How far one round of the space page is scrolled. The upload list appends as
-    #: it is reached (measured 40 cards, then 80 anchors after three steps), so the
-    #: pager is the scroll and not a page parameter.
-    SCROLL_STEPS = 3
     POLITE_BASE = 0.8
     POLITE_SPREAD = 0.3
 
@@ -158,6 +154,15 @@ class BilibiliCrawler(VideoCrawler):
                     # do not spend further pages on it.
                     blocked = str(code)
                     break
+                elif code == CODE_GONE:
+                    # A withdrawn/private video is a fact about this row, not a silent hole.
+                    logger.info(t('crawl.bili.goneVideo', i=bvid, code=code))
+                else:
+                    # ``code is None``: the endpoint answered nothing readable (a WAF body, a
+                    # non-JSON page). §6 U9 — the cleanest silent under-collect: the card cost a
+                    # request and produced neither a row nor a word, so the table and the summary
+                    # agreed on a short count with nothing to explain it.
+                    logger.warning(t('crawl.bili.fetchEmpty', i=bvid))
                 self.mark_position(page=page, done=self.collected(), bvid=bvid)
             if blocked:
                 break
@@ -187,6 +192,15 @@ class BilibiliCrawler(VideoCrawler):
         answers ``code=-403 访问权限不足`` for our session (and the older un-wbi path
         is rate-limited at ``-799``), and forging a per-request signature is a
         different, larger problem than reading a page that already renders.
+
+        Paging is a **``下一页`` button that replaces the screen**, not a scroll. Measured
+        on the logged-in (managed) profile for a prolific UP: the space renders ~40
+        ``.bili-video-card`` and neither a window nor an element scroll adds one; clicking
+        下一页 swaps in 40 *different* uploads (overlap 0) and leaves the URL unchanged. So
+        the walk scrolls by clicking and watches the on-screen BV set (``window=``) — a
+        card-*count* watcher would read 40→40 across a real page swap as "stuck" and cap a
+        creator with hundreds of videos at one screen, then log 已到列表末尾 about a page that
+        simply was never paged (this is the shape AGENTS warns a wrong page model produces).
         """
         mid = bilibili_mid(author)
         if not mid:
@@ -231,13 +245,14 @@ class BilibiliCrawler(VideoCrawler):
             self._bvids,
             scrape,
             self.emit,
-            scroll=lambda: self.scroll_down(steps=self.SCROLL_STEPS),
+            scroll=self._click_next_page,
             target=target_count,
             collected=self.collected,
             mark=mark,
             stopped=lambda: self.login_wall or self.may_stop(),
             stuck_rounds=2,
             settle_wait=self.CARD_WAIT,
+            window=self._on_screen_key,
         )
         logger.info(t('crawl.bili.authorDone', n=self.collected(), reason=stop_reason_label(result.stopped_reason)))
         return self.results()
@@ -291,6 +306,13 @@ class BilibiliCrawler(VideoCrawler):
                 self.mark_position(page=page, board='ranking' if single else 'popular', done=self.collected())
             if single:
                 # One answer *is* the whole board; asking for page two would replay it.
+                if self.collected() < target_count:
+                    # The board is shorter than the ask and that is the site's number, not a
+                    # shortfall to bury in a bare 共 {n} 条: §7 measured ranking == 100 exactly,
+                    # so a target above it must end BY NAME (like 知乎's hotCapped), not silently.
+                    logger.info(
+                        t('crawl.bili.rankingCapped', board=board_label, n=self.collected(), total=target_count)
+                    )
                 break
             if not fresh:
                 break
@@ -311,6 +333,40 @@ class BilibiliCrawler(VideoCrawler):
             if bvid and bvid not in out:
                 out.append(bvid)
         return out
+
+    def _on_screen_key(self) -> tuple:
+        """The identity of the current screen, so a *replace* pager reads as "changed".
+
+        A space page keeps ~40 cards across every page, so ``feed.walk_feed``'s default
+        count watcher would call a real page swap "stuck"; the set of BV ids on screen is
+        what actually moves (the same window trick X's virtualized timeline uses).
+        """
+        return tuple(self._bvids())
+
+    def _click_next_page(self):
+        """Advance the space page by clicking its ``下一页`` — the pager, not a scroll.
+
+        Returns the site's own word for what happened so the walk's stop reason is honest,
+        though ``feed.walk_feed`` itself only needs the side effect (the screen swapping).
+        """
+        script = """
+        var els = document.querySelectorAll('a, button, li, span, div');
+        for (var i = 0; i < els.length; i++) {
+          var el = els[i];
+          var txt = (el.textContent || '').trim();
+          if (txt !== '\u4e0b\u4e00\u9875') continue;
+          if (!el.offsetParent) continue;
+          var cls = String(el.className || '');
+          if (el.getAttribute('aria-disabled') === 'true' || /disabled/.test(cls)) return 'disabled';
+          el.scrollIntoView({block: 'center'});
+          el.click();
+          return 'clicked';
+        }
+        return 'none';
+        """
+        with contextlib.suppress(Exception):
+            return str(self.driver.execute_script(script))
+        return 'none'
 
     def _wait_bvids(self) -> list:
         """Poll the card list until it has something or the wait is spent.

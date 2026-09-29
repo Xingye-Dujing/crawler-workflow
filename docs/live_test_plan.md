@@ -152,7 +152,7 @@
 | U6 | `base.py:383-385`（B9） | 游标落盘异常被 suppress → 续跑错位 | 产品修复：至少 WARNING |
 | U7 | `base.py:355-361`（B6） | sink 写失败的行**计入 collected 但没入库**→ 报满实际缺 | 产品修复：计数与库内对账 |
 | U8 | `run_store.py:907-909` vs `app.py:2536-2546` | 去重逐行静默；聚合行只在 app 运行路径打 | 测试判据+文档说明即可 |
-| U9 | `bilibili.py:149-161,216-225`（BL2/BL7） | `fetch_json→{}`→`code is None`→**零行日志丢行**，最干净的一条静默欠采 | 产品修复 |
+| U9 | `crawlers/bilibili.py:149-172`（BL2/BL7，**已修 2026-09-29**） | `fetch_json→{}`→`code is None`→**零行日志丢行**，最干净的一条静默欠采：`if code==0 / elif code is not None` 两道闸把 `None`（非 JSON/WAF 体）与 `-404`（稿件不存在）双双夹在中间，一条请求既不出行也不出一字 | 产品修复：`search()` 内层现补 `crawl.bili.fetchEmpty`(warning) 与 `crawl.bili.goneVideo`(info)；快层 `tests/integration/test_bilibili_crawler.py::TestSearch` 两枚具名针 |
 | U10 | `weibo.py:138-169`（WB1，**已修 2026-09-28**） | 全窗走完**无最终总结行**（n/目标/原因全无）——八平台最差控制台。**已证实（代码事实）**：同文件 `author()` 有 `crawl.weibo.authorDone`（n+reason），搜索路径收尾只有逐窗的 `link_done`/`accumulated` | 产品修复（补一条带目标的收尾行） |
 | U11 | `weibo.py:480-513`（WB5，**已修**） | 「每窗 9 s 预算不够」这个前提**今天没复现**：实测三种 URL 都是 `driver.get` 0.42-0.85 s 返回、首卡 0.42-0.85 s、卡片数 2.47-2.92 s 稳定（`docs/crawler_notes.md`）。**成立的是另外两半**：① 该函数用裸 `driver.get`，绕开 `Crawler.open` → 不记「导航是否 settled」、renderer 超时直接抛；② 超时那句打成「页面加载超时，**可能无内容**」——把网络判断说成内容判断 | 产品修复（改走 `self.open`；超时行只许说代码看得见的东西） |
 | U12 | `weibo.py:515-522`（WB8，**已修**） | **已量化证实**（2026-09-28 第 0 步）：同一个 timescope 小时窗第 1 页 9 张卡、**第 2 页 6 张、mid 交集 0**，`.page-info` 虽空但 `ul.page-list a` 给到 page=1..10 → `_may_page`「窗口已经窄了」的前提被否证，**一窗静默丢 40%**；而 `_get_total_pages` 的 href 回退本来就读得到第 2 页，只是永远走不到 | 产品修复（**允许窗口翻页**，不是"声明上限"）；测量出处 `backend/test_weibo_gaps.py` |
@@ -212,6 +212,9 @@
 | U50 | 去掉评论面板 40 轮上限后，走路变成 **O(n²)** 且没人说（同一轮审计抓出） | 每轮都重新 `find_elements` 并把**所有已挂载节点**逐条 `_safe_text` 读一遍（每次一个 JS 往返）。3388 条的 thread 就是 ~1M 次读数、按小时计——**修掉「采不满」的同时把「采得完」变成了跑不完**，而且慢下来时没有任何一句提示 | 只读**新增的尾巴**（面板是追加式的，实测 16→56）；但**追加不是可以从数量推出来的**：虚拟化列表可以「同样多、头一个变了」，所以哨兵用**头节点的文字**而不是计数，头一变就回到 0 重读。快层两枚针：`test_a_growing_panel_is_read_by_its_new_tail_not_from_the_top`（数 `_safe_text` 次数 < 挂载总量）、`test_a_recycled_panel_is_re_read_from_the_top`（同数量换头 → 新条仍要被读到）；把哨兵换回「按数量判断」立刻红（已实测：`'第8条内容'` 被跳过）。 |
 | U51 | `crawlers/comments.py::crawl_douyin` 的差额句替站点说话（**已修 2026-09-28，同日二轮复查抓出**） | 让走路收工的四件事里，「你按了 停止」与「滚动不再出新行」是**两种相反的事实**，而 `comment.dyShort` 那句把后者写死在模板里（「面板滚到不再出新行即收尾」）——于是一次 停止 中断的走路被念成「站点就给了这么多」，正是 §5 拒的自证形状（同一件事在运行级已有对照：`run.finished.stopped` 报「1 个被停止」而不是「1 个失败」）。这句还漏了 `{url}`：调用一直传、模板里没有，一行多链接的控制台不知道差额属于哪条视频。修：走路自己记下出口（`no_new`/`target`/`stopped`/`stuck`），差额句按既有词表 `crawl.stopReason.*` 说出是哪一个，URL 回到句首。快层两枚针互为对照：`test_a_panel_that_ends_short_of_the_counters_number_names_the_gap`（`stuck`）、`test_a_walk_cut_short_by_the_stop_button_blames_the_stop_not_the_site`（`stopped`，并断言停止之后**一次都没再滚**） |
 | U52 | `crawlers/comments_douyin.py::douyin_comment_fields` 按位置取正文（**已修 2026-09-28，同日二轮复查抓出**） | 正文写死 `lines[1]`，两件事随之而来：① 评论换行时第二行之后**整段丢掉**（这张表的目的就是「不漏采」），而正文里自成一行的纯数字会被下面 `line.isdigit()` 那条读成 点赞数——一个挂在看起来对的列名下的错数；② 作者名渲染为空而塌行时（本模块 docstring 自己承认的形状）每个字段整体前移一格，「1天前·北京」被写进 评论内容，楼层与行号照样好看。修：把面板自己的「时间·地区」那行当锚点——锚点之前全是正文（多行按换行拼接），点赞数只认锚点之后的裸数字；锚点之前没有正文就是没有正文，这行由调用方丢掉，**宁可少一行也不存一句时间戳**。快层 `test_a_wrapped_comment_keeps_every_line_and_its_own_numbers`、`test_a_timestamp_is_never_filed_as_the_comment_text`；退回即红实测：把 `head` 改回 `lines[1:2]` → 两枚同时红（`'1天前·北京' == ''`） |
+
+
+| U53 | `crawlers/bilibili.py::author` 的分页假设（**已修 2026-09-29，B站第 0 步抓到**） | **投稿页把「换页」当成「滚动加载」**：第 0 步在生产同款托管 Profile 上量到——高产 UP 首屏 40 卡，**窗口滚动与元素滚动一个都不加**，而 `下一页` 一点整屏换成另外 40 张（交集 0、URL 不变）。旧 `author()` 走 `feed.walk_feed(scroll=window-scroll)` 且用默认**卡片数**哨兵，滚动不加 → `stuck` → 收工，于是**任何投稿过百的 UP 都被采到首屏就停，还替站点打 `已到列表末尾`**。与 §6 反复警告的「页面模型错了不会报错，只会让表/游标/总结三方同意一张缺的表」同形状 | 产品修复：`scroll=self._click_next_page`（点 `下一页`）+ `window=self._on_screen_key`（当前屏 BV 集合当哨兵，换页计数仍是 40，故不能用卡片数）；快层 `SpaceDriver` 重写为「只在点 `下一页` 脚本时换屏」，新增 `test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end`（把 `window=` 撤掉或 scroll 换回 `scroll_down` 当场红）；测量出处 `backend/test_bili_{step0,author_dom,author_pager}.py` → `scratchpad/bili_*.json`。**排行榜 `target>100` 无 cap 行（§7）同轮补 `crawl.bili.rankingCapped`** |
 
 
 **滚动节奏（fake driver 数出来的 scroll 命令，不是真机测量；读控制台 `scroll_round` 前先记住它）**：
@@ -572,7 +575,20 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
               修好后单独复测排序腿 = 14/40 且这次页面没印收尾句 → 仍然红（搜索线按用户判定暂停）。
               **所以第 8 步没过的原因有三类，已各自归因**：并发抢 profile（操作纪律）、`nap` 崩溃（已修+已针）、
               抖音搜索供给浅（用户判定，不追）。
-- [ ] B站 → 小红书 → 微信（同一套八步）
+- [ ] **B站（2026-09-29 第 0 步过，产品修复已落地，运行级矩阵与真机未跑）** —— 三条一次性探针
+      （`test_bili_step0.py` / `test_bili_author_dom.py` / `test_bili_author_pager.py` → `scratchpad/bili_*.json`）
+      在生产同款托管 Profile 上重读页面，结论进 `docs/crawler_notes.md` B站节，判决登记为 §6 **U9（已修）/ U53**：
+      * **搜索契约复核为真**（`page=1` 0 卡、7 屏 211 唯一、非互斥靠 `seen`、`cm.bilibili.com` 广告卡被
+        `CARDS_JS` 正确排除——不是漏采）；20 张卡 `view` 全 `code=0`，**U9 本轮未触发但确为潜伏**，已补
+        `crawl.bili.fetchEmpty` / `crawl.bili.goneVideo` 把静默丢行变具名。
+      * **抓到一处静默漏采 U53**：投稿页靠 **`下一页` 换页**（整屏替换、交集 0、URL 不变），窗口/元素滚动一个不加；
+        旧 `author()` 按滚动+卡片数 → 首屏就停还谎报 `已到列表末尾`。修：点 `下一页` + BV 集合当哨兵；
+        `SpaceDriver` 重写为换屏模型 + `test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end`（退回即红）。
+      * **排行榜 `target>100` 补 `crawl.bili.rankingCapped`**（§7「无 cap 行=修复项」）。
+      * 闸门：快层 **4696 passed / 0 skipped**、设备层 `-m integration` **131 passed / 0 skipped**、ruff 两项干净。
+      * **未做（需你与浏览器在场）**：`tests/live_site/test_live_bilibili_workflow.py` 运行级矩阵（抄知乎 §4 模板）
+        + §10 真机八步 + H 组用户画布 `测试：哔哩哔哩.json` 终验。
+- [ ] 小红书 → 微信（同一套八步）
 - [ ] VPN 阶段：X → YouTube（先测反向用例：不可达必须报 `unreachable`，不许假空）
 - [ ] 全平台门过 → §6 剩余嫌疑（U1 通用 under-target、U2 walk 计数器从不打印等）收口提交
 

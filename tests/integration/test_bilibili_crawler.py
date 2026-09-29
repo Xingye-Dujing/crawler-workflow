@@ -17,6 +17,7 @@ id pattern is part of what the crawler matches on: ``BV1a`` looks like a
 convenient fixture and is silently not a video.
 """
 
+import logging
 import re
 
 import pytest
@@ -139,33 +140,38 @@ def make_crawler(monkeypatch):
 
 
 class SpaceDriver(FakeDriver):
-    """An UP's own page: the upload list *appends* one screen per scroll round.
+    """A creator's space page: the pager *replaces* the screen when 下一页 is clicked.
 
-    The search driver changes its screen on every ``get()``, which is the wrong
-    shape here — a space is one navigation, and its pager is the scroll.
-    ``scroll_down`` closes a round with ``scrollTo``, so that script (not the
-    ``scrollBy`` steps inside it) is where a new screen mounts.
+    Step 0 (managed profile, a prolific UP) measured that neither a window nor an element
+    scroll adds a card, while 下一页 swaps in a fresh set (overlap 0, URL unchanged). So this
+    fake advances its depth ONLY on the click script — modelling the old append-on-scroll
+    here is precisely the wrong assumption that kept the capped author mode green. ``clicks``
+    counts the pages that actually advanced, so a test can prove the walk reached page 2.
     """
 
     def __init__(self, screens, payloads):
         super().__init__([screens[0]] if screens else [], payloads)
         self.screens = [list(screen) for screen in screens]
-        self.depth = 1
-        self.rounds = 0
+        self.depth = 0
+        self.clicks = 0
 
     def execute_script(self, script, *args):
         if '.bili-video-card' in script:
-            return [card for screen in self.screens[: self.depth] for card in screen]
-        if 'scrollTo' in script:
-            self.depth += 1
-            self.rounds += 1
-            return None
+            if not self.screens:
+                return []
+            return list(self.screens[min(self.depth, len(self.screens) - 1)])
+        if 'click' in script:  # the 下一页 pager click (CARDS_JS carries neither word)
+            if self.depth < len(self.screens) - 1:
+                self.depth += 1
+                self.clicks += 1
+                return 'clicked'
+            return 'none'
         return super().execute_script(script, *args)
 
 
 @pytest.fixture
 def make_space(monkeypatch):
-    """A space page whose list grows by scrolling, with the same fetch queue."""
+    """A space page whose 下一页 replaces the screen, with the same fetch queue."""
     monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
 
     def _make(screens, payloads):
@@ -202,12 +208,14 @@ class TestAuthorMid:
 
 
 class TestAuthor:
-    def test_the_space_is_opened_once_and_paged_by_scrolling(self, make_space):
+    def test_the_space_is_opened_once_and_paged_by_the_next_button(self, make_space):
+        """A second screen arrives by clicking 下一页, not by scrolling (step 0: a scroll
+        adds nothing, the pager *replaces* the screen)."""
         crawler, driver = make_space([[_card(A)], [_card(B)]], [_view(A), _view(B)])
         rows = crawler.author('266765166', target_count=10)
         assert [r['BV号'] for r in rows] == [A, B]
-        assert driver.visited == ['https://space.bilibili.com/266765166/video']
-        assert driver.rounds >= 1, 'the second screen has to arrive by scrolling, not by a page parameter'
+        assert driver.visited == ['https://space.bilibili.com/266765166/video'], 'one navigation'
+        assert driver.clicks >= 1, 'the second screen has to arrive by 下一页, not by a page parameter'
 
     def test_a_row_from_the_space_carries_what_a_search_row_carries(self, make_space):
         crawler, _driver = make_space([[_card(A)]], [_view(A)])
@@ -254,7 +262,7 @@ class TestAuthor:
         rows = crawler.author('266765166', target_count=2)
         assert len(rows) == 2
         assert len(driver.fetched) == 2
-        assert driver.rounds == 0, 'no scroll is worth taking when the target is already met'
+        assert driver.clicks == 0, 'no 下一页 press is worth taking when the target is already met'
 
     def test_a_resumed_run_does_not_pay_twice_for_one_video(self, make_space):
         """The rows carry their own BV号, so identity comes from what is already
@@ -271,15 +279,29 @@ class TestAuthor:
         assert crawler.position['mid'] == '266765166'
         assert crawler.position['scanned'] == 2 and crawler.position['done'] == 2
 
-    def test_a_list_that_stops_growing_ends_the_walk(self, make_space):
-        """One UP with three videos: the walk must stop instead of scrolling for
-        ``MAX_PAGES`` rounds on a page that will never change. Two rounds in a
-        row where nothing arrives is the agreed end — one is a slow renderer."""
+    def test_a_space_with_no_next_page_ends_the_walk(self, make_space):
+        """A UP with three videos on one screen: the walk must stop instead of pressing 下一页
+        forever. Two rounds in a row where the screen does not change is the agreed end —
+        one is a slow render."""
         crawler, driver = make_space([[_card(A), _card(B), _card(C)]], [_view(A), _view(B), _view(C)])
         rows = crawler.author('266765166', target_count=50)
         assert len(rows) == 3
-        assert driver.rounds == 2, 'the walk stops on the second empty round, not the fortieth'
+        assert driver.clicks == 0, 'there is no page 2 to advance to'
         assert len(driver.fetched) == 3, 'no video is asked for twice'
+
+    def test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end(self, make_space):
+        """The exact bug the step-0 rewrite removed: every page renders ~40 cards, so a
+        count watcher reads 40→40 across a real 下一页 swap as "stuck" and caps a prolific UP
+        at one screen while logging 已到列表末尾. The walk must watch WHICH cards, not how many.
+        Reverting ``window=`` on the author walk, or the scroll back to ``scroll_down``,
+        fails this."""
+        crawler, driver = make_space(
+            [[_card(A), _card(B)], [_card(C), _card(D)]],
+            [_view(A), _view(B), _view(C), _view(D)],
+        )
+        rows = crawler.author('266765166', target_count=50)
+        assert [r['BV号'] for r in rows] == [A, B, C, D], 'both screens, though each held 2 cards'
+        assert driver.clicks >= 1
 
 
 class TestPureHelpers:
@@ -333,6 +355,26 @@ class TestSearch:
         crawler, _driver = make_crawler([[_card(GONE), _card(A)]], [_view(GONE, code=-404), _view(A)])
         rows = crawler.search('ai', target_count=5)
         assert [r['BV号'] for r in rows] == [A]
+
+    def test_a_withdrawn_video_names_itself_as_a_gone_row(self, make_crawler, caplog):
+        """-404 is a real fact about THIS row; it must be said, not vanish between the
+        page line and the summary (the search used to drop it with no word at all)."""
+        crawler, _driver = make_crawler([[_card(GONE), _card(A)]], [_view(GONE, code=-404), _view(A)])
+        with caplog.at_level(logging.INFO, logger='crawlers.bilibili'):
+            rows = crawler.search('ai', target_count=5)
+        assert [r['BV号'] for r in rows] == [A]
+        assert GONE in caplog.text, 'a skipped video must name itself'
+
+    def test_a_card_the_endpoint_answers_nothing_about_is_named_not_dropped(self, make_crawler, caplog):
+        """§6 U9 — the cleanest silent under-collect: a ``view`` call returning no readable
+        data (a WAF body, a non-JSON page) cost a request and produced neither a row nor a
+        word, so the table and the summary agreed on a short count with nothing to explain
+        it. It now names the card it dropped."""
+        crawler, _driver = make_crawler([[_card(GONE), _card(A)]], [{}, _view(A)])
+        with caplog.at_level(logging.WARNING, logger='crawlers.bilibili'):
+            rows = crawler.search('ai', target_count=5)
+        assert [r['BV号'] for r in rows] == [A]
+        assert GONE in caplog.text, 'the unreadable card must be named, not silently dropped'
 
     def test_risk_control_with_nothing_collected_refuses_the_run(self, make_crawler):
         crawler, _driver = make_crawler([[_card(A)]], [_view(A, code=-412)])
@@ -422,6 +464,16 @@ class TestHot:
         rows = crawler.hot('ranking', target_count=50)
         assert [row['BV号'] for row in rows] == [A, B]
         assert len(driver.fetched) == 1 and 'ranking/v2' in driver.fetched[0]
+
+    def test_a_board_shorter_than_the_ask_names_the_site_number(self, make_crawler, caplog):
+        """§7 fix item: 排行榜 is exactly 100 items (measured), so a target above it must end
+        BY NAME (like 知乎's hotCapped), not with a bare 共 {n} 条 that reads as a shortfall we
+        failed to fill rather than a board the site simply has only that big."""
+        crawler, _driver = make_crawler([[]], [self._board(A, B)])
+        with caplog.at_level(logging.INFO, logger='crawlers.bilibili'):
+            rows = crawler.hot('ranking', target_count=50)
+        assert [row['BV号'] for row in rows] == [A, B]
+        assert '本次只有 2 条' in caplog.text, 'the board size is the site number and must be printed'
 
     def test_a_refused_board_with_nothing_collected_refuses_the_run(self, make_crawler):
         crawler, _driver = make_crawler([[]], [{'code': -412, 'message': 'risk', 'data': {}}])

@@ -551,6 +551,34 @@ answer `code=0` unsigned for our session **with `owner`/`stat`/`pubdate` inside 
 shape `view` returns for one video, which is why `hot()` reuses `_row()` and fetches nothing per row.
 Reaching for the search loop's one-request-per-row here would produce the same table at 50× the cost.
 
+### B站第 0 步：投稿页靠「下一页」换页，不靠滚动（measured 2026-09-29，三条一次性探针）
+
+探针：`backend/test_bili_step0.py`、`backend/test_bili_author_dom.py`、`backend/test_bili_author_pager.py`
+（产物 `scratchpad/bili_step0.json` / `bili_author_dom.json` / `bili_author_pager.json`）。关键词 `Python`。
+
+- **搜索契约复核为真**：`&page=1` 仍 **0 卡**（裸 URL 才有 7 屏，首屏 36→211 唯一）；分页非互斥
+  （第 3 屏 35 张里只 18 新），`search()` 靠 `seen` 过滤 + 只有「整屏全旧」才 `stuck` 的判据成立。
+  卡片容器 `.bili-video-card` 里 42 张有 7 张无 `/video/BV` 链接——`anchor_hosts` 显示它们是
+  `cm.bilibili.com` **广告卡**，`CARDS_JS` 的 `--ad/--cheese` 过滤是对的，**不是漏采**。
+- **U9 本轮未触发但确为潜伏**：20 张卡 `view?bvid=` 全 `code=0`（好会话、小批量）。但 `get_detail`
+  早就承认「一批 view 调用能把会话预算耗光、返回的不是 JSON」，而 `search()` 内层 `if code==0 /
+  elif code is not None` 两道闸把 `code is None`（非 JSON/WAF 体）与 `code==-404`（稿件不存在）
+  双双夹在中间——**一条请求既不出行也不出一字**。已补 `crawl.bili.fetchEmpty`（warning）与
+  `crawl.bili.goneVideo`（info），把「三方同意一张短表」变成有名字的一行。
+- **投稿页是「下一页」换页，不是无限滚动——这是本轮最大的一处静默漏采**：
+  `use_profile=False`（一次性设备）只给 0/25 卡，**换到生产同款托管 Profile** 后高产 UP（黑马程序员）
+  首屏 **40** 卡；但**窗口滚动与元素滚动都一个不加**（40→40→40），页面写着 `下一页`，点它之后
+  **整屏换成另外 40 张、交集为 0、URL 不变**。所以旧的 `author()` 用 `feed.walk_feed(scroll=window-scroll)`
+  且默认按**卡片数**判增长：滚动不加 → `stuck` → 收工，于是**把任何投稿过百的 UP 采到首屏就停，
+  还打印 `已到列表末尾` 替站点撒谎**。修法：`scroll=self._click_next_page`（点 `下一页`）、
+  `window=self._on_screen_key`（用**当前屏 BV 集合**当哨兵，因为换页后计数仍是 40）——与 X 虚拟化
+  时间线同一招。快层 `SpaceDriver` 重写成「只在点 `下一页` 脚本时换屏」，并新增
+  `test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end`（退回即红：把 `window=` 撤掉或
+  把 scroll 换回 `scroll_down`，这格当场只交第一屏就红）。
+- **排行榜大小由站点决定**：`ranking/v2` 本次**正好 100 条**、`code=0`；`popular` 每屏 20、第 2 屏与第 1 屏
+  全不相交（`hot()` 逐页走它对）。`target>100` 时旧代码只打 `hotDone 共 100 条（目标 N）`——§7 记的
+  「无 cap 行=修复项」，已补 `crawl.bili.rankingCapped` 点名榜单本次真实大小。
+
 ## YouTube
 
 **JSON-first, headless-safe, and its pagers are chosen by their list.** Measured 2026-09: the crawler

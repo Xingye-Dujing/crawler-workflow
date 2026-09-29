@@ -464,6 +464,9 @@ _ZH = {
     'crawl.bili.authorEmpty': '[哔哩哔哩] 没有填写 UP主（space.bilibili.com 链接或数字 mid）：{author}',
     'crawl.bili.authorNoVideos': '[哔哩哔哩] UP主 {mid} 的投稿列表没有渲染出视频（可能真的没投过稿）',
     'crawl.bili.authorDone': '[哔哩哔哩] 投稿列表采集结束，共 {n} 条（原因：{reason}）',
+    'crawl.bili.goneVideo': '[哔哩哔哩搜索] {i} 稿件不存在或已失效（{code}），跳过这一条',
+    'crawl.bili.fetchEmpty': '[哔哩哔哩搜索] {i} 的稿件接口没有返回可读数据（非 JSON 或被 WAF 拦截），跳过这一条',
+    'crawl.bili.rankingCapped': '[哔哩哔哩] {board}本次只有 {n} 条（目标 {total} 条）：榜单大小由站点决定',
     'crawl.bili.finished': '[哔哩哔哩搜索] 搜索完成，共获取 {n} 条有效结果（目标 {total} 条）',
     'crawl.bili.blocked': (
         '[哔哩哔哩] 接口拒绝返回数据（code={code}）：Cookie 可能已失效或触发了风控，'
@@ -1408,6 +1411,9 @@ _EN = {
     'crawl.bili.authorEmpty': '[Bilibili] no UP given (a space.bilibili.com link or a numeric mid): {author}',
     'crawl.bili.authorNoVideos': '[Bilibili] the upload list of UP {mid} rendered no video (possibly none published)',
     'crawl.bili.authorDone': '[Bilibili] upload list finished, {n} rows (stopped because: {reason})',
+    'crawl.bili.goneVideo': '[Bilibili search] {i} is withdrawn or unavailable ({code}), skipped',
+    'crawl.bili.fetchEmpty': '[Bilibili search] {i} returned no readable data (non-JSON or WAF-blocked), skipped',
+    'crawl.bili.rankingCapped': "[Bilibili] the {board} had only {n} rows (target {total}): its size is the site's",
     'crawl.bili.finished': '[Bilibili search] done, {n} valid rows (target {total})',
     'crawl.bili.blocked': (
         '[Bilibili] the endpoint refused to answer (code={code}): the cookie likely died or risk control '
