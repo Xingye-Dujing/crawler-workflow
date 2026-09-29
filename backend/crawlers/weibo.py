@@ -405,6 +405,11 @@ class WeiboCrawler(Crawler):
             # refusal — legal, exactly as a bilibili space with no uploads is.
             logger.info(t('crawl.weibo.authorNoPosts', uid=uid))
         logger.info(t('crawl.weibo.authorDone', n=self.collected(), reason=stop_reason_label(walk.stopped_reason)))
+        # Deliberately no ``note_end`` here yet. ``walk_pages`` separates a server-said
+        # ('end' / 'empty_page') from a self-summary ('no_new' = "cursor gave nothing new this
+        # round"), and only the former are site-attested; licensing on the walker's word as a
+        # whole is the §6 whitewash. Stays ``end_reason=None`` → the gate is silent until the
+        # server-said cases pass a member of crawlers/base.py:LICENSED_ENDS.
         return self.results()
 
     @staticmethod

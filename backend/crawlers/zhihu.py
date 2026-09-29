@@ -443,6 +443,12 @@ class ZhihuCrawler(Crawler):
         logger.info(
             t('crawl.zhihu.authorTabDone', tab=tab, n=self.collected(), reason=stop_reason_label(result.stopped_reason))
         )
+        # NOTE: deliberately does NOT set ``self.end_reason``. ``walk_feed``'s stopped_reason
+        # is a self-summary of our loop ('stuck' = "stopped growing"), which this repo forbids
+        # as a license for a shortfall (docs/crawler_notes.md ZHIHU_LIES: a list that stops
+        # growing is not proven to be out of supply). Only a *site-attested* end licenses, and
+        # this walk has none — so the crawl stays ``end_reason=None`` (the gate is silent) until
+        # the platform surfaces a real end marker. See crawlers/base.py:LICENSED_ENDS.
 
     def _profile_card(self, card, index: int = 0) -> dict | None:
         """One profile row → a row, with the body unclamped before it is read."""

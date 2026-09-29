@@ -390,6 +390,9 @@ class TwitterCrawler(Crawler):
         if self.login_wall:
             logger.warning(t('crawl.loginWall', platform=self.domain, where=self._current_url()))
         logger.info(t('crawl.x.finished', n=self.collected(), reason=stop_reason_label(result.stopped_reason)))
+        # Deliberately no ``note_end``: the walk reason is our loop's self-summary, not a
+        # site-attested end; licensing a shortfall on it is exactly the whitewash the X live
+        # tier refuses (``crawl.x.finished`` is not whitelisted). Stays ``end_reason=None``.
         return self.results()
 
     def _row(self, card, seen: set) -> dict | None:

@@ -37,6 +37,35 @@ def as_index(value, default: int = 0) -> int:
         return default
 
 
+#: The sentinel a handler passes to :meth:`Crawler.note_end` when it came back under its
+#: target and saw NO site-attested end — the silent-under-collect the executor's U1 gate
+#: refuses by name. It is the empty string on purpose: :attr:`Crawler.end_reason` defaults to
+#: ``None`` (no opinion), so only an explicit ``UNDER_TARGET`` says "I ran and I am short".
+#: CAUTION: a shared walker's *default* ``stopped_reason`` is also ``''``
+#: (:mod:`crawlers.engine.feed` / :mod:`.pager`), but both always fill a real reason before
+#: returning — never lift ``result.stopped_reason`` straight into ``note_end``, or a walk that
+#: forgot to name itself would read as "convict me". Map it to a ``LICENSED_ENDS`` member
+#: only when the SITE actually said so; otherwise leave the crawl ``end_reason=None``.
+UNDER_TARGET = ''
+
+#: The ONLY ends that license a shortfall — each a fact the SITE attested, never our loop's
+#: summary of itself. Every member has an evidentiary bar (what the handler must have seen):
+#:   ``'site_end'`` — the page wrote its own end-of-list marker (e.g. 抖音「暂时没有更多了」;
+#:                    a server cursor that returned "finished", not a round that added nothing).
+#:   ``'capped'``   — the site publishes exactly ONE list and this answer is its whole size
+#:                    (a hot board's fixed length), so more asks would only re-fetch it.
+#:   ``'empty'``    — an ATTESTED empty payload: the server answered 200 with an explicitly-empty
+#:                    list (weibo ``mymblog`` ``{ok, list:[]}`` = a real 0-post account). NOT a
+#:                    DOM that simply had not painted — "looked empty" is a liar elsewhere in this
+#:                    repo (``crawl.bili.empty_page``, zhihu ``authorTabEmpty``), so a handler that
+#:                    cannot prove the server said empty must NOT license with it.
+#: A login wall / risk / the user's 停止 are settled by the executor BEFORE this gate (and the
+#: gate itself skips when ``risk_blocked``), so they are not licences here. ``walk_feed``'s
+#: 'stuck' and ``pager``'s 'no_new' are deliberately ABSENT — a list that stopped growing is not
+#: proven out of supply (a soft throttle mimics it), so licensing on them is §6's whitewash.
+LICENSED_ENDS = frozenset({'site_end', 'capped', 'empty'})
+
+
 class CrawlerStopped(BaseException):
     """The user pressed 停止 and this crawl must end, keeping what it already paid for.
 
@@ -300,6 +329,31 @@ class Crawler(ABC):
         # be cached as 「Cookie 可用」) and by the walks that would otherwise read the
         # blank as "no results".
         self.unreachable = False
+        #: Why this crawl stopped short, for the executor's under-target judge (U1). THREE
+        #: states, and the distinction is the whole design:
+        #:   ``None``            — this handler has not adopted the contract; it states no
+        #:               opinion and the gate stays silent, so platforms migrate one at a
+        #:               time without a half-migrated tree going wrongly red;
+        #:   ``UNDER_TARGET``    — the handler ran, came back under target, and named NO
+        #:               site-attested end: a real silent under-collect, refused by name
+        #:               instead of settled DONE;
+        #:   a ``LICENSED_ENDS`` word — the SITE itself said this is all there is (an
+        #:               end-of-list marker, a board's fixed size, a genuinely empty-but-200
+        #:               payload): a legitimate short that settles clean.
+        #: A loop *self*-summary (``walk_feed`` 'stuck', ``pager`` 'no_new', a platform's own
+        #: "翻了几轮") is deliberately NOT a ``LICENSED_ENDS`` member and :meth:`note_end`
+        #: refuses it: "stopped growing" is not "the site ran out" (it can be a soft throttle),
+        #: so licensing a shortfall on our own loop is the whitewash §6 exists to refuse. The
+        #: X and bilibili live tiers already keep their ``finished``/``authorDone`` self-summary
+        #: OUT of their whitelists; the zhihu ``author`` tier does NOT yet (it whitelists
+        #: ``crawl.zhihu.authorTabDone``), and that exception must be closed when zhihu migrates
+        #: — until then no platform sets this field at all, so the gate is entirely dormant.
+        self.end_reason: str | None = None
+        #: The shared walk's funnel (scanned / kept / refused), surfaced so a convicted short
+        #: can be *attributed* — "refused N of M" tells "the site had no more" from "our
+        #: scraper dropped what it got". Optional: a handler may convict without it, and the
+        #: line then omits the funnel rather than printing a fake measurement of zeros.
+        self.walk_counts: dict = {}
         #: How many first-content waits this browser has watched expire, and the counter
         #: :attr:`MAX_PENDING_WAITS` reads. An instance counter rather than a wall flag:
         #: it is about what *this* machine just did, not about what the site said.
@@ -442,6 +496,54 @@ class Crawler(ABC):
 
     def collected(self) -> int:
         return len(self._collected)
+
+    def note_end(
+        self,
+        reason: str | None,
+        *,
+        scanned: int | None = None,
+        kept: int | None = None,
+        refused: int | None = None,
+    ) -> None:
+        """Record how the crawl finished, for the executor's under-target judge (U1).
+
+        ``reason`` has exactly three legal shapes; a fourth (a loop self-summary) is a bug and
+        is raised here so it can never quietly license a shortfall:
+
+        * ``None``                  — no opinion: leaves :attr:`end_reason` at ``None`` and the
+          gate stays silent (a not-yet-migrated handler). ``note_end(None)`` means "nothing to
+          say", NOT "convict" — the convicting value is the distinct ``UNDER_TARGET``.
+        * ``UNDER_TARGET`` (``''``) — the crawl is short and saw no site-attested end: the gate
+          refuses it by name.
+        * a ``LICENSED_ENDS`` word  — the SITE said this is all: a legitimate short, settles clean.
+
+        Anything else — ``'stuck'``, ``'no_new'``, a "翻了几轮", or a non-string like ``0``/
+        ``False`` — raises. Those are summaries of OUR loop, and a list that stopped growing is
+        not proven out of supply (a soft throttle mimics it); licensing a shortfall on them is
+        §6's whitewash. The non-string check matters: a bare truthiness test would let
+        ``note_end(result.hit_cap)`` (a bool) slip past as falsy and go *silently* unlicensed —
+        so the type is checked, not the truthiness. Failing loudly here is a crawler bug caught
+        at the boundary, never a false "采得不足" verdict handed to the user.
+
+        The funnel is per-dimension optional: only the counts actually measured are stored, so a
+        handler that knows ``kept`` but not ``scanned`` reports one number instead of inventing
+        two zeros (a lost fact presented as a measurement).
+        """
+        if reason is None:
+            return
+        if not isinstance(reason, str):
+            raise TypeError(f'note_end({reason!r}): end_reason must be None, UNDER_TARGET, or a LICENSED_ENDS string')
+        if reason != UNDER_TARGET and reason not in LICENSED_ENDS:
+            raise ValueError(
+                f'note_end({reason!r}) is not a site-attested end; a shortfall may only be licensed by '
+                f'{sorted(LICENSED_ENDS)} or left UNDER_TARGET — a loop self-summary is §6 whitewash'
+            )
+        self.end_reason = reason
+        self.walk_counts = {
+            name: value
+            for name, value in (('scanned', scanned), ('kept', kept), ('refused', refused))
+            if value is not None
+        }
 
     @staticmethod
     def resume_of(kwargs: dict) -> dict:

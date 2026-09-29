@@ -815,6 +815,18 @@ _ZH = {
         '已采集的数据全部保留——请到 设置→Cookie 更新后，用断点续跑从上次中断处继续'
     ),
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
+    # U1: a crawl that came back under its target WITHOUT naming a licensed end (the site
+    # said it ran out, a wall, risk, or the user's 停止) is a real under-collect, not a
+    # success — so it is refused BY NAME and kept resumable, never settled clean DONE.
+    # The walk funnel rides on the line because "refused N of M" is what separates "the
+    # site had no more" from "our scraper dropped what it got" (§6's silent-under-collect).
+    'run.underTargetShort': (
+        '{platform} 采到 {have}/{want} 条就停了，却没说站点自己到底了——这不是「采完了」。'
+        '已保留 {have} 行，可点「继续」从断点补剩下的{walk}'
+    ),
+    # The funnel clause only when the crawler reported counts; a convicted short without
+    # them omits it, rather than printing a fake measurement of zeros.
+    'run.underTargetWalk': '（走查：扫 {scanned}、留 {kept}、拒 {refused}）',
     # Said out loud because the alternative is silence that reads as "closed", while the
     # user may be looking at the window that is still open.
     'run.browserStuck': (
@@ -1782,6 +1794,17 @@ _EN = {
     'run.cookieExpiredOk': (
         'note: {platform} hit the login wall only after the target was met — the data is complete, nothing to resume'
     ),
+    # U1: a crawl under its target that named no licensed end (site ran out / wall / risk /
+    # the user's Stop) is a real under-collect, refused by name and left resumable — never
+    # settled clean DONE. The walk funnel rides along because "refused N of M" is what tells
+    # "the site had no more" from "our scraper dropped what it got" (§6 silent-under-collect).
+    'run.underTargetShort': (
+        '{platform} stopped at {have}/{want} rows without the site saying it ran out — that is not "finished". '
+        '{have} rows are kept; press Continue to pick up the rest from the cursor{walk}'
+    ),
+    # The funnel clause only when the crawler reported counts; a convicted short without them
+    # omits it rather than printing a fake measurement of zeros.
+    'run.underTargetWalk': ' (walk: scanned {scanned}, kept {kept}, refused {refused})',
     # Said out loud because the alternative is silence that reads as "closed", while the
     # user may be looking at the window that is still open.
     'run.browserStuck': (

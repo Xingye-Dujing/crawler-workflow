@@ -146,3 +146,22 @@
   **RAISES** so the node settles `partial` and the RUN becomes `failed` → the resume banner offers 继续 from the
   stored cursor. Never downgrade this to "completed with fewer rows" — that hides the gap forever. Comment nodes
   raise when any article was blocked likewise.
+- **A shortfall must be licensed by the SITE, never by our own loop (U1/U2).** `walk_feed`/`pager` report a
+  self-summary (`'stuck'` = "stopped growing", `'no_new'`) that a soft throttle mimics, so it is **not** proof the
+  site ran out, and the executor must not quietly license it. The harness mostly agrees (`SHARED_EXITS` holds none of
+  those) — **but zhihu's `author` tier still whitelists `crawl.zhihu.authorTabDone`, a self-summary**; that exception
+  must be closed when zhihu migrates, exactly as the X and bilibili tiers already refuse their `finished`/`authorDone`. The contract is `crawler.end_reason`, **three states**:
+  `None` (handler not migrated → the gate stays silent, so platforms migrate one at a time with no half-red tree);
+  `UNDER_TARGET` (`''`, the handler ran short and saw no site end → the executor **refuses by name**
+  `run.underTargetShort`, settling partial/继续, NOT clean DONE); or a member of `crawlers.base.LICENSED_ENDS`
+  (`'site_end'` / `'capped'` / `'empty'` — each requires a fact the SITE attested: an end-of-list marker, a fixed
+  board size, a server-confirmed 200-empty list; NOT an unrendered DOM that merely "looked empty"). A login wall and
+  the user's 停止 are settled by the executor BEFORE this gate; a **risk bounce is skipped by the gate itself**
+  (re-running into risk control immediately is forbidden advice); none of the three is a license.
+  **`Crawler.note_end(reason)` raises on any value outside `None`/`UNDER_TARGET`/`LICENSED_ENDS`, and on a non-string**
+  (a bare truthiness test would let a bool `note_end(x.hit_cap)` slip past as falsy and go silently unlicensed), and
+  `None` is a no-op, never the convicting `''`: a crawler excusing a gap with its own pager crashes at the boundary
+  instead of stamping 完成 on a thin table. A convicted short may carry the walk funnel (`scanned/kept/refused`),
+  rendered ONLY when all three were measured; a partial or absent funnel is omitted, never printed as fake zeros.
+  **As of landing no handler calls `note_end`, so the gate is entirely dormant** (every crawl keeps today's behaviour);
+  it goes live per platform as each is migrated. Pinned: `tests/api/test_under_target.py`.

@@ -255,6 +255,9 @@ class BilibiliCrawler(VideoCrawler):
             window=self._on_screen_key,
         )
         logger.info(t('crawl.bili.authorDone', n=self.collected(), reason=stop_reason_label(result.stopped_reason)))
+        # Deliberately no ``note_end``: ``walk_feed``'s reason is a self-summary, not a
+        # site-attested end, and this repo forbids licensing a shortfall on it
+        # (crawlers/base.py:LICENSED_ENDS). Stays ``end_reason=None`` → the gate is silent.
         return self.results()
 
     def hot(self, board: str = 'popular', target_count: int = 50, **kwargs):

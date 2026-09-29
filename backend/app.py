@@ -39,7 +39,7 @@ from analyzers import (
 from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
-from crawlers.base import CrawlerStopped, DeadDriver, PageNotArrivedError, warm_profile_dir
+from crawlers.base import UNDER_TARGET, CrawlerStopped, DeadDriver, PageNotArrivedError, warm_profile_dir
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, effective_workflow, node_label
@@ -2614,6 +2614,30 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
         # Wall met exactly as the target was reached: the session died at the
         # finish line, so there is nothing missing — do not raise a false alarm.
         add_log(t('run.cookieExpiredOk', platform=platform))
+    # U1: a non-wall, non-risk, non-stopped crawl that came back under its target WITHOUT a
+    # site-attested end must not settle clean DONE — that is §6's silent-under-collect, which
+    # until now only the test tier's ``classify_verdict`` convicted, never the run itself.
+    # ``end_reason`` is ``None`` for a not-yet-migrated handler (stays today's behaviour, no
+    # regression while platforms migrate one at a time); a ``LICENSED_ENDS`` word means the SITE
+    # said this is all (settles clean); ``UNDER_TARGET`` — and ONLY that — is the convicted
+    # short. A loop self-summary cannot reach here as a license: ``Crawler.note_end`` refuses it.
+    # A risk bounce is deliberately NOT convicted and NOT told to 继续: re-running into risk
+    # control immediately is the advice this repo forbids, so the gate skips when it is set.
+    if (
+        target_count
+        and len(rows) < target_count
+        and getattr(crawler, 'end_reason', None) == UNDER_TARGET
+        and not getattr(crawler, 'risk_blocked', False)
+    ):
+        counts = getattr(crawler, 'walk_counts', {}) or {}
+        # Attribute the gap only when the funnel is fully measured; a partial one is omitted
+        # rather than printed with invented zeros or a raw unfilled {slot}.
+        walk = (
+            t('run.underTargetWalk', scanned=counts['scanned'], kept=counts['kept'], refused=counts['refused'])
+            if {'scanned', 'kept', 'refused'} <= set(counts)
+            else ''
+        )
+        raise ValueError(t('run.underTargetShort', platform=platform, have=len(rows), want=target_count, walk=walk))
     return rows
 
 
