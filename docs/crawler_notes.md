@@ -747,6 +747,29 @@ consequences, both pinned by `tests/unit/test_xhs_crawler.py`:
 Fixed by entering both pages through `Crawler.open`, which also means **a slow page must not be
 judged as a wall** — see the next section; the two changes only work together.
 
+**The search grid is a virtualised feed, so progress is 笔记IDs, never card count** (measured
+2026-09-29, step-0 probe `scratchpad/xhs_step0.json`). First read mounted **22** cards; four window
+scrolls gave `12, 8, 8, 8` — the mounted COUNT holds flat while scrolling swaps which notes are in
+the DOM (new 笔记ID enter, old ones leave). Two things were wrong because of this: the walk paged on
+`_card_count` growth (a flat count was read as "reached the bottom"), and `_harvest_cards` skipped to
+`position['scanned']` as a **DOM index** — once `scanned` climbed past `len(cards)` (~8) the slice went
+empty and every later round harvested nothing while the loop insisted it had grown. That is §6 U3's
+silent under-collect, and it is a *different* lesson than the douyin "wrong scroll box" one: the scroll
+target is fine, the **progress signal was wrong**. The walk now advances on the distinct-`笔记ID` set
+(`len(seen)`) growing, re-scans the whole mounted batch each round (the `seen` dedupe skips a
+recycled card *before* its detail navigation, so no re-pay), and keeps a timed render beat after each
+scroll rather than waiting on a count that will never move. `feed.walk_feed` is deliberately NOT used —
+it carries the same card-count assumption. Confirmed live (headless, target 26 > one screen): collects
+past the first batch, each 笔记ID once.
+
+**An expired/absent `xsec_token` is one dead link, not the session refused** (same probe). Opening a
+note with its token stripped answers 安全验证 — and the old detail path scraped that wall page as a
+row (正文 0, and the 标题 literally became 安全验证), while `open(judge=True)` latched `risk_blocked`
+and aborted the whole harvest. Same shape as bilibili's U55 (a per-link code blamed on the session).
+The note is now entered with `judge=False` and read with the non-latching `verdict`: a walled detail is
+a **named** dead note (`crawl.xhs.deadNote`), the grid card's real fields are kept, and one stale token
+no longer stops the run. The session wall is still checked where it belongs — on the search page, each round.
+
 ## A login page on the way through is not a wall (measured 2026-09-24)
 
 `Crawler.open()` judged the wall on the *first* reading after `driver.get`, which is the moment a

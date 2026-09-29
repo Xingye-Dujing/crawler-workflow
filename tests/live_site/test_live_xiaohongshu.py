@@ -30,3 +30,32 @@ def test_search_returns_note_cards(live_search, headless):
     assert len(rows) <= 6, f'target_count=3 must cap the crawl (got {len(rows)})'
     titled = [r for r in rows if (r.get('标题') or '').strip()]
     assert titled, 'at least some cards must carry a title'
+
+
+def test_collect_walks_past_one_mounted_screen(live_search):
+    """A target above the first batch must be met by following 笔记ID, not the card count (U59).
+
+    The grid is virtualised: the initial mount is large (~22 measured 2026-09-29) and scrolling
+    keeps a FLAT count while swapping note identities, so the old walk — which capped at the first
+    batch and then called the flat count "the bottom" — collected at most one screen. A target past
+    that batch (26) is only reached if the harvest keeps pulling new 笔记ID. The assertion is
+    two-sided so it cannot pass by accident and cannot weaken the empty rule: reaching the target
+    proves the fix; a shortfall is accepted ONLY when the crawler names 风控/登录墙 (the account
+    walls within minutes), and a silent shortfall is exactly the under-collect this cell guards.
+    """
+    target = 26
+    rows = live_search('xiaohongshu', headless=True, keyword='三亚', count=target)
+    if not rows:
+        assert rows.login_wall or rows.risk_blocked, 'an empty must name its refusal, never read as a thin keyword'
+        return
+    assert len(rows) <= target, f'target_count={target} must cap the crawl (got {len(rows)})'
+    if len(rows) < target:
+        assert rows.login_wall or rows.risk_blocked, (
+            f'stopped at {len(rows)} of {target} with no refusal — a broad keyword has ample supply, '
+            'so this is the recycling walk under-collecting again (it must follow 笔记ID, not the flat card count)'
+        )
+    ids = [r.get('笔记ID') for r in rows if r.get('笔记ID')]
+    assert ids, 'delivered rows must carry a session-independent 笔记ID'
+    assert len(ids) == len(set(ids)), (
+        'a recycling grid re-promotes notes with new tokens; each 笔记ID must be emitted once'
+    )
