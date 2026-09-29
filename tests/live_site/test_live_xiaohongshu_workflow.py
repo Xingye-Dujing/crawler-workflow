@@ -239,4 +239,13 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
                 f'(preview is capped at 500): {mine[0].name}'
             )
         summary = accept.summary_row(run, case_id='H1', found=found, answers=answers, kept=kept, asked=asked)
-        run.finish(rows=kept, target=asked, warn=summary != harness.FULL)
+        # Pass the derived verdict explicitly: finish() would otherwise re-grade on ``mode='mixed'``
+        # against the WHOLE console — the cross-component whitewash the per-component slices exist to
+        # prevent — and this case's authoritative row is the one ``summary_row`` derived from the two
+        # component verdicts, not a whole-canvas arithmetic.
+        run.finish(
+            answer={'verdict': summary, 'reasons': [f'{len(found)} components, {kept} of {asked} rows']},
+            rows=kept,
+            target=asked,
+            warn=summary != harness.FULL,
+        )
