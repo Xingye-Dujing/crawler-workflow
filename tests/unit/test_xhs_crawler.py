@@ -201,6 +201,89 @@ class RecoverDriver:
         pass
 
 
+class _NoteDriver:
+    """A browser for the note-detail seam: ``get`` commits the URL, ``body`` hands back its text.
+
+    The detail page's identity is what the body says — a stripped/expired ``xsec_token`` swaps it
+    for 安全验证, so the whole question Fix B asks (is this link dead, or the session?) is answered
+    from the page text the classifier reads, without a real tab.
+    """
+
+    def __init__(self, url=NOTE, body=''):
+        self.current_url = url
+        self.body = body
+        self.visited = []
+
+    def get(self, url):
+        self.visited.append(url)
+        self.current_url = url
+
+    def find_element(self, by, selector):
+        if selector == 'body':
+            return _TextElement(self.body)
+        raise NoSuchElementException(selector)
+
+    def find_elements(self, by, selector):
+        return []
+
+    def execute_script(self, script, *args):
+        for arg in args:
+            text = getattr(arg, 'text', None)
+            if text:
+                return text
+        return ''
+
+    def quit(self):
+        pass
+
+
+class RecyclingGridDriver:
+    """A virtualised feed: a FLAT number of mounted cards whose identities rotate on scroll.
+
+    This is what a real xiaohongshu search does (measured 2026-09-29: the count held at ~8
+    while new 笔记ID scrolled in and old ones left the DOM). The point of the fake is that the
+    mounted COUNT never grows, so a walk that pages on ``_card_count`` growth reads one screen
+    and calls it the bottom — while a walk that pages on distinct-note growth keeps collecting.
+    """
+
+    def __init__(self, notes=None, page=8, url=SEARCH):
+        self.notes = list(notes or [])
+        self.page = page
+        self.window_start = 0
+        self.current_url = url
+        self.visited = []
+        self.max_mounted = 0
+
+    def get(self, url):
+        self.visited.append(url)
+        self.current_url = url
+
+    def advance(self):
+        """One ``scroll_down``: the feed fetches the next batch, the DOM size holds steady."""
+        if self.window_start + self.page < len(self.notes):
+            self.window_start += self.page
+
+    def find_element(self, by, selector):
+        raise NoSuchElementException(selector)
+
+    def find_elements(self, by, selector):
+        if selector == Xhs.CARD_SELECTOR:
+            window = self.notes[self.window_start : self.window_start + self.page]
+            self.max_mounted = max(self.max_mounted, len(window))
+            return [_GridCard(u) for u in window]
+        return []
+
+    def execute_script(self, script, *args):
+        for arg in args:
+            text = getattr(arg, 'text', None)
+            if text:
+                return text
+        return ''
+
+    def quit(self):
+        pass
+
+
 @pytest.fixture
 def make_crawler(monkeypatch):
     """Build a real :class:`Xhs` over a fake driver, with every wait instant."""
@@ -324,6 +407,81 @@ class TestRiskControlStopsTheCrawl:
         assert crawler.navigation_settled is True, 'the re-drive committed, so the page is not "slow" either'
         assert len(driver.visited) == Crawler.NAV_RETRY + 1, 'exactly the bound of re-drives, no more'
         assert not driver.current_url.startswith('chrome://'), 'the browser reached the site before being judged'
+
+
+class TestDeadNoteDetail:
+    """A note behind 安全验证 is THIS link dead, not the session refused (U55's shape).
+
+    The step-0 probe caught the old behavior: an expired/absent ``xsec_token`` swapped the detail
+    page for 安全验证, the crawler scraped it as a blank row (正文 0) whose 标题 was literally the wall
+    word, AND the session-wide ``open`` judged it a 风控 and latched ``risk_blocked`` — so one stale
+    token could stop the harvest. The fix reads the note with the non-latching :meth:`verdict`, names
+    it dead, and keeps the grid card row while the crawl goes on.
+    """
+
+    def test_a_walled_note_is_named_dead_and_does_not_abort_the_session(self, make_crawler, caplog):
+        crawler, _d = make_crawler(driver_cls=_NoteDriver, url=NOTE, body='安全验证，请完成验证后继续')
+        with caplog.at_level('INFO'):
+            detail = crawler._scrape_note(NOTE)
+        assert detail is None, 'a note behind 安全验证 must not become a blank row'
+        assert crawler.risk_blocked is False, (
+            'one walled note is not the session refused — the crawl must keep collecting'
+        )
+        assert crawler.login_wall is False, 'a per-note wall is not a dead cookie either'
+        assert t('crawl.xhs.deadNote', url=NOTE) in [r.getMessage() for r in caplog.records], (
+            'the dead note must be named, not silently dropped'
+        )
+
+    def test_a_healthy_note_is_not_named_dead(self, make_crawler, caplog):
+        # No refusal wording on screen → the non-latching guard passes it through (it may still
+        # time out in this fake, but it must not be skipped as a *walled* note).
+        crawler, _d = make_crawler(driver_cls=_NoteDriver, url=NOTE, body='三亚 五天四晚 攻略 全文')
+        with caplog.at_level('INFO'):
+            crawler._scrape_note(NOTE)
+        assert t('crawl.xhs.deadNote', url=NOTE) not in [r.getMessage() for r in caplog.records], (
+            'a note with no refusal on screen must not be skipped as dead'
+        )
+
+
+class TestVirtualisedFeed:
+    """The search walk must page on 笔记ID growth, not the mounted card count (U3/U59).
+
+    A real xiaohongshu grid recycles: the DOM holds ~8 cards and scrolling swaps which
+    notes they are. A walk keyed on ``_card_count`` growth reads one screen, sees the count
+    flat, and calls it the bottom — the silent under-collect (and the DOM-index skip meant
+    it then read NOTHING). These pin the opposite: a flat-count feed that keeps handing new
+    ids is harvested well past its first screen, and one that keeps handing the SAME ids
+    stops without re-emitting a note.
+    """
+
+    def _crawler(self, make_crawler, monkeypatch, notes, page=8):
+        monkeypatch.setattr('crawlers.xiaohongshu.time.sleep', lambda s: None)
+        crawler, driver = make_crawler(driver_cls=RecyclingGridDriver, notes=notes, page=page)
+        # ``scroll_down`` drives the fake's window; the detail read and the politeness beat
+        # are not this seam — the grid recycle + ``seen`` dedupe is the unit under test.
+        crawler.scroll_down = lambda **k: driver.advance()
+        crawler._polite_pause = lambda *a, **k: None
+        crawler._read_note = lambda *a, **k: {}
+        return crawler, driver
+
+    def test_a_recycling_grid_is_walked_past_its_first_screen(self, make_crawler, monkeypatch):
+        notes = [f'https://www.xiaohongshu.com/explore/{i:020x}?xsec_token=T' for i in range(1, 30)]
+        crawler, driver = self._crawler(make_crawler, monkeypatch, notes, page=8)
+        rows = crawler.search('三亚', target_count=20)
+        assert len(rows) >= 20, f'a flat-count feed was walked by card count again: only {len(rows)}'
+        assert driver.max_mounted == 8, (
+            'the feed never mounted past one screen — the walk could not have counted growth'
+        )
+        ids = [r['笔记ID'] for r in rows]
+        assert len(ids) == len(set(ids)), 'a recycling feed must not emit the same note twice'
+
+    def test_a_grid_that_repeats_the_same_notes_stops_without_overcollecting(self, make_crawler, monkeypatch):
+        notes = [f'https://www.xiaohongshu.com/explore/{i:020x}?xsec_token=T' for i in range(1, 6)]
+        crawler, _driver = self._crawler(make_crawler, monkeypatch, notes, page=8)
+        rows = crawler.search('三亚', target_count=50)
+        ids = [r['笔记ID'] for r in rows]
+        assert ids and len(ids) == len(set(ids)), 'each distinct note once, no more'
+        assert len(rows) < 50, 'the walk must stop when scrolling stops bringing new notes'
 
 
 class TestNoteNavigation:
