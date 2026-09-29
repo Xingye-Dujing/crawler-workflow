@@ -148,7 +148,7 @@
 | U2 | `engine/feed.py:99-116`、`engine/pager.py:23-36` | scanned/kept/refused/rounds/pages 算而**从不打印** | 产品修复：walk 收尾统一播报「扫X留Y拒Z」 |
 | U3 | `crawlers/zhihu.py:232-272`（Z6）**已修 2026-09-27，待真机复验** | 搜索滚动循环手抄了第二份循环（AGENTS 禁止的形状）：旧代码一屏无增长后只等 `CARD_WAIT=1.5s` 再确认一次即 `crawl.zhihu.stuck` **break**，`stuck` 恒为 1、`STUCK_ROUNDS=3` 形同装饰、`crawl.zhihu.confirmed` 分支不可达。对照：**同平台作者模式没这个毛病**（`_walk_profile_tab` 走 `engine/feed.py:194-213` 的 `walk_feed`，连停 3 轮才收工）——同一站点两套放弃速度差 3 倍，收尾还打 `crawl.zhihu.finished n=<短表> total=<目标>` 自称正常。**修法**：内层那次「二次确认滚动」保留为**额外耐心**（不再附判词），只有 `stuck>=STUCK_ROUNDS` 才收工并打 `crawl.zhihu.stuck n=3`；说过头的 `crawl.zhihu.confirmed`（「内容已加载完毕」是未测量的断言）随分支删除（双语目录两行）。快层新钉：`tests/unit/test_crawler_zhihu_search.py` | 余账：把这条循环整体换成 `feed.walk_feed`（消掉第二份拷贝，顺带带出 U2 的 scanned/kept/refused）；`xiaohongshu.py:123-133` 同病，轮到该平台时同修 |
 | U4 | `crawlers/zhihu.py:569-576,598-605`（Z9/Z10）| 卡片吞行只 `logger.debug`；根 logger INFO（`app.py:222-225`）→ 控制台与 logs/ 双不可见 | 产品修复：升 INFO 聚合行（「本轮跳过 n 张无效卡」） |
-| U5 | `xiaohongshu.py:169-171,186`（XH6）**+ 微信同形** `wechat.py:80`（**已修 2026-09-29，真机 C1 抓到**） | **seen 链接列表写进游标**（违反「游标只记位置」）→ 链接失败一次=之后每次续跑**永久静默跳过**=漏采。微信的 `mark_position(urls=urls,…)` 把整条粘贴的 URL 列表塞进游标（续跑其实只读 `url_index`、`urls` 从节点 textarea 重建，那行是冗余且违禁的）| 产品修复；D8 判据的现成红牌。微信已改位置-only，设备层针 `tests/integration/test_wechat_crawler.py::test_the_cursor_records_position_not_the_link_list`（装回 `urls=urls` 即红）；真机 `test_live_wechat_workflow.py::test_c1` 的 `not smuggled` 断言就是抓到它的那格 |
+| U5 | `xiaohongshu.py:169-171,186`（XH6）**+ 微信同形** `wechat.py:80`（**xhs 已修 2026-09-29 离线；微信已修+真机 C1 验**） | **seen 链接列表写进游标**（违反「游标只记位置」）→ 链接失败一次=之后每次续跑**永久静默跳过**=漏采。微信的 `mark_position(urls=urls,…)` 把整条粘贴的 URL 列表塞进游标（续跑其实只读 `url_index`）。xhs 把 `links=sorted(seen)` 写进游标、且 `seen` 认 token 链接（换 token 就漏判重）| **xhs 产品修复（离线，待真机 C1 同形格复验）**：游标改位置-only（`scanned`/`done`/`keyword`）、`seen` 从**已存行的 `笔记ID`** 播种（会话无关身份，换 token 仍判重）。设备层针 `tests/unit/test_xhs_crawler.py::TestResumeIdentityAndCursor`（游标不含列表 + 重新 promote 的旧 token 笔记不被重采，装回 `links=` 即红）。微信已改位置-only，设备层针 `test_the_cursor_records_position_not_the_link_list`；真机 `test_live_wechat_workflow.py::test_c1` 的 `not smuggled` 断言就是抓到它的那格 |
 | U6 | `base.py:383-385`（B9） | 游标落盘异常被 suppress → 续跑错位 | 产品修复：至少 WARNING |
 | U7 | `base.py:355-361`（B6） | sink 写失败的行**计入 collected 但没入库**→ 报满实际缺 | 产品修复：计数与库内对账 |
 | U8 | `run_store.py:907-909` vs `app.py:2536-2546` | 去重逐行静默；聚合行只在 app 运行路径打 | 测试判据+文档说明即可 |
@@ -638,11 +638,13 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
         —— 两屏同一笔记可能 token 不同，去重/续跑认 `笔记ID` 才对（这正是 U5 游标在此微妙的根因）；③ 剥掉
         `xsec_token` 的笔记**必须具名失效**（§7「过期 xsec_token=具名失效非空表」），不是空行；④ 评论面板
         出多少条、子回复藏不藏在展开器后（§6 U19 硬预算家族）。
-      * **真机开跑后接**：先按探针结论判 §6 U3（xhs 那份手抄滚动循环是否也 stuck 恒为 1/首轮即弃，
-        该换成 `feed.walk_feed`）；再**小心修 U5**：游标改位置-only、`seen` 从**已存行的 `笔记ID`** 播种
-        （不是 token 链接、也不是游标里那份 `links` 列表），需要给 `test_xhs_crawler.py` 补一个**能成功搜索**的
-        假驱动 + 续跑用例（现有那只有失败路径），装回 `mark_position(urls=…)` 即红；然后运行级矩阵 + H 组
-        `测试：小红书.json`（两组件 posts/comments，§9 记 posts `recrawl:true`）。
+      * **U5 已离线修好（2026-09-29 本会话）**：identity 来源并非真悬而未决——文件与探针早已认定会话无关的
+        `笔记ID` 才是去重/续跑身份（token 链接会变）。故游标改位置-only（`scanned`/`done`/`keyword`）、`seen`
+        从已存行的 `笔记ID` 播种（`_collected_ids`），设备层 `test_xhs_crawler.py::TestResumeIdentityAndCursor`
+        两枚针（游标不含列表、换 token 的旧笔记不被重采，装回 `links=` 即红）；快层 4719 绿、ruff 净。**待真机**：
+        C1 形状格（停止→按 `scanned` 续、seen 播种生效、不重不漏）复验。
+      * **真机开跑后接**：先按探针结论判 §6 U3（xhs 那份手抄滚动循环是否也 stuck 恒为 1/首轮即弃，该换成
+        `feed.walk_feed`）；然后运行级矩阵 + H 组 `测试：小红书.json`（两组件 posts/comments，§9 记 posts `recrawl:true`）。
       * **已排一次性监督任务**跑探针；闸门口径同前（快层 + 设备层 + ruff；live 有人盯、见风控即停）。
       * **2026-09-29 12:33 监督探针实跑结果：第一次导航即被 安全验证 挡**（`scratchpad/xhs_step0.json`：
         mount 全 0、scroll 0、卡片 0、token 测试 skipped；探针控制台走的是产品自己的

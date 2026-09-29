@@ -88,6 +88,74 @@ class SlowDriver:
         pass
 
 
+class _GridCard:
+    """One search-grid card, in the shape ``_harvest_cards`` reads: a tokenised link, title, author, like."""
+
+    def __init__(self, link, title='标题', author='作者', like='5'):
+        self._kids = {
+            'a.cover': _TextElement(''),  # present so ``.cover`` resolves; the href is on the child below
+            '.footer .title': _TextElement(title),
+            '.author .name': _TextElement(author),
+            '.like-wrapper .count': _TextElement(like),
+        }
+        self._kids['a.cover'] = _LinkElement(link, title)
+        self.link = link
+
+    def find_element(self, by, selector):
+        if selector in self._kids:
+            return self._kids[selector]
+        raise NoSuchElementException(selector)
+
+
+class _LinkElement(_TextElement):
+    """The ``a.cover`` anchor: has text AND an ``href`` (what ``_card_link`` reads)."""
+
+    def __init__(self, href, text=''):
+        super().__init__(text)
+        self._href = href
+
+    def get_attribute(self, name):
+        return self._href if name == 'href' else ''
+
+
+class GridDriver:
+    """A xiaohongshu search grid that actually loads — the counterpart to SlowDriver.
+
+    ``get`` settles (the page arrives), ``find_elements`` hands back the current cards, and ``execute_script``
+    returns a node's text so ``_scrape_card`` reads real values. ``cards`` is mutable so a test can hand the
+    same note back with a fresh token on the next scroll and watch whether dedupe catches it.
+    """
+
+    def __init__(self, cards=None, url=SEARCH):
+        self.cards = list(cards or [])
+        self.current_url = url
+        self.visited = []
+
+    def get(self, url):
+        self.visited.append(url)
+        self.current_url = url
+
+    def find_element(self, by, selector):
+        if selector == 'body':
+            return _TextElement('')
+        raise NoSuchElementException(selector)
+
+    def find_elements(self, by, selector):
+        if selector == Xhs.CARD_SELECTOR:
+            return list(self.cards)
+        return []
+
+    def execute_script(self, script, *args):
+        for arg in args:
+            text = getattr(arg, 'text', None)
+            if text:
+                return text
+        return ''
+
+    def quit(self):
+        pass
+
+
 @pytest.fixture
 def make_crawler(monkeypatch):
     """Build a real :class:`Xhs` over a fake driver, with every wait instant."""
@@ -102,6 +170,27 @@ def make_crawler(monkeypatch):
         monkeypatch.setattr(Crawler, '_create_driver', fake_create)
         crawler = Xhs(headless=True)
         return crawler, driver
+
+    return _make
+
+
+@pytest.fixture
+def make_grid(monkeypatch):
+    """A real :class:`Xhs` over a settling, card-yielding grid driver (the success path)."""
+    monkeypatch.setattr(base_module.time, 'sleep', lambda s: None)
+
+    def _make(cards=None):
+        driver = GridDriver(cards)
+
+        def fake_create(self, *args, **kwargs):
+            self.driver = driver
+
+        monkeypatch.setattr(Crawler, '_create_driver', fake_create)
+        crawler = Xhs(headless=True)
+        # The note detail is a separate navigation (a second tab); it is not what these tests are about,
+        # so it is stubbed to the card's own scrape and the seam under test is the dedupe + cursor.
+        crawler._read_note = lambda *a, **k: {}
+        return crawler
 
     return _make
 
@@ -183,3 +272,43 @@ class TestNoteNavigation:
         monkeypatch.setattr('crawlers.xiaohongshu.WebDriverWait', _Expired)
         assert crawler._scrape_note(NOTE) is None
         assert crawler.requests == [NOTE], 'the detail visit is one of the crawl requests'
+
+
+class TestResumeIdentityAndCursor:
+    """§6 U5: the search cursor records POSITION, and the resume identity is 笔记ID, not the token link.
+
+    The old code kept a ``links`` list in the cursor and keyed ``seen`` on the tokenised link. Two wrongs
+    in one: a note re-promoted with a fresh token was treated as new and re-paid (the token is not the
+    identity), and one failed note's link in the cursor meant it was silently skipped on every LATER
+    resume — a permanent under-collect with no way back but 重新采集. The fix seeds ``seen`` from the
+    stored rows' 笔记ID and keeps the cursor to the card index only.
+    """
+
+    ID_A = 'a' * 18
+    ID_B = 'b' * 18
+
+    @classmethod
+    def _link(cls, note_id, token):
+        return f'https://www.xiaohongshu.com/search_result/{note_id}?xsec_token={token}'
+
+    def test_the_search_cursor_holds_position_only_never_a_link_list(self, make_grid):
+        crawler = make_grid([_GridCard(self._link(self.ID_A, 't1')), _GridCard(self._link(self.ID_B, 't2'))])
+        crawler._harvest_cards(set(), target_count=5)
+        assert crawler.collected() == 2, 'both notes were new and stored'
+        position = crawler.position
+        assert 'links' not in position, f'the cursor carries a link list again (U5 shape): {position}'
+        smuggled = {k: v for k, v in position.items() if isinstance(v, (list, tuple, set))}
+        assert not smuggled, f'the cursor stores content, not position (U5): {smuggled}'
+
+    def test_a_repromoted_note_with_a_fresh_token_is_not_re_collected(self, make_grid):
+        # The note the previous attempt stored, but handed back on this scroll with a DIFFERENT token.
+        crawler = make_grid([])
+        crawler.seed([{'笔记ID': self.ID_A, '笔记链接': self._link(self.ID_A, 'OLD'), '标题': 'A'}])
+        seen = crawler._collected_ids()
+        assert seen == {self.ID_A}, 'the resume skip-set is seeded from stored rows, not the cursor'
+        crawler.driver.cards = [_GridCard(self._link(self.ID_A, 'NEW')), _GridCard(self._link(self.ID_B, 'NEW'))]
+        crawler._harvest_cards(seen, target_count=5)
+        ids = [row.get('笔记ID') for row in crawler.results()]
+        assert ids.count(self.ID_A) == 1, f'A (new token) was re-collected — the token is not the identity: {ids}'
+        assert self.ID_B in ids, 'a genuinely new note still gets collected'
+        assert len(ids) == 2, f'expected the stored A plus new B, got {ids}'

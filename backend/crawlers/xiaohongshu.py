@@ -87,12 +87,14 @@ class XiaohongshuCrawler(Crawler):
             return self.results()
         logger.info(t('crawl.xhs.page_ready') if found else t('crawl.xhs.page_timeout'))
 
-        # Notes already handed over by an earlier attempt. The link (token and
-        # all) is the identity, so a resume never re-reads one.
-        stored = resume.get('links')
-        seen = {str(u) for u in stored if u} if isinstance(stored, list) else set()
+        # The resume identity is the session-independent 笔记ID, seeded from the rows this node already
+        # stored — NOT the tokenised link (a later scroll can hand the same note with a different token,
+        # so keying on the token re-pays it), and NOT a list inside the cursor. §6 U5: a cursor records
+        # position, not content — the old ``links=sorted(seen)`` meant one failed note was silently
+        # skipped on *every* later resume (the wechat/youtube fixes removed the same shape).
+        seen: set[str] = self._collected_ids()
         cursor = {'scanned': as_index(resume.get('scanned')), 'total': self._card_count()}
-        self.mark_position(keyword=keyword, links=sorted(seen), scanned=cursor['scanned'], done=have)
+        self.mark_position(keyword=keyword, scanned=cursor['scanned'], done=have)
         logger.info(t('crawl.xhs.links', n=len(seen)))
 
         rounds = 0
@@ -166,14 +168,20 @@ class XiaohongshuCrawler(Crawler):
             read += 1
             try:
                 link = self._card_link(card)
-                if not link or link in seen:
+                if not link:
+                    self.mark_position(scanned=idx)
+                    continue
+                # Dedupe on the session-independent 笔记ID, not the tokenised link: the grid re-promotes
+                # the same note with a fresh token, so keying on the link would re-read (and re-pay) it.
+                key = self._note_id(link) or link
+                if key in seen:
                     self.mark_position(scanned=idx)
                     continue
                 item = self._scrape_card(card, link)
                 detail = self._read_note(link, keep_page=True)
                 if detail:
                     item.update({k: v for k, v in detail.items() if v not in ('', 0, None, [])})
-                seen.add(link)
+                seen.add(key)
                 if self.emit(item):
                     title_preview = item['标题'][:30] if item['标题'] else t('crawl.xhs.untitled')
                     logger.info(t('crawl.xhs.note_ok', title=title_preview))
@@ -181,9 +189,9 @@ class XiaohongshuCrawler(Crawler):
                     logger.debug(t('crawl.xhs.note_dup', url=link))
             except Exception as e:
                 logger.error(t('crawl.xhs.note_error', err=e), exc_info=True)
-            # Index, link memory and item count advance together, so a resumed
-            # crawl goes straight to the first card it has not read.
-            self.mark_position(scanned=idx, links=sorted(seen), done=self.collected())
+            # Index and item count advance together (position only — no id list), so a resumed crawl
+            # goes straight to the first card it has not read.
+            self.mark_position(scanned=idx, done=self.collected())
         return read
 
     def _card_link(self, card) -> str:
@@ -228,6 +236,16 @@ class XiaohongshuCrawler(Crawler):
     def _note_id(link: str) -> str:
         m = re.search(r'/(?:search_result|explore|item)/([0-9a-f]{16,})', link or '')
         return m.group(1) if m else ''
+
+    def _collected_ids(self) -> set:
+        """The 笔记IDs this crawl already holds, read off its stored rows.
+
+        A resumed run is seeded with everything the node already stored, so the rows ARE the skip-set.
+        The cursor carries only the card index (position); ids used to ride in it as a ``links`` list,
+        which is §6 U5's permanent silent-skip-on-resume — the same fix paid for on xiaohongshu's own
+        navigation and on wechat/youtube's cursors.
+        """
+        return {str(row.get('笔记ID')) for row in self.results() if row.get('笔记ID')}
 
     # ─── note detail ─────────────────────────────────────────────────
 
