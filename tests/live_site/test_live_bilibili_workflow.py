@@ -542,13 +542,6 @@ def test_d1_the_reply_cursor_walks_the_thread_and_every_row_is_real(client, app_
         run.finish(answer=answer, rows=len(rows))
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason='product bug U55 (found live 2026-09-29 D2): a nonexistent video id '
-    'is classified as a session wall, so run.cookieExpired fires and the node fails even though '
-    'the real link delivered its comments; root-cause backend/crawlers/comments.py bilibili path '
-    'on a cool account, then drop this marker',
-)
 def test_d2_a_link_that_refused_is_named_per_link(client, app_module, monkeypatch):
     """D2 — two links where one is garbage: the dead one is named, the good one still crawls."""
     harness.real_jar(monkeypatch, app_module)

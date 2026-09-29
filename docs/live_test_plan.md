@@ -215,8 +215,8 @@
 
 
 | U53 | `crawlers/bilibili.py::author` 的分页假设（**已修 2026-09-29，B站第 0 步抓到**） | **投稿页把「换页」当成「滚动加载」**：第 0 步在生产同款托管 Profile 上量到——高产 UP 首屏 40 卡，**窗口滚动与元素滚动一个都不加**，而 `下一页` 一点整屏换成另外 40 张（交集 0、URL 不变）。旧 `author()` 走 `feed.walk_feed(scroll=window-scroll)` 且用默认**卡片数**哨兵，滚动不加 → `stuck` → 收工，于是**任何投稿过百的 UP 都被采到首屏就停，还替站点打 `已到列表末尾`**。与 §6 反复警告的「页面模型错了不会报错，只会让表/游标/总结三方同意一张缺的表」同形状 | 产品修复：`scroll=self._click_next_page`（点 `下一页`）+ `window=self._on_screen_key`（当前屏 BV 集合当哨兵，换页计数仍是 40，故不能用卡片数）；快层 `SpaceDriver` 重写为「只在点 `下一页` 脚本时换屏」，新增 `test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end`（把 `window=` 撤掉或 scroll 换回 `scroll_down` 当场红）；测量出处 `backend/test_bili_{step0,author_dom,author_pager}.py` → `scratchpad/bili_*.json`。**真机 B1 已验（2026-09-29）**：问投稿过百的 37974444 要 50、实得 50（>40 一屏），U53 修复在真站成立。**排行榜 `target>100` 无 cap 行（§7）同轮补 `crawl.bili.rankingCapped`** |
-| U54 | `crawlers/comments.py::bilibili` 的 reply/main 游标（**待查，真机 D1 抓到 2026-09-29**） | 一条 2194 评论的视频（step-0 自己读到的 `stat.reply`），评论节点**只交 9 行**却报 `1/1 节点完成`——既无 `comment.status.blocked`、也无 `biliBadAnswer`、更无按分母具名的差额。§6「沉默欠采」最难看见的形状：表、汇总、完成三方同意，唯独没和**站点自印的分母**对账。也可能是匿名/一次性设备下 reply 深翻页被限流（站点行为）——两者必须靠探针分清，不在热账号上瞎判 | 待真机复现归因：账号冷却后用 `backend/test_bili_comment_cursor.py` 逐 cursor 页量 `replies/total/is_end/code`。`test_live_bilibili_workflow.py::test_d1` 现挂 `xfail(strict=False)` 记录，**不许放宽成「9 也算过」**；查明是产品即补差额具名行（仿 `comment.weiboShort`）后去标 |
-| U55 | `crawlers/comments.py::bilibili` 把不存在的视频判成登录墙（**待查，真机 D2 抓到 2026-09-29**） | 一个形状合法但不存在的 BV（`BV00000000000`）：评论路径**取不到 aid → 本应 DEAD**，却被归成「登录墙/触发风控」→ latches `login_wall` → 节点 `执行失败：…COOKIE 可能过期`，而**同一次运行下一条真链接刚采到 8 条评论**。与抖音 U47 同形：一个读不通的死链接把整条会话定了罪。| 待真机复现归因 + 产品修复（死 id 与墙分流，只按其 OWN 状态记 DEAD，绝不 latch 会话级 cookieExpired）；`test_d2` 现挂 `xfail(strict=False)` 记录，修好即绿即去标 |
+| U54 | `crawlers/comments.py::bilibili` 的 reply/main 游标（**已判定，2026-09-29 冷却账号探针**） | 冷却后逐 cursor 页量 `reply/main`（分母 `stat.reply=47268`）：每页 20/19/18、`cursor.next` 2→3→4→… 推进、**494 新行跨 26 页**、`is_end` 恒 False → **游标本身正确**；先前 D1「2194→9 行」是**一次性设备深翻页被限流**（站点行为），非游标 bug。所以 D1 冷却后 ≥40 全绿，且**不加**差额具名行（游标停在 `is_end`/无新 rpid 是站点合法收尾，不是欠采） | 判定为限流/站点行为，**无产品改动**；D1 冷却后通过；热账号若再遇 9 行按 §5「具名短收」容忍（站点答案），绝不放宽成「9 也算过」|
+| U55 | `crawlers/comments.py::bilibili` 把不存在的视频判成登录墙（**已修 2026-09-29，D2 真机复测**） | 探针喂 `BV00000000000`：`x/web-interface/view` 回 **`code=-400`**（非 `-404`），旧默认把「所有非 `CODE_GONE` 非零码」一律 BLOCKED → latches `cookieExpired` → 一条死链判死整条会话（与抖音 U47 同形）。修法即本行：按「码在怪谁」分类 | 产品修复 `crawl_bilibili`：怪视频的（-400/-404/62002）→ **DEAD** 逐链具名；只怪会话/IP 的 -352/-412/-101 → **BLOCKED**。真机 D2：死链现打「链接不可读」DEAD、`run.cookieExpired` 不再因它触发；`test_d2` 去 `xfail`。快层针 `test_a_view_code_is_classified_by_who_it_blames`（六码三向矩阵）|
 | U56 | `crawlers/wechat.py::get_detail` 的导航入口（**观察，微信第 0 步 2026-09-29**） | 详情页取正文用 `self.driver.get(url)`，**绕开了 `Crawler.open`**——`crawler_rules.md` 明说「`Crawler.open(url)` 是唯一的导航入口，它记 settled、清 dialog、并复读后再判墙」。微信正文匿名可读，墙判据本身用不上，所以这一格**不是漏采**；但 settled 记录被丢了，「页面没到」与「页面到了但列空」在此平台不可分——正是 §6 警告的「三方同意一张缺表」的形状的前半。低优先：改成 `self.open(url, judge=False)` 就能把 settled 找回来又不引入墙判据 | 记录，暂不改（改一行、无功能变化、下次真机触碰该平台一并做）；测处 `backend/test_wechat_step0.py` → `scratchpad/wechat_step0.json`（三条正文全到齐：2903/2332/93 字符，五个字段选择器一 URL 一次全命中，正文完整未被截断） |
 | U57 | `app.py::_execute_comment_node` 的去重具名（**已修 2026-09-29，YouTube 运行级 C1 真机抓到**） | 评论节点用**同一个** `row_sink` 账本去重（`item_key` 命中即 `False`，不落库），但只有 `_execute_source_node` 的收尾会打 `run.dedupe_skipped`/`..._all_skipped`；评论节点只念「共 0 条评论」。一次重跑采了 10 条**全是已有** → kept 0、无一句具名，读起来跟「这条视频没评论」一模一样——正是 §6「三方同意一张缺表」里被静默的那半。**不是 YouTube 独有**：任何平台的评论节点重复跑都会这样 | 产品修复：`_execute_comment_node` 里累计 `seen_total`，非续跑且 `row_sink` 在场时按 `seen_total - len(rows_out)` 补打现成的 `run.dedupe_skipped(n)`；若 `rows_out` 全空再补 `run.dedupe_all_skipped`。续跑不打（账本即续跑机制）、墙不打（`cookieExpired` 那句是本运行的唯一真句，§「一失败一行」）。快层针 `test_a_repeated_comment_run_names_the_ledger_skip`（同 store 同 id 跑两遍，第二遍必须两句齐出）；真机 C1（`jNQXAC9IVRw` 跑两遍）验证 |
 
@@ -600,11 +600,16 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
       * **真机第一轮（2026-09-29，国内网络，隔离 live profile + 种入 Cookie）**：posts/author/hot 全绿——
         **A1**(10 行，processed 集合==表内 BV号)、**A2**(无头 full-or-named)、**A3**(问 5 存 5)、**B1**(要 50 得 50，
         **U53 修复真站坐实**)、**B2**(非 mid 具名拒付)、**C1**(热门分页)、**C2**/**A5**(修正后过：A5 改用稳定榜单
-        验去重、C2 容忍具名风控)、修好的白名单把 `crawl.bili.blocked` 计入合法。**抓到两枚评论层新疑点 U54/U55**
-        （D1 一条 2194 评论的视频只交 9 且三方自洽；D2 一个不存在的 BV 被读成登录墙、连带判死会话——抖音 U47 同形），
-        已各挂 `xfail(strict=False, reason=product bug …)` 如实记录，**不许放宽**。连续多爬后账号进入 `code=-352`
-        间歇风控（C2/D 撞上过），故 **E/G/H 未续跑**：需账号冷却、按 §10 分批、有人盯。评论两层待用
-        `backend/test_bili_comment_cursor.py` 探针在凉账号上分清「产品欠采」vs「匿名深翻页限流」再修产品码。
+        验去重、C2 容忍具名风控)、修好的白名单把 `crawl.bili.blocked` 计入合法。抓到评论层疑点 U54/U55，
+        后由 `backend/test_bili_comment_cursor.py` 冷却账号探针归类：**U54=一次性设备深翻页限流（游标本身对，
+        冷却后 D1 ≥40 全绿，无产品改动）**、**U55=`view code=-400` 被旧默认误判 BLOCKED 连带判死会话（已修：
+        按码怪谁分类，怪视频的→DEAD、怪会话的-352/-412/-101→BLOCKED；D2 去 xfail、真机复测死链打「链接不可读」）**。
+      * **本轮（2026-09-29 续）真机再跑（国内）**：非评论 10 格 **A1/A2/A3/A5/B1/B2/C1/C2/E1/G1 一把全绿**（批次里
+        A5 那次 `kept==10` 为相邻单元把会话耗出的瞬态，探针证实排行榜**跨浏览器也一致**→A5 契约成立、单跑两次 `kept==0`）。
+        U55 产品修复已落 `crawl_bilibili` + 快层六码矩阵针。**仍欠（需账号冷却 + 本地 Ollama 在场）**：**D1/D2**
+        （`reply/main` 本轮被 `code=None` 间歇风控 BLOCKED、正确 latches cookieExpired → 等冷却重跑，D2 已验死链那一半
+        现走 DEAD）、**H1**（旗舰 `_llm_block()` 要 Ollama、且含一条评论腿要凉账号）。B站 #15 **运行级矩阵 13 格已写全、
+        10 格真机绿、2 格待冷却、1 格待 Ollama+冷却**；**绝不无人值守跑**（花账号）。
 - [x] **微信（#17，2026-09-29 第 0 步 + 运行级矩阵 + 真机第一轮全绿）** —— 正文型、无 cookie 行、`needs_session=False`，
       探针只读公开文章页（不花登录账号）。
       * **第 0 步**（`backend/test_wechat_step0.py` → `scratchpad/wechat_step0.json`）：三条 D7 链接全活，五个字段选择器

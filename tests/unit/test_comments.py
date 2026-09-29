@@ -715,11 +715,57 @@ class TestBilibiliAdapter:
         assert rows == [] and status == OK
         assert not [u for u in driver.fetched if 'reply/main' in u], 'nothing to page once reply=0'
 
-    def test_a_withdrawn_video_is_dead_and_a_refusal_is_blocked(self):
-        session, _driver = self._session([_bili_view(code=-404)])
-        assert session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0) == ([], DEAD)
-        session, _driver = self._session([_bili_view(code=-412)])
-        assert session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0) == ([], BLOCKED)
+    def test_a_view_code_is_classified_by_who_it_blames(self):
+        """A bad ``view`` code is DEAD (this link); a risk or unrecognised code is BLOCKED (this session).
+
+        §6 U55 (measured 2026-09-29): a nonexistent BV answers ``code=-400``, and the old default sent every
+        non-CODE_GONE code to BLOCKED, latching a session-wide cookieExpired beside a video whose comments had
+        just crawled — the douyin U47 shape. The matrix, each code at the outcome it earns: video answers
+        (gone -404, bad BV -400, hidden 62002) and a transport timeout (no JSON at all, ``None``) are DEAD for
+        the link; session answers (intercepted -412, risk -352, need-login -101) and an unrecognised code
+        (-799, a measured rate limit outside the video allowlist) are BLOCKED — the latter named by code, so an
+        unknown refusal backs off and stays diagnosable rather than being guessed into "this video is fine".
+        """
+        for code, expected in (
+            (-404, DEAD),
+            (-400, DEAD),
+            (62002, DEAD),
+            (None, DEAD),
+            (-412, BLOCKED),
+            (-352, BLOCKED),
+            (-101, BLOCKED),
+            (-799, BLOCKED),
+        ):
+            session, _driver = self._session([_bili_view(code=code)])
+            assert session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0) == ([], expected), (
+                f'view code {code} must be {expected}'
+            )
+
+    def test_a_risk_page_mid_thread_keeps_rows_and_backs_off(self):
+        """A throttled thread is NAMED-BLOCKED (back-off + 继续), never a silent OK and never a full.
+
+        U54's license: on a hot account the reply cursor is cut short. The old code ``break``-ed on a failed
+        page and returned the partial with status **OK**, so a 9-row read of a 2194-comment video "completed"
+        silently. Now a risk page stops the walk but keeps what was read and reports **BLOCKED** — the node
+        latches cookieExpired, the run stops (it does not press the next link against a flagged account), and
+        the position is recorded so 继续 resumes; the ``biliBadAnswer`` line names the code.
+        """
+        row = _bili_reply('100', '甲', '留着')
+        session, _driver = self._session([_bili_view(), _bili_page([row], next_cursor=2), _bili_page([], code=-352)])
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        assert status == BLOCKED, 'a risk page mid-thread must back off, not report a finished crawl'
+        assert [r['评论内容'] for r in rows] == ['留着'], 'what was collected before the wall is kept'
+
+    def test_a_first_reply_page_timeout_is_dead_not_an_empty_thread(self):
+        """A slow FIRST page (never answered as JSON) is DEAD for the link, not a silent 0-comment OK.
+
+        ``stat.reply`` said there are comments; if the first ``reply/main`` request only yields a transport
+        failure, reading that back as an empty-but-finished thread is the same silent-under-collect. It must
+        be per-link DEAD (which never convicts the session), not OK.
+        """
+        session, _driver = self._session([_bili_view(reply_total=40), 'not json at all'])
+        rows, status = session.crawl_bilibili('https://www.bilibili.com/video/BV1atCRYsE7x/', 0)
+        assert rows == [] and status == DEAD, 'an unreadable first page is a dead link, not a closed section'
 
     def test_a_risk_control_page_never_reaches_the_api(self):
         driver = FakeDriver(body='当前请求存在异常，暂时限制访问', fetch_queue=[])

@@ -533,9 +533,11 @@ answers `code=0` unsigned, cross-origin from the search page, for the cookie the
 Comments have **no DOM at all** (`.reply-item` renders nothing), so `x/v2/reply/main` is the only path
 — and its `next` is a cursor, not a page counter: `next=0` reports `cursor.next=2` while `next=1`
 replays page 0 byte for byte. Walk by the server's value and stop on a page with no new `rpid`; an
-incrementing loop would store the same 19 comments forever. `code=-404` is one withdrawn video
-(skip); any other non-zero code is the session/risk engine talking (stop, and refuse the run if
-nothing was collected).
+incrementing loop would store the same 19 comments forever. **A `view`/`reply` error code is judged by
+who it blames**: a video-level code (`-404` withdrawn, `-400` a bad/nonexistent BV, `62002` hidden) is
+that link's own answer → DEAD per-link; only the session/IP codes (`-352` 风控, `-412` 请求拦截, `-101`
+未登录) are BLOCKED (the node may then latch `cookieExpired` and offer 继续). See §6 U55 below — the old
+default sent every non-`-404` code to BLOCKED, which let one dead link convict the whole session.
 
 **Author mode is the page, not the API**: `x/space/wbi/arc/search` answers `code=-403 访问权限不足` for
 our session (the older un-wbi path is rate-limited at `-799`), so `BilibiliCrawler.author()` opens
@@ -578,6 +580,26 @@ Reaching for the search loop's one-request-per-row here would produce the same t
 - **排行榜大小由站点决定**：`ranking/v2` 本次**正好 100 条**、`code=0`；`popular` 每屏 20、第 2 屏与第 1 屏
   全不相交（`hot()` 逐页走它对）。`target>100` 时旧代码只打 `hotDone 共 100 条（目标 N）`——§7 记的
   「无 cap 行=修复项」，已补 `crawl.bili.rankingCapped` 点名榜单本次真实大小。
+
+### B站评论 U54/U55 归因（measured 2026-09-29，探针 `backend/test_bili_comment_cursor.py`，国内网络、账号已冷却）
+
+评论节点两枚疑点都用真机数据分了类，**没在热账号上瞎判**：
+
+- **U54 = 限流，不是游标 bug。** 冷却后逐 cursor 页量 `x/v2/reply/main`（分母 `stat.reply=47268`）：页 0→24
+  每页 20/19/18 条、`cursor.next` 2→3→4→… 一路推进、累计 **494 条新行跨 26 页**，`is_end` 始终 False。所以
+  先前那条「2194 评论的视频只交 9 行」**是一次性设备深翻页被限流**（站点行为），游标本身是对的。D1 冷却后
+  ≥40 全绿。**不加差额具名行**：游标停在 `is_end`/无新 rpid 是站点的合法收尾，不该被读成欠采。
+- **U55 = 死链被判成会话墙（已修）。** 探针喂一个形状合法但不存在的 BV（`BV00000000000`）：
+  `x/web-interface/view` 回 **`code=-400`**（不是 `-404`），而 `crawl_bilibili` 旧默认把「所有非 `CODE_GONE`
+  的非零码」一律归 `BLOCKED` → `_execute_comment_node` latches `cookieExpired` → 整个运行被一条读不通的死链
+  判死，与抖音 U47 同形。修法：按「这个码在怪谁」分类——怪这条视频的（-400 坏 BV、-404 已删、62002 隐藏）
+  一律 **DEAD**（逐链具名，不怪会话）；只怪会话/IP 的 -352 风控、-412 请求拦截、-101 未登录才 **BLOCKED**。
+  真机 D2 复核：死链现在打「链接不可读」DEAD，`run.cookieExpired` 不再因此触发。快层针
+  `test_a_view_code_is_classified_by_who_it_blames`（六码三向矩阵，退回旧默认即红）。
+- **排行榜跨浏览器稳定（A5 的合法去重供给）。** 探针各起一个全新一次性浏览器读 `ranking/v2`：两次 first-10
+  **顺序完全一致、集合交集 10**（同浏览器连读两次更是逐字节相同）。所以周榜是 A5「重跑必须具名拒付」的合法
+  稳定供给——批次里那次 `kept==10` 是相邻单元把 B站 会话耗出抖动的**瞬态**（单跑 A5 两次都 `kept==0`、
+  且离线 `RunStore.append_rows` 已证同 scope 跨 run 去重正确）。A5 断言保持 `kept==0` + 具名，是对的契约。
 
 ## YouTube
 

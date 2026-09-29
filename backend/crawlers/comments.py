@@ -71,6 +71,33 @@ def _as_count(value) -> int:
     return parse_count(str(value or ''))
 
 
+_BILI_VIDEO_CODES = frozenset({-404, -400, 62002})
+#: B站 ``view``/``reply`` codes that are a fact about THIS session or IP (风控 / 请求拦截 / 未登录):
+#: the only codes whose answer is "stop, and let 继续 retry" (BLOCKED → the node may latch cookieExpired).
+_BILI_RISK_CODES = frozenset({-352, -412, -101})
+
+
+def _bili_code_verdict(code) -> str:
+    """Who an error code blames: the link (``video``/``transport`` → DEAD) or the session (risk/unknown → BLOCKED).
+
+    §6 U55 was exactly the wrong default — every non-``-404`` code sent to BLOCKED, so a bad BV (which
+    answers ``-400``) convicted the whole session. The polarity is now: the *link* is accused only for a
+    code that describes the video (gone/bad/hidden) or a transport failure (no JSON — a slow link, not a
+    refusal, per crawler_rules「慢不是拒绝」); the *session* is accused for a known risk/login code AND,
+    named, for any unrecognised code — so a new rate-limit code backs off instead of being silently
+    guessed into "this video is fine" and pressing on against a flagged account.
+    """
+    if code == 0:
+        return 'ok'
+    if code is None:
+        return 'transport'
+    if code in _BILI_VIDEO_CODES:
+        return 'video'
+    if code in _BILI_RISK_CODES:
+        return 'risk'
+    return 'unknown'
+
+
 class CommentSession:
     """One browser session per platform; the node handler owns lifecycle."""
 
@@ -478,7 +505,7 @@ return (function () {
         the walk stops on a page that carries no new ``rpid`` — which is also
         what makes a repeating server-side cursor harmless.
         """
-        from .bilibili import CODE_GONE, bilibili_bvid
+        from .bilibili import bilibili_bvid
 
         self.driver.get(url)
         self.nap(3)
@@ -488,8 +515,19 @@ return (function () {
         if not bvid:
             return [], DEAD
         view = _json_or_none(self._in_page_fetch(bilibili_view_js(bvid)))
-        if not view or view.get('code') != 0:
-            return [], (DEAD if (view or {}).get('code') == CODE_GONE else BLOCKED)
+        verdict = _bili_code_verdict((view or {}).get('code'))
+        if verdict == 'video' or verdict == 'transport':
+            # This link is gone/bad/hidden, or its endpoint never answered as JSON: a fact about
+            # THIS link, so it is DEAD for the link and must not accuse the session (the douyin U47
+            # rule). A real wall was already caught above by ``looks_blocked``.
+            return [], DEAD
+        if verdict == 'risk':
+            return [], BLOCKED
+        if verdict == 'unknown':
+            # A code we have not measured: do not guess it is a video answer and keep hammering,
+            # and do not silently convict either — refuse it BY NAME and back off (BLOCKED).
+            self.log(t('comment.biliBadAnswer', url=url, code=(view or {}).get('code')))
+            return [], BLOCKED
         data = view.get('data') or {}
         aid = data.get('aid')
         if not aid:
@@ -500,14 +538,26 @@ return (function () {
             self.log(t('comment.commentsClosed', url=url))
             return [], OK
         rows, cursor, seen, guard = [], 0, set(), 0
+        # Did the walk stop because the SESSION was refused (must back off + 继续), or because a slow
+        # link never answered (keep what was read, do not latch the session)? Neither is "the thread ended".
+        session_stop = False
+        first_page_unreadable = False
         while guard < 200:
             guard += 1
             payload = _json_or_none(self._in_page_fetch(bilibili_reply_js(aid, cursor)))
-            if not payload or payload.get('code') != 0:
-                if rows:
-                    break  # a later page failing still keeps what we collected
+            page_verdict = _bili_code_verdict((payload or {}).get('code'))
+            if page_verdict != 'ok':
+                # Name the refused page with the site's own code; a later page failing still keeps
+                # what we collected, so the walk stops here rather than advancing a dead cursor.
                 self.log(t('comment.biliBadAnswer', url=url, code=(payload or {}).get('code')))
-                return [], BLOCKED
+                if page_verdict in ('risk', 'unknown'):
+                    session_stop = True
+                elif not rows:
+                    # The FIRST page never answered as JSON and the denominator said there ARE comments:
+                    # this thread was unreadable, not empty. A slow link must not latch the session, so
+                    # it is DEAD for the link rather than the old silent OK-that-reads-as-no-comments.
+                    first_page_unreadable = True
+                break
             page = payload.get('data') or {}
             items = [r for r in (page.get('replies') or []) if str(r.get('rpid')) not in seen]
             if not items:
@@ -520,6 +570,14 @@ return (function () {
                 break
             cursor = int(info.get('next') or (cursor + 1))
             self.nap(0.8)  # polite page interval on the comment API
+        if session_stop:
+            # A risk/unknown page: the thread did NOT end. Keep what was read and report BLOCKED, so the
+            # node latches cookieExpired, the run STOPS (no further links pressed against a flagged
+            # account), and 继续 resumes from the recorded cursor. This is U54's "按 §5 具名短收": a
+            # throttled 9-row thread is NAMED-BLOCKED (back-off), never a silent OK and never a full.
+            return rows, BLOCKED
+        if first_page_unreadable:
+            return [], DEAD
         return (rows[:limit] if limit else rows), OK
 
     # -- twitter (X) ------------------------------------------------------------
