@@ -269,6 +269,7 @@ class WeiboCrawler(Crawler):
         logger.info(t('crawl.weibo.hotDone', n=self.collected(), total=target_count))
         if self.collected() < target_count:
             logger.info(t('crawl.weibo.hotCapped', board=len(rows)))
+            self.note_end('capped')  # one answer IS the whole board; the short is its size, site-attested
         return self.results()
 
     def _await_home_frame(self) -> str:

@@ -355,6 +355,11 @@ class YouTubeCrawler(Crawler):
             token = nxt
             if not token:
                 logger.info(t('crawl.yt.drained'))
+                # A missing continuation is the server's own "no next page" — a site-attested
+                # end (U1). The no-fresh replay below is a walk give-up, NOT licensed or
+                # convicted here: it is indistinguishable from an honest resume/throttle, and
+                # §6's conviction awaits a positive incompleteness signal from live work (#7).
+                self.note_end('site_end')
                 break
             if not fresh:
                 repeats += 1

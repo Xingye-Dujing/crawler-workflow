@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from i18n import t
 
-from .base import UNDER_TARGET, PageNotArrivedError
+from .base import PageNotArrivedError
 from .engine import feed, popup
 from .engine.counters import parse_count
 from .video_base import VideoCrawler, _stamp
@@ -163,18 +163,17 @@ class DouyinCrawler(VideoCrawler):
             # No count on the page is not a count of zero: the line says so instead
             # of printing a number the site never published.
             logger.info(t('crawl.dy.authorDoneNoCount', n=self.collected()))
-        # U1: a short the crawl simply returned (no wall/risk/stop — those are the
-        # executor's own paths) must be licensed ONLY by something the SITE said. The
-        # profile's own 作品 total reached, or the list's 「暂时没有更多了」 marker, are
-        # attested; a grid that just stopped growing with no marker is §6's silent
-        # under-collect and is handed to the gate as ``UNDER_TARGET``.
+        # U1: license ONLY a positive site fact. The profile's own 作品 total reached, or the
+        # list's 「暂时没有更多了」 marker, are attested; a grid that merely stopped growing is
+        # indistinguishable from a soft throttle or an honest 继续 replay, so we license
+        # NOTHING there (end_reason stays None) rather than false-convict a good crawl. §6's
+        # actual conviction needs a positive "incomplete" signal, which only live measurement
+        # can supply per platform (#7).
         if self.collected() < target_count and not (self._is_walled() or self.risk_blocked or self.may_stop()):
             if published >= 0 and self.collected() >= published:
                 self.note_end('capped')
             elif self._list_end_attested:
                 self.note_end('site_end')
-            else:
-                self.note_end(UNDER_TARGET)
         return self.results()
 
     # ─── the site's own hot board ──────────────────────────────────────

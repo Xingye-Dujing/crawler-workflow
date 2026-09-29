@@ -10,7 +10,7 @@ from selenium.webdriver.common.by import By
 
 from i18n import stop_reason_label, t
 
-from .base import UNDER_TARGET, Crawler, as_index
+from .base import Crawler, as_index
 from .engine import feed, pagefetch
 from .engine.counters import parse_count
 
@@ -294,14 +294,12 @@ class ZhihuCrawler(Crawler):
             elif expand['short']:
                 logger.info(t('crawl.zhihu.bodies_short', n=expand['short']))
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
-        # U1: the loop broke on 「没有更多」 = the site's own marker → licensed; it broke on
-        # STUCK_ROUNDS of no growth WITHOUT the marker → a walk give-up, not proof of an empty
-        # list, so it goes to the gate as UNDER_TARGET (§6's silent short). Target met never
-        # fires the gate; a mid-loop wall/risk is settled by the executor first.
+        # U1: license ONLY the site's own 「没有更多」 marker. The STUCK_ROUNDS give-up is a walk
+        # self-summary that a soft throttle mimics, so it licenses nothing and convicts nothing
+        # here (end_reason stays None) — §6's conviction needs a positive incompleteness signal,
+        # which only per-platform live measurement (#7) can supply.
         if ended == 'site_end':
             self.note_end('site_end')
-        elif ended == 'under':
-            self.note_end(UNDER_TARGET)
         return self.results()
 
     # ─── the site's own board ─────────────────────────────────────────

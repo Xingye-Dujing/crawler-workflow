@@ -163,5 +163,16 @@
   `None` is a no-op, never the convicting `''`: a crawler excusing a gap with its own pager crashes at the boundary
   instead of stamping 完成 on a thin table. A convicted short may carry the walk funnel (`scanned/kept/refused`),
   rendered ONLY when all three were measured; a partial or absent funnel is omitted, never printed as fake zeros.
-  **As of landing no handler calls `note_end`, so the gate is entirely dormant** (every crawl keeps today's behaviour);
-  it goes live per platform as each is migrated. Pinned: `tests/api/test_under_target.py`.
+  **Current arming: the LICENSE side is wired for the platforms with a real site-attested end**
+  (douyin author `empty`/`capped`/`site_end` marker, zhihu search `no_more` + hot `capped`, weibo hot
+  `capped`, youtube search `drained`, bilibili hot `empty`/`capped`), **but NO handler ever issues
+  `UNDER_TARGET`, so the gate never convicts anything yet.** Conviction is deliberately deferred: a
+  scroll/cursor walk's "stopped growing" / "cursor gave nothing new" fires *identically* on a soft
+  throttle and on an honest 继续 replay (the cursor points at a page the ledger already holds), so
+  convicting on it would false-fail good resumes — §6's conviction needs a POSITIVE incompleteness
+  signal, which only per-platform live measurement (#7) can supply before any `UNDER_TARGET` is
+  emitted. Arming a license changes no observable outcome today (a license and `None` both settle
+  clean); it exists so a future, live-validated conviction can exempt the honest ends. Platforms with
+  no reliable end signal stay fully un-armed (`end_reason=None`): weibo search (its `'end'` is a loop
+  fallback, not a site marker), weibo/youtube author, bilibili search/author, xiaohongshu, twitter,
+  zhihu author. Pinned: `tests/api/test_under_target.py`.

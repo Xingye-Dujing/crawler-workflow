@@ -300,6 +300,9 @@ class BilibiliCrawler(VideoCrawler):
             fresh = [item for item in items if str(item.get('bvid') or '') not in seen]
             logger.info(t('crawl.bili.hotPage', page=page, n=len(items), fresh=len(fresh), done=self.collected()))
             if not items:
+                # code==0 with an empty 数据 list is the server's own answer (not a not-painted
+                # DOM) — an attested 'empty' end. U1.
+                self.note_end('empty')
                 break
             for item in fresh:
                 if self.collected() >= target_count:
@@ -316,6 +319,7 @@ class BilibiliCrawler(VideoCrawler):
                     logger.info(
                         t('crawl.bili.rankingCapped', board=board_label, n=self.collected(), total=target_count)
                     )
+                    self.note_end('capped')  # a fixed board the site itself sized
                 break
             if not fresh:
                 break
