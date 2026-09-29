@@ -77,7 +77,12 @@ class WechatCrawler(Crawler):
 
         total = len(urls)
         logger.info(t('crawl.wechat.batch_start', n=total))
-        self.mark_position(urls=urls, url_total=total, url_index=start_index, done=have)
+        # The cursor records POSITION only — url_index/url_total/done. It must NOT hold the URL list:
+        # the links are the node's own textarea and are re-read from there every attempt, so a stored
+        # copy is redundant, and a content list in a cursor is the §6 U5 shape (on xiaohongshu it made a
+        # link that failed once get skipped silently on every future resume). A position cursor can
+        # mis-locate, but it can never smuggle a stale "already saw this" that hides a re-crawl.
+        self.mark_position(url_total=total, url_index=start_index, done=have)
 
         for idx, url in enumerate(urls, start=1):
             if idx <= start_index:

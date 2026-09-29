@@ -75,3 +75,18 @@ def test_position_advances_per_article(crawler, wechat_article_url):
     assert pos['url_index'] == 1
     assert pos['url_total'] == 1
     assert pos['done'] == 1
+
+
+def test_the_cursor_records_position_not_the_link_list(crawler, wechat_article_url):
+    """§6 U5 (the xiaohongshu cost, same shape here): the resume cursor must hold NO content list.
+
+    ``wechat.py`` used to ``mark_position(urls=urls, …)``, smuggling the whole pasted URL list into the
+    cursor. The resume reads ``url_index`` for position and rebuilds ``urls`` from the node's own textarea,
+    so the stored list is dead weight — and the AGENTS rule ("游标只记位置；掺入链接列表即红") forbids it
+    because a cursor that carries links is how a failed page gets silently skipped forever on the next 继续.
+    Reverting ``mark_position(urls=urls)`` makes this red on the ``isinstance`` check.
+    """
+    crawler.search(urls=[wechat_article_url])
+    content = {key: value for key, value in crawler.position.items() if isinstance(value, (list, tuple, dict))}
+    assert not content, f'the WeChat cursor stores content, not position: {content}'
+    assert 'urls' not in crawler.position, 'the pasted URL list leaked back into the cursor'

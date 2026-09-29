@@ -148,7 +148,7 @@
 | U2 | `engine/feed.py:99-116`、`engine/pager.py:23-36` | scanned/kept/refused/rounds/pages 算而**从不打印** | 产品修复：walk 收尾统一播报「扫X留Y拒Z」 |
 | U3 | `crawlers/zhihu.py:232-272`（Z6）**已修 2026-09-27，待真机复验** | 搜索滚动循环手抄了第二份循环（AGENTS 禁止的形状）：旧代码一屏无增长后只等 `CARD_WAIT=1.5s` 再确认一次即 `crawl.zhihu.stuck` **break**，`stuck` 恒为 1、`STUCK_ROUNDS=3` 形同装饰、`crawl.zhihu.confirmed` 分支不可达。对照：**同平台作者模式没这个毛病**（`_walk_profile_tab` 走 `engine/feed.py:194-213` 的 `walk_feed`，连停 3 轮才收工）——同一站点两套放弃速度差 3 倍，收尾还打 `crawl.zhihu.finished n=<短表> total=<目标>` 自称正常。**修法**：内层那次「二次确认滚动」保留为**额外耐心**（不再附判词），只有 `stuck>=STUCK_ROUNDS` 才收工并打 `crawl.zhihu.stuck n=3`；说过头的 `crawl.zhihu.confirmed`（「内容已加载完毕」是未测量的断言）随分支删除（双语目录两行）。快层新钉：`tests/unit/test_crawler_zhihu_search.py` | 余账：把这条循环整体换成 `feed.walk_feed`（消掉第二份拷贝，顺带带出 U2 的 scanned/kept/refused）；`xiaohongshu.py:123-133` 同病，轮到该平台时同修 |
 | U4 | `crawlers/zhihu.py:569-576,598-605`（Z9/Z10）| 卡片吞行只 `logger.debug`；根 logger INFO（`app.py:222-225`）→ 控制台与 logs/ 双不可见 | 产品修复：升 INFO 聚合行（「本轮跳过 n 张无效卡」） |
-| U5 | `xiaohongshu.py:169-171,186`（XH6） | **seen 链接列表写进游标**（违反「游标只记位置」）→ 链接失败一次=之后每次续跑**永久静默跳过**=漏采 | 产品修复；D8 判据的现成红牌 |
+| U5 | `xiaohongshu.py:169-171,186`（XH6）**+ 微信同形** `wechat.py:80`（**已修 2026-09-29，真机 C1 抓到**） | **seen 链接列表写进游标**（违反「游标只记位置」）→ 链接失败一次=之后每次续跑**永久静默跳过**=漏采。微信的 `mark_position(urls=urls,…)` 把整条粘贴的 URL 列表塞进游标（续跑其实只读 `url_index`、`urls` 从节点 textarea 重建，那行是冗余且违禁的）| 产品修复；D8 判据的现成红牌。微信已改位置-only，设备层针 `tests/integration/test_wechat_crawler.py::test_the_cursor_records_position_not_the_link_list`（装回 `urls=urls` 即红）；真机 `test_live_wechat_workflow.py::test_c1` 的 `not smuggled` 断言就是抓到它的那格 |
 | U6 | `base.py:383-385`（B9） | 游标落盘异常被 suppress → 续跑错位 | 产品修复：至少 WARNING |
 | U7 | `base.py:355-361`（B6） | sink 写失败的行**计入 collected 但没入库**→ 报满实际缺 | 产品修复：计数与库内对账 |
 | U8 | `run_store.py:907-909` vs `app.py:2536-2546` | 去重逐行静默；聚合行只在 app 运行路径打 | 测试判据+文档说明即可 |
@@ -217,6 +217,7 @@
 | U53 | `crawlers/bilibili.py::author` 的分页假设（**已修 2026-09-29，B站第 0 步抓到**） | **投稿页把「换页」当成「滚动加载」**：第 0 步在生产同款托管 Profile 上量到——高产 UP 首屏 40 卡，**窗口滚动与元素滚动一个都不加**，而 `下一页` 一点整屏换成另外 40 张（交集 0、URL 不变）。旧 `author()` 走 `feed.walk_feed(scroll=window-scroll)` 且用默认**卡片数**哨兵，滚动不加 → `stuck` → 收工，于是**任何投稿过百的 UP 都被采到首屏就停，还替站点打 `已到列表末尾`**。与 §6 反复警告的「页面模型错了不会报错，只会让表/游标/总结三方同意一张缺的表」同形状 | 产品修复：`scroll=self._click_next_page`（点 `下一页`）+ `window=self._on_screen_key`（当前屏 BV 集合当哨兵，换页计数仍是 40，故不能用卡片数）；快层 `SpaceDriver` 重写为「只在点 `下一页` 脚本时换屏」，新增 `test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end`（把 `window=` 撤掉或 scroll 换回 `scroll_down` 当场红）；测量出处 `backend/test_bili_{step0,author_dom,author_pager}.py` → `scratchpad/bili_*.json`。**真机 B1 已验（2026-09-29）**：问投稿过百的 37974444 要 50、实得 50（>40 一屏），U53 修复在真站成立。**排行榜 `target>100` 无 cap 行（§7）同轮补 `crawl.bili.rankingCapped`** |
 | U54 | `crawlers/comments.py::bilibili` 的 reply/main 游标（**待查，真机 D1 抓到 2026-09-29**） | 一条 2194 评论的视频（step-0 自己读到的 `stat.reply`），评论节点**只交 9 行**却报 `1/1 节点完成`——既无 `comment.status.blocked`、也无 `biliBadAnswer`、更无按分母具名的差额。§6「沉默欠采」最难看见的形状：表、汇总、完成三方同意，唯独没和**站点自印的分母**对账。也可能是匿名/一次性设备下 reply 深翻页被限流（站点行为）——两者必须靠探针分清，不在热账号上瞎判 | 待真机复现归因：账号冷却后用 `backend/test_bili_comment_cursor.py` 逐 cursor 页量 `replies/total/is_end/code`。`test_live_bilibili_workflow.py::test_d1` 现挂 `xfail(strict=False)` 记录，**不许放宽成「9 也算过」**；查明是产品即补差额具名行（仿 `comment.weiboShort`）后去标 |
 | U55 | `crawlers/comments.py::bilibili` 把不存在的视频判成登录墙（**待查，真机 D2 抓到 2026-09-29**） | 一个形状合法但不存在的 BV（`BV00000000000`）：评论路径**取不到 aid → 本应 DEAD**，却被归成「登录墙/触发风控」→ latches `login_wall` → 节点 `执行失败：…COOKIE 可能过期`，而**同一次运行下一条真链接刚采到 8 条评论**。与抖音 U47 同形：一个读不通的死链接把整条会话定了罪。| 待真机复现归因 + 产品修复（死 id 与墙分流，只按其 OWN 状态记 DEAD，绝不 latch 会话级 cookieExpired）；`test_d2` 现挂 `xfail(strict=False)` 记录，修好即绿即去标 |
+| U56 | `crawlers/wechat.py::get_detail` 的导航入口（**观察，微信第 0 步 2026-09-29**） | 详情页取正文用 `self.driver.get(url)`，**绕开了 `Crawler.open`**——`crawler_rules.md` 明说「`Crawler.open(url)` 是唯一的导航入口，它记 settled、清 dialog、并复读后再判墙」。微信正文匿名可读，墙判据本身用不上，所以这一格**不是漏采**；但 settled 记录被丢了，「页面没到」与「页面到了但列空」在此平台不可分——正是 §6 警告的「三方同意一张缺表」的形状的前半。低优先：改成 `self.open(url, judge=False)` 就能把 settled 找回来又不引入墙判据 | 记录，暂不改（改一行、无功能变化、下次真机触碰该平台一并做）；测处 `backend/test_wechat_step0.py` → `scratchpad/wechat_step0.json`（三条正文全到齐：2903/2332/93 字符，五个字段选择器一 URL 一次全命中，正文完整未被截断） |
 
 
 **滚动节奏（fake driver 数出来的 scroll 命令，不是真机测量；读控制台 `scroll_round` 前先记住它）**：
@@ -603,7 +604,23 @@ cookie 死?）→ 产品 bug 修产品码（禁改断言就绿）→ 单例复�
         已各挂 `xfail(strict=False, reason=product bug …)` 如实记录，**不许放宽**。连续多爬后账号进入 `code=-352`
         间歇风控（C2/D 撞上过），故 **E/G/H 未续跑**：需账号冷却、按 §10 分批、有人盯。评论两层待用
         `backend/test_bili_comment_cursor.py` 探针在凉账号上分清「产品欠采」vs「匿名深翻页限流」再修产品码。
-- [ ] 小红书 → 微信（同一套八步）
+- [x] **微信（#17，2026-09-29 第 0 步 + 运行级矩阵 + 真机第一轮全绿）** —— 正文型、无 cookie 行、`needs_session=False`，
+      探针只读公开文章页（不花登录账号）。
+      * **第 0 步**（`backend/test_wechat_step0.py` → `scratchpad/wechat_step0.json`）：三条 D7 链接全活，五个字段选择器
+        （#activity-name / #js_name / #publish_time / #js_ip_wording / #js_content）每条各命中一次，正文 2903/2332/93 字
+        完整、均未达 5000 上限故无截断标记（正确）。页面模型复核为真，无 stale 选择器。顺带记 **§6 U56**：`get_detail`
+        用 `driver.get` 绕开 `Crawler.open`（丢 settled 记录，非漏采、暂不改）。
+      * **运行级矩阵** `tests/live_site/test_live_wechat_workflow.py` 5 格（A1 正文-only 八列 + 断言互动列缺席、
+        A2 把上限设 200 验截断 '…' 标记、A4 同链接二跑靠 `run.dedupe_*` 具名、C1 停止→继续按 `url_index` 续、
+        H1 用户画布 `测试：微信.json` 补 D7 链接后跑 + 导出行数==库内行数）。标记 `[live_site, live_cn, enable_socket, serial]`，零 skip。
+      * **真机第一轮全绿**（国内网络，无登录）：A1/A2/A4/C1/H1 全过。**C1 抓到并修掉一处 §6 U5 同形真 bug**：
+        `wechat.py` 把整条 URL 列表写进续跑游标（`mark_position(urls=urls,…)`）——改为位置-only（`url_index/url_total/done`），
+        设备层新增 `test_the_cursor_records_position_not_the_link_list`（装回 `urls=urls` 即红）。H1 的 `target_count=50`
+        是旧存档残留（微信已无 target 语义），验收副本把 ask 夹到链接数、并直接对账导出行数（`label` 含全角 '：'，
+        共享按名前缀匹配吃不下，故单组件走本地三一致）。
+      * 闸门：快层 **4696 passed / 0 skipped**、设备层 wechat 5 例 + integration 全过、ruff 两项干净。
+      * **未做**：无（微信 §7 专轴全过）。H2（无头变体）与并行对本平台无新判据（正文匿名、`serial` 存档、无并行推荐），不补跑。
+- [ ] 小红书（#16，重放会话几分钟内被墙，需用户同意承担风控风险）
 - [ ] VPN 阶段：X → YouTube（先测反向用例：不可达必须报 `unreachable`，不许假空）
 - [ ] 全平台门过 → §6 剩余嫌疑（U1 通用 under-target、U2 walk 计数器从不打印等）收口提交
 
