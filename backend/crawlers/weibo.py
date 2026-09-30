@@ -206,6 +206,13 @@ class WeiboCrawler(Crawler):
                 reason=stop_reason_label(reason),
             )
         )
+        # U1: name how the window-walk ended. ``'end'`` is the only short that is the SITE's answer here —
+        # every hourly window in the user's range was walked and the range simply held this many posts,
+        # so it is a site-attested ``site_end`` (settles clean, exactly as ``end_reason=None`` did; the
+        # label just makes the reason visible to the panel). ``wall``/``risk``/``stopped``/``unreachable``
+        # are settled in their own upstream buckets and must not be re-filed here.
+        if reason == 'end':
+            self.note_end('site_end', kept=self.collected())
         return self.results()
 
     def _refused(self) -> bool:

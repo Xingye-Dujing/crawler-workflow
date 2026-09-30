@@ -379,6 +379,26 @@ class TestPagingWalk:
             in said
         ), said
 
+    def test_a_walk_that_empties_its_windows_below_target_is_a_licensed_site_end(self, make_walker):
+        # U1: the window walk ran out of its range (here, one window of two pages) with the ask still
+        # unmet and NO refusal. Every window the user's range gave was walked — that IS the site saying
+        # 「this is all there is in the range」 — so it is a site-attested short, licensed ``site_end``
+        # (settles clean, as before), not left ``end_reason=None``. A wall/risk/停止 would land a
+        # different reason and stay unfiled here; this is the honest 「范围就这么点」 outcome.
+        crawler, _driver = make_walker(50, total_pages=2)
+        rows = crawler.search(keyword='三亚', target_count=50)
+        assert len(rows) < 50, 'premise: the windows emptied well below the ask'
+        assert crawler.end_reason == 'site_end', (
+            f'a fully-walked range that ran short is attested, not silent: {crawler.end_reason}'
+        )
+
+    def test_a_wall_shortfall_is_not_licensed_as_site_end(self, make_walker):
+        # The mirror case: the walk stopped on a REFUSAL, so ``reason`` is 'wall', not 'end', and nothing
+        # is filed here — the wall is settled in its own upstream bucket, never relabeled 「采满了/到底了」.
+        crawler, _driver = make_walker(WeiboCrawler.DEFAULT_TARGET, total_pages=50, wall_from_get=2)
+        crawler.search(keyword='三亚', target_count=0)
+        assert crawler.end_reason is None, 'a wall short is named by the wall gate upstream, not licensed as site_end'
+
     def test_a_wall_met_while_paging_keeps_the_rows_and_stops_the_walk(self, make_walker):
         # The parallel-session refusal: pages 2 answers, page 3 parks on passport.
         crawler, driver = make_walker(WeiboCrawler.DEFAULT_TARGET, total_pages=50, wall_from_get=3)
