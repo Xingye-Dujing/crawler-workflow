@@ -419,7 +419,48 @@ class ZhihuCrawler(Crawler):
                 break
             self._walk_profile_tab(token, tab, target_count)
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
+        # U1: profile tabs publish no 「没有更多」 footer (measured, see docs), so a walk that stops
+        # growing on a tab is NOT provably the site running out — the thin author (23 answers) and the
+        # throttle-stalled deep author (661 answers) both look identical at the DOM. But the profile page
+        # DOES publish its own totals in ``<meta itemprop="zhihu:answerCount">`` / ``zhihu:articlesCount``
+        # (measured: 661 / 47 on zshu-83), the exact role weibo's ``_published_count`` plays. Use it:
+        # if the walk stopped with collected < total, we KNOW it under-collected (convict, resumable);
+        # if collected reached or passed total, the site itself sized the feed → 'site_end' (settles
+        # clean). total == -1 means the metas did not render (a page we cannot read); leave None. A
+        # wall / 风控 / 停止 is settled upstream and must not be relabeled here.
+        total = self._author_total()
+        if total >= 0 and not (self.login_wall or self.risk_blocked or self.may_stop()):
+            if self.collected() < target_count and self.collected() < total:
+                self.note_end(UNDER_TARGET, kept=self.collected())
+            elif self.collected() >= total:
+                self.note_end('site_end', kept=self.collected())
         return self.results()
+
+    def _author_total(self) -> int:
+        """The author's own published answer + article count, read off the profile's ``<meta>`` tags.
+
+        ``-1`` for "the page did not publish it" (login redirect, mid-render): the caller treats -1 as
+        "no denominator", never as "the author has nothing" — reading a missing number as 0 would let a
+        page that never arrived be reported as an author who never posted (the same rule as
+        :meth:`WeiboCrawler._published_count` / douyin's profile 作品 count).
+        """
+        props = ('zhihu:answerCount', 'zhihu:articlesCount')
+        found: list = []
+        for prop in props:
+            try:
+                element = self.driver.find_element('css selector', f'meta[itemprop="{prop}"]')
+            except Exception:
+                continue
+            value = str(element.get_attribute('content') or '').strip()
+            if value.isdigit():
+                found.append(int(value))
+            else:
+                # A value that isn't digits is 「未提供」, not 0; refuse to sum a fabricated zero into a
+                # denominator the user will judge 「采得不足」 against.
+                return -1
+        if not found or len(found) != len(props):
+            return -1
+        return sum(found)
 
     def _walk_profile_tab(self, token: str, tab: str, target_count: int) -> None:
         """Harvest one profile tab, paging it by scrolling the way the search page does."""

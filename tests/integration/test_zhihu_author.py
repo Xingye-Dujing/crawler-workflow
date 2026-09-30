@@ -20,7 +20,7 @@ import pytest
 from selenium.common.exceptions import NoSuchElementException
 
 import crawlers.base as base_module
-from crawlers.base import Crawler
+from crawlers.base import UNDER_TARGET, Crawler
 from crawlers.zhihu import ZhihuCrawler
 
 pytestmark = pytest.mark.unit
@@ -105,9 +105,15 @@ def article_row():
 
 
 class FakeDriver:
-    """Serves the profile tabs, and grows the answers list once per scroll round."""
+    """Serves the profile tabs, and grows the answers list once per scroll round.
 
-    def __init__(self, tabs, grow_after=1):
+    ``meta`` carries the profile page's own self-published totals (the ``zhihu:answerCount`` /
+    ``zhihu:articlesCount`` ``<meta itemprop>`` tags the ``_author_total`` denominator reads); absent
+    keys raise so ``_author_total`` returns ``-1`` (no denominator) and the walk keeps the old
+    end_reason=None behavior — the shape most existing author tests run under.
+    """
+
+    def __init__(self, tabs, grow_after=1, meta=None):
         self.tabs = tabs
         self.visited = []
         self.current_url = 'https://www.zhihu.com/'
@@ -115,12 +121,19 @@ class FakeDriver:
         self.expansions = 0
         self.grow_after = grow_after
         self._grew = False
+        self.meta = dict(meta or {})
 
     def get(self, url):
         self.visited.append(url)
         self.current_url = url
 
     def find_element(self, by, selector):
+        # ``_author_total`` probes ``meta[itemprop="zhihu:answerCount"]`` etc. Serve them from the
+        # optional meta map; anything absent raises so the caller falls through to ``-1`` (no denominator).
+        if selector.startswith('meta[itemprop="') and selector.endswith('"]'):
+            prop = selector[len('meta[itemprop="') : -2]
+            if prop in self.meta:
+                return Node(text='', attrs={'content': str(self.meta[prop])})
         raise KeyError(selector)
 
     def _rows(self):
@@ -207,6 +220,56 @@ class TestAuthorWalk:
     def test_an_account_that_published_nothing_on_both_tabs_is_a_zero_not_an_error(self, make_crawler):
         crawler = make_crawler(FakeDriver({'answers': [], 'posts': []}))
         assert crawler.author('zshu-83', target_count=5) == []
+
+    # ─── U1: the profile's own answerCount/articlesCount metas are the denominator ───
+
+    def test_a_walk_short_of_the_authors_own_total_is_convicted(self, make_crawler):
+        # The author published 661 answers + 47 articles (per the profile's own <meta> tags); the walk
+        # stalled at one row with no 「没有更多」 marker. Without the total this is the thin/deep ambiguity
+        # #6 warns about — WITH it, the site itself says there are 708 posts and we held 1, so convict.
+        driver = FakeDriver(
+            {'answers': [answer_row()], 'posts': []},
+            meta={'zhihu:answerCount': '661', 'zhihu:articlesCount': '47'},
+        )
+        crawler = make_crawler(driver)
+        rows = crawler.author('zshu-83', target_count=50)
+        assert len(rows) < 50, 'premise: the walk came back short of the ask'
+        assert crawler.end_reason == UNDER_TARGET, (
+            f'1 of a self-reported 708 posts is a proven under-collect, not a clean settle: {crawler.end_reason}'
+        )
+
+    def test_a_walk_that_reached_the_authors_own_total_is_a_licensed_site_end(self, make_crawler):
+        # Here the author only has 2 answers + 1 article; the walk collected all three and is still
+        # below the 50 ask — but the SITE sized the feed at 3, so the short is attested, settled clean.
+        driver = FakeDriver(
+            {'answers': [answer_row(1), answer_row(2)], 'posts': [article_row()]},
+            meta={'zhihu:answerCount': '2', 'zhihu:articlesCount': '1'},
+        )
+        crawler = make_crawler(driver)
+        rows = crawler.author('zshu-83', target_count=50)
+        assert len(rows) == 3, 'premise: all three published posts were read'
+        assert crawler.end_reason == 'site_end', crawler.end_reason
+
+    def test_an_unreadable_total_leaves_the_walk_unjudged_not_guilty(self, make_crawler):
+        # No metas → total == -1 → "the page did not publish it", NOT "the author has nothing". The walk
+        # keeps the old end_reason=None (settle clean) rather than convicting against a fabricated zero.
+        driver = FakeDriver({'answers': [answer_row()], 'posts': []})  # meta omitted
+        crawler = make_crawler(driver)
+        crawler.author('zshu-83', target_count=50)
+        assert crawler.end_reason is None, 'a missing denominator is refused, never guessed as 0'
+
+    def test_a_stop_cut_short_is_not_reconvicted_as_under_target(self, make_crawler):
+        # 停止 is its own bucket (the executor counts it in ``stopped_node_ids``, not 「采得不足」). A
+        # user-pressed Stop flows through walk_feed (no raise, unlike a wall/风控 which _walk_profile_tab
+        # refuses at the tab start), so the guard must see may_stop and leave the walk unjudged.
+        driver = FakeDriver(
+            {'answers': [answer_row()], 'posts': []},
+            meta={'zhihu:answerCount': '661', 'zhihu:articlesCount': '47'},
+        )
+        crawler = make_crawler(driver)
+        crawler.may_stop = lambda: True
+        crawler.author('zshu-83', target_count=50)
+        assert crawler.end_reason is None, 'a 停止 cut short must not be filed UNDER_TARGET'
 
     def test_the_list_pages_by_scrolling_rather_than_stopping_at_one_screen(self, make_crawler):
         driver = FakeDriver({'answers': [answer_row(1)], 'grown': [answer_row(2)], 'posts': []})
