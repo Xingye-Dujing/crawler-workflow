@@ -80,11 +80,36 @@ def components(workflow: dict, *, file_name: str) -> list:
 
     nodes = {str(node.get('id')): node for node in workflow.get('nodes') or []}
     neighbours: dict = {nid: set() for nid in nodes}
+    children: dict = {nid: [] for nid in nodes}
     for conn in workflow.get('connections') or []:
         source_id, target_id = str(conn.get('from')), str(conn.get('to'))
         if source_id in neighbours and target_id in neighbours:
             neighbours[source_id].add(target_id)
             neighbours[target_id].add(source_id)
+            children[source_id].append(target_id)
+
+    def crawl_export(source_id: str) -> tuple:
+        """The filename stem + per-article flag of the output nearest the source (the CRAWL file).
+
+        ``_execute_output_node`` names each export by that output node's own ``filename`` param, not by
+        the name node's label, so this — not the label — is how a component's file is addressed. BFS from
+        the source returns the first ``output`` it reaches: for a crawl→output chain that is the crawl
+        file itself; a comments chain whose output then feeds 处理→output nodes still lands on the crawl
+        output first (the analysis files are that component's downstream, not its table).
+        """
+        seen_bfs, queue = {source_id}, [source_id]
+        while queue:
+            nid = queue.pop(0)
+            for kid in children[nid]:
+                if kid in seen_bfs:
+                    continue
+                seen_bfs.add(kid)
+                queue.append(kid)
+                if nodes[kid].get('type') == 'output':
+                    raw = str((nodes[kid].get('params') or {}).get('filename') or '')
+                    stem = raw.rsplit('.', 1)[0] if raw else ''
+                    return stem, bool((nodes[kid].get('params') or {}).get('per_article_file'))
+        return '', False
 
     seen: set = set()
     out = []
@@ -112,6 +137,7 @@ def components(workflow: dict, *, file_name: str) -> list:
         label = ''
         if names:
             label = str((nodes[names[0]].get('params') or {}).get('workflow_name') or '').strip()
+        export_stem, per_article = crawl_export(source_id)
         out.append(
             {
                 'label': label,
@@ -122,6 +148,10 @@ def components(workflow: dict, *, file_name: str) -> list:
                 else int(params.get('target_count') or 0),
                 'comment_limit': limit,
                 'urls': urls,
+                # The crawl output's own filename stem (what the file on disk is actually called) and
+                # whether it switched 每篇一个文件 on — both read from that node, never assumed.
+                'export': export_stem,
+                'per_article': per_article,
                 # A disabled node anywhere in the component takes the whole workflow out — that is
                 # ``effective_workflow`` cascading, and it is why the file's author switches off the
                 # *name* node rather than the crawler.
@@ -232,6 +262,44 @@ def audit_components(run, *, records: dict, case_id: str, found: list, grade) ->
     return silent, kept_total, ask_total, answers
 
 
+def assert_record_shape(run, records: dict, parts: list) -> None:
+    """The run's rows are the shape the canvas mode promises — never a shape pinned to one mode.
+
+    AGENTS states the invariant (「并行是一条记录；串行是一 workflow 一行」); this is the only place that
+    turns it into an assertion, so a canvas he flips 串行/并行 cannot redden a case whose every leg graded
+    honestly. A hard-coded ``wf_count == N`` read the parallel shape into a serial run and failed at the
+    reporting line while the crawl itself had delivered: the mode is read off the row, never remembered
+    here. ``parts`` is what actually ran (H1's switched-on legs, H2/H3's every leg); ``records`` maps each
+    label to the row that ``records_by_node`` resolved for it.
+    """
+    canvas_mode = str(run.record.get('mode') or '')
+    if canvas_mode == 'parallel':
+        assert int(run.record.get('wf_count') or 0) == len(parts), (
+            f'{len(parts)} components should be ONE parallel record with wf_count={len(parts)}, but the '
+            f'row says wf_count={run.record.get("wf_count")}: {run.record}'
+        )
+        joined = str(run.record.get('workflow_name') or '')
+        for part in parts:
+            assert part['label'] in joined, f'{part["label"]!r} dropped from the joined parallel record name {joined!r}'
+    elif canvas_mode == 'serial':
+        assert len(records) == len(parts), (
+            f'{len(parts)} serial legs should open {len(parts)} separate rows, resolved {len(records)}'
+        )
+        for part in parts:
+            row = records[part['label']]
+            assert row.get('mode') == 'serial', (
+                f'{part["label"]!r} was filed as {row.get("mode")!r}, not one-workflow-per-row serial'
+            )
+            assert int(row.get('wf_count') or 0) == 1, (
+                f'a serial row is one workflow, but {part["label"]!r} says wf_count={row.get("wf_count")}'
+            )
+            assert str(row.get('workflow_name') or '').strip() == part['label'], (
+                f'row {row.get("workflow_name")!r} does not name the component it crawled ({part["label"]!r})'
+            )
+    else:
+        raise AssertionError(f'the run row carries no recognizable mode ({canvas_mode!r}); cannot check its shape')
+
+
 def summary_row(run, *, case_id: str, found: list, answers: list, kept: int, asked: int) -> str:
     """Derive the case's own index row from its components — never a hard-coded FULL.
 
@@ -295,12 +363,14 @@ def assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
 
     His canvas ends every chain in an 输出 node, which makes this the one shape in the whole tier that can
     walk the plan's L2 三一致 (file == store == preview) for every crawl of a multi-component run at once.
-    Matching by the prefix the 输出 node writes is the point, twice over: a row count that ties only **in
-    total** can hide a component that wrote nothing while another wrote twice, and a loose *substring*
-    match hands the search component one of the comment files (``per_article_file`` names its files
-    ``<record>-<source>-<index>.csv``, and a parallel record's name is every label joined with ' + ') and
-    then reports a disagreement that is this file's own arithmetic — §11 caught it that way on weibo's
-    first live run of the cell, so it lives here rather than in one platform's program file.
+    A component's file is addressed by the **filename its crawl output node writes** (``part['export']``,
+    read off that node — ``_execute_output_node`` names the file by that param, never by the name node),
+    falling back to the label only when a canvas has no output node to read. This is the point twice over:
+    a row count that ties only **in total** can hide a component that wrote nothing while another wrote
+    twice, and a loose *substring* match hands the search component one of the comment files (the analysis
+    outputs downstream of a comments crawl carry their own stems) and then reports a disagreement that is
+    this file's own arithmetic. §11 caught the loose match on weibo's first live run of the cell; the
+    label-vs-filename drift was caught on douyin's (its output files are 抖音评论爬取…, not the 测试：… labels).
     """
     import live_run_harness as harness
 
@@ -308,13 +378,28 @@ def assert_canvas_exports(found: list, fresh: list, records: dict) -> None:
 
     assert fresh, f'the canvas wires an output node to every component and {Config.EXPORT_DIR} gained no file'
     for part in found:
-        mine = [path for path in fresh if part['label'] and path.name.startswith(f'{part["label"]}-')]
-        assert mine, f'no export file names the component {part["label"]!r}: {[p.name for p in fresh]}'
-        count, _header = csv_row_count(mine[0])
         kept = harness.stored_rows(records[part['label']], part['source'])
+        if kept == 0:
+            # A named short that collected nothing (a walled hot board, a closed thread) owes NO file:
+            # ``_execute_output_node`` returns before writing when its input is empty, which is the right
+            # answer for an empty table. ``audit_components`` already refused any SILENT zero upstream,
+            # so a 0-row leg reaching here did it honestly and must not be convicted for a missing export.
+            continue
+        stem = part.get('export') or part['label']
+        assert stem, f'component {part["label"]!r} has neither an export filename nor a label to match by'
+        # The written file is the stem, then either its extension ('{stem}.csv') or a timestamp the output
+        # node stamped on it ('{stem}-<stamp>.csv'); a bare substring would let one stem absorb another.
+        mine = [path for path in fresh if path.name == f'{stem}.csv' or path.name.startswith(f'{stem}-')]
+        assert mine, (
+            f'no export file is named for the component {part["label"]!r} (output stem {stem!r}): '
+            f'{[p.name for p in fresh]}'
+        )
+        count, _header = csv_row_count(mine[0])
         assert count == kept, f'{mine[0].name} holds {count} rows while the store holds {kept} for {part["label"]}'
-        if part['mode'] == 'comments' and part['urls']:
-            # §3-C's 「文件数 == 文章数」: he switched 每篇一个文件 on, so each pasted link owes its own file.
+        if part['mode'] == 'comments' and part['urls'] and part.get('per_article'):
+            # §3-C's 「文件数 == 文章数」: only when 每篇一个文件 is ACTUALLY switched on. An off comments
+            # output writes one file named by its stem, and demanding ``len(urls)`` per-article files there
+            # would convict a canvas the user never asked to split.
             per_article = [path for path in fresh if f'-{part["source"]}-' in path.name]
             assert len(per_article) == len(part['urls']), (
                 f'per_article_file is on for {len(part["urls"])} pasted link(s) and '

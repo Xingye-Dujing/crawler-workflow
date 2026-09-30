@@ -1440,20 +1440,23 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #: is absolute because ``Config.WORKFLOW_DIR`` is redirected into a throwaway root by the harness.
 ACCEPTANCE_FILE = REPO_ROOT / 'data' / 'workflows' / '测试：微博.json'
 
-#: Four components, taken one at a time on this platform (``serial_only``), each buying its own pages: a
-#: 50-row windowed search (measured: fills inside one window), a 50-row author walk (3 ``mymblog`` pages),
-#: the 51-topic board, and **all** the comments of one post. The comment leg is the unbounded one, so the
-#: budget is the comment cells' budget plus the rest.
+#: The components he saved, taken one at a time on this platform (``serial_only``), each buying its own
+#: pages: 50-row windowed searches (he has two now, one with and one without a stored range; measured:
+#: each fills inside one window), a 50-row author walk (3 ``mymblog`` pages), the 51-topic board, and
+#: **all** the comments of one post. The comment leg is the unbounded one, so the budget is the comment
+#: cells' budget plus the rest.
 ACCEPTANCE_TIMEOUT = COMMENT_TIMEOUT + DEEP_TIMEOUT
 
 
 def _acceptance_copy(**post_params) -> dict:
-    """His canvas, deep-copied with the search window narrowed — and the file on disk left alone.
+    """His canvas, deep-copied with every search window narrowed — and the file on disk left alone.
 
-    The saved 文章 node asks 2026-01-01 → 2026-09-26, which is ~6432 hourly windows. Running it as written
-    would not be a harder test: the walk stops at its target and pays for none of the rest, so the long
-    range exercises nothing a two-day one does not, at a cost the user did not agree to per pass. D9
-    decided that, and the assertion runs the other way — the copy proves 「目标先满、剩余窗口零付费」 (H1).
+    The saved 文章 legs ask for a range — one stores 2026-01-01 → 2026-09-26 (~6432 hourly windows), the
+    other stores none and so would walk unbounded. Running either as written is not a harder test: the
+    walk stops at its target and pays for none of the rest, so the long range exercises nothing a two-day
+    one does not, at a cost the user did not agree to per pass. D9 decided that, and the assertion runs the
+    other way — the copy proves 「目标先满、剩余窗口零付费」 for each search leg (H1). Every ``posts`` node is
+    narrowed here, so a 「无时间范围」 leg he adds later is budgeted the same way the moment it appears.
     The file is never rewritten (D5): the variant is what the test wanted, the file is what he wrote.
     """
     opened = copy.deepcopy(accept.workflow_file(ACCEPTANCE_FILE))
@@ -1469,15 +1472,25 @@ def _grade_component(run, part, record) -> dict:
 
 
 def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module, monkeypatch):
-    """H1 — 测试：微博.json as he left it, four components, minus the 6432-window range (D9).
+    """H1 — 测试：微博.json exactly as he left it: only the legs he switched on, minus the range (D9).
 
-    The flagship of the platform's eight steps: not a synthetic canvas but the one he clicks Run on.
-    Every component gets its own record, its own console slice, its own audit row and its own exported
-    file, and the case's index row is derived from those four verdicts — never written as FULL by hand.
+    The flagship of the platform's eight steps: not a synthetic canvas but the one he clicks Run on. So
+    it runs **as saved**, and a disabled name node cascades its whole leg out (``effective_workflow``) —
+    which means this case grades only the switched-on components and holds the switched-off ones
+    answerable for sitting out: a leg he turned off must not print a line, open a record, or pay a page.
+    H2 forces every leg on in series, so between the two the whole canvas is covered without H1 ever
+    pretending a disabled leg ran.
 
-    And the claim D9 turned into an assertion: the search component fills its stored 50, and the walk's own
-    closing line shows it stopped **before** the range ran out, with no per-window navigation after the
-    ceiling. 「剩余窗口零付费」 is what makes a narrow table and an early stop distinguishable in the
+    The component count is read out of the file, never hard-coded: he has been editing this canvas (he
+    added a second 文章 search 「无时间范围」 and switched the other legs off), and a pinned 「four」 would go
+    red on a legitimate edit while saying nothing about the one shape this case argues — a search walk
+    that stops early. The guard is that a switched-on search leg is present, and D9 is asserted of every
+    switched-on search leg. Each component gets its own record, console slice, audit row and exported
+    file, and the index row is derived from those verdicts — never written as FULL by hand.
+
+    And the claim D9 turned into an assertion: each search component fills its stored 50, and the walk's
+    own closing line shows it stopped **before** the range ran out, with no per-window navigation after
+    the ceiling. 「剩余窗口零付费」 is what makes a narrow table and an early stop distinguishable in the
     console, which is the whole complaint this round started from.
     """
     harness.real_jar(monkeypatch, app_module)
@@ -1485,7 +1498,13 @@ def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module,
     start = end - timedelta(days=1)
     workflow = _acceptance_copy(start_time=f'{start}', end_time=f'{end}')
     _on, _off, found = accept.parts(workflow, file_name=ACCEPTANCE_FILE.name)
-    assert len(found) == 4, f'this case is written against the four components he saved: {found}'
+    running = [part for part in found if part['on']]
+    sat_out = [part for part in found if not part['on']]
+    searches = [part for part in running if part['mode'] == 'posts']
+    assert searches, (
+        'this case narrows the search leg and argues it stops early, but no switched-on component is a '
+        f'posts leg to run: {[part["label"] for part in running]}'
+    )
     exported_before = accept.export_dir_entries()
     with LiveRun(
         client,
@@ -1493,54 +1512,57 @@ def test_h1_the_shipped_canvas_runs_with_its_window_narrowed(client, app_module,
         workflow,
         case_id='H1',
         mode='mixed',
-        target=sum(part['ask'] for part in found),
+        target=sum(part['ask'] for part in running),
         timeout=ACCEPTANCE_TIMEOUT,
     ) as run:
         run.wait()
         run.assert_l3()
-        records = accept.records_by_node(client, found)
+        records = accept.records_by_node(client, running)
         silent, kept, asked, answers = accept.audit_components(
             run,
             records=records,
             case_id='H1',
-            found=found,
+            found=running,
             grade=lambda part, record, console: _grade_component(run, part, record),
         )
         assert not silent, f'components under target with no honest reason named: {silent}'
-        posts = next(part for part in found if part['mode'] == 'posts')
-        own = run._slice(posts['label']).splitlines()
-        walked, offered = _walked_windows(run, own)
-        assert 0 < walked < offered, (
-            f'the search component filled {harness.stored_rows(records[posts["label"]], posts["source"])} '
-            f'rows and reported window {walked}/{offered}: D9 is about a walk that STOPS EARLY, so either '
-            'the range ran out (this copy is the two-day one) or the ceiling did not steer it'
-        )
-        paid = _paid_windows(run, own)
-        assert paid == walked, (
-            f'the walk says it reached window {walked} of {offered} but opened a page for {paid}: '
-            '剩余窗口零付费 failed, and the table cannot say which windows it paid for'
-        )
-        accept.assert_canvas_exports(found, accept.new_exports(exported_before), records)
-        # The record itself: his canvas is parallel, so it is ONE row joining the four labels in canvas
-        # order (AGENTS' 「并行是一条记录」), and every component still has to appear in that name — a label
-        # that silently drops out of the joined name is a row the panel lists short.
-        assert int(run.record.get('wf_count') or 0) == len(found), (
-            f'four components in one parallel record, and the row says wf_count={run.record.get("wf_count")}'
-        )
-        for part in found:
-            assert part['label'] in str(run.record.get('workflow_name') or ''), (
-                f'{part["label"]!r} is missing from the record name {run.record.get("workflow_name")!r}'
+        for posts in searches:
+            own = run._slice(posts['label']).splitlines()
+            walked, offered = _walked_windows(run, own)
+            assert 0 < walked < offered, (
+                f'the search component {posts["label"]!r} filled '
+                f'{harness.stored_rows(records[posts["label"]], posts["source"])} '
+                f'rows and reported window {walked}/{offered}: D9 is about a walk that STOPS EARLY, so either '
+                'the range ran out (this copy is the two-day one) or the ceiling did not steer it'
             )
+            paid = _paid_windows(run, own)
+            assert paid == walked, (
+                f'{posts["label"]!r} says it reached window {walked} of {offered} but opened a page for {paid}: '
+                '剩余窗口零付费 failed, and the table cannot say which windows it paid for'
+            )
+        # 谁没跑: a leg he switched off stays silent. ``transcript_for`` is the non-raising accessor —
+        # ``_slice`` would report the *absence* as an attribution failure, which is the wrong error for a
+        # component that was never meant to run. A disabled leg that printed anything ran against his canvas.
+        for part in sat_out:
+            assert not run.rec.transcript_for(part['label']), (
+                f'the switched-off component {part["label"]!r} still got console lines attributed to it: '
+                'a disabled leg must not run, pay, or appear'
+            )
+        accept.assert_canvas_exports(running, accept.new_exports(exported_before), records)
+        # The rows are the shape the canvas mode promises (AGENTS' 「并行是一条记录，串行一 workflow 一行」).
+        # This file is 并行 today, but the mode is read off the row, so a canvas he flips to 串行 passes on a
+        # run whose every switched-on leg graded honestly instead of reddening at a pinned parallel count.
+        accept.assert_record_shape(run, records, running)
         if run.record['status'] != 'completed':
             refusals = accept.named_refusals(run.rec.text, WEIBO_NAMED_DEATHS)
             assert refusals, (
                 f'the run settled {run.record["status"]} without naming a reason anywhere: {run.rec.text[-1500:]}'
             )
-        summary = accept.summary_row(run, case_id='H1', found=found, answers=answers, kept=kept, asked=asked)
+        summary = accept.summary_row(run, case_id='H1', found=running, answers=answers, kept=kept, asked=asked)
         assert summary == harness.FULL, f'his own canvas must work end to end on a normal day: {answers}'
         # No ``run.finish`` here on purpose: the case's index row is ``summary_row``'s, derived from the
-        # four component verdicts. A second write under the same case id would leave the artifact holding
-        # two answers for one run, and the later one is the arithmetic of a mixed-mode guess.
+        # component verdicts. A second write under the same case id would leave the artifact holding two
+        # answers for one run, and the later one is the arithmetic of a mixed-mode guess.
         run.close()
 
 

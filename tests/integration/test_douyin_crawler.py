@@ -110,6 +110,7 @@ class FakeDriver:
         title='',
         grid=None,
         grid_batches=None,
+        grid_void_jumps=0,
         works='',
         board=None,
         load_timeout=False,
@@ -155,8 +156,12 @@ class FakeDriver:
         # container jump reveals, and the count the page publishes for itself.
         self.grid = list(grid or [])
         self.grid_batches = list(grid_batches or [])
+        # How many leading container jumps reveal NOTHING — douyin's lazy race, measured live: the
+        # first bottom-touch sometimes fetches no batch and the grid only pages on a repeat approach.
+        self._grid_void = grid_void_jumps
         self._first_grid = list(self.grid)
         self._first_grid_batches = list(self.grid_batches)
+        self._first_grid_void = grid_void_jumps
         self.works = works
         self.facts = facts if facts is not None else _default_facts()
         # Facts per opened video, so a walk can be shown one page that published nothing but
@@ -255,6 +260,7 @@ class FakeDriver:
             self._profile_loads += 1
             if self._profile_loads > 1:
                 self.grid, self.grid_batches = list(self._first_grid), list(self._first_grid_batches)
+                self._grid_void = self._first_grid_void
         if self.load_timeout:
             # What chromedriver answers when the document is still building at the end
             # of ``page_load_timeout`` — the page is not wrong, it is unfinished.
@@ -412,7 +418,11 @@ class FakeDriver:
                 self.current_url = self.moves_on_scroll
             if 'scrollerFrom' in script:
                 self.container_jumps += 1
-                if '/user/' in self.current_url and self.grid_batches:
+                if self._grid_void > 0:
+                    # A lazy douyin grid that fetched nothing on this approach: the count stays put, so
+                    # a walker that gives up after one jump would end the profile at its first screen.
+                    self._grid_void -= 1
+                elif '/user/' in self.current_url and self.grid_batches:
                     self.grid = self.grid + self.grid_batches.pop(0)
             return 'container'
         if 'video-player-digg' in script:
@@ -724,6 +734,26 @@ class TestAuthorProfile:
         assert first['点赞数'] == 59000 and first['评论数'] == 2099
         assert first['粉丝数'] == '' and first['获赞数'] == '', 'profile published no totals in this fixture'
         assert driver._modal_id == '', 'every row read left the overlay dismissed'
+
+    def test_a_grid_that_pages_only_on_a_second_approach_is_not_conceded_at_the_first_screen(self, make_crawler):
+        """The 20261001-010707 live bug, made deterministic: a lazy grid that fetches NOTHING on the
+        first bottom-touch must not be read as the end of supply.
+
+        The old :meth:`DouyinCrawler._scroll_profile` took one jump and, when the count did not move,
+        returned False — so ``_harvest_pool`` drained and the author walk stopped at its first screen
+        (measured: 20 rows of a 145-work profile, no 「暂时没有更多了」, a silent shortfall). The fix
+        re-approaches the bottom within the budget; this fixture makes the FIRST container jump a
+        no-op (``grid_void_jumps=1``) and the SECOND reveal the next batch, so the walk reaching both
+        ids is the proof. A single-approach walker would land on ``[ID]`` only.
+        """
+        crawler, driver = make_crawler(cards=[], grid=[ID], grid_batches=[[OTHER]], grid_void_jumps=1, works='2')
+        rows = crawler.author(SEC, target_count=2)
+        assert [str(row['视频ID']) for row in rows] == [ID, OTHER], (
+            'a grid that only pages on a repeat approach must be followed, not conceded at the first screen'
+        )
+        assert driver.container_jumps >= 2, (
+            f'walking past a void approach takes at least two container jumps, took {driver.container_jumps}'
+        )
 
     def _author_shape(self, crawler, monkeypatch, *, modal_deferred, list_end, seeded_rows, walled=False):
         """Drive ``author`` to a fixed end-state: the grid arrived and drained, N rows landed, and

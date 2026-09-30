@@ -185,6 +185,12 @@ def _vocabulary(mode: str, headless: bool) -> tuple[tuple, tuple]:
         exits, liars = (
             harness.SHARED_EXITS
             + (
+                'comment.done',  # every pasted link tallied (正常/拦截/失效); a thread shorter than the
+                # cap is the user's budget, not a debt the site owes. ``crawl_douyin`` returns OK below
+                # its cap only when the whole thread was collected — short-vs-supply prints ``comment.dyShort``
+                # beside it — so this line names a full read and can never whitewash a silent one. Measured
+                # live (20261001-005837): a 23-comment video under a comment_limit of 50 filled all 23 and
+                # closed with 「评论采集完成：1 个链接（正常 1、拦截 0、失效 0），共 23 条评论」.
                 'comment.dyNone',  # the video reports N comments and no list opened
                 'comment.dyNoPanel',  # the panel never rendered
                 'comment.dyGone',  # the address was answered with a different video: dead, not walled
@@ -629,13 +635,18 @@ def _llm_block() -> dict:
 
 
 def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, app_module, monkeypatch):
-    """H1 — 测试：抖音.json at his parameters, three legs, each accounting for itself.
+    """H1 — 测试：抖音.json at his parameters, every leg he wired, each accounting for itself.
 
     This is the step the other cells only approximate: the canvas is his, the parameters are his, and the
     question is whether a run he starts from the panel leaves behind a table, a record and an export that
     agree — per component. ``audit_components`` writes one ledger row per leg and derives the case's index
-    row from those three, so a case cannot certify itself FULL by hand. The one thing the copy changes is
+    row from those verdicts, so a case cannot certify itself FULL by hand. The one thing the copy changes is
     which nodes are switched on (see below); no ask, keyword or link was touched.
+
+    The leg COUNT is read out of the file, never hard-coded: he keeps editing this canvas, and a pinned
+    「three」 would go red on a legitimate edit while asserting nothing about the shapes this case actually
+    previews — the author overlay and the comment thread are graded by name, so the guard is that a leg of
+    each of those modes is present.
 
     The hot leg is the one this platform answers differently (docs/crawler_notes.md §抖音热榜): the profile
     this run uses is met with 验证码中间页 at ``/hot`` while a throwaway device reads the board, and this
@@ -646,13 +657,17 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
     opened = accept.workflow_file(ACCEPTANCE_FILE)
     # Measured on the first attempt at this cell (2026-09-28): **as saved, some chains sit out.** A
     # workflow whose name node is off is not an effective component (``execution_state['skipped_workflow_labels']``
-    # → ``run.skippedWorkflows``), so the flagship leg of the platform's eight steps has to crawl the three
-    # source nodes he wired, at his parameters. Hence the deep copy (plan decision D5: the file on disk is
+    # → ``run.skippedWorkflows``), so the flagship leg of the platform's eight steps has to crawl every
+    # source node he wired, at his parameters. Hence the deep copy (plan decision D5: the file on disk is
     # what he wrote; the variant is what the test wanted), and the empty skip list is asserted rather than
     # assumed, because a switched-off leg that quietly stayed off would look like a pass.
     workflow = accept.all_enabled(opened)
     _on, off, found = accept.parts(workflow, file_name=ACCEPTANCE_FILE.name)
-    assert len(found) == 3, f'this case is written against the three source nodes he saved: {found}'
+    modes = {part['mode'] for part in found}
+    assert 'author' in modes and 'comments' in modes, (
+        f'this case previews the author overlay and the comment thread by name, but the canvas he saved '
+        f'holds no leg of one of those modes: {sorted(modes)}'
+    )
     assert not off, f'the all-enabled copy still holds a switched-off node: {off}'
     exported_before = accept.export_dir_entries()
     with LiveRun(
@@ -684,20 +699,21 @@ def test_h1_the_shipped_canvas_runs_and_every_leg_accounts_for_itself(client, ap
         )
         assert not silent, f'components under target with no honest reason named: {silent}'
         accept.assert_canvas_exports(found, accept.new_exports(exported_before), records)
-        # A serial canvas is one record per workflow *as it is reached* (AGENTS), so three legs are three rows —
-        # and every one of them has to name the component it crawled, or the panel lists a run nobody can
-        # match back to a node on the canvas.
-        assert int(run.record.get('wf_count') or 0) == len(found), (
-            f'three components, and the row says wf_count={run.record.get("wf_count")}: {run.record}'
-        )
+        # The rows are the shape the canvas mode promises (AGENTS' 「并行是一条记录，串行一 workflow 一行」).
+        # This canvas is 串行, so each leg opened its OWN row named by its own component; reading the mode
+        # off the row (rather than asserting a parallel wf_count) is what lets a 串行 file pass on a run
+        # whose three legs all graded honestly — a pinned ``wf_count == 3`` would redden it at the report.
+        accept.assert_record_shape(run, records, found)
         for part in found:
-            own = run.component_verdict(
-                part['label'], records[part['label']], part['source'], target=part['ask'], mode=part['mode']
-            )
             if part['mode'] == 'author':
+                # L2 三一致 for the overlay crawl: the preview the panel would render, the rows the store
+                # holds, and (checked above) the file on disk all agree. The ledger count is read from the
+                # record — ``component_verdict`` returns a verdict/reasons only, never a row count, so a
+                # ``own['rows']`` here was a KeyError no earlier failure ever let us reach.
                 rows = run.preview(part['source'], workflow_name=part['label'])
                 _assert_video_rows(rows, minimum=1, source=f'H1 {part["label"]}')
-                assert len(rows) == own['rows'], f'{part["label"]}: preview {len(rows)} vs ledger {own["rows"]}'
+                ledger = harness.stored_rows(records[part['label']], part['source'])
+                assert len(rows) == ledger, f'{part["label"]}: preview {len(rows)} vs ledger {ledger}'
             if part['mode'] == 'comments':
                 rows = run.preview(part['source'], workflow_name=part['label'])
                 if rows:

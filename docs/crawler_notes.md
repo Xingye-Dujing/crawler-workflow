@@ -468,6 +468,29 @@ refusing on an empty 标题 would drop real data over one column.
   `backend/test_dy_funnel.py` 跑 `author(target=40)` → **40 行、40 个不同 视频ID、一次 `authorDone`**，
   所以网格分页仍然工作，探针那次是**方法不对**（拖错盒子）。教训写进这里是为了下次别拿探针的
   失败去改产品：产品路径的结论优先，探针只负责提出疑问。
+* **懒网格：第一次触底不fetch、第二次才翻页（U50，measured 2026-10-01 真机 live H1, pass 20261001-010707）**：
+  同一作者（自报 `作品 145`）遮罩改造后的 `author()` 在真机上一会儿到 50、一会儿**卡在第一屏 20 条**就收尾，
+  控制台只有 `第 1 屏：20 张卡片`、没有 `第 2 屏`，也没有 `暂时没有更多了` → 20/50 无具名收尾（正是本层要抓的
+  静默少采）。根因在 `_scroll_profile`：它**只触底一次**就等 `+1`（`SCROLL_WAIT` 内没长就返回 False），而抖音
+  这种懒网格**第一次触底常常不发请求、要再触一次才拉下一批**。修法=在预算内**重复触底直到真长**：
+  ```python
+  while not may_stop() and time.monotonic() < deadline:
+      feed.jump_to_bottom(driver, PROFILE_GRID)
+      if feed.wait_for(lambda: len(set(self._grid_ids())), before + 1, timeout=3.0, tick=0.5) > before:
+          return True   # 这一批到了
+  return False          # 整段预算都没长，才交给 _list_says_end 判站点收尾 vs 真少采
+  ```
+  返回值语义（bool=是否长大）**没动**，所以 `_harvest_pool` 的 `drained`/具名收尾逻辑不变，只是不再被「单次
+  触底的空档」骗停。离线用 `FakeDriver(grid_void_jumps=1)` 把「第一跳不吐、第二跳才吐」钉成确定用例
+  （`tests/integration/test_douyin_crawler.py::TestAuthorProfile::test_a_grid_that_pages_only_on_a_second_approach…`），
+  单触底的旧写法只落到 `[ID]`、新写法走到 `[ID, OTHER]`。真机复跑同一 H1：作者 50/50 全绿。
+  另记两条同轮真机发现（都改了判定、不改爬取）：① 评论 `comment_limit=50` 落在一条只有 23 评论的视频上，
+  采到全部 23 属**供给就这么多**（不是少采），但收尾句 `comment.done` 不在抖音评论的合法出口白名单里 →
+  被判静默；已把 `comment.done` 加进 `_vocabulary('comments')`（`crawl_douyin` 只有在整条楼采完时才在 cap 以下返
+  OK，真少采会另打 `comment.dyShort`，所以这句不会给静默少采背书）。② H1 的导出核对过去按**名字节点标签**匹配文件，
+  但导出文件是按**输出节点 filename** 命名的（抖音两者不同：`抖音评论爬取.csv` vs 标签 `测试：抖音评论爬取`）；
+  改成按输出 filename 词干匹配，并对**0 行的具名短收**（如热榜被验证码挡、`_execute_output_node` 空输入不写文件）
+  跳过文件核对。
 * **搜索的行预算≈1.5 倍导航**：目标 8 行实际开了 12 个详情页，其中 2 张「没有渲染出数据」、
   2 张「只渲染出计数条」——**两种都有具名句**（`crawl.dy.detailEmpty` / `detailNoIdentity`），
   所以这条路不欠「静默丢行」；但 `finished` 那句只报 `n/rounds/total`，不报「拒了几张详情页」，

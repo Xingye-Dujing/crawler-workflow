@@ -587,13 +587,28 @@ class DouyinCrawler(VideoCrawler):
         page (it only feeds the footer's recommended videos), which is why the scroll
         hunts for the element that actually moves instead of calling
         :meth:`Crawler.scroll_down`.
+
+        The jump is **re-approached** until the grid grows, not taken once: a lazy douyin grid
+        sometimes fetches nothing on the first bottom-touch and pages on the next. A single
+        approach that grew nothing is therefore not the end of supply — and conceding there is
+        exactly what made a 145-work profile stop at its first screen of 20 (measured live,
+        pass 20261001-010707). Only after the whole :data:`SCROLL_WAIT` budget of approaches has
+        grown nothing does this say False, and the caller still asks the *site*
+        (:meth:`_list_says_end`) whether 「暂时没有更多了」 is really on screen before calling it
+        ``site_end`` — a stalled read stays a named shortfall, never a quiet success.
         """
         before = len(set(self._grid_ids()))
-        with contextlib.suppress(Exception):
-            feed.jump_to_bottom(self.driver, self.PROFILE_GRID)
-        settled = feed.wait_for(lambda: len(set(self._grid_ids())), before + 1, timeout=self.SCROLL_WAIT, tick=1.0)
+        deadline = time.monotonic() + self.SCROLL_WAIT
+        grew = False
+        while not self.may_stop() and time.monotonic() < deadline:
+            with contextlib.suppress(Exception):
+                feed.jump_to_bottom(self.driver, self.PROFILE_GRID)
+            settled = feed.wait_for(lambda: len(set(self._grid_ids())), before + 1, timeout=3.0, tick=0.5)
+            if settled > before:
+                grew = True
+                break
         self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
-        return bool(settled > before)
+        return grew
 
     def _return_to_profile(self, url: str) -> None:
         """Come back to the creator's grid, for the same reason a search re-open does.
