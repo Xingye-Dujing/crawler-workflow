@@ -100,7 +100,7 @@ DY_ROW_REFUSALS = (
 )
 
 #: The 12 columns a stored video row carries (author mode is the shape), the 8 a board row carries, and
-#: the 10 the comment panel yields. The matrix holds no column names, so this tier is where they are
+#: the 11 the comment panel yields. The matrix holds no column names, so this tier is where they are
 #: pinned against the live page.
 POST_COLUMNS = (
     '标题',
@@ -128,6 +128,7 @@ COMMENT_COLUMNS = (
     '点赞数',
     '子回复数',
     '楼层',
+    '父楼层',
 )
 
 #: The creator the author cells crawl, taken from the user's own acceptance canvas
@@ -428,9 +429,10 @@ def test_d1_the_comment_panel_is_scrolled_and_every_row_is_a_real_comment(client
     """D1 — comments of one known video, read off the panel that signs its own endpoint.
 
     ``a_bogus`` is why this mode is DOM-only (it cannot be fetched like weibo's ``buildComments``), so
-    what the cell can prove is the walk: rows carry the 10 columns, 楼层 runs across the whole panel
-    rather than restarting per screen, and 子回复数 is a count — the column that says "nested replies
-    exist and this table does not hold them", which is the honest trace zhihu's U29 taught.
+    what the cell can prove is the walk: rows carry the 11 columns, 楼层 runs across the whole panel
+    rather than restarting per screen, 「展开N条回复」 threads are OPENED with a real click and their
+    replies are filed as their own rows under ``父楼层``, and a parent's 子回复数 is the number of reply
+    rows actually landed (falling back to the site's declared N when a thread could not be opened).
 
     The ask is **40**, not the 15 a first draft used: measured, the panel mounts ~16 items on its first
     screen, so a 15-row ask breaks inside round one and the cell's 楼层 claim could not fail for the bug
