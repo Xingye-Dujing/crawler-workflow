@@ -284,6 +284,17 @@ Zhihu throttles headless content pages day-by-day (risk code 40362); comment cra
 visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
 outcome the message catalog already explains — don't "fix" it by loosening assertions.
 
+**作者分母来自 profile 页的 `<meta itemprop>` 元标签，不是 footer（measured 2026-10-01，B1 探针）**：
+知乎 profile tab **不渲染**「没有更多」footer——6 个 tab（3 账号 × answers+posts、最深 637 项）滚到
+顶全 `footer=False`。所以 walk_feed 的 'stuck' 在薄号（23 条真到底）与限速掐深号（661 条中途停）之间
+无法区分。但 profile 页 meta 里带 **`zhihu:answerCount` / `zhihu:articlesCount`**（zshu-83 实测 661/47）
+= 站点亲口的号主作品总数，与 weibo 的 `_published_count`（作品 145）同一角色。据此：
+collected < 总数 且 collected < target 且非墙/风控/停止 → `UNDER_TARGET`；collected ≥ 总数 → `site_end`；
+meta 读不到 → 分母 -1、跳过（宁缺毋滥：读不到 ≠ 0）。到达 target 的普通爬两条分支都不触发、`None` →
+判完成。live target=3 通过（不误判薄号）。B 站 `arc/search` 同会话 `code=-403`（与 weibo mymblog 同一
+WAF 味道）、space DOM 未命中「N 视频」——bilibili 分母**还没找到**，其 author 维持 `None`（现状安全），
+下一步用更宽的探针再试。
+
 **A search card holds an excerpt, not the answer — and only a 回答 card may be opened**
 (measured 2026-09-24, four probes in one logged-in session on `/search?q=三亚&type=content`).
 The crawler used to refuse every click inside a card, on the strength of a navigation incident
