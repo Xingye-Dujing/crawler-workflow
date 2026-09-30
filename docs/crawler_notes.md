@@ -537,6 +537,18 @@ refusing on an empty 标题 would drop real data over one column.
   **卡片点不开时本轮跳过该 id、绝不回退去 `/video` 导航**（那正是本改动要消掉的 storm）；若整轮 0 行而卡片确曾存在，
   具名判 `UNDER_TARGET`（欠采可续跑），不被「没有更多了」许可成完成；遮罩内若见验证码则 `risk_blocked`（退避）。
 
+* **抖音评论子回复能展开，但只有「原生点击真按钮」才行（U50，measured 2026-09-30，探针
+  `backend/test_douyin_subreply_probe.py` → `scratchpad/dy_subreply_probe*.log`）**：父评论 `[data-e2e="comment-item"]`
+  里的 `button.comment-reply-expand-btn`「展开N条回复」——**用 ActionChains 真实点击它，等约 1 秒**（签名回复请求）即可展开，
+  子回复**渲染在同一 comment-item 内的 `.replyContainer`**（不是嵌套的 `[data-e2e="comment-item"]`，故早先 `nested_comment_items` 一直读 0）。
+  **关键教训**：本探针一度误判「程序点不开」——根因是 `findBtn` 按 `innerText` 匹配、命中了**外层 div 包装**（父 div 的 innerText 也含子按钮的
+  「展开N条回复」），于是一切点击都打在没处理器的 div 上；改成**先按类 `button[class*="comment-reply-expand"]` 定位真按钮**后，ActionChains 一点即开
+  （`expander_gone=True / 收起 / 子树 57→107`）。合成 `.click()`/`dispatchEvent`/CDP `Input.dispatchMouseEvent` 对**错节点**都打不开，但对**真按钮**
+  ActionChains 能开——所以「点不开」是定位 bug 不是站点限制。展开后该槽变「收起」，故**按「展开N条回复」文字匹配 opener**既证明已开、又天然防再点合回去。
+  实现：`crawlers/comments.py` 走每轮重读挂载项（抖音评论列表会**虚拟化**，滚过去即卸载，单次末读会丢）+ `(作者,正文,时间)` 去重；
+  `parse_douyin_threads` 给整栏连续编 **`楼层`**、子回复行带 **`父楼层`=父评论楼层**（对齐微博/知乎 U29），父评论 **`子回复数`=实际展开到的子行数**、
+  打不开退回站点自报 N。`comment.dyShort` 的差额随之按「未展开到的回复数」算，展开成功时自然归零。
+
 
 ## Bilibili
 

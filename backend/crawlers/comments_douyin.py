@@ -52,20 +52,57 @@ def douyin_comment_fields(text: str) -> tuple:
     return author, content, when, region, likes, subs
 
 
-def parse_douyin_comments(items) -> list:
-    """Takes [(url, author, content, when, region, likes, subs)] scraped per panel."""
-    return [
-        {
-            '平台': 'douyin',
-            '文章URL': url,
-            '评论者': author,
-            '评论者主页': '',
-            '评论内容': content,
-            '评论时间': when,
-            '评论地区': region,
-            '点赞数': likes,
-            '子回复数': subs,
-            '楼层': idx,
-        }
-        for idx, (url, author, content, when, region, likes, subs) in enumerate(items, 1)
-    ]
+def parse_douyin_threads(threads: dict, url: str) -> tuple:
+    """Ordered parent→reply rows and the UNCOLLECTED reply count, numbered across the whole panel.
+
+    ``threads`` is ``{parent_key: {author, content, when, region, likes, subs, replies: {key: {...}}}}``
+    in first-seen order (``dict`` preserves it). 楼层 is a single continuous floor over parents and
+    their replies (so a reply's 父楼层 can point back at its parent's number), exactly like zhihu's.
+
+    A parent's **子回复数** is the number of reply rows we actually landed (the user's "实际子行数"),
+    falling back to the site's declared 「展开N条回复」 when the thread could not be opened. ``nested`` is
+    the sum of ``declared − captured`` over every parent — the replies the denominator counts but this
+    walk never reached — so the ``comment.dyShort`` gap stays honest whether or not the threads opened,
+    and reply rows (now real rows) are never double-counted against it.
+    """
+    rows = []
+    nested = 0
+    floor = 0
+    for slot in threads.values():
+        floor += 1
+        parent_floor = floor
+        captured = len(slot['replies'])
+        nested += max(slot['subs'] - captured, 0)
+        rows.append(
+            {
+                '平台': 'douyin',
+                '文章URL': url,
+                '评论者': slot['author'],
+                '评论者主页': '',
+                '评论内容': slot['content'],
+                '评论时间': slot['when'],
+                '评论地区': slot['region'],
+                '点赞数': slot['likes'],
+                '子回复数': captured if captured else slot['subs'],
+                '楼层': parent_floor,
+                '父楼层': '',
+            }
+        )
+        for reply in slot['replies'].values():
+            floor += 1
+            rows.append(
+                {
+                    '平台': 'douyin',
+                    '文章URL': url,
+                    '评论者': reply['author'],
+                    '评论者主页': '',
+                    '评论内容': reply['content'],
+                    '评论时间': reply['when'],
+                    '评论地区': reply['region'],
+                    '点赞数': reply['likes'],
+                    '子回复数': 0,
+                    '楼层': floor,
+                    '父楼层': parent_floor,
+                }
+            )
+    return rows, nested

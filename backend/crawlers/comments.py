@@ -33,13 +33,14 @@ import re
 import time
 
 from selenium.common.exceptions import JavascriptException, StaleElementReferenceException
+from selenium.webdriver.common.action_chains import ActionChains
 
 from i18n import stop_reason_label, t
 
 from .base import throttled_sleep
 from .comments_base import BLOCKED, DEAD, OK, _json_or_none
 from .comments_bilibili import bilibili_reply_js, bilibili_view_js, parse_bilibili_comments
-from .comments_douyin import douyin_comment_fields, parse_douyin_comments
+from .comments_douyin import douyin_comment_fields, parse_douyin_threads
 from .comments_twitter import parse_twitter_replies
 from .comments_weibo import parse_weibo_comments, weibo_bid, weibo_comments_js, weibo_show_js
 from .comments_xhs import parse_xhs_comments
@@ -797,6 +798,94 @@ return (function () {
 
     # -- douyin ---------------------------------------------------------------
 
+    #: douyin's reply expander is a real ``button`` whose ONLY reliable opener is a native click — a
+    #: synthetic ``.click()`` does not move React's delegated handler (measured on the real profile).
+    #: The opener is matched by its 「展开N条回复」 TEXT, not the class alone: after a real expand the same
+    #: slot reads 「收起」, so the text is both the proof it opened and the guard against a re-click that
+    #: would collapse it again.
+    _DY_EXPAND_RE = re.compile(r'展开\s*\d+\s*条回复')
+
+    #: One round trip for the whole mounted panel: each ``[data-e2e="comment-item"]`` as ``{own, replies}``.
+    #: ``own`` is the item's text with reply containers stripped (so a reply never bleeds into its parent's
+    #: fields) but the 「展开N条回复」 label KEPT (the declared count of an unopened thread); ``replies`` is
+    #: each ``.replyContainer``'s text — present only once the thread has been opened.
+    _DY_THREADS_JS = r"""
+    var items = document.querySelectorAll('[data-e2e="comment-item"]');
+    var out = [];
+    Array.prototype.forEach.call(items, function (it) {
+      var reps = Array.prototype.map.call(it.querySelectorAll('[class*="replyContainer"]'), function (r) {
+        return (r.innerText || '').trim();
+      });
+      var clone = it.cloneNode(true);
+      Array.prototype.forEach.call(clone.querySelectorAll('[class*="replyContainer"]'), function (x) { x.remove(); });
+      out.push({ own: (clone.innerText || '').trim(), replies: reps });
+    });
+    return out;
+    """
+
+    def _expand_douyin_reply_threads(self) -> int:
+        """Open every collapsed 「展开N条回复」 thread with a real (ActionChains) click; return how many."""
+        opened = 0
+        for btn in list(self.driver.find_elements('css selector', 'button')):
+            if not self._DY_EXPAND_RE.search(self._safe_text(btn)):
+                continue
+            with contextlib.suppress(Exception):
+                self.driver.execute_script('arguments[0].scrollIntoView({block:"center"});', btn)
+                self.nap(0.15)
+                ActionChains(self.driver).move_to_element(btn).pause(0.1).click().perform()
+                # The reply request is signed and lands about a second later (user-measured 「要加载1秒」).
+                self.nap(1.2)
+                opened += 1
+        return opened
+
+    def _douyin_has_collapsed_opener(self) -> bool:
+        """Any 「展开N条回复」 still on the panel — an opener is proof there is more to read, so the walk
+        must not stop while one remains (that would under-collect threads it never opened)."""
+        return any(
+            self._DY_EXPAND_RE.search(self._safe_text(b)) for b in self.driver.find_elements('css selector', 'button')
+        )
+
+    def _read_douyin_threads(self) -> list:
+        with contextlib.suppress(JavascriptException):
+            return self.driver.execute_script(self._DY_THREADS_JS) or []
+        return []
+
+    def _absorb_douyin_threads(self, readings, threads: dict, reply_seen: set) -> None:
+        """Fold one round's mounted readings into the ordered thread map, deduped by (author, body, time).
+
+        The panel virtualises, so a parent is re-read on every round it is mounted; the key makes that
+        idempotent and the reply set makes each child appear once. ``subs`` keeps the largest declared
+        count seen (an early read can be pre-hydration), which a later expansion replaces with real rows.
+        """
+        for one in readings or []:
+            author, content, when, region, likes, subs = douyin_comment_fields(one.get('own'))
+            if not content:
+                continue
+            key = (author, content, when)
+            slot = threads.get(key)
+            if slot is None:
+                threads[key] = {
+                    'author': author,
+                    'content': content,
+                    'when': when,
+                    'region': region,
+                    'likes': likes,
+                    'subs': subs,
+                    'replies': {},
+                }
+                slot = threads[key]
+            else:
+                slot['subs'] = max(slot['subs'], subs)
+            for rtext in one.get('replies') or []:
+                ra, rc, rw, rr, rl, _rs = douyin_comment_fields(rtext)
+                if not rc:
+                    continue
+                rkey = (ra, rc, rw)
+                if rkey in reply_seen or rkey in slot['replies']:
+                    continue
+                reply_seen.add(rkey)
+                slot['replies'][rkey] = {'author': ra, 'content': rc, 'when': rw, 'region': rr, 'likes': rl}
+
     def crawl_douyin(self, url: str, limit: int) -> tuple:
         """Scroll the rendered comment panel; douyin's API is signed.
 
@@ -805,9 +894,17 @@ return (function () {
         becoming 56 — while ``window.scrollTo`` does nothing at all. The panel's
         request carries ``a_bogus``/``msToken``, so there is no endpoint to call.
 
-        「展开N条回复」 is read as a count and never clicked: expanding a thread
-        rewrites the list under the next read, and the count is the fact the user
-        needs (this comment has N replies) either way.
+        「展开N条回复」 threads ARE expanded and their replies are filed as their own rows
+        (``父楼层`` = the parent's floor). Measured on the real profile
+        (``backend/test_douyin_subreply_probe.py``): a *native* ``ActionChains`` click on the
+        actual ``button...comment-reply-expand-btn`` opens the thread (~1 s async), and the
+        replies render inline as ``.replyContainer`` children of the same comment-item. A synthetic
+        ``.click()`` does NOT (React's delegated handler ignores it) — so this click is a real one,
+        not a dispatched event, and the opener is matched by its 「展开N条回复」 text (after a real
+        expand it reads 「收起」, which both proves the open and stops a re-click from collapsing it).
+        The walk re-reads the mounted items each round and dedups by (author, body, time), because
+        douyin virtualises the list: an item scrolled past is unmounted, so a single final read
+        would silently lose it.
         """
         from .douyin import douyin_id
 
@@ -864,53 +961,40 @@ return (function () {
             # The video says it has comments and the list never opened — a page
             # we could not read, which must never arrive as an empty table.
             return [], BLOCKED
-        seen, collected = set(), []
-        read = 0
         # No round budget. The loop used to be ``for _round in range(40)``, which decided the size of a
         # thread: measured 2026-09-28 on a video whose own counter reads 3388, the walk stopped at 406 rows
         # because its fortieth screen came and went, and returned ``OK`` as though the thread were finished.
         # 「怎么采不满」 is exactly this shape, so what ends a douyin panel walk is the panel itself — a
-        # screen with nothing new, a scroll that moved nothing — or the user's 停止 / his 评论条数.
+        # screen that grows no further, or the user's 停止 / his 评论条数.
         #
-        # ``read`` is what makes removing that ceiling affordable. The panel is append-only while it grows
-        # (measured 16 → 56 mounted items), so re-reading every mounted node each round cost a Selenium
-        # round trip per already-seen comment — on the 3388-comment thread that is ~1M reads, hours. The
-        # tail is only safe while the nodes are the same ones, and a *count* is not the proof: a recycled
-        # panel can hand back the same number of items with a different head. So the head's own text is the
-        # sentinel — one extra read per round, and any change to it sends the walk back to the top rather
-        # than letting it skip comments it has never parsed.
-        head_marker = object()
-        exit_reason = 'no_new'
+        # The walk re-reads every MOUNTED comment each round (one JS round trip, not one per element),
+        # because douyin virtualises the panel: an item scrolled past is unmounted, so a single final
+        # read would lose it. Dedup by (author, body, time) makes the re-read idempotent. Each round also
+        # opens any still-collapsed reply thread, so its replies are mounted before the next read sees it.
+        threads: dict = {}  # parent key -> {'fields', 'subs', 'replies' (ordered reply-key -> fields)}
+        reply_seen: set = set()
+        prev_count = 0
+        exit_reason = 'stuck'
         while True:
-            found = []
+            opened = self._expand_douyin_reply_threads()
             items = self.driver.find_elements('css selector', '[data-e2e="comment-item"]')
-            head = self._safe_text(items[0])[:40] if items else None
-            if head != head_marker:
-                read = 0
-            head_marker = head
-            batch = items[read:]
-            read += len(batch)
-            for item in batch:
-                author, content, when, region, likes, subs = douyin_comment_fields(self._safe_text(item))
-                key = (author, content, when)
-                if not content or key in seen:
-                    continue
-                seen.add(key)
-                found.append((target, author, content, when, region, likes, subs))
-            collected.extend(found)
-            # Each exit names itself, because the gap line below quotes it: 「还差 3000 条」 means
-            # something different when the panel ran dry than when the user pressed 停止, and a sentence
-            # that blames the site for our own early exit is the lying-summary shape §5 refuses.
-            if not found:
-                exit_reason = 'no_new'
-                break
-            if limit and len(collected) >= limit:
-                exit_reason = 'target'
-                break
+            count = len(items)
+            self._absorb_douyin_threads(self._read_douyin_threads(), threads, reply_seen)
             if self.may_stop():
                 exit_reason = 'stopped'
                 break
-            if not self._scroll_douyin_panel():
+            if limit and len(threads) >= limit:
+                exit_reason = 'target'
+                break
+            # The panel is drained only when nothing new mounted AND no thread was left to open. An
+            # opener is proof there is more to read, so the walk must not stop while one remains.
+            if count == prev_count and not opened and not self._douyin_has_collapsed_opener():
+                exit_reason = 'no_new'
+                break
+            prev_count = count
+            # Stopped growing, but a thread openable by a further scroll means there is still more to read;
+            # give up only when the scroll moved nothing AND nothing is openable.
+            if not self._scroll_douyin_panel() and not opened and not self._douyin_has_collapsed_opener():
                 exit_reason = 'stuck'
                 break
             # A pacing pause between scrolled screens, so gentle crawl may stretch THIS one. The
@@ -918,11 +1002,10 @@ return (function () {
             # politeness, and must stay unscaled — which is why pacing is a direct
             # :func:`throttled_sleep`, not the session's ``nap`` knob.
             throttled_sleep(1.5)
-        # Numbered once, over the whole thread. ``parse_douyin_comments`` counts from 1 inside the batch it
-        # is handed, so calling it per scroll round made 楼层 restart at 1 on every screen — a table where
-        # twelve rows claim floor 1 and nothing says which screen they came from. The panel is a list, not
-        # a set of pages (AGENTS: a list is a document), so the enumeration belongs after the walk.
-        rows = parse_douyin_comments(collected)
+        # Numbered once, over the whole thread (parent then its replies), because 楼层 is a continuous
+        # floor across the panel and a reply's 父楼层 points back at that number — so it is assigned after
+        # the walk, never per screen (AGENTS: a list is a document).
+        rows, nested = parse_douyin_threads(threads, target)
         moved = douyin_id(self.driver.current_url or '')
         if rows and moved and moved != douyin_id(target):
             # The address moved while the panel was being walked, so every row above belongs to a video
@@ -936,13 +1019,12 @@ return (function () {
             self.log(t('comment.dyNoPanel', url=target))
             return [], BLOCKED
         declared = parse_count(reported)
-        nested = sum(int(row.get('子回复数') or 0) for row in rows)
+        # ``nested`` is the UNCOLLECTED reply count (each parent's declared 「展开N条回复」 minus the
+        # replies this walk actually opened and filed). Reply rows already sit in ``len(rows)``, so the
+        # only thing still owed to the denominator is what could not be expanded. The gap therefore says
+        # 「the site counted this many and the table + unexpandable replies still fall short」 — never
+        # 「这条视频就这么多」 when it is not, and the exit reason keeps a user 停止 off the site's head.
         if declared and len(rows) + nested < declared and not (limit and len(rows) >= limit):
-            # The denominator is the video's own number, and the gap says what the table cannot hold:
-            # 「展开N条回复」 is counted and never clicked (expanding rewrites the list under the next
-            # read), so replies are owed to the count but not to the rows. Saying the three figures is
-            # what keeps 「这条视频就这么多」 from being this walk's answer when it is not — and saying
-            # *why the walk ended* keeps the gap from being blamed on the site when the user stopped it.
             self.log(
                 t(
                     'comment.dyShort',

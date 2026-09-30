@@ -20,13 +20,14 @@ every change:
 """
 
 import json
+import re
 
 import pytest
 from selenium.common.exceptions import TimeoutException
 
 import crawlers.base as base_module
 from crawlers.base import UNDER_TARGET, Crawler
-from crawlers.comments import BLOCKED, DEAD, OK, CommentSession, douyin_comment_fields, parse_douyin_comments
+from crawlers.comments import BLOCKED, DEAD, OK, CommentSession, douyin_comment_fields, parse_douyin_threads
 from crawlers.douyin import (
     DouyinCrawler,
     _author_from_related,
@@ -49,7 +50,7 @@ COMMENT_BLOCK = '\n'.join(
 
 
 class El:
-    def __init__(self, text='', attrs=None, intercept=False, on_click=None, on_send_keys=None):
+    def __init__(self, text='', attrs=None, intercept=False, on_click=None, on_send_keys=None, replies=None):
         self.text = text
         self._attrs = attrs or {}
         self.sent = []
@@ -59,6 +60,10 @@ class El:
         # Optional so every other El (comment items, counters) is unchanged.
         self._on_click = on_click
         self._on_send_keys = on_send_keys
+        # A comment-item that holds a reply thread: ``replies`` are its child comment texts, and they are
+        # only exposed once the thread is expanded (``_expanded``). A non-thread item leaves both empty.
+        self._replies = list(replies) if replies else None
+        self._expanded = False
 
     def get_attribute(self, name):
         return self._attrs.get(name, '')
@@ -255,6 +260,41 @@ class FakeDriver:
             # of ``page_load_timeout`` — the page is not wrong, it is unfinished.
             raise TimeoutException(f'no such window: navigation timed out for {url}')
 
+    def _mounted_items(self):
+        """The comment-item Els currently mounted — virtualisation: a scroll advances the screen."""
+        if self.comment_pages:
+            screen = min(self.scrolls, len(self.comment_pages) - 1)
+            return list(self.comment_pages[screen])
+        return list(self.comment_items)
+
+    def _douyin_readings(self):
+        """What the panel JS returns: each mounted item as {own, replies}.
+
+        ``own`` keeps the 「展开N条回复」 label while the thread is collapsed (so the parent row reads its
+        declared count) and swaps it for 「收起」 once expanded; ``replies`` are non-empty only after the
+        native click expanded that item — which is how the fake proves the product reads replies it opened.
+        """
+        out = []
+        for it in self._mounted_items():
+            reps = getattr(it, '_replies', None)
+            expanded = getattr(it, '_expanded', False)
+            own = re.sub(r'展开\s*\d+\s*条回复', '收起', it.text) if (expanded and reps) else it.text
+            out.append({'own': own, 'replies': list(reps) if (reps and expanded) else []})
+        return out
+
+    def _douyin_openers(self):
+        """One button per mounted item that still hides a collapsed thread; once opened it reads 收起."""
+        out = []
+        for it in self._mounted_items():
+            reps = getattr(it, '_replies', None)
+            if not reps:
+                continue
+            if getattr(it, '_expanded', False):
+                out.append(El('收起'))
+            else:
+                out.append(El(f'展开{len(reps)}条回复', on_click=lambda x=it: setattr(x, '_expanded', True)))
+        return out
+
     def find_element(self, by, selector):
         if selector == 'body':
             # ESC on the body dismisses the overlay (the modal path); the text it reports is the
@@ -305,15 +345,17 @@ class FakeDriver:
                 for aweme_id in self.grid
             ]
         if selector == '[data-e2e="comment-item"]':
-            if self.comment_pages:
-                # The panel lazy-fills: what it holds is a function of how many times it has been
-                # scrolled, so the walk sees screen 2 only after its own scroll moved it.
-                screen = min(self.scrolls, len(self.comment_pages) - 1)
-                return list(self.comment_pages[screen])
-            return list(self.comment_items)
+            # The panel lazy-fills: what it holds is a function of how many times it has been
+            # scrolled, so the walk sees screen 2 only after its own scroll moved it.
+            return self._mounted_items()
+        if selector == 'button':
+            return self._douyin_openers()
         return []
 
     def execute_script(self, script, *args):
+        if 'replyContainer' in script:
+            # The panel structural read: every mounted comment-item as {own, replies}.
+            return self._douyin_readings()
         if 'feed-video-nickname' in script:
             # The overlay read is scoped to the active slide; it MUST pass feed-active-video as the
             # root. Returning the neighbour's/global facts for any other root is exactly the mix-up
@@ -847,6 +889,47 @@ class TestComments:
         assert rows[0]['子回复数'] == 1 and rows[0]['评论地区'] == '北京'
         assert rows[0]['平台'] == 'douyin' and rows[0]['文章URL'].endswith(ID)
 
+    def test_a_reply_thread_is_expanded_and_its_reply_filed_under_the_parent(self, make_crawler, monkeypatch):
+        """The reply thread is OPENED with a real click, and its reply becomes a row with 父楼层.
+
+        ``_expand_douyin_reply_threads`` uses ``ActionChains`` because only a native click moves
+        douyin's React handler (measured on the profile). A fake ActionChains here performs the click
+        on the opener, which marks the thread expanded so the next panel read returns its reply —
+        proving the product reads replies it actually opened, not a declared count.
+        """
+
+        class FakeActionChains:
+            def __init__(self, driver):
+                self._el = None
+
+            def move_to_element(self, el):
+                self._el = el
+                return self
+
+            def pause(self, *a):
+                return self
+
+            def click(self):
+                if self._el is not None:
+                    self._el.click()
+                return self
+
+            def perform(self):
+                pass
+
+        monkeypatch.setattr('crawlers.comments.ActionChains', FakeActionChains)
+        parent = El('路人甲\n主评论\n1天前·北京\n2\n展开1条回复', replies=['路人乙\n子回复\n1天前·上海\n0'])
+        crawler, driver = make_crawler(cards=[], comment_items=[parent], comment_count='0')
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert status == OK, status
+        assert [r['评论者'] for r in rows] == ['路人甲', '路人乙'], rows
+        assert [r['楼层'] for r in rows] == [1, 2]
+        assert rows[1]['父楼层'] == 1 and rows[0]['父楼层'] == ''
+        # 子回复数 is the captured reply (实际子行数), and the parent keeps its own body — not the reply's.
+        assert rows[0]['子回复数'] == 1 and rows[0]['评论内容'] == '主评论'
+        assert rows[1]['评论内容'] == '子回复' and rows[1]['评论地区'] == '上海'
+
     def test_a_link_without_an_id_is_dead_and_costs_no_navigation(self, make_crawler):
         crawler, driver = make_crawler(cards=[])
         session = self._session(driver)
@@ -888,7 +971,7 @@ class TestComments:
     def test_the_floor_number_runs_across_the_panel_not_down_one_screen_at_a_time(self, make_crawler):
         """The panel lazy-fills; 楼层 is a running number over the whole thread.
 
-        ``parse_douyin_comments`` counts from 1 inside whatever batch it is handed, and the walk used to
+        ``parse_douyin_threads`` numbers the whole panel, and the walk used to
         hand it one scroll round at a time — so a video read across two screens stored ``1,2,1,2`` and
         nothing in the table said which screen a row came from. Measured shape (live site, 2026-09-28):
         the second screen *contains* the first, because the list is a document, not a page.
@@ -1092,10 +1175,35 @@ class TestComments:
     def test_identity_columns_stay_out_of_the_dedupe_field_lists(self):
         from services.run_store import _AUTHOR_FIELDS, _BODY_FIELDS, _URL_FIELDS
 
-        rows = parse_douyin_comments([(f'https://www.douyin.com/video/{ID}', '甲', '内容', '1天前', '北京', 2, 0)])
-        for name in rows[0]:
-            assert name not in _URL_FIELDS + _AUTHOR_FIELDS + _BODY_FIELDS, name
-        assert rows[0]['楼层'] == 1
+        url = f'https://www.douyin.com/video/{ID}'
+        threads = {
+            ('甲', '内容', '1天前'): {
+                'author': '甲',
+                'content': '内容',
+                'when': '1天前',
+                'region': '北京',
+                'likes': 2,
+                'subs': 1,
+                'replies': {
+                    ('乙', '子回复', '1天前'): {
+                        'author': '乙',
+                        'content': '子回复',
+                        'when': '1天前',
+                        'region': '',
+                        'likes': 0,
+                    }
+                },
+            }
+        }
+        rows, nested = parse_douyin_threads(threads, url)
+        for row in rows:
+            for name in row:
+                assert name not in _URL_FIELDS + _AUTHOR_FIELDS + _BODY_FIELDS, name
+        # Parent floor 1, its reply floor 2 pointing back at floor 1; the captured reply is the parent's
+        # 子回复数 (not the declared), so nothing stays owed and nested is 0.
+        assert [r['楼层'] for r in rows] == [1, 2]
+        assert rows[0]['父楼层'] == '' and rows[1]['父楼层'] == 1
+        assert rows[0]['子回复数'] == 1 and rows[1]['子回复数'] == 0 and nested == 0
 
 
 def _entry(word='中美元首会谈', sentence='2665423', position=1, hot=12112641, views=64657293, **extra):
