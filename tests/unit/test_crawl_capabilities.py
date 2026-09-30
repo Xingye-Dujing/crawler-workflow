@@ -652,6 +652,10 @@ class TestCollectionKind:
         assert mode_for('weibo', 'comments').collects == 'fetch'
         assert mode_for('bilibili', 'hot').collects == 'fetch'
         assert mode_for('zhihu', 'comments').collects == 'dom_scroll'
+        # douyin's author walk opens an in-page overlay per row, not a new page: it visibly moves,
+        # so it is no ``fetch`` mode — but the honest name is ``modal_per_row``, since no page loads
+        # per row any more (the per-row ``/video`` navigation was removed).
+        assert mode_for('douyin', 'author').collects == 'modal_per_row'
         assert mode_for('douyin', 'author').collects != 'fetch'
 
     def test_wechat_states_its_limits_and_offers_the_reason(self):

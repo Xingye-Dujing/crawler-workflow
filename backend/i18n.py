@@ -386,7 +386,7 @@ _ZH = {
         '这一轮的供给就到这儿（不是滚动没生效）'
     ),
     'crawl.dy.processed': '[抖音] 已收录视频 {i}，当前有效数据: {n} 条',
-    'crawl.dy.authorStart': '[抖音作者] 开始采集该作者的作品，目标 {n} 条（计数要逐条打开视频页取）',
+    'crawl.dy.authorStart': '[抖音作者] 开始采集该作者的作品，目标 {n} 条（计数在同页遮罩里逐条点开取，不整页跳转）',
     'crawl.dy.authorEmpty': '[抖音作者] 没有给出作者（粘贴 douyin.com/user/… 链接或那串 sec_uid）：{author}',
     'crawl.dy.authorNoWorks': '[抖音作者] 该作者的主页自报作品数为 0，本就没有可采集的内容',
     'crawl.dy.authorDone': '[抖音作者] 作品列表采集结束，共 {n} 条（主页自报 {works} 条）',
@@ -418,6 +418,9 @@ _ZH = {
     ),
     'crawl.dy.detailSlow': (
         '[抖音] 视频 {i} 的详情页在加载超时内没加载完，已跳过该行：这是网络或站点响应慢，稍后重试可能就拿到了'
+    ),
+    'crawl.dy.modalDeferred': (
+        '[抖音] 有 {n} 条作品卡片的遮罩打不开、本轮跳过：这不是「没有更多了」，是读不到，稍后可重试'
     ),
     # The one refusal on this page that needs no waiting and no probing: the document is
     # the browser's own, and it says which address it refused.
@@ -1323,7 +1326,7 @@ _EN = {
         '{cards} cards — that is the supply for this order, not a scroll that failed'
     ),
     'crawl.dy.processed': '[Douyin] stored video {i}, {n} valid rows so far',
-    'crawl.dy.authorStart': "[Douyin author] one creator's posts, target {n} (counters cost a page each)",
+    'crawl.dy.authorStart': "[Douyin author] one creator's posts, target {n} (counters read from the in-page overlay)",
     'crawl.dy.authorEmpty': '[Douyin author] no author given (paste a douyin.com/user/… link or the sec_uid): {author}',
     'crawl.dy.authorNoWorks': '[Douyin author] the profile publishes 0 posts, so there is nothing to collect',
     'crawl.dy.authorDone': '[Douyin author] post list finished, {n} rows (the profile publishes {works})',
@@ -1358,6 +1361,10 @@ _EN = {
     'crawl.dy.detailSlow': (
         '[Douyin] video {i} did not finish loading inside the page-load timeout, row skipped: that is the '
         'network or the site being slow, a retry may well get it'
+    ),
+    'crawl.dy.modalDeferred': (
+        '[Douyin] the overlay would not open for {n} works cards, skipped this round: that is unreadable, '
+        'not the site running out — retry later'
     ),
     # The one refusal on this page that needs no waiting and no probing: the document is
     # the browser's own, and it says which address it refused.

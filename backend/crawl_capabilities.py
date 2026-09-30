@@ -127,8 +127,10 @@ class Mode:
     then reads JSON from inside it (nothing moves afterwards — measured 2026-09-25:
     the weibo and bilibili comment walks answer a HEADLESS browser with the same
     rows the window sees), ``'dom_read'`` reads a rendered page without scrolling,
-    ``'dom_scroll'`` scrolls a feed that visibly moves, and ``'page_per_row'``
-    opens one page per row. The panel's note and the comment engine's window
+    ``'dom_scroll'`` scrolls a feed that visibly moves, ``'modal_per_row'`` scrolls a
+    grid and opens an in-page overlay on each row (a visible move per row, but NO
+    navigation — the document is the one already loaded), and ``'page_per_row'``
+    opens one whole page per row. The panel's note and the comment engine's window
     decision read this field instead of each holding its own opinion — which is
     what the AGENTS rule 「a visible window must be doing something visible」 needs
     to be code rather than prose.
@@ -646,7 +648,7 @@ CAPABILITIES: tuple[Capability, ...] = (
             _author_mode(
                 placeholder='https://www.douyin.com/user/<sec_uid>',
                 hint_key='settings.authorHintDouyin',
-                collects='page_per_row',
+                collects='modal_per_row',
             ),
             # One answer is the whole board (measured 51 rows), and it needs no board
             # choice: douyin publishes this one list. It does need a session — measured
@@ -735,7 +737,7 @@ def serial_only_of(platform: str) -> bool:
 
 #: The vocabulary of :attr:`Mode.collects`. One of these four on every mode, checked
 #: by the tests so a mode cannot declare a word the panel and executor do not know.
-COLLECT_KINDS = ('fetch', 'dom_read', 'dom_scroll', 'page_per_row')
+COLLECT_KINDS = ('fetch', 'dom_read', 'dom_scroll', 'modal_per_row', 'page_per_row')
 
 
 def needs_session(platform: str, mode_key: str) -> bool:

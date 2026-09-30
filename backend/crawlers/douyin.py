@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from i18n import t
 
-from .base import PageNotArrivedError
+from .base import UNDER_TARGET, PageNotArrivedError
 from .engine import feed, popup
 from .engine.counters import parse_count
 from .video_base import VideoCrawler, _stamp
@@ -28,10 +28,14 @@ class DouyinCrawler(VideoCrawler):
     login_url = 'https://www.douyin.com/'
     supports_crawl = True
 
-    #: How many of THIS crawl's detail pages came back 「验证码中间页」. ``author`` reads it to tell
-    #: a captcha-refused 0 (风控) from a genuinely short list; the class default is what keeps a bare
-    #: ``get_detail`` (which never opens the author walk) from raising — :meth:`_detail_row` bumps it.
-    _detail_walled = 0
+    #: How many cards this walk could not open the overlay on (virtualised away / a click swallowed
+    #: / the slide never painted), after their bounded retries were used up. Named at the end of the
+    #: walk so a shortfall is a stated fact, never a silent 完成.
+    _modal_deferred = 0
+    #: The account's (粉丝, 获赞), read once off the profile page in ``author`` for the overlay rows
+    #: (the slide does not carry them). A class default so any read before ``author`` sets it is
+    #: blank rather than an AttributeError — blank, never a fabricated 0.
+    _profile_totals = ('', '')
 
     #: The 「保存登录信息超过5天」 mask covers the search button (measured: the
     #: click is intercepted by ``.trust-login-dialog-mask``). Only 取消 is ever
@@ -66,6 +70,21 @@ class DouyinCrawler(VideoCrawler):
     #: What the page says its own 作品 count is — the only honest yardstick for
     #: "did we reach the end of this list" when the list has no end marker.
     WORK_COUNT = '[data-e2e="user-tab-count"]'
+    #: The 遮罩 / preview overlay a grid card opens in the SAME document. Measured 2026-09-30
+    #: (``scratchpad/dy_phase0.log``): clicking a ``user-post-list a[href*="/video/<id>"]`` swaps the
+    #: URL to ``…?modal_id=<id>`` with NO document navigation (``document navigated: False``), and the
+    #: slide renders its own counters + caption + author. Reading a row through it costs ZERO page
+    #: loads — the whole point, since the per-row ``/video/<id>`` navigation is what drew the 验证码
+    #: storm. The overlay is a SLIDE LIST: the neighbour video's ``feed-item`` sits in the DOM too, so
+    #: every read is scoped to ``feed-active-video`` or it can pick up the adjacent post's figures.
+    #: ``ESC`` closes it and the grid stays mounted underneath (re-clicking a later card re-opens on
+    #: that id — Phase 0 confirmed the swap). Author totals 粉丝/获赞 are NOT in the slide; they come
+    #: from the profile page once (``user-info-fans`` / ``user-info-like``), which is account-level.
+    MODAL_ID_RE = re.compile(r'modal_id=(\d+)')
+    ACTIVE_SLIDE = '[data-e2e="feed-active-video"]'
+    PROFILE_FANS = '[data-e2e="user-info-fans"]'
+    PROFILE_LIKED = '[data-e2e="user-info-like"]'
+    ESC_KEY = '\ue00c'  # Selenium Keys.ESCAPE, sent to the body to dismiss the overlay
     #: The board page and its own endpoint. Measured twice today
     #: (``scratchpad/douyin_hot_static.json``): asked from inside a loaded ``/hot``
     #: document with a URL built **from literals** — no ``a_bogus``, no ``msToken``, no
@@ -92,6 +111,17 @@ class DouyinCrawler(VideoCrawler):
     MOUNT_WAIT = 45.0
     #: How long one scroll is allowed to take to pay out new rows.
     SCROLL_WAIT = 14.0
+    #: How long a single overlay read waits for the clicked slide to paint. Deliberately far
+    #: short of :attr:`MOUNT_WAIT`: that 45 s clock is a page-arrival budget, and spending it per
+    #: row would make a stuck card cost more than the old navigation did. A slide that has not
+    #: painted inside this window is treated as un-clickable and deferred, not waited out.
+    MODAL_WAIT = 12.0
+    #: How many times one card is retried (re-surfaced by a later scroll round and clicked again)
+    #: before the walk gives up on it. A stuck overlay is often transient — the slide hydrates late,
+    #: a sticky header ate one click — so dropping it the first time would be 漏采. Bounding the
+    #: retries is what keeps a genuinely-unclickable card from looping forever; past this the id is
+    #: consumed and counted as deferred (named at the end), never navigated.
+    MODAL_MAX_TRIES = 3
     POLITE_BASE = 1.0
     POLITE_SPREAD = 0.4
 
@@ -160,13 +190,16 @@ class DouyinCrawler(VideoCrawler):
         # run skips what it already paid for and the cursor stays a position.
         done = {str(row.get('视频ID') or '') for row in self.results() if row.get('视频ID')}
         self._list_end_attested = False
-        # Counted during the walk so its end can tell a captcha-refused 0 (风控) from a genuine
-        # short list — the profile title is clean by then, so only this tally sees the refusals.
-        self._detail_walled = 0
+        # Cards whose overlay would not open (after bounded retries) are counted here and named at
+        # the end — the overlay path never navigates, so there is no per-detail wall tally to keep.
+        self._modal_deferred = 0
+        # 粉丝/获赞 are account-level and NOT in the slide; read them once off the profile page so
+        # every row carries them (blank if the profile published none — never a fabricated 0).
+        self._profile_totals = self._read_profile_totals()
         self._open_each(
+            url,
             lambda: self._grid_ids(),
             self._scroll_profile,
-            lambda: self._return_to_profile(url),
             done,
             target_count,
         )
@@ -176,27 +209,31 @@ class DouyinCrawler(VideoCrawler):
             # No count on the page is not a count of zero: the line says so instead
             # of printing a number the site never published.
             logger.info(t('crawl.dy.authorDoneNoCount', n=self.collected()))
-        # U1: license ONLY a positive site fact. The profile's own 作品 total reached, or the
-        # list's 「暂时没有更多了」 marker, are attested; a grid that merely stopped growing is
-        # indistinguishable from a soft throttle or an honest 继续 replay, so we license
-        # NOTHING there (end_reason stays None) rather than false-convict a good crawl. §6's
-        # actual conviction needs a positive "incomplete" signal, which only live measurement
-        # can supply per platform (#7). The ONE exception is a walk that collected NOTHING while
-        # its content pages were refused: a per-detail-page 验证码 is normally just the 图文 route
-        # this browser is denied (measured ~15 of 39), and the profile title is NOT a captcha once
-        # we return to it, so the title-based latch above would miss it. But when ZERO rows landed
-        # while detail pages answered 验证码中间页, the site did not "run out" — it refused every
-        # row. That is a positive 风控 signal: latch it (which also suppresses the licenses below,
-        # so the list's own 「没有更多了」 cannot whitewash a 0-row captcha stall), and let the
-        # executor name it as 风控-back-off. A crawl that collected SOME rows keeps its licenses —
-        # a walled 图文 alongside rendered videos is normal, not a blocked session.
-        if target_count and self.collected() == 0 and self._detail_walled:
-            self.risk_blocked = True
-        if self.collected() < target_count and not (self._is_walled() or self.risk_blocked or self.may_stop()):
+        # The overlay never navigates, so a stuck card is DEFERRED, not chased. That leaves one gap
+        # U1 must not paper over: a walk that collected NOTHING while the grid clearly had cards to
+        # open (it paged, ids were harvested, but not one overlay opened) is a failed read — NOT the
+        # site running out. If the page is now captcha-titled that is 风控 (back off); otherwise it is
+        # a real shortfall → ``UNDER_TARGET``, which the executor refuses by name and keeps resumable.
+        # A walk that collected SOME rows is left to the licenses below (a 图文 refusal among
+        # rendered videos is normal). ``end_reason is None`` guard stops a license overwriting this.
+        if target_count and self.collected() == 0 and self._modal_deferred:
+            if self._is_walled():
+                self.risk_blocked = True
+            else:
+                self.note_end(UNDER_TARGET)
+        if (
+            self.collected() < target_count
+            and self.end_reason is None
+            and not (self._is_walled() or self.risk_blocked or self.may_stop())
+        ):
             if published >= 0 and self.collected() >= published:
                 self.note_end('capped')
             elif self._list_end_attested:
                 self.note_end('site_end')
+        if self._modal_deferred:
+            # Said once, and about a count: N cards this run could not open is the difference between
+            # 「采完了」 and 「采到一半遮罩点不开」, and only the first is a site fact.
+            logger.info(t('crawl.dy.modalDeferred', n=self._modal_deferred, total=target_count))
         return self.results()
 
     # ─── the site's own hot board ──────────────────────────────────────
@@ -300,29 +337,27 @@ class DouyinCrawler(VideoCrawler):
 
     # ─── spending the list ─────────────────────────────────────────────
 
-    def _open_each(self, read_ids, scroll, reopen, done: set, target_count: int) -> int:
-        """Take the whole list first, then spend one detail visit per id.
+    def _open_each(self, profile_url: str, read_ids, scroll, done: set, target_count: int) -> int:
+        """Take the list, then read each id through the in-page overlay — NO per-row navigation.
 
-        Two passes and never interleaved, because a detail visit is a **whole navigation**:
-        measured 2026-09-26 on the user's own run (关键词 IU, 目标 50) the interleaved shape
-        read the first screen (26 cards), opened all 26, and then asked the page it was
-        standing on — which by then was the last **video** page — to hand it more result
-        cards. It never does, so a douyin search stopped at one screen however large the
-        target was, finishing as「翻了 2 屏」with 26 of 50 rows and no complaint. The fake
-        driver hid this for the whole time: it served the search cards from a fixed list no
-        matter which address was loaded.
+        Two passes and never interleaved: harvest a pool of ids by scrolling the grid, then spend one
+        overlay read per id. The overlay does NOT replace the grid (it opens over the SAME profile
+        document and ``ESC`` dismisses it), so this never re-navigates the profile between rounds —
+        the grid stays mounted underneath. A card that would not open (virtualised away, a click the
+        sticky header swallowed, a slide that never painted) is DEFERRED and counted, not chased with
+        a navigation: re-navigating per stuck card is the storm this change removes, and it would cost
+        more than the old path. Every pool id is consumed once (added to ``done``), so the walk always
+        terminates; ``_modal_deferred`` makes the shortfall visible at the end rather than silent.
 
-        *reopen* is what makes a pool that ran dry on blank detail pages recoverable: the
-        walk comes back to the list and keeps going from the ids ``done`` has not paid for
-        yet. A round whose ids are all already known is **not** the end of the list either —
-        that is the resumed run's ordinary first screen — so only a scroll that pays out
-        nothing ends the walk.
+        Only a scroll that pays out nothing ends the list — a round whose ids are all already known is
+        the resumed run's ordinary first screen, not the end of supply.
         """
         screens = 0
         first = True
+        attempts: dict = {}
         while not self.may_stop() and self.collected() < target_count:
             if not first:
-                reopen()
+                self._ensure_grid(profile_url)
             first = False
             pool, drained, taken = self._harvest_pool(read_ids, scroll, done, target_count - self.collected())
             screens += taken
@@ -331,21 +366,43 @@ class DouyinCrawler(VideoCrawler):
             for aweme_id in pool:
                 if self.collected() >= target_count or self.may_stop():
                     break
+                row = self._modal_row(aweme_id)
+                if row is self.DEFER:
+                    self._close_modal()  # a stuck overlay would cover the next card
+                    tries = attempts.get(aweme_id, 0) + 1
+                    attempts[aweme_id] = tries
+                    # Not consumed yet: leave the id out of ``done`` so a later round (while the card
+                    # is still on screen) re-surfaces and retries it — 不漏采 over a transient stall.
+                    # Only give up, and count it, after the bounded retries.
+                    if tries >= self.MODAL_MAX_TRIES:
+                        done.add(aweme_id)
+                        self._modal_deferred += 1
+                    continue
                 done.add(aweme_id)
-                row = self._detail_row(aweme_id)
                 if row and self.emit(row):
                     logger.info(t('crawl.dy.processed', i=aweme_id, n=self.collected()))
-                # ``page`` is kept as the cursor key because runs saved before the
-                # shared walk already store the round number under it. The cursor
-                # records position only — the already-opened ids come back from the
-                # seeded rows, never from an id list written here.
+                # ``page`` is kept as the cursor key because runs saved before the shared walk already
+                # store the round number under it. The cursor records position only — the already-read
+                # ids come back from the seeded rows, never from an id list written here.
                 self.mark_position(page=screens, done=self.collected())
                 self._polite_pause(0.6, 0.2)
             if drained:
-                # The list itself said it has nothing more, so every row this crawl can get is
-                # either collected already or one of the detail pages that published nothing.
+                # The list itself said it has nothing more, so every row this crawl can get is either
+                # collected already or one whose overlay published nothing (or was deferred).
                 break
         return screens
+
+    def _ensure_grid(self, profile_url: str) -> None:
+        """Make sure the grid is back and clickable between rounds.
+
+        Reading a row opens an overlay over the grid and closes it with ``ESC``; if a read ever left
+        an overlay stuck open the next scroll would feed the slide instead of the grid. Re-opening the
+        profile only when the grid is gone keeps this cheap — in the normal path it is just a dismiss +
+        presence check, NOT the full re-navigation the old per-detail walk paid every round.
+        """
+        self._close_modal()
+        if not self._grid_ids():
+            self._return_to_profile(profile_url)
 
     def _harvest_pool(self, read_ids, scroll, done: set, need: int) -> tuple:
         """Scroll the list — and nothing but the list — until it holds *need* unpaid-for ids.
@@ -559,6 +616,202 @@ class DouyinCrawler(VideoCrawler):
         """
         return any(mark in self._body_text(limit=6000) for mark in self.LIST_END_MARKS)
 
+    # ─── reading one video through the overlay (no navigation) ─────────
+
+    def _modal_open(self) -> bool:
+        """Is an overlay currently up? Active slide node, or a ``?modal_id=`` in the URL."""
+        try:
+            if self.driver.find_elements('css selector', self.ACTIVE_SLIDE):
+                return True
+        except Exception:
+            return False
+        return bool(self._active_modal_id())
+
+    def _close_modal(self) -> bool:
+        """Dismiss the overlay with ESC and VERIFY it went — a blind ESC is not "closed".
+
+        Returns whether the overlay is gone. A stuck overlay would cover the next card, so the
+        caller needs the true answer rather than hope; ESC is sent, a short bounded re-check polls
+        for it, then ESC fires once more before giving up.
+        """
+        for _ in range(2):
+            with contextlib.suppress(Exception):
+                self.driver.find_element('css selector', 'body').send_keys(self.ESC_KEY)
+            if feed.wait_for(lambda: not self._modal_open(), 1, timeout=3.0, tick=0.5):
+                return True
+        return not self._modal_open()
+
+    def _find_card(self, aweme_id: str):
+        """The profile-grid anchor whose OWN id equals *aweme_id* — matched by parsed id, not a
+        substring, so a 19-digit id that merely prefixes another cannot return the wrong card."""
+        for el in self.driver.find_elements('css selector', self.PROFILE_ANCHOR):
+            with contextlib.suppress(Exception):
+                match = self.VIDEO_HREF.search(str(el.get_attribute('href') or ''))
+                if match and match.group(1) == str(aweme_id):
+                    return el
+        return None
+
+    def _open_modal(self, aweme_id: str) -> bool:
+        """Click this id's grid card so the overlay opens on it; no navigation to chase a missing card.
+
+        Returns True only when the overlay is showing THIS id and its slide has painted. A card the
+        grid has virtualised away is NOT recovered by re-navigating the profile (that is the storm
+        this whole change removes) — it returns False, and the caller defers the id to a later round
+        where scrolling may re-surface it.
+        """
+        card = self._find_card(aweme_id)
+        if card is None:
+            return False
+        try:
+            self.driver.execute_script('arguments[0].scrollIntoView({block:"center"});', card)
+            card.click()
+        except Exception:
+            return False
+        # The overlay swaps the URL to modal_id=<id> with no document navigation; wait only as long
+        # as a slide should need to paint, and require it be THIS id, never a neighbour.
+        return bool(
+            feed.wait_for(
+                lambda: self._active_modal_id() == str(aweme_id) and self._slide_painted(),
+                1,
+                timeout=self.MODAL_WAIT,
+                tick=0.5,
+            )
+        )
+
+    def _slide_painted(self) -> bool:
+        """The active slide has real content (a caption or a counter) — one read, not two."""
+        facts = self._active_facts()
+        return bool(facts.get('desc') or facts.get('digg'))
+
+    def _active_modal_id(self) -> str:
+        """The id the overlay is currently showing (from ``?modal_id=``), or ''."""
+        match = self.MODAL_ID_RE.search(self._current_url() or '')
+        return match.group(1) if match else ''
+
+    def _active_facts(self) -> dict:
+        """Read the ACTIVE slide only — the neighbour ``feed-item`` is in the DOM and must not mix in.
+
+        Counters carry by their own ``data-e2e`` names exactly as on the standalone page; 正文 comes
+        from ``video-desc`` and 作者/发布时间 are parsed from ``video-info`` (``@name · date · #tags``).
+        Returns an empty dict when there is no active slide (overlay not open / refused).
+        """
+        script = """
+        var root = document.querySelector(arguments[0]);
+        if (!root) { return {}; }
+        function t(sel) {
+          var el = root.querySelector(sel);
+          return el ? (el.innerText || '').trim().replace(/\\s+/g, ' ') : '';
+        }
+        return {
+          digg: t('[data-e2e="video-player-digg"]'),
+          comment: t('[data-e2e="feed-comment-icon"]'),
+          collect: t('[data-e2e="video-player-collect"]'),
+          share: t('[data-e2e="video-player-share"]'),
+          desc: t('[data-e2e="video-desc"]'),
+          info: t('[data-e2e="video-info"]'),
+          nickname: t('[data-e2e="feed-video-nickname"]')
+        };
+        """
+        with contextlib.suppress(Exception):
+            found = self.driver.execute_script(script, self.ACTIVE_SLIDE)
+            if isinstance(found, dict):
+                return found
+        return {}
+
+    def _read_profile_totals(self) -> tuple:
+        """The account's 粉丝/获赞, read once off the profile page (the slide does not carry them).
+
+        Account-level, so one read applies to every row; ``-1``-style absence becomes blank rather than
+        a fabricated 0 — a number the page did not publish is not a count the account is claiming.
+        """
+
+        def _num(selector) -> str:
+            element = self._element_or_none(selector)
+            if element is None:
+                return ''
+            value = parse_count(self._node_text(element))
+            return value if value else ''
+
+        return _num(self.PROFILE_FANS), _num(self.PROFILE_LIKED)
+
+    #: A full calendar date with a four-digit year: 2025年11月12日, 2026-08-04, 2026/8/4, 2026.8.4.
+    #: Anchored at the start of a segment so trailing tags/prose are not captured.
+    _DATE_RE = re.compile(r'^(\d{4}\s*[年./-]\s*\d{1,2}\s*[月./-]\s*\d{1,2}\s*日?)')
+    # Relative stamps (「刚刚」/「3天前」) rot the moment they are stored, and a no-year 「2月25日」 is
+    # not comparable against the year-bearing rows beside it — both are worse in a 发布时间 column
+    # than a blank, which is the same rule that keeps a wrong number out of 播放数.
+
+    @classmethod
+    def _publish_from_info(cls, info: str) -> str:
+        """The publish date out of ``video-info`` (``@作者 · 2025年11月12日 #标签…``) — or blank.
+
+        The overlay has no dedicated publish-time node and its date is coarser than the standalone
+        page. This accepts ONLY a year-bearing calendar date at the start of a segment; a hashtag
+        (``#2025年高考``), a relative word (``刚刚``/``3天前``) or a year-less fragment (``2月25日``)
+        is left out rather than filed as a timestamp — a half-token that sorts as a date is exactly
+        the "right column name, wrong value" the repo refuses elsewhere.
+        """
+        for part in str(info or '').split('·'):
+            token = part.strip()
+            if token.startswith('#'):
+                continue
+            match = cls._DATE_RE.match(token)
+            if match:
+                return re.sub(r'\s+', '', match.group(1))[:40]
+        return ''
+
+    #: Returned by :meth:`_modal_row` when the overlay simply would not open on this card — the id is
+    #: left unpaid so a later scroll round may re-surface it, instead of paying a navigation to chase it.
+    DEFER = object()
+
+    def _modal_row(self, aweme_id: str) -> dict | None:
+        """One row read off the overlay, or :attr:`DEFER` if it would not open (never a navigation).
+
+        An un-clickable card is DEFERRED — the grid virtualises, and the old walk re-navigated the
+        profile to chase it, which is exactly the page-load storm this change removes. Opening the
+        overlay on THIS id and reading the active slide is the only path here; ``get_detail`` keeps
+        the standalone navigation for a single pasted URL, which has no grid to click.
+        """
+        if not self._open_modal(aweme_id):
+            return self.DEFER
+        try:
+            facts = self._active_facts()
+            shown = self._active_modal_id()
+            if shown and shown != str(aweme_id):
+                # The active slide is a different video than the card we asked for — a wrong row is
+                # data, so refuse it; deferring lets the next look try this id again.
+                logger.warning(t('crawl.dy.detailSwapped', i=aweme_id, shown=shown))
+                return self.DEFER
+            text = facts.get('desc') or ''
+            publish = self._publish_from_info(facts.get('info') or '')
+            nickname = (facts.get('nickname') or '').lstrip('@').strip()
+            followers, liked = self._profile_totals
+            if not text and not publish:
+                # Identity is the caption or its date — an overlay still hydrating has neither, and an
+                # empty row is not data no matter whose counters briefly rendered. CONSUMED (not
+                # deferred): a slide that opened and stayed empty is that post having no text, not a
+                # stuck card, so re-reading it next round would only spend the budget again.
+                logger.warning(t('crawl.dy.detailNoIdentity', i=aweme_id))
+                return None
+            return {
+                # 标题 is the caption on this site (there is no separate video title in the overlay);
+                # never ``self._title()`` — that is the PROFILE document's title, not this video's.
+                '标题': text[:120],
+                '正文': text,
+                '作者': nickname,
+                '粉丝数': followers,
+                '获赞数': liked,
+                '发布时间': publish,
+                '视频ID': str(aweme_id),
+                '点赞数': parse_count(facts.get('digg')),
+                '评论数': parse_count(facts.get('comment')),
+                '收藏数': parse_count(facts.get('collect')),
+                '转发数': parse_count(facts.get('share')),
+                '链接': f'https://www.douyin.com/video/{aweme_id}',
+            }
+        finally:
+            self._close_modal()
+
     # ─── one video ────────────────────────────────────────────────────
 
     def get_detail(self, url: str) -> dict | None:
@@ -591,10 +844,7 @@ class DouyinCrawler(VideoCrawler):
                 # 「没有渲染出数据」 was therefore a wrong sentence about a real event, and the wrong sentence
                 # invites the wrong repair. It is NOT the session either: latching ``login_wall`` here would
                 # hand the whole node to 「COOKIE 可能过期」 while the next card crawls fine, so the flag is
-                # read but not set, and the walk keeps going. The COUNT is kept, though — ``author`` turns
-                # "zero rows while every detail was refused" into a crawl-level 风控, which is the one shape
-                # the profile-title read cannot see (a 图文 route refusal, not a login page).
-                self._detail_walled += 1
+                # read but not set, and the walk keeps going — this single video is refused, the crawl moves on.
                 logger.warning(t('crawl.dy.detailWalled', i=aweme_id))
                 return None
             # Two different complaints. "No data rendered" says the page arrived and

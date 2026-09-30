@@ -25,7 +25,7 @@ import pytest
 from selenium.common.exceptions import TimeoutException
 
 import crawlers.base as base_module
-from crawlers.base import Crawler
+from crawlers.base import UNDER_TARGET, Crawler
 from crawlers.comments import BLOCKED, DEAD, OK, CommentSession, douyin_comment_fields, parse_douyin_comments
 from crawlers.douyin import (
     DouyinCrawler,
@@ -49,23 +49,31 @@ COMMENT_BLOCK = '\n'.join(
 
 
 class El:
-    def __init__(self, text='', attrs=None, intercept=False):
+    def __init__(self, text='', attrs=None, intercept=False, on_click=None, on_send_keys=None):
         self.text = text
         self._attrs = attrs or {}
         self.sent = []
         self.clicked = False
         self._intercept = intercept
+        # Overlay emulation: a grid card's click opens the modal, and ESC on the body closes it.
+        # Optional so every other El (comment items, counters) is unchanged.
+        self._on_click = on_click
+        self._on_send_keys = on_send_keys
 
     def get_attribute(self, name):
         return self._attrs.get(name, '')
 
     def send_keys(self, value):
         self.sent.append(value)
+        if self._on_send_keys:
+            self._on_send_keys(value)
 
     def click(self):
         if self._intercept:
             raise RuntimeError('element click intercepted')
         self.clicked = True
+        if self._on_click:
+            self._on_click()
 
 
 class FakeDriver:
@@ -189,6 +197,38 @@ class FakeDriver:
         # How many of those moves happened while the driver was standing on a video page —
         # i.e. how much of the walk was paging something that is not the list it came from.
         self.detail_scrolls = 0
+        # Overlay state: the author reads through the in-page modal (a card click swaps the URL to
+        # ``?modal_id=<id>`` with NO document navigation; ESC dismisses it). Only ``get`` records a
+        # visit, so a modal read leaves ``visited`` at the single profile load — which is the whole
+        # point the test proves.
+        self._modal_id = ''
+        self._profile_base = ''
+
+    def _open_modal(self, aweme_id):
+        self._modal_id = str(aweme_id)
+        self._profile_base = self.current_url
+        self.current_url = f'{self._profile_base}?modal_id={aweme_id}'
+
+    def _close_modal(self):
+        if self._modal_id:
+            self._modal_id = ''
+            self.current_url = self._profile_base
+
+    def _modal_facts(self):
+        """The ACTIVE slide's fields, mapped onto the names the overlay reader expects."""
+        src = dict(self.facts_by_id.get(self._modal_id, self.facts))
+        caption = (src.get('info') or '').split('\n')[0].strip()
+        # Real ``video-info`` reads ``@作者 · 2025年11月12日 #话题`` — date then hashtags, no prose
+        # between — so the publish parse must see that shape, not the caption's leading words.
+        return {
+            'digg': src.get('digg', ''),
+            'comment': src.get('comment', ''),
+            'collect': src.get('collect', ''),
+            'share': src.get('share', ''),
+            'desc': caption,
+            'info': '@测试作者 · 2026-08-04 #示例',
+            'nickname': '@测试作者',
+        }
 
     def get(self, url):
         self.visited.append(url)
@@ -217,9 +257,14 @@ class FakeDriver:
 
     def find_element(self, by, selector):
         if selector == 'body':
-            if self.body is not None:
-                return El(self.body)
-            return El(self.video_body if '/video/' in self.current_url else self.list_body)
+            # ESC on the body dismisses the overlay (the modal path); the text it reports is the
+            # page body either way.
+            text = (
+                self.body
+                if self.body is not None
+                else (self.video_body if '/video/' in self.current_url else self.list_body)
+            )
+            return El(text, on_send_keys=lambda _v: self._close_modal())
         if selector == '[data-e2e="comment-list"]':
             return El('')
         if selector == '[data-e2e="feed-comment-icon"]':
@@ -248,7 +293,17 @@ class FakeDriver:
         if selector == DouyinCrawler.PROFILE_ANCHOR:
             if '/user/' not in self.current_url:
                 return []
-            return [El('', {'href': f'https://www.douyin.com/video/{aweme_id}'}) for aweme_id in self.grid]
+            # Each grid card carries a click that opens the overlay on ITS id (the product matches the
+            # card by parsed id, not by the first anchor) — this is what lets a wrong-card / neighbour
+            # read be caught, and what the author test needs to drive the modal path at all.
+            return [
+                El(
+                    '',
+                    {'href': f'https://www.douyin.com/video/{aweme_id}'},
+                    on_click=lambda i=str(aweme_id): self._open_modal(i),
+                )
+                for aweme_id in self.grid
+            ]
         if selector == '[data-e2e="comment-item"]':
             if self.comment_pages:
                 # The panel lazy-fills: what it holds is a function of how many times it has been
@@ -259,6 +314,12 @@ class FakeDriver:
         return []
 
     def execute_script(self, script, *args):
+        if 'feed-video-nickname' in script:
+            # The overlay read is scoped to the active slide; it MUST pass feed-active-video as the
+            # root. Returning the neighbour's/global facts for any other root is exactly the mix-up
+            # the docs warn about, so an un-scoped reader gets nothing rather than wrong data.
+            scoped = args and args[0] == DouyinCrawler.ACTIVE_SLIDE
+            return self._modal_facts() if (self._modal_id and scoped) else {}
         if 'documentURI' in script:
             return self.document_uri
         if 'innerText' in script and args:
@@ -350,6 +411,18 @@ class TestPureHelpers:
         assert douyin_id(ID) == ID
         assert douyin_id('https://www.douyin.com/jingxuan') == ''
         assert douyin_id('') == ''
+
+    def test_the_overlay_publish_date_accepts_only_a_full_calendar_date(self):
+        """The overlay has no dedicated publish node — its date hides inside ``video-info``. Only a
+        year-bearing date is trusted; a hashtag, a relative word, or a year-less fragment stays blank
+        rather than landing a value that sorts as a timestamp but is not one (the 播放数 rule again)."""
+        pub = DouyinCrawler._publish_from_info
+        assert pub('@白水 · 2025年11月12日 #镇平五朵山') == '2025年11月12日'
+        assert pub('@白水 · 2026-08-04 #tag') == '2026-08-04'
+        assert pub('@白水 · #2025年高考 #倒计时100天') == '', 'a hashtag whose digits look like a year'
+        assert pub('@白水 · 刚刚') == '' and pub('@白水 · 3天前') == '', 'relative stamps rot once stored'
+        assert pub('@白水 · 2月25日 #tag') == '', 'no year is not comparable with the year-bearing rows'
+        assert pub('') == '' and pub(None) == ''
 
     def test_counts_honour_the_chinese_units(self):
         # The parser itself lives in ``crawlers.engine.counters`` (every platform
@@ -564,17 +637,35 @@ class TestAuthorProfile:
         assert driver.visited[0] == DouyinCrawler.PROFILE_ENTRY.format(sec=SEC)
         assert len([u for u in driver.visited if '/user/' in u]) == 1, 'the grid is one navigation, then scrolls'
 
-    def _author_shape(self, crawler, monkeypatch, *, detail_walled, list_end, seeded_rows):
-        """Drive ``author`` to a fixed end-state: the grid arrived and drained, N rows landed, and
-        ``detail_walled`` content pages answered 验证码中间页 — the shape a real 风控 stall leaves.
+    def test_the_author_reads_each_row_through_the_overlay_without_a_video_navigation(self, make_crawler):
+        """The #1 风控 fix in code: a row is read by clicking its card (same-document overlay at
+        ``?modal_id=``) and dismissing with ESC — NO ``/video/<id>`` navigation per row, which is the
+        page-load storm that drew the captcha. Fields come from the active slide's own names, and the
+        overlay is closed after every row so the next card is clickable."""
+        crawler, driver = make_crawler(cards=[], grid=[ID], grid_batches=[[OTHER]], works='2')
+        rows = crawler.author(SEC, target_count=2)
+        assert [str(r['视频ID']) for r in rows] == [ID, OTHER]
+        assert not any('/video/' in u for u in driver.visited), f'author must not navigate to /video: {driver.visited}'
+        assert len([u for u in driver.visited if '/user/' in u]) == 1, 'one profile navigation; the rest is clicks'
+        first = rows[0]
+        # Read off the overlay: caption is 正文, the @-name loses its @, the date is parsed from
+        # video-info (coarser than the old page — a date, not a timestamp), and the account totals
+        # are NOT in the slide → blank, never a fabricated 0.
+        assert first['正文'].startswith('归墟第十二集')
+        assert first['作者'] == '测试作者'
+        assert first['发布时间'] == '2026-08-04'
+        assert first['点赞数'] == 59000 and first['评论数'] == 2099
+        assert first['粉丝数'] == '' and first['获赞数'] == '', 'profile published no totals in this fixture'
+        assert driver._modal_id == '', 'every row read left the overlay dismissed'
 
-        White-box on purpose: the rule under test is the end-of-walk decision, not the paging (which
-        the case above covers). Everything the walk does before that decision is stubbed to the
-        measured live outcome, so the assertions read on the one branch the live run exposed.
+    def _author_shape(self, crawler, monkeypatch, *, modal_deferred, list_end, seeded_rows, walled=False):
+        """Drive ``author`` to a fixed end-state: the grid arrived and drained, N rows landed, and
+        ``modal_deferred`` cards' overlays would not open. White-box on purpose — the rule under test
+        is the end-of-walk decision, so everything before it is stubbed to the measured shape.
         """
 
         def _walk(*_a, **_k):
-            crawler._detail_walled = detail_walled
+            crawler._modal_deferred = modal_deferred
             crawler._list_end_attested = list_end
 
         for name, value in {
@@ -582,35 +673,53 @@ class TestAuthorProfile:
             '_dismiss_prompts': lambda *_a, **_k: None,
             '_published_count': lambda: 145,
             '_wait_for_grid': lambda timeout=None: {'arrived': True, 'waited': 0.0, 'verdict': '', 'gave_up': 0},
-            '_is_walled': lambda: False,
+            '_is_walled': lambda: walled,
             'may_stop': lambda: False,
             '_open_each': _walk,
         }.items():
             monkeypatch.setattr(crawler, name, value)
         crawler._collected = list(seeded_rows)
 
-    def test_an_author_walk_of_zero_captcha_refused_details_is_risk_not_a_site_end(self, make_crawler, monkeypatch):
-        """#1, the live-exposed gap: the grid arrived and printed 「没有更多了」, but EVERY content page
-        was a 验证码 → 0 rows. A 0 that was refused is 风控 (back off), never the list's end marker
-        licensing an empty as 「the creator has no more」."""
+    def test_an_author_walk_of_zero_with_all_overlays_deferred_convicts_rather_than_site_end(
+        self, make_crawler, monkeypatch
+    ):
+        """The live-exposed gap: the grid arrived and paged, but NO overlay opened → 0 rows. That is a
+        failed read, not the site running out — convict it (``UNDER_TARGET``, resumable) rather than
+        let the list's 「没有更多了」 license an empty as ``site_end`` / settle 完成."""
         crawler, _driver = make_crawler(cards=[])
-        self._author_shape(crawler, monkeypatch, detail_walled=12, list_end=True, seeded_rows=[])
+        self._author_shape(crawler, monkeypatch, modal_deferred=12, list_end=True, seeded_rows=[])
         rows = crawler.author(SEC, target_count=12)
         assert rows == [], 'nothing was collected'
-        assert crawler.risk_blocked is True, 'a captcha-refused 0 is 风控, not a short list'
-        assert crawler.end_reason != 'site_end', "the grid's end marker must not whitewash an all-refused walk"
+        assert crawler.risk_blocked is False, 'no captcha was seen, so this is not 风控 — it is a failed read'
+        assert crawler.end_reason == UNDER_TARGET, 'convicted, never whitewashed by the list-end marker'
 
-    def test_a_partial_author_walk_with_a_refused_image_text_is_not_risk(self, make_crawler, monkeypatch):
-        """The false-positive guard M4: one refused 图文 alongside rendered videos is the route the
-        site denies for this browser, not a throttled session — a crawl that DID collect keeps its
-        ``site_end`` license and must never be convicted."""
+    def test_a_zero_with_deferred_cards_and_a_captcha_is_risk_not_under_target(self, make_crawler, monkeypatch):
+        """Same 0-row shape, but a captcha appeared *during* the walk (clean page open, wall shows
+        later): that is 风控 (back off), not a convictable shortfall. Driven by stubbing the open-time
+        wall off and the end-time wall on, which is the only way to reach that branch."""
+        crawler, _driver = make_crawler(cards=[])
+        calls = {'n': 0}
+
+        def _wall_later():
+            calls['n'] += 1
+            return calls['n'] >= 2  # False at author's page-open check, True by the end decision
+
+        self._author_shape(crawler, monkeypatch, modal_deferred=12, list_end=True, seeded_rows=[])
+        monkeypatch.setattr(crawler, '_is_walled', _wall_later)
+        rows = crawler.author(SEC, target_count=12)
+        assert rows == []
+        assert crawler.risk_blocked is True, 'a captcha mid-read is 风控'
+        assert crawler.end_reason is None, 'risk is not a licensing/conviction verdict — the gate skips it'
+
+    def test_a_partial_author_walk_with_deferred_cards_is_not_convicted(self, make_crawler, monkeypatch):
+        """A crawl that DID collect some rows and merely deferred a few 图文 cards is not a failed
+        read — it keeps its ``site_end`` license and must never be convicted or called 风控."""
         crawler, _driver = make_crawler(cards=[])
         seeded = [{'视频ID': ID, '标题': 't'}]
-        self._author_shape(crawler, monkeypatch, detail_walled=3, list_end=True, seeded_rows=seeded)
+        self._author_shape(crawler, monkeypatch, modal_deferred=3, list_end=True, seeded_rows=seeded)
         rows = crawler.author(SEC, target_count=12)
         assert len(rows) == 1
-        assert crawler.risk_blocked is False, 'a partial walk that produced rows is not a blocked session'
-        assert crawler.end_reason == 'site_end', 'the drained grid still licenses a genuine short'
+        assert crawler.risk_blocked is False and crawler.end_reason == 'site_end'
 
     def test_the_harvest_loop_waits_on_its_own_list_not_on_the_search_route(self, make_crawler, monkeypatch):
         """A remount wait belongs to the list being read, not to whichever route mounted first.
@@ -656,11 +765,15 @@ class TestAuthorProfile:
         assert driver.detail_scrolls == 0, 'the grid was paged from a video page, which has none'
         assert driver.window_scrolls == 0, 'and it is still the container that pages a profile, not the window'
 
-    def test_the_numbers_come_from_opening_the_video_not_from_the_card(self, make_crawler):
+    def test_the_numbers_come_from_the_overlay_not_from_the_card(self, make_crawler):
+        """The counters are not on the grid card — they come from reading the opened video (now the
+        in-page overlay). The overlay names its author on ``feed-video-nickname`` (leading ``@`` lost)
+        and its date inside ``video-info`` — coarser than the old ``/video`` page (a date, not a
+        timestamp) — and the account 粉丝/获赞 are not on the slide at all, so they come from the profile."""
         crawler, _driver = make_crawler(cards=[], grid=[ID], works='1')
         row = crawler.author(f'https://www.douyin.com/user/{SEC}?from_tab_name=main', target_count=1)[0]
         assert row['点赞数'] == 59000 and row['评论数'] == 2099 and row['收藏数'] == 9241 and row['转发数'] == 7839
-        assert row['作者'] == '泫九' and row['发布时间'] == '2026-08-04 16:32'
+        assert row['作者'] == '测试作者' and row['发布时间'] == '2026-08-04'
         assert row['视频ID'] == ID and '播放数' not in row
 
     def test_a_profile_that_publishes_zero_works_is_an_answer_not_a_failure(self, make_crawler):

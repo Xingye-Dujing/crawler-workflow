@@ -6,22 +6,26 @@ was removed (its feed is shallow and lazily throttled, measured at 26 then 16 di
 two keywords, neither reaching the site's own 「暂时没有更多了」), so this tier covers the three
 douyin modes that page differently and work — **author**, **热榜**, **评论**.
 
-What is platform-specific here is the **cost model**: author mode is ``collects='page_per_row'``
-— a row costs one detail navigation (the grid card publishes one rounded figure and nothing
-else) — so a 12-row ask buys ~18-20 page loads, and the funnel question is not "how many windows
-did the walk touch" but **how many pages were opened and how many of them published nothing**.
+What is platform-specific here is the **cost model**: author mode is ``collects='modal_per_row'``
+— the grid is opened once and each row is read off an in-page overlay that opens and closes on the
+profile's own document, so a row costs a **click and a slide read, not a navigation**. The per-row
+``/video`` navigation was removed (that storm was a 风控 trigger), so the funnel question is not
+"how many pages were opened" but **how many overlays opened on THIS id and published nothing**.
 Measured while writing this (``backend/test_dy_author.py`` → ``scratchpad/dy_*.json``), and
 load-bearing for the assertions below:
 
 * the author grid pages by its **own** scroll box (the window moves the footer's recommendations
   instead); the product's walk reached 40 distinct ids when asked for 40, against a profile that
   publishes 作品 145.
-* 作者 used to come out of ``[data-e2e="related-video"]``, which this build no longer renders: every
-  row stored an empty author and two zeros (§6 U42). B1 asserts the column is *read*, because a green
+* 作者 on the overlay comes from ``feed-video-nickname`` (the old ``[data-e2e="related-video"]`` read,
+  which this build stopped rendering and left every row with an empty author and two zeros — §6 U42 —
+  is gone with the navigation). 粉丝数/获赞数 are not in the overlay at all, so they are read ONCE from
+  the profile page and applied to that author's rows; B1 asserts the columns are *read*, because a green
   tier that never looked at a blank column is how it stayed blank.
 
-**Cost, stated because it is the user's account.** Each author cell is one profile page plus ~1.5
-navigations per row; 热榜 is one page plus one request; 评论 scrolls one panel. Nothing here asks for
+**Cost, stated because it is the user's account.** Each author cell is one profile page plus an
+in-page overlay opened and closed once per row (no per-row navigation since the 遮罩 change); 热榜 is one
+page plus one request; 评论 scrolls one panel. Nothing here asks for
 more than 40 rows. Run in batches, domestic network, never unattended (douyin is
 ``profile_recommended``: a copy of the login is a second device, so this tier crawls in the user's own
 profile under ``CIXI_LIVE_USE_USER_PROFILE=1``, as §10 spells out)::
@@ -514,15 +518,15 @@ def test_d2_a_panel_that_refused_is_named_per_link(client, app_module, monkeypat
         run.finish(answer=answer, rows=len(rows), warn=True)
 
 
-# ─── G · the platform's own axes: page_per_row cost, and the profile ─────
+# ─── G · the platform's own axes: in-page overlay cost, and the profile ─────
 
 
 def test_g1_two_douyin_walks_in_parallel_both_arrive(client, app_module, monkeypatch):
     """G1 — douyin is *not* ``serial_only``, so a parallel canvas must deliver both tables.
 
-    The axis that matters here is the opposite of weibo's: this platform's rows each cost a
-    navigation, so two walks at once is the shape where a queue, a pool ceiling or a profile lock
-    would silently drop one of them. ``use_profile=False`` is plan decision D3 (one profile, one
+    The axis that matters here is the opposite of weibo's: this platform reads each row through the
+    profile's one browser, so two walks at once is the shape where a queue, a pool ceiling or a profile
+    lock would silently drop one of them. ``use_profile=False`` is plan decision D3 (one profile, one
     browser) and it is also what the hot board measured: the throwaway device is the one douyin
     serves.
 
@@ -598,9 +602,9 @@ def test_g1_two_douyin_walks_in_parallel_both_arrive(client, app_module, monkeyp
 #: changed under us — which is information, not a broken test.
 ACCEPTANCE_FILE = REPO_ROOT / 'data' / 'workflows' / '测试：抖音.json'
 
-#: Three components, one of them ``page_per_row``: 50 author rows is ~75 detail navigations on this
-#: platform (measured ~1.5 openings per row), the board is one page, and the comment leg is unbounded.
-#: The budget is the author cell's worst case twice plus the comment cell's own.
+#: Three components, one of them ``modal_per_row``: 50 author rows is 50 in-page overlay open/close
+#: cycles on one loaded profile (no per-row navigation since the 遮罩 change), the board is one page, and
+#: the comment leg is unbounded. The budget is the author cell's worst case twice plus the comment cell's own.
 ACCEPTANCE_TIMEOUT = 2 * DEEP_TIMEOUT + COMMENT_TIMEOUT
 
 

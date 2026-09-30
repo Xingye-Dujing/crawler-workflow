@@ -524,6 +524,19 @@ refusing on an empty 标题 would drop real data over one column.
   **没坏**（存下来的行是 `点赞 279000 / 评论 1473 / 收藏 13000 / 转发 40000`），
   是 `[data-e2e]` 遍历看不到它们（数在兄弟节点上），别照着探针「修」读数。
 
+* **作者模式改走「站内遮罩」读取，省掉逐条 `/video` 整页导航（U49，measured 2026-09-30，探针
+  `backend/test_douyin_modal_probe*.py` / `test_douyin_phase0.py` → `scratchpad/dy_phase0.log`）**：
+  点网格卡片是在**同一文档**弹预览遮罩——URL 变 `…?modal_id=<id>`、`document navigated: False`，读完 `ESC`
+  关掉、再点下一张卡切到新 id（`switched by click, descChanged=True`，两条都实测）。过去逐条 `open('/video/<id>')`
+  是**风控诱因**：本次账号被验证码挡时，网格正常到位、但**每条详情页全回 `验证码中间页`** → 0 行。遮罩读取把
+  「N 行 = N 次整页加载」压成「1 次个人页 + N 次点击」。字段差异（都实测、别猜）：遮罩是 **slide 列表**、
+  邻条 `feed-item` 也在 DOM，**一切读取限定 `[data-e2e="feed-active-video"]` 子树**否则读到邻条；正文=`video-desc`；
+  作者=`feed-video-nickname`（去 `@`）；**发布时间只在 `video-info` 里、比旧页粗**（`2025年11月12日`，有时无年份、无时分），
+  **只认带年份的绝对日期，其余（相对词/标签/无年份）一律留空**（B1：把 `#2025年高考` 写进发布时间列是「列名对、值是假的」）；
+  **粉丝/获赞不在遮罩里**（`fans_like:{}`），改从个人页 `user-info-fans`/`user-info-like` 读一次套用（账号级）。
+  **卡片点不开时本轮跳过该 id、绝不回退去 `/video` 导航**（那正是本改动要消掉的 storm）；若整轮 0 行而卡片确曾存在，
+  具名判 `UNDER_TARGET`（欠采可续跑），不被「没有更多了」许可成完成；遮罩内若见验证码则 `risk_blocked`（退避）。
+
 
 ## Bilibili
 
