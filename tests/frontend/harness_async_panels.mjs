@@ -37,18 +37,23 @@ const RESUME_RUNS = [
     },
 ];
 
+const OLLAMA_MODELS = ['m1:latest', 'm2:7b'];
+
 async function ticks(n) {
     for (let i = 0; i < (n || 6); i += 1) await new Promise((r) => setImmediate(r));
 }
 
 /* One world per scenario: the panel caches the markup it drew, and a shared one
    would let the second scenario read the first one's page. */
-function world() {
+function world(provider) {
     const pending = [];
     const inits = [];
     const sandbox = {
         ...baseSandbox(),
         I18n,
+        /* The process panel reads the run-level transport from here to decide
+           whether a per-node Ollama model box belongs at all. */
+        LLMSettings: { load: () => ({ provider: provider || 'ollama' }) },
         echarts: {
             init(el) {
                 inits.push(el);
@@ -81,11 +86,11 @@ function world() {
                 url: String(url),
                 body: options && options.body ? JSON.parse(options.body) : null,
                 answer: () => {
-                    const payload =
-                        String(url).indexOf('/api/runs/resumable') >= 0
-                            ? { ok: true, runs: RESUME_RUNS }
-                            : { ok: true, engine: 'echarts', option: {} };
-                    resolve({ json: () => Promise.resolve(payload) });
+                    const u = String(url);
+                    let payload = { ok: true, engine: 'echarts', option: {} };
+                    if (u.indexOf('/api/runs/resumable') >= 0) payload = { ok: true, runs: RESUME_RUNS };
+                    else if (u.indexOf('/api/llm/ollama/models') >= 0) payload = { ok: true, models: OLLAMA_MODELS };
+                    resolve({ json: () => Promise.resolve(payload), status: 200 });
                 },
             });
         });
@@ -147,8 +152,41 @@ async function dashCase(redrawMidFlight, tokenize) {
     };
 }
 
+/* ─── process node: the per-node Ollama model box ───────────────────────── */
+async function modelCase(provider, redrawMidFlight, current) {
+    const w = world(provider);
+    const params = { text_column: '正文', mode: 'llm' };
+    if (current !== undefined) params.model = current;
+    w.sandbox.canvas.nodes['pr-1'] = { id: 'pr-1', type: 'process', operation: 'emotion', title: '情感', params };
+    w.x.openSettings('pr-1');
+    if (redrawMidFlight) {
+        /* Editing any field rewrites the form while the tag list is in flight; the
+           loader must look the select up again after the await and fill the element
+           that is actually on screen, not the one it started with. */
+        w.x.openSettings('pr-1');
+    }
+    if (w.pending.length) w.pending[0].answer();
+    await ticks();
+    const content = String(w.sandbox.document.getElementById('settings-content').innerHTML || '');
+    const selMarkup = String(w.sandbox.document.getElementById('node-model-pr-1').innerHTML || '');
+    return {
+        asked: w.pending.length,
+        hasSelect: content.indexOf('node-model-pr-1') >= 0,
+        follow: selMarkup.indexOf('settings.followGlobalModel') >= 0,
+        filled: selMarkup.indexOf('m1:latest') >= 0 && selMarkup.indexOf('m2:7b') >= 0,
+        kept: current === undefined ? null : selMarkup.indexOf(String(current)) >= 0,
+    };
+}
+
 const resume = { calm: await resumeCase(false), raced: await resumeCase(true) };
 const dash = { calm: await dashCase(false, 'false'), raced: await dashCase(true, 'false') };
+const model = {
+    ollamaCalm: await modelCase('ollama', false, ''),
+    ollamaRaced: await modelCase('ollama', true, ''),
+    // A stored tag the daemon no longer lists must survive as itself, not collapse to the default.
+    ollamaOffList: await modelCase('ollama', false, 'gone:tag'),
+    openrouter: await modelCase('openrouter', false, ''),
+};
 /* The switch as the render request sees it. The board asked for a chart of the
    tokenized column whenever the stored value was the TEXT 'false' — `!!'false'` is
    true — which is the same reading the backend already corrected. */
@@ -159,4 +197,4 @@ for (const spelling of spellings) {
     sent[JSON.stringify(spelling)] = one.sent;
 }
 
-process.stdout.write(JSON.stringify({ resume, dash, sent }));
+process.stdout.write(JSON.stringify({ resume, dash, model, sent }));

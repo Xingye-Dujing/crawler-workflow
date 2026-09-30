@@ -1943,6 +1943,21 @@ function openSettings(nodeId) {
            waiting for the node (or the run) to finish. */
         var isLlmOp = nodeNeedsLlm(p, node.operation);
         if (isLlmOp) {
+            /* Per-node model override: the transport (provider/host/key) stays
+               run-global, but a node may pick its own local Ollama tag. Only
+               offered on the ollama provider — an OpenRouter run cannot use a
+               daemon tag it has no id for. The real tag list is filled in async
+               by renderNodeModelSelect once the panel mounts; until then the box
+               shows 跟随全局 plus whatever value is already stored. */
+            if (typeof LLMSettings !== 'undefined' && LLMSettings.load().provider === 'ollama') {
+                var modelOpts = [{ value: '', label: I18n.t('settings.followGlobalModel') }];
+                if (p.model) modelOpts.push({ value: p.model, label: escapeHtml(p.model) });
+                html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.nodeModel') + '</label>' +
+                    '<select class="settings-select" id="node-model-' + nodeId + '" ' +
+                    'onchange="updateParam(\'' + nodeId + '\',\'model\',this.value)">' +
+                    selectOptionTags(modelOpts, p.model, '') +
+                    '</select></div>';
+            }
             html += '<div class="settings-group"><label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;">' +
                 '<input type="checkbox" ' + (boolParam(p.live_export, false) ? 'checked' : '') + ' ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'live_export\',this.checked)">' + I18n.t('settings.liveExport') + '</label>' +
@@ -2028,7 +2043,52 @@ function openSettings(nodeId) {
     }
     content.innerHTML = html;
     if (node.type === 'resume') renderResumeSettings(nodeId);
+    if (
+        node.type === 'process' &&
+        nodeNeedsLlm(node.params, node.operation) &&
+        typeof LLMSettings !== 'undefined' &&
+        LLMSettings.load().provider === 'ollama'
+    ) {
+        renderNodeModelSelect(nodeId);
+    }
     canvas.updateSettingsButton();
+}
+
+/* ── Per-node Ollama model picker: fill the node's model select from the
+   daemon's own tags ──
+   The panel renders synchronously, so the box starts with just 跟随全局 + the
+   stored value; this runs after mount and repopulates it with the real list.
+   One fetch per session (the daemon list rarely changes while the page is
+   open) — 刷新 in the AI panel stays the way to force a re-read. Guarded on the
+   ollama provider by the caller. */
+var _nodeOllamaModels = null; // cached tag list, or '' once a fetch failed
+async function renderNodeModelSelect(nodeId) {
+    var node = canvas.nodes[nodeId];
+    if (!node) return;
+    if (_nodeOllamaModels === null) {
+        try {
+            var resp = await fetch('/api/llm/ollama/models');
+            var result = await resp.json();
+            _nodeOllamaModels = (result.ok && result.models) || [];
+        } catch (e) {
+            _nodeOllamaModels = ''; // say it failed once, do not re-hit every panel open
+        }
+    }
+    // A node captured before the await is not on the page after it: re-look the
+    // select up (the panel may have been rebuilt while we were fetching).
+    node = canvas.nodes[nodeId];
+    var sel = document.getElementById('node-model-' + nodeId);
+    if (!node || !sel) return;
+    var current = node.params && node.params.model ? node.params.model : '';
+    var tags = _nodeOllamaModels === '' ? [] : _nodeOllamaModels;
+    var items = [{ value: '', label: I18n.t('settings.followGlobalModel') }];
+    tags.forEach(function (m) {
+        items.push({ value: m, label: escapeHtml(m) });
+    });
+    if (current && !tags.some(function (m) { return m === current; })) {
+        items.push({ value: current, label: escapeHtml(current) });
+    }
+    sel.innerHTML = selectOptionTags(items, current, '');
 }
 
 /* ── Resume node: pick a stored run and one of its node outputs ── */

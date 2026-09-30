@@ -1026,6 +1026,38 @@ class TestProgressiveOutput:
         stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p2')
         assert not list((data_root / 'data' / 'exports').glob(f'{stem}.live.*'))
 
+    def test_llm_run_ctx_uses_a_per_node_model_only_on_ollama(self, client, app_module, data_root):
+        """A node may pick its own local Ollama tag; a blank node model falls back to
+        the run's global model (the box's 跟随全局). The override is Ollama-only: an
+        OpenRouter run must not be handed a daemon tag it has no id for, so its node
+        model is ignored and the global OpenRouter model stands."""
+        prev = app_module.execution_state.get('llm')
+        try:
+            app_module.execution_state['llm'] = {'provider': 'ollama', 'model': 'global:tag'}
+
+            override = _node('p-ov', 'process', operation='clean', params={'text_column': '正文', 'model': 'node:tag'})
+            assert app_module._llm_run_ctx(override, 'clean', None)['client'].model == 'node:tag'
+
+            blank = _node('p-bl', 'process', operation='clean', params={'text_column': '正文', 'model': '   '})
+            assert app_module._llm_run_ctx(blank, 'clean', None)['client'].model == 'global:tag'
+
+            absent = _node('p-ab', 'process', operation='clean', params={'text_column': '正文'})
+            assert app_module._llm_run_ctx(absent, 'clean', None)['client'].model == 'global:tag'
+
+            app_module.execution_state['llm'] = {'provider': 'openrouter', 'api_key': 'k', 'model': 'or/model'}
+            cloud = _node(
+                'p-or',
+                'process',
+                operation='emotion',
+                params={'text_column': '正文', 'mode': 'llm', 'model': 'node:tag'},
+            )
+            assert app_module._llm_run_ctx(cloud, 'emotion', None)['client'].model == 'or/model'
+        finally:
+            if prev is None:
+                app_module.execution_state.pop('llm', None)
+            else:
+                app_module.execution_state['llm'] = prev
+
 
 class TestEntityNode:
     """The entity node end to end, through /api/workflow/execute.

@@ -191,6 +191,28 @@ class TestFingerprints:
         named = _node(params={'keyword': '三亚', 'account': 'work'})
         assert node_fingerprint(named) != node_fingerprint(plain)
 
+    def test_a_blank_model_hashed_the_same_as_no_model_at_all(self):
+        """A BLANK 模型 IS 跟随全局 — the run's single global model, exactly what an
+        LLM node used before per-node models existed. So absence and '' must hash
+        alike, or merely reopening a node panel and picking 「跟随全局」 (which stamps
+        '' into params) would re-key every paid LLM row and the children's dedupe
+        scope of an old canvas.
+
+        A NAMED model still moves the fingerprint: it chooses a different model, and
+        per the design that makes it a different answer — its cached answers must not
+        claim the global model's.
+        """
+        plain = _node(ntype='process', operation='emotion', params={'text_column': '正文', 'mode': 'llm'})
+        blank = _node(ntype='process', operation='emotion', params={'text_column': '正文', 'mode': 'llm', 'model': ''})
+        spaced = _node(
+            ntype='process', operation='emotion', params={'text_column': '正文', 'mode': 'llm', 'model': '  '}
+        )
+        assert node_fingerprint(plain) == node_fingerprint(blank) == node_fingerprint(spaced)
+        named = _node(
+            ntype='process', operation='emotion', params={'text_column': '正文', 'mode': 'llm', 'model': 'qwen2.5:7b'}
+        )
+        assert node_fingerprint(named) != node_fingerprint(plain)
+
     def test_structure_fingerprint_treats_a_disabled_node_as_absent(self):
         """The resume key is computed on the EFFECTIVE graph, so a disabled node is the same as a
         deleted one — and re-enabling it returns to the original identity, keeping the interrupted

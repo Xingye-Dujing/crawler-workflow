@@ -435,6 +435,8 @@ const I18n = {
             'history.removeGone': 'That run was no longer in the history (cleaned up in the meantime)',
             'history.removeFailed': 'Delete failed',
             'settings.mode': 'Analysis Mode',
+            'settings.nodeModel': 'Model (this node)',
+            'settings.followGlobalModel': 'Follow global AI model',
             'mode.llm': 'LLM (local Ollama / OpenRouter)',
             // On a cloud host the first half of that name is a transport with no daemon
             // behind it, so the option says what will actually be called.
@@ -1202,6 +1204,8 @@ const I18n = {
             'history.removeGone': '这条运行已不在执行历史里（期间被自动清理）',
             'history.removeFailed': '删除失败',
             'settings.mode': '分析模式',
+            'settings.nodeModel': '模型（本节点）',
+            'settings.followGlobalModel': '跟随全局 AI 模型',
             'mode.llm': '大模型（本地 Ollama / OpenRouter）',
             'mode.llmCloud': '大模型（OpenRouter）',
             'mode.ml': '传统机器学习 (sklearn)',

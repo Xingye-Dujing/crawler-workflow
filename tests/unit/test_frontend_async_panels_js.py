@@ -53,6 +53,42 @@ class TestResumeDropdown:
         assert raced['holderNode'] == 'res-1', raced
 
 
+class TestNodeModelBox:
+    """The per-node Ollama model picker on an LLM process node."""
+
+    def test_the_box_offers_the_daemon_tags_when_the_panel_is_left_alone(self, panels):
+        calm = panels['model']['ollamaCalm']
+        assert calm['hasSelect'] is True, 'a provider=ollama LLM node drew no model box'
+        assert calm['asked'] == 1, calm
+        assert calm['follow'] is True, 'the box lost its 跟随全局 default option'
+        assert calm['filled'] is True, 'the daemon tags never reached the select'
+
+    def test_the_tags_still_land_when_a_redraw_lands_mid_flight(self, panels):
+        """Editing a field rewrites the form while the tag list is in flight; the
+        loader re-looks the select up after the await, so it fills the box the user
+        sees instead of the orphan it started with.
+        """
+        raced = panels['model']['ollamaRaced']
+        assert raced['asked'] == 2, f'the scenario did not redraw mid-flight: {raced}'
+        assert raced['filled'] is True, 'the tags were written into an off-page select'
+
+    def test_a_stored_model_the_daemon_dropped_shows_as_itself(self, panels):
+        """Never collapse an off-list value to option #0 (the AGENTS.md select rule):
+        a tag the node was built with but the daemon no longer lists must survive.
+        """
+        off = panels['model']['ollamaOffList']
+        assert off['kept'] is True, off
+        assert off['follow'] is True, off
+
+    def test_an_openrouter_run_gets_no_model_box(self, panels):
+        """The override is Ollama-only; an OpenRouter run must not be offered a box
+        whose value it would refuse at the daemon that has no such tag.
+        """
+        cloud = panels['model']['openrouter']
+        assert cloud['hasSelect'] is False, 'an openrouter node offered an Ollama model box'
+        assert cloud['asked'] == 0, 'the tag list was fetched for a run that cannot use it'
+
+
 class TestDashboardCells:
     def test_a_chart_is_drawn_when_its_cell_is_still_on_the_board(self, panels):
         calm = panels['dash']['calm']

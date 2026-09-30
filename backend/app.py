@@ -754,9 +754,14 @@ def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     """
     cfg = execution_state.get('llm') or {}
     provider = cfg.get('provider') or 'ollama'
+    # Per-node model override: a node may pick its own Ollama tag, but the
+    # transport (provider/host/key) stays run-level. Only Ollama is overridable —
+    # an OpenRouter run must not be handed a daemon tag it has no id for — and a
+    # blank node model falls back to the run's global model.
+    node_model = str((node.get('params') or {}).get('model') or '').strip() if provider == 'ollama' else ''
     client = LLMClient(
         provider=provider,
-        model=cfg.get('model') or '',
+        model=node_model or (cfg.get('model') or ''),
         api_key=cfg.get('api_key') or '',
         # Cleaner outputs a full rewritten text; the classifiers answer in a
         # dozen tokens. Capping keeps a chatty model from burning quota.

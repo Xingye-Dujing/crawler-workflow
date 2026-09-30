@@ -192,10 +192,18 @@ def stable_params(params) -> dict:
     must not re-key rows already paid for. A NAMED account stays in the hash: it
     selects a different session and device, and per the design that makes it a
     different crawl — its cursor and dedupe scope must not claim the old one's.
+
+    A BLANK model is dropped for the same reason: blank IS 跟随全局 (the run's
+    global model), so reopening a node panel and picking 「跟随全局」 must not
+    re-key the node's paid LLM rows. A NAMED model stays in the hash: it selects
+    a different model, and per the design that makes it a different answer — its
+    cached answers and children's dedupe scope must not claim the old model's.
     """
     out = {k: v for k, v in (params or {}).items() if str(k) not in _VOLATILE_PARAMS}
     if str(out.get('account') or '').strip() == '':
         out.pop('account', None)
+    if str(out.get('model') or '').strip() == '':
+        out.pop('model', None)
     return out
 
 
