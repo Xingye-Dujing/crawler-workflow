@@ -15,7 +15,7 @@ from selenium.common.exceptions import NoSuchElementException
 
 import crawlers.base as base_module
 import i18n
-from crawlers.base import Crawler
+from crawlers.base import UNDER_TARGET, Crawler
 from crawlers.zhihu import ZhihuCrawler
 
 pytestmark = pytest.mark.unit
@@ -418,6 +418,43 @@ class TestZhihuSearch:
         # way out: the number in that sentence and the number the walk honoured were two
         # different numbers, and 「采到 1 条」 was indistinguishable from a slow machine.
         assert i18n.t('crawl.zhihu.stuck', n=ZhihuCrawler.STUCK_ROUNDS) in _lines(caplog)
+
+    def test_a_search_that_fills_its_target_files_no_end_reason(self, make_crawler):
+        cards = [_card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS), _card(CARD_2, CARD_2_BUTTONS, CARD_2_HREFS)]
+        crawler, _ = make_crawler(cards)
+        rows = crawler.search('三亚', target_count=2)
+        assert len(rows) == 2, 'premise: two distinct cards fill the ask'
+        assert crawler.end_reason is None, 'a walk that met the ask has no shortfall to judge'
+
+    def test_the_more_marker_ends_the_walk_as_a_licensed_site_end(self, make_crawler):
+        # The 「没有更多了」 plate is the site's own word that the list is over: short of the ask is
+        # legal, settled clean — and now NAMED, with the funnel the under-target gate would want.
+        cards = [_card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS)] * 2
+        crawler, _ = make_crawler(cards, no_more='亲，没有更多了~')
+        rows = crawler.search('三亚', target_count=50)
+        assert len(rows) == 2, 'the marker ended the walk well before the ask'
+        assert crawler.end_reason == 'site_end', crawler.end_reason
+        assert {'scanned', 'kept', 'refused'} <= set(crawler.walk_counts), crawler.walk_counts
+
+    def test_a_stuck_walk_with_no_more_marker_is_convicted_under_target(self, make_crawler):
+        # The mirror image of the marker case: STUCK_ROUNDS give-up, 「没有更多了」 never shown — a walk
+        # that stopped, not a list that ended (zhihu's throttle mimics it), so it must be convicted and
+        # resumable, NOT left end_reason=None to settle clean.
+        crawler, _ = make_crawler([_card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS)], no_more=None)
+        rows = crawler.search('三亚', target_count=50)
+        assert len(rows) < 50, 'premise: the walk gave up short'
+        assert crawler.end_reason == UNDER_TARGET, (
+            f'a stuck zhihu walk must be convicted, not settled clean: end_reason={crawler.end_reason!r}'
+        )
+
+    def test_a_risk_latched_shortfall_is_not_reported_as_under_target(self, make_crawler):
+        # 风控 is its own bucket: the executor refuses it as 「退避重试」 upstream. Convicting it here as
+        # 采得不足 would double-label one run and hide the back-off the user must see. A search that
+        # latched 风控 and then gave up (``under``) must therefore stay ``end_reason=None``, not convict.
+        crawler, _ = make_crawler([_card(CARD_1, CARD_1_BUTTONS, CARD_1_HREFS)], no_more=None)
+        crawler.risk_blocked = True
+        crawler.search('三亚', target_count=50)
+        assert crawler.end_reason is None, 'a 风控 short is named 风控 upstream, never re-filed UNDER_TARGET'
 
     def test_a_page_that_grows_late_is_not_called_exhausted(self, make_crawler):
         """The patience ``STUCK_ROUNDS`` promises, actually paid for (§6 U3 of the plan).

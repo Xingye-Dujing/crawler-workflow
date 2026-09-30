@@ -10,7 +10,7 @@ from selenium.webdriver.common.by import By
 
 from i18n import stop_reason_label, t
 
-from .base import Crawler, as_index
+from .base import UNDER_TARGET, Crawler, as_index
 from .engine import feed, pagefetch
 from .engine.counters import parse_count
 
@@ -294,12 +294,16 @@ class ZhihuCrawler(Crawler):
             elif expand['short']:
                 logger.info(t('crawl.zhihu.bodies_short', n=expand['short']))
         logger.info(t('crawl.zhihu.finished', n=self.collected(), total=target_count))
-        # U1: license ONLY the site's own 「没有更多」 marker. The STUCK_ROUNDS give-up is a walk
-        # self-summary that a soft throttle mimics, so it licenses nothing and convicts nothing
-        # here (end_reason stays None) — §6's conviction needs a positive incompleteness signal,
-        # which only per-platform live measurement (#7) can supply.
+        # U1: the walk already separates how it stopped. ``site_end`` is the 「没有更多了」 marker — the
+        # site's own word, so the short is licensed. ``under`` is the STUCK_ROUNDS give-up WITH no marker:
+        # it names a walk that stopped, NOT a list that ended, and zhihu's soft throttle mimics it
+        # exactly (this is the platform whose throttle was measured to serve a thin day), so it is
+        # convicted ``UNDER_TARGET`` (refused by name, resumable) rather than left silent. A wall / 风控 /
+        # 停止 is settled upstream and must not be mislabeled as 采得不足.
         if ended == 'site_end':
-            self.note_end('site_end')
+            self.note_end('site_end', scanned=cursor['scanned'], kept=self.collected(), refused=expand['misses'])
+        elif self.collected() < target_count and not (self.login_wall or self.risk_blocked or self.may_stop()):
+            self.note_end(UNDER_TARGET, scanned=cursor['scanned'], kept=self.collected(), refused=expand['misses'])
         return self.results()
 
     # ─── the site's own board ─────────────────────────────────────────
