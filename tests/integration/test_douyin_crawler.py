@@ -1000,6 +1000,27 @@ class TestComments:
         assert rows[0]['父楼层'] == ''
         assert getattr(dead, '_tries', 0) == 1, f'the failed thread was clicked more than once: {dead._tries}'
 
+    def test_a_reply_also_mounted_as_a_top_level_item_is_filed_once(self, make_crawler, monkeypatch):
+        """Virtualisation files each comment once even when a reply also re-mounts as a top-level item.
+
+        The live douyin comment gate caught 40 rows for 35 unique identities: a re-collapsed parent
+        re-expanded under another identity and re-attached its reply, so the reply landed twice (over-collection
+        / 重采). The global identity set must collapse that — the same (author, body, time) emitted once, as the
+        reply under its parent, never also as a top-level row.
+        """
+        monkeypatch.setattr('crawlers.comments.ActionChains', _FakeActionChains)
+        parent = El('甲\n主评论\n1天前·北京\n0\n展开1条回复', replies=['路人乙\n子回复\n1天前·上海\n0'])
+        # The same reply ALSO mounted as its own top-level comment-item (what re-mounting produces).
+        reply_as_top = El('路人乙\n子回复\n1天前·上海\n0')
+        crawler, driver = make_crawler(cards=[], comment_items=[parent, reply_as_top], comment_count='0')
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert status == OK, status
+        keys = {(r['评论者'], r['评论内容'], r['评论时间']) for r in rows}
+        assert len(keys) == len(rows), f'a comment was filed twice: {len(rows)} rows, {len(keys)} unique'
+        assert [r['评论者'] for r in rows] == ['甲', '路人乙'], rows
+        assert rows[1]['父楼层'] == 1, 'the reply stays attributed to its parent, not a top-level row'
+
     def test_a_link_without_an_id_is_dead_and_costs_no_navigation(self, make_crawler):
         crawler, driver = make_crawler(cards=[])
         session = self._session(driver)

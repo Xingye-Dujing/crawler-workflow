@@ -807,17 +807,18 @@ return (function () {
     #: walk; it is skipped for good and its parent keeps the site's declared count.
     _DY_EXPAND_RE = re.compile(r'展开\s*\d+\s*条回复')
 
-    #: One round trip for the whole mounted panel: each ``[data-e2e="comment-item"]`` as ``{own, replies}``.
-    #: ``own`` is the item's LIVE ``innerText``; ``replies`` is each ``.replyContainer``'s text (present only
-    #: after the thread was opened). The parent is parsed from ``own`` with the anchor-based
-    #: :func:`douyin_comment_fields`, whose content is the block BEFORE the first time-line — so reply text
-    #: that trails after the parent's own fields does not corrupt them. NOT a ``cloneNode`` copy: Chrome's
-    #: ``innerText`` on a detached node returns empty, which (masked by the text-based fake) zeroed every row
-    #: on the live panel — this reads the rendered element directly.
+    #: One round trip for the whole mounted panel: each TOP-LEVEL ``[data-e2e="comment-item"]`` as
+    #: ``{own, replies}``. A reply is itself a ``[data-e2e="comment-item"]`` nested inside the parent's
+    #: ``.replyContainer``; those are SKIPPED as parents (``it.closest``) and read only via the parent's
+    #: ``replies`` — otherwise they double-file and their innerText line order (timestamp before the
+    #: author) produces malformed rows with a blank region (both live bugs this guards). ``own`` is the
+    #: parent's LIVE ``innerText``; ``replies`` is each ``.replyContainer``'s text. Chrome's ``innerText``
+    #: on a detached ``cloneNode`` is empty, so the parent is read from the rendered element directly.
     _DY_THREADS_JS = r"""
     var items = document.querySelectorAll('[data-e2e="comment-item"]');
     var out = [];
     Array.prototype.forEach.call(items, function (it) {
+      if (it.closest('[class*="replyContainer"]')) return;  // a reply: read under its parent, not as a thread
       var reps = Array.prototype.map.call(it.querySelectorAll('[class*="replyContainer"]'), function (r) {
         return (r.innerText || '').trim();
       });
@@ -916,20 +917,29 @@ return (function () {
             return self.driver.execute_script(self._DY_THREADS_JS) or []
         return []
 
-    def _absorb_douyin_threads(self, readings, threads: dict, reply_seen: set) -> None:
-        """Fold one round's mounted readings into the ordered thread map, deduped by (author, body, time).
+    def _absorb_douyin_threads(self, readings, threads: dict, reply_seen: set, seen_identity: set) -> None:
+        """Fold one round's mounted readings into the ordered thread map, filing each identity ONCE.
 
-        The panel virtualises, so a parent is re-read on every round it is mounted; the key makes that
-        idempotent and the reply set makes each child appear once. ``subs`` keeps the largest declared
-        count seen (an early read can be pre-hydration), which a later expansion replaces with real rows.
+        The panel virtualises: a parent re-read each round it re-mounts (key makes it idempotent), and — the
+        live bug this guards — a re-collapsed parent re-expands under another identity and would re-attach its
+        replies. ``seen_identity`` (every author/body/time) is the single source of uniqueness across BOTH
+        parents and replies, so over-collection is impossible: a comment that is really someone's reply, but
+        that douyin also mounts as a top-level item, is skipped as a parent if its reply already landed.
+        ``subs`` keeps the largest declared count seen (an early read can be pre-hydration).
         """
         for one in readings or []:
             author, content, when, region, likes, subs = douyin_comment_fields(one.get('own'))
             if not content:
                 continue
             key = (author, content, when)
-            slot = threads.get(key)
-            if slot is None:
+            if key in threads:
+                threads[key]['subs'] = max(threads[key]['subs'], subs)
+            elif key in reply_seen:
+                # This comment is already filed as a reply under another parent — not a top-level thread;
+                # skip it (and its nested replies, which are the same comments) so it appears exactly once.
+                continue
+            else:
+                seen_identity.add(key)
                 threads[key] = {
                     'author': author,
                     'content': content,
@@ -939,16 +949,15 @@ return (function () {
                     'subs': subs,
                     'replies': {},
                 }
-                slot = threads[key]
-            else:
-                slot['subs'] = max(slot['subs'], subs)
+            slot = threads[key]
             for rtext in one.get('replies') or []:
                 ra, rc, rw, rr, rl, _rs = douyin_comment_fields(rtext)
                 if not rc:
                     continue
                 rkey = (ra, rc, rw)
-                if rkey in reply_seen or rkey in slot['replies']:
+                if rkey in seen_identity or rkey in slot['replies']:
                     continue
+                seen_identity.add(rkey)
                 reply_seen.add(rkey)
                 slot['replies'][rkey] = {'author': ra, 'content': rc, 'when': rw, 'region': rr, 'likes': rl}
 
@@ -1038,6 +1047,8 @@ return (function () {
         # read would lose it. Dedup by (author, body, time) makes the re-read idempotent. Each round also
         # opens any still-collapsed reply thread, so its replies are mounted before the next read sees it.
         threads: dict = {}  # parent key -> {'fields', 'subs', 'replies' (ordered reply-key -> fields)}
+        seen_identity: set = set()  # every (author, body, time) filed once — virtualisation re-expands a
+        # re-collapsed parent on a later round, which would otherwise re-attach its replies as duplicates.
         reply_seen: set = set()
         prev_count = 0
         exit_reason = 'stuck'
@@ -1045,7 +1056,7 @@ return (function () {
             opened = self._expand_douyin_reply_threads()
             items = self.driver.find_elements('css selector', '[data-e2e="comment-item"]')
             count = len(items)
-            self._absorb_douyin_threads(self._read_douyin_threads(), threads, reply_seen)
+            self._absorb_douyin_threads(self._read_douyin_threads(), threads, reply_seen, seen_identity)
             if self.may_stop():
                 exit_reason = 'stopped'
                 break

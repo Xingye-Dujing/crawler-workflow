@@ -555,6 +555,17 @@ refusing on an empty 标题 would drop real data over one column.
   「失败」窗）会把出口卡死。删除/不可见的线程 = 真采不到，**直接跳过、不重试**，父条仍记站点自报的 N；`_dismiss_douyin_popup` 顺手关掉那个 semi-ui 失败弹窗
   （`.semi-modal`/`.semi-toast`，抖音用的就是 semi-ui 库，探针 DOM 里见过 `semi-avatar`），以免它挡住后续滚动/读取。
 
+* **抖音子回复也是 `[data-e2e="comment-item"]`，嵌在父项 `.replyContainer` 里——被当顶层读会重采 + 造出畸形行（U51，live 2026-09-30）**：
+  live 评论单元 `test_comments_scroll_past_the_first_screen` 先报 **40 行只有 35 个唯一身份（重采）**，修掉重采后又报 **`评论地区` 全空**。
+  根因同一个：抖音把**每条回复也渲染成一个 `[data-e2e="comment-item"]` 节点、嵌在父评论的 `.replyContainer` 内**。旧 `_DY_THREADS_JS` 把所有
+  comment-item 都当**顶层父项**读，于是：① 回复既作父项出现、又在其父的 `replies` 里出现 → **重采**；② 回复项自己的 `innerText` 行序是
+  **时间在前、作者在后**（顶层父项是作者在前），按 anchor 法解析出 `作者='1月前'`、`正文='3'`、`地区=''` 的畸形行——畸形行身份各不相同，
+  全局去重**抓不到**它们，于是 `评论地区` 全空。**正解在源头**：`_DY_THREADS_JS` 用 `it.closest('[class*="replyContainer"]')` **跳过**嵌在回复容器里的
+  comment-item，只把**真正的顶层评论**当父项，回复一律从其父的 `.replyContainer` 文本取。再叠一层**全局身份集** `seen_identity`（父+回复共用一套
+  (作者,正文,时间)，虚拟化下父项重挂会重新展开、可能二次附回同一回复）作兜底，杜绝重采。两个 live 失败随之消失（30+ 行、点赞/正文正常）。
+  注：修完后该视频本轮 `评论地区` 仍可能整列为空——若抖音**当前没发布 IP 属地**（`X天前` 后无 `·地区`），代码**留空是对的**（宁缺毋滥、不造假），
+  待确认是站点不再显示属地、还是本会话数据；若是前者，那条 live 断言 `any(评论地区)` 需改为双向/按站点实际，不该硬凑。
+
 
 ## Bilibili
 
