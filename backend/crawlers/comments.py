@@ -805,9 +805,19 @@ return (function () {
         becoming 56 — while ``window.scrollTo`` does nothing at all. The panel's
         request carries ``a_bogus``/``msToken``, so there is no endpoint to call.
 
-        「展开N条回复」 is read as a count and never clicked: expanding a thread
-        rewrites the list under the next read, and the count is the fact the user
-        needs (this comment has N replies) either way.
+        「展开N条回复」 is read as a count and NOT expanded: a measured limitation, not a
+        choice. Probing the real profile (``backend/test_douyin_subreply_probe.py`` ->
+        ``scratchpad/dy_subreply_probe_profile*.log``) found no programmatic click opens the
+        thread — ``el.click()`` on the button and its wrapper, a browser-level CDP trusted
+        mouse event at the confirmed element point, ActionChains, and dispatched pointer/mouse
+        sequences ALL left the 「展开N条回复」 label in place (descendant count flat), even though
+        ``document.elementFromPoint`` showed the point was genuinely the button (not occluded).
+        A human can expand it, so douyin gates the reply behind a real user gesture the driver
+        cannot forge. Sub-replies also render INLINE inside the parent ``comment-item`` (NOT as a
+        nested ``[data-e2e="comment-item"]``), so even their DOM shape is unreadable without an
+        expansion that will not happen. The honest answer is the site's own declared count; a fake
+        click that silently does nothing would under-collect while claiming not to — the one thing
+        this table refuses to do.
         """
         from .douyin import douyin_id
 
@@ -939,10 +949,11 @@ return (function () {
         nested = sum(int(row.get('子回复数') or 0) for row in rows)
         if declared and len(rows) + nested < declared and not (limit and len(rows) >= limit):
             # The denominator is the video's own number, and the gap says what the table cannot hold:
-            # 「展开N条回复」 is counted and never clicked (expanding rewrites the list under the next
-            # read), so replies are owed to the count but not to the rows. Saying the three figures is
-            # what keeps 「这条视频就这么多」 from being this walk's answer when it is not — and saying
-            # *why the walk ended* keeps the gap from being blamed on the site when the user stopped it.
+            # 「展开N条回复」 is counted, not expanded — a measured limitation (see the method docstring:
+            # no programmatic click opens the thread on the trusted profile), so reply bodies are owed
+            # to the count but never to the rows. Saying the three figures keeps 「这条视频就这么多」
+            # from being this walk's answer when it is not — and naming *why the walk ended* keeps the
+            # gap off the site when the user stopped it.
             self.log(
                 t(
                     'comment.dyShort',
