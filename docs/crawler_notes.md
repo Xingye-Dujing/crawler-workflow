@@ -537,20 +537,6 @@ refusing on an empty 标题 would drop real data over one column.
   **卡片点不开时本轮跳过该 id、绝不回退去 `/video` 导航**（那正是本改动要消掉的 storm）；若整轮 0 行而卡片确曾存在，
   具名判 `UNDER_TARGET`（欠采可续跑），不被「没有更多了」许可成完成；遮罩内若见验证码则 `risk_blocked`（退避）。
 
-* **抖音子回复无法用程序点开，是实测限制、不是没去试（U50，measured 2026-09-30，探针
-  `backend/test_douyin_subreply_probe.py` → `scratchpad/dy_subreply_probe*.log`、`..._profile*.log`）**：
-  父评论行 `[data-e2e="comment-item"]` 里带 `button.comment-reply-expand-btn`「展开N条回复」。本打算仿知乎
-  `_click_zhihu_reply_threads` 点开它、把子回复收成独立行——探针把它测死了：**两种环境（抛 cookie 的一次性浏览器
-  + 用户真实 profile）下，7 种点击全部无效**：`el.click()`（点按钮、也点它的 wrapper 父节点——坐标无关，能排除
-  sticky 评论输入栏遮挡，`elementFromPoint` 也确认落点就是按钮）、浏览器级**可信 CDP `Input.dispatchMouseEvent`**、
-  ActionChains 原生点击、dispatchEvent 指针/鼠标序列、点内层 span——`「展开N条回复」标签始终不消失、也不变「收起」，
-  父节点子树计数纹丝不动`（早期一次 54→57 只是父行自己的头像/文字在注水，非展开，这条误判也已被纠正）。人能点，
-  说明站点把这个展开锁在真实用户手势之后（驱动伪造不了），或子回复那条签名请求对本机静默拒答。
-  且**子回复渲染在父 `comment-item` 内部、不是嵌套的 `[data-e2e="comment-item"]`**，所以不展开连它的 DOM 形状都读不到。
-  结论：`子回复数` 只取站点自报的「展开N条回复」计数、**不假装展开**（加一个静默失效的假点击=「假装不漏」，正是本表
-  拒绝的形状）；欠额仍由 `comment.dyShort` 按 `declared - rows - Σ子回复数` 具名说清。若要真采子回复，得另寻不依赖
-  展开的入口（如单条评论 permalink / 「查看全部N条」整页），那是另一场实测、不在本改动内。
-
 
 ## Bilibili
 
