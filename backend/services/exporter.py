@@ -13,7 +13,7 @@ import time
 
 import pandas as pd
 
-from i18n import t
+from i18n import platform_label, t
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +130,7 @@ class DataExporter:
         dict with keys: path, format, rows
         """
         df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data or [])
+        df = cls._localized_platform(df)
         fmt = cls.resolve(fmt) or cls.infer_format(filepath)
         if fmt not in cls.SUPPORTED_FORMATS:
             raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
@@ -155,6 +156,21 @@ class DataExporter:
         return {'path': filepath, 'format': fmt, 'rows': len(df)}
 
     # ── Individual writers ──────────────────────────────────────
+
+    @staticmethod
+    def _localized_platform(df: pd.DataFrame) -> pd.DataFrame:
+        """Show the 「平台」 column as the word the user reads (抖音, not ``douyin``).
+
+        The stored column is the raw key — the row's identity, used for dedupe and platform
+        detection — and it stays that way in the database; this rewrites only the export frame,
+        in the language of the run/request. An unmapped value falls back to itself (never blank),
+        so a column that is not a platform key passes through untouched.
+        """
+        if '平台' not in df.columns:
+            return df
+        out = df.copy()
+        out['平台'] = out['平台'].map(lambda v: platform_label(v) if isinstance(v, str) and v else v)
+        return out
 
     @staticmethod
     def _write_csv(df: pd.DataFrame, filepath: str, encoding: str = 'utf-8-sig', **_):

@@ -287,3 +287,35 @@ class TestSave:
         E.save(df, target)
         E.save(df.head(1), target)
         assert E.save(df.head(1), target)['rows'] == 1
+
+
+class TestPlatformColumnIsLocalized:
+    """The export shows the platform *word* (抖音) — the raw key is the row's storage identity
+    (dedupe, platform detection) and stays in the DB; only the written file is localized, in the
+    run/request language, and an unmapped value falls back to itself rather than blank."""
+
+    def test_the_platform_column_is_written_as_the_name_not_the_key(self, tmp_path, monkeypatch):
+        import i18n
+
+        monkeypatch.setattr(i18n, 'get_lang', lambda: 'zh')
+        frame = pd.DataFrame({'平台': ['douyin', 'zhihu', 'kuaishou'], '标题': ['a', 'b', 'c']})
+        out = str(tmp_path / 'p.csv')
+        E.save(frame, out)
+        written = pd.read_csv(out, keep_default_na=False)
+        assert list(written['平台']) == ['抖音', '知乎', 'kuaishou'], 'unknown key must fall back to itself, not blank'
+        # the non-platform column is untouched
+        assert list(written['标题']) == ['a', 'b', 'c']
+
+    def test_localization_follows_the_language(self, tmp_path, monkeypatch):
+        import i18n
+
+        monkeypatch.setattr(i18n, 'get_lang', lambda: 'en')
+        out = str(tmp_path / 'p.csv')
+        E.save(pd.DataFrame({'平台': ['douyin']}), out)
+        assert pd.read_csv(out, keep_default_na=False)['平台'].tolist() == ['Douyin']
+
+    def test_a_frame_without_a_platform_column_is_left_alone(self, df, tmp_path):
+        before = df.copy()
+        out = str(tmp_path / 'plain.csv')
+        E.save(df, out)
+        assert pd.read_csv(out, keep_default_na=False)['标题'].tolist() == list(before['标题'])
