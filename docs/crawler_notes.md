@@ -836,9 +836,24 @@ silent under-collect, and it is a *different* lesson than the douyin "wrong scro
 target is fine, the **progress signal was wrong**. The walk now advances on the distinct-`笔记ID` set
 (`len(seen)`) growing, re-scans the whole mounted batch each round (the `seen` dedupe skips a
 recycled card *before* its detail navigation, so no re-pay), and keeps a timed render beat after each
-scroll rather than waiting on a count that will never move. `feed.walk_feed` is deliberately NOT used —
-it carries the same card-count assumption. Confirmed live (headless, target 26 > one screen): collects
-past the first batch, each 笔记ID once.
+scroll rather than waiting on a count that will never move.
+
+**It now runs on `feed.walk_feed` via the `window` hook (was a hand-rolled second copy).** walk_feed
+once assumed a card-count signal, but it learned the `window=` parameter for exactly this shape (X's
+timeline): pass the identity of the on-screen notes and it waits for *that* to turn over rather than the
+flat count. So xiaohongshu's search folds onto the shared engine like zhihu/bilibili/X, and `read_cards`
+/`scrape`/`emit` split replaces `_harvest_cards`. Confirmed live (headless, target 26 > one screen):
+collects past the first batch, each 笔记ID once.
+
+**A shortfall is now convicted `UNDER_TARGET`, not settled clean.** xiaohongshu's grid publishes no
+total and no 「没有更多」 sentence the code can read, so a walk that stopped growing below the ask NEVER
+proves supply ran out (a soft throttle mimics it) — the search files `note_end(UNDER_TARGET)` and the
+executor refuses it by name (「采得不足」, resumable). It used to leave `end_reason=None`, which the gate
+treated as "not-yet-migrated → settle clean"; that silent-clean was the §6 whitewash, now closed. 停止 /
+a wall / a 风控 bounce are NOT filed here (settled upstream, their own buckets). The old
+`crawl.xhs.exhausted` console line — which could not tell a real bottom from a late-answering page — was
+deleted, and the live H1 grader now judges posts on `SHARED_EXITS` alone (no whitelist may excuse an
+un-attested xhs shortfall).
 
 **An expired/absent `xsec_token` is one dead link, not the session refused** (same probe). Opening a
 note with its token stripped answers 安全验证 — and the old detail path scraped that wall page as a

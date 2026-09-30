@@ -20,7 +20,7 @@ import pytest
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 import crawlers.base as base_module
-from crawlers.base import Crawler
+from crawlers.base import UNDER_TARGET, Crawler
 from crawlers.xiaohongshu import XiaohongshuCrawler as Xhs
 from i18n import t
 
@@ -484,6 +484,56 @@ class TestVirtualisedFeed:
         assert len(rows) < 50, 'the walk must stop when scrolling stops bringing new notes'
 
 
+class TestUnderTargetWiring:
+    """§6 U1 migration: xiaohongshu's grid publishes no total and no end marker, so a walk that
+    stopped growing below the ask must be CONVICTED (``end_reason == UNDER_TARGET``) rather than
+    left ``None`` — which the executor lets settle clean (the not-yet-migrated behaviour this
+    migrates away from). But a run the user STOPPED, or one a wall/风控 answered, is settled
+    upstream and must NOT be filed ``UNDER_TARGET`` here: that would report 「采得不足」 over
+    「你按了停止」 or 风控, the exact mislabels the plan forbids.
+    """
+
+    def _short_feed(self, make_crawler, monkeypatch, notes, page=8):
+        monkeypatch.setattr('crawlers.xiaohongshu.time.sleep', lambda s: None)
+        crawler, driver = make_crawler(driver_cls=RecyclingGridDriver, notes=notes, page=page)
+        crawler.scroll_down = lambda **k: driver.advance()
+        crawler._polite_pause = lambda *a, **k: None
+        crawler._read_note = lambda *a, **k: {}
+        return crawler
+
+    def test_a_grid_short_of_target_with_no_attested_end_is_convicted(self, make_crawler, monkeypatch):
+        notes = [f'https://www.xiaohongshu.com/explore/{i:020x}?xsec_token=T' for i in range(1, 6)]
+        crawler = self._short_feed(make_crawler, monkeypatch, notes)
+        rows = crawler.search('三亚', target_count=50)
+        assert len(rows) < 50, 'premise: the feed came back short'
+        assert crawler.end_reason == UNDER_TARGET, (
+            f'a short xhs walk must name itself short, not settle clean: end_reason={crawler.end_reason!r}'
+        )
+        # The funnel is reported only from numbers the walk actually measured (U2), never invented zeros.
+        assert {'scanned', 'kept', 'refused'} <= set(crawler.walk_counts), crawler.walk_counts
+
+    def test_a_walk_that_fills_its_target_is_not_convicted(self, make_crawler, monkeypatch):
+        notes = [f'https://www.xiaohongshu.com/explore/{i:020x}?xsec_token=T' for i in range(1, 30)]
+        crawler = self._short_feed(make_crawler, monkeypatch, notes)
+        rows = crawler.search('三亚', target_count=20)
+        assert len(rows) >= 20, 'premise: the feed filled the ask'
+        assert crawler.end_reason is None, 'a walk that met its target files no shortfall'
+
+    def test_a_user_stop_is_not_reported_as_under_target(self, make_crawler, monkeypatch):
+        notes = [f'https://www.xiaohongshu.com/explore/{i:020x}?xsec_token=T' for i in range(1, 6)]
+        crawler = self._short_feed(make_crawler, monkeypatch, notes)
+        crawler.may_stop = lambda: True
+        crawler.search('三亚', target_count=50)
+        assert crawler.end_reason is None, 'a 停止 cut short is its own bucket, never 「采得不足」'
+
+    def test_a_risk_block_is_not_reported_as_under_target(self, make_crawler, monkeypatch):
+        notes = [f'https://www.xiaohongshu.com/explore/{i:020x}?xsec_token=T' for i in range(1, 6)]
+        crawler = self._short_feed(make_crawler, monkeypatch, notes)
+        crawler.risk_blocked = True
+        crawler.search('三亚', target_count=50)
+        assert crawler.end_reason is None, 'a 风控 short is named 风控 upstream, not double-convicted here'
+
+
 class TestNoteNavigation:
     def test_a_note_that_never_arrives_costs_its_row_and_not_the_crawl(self, make_crawler, monkeypatch):
         crawler, driver = make_crawler(get_error=False)
@@ -519,7 +569,10 @@ class TestResumeIdentityAndCursor:
 
     def test_the_search_cursor_holds_position_only_never_a_link_list(self, make_grid):
         crawler = make_grid([_GridCard(self._link(self.ID_A, 't1')), _GridCard(self._link(self.ID_B, 't2'))])
-        crawler._harvest_cards(set(), target_count=5)
+        for card in crawler._mounted_cards():
+            row = crawler._note_row(card, set())
+            if row is not None:
+                crawler._emit_note(row)
         assert crawler.collected() == 2, 'both notes were new and stored'
         position = crawler.position
         assert 'links' not in position, f'the cursor carries a link list again (U5 shape): {position}'
@@ -533,7 +586,10 @@ class TestResumeIdentityAndCursor:
         seen = crawler._collected_ids()
         assert seen == {self.ID_A}, 'the resume skip-set is seeded from stored rows, not the cursor'
         crawler.driver.cards = [_GridCard(self._link(self.ID_A, 'NEW')), _GridCard(self._link(self.ID_B, 'NEW'))]
-        crawler._harvest_cards(seen, target_count=5)
+        for card in crawler._mounted_cards():
+            row = crawler._note_row(card, seen)
+            if row is not None:
+                crawler._emit_note(row)
         ids = [row.get('笔记ID') for row in crawler.results()]
         assert ids.count(self.ID_A) == 1, f'A (new token) was re-collected — the token is not the identity: {ids}'
         assert self.ID_B in ids, 'a genuinely new note still gets collected'

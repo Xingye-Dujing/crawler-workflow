@@ -5,11 +5,12 @@ cookie, his ``测试：小红书.json``), grades each run against *its own* cons
 ``classify_verdict``, and ties file==store==preview per component. What is xhs-specific and
 lives here:
 
-* **vocabulary** — which lines are an honest site answer for a recycling grid. The load-bearing
-  discipline is that a shortfall is excused ONLY by a sentence the site truthfully said:
-  ``crawl.xhs.exhausted`` is a real bottom *because* the walk now follows ``笔记ID`` (U59), and a
-  broad keyword at 50 that stops short without that or a named wall is the silent under-collect
-  this tier exists to catch, so it is NOT whitelisted away.
+* **vocabulary** — which lines are an honest site answer for a recycling grid. xiaohongshu's grid
+  publishes NO total and NO end-of-list marker the code can read, so the product files no attested
+  end: a posts walk that stops growing below the ask is convicted ``UNDER_TARGET`` (the node fails
+  with 「采得不足」 and stays resumable), not excused by any console sentence. So the posts leg is
+  graded on ``SHARED_EXITS`` ALONE — a broad keyword at 50 that comes back short with no named wall
+  is exactly the silent under-collect this tier exists to catch, and it now stays red.
 * **shape checks** — 笔记ID is the dedupe/resume identity, so a post row without one, or the same
   笔记ID twice across a grid that re-promotes with fresh tokens, is a red.
 * **the two components he saved** — node-1 关键词 ``IU`` (posts, ``recrawl:true``) and node-4 a
@@ -74,13 +75,14 @@ class LiveRun(driver.RunDriver):
 def _vocabulary(mode: str, headless: bool) -> tuple[tuple, tuple]:
     """Which lines honestly explain an xhs shortfall, per mode. Unknown modes are refused.
 
-    ``crawl.xhs.exhausted`` is a legitimate POSTS exit ONLY when the leg actually consumed a
-    note: the walk prints it after ``STUCK_ROUNDS`` cheap no-growth rounds, and the same line is
-    emitted by a page that simply has not answered yet (docs/crawler_notes.md measures this grid
-    answering late) — so a 0-row leg that says only 「无更多内容」 is a walk that gave up, not a
-    bottom. The H1 grader enforces that by grading a 0-row posts leg against ``SHARED_EXITS``
-    alone (see :func:`test_h1_...`'s ``grade``). A genuine bottom at N>0 is excused by the walk
-    having consumed notes and then run out.
+    The POSTS leg is graded on ``SHARED_EXITS`` ALONE. xiaohongshu's grid publishes no total and
+    no end-of-list sentence the code can read, so the walk files no site-attested end — a posts
+    crawl that stops below its ask is convicted ``UNDER_TARGET`` by the product (the node fails
+    with 「采得不足」) rather than excused by a 「无更多内容」 line. There used to be such a line
+    (``crawl.xhs.exhausted``) whitelisted here; the walk now keys on 笔记ID growth, 「exhausted」
+    could not tell a real bottom from a late-answering page, so it was deleted from both the
+    product and this whitelist. A shortfall naming nothing is the silent under-collect this tier
+    exists to catch, and it stays red.
 
     The comments leg is graded ONLY on ``SHARED_EXITS``: a stale ``xsec_token`` there answers
     安全验证, which the comment engine turns into ``BLOCKED`` → ``run.cookieExpired`` (a shared
@@ -90,7 +92,7 @@ def _vocabulary(mode: str, headless: bool) -> tuple[tuple, tuple]:
     is a real product gap, not something a whitelist may paper over.
     """
     if mode == 'posts':
-        return harness.SHARED_EXITS + ('crawl.xhs.exhausted',), ()
+        return harness.SHARED_EXITS, ()
     if mode == 'comments':
         return harness.SHARED_EXITS, ()
     raise AssertionError(f'xhs vocabulary is unmeasured for mode {mode!r}; refuse to default it to posts')

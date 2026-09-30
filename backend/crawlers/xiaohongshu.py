@@ -11,7 +11,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from i18n import t
 
-from .base import Crawler, as_index
+from .base import UNDER_TARGET, Crawler, as_index
+from .engine import feed
 from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
@@ -96,111 +97,115 @@ class XiaohongshuCrawler(Crawler):
         self.mark_position(keyword=keyword, scanned=as_index(resume.get('scanned')), done=have)
         logger.info(t('crawl.xhs.links', n=len(seen)))
 
-        rounds = 0
-        stuck = 0
-        # `emit` already refuses to accept a row after a Stop, but this loop can also
-        # spin on a page that adds no notes at all — where nothing is ever emitted.
-        #
         # The grid is a VIRTUALISED feed (measured 2026-09-29: 22 cards at first read, then a
         # flat ~8 as scrolling swaps card *identities* rather than appending — new 笔记ID enter
-        # the DOM, old ones leave). So progress is the dedupe set `seen` growing, never
-        # `_card_count`: a flat count is this feed's normal state, not "reached the bottom".
-        # Keying the walk on the mounted count is §6 U3's silent under-collect — it called a
-        # recycling feed exhausted and stopped after one screen.
-        while self.collected() < target_count and not self.may_stop():
-            before = len(seen)
-            self._harvest_cards(seen, target_count)
-            if self.collected() >= target_count:
-                logger.info(t('crawl.xhs.target_reached', n=target_count))
-                break
+        # the DOM, old ones leave). So the walk is keyed on ``_window_key`` — the ids ON SCREEN,
+        # which turn over while the node count does not — and the ``seen`` set filed into it by
+        # :meth:`_note_row` is what de-dupes each screen read whole. Keying on ``_card_count``
+        # growth is §6 U3's silent under-collect: a recycling feed looks exhausted after one
+        # screen and stops. This is the same ``feed.walk_feed`` zhihu/bilibili/X run on, so the
+        # walk lives in one place (it used to be a second copy here).
+        def mark(_progress):
+            # ``scanned`` is a running count of distinct notes consumed — a POSITION, never the
+            # id list (the rows themselves are the resume skip-set; §6 U5).
+            self.mark_position(scanned=len(seen), done=self.collected())
 
-            rounds += 1
-            logger.info(t('crawl.xhs.scroll_round', i=rounds))
-            self.scroll_down(steps=self.SCROLL_STEPS)
-            # A fixed render beat, then read the recycled batch — and do NOT poll the card
-            # count for growth (the old mis-signal): on this feed it never grows, so that
-            # wait only burned the window and then reported "stuck". The beat is not a
-            # progress judgement, so a timed wait is the right tool for it.
-            time.sleep(self.CARD_WAIT)
-            self._harvest_cards(seen, target_count)
+        result = feed.walk_feed(
+            self._mounted_cards,
+            lambda card, index: self._note_row(card, seen),
+            self._emit_note,
+            scroll=lambda: self.scroll_down(steps=self.SCROLL_STEPS),
+            target=target_count,
+            collected=self.collected,
+            window=self._window_key,
+            mark=mark,
+            stopped=lambda: self.login_wall or self.risk_blocked or self.may_stop(),
+            stuck_rounds=self.STUCK_ROUNDS,
+            settle_wait=self.CARD_WAIT,
+        )
 
-            if self.collected() >= target_count:
-                logger.info(t('crawl.xhs.target_reached', n=target_count))
-                break
-            if len(seen) <= before:
-                stuck += 1
-                if stuck >= self.STUCK_ROUNDS:
-                    logger.info(t('crawl.xhs.exhausted'))
-                    break
-                logger.info(t('crawl.xhs.no_growth'))
-            else:
-                stuck = 0
-            if self.login_wall or self.risk_blocked:
-                logger.info(t('crawl.xhs.collect_done', n=self.collected()))
-                break
-            # Politeness between scroll rounds — the grid only ever asks for one
-            # more page of results, so this is the request rate that matters.
-            self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)
-
-        # A round that hit the target mid-scan leaves the rest of the mounted batch unread;
-        # one last pass before finishing costs nothing and closes that gap.
-        if self.collected() < target_count:
-            self._harvest_cards(seen, target_count)
+        # U1 migration: xiaohongshu's grid publishes NO total and NO end-of-list marker the code
+        # can read, so a walk that stopped growing below the ask NEVER proves supply ran out — a
+        # soft throttle mimics it exactly (docs/crawler_notes.md). A shortfall is therefore filed
+        # ``UNDER_TARGET`` (the executor refuses it by name and keeps it resumable) rather than
+        # left ``end_reason=None``, which used to let it settle clean. 停止 / a wall / a risk
+        # bounce are NOT convicted here: the executor raises 风控 on ``risk_blocked``, and 停止 is
+        # counted in its own bucket — this gate must only fire for an unexplained shortfall.
+        # ``walk_feed``'s own ``result.stopped_reason`` is a self-summary of our loop and can never
+        # license this — ``Crawler.note_end`` refuses a non-site reason by construction.
+        if self.collected() < target_count and not (self.login_wall or self.risk_blocked or self.may_stop()):
+            self.note_end(UNDER_TARGET, scanned=result.scanned, kept=result.kept, refused=result.refused)
 
         logger.info(t('crawl.xhs.collect_done', n=len(seen)))
         logger.info(t('crawl.xhs.finished', n=self.collected()))
         return self.results()
 
+    def _mounted_cards(self) -> list:
+        return self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR)
+
+    def _window_key(self) -> tuple:
+        """The ids currently on screen — the only motion signal a recycled grid gives.
+
+        Selenium wrapper objects are rebuilt on every query, so ``id(element)`` would always look
+        changed and the walk would never notice an exhausted list; the 笔记IDs are what actually
+        identify the content, and they turn over while the node count holds flat.
+        """
+        keys = []
+        for card in self._mounted_cards():
+            link = self._card_link(card)
+            keys.append(self._note_id(link) or link)
+        return tuple(keys)
+
+    def _note_row(self, card, seen: set) -> dict | None:
+        """Read one mounted card once into a row, dropping anything already collected.
+
+        The detail is read in a throwaway tab (``keep_page=True``) so the search grid keeps its
+        scroll offset while the walk pages. A card already in ``seen`` is skipped BEFORE its detail
+        navigation, so re-reading a mounted card that came back with a fresh ``xsec_token`` costs no
+        re-pay. Returns ``None`` for a card with no link or an already-seen note; ``walk_feed``
+        counts those as refused and moves on.
+        """
+        link = self._card_link(card)
+        if not link:
+            return None
+        # Dedupe on the session-independent 笔记ID, not the tokenised link: the grid re-promotes the
+        # same note with a fresh token, so keying on the link would re-read (and re-pay) it.
+        key = self._note_id(link) or link
+        if key in seen:
+            return None
+        try:
+            item = self._scrape_card(card, link)
+            detail = self._read_note(link, keep_page=True)
+        except Exception as e:
+            # One unopenable note costs its row, not the crawl: the same per-card guard the hand-rolled
+            # loop had. A note that threw before ``seen.add`` is left OUT of ``seen``, so a later round
+            # (the grid re-promotes it) can still recover it — 不漏采 over a transient failure.
+            logger.error(t('crawl.xhs.note_error', err=e), exc_info=True)
+            return None
+        if detail:
+            item.update({k: v for k, v in detail.items() if v not in ('', 0, None, [])})
+        seen.add(key)
+        return item
+
+    def _emit_note(self, row: dict) -> bool:
+        """The sink :func:`walk_feed` feeds each built row through — and the per-note console line.
+
+        Dedupe happens here, not in :meth:`_note_row`: ``walk_feed`` calls ``emit`` itself, so calling
+        it inside the scrape would file every note twice. The store answers whether the row was kept,
+        which is what the 「采到一篇」 line reports.
+        """
+        kept = self.emit(row)
+        if kept:
+            title_preview = row['标题'][:30] if row['标题'] else t('crawl.xhs.untitled')
+            logger.info(t('crawl.xhs.note_ok', title=title_preview))
+        else:
+            logger.debug(t('crawl.xhs.note_dup', url=row['笔记链接']))
+        return kept
+
     # ─── card harvest (interleaved with the scroll) ──────────────────
 
     def _card_count(self) -> int:
         return len(self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR))
-
-    def _harvest_cards(self, seen: set, target_count: int) -> int:
-        """Scrape + emit every MOUNTED card not already in *seen*. Returns how many were new.
-
-        The feed recycles (see :meth:`search`): scrolling hands back roughly the same number
-        of cards with different note ids, so the harvest reads the WHOLE mounted list every
-        round and dedupes on the session-independent 笔记ID. A card already in ``seen`` is
-        skipped BEFORE its detail navigation, so re-reading mounted cards costs no re-pay.
-
-        The old ``start = position['scanned']`` DOM-index skip is exactly what broke on this
-        feed: ``scanned`` climbs past ``len(cards)`` once the count stops growing, the slice
-        goes empty, and every later round read nothing while the walk insisted it had hit the
-        bottom. ``scanned`` is now just a running count of notes consumed (position, not the
-        id list — resume is still seeded from the stored rows' 笔记IDs).
-        """
-        cards = self.driver.find_elements(By.CSS_SELECTOR, self.CARD_SELECTOR)
-        read = 0
-        for card in cards:
-            if self.collected() >= target_count:
-                logger.info(t('crawl.xhs.target_reached', n=target_count))
-                break
-            try:
-                link = self._card_link(card)
-                if not link:
-                    continue
-                # Dedupe on the session-independent 笔记ID, not the tokenised link: the grid re-promotes
-                # the same note with a fresh token, so keying on the link would re-read (and re-pay) it.
-                key = self._note_id(link) or link
-                if key in seen:
-                    continue
-                item = self._scrape_card(card, link)
-                detail = self._read_note(link, keep_page=True)
-                if detail:
-                    item.update({k: v for k, v in detail.items() if v not in ('', 0, None, [])})
-                seen.add(key)
-                read += 1
-                if self.emit(item):
-                    title_preview = item['标题'][:30] if item['标题'] else t('crawl.xhs.untitled')
-                    logger.info(t('crawl.xhs.note_ok', title=title_preview))
-                else:
-                    logger.debug(t('crawl.xhs.note_dup', url=link))
-            except Exception as e:
-                logger.error(t('crawl.xhs.note_error', err=e), exc_info=True)
-        # Position advances with notes consumed — a count, never an id list.
-        self.mark_position(scanned=len(seen), done=self.collected())
-        return read
 
     def _card_link(self, card) -> str:
         for sel in self.LINK_SELECTORS:
