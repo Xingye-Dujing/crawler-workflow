@@ -808,9 +808,12 @@ return (function () {
     _DY_EXPAND_RE = re.compile(r'展开\s*\d+\s*条回复')
 
     #: One round trip for the whole mounted panel: each ``[data-e2e="comment-item"]`` as ``{own, replies}``.
-    #: ``own`` is the item's text with reply containers stripped (so a reply never bleeds into its parent's
-    #: fields) but the 「展开N条回复」 label KEPT (the declared count of an unopened thread); ``replies`` is
-    #: each ``.replyContainer``'s text — present only once the thread has been opened.
+    #: ``own`` is the item's LIVE ``innerText``; ``replies`` is each ``.replyContainer``'s text (present only
+    #: after the thread was opened). The parent is parsed from ``own`` with the anchor-based
+    #: :func:`douyin_comment_fields`, whose content is the block BEFORE the first time-line — so reply text
+    #: that trails after the parent's own fields does not corrupt them. NOT a ``cloneNode`` copy: Chrome's
+    #: ``innerText`` on a detached node returns empty, which (masked by the text-based fake) zeroed every row
+    #: on the live panel — this reads the rendered element directly.
     _DY_THREADS_JS = r"""
     var items = document.querySelectorAll('[data-e2e="comment-item"]');
     var out = [];
@@ -818,9 +821,7 @@ return (function () {
       var reps = Array.prototype.map.call(it.querySelectorAll('[class*="replyContainer"]'), function (r) {
         return (r.innerText || '').trim();
       });
-      var clone = it.cloneNode(true);
-      Array.prototype.forEach.call(clone.querySelectorAll('[class*="replyContainer"]'), function (x) { x.remove(); });
-      out.push({ own: (clone.innerText || '').trim(), replies: reps });
+      out.push({ own: (it.innerText || '').trim(), replies: reps });
     });
     return out;
     """
