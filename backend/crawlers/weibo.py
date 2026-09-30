@@ -12,7 +12,7 @@ from selenium.webdriver.common.by import By
 from config import Config
 from i18n import stop_reason_label, t
 
-from .base import Crawler, CrawlerStopped, as_index
+from .base import UNDER_TARGET, Crawler, CrawlerStopped, as_index
 from .engine import pagefetch, pager, times
 from .engine.counters import parse_count
 
@@ -406,11 +406,29 @@ class WeiboCrawler(Crawler):
             # refusal — legal, exactly as a bilibili space with no uploads is.
             logger.info(t('crawl.weibo.authorNoPosts', uid=uid))
         logger.info(t('crawl.weibo.authorDone', n=self.collected(), reason=stop_reason_label(walk.stopped_reason)))
-        # Deliberately no ``note_end`` here yet. ``walk_pages`` separates a server-said
-        # ('end' / 'empty_page') from a self-summary ('no_new' = "cursor gave nothing new this
-        # round"), and only the former are site-attested; licensing on the walker's word as a
-        # whole is the §6 whitewash. Stays ``end_reason=None`` → the gate is silent until the
-        # server-said cases pass a member of crawlers/base.py:LICENSED_ENDS.
+        # U1 migration: name how the author walk ended so the executor can judge a shortfall.
+        # weibo's mymblog ``_extract`` never hands back ``next=None``, so a real end surfaces as a
+        # page that came back EMPTY (``empty_page``) — that IS the server saying 「no more」, an
+        # attested end, so the short is licensed (it settles clean, exactly as before; the migration
+        # only adds the honest label + the funnel). Anything that stopped short WITHOUT that signal —
+        # a cursor that kept replaying already-seen posts (``no_new``) or a page that died mid-walk
+        # with rows already on disk (``fetch_failed``) — is NOT proven out of supply, so it is
+        # convicted ``UNDER_TARGET`` (refused by name, resumable) rather than left silent. A wall /
+        # 风控 / 停止 is settled upstream and must not be mislabeled here. (``PageWalk.drained``
+        # lumps ``no_new`` in; base doctrine forbids licensing on a self-summary, so it is not used.)
+        if self.collected() < target and not (self.login_wall or self.risk_blocked or self.may_stop()):
+            scanned = walk.fresh + walk.repeats
+            if walk.stopped_reason in ('end', 'empty_page'):
+                # A page came back empty: the server said this account has nothing deeper. Zero rows
+                # is 「没发过」 ('empty'); some rows then the empty page is 「到底了」 ('site_end').
+                self.note_end(
+                    'empty' if self.collected() == 0 else 'site_end',
+                    scanned=scanned,
+                    kept=walk.fresh,
+                    refused=walk.repeats,
+                )
+            else:
+                self.note_end(UNDER_TARGET, scanned=scanned, kept=walk.fresh, refused=walk.repeats)
         return self.results()
 
     @staticmethod

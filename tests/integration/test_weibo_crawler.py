@@ -16,7 +16,7 @@ from selenium.common.exceptions import NoSuchElementException
 
 import crawlers.base as base_module
 import crawlers.weibo as weibo_module
-from crawlers.base import Crawler, CrawlerStopped
+from crawlers.base import UNDER_TARGET, Crawler, CrawlerStopped
 from crawlers.weibo import WeiboCrawler
 
 pytestmark = pytest.mark.unit
@@ -741,6 +741,58 @@ class TestWeiboAuthorWalk:
         crawler, _driver = make_author({1: [item]})
         rows = crawler.author('6302837173', target_count=1)
         assert rows[0]['发布者'] == '转发者', 'the row is the reposter own post, not the source of the retweet'
+
+    # ─── U1: how the walk ended is named so the executor can judge a shortfall ───
+
+    def test_a_walk_that_fills_its_target_files_no_end_reason(self, make_author):
+        pages = {
+            1: [_mymblog_item(str(1000 + i), '6302837173') for i in range(28)],
+            2: [_mymblog_item(str(2000 + i), '6302837173') for i in range(20)],
+        }
+        crawler, _driver = make_author(pages)
+        rows = crawler.author('6302837173', target_count=40)
+        assert len(rows) == 40
+        assert crawler.end_reason is None, 'a walk that met the ask files nothing — there is no shortfall to judge'
+
+    def test_an_account_that_ends_on_an_empty_page_is_attested_site_end(self, make_author):
+        # page 2 is beyond the map → an empty list, which is the server saying 「no more」. Rows landed,
+        # so this is 「到底了」 (site_end), settled clean — exactly what the run did before the migration;
+        # the migration only adds the honest label + the funnel so the panel can show it.
+        pages = {1: [_mymblog_item(str(1000 + i), '6302837173') for i in range(10)]}
+        crawler, _driver = make_author(pages)
+        rows = crawler.author('6302837173', target_count=50)
+        assert len(rows) == 10, 'premise: the account ran out below the ask'
+        assert crawler.end_reason == 'site_end', crawler.end_reason
+        assert {'scanned', 'kept', 'refused'} <= set(crawler.walk_counts), crawler.walk_counts
+
+    def test_an_account_with_nothing_to_show_is_a_licensed_empty_not_a_shortfall(self, make_author):
+        crawler, _driver = make_author({})
+        assert crawler.author('6302837173', target_count=5) == []
+        assert crawler.end_reason == 'empty', '0 rows because the server said so is 「没发过」, settled clean'
+
+    def test_a_replaying_cursor_is_convicted_not_licensed(self, make_author):
+        # The endpoint keeps handing back a page of items the cursor has ALL already seen, with a live
+        # ``since_id`` (never None here) → walk_pages stops 'no_new'. That is NOT the server attesting an
+        # end — it is the loop saying "nothing new this round", and a soft throttle mimics it exactly, so
+        # it must be convicted (resumable), not settled clean.
+        block = [_mymblog_item(str(1000 + i), '6302837173') for i in range(6)]
+        pages = {1: block, 2: block}  # same ids on page 2 → fresh_here == 0 → 'no_new'
+        crawler, _driver = make_author(pages)
+        rows = crawler.author('6302837173', target_count=50)
+        assert len(rows) == 6, 'premise: only the first page added anything'
+        assert crawler.end_reason == UNDER_TARGET, (
+            f'a replaying cursor must be convicted, not licensed: end_reason={crawler.end_reason!r}'
+        )
+
+    def test_a_refused_page_after_some_rows_keeps_them_but_is_convicted(self, make_author):
+        # Rows paid for, then a 403 edge mid-walk: kept (the walk resumes from the cursor), but the
+        # shortfall is NOT an attested end → UNDER_TARGET. (The rows-kept assertion already existed;
+        # this adds the verdict the migration owes it.)
+        pages = {1: [_mymblog_item(str(1000 + i), '6302837173') for i in range(10)], 2: 'refuse'}
+        crawler, _driver = make_author(pages)
+        rows = crawler.author('6302837173', target_count=50)
+        assert len(rows) == 10, 'every page paid for is kept'
+        assert crawler.end_reason == UNDER_TARGET, 'a mid-walk refusal is not a proven end — resumable'
 
 
 class FakeBoardDriver:

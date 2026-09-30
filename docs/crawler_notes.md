@@ -69,6 +69,15 @@ page* with `credentials: 'include'` — the same shape bilibili comments and You
 * page 1 → **28 rows**; page 2 → 20 rows with **20 unseen ids**; page 3 → 20 rows with 20 unseen ids.
   Plain `page=N` advances, so no cursor has to be followed. The page-1 surplus is a fact to pin
   ("page 1 may return more than the rest"), not something to normalise to 20.
+* **how the author walk ends is now named (U1, 2026-10-01).** `_extract` never returns `next=None`, so a
+  real end surfaces as a page that came back EMPTY → `walk_pages` stops `'empty_page'` → that IS the
+  server saying 「no more」 (attested) → the short is licensed `site_end` (or `empty` at 0 rows) and
+  settles clean, exactly as before; the migration only adds the label + the scanned/kept/refused funnel.
+  Anything short that stopped WITHOUT an empty page — a cursor replaying already-seen ids (`'no_new'`) or
+  a mid-walk 403 that still left rows (`'fetch_failed'`) — is NOT proven out of supply → convicted
+  `UNDER_TARGET` (resumable). `PageWalk.drained` lumps `no_new` in; base doctrine forbids licensing a
+  self-summary, so the code keys on the explicit `('end','empty_page')` set instead. Live: target 5 on a
+  discovered author came back rows (not a silent empty), and the FakeMymblogDriver pins all four endings.
 * the first row's `user.id` equals the requested `uid`. That is the ONLY thing distinguishing a real
   author crawl from a mirror of the home timeline, because both answer `200` with the same envelope
   (`data.list`, `data.since_id`, `data.pageid`). An earlier reading of this probe printed the same
