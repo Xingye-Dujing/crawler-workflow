@@ -127,6 +127,10 @@ function catalog(sandbox) {
             rows: I18n.t('dataPreview.rows'),
             columns: I18n.t('dataPreview.columns'),
             failed: I18n.t('toast.previewFailed'),
+            platform: {
+                douyin: I18n.t('platform.douyin'),
+                zhihu: I18n.t('platform.zhihu'),
+            },
         })`,
         sandbox,
     );

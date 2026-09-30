@@ -560,6 +560,35 @@ const workflow = {
         return choice === 'go';
     },
 
+    _hasCommentCrawl() {
+        /* A comment crawl is either a dedicated 「评论」 node or a source node switched to
+           the comments mode. Only nodes the run will actually reach count — a disabled one
+           crawls nothing, so it must not raise a notice about a column it will never fill. */
+        var alive = {};
+        (canvas.effectiveIds ? canvas.effectiveIds() : Object.keys(canvas.nodes)).forEach(function (id) {
+            alive[id] = true;
+        });
+        return Object.keys(canvas.nodes).some(function (id) {
+            if (!alive[id]) return false;
+            var node = canvas.nodes[id];
+            var p = node.params || {};
+            return node.type === 'comment' || (node.type === 'source' && (p.collect === 'comments' || p.mode === 'comments'));
+        });
+    },
+
+    async _confirmCommentRegionBeforeRun() {
+        /* Some platforms/videos do not publish an IP region in their comments, so the 「评论地区」
+           column can legitimately come back blank — a measured site fact, not a broken crawl (douyin
+           especially: two comment sections, one shows 「·湖南」, the next shows nothing). Users read
+           the blank as a bug, so say once, before the run, what the column's emptiness means. */
+        if (!this._hasCommentCrawl()) return true;
+        var choice = await showDialog({
+            message: I18n.t('dialog.commentRegionNotice'),
+            buttons: [{ label: I18n.t('dialog.commentRegionOk'), value: 'go', primary: true }],
+        });
+        return choice === 'go';
+    },
+
     async _cookieGateBeforeRun(opts, profileChoice) {
         /* One place decides what this run has to know about its cookies, because the
            answers have to stay in one order:
@@ -718,6 +747,10 @@ const workflow = {
            different networks, and neither one serves both — say so before paying for
            the cookie probes below. */
         if (!(await this._confirmOverseasBeforeRun())) return;
+        /* A comment crawl can come back with a blank 「评论地区」 because the *site* does not
+           publish an IP region for that video — say so once before the run, so the empty column
+           is not mistaken for a failure. Silent when the canvas has no comment node. */
+        if (!(await this._confirmCommentRegionBeforeRun())) return;
         /* A long crawl can outlive its cookie and die at the login wall an hour
            in. When 自动验证 is on, the sites are asked whether that has already
            happened and a login page refuses the run; with it off nothing is asked.
@@ -2819,6 +2852,16 @@ var dataPreview = {
     },
 };
 
+// A stored data cell is the raw platform key (identity); the UI shows its localized name from the
+// same catalog the rest of the page uses. Falls back to the raw value for a key the catalog lacks,
+// so an unmapped platform still shows something instead of nothing.
+function displayPlatform(v) {
+    if (typeof I18n === 'undefined' || !I18n.t) return v;
+    var key = 'platform.' + v;
+    var label = I18n.t(key);
+    return label && label !== key ? label : v;
+}
+
 function renderDataPreviewTable(result) {
     var panel = document.getElementById('data-preview-panel');
     panel.classList.add('open');
@@ -2844,7 +2887,12 @@ function renderDataPreviewTable(result) {
     result.rows.forEach(function (row) {
         html += '<tr>' + result.columns.map(function (c) {
             var v = row[c];
-            return '<td>' + escapeHtml(v === null || v === undefined ? '' : v) + '</td>';
+            if (v === null || v === undefined) v = '';
+            // The 平台 column stores the raw key (douyin, zhihu, …) as the row's storage identity;
+            // the preview shows the localized name the rest of the UI already uses, but only when the
+            // catalog knows it — an unmapped value falls back to the raw text rather than a blank.
+            if (c === '平台' && v) v = displayPlatform(v);
+            return '<td>' + escapeHtml(v) + '</td>';
         }).join('') + '</tr>';
     });
     html += '</tbody></table>';

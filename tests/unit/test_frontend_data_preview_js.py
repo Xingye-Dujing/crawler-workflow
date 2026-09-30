@@ -192,6 +192,19 @@ SCENARIOS = [
         ],
         'steps': ['open'],
     },
+    # ── the platform column shows a name, not a key ──────────────────────────
+    {
+        'id': 'platform-column-localized',
+        'payload': {'node_id': '3'},
+        'columns': ['平台', '评论内容'],
+        'rows': [
+            {'平台': 'douyin', '评论内容': 'a'},
+            {'平台': 'zhihu', '评论内容': 'b'},
+            {'平台': 'kuaishou', '评论内容': 'c'},
+        ],
+        'lang': 'zh',
+        'steps': ['open', {'do': 'lang', 'value': 'en'}, 'open'],
+    },
     # ── language ─────────────────────────────────────────────────────────────
     {
         'id': 'language-of-the-meta-line',
@@ -477,6 +490,28 @@ class TestCellValues:
         table = case(world, 'hostile-cells')['world']['table']
         assert [c['text'] for c in table['rows'][1]] == ['', '0']
         assert [c['text'] for c in table['rows'][2]] == ['plain', '']
+
+
+class TestPlatformColumnIsAName:
+    def test_the_platform_column_shows_the_localized_name_not_the_storage_key(self, world):
+        """The row stores the raw key (its identity), but the preview is for a human:
+        a column reading `douyin` looks like untranslated output. Asserted against the
+        per-step catalog in the same language, never a pasted word — so it speaks zh
+        in Chinese and en in English, and it cannot rot when the catalog is edited."""
+        report = case(world, 'platform-column-localized')
+        zh, en = report['trace'][0], report['trace'][2]
+        assert zh['after']['table']['rows'][0][0]['text'] == zh['words']['platform']['douyin'] != 'douyin'
+        assert zh['after']['table']['rows'][1][0]['text'] == zh['words']['platform']['zhihu'] != 'zhihu'
+        # Same rows, English interface: the label flips with the catalog, not stuck in one language.
+        assert en['after']['table']['rows'][0][0]['text'] == en['words']['platform']['douyin'] != 'douyin'
+        assert en['words']['platform']['douyin'] != zh['words']['platform']['douyin'], 'catalog has one language'
+
+    def test_an_unmapped_platform_falls_back_to_the_raw_value_not_a_blank(self, world):
+        """A platform the catalog has no name for still has to show *something* — the
+        raw key — rather than a cell that vanished the value the user came to read."""
+        report = case(world, 'platform-column-localized')
+        # 'kuaishou' is not in the platform catalog; the third row's platform cell stays raw.
+        assert report['trace'][0]['after']['table']['rows'][2][0]['text'] == 'kuaishou'
 
 
 # ─── language ─────────────────────────────────────────────────────────────

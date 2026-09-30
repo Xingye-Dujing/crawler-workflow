@@ -498,6 +498,10 @@ const I18n = {
                 + 'Is your overseas connection up?',
             'dialog.overseasNetworkYes': 'It is up — run',
             'dialog.overseasNetworkNo': 'Not yet — do not run',
+            'dialog.commentRegionNotice':
+                'Some platforms/videos do not publish an IP region in their comments, so the 「评论地区」 column may '
+                + 'come back blank. That is the site not having it, not a crawl error — continuing is normal.',
+            'dialog.commentRegionOk': 'Got it — continue',
             'set.cookiePreflightInline': 'Ask each platform of this canvas whether its Cookie still works',
             'set.sameQueue': 'Fully queue same-platform crawls',
             'set.sameQueueInline': '真排队: one platform runs one crawl at a time, start to finish',
@@ -1256,6 +1260,9 @@ const I18n = {
                 + '跟「什么都没搜到」一模一样。你的外网已经开了吗？',
             'dialog.overseasNetworkYes': '已开，继续运行',
             'dialog.overseasNetworkNo': '还没开，先别跑',
+            'dialog.commentRegionNotice':
+                '部分平台/视频的评论区不发布 IP 属地，「评论地区」这一列可能会是空的——这是站点本身没有，不是程序出错，继续运行即可。',
+            'dialog.commentRegionOk': '知道了，继续',
             'set.cookiePreflightInline': '运行前用本次真要用的浏览器各加载一次该平台，问它 Cookie 还认不认',
             'set.sameQueue': '同平台真排队',
             'set.sameQueueInline': '真排队：同一平台一次只跑一条，前一条跑完才轮到下一条',
