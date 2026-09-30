@@ -82,6 +82,13 @@ DEFAULTS = {
     #: the instant a new run starts. Off keeps the last run's lines up until the next poll
     #: overwrites them, which is what makes a fresh run look like it inherited old output.
     'clear_console_before_run': False,
+    #: Stretch the politeness pauses a crawl takes (``Crawler._polite_pause`` and the douyin
+    #: panel's between-screen wait) by a fixed factor — pacing only, never fingerprint: no new
+    #: stealth, no identity mutation, and NOT the page-arrival render budgets. A gentle rhythm
+    #: trips a platform's 风控 far less than a metronome at full speed, and when a session has
+    #: just been challenged the safe move is to back off rather than push. On costs wall-clock
+    #: (a deep crawl runs several times slower); off is today's behaviour.
+    'gentle_crawl': False,
 }
 
 _values = None
@@ -195,6 +202,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 'same_platform_queue',
                 'ask_overseas_network',
                 'clear_console_before_run',
+                'gentle_crawl',
             ):
                 # The browser may send a real bool or the 'true'/'false' string
                 # the checkbox helpers historically produced; anything else

@@ -2565,6 +2565,12 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
         # burned a user's trust in its messages before.
         if getattr(crawler, 'login_wall', False):
             execution_state['cookie_expired'] = True
+        elif getattr(crawler, 'risk_blocked', False):
+            # A 验证码/风控 that mounted mid-wait is an *answer*, not a slow page: name it
+            # as 风控 so the user backs off instead of retrying into the wall.
+            with contextlib.suppress(Exception):
+                _merge_parts(None)
+            raise ValueError(t('run.riskControlled', platform=platform)) from exc
         with contextlib.suppress(Exception):
             _merge_parts(None)
         raise _page_not_arrived(platform, exc) from exc
@@ -2611,9 +2617,18 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
             # every failure as '节点 X 执行失败：…', which names the node. Both
             # calls made the same sentence appear twice, once without the node.
             raise ValueError(t('run.cookieExpired', platform=platform))
-        # Wall met exactly as the target was reached: the session died at the
-        # finish line, so there is nothing missing — do not raise a false alarm.
+        # Wall met exactly as the target was reached: the session died at the finish
+        # line, so there is nothing missing — do not raise a false alarm.
         add_log(t('run.cookieExpiredOk', platform=platform))
+    # A 风控 bounce that left the crawl short is named here — the sibling of U1, and the
+    # opposite advice. A login wall says "re-save the cookie"; risk control says the session
+    # may be perfectly fine and the ONLY safe move is to back off, so the node FAILS (keeps
+    # every row, run marked failed so 继续 appears) with a line that forbids an immediate
+    # re-run. Before U1, because a risk short must report 风控, never 采得不足. (A login wall
+    # already raised in the block above, so reaching here short with ``wall`` set is impossible —
+    # the two refusals are mutually exclusive by control flow, not by an added guard.)
+    if target_count and len(rows) < target_count and getattr(crawler, 'risk_blocked', False):
+        raise ValueError(t('run.riskControlled', platform=platform))
     # U1: a non-wall, non-risk, non-stopped crawl that came back under its target WITHOUT a
     # site-attested end must not settle clean DONE — that is §6's silent-under-collect, which
     # until now only the test tier's ``classify_verdict`` convicted, never the run itself.
@@ -2621,8 +2636,8 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
     # regression while platforms migrate one at a time); a ``LICENSED_ENDS`` word means the SITE
     # said this is all (settles clean); ``UNDER_TARGET`` — and ONLY that — is the convicted
     # short. A loop self-summary cannot reach here as a license: ``Crawler.note_end`` refuses it.
-    # A risk bounce is deliberately NOT convicted and NOT told to 继续: re-running into risk
-    # control immediately is the advice this repo forbids, so the gate skips when it is set.
+    # A risk bounce is settled by the branch just above (named 风控, back off), so this gate
+    # skips when ``risk_blocked`` is set — the two refusals never collide.
     if (
         target_count
         and len(rows) < target_count
@@ -3295,6 +3310,12 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     counts = {OK: 0, BLOCKED: 0, DEAD: 0}
     # Which platforms actually answered with a login page, in the order they did.
     blocked_by: list[str] = []
+    # Blocked platforms whose owning crawler named 风控 (back off) rather than a dead cookie
+    # (re-save); kept per-platform because the two refusals carry opposite advice and a mixed
+    # batch must not mislabel the cookie-only ones. ``login_seen`` marks that SOME blocked
+    # platform named a login wall — that always defers to the actionable cookie verdict.
+    risk_by: list[str] = []
+    login_seen = False
     sessions = {}
 
     def _writer_for(idx: int, url: str) -> PartWriter:
@@ -3366,6 +3387,16 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 # 的登录态失效 — naming four platforms the user never crawled and
                 # leaving the one they did unnamed.
                 blocked_by.append(kind)
+                # 风控 and a dead cookie are OPPOSITE advice (back off vs re-save), and only the
+                # owning crawler can tell them apart: it latches ``risk_blocked`` on a captcha and
+                # ``login_wall`` on a login redirect. A platform that names neither keeps today's
+                # bare-cookie verdict, so this changes nothing for them. Tracked PER platform (not
+                # one boolean) so a mixed batch can only report 风控 when EVERY blocked platform
+                # named it — otherwise the actionable cookie path wins.
+                if getattr(_crawler, 'risk_blocked', False) and not getattr(_crawler, 'login_wall', False):
+                    risk_by.append(kind)
+                if getattr(_crawler, 'login_wall', False):
+                    login_seen = True
             writer = _writer_for(idx, url)
             fresh = []
             for row in rows:
@@ -3393,12 +3424,16 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         # summary, because the executor's own 被停止 line is the one true sentence here.
         raise CrawlerStopped(t('crawl.stopped'))
     blocked_seen = bool(counts.get(BLOCKED))
-    if blocked_seen:
-        # Same story as the source crawler: a blocked article means the saved
-        # cookie likely died — the collected comments are already merged to
-        # disk and stored; refresh the cookie and resume for the rest. The
-        # line above (comment.done) already reported how many were blocked, so
-        # this only raises: the executor prints it once, with the node's name.
+    # 风控-only when EVERY blocked platform named 风控 and none named a login wall: then the
+    # back-off verdict owns the node and no cookie flag is raised. Any cookie wall, or any blocked
+    # platform that named neither refusal, defers to the actionable cookie path unchanged.
+    risk_only = blocked_seen and not login_seen and set(blocked_by) <= set(risk_by)
+    if blocked_seen and not risk_only:
+        # A blocked article whose session did NOT name 风控 is the cookie-death case: raise the
+        # toast flag so the user refreshes and resumes. 风控-only is the exception — its session
+        # may be fine and re-saving a working cookie is the lie this repo refuses, so the flag
+        # stays down and the verdict (below) is the back-off one. Every platform that returns a
+        # bare BLOCKED without latching risk keeps the original "any block → cookie" behaviour.
         execution_state['cookie_expired'] = True
     add_log(
         t(
@@ -3430,7 +3465,12 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         # A sequence, not a '/'.join(): the {platform} slot localizes+joins only
         # list values and comma-joined strings, so a slash string printed raw keys.
         named = list(dict.fromkeys(blocked_by))
-        raise ValueError(t('run.cookieExpired', platform=named or want or t('run.cookieAnyPlatform')))
+        target_word = named or want or t('run.cookieAnyPlatform')
+        if risk_only:
+            # 风控 the whole batch: name it and tell them to back off, NOT to re-save a
+            # cookie — that is the source crawler's rule, applied to the comment node too.
+            raise ValueError(t('run.riskControlled', platform=target_word))
+        raise ValueError(t('run.cookieExpired', platform=target_word))
     return rows_out
 
 

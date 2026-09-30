@@ -36,6 +36,7 @@ from selenium.common.exceptions import JavascriptException, StaleElementReferenc
 
 from i18n import stop_reason_label, t
 
+from .base import throttled_sleep
 from .comments_base import BLOCKED, DEAD, OK, _json_or_none
 from .comments_bilibili import bilibili_reply_js, bilibili_view_js, parse_bilibili_comments
 from .comments_douyin import douyin_comment_fields, parse_douyin_comments
@@ -817,6 +818,11 @@ return (function () {
         self.driver.get(target)
         mounted = self._wait_for_douyin_panel()
         if looks_blocked(self._body_head()):
+            # A security-check body is 风控, not a dead session: latch it on the owning
+            # crawler so the node reports 「退避重试」, never 「重新保存 Cookie」 for a session
+            # that may be perfectly fine.
+            if self._owner is not None:
+                self._owner.risk_blocked = True
             return [], BLOCKED
         reported = self._node_text('[data-e2e="feed-comment-icon"]')
         # The substitution test runs **before** the panel branch, not inside the 「没挂载」 arm: measured
@@ -843,6 +849,12 @@ return (function () {
                 # Neither a panel nor the counter that would explain its absence:
                 # that is not "no comments", and reporting it as one would hide a
                 # dead session behind an empty table.
+                # Douyin's captcha speaks in the tab TITLE (which ``looks_blocked``
+                # on the body could not see), so ask the owning crawler directly: if
+                # it is walled, this is 风控 (back off), not a cookie to re-save.
+                is_walled = self._owner is not None and getattr(self._owner, '_is_walled', lambda: False)()
+                if is_walled:
+                    self._owner.risk_blocked = True
                 self.log(t('comment.dyNoPanel', url=target))
                 return [], BLOCKED
             self.log(t('comment.dyNone', url=target, n=parse_count(reported)))
@@ -901,7 +913,11 @@ return (function () {
             if not self._scroll_douyin_panel():
                 exit_reason = 'stuck'
                 break
-            self.nap(1.5)
+            # A pacing pause between scrolled screens, so gentle crawl may stretch THIS one. The
+            # other ``self.nap`` calls in this engine are page-arrival budgets (render waits), not
+            # politeness, and must stay unscaled — which is why pacing is a direct
+            # :func:`throttled_sleep`, not the session's ``nap`` knob.
+            throttled_sleep(1.5)
         # Numbered once, over the whole thread. ``parse_douyin_comments`` counts from 1 inside the batch it
         # is handed, so calling it per scroll round made 楼层 restart at 1 on every screen — a table where
         # twelve rows claim floor 1 and nothing says which screen they came from. The panel is a list, not

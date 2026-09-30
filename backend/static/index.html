@@ -1548,6 +1548,19 @@
         </span>
       </div>
       <div class="dd-item-row">
+        <span data-i18n="set.gentleCrawl">慢速采集（降风控）</span>
+        <span class="dd-ctrl">
+          <label class="settings-checkbox-label">
+            <input
+              type="checkbox"
+              id="set-gentle-crawl"
+              onchange="onSettingInput('gentle_crawl', this.checked)"
+            />
+            <span data-i18n="set.gentleCrawlInline">只放慢采集节奏（每次动作间多等数秒），绝不改浏览器身份；刚被风控/验证码挡过时开启，用退避换更低的再次触发</span>
+          </label>
+        </span>
+      </div>
+      <div class="dd-item-row">
         <span data-i18n="set.overseasAsk">海外平台运行前问一句外网</span>
         <span class="dd-ctrl">
           <label class="settings-checkbox-label">

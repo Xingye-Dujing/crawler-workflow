@@ -156,8 +156,26 @@
   `run.underTargetShort`, settling partial/继续, NOT clean DONE); or a member of `crawlers.base.LICENSED_ENDS`
   (`'site_end'` / `'capped'` / `'empty'` — each requires a fact the SITE attested: an end-of-list marker, a fixed
   board size, a server-confirmed 200-empty list; NOT an unrendered DOM that merely "looked empty"). A login wall and
-  the user's 停止 are settled by the executor BEFORE this gate; a **risk bounce is skipped by the gate itself**
-  (re-running into risk control immediately is forbidden advice); none of the three is a license.
+  the user's 停止 are settled by the executor BEFORE this gate; a **risk bounce has its own gate ahead of U1** (see the
+  next paragraph) and U1 itself still skips when `risk_blocked` is set, so the two refusals never collide; a license is
+  never one of the three.
+  **A short crawl the platform marked `risk_blocked` is named 风控 (back off), not 采得不足 (U1) and never a dead
+  cookie.** `_execute_source_node` raises `run.riskControlled` when `risk_blocked`, the target was missed and there is
+  NO login wall — keeping the rows, failing the run so 继续 appears, and telling the user to WAIT (it explicitly suggests
+  慢速采集), because re-running straight into risk control is forbidden advice and re-saving a session that may be fine
+  is a lie. Douyin is the reason this exists: its 验证码中间页 speaks only in the tab TITLE, which `classify` never reads,
+  so `DouyinCrawler._latch_risk_if_walled` sets `risk_blocked` at the ONE crawl-level point a captcha can end an author
+  walk — a profile grid that never arrived — deliberately NOT `login_wall`. It is NOT re-checked at the end of a walk:
+  a per-detail-page 验证码 (measured to fire on a share of every walk) leaves a stale title that would false-convict a
+  crawl that collected everything the site has. The comment node splits the same way: `_execute_comment_node` records
+  which blocked platforms latched `risk_blocked`, and raises `run.riskControlled` only when EVERY blocked platform named
+  风控 and none named a login wall; any cookie wall, or any platform naming neither, keeps the original cookie verdict AND
+  its `cookie_expired` toast flag (a bare BLOCKED never set that flag before either, so nothing regresses).
+  **The ONLY sanctioned way to reduce 风控 is pacing, never disguise.** The `gentle_crawl` setting scales the POLITENESS
+  pauses — `Crawler._polite_pause` and the douyin panel's between-screen wait — by `GENTLE_PAUSE_FACTOR`; it is speed only.
+  The comment engine's per-URL `nap` calls are NOT scaled: those are page-arrival render budgets, not anti-bot pacing, and
+  stretching them just slows the crawl and delays honouring 停止. No UA/`navigator`/fingerprint work is added or permitted
+  here, since spoofing detection is an arms race whose loss mode is a banned account, not a blocked request.
   **`Crawler.note_end(reason)` raises on any value outside `None`/`UNDER_TARGET`/`LICENSED_ENDS`, and on a non-string**
   (a bare truthiness test would let a bool `note_end(x.hit_cap)` slip past as falsy and go silently unlicensed), and
   `None` is a no-op, never the convicting `''`: a crawler excusing a gap with its own pager crashes at the boundary

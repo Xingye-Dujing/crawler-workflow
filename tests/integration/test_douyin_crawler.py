@@ -564,6 +564,54 @@ class TestAuthorProfile:
         assert driver.visited[0] == DouyinCrawler.PROFILE_ENTRY.format(sec=SEC)
         assert len([u for u in driver.visited if '/user/' in u]) == 1, 'the grid is one navigation, then scrolls'
 
+    def _author_shape(self, crawler, monkeypatch, *, detail_walled, list_end, seeded_rows):
+        """Drive ``author`` to a fixed end-state: the grid arrived and drained, N rows landed, and
+        ``detail_walled`` content pages answered 验证码中间页 — the shape a real 风控 stall leaves.
+
+        White-box on purpose: the rule under test is the end-of-walk decision, not the paging (which
+        the case above covers). Everything the walk does before that decision is stubbed to the
+        measured live outcome, so the assertions read on the one branch the live run exposed.
+        """
+
+        def _walk(*_a, **_k):
+            crawler._detail_walled = detail_walled
+            crawler._list_end_attested = list_end
+
+        for name, value in {
+            'open': lambda *_a, **_k: True,
+            '_dismiss_prompts': lambda *_a, **_k: None,
+            '_published_count': lambda: 145,
+            '_wait_for_grid': lambda timeout=None: {'arrived': True, 'waited': 0.0, 'verdict': '', 'gave_up': 0},
+            '_is_walled': lambda: False,
+            'may_stop': lambda: False,
+            '_open_each': _walk,
+        }.items():
+            monkeypatch.setattr(crawler, name, value)
+        crawler._collected = list(seeded_rows)
+
+    def test_an_author_walk_of_zero_captcha_refused_details_is_risk_not_a_site_end(self, make_crawler, monkeypatch):
+        """#1, the live-exposed gap: the grid arrived and printed 「没有更多了」, but EVERY content page
+        was a 验证码 → 0 rows. A 0 that was refused is 风控 (back off), never the list's end marker
+        licensing an empty as 「the creator has no more」."""
+        crawler, _driver = make_crawler(cards=[])
+        self._author_shape(crawler, monkeypatch, detail_walled=12, list_end=True, seeded_rows=[])
+        rows = crawler.author(SEC, target_count=12)
+        assert rows == [], 'nothing was collected'
+        assert crawler.risk_blocked is True, 'a captcha-refused 0 is 风控, not a short list'
+        assert crawler.end_reason != 'site_end', "the grid's end marker must not whitewash an all-refused walk"
+
+    def test_a_partial_author_walk_with_a_refused_image_text_is_not_risk(self, make_crawler, monkeypatch):
+        """The false-positive guard M4: one refused 图文 alongside rendered videos is the route the
+        site denies for this browser, not a throttled session — a crawl that DID collect keeps its
+        ``site_end`` license and must never be convicted."""
+        crawler, _driver = make_crawler(cards=[])
+        seeded = [{'视频ID': ID, '标题': 't'}]
+        self._author_shape(crawler, monkeypatch, detail_walled=3, list_end=True, seeded_rows=seeded)
+        rows = crawler.author(SEC, target_count=12)
+        assert len(rows) == 1
+        assert crawler.risk_blocked is False, 'a partial walk that produced rows is not a blocked session'
+        assert crawler.end_reason == 'site_end', 'the drained grid still licenses a genuine short'
+
     def test_the_harvest_loop_waits_on_its_own_list_not_on_the_search_route(self, make_crawler, monkeypatch):
         """A remount wait belongs to the list being read, not to whichever route mounted first.
 

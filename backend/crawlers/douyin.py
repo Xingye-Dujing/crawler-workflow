@@ -28,6 +28,11 @@ class DouyinCrawler(VideoCrawler):
     login_url = 'https://www.douyin.com/'
     supports_crawl = True
 
+    #: How many of THIS crawl's detail pages came back 「验证码中间页」. ``author`` reads it to tell
+    #: a captcha-refused 0 (风控) from a genuinely short list; the class default is what keeps a bare
+    #: ``get_detail`` (which never opens the author walk) from raising — :meth:`_detail_row` bumps it.
+    _detail_walled = 0
+
     #: The 「保存登录信息超过5天」 mask covers the search button (measured: the
     #: click is intercepted by ``.trust-login-dialog-mask``). Only 取消 is ever
     #: pressed: the user reports that 保存 leads to a phone-verification step, so
@@ -131,6 +136,11 @@ class DouyinCrawler(VideoCrawler):
                 logger.info(t('crawl.dy.authorNoWorks'))
                 self.note_end('empty')
                 return self.results()
+            # A page that did not answer MAY have been refused by a captcha that mounted
+            # during the wait; latch it before the refusal travels so the executor names
+            # 风控 rather than 「这一页没到位」. An unreachable browser-error page leaves
+            # ``_is_walled`` false, so its own 「浏览器自己拒绝了」 line still stands.
+            self._latch_risk_if_walled()
             # Anything else is a page that did not answer: quoting the site is the
             # only way the user can tell a wall from a quiet zero.
             facts = {'waited': grid['waited'], 'verdict': grid['verdict'], 'gave_up': grid['gave_up']}
@@ -150,6 +160,9 @@ class DouyinCrawler(VideoCrawler):
         # run skips what it already paid for and the cursor stays a position.
         done = {str(row.get('视频ID') or '') for row in self.results() if row.get('视频ID')}
         self._list_end_attested = False
+        # Counted during the walk so its end can tell a captcha-refused 0 (风控) from a genuine
+        # short list — the profile title is clean by then, so only this tally sees the refusals.
+        self._detail_walled = 0
         self._open_each(
             lambda: self._grid_ids(),
             self._scroll_profile,
@@ -168,7 +181,17 @@ class DouyinCrawler(VideoCrawler):
         # indistinguishable from a soft throttle or an honest 继续 replay, so we license
         # NOTHING there (end_reason stays None) rather than false-convict a good crawl. §6's
         # actual conviction needs a positive "incomplete" signal, which only live measurement
-        # can supply per platform (#7).
+        # can supply per platform (#7). The ONE exception is a walk that collected NOTHING while
+        # its content pages were refused: a per-detail-page 验证码 is normally just the 图文 route
+        # this browser is denied (measured ~15 of 39), and the profile title is NOT a captcha once
+        # we return to it, so the title-based latch above would miss it. But when ZERO rows landed
+        # while detail pages answered 验证码中间页, the site did not "run out" — it refused every
+        # row. That is a positive 风控 signal: latch it (which also suppresses the licenses below,
+        # so the list's own 「没有更多了」 cannot whitewash a 0-row captcha stall), and let the
+        # executor name it as 风控-back-off. A crawl that collected SOME rows keeps its licenses —
+        # a walled 图文 alongside rendered videos is normal, not a blocked session.
+        if target_count and self.collected() == 0 and self._detail_walled:
+            self.risk_blocked = True
         if self.collected() < target_count and not (self._is_walled() or self.risk_blocked or self.may_stop()):
             if published >= 0 and self.collected() >= published:
                 self.note_end('capped')
@@ -407,6 +430,18 @@ class DouyinCrawler(VideoCrawler):
         """A refusal the page has already announced: captcha title, or a wall flag."""
         return bool(self.login_wall or self.risk_blocked or any(mark in self._title() for mark in self.CAPTCHA_MARKS))
 
+    def _latch_risk_if_walled(self) -> None:
+        """Name a 验证码中间页 as 风控 so the executor tells the user to back off, not re-save.
+
+        The captcha this site answers a throttled session with is visible only in the tab
+        title — invisible to the shared classifier — so ``open`` never latched ``risk_blocked``
+        and a crawl that died on it used to read as a quiet zero (or a 「页面没到位」). Setting
+        ``risk_blocked`` here routes it to ``run.riskControlled``. It is deliberately NOT
+        ``login_wall``: re-saving a cookie that is actually fine is the advice this repo refuses.
+        """
+        if self._is_walled() and not self.login_wall:
+            self.risk_blocked = True
+
     def _page_words(self) -> str:
         """What the page says about itself, quoted into the refusal.
 
@@ -556,7 +591,10 @@ class DouyinCrawler(VideoCrawler):
                 # 「没有渲染出数据」 was therefore a wrong sentence about a real event, and the wrong sentence
                 # invites the wrong repair. It is NOT the session either: latching ``login_wall`` here would
                 # hand the whole node to 「COOKIE 可能过期」 while the next card crawls fine, so the flag is
-                # read but not set, and the walk keeps going.
+                # read but not set, and the walk keeps going. The COUNT is kept, though — ``author`` turns
+                # "zero rows while every detail was refused" into a crawl-level 风控, which is the one shape
+                # the profile-title read cannot see (a 图文 route refusal, not a login page).
+                self._detail_walled += 1
                 logger.warning(t('crawl.dy.detailWalled', i=aweme_id))
                 return None
             # Two different complaints. "No data rendered" says the page arrived and

@@ -815,6 +815,13 @@ _ZH = {
         '已采集的数据全部保留——请到 设置→Cookie 更新后，用断点续跑从上次中断处继续'
     ),
     'run.cookieExpiredOk': '提示：{platform} 在目标达成后才遇到登录墙，本次数据完整，无需续跑',
+    # A 风控 refusal is the OPPOSITE advice from a dead cookie: the session may be fine and
+    # re-running straight into it only deepens the block, so the console names 风控, says it
+    # is not a login problem, and tells the user to wait (继续 later), never to re-save.
+    'run.riskControlled': (
+        '{platform} 被安全验证（风控）拦下，本次未能采满——这不是登录态失效，请勿立刻重跑（立即再撞只会加重风控）。'
+        '已采集的数据全部保留；可先开启 设置→慢速采集，稍后用「继续」从断点补采'
+    ),
     # U1: a crawl that came back under its target WITHOUT naming a licensed end (the site
     # said it ran out, a wall, risk, or the user's 停止) is a real under-collect, not a
     # success — so it is refused BY NAME and kept resumable, never settled clean DONE.
@@ -1793,6 +1800,14 @@ _EN = {
     ),
     'run.cookieExpiredOk': (
         'note: {platform} hit the login wall only after the target was met — the data is complete, nothing to resume'
+    ),
+    # A 风控 refusal is the OPPOSITE advice from a dead cookie: the session may be fine and
+    # re-running straight into it only deepens the block, so the console names risk control,
+    # says it is not a login problem, and tells the user to wait (继续 later), never re-save.
+    'run.riskControlled': (
+        '{platform} was stopped by a security check (risk control) before the target was met — this is NOT an expired '
+        'login, and re-running immediately only deepens the block. Everything collected so far is kept; you can enable '
+        'Settings -> Gentle crawling, then use 继续 / Resume later to pick up from the checkpoint'
     ),
     # U1: a crawl under its target that named no licensed end (site ran out / wall / risk /
     # the user's Stop) is a real under-collect, refused by name and left resumable — never

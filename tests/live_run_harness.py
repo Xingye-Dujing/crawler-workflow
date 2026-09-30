@@ -110,6 +110,7 @@ SILENT_SHORT = 'SILENT_SHORT'
 #: stopping is graded when it is graded by ``run.nodeStopped`` alone.
 SHARED_EXITS = (
     'run.cookieExpired',
+    'run.riskControlled',
     'run.dedupe_skipped',
     'run.dedupe_all_skipped',
     'run.nodeStopped',
@@ -1074,7 +1075,11 @@ def classify_verdict(target: int, rows_kept: int, console: str, exits=SHARED_EXI
 def wall_flags(console: str) -> list[str]:
     """Which walls this console spoke about — a separate column because a *risk* block and
     a *dead session* are different facts wearing one face, and the fix is different too."""
-    return [key for key in ('crawl.loginWall', 'crawl.riskBlocked', 'run.cookieExpired') if names_key(console, key)]
+    return [
+        key
+        for key in ('crawl.loginWall', 'crawl.riskBlocked', 'run.cookieExpired', 'run.riskControlled')
+        if names_key(console, key)
+    ]
 
 
 # ─── the one site answer a live case cannot wait for ─────────────────────

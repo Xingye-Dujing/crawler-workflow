@@ -33,11 +33,12 @@ _ROWS = [{'标题': f'条目{i}', '链接': f'https://example.com/{i}'} for i in
 class _StubCrawler:
     """Returns a fixed table and reports `end_reason` exactly as a migrated handler would."""
 
-    def __init__(self, rows, end_reason, *, wall=False, counts=None):
+    def __init__(self, rows, end_reason, *, wall=False, risk=False, counts=None):
         self._rows = list(rows)
         self.end_reason = end_reason
         self.walk_counts = counts or {}
         self._wall = wall
+        self.risk_blocked = risk
 
     def set_sink(self, sink):
         pass
@@ -134,6 +135,31 @@ def test_a_wall_short_uses_the_cookie_path_not_this_gate(app_module, monkeypatch
     with pytest.raises(ValueError) as err:
         _run(app_module, monkeypatch, _StubCrawler(_ROWS, UNDER_TARGET, wall=True))
     assert t('run.cookieExpired', platform='zhihu') == str(err.value)
+
+
+def test_a_risk_short_is_named_as_risk_control_not_a_silent_done(app_module, monkeypatch):
+    """#1: a crawl that 风控 blocked (``risk_blocked``, NOT a login wall) and came back short
+    must FAIL by name with the back-off verdict — never settle DONE over a thin table, and never
+    the cookie re-save advice (the session may be fine)."""
+    with pytest.raises(ValueError) as err:
+        _run(app_module, monkeypatch, _StubCrawler(_ROWS, None, risk=True))
+    assert str(err.value) == t('run.riskControlled', platform='zhihu')
+    assert 'COOKIE' not in str(err.value), 'risk control must not be misadvised as a dead cookie'
+
+
+def test_risk_control_outranks_the_under_target_wording(app_module, monkeypatch):
+    """When BOTH signals could fire, the actionable one wins: a risk short reports 风控 (back
+    off), not 「采得不足」 (which would invite the exact immediate re-run this repo forbids)."""
+    with pytest.raises(ValueError) as err:
+        _run(app_module, monkeypatch, _StubCrawler(_ROWS, UNDER_TARGET, risk=True))
+    assert str(err.value) == t('run.riskControlled', platform='zhihu')
+
+
+def test_a_risk_crawl_that_met_its_target_is_not_a_failure(app_module, monkeypatch):
+    """风控 only refuses a GAP: a full table is a finished crawl even if the flag was set."""
+    five = _ROWS + [{'标题': 'x', '链接': 'y'}] * 3
+    rows = _run(app_module, monkeypatch, _StubCrawler(five, None, risk=True))
+    assert len(rows) == 5, 'a crawl that met its target has nothing to refuse'
 
 
 # ─── note_end: the boundary that keeps a loop self-summary from becoming a license ───
@@ -287,3 +313,127 @@ def test_executor_settles_a_silent_short_as_partial_with_rows_kept(client, app_m
     assert nodes['node-1']['status'] == 'partial', 'the node is partial (resumable), not done'
     assert store.row_count(run_id, 'node-1') == 4, 'the rows collected before the gap stay on disk'
     assert '站点没说到底' in nodes['node-1']['error'] or 'ran out' in nodes['node-1']['error'].lower()
+
+
+class _RiskSimCrawler(_SimCrawler):
+    """A real ``Crawler`` that came back short because 风控 blocked it — #1's product shape.
+
+    Sets ``risk_blocked`` (what douyin's captcha latch and ``wall.classify`` both reach) and
+    names no site-attested end, so the executor must report 风控-back-off: never a clean DONE,
+    and never the cookie re-save a login wall would warrant (the session may be perfectly fine).
+    """
+
+    def search(self, keyword=None, target_count=None, resume=None, **kw):
+        for item in self._supply:
+            self.emit(item)
+        self.risk_blocked = True
+        return self.results()
+
+
+@pytest.mark.serial
+@pytest.mark.usefixtures('seeded_logins')
+def test_executor_names_a_risk_short_as_backoff_not_cookie(client, app_module, monkeypatch):
+    """4 of 10 under a 风控 block → node PARTIAL, run FAILED, 4 rows kept, and the error names
+    风控 (back off) — the opposite advice from a dead cookie, proven in the product path."""
+    monkeypatch.setattr(
+        app_module,
+        'get_crawler',
+        lambda *a, **k: _RiskSimCrawler([{'作者': f'a{i}', '正文': f'body {i}'} for i in range(4)]),
+    )
+    started = client.post('/api/workflow/execute', json={'workflow': _workflow(10), 'workflow_name': 'risk-short'})
+    run_id = started.get_json()['run_id']
+    assert _drain(app_module)
+
+    store = app_module._RUN_STORE
+    run = store.get_run(run_id)
+    nodes = {node['node_id']: node for node in run['nodes']}
+    assert run['status'] == 'failed', 'a risk-blocked short must not settle the run complete'
+    assert nodes['node-1']['status'] == 'partial', 'the node stays resumable (继续 later, after back-off)'
+    assert store.row_count(run_id, 'node-1') == 4, 'rows collected before the block stay on disk'
+    error = nodes['node-1']['error']
+    assert '风控' in error or 'risk control' in error.lower(), error
+    assert 'COOKIE' not in error and 'cookie' not in error.lower(), 'a 风控 block must not advise re-saving a cookie'
+
+
+def test_a_login_wall_outranks_risk_on_the_source_path(app_module, monkeypatch):
+    """Both flags on a short source crawl → the cookie verdict wins, because the wall branch
+    raises first: a re-savable session is the actionable fix, and the two refusals stay mutually
+    exclusive rather than double-reporting the same node."""
+    with pytest.raises(ValueError) as err:
+        _run(app_module, monkeypatch, _StubCrawler(_ROWS, UNDER_TARGET, wall=True, risk=True))
+    assert str(err.value) == t('run.cookieExpired', platform='zhihu')
+
+
+# ─── the comment node's 风控-vs-cookie split (the regression B1 would have hidden) ───
+
+import crawlers.comments as _comments  # noqa: E402  (module object, for monkeypatching its name)
+
+
+class _FakeCommentCrawler:
+    """The owning browser a comment session is built on — just enough surface for the split."""
+
+    def __init__(self, *, risk=False, wall=False):
+        self.risk_blocked = risk
+        self.login_wall = wall
+        self.driver = None
+
+    def close(self):
+        return None
+
+
+class _BlockingSession:
+    """Stand-in for CommentSession: the douyin panel adapter answers BLOCKED for every URL."""
+
+    def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+        self._owner = owner
+
+    def crawl_douyin(self, url, limit):
+        return [], _comments.BLOCKED
+
+
+def _comment_node():
+    return {
+        'id': 'node-1',
+        'type': 'source',
+        'title': '评论',
+        'platform': 'douyin',
+        'params': {
+            'platform': 'douyin',
+            capabilities.MODE_KEY: 'comments',
+            'urls': 'https://www.douyin.com/video/7000000000000000001',
+            'comment_limit': 10,
+        },
+    }
+
+
+def _drive_comment_block(app_module, monkeypatch, crawler):
+    monkeypatch.setitem(app_module.execution_state, 'running', True)
+    # The flag is what the two assertions read, so it must start clean rather than inherit a
+    # value some earlier source-wall test left on the shared execution_state (a state test that
+    # passes for the wrong reason — the suite shares ONE dict across the whole run).
+    monkeypatch.setitem(app_module.execution_state, 'cookie_expired', False)
+    monkeypatch.setattr(app_module, 'get_crawler', lambda *a, **k: crawler)
+    monkeypatch.setattr(_comments, 'CommentSession', _BlockingSession)
+    with pytest.raises(ValueError) as err:
+        app_module._execute_comment_node(_comment_node(), headless=True, ctx=None)
+    return str(err.value)
+
+
+@pytest.mark.usefixtures('clean_globals')
+def test_a_comment_risk_block_names_backoff_and_keeps_the_cookie_flag_down(app_module, monkeypatch):
+    """A douyin comment crawl blocked by a captcha (owner latched risk, not a login wall) reports
+    风控-back-off and must NOT raise the cookie-death toast — the session may be perfectly fine."""
+    message = _drive_comment_block(app_module, monkeypatch, _FakeCommentCrawler(risk=True))
+    assert '风控' in message or 'risk control' in message.lower(), message
+    assert app_module.execution_state['cookie_expired'] is not True, (
+        'a 风控 comment block must not raise the cookie toast'
+    )
+
+
+@pytest.mark.usefixtures('clean_globals')
+def test_a_comment_block_that_named_nothing_keeps_the_cookie_verdict(app_module, monkeypatch):
+    """The behaviour every platform that does NOT latch 风控 depends on must survive B1's split:
+    a bare BLOCKED is still the cookie-death path (toast flag raised AND cookieExpired wording)."""
+    message = _drive_comment_block(app_module, monkeypatch, _FakeCommentCrawler(risk=False, wall=False))
+    assert 'COOKIE' in message or 'cookie' in message.lower(), message
+    assert app_module.execution_state['cookie_expired'] is True, 'a cookie block must still raise the toast flag'

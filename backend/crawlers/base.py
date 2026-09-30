@@ -22,6 +22,31 @@ from .engine.wall import bounced_to_root, classify, error_token, never_arrived, 
 
 logger = logging.getLogger(__name__)
 
+#: How much :func:`throttled_sleep` and :meth:`Crawler._polite_pause` stretch every pause
+#: when the 慢速采集 (``gentle_crawl``) setting is on. It is a pure pacing multiplier — it
+#: changes no header, no fingerprint, no identity — because the goal is to make the crawl
+#: LOOK unhurried to a platform's 风控, not to look like something it is not. 4× was chosen
+#: so a normal ~1 s per-round pause becomes a few seconds: enough to break the metronome
+#: rhythm a bot-detection model reads, without turning a shallow crawl into an all-day run.
+GENTLE_PAUSE_FACTOR = 4.0
+
+
+def gentle_crawl_on() -> bool:
+    """Whether the user asked for gentle (slowed) crawling right now."""
+    return bool(get_setting('gentle_crawl'))
+
+
+def throttled_sleep(seconds: float) -> None:
+    """Sleep *seconds*, scaled up when gentle crawl is on.
+
+    One home for the pacing decision so both the DOM crawlers' :meth:`Crawler._polite_pause`
+    and the comment engine's ``nap`` honour the same switch. A negative or zero request is a
+    no-op wait, never a raised floor: this scales a pause, it does not impose a minimum.
+    """
+    delay = max(0.0, float(seconds))
+    time.sleep(delay * (GENTLE_PAUSE_FACTOR if gentle_crawl_on() else 1.0))
+
+
 # Where a crawler has been pushed into a login page instead of the content it
 # asked for is decided once, in :mod:`crawlers.engine.wall`; see that module for
 # the measured shape of every platform's wall.
@@ -1261,9 +1286,12 @@ class Crawler(ABC):
         """Jittered pause between rounds that hit the network.
 
         Anti-bot caution is a requirement, not a leftover: the jitter is what
-        keeps a run of crawls from looking like a metronome.
+        keeps a run of crawls from looking like a metronome. When the user has
+        switched on 慢速采集 (``gentle_crawl``) the whole pause is stretched by
+        :data:`GENTLE_PAUSE_FACTOR` through :func:`throttled_sleep` — pacing only,
+        never the browser's identity.
         """
-        time.sleep(max(0.2, base + random.uniform(-spread, spread)))
+        throttled_sleep(max(0.2, base + random.uniform(-spread, spread)))
 
     @staticmethod
     def _as_text(value) -> str:
