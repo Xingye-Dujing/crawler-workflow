@@ -802,7 +802,9 @@ return (function () {
     #: synthetic ``.click()`` does not move React's delegated handler (measured on the real profile).
     #: The opener is matched by its 「展开N条回复」 TEXT, not the class alone: after a real expand the same
     #: slot reads 「收起」, so the text is both the proof it opened and the guard against a re-click that
-    #: would collapse it again.
+    #: would collapse it again. Each thread is stamped ``data-dy-tried`` so it is attempted ONCE — a comment
+    #: that is deleted/hidden only pops 「评论已删除 / 不可见」 and never renders, so retrying it would hang the
+    #: walk; it is skipped for good and its parent keeps the site's declared count.
     _DY_EXPAND_RE = re.compile(r'展开\s*\d+\s*条回复')
 
     #: One round trip for the whole mounted panel: each ``[data-e2e="comment-item"]`` as ``{own, replies}``.
@@ -823,27 +825,90 @@ return (function () {
     return out;
     """
 
+    #: Stamps the expander's comment-item with ``data-dy-tried`` and reports whether THIS is a first try,
+    #: so a thread is clicked ONCE and never re-clicked — a second click while its signed reply request is
+    #: still loading can COLLAPSE it, which is what made a big thread re-open/lose-loop. False = already tried.
+    _DY_MARK_JS = r"""
+    var it = arguments[0].closest('[data-e2e="comment-item"]');
+    if (!it) { arguments[0].setAttribute('data-dy-tried', '1'); return true; }
+    if (it.hasAttribute('data-dy-tried')) return false;
+    it.setAttribute('data-dy-tried', '1');
+    return true;
+    """
+
+    #: True only if some 「展开N条回复」 belongs to a comment-item NOT yet tried. The walk keeps going while an
+    #: untried thread remains but STOPS once every thread has been tried — even a thread that will not open —
+    #: otherwise one stubborn 「展开」 that never flips would block the exit forever.
+    _DY_UNTRIED_JS = r"""
+    var re = /展开\s*\d+\s*条回复/;
+    var btns = document.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+      if (!re.test((btns[i].innerText || '').trim())) continue;
+      var it = btns[i].closest('[data-e2e="comment-item"]');
+      if (it && it.hasAttribute('data-dy-tried')) continue;
+      return true;
+    }
+    return false;
+    """
+
     def _expand_douyin_reply_threads(self) -> int:
-        """Open every collapsed 「展开N条回复」 thread with a real (ActionChains) click; return how many."""
-        opened = 0
+        """Open every not-yet-tried 「展开N条回复」 thread once with a real (ActionChains) click.
+
+        Clicks are batched and a single settle follows the round (not a per-opener wait): the reply request
+        is signed and lands ~1 s after the click (user-measured), so one wait for the whole batch is what
+        lets a reply-heavy thread finish instead of grinding. Returns how many it opened.
+        """
+        clicked = 0
         for btn in list(self.driver.find_elements('css selector', 'button')):
             if not self._DY_EXPAND_RE.search(self._safe_text(btn)):
                 continue
             with contextlib.suppress(Exception):
+                if not self.driver.execute_script(self._DY_MARK_JS, btn):
+                    continue
                 self.driver.execute_script('arguments[0].scrollIntoView({block:"center"});', btn)
-                self.nap(0.15)
                 ActionChains(self.driver).move_to_element(btn).pause(0.1).click().perform()
-                # The reply request is signed and lands about a second later (user-measured 「要加载1秒」).
-                self.nap(1.2)
-                opened += 1
-        return opened
+                clicked += 1
+        if clicked:
+            self.nap(1.3)  # one settle for all the signed reply requests this round issued
+            # A failed thread pops 「评论已删除 / 不可见」 — clear it so it can't block the rest of the panel.
+            self._dismiss_douyin_popup()
+        return clicked
+
+    #: A failed 「展开N条回复」 pops a semi-ui toast/modal (评论已删除 / 该评论不可见) — a comment that is gone
+    #: or hidden on the web frontend, which is genuinely UNCRAWLABLE and must be skipped, not retried (the
+    #: ``data-dy-tried`` mark already guarantees one try, no retry). This only clears the popup so it can't
+    #: cover the panel; it never re-clicks. Douyin ships semi-ui (``.semi-modal``/``.semi-toast`` — the same
+    #: library the probe's DOM showed via ``semi-avatar``/``semi-icon``), so the close control is real, not guessed.
+    _DY_POPUP_CLOSE_JS = r"""
+    var popups = document.querySelectorAll('.semi-modal, [role="dialog"], .semi-toast, [class*="semi-toast"]');
+    var visible = [];
+    Array.prototype.forEach.call(popups, function (p) {
+      var r = p.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) visible.push(p);
+    });
+    if (!visible.length) return 'none';
+    var close = null;
+    visible.forEach(function (p) {
+      var c = p.querySelector('.semi-modal-close, [aria-label*="关闭"], [aria-label*="Close"], button[class*="close"]');
+      if (!close && c) close = c;
+    });
+    if (close) { close.click(); return 'closed'; }
+    return 'present';
+    """
+
+    def _dismiss_douyin_popup(self) -> None:
+        with contextlib.suppress(Exception):
+            state = self.driver.execute_script(self._DY_POPUP_CLOSE_JS)
+            # No close control found but a dialog is up: ESC dismisses a modal (comment mode has no video
+            # overlay to hit, and ESC only fires when a popup is actually present — never blind).
+            if state == 'present':
+                self.driver.find_element('css selector', 'body').send_keys('\ue00c')
 
     def _douyin_has_collapsed_opener(self) -> bool:
-        """Any 「展开N条回复」 still on the panel — an opener is proof there is more to read, so the walk
-        must not stop while one remains (that would under-collect threads it never opened)."""
-        return any(
-            self._DY_EXPAND_RE.search(self._safe_text(b)) for b in self.driver.find_elements('css selector', 'button')
-        )
+        """A thread NOT yet tried is still on the panel → the walk has more to open. Once every thread
+        has been tried (opened, or failed-and-skipped) this is False, so a stubborn 「展开」 that only
+        pops 「评论已删除」 cannot hang the walk — it is tried once and then skipped for good."""
+        return bool(self.driver.execute_script(self._DY_UNTRIED_JS))
 
     def _read_douyin_threads(self) -> list:
         with contextlib.suppress(JavascriptException):

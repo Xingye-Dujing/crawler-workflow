@@ -283,16 +283,24 @@ class FakeDriver:
         return out
 
     def _douyin_openers(self):
-        """One button per mounted item that still hides a collapsed thread; once opened it reads 收起."""
+        """One button per mounted item that hides a reply thread; state lives on the ITEM (persists across
+        rounds), so a thread is tried once and a delete-failed thread (``_expandable=False``) never opens.
+        """
         out = []
         for it in self._mounted_items():
             reps = getattr(it, '_replies', None)
             if not reps:
                 continue
-            if getattr(it, '_expanded', False):
-                out.append(El('收起'))
-            else:
-                out.append(El(f'展开{len(reps)}条回复', on_click=lambda x=it: setattr(x, '_expanded', True)))
+            label = '收起' if getattr(it, '_expanded', False) else f'展开{len(reps)}条回复'
+
+            def _do_open(x=it):
+                x._tries = getattr(x, '_tries', 0) + 1
+                if getattr(x, '_expandable', True):
+                    x._expanded = True
+
+            opener = El(label, on_click=_do_open)
+            opener._parent = it
+            out.append(opener)
         return out
 
     def find_element(self, by, selector):
@@ -356,6 +364,23 @@ class FakeDriver:
         if 'replyContainer' in script:
             # The panel structural read: every mounted comment-item as {own, replies}.
             return self._douyin_readings()
+        if 'data-dy-tried' in script and 'setAttribute' in script:
+            # The tried-mark: stamp the expander's item once; False if already tried (never re-click).
+            parent = getattr(args[0], '_parent', None) if args else None
+            if parent is None:
+                return True
+            if getattr(parent, '_tried', False):
+                return False
+            parent._tried = True
+            return True
+        if 'data-dy-tried' in script:
+            # The untried check: is there a thread not yet attempted?
+            return any(
+                getattr(it, '_replies', None) and not getattr(it, '_tried', False) for it in self._mounted_items()
+            )
+        if 'semi-toast' in script or 'semi-modal' in script:
+            # The failure-popup dismissal: the fixture models no blocking dialog, so nothing to clear.
+            return 'none'
         if 'feed-video-nickname' in script:
             # The overlay read is scoped to the active slide; it MUST pass feed-active-video as the
             # root. Returning the neighbour's/global facts for any other root is exactly the mix-up
@@ -875,6 +900,31 @@ class TestAuthorProfile:
         assert driver.visited == []
 
 
+class _FakeActionChains:
+    """Stand-in for selenium ActionChains: ``perform`` runs the queued click on the element it was moved
+    to, which triggers the element's ``on_click`` (the fake's expansion hook). Lets a unit test drive the
+    product's real-click path without a browser.
+    """
+
+    def __init__(self, driver):
+        self._el = None
+
+    def move_to_element(self, el):
+        self._el = el
+        return self
+
+    def pause(self, *a):
+        return self
+
+    def click(self):
+        if self._el is not None:
+            self._el.click()
+        return self
+
+    def perform(self):
+        pass
+
+
 class TestComments:
     def _session(self, driver):
         return CommentSession(driver, log=lambda m: None, nap=lambda s: None)
@@ -917,7 +967,7 @@ class TestComments:
             def perform(self):
                 pass
 
-        monkeypatch.setattr('crawlers.comments.ActionChains', FakeActionChains)
+        monkeypatch.setattr('crawlers.comments.ActionChains', _FakeActionChains)
         parent = El('路人甲\n主评论\n1天前·北京\n2\n展开1条回复', replies=['路人乙\n子回复\n1天前·上海\n0'])
         crawler, driver = make_crawler(cards=[], comment_items=[parent], comment_count='0')
         session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
@@ -929,6 +979,26 @@ class TestComments:
         # 子回复数 is the captured reply (实际子行数), and the parent keeps its own body — not the reply's.
         assert rows[0]['子回复数'] == 1 and rows[0]['评论内容'] == '主评论'
         assert rows[1]['评论内容'] == '子回复' and rows[1]['评论地区'] == '上海'
+
+    def test_a_failed_expand_is_tried_once_then_skipped_not_retried(self, make_crawler, monkeypatch):
+        """A thread that only pops 「评论已删除 / 不可见」 is uncrawlable — tried ONCE, never re-clicked.
+
+        The opener's click does not render replies (``_expandable=False``), the way a deleted/hidden
+        comment behaves live. The walk must file only the parent (with its declared 子回复数), not hang or
+        re-click — the ``data-dy-tried`` mark guarantees a single attempt, and the untried-exit lets the
+        walk finish with that one thread left unopened.
+        """
+        monkeypatch.setattr('crawlers.comments.ActionChains', _FakeActionChains)
+        dead = El('甲\n主评论\n1天前·北京\n0\n展开2条回复', replies=['x', 'y'])
+        dead._expandable = False
+        crawler, driver = make_crawler(cards=[], comment_items=[dead], comment_count='0')
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None)
+        rows, status = session.crawl_douyin(f'https://www.douyin.com/video/{ID}', 0)
+        assert status == OK, status
+        assert len(rows) == 1, f'a thread that will not open yields only its parent: {rows}'
+        assert rows[0]['子回复数'] == 2, "a non-expanded parent keeps the site's declared count, not 0"
+        assert rows[0]['父楼层'] == ''
+        assert getattr(dead, '_tries', 0) == 1, f'the failed thread was clicked more than once: {dead._tries}'
 
     def test_a_link_without_an_id_is_dead_and_costs_no_navigation(self, make_crawler):
         crawler, driver = make_crawler(cards=[])
