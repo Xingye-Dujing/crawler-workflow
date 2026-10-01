@@ -6,9 +6,9 @@ device tier can see:
 
 - what a model answer has to look like before it counts (the parsers are the
   only place a free-form reply becomes a table cell),
-- what a rejected answer becomes (``skip_value`` / ``fail_value`` — an
-  unparseable row is *reported as Neutral*, not left blank, so the gap never
-  shows up as a hole in the table),
+- what a rejected answer becomes (``fail_value`` — an unparseable row is
+  *reported as Neutral*, not left blank, so the gap never shows up as a hole in
+  the table),
 - the ML fallback's neutral default and who it writes it into,
 - the exact result-column names the browser's result table addresses.
 
@@ -38,8 +38,8 @@ pytestmark = pytest.mark.unit
 
 # A row every analyzer agrees is long enough to ask about.
 LONG = '三亚的海非常蓝，适合冬天去度假潜水，珊瑚很多'  # 22 chars
-# Long enough for the scorers (min_len 10), too short for the cleaner (min_len 20),
-# which is the measured divergence between them.
+# A short but non-blank comment. Length no longer filters a row out of the model,
+# so this reaches the model in every analyzer just like LONG does.
 MID = '三亚的海非常蓝，适合冬天度假潜水'  # 16 chars
 
 
@@ -325,8 +325,9 @@ class TestEmotionMlMode:
 
     def test_a_failing_prediction_falls_back_to_neutral_half_confidence(self, emotion, monkeypatch, caplog):
         """The real default is ('Neutral', 0.5) — read off the ``fail_value``
-        branch, not guessed: 0.5 is below the skip default of 0.6, so a fallen-back
-        row is visibly less certain than a row that was simply too short."""
+        branch, not guessed: an unparseable or failed answer reports Neutral at
+        0.5, the confidence a chart reads as "no signal", rather than a blank hole
+        in the table."""
 
         def boom(texts):
             raise RuntimeError('no model trained')
@@ -413,10 +414,12 @@ class TestTendencyMlMode:
 class TestRunnerDeclaration:
     """What each analyzer hands ``run_llm_dataframe``, captured at the call.
 
-    The column names, the skip/fail triples and the "not worth asking" length live
-    only in those three call sites, and the browser's result table addresses the
-    columns by name — so a renamed result column or a swapped default is a
-    user-visible break no row-level test would notice.
+    The column names and the fail default live only in those call sites, and the
+    browser's result table addresses the columns by name — so a renamed result
+    column or a swapped default is a user-visible break no row-level test would
+    notice. The captured kwargs must also carry no length gate: the model answers
+    every non-blank row, so a ``skip_value``/``min_len`` creeping back in would
+    silently start withholding short rows again.
     """
 
     @staticmethod
@@ -438,11 +441,10 @@ class TestRunnerDeclaration:
         assert seen['op'] == 'clean'
         assert seen['result_columns'] == ['action', 'cleaned_text']
         assert seen['blank'] == ['', None]
-        # A short row and a failed row are both deleted, so a cleaning node that
-        # cannot reach a model never leaves an undecided row downstream.
-        assert seen['skip_value'] == ('删除', None)
+        # A failed cleaning answer deletes the row, so a node that cannot reach a
+        # model never leaves an undecided row downstream. There is no length gate.
         assert seen['fail_value'] == ('删除', None)
-        assert seen['min_len'] == 20
+        assert 'skip_value' not in seen and 'min_len' not in seen
         assert seen['label'] == t('label.clean')
         # The topic is the cleaner's own cache scope: the prompt builder is a
         # closure whose body cannot see it, so only this string separates two
@@ -464,9 +466,8 @@ class TestRunnerDeclaration:
         assert seen['op'] == 'emotion'
         assert seen['result_columns'] == ['emotion', 'confidence']
         assert seen['blank'] == ['', None]
-        assert seen['skip_value'] == ('Neutral', 0.6)
         assert seen['fail_value'] == ('Neutral', 0.5)
-        assert seen['min_len'] == 10
+        assert 'skip_value' not in seen and 'min_len' not in seen
         assert seen['label'] == t('label.emotion')
         assert seen.get('extra_key', '') == ''  # nothing widens an emotion scope
         assert seen['parse']('Emotion: Joy, Confidence: 0.9') == ('Joy', 0.9)
@@ -476,8 +477,8 @@ class TestRunnerDeclaration:
         tendency.analyze_dataframe(one_row_frame(), '正文', ctx={'client': ScriptedClient()})
         assert seen['op'] == 'tendency'
         assert seen['result_columns'] == ['tendency', 'tendency_confidence']
-        assert seen['skip_value'] == ('Objective Statement', 0.6)
         assert seen['fail_value'] == ('Objective Statement', 0.5)
+        assert 'skip_value' not in seen and 'min_len' not in seen
         assert seen['label'] == t('label.tendency')
 
 
@@ -543,25 +544,28 @@ class TestAnalyzerRows:
         assert result.loc[1, 'emotion'] == ''
         assert pd.isna(result.loc[1, 'confidence'])
 
-    def test_the_two_scorers_and_the_cleaner_disagree_about_a_short_row(self, cleaner, emotion):
-        """min_len is per-analyzer. A 16-character comment is answered by the
-        emotion node and deleted unseen by the cleaning node — the row never
-        reaches the model there, so no transport change can make it appear."""
+    def test_a_short_non_blank_row_reaches_the_model_in_every_analyzer(self, cleaner, emotion):
+        """Length no longer filters a row out of the model. A 16-character comment is
+        asked about by the cleaning node and the emotion node alike — a short comment
+        is still a row the user wanted the model to judge, not a value the analyzer
+        picked on its behalf."""
         short_client = ScriptedClient(default='KEEP: 三亚的海')
         clean = cleaner.clean_dataframe(one_row_frame(MID), '正文', ctx={'client': short_client})
-        assert (clean.loc[0, 'action'], clean.loc[0, 'cleaned_text']) == ('删除', None)
-        assert short_client.prompts == []
+        assert (clean.loc[0, 'action'], clean.loc[0, 'cleaned_text']) == ('保留', '三亚的海')
+        assert len(short_client.prompts) == 1
 
         emotion_client = ScriptedClient(default='Emotion: Joy, Confidence: 0.7')
         scored = EmotionAnalyzer().analyze_dataframe(one_row_frame(MID), '正文', ctx={'client': emotion_client})
         assert (scored.loc[0, 'emotion'], scored.loc[0, 'confidence']) == ('Joy', 0.7)
         assert len(emotion_client.prompts) == 1
 
-    def test_a_row_too_short_for_the_scorers_takes_the_skip_default(self, emotion):
-        client = ScriptedClient()
+    def test_a_two_character_row_is_answered_not_skipped(self, emotion):
+        """Even a two-character comment reaches the model: only a genuinely empty
+        cell is withheld (that is the blank mask, tested in the row-runner tier)."""
+        client = ScriptedClient()  # the scripted default parses to Joy 0.9
         result = emotion.analyze_dataframe(one_row_frame('太短'), '正文', ctx={'client': client})
-        assert (result.loc[0, 'emotion'], result.loc[0, 'confidence']) == ('Neutral', 0.6)
-        assert client.prompts == []
+        assert (result.loc[0, 'emotion'], result.loc[0, 'confidence']) == ('Joy', 0.9)
+        assert len(client.prompts) == 1
 
     def test_a_missing_column_raises_in_llm_mode(self, emotion):
         """The LLM and ML paths answer the same misconfiguration differently, by

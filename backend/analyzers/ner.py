@@ -286,7 +286,6 @@ class NamedEntityRecognizer:
             op='ner',
             result_columns=['entities'],
             blank=[''],
-            skip_value=('',),
             fail_value=('',),
             build_prompt=build_prompt,
             # The closure above only forwards (labels are a captured value, already
@@ -296,9 +295,6 @@ class NamedEntityRecognizer:
             parse=self.parse_ner_response,
             ctx=cfg,
             label=t('label.ner'),
-            # Nothing to skip: a two-character comment can still name someone,
-            # and the runner's own mask already drops empty cells.
-            min_len=1,
             default_model=self.model_name,
             # The category list is a closure value the prompt-version digest
             # cannot see, so a PERSON-only answer is never served to a run that

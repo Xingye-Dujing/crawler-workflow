@@ -156,13 +156,11 @@ Analyze strictly and output only the required plain string."""
             op='tendency',
             result_columns=['tendency', 'tendency_confidence'],
             blank=['', None],
-            skip_value=('Objective Statement', 0.6),
             fail_value=('Objective Statement', 0.5),
             build_prompt=self.build_tendency_prompt,
             parse=self.parse_tendency_response,
             ctx=ctx,
             label=t('label.tendency'),
-            min_len=10,
             default_model=self.model_name,
         )
 

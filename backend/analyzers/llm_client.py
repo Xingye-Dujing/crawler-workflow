@@ -743,13 +743,11 @@ def run_llm_dataframe(
     op: str,
     result_columns: list,
     blank: list,
-    skip_value: tuple,
     fail_value: tuple,
     build_prompt,
     parse,
     ctx=None,
     label: str = '',
-    min_len: int = 10,
     default_model: str = '',
     extra_key: str = '',
     prompt_template=None,
@@ -800,15 +798,11 @@ def run_llm_dataframe(
         if callable(cb):
             cb(df)
 
-    # Skip rules stay per-analyzer (they know what a useless row means).
-    jobs = []
-    for idx in process_indices:
-        text = str(df.at[idx, text_column]).strip()
-        if len(text) < min_len:
-            for col, val in zip(result_columns, skip_value, strict=True):
-                df.at[idx, col] = val
-            continue
-        jobs.append((idx, text))
+    # Every non-blank row reaches the model. Length is not a reason to withhold a
+    # row from the model the user asked for: a short comment is still a row, and
+    # filling it with an analyzer-chosen default would hide the gap. Genuinely
+    # empty cells are dropped by the blank mask above and keep their blank value.
+    jobs = [(idx, str(df.at[idx, text_column]).strip()) for idx in process_indices]
 
     checkpoint_dir = cfg.get('checkpoint_dir')
     # Two interchangeable back-ends, same three calls: get(idx, thash) ->

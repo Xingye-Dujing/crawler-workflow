@@ -127,7 +127,6 @@ string format."""
             op='clean',
             result_columns=['action', 'cleaned_text'],
             blank=['', None],
-            skip_value=('删除', None),
             fail_value=('删除', None),
             build_prompt=lambda text: self.build_prompt(text, topic),
             # The lambda only forwards; the version that invalidates the cache is
@@ -136,7 +135,6 @@ string format."""
             parse=self.parse_model_output,
             ctx=ctx,
             label=t('label.clean'),
-            min_len=20,
             default_model=self.model_name,
             extra_key=topic or '',
         )

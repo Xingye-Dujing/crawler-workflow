@@ -284,7 +284,6 @@ def run_df(df, client=None, prompt=build_prompt, op='emotion', text_column='正�
     base = {
         'result_columns': ['情感', '置信度'],
         'blank': ['', 0.0],
-        'skip_value': ['跳过', 0.0],
         'fail_value': ['失败', 0.0],
     }
     kwargs = {
@@ -300,13 +299,16 @@ def run_df(df, client=None, prompt=build_prompt, op='emotion', text_column='正�
 
 
 class TestDataframeRunner:
-    def test_short_and_empty_rows_are_skipped(self, df_for_llm):
+    def test_short_non_blank_rows_are_answered_and_empty_rows_skipped(self, df_for_llm):
+        """Length no longer filters a row out of the model: the 4-character '小镇安静'
+        is asked about like any other row. Only a genuinely empty cell stays out —
+        it never enters process_indices, so there is nothing to answer."""
         client = ScriptedClient()
         df = run_df(df_for_llm, client=client)
-        assert df.loc[1, '情感'] == '跳过'  # len < min_len(10)
+        assert df.loc[1, '情感'] == 'Joy'  # short but non-blank: answered, not skipped
         assert df.loc[2, '情感'] == ''  # blank never enters process_indices
         assert df.loc[0, '情感'] == 'Joy' and df.loc[4, '情感'] == 'Joy'
-        assert len(client.prompts) == 3
+        assert len(client.prompts) == 4  # every non-blank row reached the model
 
     def test_clean_run_discards_the_checkpoint_file(self, df_for_llm, tmp_path):
         client = ScriptedClient()
@@ -321,7 +323,7 @@ class TestDataframeRunner:
         with pytest.raises(LLMError):
             run_df(df_for_llm, client=client, publish=lambda _df: published.append(1))
         assert df_for_llm.loc[0, '情感'] == ABORT_MARK
-        assert df_for_llm.loc[1, '情感'] == '跳过'  # skip marks stay skips
+        assert df_for_llm.loc[1, '情感'] == ABORT_MARK  # short row is now a job too, so it shows the gap
         assert published, 'partial results must be published before the raise'
 
     def test_cancel_is_swallowed_but_gap_stays_visible(self, df_for_llm):
@@ -330,9 +332,11 @@ class TestDataframeRunner:
         ev = threading.Event()
         ev.set()
         df = run_df(df_for_llm, cancel_event=ev)  # no raise for cancelled
-        for idx in (0, 3, 4):
+        # Every non-blank row is now a job, so a stop short-circuits all four;
+        # only the empty cell (row 2) keeps its blank.
+        for idx in (0, 1, 3, 4):
             assert df.loc[idx, '情感'] == ABORT_MARK
-        assert df.loc[1, '情感'] == '跳过'
+        assert df.loc[2, '情感'] == ''
 
     def test_cancel_marks_the_node_on_the_cancellation_ledger(self, df_for_llm):
         """NER explodes the 未处理 rows away, so the executor cannot see them in the
@@ -382,7 +386,7 @@ class TestDataframeRunner:
 
         spy = SpyCache()
         df = run_df(df_for_llm, cache=spy, checkpoint_dir=str(tmp_path))
-        assert spy.added == [0, 3, 4]
+        assert spy.added == [0, 1, 3, 4]  # every non-blank row is now answered and cached
         assert list(tmp_path.glob('*.jsonl')) == []
         # Clean finish calls discard() on whichever checkpoint object it got —
         # for the durable cache that is a no-op by contract, but it must not
@@ -513,30 +517,31 @@ class TestDurableAnswerCache:
         assert cache._scope.split('|')[:6] == ['emotion', 'openrouter', 'scripted', '正文', '600', '']
 
     def test_unchanged_rerun_is_served_without_a_second_chat(self, run_store, df_for_llm):
-        assert len(replay(run_store, df_for_llm).prompts) == 3
+        assert len(replay(run_store, df_for_llm).prompts) == 4
         second = replay(run_store, df_for_llm)
         assert second.prompts == []  # every answer came back from runs.db
         # The frame is blanked at the start of each run, so these landed from the
-        # cache rather than being left over from the first pass.
-        assert [df_for_llm.loc[i, '情感'] for i in (0, 3, 4)] == ['Joy', 'Joy', 'Joy']
+        # cache rather than being left over from the first pass — including the
+        # short row, which is now answered and cached like the rest.
+        assert [df_for_llm.loc[i, '情感'] for i in (0, 1, 3, 4)] == ['Joy', 'Joy', 'Joy', 'Joy']
 
     def test_edited_prompt_template_invalidates_the_answers(self, run_store, df_for_llm):
         replay(run_store, df_for_llm)
-        assert len(replay(run_store, df_for_llm, prompt=build_prompt_reworded).prompts) == 3
+        assert len(replay(run_store, df_for_llm, prompt=build_prompt_reworded).prompts) == 4
 
     def test_changed_topic_invalidates_the_answers(self, run_store, df_for_llm):
         replay(run_store, df_for_llm)
-        assert len(replay(run_store, df_for_llm, extra_key='三亚旅游').prompts) == 3
+        assert len(replay(run_store, df_for_llm, extra_key='三亚旅游').prompts) == 4
 
     def test_changed_truncation_invalidates_the_answers(self, run_store, df_for_llm):
         replay(run_store, df_for_llm)
         shorter = ScriptedClient(max_chars=12)
-        assert len(replay(run_store, df_for_llm, client=shorter).prompts) == 3
+        assert len(replay(run_store, df_for_llm, client=shorter).prompts) == 4
 
     def test_changed_daemon_host_invalidates_the_answers(self, run_store, df_for_llm):
         replay(run_store, df_for_llm)
         other_host = ScriptedClient(host='http://10.0.0.8:11434')
-        assert len(replay(run_store, df_for_llm, client=other_host).prompts) == 3
+        assert len(replay(run_store, df_for_llm, client=other_host).prompts) == 4
 
     def test_scopes_coexist_and_stay_independent(self, run_store, df_for_llm):
         replay(run_store, df_for_llm)
@@ -552,11 +557,11 @@ class TestDurableAnswerCache:
         replay(run_store, df_for_llm, checkpoint_dir=str(tmp_path))
         assert list(tmp_path.glob('*.jsonl')) == []
         rows = run_store._query('SELECT cache_key, value FROM llm_cache')
-        assert len(rows) == 3
+        assert len(rows) == 4
         assert all('"Joy"' in row['value'] for row in rows)
         # Keyed by the text itself, not by its row number — that is what lets a
         # re-crawled table reuse these answers.
-        expected = {text_hash(str(df_for_llm.loc[i, '正文']).strip()) for i in (0, 3, 4)}
+        expected = {text_hash(str(df_for_llm.loc[i, '正文']).strip()) for i in (0, 1, 3, 4)}
         assert {row['cache_key'] for row in rows} == expected
 
     def test_explicit_cache_still_beats_the_lent_store(self, run_store, df_for_llm):
@@ -578,7 +583,7 @@ class TestDurableAnswerCache:
 
         spy = SpyCache()
         replay(run_store, df_for_llm, cache=spy)
-        assert spy.added == [0, 3, 4]
+        assert spy.added == [0, 1, 3, 4]
         assert spy.discarded is True
         assert cached_scopes(run_store) == set()  # the store was never written to
 

@@ -136,13 +136,11 @@ Analyze strictly and output only the required plain string."""
             op='emotion',
             result_columns=['emotion', 'confidence'],
             blank=['', None],
-            skip_value=('Neutral', 0.6),
             fail_value=('Neutral', 0.5),
             build_prompt=self.build_emotion_prompt,
             parse=self.parse_emotion_response,
             ctx=ctx,
             label=t('label.emotion'),
-            min_len=10,
             default_model=self.model_name,
         )
 
