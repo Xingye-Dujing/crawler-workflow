@@ -992,6 +992,13 @@ def test_switching_console_tabs_keeps_the_lines_already_shown(app_url, driver):
             return Promise.resolve({ json: () => Promise.resolve(payload), text: () => Promise.resolve('') });
         };
         document.getElementById('console-panel').classList.add('open');
+        /* A page that boots now reads the console back from the server (a refresh used to
+           lose it), and this test server has startup lines of its own. This case is about
+           what a TAB SWITCH does to lines the poller already showed, so it starts from an
+           empty page rather than inheriting another run's log. */
+        document.getElementById('console-output').innerHTML = '';
+        consoleViews.all = { seen: 0, lines: [] };
+        consoleViews.wf = {};
         // One tick of the real poller: capture the callback setInterval was given.
         window.__tick = null;
         const realInterval = window.setInterval;
@@ -1020,6 +1027,145 @@ def test_switching_console_tabs_keeps_the_lines_already_shown(app_url, driver):
     assert seen['tabA'] == ['甲的第一行', '甲的第二行'], f'the 甲 tab opened blank: {seen}'
     assert seen['tabB'] == ['乙的第一行'], f'the 乙 tab did not show only its own lines: {seen}'
     assert seen['backToAll'] == seen['before'], f'coming back to 全部 lost or duplicated lines: {seen}'
+
+
+def test_a_page_that_reloaded_takes_the_console_back_up_in_a_real_browser(app_url, driver):
+    """The console is a real docked panel, and the reconnect writes into it: opens
+    ``#console-panel``, builds the parallel tab bar and paints ``.console-line`` rows.
+
+    The node harness proves the cursor arithmetic; this tier is the only one that can see
+    the panel actually opening, the tabs actually rendering, and the class names the CSS
+    matches. ``fetch`` is stubbed — this tier performs no server writes, and no run is
+    started — and the answer is the shape ``/api/workflow/status?tail=`` really ships: a
+    tail plus the total that was ever produced.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    driver.execute_script(
+        """
+        document.getElementById('console-output').innerHTML = '';
+        document.getElementById('console-panel').classList.remove('open');
+        consoleViews.all = { seen: 0, lines: [] };
+        consoleViews.wf = {};
+        const held = [];
+        for (let i = 1; i <= 240; i++) held.push('L' + i);
+        window.__tail = held.slice(40);
+        window.fetch = function (url) {
+            if (String(url).indexOf('/api/workflow/status') === 0) {
+                return Promise.resolve({ json: () => Promise.resolve({
+                    running: true, logs: window.__tail, log_total: 240,
+                    workflows: [
+                        { id: 0, name: '甲', logs: ['a1', 'a2'], total: 2 },
+                        { id: 1, name: '乙', logs: ['b1'], total: 1 }
+                    ],
+                    mode: 'parallel', total_nodes: 6, completed_nodes: 2,
+                    results: [], chart_results: {}, cookie_expired: false, queue: []
+                }) });
+            }
+            return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+        };
+        """,
+        [],
+    )
+    facts = driver.execute_async_script(
+        """
+        const done = arguments[arguments.length - 1];
+        const read = () => Array.from(document.querySelectorAll('#console-output .console-line'))
+            .map((el) => el.textContent);
+        workflow.reconnectConsole().then(() => {
+            const first = read();
+            switchWfTab(1);
+            const tabB = read();
+            switchWfTab('all');
+            done({
+                asked: String(window.__tail.length),
+                painted: first.length,
+                first: first[0],
+                last: first[first.length - 1],
+                panelOpen: document.getElementById('console-panel').classList.contains('open'),
+                tabs: document.querySelectorAll('#console-tabs .console-tab').length,
+                tabBarShown: getComputedStyle(document.getElementById('console-tabs')).display !== 'none',
+                tabB: tabB,
+                allSeen: consoleViews.all.seen,
+                bSeen: (consoleViews.wf[1] || {}).seen,
+                statusNodes: document.getElementById('status-nodes').textContent,
+                stillThere: read().length,
+            });
+        });
+        """,
+        [],
+    )
+    assert facts['painted'] == 200, f'the replay painted {facts["painted"]} of the {facts["asked"]} held lines'
+    assert (facts['first'], facts['last']) == ('L41', 'L240'), facts
+    assert facts['panelOpen'] is True, 'the log came back but its panel stayed shut'
+    assert facts['tabs'] == 3 and facts['tabBarShown'] is True, f'the workflow tabs were not rebuilt: {facts}'
+    assert facts['tabB'] == ['b1'], f'the 乙 tab opened blank: {facts["tabB"]}'
+    assert facts['allSeen'] == 240 and facts['bSeen'] == 1, f'cursors did not land on the reported totals: {facts}'
+    assert facts['stillThere'] == 200, 'returning to 全部 lost the replayed history'
+    assert '2/6' in facts['statusNodes'], facts['statusNodes']
+
+
+def test_a_fresh_page_reconnects_its_console_without_being_asked(app_url, driver):
+    """The wiring, not the logic: ``app.js``'s boot sequence must call
+    ``workflow.reconnectConsole()`` on its own.
+
+    The reconnect code and the call site live in two different files, which is exactly the
+    shape this project has already been burned by — a wrapper installed in one file whose
+    signature was only right in the browser, while every single-file harness stayed green.
+    A node harness loads workflow.js alone and can never see the hand-off, and no
+    ``execute()`` happens here, so the only proof is a real page that nobody told to
+    reconnect arriving with the server's own lines already in its console box.
+
+    The test server writes its startup narration into the same buffer, so this reads a
+    page-load against it with no run in flight: the lines must be PAINTED (the run's log is
+    worth showing) and the panel must stay SHUT (a run that ended before this page opened
+    does not get to take over the screen on every refresh).
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    # The boot step is one fetch deep, so wait for the lines rather than for a tick.
+    shown = driver.execute_script(
+        """
+        const read = () => document.querySelectorAll('#console-output .console-line').length;
+        return new Promise((resolve) => {
+            let waited = 0;
+            const step = () => {
+                if (read() > 0 || waited > 6000) return resolve(read());
+                waited += 100;
+                setTimeout(step, 100);
+            };
+            step();
+        });
+        """,
+        [],
+    )
+    facts = driver.execute_script(
+        """
+        const read = () => Array.from(document.querySelectorAll('#console-output .console-line'));
+        const lines = read().map((el) => el.textContent);
+        return {
+            lines: lines,
+            panelOpen: document.getElementById('console-panel').classList.contains('open'),
+            seen: consoleViews.all.seen,
+            held: consoleViews.all.lines.length,
+        };
+        """,
+        [],
+    )
+    assert facts['lines'], (
+        f'a page loaded against a server with lines in its console buffer showed none '
+        f'({shown} after waiting) — the boot step is not wired, or it refuses to read'
+    )
+    assert facts['seen'] >= len(facts['lines']), (
+        f'the cursor ({facts["seen"]}) is behind what was painted ({len(facts["lines"])}), so the next '
+        'poll would reprint the buffer'
+    )
+    assert facts['held'] == len(facts['lines']), facts
+    assert facts['panelOpen'] is False, 'a run that was already over took over the screen on page load: ' + ' / '.join(
+        facts['lines'][:3]
+    )
 
 
 def test_deleting_one_history_row_reaches_the_server_with_that_run_only(app_url, driver):
@@ -1266,6 +1412,166 @@ def test_auto_layout_clears_a_wide_node_and_draws_its_wire_flat(app_url, driver)
     assert len(made['paths']) == 1, f'expected exactly the one wire measured, got {made["paths"]}'
     d = made['paths'][0]
     assert ' L ' in d and ' C ' not in d, f'the forward wire between centre-aligned ranks still bows: {d}'
+
+
+FAR_WORLD_WIRE_JS = r"""
+// TWO flat wires, built the same way and measured the same way, differing only in
+// where they sit in the world: one pair inside the 10000px #canvas-inner box (the
+// positive control — proof the probe can land on painted wire at all) and one pair
+// past its right edge (the case the user hit). Equal type AND equal params is what
+// makes each pair's node heights equal, which is what makes each wire flat (a
+// forward hop between centre-aligned ports draws ` L `, not ` C `) — and a flat
+// stroke is the only geometry whose bounding-rect centre lies ON the paint, which is
+// the point probed below.
+canvas.nodes = {}; canvas.connections = [];
+document.getElementById('nodes-container').innerHTML = '';
+localStorage.removeItem('crawler_canvas');
+const fill = (id) => {
+    const p = canvas.nodes[id].params;
+    p.operation = 'keyword'; p.method = 'tfidf'; p.topk = 10;
+    canvas.updateNodeDisplay(id);
+};
+const pair = (x) => {
+    const a = canvas.addNode('process', x, 300); fill(a);
+    const b = canvas.addNode('process', x + 700, 300); fill(b);
+    canvas.connections.push({from: a, to: b});
+    return {a, b};
+};
+const near = pair(200);      // inside the world box
+const far = pair(10400);     // past its right edge
+canvas.updateConnections();
+
+const svg = document.getElementById('svg-layer');
+const world = document.getElementById('canvas-inner');
+const work = document.getElementById('workspace').getBoundingClientRect();
+const at = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    return el.className && el.className.baseVal !== undefined
+        ? el.className.baseVal : String(el.tagName);
+};
+// Centre one pair on screen at zoom 1 by moving the camera to where the paint is,
+// rather than trusting a fit that would shrink the whole 11000px spread to 0.2 and
+// leave both pairs unreadable.
+const measure = (which, ids) => {
+    canvas.zoom = 1;
+    canvas.panX = 0; canvas.panY = 0;
+    canvas.updateTransform();
+    const paths = Array.prototype.filter.call(
+        svg.querySelectorAll('.conn-line:not(.temp)'),
+        (p) => (p.getAttribute('d') || '').length
+    );
+    const idx = which === 'near' ? 0 : 1;
+    const line = paths[idx];
+    const hit = svg.querySelectorAll('.conn-delete-hit')[idx];
+    let r = hit.getBoundingClientRect();
+    canvas.panX = work.left + work.width / 2 - (r.left + r.right) / 2;
+    canvas.panY = work.top + work.height / 2 - (r.top + r.bottom) / 2;
+    canvas.updateTransform();
+    r = hit.getBoundingClientRect();
+    const cx = (r.left + r.right) / 2;
+    const cy = (r.top + r.bottom) / 2;
+    const box = svg.getBoundingClientRect();
+    const nodeA = document.getElementById(ids.a);
+    return {
+        d: line ? (line.getAttribute('d') || '') : '',
+        // The canvas-space coordinate of the node that owns this wire's out-port.
+        canvasX: nodeA.offsetLeft,
+        worldEdge: world.clientWidth,
+        svgBox: [box.left, box.top, box.width, box.height],
+        pathBox: [r.left, r.top, r.width, r.height],
+        // How far past the svg's own viewport the whole stroke sits, in canvas units.
+        beyondCanvas: Math.round(Math.min(nodeA.offsetLeft, nodeA.offsetWidth) - box.width),
+        hitCentre: at(cx, cy),
+        onScreen: cx >= work.left && cx <= work.right && cy >= work.top && cy <= work.bottom,
+        overflow: getComputedStyle(svg).overflow,
+    };
+};
+const probe = {
+    near: measure('near', near),
+    far: measure('far', far),
+    viewport: (() => {
+        const p = document.createElement('div');
+        p.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;visibility:hidden';
+        document.body.appendChild(p);
+        const v = [p.offsetWidth, p.offsetHeight];
+        p.remove();
+        return v;
+    })(),
+};
+canvas.connections = []; canvas.nodes = {};
+document.getElementById('nodes-container').innerHTML = '';
+canvas.updateConnections();
+return probe;
+"""
+
+
+def test_a_wire_between_far_apart_nodes_is_painted_not_clipped(app_url, driver):
+    """The nodes are `<div>`s, so dragging one past the finite #canvas-inner kept it
+    visible; the wires all live in ONE `<svg>` sized 100% of that box, and an `<svg>`
+    root clips to its own viewport by UA default. Past x=10000 the curve simply did not
+    exist on screen — the user's report was 「连线到一定范围就不渲染了」, and
+    `#svg-layer { overflow: visible }` is what removes that bound.
+
+    A bounding rect CANNOT see this bug: a clipped path reports its full layout box while
+    painting nothing. So the instrument is real hit-testing — the delete target is a
+    sibling path with `pointer-events: stroke` carrying the identical `d`, and Chrome does
+    not deliver a pointer event into a region clipped away. The same probe is run on a
+    wire INSIDE the world box first, so "the probe finds nothing" can never be mistaken
+    for "the fix works": only the pair of readings differs in where it sits, and only a
+    control that lands while the far one does not is evidence about a clip.
+
+    The viewport is emulated, because on Windows `set_window_size` is answered by neither
+    the OS nor the page (see the cookie panel case above for the measurement).
+    """
+    driver.set_window_size(1366, 768)
+    driver.execute_cdp_cmd(
+        'Emulation.setDeviceMetricsOverride',
+        {'width': 1366, 'height': 768, 'deviceScaleFactor': 1, 'mobile': False},
+    )
+    try:
+        _quiet_canvas(driver, app_url)
+        got = driver.execute_script(FAR_WORLD_WIRE_JS, [])
+    finally:
+        driver.execute_cdp_cmd('Emulation.clearDeviceMetricsOverride', {})
+
+    inner_w, inner_h = got['viewport']
+    assert abs(inner_w - 1366) <= 2 and abs(inner_h - 768) <= 2, (
+        f'this case measures a 1366x768 window and CSS saw {got["viewport"]}; the emulation '
+        'did not take effect, so nothing below describes a laptop'
+    )
+    for name, one in (('near', got['near']), ('far', got['far'])):
+        assert ' L ' in one['d'] and ' C ' not in one['d'], (
+            f'the {name} wire is not the flat line whose centre lies on the stroke, so its '
+            f'probe point is not on any paint: {one["d"]}'
+        )
+        assert one['onScreen'], (
+            f'the {name} wire {one["pathBox"]} never landed inside the workspace after the camera '
+            f'moved, so its probe could not have hit painted pixels'
+        )
+    assert got['near']['canvasX'] < got['near']['worldEdge'], (
+        f'the control wire was meant to sit inside the {got["near"]["worldEdge"]}px world box, '
+        f'it is at canvas x={got["near"]["canvasX"]}'
+    )
+    assert got['far']['canvasX'] > got['far']['worldEdge'], (
+        f'the measured wire was meant to sit PAST the {got["far"]["worldEdge"]}px world box, it '
+        f'is at canvas x={got["far"]["canvasX"]} — the case is testing the wrong geometry'
+    )
+    # Positive control before the verdict: the probe lands on painted wire where the old
+    # clip box always painted, so a miss below is about the clip and not about the probe.
+    assert got['near']['hitCentre'] == 'conn-delete-hit', (
+        f'the probe does not find the delete target even INSIDE the world box (got '
+        f'{got["near"]["hitCentre"]!r} at {got["near"]["pathBox"]} inside svg '
+        f'{got["near"]["svgBox"]}); the point missed the stroke, so the verdict on the far '
+        'wire would mean nothing'
+    )
+    assert got['far']['hitCentre'] == 'conn-delete-hit', (
+        f'a wire {got["far"]["beyondCanvas"]}px past the {got["far"]["worldEdge"]}px world border '
+        f'still does not paint: its delete target is un-hittable at its own centre (got '
+        f'{got["far"]["hitCentre"]!r} at {got["far"]["pathBox"]}, svg {got["far"]["svgBox"]}, '
+        f'overflow {got["far"]["overflow"]!r}) — the UA clip is back'
+    )
+    assert got['far']['overflow'] == 'visible', f'the svg is clipping its viewport again: {got["far"]["overflow"]!r}'
 
 
 AUTO_LAYOUT_FIT_JS = """

@@ -98,6 +98,15 @@ _PANELS = [
     ('panel_visualize_wordcloud', 'visualize', {'chart_type': 'wordcloud', 'value_field': '权重'}),
     ('panel_output_csv', 'output', {'operation': 'save_csv', 'filename': 'export.csv', 'text_column': '正文'}),
     ('panel_output_stamped', 'output', {'operation': 'save', 'filename': 'stamped.csv', 'filename_timestamp': True}),
+    (
+        'panel_output_ranged',
+        'output',
+        {'operation': 'save', 'filename': 'ranged.csv', 'filename_time_range': True},
+    ),
+    ('panel_sentiment_default', 'process', {'operation': 'sentiment'}),
+    ('panel_sentiment_snownlp', 'process', {'operation': 'sentiment', 'mode': 'snownlp'}),
+    ('panel_sentiment_bert', 'process', {'operation': 'sentiment', 'mode': 'bert'}),
+    ('panel_sentiment_llm', 'process', {'operation': 'sentiment', 'mode': 'llm'}),
 ]
 
 #: One quote is enough to leave an attribute; the rest proves the payload landed.
@@ -528,6 +537,69 @@ class TestSettingsPanel:
 
     def test_a_panel_that_stored_the_option_shows_it_ticked(self, results):
         assert '<input type="checkbox" checked ' in results['settings']['panel_output_stamped']
+
+    def test_the_output_panel_offers_the_time_range_in_the_filename(self, results):
+        """「文件名带时间范围」 is the save node's only route to ``filename_time_range``,
+        which is what makes the backend look the window up at all — a switch with no
+        widget is a switch nobody can turn on, and one that renders ticked from an absent
+        parameter would silently rename every existing workflow's output."""
+        html = results['settings']['panel_output_csv']
+        assert "updateParam('n1','filename_time_range',this.checked)" in html
+        assert 'settings.filenameTimeRange' in html
+        assert '<input type="checkbox" checked ' not in html, 'the default is off: old names must not move'
+
+    def test_a_stored_time_range_renders_ticked(self, results):
+        assert '<input type="checkbox" checked ' in results['settings']['panel_output_ranged'], (
+            'a saved workflow that asked for the range must show the box as it stored it'
+        )
+
+    def test_the_sentiment_panel_offers_all_four_methods_and_defaults_to_the_free_one(self, results):
+        """SnowNLP / sklearn / LLM / BERT all answer 正面·负面·中性, and the untouched node
+        must be the one that costs nothing and downloads nothing. A workflow saved before
+        the selector exists has no ``mode`` at all, so the default is the panel's figure
+        AND the executor's — never option #0 of whatever list happens to be rendered."""
+        default = results['settings']['panel_sentiment_default']
+        for value in ('snownlp', 'ml', 'llm', 'bert'):
+            assert f'<option value="{value}"' in default, f'{value} is not offered'
+        assert '<option value="snownlp" selected>' in default, 'an untouched node must not ask for a model'
+        assert '<option value="llm" selected>' not in default
+        assert 'mode.snownlp' in default and 'mode.bert' in default
+
+    def test_the_polarity_band_is_offered_only_where_a_probability_is_produced(self, results):
+        """SnowNLP answers a 0–1 probability, so the two cut-offs are its only honest
+        knobs. ``ml`` and ``llm`` answer with a label they were trained or prompted to
+        choose, and re-deciding that from their confidence figure would be the panel
+        holding a second opinion about the model's own answer."""
+        snownlp = results['settings']['panel_sentiment_snownlp']
+        assert "updateParam('n1','pos_threshold'" in snownlp and "updateParam('n1','neg_threshold'" in snownlp
+        assert 'settings.sentimentThresholdHint' in snownlp
+        for panel in ('panel_sentiment_llm', 'panel_sentiment_bert'):
+            assert 'pos_threshold' not in results['settings'][panel], f'{panel} offers a band it cannot read'
+
+    def test_the_bert_panel_asks_for_the_model_it_cannot_guess(self, results):
+        """No default model name is invented here: the node has to be told, because the
+        operation refuses to run with a model nobody chose."""
+        bert = results['settings']['panel_sentiment_bert']
+        assert "updateParam('n1','bert_model'" in bert
+        assert 'settings.bertModel' in bert and 'settings.bertModelHint' in bert
+        assert 'trainMLModel' not in bert, 'the train button belongs to the sklearn path'
+
+    def test_the_sentiment_panel_offers_training_only_for_the_local_classifier(self, results):
+        """The 训练模型 button writes ``data/models/sentiment.pkl``, which only
+        ``mode='ml'`` reads — offering it on another row would have the user train a model
+        the run then ignores."""
+        llm = results['settings']['panel_sentiment_llm']
+        assert 'trainMLModel' not in llm
+        assert 'pos_threshold' not in llm
+
+    def test_the_crawl_panel_offers_the_record_stamp_from_the_matrix(self, results):
+        """``part_timestamp`` is declared once, in the matrix's shared file block, so EVERY
+        platform's crawl panel carries it — the panel renders the list rather than keeping
+        its own copy of which knobs a crawl has."""
+        for panel in ('panel_weibo_posts', 'panel_zhihu_posts', 'panel_xhs_posts'):
+            html = results['settings'][panel]
+            assert "updateParam('n1','part_timestamp',this.checked)" in html, f'{panel} lost the shared file block'
+            assert 'settings.partTimestamp' in html and 'settings.partTimestampHint' in html
 
     def test_ner_panel_offers_a_model_switch_and_the_category_filter(self, results):
         """Both fields are the only route to what the backend reads, and the

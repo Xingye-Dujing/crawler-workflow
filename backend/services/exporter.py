@@ -73,6 +73,22 @@ class DataExporter:
             return f'export{wanted}'
         return root + wanted
 
+    @staticmethod
+    def tagged_filename(filename: str, tag: str) -> str:
+        """Put *tag* into *filename* before the extension: ``data.csv`` → ``data_20260101_to_20260315.csv``.
+
+        Before the extension and never after, for the same reason ``stamp_filename``
+        gives: the export panel classifies a row by its suffix and refuses to serve a
+        name whose extension it does not recognise, so anything landing after ``.csv``
+        makes the file unopenable from the very list that shows it. An empty tag leaves
+        the name untouched, because most workflows have no window to name.
+        """
+        name = str(filename or '')
+        if not tag:
+            return name
+        root, ext = os.path.splitext(name)
+        return f'{root}{tag}{ext}'
+
     @classmethod
     def stamp_filename(cls, filename: str, export_dir: str) -> str:
         """Rename *filename* so writing it cannot replace last run's file.

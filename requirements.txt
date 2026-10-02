@@ -18,3 +18,4 @@ pytest-socket
 pytest-timeout
 jieba
 scikit-learn
+snownlp

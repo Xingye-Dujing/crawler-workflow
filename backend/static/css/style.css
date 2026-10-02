@@ -874,6 +874,16 @@ body.style-menu-open #workspace #resume-banner {
   left: 0;
   width: 100%;
   height: 100%;
+  /* The wires live in a coordinate system this box defines, and this element is
+     100% of #canvas-inner — a finite 10000x10000 one. A node is a plain <div>, so
+     dragging it past that border still shows it; an <svg> ROOT clips to its
+     viewport by UA default, so the wire between two such nodes was CUT, not
+     missing — the farther apart they sat, the more of the curve disappeared, and a
+     node at a negative coordinate lost its incoming wire the same way. `visible`
+     un-clips it, which is what makes the canvas infinite for the wires as well as
+     for the boxes. Window clipping is #workspace's job (inset: 0; overflow:
+     hidden), so nothing paints over the menu or a docked panel. */
+  overflow: visible;
   pointer-events: none;
   z-index: 2;
 }

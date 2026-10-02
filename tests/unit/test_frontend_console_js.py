@@ -186,3 +186,65 @@ class TestClearConsoleBeforeRun:
         assert console['clearDefaultFalse'] is True, 'an unpulled AppSettings must not force a clear'
         assert console['clearOnTrue'] is True, 'clear_console_before_run=true must clear'
         assert console['clearUnsetFalse'] is True, 'a valueless settings object must not clear'
+
+
+class TestConsoleReconnect:
+    """A refreshed page takes the console back up — 「页面一刷新，控制台信息就丢失了」.
+
+    Nothing used to start the poll except the Run button, so F5 mid-run left an empty box
+    over a crawl that was still writing. The server holds the lines (LOG_KEEP of them) and
+    the run never noticed the tab go away, so the page asks for what it lost. Each case
+    below is one way that answer could still be wrong.
+    """
+
+    def test_a_live_run_comes_back_whole_and_the_next_tick_adds_only_the_new_line(self, console):
+        back = console['reconnectLive']
+        assert back['painted'] == 200, f'the replay painted {back["painted"]} of the 200 the server shipped'
+        assert (back['first'], back['last']) == ('L51', 'L250'), 'the wrong slice came back'
+        assert back['seen'] == 250, 'the cursor did not reach the reported total, so the next poll replays'
+        assert back['next'] == ['L251'], f'a reconnection must not reprint the tail it already showed: {back["next"]}'
+        assert back['panelOpen'] is True, 'the log came back but the box that shows it stayed shut'
+        assert back['running'] is True, 'the status bar must not still say 就绪 over a live run'
+        assert back['polling'] is True, 'a refreshed page never took the stream up again'
+        assert back['toast'] == ['RECONNECTED'], 'the panel opening by itself has to say why'
+
+    def test_an_empty_buffer_opens_nothing(self, console):
+        """Between runs the buffer is empty and no run is live. Painting an empty box and
+        popping the panel open would read as a crash — this page has nothing to show."""
+        idle = console['reconnectIdle']
+        assert idle['painted'] == 0 and idle['panelOpen'] is False, idle
+        assert idle['polling'] is False, 'a page with no run behind it must not poll every second'
+        assert idle['running'] is False, 'the Run state was invented out of an empty buffer'
+
+    def test_a_run_that_finished_while_the_page_was_closed_is_shown_not_re_announced(self, console):
+        """The buffer outlives the run and is only cleared by the NEXT one claiming the
+        slot, so 「刚才那次跑了什么」 is still answerable after a refresh. But the finish
+        line — its toast, its resume offer — belongs to the tab that watched it end:
+        reprinting it would offer a resume on every reload."""
+        done = console['reconnectFinished']
+        assert done['painted'] == 1, done
+        assert done['statusText'] == 'completed' and done['statusNodes'] == 'progress 3/3', done
+        assert done['polling'] is False, 'a finished run has nothing left to poll'
+        assert done['toasts'] == [], f'the reconnect must not re-fire the ending: {done["toasts"]}'
+        assert done['running'] is False, done
+        assert done['panelOpen'] is False, (
+            'work that ended an hour ago does not get to take over the screen on every load — '
+            'the lines are painted and waiting, the panel stays where the user left it'
+        )
+
+    def test_a_parallel_reconnect_rebuilds_every_tab_and_keeps_each_history(self, console):
+        """The tab bar is built by the poller, which a reconnected page has not started —
+        so a parallel run came back as one shared box with no way to reach a workflow's
+        own lines. Every view is loaded from the replay, including the tab nobody is on."""
+        par = console['reconnectParallel']
+        assert par['tabs'] == 3, f'expected 全部 + the two workflows, saw {par["tabs"]}'
+        assert par['bSeen'] == 1 and par['bLines'] == ['b1'], 'the hidden tab had nothing to show when opened'
+        assert par['allSeen'] == 2, par
+        assert par['next'] == ['b2', 'b3'], f'the next poll replayed B: {par["next"]}'
+
+    def test_two_boot_steps_cannot_start_two_readers_of_one_console(self, console):
+        """The reason the poller now has one owner. Two intervals append the same line
+        twice and the cursor cannot tell them apart, because both reads are valid."""
+        twice = console['reconnectTwice']
+        assert twice['painted'] == twice['afterFirst'] == 1, twice
+        assert twice['lines'] == ['once'], f'the second reconnect duplicated the console: {twice["lines"]}'

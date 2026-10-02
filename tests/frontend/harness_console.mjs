@@ -40,6 +40,7 @@ const KEYS = {
     'toast.workflowEnded': 'WORKFLOW-ENDED {done}/{total}',
     'toast.workflowRejected': 'WORKFLOW-REJECTED',
     'toast.workflowStopped': 'WORKFLOW-STOPPED',
+    'toast.consoleReconnected': 'RECONNECTED',
     'name.unnamed': 'unnamed',
 };
 const I18n = { lang: 'en', dict: { en: KEYS, zh: {} }, t(k) { return KEYS[k] || k; }, apply() {} };
@@ -205,7 +206,7 @@ sandbox.resumeBar = { refresh: () => { resumeRefreshes++; } };
 async function finishCase(name, payload) {
     toasts.length = 0;
     resumeRefreshes = 0;
-    tick = null; // the previous case ended the interval, as in the browser
+    wf._stopPoll(); // the previous case ended the interval, as in the browser
     wf.pollStatus();
     await answer(payload);
     out[name] = {
@@ -237,7 +238,7 @@ await finishCase(
 async function settleCase(name, payloads) {
     toasts.length = 0;
     resumeRefreshes = 0;
-    tick = null;
+    wf._stopPoll();
     wf.pollStatus();
     const sawTick = [];
     for (const payload of payloads) {
@@ -263,7 +264,7 @@ sandbox.runsManager.autoRefresh = () => {
     refreshes += 1;
 };
 toasts.length = 0;
-tick = null;
+wf._stopPoll();
 wf.pollStatus();
 await answer(status(['working'], 4, { running: false, settling: true, completed_nodes: 1, total_nodes: 3, outcome: '' }));
 out.settlingTick = { refreshed: refreshes, toasts: toasts.slice(), stillPolling: tick !== null };
@@ -281,7 +282,7 @@ out.settledIsNotAwaited = sandbox.runsManager._awaitable.call({ _shown: [{ statu
    empty string while the worker is still unwinding, and reading a failure out of
    that told the user their own button press had broken the workflow. */
 toasts.length = 0;
-tick = null;
+wf._stopPoll();
 resumeRefreshes = 0;
 wf.pollStatus();
 const wedged = status(['working'], 4, { running: false, stopping: true, completed_nodes: 1, total_nodes: 3, outcome: '' });
@@ -339,7 +340,7 @@ out.stopPress = {
 /* The status bar carries the activity without the console's clock, and keeps the
    progress ratio rather than overwriting it with a different statistic. */
 out.statusBarDuringRun = null;
-tick = null;
+wf._stopPoll();
 wf.pollStatus();
 await answer(status(['[12:00:01] Executing node: 抓取 #node-1'], 5, { completed_nodes: 1, total_nodes: 3 }));
 out.statusBarDuringRun = {
@@ -375,5 +376,107 @@ sandbox.AppSettings = { _values: { clear_console_before_run: true } };
 out.clearOnTrue = clearFlag() === true;
 sandbox.AppSettings = { _values: {} };
 out.clearUnsetFalse = clearFlag() === false;
+
+/* ── 11. a page that reloaded mid-run takes the console back up ─────────── */
+/* The complaint: 页面一刷新，控制台信息就丢失了. Nothing in the boot sequence started
+   the poll, so the box stayed empty for the rest of a run the SERVER was still writing.
+   These five cases are the five ways that answer can go wrong: replaying the wrong
+   slice, leaving the cursor behind (which replays the tail on the next tick), opening a
+   console for a run that never happened, forgetting the parallel tabs, and — worst —
+   starting a second reader of one console so every line prints twice. */
+const consolePanel = sandbox.__byId('console-panel');
+function freshPage() {
+    resetViews();
+    sandbox.__byId('console-output').innerHTML = '';
+    tabsEl.innerHTML = '';
+    consolePanel.classList.remove('open');
+    toasts.length = 0;
+    tick = null;
+    sandbox.RunState.running = false;
+}
+
+const longRun = [];
+for (let i = 1; i <= 250; i++) longRun.push('L' + i);
+
+wf._stopPoll();
+freshPage();
+// The server ships the last 200 of 250: exactly the pair a reconnecting page gets.
+nextAnswer = status(longRun.slice(50), 250);
+await wf.reconnectConsole();
+out.reconnectLive = {
+    painted: lines().length,
+    first: lines()[0],
+    last: lines()[lines().length - 1],
+    seen: sandbox.__wf.consoleViews.all.seen,
+    panelOpen: consolePanel.classList.contains('open'),
+    running: sandbox.RunState.running,
+    polling: tick !== null,
+    // The cursor has to be on the reported total, or the next tick replays the tail.
+    next: await answer(status(longRun.slice(51).concat(['L251']), 251)),
+    toast: toasts.slice(),
+};
+
+wf._stopPoll();
+freshPage();
+nextAnswer = status([], 0, { running: false });
+await wf.reconnectConsole();
+out.reconnectIdle = {
+    painted: lines().length,
+    panelOpen: consolePanel.classList.contains('open'),
+    polling: tick !== null,
+    running: sandbox.RunState.running,
+};
+
+wf._stopPoll();
+freshPage();
+nextAnswer = status(['the end'], 4, { running: false, outcome: 'completed', completed_nodes: 3, total_nodes: 3 });
+await wf.reconnectConsole();
+out.reconnectFinished = {
+    painted: lines().length,
+    statusText: sandbox.__byId('status-text').textContent,
+    statusNodes: sandbox.__byId('status-nodes').textContent,
+    // A run that is over must not be re-pollled, and its finish line must not be
+    // re-announced: the toasts and the resume banner belong to the tab that watched it end.
+    polling: tick !== null,
+    toasts: toasts.slice(),
+    panelOpen: consolePanel.classList.contains('open'),
+    running: sandbox.RunState.running,
+};
+
+wf._stopPoll();
+freshPage();
+const rpA = { id: 0, name: '甲', logs: ['a1', 'a2'], total: 2 };
+const rpB = { id: 1, name: '乙', logs: ['b1'], total: 1 };
+nextAnswer = status(['s1', 's2'], 2, { workflows: [rpA, rpB], mode: 'parallel' });
+await wf.reconnectConsole();
+switchWfTab(1);
+out.reconnectParallel = {
+    tabs: (tabsEl.innerHTML.match(/console-tab/g) || []).length,
+    bSeen: sandbox.__wf.consoleViews.wf[1] ? sandbox.__wf.consoleViews.wf[1].seen : -1,
+    bLines: lines(),
+    allSeen: sandbox.__wf.consoleViews.all.seen,
+    // A consistent next answer: three lines held, three ever produced.
+    next: await answer(
+        status(['s1', 's2', 's3'], 3, {
+            workflows: [rpA, { id: 1, name: '乙', logs: ['b1', 'b2', 'b3'], total: 3 }],
+            mode: 'parallel',
+        })
+    ),
+};
+switchWfTab('all');
+
+wf._stopPoll();
+freshPage();
+nextAnswer = status(['once'], 1);
+await wf.reconnectConsole();
+const afterFirstReconnect = lines().length;
+nextAnswer = status(['once', 'two'], 2);
+await wf.reconnectConsole();
+out.reconnectTwice = {
+    afterFirst: afterFirstReconnect,
+    painted: lines().length,
+    // one reader, so the second boot step added nothing at all
+    lines: lines(),
+};
 
 process.stdout.write(JSON.stringify(out));

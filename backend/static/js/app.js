@@ -185,6 +185,7 @@ const I18n = {
             'toast.workflowLoaded': 'Workflow loaded',
             'toast.workflowFileInvalid': 'That file is not a workflow — it holds no node list, so nothing was changed',
             'toast.workflowStarted': 'Workflow started',
+            'toast.consoleReconnected': 'Reconnected to the run still going — its log is shown below',
             'toast.workflowEnded': 'Run ended — {done}/{total} nodes completed (continue is available)',
             'toast.queued': 'Queued — it starts when the current run finishes',
             'toast.workflowCompleted': 'Workflow completed',
@@ -247,6 +248,7 @@ const I18n = {
             'settings.topic': 'Topic',
             'settings.filename': 'Filename',
             'settings.filenameTimestamp': 'Append the run time to the filename (never overwrite)',
+            'settings.filenameTimeRange': 'Append the crawled time range to the filename',
             'settings.workflowName': 'Workflow name',
             'nodeType.source': 'Data Source',
             'nodeType.upload': 'Upload File',
@@ -264,6 +266,7 @@ const I18n = {
             'nodeType.misc': 'Node',
             'op.clean': 'Clean',
             'op.emotion': 'Emotion',
+            'op.sentiment': 'Sentiment polarity',
             'op.tendency': 'Tendency',
             'op.save_csv': 'Save CSV',
             'op.save': 'Save',
@@ -442,6 +445,13 @@ const I18n = {
             // behind it, so the option says what will actually be called.
             'mode.llmCloud': 'LLM (OpenRouter)',
             'mode.ml': 'Traditional ML (sklearn)',
+            'mode.snownlp': 'SnowNLP (traditional polarity, no model needed)',
+            'mode.bert': 'BERT transformer (needs torch + a sentiment model)',
+            'settings.posThreshold': 'Positive at or above',
+            'settings.negThreshold': 'Negative at or below',
+            'settings.sentimentThresholdHint': 'SnowNLP answers a 0–1 probability that the text is positive. Between the two figures the row is 中性; raise the band when a site writes neutrally, lower it when you want fewer neutral rows. The score column always keeps the raw figure.',
+            'settings.bertModel': 'BERT model',
+            'settings.bertModelHint': 'A local folder or a model name on this machine. Left empty, the node refuses to run rather than answering with a different model.',
             'mode.regex': 'Rule-based regex (no model)',
             'settings.entityTypes': 'Entity types',
             'settings.entityTypesPlaceholder': 'PERSON,ORG,LOC,DATE',
@@ -631,6 +641,8 @@ const I18n = {
             'settings.liveExportHint': 'Rewrites this node\'s .live file after every batch so you can watch results before the node finishes.',
             'settings.perArticleFile': 'One output file per article',
             'settings.keepParts': 'Keep part files after merge',
+            'settings.partTimestamp': 'Add this run\'s time to part filenames',
+            'settings.partTimestampHint': 'Names the shards (and the file they merge into) after the moment this run started, so a second pass keeps the first one\'s files. A 续跑 of the same run keeps writing the same names.',
             'settings.commentHint': 'The comments load by scrolling the page. A windowed run scrolls visibly; a headless run opens no window and collects the same rows (#148). Every part_size comments are written as a part file into the export directory.',
             'settings.commentFetchHint': 'These comments are read from inside one loaded page, so a window would just sit there. A headless run opens no window and collects the same rows. Every part_size comments are written as a part file into the export directory.',
             'settings.fetchQuietNote': 'This mode loads a page once and reads the data from inside it: a visible window would just sit there showing nothing, so 无头 runs it just as well.',
@@ -963,6 +975,7 @@ const I18n = {
             'toast.workflowLoaded': '工作流已加载',
             'toast.workflowFileInvalid': '这个文件不是工作流（没有节点列表），画布内容未做任何改动',
             'toast.workflowStarted': '工作流已启动',
+            'toast.consoleReconnected': '已重新接上仍在进行的运行，下面是它的日志',
             'toast.workflowEnded': '运行结束——完成 {done}/{total} 个节点（可继续）',
             'toast.queued': '已排队——当前运行结束后自动开始',
             'toast.workflowCompleted': '工作流已完成',
@@ -1023,6 +1036,7 @@ const I18n = {
             'settings.topic': '主题',
             'settings.filename': '文件名',
             'settings.filenameTimestamp': '文件名追加本次运行时间（不覆盖旧文件）',
+            'settings.filenameTimeRange': '文件名追加本次采集的时间范围',
             'settings.workflowName': '工作流名称',
             'nodeType.source': '数据源',
             'nodeType.upload': '上传文件',
@@ -1036,6 +1050,7 @@ const I18n = {
             'nodeType.misc': '节点',
             'op.clean': '清洗',
             'op.emotion': '情感分析',
+            'op.sentiment': '情感极性',
             'op.tendency': '倾向分析',
             'op.save_csv': '保存 CSV',
             'op.save': '保存',
@@ -1209,6 +1224,13 @@ const I18n = {
             'mode.llm': '大模型（本地 Ollama / OpenRouter）',
             'mode.llmCloud': '大模型（OpenRouter）',
             'mode.ml': '传统机器学习 (sklearn)',
+            'mode.snownlp': 'SnowNLP 传统极性模型（无需下载模型）',
+            'mode.bert': 'BERT 预训练模型（需 torch 与情感模型）',
+            'settings.posThreshold': '判定为正面的下限',
+            'settings.negThreshold': '判定为负面的上限',
+            'settings.sentimentThresholdHint': 'SnowNLP 给出的是「这段文本偏正面」的概率（0–1）。两个数之间记为中性：站子说话越客气越要把区间调宽，想少一些中性就把它调窄。score 列始终保留原始概率。',
+            'settings.bertModel': 'BERT 模型',
+            'settings.bertModelHint': '填本机已有的模型目录或模型名。留空时节点会直接拒绝运行，而不会改用别的方法代替。',
             'mode.regex': '正则规则（无需模型）',
             'settings.entityTypes': '实体类型',
             'settings.entityTypesPlaceholder': 'PERSON,ORG,LOC,DATE',
@@ -1388,6 +1410,8 @@ const I18n = {
             'settings.liveExportHint': '每处理完一批就重写一次本节点的 .live 文件，节点未跑完也能查看当前结果。',
             'settings.perArticleFile': '每篇文章单独输出文件',
             'settings.keepParts': '合并后保留分片文件',
+            'settings.partTimestamp': '分片文件名加本次创建时间',
+            'settings.partTimestampHint': '按本次运行的开始时间命名分片（以及合并后的文件），再跑一次不会覆盖上一次的文件。同一次运行的「续跑」仍然写同一组名字。',
             'settings.commentHint': '评论区靠滚动页面加载。选窗口运行会可见地滚动；选无头运行则不弹窗，采集到的行数一样（#148）。每 part_size 条评论写入一个分片文件到导出目录。',
             'settings.commentFetchHint': '此平台的评论在页面内一次性取数，开窗口也只是停在首页。无头运行不弹窗，采集到的行数一样。每 part_size 条评论写入一个分片文件到导出目录。',
             'settings.fetchQuietNote': '这个模式只打开一次页面、再从页面内部读取数据：可见窗口只会停在上面什么都不显示，用「无头」跑效果完全一样。',
@@ -2406,6 +2430,14 @@ document.addEventListener('DOMContentLoaded', () => {
     /* An interrupted run may be waiting from before this page opened. */
     boot('resumeBar', () => {
         if (typeof resumeBar !== 'undefined' && resumeBar) resumeBar.refresh();
+    });
+    /* A run may also be GOING, in which case this page's console is not a new console —
+       it is the same run's log with a browser that reloaded in the middle of it. Nothing
+       else starts the poll, so without this step the box stays empty for the rest of the
+       crawl while the server keeps writing. `workflow` is a top-level const in
+       workflow.js, so it is named directly: `window.workflow` could never be truthy. */
+    boot('consoleReconnect', () => {
+        if (typeof workflow !== 'undefined' && workflow) workflow.reconnectConsole();
     });
     boot('locks', () => {
         /* #182: fetch the lock set ONCE at startup, then repaint any docked panel that

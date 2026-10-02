@@ -625,6 +625,66 @@ def _run_e2e(client, app_module, paste, name: str) -> dict:
     return client.get('/api/workflow/status').get_json()
 
 
+@pytest.mark.usefixtures('clean_globals')
+class TestConsoleStatusTail:
+    """``?tail=`` — the read a refreshed page uses to take the console back up.
+
+    The default stays 200 because that is what a page following a live run renders, and a
+    second a run is over the browser has everything it needs already. The reload is the
+    one case with lines MISSING, and the buffer behind it is the answer: this endpoint is
+    the only place the console is read, so the replay rides on it rather than on a second
+    endpoint with its own idea of what the log is.
+    """
+
+    def _fill(self, app_module, n, wf=False):
+        app_module.reset_console_state()
+        for i in range(n):
+            app_module._push_log(f'line-{i:05d}', wf_idx=0 if wf else None)
+
+    def test_the_default_still_ships_two_hundred(self, client, app_module):
+        self._fill(app_module, 300)
+        body = client.get('/api/workflow/status').get_json()
+        assert len(body['logs']) == 200, 'the shipped tail grew, so every live poll got heavier'
+        assert body['logs'][-1] == 'line-00299'
+        assert body['log_total'] == 300, 'the total counts lines ever produced, not lines retained'
+
+    def test_a_refreshed_page_asks_for_everything_still_held(self, client, app_module):
+        self._fill(app_module, 300)
+        body = client.get('/api/workflow/status?tail=300').get_json()
+        assert len(body['logs']) == 300
+        assert body['logs'][0] == 'line-00000', 'a replay that starts mid-sentence is not a replay'
+        assert body['log_total'] == 300, 'the cursor the page lands on comes from this number'
+
+    def test_the_per_workflow_tabs_are_read_the_same_way(self, client, app_module):
+        """A parallel run's tab is a separate buffer with its own total; a replay that
+        widened only the shared console would leave every workflow tab at 200 lines and
+        reconnect the 全部 view only."""
+        self._fill(app_module, 260, wf=True)
+        body = client.get('/api/workflow/status?tail=260').get_json()
+        assert len(body['workflows']) == 1
+        assert len(body['workflows'][0]['logs']) == 260
+        assert body['workflows'][0]['total'] == 260
+
+    def test_the_ask_is_clamped_to_the_buffer_never_past_it(self, client, app_module):
+        self._fill(app_module, app_module.LOG_KEEP + 100)
+        body = client.get(f'/api/workflow/status?tail={app_module.LOG_KEEP * 3}').get_json()
+        assert len(body['logs']) == app_module.LOG_KEEP, 'a tail cannot ship lines the server threw away'
+        assert body['log_total'] == app_module.LOG_KEEP + 100, 'and the total must still say how many existed'
+
+    @pytest.mark.parametrize('ask,expected', [('0', 1), ('-5', 1), ('abc', 200), ('', 200), (' 42 ', 42)])
+    def test_a_junk_or_empty_tail_is_the_default_not_an_error(self, app_module, ask, expected):
+        """Hand-typing a URL must not answer a 400 in the middle of a run: this is a
+        nicety on a read-only path. And 0 is clamped UP, because a tail of zero lines is
+        a console that never receives anything again."""
+        seen = []
+
+        class _Req:
+            args = {'tail': ask}
+
+        seen.append(app_module._status_tail(_Req()))
+        assert seen == [expected]
+
+
 class TestConsoleSaysEachThingOnce:
     """The console is read line by line, so a fact printed twice is a fact the
     reader has to reconcile — and the pairs below did not even agree with each

@@ -16,9 +16,11 @@ from utils.helpers import (
     MAX_FILENAME_LENGTH,
     as_bool,
     df_to_csv_string,
+    export_stamp,
     extract_number,
     merge_results,
     sanitize_filename,
+    window_tag,
 )
 
 pytestmark = pytest.mark.unit
@@ -153,6 +155,102 @@ class TestSanitizeFilename:
 
     def test_numbers_are_stringified(self):
         assert sanitize_filename(2024) == '2024'
+
+
+class TestWindowTag:
+    """A crawl's declared time window, as a filename component.
+
+    The window is the only thing that tells a table collected for January apart from the
+    one collected for March, and it used to exist nowhere but the node's own form — the
+    second file silently replaced the first and nobody could tell afterwards which month
+    they were reading. Anything that is not a complete, parseable pair answers the empty
+    string, because the crawler refuses those inputs itself and half a name would claim a
+    range this table does not describe.
+    """
+
+    def test_a_complete_pair_is_compacted_into_the_component(self):
+        assert window_tag('2026-01-01', '2026-03-15') == '_20260101_to_20260315'
+
+    def test_padding_and_a_longer_timestamp_still_read_as_the_date(self):
+        assert window_tag('  2026-01-01 ', '2026-03-15 08:30:00') == '_20260101_to_20260315'
+
+    @pytest.mark.parametrize(
+        'start,end',
+        [
+            (None, None),
+            ('', ''),
+            ('2026-01-01', ''),
+            ('', '2026-03-15'),
+            ('2026-13-01', '2026-03-15'),
+            ('January', '2026-03-15'),
+            ('2026/01/01', '2026-03-15'),
+        ],
+    )
+    def test_an_incomplete_or_unparseable_pair_names_nothing(self, start, end):
+        assert window_tag(start, end) == ''
+
+    def test_an_unpadded_date_is_read_because_the_crawler_reads_it(self):
+        # ``crawlers/weibo.py:_parse_date`` accepts this through the same strptime, so a
+        # filename that refused it would disagree with the crawl that really ran.
+        assert window_tag('2026-1-1', '2026-3-5') == '_20260101_to_20260305'
+
+    def test_a_one_sided_window_is_not_half_a_name(self):
+        # ``crawlers/weibo.py:_build_urls`` raises on exactly this input; a filename is
+        # not where that answer belongs, and printing one date would read as a range.
+        assert window_tag('2026-01-01', None) == ''
+
+    def test_the_separator_is_not_a_tilde(self):
+        # NTFS reads '~' as an 8.3 short-name marker and ``sanitize_filename`` would keep
+        # it, so the character is a decision, not a taste.
+        assert '~' not in window_tag('2026-01-01', '2026-03-15')
+
+    def test_the_tag_survives_the_filename_sanitizer_unchanged(self):
+        tag = window_tag('2026-01-01', '2026-03-15')
+        assert sanitize_filename(tag) == tag, 'the sanitizer would be eating this out of every name'
+
+
+class TestExportStamp:
+    """Which record wrote this file, in its name — and stable across that record's attempts.
+
+    ``PartWriter`` adopts the shards an interrupted attempt already flushed by matching
+    its stem as a prefix, so a stamp that moved between attempts would leave those parts
+    orphaned beside a numbering that restarted at 001. The record's ``started_at`` is
+    precisely the field 继续 never refreshes; the run id is the fallback, because it keeps
+    the one property that matters — one value per record, a different one between records.
+    """
+
+    def test_the_iso_timestamp_the_store_writes_becomes_the_component(self):
+        assert export_stamp('2026-10-02T14:35:07') == '_20261002-1435'
+
+    def test_a_space_separated_date_is_read_as_well(self):
+        assert export_stamp('2026-10-02 14:35:07') == '_20261002-1435'
+
+    def test_the_record_id_rides_along_because_minutes_collide(self):
+        # A parallel canvas opens several records inside one second, so no date
+        # resolution short of the record itself keeps two of them off one filename.
+        assert export_stamp('2026-10-02T14:35:07', 'a1b2c3d4') == '_20261002-1435-a1b2c3d4'
+        assert export_stamp('2026-10-02T14:35:07', 'zzzz9999') != export_stamp('2026-10-02T14:35:07', 'a1b2c3d4')
+
+    def test_the_two_pieces_each_stand_alone(self):
+        assert export_stamp('2026-10-02T14:35:07', '') == '_20261002-1435'
+        assert export_stamp('', 'a1b2c3d4') == '_a1b2c3d4'
+
+    @pytest.mark.parametrize('stored', ['', None, 'not a date', '2026-10-02'])
+    def test_an_unreadable_date_falls_back_to_the_run_id(self, stored):
+        assert export_stamp(stored, 'abcdef123456') == '_abcdef12'
+
+    def test_the_fallback_cannot_carry_path_shape(self):
+        assert export_stamp('', '../evil') == '_evil'
+
+    def test_nothing_to_name_answers_nothing(self):
+        assert export_stamp('', '') == ''
+        assert export_stamp(None, None) == ''
+
+    def test_two_attempts_of_one_record_answer_the_same_string(self):
+        # The whole reason this is read off the record instead of ``time.strftime``: a
+        # resumed crawl must find the shards its previous attempt left, by name.
+        first = export_stamp('2026-10-02T14:35:07', 'run1')
+        assert first == export_stamp('2026-10-02T14:35:07', 'run1')
 
 
 class TestExtractNumber:

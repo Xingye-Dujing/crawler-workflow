@@ -518,6 +518,53 @@ class TestMlTraining:
         }
         assert (tmp_path / 'emotion.pkl').exists()
 
+    def test_the_label_column_is_answered_per_model_and_not_by_a_ternary(self, client, paste, tmp_path, monkeypatch):
+        """``label_column`` used to default to ``'emotion'`` whatever was being trained, and
+        the browser compensated with ``modelType === 'emotion' ? 'emotion' : 'tendency'`` —
+        two opinions, one of which was about to be wrong for the third classifier: a
+        `sentiment` train would have fitted itself from the tendency column and reported
+        success. The server now reads the same table that decides what ``mode='ml'`` loads.
+        """
+        from analyzers import ml_base
+
+        monkeypatch.setattr(ml_base, 'MODEL_DIR', str(tmp_path))
+        records = []
+        for label in ('positive', 'negative'):
+            for i in range(6):
+                records.append(
+                    {
+                        '正文': f'很好 开心 漂亮 {i} {label}',
+                        'sentiment': label,
+                        'tendency': label,
+                        'emotion': label,
+                    }
+                )
+        dataset_id = paste(records, name='three-labels.csv')
+        for model_type in ('emotion', 'tendency', 'sentiment'):
+            body = client.post(
+                '/api/analysis/train',
+                json={'dataset_id': dataset_id, 'model_type': model_type, 'text_column': '正文'},
+            ).get_json()
+            assert body['ok'] is True, body
+            assert body['model_type'] == model_type
+            assert body['labels'] == ['negative', 'positive'], model_type
+            assert (tmp_path / f'{model_type}.pkl').exists(), model_type
+
+    def test_sentiment_is_an_allowed_model_type_at_all(self, client, paste):
+        """``_ML_MODEL_TYPES`` is derived from the analyzer classes, so a name the panel can
+        send must be a name the route accepts — otherwise the train button is a 400.
+
+        One row is enough to prove it, because of the ORDER the route checks in: a refused
+        ``model_type`` and a missing column both answer before the row-count floor. Getting
+        「至少要 10 行标注」 back means the name was accepted AND 正文/sentiment were found.
+        """
+        dataset_id = paste([{'正文': 'x', 'sentiment': 'positive'}], name='one.csv')
+        body = client.post('/api/analysis/train', json={'dataset_id': dataset_id, 'model_type': 'sentiment'}).get_json()
+        assert body['ok'] is False
+        error = str(body['error'])
+        assert 'model_type' not in error and 'sentiment' not in error, f'the name or its column was refused: {error}'
+        assert '10' in error or 'labelled' in error.lower() or '标注' in error, error
+
     @pytest.mark.parametrize('bogus', ['../../evil', 'Matplotlib', 'mpl', ''])
     def test_a_model_name_that_chooses_a_file_is_refused_by_name(self, client, paste, tmp_path, monkeypatch, bogus):
         """``model_type`` became ``MODEL_DIR/<name>.pkl`` and was read back with joblib,

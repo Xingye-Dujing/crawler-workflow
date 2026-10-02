@@ -2175,3 +2175,22 @@ rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新
 
 
 
+
+## 时间窗进文件名，与 SnowNLP 的偏置（measured 2026-10-02）
+
+- **微博的分时间窗只有帖子 mode 声明**：`start_time`/`end_time` 挂在 `_TIMES`
+  （`crawl_capabilities.py`），只接进 weibo 的 `posts` mode，`tests/unit/test_crawl_capabilities.py`
+  钉住"没有第二个平台拿到它"。真正的校验在爬虫里（`crawlers/weibo.py:_build_urls`：要么都给、
+  要么都不给，`end <= start` 直接拒），设计期不看，所以一个坏日期是在运行时点名失败的。
+- **文件名里的窗口是"用户声明的那一段"，不是"走到的那一段"**：stem 在爬虫跑之前就定了
+  （`app.py` 的 `_execute_source_node`）。走到哪只有游标与 `end_reason` 知道，而窗口本身不会
+  因为中途 停止 而改变含义，所以进名字的是请求的区间。分隔符用 `_to_` + `%Y%m%d` 而不用 `~`：
+  NTFS 把 `~` 当 8.3 短名标记，`sanitize_filename` 又不会替我把它去掉；紧凑日期是为了不吃满
+  `MAX_FILENAME_LENGTH = 100`（工作流名长的时候，窗口不能被截掉）。
+- **SnowNLP 在客观陈述上明显偏负**：本机实测 `SnowNLP('会议定于周三举行').sentiments == 0.2378`，
+  而 `'今天玩得非常开心，风景太美了'` 是 0.9464、`'这服务太差了令人失望'` 是 0.0279。它是购物评论
+  上训出来的模型，把"没有好评色彩"读成了负面。因此 0.5 不是可写的常数：正/负两档阈值是节点参数
+  （默认 0.6 / 0.4），`score` 列永远保留原始概率，用户在报告里重划档位即可，不必重跑分析。
+- **`bert` 这一路在本机不可测**：`transformers 5.13` 在，`torch` 不在，`find_spec` 就答得出缺哪个。
+  所以 `bert` mode 只有拒绝路径被测试覆盖（`tests/unit/test_sentiment_analyzer.py::TestBertMode` 里
+  推理管线是 stub 进 `sys.modules` 的），**真模型从未在这台机器上跑过**，README 也照这句话写。

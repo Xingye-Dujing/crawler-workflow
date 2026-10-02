@@ -138,6 +138,48 @@ function repaintConsoleView(out, key) {
     out.scrollTop = out.scrollHeight;
 }
 
+/* What a refreshed page asks the server for on its first read. The buffer behind
+ * `?tail=` is LOG_KEEP lines (backend `app.py`); the browser then keeps what its own
+ * view keeps (CONSOLE_VIEW_CAP) — the ask is "give me back what I lost", the cap is a
+ * DOM-size decision, and the two are different questions. */
+var CONSOLE_REPLAY_LIMIT = 5000;
+
+/** Load one view from a replay, and mark EVERY line the server has ever produced as seen.
+ *
+ * A fresh page starts at `seen: 0` while the run it is reconnecting to may be at line
+ * four thousand. Filling `lines` from the replay is only half of it: the cursor has to
+ * land on the reported total as well, or the very next poll — which ships the last 200 —
+ * would hand back lines this view has just painted and print them a second time.
+ * `takeLines` reads the pair, so the pair must be right. */
+function replayConsoleView(view, lines, total) {
+    var held = lines || [];
+    var count = total === undefined || total === null ? held.length : total;
+    view.seen = count;
+    view.lines = held.length > CONSOLE_VIEW_CAP ? held.slice(held.length - CONSOLE_VIEW_CAP) : held.slice();
+    return view.lines;
+}
+
+/* The console's workflow tabs, built in one place. A page that reconnects mid-run has to
+ * rebuild them from a status read rather than from a poll it never started, and a copy of
+ * this markup in the reconnect path is a bar that drifts from the one the user looks at. */
+function consoleTabsHtml(result, activeTab) {
+    var html = '<div class="console-tab' + (activeTab === 'all' ? ' active' : '') +
+        '" data-wf="all" onclick="switchWfTab(\'all\')">\u25a0 ' + I18n.t('console.all') + '</div>';
+    (result.workflows || []).forEach(function (wf) {
+        var dotClass = 'tab-dot-idle';
+        if (result.running) dotClass = 'tab-dot-run';
+        else dotClass = 'tab-dot-done';
+        html += '<div class="console-tab' + (activeTab === wf.id ? ' active' : '') + '" data-wf="' + wf.id +
+            '" onclick="switchWfTab(' + wf.id + ')">' +
+            '<span class="tab-dot ' + dotClass + '"></span>' + escapeHtml(wf.name || ('#' + (wf.id + 1))) + '</div>';
+    });
+    return html;
+}
+
+function consoleHasMultipleWf(result) {
+    return !!(result.workflows && result.workflows.length > 1 && result.mode === 'parallel');
+}
+
 const workflow = {
     currentFile: null,
 
@@ -876,7 +918,100 @@ const workflow = {
         }
     },
 
+    async reconnectConsole() {
+        /* A refresh used to cost the console: nothing in the boot sequence started the
+           poll, so the box sat empty for the rest of a run that was still writing and the
+           user read a dead UI for a live crawl. The lines are in the server's buffer (it
+           never knew this tab went away), so the page asks for what it lost, paints it,
+           and — if the work is still going — takes the stream up again.
+
+           A run that finished while the page was closed is shown too. The buffer is not
+           cleared until the NEXT run claims it, so 「刚才那次跑了什么」 is still answerable,
+           and answering it is the point of keeping the lines at all. */
+        if (this._pollTimer) return;
+        var result;
+        try {
+            var resp = await fetch('/api/workflow/status?tail=' + CONSOLE_REPLAY_LIMIT);
+            result = await resp.json();
+        } catch (e) {
+            return; // no server to read, so nothing to say about it
+        }
+        var out = document.getElementById('console-output');
+        if (!out) return;
+        var live = !!(result.running || result.settling || result.stopping);
+        var shown = (result.logs && result.logs.length) || 0;
+        if (!live && !shown) return; // an empty between-runs buffer is not a console
+
+        /* Every view is loaded from the replay, not only the visible one: a parallel run's
+           second tab is one click away, and a tab that replays nothing when it is opened
+           is the same loss this function exists to end. */
+        replayConsoleView(consoleViews.all, result.logs, result.log_total);
+        (result.workflows || []).forEach(function (w) {
+            replayConsoleView(consoleViewFor(w.id), w.logs, w.total);
+        });
+
+        var tabs = document.getElementById('console-tabs');
+        if (consoleHasMultipleWf(result)) {
+            tabs.style.display = 'flex';
+            tabs.innerHTML = consoleTabsHtml(result, _wfActiveTab);
+        } else {
+            tabs.style.display = 'none';
+            tabs.innerHTML = '';
+        }
+        var active = consoleHasMultipleWf(result) && _wfActiveTab !== 'all' ? _wfActiveTab : 'all';
+        repaintConsoleView(out, active);
+
+        var statusText = document.getElementById('status-text');
+        var statusNodes = document.getElementById('status-nodes');
+        if (result.total_nodes > 0 && statusNodes) {
+            statusNodes.textContent = I18n.t('status.progress')
+                .replace('{done}', result.completed_nodes)
+                .replace('{total}', result.total_nodes);
+        }
+        if (statusText) {
+            /* The run's own last line is the sentence that describes it; inventing a
+               status word here would be a second opinion about a run this page did not
+               watch end. */
+            var last = (result.logs || [])[shown - 1];
+            if (live) {
+                statusText.textContent = last
+                    ? last.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '')
+                    : I18n.t('status.running');
+            } else if (result.outcome === 'completed') {
+                statusText.textContent = I18n.t('status.completed');
+            } else if (last) {
+                statusText.textContent = last.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '');
+            }
+        }
+
+        if (!live) return;
+        /* Only a run that is still going steals the screen. A finished one is worth
+           reading — its lines are painted above — but popping the console panel open on
+           every page load for work that ended an hour ago is the app deciding to show the
+           user something they did not ask for. */
+        var panel = document.getElementById('console-panel');
+        if (panel && !panel.classList.contains('open')) {
+            closeDockedPanels('console-panel');
+            panel.classList.add('open');
+        }
+        RunState.setRunning(true);
+        this.pollStatus();
+        showToast(I18n.t('toast.consoleReconnected'));
+    },
+
+    _stopPoll: function () {
+        /* One owner for the timer. The reconnect path and the Run button can both ask
+           for status, and two intervals reading the same console would append the same
+           line twice — the cursor cannot tell them apart because both reads are valid. */
+        if (this._pollTimer) {
+            clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+    },
+
     pollStatus: function () {
+        var self = this;
+        if (this._pollTimer) return;
         /* Stick-to-bottom, not force-to-bottom. Measure BEFORE appending: if
            the user is already near the bottom they are "following" the stream,
            so keep doing it; if they scrolled up to read history, leave their
@@ -935,21 +1070,13 @@ const workflow = {
                     var consoleTabs = document.getElementById('console-tabs');
                     if (!consoleOut) return;
 
-                    var hasMultipleWf = result.workflows && result.workflows.length > 1 && result.mode === 'parallel';
+                    var hasMultipleWf = consoleHasMultipleWf(result);
 
                     if (hasMultipleWf) {
                         /* Show tab bar */
                         consoleTabs.style.display = 'flex';
                         var activeTab = typeof _wfActiveTab !== 'undefined' ? _wfActiveTab : 'all';
-                        var tabHtml = '<div class="console-tab' + (activeTab === 'all' ? ' active' : '') + '" data-wf="all" onclick="switchWfTab(\'all\')">\u25a0 ' + I18n.t('console.all') + '</div>';
-                        result.workflows.forEach(function (wf) {
-                            var dotClass = 'tab-dot-idle';
-                            if (result.running) dotClass = 'tab-dot-run';
-                            else dotClass = 'tab-dot-done';
-                            tabHtml += '<div class="console-tab' + (activeTab === wf.id ? ' active' : '') + '" data-wf="' + wf.id + '" onclick="switchWfTab(' + wf.id + ')">' +
-                                '<span class="tab-dot ' + dotClass + '"></span>' + escapeHtml(wf.name || ('#' + (wf.id + 1))) + '</div>';
-                        });
-                        consoleTabs.innerHTML = tabHtml;
+                        consoleTabs.innerHTML = consoleTabsHtml(result, activeTab);
 
                         /* Every view is read on every tick; only the visible one is
                            written to the DOM. That is what keeps a tab the user is
@@ -1003,14 +1130,14 @@ const workflow = {
                            slowly. Say the one thing that is known instead, and let the
                            record be read where it is read from: the run panel keeps
                            re-reading it until the verdict lands. */
-                        clearInterval(interval);
+                        self._stopPoll();
                         RunState.setRunning(false);
                         document.getElementById('status-text').textContent = I18n.t('status.stopping');
                         showToast(I18n.t('toast.stillSettling'));
                         return;
                     }
                     if (!result.running) {
-                        clearInterval(interval);
+                        self._stopPoll();
                         RunState.setRunning(false);
                         if (result.logs && result.logs.length) {
                             document.getElementById('status-text').textContent = I18n.t('status.completed');
@@ -1064,11 +1191,12 @@ const workflow = {
             } catch (e) {
                 /* The server went away mid-run: stop polling, but say so
                    instead of leaving a frozen "running" status bar. */
-                clearInterval(interval);
+                self._stopPoll();
                 RunState.setRunning(false);
                 showToast(I18n.t('toast.pollFailed'));
             }
         }, 1000);
+        this._pollTimer = interval;
     },
 };
 
@@ -1853,7 +1981,7 @@ function openSettings(nodeId) {
             I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'process') {
         var p = node.params;
-        var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'keyword', 'cluster', 'ner', 'anomaly', 'correlation'];
+        var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'anomaly', 'correlation'];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
             selectOptionTags(
@@ -1888,6 +2016,35 @@ function openSettings(nodeId) {
                     'llm'
                 ) +
                 '</select></div>';
+            if (p.mode === 'ml') {
+                html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
+            }
+        }
+
+        /* Sentiment polarity. Four ways to answer 正面/负面/中性, and the default is the one
+           that costs nothing: SnowNLP needs no model, no download and no GPU. The
+           thresholds only mean anything to the two modes that answer with a POLARITY
+           PROBABILITY — ml and llm answer with a label they were trained or prompted to
+           pick, and re-deciding it from their confidence number would be a second opinion
+           about the model's own answer (see analyzers/sentiment.py). */
+        if (p.operation === 'sentiment') {
+            html += renderParamSelect(nodeId, p, 'mode', 'settings.mode', 'snownlp', [
+                { v: 'snownlp', l: I18n.t('mode.snownlp') },
+                { v: 'ml', l: I18n.t('mode.ml') },
+                { v: 'llm', l: llmModeLabel() },
+                { v: 'bert', l: I18n.t('mode.bert') },
+            ]);
+            if (p.mode === 'snownlp') {
+                html += renderParamInput(nodeId, p, 'pos_threshold', 'settings.posThreshold', 'number', 0.6);
+                html += renderParamInput(nodeId, p, 'neg_threshold', 'settings.negThreshold', 'number', 0.4);
+                html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+                    I18n.t('settings.sentimentThresholdHint') + '</div></div>';
+            }
+            if (p.mode === 'bert') {
+                html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
+                html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+                    I18n.t('settings.bertModelHint') + '</div></div>';
+            }
             if (p.mode === 'ml') {
                 html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
             }
@@ -2033,7 +2190,11 @@ function openSettings(nodeId) {
             '<div class="settings-group"><label class="settings-checkbox-label">' +
             '<input type="checkbox" ' + (boolParam(p.filename_timestamp, false) ? 'checked' : '') + ' ' +
             'onchange="updateParam(\'' + nodeId + '\',\'filename_timestamp\',this.checked)"> ' +
-            I18n.t('settings.filenameTimestamp') + '</label></div>';
+            I18n.t('settings.filenameTimestamp') + '</label></div>' +
+            '<div class="settings-group"><label class="settings-checkbox-label">' +
+            '<input type="checkbox" ' + (boolParam(p.filename_time_range, false) ? 'checked' : '') + ' ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'filename_time_range\',this.checked)"> ' +
+            I18n.t('settings.filenameTimeRange') + '</label></div>';
         if (fmt === 'txt') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
                 '<input class="settings-input" value="' + escapeHtml(p.text_column || '') + '" placeholder="optional: one column per line" ' +
@@ -2198,7 +2359,13 @@ function nodeNeedsLlm(params, nodeOperation) {
     var p = params || {};
     var op = p.operation || nodeOperation || '';
     if (op === 'clean') return true;
-    if (op === 'emotion' || op === 'tendency') return p.mode !== 'ml';
+    /* Asked by NAME, never by "not the one I special-case". `mode !== 'ml'` was the old
+       reading and it charged a row-by-row model pass to a node whose mode said something
+       else — sentiment has four modes now, three of which need no model at all. A blank
+       means the operation's own declared default, which is what the backend reads too
+       (app.py `_op_needs_llm`). */
+    if (op === 'emotion' || op === 'tendency') return (p.mode || 'llm') === 'llm';
+    if (op === 'sentiment') return (p.mode || 'snownlp') === 'llm';
     if (op === 'ner') return p.mode === 'llm';
     return false;
 }
@@ -2687,7 +2854,11 @@ async function trainMLModel(nodeId, modelType) {
     payload.node_id = upstream;
     payload.model_type = modelType;
     payload.text_column = node.params.text_column || '正文';
-    payload.label_column = modelType === 'emotion' ? 'emotion' : 'tendency';
+    /* Which column holds the labels is the BACKEND's answer, not this file's. It used to be
+       a ternary over two model names, so a third classifier trained itself from whichever
+       column the `else` branch happened to name — and the training would have succeeded,
+       silently, on the wrong column. `train_ml_model` reads the same table that decides
+       what `mode='ml'` later loads, so the two cannot disagree. */
     try {
         var resp = await fetch('/api/analysis/train', {
             method: 'POST',

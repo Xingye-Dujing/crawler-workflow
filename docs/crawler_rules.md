@@ -194,3 +194,26 @@
   no reliable end signal stay fully un-armed (`end_reason=None`): weibo search (its `'end'` is a loop
   fallback, not a site marker), weibo/youtube author, bilibili search/author, xiaohongshu, twitter,
   zhihu author. Pinned: `tests/api/test_under_target.py`.
+
+- **A 分批输出 stem is a storage key, not a label: it must be identical across every attempt of
+  one run.** `PartWriter` adopts the shards a crashed attempt already flushed by matching
+  `{stem}.part` as a directory prefix (`services/part_writer.py`), and `run.progress_file`
+  announces the merged file the user is told to open. So any component that changes between
+  attempts of the SAME run silently orphanes those parts and restarts the numbering at 001
+  beside them — the resume looks green and the merged table is only the tail. That is why the
+  optional 「创建时间」 component (`utils.helpers.export_stamp`) is read from the run RECORD's
+  `started_at` plus its `run_id`, never from the clock at write time: `run_store.start_run`'s
+  继续 conflict update deliberately does NOT refresh `started_at`, and `run_id` is what the
+  resume keys on, so both are stable per record and different between records. A date-only
+  component is not enough on its own — a parallel canvas opens several records inside one
+  second. The time window a crawl was told to walk (`utils.helpers.window_tag`) is safe to put
+  in the same stem for the same reason: it is a node parameter, so it cannot drift mid-run.
+  Pinned: `tests/unit/test_utils.py::TestExportStamp`, `tests/api/test_nodes_execution.py::
+  TestWindowedFilenames::test_the_stamp_a_resume_reuses_is_the_record_and_not_the_clock`.
+- **A filename component is a name being chosen, so an ambiguous one is refused by name.**
+  「文件名带时间范围」 asks the SAVE node to print a window it cannot see (it receives a table),
+  so the range travels through the run (`execution_state['_time_windows']`, keyed per workflow
+  exactly like the console buffers, recorded where the crawl states it). Zero windows and two
+  different windows both fail the node saying which, rather than naming a file after a stretch
+  this table does not describe — a CSV labelled with the wrong month reads as evidence.
+  The resolved name is still never written back into `node['params']` (the fingerprint rule).

@@ -31,6 +31,7 @@ from analyzers import (
     EmotionAnalyzer,
     KeywordExtractor,
     NamedEntityRecognizer,
+    SentimentAnalyzer,
     TendencyAnalyzer,
     TextCluster,
     build_training_data,
@@ -70,7 +71,16 @@ from services.run_store import (
 from services.visualizer import ChartConfigError, VisualizationService
 from services.workflow_manager import WorkflowManager
 from settings_store import all_settings, get_setting, save_settings
-from utils.helpers import as_bool, comment_platforms, platform_for, sanitize_filename, split_names, split_urls
+from utils.helpers import (
+    as_bool,
+    comment_platforms,
+    export_stamp,
+    platform_for,
+    sanitize_filename,
+    split_names,
+    split_urls,
+    window_tag,
+)
 
 #: The comment router's supported platforms, as raw keys. They go into a
 #: ``{platforms}`` slot that localizes *and joins* them, so they must arrive as a
@@ -162,6 +172,26 @@ _wf_local = threading.local()
 # but the total count has to keep growing so the browser can tell how many it
 # has not seen yet (see _push_log).
 LOG_KEEP = 5000
+#: What a status read ships when nobody asks otherwise: the tail the console paints.
+CONSOLE_TAIL_DEFAULT = 200
+
+
+def _status_tail(req) -> int:
+    """How many console lines this status read carries — ``?tail=``, clamped to the buffer.
+
+    A page polls for the 200 it renders. A page that was just REFRESHED mid-run asks for
+    the whole retained buffer instead, because the lines it lost exist only in this
+    process's memory: answering it with 200 would replay the recent part of a run whose
+    opening the server could still show. A junk value is the default and not an error —
+    this is a nicety on a read-only path, and a run in flight must not be answered a 400
+    because someone hand-typed a URL.
+    """
+    try:
+        asked = int(str(req.args.get('tail') or '').strip())
+    except ValueError:
+        return CONSOLE_TAIL_DEFAULT
+    return max(1, min(LOG_KEEP, asked))
+
 
 # Every message that reaches the console is i18n.t(key, **params) — add_log,
 # logging, and print() all funnel through here.
@@ -496,6 +526,10 @@ execution_state = {
     '_wf_logs': {},  # {wf_idx: [log lines]} per-workflow logs for parallel mode
     '_wf_log_total': {},  # {wf_idx: lines ever produced} — see _push_log
     '_wf_names': {},  # {wf_idx: the workflow's user-facing name} for console lines
+    # {wf_idx: [(start, end)]} of the time windows a crawl node in this workflow was
+    # asked to walk. A save node cannot see the crawl it sits downstream of — it gets a
+    # table — so this is how 「文件名带时间范围」 can say which window the table is.
+    '_time_windows': {},
     '_mode': 'serial',
     'llm': None,  # AI transport config from the settings panel (see /api/workflow/execute)
     'cancel_event': threading.Event(),  # set by Stop; checked between LLM rows
@@ -540,6 +574,8 @@ def _console_baseline() -> dict:
         '_wf_logs': {},
         '_wf_log_total': {},
         '_wf_names': {},
+        # A new run must not name its files after the window the last one walked.
+        '_time_windows': {},
         'total_nodes': 0,
         'completed_nodes': 0,
         'skipped_nodes': 0,
@@ -558,6 +594,56 @@ def reset_console_state() -> None:
     downstream, where they read as a run nobody had started.
     """
     execution_state.update(_console_baseline())
+
+
+def _record_export_stamp(store, run_id: str) -> str:
+    """The filename component that names one record, read from the record itself.
+
+    Taken from ``started_at`` and not from the clock, because ``PartWriter`` adopts the
+    shards an interrupted attempt already flushed by matching its stem as a prefix: a
+    component that moved between attempts would leave those parts orphaned beside a
+    numbering that restarted at 001. 继续 never refreshes ``started_at`` — the record's
+    date is when this work began — which is exactly the stability this needs.
+    """
+    record = store.get_run(run_id) or {}
+    return export_stamp(record.get('started_at'), run_id)
+
+
+def _note_window(wf_idx, start, end) -> None:
+    """Remember that a crawl in this workflow was asked to walk a time window.
+
+    Recorded at the crawl, where the window is stated, for the save node downstream,
+    which receives only a table and cannot ask. Blank and unparseable pairs are not
+    recorded at all: the crawler refuses those itself, and a half-window must not become
+    half a filename.
+
+    What is kept is the formatted tag rather than the two strings as typed, because
+    「2026-1-1」 and 「2026-01-01」 are the one stretch, and storing the spellings would
+    refuse a file there is nothing ambiguous about.
+    """
+    tag = window_tag(start, end)
+    if not tag:
+        return
+    found = execution_state['_time_windows'].setdefault(wf_idx, [])
+    if tag not in found:
+        found.append(tag)
+
+
+def _window_for_save(wf_idx) -> tuple:
+    """``(tag, refusal)`` — the time window this workflow's file can honestly name.
+
+    One window is the case the user asked for. Zero is a workflow that never asked for a
+    range, so 「文件名带时间范围」 has nothing to print; two different ranges is a canvas
+    whose single file cannot say which of them it holds. Both answer with the sentence
+    rather than a guess, because a filename is a name being chosen — and a saved table
+    quietly labelled with the wrong month is worse than one that was not written.
+    """
+    found = execution_state['_time_windows'].get(wf_idx) or []
+    if not found:
+        return '', t('export.window_none')
+    if len(found) > 1:
+        return '', t('export.window_many', n=len(found))
+    return found[0], ''
 
 
 def _results_snapshot() -> dict:
@@ -709,27 +795,49 @@ def _item_scope(ctx: dict, node: dict) -> str:
     return 'item:' + str((ctx.get('fingerprints') or {}).get(node.get('id') or '', ''))
 
 
+#: The operations that call a language model whatever the node says.
+_ALWAYS_LLM_OPS = frozenset({'clean'})
+
+
+def _op_needs_llm(op: str, params: dict) -> bool:
+    """Whether this node's own choice will call a language model.
+
+    Read through the declared default the panel shows (``PROCESS_ENUMS``), because a blank
+    field means "not stated", not "not the model": an ``emotion`` node left empty IS an LLM
+    run, while an empty ``sentiment`` node is SnowNLP and costs nothing. The test this
+    replaces was ``mode != 'ml'``, which charged a row-by-row model pass to every node whose
+    mode said something else — and a cloud host then refused the whole run for a missing API
+    key that no node in it had asked for.
+    """
+    if op in _ALWAYS_LLM_OPS:
+        return True
+    spec = PROCESS_ENUMS.get(op) or {}
+    if 'mode' not in spec:
+        return False
+    default, allowed = spec['mode']
+    raw = str(params.get('mode') or '').strip()
+    value = raw if raw else default
+    # Only the mode that NAMES the model needs one. An unrecognised mode is not treated as
+    # a model call either: it is refused BY NAME when the node runs, and answering "a key
+    # is required" here would send the user to configure credentials for a definition
+    # whose actual problem is a spelling.
+    return value == 'llm'
+
+
 def _workflow_needs_llm(workflow: dict) -> bool:
     """True when any process node in the payload will actually call a model.
 
-    Cleaner always does; the two classifiers only when they are not running the
-    locally trained scikit-learn model; entity recognition only when it was
-    switched over to the model, since its rules need nothing. A crawl-and-save
-    workflow must not be blocked by a missing API key or an unpicked Ollama tag —
-    the frontend makes the same distinction (``nodeNeedsLlm``) before it opens
-    the console.
+    Cleaner always does; the three classifiers and entity recognition only when the node
+    picked the model. A crawl-and-save workflow must not be blocked by a missing API key or
+    an unpicked Ollama tag — the frontend makes the same distinction (``nodeNeedsLlm``)
+    before it opens the console, and both read one table of which mode means which model.
     """
     for node in workflow.get('nodes') or []:
         if not isinstance(node, dict) or node.get('type') != 'process':
             continue
         params = node.get('params') or {}
         op = str(params.get('operation') or node.get('operation') or '')
-        if op == 'clean':
-            return True
-        if op in ('emotion', 'tendency') and str(params.get('mode') or '') != 'ml':
-            return True
-        # NER is the opposite default: rules first, a model only when asked.
-        if op == 'ner' and str(params.get('mode') or '') == 'llm':
+        if _op_needs_llm(op, params):
             return True
     return False
 
@@ -1836,6 +1944,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 # Read *after* start_run so nodes left 'running' by the promotion
                 # are visible as partial, which is what makes them resumable.
                 ctx['statuses'] = store.node_statuses(run_id)
+                ctx['export_stamp'] = _record_export_stamp(store, run_id)
                 if resume_run_id:
                     previous = store.get_run(run_id) or {}
                     saved = sum(int(n.get('row_count') or 0) for n in previous.get('nodes') or [])
@@ -1915,6 +2024,9 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     # Read after start_run, for the same reason as above: nodes the
                     # promotion left 'running' must read as partial to be resumable.
                     statuses=store.node_statuses(rid),
+                    # Per RECORD, not per canvas: in a split run each workflow owns a row,
+                    # and its files should carry the minute that row began.
+                    export_stamp=_record_export_stamp(store, rid),
                 )
 
             def _close_component_record(sub_engine, sub_ctx: dict) -> None:
@@ -2374,6 +2486,20 @@ def _column_to_links(rows: list, column: str) -> tuple[list[str], int]:
     return links, skipped
 
 
+def _name_parts(params: dict, stamp: str = '') -> str:
+    """The filename components a crawl appends to its own name, in order.
+
+    Two facts that used to live only in the node's form: which stretch of the calendar
+    the crawl was asked to walk, and (on request) which record is writing these files.
+    Empty answers stay empty rather than becoming a stray separator, and the stamp is
+    handed in rather than read from the clock — see ``_record_export_stamp`` for the
+    prefix a moving stamp would break.
+    """
+    window = window_tag(params.get('start_time'), params.get('end_time'))
+    run = (stamp or '') if as_bool(params.get('part_timestamp')) else ''
+    return window + run
+
+
 def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream: list = None):
     """Scrape a platform, one row at a time.
 
@@ -2506,11 +2632,19 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
         part_size = _safe_int(params.get('part_size'), 0, minimum=0)
         keep_parts = as_bool(params.get('keep_parts'))
         pfmt = 'json' if str(params.get('format') or 'csv') == 'json' else 'csv'
+        # A crawl 「按时间」 writes a table for a stated stretch of the calendar, and on
+        # disk that fact used to exist nowhere but the node's own form: the file for
+        # January and the file for March were both 「微博-src-node-2.csv」, so the second
+        # one silently replaced the first and nobody could tell afterwards which month
+        # they were reading. The window goes into the name of the parts AND of the file
+        # they merge into, because those two are the same stem.
+        _note_window(getattr(_wf_local, 'idx', None), params.get('start_time'), params.get('end_time'))
+        parts = _name_parts(params, (ctx or {}).get('export_stamp') or '')
         writer = None
         if part_size > 0:
             from services.part_writer import PartWriter, safe_stem
 
-            stem = safe_stem(f'{execution_state.get("workflow_name") or platform}-src-{nid}')
+            stem = safe_stem(f'{execution_state.get("workflow_name") or platform}-src-{nid}{parts}')
             writer = PartWriter(Config.EXPORT_DIR, stem, pfmt, part_size, keep_parts)
         if ctx is not None:
             scope = _item_scope(ctx, node)
@@ -2728,6 +2862,10 @@ def _execute_upload_node(node: dict, headless: bool = True):
 PROCESS_ENUMS = {
     'emotion': {'mode': ('llm', ('llm', 'ml'))},
     'tendency': {'mode': ('llm', ('llm', 'ml'))},
+    # The traditional methods answer 正面/负面/中性, which is not the five-emotion or the
+    # six-tendency label set — hence its own operation rather than a new mode on theirs.
+    # SnowNLP is the default because it needs no model, no download and no GPU.
+    'sentiment': {'mode': ('snownlp', ('llm', 'ml', 'snownlp', 'bert'))},
     'ner': {'mode': ('regex', ('regex', 'llm'))},
     'keyword': {'method': ('tfidf', ('tfidf', 'textrank'))},
     'cluster': {'cluster_method': ('kmeans', ('kmeans', 'kmeans++', 'dbscan'))},
@@ -2735,7 +2873,7 @@ PROCESS_ENUMS = {
 }
 
 #: The operations whose whole job is to read one text column of the table.
-_TEXT_COLUMN_OPS = ('clean', 'emotion', 'tendency', 'keyword', 'cluster', 'ner')
+_TEXT_COLUMN_OPS = ('clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner')
 
 
 def enum_param(op: str, params: dict, key: str) -> str:
@@ -2779,6 +2917,21 @@ def chart_engine(value) -> str:
     return name
 
 
+def sentiment_thresholds(params: dict) -> tuple:
+    """The two polarity cut-offs a sentiment node asked for, refused when they overlap.
+
+    ``pos=0.3, neg=0.7`` is not an aggressive setting: read in order, every row is at once
+    positive (score >= 0.3) and negative (score <= 0.7), so the whole column would come
+    back 正面 and nothing would say the question was unanswerable. The band is checked
+    rather than normalised because a swap is a guess about which number the user meant.
+    """
+    pos = _safe_float(params.get('pos_threshold'), 0.6)
+    neg = _safe_float(params.get('neg_threshold'), 0.4)
+    if neg > pos:
+        raise UnknownOperationError(t('sentiment.bad_thresholds', pos=pos, neg=neg))
+    return pos, neg
+
+
 def check_process_params(op: str, params: dict, df) -> None:
     """Refuse an algorithm node whose parameters name nothing it can run.
 
@@ -2791,6 +2944,10 @@ def check_process_params(op: str, params: dict, df) -> None:
     """
     for key in PROCESS_ENUMS.get(op) or {}:
         enum_param(op, params, key)
+    if op == 'sentiment':
+        # Asked here as well as where it is used, so a workflow that cannot answer the
+        # question fails at the validation boundary the executor already reports by node.
+        sentiment_thresholds(params)
     if op in _TEXT_COLUMN_OPS:
         name = str(params.get('text_column') or '正文').strip()
         if name not in [str(col) for col in df.columns]:
@@ -2824,6 +2981,17 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
 
     if op == 'tendency':
         analyzer = TendencyAnalyzer(mode=enum_param(op, params, 'mode'))
+        df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
+        return df.to_dict('records')
+
+    if op == 'sentiment':
+        pos, neg = sentiment_thresholds(params)
+        analyzer = SentimentAnalyzer(
+            mode=enum_param(op, params, 'mode'),
+            pos_threshold=pos,
+            neg_threshold=neg,
+            bert_model=str(params.get('bert_model') or '').strip(),
+        )
         df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')
 
@@ -2923,6 +3091,17 @@ def _execute_output_node(node: dict, current_input: list):
         # on 继续 an output node whose stored rows still match its fingerprint is
         # *restored*, so this line never runs and no second file appears. Re-running
         # for a new timestamp means re-running the chain it writes out of.
+        if as_bool(params.get('filename_time_range')):
+            # Which stretch of the calendar this table covers is a fact about the CRAWL,
+            # and a save node is handed only rows — so the window is whatever this run's
+            # crawl nodes recorded (`_note_window`). Zero of them and two different ones
+            # are both refusals stated by name: a file called 「January」 that holds March
+            # is worse than a file that was never written, and the name is the thing being
+            # chosen here.
+            tag, refusal = _window_for_save(getattr(_wf_local, 'idx', None))
+            if refusal:
+                return {'error': refusal}
+            filename = DataExporter.tagged_filename(filename, tag)
         if as_bool(params.get('filename_timestamp')):
             filename = DataExporter.stamp_filename(filename, Config.EXPORT_DIR)
         filepath = os.path.join(Config.EXPORT_DIR, filename)
@@ -3287,7 +3466,12 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     keep_parts = as_bool(params.get('keep_parts'), True)
     fmt = 'json' if str(params.get('format') or 'csv') == 'json' else 'csv'
     nid = str(node.get('id') or '')
-    stem_base = safe_stem(f'{execution_state.get("workflow_name") or "comments"}-{nid}')
+    # The same two filename components a crawl node writes: a comment table collected for
+    # a stated stretch carries the same ambiguity, and a second pass over the same links
+    # the same overwrite. A comments mode declares no window today, so only the record
+    # stamp ever lands here.
+    parts = _name_parts(params, (ctx or {}).get('export_stamp') or '')
+    stem_base = safe_stem(f'{execution_state.get("workflow_name") or "comments"}-{nid}{parts}')
 
     row_sink = cursor_sink = None
     resumed_index = 0
@@ -3985,14 +4169,15 @@ def workflow_status():
     # _push_log that advanced ``_log_total`` between reading the tail and the total
     # would hand the browser a pair that disagree, and its delta cursor then marks
     # the gap already-seen and silently drops a few lines off the console.
+    tail = _status_tail(request)
     mode = execution_state.get('_mode', 'serial')
     with _completed_lock:
-        global_logs = execution_state['logs'][-200:]
+        global_logs = execution_state['logs'][-tail:]
         global_total = execution_state['_log_total']
         wf_view = [
             (
                 wk,
-                execution_state['_wf_logs'][wk][-200:],
+                execution_state['_wf_logs'][wk][-tail:],
                 execution_state['_wf_log_total'].get(wk, len(execution_state['_wf_logs'][wk])),
             )
             for wk in sorted(execution_state['_wf_logs'].keys())
@@ -4381,7 +4566,17 @@ def run_analysis():
 #: consume them so a train name can never drift from what ``mode='ml'`` loads. Each
 #: maps to ``data/models/<name>.pkl``, so an un-listed value was a filesystem write
 #: (and a later ``joblib.load``) under an attacker-chosen path, not a choice to guess.
-_ML_MODEL_TYPES = (EmotionAnalyzer._ML_MODEL_NAME, TendencyAnalyzer._ML_MODEL_NAME)
+_ML_MODEL_TYPES = (
+    EmotionAnalyzer._ML_MODEL_NAME,
+    TendencyAnalyzer._ML_MODEL_NAME,
+    SentimentAnalyzer._ML_MODEL_NAME,
+)
+
+#: The column each classifier's own operation writes its labels into, so training from
+#: 「这一列就是答案」 does not have to be spelled out at every call site — and a fourth
+#: model type added without a row here answers the first model's column, which the
+#: frontend would then have to be trusted not to be wrong about.
+_ML_LABEL_COLUMNS = {'emotion': 'emotion', 'tendency': 'tendency', 'sentiment': 'sentiment'}
 
 
 @app.route('/api/analysis/train', methods=['POST'])
@@ -4414,7 +4609,7 @@ def train_ml_model():
             }
         ), 400
     text_column = data.get('text_column', '正文')
-    label_column = data.get('label_column', 'emotion')
+    label_column = data.get('label_column') or _ML_LABEL_COLUMNS.get(model_type, 'emotion')
 
     if text_column not in df.columns:
         return jsonify({'ok': False, 'error': t('api.columnMissing', column=text_column)}), 400

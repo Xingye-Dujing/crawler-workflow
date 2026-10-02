@@ -114,6 +114,16 @@ class TestLlmGateParity:
         ('ner_regex', {'operation': 'ner', 'mode': 'regex'}, None),
         ('ner_llm', {'operation': 'ner', 'mode': 'llm'}, None),
         ('ner_bogus_mode', {'operation': 'ner', 'mode': 'sklearn'}, None),
+        # Polarity answers the same question four ways, three of which need no model, so
+        # the whole grid is in here: `mode !== 'ml'` was the old reading and it would
+        # block a SnowNLP run behind an API key nothing in the canvas asked for.
+        ('sentiment_default', {'operation': 'sentiment'}, None),
+        ('sentiment_snownlp', {'operation': 'sentiment', 'mode': 'snownlp'}, None),
+        ('sentiment_ml', {'operation': 'sentiment', 'mode': 'ml'}, None),
+        ('sentiment_bert', {'operation': 'sentiment', 'mode': 'bert'}, None),
+        ('sentiment_llm', {'operation': 'sentiment', 'mode': 'llm'}, None),
+        ('sentiment_blank_mode', {'operation': 'sentiment', 'mode': '  '}, None),
+        ('sentiment_bogus_mode', {'operation': 'sentiment', 'mode': 'TextBlob'}, None),
         ('keyword', {'operation': 'keyword'}, None),
         ('cluster', {'operation': 'cluster'}, None),
         ('anomaly', {'operation': 'anomaly'}, None),
@@ -146,8 +156,64 @@ class TestLlmGateParity:
             node['operation'] = operation
         assert js_answers[name] == _workflow_needs_llm({'nodes': [node]}), name
 
+    def test_the_process_selector_offers_exactly_the_operations_the_executor_serves(self):
+        """``PROCESS_OPS`` in workflow.js is what the 算法处理 node's dropdown offers; the
+        branches inside ``_execute_process_node`` are what actually run. Read from the
+        source of both, because either half drifting is silent in the other direction:
 
-class TestFrontendCatalog:
+        a name only in the browser is an option that validates, runs, and then fails on
+        「未知操作」 after the user paid for the crawl above it; a name only in the backend
+        is a capability nobody can reach.
+        """
+        import ast
+
+        js = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        listed = js[js.index('var PROCESS_OPS = [') :]
+        offered = re.findall(r"""'([a-z_]+)'""", listed[: listed.index('];')])
+
+        source = (STATIC_DIR.parent / 'app.py').read_text(encoding='utf-8')
+        tree = ast.parse(source)
+        served = []
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.FunctionDef) and node.name == '_execute_process_node'):
+                continue
+            for test in ast.walk(node):
+                # Only the top-level dispatch tests count: `if op == 'clean'` routes the
+                # node, while a comparison against some other variable is that branch's
+                # own business and says nothing about what the operation is called.
+                if (
+                    isinstance(test, ast.Compare)
+                    and isinstance(test.left, ast.Name)
+                    and test.left.id == 'op'
+                    and len(test.ops) == 1
+                    and isinstance(test.ops[0], ast.Eq)
+                    and isinstance(test.comparators[0], ast.Constant)
+                    and isinstance(test.comparators[0].value, str)
+                ):
+                    served.append(test.comparators[0].value)
+        assert offered == sorted(set(offered), key=offered.index), f'the selector lists an operation twice: {offered}'
+        assert sorted(offered) == sorted(set(served)), (
+            f'only the browser offers {sorted(set(offered) - set(served))}; '
+            f'only the executor serves {sorted(set(served) - set(offered))}'
+        )
+
+    def test_every_offered_operation_that_chooses_an_algorithm_declares_its_options(self):
+        """An op with a select-shaped parameter must be in ``PROCESS_ENUMS``, or its select
+        is a field the executor reads without ever checking it — the exact shape that let
+        ``method='TF-IDF'`` run TextRank and stamp the table with the name that had not
+        run. Ops with no such field (clean, anomaly) are legitimately absent, so the two
+        lists are compared against what the panels actually render."""
+        from app import PROCESS_ENUMS
+
+        js = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        panelled = {
+            op
+            for op in ('emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'correlation')
+            if f"p.operation === '{op}'" in js
+        }
+        assert panelled <= set(PROCESS_ENUMS), sorted(panelled - set(PROCESS_ENUMS))
+        assert 'sentiment' in PROCESS_ENUMS and 'mode' in PROCESS_ENUMS['sentiment']
+
     def test_every_literal_i18n_key_exists_in_both_languages(self):
         catalogs = _catalog_keys()
         missing = []
@@ -160,6 +226,8 @@ class TestFrontendCatalog:
                         missing.append(f'{name}: {key} missing from {lang}')
         assert not missing, '\n'.join(missing)
 
+
+class TestFrontendCatalog:
     def test_every_static_label_in_the_page_exists_in_both_languages(self):
         """``data-i18n`` is how the HTML gets re-worded when the language flips.
 
@@ -467,7 +535,125 @@ class TestChromeOfThePageItself:
         js = (JS_DIR / 'custom-select.js').read_text(encoding='utf-8')
         assert 'b.title = o.textContent' in js, 'an ellipsised option says its full text nowhere'
 
-    def test_the_platform_names_agree_between_the_two_layers(self):
+    def test_a_wire_that_leaves_the_world_box_is_still_painted(self):
+        """The world is infinite for a NODE (a <div>, whose overflow is visible) but the
+        wires are drawn into one <svg> that is 100% of the finite #canvas-inner, and an
+        <svg> ROOT clips to its own viewport by UA default. So a node dragged past
+        x=10000 — or to a negative coordinate, which pan has always allowed — stayed
+        perfectly visible while its curve was CUT at the border: the further apart two
+        boxes sat, the less of the wire between them existed. `overflow: visible` is the
+        one declaration that un-clips it, and #workspace is then what keeps the paint
+        inside the window, so the named clipper is checked as well as the fix."""
+        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
+
+        def block_of(selector):
+            start = css.index(selector)
+            return css[start : css.index('}', start)]
+
+        layer = block_of('#svg-layer {')
+        assert 'overflow: visible' in layer, f'the wires are clipped to the world box again: {layer}'
+        assert 'position: absolute' in layer, 'the layer no longer shares the nodes coordinate space'
+        # A wire nobody can click is a wire the user cannot delete: the hit paths live in
+        # this same layer, so un-clipping must not have taken the pointer away with it.
+        assert 'pointer-events: none' in layer
+        assert 'pointer-events: stroke' in block_of('.conn-delete-hit {'), (
+            'the delete hit-area needs its own pointer-events, since its layer has none'
+        )
+        window = block_of('#workspace {')
+        assert 'overflow: hidden' in window, 'nothing now bounds the paint, so wires cross the chrome'
+        world = block_of('#canvas-inner {')
+        assert 'width: 10000px' in world, 'the world box is the finite box the rule above exists to outgrow'
+
+        # The nesting is what makes `100%` mean the world box; restructure the page and the
+        # rule above is dead text, which is exactly the audit that used to pass on nothing.
+        svg = html.index('<svg id="svg-layer">')
+        assert html.index('<div id="canvas-inner">') < svg < html.index('<div id="nodes-container">')
+        assert html.index('<div id="workspace">') < html.index('<div id="canvas-inner">')
+        # And nothing bounds the NODE coordinate either — an unbounded pan is what lets a
+        # port sit outside the world box in the first place, so a clamp appearing here
+        # would mean the un-clipped wire was unnecessary after all.
+        js = (JS_DIR / 'canvas.js').read_text(encoding='utf-8')
+        assert "['panX', view.panX, -Infinity, Infinity]" in js, 'pan gained a bound'
+        assert "['panY', view.panY, -Infinity, Infinity]" in js, 'pan gained a bound'
+
+    def test_the_train_button_does_not_choose_the_label_column_it_cannot_see(self):
+        """``trainMLModel`` used to end its payload with
+        ``modelType === 'emotion' ? 'emotion' : 'tendency'`` — a second opinion about which
+        column holds the labels, held in the one file that has never seen the table. It was
+        harmless while two classifiers existed and became a wrong training set the moment a
+        third arrived: 「训练」 on a sentiment node would have fitted itself from the
+        tendency column and reported ``ok``. The server answers from the same table that
+        decides what ``mode='ml'`` loads, so the field is simply not sent."""
+        js = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        body = js[js.index('async function trainMLModel(') :]
+        body = body[: body.index('\n}\n')]
+        assert 'label_column' not in body, 'the browser is choosing the label column again'
+        assert 'model_type = modelType' in body, 'the train call lost the model it was asked for'
+        # …and the backend really does answer it per model type, so nothing is unsent by accident.
+        import app as app_module
+
+        assert app_module._ML_LABEL_COLUMNS['sentiment'] == 'sentiment'
+        assert set(app_module._ML_LABEL_COLUMNS) == set(app_module._ML_MODEL_TYPES), (
+            'a classifier can be trained whose label column nobody defaults'
+        )
+
+    def test_a_reloaded_page_is_wired_to_take_the_console_back_up(self):
+        """The reconnect logic lives in workflow.js and the boot sequence lives in app.js, so
+        the wiring between them is the one place this feature can die silently: a refresh
+        would still show an empty console over a run that is writing, and every unit test
+        would pass because each file is correct on its own.
+
+        ``workflow`` is a top-level const in workflow.js — never a ``window`` property —
+        so the guard has to name the binding. That exact mistake (``if (window.X)`` on a
+        top-level const) is already written down in AGENTS.md as a frontend rule, and this
+        is the call site that would have made it a silent no-op.
+        """
+        app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
+        wf = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        assert "boot('consoleReconnect'" in app, 'a boot step that is not registered is a boot step that never runs'
+        assert 'workflow.reconnectConsole()' in app
+        assert "typeof workflow !== 'undefined'" in app, 'the guard must read the binding, not window.workflow'
+        assert 'if (window.workflow' not in app, 'a top-level const never reaches window, so that guard is always false'
+        # …and the step must sit in the DOMContentLoaded body like its neighbours, not in
+        # some function nothing calls.
+        boot_body = app[app.index("document.addEventListener('DOMContentLoaded'") :]
+        assert "boot('consoleReconnect'" in boot_body[: boot_body.index("boot('locks'")], (
+            'the reconnect step must run with the other post-boot steps'
+        )
+        assert 'reconnectConsole: async function' in wf or 'async reconnectConsole()' in wf, (
+            'the method the boot step calls must exist'
+        )
+
+    def test_the_console_poller_has_exactly_one_owner(self):
+        """Two intervals reading one console append the same line twice, and the delta
+        cursor cannot tell them apart because both answers are valid. The reconnect path is
+        the second caller that exists now, so the timer needs an owner rather than a local.
+        """
+        wf = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        body = wf[wf.index('pollStatus: function') :]
+        body = body[: body.index('\n};')]
+        assert 'if (this._pollTimer) return;' in body, 'the poller can be started twice again'
+        assert 'this._pollTimer = interval;' in body, 'the timer is never recorded, so the guard reads nothing'
+        assert 'clearInterval(interval)' not in body, (
+            'a callback that clears its own local handle leaves _pollTimer set and the next '
+            'start refused forever — every stop must go through the owner'
+        )
+        assert body.count('self._stopPoll();') >= 3, (
+            f'every exit that ends the run must release the owner, saw {body.count("self._stopPoll();")}'
+        )
+
+    def test_the_tab_bar_is_built_in_one_place_for_the_poller_and_the_replay(self):
+        """A reconnecting page has not started the poller, so it must be able to rebuild the
+        workflow tabs from a status read. A second copy of that markup is a bar that drifts
+        from the one the user runs."""
+        wf = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        assert wf.count('function consoleTabsHtml(') == 1
+        assert wf.count('consoleTabsHtml(') >= 3, 'the builder is declared but no caller uses it'
+        assert wf.count('class="console-tab\'') == 2, (
+            'the tab template exists more than once, so the two bars can disagree'
+        )
+
         """The browser labels a platform from ``platform.*`` in app.js and the backend from
         ``i18n._PLATFORM_LABELS``. Two lists of the same nine words drift the moment one of
         them is edited — and the console and the dialog would then name the same site

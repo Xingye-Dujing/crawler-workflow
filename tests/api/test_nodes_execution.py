@@ -412,6 +412,222 @@ class TestStampedOutputFilenames:
         assert _export_names(data_root) - before == {'plain.csv'}
 
 
+@pytest.mark.usefixtures('clean_globals')
+class TestWindowedFilenames:
+    """「文件名带时间范围」 and 「分片文件名加创建时间」 — the two components a crawl appends.
+
+    The window is a fact about the CRAWL and a save node is handed only rows, so the range
+    travels through the run: ``_note_window`` records it where the crawl states it,
+    ``_window_for_save`` reads it back where the file is named. Anything that is not
+    exactly one window is a refusal rather than a guess, because a table quietly labelled
+    with the wrong month reads as evidence — and a filename is a name being chosen.
+    """
+
+    ROWS = [{'正文': 'a'}, {'正文': 'b'}]
+
+    def _save(self, app_module, tmp_path, monkeypatch, **params):
+        monkeypatch.setattr(app_module.Config, 'EXPORT_DIR', str(tmp_path))
+        node = _node('node-9', 'output', {'operation': 'save', 'format': 'csv', **params}, 'save')
+        return app_module._execute_output_node(node, list(self.ROWS))
+
+    def test_a_recorded_window_lands_before_the_extension(self, app_module, tmp_path, monkeypatch):
+        app_module._note_window(None, '2026-01-01', '2026-03-15')
+        result = self._save(app_module, tmp_path, monkeypatch, filename='weibo.csv', filename_time_range=True)
+        assert isinstance(result, list) and len(result) == 2, 'the table must still travel downstream'
+        assert [p.name for p in tmp_path.iterdir()] == ['weibo_20260101_to_20260315.csv']
+
+    def test_a_window_the_user_padded_still_names_the_file(self, app_module, tmp_path, monkeypatch):
+        app_module._note_window(None, ' 2026-01-01 ', '2026-03-15 00:00:00')
+        self._save(app_module, tmp_path, monkeypatch, filename='w.csv', filename_time_range=True)
+        assert [p.name for p in tmp_path.iterdir()] == ['w_20260101_to_20260315.csv']
+
+    def test_a_chain_with_no_crawl_refuses_rather_than_naming_nothing(self, app_module, tmp_path, monkeypatch):
+        """An upload feeding a save node has no window at all. The switch the user ticked
+        is the thing that cannot be honoured, so the node fails saying why and writes
+        nothing — a plain file would look like the range-named one it is not."""
+        result = self._save(app_module, tmp_path, monkeypatch, filename='nowhere.csv', filename_time_range=True)
+        assert isinstance(result, dict) and result.get('error'), 'a switch that cannot be honoured must fail the node'
+        assert '时间' in result['error'] or 'time range' in result['error'], result['error']
+        assert list(tmp_path.iterdir()) == [], 'a refusal must not also write the un-named file'
+
+    def test_two_windows_refuse_because_one_file_cannot_name_both(self, app_module, tmp_path, monkeypatch):
+        app_module._note_window(None, '2026-01-01', '2026-01-31')
+        app_module._note_window(None, '2026-03-01', '2026-03-31')
+        result = self._save(app_module, tmp_path, monkeypatch, filename='two.csv', filename_time_range=True)
+        assert isinstance(result, dict) and result.get('error'), 'an ambiguous range must not be guessed'
+        assert list(tmp_path.iterdir()) == []
+
+    def test_the_same_window_recorded_twice_is_still_one_window(self, app_module, tmp_path, monkeypatch):
+        # Two crawl nodes over ONE range is the common shape of a keyword sweep. Calling
+        # that an ambiguity would refuse a file with nothing ambiguous about it.
+        app_module._note_window(None, '2026-01-01', '2026-01-31')
+        app_module._note_window(None, '2026-01-01', '2026-01-31')
+        self._save(app_module, tmp_path, monkeypatch, filename='twice.csv', filename_time_range=True)
+        assert [p.name for p in tmp_path.iterdir()] == ['twice_20260101_to_20260131.csv']
+
+    def test_ranges_are_kept_apart_per_workflow(self, app_module):
+        """A parallel canvas runs several workflows at once, and naming A's file after B's
+        window is precisely the wrong-month table this switch must never produce."""
+        app_module._note_window(0, '2026-01-01', '2026-01-31')
+        app_module._note_window(1, '2026-03-01', '2026-03-31')
+        assert app_module._window_for_save(0)[0] == '_20260101_to_20260131'
+        assert app_module._window_for_save(1)[0] == '_20260301_to_20260331'
+        assert app_module._window_for_save(7) == ('', app_module.t('export.window_none'))
+
+    def test_a_window_that_was_never_stated_is_never_recorded(self, app_module):
+        for blank in ((None, None), ('2026-01-01', ''), ('nonsense', '2026-03-15')):
+            app_module._note_window(3, *blank)
+        assert app_module.execution_state['_time_windows'].get(3, []) == [], (
+            'a one-sided or unreadable range is the crawler’s own refusal, not half a name'
+        )
+
+    def test_a_new_run_starts_with_no_window_of_its_own(self, app_module):
+        app_module._note_window(0, '2026-01-01', '2026-01-31')
+        app_module.reset_console_state()
+        assert app_module.execution_state['_time_windows'] == {}, (
+            'a run must not name its files after the stretch the last one walked'
+        )
+
+    def test_the_two_components_join_in_order_and_only_when_asked(self, app_module):
+        """What the crawl node appends to its own stem: the window it was told to walk,
+        then the record writing the file — and neither without its switch."""
+        stated = {'start_time': '2026-01-01', 'end_time': '2026-03-15', 'part_timestamp': True}
+        assert app_module._name_parts(stated, '_20261002-1435-a1b2c3') == ('_20260101_to_20260315_20261002-1435-a1b2c3')
+        assert app_module._name_parts(stated) == '_20260101_to_20260315', 'no stamp was asked for'
+        assert app_module._name_parts({'part_timestamp': True}, '_20261002-1435-a1b2c3') == '_20261002-1435-a1b2c3'
+        assert app_module._name_parts({}) == '', 'an ordinary crawl keeps the name it always had'
+        # The panel stores a checkbox as a real boolean, a workflow FILE as the text
+        # 'true'/'false', and an exported draft as either: all three must read as asked.
+        for spelling in (True, 'true', 'True', '1', 1):
+            assert app_module._name_parts({'part_timestamp': spelling}, '_S') == '_S', spelling
+        for spelling in (False, 'false', '', None):
+            assert app_module._name_parts({'part_timestamp': spelling}, '_S') == '', spelling
+
+    def test_the_stamp_a_resume_reuses_is_the_record_and_not_the_clock(self, app_module, tmp_path):
+        """``PartWriter`` adopts the shards an interrupted attempt flushed by matching its
+        stem as a prefix. A stamp that moved between attempts would leave them orphaned
+        beside a numbering restarting at 001 — which is why it is read off the record."""
+        from services.run_store import RunStore
+
+        store = RunStore(str(tmp_path / 'runs.db'))
+        store.start_run('r1', 'wf', 'fp')
+        first = app_module._record_export_stamp(store, 'r1')
+        store.start_run('r1', 'wf', 'fp')  # what 继续 does to the same row
+        assert app_module._record_export_stamp(store, 'r1') == first, 'a resume must write the same names'
+        store.start_run('r2', 'wf', 'fp')
+        second = app_module._record_export_stamp(store, 'r2')
+        assert second != first, f'two records collided onto one file name: {first} / {second}'
+        assert second.endswith('-r2'), f'the record is what makes this name unique: {second}'
+
+
+class TestSentimentNode:
+    """「情感极性」 end to end: a real SnowNLP pass through the executor into a CSV.
+
+    No model download, no GPU and no LLM call, so this is the tier where the whole chain
+    is honest — the node runs, the two columns land in the stored rows and in the file,
+    and a mode the operation does not know fails by name instead of running something else.
+    """
+
+    ROWS = [
+        {'正文': '今天玩得非常开心，风景太美了'},
+        {'正文': '这服务太差了，等了两个小时没人管'},
+        {'正文': '会议定于周三在报告厅举行'},
+        {'正文': ''},
+    ]
+
+    def _chain(self, ds, **params):
+        return _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': len(self.ROWS)}),
+                _node('node-2', 'process', {'operation': 'sentiment', 'text_column': '正文', **params}, 'sentiment'),
+                _node('node-3', 'output', {'operation': 'save', 'format': 'csv', 'filename': 'senti.csv'}, 'save'),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-3'}],
+        )
+
+    def test_the_default_mode_labels_the_column_and_writes_it_out(self, client, app_module, paste, data_root):
+        ds = paste(self.ROWS, name='senti.csv')
+        started = client.post('/api/workflow/execute', json={'workflow': self._chain(ds), 'workflow_name': 'senti'})
+        run_id = started.get_json()['run_id']
+        assert _wait(app_module)
+        statuses = app_module._RUN_STORE.node_statuses(run_id)
+        assert statuses['node-2']['status'] == 'done', statuses['node-2'].get('error')
+        rows = app_module._RUN_STORE.load_rows(run_id, 'node-2')
+        assert {'sentiment', 'score'} <= set(rows[0]), sorted(rows[0])
+        assert [r['sentiment'] for r in rows[:2]] == ['positive', 'negative']
+        # An empty text is not a judgement of 中性; the row keeps saying nothing.
+        assert rows[3]['sentiment'] == '' and rows[3]['score'] in (None, ''), rows[3]
+        written = pd.read_csv(data_root / 'data' / 'exports' / 'senti.csv', encoding='utf-8-sig')
+        assert {'sentiment', 'score'} <= set(written.columns), sorted(written.columns)
+        assert len(written) == 4
+
+    def test_the_whole_chain_needs_no_api_key_for_any_of_the_three_free_modes(self, client, app_module):
+        """The gate is what refuses a run before it starts, and three of these four modes
+        cost nothing: a canvas that asked for SnowNLP must not be blocked for a key, which
+        is exactly the trap ``mode != 'ml'`` set for every other spelling."""
+        for mode in ('snownlp', 'ml', 'bert'):
+            node = _node('n', 'process', {'operation': 'sentiment', 'mode': mode}, 'sentiment')
+            assert app_module._workflow_needs_llm({'nodes': [node]}) is False, mode
+        llm = _node('n', 'process', {'operation': 'sentiment', 'mode': 'llm'}, 'sentiment')
+        assert app_module._workflow_needs_llm({'nodes': [llm]}) is True
+
+    def test_a_mode_the_operation_does_not_know_fails_the_node_by_name(self, client, app_module, paste):
+        ds = paste(self.ROWS, name='senti-bogus.csv')
+        started = client.post(
+            '/api/workflow/execute', json={'workflow': self._chain(ds, mode='TextBlob'), 'workflow_name': 'senti-bogus'}
+        )
+        run_id = started.get_json()['run_id']
+        assert _wait(app_module)
+        statuses = app_module._RUN_STORE.node_statuses(run_id)
+        assert statuses['node-2']['status'] == 'failed', statuses['node-2']
+        assert 'TextBlob' in statuses['node-2']['error'], statuses['node-2']['error']
+        assert 'mode' in statuses['node-2']['error'], 'the refusal must name the field it is refusing'
+        assert app_module._RUN_STORE.load_rows(run_id, 'node-2') == [], 'a refused mode stores nothing'
+
+    def test_an_inverted_threshold_band_fails_rather_than_answering_every_row_positive(self, client, app_module, paste):
+        ds = paste(self.ROWS, name='senti-band.csv')
+        started = client.post(
+            '/api/workflow/execute',
+            json={'workflow': self._chain(ds, pos_threshold=0.2, neg_threshold=0.8), 'workflow_name': 'senti-band'},
+        )
+        run_id = started.get_json()['run_id']
+        assert _wait(app_module)
+        statuses = app_module._RUN_STORE.node_statuses(run_id)
+        assert statuses['node-2']['status'] == 'failed', statuses['node-2']
+        assert '0.2' in statuses['node-2']['error'], statuses['node-2']['error']
+
+    def test_a_machine_without_torch_refuses_bert_instead_of_running_snownlp(self, client, app_module, paste):
+        ds = paste(self.ROWS, name='senti-bert.csv')
+        started = client.post(
+            '/api/workflow/execute', json={'workflow': self._chain(ds, mode='bert'), 'workflow_name': 'senti-bert'}
+        )
+        run_id = started.get_json()['run_id']
+        assert _wait(app_module)
+        statuses = app_module._RUN_STORE.node_statuses(run_id)
+        assert statuses['node-2']['status'] == 'failed', statuses['node-2']
+        error = statuses['node-2']['error'] or ''
+        # The refusal names the missing piece, and never becomes another algorithm.
+        assert 'torch' in error or '模型' in error or 'Model' in error, error
+        assert app_module._RUN_STORE.load_rows(run_id, 'node-2') == [], 'a refused mode stores nothing'
+
+    def test_a_missing_text_column_is_refused_before_any_row_is_read(self, client, app_module, paste):
+        ds = paste([{'标题': '只有标题'}] * 3, name='senti-nocol.csv')
+        workflow = _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 3}),
+                _node('node-2', 'process', {'operation': 'sentiment', 'text_column': '正文'}, 'sentiment'),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'senti-nocol'})
+        run_id = started.get_json()['run_id']
+        assert _wait(app_module)
+        statuses = app_module._RUN_STORE.node_statuses(run_id)
+        assert statuses['node-2']['status'] == 'failed', (
+            'a node that read nothing and changed nothing must not settle DONE'
+        )
+
+
 class TestResumeNode:
     def test_explicit_pick_adopts_a_finished_runs_table(self, client, app_module, paste):
         ds = _upload(client, paste)

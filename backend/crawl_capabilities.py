@@ -214,6 +214,17 @@ FILE_FIELDS = (
         options=(('csv', 'format.csv'), ('json', 'format.json')),
     ),
     Field(key='keep_parts', control='checkbox', label_key='settings.keepParts', default=False, coerce='bool'),
+    # Which RECORD wrote these shards, in their name, so a second pass over the same
+    # canvas does not replace the first one's files. Executor-only like ``keep_parts``:
+    # it decides a filename, never what the crawler collects.
+    Field(
+        key='part_timestamp',
+        control='checkbox',
+        label_key='settings.partTimestamp',
+        default=False,
+        hint_key='settings.partTimestampHint',
+        coerce='bool',
+    ),
 )
 
 # ─── The fields themselves ──────────────────────────────────────────────

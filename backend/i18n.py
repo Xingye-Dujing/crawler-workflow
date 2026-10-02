@@ -120,6 +120,7 @@ _ZH = {
     # ── analyzer labels (console prefix) ──────────────────────
     'label.clean': '清洗',
     'label.emotion': '情感分析',
+    'label.sentiment': '情感极性',
     'label.tendency': '倾向性分析',
     'label.ner': '实体识别',
     'ner.dropped': '实体识别：{n} 条模型答案未在原文中出现，已丢弃（不记录推测出的实体）',
@@ -303,6 +304,12 @@ _ZH = {
     'crawl.xhs.comment_done': '[提取评论] 共提取 {n} 条评论',
     # ── analysis / services ───────────────────────────────────
     'export.done': '已导出 {n} 行至 {path}（{fmt}）',
+    # 「文件名带时间范围」 asks the save node to print a window it cannot see: the crawl
+    # states it, this node receives a table. Both answers name the reason instead of
+    # inventing a range, because a file labelled with the wrong month is worse than one
+    # that was never written.
+    'export.window_none': '文件名要求带时间范围，但这条链路上没有任何采集节点声明开始/结束时间',
+    'export.window_many': '文件名要求带时间范围，但这条链路上有 {n} 个不同的时间窗，一个文件说不清它装的是哪一段',
     'analysis.type_convert_failed': '列 {col} 转换为 {dtype} 失败：{err}',
     'analysis.calc_failed': '计算列 {col} = {expr} 失败：{err}',
     'analysis.bin_failed': '列 {col} 分箱失败：{err}',
@@ -332,6 +339,19 @@ _ZH = {
     'ml.missing_col': 'DataFrame 缺少必需的列“{col}”。跳过分析。',
     'ml.no_rows': '没有需要处理的行（目标列为空）。',
     'ml.emotion_failed': 'ML 情感预测失败：{err}——回退为 Neutral',
+    # ── 情感极性（snownlp / bert / ml / llm）───────────────────────────
+    # A row that fails to read stays blank, so the failure line has to say the count:
+    # 「判断为中性」 and 「没判断出来」 are different statements about the text.
+    'sentiment.scored': '情感极性（{mode}）：已判断 {n} 行',
+    'sentiment.scored_failed': '情感极性：{n} 行读取失败，留空（不是中性）',
+    'sentiment.snownlp_failed': 'SnowNLP 判断失败：{err}',
+    'sentiment.bert_failed': 'BERT 判断失败：{err}',
+    'sentiment.ml_failed': 'ML 情感极性预测失败：{err}——回退为 neutral',
+    'sentiment.unknown_mode': '使用了未知的情感极性模式「{mode}」',
+    'sentiment.bad_thresholds': '正向阈值 {pos} 不得低于负向阈值 {neg}，那样每一行都会同时满足两边',
+    'sentiment.bert_missing': 'BERT 模式需要本机安装 {need}——当前环境没有，也不会改用别的方法代替',
+    'sentiment.bert_no_model': 'BERT 模式还需要在「模型」里填一个情感模型名（本地目录或仓库名），空着无法判断',
+    'sentiment.bert_bad_label': 'BERT 模型回了一个不认识的标签「{label}」，无法归入正面/负面/中性',
     'ml.tendency_failed': 'ML 倾向性预测失败：{err}——回退为 Objective Statement',
     'ml.emotion_done': '[ML] 情感分类完成，共处理 {n} 行，模式: ML',
     'ml.tendency_done': '[ML] 倾向性分析完成，共处理 {n} 行，模式: ML',
@@ -1042,6 +1062,7 @@ _EN = {
     # ── analyzer labels (console prefix) ──────────────────────
     'label.clean': 'Clean',
     'label.emotion': 'Emotion',
+    'label.sentiment': 'Sentiment polarity',
     'label.tendency': 'Tendency',
     'label.ner': 'Entities',
     'ner.dropped': 'NER: dropped {n} model answer(s) that do not appear in the source text (nothing is guessed)',
@@ -1234,6 +1255,8 @@ _EN = {
     'crawl.xhs.comment_done': '[Comments] Extracted {n} comments',
     # ── analysis / services ───────────────────────────────────
     'export.done': 'Exported {n} rows to {path} ({fmt})',
+    'export.window_none': 'the filename wants a time range, but no crawl here set a start/end time',
+    'export.window_many': 'the filename wants a time range, but this path has {n} of them',
     'analysis.type_convert_failed': 'Type conversion failed for column {col} -> {dtype}: {err}',
     'analysis.calc_failed': 'Column calc failed for {col} = {expr}: {err}',
     'analysis.bin_failed': 'Binning failed for {col}: {err}',
@@ -1259,6 +1282,16 @@ _EN = {
     'ml.missing_col': 'DataFrame is missing the required column "{col}". Skipping analysis.',
     'ml.no_rows': 'Nothing to process (the target column is empty).',
     'ml.emotion_failed': 'ML emotion prediction failed: {err} — falling back to Neutral',
+    'sentiment.scored': 'Sentiment polarity ({mode}): judged {n} rows',
+    'sentiment.scored_failed': 'Sentiment polarity: {n} rows could not be read and are left blank (not neutral)',
+    'sentiment.snownlp_failed': 'SnowNLP failed: {err}',
+    'sentiment.bert_failed': 'BERT failed: {err}',
+    'sentiment.ml_failed': 'ML sentiment polarity prediction failed: {err} — falling back to neutral',
+    'sentiment.unknown_mode': 'unknown sentiment polarity mode "{mode}"',
+    'sentiment.bad_thresholds': 'the positive threshold {pos} cannot sit below the negative threshold {neg}',
+    'sentiment.bert_missing': 'BERT mode needs {need} installed here — it is not, and nothing else will run instead',
+    'sentiment.bert_no_model': 'BERT mode needs a sentiment model named; empty means nothing can be judged',
+    'sentiment.bert_bad_label': 'the BERT model answered an unrecognised label "{label}"',
     'ml.tendency_failed': 'ML tendency prediction failed: {err} — falling back to Objective Statement',
     'ml.emotion_done': '[ML] Emotion classification done, {n} rows, mode: ML',
     'ml.tendency_done': '[ML] Tendency analysis done, {n} rows, mode: ML',

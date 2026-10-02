@@ -421,7 +421,18 @@ class TestDefaults:
     def test_fields_for_a_mode_ends_with_the_file_block(self):
         keys = [f.key for f in fields_for('zhihu', 'posts')]
         assert keys[:2] == ['keyword', 'target_count']
-        assert keys[-3:] == ['part_size', 'format', 'keep_parts']
+        assert keys[-4:] == ['part_size', 'format', 'keep_parts', 'part_timestamp']
+
+    def test_the_file_block_never_reaches_the_crawler_call(self):
+        """Every member of the shared tail decides how rows LEAVE the crawl — a filename,
+        a shard size, a format. Handed to ``search()`` as an argument they would be
+        swallowed by ``**_kwargs`` at best and shadow a real parameter at worst, so the
+        executor reads them straight off the node and the call stays what the signature
+        declares."""
+        posts = _mode('weibo', 'posts')
+        kwargs = crawl_kwargs(posts, {'keyword': 'k', 'part_size': 50, 'format': 'json', 'keep_parts': True})
+        assert not {'part_size', 'format', 'keep_parts', 'part_timestamp'} & set(kwargs), sorted(kwargs)
+        assert {'keyword', 'start_time', 'end_time'} <= set(kwargs), sorted(kwargs)
 
     def test_unknown_platform_offers_no_fields(self):
         assert fields_for('kuaishou', 'posts') == ()

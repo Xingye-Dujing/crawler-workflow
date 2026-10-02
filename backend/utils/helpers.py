@@ -1,6 +1,7 @@
 import io
 import os
 import re
+from datetime import datetime
 
 import pandas as pd
 
@@ -155,6 +156,58 @@ def sanitize_filename(name: str) -> str:
         keep = max(1, MAX_FILENAME_LENGTH - len(ext))
         clean = root[:keep] + ext
     return clean
+
+
+def window_tag(start, end) -> str:
+    """A crawl's declared time window as a filename component: ``_20260101_to_20260315``.
+
+    A table of posts collected 「按时间」 is otherwise indistinguishable, on disk, from
+    the one collected last month for a different month — the window existed only in the
+    node's own form. Anything that is not a complete, parseable pair answers ``''``:
+    a one-sided window is a request the crawler refuses at run time
+    (``crawlers/weibo.py:_build_urls``), and a half-named file would claim a range this
+    table does not describe. A name is not where a validation error belongs.
+
+    ``~`` is deliberately not the separator: NTFS reads it as an 8.3 short-name marker.
+    """
+    parts = []
+    for value in (start, end):
+        text = str(value or '').strip()[:10]
+        try:
+            parts.append(datetime.strptime(text, '%Y-%m-%d').strftime('%Y%m%d'))
+        except ValueError:
+            return ''
+    return f'_{parts[0]}_to_{parts[1]}'
+
+
+def export_stamp(started_at, run_id: str = '') -> str:
+    """Which record wrote this file, as a filename component: ``_20261002-0805-a1b2c3d4``.
+
+    Read from the RECORD rather than from the clock at write time, because ``PartWriter``
+    adopts the shards an interrupted attempt already flushed by matching its stem as a
+    prefix — a component that moved between attempts would leave those parts orphaned
+    beside a numbering that restarted at 001. ``started_at`` is precisely the field 继续
+    does not refresh (``run_store.start_run``), so the date names the work, not this
+    attempt at it.
+
+    The record's own id rides along, and that is the part that makes the promise true
+    rather than nearly: a parallel canvas opens several records inside one second, so no
+    date resolution short of the id itself keeps two of them off one filename. Each piece
+    earns its place — the date is what a person reads when sorting the export folder, the
+    id is what makes it unique — and either alone still produces a component.
+    """
+    pieces = []
+    text = str(started_at or '').strip()
+    for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S'):
+        try:
+            pieces.append(datetime.strptime(text, fmt).strftime('%Y%m%d-%H%M'))
+            break
+        except ValueError:
+            continue
+    safe = re.sub(r'[^0-9A-Za-z_-]', '', str(run_id or ''))[:8]
+    if safe:
+        pieces.append(safe)
+    return '_' + '-'.join(pieces) if pieces else ''
 
 
 def df_to_csv_string(df: pd.DataFrame) -> str:
