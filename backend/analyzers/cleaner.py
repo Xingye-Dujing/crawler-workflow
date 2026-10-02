@@ -41,7 +41,20 @@ class ContentCleaner:
     _TOPIC_PAT = re.compile(r'#([^#\n]{1,40})#')
     # URLs in every shape the crawlers actually emit, including the sites' own link text.
     _URL_PAT = re.compile(r'https?://\S+|www\.\S+')
-    _PLACEHOLDER_PAT = re.compile(r'O?网页链接|展开c|收起c|L微博视频|微博视频|查看图片|全文')
+    _PLACEHOLDER_PAT = re.compile(r'O?网页链接|L微博视频|微博视频|查看图片')
+    # The 展开/收起 control, whose text the card carries inside the body node.
+    #
+    # Two measured facts shape this pattern, and the first one is why the old spelling
+    # missed most of the corpus: weibo appends ONE ASCII letter to the word, and it is not
+    # always 'c' — a real 10k-row export measured '收起d' on 23–29% of its rows while the
+    # pattern hard-coded 'c'. The second is that the site writes 「展开全文」, and the old
+    # standalone '全文' alternative merely ate that tail and left a bare 「展开」 behind —
+    # a leftover that reads like a word, which is worse than not matching at all.
+    #
+    # The trailing boundary is what keeps prose: 「请展开说说」 and 「展开讨论」 are text, not
+    # controls, so the marker only goes where a sentence cannot follow it. Same distinction
+    # `engine/times.py` makes for relative labels — recognise the shape, never the bare word.
+    _EXPAND_PAT = re.compile(r'(?:展开|收起)(?:全文|[A-Za-z])?(?=$|[\s，。！？、,.!?;；:：~～|])')
     # 表情代码. Dropped from the washed text because `[笑cry]` tokenises into keyword noise;
     # the raw column keeps them, so a sentiment node can still read the emoji signal.
     _EMOJI_PAT = re.compile(r'\[[^\[\]\n]{1,10}\]')
@@ -73,6 +86,7 @@ class ContentCleaner:
         out = cls._ZERO_WIDTH_PAT.sub('', str(text))
         out = cls._URL_PAT.sub(' ', out)
         out = cls._PLACEHOLDER_PAT.sub(' ', out)
+        out = cls._EXPAND_PAT.sub(' ', out)
         out = cls._REPLY_PAT.sub(' ', out)
         out = cls._FORWARD_PAT.sub('\n', out)
         out = out.split('\n', 1)[0]

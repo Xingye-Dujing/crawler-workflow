@@ -3084,21 +3084,90 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
     raise ValueError(t('wf.unknown_process_op', op=op or '(empty)'))
 
 
-def _execute_output_node(node: dict, current_input: list):
-    """Save node: exports the upstream data in the format the user picked,
-    then passes the data through for downstream nodes.
+def _merge_upstream_tables(current_input: list, upstream: list, label: str) -> tuple:
+    """Every incoming table as one, or the reason they cannot be one.
+
+    A node with several incoming connections used to take only the FIRST and mention the
+    rest in one console line, so wiring three crawls into one save node exported one of
+    them and reported success — the shape this project bans everywhere else. The save node
+    is the merge point because that is where a user naturally puts it: several batches of
+    the same crawl, one file to analyse.
+
+    Two refusals, both about not guessing:
+
+    * a parent whose result is not a table at all — a chart spec or a refusal envelope —
+      cannot contribute rows, and skipping it silently would export the others as if the
+      canvas had only those;
+    * parents whose COLUMN SETS differ are refused rather than passed to ``pd.concat``,
+      which answers a mismatch with an outer join: the missing columns come back as NaN
+      and the file looks like a complete table with holes in it. A crawler whose columns
+      changed between two runs is exactly how that happens, and the reason names the
+      columns so the canvas can be fixed.
+
+    A parent with ZERO rows is not a refusal — an empty batch is a real answer, and it is
+    reported so the row counts still add up to what was written.
+    """
+    tables = []
+    for pid, result in upstream or ():
+        if isinstance(result, list):
+            tables.append((str(pid), result))
+            continue
+        raise ValueError(t('wf.merge_not_tabular', nid=label, up=str(pid)))
+    if not tables:
+        # No upstream list at all (a direct caller, or a node with no wire): the rows in
+        # hand are the whole answer, which is what this node did before merging existed.
+        return list(current_input or []), (str(label), len(current_input or []))
+    if len(tables) == 1:
+        return list(tables[0][1]), (tables[0][0], len(tables[0][1]))
+
+    frames = [(pid, pd.DataFrame(rows)) for pid, rows in tables]
+    # The reference columns come from the first frame that HAS any: an empty table answers
+    # with no columns at all, and taking its shape as the truth would call every other
+    # table's columns "extra".
+    reference = next((list(frame.columns) for _pid, frame in frames if len(frame.columns)), [])
+    for pid, frame in frames[1:]:
+        # A table with ZERO rows has nothing that can disagree — there is no cell to line
+        # up — so it is skipped here and contributes nothing to the concatenation. Refusing
+        # it would make an honest empty batch look like a misconfigured canvas.
+        if len(frame) and set(frame.columns) != set(reference):
+            extra = [str(name) for name in frame.columns if name not in reference]
+            missing = [str(name) for name in reference if name not in frame.columns]
+            raise ValueError(
+                t(
+                    'wf.merge_columns',
+                    nid=label,
+                    up=pid,
+                    extra=', '.join(extra) or '-',
+                    missing=', '.join(missing) or '-',
+                )
+            )
+    merged = pd.concat([frame for _pid, frame in frames], ignore_index=True, sort=False)
+    detail = '、'.join(f'{pid} {len(frame)} 行' for pid, frame in frames)
+    add_log(t('wf.merge_done', nid=label, n=len(merged), tables=len(frames), detail=detail))
+    return merged.to_dict('records'), (str(label), len(merged))
+
+
+def _execute_output_node(node: dict, current_input: list, upstream: list = None):
+    """Save node: merges every incoming table, exports it, and passes it downstream.
 
     'save_csv' is kept as a back-compat alias for older saved workflows;
     both routes go through the same DataExporter used by the standalone
     /api/export/save endpoint, so behaviour is identical whether the save
     happens inside a workflow or on its own.
+
+    It hands ON the merged table rather than the first parent's rows, so a chain of
+    analyses may hang off this node and see everything that was written to the file.
     """
     params = node.get('params', {})
     op = node.get('operation', params.get('operation', ''))
-    if not current_input:
+    if not current_input and not upstream:
         return []
 
-    df = pd.DataFrame(current_input)
+    merged_rows, _ = _merge_upstream_tables(current_input, upstream, node_label(node, node.get('id', '')))
+    if not merged_rows:
+        return []
+
+    df = pd.DataFrame(merged_rows)
 
     if op in ('save', 'save_csv'):
         fmt = params.get('format', 'csv' if op == 'save_csv' else None)
@@ -3141,7 +3210,7 @@ def _execute_output_node(node: dict, current_input: list):
         # "exported N rows to <path> (fmt)" one line above, and saying the same
         # fact twice in two wordings is two chances to word them differently.
 
-    return current_input
+    return merged_rows
 
 
 def _safe_int(value, default: int = 0, minimum: int = None, maximum: int = None) -> int:
@@ -4075,7 +4144,10 @@ def _execute_node(
     if ntype == 'tokenize':
         return _execute_tokenize_node(node, current_input)
     if ntype == 'output':
-        return _execute_output_node(node, current_input)
+        # ``upstream`` reaches it so several incoming tables become ONE: a crawl split
+        # over several batches is the normal reason a user wires two nodes into a save
+        # node, and taking only the first exported one of them as if it were all of them.
+        return _execute_output_node(node, current_input, upstream=upstream)
     return []
 
 

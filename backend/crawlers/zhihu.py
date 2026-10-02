@@ -11,7 +11,7 @@ from selenium.webdriver.common.by import By
 from i18n import stop_reason_label, t
 
 from .base import UNDER_TARGET, Crawler, as_index
-from .engine import feed, pagefetch
+from .engine import feed, pagefetch, times
 from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
@@ -811,10 +811,14 @@ class ZhihuCrawler(Crawler):
         return parse_count(aria.get_attribute('aria-label') or '')
 
     def _get_publish_time(self, card):
-        # 2026 layout moved the date from .ContentItem-time to .SearchItem-time.
+        # 2026 layout moved the date from .ContentItem-time to .SearchItem-time. The cell is
+        # the site's own wording: 「发布于 2022-01-24」, 「编辑于 3 天前」, and for a card whose
+        # extractor lands on the wrong node, something that is not a time at all — so it goes
+        # through the closed-set resolver, which answers an absolute stamp for what it
+        # recognises and hands back the text unchanged for what it does not.
         for sel in ('.SearchItem-time', '.ContentItem-time a, .ContentItem-time div'):
             try:
-                return card.find_element(By.CSS_SELECTOR, sel).text.strip()
+                return times.absolute(card.find_element(By.CSS_SELECTOR, sel).text.strip())
             except NoSuchElementException:
                 pass
         return ''

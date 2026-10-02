@@ -100,6 +100,16 @@ def node_label(node: dict, nid: str) -> str:
     return nid
 
 
+#: Node types whose result is a table of rows.
+#:
+#: A name node is metadata and a visualize node answers a chart SPEC, so neither can hand
+#: rows to anything downstream. That matters at exactly one place, and it is not obvious
+#: there: the save node now MERGES its incoming tables, so a wire from a node that carries
+#: no rows is one the canvas draws and the run ignores — the silent half of the picture
+#: this rule exists to refuse.
+TABLE_NODE_TYPES = frozenset({'source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'output'})
+
+
 def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
     """Refuse a node whose account holds no login — named, never guessed around.
 
@@ -429,6 +439,17 @@ class WorkflowEngine:
                 errors.append(t('engine.process_no_op', nid=label))
             if ntype == 'output' and not operation:
                 errors.append(t('engine.output_no_op', nid=label))
+            if ntype == 'output':
+                # A save node is the canvas's merge point: several incoming tables become
+                # one file, and the merged table is what flows onwards. Both halves of
+                # "there is nothing to save here" were passing validation silently — a
+                # save node with no wire at all, and one fed only by a name node or a
+                # chart — and then wrote an empty file over a green node.
+                parents = [str(c.get('from')) for c in self.connections if str(c.get('to')) == str(nid)]
+                if not parents:
+                    errors.append(t('engine.output_no_upstream', nid=label))
+                elif not any((self.nodes.get(pid) or {}).get('type') in TABLE_NODE_TYPES for pid in parents):
+                    errors.append(t('engine.output_no_table', nid=label))
             if ntype == 'analysis' and not (params.get('steps') or operation):
                 errors.append(t('engine.analysis_no_op', nid=label))
             if ntype == 'tokenize' and not params.get('text_column'):

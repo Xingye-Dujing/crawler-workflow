@@ -109,6 +109,28 @@
   any account uses it**, not quietly copied. `_template` is a reserved platform name because it *is* a directory
   under the same root.
 
+- **A relative timestamp is resolved at READ time, and only there.** The sites print
+  「3小时前」/「昨天 21:30」/「2 days ago」 for anything recent, and storing that wording is what
+  rots: the same cell means a different date tomorrow. Leaving it stored was the old answer
+  (``normalise_rfc822`` returns what it cannot parse untouched) and it is honest and useless —
+  a time series over it silently loses exactly the rows a live event is about, and 发布时间 is
+  empty for them. So every platform hands its own time cell through **``engine/times.absolute``**
+  (RFC-822 → the site's CJK display form → a relative wording → unchanged), which converts once,
+  at the moment of the read. Two properties make that safe rather than a fabrication:
+  - **the recognised set is CLOSED.** ``relative_to_absolute`` admits a listed set of Chinese and
+    English shapes and answers ``''`` for anything else, so a topic tag or a layout string can
+    never become a timestamp — which is the same protection bilibili's author mode bought by
+    leaving relative words empty (``crawler_notes`` line ~578) and the reason douyin's
+    ``_publish_from_info`` **still refuses** them: that cell is a ``·``-split segment, not a
+    dedicated time node, so we cannot be sure the token is a time at all. ``_clean_publish``
+    (the cell the page labels 发布时间) does convert.
+  - **the precision is stated, not dressed up.** An OFFSET (``3小时前``) names an instant, so it
+    answers ``now − N`` and keeps the clock; a NAMED DAY with no clock (``昨天``, ``yesterday``)
+    names a day, so it answers that day's ``00:00`` rather than a made-up reading. A year-less
+    date (``09月26日 21:00``, ``09-10``) is deliberately NOT inferred — the same decision as
+    bilibili's, because guessing the year moves a row into another year.
+  Pinned: ``tests/unit/test_times.py``.
+
 ## Platform red lines (full evidence in `docs/crawler_notes.md`)
 
 - **douyin**: headless works now (#148, was forced to a window by 验证码); search is DOM-only; **no 播放数 column

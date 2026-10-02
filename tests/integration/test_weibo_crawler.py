@@ -1023,3 +1023,63 @@ class TestWeiboHotBoard:
         assert len(rows) == 1
         assert crawler.login_wall is False
         assert driver.visited == ['https://weibo.com/'], 'one page load buys the document to ask from'
+
+
+class _BodyCard:
+    """Just enough of a search card for ``_get_full_text``: the body node, and nothing else.
+
+    ``find_elements`` answers the same element for every selector the reader tries, which is
+    what makes the FIRST selector win — the same precedence the real card has.
+    """
+
+    def __init__(self, body):
+        self._body = body
+
+    def find_elements(self, _by, _selector):
+        return [FakeEl(self._body)] if self._body else []
+
+
+class _NoScript:
+    """``_node_text`` falls back to ``element.text`` when the driver cannot run script."""
+
+    def execute_script(self, *_args):
+        raise RuntimeError('no js in this test')
+
+
+class TestTheBodyReaderDropsTheExpandControl:
+    """The card's own 展开/收起 control sits inside the body node it labels.
+
+    Measured on a real 10k-row export: 23–29% of rows carried it, spelled ``收起d``. The
+    old strip removed only a bare trailing word, so ``收起d`` survived (a letter follows) and
+    so did ``展开全文`` (the string ends with 全文). Both halves are pinned here, because a
+    reader that captures site chrome into 正文 poisons every keyword and sentiment figure
+    computed from it — the Analysis node's 清洗 step carries the same marker, but a raw
+    export should not need it.
+    """
+
+    @staticmethod
+    def _read(body):
+        crawler = WeiboCrawler.__new__(WeiboCrawler)
+        crawler.driver = _NoScript()
+        return crawler._get_full_text(_BodyCard(body))
+
+    @pytest.mark.parametrize(
+        'body, expected',
+        [
+            ('正文内容收起d', '正文内容'),
+            ('正文内容展开d', '正文内容'),
+            ('正文内容展开全文', '正文内容'),
+            ('正文内容收起全文', '正文内容'),
+            ('正文内容收起c', '正文内容'),
+            ('正文内容 收起', '正文内容'),
+            ('没有控件的一段正文', '没有控件的一段正文'),
+        ],
+    )
+    def test_the_trailing_control_and_its_letter_go(self, body, expected):
+        assert self._read(body) == expected
+
+    def test_a_sentence_that_merely_uses_the_verb_keeps_it(self):
+        """The control is a trailing label; 展开 is also an ordinary verb. This reader only
+        ever strips the END of the body, so a sentence that uses the word in the middle is
+        untouched — and the Analysis node's 清洗 step keeps it too, by requiring a boundary."""
+        assert self._read('相关部门已经展开调查，后续会公布结果') == '相关部门已经展开调查，后续会公布结果'

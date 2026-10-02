@@ -43,7 +43,19 @@ _ZH = {
     'wf.node_failed': '[{wf}] 节点 {nid} 执行失败：{err}',
     'wf.unnamed': '未命名工作流{i}',
     'wf.node_completed': '[{wf}] 节点 {nid} 完成（{done}/{total}）',
-    'wf.multi_input': '节点 {nid} 有 {n} 条上游连线，主输入取第一条（来自 {up}）；合并表用第二条当右表',
+    'wf.multi_input': (
+        '节点 {nid} 有 {n} 条上游连线：主输入取第一条（来自 {up}）；分析节点的连接用第二条当右表，'
+        '输出节点则把全部上游合并成一张表'
+    ),
+    'wf.merge_not_tabular': (
+        '节点 {nid} 的上游「{up}」不产出表格（是图表配置或错误应答），无法合并——请断开这条连线，'
+        '或改接一个产出表格的节点'
+    ),
+    'wf.merge_columns': (
+        '节点 {nid} 合并上游表时列名不一致，对比「{up}」：多出 [{extra}]、缺少 [{missing}]。'
+        '不做外连接合并——那会凭空补出空值，让文件看起来完整'
+    ),
+    'wf.merge_done': '节点 {nid} 合并 {tables} 张上游表 → {n} 行（{detail}）',
     'wf.validation_error': '校验错误：{err}',
     'wf.found': '发现 {n} 条工作流',
     'wf.starting': '开始执行工作流「{name}」',
@@ -750,6 +762,10 @@ _ZH = {
     'comment.status.dead': '链接不可读',
     'engine.process_no_op': '节点 {nid}：处理节点没有选择操作',
     'engine.output_no_op': '节点 {nid}：输出节点没有选择操作',
+    'engine.output_no_upstream': '节点 {nid}：输出节点没有任何上游连线，没有可保存的表格',
+    'engine.output_no_table': (
+        '节点 {nid}：输出节点的上游都不产出表格（命名节点只是元数据，可视化节点产出的是图表配置）'
+    ),
     'engine.analysis_no_op': '节点 {nid}：分析节点没有配置操作或步骤',
     'engine.cycle': '工作流存在环，以下节点无法排序：{nodes}',
     # A wire whose end is not on the canvas is not a cycle. Reporting it as one
@@ -1008,7 +1024,19 @@ _EN = {
     'wf.node_failed': '[{wf}] Node {nid} failed: {err}',
     'wf.unnamed': 'Unnamed workflow {i}',
     'wf.node_completed': '[{wf}] Node {nid} completed ({done}/{total})',
-    'wf.multi_input': 'Node {nid} has {n} incoming connections — the first (from {up}) is the primary input',
+    'wf.multi_input': (
+        'Node {nid} has {n} incoming connections — the first (from {up}) is the primary input; '
+        'an analysis node uses the second as its right-hand table, and an output node merges them all into one'
+    ),
+    'wf.merge_not_tabular': (
+        'Node {nid}: upstream "{up}" produces no table (a chart spec or a refusal), so it cannot be merged — '
+        'disconnect that wire or point it at a node that carries rows'
+    ),
+    'wf.merge_columns': (
+        'Node {nid}: the upstream tables have different columns, compared with "{up}": extra [{extra}], '
+        'missing [{missing}]. Not merged as an outer join — that fabricates empty cells and the file looks complete'
+    ),
+    'wf.merge_done': 'Node {nid} merged {tables} upstream tables → {n} rows ({detail})',
     'wf.validation_error': 'Validation error: {err}',
     'wf.found': 'Found {n} workflow(s)',
     'wf.starting': 'Starting workflow "{name}"',
@@ -1767,6 +1795,11 @@ _EN = {
     'comment.status.dead': 'link unreadable',
     'engine.process_no_op': 'Node {nid}: process node has no operation',
     'engine.output_no_op': 'Node {nid}: output node has no operation',
+    'engine.output_no_upstream': 'Node {nid}: output node has no incoming connection, so there is no table to save',
+    'engine.output_no_table': (
+        "Node {nid}: none of the output node's upstreams produces a table "
+        '(a name node is metadata, a visualize node answers a chart spec)'
+    ),
     'engine.analysis_no_op': 'Node {nid}: analysis node has no operation/steps configured',
     'engine.cycle': 'the workflow contains a cycle; these nodes cannot be ordered: {nodes}',
     'engine.dangling_connection': 'a connection points at a node the canvas does not hold: {src} → {dst}',

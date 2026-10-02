@@ -6,6 +6,7 @@ it lives in :class:`crawlers.comments.CommentSession`.
 """
 
 from .comments_base import _query_value
+from .engine import times
 from .engine.counters import parse_count, to_int
 from .engine.jsonpath import collect, get_in, runs_text
 
@@ -45,7 +46,7 @@ def parse_youtube_comments(payload: dict, article_url: str) -> list:
                 '评论者主页': f'https://www.youtube.com{canonical}' if canonical else '',
                 '评论者ID': str(author.get('channelId') or ''),
                 '评论内容': runs_text(props.get('content')),
-                '评论时间': str(props.get('publishedTime') or ''),
+                '评论时间': times.absolute(props.get('publishedTime')),
                 # The count the viewer has not used reads the same as the one
                 # they have, so either spelling is the number — and the a11y
                 # sentence ("… along with 56 other people") is the fallback.

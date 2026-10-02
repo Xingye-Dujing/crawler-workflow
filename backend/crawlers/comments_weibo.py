@@ -92,7 +92,10 @@ def _one_row(item: dict, article_url: str, fallback_floor: int, parent_floor: in
         '评论者': str(user.get('screen_name') or ''),
         '评论者主页': _user_home(user),
         '评论内容': body,
-        '评论时间': times.normalise_rfc822(item.get('created_at')),
+        # ``absolute``, not the RFC-822-only helper: the JSON path is normally the RFC stamp,
+        # but the same column also carries the site's own wording when the payload falls back
+        # to it, and a relative one there would be a time series' missing row.
+        '评论时间': times.absolute(item.get('created_at')),
         '点赞数': _as_int(likes),
         '楼层': floor,
         # '' and not 0: a row the payload flags as a reply without naming its parent has no

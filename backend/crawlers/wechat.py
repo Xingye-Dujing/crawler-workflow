@@ -11,6 +11,7 @@ from config import Config
 from i18n import t
 
 from .base import Crawler, as_index
+from .engine import times
 
 logger = logging.getLogger(__name__)
 
@@ -241,12 +242,18 @@ class WechatCrawler(Crawler):
         return ''
 
     def get_publish_time(self) -> str:
-        """Extract the article publish time.
+        """Extract the article publish time, as an absolute stamp where one can be derived.
 
         The page renders a Chinese date ('2026年9月15日 13:08'), not the ISO form
         the local fixture uses, so both spellings have to be recognised — the
         old ``\\d{4}-\\d{1,2}-\\d{1,2}`` test matched neither and the column came
         back empty on every real article.
+
+        ``_DATE_RE`` also admits the relative wordings the page uses for a very recent
+        article ('3小时前'), and those used to be written into the column as the site's own
+        words. They are resolved through ``times.absolute`` now: an article published two
+        hours ago is exactly the row a live event's time series needs, and the day it
+        belongs to IS recoverable from the wall clock this is read at.
         """
         selectors = ['#publish_time', '#meta_content .rich_media_meta_text']
         for sel in selectors:
@@ -257,7 +264,7 @@ class WechatCrawler(Crawler):
             for el in els:
                 text = self._node_text(el)
                 if self._DATE_RE.search(text):
-                    return text
+                    return times.absolute(text)
         logger.debug(t('crawl.debug.time_missing'))
         return ''
 

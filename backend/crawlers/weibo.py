@@ -483,13 +483,14 @@ class WeiboCrawler(Crawler):
 
     @staticmethod
     def _normalise_weibo_time(value) -> str:
-        # The endpoint stamps 'Wed Sep 24 15:42:51 +0800 2026'; the search page shows a
-        # relative label. Two shapes in one column is the documented defect, so normalise
-        # the absolute time to a readable absolute form rather than shipping an English
-        # stamp beside a Chinese one. The comment engine parses the same stamp, so the
-        # format lives in engine/times.py — a second copy here is what the helper exists
-        # to prevent.
-        return times.normalise_rfc822(value)
+        # The endpoint stamps 'Wed Sep 24 15:42:51 +0800 2026'; the search page shows the
+        # site's own wording instead — an absolute Chinese date for old posts and a relative
+        # label ("3小时前") for recent ones. Two shapes in one column is the documented defect,
+        # so both are resolved to one readable absolute form here rather than shipping an
+        # English stamp beside a Chinese label beside a relative word. The comment engine
+        # parses the same stamp, so the formats live in engine/times.py — a second copy here
+        # is what the helper exists to prevent.
+        return times.absolute(value)
 
     @staticmethod
     def _strip_html(text: str) -> str:
@@ -775,7 +776,12 @@ class WeiboCrawler(Crawler):
             return '', '', ''
         if not anchors:
             return '', '', ''
-        publish_time = self._node_text(anchors[0])
+        # The anchor's own text IS the timestamp the search page shows: the site's absolute
+        # Chinese date on an old post, a relative label ("3小时前", "昨天 21:30") on a recent
+        # one. Resolved to one absolute form here, because a relative word in 发布时间 makes
+        # every recent row invisible to a time series — see engine/times.py for what is and
+        # is not recognised.
+        publish_time = times.absolute(self._node_text(anchors[0]))
         post_link = self._abs_url(anchors[0].get_attribute('href') or '').split('?')[0]
         whole = self._text_of(card, '.from') or publish_time
         source = whole.replace(publish_time, ' ').strip(' \n\u00a0')
@@ -825,7 +831,15 @@ class WeiboCrawler(Crawler):
                 continue
             for el in els:
                 text = self._node_text(el)
-                text = re.sub(r'\s*(展开|收起)\s*$', '', text).strip()
+                # The card's own 展开/收起 control sits inside the body node, and weibo
+                # appends ONE ASCII letter to it — '收起c' on some cards, measured '收起d' on
+                # 23–29% of a real 10k export. The old spelling stripped a bare trailing word
+                # only, so '收起d' survived into 正文 and '展开全文' survived because the
+                # string ends with 全文. This is the CRAWLER's copy of that rule: it removes a
+                # trailing control from a card it just read. The Analysis node's 清洗 step
+                # carries the same marker with a boundary rule, for data already collected and
+                # for platforms whose body reader cannot separate the control at all.
+                text = re.sub(r'\s*(?:展开|收起)(?:全文|[A-Za-z])?\s*$', '', text).strip()
                 if text:
                     return text
         return ''

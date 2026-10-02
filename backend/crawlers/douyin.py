@@ -13,7 +13,7 @@ from urllib.parse import quote
 from i18n import t
 
 from .base import UNDER_TARGET, PageNotArrivedError
-from .engine import feed, popup
+from .engine import feed, popup, times
 from .engine.counters import parse_count
 from .video_base import VideoCrawler, _stamp
 
@@ -990,9 +990,17 @@ def douyin_sec_uid(value: str) -> str:
 
 
 def _clean_publish(value) -> str:
-    """「发布时间：2026-08-04 16:32」 → 「2026-08-04 16:32」."""
+    """「发布时间：2026-08-04 16:32」 → 「2026-08-04 16:32」, and a relative word resolved.
+
+    This cell is labelled 发布时间 by the page itself, so its content IS a time — including
+    the relative wording it uses for a very recent video, which ``times.absolute`` turns into
+    a date. Not to be confused with :meth:`DouyinCrawler._publish_from_info`, whose
+    ``·``-split segment is not a dedicated time node and therefore keeps refusing relative
+    words: there we cannot be sure the token is a time at all.
+    """
     text = str(value or '')
-    return text.split('：')[-1].strip() if '：' in text else text.strip()
+    stripped = text.split('：')[-1].strip() if '：' in text else text.strip()
+    return times.absolute(stripped)
 
 
 def _author_from_related(related: str) -> tuple:

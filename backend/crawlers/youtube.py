@@ -37,7 +37,7 @@ from urllib.parse import quote
 from i18n import t
 
 from .base import Crawler
-from .engine import innertube
+from .engine import innertube, times
 from .engine.counters import parse_count
 from .engine.jsonpath import collect, get_in, runs_text
 
@@ -125,7 +125,11 @@ def row_from_video_renderer(item: dict) -> dict:
         '链接': watch_url(video_id),
         '播放数': parse_count(runs_text(item.get('viewCountText')) or runs_text(item.get('shortViewCountText'))),
         '点赞数': 0,
-        '发布时间': runs_text(item.get('publishedTimeText')),
+        # ``publishedTimeText`` is the site's own wording — '2 days ago' on a fresh upload,
+        # 'Jan 24, 2022' on an old one. The relative half is resolved at read time, which is
+        # the only moment it can be: a stored '2 days ago' means a different date tomorrow.
+        # An unrecognised wording still comes back untouched.
+        '发布时间': times.absolute(runs_text(item.get('publishedTimeText'))),
         '时长': runs_text(item.get('lengthText')),
         '时长秒': duration_seconds(item.get('lengthText')),
         '频道ID': str(get_in(item, 'ownerText.runs.0.navigationEndpoint.browseEndpoint.browseId') or ''),
@@ -152,7 +156,10 @@ def row_from_lockup(item: dict) -> dict:
             if text:
                 parts.append(text)
     views = next((text for text in parts if 'view' in text.lower() or '次观看' in text), '')
-    published = next((text for text in parts if 'ago' in text.lower() or text.endswith('前')), '')
+    # The publish cell is picked out by its own wording — "… ago" or a trailing 前 — which is
+    # the site's RELATIVE form on anything fresh. Resolved here, at the read, because that is
+    # the only moment it can be: a stored "2 days ago" names a different date tomorrow.
+    published = times.absolute(next((text for text in parts if 'ago' in text.lower() or text.endswith('前')), ''))
     badge = (
         get_in(
             item,

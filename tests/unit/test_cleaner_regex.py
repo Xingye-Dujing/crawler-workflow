@@ -54,6 +54,45 @@ class TestWashText:
         assert 'http' not in washed and '网页链接' not in washed and '展开c' not in washed
         assert '真的绝了' in washed
 
+    @pytest.mark.parametrize(
+        'raw, expected',
+        [
+            ('正文内容收起d', '正文内容'),
+            ('正文内容展开d', '正文内容'),
+            ('正文内容展开全文', '正文内容'),
+            ('正文内容收起全文', '正文内容'),
+            ('正文内容展开c', '正文内容'),
+            ('正文内容收起c', '正文内容'),
+            ('正文内容 展开 更多', '正文内容 更多'),
+        ],
+    )
+    def test_the_expand_control_goes_whole(self, raw, expected):
+        """Measured on a real 10k-row weibo export: 23–29% of rows carried the card's own
+        展开/收起 control inside 正文, spelled ``收起d``. The old pattern hard-coded the
+        letter ``c``, so it matched none of them; and its standalone ``全文`` alternative ate
+        only the tail of 「展开全文」, leaving a bare 「展开」 that reads like a word — worse
+        than no match at all.
+        """
+        assert ContentCleaner.wash_text(raw) == expected
+
+    @pytest.mark.parametrize(
+        'prose',
+        [
+            '请大家展开讨论这个问题',
+            '请展开说说你的想法',
+            '全文如下所述内容较长',
+            '这件事情展开了新的调查',
+            '他展开双臂拥抱了她',
+            '展会开始收起摊位',
+        ],
+    )
+    def test_the_marker_is_never_stripped_out_of_prose(self, prose):
+        """The half that protects the text: 展开 is an ordinary verb, so the control only
+        goes where a sentence cannot follow it. A pattern that removed the bare word would
+        quietly edit what the user wrote — and this is the same distinction ``engine.times``
+        makes for relative labels: recognise the shape, never the bare word."""
+        assert ContentCleaner.wash_text(prose) == prose
+
     def test_emoji_codes_are_removed_because_they_tokenise_into_keyword_noise(self):
         washed = ContentCleaner.wash_text('[泪][泪]太感动了[赞]')
         assert '[' not in washed and ']' not in washed

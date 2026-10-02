@@ -2195,6 +2195,11 @@ function openSettings(nodeId) {
     } else if (node.type === 'output') {
         var p = node.params;
         var fmt = p.format || (p.operation === 'save_csv' ? 'csv' : 'csv');
+        /* The save node is the canvas's merge point. Said on the panel because it is not
+           something a wire shows: several upstreams become ONE file, and the merged table
+           is what flows onwards — so a chain of analyses may hang off this node. */
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.outputMergeHint') + '</div></div>';
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.format') + '</label>' +
             '<select class="settings-select" onchange="onOutputFormatChange(\'' + nodeId + '\',this.value)">' +
             selectOptionTags(

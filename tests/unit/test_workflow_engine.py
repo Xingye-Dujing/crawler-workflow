@@ -501,7 +501,11 @@ class TestValidate:
         strictness had no counterpart in the behaviour it was guarding."""
         process = {'id': 'node-1', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}}
         output = {'id': 'node-2', 'type': 'output', 'params': {'operation': 'save', 'filename': 'a.csv'}}
-        assert WorkflowEngine(_wf([process, output], [])).validate() == []
+        # Wired, because the question here is where ``operation`` was WRITTEN — not whether
+        # the canvas has a shape. A save node with nothing upstream is refused for its own
+        # reason (there is no table to save), and leaving that wire out made this test fail
+        # on a rule it was never about.
+        assert WorkflowEngine(_wf([process, output], [{'from': 'node-1', 'to': 'node-2'}])).validate() == []
 
     def test_an_operation_written_only_on_the_node_is_still_a_configured_analysis(self, en):
         """The mirror case, and the one the analysis branch missed: its executor

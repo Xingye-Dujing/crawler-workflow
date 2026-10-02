@@ -13,6 +13,8 @@ shapes the site uses at once — ``videoRenderer`` on the search list and
 of them is a crawler that reports an empty channel.
 """
 
+from datetime import datetime, timedelta
+
 import pytest
 
 from crawlers.comments import parse_youtube_comments
@@ -186,12 +188,27 @@ class TestSearchRow:
 
 
 class TestChannelRow:
+    """``发布时间`` is the site's own wording, resolved at read time.
+
+    ``publishedTimeText`` is relative on anything fresh ('2 days ago'), and a relative word
+    stored in a table means a different date tomorrow — so it is converted the moment it is
+    read, which is the only moment that conversion is possible. What these tests can assert
+    is therefore the RESOLVED instant, computed against the same clock: a hard-coded string
+    would only prove which day the test was written on.
+    """
+
+    @staticmethod
+    def _assert_relative_to_now(value, days):
+        moment = datetime.strptime(value, '%Y-%m-%d %H:%M')
+        expected = datetime.now() + timedelta(days=days)
+        assert abs((moment - expected).total_seconds()) <= 300, f'{value} is not ~{days} day(s) ago'
+
     def test_a_lockup_becomes_a_row(self):
         row = row_from_lockup(_lockup('yMoGiIeDH9s', ['1.2M views', '2 days ago']))
         assert row['视频ID'] == 'yMoGiIeDH9s'
         assert row['标题'] == 'James Web 发射前的最后检查'
         assert row['播放数'] == 1200000
-        assert row['发布时间'] == '2 days ago'
+        self._assert_relative_to_now(row['发布时间'], -2)
         assert row['时长'] == '5:33'
         assert row['时长秒'] == 333
         assert row['链接'].endswith('/watch?v=yMoGiIeDH9s')
@@ -201,12 +218,19 @@ class TestChannelRow:
         # view count would file "2 days ago" into 播放数 as parse_count's 2.
         swapped = row_from_lockup(_lockup('abc', ['2 days ago', '1.2M views']))
         assert swapped['播放数'] == 1200000
-        assert swapped['发布时间'] == '2 days ago'
+        self._assert_relative_to_now(swapped['发布时间'], -2)
 
     def test_a_chinese_label_is_understood_too(self):
         row = row_from_lockup(_lockup('abc', ['3.5万次观看', '1 天前']))
         assert row['播放数'] == 35000
-        assert row['发布时间'] == '1 天前'
+        self._assert_relative_to_now(row['发布时间'], -1)
+
+    def test_a_wording_the_resolver_does_not_know_is_left_alone(self):
+        """The half that protects the column. This cell is chosen BECAUSE it says "ago", so
+        the extractor keeps it — and the resolver does not recognise a wording that leads
+        with a word instead of a number, so it is handed on exactly as the site wrote it."""
+        row = row_from_lockup(_lockup('abc', ['1.2M views', 'Premiered 2 months ago']))
+        assert row['发布时间'] == 'Premiered 2 months ago'
 
     def test_no_views_at_all_is_zero_and_not_a_guess(self):
         assert row_from_lockup(_lockup('abc', ['2 days ago']))['播放数'] == 0
@@ -376,7 +400,9 @@ class TestCommentRows:
         assert first['评论者'] == '@yunguchaxiang'
         assert first['评论者主页'] == 'https://www.youtube.com/@yunguchaxiang'
         assert first['评论内容'].startswith('做大叔')
-        assert first['评论时间'] == '1 year ago'
+        # '1 year ago' resolved at read time; asserted against the same clock.
+        moment = datetime.strptime(first['评论时间'], '%Y-%m-%d %H:%M')
+        assert abs((moment - (datetime.now() - timedelta(days=365))).total_seconds()) <= 300
         assert first['点赞数'] == 56
         assert first['回复数'] == 2
         assert first['楼层'] == 1

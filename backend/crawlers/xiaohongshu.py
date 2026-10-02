@@ -12,7 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from i18n import t
 
 from .base import UNDER_TARGET, Crawler, as_index
-from .engine import feed
+from .engine import feed, times
 from .engine.counters import parse_count
 
 logger = logging.getLogger(__name__)
@@ -416,14 +416,20 @@ class XiaohongshuCrawler(Crawler):
 
         The site appends the IP region to the same node, which used to land in
         the date column and made every downstream time filter useless.
+
+        The date half is then resolved through ``times.absolute``: this node's own examples
+        are a year-less date and a relative word, and a relative word in 发布时间 makes the
+        note invisible to a time series. What comes back unchanged is what the resolver does
+        not positively recognise — including the year-less '09-10', whose year is not
+        recoverable without guessing.
         """
         text = (raw or '').strip()
         if not text:
             return '', ''
         m = re.search(r'((?:编辑于\s*)?(?:\d{4}-)?\d{1,2}-\d{1,2}|\d+\s*(?:分钟|小时|天)前|昨天|今天)', text)
         if not m:
-            return text, ''
-        publish = m.group(1).strip()
+            return times.absolute(text), ''
+        publish = times.absolute(m.group(1).strip())
         region = text[m.end() :].strip()
         return publish, region
 

@@ -7,6 +7,8 @@ becoming comment text.
 
 import re
 
+from .engine import times
+
 # ``1周前·江苏`` / ``刚刚`` / ``2026-08-04`` — douyin puts the relative time and
 # the IP 地区 in one line, and it is the only line of the block that is neither a
 # name, the text itself, nor a number.
@@ -80,7 +82,11 @@ def parse_douyin_threads(threads: dict, url: str) -> tuple:
                 '评论者': slot['author'],
                 '评论者主页': '',
                 '评论内容': slot['content'],
-                '评论时间': slot['when'],
+                # The panel prints a relative wording for anything recent ("1天前"), which
+                # is the cell ``comments.py``'s own time matcher exists to find. Resolved at
+                # the row boundary so every platform's 评论时间 is one format; the region
+                # that shares the same line is split off before this and is unaffected.
+                '评论时间': times.absolute(slot['when']),
                 '评论地区': slot['region'],
                 '点赞数': slot['likes'],
                 '子回复数': captured if captured else slot['subs'],
@@ -97,7 +103,7 @@ def parse_douyin_threads(threads: dict, url: str) -> tuple:
                     '评论者': reply['author'],
                     '评论者主页': '',
                     '评论内容': reply['content'],
-                    '评论时间': reply['when'],
+                    '评论时间': times.absolute(reply['when']),
                     '评论地区': reply['region'],
                     '点赞数': reply['likes'],
                     '子回复数': 0,

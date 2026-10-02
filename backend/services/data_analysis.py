@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import re
 
 import pandas as pd
 
@@ -165,6 +166,32 @@ STEP_PARAMS: dict = {
 def _blank(value) -> bool:
     """Nothing stated: absent, or the empty text a cleared settings box leaves behind."""
     return value is None or (isinstance(value, str) and not value.strip())
+
+
+#: The timestamp shape THIS PROJECT'S OWN weibo crawler writes: '2022年01月27日 00:59'.
+#:
+#: ``crawlers/weibo.py`` normalises an absolute RFC-822 stamp to ISO, but the search page
+#: hands back the site's own Chinese display label for most rows and that label is kept as
+#: it came (``times.normalise_rfc822`` returns anything it cannot parse untouched, on
+#: purpose — inventing an absolute time for a relative label would be worse). So the
+#: project emits a column its own time operators cannot read: ``pd.to_datetime`` answers
+#: every one of those rows with NaT, and the whole day/phase/sentiment-curve chain then
+#: produces one empty column and reports success. Measured on a real export: 4000 of 4000
+#: sampled rows are this shape and nothing else.
+_CJK_DATE_RE = re.compile(r'(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日')
+
+
+def _to_datetime(values):
+    """Parse a timestamp column, including the shape our own crawler writes.
+
+    The CJK date form is folded to ISO first and then parsed once for the whole column.
+    The substitution is a no-op on a string that is already ISO, so a column carrying both
+    shapes (an export where some rows took the absolute path and others did not) parses
+    whole rather than half — which is the case the old single call got wrong.
+    """
+    text = values.astype('string')
+    folded = text.str.replace(_CJK_DATE_RE, r'\1-\2-\3', regex=True)
+    return pd.to_datetime(folded, errors='coerce', format='mixed')
 
 
 def normalize_step_params(op: str, params: dict) -> dict:
@@ -498,7 +525,11 @@ class DataAnalysisService:
                 # ``%Y-%m-%d`` from row one and coerced row two to ``NaT``, so the timestamps simply
                 # disappeared from the user's table. Declaring the per-element path keeps every row
                 # and removes the noise the user cannot act on (pandas >= 2.0; the venv has 3.x).
-                work[column] = pd.to_datetime(work[column], errors='coerce', format='mixed')
+                #
+                # Through ``_to_datetime`` rather than pandas directly: this is the second door onto
+                # the same column, and a 发布时间 that parses in ``extract_time`` while ``convert_type``
+                # answers NaT for it is the same defect wearing a different control.
+                work[column] = _to_datetime(work[column])
             else:
                 work[column] = work[column].astype(str)
         except (ValueError, TypeError) as e:
@@ -645,7 +676,7 @@ class DataAnalysisService:
                 t('analysis.bad_option', op='extract_time', param='part', value=part, allowed=', '.join(TIME_PARTS))
             )
         work = df.copy()
-        stamps = pd.to_datetime(work[column], errors='coerce', format='mixed')
+        stamps = _to_datetime(work[column])
         unparsed = int(stamps.isna().sum())
         if part == 'date':
             work[new_col] = stamps.dt.strftime('%Y-%m-%d')
@@ -691,7 +722,7 @@ class DataAnalysisService:
             # pd.cut would raise on unsorted bins with pandas' own wording; naming the
             # parameter is what lets the user find the box that holds it.
             raise UnknownOperationError(t('analysis.time_bin_order', op='bin_time'))
-        stamps = pd.to_datetime(work[column], errors='coerce', format='mixed')
+        stamps = _to_datetime(work[column])
         unparsed = int(stamps.isna().sum())
         work[new_col] = pd.cut(stamps.dt.normalize(), bins=parsed, labels=names, right=False)
         if unparsed:

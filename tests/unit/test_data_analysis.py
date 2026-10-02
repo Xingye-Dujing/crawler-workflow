@@ -1041,6 +1041,32 @@ class TestDedupeSimilar:
 class TestExtractTime:
     """One calendar part out of a timestamp — the floor everything else stands on."""
 
+    def test_the_format_our_own_weibo_crawler_writes_is_read(self):
+        """``weibo.py`` keeps the search page's Chinese display stamp for most rows —
+        '2022年01月27日 00:59' — and ``pd.to_datetime`` answers every one of them with NaT.
+        Measured on a real export: 4000 of 4000 sampled rows are this shape. A time operator
+        that cannot read the project's own column is not a time operator, and the failure was
+        silent: an empty 日期 column and a green node.
+        """
+        frame = pd.DataFrame({'发布时间': ['2022年01月27日 00:59', '2022年02月03日 23:59']})
+        out = D.extract_time(frame, '发布时间')
+        assert list(out['日期']) == ['2022-01-27', '2022-02-03']
+
+    def test_a_column_holding_both_shapes_parses_whole(self):
+        """An export where some rows took the absolute path and some did not: folding the
+        CJK form first and parsing once keeps every row, where the old single call lost the
+        Chinese half."""
+        frame = pd.DataFrame({'发布时间': ['2022-01-27 00:59', '2022年01月27日 00:59']})
+        out = D.extract_time(frame, '发布时间')
+        assert list(out['日期']) == ['2022-01-27', '2022-01-27']
+
+    def test_the_chinese_form_parses_through_convert_type_too(self):
+        # The second door onto the same column: a 发布时间 that extract_time reads while
+        # convert_type answers NaT for it is the same defect wearing a different control.
+        frame = pd.DataFrame({'发布时间': ['2022年01月27日 00:59']})
+        out = D.convert_type(frame, '发布时间', 'datetime')
+        assert not pd.isna(out.at[0, '发布时间'])
+
     def test_an_iso_timestamp_becomes_a_day(self):
         frame = pd.DataFrame({'评论时间': ['2024-05-02 13:45', '2024-05-02 23:59', '2024-05-03 00:01']})
         out = D.extract_time(frame, '评论时间')

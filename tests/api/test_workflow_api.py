@@ -862,15 +862,28 @@ class TestProgressAccounting:
     @pytest.mark.serial
     def test_a_refused_definition_never_reports_zero_percent_of_a_run(self, client, app_module):
         """Validation errors stop the run before a node exists. The old answer was
-        silence plus '0/0', which the browser read as a finished run."""
+        silence plus '0/0', which the browser read as a finished run.
+
+        The count is asserted through ``t()`` instead of as a bare digit. It used to be
+        ``'1' in rejected[0]``, and that passed only because the stored line carries an
+        ``[HH:MM:SS]`` stamp: the digit was the CLOCK's, so the assertion held whenever the
+        minute or second happened to contain a 1 and failed when it did not. Adding a second
+        validation error (an output node with no upstream has two problems, not one) took the
+        accidental 1 away and turned a mostly-passing flake into a coin flip — so the count
+        is now the thing being asserted, in the language the run is in.
+        """
+        from i18n import t
+
         workflow = _workflow([_node('node-1', 'output', params={})], [])
         client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'refused'})
         assert _wait_for_worker(app_module)
         body = client.get('/api/workflow/status').get_json()
         assert body['outcome'] == 'rejected'
         assert body['total_nodes'] == 0 and body['completed_nodes'] == 0
-        rejected = [line for line in body['logs'] if 'Nothing ran' in line]
-        assert rejected and '1' in rejected[0], 'the line must say how many problems there are'
+        rejected = [line for line in body['logs'] if t('run.rejected', n=2) in line]
+        assert rejected, f'no rejection line naming the problem count: {body["logs"]}'
+        errors = [line for line in body['logs'] if t('wf.validation_error', err='')[:6] in line]
+        assert len(errors) == 2, f'the line says 2 problems, so there must be 2: {body["logs"]}'
         assert not any('Run finished' in line for line in body['logs']), 'nothing ran, so nothing finished'
 
     def test_an_empty_canvas_is_rejected_rather_than_completing(self, client, app_module):
