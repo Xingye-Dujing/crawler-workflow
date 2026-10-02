@@ -8,15 +8,16 @@ guessed into another algorithm, a probability decided into the wrong label, and 
 backend quietly replaced by a model nobody asked for.
 
 Nothing here reaches a network or a GPU: the LLM path is pinned at the routing seam, and
-the transformer path is only ever exercised through its refusals (this machine has no
-torch, and an untested real inference is stated as such in the README, not pretended).
+the transformer path runs against a stub ``transformers`` in ``sys.modules`` — which is
+enough to pin the batching, the label signing and the refusals, and is stated as such in
+the README rather than pretended to be a real inference.
 """
 
 import pandas as pd
 import pytest
 
 import analyzers.sentiment as sentiment_module
-from analyzers.sentiment import SentimentAnalyzer, bert_backend
+from analyzers.sentiment import BERT_BATCH, SentimentAnalyzer, bert_backend
 from i18n import set_lang
 
 pytestmark = pytest.mark.unit
@@ -268,6 +269,45 @@ class TestLlmMode:
         assert SentimentAnalyzer().parse_sentiment_response('Sentiment: negative, Score: abc') == ('negative', None)
 
 
+def _install_bert_stub(monkeypatch, answer_for, batches=None):
+    """A fake ``transformers`` in ``sys.modules`` that answers per BATCH.
+
+    The real package is never imported here: this machine has no torch, and importing it
+    would print its own verdict about that to stderr — a fact about the dependency no
+    test in this file is making. ``answer_for(text)`` is called for every text in the
+    batch the product hands over, so a test can prove the column went through in chunks;
+    letting it raise is how a test reproduces a failing batch.
+
+    ``batches`` receives the list of texts of every call, which is the measurement the
+    batching tests assert on. The returned list receives one record per ``pipeline()``
+    call.
+    """
+    import sys
+    import types
+
+    stub = types.ModuleType('transformers')
+    calls = []
+
+    def fake_pipeline(task, model=None, device=-1):
+        calls.append({'task': task, 'model': model, 'device': device})
+
+        def run(texts, **kwargs):
+            if isinstance(texts, str):
+                raise AssertionError('the node must hand the pipeline a whole batch, not one row')
+            if batches is not None:
+                batches.append(list(texts))
+            return [answer_for(t) for t in texts]
+
+        return run
+
+    stub.pipeline = fake_pipeline
+    monkeypatch.setitem(sys.modules, 'transformers', stub)
+    # The probe is what decides whether the mode refuses, and this machine genuinely has
+    # neither package; without this the stub above would never be reached.
+    monkeypatch.setattr(sentiment_module, 'bert_backend', lambda: '')
+    return calls
+
+
 class TestBertMode:
     """The mode is offered, and it refuses by name. Nothing here ever runs a transformer."""
 
@@ -298,37 +338,68 @@ class TestBertMode:
         ``from transformers import pipeline`` then resolves to the stub, which is the
         seam the method actually calls.
         """
-        import sys
-        import types
-
-        stub = types.ModuleType('transformers')
-        calls = []
-
-        def fake_pipeline(task, model=None):
-            calls.append((task, model))
-
-            def run(text):
-                return [{'label': '负面' if '差' in text else '正面', 'score': 0.93}]
-
-            return run
-
-        stub.pipeline = fake_pipeline
-        monkeypatch.setitem(sys.modules, 'transformers', stub)
-        monkeypatch.setattr(sentiment_module, 'bert_backend', lambda: '')
+        calls = _install_bert_stub(monkeypatch, lambda t: {'label': '负面' if '差' in t else '正面', 'score': 0.93})
         analyzer = SentimentAnalyzer(mode='bert', pos_threshold=0.6, neg_threshold=0.4, bert_model='some/model')
         rows = analyzer.analyze_dataframe(frame(), '正文').to_dict('records')
-        assert calls[0][0] == 'sentiment-analysis' and calls[0][1] == 'some/model'
+        assert calls[0]['task'] == 'sentiment-analysis' and calls[0]['model'] == 'some/model'
         assert rows[0]['sentiment'] == 'positive' and rows[0]['score'] == pytest.approx(0.93)
         assert rows[1]['sentiment'] == 'negative' and rows[1]['score'] == pytest.approx(0.07)
 
-    def test_a_label_the_mapping_does_not_know_refuses_rather_than_guessing(self, monkeypatch):
-        import sys
-        import types
+    def test_the_column_goes_through_in_batches_not_one_row_at_a_time(self, monkeypatch):
+        """The whole reason this mode is usable on a real table: the round trips through
+        Python are per BATCH. Three readable rows at a batch size of 4 are one call, and
+        the blank row is not in it — nothing is asked about a text that is not there."""
+        batches = []
+        _install_bert_stub(monkeypatch, lambda t: {'label': '正面', 'score': 0.9}, batches=batches)
+        analyzer = SentimentAnalyzer(mode='bert', bert_model='m', batch_size=4)
+        analyzer.analyze_dataframe(frame(), '正文')
+        assert batches == [['今天玩得非常开心', '这服务太差了令人失望', '会议将于周三举行']]
 
-        stub = types.ModuleType('transformers')
-        stub.pipeline = lambda task, model=None: lambda text: [{'label': 'SURPRISE', 'score': 0.5}]
-        monkeypatch.setitem(sys.modules, 'transformers', stub)
-        monkeypatch.setattr(sentiment_module, 'bert_backend', lambda: '')
+    def test_a_small_batch_size_splits_the_column(self, monkeypatch):
+        batches = []
+        _install_bert_stub(monkeypatch, lambda t: {'label': '正面', 'score': 0.9}, batches=batches)
+        SentimentAnalyzer(mode='bert', bert_model='m', batch_size=2).analyze_dataframe(frame(), '正文')
+        assert [len(b) for b in batches] == [2, 1]
+
+    def test_a_failing_batch_blanks_its_own_rows_and_leaves_the_others(self, monkeypatch):
+        """A batch that raises answers every row of THAT batch with the same reason. The
+        per-row contract of this operation survives batching: what read is answered, what
+        did not stays blank rather than being guessed at."""
+
+        def answer_for(text):
+            if '差' in text:
+                raise RuntimeError('CUDA out of memory')
+            return {'label': '正面', 'score': 0.9}
+
+        _install_bert_stub(monkeypatch, answer_for)
+        rows = SentimentAnalyzer(mode='bert', bert_model='m', batch_size=1).analyze_dataframe(frame(), '正文')
+        rows = rows.to_dict('records')
+        assert rows[0]['sentiment'] == 'positive', 'a batch that answered must still be kept'
+        assert rows[1]['sentiment'] == '' and rows[1]['score'] is None, 'the failed row must not be guessed'
+        assert rows[2]['sentiment'] == 'positive'
+
+    def test_a_batch_size_that_is_not_a_count_cannot_become_a_zero_step_loop(self):
+        """The chunking loop steps by this number, so a 0 reaching it would score nothing
+        and report success over a table of blanks. 0 is read the way every other blank in
+        this project is — not stated, so the declared default — and a negative count is
+        floored at one row rather than trusted."""
+        assert SentimentAnalyzer(mode='bert', batch_size=0).batch_size == BERT_BATCH
+        assert SentimentAnalyzer(mode='bert', batch_size=-5).batch_size == 1
+
+    def test_the_gpu_is_handed_to_the_pipeline_when_there_is_one(self, monkeypatch):
+        calls = _install_bert_stub(monkeypatch, lambda t: {'label': '正面', 'score': 0.9})
+        monkeypatch.setattr(sentiment_module, 'bert_device', lambda: 0)
+        SentimentAnalyzer(mode='bert', bert_model='m').analyze_dataframe(frame(), '正文')
+        assert calls[0]['device'] == 0, 'a card the machine has must not be left idle'
+
+    def test_the_device_probe_always_answers_something_a_pipeline_accepts(self):
+        # -1 is the pipeline's own CPU default, so the no-torch case needs no branch.
+        # Asserted as a member rather than as -1: whether this machine has torch is a
+        # fact about the machine, not about the code under test.
+        assert sentiment_module.bert_device() in (-1, 0)
+
+    def test_a_label_the_mapping_does_not_know_refuses_rather_than_guessing(self, monkeypatch):
+        _install_bert_stub(monkeypatch, lambda t: {'label': 'SURPRISE', 'score': 0.5})
         analyzer = SentimentAnalyzer(mode='bert', bert_model='m')
         with pytest.raises(ValueError, match='SURPRISE'):
             analyzer.analyze_dataframe(frame(), '正文')

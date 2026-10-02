@@ -35,6 +35,7 @@ OPERATIONS = [
     'drop_null',
     'fill_null',
     'drop_duplicates',
+    'dedupe_similar',
     'filter_rows',
     'select_columns',
     'rename_columns',
@@ -46,6 +47,10 @@ OPERATIONS = [
     'join_tables',
     'column_calc',
     'bin_column',
+    'extract_time',
+    'bin_time',
+    'topic_model',
+    'sentiment_evolution',
 ]
 
 # ─── reading the names out of the real sources ─────────────────────────
@@ -135,6 +140,7 @@ class TestRegistry:
             ('drop_null', {}),
             ('fill_null', {'value': 'x'}),
             ('drop_duplicates', {}),
+            ('dedupe_similar', {'column': '作者'}),
             ('filter_rows', {'column': '作者', 'op': 'eq', 'value': '甲'}),
             ('select_columns', {'columns': ['作者']}),
             ('rename_columns', {'mapping': {'作者': 'who'}}),
@@ -154,10 +160,27 @@ class TestRegistry:
             ),
             ('column_calc', {'new_col': 'twice', 'expr': '点赞 * 2'}),
             ('bin_column', {'column': '点赞', 'bins': [0, 5, 10]}),
+            ('extract_time', {'column': '时间', 'new_col': '日期', 'part': 'date'}),
+            (
+                'bin_time',
+                {'column': '时间', 'new_col': '阶段', 'edges': ['2024-05-01', '2024-05-08'], 'labels': ['前']},
+            ),
+            ('topic_model', {'column': '正文', 'n_topics': 2, 'topn': 3}),
+            ('sentiment_evolution', {'column': '作者'}),
         ],
     )
     def test_every_registered_operation_is_reachable_from_the_pipeline(self, op, params):
-        frame = pd.DataFrame({'点赞': [1, 2, 3], '作者': ['甲', '甲', '乙']})
+        # Carries a timestamp and a text column as well as the numeric/categorical pair the
+        # original steps needed: an op that cannot be reached with real inputs would pass a
+        # registry check and fail on the canvas.
+        frame = pd.DataFrame(
+            {
+                '点赞': [1, 2, 3],
+                '作者': ['甲', '甲', '乙'],
+                '时间': ['2024-05-02 10:00', '2024-05-03 11:00', '2024-05-09 12:00'],
+                '正文': ['服务太差了', '服务太差了', '今天天气不错'],
+            }
+        )
         result, report = D.run_pipeline(frame, [{'op': op, 'params': params}])
         assert isinstance(result, pd.DataFrame)
         assert report[0]['op'] == op
@@ -479,10 +502,20 @@ class TestReshaping:
         frame = pd.DataFrame({'a': [1, 2], 'b': [3, 4]})
         assert D.column_calc(frame, 'c', 'a + b')['c'].tolist() == [4, 6]
 
-    def test_column_calc_swallows_a_bad_expression(self):
+    def test_column_calc_refuses_an_expression_it_cannot_run(self):
+        """Was `test_column_calc_swallows_a_bad_expression`, and the change is the point.
+
+        Swallowing it settled the node DONE with the named column missing and one line in
+        ``logs/`` as the only trace; the failure then surfaced two nodes later as an empty
+        chart, on a run that had already paid for its crawl. Every other step in this
+        service refuses a column it cannot find, and this one can only be checked by
+        running it — so its failure IS the refusal.
+        """
         frame = pd.DataFrame({'a': [1, 2]})
-        out = D.column_calc(frame, 'c', 'ghost + 1')
-        assert list(out.columns) == ['a']
+        with pytest.raises(UnknownOperationError) as err:
+            D.column_calc(frame, 'c', 'ghost + 1')
+        message = str(err.value)
+        assert 'c' in message and 'ghost + 1' in message, message
 
     @pytest.mark.parametrize('new_col, expr', [('', 'a + 1'), ('c', ''), ('', '')])
     def test_column_calc_needs_both_names(self, new_col, expr):
@@ -510,10 +543,24 @@ class TestReshaping:
         assert 'bucket' in D.bin_column(frame, 'v', new_col='bucket').columns
         assert 'v_bin' in D.bin_column(frame, 'v').columns
 
-    def test_bin_column_swallows_a_bad_bin_definition(self):
+    @pytest.mark.parametrize(
+        'bins, labels',
+        [
+            ('oops', None),  # not a bin definition at all
+            ([10, 5, 0], None),  # edges in the wrong order
+            ([0, 5, 10], ['a']),  # one bucket short of edges
+        ],
+    )
+    def test_bin_column_refuses_a_bin_definition_it_cannot_apply(self, bins, labels):
+        """Was `test_bin_column_swallows_a_bad_bin_definition`, and the change is the point:
+        the node used to settle DONE with no new column and a line in ``logs/`` as the only
+        trace, so the user's next sight of the problem was a chart grouped on a column that
+        does not exist.
+        """
         frame = pd.DataFrame({'v': range(5)})
-        out = D.bin_column(frame, 'v', bins='oops')
-        assert list(out.columns) == ['v']
+        with pytest.raises(UnknownOperationError) as err:
+            D.bin_column(frame, 'v', bins=bins, labels=labels)
+        assert 'v' in str(err.value), str(err.value)
 
     def test_bin_column_on_a_missing_column_changes_nothing(self, df):
         assert D.bin_column(df, 'nope', bins=[0, 1]) is df
@@ -841,3 +888,395 @@ class TestPipelineOrder:
         ]
         with pytest.raises(UnknownOperationError, match='needs a numeric value'):
             D.run_pipeline(SWEEP.copy(), steps)
+
+
+# ─── deduplication: exact, normalised, and near ────────────────────────
+
+
+class TestDropDuplicatesModes:
+    """Two different questions the same node can ask: "same string" and "same comment".
+
+    A paid comment farm never reposts the *same string* — it adds a tracking link, one
+    more emoji code, or re-pastes the forward chain — so exact equality answers only half
+    the user's question. What is pinned here is that asking for one mode never silently
+    runs the other, and that the normalisation is a comparison key rather than a rewrite.
+    """
+
+    FARM = [
+        {'正文': '这服务太差了'},
+        {'正文': '这服务太差了 https://t.cn/A6xyz'},
+        {'正文': '[泪]这服务太差了'},
+        {'正文': '完全不同的评论'},
+    ]
+
+    def test_exact_matching_sees_four_distinct_rows(self):
+        out = D.drop_duplicates(pd.DataFrame(self.FARM), columns=['正文'], mode='exact')
+        assert len(out) == 4
+
+    def test_normalised_matching_collapses_a_farms_variations(self):
+        out = D.drop_duplicates(pd.DataFrame(self.FARM), columns=['正文'], mode='normalized')
+        assert len(out) == 2, 'the three spellings of one comment are one comment'
+        assert out.iloc[0]['正文'] == '这服务太差了', 'the first occurrence is what survives'
+
+    def test_the_comparison_key_never_reaches_the_table(self):
+        out = D.drop_duplicates(pd.DataFrame(self.FARM), columns=['正文'], mode='normalized')
+        assert list(out.columns) == ['正文'], 'a key column downstream would be a leaked implementation detail'
+
+    def test_the_original_text_is_what_survives_not_the_normalised_form(self):
+        # The key is lossy by design; the row it identifies must not be.
+        frame = pd.DataFrame([{'正文': '这服务太差了 https://t.cn/A6xyz'}])
+        out = D.drop_duplicates(frame, columns=['正文'], mode='normalized')
+        assert out.iloc[0]['正文'] == '这服务太差了 https://t.cn/A6xyz'
+
+    @pytest.mark.parametrize('mode', ['Exact', 'NORMALIZED', 'fuzzy', 'near'])
+    def test_a_mode_the_step_does_not_know_is_refused_by_name(self, mode):
+        with pytest.raises(UnknownOperationError) as err:
+            D.drop_duplicates(pd.DataFrame(self.FARM), columns=['正文'], mode=mode)
+        assert 'drop_duplicates' in str(err.value) and mode in str(err.value)
+
+    def test_a_blank_column_list_still_means_every_column(self):
+        out = D.drop_duplicates(pd.DataFrame(self.FARM), mode='normalized')
+        assert len(out) == 2, '留空=全部 is a rule of this step, not of one mode'
+
+
+class TestDedupeSimilar:
+    """SimHash near-duplicates, which is the half exact matching cannot reach.
+
+    Every number here is a MEASUREMENT, not a choice, and it is the reason the default is
+    not the tightest distance that could be defended: on hand-written Weibo comments a
+    one-word rewrite lands 5–18 bits away while two unrelated comments land 26–28. A
+    tighter default (3, the narrowest the banding could prove when this was written) finds
+    essentially nothing the normalised-exact key had not already found.
+    """
+
+    # Measured distance 4: one character swapped for a near-synonym.
+    NEAR = [
+        {'正文': '这家店的服务态度真的很差，再也不会来了'},
+        {'正文': '这家店的服务态度真的很差，再也不会去了'},
+        {'正文': '今天天气不错适合出去玩'},
+    ]
+
+    def test_a_one_word_edit_is_the_same_comment(self):
+        out = D.dedupe_similar(pd.DataFrame(self.NEAR), column='正文')
+        assert len(out) == 2
+        assert out.iloc[0]['正文'] == '这家店的服务态度真的很差，再也不会来了', 'the first of a group is kept'
+
+    def test_a_distance_that_only_just_reaches_the_pair_still_finds_it(self):
+        # The same pair at the narrowest distance that can see it (measured 4), which is
+        # what makes the case above a real one rather than an artefact of a loose default.
+        out = D.dedupe_similar(pd.DataFrame(self.NEAR), column='正文', max_distance=4)
+        assert len(out) == 2
+
+    def test_a_distance_below_the_measured_gap_leaves_the_pair_alone(self):
+        # ... and at 3 it does not, which is the measurement this default was chosen from.
+        out = D.dedupe_similar(pd.DataFrame(self.NEAR), column='正文', max_distance=3)
+        assert len(out) == 3
+
+    def test_unrelated_comments_are_not_collapsed(self):
+        frame = pd.DataFrame([{'正文': '今天天气不错'}, {'正文': '这只猫太可爱了'}])
+        assert len(D.dedupe_similar(frame, column='正文')) == 2
+
+    def test_a_loose_default_does_not_swallow_unrelated_long_comments(self):
+        """The default has to sit BELOW the unrelated band (measured 26–28), or it would
+        merge comments on the strength of both being Chinese sentences of similar length.
+        """
+        frame = pd.DataFrame(
+            [
+                {'正文': '这家店的服务态度真的很差，我再也不会来了'},
+                {'正文': '今天天气不错，适合出去走走看看风景'},
+                {'正文': '这个价格买到这样的质量算是很划算了'},
+            ]
+        )
+        assert len(D.dedupe_similar(frame, column='正文')) == 3
+
+    def test_blank_and_artifact_only_rows_are_never_grouped(self):
+        """Every comment with no fingerprint of its own hashes to the same value. Treating
+        that as a duplicate would delete unrelated empty rows — they are empty, not equal.
+        """
+        frame = pd.DataFrame([{'正文': '   '}, {'正文': None}, {'正文': '//@张三:'}])
+        assert len(D.dedupe_similar(frame, column='正文')) == 3
+
+    def test_a_distance_the_banded_index_cannot_prove_is_refused_by_name(self):
+        from services.text_dedupe import MAX_BANDED_DISTANCE
+
+        too_far = MAX_BANDED_DISTANCE + 1
+        with pytest.raises(UnknownOperationError) as err:
+            D.dedupe_similar(pd.DataFrame(self.NEAR), column='正文', max_distance=too_far)
+        assert str(too_far) in str(err.value), str(err.value)
+
+    def test_the_widest_distance_the_index_can_prove_is_accepted(self):
+        from services.text_dedupe import MAX_BANDED_DISTANCE
+
+        out = D.dedupe_similar(pd.DataFrame(self.NEAR), column='正文', max_distance=MAX_BANDED_DISTANCE)
+        assert len(out) == 2
+
+    def test_a_negative_distance_is_refused_too(self):
+        with pytest.raises(UnknownOperationError):
+            D.dedupe_similar(pd.DataFrame(self.NEAR), column='正文', max_distance=-1)
+
+    def test_a_column_that_is_not_there_is_a_no_op_like_every_other_step(self):
+        frame = pd.DataFrame([{'别的': 'a'}, {'别的': 'b'}])
+        out = D.dedupe_similar(frame, column='正文')
+        assert list(out.columns) == ['别的'] and len(out) == 2
+
+    def test_the_pipeline_reports_the_rows_it_removed(self):
+        steps = [{'op': 'dedupe_similar', 'params': {'column': '正文'}}]
+        result, report = D.run_pipeline(pd.DataFrame(self.NEAR), steps)
+        assert len(result) == 2
+        assert report[0]['rows_removed'] == 1, 'a shrinking step must say how much it shrank'
+
+    def test_the_outcome_is_reproducible_across_runs(self):
+        """The fingerprint may not depend on Python's salted ``hash()``: a dedupe that
+        grouped differently on every run would make a resumed run disagree with itself.
+        """
+        frame = pd.DataFrame(self.NEAR)
+        first = D.dedupe_similar(frame, column='正文')
+        second = D.dedupe_similar(frame, column='正文')
+        assert list(first['正文']) == list(second['正文'])
+
+
+# ─── the event study: when, which subjects, which way the crowd leaned ───
+
+
+class TestExtractTime:
+    """One calendar part out of a timestamp — the floor everything else stands on."""
+
+    def test_an_iso_timestamp_becomes_a_day(self):
+        frame = pd.DataFrame({'评论时间': ['2024-05-02 13:45', '2024-05-02 23:59', '2024-05-03 00:01']})
+        out = D.extract_time(frame, '评论时间')
+        assert list(out['日期']) == ['2024-05-02', '2024-05-02', '2024-05-03']
+
+    def test_days_sort_chronologically_as_text(self):
+        """The value is text on purpose: it is grouped, exported and charted, and an ISO
+        date's lexical order IS its chronological order — so a line chart drawn from it
+        runs left to right in time without a separate datetime column."""
+        days = ['2024-05-02', '2024-05-19', '2024-05-08']
+        assert sorted(days) == ['2024-05-02', '2024-05-08', '2024-05-19']
+
+    def test_a_relative_label_the_site_gave_is_not_guessed_into_a_year(self):
+        """Weibo shows "09月26日 21:00" when it has no year. Inventing this year for it
+        would move rows between phases, which is the one thing an event study cannot
+        survive — so the cell stays empty and the console says how many did."""
+        frame = pd.DataFrame({'评论时间': ['2024-05-02 13:45', '09月26日 21:00']})
+        out = D.extract_time(frame, '评论时间')
+        assert out.at[0, '日期'] == '2024-05-02'
+        assert pd.isna(out.at[1, '日期']), 'an unparseable stamp is not a day'
+
+    def test_other_parts_answer_with_numbers(self):
+        frame = pd.DataFrame({'时间': ['2024-05-02 13:45']})
+        assert D.extract_time(frame, '时间', new_col='月份', part='month').at[0, '月份'] == 5
+        assert D.extract_time(frame, '时间', new_col='小时', part='hour').at[0, '小时'] == 13
+
+    def test_a_missing_column_is_a_no_op_like_every_other_step(self):
+        frame = pd.DataFrame({'别的': ['a']})
+        assert list(D.extract_time(frame, '时间').columns) == ['别的']
+
+
+class TestBinTime:
+    """The lifecycle split. The boundary rules are the whole test."""
+
+    #: The paper's own phases for the 胖猫 event, as (start, end-inclusive) pairs.
+    EDGES = ['2024-04-11', '2024-05-02', '2024-05-08', '2024-05-19', '2024-05-26', '2024-07-11']
+    LABELS = ['发酵期', '爆发期', '波动期', '二次爆发期', '消退期']
+
+    def _phase_of(self, stamp):
+        frame = pd.DataFrame({'评论时间': [stamp]})
+        return D.bin_time(frame, '评论时间', edges=self.EDGES, labels=self.LABELS).at[0, '阶段']
+
+    def test_the_five_phases_come_out_of_six_boundaries(self):
+        out = D.bin_time(
+            pd.DataFrame({'评论时间': ['2024-04-11 00:00', '2024-05-02 08:00', '2024-07-10 23:00']}),
+            '评论时间',
+            edges=self.EDGES,
+            labels=self.LABELS,
+        )
+        assert list(out['阶段']) == ['发酵期', '爆发期', '消退期']
+
+    def test_the_last_minute_before_a_boundary_stays_in_the_earlier_phase(self):
+        """The comparison runs on the calendar DAY, so 5月7日 23:59 is still 爆发期 — the
+        paper's phase is "5月2日-5月7日", and a timestamp comparison would have moved that
+        row into 波动期 by one minute. Those boundary days are what the study is about."""
+        assert self._phase_of('2024-05-07 23:59') == '爆发期'
+        assert self._phase_of('2024-05-08 00:00') == '波动期'
+
+    def test_a_row_outside_every_window_is_left_empty(self):
+        assert pd.isna(self._phase_of('2024-01-01 00:00'))
+
+    def test_a_label_count_that_does_not_match_the_boundaries_is_refused(self):
+        # Five phases need six boundaries; four names against six boundaries would silently
+        # leave one window unnamed, and pd.cut would report it as its own error. Asserted on
+        # the two counts rather than on the wording, which is translated.
+        with pytest.raises(UnknownOperationError) as err:
+            D.bin_time(pd.DataFrame({'时间': ['2024-05-02']}), '时间', edges=self.EDGES, labels=['甲', '乙'])
+        assert '6' in str(err.value) and '2' in str(err.value), str(err.value)
+
+    def test_boundaries_that_are_not_dates_are_refused_by_name(self):
+        frame = pd.DataFrame({'时间': ['2024-05-02']})
+        with pytest.raises(UnknownOperationError, match='2024-13-99'):
+            D.bin_time(frame, '时间', edges=['2024-13-99', '2024-05-08'], labels=['甲'])
+
+    def test_boundaries_out_of_order_are_refused(self):
+        # pd.cut raises on unsorted bins with pandas' own wording; naming the parameter is
+        # what lets the user find the box that holds it.
+        frame = pd.DataFrame({'时间': ['2024-05-02']})
+        with pytest.raises(UnknownOperationError):
+            D.bin_time(frame, '时间', edges=['2024-05-08', '2024-05-01'], labels=['甲'])
+
+
+class TestTopicModel:
+    """LDA. Pinned for shape and for reproducibility, not for a topic's words."""
+
+    CORPUS = [
+        '外卖 空包 商家 道歉 品牌',
+        '外卖 空包 门店 公关 危机',
+        '外卖 骑手 配送 订单 迟到',
+        '警方 通报 调查 结果 真相',
+        '警方 通报 立案 谣言 处置',
+        '官方 通报 调查 结果 公布',
+    ]
+
+    def test_one_row_per_topic_and_keyword(self):
+        out = D.topic_model(pd.DataFrame({'正文': self.CORPUS}), '正文', n_topics=2, topn=3)
+        assert list(out.columns) == ['topic', 'rank', 'keyword', 'weight']
+        assert len(out) == 2 * 3, 'two topics, three words each'
+        assert sorted(set(out['topic'])) == ['Topic-1', 'Topic-2']
+
+    def test_ranks_run_from_the_heaviest_word_down(self):
+        out = D.topic_model(pd.DataFrame({'正文': self.CORPUS}), '正文', n_topics=2, topn=3)
+        for _topic, group in out.groupby('topic'):
+            assert list(group['rank']) == [1, 2, 3]
+            assert list(group['weight']) == sorted(group['weight'], reverse=True)
+
+    def test_the_answer_repeats_because_the_seed_is_fixed(self):
+        """A topic model with a random init answers differently every run, and a resumed
+        run that produced a different table than the one it recorded is not a resume."""
+        frame = pd.DataFrame({'正文': self.CORPUS})
+        first = D.topic_model(frame, '正文', n_topics=2, topn=3)
+        second = D.topic_model(frame, '正文', n_topics=2, topn=3)
+        assert list(first['keyword']) == list(second['keyword'])
+
+    def test_one_topic_is_refused_because_it_models_nothing(self):
+        with pytest.raises(UnknownOperationError, match='1'):
+            D.topic_model(pd.DataFrame({'正文': self.CORPUS}), '正文', n_topics=1)
+
+    def test_more_topics_than_texts_is_refused_with_both_numbers(self):
+        with pytest.raises(UnknownOperationError) as err:
+            D.topic_model(pd.DataFrame({'正文': ['只有一句话']}), '正文', n_topics=5)
+        assert '5' in str(err.value) and '1' in str(err.value)
+
+    def test_a_corpus_with_no_words_is_refused_rather_than_answered_empty(self):
+        # Every row punctuation: no vocabulary, so there is no model to fit. Returning an
+        # empty table would settle the node DONE over nothing.
+        with pytest.raises(UnknownOperationError):
+            D.topic_model(pd.DataFrame({'正文': ['。。。', '！！！']}), '正文', n_topics=2)
+
+
+class TestSentimentEvolution:
+    """The paper's evolution curve — checked against the paper's published numbers.
+
+    表 2 of the 胖猫 study reports, for each phase, the counts of 积极/中性/消极 and their
+    percentages. If this step implements the same index the paper plotted, then feeding it
+    those counts must reproduce the paper's own daily values. That is what makes this a
+    verification rather than a shape check.
+    """
+
+    @staticmethod
+    def _frame(periods: dict) -> pd.DataFrame:
+        rows = []
+        for period, (positive, neutral, negative) in periods.items():
+            rows += [{'period': period, 'sentiment': 'positive'}] * positive
+            rows += [{'period': period, 'sentiment': 'neutral'}] * neutral
+            rows += [{'period': period, 'sentiment': 'negative'}] * negative
+        return pd.DataFrame(rows)
+
+    def test_the_papers_phase_shares_come_back_out(self):
+        # 发酵期: 17 积极 / 252 中性 / 80 消极 out of 349 (表 2).
+        out = D.sentiment_evolution(self._frame({'发酵期': (17, 252, 80)}), 'period')
+        assert out.at[0, 'positive_n'] == 17
+        assert out.at[0, 'neutral_n'] == 252
+        assert out.at[0, 'negative_n'] == 80
+        assert out.at[0, 'total'] == 349
+        assert out.at[0, 'positive_pct'] == pytest.approx(4.87, abs=0.01)
+        assert out.at[0, 'neutral_pct'] == pytest.approx(72.21, abs=0.01)
+        assert out.at[0, 'negative_pct'] == pytest.approx(22.92, abs=0.01)
+
+    def test_the_index_is_positive_minus_negative_over_total(self):
+        # The paper's own worked examples: 发酵期 (17 − 80) / 349 = −0.1805, and the phase
+        # the paper calls the most negative, 二次爆发期 (1887 − 6030) / 8029 = −0.516.
+        # Looked up BY NAME, not by position: the row order of a phase table is the step
+        # below this one's business, and asserting on the arithmetic here keeps the two
+        # questions from failing each other.
+        out = D.sentiment_evolution(self._frame({'发酵期': (17, 252, 80), '二次爆发期': (1887, 112, 6030)}), 'period')
+        index = out.set_index('period')['sentiment_index']
+        assert index['发酵期'] == pytest.approx(-0.1805, abs=0.0001)
+        assert index['二次爆发期'] == pytest.approx(-0.5160, abs=0.0001)
+
+    def test_a_neutral_majority_reads_as_moderate_even_when_opinions_are_extreme(self):
+        """The distinction the whole curve rests on: 76% negative in 爆发期 is a phase
+        index of only −0.56, because the crowd leaned negative without being unanimous.
+        A mean over rows would have answered a different question."""
+        phase = {'爆发期': (1553, 260, 5811)}
+        out = D.sentiment_evolution(self._frame(phase), 'period')
+        assert out.at[0, 'negative_pct'] == pytest.approx(76.22, abs=0.01)
+        assert out.at[0, 'sentiment_index'] == pytest.approx(-0.5584, abs=0.0001)
+
+    def test_a_row_the_model_could_not_judge_is_not_a_neutral_opinion(self):
+        """A blank polarity is "not judged", not "judged neutral". Counting it as neutral
+        would report a finding the data does not contain, so it lands in ``other_n`` and
+        in the denominator only — which is also what makes the two visible side by side.
+        """
+        frame = self._frame({'发酵期': (1, 1, 1)})
+        frame.loc[len(frame)] = {'period': '发酵期', 'sentiment': ''}
+        out = D.sentiment_evolution(frame, 'period')
+        assert out.at[0, 'neutral_n'] == 1, 'the blank must not be counted as neutral'
+        assert out.at[0, 'other_n'] == 1
+        assert out.at[0, 'total'] == 4, 'but it IS part of what that period was'
+        assert out.at[0, 'sentiment_index'] == pytest.approx(0.0)
+
+    def test_a_positive_period_reads_positive(self):
+        # 衰退期 (547 − 503) / 2286 = +0.0192 — the only phase of the paper's where the two
+        # sides nearly cancel, which is why the study describes the whole event as negative.
+        out = D.sentiment_evolution(self._frame({'衰退期': (547, 1236, 503)}), 'period')
+        assert out.at[0, 'sentiment_index'] == pytest.approx(0.0192, abs=0.0001)
+
+    def test_phases_labeled_in_chinese_still_come_back_in_lifecycle_order(self):
+        """The one ordering trap. Chinese phase names have no chronological sort order —
+        '二次爆发期' sorts BEFORE '发酵期' by code point — so sorting the result would put
+        the paper's table 2 out of order. ``bin_time`` builds an ORDERED categorical, and
+        grouping by it keeps the order the user declared in the phase names.
+        """
+        frame = self._frame({'发酵期': (1, 0, 1), '爆发期': (1, 0, 1), '二次爆发期': (1, 0, 1), '消退期': (1, 0, 1)})
+        # Give the rows a timestamp inside each phase, then let the pipeline tag them.
+        stamps = {'发酵期': '2024-04-20', '爆发期': '2024-05-03', '二次爆发期': '2024-05-20', '消退期': '2024-06-01'}
+        dated = []
+        for record in frame.to_dict('records'):
+            dated.append({**record, '评论时间': stamps[record['period']]})
+        tagged = D.bin_time(
+            pd.DataFrame(dated),
+            '评论时间',
+            edges=['2024-04-11', '2024-05-02', '2024-05-08', '2024-05-19', '2024-05-26', '2024-07-11'],
+            labels=['发酵期', '爆发期', '波动期', '二次爆发期', '消退期'],
+        )
+        out = D.sentiment_evolution(tagged, '阶段')
+        assert list(out['period']) == ['发酵期', '爆发期', '二次爆发期', '消退期'], (
+            'the declared lifecycle order, not the code-point order of the names'
+        )
+
+    def test_the_periods_come_back_in_time_order(self):
+        """A line chart draws in row order, so the step sorts rather than making the user
+        add a sort and get it wrong."""
+        frame = self._frame({'2024-05-19': (1, 0, 1), '2024-04-11': (1, 0, 1), '2024-05-02': (1, 0, 1)})
+        out = D.sentiment_evolution(frame, 'period')
+        assert list(out['period']) == ['2024-04-11', '2024-05-02', '2024-05-19']
+
+    def test_other_label_spellings_can_be_named(self):
+        # The emotion node writes Anger/Joy/Sadness; a 积极/中性/消极 column is what a
+        # replicated study usually holds. The three names are parameters for that reason.
+        frame = pd.DataFrame([{'日期': '2024-05-02', 'labels': '积极'}, {'日期': '2024-05-02', 'labels': '消极'}])
+        out = D.sentiment_evolution(frame, '日期', label_col='labels', positive='积极', neutral='中性', negative='消极')
+        assert out.at[0, 'positive_n'] == 1 and out.at[0, 'negative_n'] == 1
+        assert out.at[0, 'sentiment_index'] == pytest.approx(0.0)
+
+    def test_a_missing_label_column_is_a_no_op(self):
+        frame = pd.DataFrame({'日期': ['2024-05-02']})
+        assert list(D.sentiment_evolution(frame, '日期').columns) == ['日期']

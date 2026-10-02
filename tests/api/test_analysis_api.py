@@ -707,7 +707,24 @@ NORMALIZED = {
         {'columns': '名称', 'value': '未知', 'method': 'ffill'},
         {'columns': ['名称'], 'value': '未知', 'method': 'ffill'},
     ),
-    'drop_duplicates': ({'columns': '名称'}, {'columns': ['名称']}),
+    'drop_duplicates': ({'columns': '名称', 'mode': 'normalized'}, {'columns': ['名称'], 'mode': 'normalized'}),
+    'dedupe_similar': ({'column': '名称', 'max_distance': '2'}, {'column': '名称', 'max_distance': 2}),
+    'extract_time': (
+        {'column': '城市', 'time_new_col': '天', 'time_part': 'date'},
+        {'column': '城市', 'new_col': '天', 'part': 'date'},
+    ),
+    'bin_time': (
+        {'column': '城市', 'phase_edges': '2024-05-01, 2024-05-08', 'phase_labels': '前'},
+        {'column': '城市', 'new_col': '阶段', 'edges': ['2024-05-01', '2024-05-08'], 'labels': ['前']},
+    ),
+    'topic_model': (
+        {'column': '城市', 'n_topics': '3', 'topic_topn': '4', 'topic_max_features': '500'},
+        {'column': '城市', 'n_topics': 3, 'topn': 4, 'max_features': 500},
+    ),
+    'sentiment_evolution': (
+        {'column': '城市', 'label_col': 'emotion', 'index_new_col': 'idx'},
+        {'column': '城市', 'label_col': 'emotion', 'new_col': 'idx'},
+    ),
     'filter_rows': (
         {'column': '城市', 'op': 'not_in', 'value': '北京, 上海'},
         {'column': '城市', 'op': 'not_in', 'value': '北京, 上海'},
@@ -738,7 +755,8 @@ NORMALIZED = {
 BLANK_FORM = {
     'drop_null': {'columns': [], 'how': 'any'},
     'fill_null': {'columns': [], 'value': None},
-    'drop_duplicates': {'columns': None},
+    'drop_duplicates': {'columns': None, 'mode': 'exact'},
+    'dedupe_similar': {'column': ''},
     'filter_rows': {'column': '', 'op': 'eq', 'value': None},
     'select_columns': {'columns': []},
     'rename_columns': {'mapping': {}},
@@ -750,6 +768,13 @@ BLANK_FORM = {
     'join_tables': {'how': 'left', 'left_on': '', 'right_on': ''},
     'column_calc': {'new_col': '', 'expr': ''},
     'bin_column': {'column': '', 'new_col': ''},
+    # The four event-study steps. ``extract_time``/``bin_time``/``topic_model`` take a
+    # column and then have defaults of their own; ``sentiment_evolution`` is refused on a
+    # blank column like the rest, but names the LABEL column too once one is given.
+    'extract_time': {'column': '', 'new_col': '日期', 'part': 'date'},
+    'bin_time': {'column': '', 'new_col': '阶段', 'edges': [], 'labels': []},
+    'topic_model': {'column': '', 'n_topics': 5, 'topn': 10},
+    'sentiment_evolution': {'column': ''},
 }
 
 # The values this repository uses for "the user typed nothing sensible".
@@ -1307,6 +1332,26 @@ PARSED_FIELDS = {
     'ascending',
     'rename_from',
     'rename_to',
+    # ``mode`` is a select and ``max_distance`` a count, so both are read and re-shaped
+    # rather than forwarded: junk in either becomes the step's own declared default or
+    # disappears into the signature default, never the literal the user typed.
+    'mode',
+    'max_distance',
+    # Same story for the event-study steps: every one of these carries a declared default,
+    # so a blank becomes that default instead of reaching the operator as an empty string.
+    'time_new_col',
+    'time_part',
+    'phase_new_col',
+    'phase_edges',
+    'phase_labels',
+    'n_topics',
+    'topic_topn',
+    'topic_max_features',
+    'label_col',
+    'index_new_col',
+    'label_positive',
+    'label_neutral',
+    'label_negative',
 }
 
 
@@ -1899,6 +1944,24 @@ PANEL_VALUE = {
     'bin_new_col': 'd',
     'bins': '0, 1, 2',
     'bin_labels': 'lo, hi',
+    'mode': 'normalized',
+    'max_distance': '2',
+    'time_new_col': '天',
+    # Deliberately NOT the declared default ('date'/'阶段'): a probe that equals the
+    # default cannot prove the field is read at all, because dropping it produces the
+    # same kwargs.
+    'time_part': 'month',
+    'phase_new_col': '期',
+    'phase_edges': '2024-05-01, 2024-05-08',
+    'phase_labels': '前, 后',
+    'n_topics': '3',
+    'topic_topn': '4',
+    'topic_max_features': '500',
+    'label_col': 'emotion',
+    'index_new_col': 'idx',
+    'label_positive': 'Joy',
+    'label_neutral': 'Neutral',
+    'label_negative': 'Anger',
 }
 
 

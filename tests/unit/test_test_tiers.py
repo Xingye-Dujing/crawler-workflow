@@ -26,7 +26,14 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTEST_INI = REPO_ROOT / 'pytest.ini'
 LIVE_DIR = REPO_ROOT / 'tests' / 'live_site'
+INTEGRATION_DIR = REPO_ROOT / 'tests' / 'integration'
 TESTS_DIR = REPO_ROOT / 'tests'
+
+#: The device tier's loud-failure switches, and the reason they exist. Read from the
+#: conftest rather than imported: importing a conftest by name is not a supported pytest
+#: shape, and this is a rule about the FILE (a probe must be wired, not merely named).
+REQUIRE_BROWSER_ENV = 'CRAWLER_REQUIRE_BROWSER'
+REQUIRE_OLLAMA_ENV = 'CRAWLER_REQUIRE_OLLAMA'
 
 #: ``live_quick`` exists to be short. Nine today; the ceiling is where a future
 #: "just add one more" has to say why out loud instead of silently doubling the
@@ -855,6 +862,57 @@ _LIVE_SKIP_ALLOWANCE = {
     ('test_live_zhihu.py', 'refused the headless session'),
     ('test_live_cookie_preflight.py', 'no saved cookies'),
 }
+
+
+class TestTheDeviceTierCanFailLoudly:
+    """The device tier's worst failure mode is that it looks green without running.
+
+    A machine whose chromedriver *starts and crashes* — measured here — makes every
+    browser fixture skip, and `-m integration` prints "99 skipped" over a run that looks
+    exactly like a passing one. The closure rule ("nothing deselected and nothing
+    skipped") cannot be checked against a number that also means "this tier never ran",
+    so the tier carries two switches an operator sets when the answer matters, and a probe
+    that starts a real driver before the first case. These tests pin the switch's SHAPE:
+    a name with no failing branch would be a flag that does nothing.
+    """
+
+    @staticmethod
+    def _source() -> str:
+        return (INTEGRATION_DIR / 'conftest.py').read_text(encoding='utf-8')
+
+    def test_both_devices_have_a_fail_loudly_switch(self):
+        source = self._source()
+        assert REQUIRE_BROWSER_ENV in source
+        assert REQUIRE_OLLAMA_ENV in source
+
+    def test_the_switch_actually_fails_instead_of_merely_being_named(self):
+        source = self._source()
+        assert 'pytest.fail(' in source, 'a flag whose only branch skips is not a guarantee'
+        # ``unavailable`` is the one place the decision is made; a second copy is how the
+        # browser and the daemon would drift apart.
+        assert source.count('def unavailable(') == 1
+        assert source.count('pytest.skip(') == 1, 'the skip belongs inside `unavailable` only'
+
+    def test_the_probe_runs_before_any_device_case_and_only_on_request(self):
+        """Autouse + session scope is what makes it a guarantee: a fixture somebody has to
+        remember to ask for cannot stop a green-looking run, and a probe that always fires
+        would slow down every developer who has no Chrome on purpose."""
+        source = self._source()
+        start = source.index('def the_device_the_tier_asked_for_really_starts')
+        # The decorator sits directly above the definition.
+        head = source[:start]
+        decorator_line = [line for line in head.splitlines() if line.strip().startswith('@')][-1]
+        assert 'autouse=True' in decorator_line and "scope='session'" in decorator_line, decorator_line
+        assert 'WechatCrawler(' in source, 'the probe must START a driver, not read a path'
+
+    def test_the_daemon_fixture_uses_the_same_gate(self):
+        """The Ollama fixture had the identical silent-skip shape; routing it through
+        ``unavailable`` is what keeps one rule in one place."""
+        source = self._source()
+        start = source.index('def ollama_host')
+        body = source[start : source.index('def ollama_chat_model')]
+        assert 'unavailable(' in body
+        assert 'pytest.skip(' not in body
 
 
 class TestLiveTierSkipsAreEnumerated:

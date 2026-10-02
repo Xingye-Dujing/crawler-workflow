@@ -87,6 +87,29 @@ DROP_HOW = ('any', 'all')
 #: ``fill_null`` accepts pandas' own aliases, so both spellings of each pair are named
 #: rather than mapped: the value that reaches the step has to be one the step honours.
 FILL_METHODS = ('ffill', 'pad', 'bfill', 'backfill')
+#: How ``drop_duplicates`` decides two rows are the same row. ``exact`` is pandas'
+#: equality over the selected columns; ``normalized`` compares the identity form
+#: that :mod:`services.text_dedupe` computes, so a comment farm's extra emoji code, a
+#: fresh tracking link or a re-pasted forward chain no longer makes a row unique.
+DEDUPE_MODES = ('exact', 'normalized')
+#: Which calendar part :meth:`DataAnalysisService.extract_time` can derive. ``date`` is the
+#: one an event study is built on — a day is the unit every phase boundary is drawn in.
+TIME_PARTS = ('date', 'hour', 'weekday', 'month', 'year')
+
+
+# Module-level, not lambdas: sklearn's vectorisers keep the callable they were built with,
+# and these two are handed to one inside ``topic_model``. They are also what makes the
+# tokenisation explicit — jieba has already cut the text into space-separated tokens, so the
+# vectoriser only has to split, and doing that here keeps the same convention the ML
+# classifiers use (``analyzers.ml_base``).
+def _split_tokens(text: str) -> list:
+    return str(text).split()
+
+
+def _keep_text(text: str) -> str:
+    return text
+
+
 JOIN_HOW = ('left', 'right', 'inner', 'outer', 'cross')
 
 #: Sentinel for a select with no fallback: leaving it blank is a missing choice, and
@@ -112,7 +135,10 @@ NO_DEFAULT = object()
 STEP_PARAMS: dict = {
     'drop_null': {'some': ('columns',), 'enums': {'how': ('any', DROP_HOW)}},
     'fill_null': {'some': ('columns',), 'enums': {'method': (None, FILL_METHODS)}},
-    'drop_duplicates': {'some': ('columns',)},
+    'drop_duplicates': {'some': ('columns',), 'enums': {'mode': ('exact', DEDUPE_MODES)}},
+    # SimHash near-duplicates read ONE column: the fingerprint is over a text, so a
+    # multi-column ask would have to invent a concatenation order nobody chose.
+    'dedupe_similar': {'one': ('column',)},
     'select_columns': {'some': ('columns',)},
     'strip_whitespace': {'some': ('columns',)},
     'filter_rows': {'one': ('column',), 'enums': {'op': (NO_DEFAULT, FILTER_OPS)}},
@@ -124,6 +150,15 @@ STEP_PARAMS: dict = {
     'column_calc': {'nonblank': ('new_col', 'expr')},
     'bin_column': {'one': ('column',)},
     'sample_rows': {},
+    # ── the event-study steps ──
+    # All four name ONE column: an unnamed timestamp is not "every timestamp", and a topic
+    # model over a column nobody named has no corpus to read. A blank is refused by name
+    # rather than defaulted to 正文, because comment crawls file their text under 评论内容 —
+    # a default there would model the wrong column and report it as a result.
+    'extract_time': {'one': ('column',)},
+    'bin_time': {'one': ('column',)},
+    'topic_model': {'one': ('column',)},
+    'sentiment_evolution': {'one': ('column',)},
 }
 
 
@@ -285,9 +320,93 @@ class DataAnalysisService:
         return work
 
     @staticmethod
-    def drop_duplicates(df: pd.DataFrame, columns: list = None, keep: str = 'first') -> pd.DataFrame:
+    def drop_duplicates(
+        df: pd.DataFrame, columns: list = None, keep: str = 'first', mode: str = 'exact'
+    ) -> pd.DataFrame:
+        """Drop repeated rows, by exact equality or by their normalised identity.
+
+        ``exact`` is plain pandas equality. ``normalized`` compares the identity form
+        from :mod:`services.text_dedupe`: a comment farm reposts the same sentence with a
+        different tracking link, one more emoji code, or a re-pasted forward chain, and
+        every one of those is a new string but the same comment. The original text is what
+        survives — the key is a temporary column and never reaches the output.
+        """
         subset = [c for c in (columns or []) if c in df.columns] or None
-        return df.drop_duplicates(subset=subset, keep=keep).reset_index(drop=True)
+        work = df.copy()
+        if mode == 'exact':
+            return work.drop_duplicates(subset=subset, keep=keep).reset_index(drop=True)
+        if mode not in DEDUPE_MODES:
+            raise UnknownOperationError(
+                t(
+                    'analysis.bad_option',
+                    op='drop_duplicates',
+                    param='mode',
+                    value=mode,
+                    allowed=', '.join(DEDUPE_MODES),
+                )
+            )
+        from services.text_dedupe import normalized_key
+
+        cols = subset or [str(col) for col in work.columns]
+        # Joined with a byte that cannot appear in a cell, so ('ab', 'c') and ('a', 'bc')
+        # are not handed the same key — the bug a plain ''.join would produce.
+        joined = work[cols[0]].fillna('').astype(str)
+        for name in cols[1:]:
+            joined = joined + '\x1e' + work[name].fillna('').astype(str)
+        work['__dedupe_key__'] = joined.map(normalized_key)
+        out = work.drop_duplicates(subset=['__dedupe_key__'], keep=keep)
+        return out.drop(columns=['__dedupe_key__']).reset_index(drop=True)
+
+    @staticmethod
+    def dedupe_similar(df: pd.DataFrame, column: str, max_distance: int = 8) -> pd.DataFrame:
+        """Drop near-duplicate rows — SimHash distance within ``max_distance`` bits.
+
+        What ``drop_duplicates`` cannot see: a comment reposted with one word changed, or
+        the same sentence padded to a different length. SimHash puts each comment's
+        *meaning-bearing tokens* into 64 bits, so a small edit flips few bits and the row
+        collapses into the group it belongs to.
+
+        The first row of each group is kept, matching ``keep='first'`` above, and the
+        search is sub-quadratic by banding (see :mod:`services.text_dedupe`) — an
+        all-pairs scan over a hundred-thousand-row comment table is not a thing this can
+        afford, so a distance the banded index cannot prove is refused by name rather than
+        answered with a slow scan or a quietly incomplete group.
+
+        The default is 8 rather than the tightest distance that could be justified, and it
+        is measured rather than chosen: on hand-written Weibo comments a one-word rewrite
+        sits 5–18 bits away while two unrelated comments sit 26–28, so 8 catches the
+        clearly-identical rewrites and leaves the genuinely-different ones alone. Raising
+        it towards 15 buys recall and spends precision — worth doing per table, with the
+        row counts the run reports, rather than once for every table.
+        """
+        work = df.copy()
+        if column not in work.columns:
+            return work
+        # Imported here, not at module scope: this module is what the app loads on a plain
+        # crawl, and the dedupe helpers pull in jieba for tokenising.
+        from services.text_dedupe import MAX_BANDED_DISTANCE, group_near_duplicates, normalize_text, simhash64
+
+        distance = 8 if max_distance is None else int(max_distance)
+        if not 0 <= distance <= MAX_BANDED_DISTANCE:
+            raise UnknownOperationError(t('analysis.dedupe_distance', value=distance, max=MAX_BANDED_DISTANCE))
+        candidates = []
+        for idx, raw in work[column].items():
+            if pd.isna(raw):
+                continue
+            text = str(raw)
+            # A comment that is only artifacts has no fingerprint of its own: every such
+            # row hashes to the same value, so including them would collapse unrelated
+            # rows into one group. They are not duplicates of each other — they are empty.
+            if not normalize_text(text):
+                continue
+            candidates.append((str(idx), simhash64(text)))
+        dropped = []
+        for group in group_near_duplicates(candidates, max_distance=distance):
+            dropped.extend(int(member) for member in group[1:])
+        if dropped:
+            work = work.drop(index=dropped)
+        logger.info(t('analysis.dedupe_similar', n=len(dropped), column=column, distance=distance))
+        return work.reset_index(drop=True)
 
     @staticmethod
     def filter_rows(df: pd.DataFrame, column: str, op: str, value) -> pd.DataFrame:
@@ -454,13 +573,26 @@ class DataAnalysisService:
 
     @staticmethod
     def column_calc(df: pd.DataFrame, new_col: str, expr: str) -> pd.DataFrame:
+        """Add a computed column, or refuse with the expression that could not run.
+
+        This used to log a warning and hand the table back UNCHANGED, which is the one
+        outcome this project forbids everywhere else: the node settled DONE, the column the
+        user named was never created, and the only trace was a line in ``logs/``. A
+        mistyped column name then surfaced two nodes later as a chart with nothing in it —
+        on a run that had already paid for its crawl.
+
+        The column name inside an expression is the reason this could not simply be added
+        to :data:`STEP_PARAMS`: no table of column names can validate a formula, so the
+        check has to be the evaluation itself. Which means the refusal has to BE the
+        evaluation's failure, carrying the expression the user typed.
+        """
         if not new_col or not expr:
             return df
         work = df.copy()
         try:
             work[new_col] = work.eval(expr)
         except Exception as e:
-            logger.warning(t('analysis.calc_failed', col=new_col, expr=expr, err=e))
+            raise UnknownOperationError(t('analysis.calc_failed', col=new_col, expr=expr, err=e)) from e
         return work
 
     @staticmethod
@@ -476,8 +608,256 @@ class DataAnalysisService:
         try:
             work[bin_col] = pd.cut(pd.to_numeric(work[column], errors='coerce'), bins=bins, labels=labels)
         except Exception as e:
-            logger.warning(t('analysis.bin_failed', col=column, err=e))
+            # Same rule as ``column_calc`` above: a refusal, never a silent no-op. The
+            # inputs that reach here are real — edges given in the wrong order, a label
+            # list that does not match the number of buckets — and each of them used to
+            # settle the node DONE with no new column and one line in the log file.
+            raise UnknownOperationError(t('analysis.bin_failed', col=column, err=e)) from e
         return work
+
+    # ── Time dimension ──────────────────────────────────────────
+    #
+    # An event study is a study of WHEN, and nothing above answers that: `评论时间` holds
+    # "2024-05-02 13:45", so grouping by it groups by the minute, and a line chart of a
+    # per-minute series is noise. These two steps are the floor the whole analysis stands
+    # on — daily post counts, the phase split, and the sentiment curve are all defined
+    # over a calendar day rather than over a timestamp.
+
+    @staticmethod
+    def extract_time(df: pd.DataFrame, column: str, new_col: str = '日期', part: str = 'date') -> pd.DataFrame:
+        """Derive one calendar part of a timestamp column.
+
+        ``date`` answers with ``YYYY-MM-DD`` text rather than a date object: the value is
+        grouped, exported and charted, and a lexical sort of ISO dates IS a chronological
+        sort, so the text form costs nothing and survives every serialisation in this
+        pipeline. The other parts answer with a number.
+
+        A timestamp the site handed back as a relative label ("09月26日 21:00" is what Weibo
+        shows when it has no year) cannot be turned into a calendar day, and guessing this
+        year for it would move rows between phases. Those rows are left EMPTY and counted
+        in the console — an empty is not a date, and pandas' own ``groupby`` then drops them
+        instead of inventing a 1970 bucket for them.
+        """
+        if column not in df.columns:
+            return df
+        if part not in TIME_PARTS:
+            raise UnknownOperationError(
+                t('analysis.bad_option', op='extract_time', param='part', value=part, allowed=', '.join(TIME_PARTS))
+            )
+        work = df.copy()
+        stamps = pd.to_datetime(work[column], errors='coerce', format='mixed')
+        unparsed = int(stamps.isna().sum())
+        if part == 'date':
+            work[new_col] = stamps.dt.strftime('%Y-%m-%d')
+            # strftime answers 'NaT' for a missing stamp, and a column whose missing value
+            # is the text "NaT" groups those rows together as if they were one day.
+            work.loc[stamps.isna(), new_col] = pd.NA
+        else:
+            work[new_col] = getattr(stamps.dt, part)
+        if unparsed:
+            logger.warning(t('analysis.time_unparsed', col=column, n=unparsed))
+        return work
+
+    @staticmethod
+    def bin_time(
+        df: pd.DataFrame, column: str, edges: list = None, labels: list = None, new_col: str = '阶段'
+    ) -> pd.DataFrame:
+        """Cut a timestamp column into named windows — the event's lifecycle phases.
+
+        ``edges`` are the boundaries, left-closed and right-open: five phases need SIX
+        edges, and the last one is the day after the final phase ends. That is stated
+        rather than smoothed over because the alternative reading ("edges are the phase
+        ends") silently shifts every row on a boundary day into the neighbouring phase —
+        and those are exactly the days an event study is about.
+
+        Which is why the comparison runs on the calendar DAY: a row stamped 23:59 on the
+        day before a boundary belongs to the earlier phase, not to the next one by two
+        minutes.
+        """
+        if column not in df.columns:
+            return df
+        work = df.copy()
+        bounds = [value for value in (edges or []) if not _blank(value)]
+        names = [str(name).strip() for name in (labels or []) if str(name).strip()]
+        if len(bounds) < 2:
+            raise UnknownOperationError(t('analysis.need_param', op='bin_time', param='edges'))
+        if len(names) != len(bounds) - 1:
+            raise UnknownOperationError(t('analysis.time_bin_labels', edges=len(bounds), labels=len(names)))
+        parsed = pd.to_datetime(pd.Series(bounds), errors='coerce', format='mixed')
+        if parsed.isna().any():
+            bad = [bounds[index] for index, ok in enumerate(parsed.notna()) if not ok]
+            raise UnknownOperationError(t('analysis.time_bin_edges', edges=', '.join(str(x) for x in bad)))
+        if not parsed.is_monotonic_increasing:
+            # pd.cut would raise on unsorted bins with pandas' own wording; naming the
+            # parameter is what lets the user find the box that holds it.
+            raise UnknownOperationError(t('analysis.time_bin_order', op='bin_time'))
+        stamps = pd.to_datetime(work[column], errors='coerce', format='mixed')
+        unparsed = int(stamps.isna().sum())
+        work[new_col] = pd.cut(stamps.dt.normalize(), bins=parsed, labels=names, right=False)
+        if unparsed:
+            logger.warning(t('analysis.time_unparsed', col=column, n=unparsed))
+        counts = work[new_col].value_counts()
+        detail = '、'.join(f'{name} {int(counts.get(name, 0))} 行' for name in names)
+        logger.info(t('analysis.time_binned', col=new_col, detail=detail))
+        return work
+
+    # ── Topic modelling ─────────────────────────────────────────
+
+    @staticmethod
+    def topic_model(
+        df: pd.DataFrame, column: str, n_topics: int = 5, topn: int = 10, max_features: int = 2000
+    ) -> pd.DataFrame:
+        """LDA over one text column: which subjects is this corpus made of.
+
+        ``sklearn``'s ``LatentDirichletAllocation``, not Gensim's: scikit-learn is already
+        a dependency of this project and gensim is not, and a topic model that needs a
+        second numerical stack installed to read a table is not worth the extra words it
+        would type. Both fit the same generative model; the numbers they report are not
+        identical, so a replication should say which one produced its table.
+
+        The output is ONE ROW PER (topic, keyword) rather than one row per topic with its
+        words joined: it is the shape the keyword node already answers with, it keeps every
+        weight addressable, and a chart can group it by ``topic`` directly. Reading it as
+        the paper's table is a job for the console line, which prints each topic's words in
+        order.
+
+        The perplexity is logged because "设定主题个数" is a real decision and the paper
+        does not say how it was made: run the node at several ``n_topics`` and read the
+        number, which falls as the model fits better and stops meaning anything once it
+        starts memorising rows.
+        """
+        import jieba
+        from sklearn.decomposition import LatentDirichletAllocation
+        from sklearn.feature_extraction.text import CountVectorizer
+
+        if column not in df.columns:
+            return df
+        topics = int(n_topics)
+        if topics < 2:
+            raise UnknownOperationError(t('analysis.topic_count', value=topics))
+        texts = [str(value) for value in df[column].dropna().tolist() if str(value).strip()]
+        if len(texts) < topics:
+            raise UnknownOperationError(t('analysis.topic_rows', rows=len(texts), topics=topics))
+        # Tokens with no letter or digit in them are dropped before the model sees them, the
+        # same rule the word-cloud tokenizer applies: jieba hands back the punctuation it
+        # split on, and a topic model whose vocabulary is "。" and "！" has topics that are
+        # punctuation. A corpus that is nothing BUT punctuation then has no vocabulary at
+        # all, which is refused below rather than answered with an empty table.
+        tokenized = [
+            ' '.join(token for token in jieba.cut(text) if any(char.isalnum() for char in token)) for text in texts
+        ]
+        vectorizer = CountVectorizer(
+            tokenizer=_split_tokens,
+            preprocessor=_keep_text,
+            token_pattern=None,
+            max_features=max(10, int(max_features)),
+        )
+        try:
+            matrix = vectorizer.fit_transform(tokenized)
+        except ValueError as e:
+            raise UnknownOperationError(t('analysis.topic_features', err=e)) from e
+        model = LatentDirichletAllocation(n_components=topics, random_state=42, learning_method='batch')
+        model.fit(matrix)
+        vocabulary = vectorizer.get_feature_names_out()
+        rows = []
+        lines = []
+        for index, component in enumerate(model.components_):
+            best = component.argsort()[::-1][: max(1, int(topn))]
+            words = [str(vocabulary[position]) for position in best]
+            lines.append(f'Topic-{index + 1}: {" ".join(words)}')
+            for rank, position in enumerate(best):
+                rows.append(
+                    {
+                        'topic': f'Topic-{index + 1}',
+                        'rank': rank + 1,
+                        'keyword': str(vocabulary[position]),
+                        'weight': round(float(component[position]), 6),
+                    }
+                )
+        logger.info(
+            t(
+                'analysis.topic_done',
+                n=topics,
+                rows=len(texts),
+                perplexity=round(float(model.perplexity(matrix)), 2),
+            )
+        )
+        for line in lines:
+            # One line per topic, so the console reads like the paper's table without an
+            # export round trip — the whole point of running the node.
+            logger.info(line)
+        return pd.DataFrame(rows, columns=['topic', 'rank', 'keyword', 'weight'])
+
+    # ── The sentiment curve ─────────────────────────────────────
+
+    @staticmethod
+    def sentiment_evolution(
+        df: pd.DataFrame,
+        column: str,
+        label_col: str = 'sentiment',
+        positive: str = 'positive',
+        neutral: str = 'neutral',
+        negative: str = 'negative',
+        new_col: str = 'sentiment_index',
+    ) -> pd.DataFrame:
+        """Per-period sentiment shares and one signed intensity — the evolution curve.
+
+        The number this exists for is ``sentiment_index`` = (positive − negative) / total,
+        which is the paper's daily value: +1 means the period was wholly positive, −1
+        wholly negative, and 0 means either everything was neutral or the two sides
+        cancelled. It is deliberately NOT a mean of per-row scores: a mean over rows answers
+        "how strong was the average opinion", while this answers "which way did the crowd
+        lean", and a phase with a large silent neutral majority must read as moderate even
+        when the few opinions are extreme. That distinction is the paper's central finding
+        (爆发期 76% negative but a phase index near −0.56), so it is computed rather than
+        approximated.
+
+        Rows whose label is none of the three named values are counted in ``total`` and in
+        none of the three buckets — a blank the polarity node could not judge is not a
+        neutral opinion, and folding it into 中性 would report a finding the data does not
+        contain. Their count is ``other_n``, so the difference is visible rather than lost.
+        """
+        if column not in df.columns or label_col not in df.columns:
+            return df
+        work = df.copy()
+        labels = work[label_col].astype('string').fillna('').str.strip()
+        work['_pos'] = (labels == positive).astype(int)
+        work['_neu'] = (labels == neutral).astype(int)
+        work['_neg'] = (labels == negative).astype(int)
+        grouped = work.groupby(column, dropna=True).agg(
+            positive_n=('_pos', 'sum'),
+            neutral_n=('_neu', 'sum'),
+            negative_n=('_neg', 'sum'),
+            total=('_pos', 'size'),
+        )
+        grouped = grouped.reset_index()
+        grouped['other_n'] = grouped['total'] - grouped['positive_n'] - grouped['neutral_n'] - grouped['negative_n']
+        # A zero total cannot happen (groupby only makes groups from rows) but the ratio is
+        # written defensively: a division here would surface as an inf in a chart, not as
+        # an error anyone could trace back to this line.
+        totals = grouped['total'].replace(0, pd.NA)
+        for name, source in (
+            ('positive_pct', 'positive_n'),
+            ('neutral_pct', 'neutral_n'),
+            ('negative_pct', 'negative_n'),
+        ):
+            grouped[name] = (grouped[source] / totals * 100).round(2)
+        grouped[new_col] = ((grouped['positive_n'] - grouped['negative_n']) / totals).round(4)
+        # Ascending by the period so a line chart draws left-to-right in time without the
+        # user having to add a sort step — and 'YYYY-MM-DD' sorts chronologically as text,
+        # which is why extract_time answers with text.
+        grouped = grouped.sort_values(column, kind='stable').reset_index(drop=True)
+        grouped = grouped.rename(columns={column: 'period'})
+        logger.info(
+            t(
+                'analysis.evolution_done',
+                n=len(grouped),
+                periods=str(grouped['period'].iloc[0]) + ' … ' + str(grouped['period'].iloc[-1])
+                if len(grouped)
+                else '',
+            )
+        )
+        return grouped
 
     # ── Operation registry + pipeline runner ────────────────────
 
@@ -487,6 +867,7 @@ class DataAnalysisService:
             'drop_null': cls.drop_null,
             'fill_null': cls.fill_null,
             'drop_duplicates': cls.drop_duplicates,
+            'dedupe_similar': cls.dedupe_similar,
             'filter_rows': cls.filter_rows,
             'select_columns': cls.select_columns,
             'rename_columns': cls.rename_columns,
@@ -498,6 +879,10 @@ class DataAnalysisService:
             'join_tables': cls.join_tables,
             'column_calc': cls.column_calc,
             'bin_column': cls.bin_column,
+            'extract_time': cls.extract_time,
+            'bin_time': cls.bin_time,
+            'topic_model': cls.topic_model,
+            'sentiment_evolution': cls.sentiment_evolution,
         }
 
     @classmethod

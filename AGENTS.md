@@ -29,7 +29,11 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
 - **Test tiers** (`pytest.ini` excludes the real tiers by default; pinned by `tests/unit/test_test_tiers.py`):
   - Fast (~4.3k cases, ~2 min, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
   - Device (real Chrome on `file://` fixtures + real Ollama; LLM boundary mocks run by default):
-    `... -m "integration or live_ollama"`.
+    `... -m "integration or live_ollama"`. **An unavailable browser or daemon SKIPS, which makes a whole tier
+    look green without running** (measured: a chromedriver that starts and crashes left all 99 UI-layout cases
+    skipped under a passing-looking run). When the green has to be evidence, set `CRAWLER_REQUIRE_BROWSER=1`
+    and/or `CRAWLER_REQUIRE_OLLAMA=1`: the session then probes the real thing once and FAILS instead of
+    skipping (`tests/integration/conftest.py` owns that decision; `test_test_tiers.py` pins its shape).
   - Live (REAL crawls, skip when a cookie is absent): `... -m live_quick` visits each platform once and gates a
     change; `... -m live_site` is the full acceptance pass. **Never run a live tier unattended: it spends the
     user's accounts.** A copied login is a second device, so the tier keeps its own profile root; only

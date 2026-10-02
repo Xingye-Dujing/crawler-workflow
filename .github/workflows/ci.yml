@@ -1,0 +1,49 @@
+name: ci
+
+# The fast tier and nothing else.
+#
+# No browser, no daemon and no account: AGENTS.md's fast tier is defined as "no
+# browser/daemon", which is exactly what a hosted runner can be trusted with. The device,
+# live_quick and live_site tiers stay local — they spend a real session and a real daemon,
+# and a green check on a shared runner would be a claim this project cannot make.
+#
+# windows-latest rather than ubuntu-latest on purpose: every verification this project has
+# ever had was on Windows, and changing platform and adding a first CI run in the same step
+# turns one unknown into two. Widening to Linux is its own change, with the failures read.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  fast:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create the venv the project mandates
+        run: python -m venv .venv
+
+      - name: Install declared dependencies
+        run: .venv/Scripts/python.exe -m pip install --upgrade pip -r requirements.txt
+
+      # Formatting is checked HERE and not only in the local hook, because the hook cannot
+      # run everywhere: `ruff format` writes through a temporary file and a rename, which a
+      # restricted workspace refuses outright — measured, it fails with os error 5 and the
+      # edit silently stays unformatted. This step is the gate that cannot be skipped.
+      - name: Lint
+        run: .venv/Scripts/ruff.exe check backend/ tests/
+
+      - name: Format
+        run: .venv/Scripts/ruff.exe format --check backend/ tests/
+
+      # `node` is on the runner image, so the frontend harness cases run rather than skip.
+      - name: Fast tier
+        run: .venv/Scripts/python.exe -m pytest -q

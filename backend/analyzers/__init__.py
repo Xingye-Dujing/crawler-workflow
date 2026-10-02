@@ -6,10 +6,11 @@ from analyzers.emotion import EmotionAnalyzer
 from analyzers.keyword import KeywordExtractor
 from analyzers.ml_base import MLClassifier, build_tfidf_pipeline, build_training_data, get_classifier
 from analyzers.ner import NamedEntityRecognizer
-from analyzers.sentiment import SentimentAnalyzer
+from analyzers.sentiment import BERT_BATCH, SentimentAnalyzer
 from analyzers.tendency import TendencyAnalyzer
 
 __all__ = [
+    'BERT_BATCH',
     'ContentCleaner',
     'EmotionAnalyzer',
     'TendencyAnalyzer',

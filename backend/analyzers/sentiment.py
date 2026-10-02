@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import re
 from importlib.util import find_spec
@@ -19,6 +20,12 @@ LABELS = ('positive', 'negative', 'neutral')
 #: cannot interpret would be a second opinion about the model's own answer.
 SCORE_MODES = ('snownlp', 'bert')
 
+#: Rows handed to the transformer in one forward pass. The old path called the pipeline
+#: once per row — a Python-level round trip for every comment — which on a real Weibo
+#: table (10^5 rows) is the difference between minutes and an hour. 32 keeps a 110M
+#: model's activations far inside an 8 GB card while still filling it.
+BERT_BATCH = 32
+
 
 class PolarityError(ValueError):
     """The reader cannot answer THIS column at all, as opposed to one row of it.
@@ -39,6 +46,42 @@ def bert_backend() -> str:
     hundred MB of resident memory to learn a fact a directory listing already answers.
     """
     return ', '.join(name for name in ('torch', 'transformers') if find_spec(name) is None)
+
+
+def bert_device() -> int:
+    """``0`` when this machine has a CUDA device, ``-1`` (CPU) otherwise.
+
+    The transformer path was written for a CPU-only machine and stayed there, which is
+    the wrong default for the one machine this actually runs on: a laptop with a small
+    GPU answers the same column an order of magnitude faster, and nothing in the node
+    asked to be slow. A machine without torch answers -1, which is the pipeline's own
+    CPU default, so the no-GPU case is not a special case here.
+    """
+    try:
+        import torch
+    except Exception:
+        return -1
+    with contextlib.suppress(Exception):
+        if torch.cuda.is_available():
+            return 0
+    return -1
+
+
+def _signed_polarity(answer: dict) -> float:
+    """One pipeline answer as a polarity probability, or a refusal.
+
+    The pipeline reports its own label plus a confidence; the three-value column needs a
+    polarity probability, so the confidence is signed by the label it came with. A model
+    that says 负面 0.93 is a text 0.07 positive, and that is the one number the
+    thresholds mean anything against.
+    """
+    name = str(answer.get('label') or '').lower()
+    score = float(answer.get('score') or 0.0)
+    if any(word in name for word in ('pos', '正面', '积极', 'good', '支持')):
+        return score
+    if any(word in name for word in ('neg', '负面', '消极', 'bad', '批评')):
+        return 1.0 - score
+    raise PolarityError(t('sentiment.bert_bad_label', label=answer.get('label')))
 
 
 class SentimentAnalyzer:
@@ -67,12 +110,16 @@ class SentimentAnalyzer:
         pos_threshold: float = 0.6,
         neg_threshold: float = 0.4,
         bert_model: str = '',
+        batch_size: int = BERT_BATCH,
     ):
         self.mode = mode
         self.model_name = model_name
         self.pos_threshold = pos_threshold
         self.neg_threshold = neg_threshold
         self.bert_model = bert_model
+        # A configured 0 would make the chunking loop below step zero times and score an
+        # empty column while reporting success, so the floor is one row.
+        self.batch_size = max(1, int(batch_size or BERT_BATCH))
         # Lazily built, exactly as the other two classifiers build theirs: a run that
         # asks for SnowNLP must not touch sklearn, and one that asks for sklearn must not
         # pay for a model file it will never read.
@@ -107,7 +154,7 @@ class SentimentAnalyzer:
         def read(text: str) -> float:
             return float(SnowNLP(text).sentiments)
 
-        return self._score_dataframe(df, text_column, read, 'sentiment.snownlp_failed')
+        return self._score_dataframe(df, text_column, read=read, failure_key='sentiment.snownlp_failed')
 
     def _analyze_bert(self, df: pd.DataFrame, text_column: str) -> pd.DataFrame:
         """A transformer sentiment pipeline, or the reason there is not one here.
@@ -115,34 +162,54 @@ class SentimentAnalyzer:
         Every answer refuses BY NAME. Silently falling back to SnowNLP would put one
         model's verdict in a column the node said another model produced, which is the
         exact shape of bug this project has already paid for twice.
+
+        The whole column goes through in batches. That is the difference between a node
+        that finishes a 100k-comment table in minutes and one that spends an hour in
+        Python between forward passes — see :data:`BERT_BATCH`.
         """
         missing = bert_backend()
         if missing:
             raise ValueError(t('sentiment.bert_missing', need=missing))
-        if not str(self.bert_model or '').strip():
+        model = str(self.bert_model or '').strip()
+        if not model:
             raise ValueError(t('sentiment.bert_no_model'))
 
         from transformers import pipeline
 
-        label_of = pipeline('sentiment-analysis', model=self.bert_model.strip())
+        device = bert_device()
+        label_of = pipeline('sentiment-analysis', model=model, device=device)
+        # Said out loud, because "did this use my GPU" is otherwise only answerable by
+        # timing the run, and a laptop falling back to CPU is the common surprise.
+        logger.info(t('sentiment.bert_loaded', model=model, device='cuda' if device >= 0 else 'cpu'))
 
-        def read(text: str) -> float:
-            # The pipeline answers its own label plus a confidence; the three-value column
-            # needs a polarity probability, so the confidence is signed by the label it
-            # came with. A model that says 负面 0.93 is a text 0.07 positive, and that is
-            # the one number the thresholds below mean anything against.
-            out = label_of(text[:512])[0]
-            name = str(out.get('label') or '').lower()
-            score = float(out.get('score') or 0.0)
-            if any(word in name for word in ('pos', '正面', '积极', 'good', '支持')):
-                return score
-            if any(word in name for word in ('neg', '负面', '消极', 'bad', '批评')):
-                return 1.0 - score
-            raise PolarityError(t('sentiment.bert_bad_label', label=out.get('label')))
+        def read_many(texts: list) -> list:
+            """One forward pass per chunk, one answer per text, failures as values.
 
-        return self._score_dataframe(df, text_column, read, 'sentiment.bert_failed')
+            A batch that raises answers every row of that batch with the same exception
+            rather than ending the column: the per-row contract of this operation is that
+            the rows that read are answered and the ones that did not stay blank.
+            Truncation lives in the pipeline call so the tokenizer's own limit is applied
+            to the batch, instead of this module guessing at a character count.
+            """
+            try:
+                answers = label_of(list(texts), batch_size=len(texts), truncation=True, max_length=512)
+            except Exception as e:
+                return [e] * len(texts)
+            out = []
+            for answer in answers:
+                try:
+                    out.append(_signed_polarity(answer))
+                except PolarityError as e:
+                    # A label this mapping does not know is a question about the MODEL,
+                    # not about one row: it travels, as it did before batching existed.
+                    out.append(e)
+            return out
 
-    def _score_dataframe(self, df: pd.DataFrame, text_column: str, read, failure_key: str) -> pd.DataFrame:
+        return self._score_dataframe(df, text_column, failure_key='sentiment.bert_failed', read_many=read_many)
+
+    def _score_dataframe(
+        self, df: pd.DataFrame, text_column: str, read=None, failure_key: str = '', read_many=None
+    ) -> pd.DataFrame:
         """Apply one polarity reader down a column, and write the two result columns.
 
         A row that fails to read is left BLANK, not answered 中性: 「没有判断」 and
@@ -151,6 +218,11 @@ class SentimentAnalyzer:
         not a finished sentence, because the reason has to be interpolated into it — a
         rendered string handed in here printed the template back with a literal ``{err}``
         in the console and no error at all.
+
+        Exactly one of ``read`` (one text) and ``read_many`` (a batch, answering with a
+        float or an Exception per text) is given. Both funnel into the same per-row
+        settlement, so a batched model and a looped one cannot disagree about what a
+        failure means.
         """
         df['sentiment'] = ''
         df['score'] = None
@@ -163,19 +235,32 @@ class SentimentAnalyzer:
             logger.info(t('ml.no_rows'))
             return df
         failed = 0
-        for idx in indices:
-            text = str(df.at[idx, text_column]).strip()
-            try:
-                score = max(0.0, min(1.0, float(read(text))))
-            except PolarityError:
-                raise
-            except Exception as e:
-                failed += 1
-                logger.warning(t(failure_key, err=e))
-                continue
-            df.at[idx, 'score'] = score
-            df.at[idx, 'sentiment'] = self.label_for_score(score)
-        logger.info(t('sentiment.scored', n=len(indices) - failed, mode=self.mode))
+        scored = 0
+        step = self.batch_size if read_many is not None else 1
+        for start in range(0, len(indices), step):
+            chunk = indices[start : start + step]
+            texts = [str(df.at[idx, text_column]).strip() for idx in chunk]
+            if read_many is not None:
+                answers = list(read_many(texts))
+            else:
+                answers = []
+                for text in texts:
+                    try:
+                        answers.append(read(text))
+                    except Exception as e:
+                        answers.append(e)
+            for idx, answer in zip(chunk, answers, strict=False):
+                if isinstance(answer, PolarityError):
+                    raise answer
+                if isinstance(answer, Exception):
+                    failed += 1
+                    logger.warning(t(failure_key, err=answer))
+                    continue
+                score = max(0.0, min(1.0, float(answer)))
+                df.at[idx, 'score'] = score
+                df.at[idx, 'sentiment'] = self.label_for_score(score)
+                scored += 1
+        logger.info(t('sentiment.scored', n=scored, mode=self.mode))
         if failed:
             logger.warning(t('sentiment.scored_failed', n=failed))
         return df

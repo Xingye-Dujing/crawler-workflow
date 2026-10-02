@@ -314,6 +314,28 @@ _ZH = {
     'analysis.calc_failed': '计算列 {col} = {expr} 失败：{err}',
     'analysis.bin_failed': '列 {col} 分箱失败：{err}',
     'analysis.col_missing': '未找到列“{col}”',
+    'analysis.dedupe_similar': (
+        '近重复去重：在「{column}」上按 SimHash 距离 ≤{distance} 判定，删除 {n} 行（每组保留首次出现的那行）'
+    ),
+    'analysis.dedupe_distance': '近重复去重支持的距离是 0–{max} 位，收到 {value}，已拒绝（不做全量两两比对）',
+    'analysis.time_unparsed': (
+        '「{col}」有 {n} 行不是可解析的时间（站点只给了相对标签，如「09月26日 21:00」），已留空而不是猜一个年份'
+    ),
+    'analysis.time_binned': '{col} 划分完成：{detail}',
+    'analysis.time_bin_labels': '时间分段需要「边界数 = 阶段名数 + 1」，现在是 {edges} 个边界、{labels} 个名称',
+    'analysis.time_bin_edges': '时间分段里有无法解析成日期的边界：{edges}',
+    'analysis.time_bin_order': '{op} 的边界必须按时间从早到晚排列',
+    'analysis.topic_count': 'LDA 主题数至少要 2，收到 {value}（1 个主题只是"整段文本"）',
+    'analysis.topic_rows': 'LDA 需要至少和主题数一样多的文本：主题 {topics} 个、有效文本 {rows} 行',
+    'analysis.topic_features': 'LDA 无法从这一列抽到特征词（可能整列都是标点或停用词）：{err}',
+    'analysis.topic_done': (
+        'LDA 主题模型：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}（数值越低拟合越好，但过小意味着在记原文）'
+    ),
+    'analysis.evolution_done': (
+        '情感演化：按「period」聚合出 {n} 个时段（{periods}），情感指数 =(积极−消极)/总数 ∈ [-1, 1]'
+    ),
+    'clean.unknown_mode': '清洗节点没有名为「{mode}」的模式（可用：regex、llm）',
+    'clean.regex_done': '正则清洗：保留 {kept} 行、判定删除 {dropped} 行（未做主题相关性判断，那需要 llm 模式）',
     # A cleaning step that this table cannot carry out. `{op}` and `{param}` stay the
     # storage names on purpose: they are what the caller of /api/analysis/run wrote,
     # and what the Settings panel stores in the node's JSON, so a person fixing a
@@ -352,6 +374,7 @@ _ZH = {
     'sentiment.bert_missing': 'BERT 模式需要本机安装 {need}——当前环境没有，也不会改用别的方法代替',
     'sentiment.bert_no_model': 'BERT 模式还需要在「模型」里填一个情感模型名（本地目录或仓库名），空着无法判断',
     'sentiment.bert_bad_label': 'BERT 模型回了一个不认识的标签「{label}」，无法归入正面/负面/中性',
+    'sentiment.bert_loaded': 'BERT 情感模型已加载：{model}（运行在 {device} 上，逐批推理）',
     'ml.tendency_failed': 'ML 倾向性预测失败：{err}——回退为 Objective Statement',
     'ml.emotion_done': '[ML] 情感分类完成，共处理 {n} 行，模式: ML',
     'ml.tendency_done': '[ML] 倾向性分析完成，共处理 {n} 行，模式: ML',
@@ -821,6 +844,7 @@ _ZH = {
     'run.resume_from': '续跑模式：接着 {at} 那次往下跑，此前已保存 {rows} 行',
     'run.restored': '节点 {nid} 沿用上次结果（{n} 行），不再重跑',
     'run.resume_crawl': '节点 {nid} 从上次中断处继续抓取（已有 {have} 行）',
+    'run.heavy_result': '内存提示：节点「{nid}」产出 {n} 行，运行结束前每个节点的这份结果都留在内存里',
     'run.recrawl': '重新采集：已释放 {n} 条历史去重记录，本节点将重新抓取',
     'run.dedupe_skipped': '增量采集：{n} 条结果此前已采集，本次被跳过（如需重抓请在采集节点开启「重新采集」）',
     'run.dedupe_all_skipped': (
@@ -1261,6 +1285,38 @@ _EN = {
     'analysis.calc_failed': 'Column calc failed for {col} = {expr}: {err}',
     'analysis.bin_failed': 'Binning failed for {col}: {err}',
     'analysis.col_missing': 'Column "{col}" not found',
+    'analysis.dedupe_similar': (
+        'Near-duplicate dedupe: SimHash distance ≤{distance} on "{column}", dropped {n} rows (first of each group kept)'
+    ),
+    'analysis.dedupe_distance': (
+        'near-duplicate dedupe supports a distance of 0–{max} bits, got {value}: '
+        'a larger one is refused rather than answered with an all-pairs scan'
+    ),
+    'analysis.time_unparsed': (
+        '"{col}" has {n} rows that are not a parseable time (the site only gave a relative label such as '
+        '"09月26日 21:00"); they are left empty rather than guessed into a year'
+    ),
+    'analysis.time_binned': '{col} split done: {detail}',
+    'analysis.time_bin_labels': (
+        'time binning needs one more boundary than there are phase names: {edges} boundaries and {labels} names'
+    ),
+    'analysis.time_bin_edges': 'time binning got a boundary that is not a date: {edges}',
+    'analysis.time_bin_order': '{op} boundaries must run from earliest to latest',
+    'analysis.topic_count': 'LDA needs at least 2 topics, got {value} (one topic is just "the whole text")',
+    'analysis.topic_rows': 'LDA needs at least as many texts as topics: {topics} topics, {rows} usable rows',
+    'analysis.topic_features': 'LDA could find no features in this column (punctuation or stopwords only?): {err}',
+    'analysis.topic_done': (
+        'LDA topic model: {n} topics over {rows} texts, perplexity {perplexity} '
+        '(lower fits better, but far too low means it is memorising the corpus)'
+    ),
+    'analysis.evolution_done': (
+        'Sentiment evolution: {n} periods from "period" ({periods}); index = (positive − negative) / total ∈ [-1, 1]'
+    ),
+    'clean.unknown_mode': 'the clean node has no mode named "{mode}" (available: regex, llm)',
+    'clean.regex_done': (
+        'Regex clean: kept {kept} rows, marked {dropped} for deletion '
+        '(topic relevance is not judged here — that needs the llm mode)'
+    ),
     'analysis.need_param': '{op} needs {param}, which is empty',
     'analysis.step_col_missing': '{op}: no column named "{col}" in this table',
     'analysis.step_cols_missing': '{op}: these columns are not in this table: {cols}',
@@ -1292,6 +1348,7 @@ _EN = {
     'sentiment.bert_missing': 'BERT mode needs {need} installed here — it is not, and nothing else will run instead',
     'sentiment.bert_no_model': 'BERT mode needs a sentiment model named; empty means nothing can be judged',
     'sentiment.bert_bad_label': 'the BERT model answered an unrecognised label "{label}"',
+    'sentiment.bert_loaded': 'BERT sentiment model loaded: {model} (running on {device}, in batches)',
     'ml.tendency_failed': 'ML tendency prediction failed: {err} — falling back to Objective Statement',
     'ml.emotion_done': '[ML] Emotion classification done, {n} rows, mode: ML',
     'ml.tendency_done': '[ML] Tendency analysis done, {n} rows, mode: ML',
@@ -1815,6 +1872,9 @@ _EN = {
     'run.resume_from': 'Resuming the run interrupted at {at} — {rows} rows already stored',
     'run.restored': 'Node {nid} reuses its previous result ({n} rows) instead of running again',
     'run.resume_crawl': 'Node {nid} continues crawling from where it stopped ({have} rows already saved)',
+    'run.heavy_result': (
+        'Memory note: node "{nid}" produced {n} rows, and every node\'s rows are held in memory until the run ends'
+    ),
     'run.recrawl': 'Re-crawl: released {n} dedupe records; this node will collect again',
     'run.dedupe_skipped': (
         'Incremental: {n} already-collected items were skipped (enable Recrawl on the source node to re-collect)'

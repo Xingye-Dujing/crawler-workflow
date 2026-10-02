@@ -1996,11 +1996,23 @@ function openSettings(nodeId) {
             '<input class="settings-input" value="' + escapeHtml(p.text_column || '正文') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'text_column\',this.value)"></div>';
 
-        /* Clean operation */
+        /* Clean operation. Two ways to wash a table: the model reads each row and judges
+           both artifacts and relevance; the rule set strips what a repost leaves behind
+           (转发链, @提及, 话题标签, O网页链接, 展开c) for free. The topic box belongs to the model
+           alone, and is therefore not shown for the rules that would ignore it. */
         if (p.operation === 'clean') {
-            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.topic') + '</label>' +
-                '<input class="settings-input" value="' + escapeHtml(p.topic || '') + '" placeholder="e.g. topic" ' +
-                'onchange="updateParam(\'' + nodeId + '\',\'topic\',this.value)"></div>';
+            html += renderParamSelect(nodeId, p, 'mode', 'settings.mode', 'llm', [
+                { v: 'llm', l: llmModeLabel() },
+                { v: 'regex', l: I18n.t('mode.regex') },
+            ]);
+            if (p.mode === 'regex') {
+                html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+                    I18n.t('settings.cleanRegexHint') + '</div></div>';
+            } else {
+                html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.topic') + '</label>' +
+                    '<input class="settings-input" value="' + escapeHtml(p.topic || '') + '" placeholder="e.g. topic" ' +
+                    'onchange="updateParam(\'' + nodeId + '\',\'topic\',this.value)"></div>';
+            }
         }
 
         /* ML mode selector for emotion / tendency */
@@ -2042,6 +2054,7 @@ function openSettings(nodeId) {
             }
             if (p.mode === 'bert') {
                 html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
+                html += renderParamInput(nodeId, p, 'batch_size', 'settings.batchSize', 'number', 32);
                 html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
                     I18n.t('settings.bertModelHint') + '</div></div>';
             }
@@ -2050,10 +2063,18 @@ function openSettings(nodeId) {
             }
         }
 
-        /* Keyword extraction */
+        /* Keyword extraction. Three methods, and the third is the one for social text:
+           jieba's built-in IDF table comes from a news corpus, so Weibo colloquial words
+           score wrongly; tfidf_corpus fits the IDF on the user's own table instead. The
+           word-class filter is what keeps 转发/哈哈 out of the list. */
         if (p.operation === 'keyword') {
-            html += renderParamSelect(nodeId, p, 'method', 'settings.method', 'tfidf', [{ v: 'tfidf', l: 'TF-IDF' }, { v: 'textrank', l: 'TextRank' }]);
+            html += renderParamSelect(nodeId, p, 'method', 'settings.method', 'tfidf',
+                [{ v: 'tfidf', l: 'TF-IDF' }, { v: 'textrank', l: 'TextRank' },
+                 { v: 'tfidf_corpus', l: I18n.t('settings.methodCorpusIdf') }]);
             html += renderParamInput(nodeId, p, 'topk', 'settings.topk', 'number', 10);
+            html += renderParamInput(nodeId, p, 'allow_pos', 'settings.allowPos', 'text', '');
+            html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+                I18n.t('settings.allowPosHint') + '</div></div>';
             html += renderParamCheckbox(nodeId, p, 'merge', 'settings.merge', true);
         }
 
@@ -2358,15 +2379,20 @@ function llmModeLabel() {
 function nodeNeedsLlm(params, nodeOperation) {
     var p = params || {};
     var op = p.operation || nodeOperation || '';
-    if (op === 'clean') return true;
+    /* Trimmed, because a BLANK means the operation's declared default on the server —
+       `'  '` is not a mode name and app.py reads it as "not stated". Comparing the raw
+       value here answered "no model" for a whitespace-only field while the server
+       answered "the default", so one of the two blocked a run the other would allow. */
+    var mode = String(p.mode === undefined || p.mode === null ? '' : p.mode).trim();
     /* Asked by NAME, never by "not the one I special-case". `mode !== 'ml'` was the old
        reading and it charged a row-by-row model pass to a node whose mode said something
        else — sentiment has four modes now, three of which need no model at all. A blank
        means the operation's own declared default, which is what the backend reads too
        (app.py `_op_needs_llm`). */
-    if (op === 'emotion' || op === 'tendency') return (p.mode || 'llm') === 'llm';
-    if (op === 'sentiment') return (p.mode || 'snownlp') === 'llm';
-    if (op === 'ner') return p.mode === 'llm';
+    if (op === 'clean') return (mode || 'llm') === 'llm';
+    if (op === 'emotion' || op === 'tendency') return (mode || 'llm') === 'llm';
+    if (op === 'sentiment') return (mode || 'snownlp') === 'llm';
+    if (op === 'ner') return mode === 'llm';
     return false;
 }
 
@@ -2398,7 +2424,7 @@ function renderParamCheckbox(nodeId, p, key, labelKey, defVal) {
 }
 
 /* ── Analysis node settings ── */
-var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column'];
+var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'topic_model', 'sentiment_evolution'];
 var FILTER_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains', 'not_contains', 'in', 'not_in', 'is_null', 'not_null'];
 var CONVERT_TYPES = ['str', 'int', 'float', 'bool', 'datetime'];
 
@@ -2426,6 +2452,71 @@ function renderAnalysisSettings(nodeId, p) {
            has to be on the panel and not buried in a default. */
         html += renderParamSelect(nodeId, p, 'how', 'settings.dropHow', 'any',
             [{ v: 'any', l: I18n.t('settings.dropHowAny') }, { v: 'all', l: I18n.t('settings.dropHowAll') }]);
+    }
+    if (op === 'drop_duplicates') {
+        /* Exact text and normalised text are different questions about the same table: a
+           comment farm's repost is a NEW string and the same comment. Naming both here is
+           what keeps the node from answering the second while the user asked the first. */
+        html += renderParamSelect(nodeId, p, 'mode', 'settings.dedupeMode', 'exact',
+            [{ v: 'exact', l: I18n.t('settings.dedupeModeExact') },
+             { v: 'normalized', l: I18n.t('settings.dedupeModeNormalized') }]);
+    }
+    if (op === 'dedupe_similar') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
+            renderParamInput(nodeId, p, 'max_distance', 'settings.dedupeDistance', 'number', 8) +
+            '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.dedupeSimilarHint') + '</div></div>';
+    }
+
+    /* ── The event study: when, which subjects, and which way the crowd leaned ──
+       These four are the paper-replication steps. They share one shape — name the
+       column, name the new column — so they are rendered together rather than one
+       block per operation with the same three inputs copied into each. */
+    if (op === 'extract_time') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'time_new_col', 'settings.newColumn', 'text', '日期');
+        html += renderParamSelect(nodeId, p, 'time_part', 'settings.timePart', 'date',
+            [{ v: 'date', l: I18n.t('settings.timePartDate') },
+             { v: 'hour', l: I18n.t('settings.timePartHour') },
+             { v: 'weekday', l: I18n.t('settings.timePartWeekday') },
+             { v: 'month', l: I18n.t('settings.timePartMonth') },
+             { v: 'year', l: I18n.t('settings.timePartYear') }]);
+    }
+    if (op === 'bin_time') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'phase_new_col', 'settings.newColumn', 'text', '阶段');
+        html += renderParamInput(nodeId, p, 'phase_edges', 'settings.phaseEdges', 'text', '');
+        html += renderParamInput(nodeId, p, 'phase_labels', 'settings.phaseLabels', 'text', '');
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.phaseHint') + '</div></div>';
+    }
+    if (op === 'topic_model') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'n_topics', 'settings.nTopics', 'number', 5);
+        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTopn', 'number', 10);
+        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.topicHint') + '</div></div>';
+    }
+    if (op === 'sentiment_evolution') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'label_col', 'settings.labelColumn', 'text', 'sentiment');
+        html += renderParamInput(nodeId, p, 'index_new_col', 'settings.newColumn', 'text', 'sentiment_index');
+        html += renderParamInput(nodeId, p, 'label_positive', 'settings.labelPositive', 'text', 'positive');
+        html += renderParamInput(nodeId, p, 'label_neutral', 'settings.labelNeutral', 'text', 'neutral');
+        html += renderParamInput(nodeId, p, 'label_negative', 'settings.labelNegative', 'text', 'negative');
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.evolutionHint') + '</div></div>';
     }
     if (op === 'fill_null') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.value') + '</label>' +

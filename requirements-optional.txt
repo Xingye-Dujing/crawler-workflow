@@ -1,0 +1,23 @@
+# Optional, per-feature dependencies — nothing here is needed for a crawl, a cleaning
+# pass, a keyword list, a topic model or a SnowNLP polarity column.
+#
+# They live in their own file rather than in requirements.txt because of SIZE and because
+# of how the code treats them. `torch` is a multi-gigabyte download, and `sentiment.py`
+# imports both packages inside a guard that PROBES for them first — a machine without them
+# gets a working project whose `bert` mode refuses and names the missing package, rather
+# than a broken install or a silent fallback to a different model.
+#
+# So this file exists to keep one rule honest: every package the code imports is declared
+# somewhere it can be found, instead of being discovered by reading the source.
+#
+# Install (CUDA build — replace cu121 with the wheel matching your driver, or drop the
+# --extra-index-url entirely for the CPU build):
+#
+#     .venv/Scripts/pip.exe install -r requirements-optional.txt \
+#         --extra-index-url https://download.pytorch.org/whl/cu121
+#
+# Used by: the Process node's 情感极性 (sentiment) operation, mode `bert`.
+# The model itself is a separate download named in the node — see the README's bert note.
+
+torch
+transformers

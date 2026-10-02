@@ -104,7 +104,14 @@ class TestLlmGateParity:
     """
 
     CASES = [
+        # ``clean`` was the one operation listed as always needing a model. It has a mode
+        # of its own now, and its rule set pays for nothing — so a blank (which means the
+        # declared default, llm) and the regex mode must answer differently on BOTH sides.
         ('clean', {'operation': 'clean'}, None),
+        ('clean_llm', {'operation': 'clean', 'mode': 'llm'}, None),
+        ('clean_regex', {'operation': 'clean', 'mode': 'regex'}, None),
+        ('clean_blank_mode', {'operation': 'clean', 'mode': '  '}, None),
+        ('clean_bogus_mode', {'operation': 'clean', 'mode': 'rules'}, None),
         ('emotion_default', {'operation': 'emotion'}, None),
         ('emotion_llm', {'operation': 'emotion', 'mode': 'llm'}, None),
         ('emotion_ml', {'operation': 'emotion', 'mode': 'ml'}, None),

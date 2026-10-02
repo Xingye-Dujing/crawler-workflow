@@ -25,6 +25,7 @@ from flask_cors import CORS
 
 import crawl_capabilities as capabilities
 from analyzers import (
+    BERT_BATCH,
     AnomalyDetector,
     ContentCleaner,
     CorrelationAnalyzer,
@@ -795,10 +796,6 @@ def _item_scope(ctx: dict, node: dict) -> str:
     return 'item:' + str((ctx.get('fingerprints') or {}).get(node.get('id') or '', ''))
 
 
-#: The operations that call a language model whatever the node says.
-_ALWAYS_LLM_OPS = frozenset({'clean'})
-
-
 def _op_needs_llm(op: str, params: dict) -> bool:
     """Whether this node's own choice will call a language model.
 
@@ -808,9 +805,12 @@ def _op_needs_llm(op: str, params: dict) -> bool:
     replaces was ``mode != 'ml'``, which charged a row-by-row model pass to every node whose
     mode said something else — and a cloud host then refused the whole run for a missing API
     key that no node in it had asked for.
+
+    ``clean`` used to be listed here as an operation that always calls a model. It has a
+    mode of its own now, and its regex mode washes a Weibo comment without asking anyone —
+    so the answer comes from that same table instead of from a hard-coded membership, and
+    the two can no longer disagree.
     """
-    if op in _ALWAYS_LLM_OPS:
-        return True
     spec = PROCESS_ENUMS.get(op) or {}
     if 'mode' not in spec:
         return False
@@ -2860,6 +2860,12 @@ def _execute_upload_node(node: dict, headless: bool = True):
 #: answer is the one the panel showed — read at the site that uses it, so the string
 #: that is checked and the string the analyzer receives cannot be two different things.
 PROCESS_ENUMS = {
+    # Two ways to wash a table of Weibo comments clean: the model reads one row at a time
+    # and judges relevance, or a rule set strips the artifacts a repost leaves behind
+    # (转发链, @提及, 话题标签, O网页链接, 展开c) for free and at crawling speed. ``llm`` stays the
+    # declared default because that is what a workflow saved before this selector existed
+    # was already doing — a blank must not silently change what a stored canvas produces.
+    'clean': {'mode': ('llm', ('regex', 'llm'))},
     'emotion': {'mode': ('llm', ('llm', 'ml'))},
     'tendency': {'mode': ('llm', ('llm', 'ml'))},
     # The traditional methods answer 正面/负面/中性, which is not the five-emotion or the
@@ -2867,7 +2873,7 @@ PROCESS_ENUMS = {
     # SnowNLP is the default because it needs no model, no download and no GPU.
     'sentiment': {'mode': ('snownlp', ('llm', 'ml', 'snownlp', 'bert'))},
     'ner': {'mode': ('regex', ('regex', 'llm'))},
-    'keyword': {'method': ('tfidf', ('tfidf', 'textrank'))},
+    'keyword': {'method': ('tfidf', ('tfidf', 'textrank', 'tfidf_corpus'))},
     'cluster': {'cluster_method': ('kmeans', ('kmeans', 'kmeans++', 'dbscan'))},
     'correlation': {'corr_method': ('pearson', ('pearson', 'spearman', 'kendall'))},
 }
@@ -2971,7 +2977,13 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
     if op == 'clean':
         topic = params.get('topic', '')
         cleaner = ContentCleaner()
-        df = cleaner.clean_dataframe(df, text_column=text_column, topic=topic, ctx=run_ctx)
+        df = cleaner.clean_dataframe(
+            df,
+            text_column=text_column,
+            topic=topic,
+            ctx=run_ctx,
+            mode=enum_param(op, params, 'mode'),
+        )
         return df.to_dict('records')
 
     if op == 'emotion':
@@ -2991,6 +3003,9 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
             pos_threshold=pos,
             neg_threshold=neg,
             bert_model=str(params.get('bert_model') or '').strip(),
+            # Only the transformer path reads this, but it is validated here for every
+            # mode so a stored 0 cannot reach the chunking loop and score nothing.
+            batch_size=_safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256),
         )
         df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')
@@ -3002,8 +3017,18 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         # so a workflow that stored the boolean (an exported file, /api/analysis/run)
         # asking for one merged keyword table silently got the per-row expansion.
         merge = as_bool(params.get('merge'), True)
+        # A blank is "no filter" — the behaviour this node always had — so an untouched
+        # canvas keeps producing exactly the keywords it used to.
+        allow_pos = str(params.get('allow_pos') or '').strip()
         extractor = KeywordExtractor()
-        df = extractor.analyze_dataframe(df, text_column=text_column, method=method, topk=topk, merge=merge)
+        df = extractor.analyze_dataframe(
+            df,
+            text_column=text_column,
+            method=method,
+            topk=topk,
+            merge=merge,
+            allow_pos=allow_pos,
+        )
         return df.to_dict('records')
 
     if op == 'cluster':
@@ -3214,7 +3239,19 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             result['method'] = method
         return result
     if op == 'drop_duplicates':
-        return {'columns': _split_columns(params.get('columns')) or None}
+        # ``mode`` is passed explicitly rather than left to the method's signature: the
+        # stored value is what the user chose, and a bad spelling has to reach
+        # ``validate_step`` and be refused by name instead of quietly becoming 'exact'.
+        return {
+            'columns': _split_columns(params.get('columns')) or None,
+            'mode': params.get('mode') or 'exact',
+        }
+    if op == 'dedupe_similar':
+        result = {'column': params.get('column', '')}
+        distance = _optional_int(params.get('max_distance'))
+        if distance is not None:
+            result['max_distance'] = distance
+        return result
     if op == 'filter_rows':
         return {'column': params.get('column', ''), 'op': params.get('op', 'eq'), 'value': params.get('value')}
     if op == 'rename_columns':
@@ -3272,6 +3309,52 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         labels = _split_columns(params.get('bin_labels'))
         if labels:
             result['labels'] = labels
+        return result
+    # ── the event-study steps ──
+    if op == 'extract_time':
+        return {
+            'column': params.get('column', ''),
+            'new_col': params.get('time_new_col') or '日期',
+            'part': params.get('time_part') or 'date',
+        }
+    if op == 'bin_time':
+        # The boundaries and the names are two parallel lists, so both are parsed here and
+        # their lengths are checked by the step itself — that check is a refusal with a
+        # reason, which is where a mismatched pair belongs.
+        return {
+            'column': params.get('column', ''),
+            'new_col': params.get('phase_new_col') or '阶段',
+            'edges': _split_columns(params.get('phase_edges')),
+            'labels': _split_columns(params.get('phase_labels')),
+        }
+    if op == 'topic_model':
+        result = {
+            'column': params.get('column', ''),
+            'n_topics': _optional_int(params.get('n_topics')) or 5,
+            'topn': _optional_int(params.get('topic_topn')) or 10,
+        }
+        features = _optional_int(params.get('topic_max_features'))
+        if features:
+            result['max_features'] = features
+        return result
+    if op == 'sentiment_evolution':
+        result = {'column': params.get('column', '')}
+        label_col = str(params.get('label_col') or '').strip()
+        if label_col:
+            result['label_col'] = label_col
+        # The three label spellings are only passed when the user actually typed one: the
+        # step's own defaults are the polarity node's verbs, and an empty string is not a
+        # spelling to filter by.
+        for key, source in (
+            ('positive', 'label_positive'),
+            ('neutral', 'label_neutral'),
+            ('negative', 'label_negative'),
+        ):
+            value = str(params.get(source) or '').strip()
+            if value:
+                result[key] = value
+        if str(params.get('index_new_col') or '').strip():
+            result['new_col'] = str(params['index_new_col']).strip()
         return result
     return {}
 
@@ -3919,6 +4002,7 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         # Source rows are already in the store — the sink put every item there
         # as it was scraped, and re-writing them here would only renumber.
         store.replace_rows(run_id, nid, result, label=label)
+        _note_heavy_result(result, label)
     # ``node_cancelled`` is the row runner's channel for an LLM node the Stop cut
     # short whose returned rows no longer carry the 未处理 marker (NER explodes it
     # away). pop() reads-and-clears so a node id cannot inherit a stale verdict.
@@ -3993,6 +4077,31 @@ def _execute_node(
     if ntype == 'output':
         return _execute_output_node(node, current_input)
     return []
+
+
+#: Rows above which a node's result is worth mentioning out loud.
+#:
+#: ``execution_state['results']`` holds EVERY node's rows for the whole run — that is what a
+#: preview and a child node read — so the row caps elsewhere do not bound memory at all.
+#: ``RUN_MAX_ROWS_PER_NODE`` is a DISK cap (it stops a runaway crawl filling ``runs.db``),
+#: and ``DATASET_MAX_ROWS`` caps one uploaded FILE; neither is about what is resident.
+#: Measured, the list-of-dicts form costs about 3.1x the equivalent DataFrame (100k rows x
+#: 4 columns: 17 MB → 53 MB), so a ten-node pipeline over one large table is where a
+#: laptop runs out. This constant is the point at which the run should say so rather than
+#: die three nodes later with an anonymous MemoryError.
+HEAVY_RESULT_ROWS = 100000
+
+
+def _note_heavy_result(rows, label: str) -> None:
+    """Say out loud how much of this run is being held in memory.
+
+    Deliberately not an error and not a refusal: a large table is often exactly what was
+    asked for, and the run is still the user's to finish. What it must not be is invisible
+    — an OOM has no node name attached to it.
+    """
+    if not isinstance(rows, list) or len(rows) < HEAVY_RESULT_ROWS:
+        return
+    add_log(t('run.heavy_result', nid=label, n=len(rows)))
 
 
 def _close_active_crawlers(quit_timeout: float = 3.0):

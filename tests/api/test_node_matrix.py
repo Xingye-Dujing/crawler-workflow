@@ -515,11 +515,14 @@ class TestAnalysisNodeOperations:
         assert status['status'] == 'done', status.get('error')
         assert [row['两倍'] for row in rows] == [6, 10, 2, 8, 8]
 
-    def test_column_calc_with_an_unparseable_expression_keeps_the_table(self, client, app_module, paste):
+    def test_column_calc_with_an_unparseable_expression_fails_the_node(self, client, app_module, paste):
+        """Was `..._keeps_the_table`. Keeping the table also kept the node GREEN while the
+        column the user named was never created — a failure that reaches the user two
+        nodes later, as a chart with nothing in it, instead of as its own reason here.
+        """
         _run, status, rows = self._run(client, app_module, paste, 'column_calc', {'new_col': '坏', 'expr': '序号 @@ 2'})
-        assert status['status'] == 'done', status.get('error')
-        assert len(rows) == len(CLEAN_RECORDS)
-        assert '坏' not in rows[0], 'a failed expression must not add an all-null column'
+        assert status['status'] == 'failed', status
+        assert '序号 @@ 2' in (status.get('error') or ''), status.get('error')
 
     def test_bin_column_with_a_bucket_count(self, client, app_module, paste):
         _run, status, rows = self._run(
