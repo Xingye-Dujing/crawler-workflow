@@ -21,6 +21,7 @@ import base64
 import io
 import logging
 import math
+import re
 from collections import Counter
 
 import jieba
@@ -56,6 +57,7 @@ CHART_TYPES = (
     'box',
     'heatmap',
     'sankey',
+    'network',
     'wordcloud',
     'map',
 )
@@ -89,6 +91,60 @@ def _finite(values) -> list:
         if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v):
             out.append(float(v))
     return out
+
+
+def _parse_annotations(text) -> list:
+    """Event markers written as ``date=label`` pairs, into ``[(axis label, caption)]``.
+
+    The whole reading of the study's curve hangs on dated events — 4 月 23 日的遗体打捞,
+    5 月 19 日的通报 — and a curve without them is a shape nobody can interpret. ECharts draws
+    one as a vertical ``markLine`` at a CATEGORY, which means the text has to match an axis
+    label exactly; a date formatted differently (``4-23`` against ``04-23``) would therefore
+    silently draw nothing, so an unknown label is refused here with the real ones listed.
+
+    Events are separated by ``;`` (or a newline, which a pasted list gives). A chunk with no
+    separator is a typo, and guessing which half is the date would put an invented line on
+    someone's figure.
+    """
+    markers = []
+    for chunk in re.split(r'[;；\n]+', str(text if text is not None else '')):
+        item = chunk.strip()
+        if not item:
+            continue
+        for separator in ('=', '：', ':'):
+            if separator in item:
+                when, _, caption = item.partition(separator)
+                break
+        else:
+            raise ChartConfigError(
+                f'annotation "{item}" is not a "date=label" pair: separate the event name from '
+                'the axis label with = (events themselves are separated by ;)'
+            )
+        when = when.strip()
+        if not when:
+            raise ChartConfigError(f'annotation "{item}" has no axis label before the =')
+        markers.append((when, caption.strip() or when))
+    return markers
+
+
+def _annotation_lines(markers, labels, field) -> dict:
+    """One ECharts ``markLine`` for the markers, or a refusal naming what is not on the axis."""
+    available = [str(value) for value in labels]
+    missing = [when for when, _ in markers if when not in available]
+    if missing:
+        preview = '、'.join(available[:8]) + (' …' if len(available) > 8 else '')
+        raise ChartConfigError(
+            f'annotation {("、".join(missing))} is not a value of the x axis "{field}"; '
+            f'this axis can mark only: {preview}'
+        )
+    return {
+        'symbol': ['none', 'none'],
+        # Silent, or a hovered point would fight the event line for the tooltip.
+        'silent': True,
+        'lineStyle': {'color': '#F59E0B', 'type': 'dashed', 'width': 1.5},
+        'label': {'show': True, 'position': 'insideEndTop', 'color': '#F59E0B', 'fontSize': 10},
+        'data': [{'xAxis': when, 'label': {'formatter': caption}} for when, caption in markers],
+    }
 
 
 # ── Professional colour palette (Nature/Science journal inspired) ──
@@ -247,7 +303,12 @@ WORDCLOUD_STYLES = {
 # ``twinx()``, but the right-hand scale, legend and shared tooltip are the parts that make
 # 热度 and 强度 readable on one figure, and re-implementing them per engine is how the two
 # engines start telling the same data differently.
-ECHARTS_ONLY_TYPES = ('wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms')
+ECHARTS_ONLY_TYPES = ('wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network')
+
+#: Chart types that can carry dated event markers (a vertical line at one category). Any other
+#: type that is handed the box is refused rather than ignored: an annotation the figure does not
+#: show is worse than no annotation, because the user believes it is there.
+ANNOTATED_TYPES = ('bar', 'line', 'dual_line')
 
 
 class ChartConfigError(ValueError):
@@ -308,11 +369,20 @@ class VisualizationService:
         y2: str = None,
         agg2: str = None,
         label_field: str = 'topic',
+        annotations: str = '',
         title: str = '',
         **kwargs,
     ) -> dict:
         if chart_type not in CHART_TYPES:
             raise ChartConfigError(f'Unsupported chart type: {chart_type}')
+        if annotations and chart_type not in ANNOTATED_TYPES:
+            # Checked before anything is built, so the message is about the box, not about a
+            # half-drawn figure.
+            raise ChartConfigError(
+                f'the {chart_type} figure cannot carry event markers: only {", ".join(ANNOTATED_TYPES)} draw a '
+                'vertical line at one category. Clear the box rather than trusting a figure '
+                'that quietly dropped it.'
+            )
 
         color = CATEGORY_COLORS[:]
 
@@ -326,12 +396,12 @@ class VisualizationService:
                 'top': 6,
             },
             'tooltip': {
-                'trigger': 'item' if chart_type in ('pie', 'wordcloud', 'map', 'sankey') else 'axis',
+                'trigger': 'item' if chart_type in ('pie', 'wordcloud', 'map', 'sankey', 'network') else 'axis',
                 'backgroundColor': 'rgba(30,30,40,0.9)',
                 'borderColor': '#444',
                 'borderWidth': 1,
                 'textStyle': {'color': '#eee', 'fontSize': 12, 'fontFamily': 'sans-serif'},
-                'formatter': '{b}: {c}' if chart_type not in ('pie', 'sankey') else None,
+                'formatter': '{b}: {c}' if chart_type not in ('pie', 'sankey', 'network') else None,
             },
             'animationDuration': 800,
             'animationEasing': 'cubicOut',
@@ -610,6 +680,137 @@ class VisualizationService:
             ]
             return base
 
+        # ── Force-directed network: the co-occurrence and flow graphs ──
+        if chart_type == 'network':
+            if not x or not y:
+                raise ChartConfigError('Network graph requires a source field (x) and a target field (y)')
+            nodes, links = cls._sankey_links(df, x, y, value_field, agg)
+            if not links:
+                # The sankey would draw an empty frame and look like a finished figure; a graph
+                # with no edge is not "a sparse relationship network", it is nothing measured.
+                raise ChartConfigError(
+                    f'network graph has no edges: every {x}/{y} pair was blank, zero-weighted or unvalued'
+                )
+            incident: dict = {}
+            for link in links:
+                for name in (link['source'], link['target']):
+                    incident[name] = incident.get(name, 0.0) + link['value']
+            biggest_node = max(incident.values()) or 1.0
+            biggest_link = max(link['value'] for link in links) or 1.0
+            base['series'] = [
+                {
+                    'type': 'graph',
+                    'layout': 'force',
+                    # Circular first, then relaxed: an unconstrained force start is random, and
+                    # a figure whose clusters move between two runs of one table is a figure
+                    # nobody can put in a report.
+                    'force': {
+                        'initLayout': 'circular',
+                        'repulsion': 160,
+                        'edgeLength': [60, 160],
+                        'gravity': 0.06,
+                        'friction': 0.6,
+                    },
+                    'roam': True,
+                    'draggable': True,
+                    'data': [
+                        {
+                            'name': name,
+                            # The node's own number is the sum of the weights of the links it
+                            # carries, so the tooltip says what the bubble size means.
+                            'value': round(float(incident[name]), 6),
+                            # Area, not radius, carries the weight — the same rule as the topic map.
+                            'symbolSize': round(14.0 + 40.0 * (float(incident[name]) / biggest_node) ** 0.5, 2),
+                            'itemStyle': {'color': CATEGORY_COLORS[position % len(CATEGORY_COLORS)]},
+                        }
+                        for position, name in enumerate(nodes)
+                    ],
+                    'links': [
+                        {
+                            **link,
+                            'lineStyle': {'width': round(1.0 + 5.0 * (float(link['value']) / biggest_link) ** 0.5, 2)},
+                        }
+                        for link in links
+                    ],
+                    'label': {
+                        'show': True,
+                        'position': 'right',
+                        'color': '#ccc',
+                        'fontSize': 10,
+                        'fontFamily': 'sans-serif',
+                    },
+                    'lineStyle': {'color': 'source', 'curveness': 0.15, 'opacity': 0.55},
+                    'emphasis': {'focus': 'adjacency', 'lineStyle': {'width': 4}},
+                }
+            ]
+            return base
+
+        # ── Force-directed network: the co-occurrence and flow graphs ──
+        if chart_type == 'network':
+            if not x or not y:
+                raise ChartConfigError('Network graph requires a source field (x) and a target field (y)')
+            nodes, links = cls._sankey_links(df, x, y, value_field, agg)
+            if not links:
+                # A sankey with no links still shows its nodes; a force graph with no links shows
+                # a scatter of words and looks like a finished figure. Empty is an answer here,
+                # and it has to be said out loud rather than drawn.
+                raise ChartConfigError(
+                    f'network graph has no edges to draw: every {x}→{y} pair was blank, zero-weighted or unvalued'
+                )
+            incident: dict = {}
+            for link in links:
+                for name in (link['source'], link['target']):
+                    incident[name] = incident.get(name, 0.0) + link['value']
+            biggest_node = max(incident.values()) or 1.0
+            biggest_link = max(link['value'] for link in links) or 1.0
+            base['series'] = [
+                {
+                    'type': 'graph',
+                    'layout': 'force',
+                    # Circular first, then relaxed: an unconstrained force start is random, and
+                    # a figure whose clusters move between two runs of one table is a figure
+                    # nobody can put in a report.
+                    'force': {
+                        'initLayout': 'circular',
+                        'repulsion': 160,
+                        'edgeLength': [60, 160],
+                        'gravity': 0.06,
+                        'friction': 0.6,
+                    },
+                    'roam': True,
+                    'draggable': True,
+                    'data': [
+                        {
+                            'name': name,
+                            # The node's own number is the sum of the weights of the links it
+                            # carries, so the tooltip says what the bubble size means.
+                            'value': round(float(incident[name]), 6),
+                            # Area, not radius, carries the weight — the same rule as the topic map.
+                            'symbolSize': round(14.0 + 40.0 * (float(incident[name]) / biggest_node) ** 0.5, 2),
+                            'itemStyle': {'color': CATEGORY_COLORS[position % len(CATEGORY_COLORS)]},
+                        }
+                        for position, name in enumerate(nodes)
+                    ],
+                    'links': [
+                        {
+                            **link,
+                            'lineStyle': {'width': round(1.0 + 5.0 * (float(link['value']) / biggest_link) ** 0.5, 2)},
+                        }
+                        for link in links
+                    ],
+                    'label': {
+                        'show': True,
+                        'position': 'right',
+                        'color': '#ccc',
+                        'fontSize': 10,
+                        'fontFamily': 'sans-serif',
+                    },
+                    'lineStyle': {'color': 'source', 'curveness': 0.15, 'opacity': 0.55},
+                    'emphasis': {'focus': 'adjacency', 'lineStyle': {'width': 4}},
+                }
+            ]
+            return base
+
         # ── Word cloud ──
         if chart_type == 'wordcloud':
             if not x:
@@ -884,6 +1085,10 @@ class VisualizationService:
                     'itemStyle': {'color': color[1]},
                 },
             ]
+            if annotations:
+                # On the LEFT series, whose values the shared category axis is built from: the
+                # marker belongs to the time axis, not to either curve.
+                base['series'][0]['markLine'] = _annotation_lines(_parse_annotations(annotations), labels, x)
             return base
 
         # ── Bar / Line ──
@@ -949,6 +1154,9 @@ class VisualizationService:
                     },
                 }
             ]
+
+        if annotations:
+            base['series'][0]['markLine'] = _annotation_lines(_parse_annotations(annotations), labels, x)
 
         return base
 
@@ -1096,11 +1304,19 @@ class VisualizationService:
         value_field: str = None,
         agg: str = 'sum',
         title: str = '',
+        annotations: str = '',
     ) -> str:
         """Render the chart with matplotlib and return a base64 PNG data URI."""
 
         if chart_type not in CHART_TYPES:
             raise ChartConfigError(f'Unsupported chart type: {chart_type}')
+        if annotations:
+            # The markers exist as an ECharts ``markLine`` on a category axis; a PNG without
+            # them would be a figure whose dates vanished with no word said.
+            raise ChartConfigError(
+                'event markers (annotations) are only drawn with engine=echarts — the matplotlib '
+                'renderer has no marker layer, so switch engine or clear the box'
+            )
         if chart_type in ECHARTS_ONLY_TYPES:
             raise ChartConfigError(
                 f'"{chart_type}" is only available with engine=echarts '

@@ -769,6 +769,64 @@ NORMALIZED = {
             'word_source': 'lda',
         },
     ),
+    'topic_timeline': (
+        {
+            'timeline_stage_col': '期',
+            'timeline_topic_col': '主题',
+            'timeline_words_col': '词',
+            'timeline_size_col': '行数',
+            'timeline_order_col': '日期',
+            'timeline_overlap': '0.7',
+        },
+        {
+            'stage_col': '期',
+            'topic_col': '主题',
+            'words_col': '词',
+            'size_col': '行数',
+            'order_col': '日期',
+            'min_overlap': 0.7,
+        },
+    ),
+    'topic_flow': (
+        {
+            'flow_stage_col': '期',
+            'flow_topic_col': '主题',
+            'flow_words_col': '词',
+            'flow_weights_col': '权重',
+            'flow_order_col': '日期',
+            'flow_min_similarity': '0.6',
+        },
+        {
+            'stage_col': '期',
+            'topic_col': '主题',
+            'words_col': '词',
+            'weights_col': '权重',
+            'order_col': '日期',
+            'min_similarity': 0.6,
+        },
+    ),
+    'topic_coherence': (
+        {
+            'column': '城市',
+            'coherence_min_topics': '3',
+            'coherence_max_topics': '6',
+            'topic_topn': '4',
+            'coherence_max_documents': '50',
+            'topic_max_features': '500',
+        },
+        {
+            'column': '城市',
+            'topn': 4,
+            'min_topics': 3,
+            'max_topics': 6,
+            'max_documents': 50,
+            'max_features': 500,
+        },
+    ),
+    'cooccur': (
+        {'column': '城市', 'cooccur_topn': '12', 'cooccur_min_count': '3', 'cooccur_window': '5'},
+        {'column': '城市', 'topn': 12, 'min_count': 3, 'window': 5},
+    ),
     'filter_rows': (
         {'column': '城市', 'op': 'not_in', 'value': '北京, 上海'},
         {'column': '城市', 'op': 'not_in', 'value': '北京, 上海'},
@@ -838,6 +896,20 @@ BLANK_FORM = {
         'on_fail': 'abort',
         'max_topics': 30,
     },
+    # The three reads that follow the staged model fall back to the column names
+    # ``topic_by_stage`` writes, so an untouched form is the hand-off. The order column and
+    # the numbers are omitted when blank: the first is a choice the step cannot make for the
+    # user, the others are the step's own signature defaults.
+    'topic_timeline': {'stage_col': 'stage', 'words_col': 'feature_words', 'size_col': 'doc_n', 'topic_col': 'topic'},
+    'topic_flow': {
+        'stage_col': 'stage',
+        'topic_col': 'topic',
+        'words_col': 'feature_words',
+        'weights_col': 'weights',
+        'min_similarity': 0.5,
+    },
+    'topic_coherence': {'column': '', 'topn': 10},
+    'cooccur': {'column': '', 'topn': 30},
     'sentiment_evolution': {'column': ''},
 }
 
@@ -1440,6 +1512,29 @@ PARSED_FIELDS = {
     'label_summary_col',
     'label_on_fail',
     'label_max_topics',
+    # The lifecycle and flow steps re-shape all six of their fields each: four fall back to a
+    # 分阶段 LDA column name when blank, one is dropped when blank (the order column, which is a
+    # choice rather than a default) and one is a number.
+    'timeline_stage_col',
+    'timeline_topic_col',
+    'timeline_words_col',
+    'timeline_size_col',
+    'timeline_order_col',
+    'timeline_overlap',
+    'flow_stage_col',
+    'flow_topic_col',
+    'flow_words_col',
+    'flow_weights_col',
+    'flow_order_col',
+    'flow_min_similarity',
+    # The sweep's ends and the co-occurrence counts are all read through ``_optional_int``, so a
+    # blank or junk box disappears into the step's default instead of reaching it as ''.
+    'coherence_min_topics',
+    'coherence_max_topics',
+    'coherence_max_documents',
+    'cooccur_topn',
+    'cooccur_min_count',
+    'cooccur_window',
 }
 
 
@@ -2151,6 +2246,30 @@ PANEL_VALUE = {
     # Blank means "no intensity line", so the probe is a name: the only way to tell that
     # the field reaches the kwargs at all.
     'score_col': 'score',
+    # The lifecycle and flow steps name the columns 分阶段 LDA writes. Every probe is a DIFFERENT
+    # name from the fallback the branch applies when the box is blank, which is what proves the
+    # box was read rather than ignored.
+    'timeline_stage_col': '期',
+    'timeline_topic_col': '主题',
+    'timeline_words_col': '词',
+    'timeline_size_col': '行数',
+    'timeline_order_col': '日期',
+    'timeline_overlap': '0.7',
+    'flow_stage_col': '期',
+    'flow_topic_col': '主题',
+    'flow_words_col': '词',
+    'flow_weights_col': '权重',
+    'flow_order_col': '日期',
+    'flow_min_similarity': '0.6',
+    # The sweep's two ends and its sample cap: none of the three is the step's own default.
+    'coherence_min_topics': '3',
+    'coherence_max_topics': '6',
+    'coherence_max_documents': '50',
+    # ``cooccur_window`` is probed at 5 rather than 0 because 0 is what an empty box means, and
+    # a probe equal to the default cannot show that the field was read at all.
+    'cooccur_topn': '12',
+    'cooccur_min_count': '3',
+    'cooccur_window': '5',
 }
 
 

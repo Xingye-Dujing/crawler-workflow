@@ -55,6 +55,10 @@ OPERATIONS = [
     'topic_label',
     'topic_map',
     'topic_salience',
+    'topic_timeline',
+    'topic_flow',
+    'topic_coherence',
+    'cooccur',
     'sentiment_evolution',
 ]
 
@@ -1745,6 +1749,403 @@ class TestTopicViews:
         out = D.topic_salience(self._corpus(), '正文', n_topics=2, topn=3)
         assert len(out) <= 6
         assert max(len(rows) for _topic, rows in out.groupby('topic')) == 3
+
+
+class TestTopicTimeline:
+    """Which subject was born in which phase — and the flag the study calls 次生舆情.
+
+    The words are chosen so jieba keeps each of them as one token (a one-character or a
+    never-seen compound would make the fixture measure the tokenizer instead of the
+    lifecycle). Nothing pins WHICH subject a real corpus produces; what is pinned is the
+    tracking rule, the two-part definition of a secondary flare-up, and every way the step
+    could be asked to invent an order it was not given.
+    """
+
+    STAGES = ['发酵期', '爆发期', '衰退期']
+    ROWS = [
+        # One subject across the first two phases: born at the opening, so not secondary.
+        ('发酵期', 'TopicⅠ-1', '警方、通报、调查', 100),
+        ('爆发期', 'TopicⅡ-1', '警方、通报、问责', 700),
+        # A subject the first week never had, still growing when it peaks.
+        ('爆发期', 'TopicⅡ-2', '外卖、商家、退款', 200),
+        ('衰退期', 'TopicⅢ-1', '外卖、商家、判决', 600),
+        # Late, and biggest the moment it appears: a late topic, not a flare-up.
+        ('衰退期', 'TopicⅢ-2', '判决、问责、处理', 40),
+    ]
+
+    @classmethod
+    def _frame(cls, rows=None, ordered=True):
+        frame = pd.DataFrame(rows or cls.ROWS, columns=['stage', 'topic', 'feature_words', 'doc_n'])
+        if ordered:
+            frame['stage'] = pd.Categorical(frame['stage'], categories=cls.STAGES, ordered=True)
+        return frame
+
+    def test_a_subject_is_followed_by_its_words_not_by_its_number(self):
+        out = D.topic_timeline(self._frame())
+        assert list(out.columns) == [
+            'topic',
+            'topic_words',
+            'first_stage',
+            'peak_stage',
+            'last_stage',
+            'stages_present',
+            'stage_path',
+            'size_total',
+            'peak_size',
+            'is_secondary',
+        ]
+        assert len(out) == 3, 'the police subject, the delivery one, and the late 判决 topic'
+        police = out[out['topic'] == 'TopicⅠ-1'].iloc[0]
+        assert police['stages_present'] == 2, 'the two police rows are ONE subject, not two entries'
+        assert police['first_stage'] == '发酵期' and police['peak_stage'] == '爆发期'
+        assert police['size_total'] == 800 and police['peak_size'] == 700
+        assert not police['is_secondary'], 'it opened the case, so it is not a flare-up'
+
+    def test_a_late_subject_that_grows_after_it_appears_is_the_secondary_one(self):
+        out = D.topic_timeline(self._frame())
+        late = out[out['topic'] == 'TopicⅡ-2'].iloc[0]
+        assert late['first_stage'] == '爆发期'
+        assert late['peak_stage'] == '衰退期', 'the peak has to come after the debut'
+        assert late['stage_path'] == '爆发期 → 衰退期'
+        assert late['is_secondary']
+
+    def test_a_subject_that_peaks_where_it_was_born_is_late_but_not_a_flare_up(self):
+        out = D.topic_timeline(self._frame())
+        row = out[out['topic'] == 'TopicⅢ-2'].iloc[0]
+        assert row['first_stage'] == '衰退期' and row['stages_present'] == 1
+        assert not row['is_secondary']
+
+    def test_the_merged_word_list_keeps_each_word_once_in_first_seen_order(self):
+        out = D.topic_timeline(self._frame())
+        assert out[out['topic'] == 'TopicⅠ-1'].iloc[0]['topic_words'] == '警方、通报、调查、问责'
+
+    def test_the_table_reads_in_lifecycle_order(self):
+        out = D.topic_timeline(self._frame())
+        debuts = [self.STAGES.index(name) for name in out['first_stage']]
+        assert debuts == sorted(debuts)
+
+    def test_one_phase_cannot_have_a_lifecycle(self):
+        with pytest.raises(UnknownOperationError, match='至少'):
+            D.topic_timeline(self._frame(rows=self.ROWS[:1]))
+
+    def test_an_unordered_phase_column_is_refused_rather_than_sorted_by_code_point(self):
+        # 二次爆发期 sorts BEFORE 发酵期 by code point; renumbering a replication in silence is
+        # the mistake this guard exists for (AGENTS.md's phase-order invariant).
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.topic_timeline(self._frame(ordered=False))
+        assert '阶段' in str(excinfo.value)
+
+    def test_a_time_column_can_supply_the_order_the_round_trip_erased(self):
+        frame = self._frame(ordered=False)
+        stamps = {'发酵期': '2024-04-11', '爆发期': '2024-04-23', '衰退期': '2024-05-19'}
+        frame['日期'] = [stamps[name] for name in frame['stage']]
+        out = D.topic_timeline(frame, order_col='日期')
+        # Deliberately written so a code-point sort would put 衰退期 second: the order the
+        # timestamps give is the one the table has to follow.
+        assert out[out['topic'] == 'TopicⅢ-2'].iloc[0]['first_stage'] == '衰退期'
+
+    def test_a_row_with_no_words_cannot_be_followed(self):
+        rows = list(self.ROWS)
+        rows[1] = ('爆发期', 'TopicⅡ-1', '', 700)
+        with pytest.raises(UnknownOperationError, match='没有特征词'):
+            D.topic_timeline(self._frame(rows=rows))
+
+    def test_a_size_column_of_text_has_no_peak_to_find(self):
+        frame = self._frame()
+        frame['doc_n'] = ['很多', '较多', '一些', '一些', '少']
+        with pytest.raises(UnknownOperationError, match='doc_n'):
+            D.topic_timeline(frame)
+
+    def test_only_part_of_a_size_column_being_text_is_said_and_counted_as_zero(self):
+        frame = self._frame()
+        frame['doc_n'] = frame['doc_n'].astype(object)
+        frame.loc[1, 'doc_n'] = '未知'
+        out = D.topic_timeline(frame)
+        assert out[out['topic'] == 'TopicⅠ-1'].iloc[0]['size_total'] == 100
+
+    @pytest.mark.parametrize('value', [0, -1, 1.5, 'abc', ''])
+    def test_the_overlap_threshold_has_to_be_a_ratio(self, value):
+        with pytest.raises(UnknownOperationError):
+            D.topic_timeline(self._frame(), min_overlap=value)
+
+    def test_the_threshold_is_the_users_saying_how_much_similarity_is_one_subject(self):
+        # The fixture's merged pairs share 2 words out of 4 (0.5): three subjects at the
+        # default, five when the user asks for a tighter match.
+        assert len(D.topic_timeline(self._frame())) == 3
+        assert len(D.topic_timeline(self._frame(), min_overlap=0.9)) == 5
+
+    def test_a_row_that_belongs_to_no_phase_is_left_out_without_inventing_one(self):
+        frame = self._frame()
+        # The shape an unparseable timestamp leaves after 按时间划分阶段: a MISSING phase, which
+        # joins no lifecycle rather than opening a new one.
+        frame.loc[4, 'stage'] = pd.NA
+        out = D.topic_timeline(frame)
+        assert 'TopicⅢ-2' not in set(out['topic'])
+        assert len(out) == 2
+
+    def test_a_phase_the_boundaries_named_but_no_post_fell_into_is_not_a_second_one(self):
+        # An empty category in the column's category list is not a phase with rows in it, and a
+        # lifecycle needs two of those.
+        frame = self._frame(rows=self.ROWS[:1])
+        frame['stage'] = pd.Categorical(frame['stage'], categories=self.STAGES, ordered=True)
+        with pytest.raises(UnknownOperationError, match='至少'):
+            D.topic_timeline(frame)
+
+    def test_a_blank_size_column_is_not_a_peak_of_zero(self):
+        frame = self._frame()
+        frame['doc_n'] = [None] * len(frame)
+        with pytest.raises(UnknownOperationError, match='doc_n'):
+            D.topic_timeline(frame)
+
+
+class TestTopicFlow:
+    """Adjacent phases compared as word DISTRIBUTIONS, feeding the existing 桑基图 node."""
+
+    ROWS = [
+        ('发酵期', 'TopicⅠ-1', '警方、通报、调查', '警方:0.5 通报:0.3 调查:0.2'),
+        ('发酵期', 'TopicⅠ-2', '外卖、商家、退款', '外卖:0.6 商家:0.25 退款:0.15'),
+        ('爆发期', 'TopicⅡ-1', '警方、通报、问责', '警方:0.45 通报:0.35 问责:0.2'),
+        ('爆发期', 'TopicⅡ-2', '外卖、商家、判决', '判决:0.5 外卖:0.3 商家:0.2'),
+        ('衰退期', 'TopicⅢ-1', '判决、问责、处理', '判决:0.55 问责:0.3 处理:0.15'),
+    ]
+
+    @classmethod
+    def _frame(cls, rows=None, ordered=True):
+        frame = pd.DataFrame(rows or cls.ROWS, columns=['stage', 'topic', 'feature_words', 'weights'])
+        if ordered:
+            # The categories come from the rows in the order they appear, because that order is
+            # the lifecycle: a code-point sort of the names is exactly what the guard refuses.
+            frame['stage'] = pd.Categorical(
+                frame['stage'], categories=list(dict.fromkeys(frame['stage'].tolist())), ordered=True
+            )
+        return frame
+
+    def _flow(self, **kwargs):
+        return D.topic_flow(self._frame(), **kwargs)
+
+    def test_edges_join_the_shapes_the_sankey_node_reads(self):
+        out = self._flow(min_similarity=0.01)
+        assert list(out.columns) == [
+            'source',
+            'target',
+            'similarity',
+            'divergence',
+            'from_stage',
+            'to_stage',
+            'source_words',
+            'target_words',
+        ]
+        assert {('TopicⅠ-1', 'TopicⅡ-1')} <= {(row['source'], row['target']) for _, row in out.iterrows()}
+        assert (out['source_words'] != '').all() and (out['target_words'] != '').all()
+
+    def test_only_adjacent_phases_are_compared(self):
+        out = self._flow(min_similarity=0.01)
+        joined = {(row['from_stage'], row['to_stage']) for _, row in out.iterrows()}
+        assert joined == {('发酵期', '爆发期'), ('爆发期', '衰退期')}
+
+    def test_the_closer_pair_scores_higher_and_the_table_is_sorted(self):
+        out = self._flow(min_similarity=0.01)
+        pair = {(row['source'], row['target']): row['similarity'] for _, row in out.iterrows()}
+        # Ⅰ-1 and Ⅱ-1 share 警方/通报 at nearly the same mass; Ⅰ-1 against Ⅱ-2 shares nothing.
+        assert pair[('TopicⅠ-1', 'TopicⅡ-1')] > pair[('TopicⅠ-1', 'TopicⅡ-2')]
+        assert pair[('TopicⅡ-2', 'TopicⅢ-1')] > pair[('TopicⅡ-1', 'TopicⅢ-1')]
+        assert (out['similarity'].diff().dropna() <= 0).all(), 'the thickest link has to come first'
+
+    def test_a_threshold_nothing_reaches_names_the_best_similarity_measured(self):
+        measured = self._flow(min_similarity=0.01)['similarity'].max()
+        with pytest.raises(UnknownOperationError) as excinfo:
+            self._flow(min_similarity=0.9999)
+        assert str(round(measured, 4)) in str(excinfo.value)
+
+    def test_a_topic_with_no_weights_cannot_be_compared(self):
+        rows = list(self.ROWS)
+        rows[2] = ('爆发期', 'TopicⅡ-1', '警方、通报、问责', '警方 通报 问责')
+        with pytest.raises(UnknownOperationError, match='TopicⅡ-1'):
+            D.topic_flow(self._frame(rows=rows))
+
+    def test_one_phase_cannot_flow_anywhere(self):
+        with pytest.raises(UnknownOperationError, match='相邻'):
+            D.topic_flow(self._frame(rows=self.ROWS[:2]))
+
+    def test_a_phase_that_supplies_no_topic_is_refused_by_name(self):
+        # The boundaries named three phases and the rows fill two: the empty one cannot carry an
+        # edge, and drawing the other two as if the lifecycle were complete is the silence here.
+        frame = self._frame(rows=self.ROWS[:4])
+        frame['stage'] = pd.Categorical(frame['stage'], categories=['发酵期', '爆发期', '空窗期'], ordered=True)
+        with pytest.raises(UnknownOperationError, match='空窗期'):
+            D.topic_flow(frame)
+
+    def test_the_order_still_has_to_be_declared(self):
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.topic_flow(self._frame(ordered=False))
+        assert '阶段' in str(excinfo.value)
+
+    @pytest.mark.parametrize('value', [0, -0.5, 1.5, 'abc', ''])
+    def test_the_similarity_threshold_has_to_be_a_ratio(self, value):
+        with pytest.raises(UnknownOperationError):
+            self._flow(min_similarity=value)
+
+
+class TestTopicCoherence:
+    """The topic-count sweep, and the two numbers that argue about 设定主题个数."""
+
+    FAMILIES = ['警方 通报 调查 处理 依法', '外卖 商家 退款 差评 骑手']
+
+    @classmethod
+    def _corpus(cls, per_family: int = 12) -> pd.DataFrame:
+        rows = []
+        for index in range(per_family):
+            rows.append({'正文': f'微博 热搜 {cls.FAMILIES[0]} 第{index}条'})
+            rows.append({'正文': f'微博 热搜 {cls.FAMILIES[1]} 第{index}条'})
+        return pd.DataFrame(rows)
+
+    def test_one_row_per_count_with_both_decision_numbers(self):
+        out = D.topic_coherence(self._corpus(), '正文', min_topics=2, max_topics=4, topn=3, max_documents=0)
+        assert list(out['n_topics']) == [2, 3, 4]
+        assert list(out.columns) == [
+            'n_topics',
+            'coherence',
+            'perplexity',
+            'documents',
+            'terms',
+            'pairs_used',
+            'pairs_skipped',
+        ]
+        assert (out['perplexity'] > 0).all()
+
+    def test_the_coherence_score_is_a_bounded_normalised_measure(self):
+        out = D.topic_coherence(self._corpus(), '正文', min_topics=2, max_topics=4, topn=3, max_documents=0)
+        assert ((out['coherence'] >= -1.0) & (out['coherence'] <= 1.0)).all()
+
+    def test_words_that_always_appear_together_score_the_maximum(self):
+        # Every document identical: every pair of top words co-occurs in every one, so NPMI is
+        # exactly 1. This is the arithmetic pinned against its known answer, not a shape check.
+        frame = pd.DataFrame({'正文': ['警方 通报 调查 处理'] * 8})
+        out = D.topic_coherence(frame, '正文', min_topics=2, max_topics=2, topn=3, max_documents=0)
+        assert out.at[0, 'coherence'] == pytest.approx(1.0)
+
+    def test_every_candidate_pair_is_accounted_for_as_used_or_skipped(self):
+        # A pair whose two words never share a document has an undefined NPMI, so it is skipped
+        # rather than scored — and the two counters have to add up to the pairs the sweep looked
+        # at, or a reader cannot tell "measured as unrelated" from "not measured".
+        out = D.topic_coherence(self._corpus(), '正文', min_topics=2, max_topics=4, topn=3, max_documents=0)
+        per_topic = 3 * 2 // 2
+        for _, row in out.iterrows():
+            assert row['pairs_used'] + row['pairs_skipped'] == row['n_topics'] * per_topic
+
+    def test_a_corpus_whose_words_rarely_share_a_post_shows_that_in_the_skips(self):
+        # Two-word posts out of an eight-word pool: at most one pair per topic can co-occur, so
+        # most of the candidate pairs are skipped rather than scored as zero.
+        frame = pd.DataFrame({'正文': ['警方 通报', '调查 处理', '外卖 商家', '退款 差评'] * 6})
+        out = D.topic_coherence(frame, '正文', min_topics=2, max_topics=2, topn=3, max_documents=0)
+        assert out.at[0, 'pairs_skipped'] > out.at[0, 'pairs_used']
+
+    def test_the_sample_cap_is_stated_in_the_table_it_limited(self):
+        out = D.topic_coherence(self._corpus(per_family=20), '正文', min_topics=2, max_topics=3, max_documents=10)
+        assert (out['documents'] == 10).all()
+
+    def test_two_runs_of_one_table_answer_with_one_number_set(self):
+        frame = self._corpus(per_family=6)
+        first = D.topic_coherence(frame, '正文', min_topics=2, max_topics=3, max_documents=12)
+        second = D.topic_coherence(frame, '正文', min_topics=2, max_topics=3, max_documents=12)
+        assert first.equals(second)
+
+    def test_a_sweep_cannot_end_before_it_starts(self):
+        with pytest.raises(UnknownOperationError, match='起点'):
+            D.topic_coherence(self._corpus(), '正文', min_topics=4, max_topics=2)
+
+    def test_one_topic_is_not_a_model(self):
+        with pytest.raises(UnknownOperationError, match='至少'):
+            D.topic_coherence(self._corpus(), '正文', min_topics=1, max_topics=3)
+
+    def test_too_few_texts_for_the_smallest_count_is_refused(self):
+        with pytest.raises(UnknownOperationError, match='主题'):
+            D.topic_coherence(pd.DataFrame({'正文': ['警方 通报', '外卖 商家']}), '正文', min_topics=3, max_topics=6)
+
+    def test_the_sweep_stops_at_the_row_count_and_says_so(self, caplog):
+        out = D.topic_coherence(
+            pd.DataFrame({'正文': ['警方 通报 调查'] * 3}), '正文', min_topics=2, max_topics=6, topn=2
+        )
+        assert list(out['n_topics']) == [2, 3]
+
+    def test_a_missing_column_is_named_before_any_fit_is_paid_for(self):
+        with pytest.raises(UnknownOperationError, match='没有这一列'):
+            D.topic_coherence(self._corpus(), '没有这一列')
+
+
+class TestCooccur:
+    """Word pairs that share a post — the paper's 知识图谱 edges."""
+
+    @staticmethod
+    def _frame(texts):
+        return pd.DataFrame({'正文': texts})
+
+    def test_edges_are_strongest_first_and_triply_named(self):
+        out = D.cooccur(
+            self._frame(['警方 通报 调查'] * 3 + ['警方 通报 处理'] * 2 + ['外卖 商家 退款'] * 4),
+            '正文',
+            topn=10,
+            min_count=2,
+        )
+        assert list(out.columns) == ['source', 'target', 'value']
+        assert (out['value'].diff().dropna() <= 0).all(), 'the busiest link has to come first'
+        assert (out['value'] >= 2).all()
+        # One direction per pair, named by code point: an undirected graph that carries 甲→乙 and
+        # 乙→甲 would draw the same relationship twice and size both nodes from it.
+        assert (out['source'] < out['target']).all()
+        assert len({frozenset((row['source'], row['target'])) for _, row in out.iterrows()}) == len(out)
+
+    def test_a_window_counts_near_neighbours_only(self):
+        frame = self._frame(['警方 通报 外卖 商家 退款 差评 调查'] * 4)
+        whole = {(row['source'], row['target']) for _, row in D.cooccur(frame, '正文', topn=10, min_count=1).iterrows()}
+        near = {
+            (row['source'], row['target'])
+            for _, row in D.cooccur(frame, '正文', topn=10, min_count=1, window=2).iterrows()
+        }
+        assert ('警方', '通报') in whole and ('警方', '调查') in whole
+        assert ('警方', '通报') in near
+        assert ('警方', '调查') not in near, 'the two words are never within two tokens of each other'
+
+    def test_the_count_threshold_is_a_filter_and_not_a_renumbering(self):
+        frame = self._frame(['警方 通报 调查'] * 3 + ['外卖 商家 退款'] * 1)
+        loose = D.cooccur(frame, '正文', topn=10, min_count=1)
+        strict = D.cooccur(frame, '正文', topn=10, min_count=3)
+        assert len(strict) < len(loose)
+        assert (strict['value'] == 3).all()
+
+    def test_the_candidate_cap_is_refused_rather_than_clipped(self):
+        from services.data_analysis import COOCCUR_WORD_CAP
+
+        frame = self._frame(['警方 通报 调查'] * 2)
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.cooccur(frame, '正文', topn=COOCCUR_WORD_CAP + 1)
+        assert str(COOCCUR_WORD_CAP) in str(excinfo.value)
+
+    @pytest.mark.parametrize('value', [1, 0, -3, 'abc'])
+    def test_a_network_needs_at_least_two_candidate_words_to_have_an_edge(self, value):
+        with pytest.raises(UnknownOperationError):
+            D.cooccur(self._frame(['警方 通报'] * 2), '正文', topn=value)
+
+    def test_a_threshold_no_pair_reaches_names_the_busiest_one_measured(self):
+        frame = self._frame(['警方 通报 调查'] * 3)
+        with pytest.raises(UnknownOperationError) as excinfo:
+            D.cooccur(frame, '正文', topn=10, min_count=99)
+        assert '3' in str(excinfo.value)
+
+    def test_one_character_words_are_not_candidates_at_all(self):
+        # The keyword node's rule, reused rather than restated: a single ideograph cannot carry
+        # a co-occurrence edge, so no endpoint of the graph is one character long.
+        out = D.cooccur(self._frame(['捞 警方 通报 调查'] * 4), '正文', topn=10, min_count=2)
+        assert out['source'].str.len().min() >= 2 and out['target'].str.len().min() >= 2
+        assert '捞' not in set(out['source']) | set(out['target'])
+
+    def test_a_missing_column_is_refused_by_the_gate(self):
+        with pytest.raises(UnknownOperationError):
+            D.cooccur(self._frame(['警方 通报']), '没有这一列')
+
+    def test_a_count_threshold_below_one_is_not_a_filter(self):
+        with pytest.raises(UnknownOperationError, match='至少'):
+            D.cooccur(self._frame(['警方 通报 调查'] * 2), '正文', topn=5, min_count=0)
 
 
 class TestSentimentEvolution:

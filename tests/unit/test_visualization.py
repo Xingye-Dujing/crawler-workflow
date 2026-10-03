@@ -19,7 +19,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from services.visualizer import CHART_TYPES, ECHARTS_ONLY_TYPES, ChartConfigError
+from services.visualizer import ANNOTATED_TYPES, CHART_TYPES, ECHARTS_ONLY_TYPES, ChartConfigError
 from services.visualizer import VisualizationService as V
 
 pytestmark = pytest.mark.unit
@@ -47,6 +47,7 @@ USABLE = {
     'box': {'x': '作者', 'y': '点赞'},
     'heatmap': {'x': '作者', 'y': '平台'},
     'sankey': {'x': '作者', 'y': '平台'},
+    'network': {'x': '作者', 'y': '平台'},
     'wordcloud': {'x': '作者'},
     'map': {'x': '作者', 'value_field': '点赞'},
 }
@@ -87,6 +88,116 @@ class TestChartCatalogue:
         text = _WORKFLOW_JS.read_text(encoding='utf-8')
         assert _js_list(text, 'CHART_TYPES') == list(CHART_TYPES)
         assert _js_list(text, 'ECHARTS_ONLY_CHARTS') == list(ECHARTS_ONLY_TYPES)
+
+    def test_the_browser_offers_event_markers_only_where_they_are_drawn(self):
+        # The same drift in the other direction: a box the figure cannot honour is a date the
+        # reader of the exported PNG believes is on the curve and never was.
+        text = _WORKFLOW_JS.read_text(encoding='utf-8')
+        assert _js_list(text, 'CHARTS_WITH_ANNOTATIONS') == list(ANNOTATED_TYPES)
+
+
+class TestEventMarkers:
+    """Dated vertical lines — the reading the study hangs on its events.
+
+    4 月 23 日的遗体打捞 and 5 月 19 日的通报 are what make a sentiment curve mean anything,
+    and ECharts draws one as a ``markLine`` positioned by a CATEGORY. That single dependency
+    is the whole risk: a date written differently from the axis label matches nothing and
+    silently draws nothing, so the tests here pin the refusal as hard as the placement.
+    """
+
+    def test_each_marker_is_a_line_at_the_label_it_names(self, df):
+        option = V.to_echarts_option(df, 'line', x='作者', y='点赞', annotations='甲=起点; 丙=终点')
+        markers = option['series'][0]['markLine']
+        assert [item['xAxis'] for item in markers['data']] == ['甲', '丙']
+        assert [item['label']['formatter'] for item in markers['data']] == ['起点', '终点']
+        assert markers['silent'] is True, 'a hovered point must not fight the event line'
+
+    def test_a_marker_can_sit_on_the_left_axis_of_a_two_scale_figure(self, df):
+        # The line belongs to the shared category axis, so it rides the first series; putting
+        # it on the right one would scale a vertical line against the wrong axis.
+        option = V.to_echarts_option(df, 'dual_line', x='作者', y='点赞', y2='阅读', annotations='乙=通报')
+        assert 'markLine' not in option['series'][1]
+        assert option['series'][0]['markLine']['data'][0]['xAxis'] == '乙'
+
+    def test_a_date_that_is_not_on_the_axis_lists_the_labels_that_are(self, df):
+        with pytest.raises(ChartConfigError) as excinfo:
+            V.to_echarts_option(df, 'line', x='作者', y='点赞', annotations='2024-04-23=遗体打捞')
+        message = str(excinfo.value)
+        assert 'is not a value of the x axis "作者"' in message
+        for label in ('甲', '乙', '丙'):
+            assert label in message, 'the refusal has to hand back the labels that would work'
+
+    @pytest.mark.parametrize('text', ['甲', '甲|乙'])
+    def test_a_chunk_with_no_separator_is_refused(self, df, text):
+        with pytest.raises(ChartConfigError, match='not a "date=label" pair'):
+            V.to_echarts_option(df, 'line', x='作者', y='点赞', annotations=text)
+
+    def test_a_marker_with_no_label_of_its_own_is_named_by_its_date(self, df):
+        markers = V.to_echarts_option(df, 'bar', x='作者', annotations='甲=')['series'][0]['markLine']
+        assert markers['data'][0]['label']['formatter'] == '甲'
+
+    def test_a_chart_without_a_category_axis_refuses_the_box(self, df):
+        for chart_type in ('pie', 'scatter', 'heatmap'):
+            with pytest.raises(ChartConfigError, match='cannot carry event markers'):
+                V.to_echarts_option(df, chart_type, x='作者', y='点赞', annotations='甲=起点')
+
+    def test_the_image_engine_refuses_markers_by_name(self, df):
+        # Not a PNG with the dates missing: the renderer has no marker layer at all.
+        with pytest.raises(ChartConfigError, match='engine=echarts'):
+            V.render_image(df, 'bar', x='作者', y='点赞', annotations='甲=起点')
+
+    def test_no_markers_means_no_marker_layer(self, df):
+        option = V.to_echarts_option(df, 'line', x='作者', y='点赞')
+        assert 'markLine' not in option['series'][0]
+        assert 'markLine' not in V.to_echarts_option(df, 'line', x='作者', y='点赞', annotations='  ')
+
+
+class TestRelationshipNetwork:
+    """The co-occurrence and flow graphs: edges are the data, so no edges is a refusal."""
+
+    def test_links_are_aggregated_and_nodes_carry_their_own_incident_weight(self, df):
+        option = V.to_echarts_option(df, 'network', x='作者', y='平台', value_field='点赞')
+        series = option['series'][0]
+        assert series['type'] == 'graph' and series['layout'] == 'force'
+        # 甲 appears twice, both against 知乎, so ONE edge carries the summed weight.
+        assert {(link['source'], link['target']): link['value'] for link in series['links']} == {
+            ('甲', '知乎'): 15.0,
+            ('乙', '微博'): 25.0,
+            ('丙', '小红书'): 40.0,
+        }
+        values = {node['name']: node['value'] for node in series['data']}
+        assert values['甲'] == 15.0 and values['小红书'] == 40.0
+
+    def test_size_and_width_follow_the_weight_rather_than_the_raw_number(self, df):
+        # Radius proportional to value would make the busiest node look four times what it is;
+        # the square root puts the eye back on the area, which is the same rule the topic map uses.
+        option = V.to_echarts_option(df, 'network', x='作者', y='平台', value_field='点赞')
+        series = option['series'][0]
+        sizes = {node['name']: node['symbolSize'] for node in series['data']}
+        assert sizes['甲'] < sizes['丙']
+        assert (sizes['丙'] - 14.0) / (sizes['甲'] - 14.0) == pytest.approx((40.0 / 15.0) ** 0.5, abs=0.02)
+        widths = {(link['source'], link['target']): link['lineStyle']['width'] for link in series['links']}
+        assert widths[('丙', '小红书')] > widths[('甲', '知乎')]
+
+    def test_the_layout_starts_circular_so_two_runs_of_one_table_agree(self, df):
+        force = V.to_echarts_option(df, 'network', x='作者', y='平台')['series'][0]['force']
+        assert force['initLayout'] == 'circular'
+
+    def test_a_graph_with_no_edge_is_refused_not_drawn_empty(self):
+        frame = pd.DataFrame({'s': ['a', 'b'], 't': ['x', 'y'], 'v': [None, None]})
+        with pytest.raises(ChartConfigError, match='no edges'):
+            V.to_echarts_option(frame, 'network', x='s', y='t', value_field='v')
+
+    def test_nested_edge_styles_are_json_safe(self, df):
+        option = V.to_echarts_option(df, 'network', x='作者', y='平台', value_field='点赞')
+        assert json.dumps(option, allow_nan=False)
+        assert all(isinstance(link['lineStyle']['width'], float) for link in option['series'][0]['links'])
+
+    def test_both_field_names_are_required_and_addressable(self, df):
+        with pytest.raises(ChartConfigError, match='requires a source field'):
+            V.to_echarts_option(df, 'network', x='作者')
+        with pytest.raises(ChartConfigError, match='Field not found in the data'):
+            V.to_echarts_option(df, 'network', x='作者', y='不存在的列')
 
 
 class TestDualAxisLine:
@@ -223,8 +334,11 @@ class TestOptionJsonSafety:
         assert values[0] is None
         assert json.dumps(values, allow_nan=False)
 
-    @pytest.mark.parametrize('chart_type', CHART_TYPES)
+    @pytest.mark.parametrize('chart_type', [c for c in CHART_TYPES if c != 'network'])
     def test_a_frame_full_of_missing_numbers_still_serialises(self, chart_type):
+        # ``network`` is out of this sweep for a reason, not by oversight: on a frame with no
+        # usable numbers it has no edge to draw, and an edge-less graph is a refusal
+        # (TestRelationshipNetwork) rather than a serialisable empty figure.
         frame = pd.DataFrame({'g': ['a', 'b'], 'v': [None, None]})
         # 双轴折线 and 显著词图 need their second field like any other type needs x: without
         # one they are a refused spec (pinned in TestConfigErrors), not a chart with a blank

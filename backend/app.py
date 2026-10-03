@@ -3466,6 +3466,72 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         if features:
             result['max_features'] = features
         return result
+    if op == 'topic_timeline':
+        # The four column names default to what 分阶段 LDA writes, so an untouched form is the
+        # pipeline's own hand-off. The step still refuses when this table does not hold them.
+        result = {
+            'stage_col': str(params.get('timeline_stage_col') or 'stage').strip(),
+            'words_col': str(params.get('timeline_words_col') or 'feature_words').strip(),
+            'size_col': str(params.get('timeline_size_col') or 'doc_n').strip(),
+            'topic_col': str(params.get('timeline_topic_col') or 'topic').strip(),
+        }
+        # Blank means "the phases are still ordered as the categorical left them", which is a
+        # different answer from "sort them by this column", so it is omitted rather than sent.
+        order_column = str(params.get('timeline_order_col') or '').strip()
+        if order_column:
+            result['order_col'] = order_column
+        # 0 is refused by the step (no overlap at all would put every row in its own family),
+        # so it is forwarded as the wrong answer it is instead of swallowed by ``or``.
+        overlap = _optional_float(params.get('timeline_overlap'))
+        if overlap is not None:
+            result['min_overlap'] = overlap
+        return result
+    if op == 'topic_flow':
+        result = {
+            'stage_col': str(params.get('flow_stage_col') or 'stage').strip(),
+            'topic_col': str(params.get('flow_topic_col') or 'topic').strip(),
+            'words_col': str(params.get('flow_words_col') or 'feature_words').strip(),
+            'weights_col': str(params.get('flow_weights_col') or 'weights').strip(),
+            'min_similarity': _optional_float(params.get('flow_min_similarity')) or 0.5,
+        }
+        order_column = str(params.get('flow_order_col') or '').strip()
+        if order_column:
+            result['order_col'] = order_column
+        return result
+    if op == 'topic_coherence':
+        result = {
+            'column': params.get('column', ''),
+            'topn': _optional_int(params.get('topic_topn')) or 10,
+        }
+        # The sweep's two ends are forwarded whenever a number was written, including a 0: an
+        # impossible end is refused by the step with the range in the message, which is truer
+        # than quietly raising it to the default the user just overrode.
+        for key, source in (
+            ('min_topics', 'coherence_min_topics'),
+            ('max_topics', 'coherence_max_topics'),
+            ('max_documents', 'coherence_max_documents'),
+        ):
+            number = _optional_int(params.get(source))
+            if number is not None:
+                result[key] = number
+        features = _optional_int(params.get('topic_max_features'))
+        if features:
+            result['max_features'] = features
+        return result
+    if op == 'cooccur':
+        result = {
+            'column': params.get('column', ''),
+            'topn': _optional_int(params.get('cooccur_topn')) or 30,
+        }
+        floor = _optional_int(params.get('cooccur_min_count'))
+        if floor is not None:
+            result['min_count'] = floor
+        # A window of 0 is the whole document, which is the answer the panel's empty box means —
+        # so it has to reach the step as 0, not be read as "not configured".
+        window = _optional_int(params.get('cooccur_window'))
+        if window is not None:
+            result['window'] = window
+        return result
     if op == 'topic_label':
         # Every field falls back to the column 分阶段 LDA writes, so an untouched form is the
         # pipeline's own hand-off rather than a missing parameter; the step still refuses when
@@ -3635,6 +3701,9 @@ def _execute_visualize_node(node: dict, current_input: list):
     # The column that NAMES each bubble in the intertopic map (the topic label). Read like
     # ``value_field``: the builder owns the refusal when a type needs it and does not have it.
     label_field = params.get('label_field')
+    # Dated event markers for 折线/柱状/双轴折线. Forwarded to both engines: the matplotlib
+    # renderer refuses it by name, which is the honest answer when a figure would lose its dates.
+    annotations = params.get('annotations')
     title = params.get('title', '')
     tokenize = as_bool(params.get('tokenize'))
     wordcloud_style = params.get('wordcloud_style')
@@ -3651,7 +3720,14 @@ def _execute_visualize_node(node: dict, current_input: list):
         engine = chart_engine(params.get('engine'))
         if engine == 'matplotlib':
             image = VisualizationService.render_image(
-                df, chart_type, x=x_field, y=y_field, value_field=value_field, agg=agg, title=title
+                df,
+                chart_type,
+                x=x_field,
+                y=y_field,
+                value_field=value_field,
+                agg=agg,
+                title=title,
+                annotations=annotations,
             )
             spec = {'engine': 'matplotlib', 'image': image}
         else:
@@ -3668,6 +3744,7 @@ def _execute_visualize_node(node: dict, current_input: list):
                 y2=y2_field,
                 agg2=agg2_field,
                 label_field=label_field,
+                annotations=annotations,
                 title=title,
                 **kw,
             )
@@ -4955,6 +5032,7 @@ def render_visualization():
     y2_field = data.get('y2_field')
     agg2_field = data.get('agg2')
     label_field = data.get('label_field')
+    annotations = data.get('annotations')
     title = data.get('title', '')
     tokenize = as_bool(data.get('tokenize'))
     wordcloud_style = data.get('wordcloud_style')
@@ -4963,7 +5041,14 @@ def render_visualization():
         engine = chart_engine(data.get('engine'))
         if engine == 'matplotlib':
             image = VisualizationService.render_image(
-                df, chart_type, x=x_field, y=y_field, value_field=value_field, agg=agg, title=title
+                df,
+                chart_type,
+                x=x_field,
+                y=y_field,
+                value_field=value_field,
+                agg=agg,
+                title=title,
+                annotations=annotations,
             )
             return jsonify({'ok': True, 'engine': 'matplotlib', 'image': image})
         kw = {'tokenize': tokenize}
@@ -4979,6 +5064,7 @@ def render_visualization():
             y2=y2_field,
             agg2=agg2_field,
             label_field=label_field,
+            annotations=annotations,
             title=title,
             **kw,
         )

@@ -208,6 +208,16 @@ STEP_PARAMS: dict = {
         'enums': {'on_fail': ('abort', ON_FAIL)},
     },
     'sentiment_evolution': {'one': ('column',)},
+    # The three reads that follow the staged model all name the columns 分阶段 LDA writes: a
+    # lifecycle built on a guessed word column is a story about the wrong cell, and these steps
+    # would still print a complete-looking table. ``size_col`` for the timeline is gated for the
+    # same reason — a peak taken from a column that holds text is a peak measured from zeros.
+    'topic_timeline': {'one': ('stage_col', 'words_col', 'size_col')},
+    'topic_flow': {'one': ('stage_col', 'topic_col', 'weights_col')},
+    # The sweep and the co-occurrence graph both read one text column, exactly as the topic
+    # steps do: neither has a defensible fallback corpus to pick.
+    'topic_coherence': {'one': ('column',)},
+    'cooccur': {'one': ('column',)},
 }
 
 
@@ -249,7 +259,7 @@ def _stage_key(value) -> str:
     return str(value).strip()
 
 
-def _stage_order(df: pd.DataFrame, stage_col: str, order_col: str) -> list:
+def _stage_order(df: pd.DataFrame, stage_col: str, order_col: str, op: str = 'topic_by_stage') -> list:
     """The lifecycle order of the stage names in this table, or a refusal naming the fix.
 
     :meth:`DataAnalysisService.bin_time` builds an ORDERED categorical, so a phase column that
@@ -264,7 +274,7 @@ def _stage_order(df: pd.DataFrame, stage_col: str, order_col: str) -> list:
         return [str(name) for name in values.cat.categories if str(name).strip()]
     if order_col:
         if order_col not in df.columns:
-            raise UnknownOperationError(t('analysis.stage_order_col', op='topic_by_stage', col=order_col))
+            raise UnknownOperationError(t('analysis.stage_order_col', op=op, col=order_col))
         stamps = _to_datetime(df[order_col])
         first_seen: dict = {}
         names: list = []
@@ -281,10 +291,10 @@ def _stage_order(df: pd.DataFrame, stage_col: str, order_col: str) -> list:
             # A phase whose rows carry no parsable time cannot be placed on a timeline, and
             # appending it at the end would invent a position for it in the numbering.
             raise UnknownOperationError(
-                t('analysis.stage_order_unparsed', op='topic_by_stage', col=order_col, stages='、'.join(adrift))
+                t('analysis.stage_order_unparsed', op=op, col=order_col, stages='、'.join(adrift))
             )
         return sorted(names, key=lambda key: first_seen[key])
-    raise UnknownOperationError(t('analysis.stage_order', op='topic_by_stage', col=stage_col))
+    raise UnknownOperationError(t('analysis.stage_order', op=op, col=stage_col))
 
 
 def _stage_topic_counts(value, stages: list) -> list:
@@ -317,6 +327,73 @@ def _stage_topic_counts(value, stages: list) -> list:
             t('analysis.topic_stage_counts', stages=len(stages), counts=','.join(str(n) for n in picked))
         )
     return picked
+
+
+#: The separators a 特征词 cell can be written with (see :func:`_word_cells`).
+_WORD_CELL_RE = re.compile(r'[、,，;；/|]+')
+
+#: The ceiling on candidate words for :meth:`DataAnalysisService.cooccur`. A co-occurrence
+#: network is complete: every candidate is compared with every other, so ``topn`` costs
+#: ``topn·(topn−1)/2`` pair counters per document — 30 words is 435 pairs, 120 is 7,140, and
+#: 500 would be 124,750 per post on a corpus of tens of thousands.
+COOCCUR_WORD_CAP = 120
+
+
+def _whole(value, op: str, param: str) -> int:
+    """A count the step reads as an integer, or a named refusal.
+
+    The panel cannot send junk here (``_optional_int`` in ``app.py`` drops an unreadable box to
+    the step's default), but a hand-written workflow file and ``/api/analysis/run`` both reach
+    this module directly — and ``int('abc')`` arriving at the executor is the opaque node
+    failure this repo keeps converting into a sentence that names the parameter.
+    """
+    if isinstance(value, bool):
+        raise UnknownOperationError(t('analysis.need_number', op=op, param=param, value=value))
+    try:
+        number = float(str(value).strip())
+    except (TypeError, ValueError):
+        raise UnknownOperationError(t('analysis.need_number', op=op, param=param, value=value)) from None
+    if not math.isfinite(number):
+        raise UnknownOperationError(t('analysis.need_number', op=op, param=param, value=value))
+    return int(number)
+
+
+def _word_cells(value) -> list:
+    """One 特征词 cell as the ordered list of words it names, without repeats.
+
+    :meth:`DataAnalysisService.topic_by_stage` writes its words joined by 、 and the keyword
+    node writes them space-separated, so both spellings (plus the comma and semicolon forms a
+    hand-edited CSV picks up) are read here. Order is kept because the paper's table is read
+    as a *ranked* list — the first word is the one the topic is most about — and a set would
+    throw that away before it reached the comparison.
+    """
+    words: list = []
+    for token in _WORD_CELL_RE.split(str(value if value is not None else '')):
+        word = token.strip()
+        if word and word not in words:
+            words.append(word)
+    return words
+
+
+def _word_weights(value) -> dict:
+    """A ``word:weight`` cell as ``{word: weight}``; words without a number are dropped.
+
+    The weights :meth:`topic_by_stage` files are the ones a distribution comparison needs, and
+    a cell that parses to nothing is not a flat distribution: treating it as one would compare
+    a topic nobody scored against a topic that was, and report the result as a flow. The caller
+    refuses on an empty result instead.
+    """
+    weights: dict = {}
+    for chunk in str(value if value is not None else '').split():
+        word, _, raw = chunk.rpartition(':')
+        if not word:
+            continue
+        try:
+            number = float(raw)
+        except ValueError:
+            continue
+        weights[word.strip()] = number
+    return weights
 
 
 def _prepare_topic_model(df, column, n_topics, max_features):
@@ -375,6 +452,28 @@ def _kl2(p, q):
     return float(np.sum(p[mask] * np.log2(p[mask] / q[mask])))
 
 
+def _jsd(p, q):
+    """Jensen-Shannon divergence between two vectors over the SAME vocabulary, in bits.
+
+    Both sides are normalised here, so a caller can hand it raw counts. The vectors have to be
+    aligned first: two topics from different stages each carry their own vocabulary, and
+    numpy's elementwise arithmetic would either fail on the length difference or — worse,
+    because it returns a number — line the two word lists up by position and call the result a
+    distance. :meth:`DataAnalysisService.topic_flow` builds the union vocabulary for exactly
+    this reason.
+    """
+    import numpy as np
+
+    left = np.asarray(p, dtype=float)
+    right = np.asarray(q, dtype=float)
+    if left.sum() <= 0 or right.sum() <= 0:
+        return 0.0
+    left = left / left.sum()
+    right = right / right.sum()
+    mixture = (left + right) / 2.0
+    return 0.5 * _kl2(left, mixture) + 0.5 * _kl2(right, mixture)
+
+
 def _jsd_matrix(distributions):
     """Pairwise Jensen-Shannon divergence between topic-word distributions.
 
@@ -391,8 +490,7 @@ def _jsd_matrix(distributions):
     out = [[0.0] * size for _ in range(size)]
     for left in range(size):
         for right in range(left + 1, size):
-            mixture = (rows[left] + rows[right]) / 2.0
-            out[left][right] = out[right][left] = 0.5 * _kl2(rows[left], mixture) + 0.5 * _kl2(rows[right], mixture)
+            out[left][right] = out[right][left] = _jsd(rows[left], rows[right])
     return out
 
 
@@ -1558,6 +1656,505 @@ class DataAnalysisService:
         logger.info(t('analysis.topic_salience_done', n=topics, rows=len(texts), terms=len(rows), value=lam))
         return pd.DataFrame(rows)
 
+    # ── What the phases did to each other ───────────────────────
+
+    @staticmethod
+    def topic_timeline(
+        df: pd.DataFrame,
+        stage_col: str = 'stage',
+        words_col: str = 'feature_words',
+        size_col: str = 'doc_n',
+        topic_col: str = 'topic',
+        order_col: str = '',
+        min_overlap: float = 0.5,
+    ) -> pd.DataFrame:
+        """When each subject appeared, and which ones were 次生舆情.
+
+        表 1 is one snapshot per phase. It cannot say that 「外卖空包」 only became a subject
+        after the first week — that is a statement about rows in DIFFERENT phases, and the
+        paper makes it: the 次生舆情 (the secondary flare-up of a case, off a subject the
+        first week never had) is one of its findings.
+
+        A phase-by-phase LDA gives every topic a label scoped to its own stage (TopicⅠ-1 is
+        not the same object as TopicⅡ-1), so a subject is tracked by the WORDS it is about:
+        two rows belong to one lifecycle when their word lists overlap by at least
+        ``min_overlap`` (Jaccard over the two sets). That threshold is the user's call about
+        how much similarity counts as the same subject, which is why it is a parameter and is
+        printed with the result rather than buried in this function.
+
+        Families are grown in lifecycle order against the union of the words the family has
+        already shown, so a subject that drifts one word per phase stays ONE subject instead
+        of being filed as five — and the price of that choice is that a subject which changes
+        abruptly opens a second family. Both readings are defensible; neither is silent,
+        because the threshold and the union rule are stated here and on the panel.
+
+        ``is_secondary`` is the paper's own two-part shape: the subject did not first appear
+        in the opening phase, AND its largest phase came after its first one. A subject that
+        was born late and peaked immediately (one phase only) is a late topic, not a
+        flare-up, and is reported ``False`` — the columns beside it (``first_stage``,
+        ``peak_stage``, ``stages_present``) are what the reader needs to judge that
+        themselves, which is why they are in the table rather than folded into one flag.
+        """
+        stages = _stage_order(df, stage_col, order_col, op='topic_timeline')
+        if len(stages) < 2:
+            raise UnknownOperationError(t('analysis.timeline_stages', stages=len(stages)))
+        for name in (size_col, topic_col):
+            if name and name not in df.columns:
+                raise UnknownOperationError(t('analysis.step_col_missing', op='topic_timeline', col=name))
+        try:
+            threshold = float(min_overlap)
+        except (TypeError, ValueError):
+            raise UnknownOperationError(t('analysis.timeline_overlap', value=min_overlap)) from None
+        if not 0.0 < threshold <= 1.0:
+            raise UnknownOperationError(t('analysis.timeline_overlap', value=min_overlap))
+
+        positions = {stage: index for index, stage in enumerate(stages)}
+        # Read positionally and once per column: ``Series.map`` on a categorical maps its
+        # CATEGORIES, ``df.at`` addresses by row LABEL (and a filtered table's labels are not
+        # its positions), and this table usually arrives across a node boundary as plain
+        # strings anyway (see the invariant in AGENTS.md).
+        keys = [_stage_key(value) for value in df[stage_col].tolist()]
+        unusable = sum(1 for key in keys if key not in positions)
+        if unusable:
+            logger.warning(t('analysis.timeline_blank', col=stage_col, n=unusable))
+        ordered = sorted(
+            (positions[key], number) for number, key in enumerate(keys) if key in positions
+        )  # stage order first, and the table's own order inside one stage
+        if not ordered:
+            raise UnknownOperationError(t('analysis.timeline_stages', stages=0))
+        present = {position for position, _ in ordered}
+        if len(present) < 2:
+            # The declared lifecycle can carry an empty category (a phase 按时间划分阶段 named and
+            # no post fell into). A lifecycle is about the phases with rows in them: one of
+            # those is not a before and an after, whatever the column's category list says.
+            raise UnknownOperationError(t('analysis.timeline_stages', stages=len(present)))
+        word_lists = [_word_cells(value) for value in df[words_col].tolist()]
+        label_list = [str(value).strip() for value in df[topic_col].tolist()] if topic_col else [''] * len(keys)
+
+        sizes = pd.to_numeric(df[size_col], errors='coerce') if size_col else pd.Series(dtype=float)
+        usable_sizes = int(sizes.notna().sum()) if len(sizes) else 0
+        if size_col and not usable_sizes:
+            # Every cell of the size column is text the numbers cannot come out of. Peak is
+            # then not "flat", it is UNMEASURED, and a table of peaks built on zeros would be
+            # the paper's finding manufactured out of nothing.
+            raise UnknownOperationError(t('analysis.timeline_size', col=size_col))
+        if size_col and usable_sizes < len(sizes):
+            logger.warning(t('analysis.timeline_partial', col=size_col, n=len(sizes) - usable_sizes))
+        size_list = sizes.tolist() if size_col else [0.0] * len(keys)
+
+        families: list = []
+        for stage_position, number in ordered:
+            words = word_lists[number]
+            if not words:
+                raise UnknownOperationError(
+                    t(
+                        'analysis.timeline_words',
+                        stage=stages[stage_position],
+                        topic=label_list[number] or f'#{number + 1}',
+                        col=words_col,
+                    )
+                )
+            raw_size = size_list[number]
+            size = float(raw_size) if pd.notna(raw_size) else 0.0
+            best, best_score = None, 0.0
+            unique = set(words)
+            for family in families:
+                union = family['words'] | unique
+                score = len(family['words'] & unique) / len(union) if union else 0.0
+                if score > best_score:
+                    # Ties go to the family that opened first, because "same subject" is judged
+                    # against the debut that got there earliest, not against whichever the row
+                    # order happened to test first.
+                    best, best_score = family, score
+            record = {'pos': stage_position, 'size': size, 'words': words, 'label': label_list[number]}
+            if best is not None and best_score >= threshold:
+                best['rows'].append(record)
+                best['words'].update(words)
+            else:
+                families.append({'words': set(words), 'rows': [record]})
+
+        rows = []
+        for family in families:
+            entries = sorted(family['rows'], key=lambda record: record['pos'])
+            debut = entries[0]['pos']
+            peak = max(entries, key=lambda record: (record['size'], -record['pos']))['pos']
+            shown: list = []
+            for record in entries:
+                for word in record['words']:
+                    if word not in shown:
+                        shown.append(word)
+            rows.append(
+                {
+                    'topic': entries[0]['label'] or f'Subject-{len(rows) + 1}',
+                    'topic_words': '、'.join(shown),
+                    'first_stage': stages[debut],
+                    'peak_stage': stages[peak],
+                    'last_stage': stages[entries[-1]['pos']],
+                    'stages_present': len({record['pos'] for record in entries}),
+                    'stage_path': ' → '.join(stages[record['pos']] for record in entries),
+                    'size_total': round(float(sum(record['size'] for record in entries)), 4),
+                    'peak_size': round(float(max(record['size'] for record in entries)), 4),
+                    'is_secondary': bool(debut > 0 and peak > debut),
+                }
+            )
+        rows.sort(key=lambda row: (stages.index(row['first_stage']), row['topic']))
+        multi = sum(1 for row in rows if row['stages_present'] > 1)
+        secondary = sum(1 for row in rows if row['is_secondary'])
+        logger.info(
+            t(
+                'analysis.timeline_done',
+                topics=len(rows),
+                multi=multi,
+                secondary=secondary,
+                value=threshold,
+                stages=len(stages),
+            )
+        )
+        for row in rows:
+            if row['is_secondary']:
+                logger.info(t('analysis.timeline_secondary', topic=row['topic'], path=row['stage_path']))
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def topic_flow(
+        df: pd.DataFrame,
+        stage_col: str = 'stage',
+        topic_col: str = 'topic',
+        words_col: str = 'feature_words',
+        weights_col: str = 'weights',
+        order_col: str = '',
+        min_similarity: float = 0.5,
+    ) -> pd.DataFrame:
+        """Which topic of one phase carried over into the next — the sankey's edges.
+
+        表 1 says what each phase was about; it does not say how one phase's subject BECAME the
+        next one's. That is the paper's other structural claim (「外卖黑盒→外卖空包」 is one subject
+        mutating, not two subjects), and the only way to read it from a per-phase model is to
+        compare the topics of adjacent phases with each other.
+
+        The comparison is the Jensen-Shannon divergence of the two word DISTRIBUTIONS, taken
+        from the ``word:weight`` cell :meth:`topic_by_stage` writes, turned into a similarity by
+        ``1 / (1 + d)``. The distributions rather than the word lists, because two topics can
+        share 「外卖」 and mean different things by how hard they lean on it; where the lists are
+        all that is left, :meth:`topic_timeline` is the step to use.
+
+        Adjacent phases only, and deliberately so: comparing 发酵期 with 衰退期 would draw an
+        edge across the whole lifecycle and make the flow figure unreadable in exactly the way
+        the paper's own stage-by-stage narrative is not.
+
+        A threshold nobody clears is an answer, not an empty table: the refusal names the best
+        similarity that was measured, so lowering it is a decision the user can make with the
+        number in front of them.
+        """
+        stages = _stage_order(df, stage_col, order_col, op='topic_flow')
+        if len(stages) < 2:
+            raise UnknownOperationError(t('analysis.flow_stages', stages=len(stages)))
+        for name in (topic_col, words_col, weights_col):
+            if name and name not in df.columns:
+                raise UnknownOperationError(t('analysis.step_col_missing', op='topic_flow', col=name))
+        try:
+            threshold = float(min_similarity)
+        except (TypeError, ValueError):
+            raise UnknownOperationError(t('analysis.flow_similarity', value=min_similarity)) from None
+        if not 0.0 < threshold <= 1.0:
+            raise UnknownOperationError(t('analysis.flow_similarity', value=min_similarity))
+
+        positions = {stage: index for index, stage in enumerate(stages)}
+        keys = [_stage_key(value) for value in df[stage_col].tolist()]
+        # Positional reads, for the reason given in ``topic_timeline``: a filtered table's row
+        # labels are not its positions, and ``df.at`` would answer with the wrong row.
+        weights_list = [_word_weights(value) for value in df[weights_col].tolist()]
+        topic_list = [str(value).strip() for value in df[topic_col].tolist()]
+        words_list = (
+            ['、'.join(_word_cells(value)) for value in df[words_col].tolist()] if words_col else [''] * len(keys)
+        )
+        buckets: list = [[] for _ in stages]
+        skipped = 0
+        for number, key in enumerate(keys):
+            if key not in positions:
+                skipped += 1
+                continue
+            weights = weights_list[number]
+            if not weights:
+                # No weights means no distribution. Filing the row as uniform-over-its-words
+                # would compute a similarity from a list overlap while the message reported a
+                # divergence, which is two different measurements wearing one name.
+                raise UnknownOperationError(
+                    t('analysis.flow_weights', topic=topic_list[number] or f'#{number + 1}', stage=key, col=weights_col)
+                )
+            buckets[positions[key]].append(
+                {'topic': topic_list[number], 'words': words_list[number], 'weights': weights}
+            )
+        if skipped:
+            logger.warning(t('analysis.timeline_blank', col=stage_col, n=skipped))
+        for stage, entries in zip(stages, buckets, strict=True):
+            if not entries:
+                raise UnknownOperationError(t('analysis.flow_stage_empty', stage=stage, col=stage_col))
+
+        edges = []
+        best_seen = 0.0
+        for left_index in range(len(stages) - 1):
+            for source in buckets[left_index]:
+                for target in buckets[left_index + 1]:
+                    vocabulary = sorted(set(source['weights']) | set(target['weights']))
+                    divergence = _jsd(
+                        [source['weights'].get(word, 0.0) for word in vocabulary],
+                        [target['weights'].get(word, 0.0) for word in vocabulary],
+                    )
+                    similarity = 1.0 / (1.0 + divergence)
+                    best_seen = max(best_seen, similarity)
+                    if similarity < threshold:
+                        continue
+                    edges.append(
+                        {
+                            'source': source['topic'],
+                            'target': target['topic'],
+                            'similarity': round(similarity, 6),
+                            'divergence': round(divergence, 6),
+                            'from_stage': stages[left_index],
+                            'to_stage': stages[left_index + 1],
+                            'source_words': source['words'],
+                            'target_words': target['words'],
+                        }
+                    )
+        if not edges:
+            raise UnknownOperationError(t('analysis.flow_no_edges', value=threshold, best=round(best_seen, 4)))
+        # Thickest link first: the sankey draws what it is handed, and a flow table read top-down
+        # should start with the carry-over that was strongest.
+        edges.sort(key=lambda edge: (-edge['similarity'], edge['source'], edge['target']))
+        logger.info(
+            t(
+                'analysis.flow_done',
+                edges=len(edges),
+                stages=len(stages),
+                value=threshold,
+                best=round(best_seen, 4),
+            )
+        )
+        return pd.DataFrame(edges)
+
+    @staticmethod
+    def topic_coherence(
+        df: pd.DataFrame,
+        column: str,
+        min_topics: int = 2,
+        max_topics: int = 8,
+        topn: int = 10,
+        max_features: int = 2000,
+        max_documents: int = 2000,
+    ) -> pd.DataFrame:
+        """Score a SWEEP of topic counts, for the decision the paper never explains.
+
+        「设定主题个数」 is a real choice and 表 1 gives no reason for 5/6/4/4/4. This step fits
+        the same model :meth:`topic_model` fits, once per count, and prints two numbers per
+        count: the log perplexity (how well the model predicts held-out word counts — it keeps
+        falling as the model memorises rows) and a word-coherence score (whether a topic's top
+        words actually appear together in the same posts, which perplexity does not check).
+
+        The coherence score is **document-level NPMI over each topic's top ``topn`` words**,
+        averaged over pairs and then over topics. That is a fraction of the coherence literature
+        named C_v, not C_v: there is no sliding-window segmentation (each post is one window,
+        which for short social posts is the same thing, but is not what the published algorithm
+        does) and no reference-measure cosine step between topic pairs. It is reported here as
+        ``coherence`` because it measures the same property; a replication of a published C_v
+        number should not expect to agree with it.
+
+        The pair count is what a zero-co-occurrence pair would silently become (an undefined
+        log ratio), so such pairs are skipped and ``pairs_used`` says how many were not. A sweep
+        with almost no usable pairs is a corpus whose topics do not share documents, and the
+        perplexity alone is then the only number worth reading.
+        """
+        from itertools import combinations
+
+        import jieba
+
+        if column not in df.columns:
+            raise UnknownOperationError(t('analysis.step_col_missing', op='topic_coherence', col=column))
+        texts = [str(value) for value in df[column].dropna().tolist() if str(value).strip()]
+        limit = _whole(max_documents, 'topic_coherence', 'max_documents')
+        if limit > 0 and len(texts) > limit:
+            # Deterministic on purpose: a sweep whose sample changes between runs changes its
+            # numbers, and the user cannot tell the difference between a worse model and a
+            # different dozen posts.
+            texts = pd.Series(texts).sample(n=limit, random_state=_stable_seed(df)).sort_index().tolist()
+            logger.info(t('analysis.coherence_sampled', used=limit, total=len(df[column].dropna())))
+        low = _whole(min_topics, 'topic_coherence', 'min_topics')
+        high = _whole(max_topics, 'topic_coherence', 'max_topics')
+        if low < 2:
+            raise UnknownOperationError(t('analysis.topic_count', value=low))
+        if high < low:
+            raise UnknownOperationError(t('analysis.coherence_range', low=low, high=high))
+        if len(texts) < low:
+            raise UnknownOperationError(t('analysis.topic_rows', rows=len(texts), topics=low))
+        if high > len(texts):
+            # Fitting five topics on three posts is not a model, and every count above the row
+            # count would answer with the same degenerate fit. Saying so is the whole message.
+            logger.info(t('analysis.coherence_capped', high=high, rows=len(texts)))
+            high = len(texts)
+        # One tokenisation per document, reused by every count: the vectoriser inside
+        # ``_fit_topic_model`` re-cuts these texts (its contract is raw text, and sharing a
+        # token list would make the two steps disagree the moment either changed its rule),
+        # so this copy is for the co-occurrence counts only.
+        documents = [
+            frozenset(token for token in jieba.cut(text) if any(char.isalnum() for char in token)) for text in texts
+        ]
+        keep = max(1, _whole(topn, 'topic_coherence', 'topn'))
+        rows = []
+        for topics in range(low, high + 1):
+            try:
+                model, matrix, _doc_topic, vocabulary = _fit_topic_model(texts, topics, max_features)
+            except ValueError as e:
+                raise UnknownOperationError(t('analysis.topic_features', err=e)) from e
+            perplexity = round(float(model.perplexity(matrix)), 2)
+            tops = [
+                [str(vocabulary[position]) for position in component.argsort()[::-1][:keep]]
+                for component in model.components_
+            ]
+            candidates = set().union(*(set(words) for words in tops))
+            singles = {word: sum(1 for document in documents if word in document) for word in candidates}
+            joint: dict = {}
+            for document in documents:
+                present = sorted(document & candidates)
+                for pair in combinations(present, 2):
+                    joint[pair] = joint.get(pair, 0) + 1
+            total_documents = len(documents)
+            scores = []
+            used_pairs = 0
+            skipped = 0
+            for words in tops:
+                values = []
+                for pair in combinations(sorted(words), 2):
+                    count = joint.get(pair, 0)
+                    if not count or not singles[pair[0]] or not singles[pair[1]]:
+                        skipped += 1
+                        continue  # an undefined ratio is not a zero score
+                    used_pairs += 1
+                    p_ij = count / total_documents
+                    if p_ij >= 1.0:
+                        # Both words are in every document, which is the one case where the
+                        # denominator −log₂ p(i,j) is 0. Perfect co-occurrence is the maximum
+                        # score by definition, so it is filed as 1.0 rather than as a division.
+                        values.append(1.0)
+                        continue
+                    numerator = (
+                        math.log2(p_ij)
+                        - math.log2(singles[pair[0]] / total_documents)
+                        - math.log2(singles[pair[1]] / total_documents)
+                    )
+                    values.append(numerator / -math.log2(p_ij))
+                if values:
+                    scores.append(sum(values) / len(values))
+            coherence = round(sum(scores) / len(scores), 4) if scores else None
+            rows.append(
+                {
+                    'n_topics': topics,
+                    'coherence': coherence,
+                    'perplexity': perplexity,
+                    'documents': total_documents,
+                    'terms': len(vocabulary),
+                    'pairs_used': used_pairs,
+                    'pairs_skipped': skipped,
+                }
+            )
+            logger.info(f'n_topics={topics}  coherence={coherence}  perplexity={perplexity}')
+        scored = [row for row in rows if row['coherence'] is not None]
+        if not scored:
+            raise UnknownOperationError(
+                t('analysis.coherence_pairs', topn=keep, pairs=sum(row['pairs_skipped'] for row in rows))
+            )
+        best_coherence = max(scored, key=lambda row: row['coherence'])['n_topics']
+        best_perplexity = min(rows, key=lambda row: row['perplexity'])['n_topics']
+        logger.info(
+            t(
+                'analysis.coherence_best',
+                coherence=best_coherence,
+                perplexity=best_perplexity,
+                low=low,
+                high=high,
+            )
+        )
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def cooccur(df: pd.DataFrame, column: str, topn: int = 30, min_count: int = 2, window: int = 0) -> pd.DataFrame:
+        """Which words travel together — the co-occurrence edges of 论文's knowledge graph.
+
+        One row per word pair, with the number of posts that contain both (or both within
+        ``window`` tokens of each other, when a window is asked for). The paper's other figure
+        is a 知识图谱 built from exactly this: two words are related in the graph because readers
+        put them in the same sentence, not because a topic model grouped them.
+
+        The candidate words are the corpus TF-IDF list :class:`KeywordExtractor` already ranks
+        by how distinctive a term is in THIS table, and the token rule (two characters or more,
+        jieba's cut) is the same call — a second tokenizer here would produce a graph whose
+        words are not the words the keyword node reports for the same corpus.
+
+        ``topn`` is capped at :data:`COOCCUR_WORD_CAP` and a larger request is refused rather
+        than clamped: the graph is complete over its candidates, so quietly keeping 120 of the
+        500 words asked for decides WHICH EDGES EXIST, and that is a data choice.
+        """
+        from itertools import combinations
+
+        from analyzers.keyword import KeywordExtractor
+
+        wanted = _whole(topn, 'cooccur', 'topn')
+        if wanted < 2:
+            raise UnknownOperationError(t('analysis.cooccur_topn', value=topn, cap=COOCCUR_WORD_CAP))
+        if wanted > COOCCUR_WORD_CAP:
+            raise UnknownOperationError(t('analysis.cooccur_topn', value=wanted, cap=COOCCUR_WORD_CAP))
+        floor = _whole(min_count, 'cooccur', 'min_count')
+        if floor < 1:
+            raise UnknownOperationError(t('analysis.cooccur_count', value=min_count))
+        span = max(0, _whole(window, 'cooccur', 'window'))
+
+        scored = KeywordExtractor().tfidf_corpus(df, text_column=column, topk=wanted, merge=True)
+        candidates = {str(word) for word in scored['keyword'].tolist()} if 'keyword' in scored.columns else set()
+        if len(candidates) < 2:
+            raise UnknownOperationError(t('analysis.cooccur_words', found=len(candidates), topn=wanted))
+
+        counts: dict = {}
+        documents = 0
+        for text in df[column].dropna().tolist():
+            tokens = KeywordExtractor._tokenize(str(text), None)
+            sequence = [token for token in tokens if token in candidates]
+            if len(sequence) < 2:
+                continue
+            documents += 1
+            size = len(sequence) if span <= 0 else min(span, len(sequence))
+            starts = range(1) if size >= len(sequence) else range(len(sequence) - size + 1)
+            for start in starts:
+                present = sorted(set(sequence[start : start + size]))
+                for pair in combinations(present, 2):
+                    counts[pair] = counts.get(pair, 0) + 1
+        edges = [
+            {'source': left, 'target': right, 'value': count}
+            for (left, right), count in counts.items()
+            if count >= floor
+        ]
+        if not edges:
+            raise UnknownOperationError(
+                t(
+                    'analysis.cooccur_empty',
+                    floor=floor,
+                    top=max(counts.values()) if counts else 0,
+                    pairs=len(counts),
+                )
+            )
+        # Strongest link first, and one fixed order for ties: the graph's edge width is read
+        # from these rows, and a list that reorders itself between runs is a different figure.
+        edges.sort(key=lambda edge: (-edge['value'], edge['source'], edge['target']))
+        logger.info(
+            t(
+                'analysis.cooccur_done',
+                words=len(candidates),
+                docs=documents,
+                pairs=len(counts),
+                edges=len(edges),
+                floor=floor,
+            )
+        )
+        return pd.DataFrame(edges)
+
     # ── The sentiment curve ─────────────────────────────────────
 
     @staticmethod
@@ -1706,6 +2303,10 @@ class DataAnalysisService:
             'topic_label': cls.topic_label,
             'topic_map': cls.topic_map,
             'topic_salience': cls.topic_salience,
+            'topic_timeline': cls.topic_timeline,
+            'topic_flow': cls.topic_flow,
+            'topic_coherence': cls.topic_coherence,
+            'cooccur': cls.cooccur,
             'sentiment_evolution': cls.sentiment_evolution,
         }
 

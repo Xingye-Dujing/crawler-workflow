@@ -2429,7 +2429,7 @@ function renderParamCheckbox(nodeId, p, key, labelKey, defVal) {
 }
 
 /* ── Analysis node settings ── */
-var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'topic_map', 'topic_salience', 'sentiment_evolution'];
+var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'sentiment_evolution'];
 var FILTER_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains', 'not_contains', 'in', 'not_in', 'is_null', 'not_null'];
 var CONVERT_TYPES = ['str', 'int', 'float', 'bool', 'datetime'];
 
@@ -2569,6 +2569,50 @@ function renderAnalysisSettings(nodeId, p) {
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.topicSalienceHint') + '</div></div>';
     }
+    if (op === 'topic_timeline') {
+        // Every box names a column 分阶段 LDA writes, so the defaults are that step's own
+        // output names: an untouched form is the pipeline hand-off, not a guess.
+        html += renderParamInput(nodeId, p, 'timeline_stage_col', 'settings.timelineStageColumn', 'text', 'stage');
+        html += renderParamInput(nodeId, p, 'timeline_topic_col', 'settings.timelineTopicColumn', 'text', 'topic');
+        html += renderParamInput(nodeId, p, 'timeline_words_col', 'settings.timelineWordsColumn', 'text', 'feature_words');
+        html += renderParamInput(nodeId, p, 'timeline_size_col', 'settings.timelineSizeColumn', 'text', 'doc_n');
+        html += renderParamInput(nodeId, p, 'timeline_order_col', 'settings.timelineOrderColumn', 'text', '');
+        html += renderParamInput(nodeId, p, 'timeline_overlap', 'settings.timelineOverlap', 'number', 0.5);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.timelineHint') + '</div></div>';
+    }
+    if (op === 'topic_flow') {
+        html += renderParamInput(nodeId, p, 'flow_stage_col', 'settings.flowStageColumn', 'text', 'stage');
+        html += renderParamInput(nodeId, p, 'flow_topic_col', 'settings.flowTopicColumn', 'text', 'topic');
+        html += renderParamInput(nodeId, p, 'flow_words_col', 'settings.flowWordsColumn', 'text', 'feature_words');
+        html += renderParamInput(nodeId, p, 'flow_weights_col', 'settings.flowWeightsColumn', 'text', 'weights');
+        html += renderParamInput(nodeId, p, 'flow_order_col', 'settings.flowOrderColumn', 'text', '');
+        html += renderParamInput(nodeId, p, 'flow_min_similarity', 'settings.flowMinSimilarity', 'number', 0.5);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.flowHint') + '</div></div>';
+    }
+    if (op === 'topic_coherence') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'coherence_min_topics', 'settings.coherenceMinTopics', 'number', 2);
+        html += renderParamInput(nodeId, p, 'coherence_max_topics', 'settings.coherenceMaxTopics', 'number', 8);
+        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTopn', 'number', 10);
+        html += renderParamInput(nodeId, p, 'coherence_max_documents', 'settings.coherenceMaxDocuments', 'number', 2000);
+        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.coherenceHint') + '</div></div>';
+    }
+    if (op === 'cooccur') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'cooccur_topn', 'settings.cooccurTopn', 'number', 30);
+        html += renderParamInput(nodeId, p, 'cooccur_min_count', 'settings.cooccurMinCount', 'number', 2);
+        html += renderParamInput(nodeId, p, 'cooccur_window', 'settings.cooccurWindow', 'number', 0);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.cooccurHint') + '</div></div>';
+    }
     if (op === 'sentiment_evolution') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
@@ -2674,7 +2718,7 @@ function renderAnalysisSettings(nodeId, p) {
 }
 
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'dual_line', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'wordcloud', 'map'];
+var CHART_TYPES = ['bar', 'line', 'dual_line', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'network', 'wordcloud', 'map'];
 
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
@@ -2685,12 +2729,12 @@ var ENGINES = [
 /* Field labels change meaning per chart type (e.g. x/y are two category
    dimensions for heatmap/sankey, not "category + value" like bar/line). */
 var CHART_X_LABEL_KEY = {
-    heatmap: 'settings.xFieldCat1', sankey: 'settings.sourceField',
+    heatmap: 'settings.xFieldCat1', sankey: 'settings.sourceField', network: 'settings.sourceField',
     wordcloud: 'settings.textField', map: 'settings.regionField',
 };
-var CHART_Y_LABEL_KEY = { heatmap: 'settings.yFieldCat2', sankey: 'settings.targetField' };
-var CHARTS_WITH_Y_AS_CATEGORY = ['heatmap', 'sankey'];
-var CHARTS_WITH_VALUE_FIELD = ['heatmap', 'sankey', 'wordcloud', 'map', 'topic_map'];
+var CHART_Y_LABEL_KEY = { heatmap: 'settings.yFieldCat2', sankey: 'settings.targetField', network: 'settings.targetField' };
+var CHARTS_WITH_Y_AS_CATEGORY = ['heatmap', 'sankey', 'network'];
+var CHARTS_WITH_VALUE_FIELD = ['heatmap', 'sankey', 'network', 'wordcloud', 'map', 'topic_map'];
 var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map'].concat(CHARTS_WITH_Y_AS_CATEGORY);
 // The right-hand scale, which only 双轴折线 asks for. Kept equal to the backend's
 // ECHARTS_ONLY_TYPES by tests/unit/test_visualization.py, because the renderer that cannot
@@ -2700,7 +2744,12 @@ var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map'].concat(CHARTS_WITH_Y_AS_CATE
 // rare word look bigger than a common one.
 var CHARTS_WITH_Y2 = ['dual_line', 'topic_terms'];
 var CHARTS_WITH_LABEL = ['topic_map'];
-var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms'];
+var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network'];
+// The types that draw a vertical line at one x-axis label, so an event ("5/19 公安通报") sits
+// on the curve it explains. Kept equal to the backend's ANNOTATED_TYPES by
+// tests/unit/test_visualization.py: a box the figure cannot honour would drop the date in
+// silence, which is the one outcome a reader of the figure must not be left with.
+var CHARTS_WITH_ANNOTATIONS = ['bar', 'line', 'dual_line'];
 
 function renderVisualizeSettings(nodeId, p) {
     var upstream = canvas.getUpstreamNodeId(nodeId);
@@ -2814,6 +2863,13 @@ function renderVisualizeSettings(nodeId, p) {
             ['sum', 'mean', 'count', 'max', 'min'].map(function (a) { return '<option value="' + a + '"' + (p.agg2 === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') +
             '</select></div>' +
             '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.dualLine') + '</div>';
+    }
+    if (CHARTS_WITH_ANNOTATIONS.indexOf(ct) >= 0) {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chartAnnotations') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.annotations || '') + '" ' +
+            'placeholder="2024-05-19=公安通报; 2024-04-23=遗体打捞" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'annotations\',this.value)"></div>' +
+            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.annotations') + '</div>';
     }
     if (ct === 'wordcloud') {
         html += '<div class="settings-group"><label class="settings-checkbox-label">' +

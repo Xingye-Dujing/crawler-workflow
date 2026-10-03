@@ -329,8 +329,11 @@ class TestAnalysisNodeOperations:
     unit test of the helper.
     """
 
-    def _run(self, client, app_module, paste, op, params, **kwargs):
-        return _run_node(client, app_module, paste, 'analysis', params, op, records=CLEAN_RECORDS, **kwargs)
+    def _run(self, client, app_module, paste, op, params, records=None, **kwargs):
+        # ``records`` defaults here rather than in the call: the staged and corpus tables are
+        # what the event-study steps are actually fed, and CLEAN_RECORDS is what the cleaning
+        # steps have always been driven with.
+        return _run_node(client, app_module, paste, 'analysis', params, op, records=records or CLEAN_RECORDS, **kwargs)
 
     def test_select_columns_keeps_only_the_named_columns(self, client, app_module, paste):
         _run, status, rows = self._run(client, app_module, paste, 'select_columns', {'columns': '名称, 城市'})
@@ -548,6 +551,138 @@ class TestAnalysisNodeOperations:
         assert 'flatten_strings' in (status.get('error') or '')
         assert rows == [], 'a refused op must not export an empty table as if it were the answer'
 
+    #: The table 分阶段 LDA writes, so the two reads that follow it are driven as nodes without
+    #: fitting a model inside an API test. The phase column is plain text on purpose: that is the
+    #: shape a node boundary leaves, and 日期 is what the order then has to come from.
+    STAGED_RECORDS = [
+        {
+            'stage': '发酵期',
+            'topic': 'TopicⅠ-1',
+            'feature_words': '警方、通报、调查',
+            'weights': '警方:0.5 通报:0.3 调查:0.2',
+            'doc_n': 100,
+            '日期': '2024-04-11',
+        },
+        {
+            'stage': '爆发期',
+            'topic': 'TopicⅡ-1',
+            'feature_words': '警方、通报、问责',
+            'weights': '警方:0.45 通报:0.35 问责:0.2',
+            'doc_n': 700,
+            '日期': '2024-04-23',
+        },
+        {
+            'stage': '爆发期',
+            'topic': 'TopicⅡ-2',
+            'feature_words': '外卖、商家、退款',
+            'weights': '外卖:0.6 商家:0.25 退款:0.15',
+            'doc_n': 200,
+            '日期': '2024-04-24',
+        },
+        {
+            'stage': '衰退期',
+            'topic': 'TopicⅢ-1',
+            'feature_words': '外卖、商家、判决',
+            'weights': '判决:0.5 外卖:0.3 商家:0.2',
+            'doc_n': 600,
+            '日期': '2024-05-19',
+        },
+    ]
+
+    def test_the_lifecycle_step_reads_the_staged_table_across_a_node_boundary(self, client, app_module, paste):
+        _run, status, rows = self._run(
+            client,
+            app_module,
+            paste,
+            'topic_timeline',
+            {
+                'timeline_stage_col': 'stage',
+                'timeline_topic_col': 'topic',
+                'timeline_words_col': 'feature_words',
+                'timeline_size_col': 'doc_n',
+                'timeline_order_col': '日期',
+                'timeline_overlap': '0.5',
+            },
+            records=self.STAGED_RECORDS,
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert len(rows) == 2, 'police and delivery, each followed across two phases'
+        late = next(row for row in rows if row['topic'] == 'TopicⅡ-2')
+        assert late['first_stage'] == '爆发期' and late['peak_stage'] == '衰退期'
+        assert late['is_secondary'], 'born after the opening and still growing at its peak'
+
+    def test_the_flow_step_hands_the_sankey_node_its_edges(self, client, app_module, paste):
+        _run, status, rows = self._run(
+            client,
+            app_module,
+            paste,
+            'topic_flow',
+            {
+                'flow_stage_col': 'stage',
+                'flow_topic_col': 'topic',
+                'flow_words_col': 'feature_words',
+                'flow_weights_col': 'weights',
+                'flow_order_col': '日期',
+                'flow_min_similarity': '0.01',
+            },
+            records=self.STAGED_RECORDS,
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert {'source', 'target', 'similarity'} <= set(rows[0])
+        joined = {(row['from_stage'], row['to_stage']) for row in rows}
+        assert joined == {('发酵期', '爆发期'), ('爆发期', '衰退期')}
+
+    def test_a_flow_threshold_nothing_reaches_fails_the_node_with_the_number(self, client, app_module, paste):
+        _run, status, rows = self._run(
+            client,
+            app_module,
+            paste,
+            'topic_flow',
+            {'flow_stage_col': 'stage', 'flow_order_col': '日期', 'flow_min_similarity': '0.9999'},
+            records=self.STAGED_RECORDS,
+        )
+        assert status['status'] == 'failed', status
+        assert rows == [], 'an empty flow table would read as "no carry-over", not as "not measured"'
+        assert '0.9999' in (status.get('error') or '') or '阈值' in (status.get('error') or '')
+
+    def test_cooccur_turns_a_text_column_into_edges_as_a_node(self, client, app_module, paste):
+        corpus = [{'正文': text} for text in (['警方 通报 调查'] * 3 + ['外卖 商家 退款'] * 3) * 2]
+        _run, status, rows = self._run(
+            client,
+            app_module,
+            paste,
+            'cooccur',
+            {'column': '正文', 'cooccur_topn': '8', 'cooccur_min_count': '2'},
+            records=corpus,
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert set(rows[0]) == {'source', 'target', 'value'}
+        # One direction per pair, named by code point, so the same two words never appear as
+        # two edges of a graph that counts them twice.
+        assert {(row['source'], row['target']) for row in rows} >= {('警方', '通报'), ('商家', '外卖')}
+        assert all(row['source'] < row['target'] for row in rows)
+
+    def test_a_topic_count_sweep_runs_as_a_node_and_answers_one_row_per_count(self, client, app_module, paste):
+        corpus = [{'正文': f'微博 热搜 警方 通报 调查 {index}'} for index in range(12)]
+        corpus += [{'正文': f'微博 热搜 外卖 商家 退款 {index}'} for index in range(12)]
+        _run, status, rows = self._run(
+            client,
+            app_module,
+            paste,
+            'topic_coherence',
+            {
+                'column': '正文',
+                'coherence_min_topics': '2',
+                'coherence_max_topics': '3',
+                'topic_topn': '3',
+                'coherence_max_documents': '12',
+            },
+            records=corpus,
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert [row['n_topics'] for row in rows] == [2, 3]
+        assert all(row['documents'] == 12 for row in rows), 'the sample cap reached the table it limited'
+
     def test_a_step_pipeline_runs_in_order(self, client, app_module, paste):
         ds = paste(CLEAN_RECORDS, name='matrix.csv')
         steps = [
@@ -715,6 +850,7 @@ class TestVisualizeNodeChartTypes:
             ({'chart_type': 'sankey', 'x_field': 'city', 'y_field': 'district', 'value_field': 'likes'}, 'sankey'),
             ({'chart_type': 'map', 'x_field': 'city', 'value_field': 'likes'}, 'map'),
             ({'chart_type': 'wordcloud', 'x_field': 'city', 'value_field': 'likes'}, 'wordCloud'),
+            ({'chart_type': 'network', 'x_field': 'city', 'y_field': 'district', 'value_field': 'likes'}, 'graph'),
         ],
     )
     def test_every_chart_type_the_panel_offers_reaches_the_browser(
@@ -724,6 +860,46 @@ class TestVisualizeNodeChartTypes:
         assert status['status'] == 'done', status.get('error')
         assert spec and spec['engine'] == 'echarts', spec
         assert spec['option']['series'][0]['type'] == series_type, params
+
+    def test_an_event_marker_reaches_the_spec_as_a_line_at_its_label(self, client, app_module, paste):
+        status, spec = _run_chart(
+            client,
+            app_module,
+            paste,
+            {'chart_type': 'line', 'x_field': 'city', 'y_field': 'likes', 'annotations': '三亚=开帖; 海口=通报'},
+        )
+        assert status['status'] == 'done', status.get('error')
+        markers = spec['option']['series'][0]['markLine']['data']
+        assert [item['xAxis'] for item in markers] == ['三亚', '海口']
+        assert [item['label']['formatter'] for item in markers] == ['开帖', '通报']
+
+    def test_a_marker_the_axis_cannot_hold_fails_the_node_and_lists_the_labels(self, client, app_module, paste):
+        status, spec = _run_chart(
+            client,
+            app_module,
+            paste,
+            {'chart_type': 'line', 'x_field': 'city', 'y_field': 'likes', 'annotations': '2024-04-23=打捞'},
+        )
+        assert status['status'] == 'failed', status
+        assert spec is None, 'a half-drawn figure must not reach the canvas'
+        error = status.get('error') or ''
+        assert '2024-04-23' in error and '三亚' in error and '海口' in error, error
+
+    def test_the_matplotlib_engine_refuses_markers_instead_of_losing_them(self, client, app_module, paste):
+        status, _spec = _run_chart(
+            client,
+            app_module,
+            paste,
+            {
+                'chart_type': 'bar',
+                'x_field': 'city',
+                'y_field': 'likes',
+                'engine': 'matplotlib',
+                'annotations': '三亚=开帖',
+            },
+        )
+        assert status['status'] == 'failed', status
+        assert 'engine=echarts' in (status.get('error') or '')
 
     def test_a_title_reaches_the_spec(self, client, app_module, paste):
         _status, spec = _run_chart(

@@ -413,6 +413,40 @@ _ZH = {
     # The intensity curve is only honest if the periods it could not score say so: a blank
     # in an exported table is invisible, and 0.5 would print as "measured, and neutral".
     'analysis.evolution_unscored': '「{col}」在时段「{periods}」里一行分数都没有，这些时段的情感强度留空',
+    # ── 阶段之后的读数：主题生命周期、跨阶段流向、主题数扫描、共词 ──
+    # Each refusal names the number it measured, so the fix is a choice with a figure in front
+    # of it rather than a guess at what the step wanted.
+    'analysis.timeline_stages': '主题生命周期至少要 2 个阶段才谈得上「先后」，现在只有 {stages} 个',
+    'analysis.timeline_overlap': '「同主题词重合度」要在 0 到 1 之间，收到 {value}',
+    'analysis.timeline_blank': '「{col}」有 {n} 行不属于任何阶段，它们不进生命周期',
+    'analysis.timeline_size': '「{col}」里一个数值都没有，峰值无从测量（留空不等于峰为 0）',
+    'analysis.timeline_partial': '「{col}」有 {n} 行不是数值，它们在峰值里按 0 计',
+    'analysis.timeline_words': '阶段「{stage}」的 {topic} 在「{col}」里没有特征词，无法跨阶段追踪它',
+    'analysis.timeline_done': (
+        '主题生命周期：{topics} 个主题（{stages} 个阶段），{multi} 个跨多阶段、{secondary} 个判为次生舆情'
+        '（词重合阈值 {value}）'
+    ),
+    'analysis.timeline_secondary': '次生舆情：{topic} 的阶段路径 {path}',
+    'analysis.flow_stages': '主题流向至少要 2 个相邻阶段，现在只有 {stages} 个',
+    'analysis.flow_similarity': '「流向相似度阈值」要在 0 到 1 之间，收到 {value}',
+    'analysis.flow_weights': '{topic}（阶段「{stage}」）的「{col}」里没有可用的词权重，无法算分布差异',
+    'analysis.flow_stage_empty': '阶段「{stage}」里没有主题行（先检查「{col}」）',
+    'analysis.flow_no_edges': ('没有一条主题流向达到阈值 {value}：实测最相似的一对是 {best}，把阈值调到它以下再来'),
+    'analysis.flow_done': '主题流向：{stages} 个阶段之间得到 {edges} 条边（阈值 {value}，实测最高 {best}）',
+    'analysis.coherence_range': '主题数扫描的起点不能大于终点：{low} > {high}',
+    'analysis.coherence_sampled': '主题数扫描只抽 {used} 篇文本（共 {total} 篇可用），换个样本数字会变',
+    'analysis.coherence_capped': '文本只有 {rows} 篇，扫描的终点从 {high} 个主题降到 {rows} 个',
+    'analysis.coherence_pairs': (
+        '每主题取 {topn} 个词，但这些词没有一对出现在同一篇文本里（跳过 {pairs} 对）：一致性无法测量，只有困惑度可读'
+    ),
+    'analysis.coherence_best': (
+        '主题数扫描（{low}…{high}）：一致性最高在 {coherence} 个主题，困惑度最低在 {perplexity} 个'
+    ),
+    'analysis.cooccur_topn': '共词网络的候选词上限是 {cap}（词数翻倍则边数翻四倍），收到 {value}',
+    'analysis.cooccur_count': '共现次数阈值至少是 1，收到 {value}',
+    'analysis.cooccur_words': '只选出 {found} 个候选词，凑不出一对共现（要求前 {topn} 个）',
+    'analysis.cooccur_empty': ('没有一对词共现达到阈值 {floor}：{pairs} 对里最高只有 {top} 次，请降低阈值或放宽候选词'),
+    'analysis.cooccur_done': '共词网络：{words} 个候选词、{docs} 篇文本，{pairs} 对里 {edges} 对达到阈值 {floor}',
     'clean.unknown_mode': '清洗节点没有名为「{mode}」的模式（可用：regex、llm）',
     'clean.regex_done': '正则清洗：保留 {kept} 行、判定删除 {dropped} 行（未做主题相关性判断，那需要 llm 模式）',
     # A cleaning step that this table cannot carry out. `{op}` and `{param}` stay the
@@ -420,6 +454,10 @@ _ZH = {
     # and what the Settings panel stores in the node's JSON, so a person fixing a
     # hand-written pipeline can match them against the file they edited.
     'analysis.need_param': '「{op}」缺少「{param}」，请先填写',
+    # A count the step reads as an integer. The panel cannot send junk here (the normalizer drops
+    # an unreadable box to the default), but a hand-written workflow file and /api/analysis/run
+    # both reach the service, where int('abc') would otherwise surface as an opaque node failure.
+    'analysis.need_number': '「{op}」的「{param}」要是一个整数，收到「{value}」',
     'analysis.step_col_missing': '「{op}」：表里没有名为「{col}」的列',
     'analysis.step_cols_missing': '「{op}」：表里没有这些列：{cols}',
     'analysis.bad_option': '「{op}」的「{param}」没有「{value}」这个选项（可用：{allowed}）',
@@ -1489,12 +1527,67 @@ _EN = {
     'analysis.evolution_unscored': (
         'no rows of "{col}" carry a score in {periods}, so the sentiment intensity is left empty there'
     ),
+    # ── Reads taken after the phases: lifecycles, flow, a topic-count sweep, co-occurrence ──
+    'analysis.timeline_stages': (
+        'a lifecycle needs at least 2 phases to say "before" and "after", this table has {stages}'
+    ),
+    'analysis.timeline_overlap': 'the same-topic word overlap has to be between 0 and 1, got {value}',
+    'analysis.timeline_blank': '{n} rows of "{col}" belong to no phase, so they join no lifecycle',
+    'analysis.timeline_size': '"{col}" holds no number at all, so a peak cannot be measured (blank is not a peak of 0)',
+    'analysis.timeline_partial': '{n} rows of "{col}" are not numbers and count as 0 when finding the peak',
+    'analysis.timeline_words': '{topic} of phase "{stage}" has no feature words in "{col}", so it cannot be followed',
+    'analysis.timeline_done': (
+        'topic lifecycles: {topics} subjects over {stages} phases, {multi} spanning more than one phase '
+        'and {secondary} flagged as a secondary flare-up (word-overlap threshold {value})'
+    ),
+    'analysis.timeline_secondary': 'secondary flare-up: {topic} runs {path}',
+    'analysis.flow_stages': 'topic flow needs at least 2 adjacent phases, this table has {stages}',
+    'analysis.flow_similarity': 'the flow similarity threshold has to be between 0 and 1, got {value}',
+    'analysis.flow_weights': (
+        '{topic} (phase "{stage}") has no usable word weights in "{col}", so no divergence can be computed'
+    ),
+    'analysis.flow_stage_empty': 'phase "{stage}" holds no topic rows (check "{col}" first)',
+    'analysis.flow_no_edges': (
+        'no topic pair reached the similarity threshold {value}: the closest measured pair was {best}, '
+        'so lower the threshold below it'
+    ),
+    'analysis.flow_done': 'topic flow: {edges} edges between {stages} phases (threshold {value}, best measured {best})',
+    'analysis.coherence_range': 'the topic-count sweep cannot start above where it ends: {low} > {high}',
+    'analysis.coherence_sampled': (
+        'the sweep fits {used} sampled texts out of {total} available; a different sample moves the numbers'
+    ),
+    'analysis.coherence_capped': (
+        'only {rows} texts are available, so the sweep stops at {rows} topics instead of {high}'
+    ),
+    'analysis.coherence_pairs': (
+        'no pair of the {topn} top words of any topic appears in one text ({pairs} pairs skipped): '
+        'coherence is unmeasurable here, only perplexity is readable'
+    ),
+    'analysis.coherence_best': (
+        'topic-count sweep ({low}…{high}): best coherence at {coherence} topics, lowest perplexity at {perplexity}'
+    ),
+    'analysis.cooccur_topn': (
+        'a co-occurrence network caps its candidate words at {cap} (doubling the words '
+        'quadruples the edges), got {value}'
+    ),
+    'analysis.cooccur_count': 'the co-occurrence count threshold has to be at least 1, got {value}',
+    'analysis.cooccur_words': (
+        'only {found} candidate words were available, which cannot form a pair (asked for the top {topn})'
+    ),
+    'analysis.cooccur_empty': (
+        'no word pair reached the count threshold {floor}: the busiest of {pairs} pairs appeared {top} times, '
+        'so lower the threshold or widen the candidates'
+    ),
+    'analysis.cooccur_done': (
+        'co-occurrence network: {words} candidate words over {docs} texts, {edges} of {pairs} pairs at or above {floor}'
+    ),
     'clean.unknown_mode': 'the clean node has no mode named "{mode}" (available: regex, llm)',
     'clean.regex_done': (
         'Regex clean: kept {kept} rows, marked {dropped} for deletion '
         '(topic relevance is not judged here — that needs the llm mode)'
     ),
     'analysis.need_param': '{op} needs {param}, which is empty',
+    'analysis.need_number': '{op}: "{param}" has to be a whole number, got "{value}"',
     'analysis.step_col_missing': '{op}: no column named "{col}" in this table',
     'analysis.step_cols_missing': '{op}: these columns are not in this table: {cols}',
     'analysis.bad_option': '{op} has no "{param}" option "{value}" (available: {allowed})',
