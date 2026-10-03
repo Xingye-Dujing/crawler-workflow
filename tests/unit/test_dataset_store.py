@@ -28,7 +28,7 @@ pytestmark = pytest.mark.unit
 def store(tmp_path):
     s = DatasetStore(str(tmp_path / 'datasets.db'))
     yield s
-    s._conn.close()
+    s.close()
 
 
 def _df(n=3, col='值'):
@@ -241,6 +241,14 @@ class TestRefsAndListing:
 
 
 class TestPurge:
+    def test_close_is_idempotent_and_lock_respecting(self, store):
+        # The housekeeping sweep purges unreferenced datasets on a worker thread while the UI
+        # reads them on the request thread; a close that skipped the lock could finalise the
+        # handle mid-execute and fault the process rather than raise.
+        store.close()
+        store.close()
+        assert store._conn is None
+
     def test_purge_removes_old_orphans_only(self, store):
         orphan = store.put(_df(n=2), name='孤儿.csv')
         referenced = store.put(_df(n=3), name='在用.csv')

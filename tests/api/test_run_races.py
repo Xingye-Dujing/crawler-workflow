@@ -424,7 +424,7 @@ class TestResumeAfterInterruption:
             assert restarted.row_count(run_id, 'node-1') == 3, 'the paid-for rows did not survive the restart'
         finally:
             with contextlib.suppress(Exception):
-                restarted._conn.close()
+                restarted.close()
 
 
 class TestContinueAfterAnEdit:

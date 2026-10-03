@@ -827,6 +827,50 @@ NORMALIZED = {
         {'column': '城市', 'cooccur_topn': '12', 'cooccur_min_count': '3', 'cooccur_window': '5'},
         {'column': '城市', 'topn': 12, 'min_count': 3, 'window': 5},
     ),
+    'forecast': (
+        {
+            'forecast_period_col': '期',
+            'forecast_value_col': '指数',
+            'forecast_method': 'holt',
+            'forecast_horizon': '2',
+            'forecast_window': '4',
+            'forecast_alpha': '0.4',
+            'forecast_beta': '0.2',
+            'forecast_min_periods': '5',
+        },
+        {
+            'column': '期',
+            'value_col': '指数',
+            'method': 'holt',
+            'horizon': 2,
+            'window': 4,
+            'min_periods': 5,
+            'alpha': 0.4,
+            'beta': 0.2,
+        },
+    ),
+    'alert': (
+        {
+            'alert_period_col': '期',
+            'alert_index_col': '指数',
+            'alert_intensity_col': '强度',
+            'alert_volume_col': '数量',
+            'alert_streak': '3',
+            'alert_swing': '0.3',
+            'alert_heating': '0.25',
+            'alert_volume_floor': '0.5',
+        },
+        {
+            'column': '期',
+            'index_col': '指数',
+            'intensity_col': '强度',
+            'volume_col': '数量',
+            'streak': 3,
+            'swing': 0.3,
+            'heating': 0.25,
+            'volume_floor': 0.5,
+        },
+    ),
     'filter_rows': (
         {'column': '城市', 'op': 'not_in', 'value': '北京, 上海'},
         {'column': '城市', 'op': 'not_in', 'value': '北京, 上海'},
@@ -910,6 +954,25 @@ BLANK_FORM = {
     },
     'topic_coherence': {'column': '', 'topn': 10},
     'cooccur': {'column': '', 'topn': 30},
+    # Both look-forward steps name the columns 情感演化曲线 writes, so an untouched form is the
+    # hand-off. The two smoothing factors and the two optional alert signals are omitted when
+    # blank: they are choices, not defaults to fall back on.
+    'forecast': {
+        'column': 'period',
+        'value_col': 'sentiment_index',
+        'method': 'moving_average',
+        'horizon': 3,
+        'window': 3,
+        'min_periods': 4,
+    },
+    'alert': {
+        'column': 'period',
+        'index_col': 'sentiment_index',
+        'streak': 2,
+        'swing': 0.2,
+        'heating': 0.15,
+        'volume_floor': 0.6,
+    },
     'sentiment_evolution': {'column': ''},
 }
 
@@ -1535,6 +1598,25 @@ PARSED_FIELDS = {
     'cooccur_topn',
     'cooccur_min_count',
     'cooccur_window',
+    # Both look-forward steps re-shape every one of their fields: the four column names fall back
+    # to what 情感演化曲线 writes (or are dropped, for the two optional alert signals), and every
+    # number is read through ``_optional_int`` / ``_optional_float``.
+    'forecast_period_col',
+    'forecast_value_col',
+    'forecast_method',
+    'forecast_horizon',
+    'forecast_window',
+    'forecast_alpha',
+    'forecast_beta',
+    'forecast_min_periods',
+    'alert_period_col',
+    'alert_index_col',
+    'alert_intensity_col',
+    'alert_volume_col',
+    'alert_streak',
+    'alert_swing',
+    'alert_heating',
+    'alert_volume_floor',
 }
 
 
@@ -2270,6 +2352,25 @@ PANEL_VALUE = {
     'cooccur_topn': '12',
     'cooccur_min_count': '3',
     'cooccur_window': '5',
+    # The forecast's boxes: none of these is the value an untouched form falls back to, and
+    # ``forecast_alpha`` is 0.4 rather than 0 because a probe the normalizer would drop (a falsy
+    # number) cannot show that the field reached the step.
+    'forecast_period_col': '期',
+    'forecast_value_col': '指数',
+    'forecast_method': 'holt',
+    'forecast_horizon': '2',
+    'forecast_window': '4',
+    'forecast_alpha': '0.4',
+    'forecast_beta': '0.2',
+    'forecast_min_periods': '5',
+    'alert_period_col': '期',
+    'alert_index_col': '指数',
+    'alert_intensity_col': '强度',
+    'alert_volume_col': '数量',
+    'alert_streak': '3',
+    'alert_swing': '0.3',
+    'alert_heating': '0.25',
+    'alert_volume_floor': '0.5',
 }
 
 

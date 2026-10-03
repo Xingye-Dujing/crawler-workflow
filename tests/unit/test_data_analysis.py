@@ -59,6 +59,8 @@ OPERATIONS = [
     'topic_flow',
     'topic_coherence',
     'cooccur',
+    'forecast',
+    'alert',
     'sentiment_evolution',
 ]
 
@@ -2146,6 +2148,178 @@ class TestCooccur:
     def test_a_count_threshold_below_one_is_not_a_filter(self):
         with pytest.raises(UnknownOperationError, match='至少'):
             D.cooccur(self._frame(['警方 通报 调查'] * 2), '正文', topn=5, min_count=0)
+
+
+class TestForecast:
+    """Extrapolating the curve, and the difference between a band and a guess.
+
+    The series is monotone on purpose: a steady fall is what 发酵期→爆发期 looks like in the
+    study's own numbers, and it is the one shape where "the trend continues" can be checked
+    against the arithmetic rather than against luck.
+    """
+
+    VALUES = [-0.1, -0.2, -0.3, -0.5, -0.7, -0.85]
+
+    @classmethod
+    def _curve(cls, spacing=1, values=None):
+        start = pd.Timestamp('2024-04-10')
+        return pd.DataFrame(
+            {
+                'period': [
+                    str((start + pd.Timedelta(days=spacing * index)).date())
+                    for index in range(len(values or cls.VALUES))
+                ],
+                'sentiment_index': list(values or cls.VALUES),
+            }
+        )
+
+    def test_history_keeps_its_numbers_and_the_future_gets_the_band(self):
+        out = D.forecast(self._curve(), horizon=2, window=3)
+        assert list(out.columns) == ['period', 'actual', 'predicted', 'lower', 'upper', 'horizon']
+        assert list(out['horizon']) == [0] * 6 + [1, 2]
+        assert (out['actual'].tail(2).isna()).all(), 'a future period has not been observed'
+        assert (out[out['horizon'] > 0]['predicted'].notna()).all(), 'every future row is answered'
+        assert out.iloc[-1]['period'] == '2024-04-17', 'future rows are dated on the same axis'
+
+    def test_a_moving_average_extrapolates_the_last_window_and_holds_its_band(self):
+        out = D.forecast(self._curve(), method='moving_average', horizon=3, window=3)
+        expected = sum(self.VALUES[-3:]) / 3
+        tail = out[out['horizon'] > 0]
+        assert (tail['predicted'] == round(expected, 4)).all(), 'no trend means a flat forecast'
+        assert tail['lower'].nunique() == 1 and tail['upper'].nunique() == 1, 'the band must not widen'
+
+    def test_holt_carries_the_trend_and_widens_with_the_square_root_of_the_horizon(self):
+        out = D.forecast(self._curve(), method='holt', horizon=3)
+        tail = out[out['horizon'] > 0].reset_index(drop=True)
+        # A falling curve forecast below its last observation: the trend is the whole method.
+        assert tail.at[0, 'predicted'] < self.VALUES[-1]
+        assert (tail['predicted'].diff().dropna() < 0).all(), 'each further step falls further'
+        widths = (tail['upper'] - tail['lower']) / 2
+        assert (widths.diff().dropna() > 0).all(), 'a further horizon is a wider interval'
+        assert widths.iloc[1] / widths.iloc[0] == pytest.approx(2**0.5, abs=0.02)
+
+    def test_the_fit_is_reported_where_the_model_could_have_made_it(self):
+        out = D.forecast(self._curve(), method='moving_average', horizon=1, window=3)
+        history = out[out['horizon'] == 0]
+        assert history['predicted'].isna().sum() == 3, 'the first window has nothing to predict from'
+        assert history.iloc[3]['predicted'] == pytest.approx((-0.1 + -0.2 + -0.3) / 3, abs=1e-4)
+
+    def test_two_runs_of_one_curve_answer_with_one_table(self):
+        frame = self._curve()
+        assert D.forecast(frame, horizon=2).equals(D.forecast(frame, horizon=2))
+
+    def test_a_curve_of_phase_names_cannot_be_extrapolated(self):
+        frame = pd.DataFrame({'period': ['发酵期'] * 3 + ['爆发期'] * 3, 'sentiment_index': self.VALUES})
+        with pytest.raises(UnknownOperationError, match='period'):
+            D.forecast(frame)
+
+    def test_a_column_that_is_not_there_is_named_rather_than_raising_keyerror(self):
+        with pytest.raises(UnknownOperationError, match='没有这一列'):
+            D.forecast(self._curve(), value_col='没有这一列')
+
+    def test_two_rows_for_one_day_are_refused_because_they_are_a_fake_step(self):
+        frame = pd.concat([self._curve(), self._curve().head(1)], ignore_index=True)
+        with pytest.raises(UnknownOperationError, match='同一天'):
+            D.forecast(frame)
+
+    def test_an_uneven_curve_is_warned_about_and_stepped_by_its_modal_gap(self):
+        frame = self._curve(spacing=1)
+        frame.loc[2, 'period'] = '2024-04-20'
+        # Sorted: 10, 11, 13, 14, 15, 20 — gaps 1,2,1,1,5, so the modal step is 1 day and the
+        # future label is stepped from the LAST period, not from a calendar the series does not have.
+        out = D.forecast(frame, horizon=1)
+        assert out.iloc[-1]['period'] == '2024-04-21'
+        assert out.iloc[-1]['horizon'] == 1
+
+    @pytest.mark.parametrize(
+        ('kwargs', 'needle'), [({'horizon': 0}, '步数'), ({'window': 1}, '窗口'), ({'alpha': 0}, '平滑')]
+    )
+    def test_an_impossible_setting_is_refused_with_its_own_number(self, kwargs, needle):
+        with pytest.raises(UnknownOperationError, match=needle):
+            D.forecast(self._curve(), **kwargs)
+
+    def test_a_curve_too_short_to_forecast_is_refused_rather_than_fitted_badly(self):
+        with pytest.raises(UnknownOperationError, match='至少'):
+            D.forecast(self._curve(values=[-0.1, -0.2]), horizon=2)
+
+    def test_the_window_needs_an_observation_left_to_predict(self):
+        with pytest.raises(UnknownOperationError, match='窗口'):
+            D.forecast(self._curve(values=self.VALUES[:3]), window=3, min_periods=2)
+
+
+class TestAlert:
+    """The flare-up warning, and the rule that never answers with an empty table."""
+
+    @classmethod
+    def _curve(cls, indexes, intensity=None, volume=None):
+        start = pd.Timestamp('2024-05-01')
+        frame = pd.DataFrame(
+            {
+                'period': [str((start + pd.Timedelta(days=index)).date()) for index in range(len(indexes))],
+                'sentiment_index': indexes,
+                'total': volume if volume is not None else [100] * len(indexes),
+            }
+        )
+        if intensity is not None:
+            frame['intensity'] = intensity
+        return frame
+
+    def test_a_run_of_same_direction_moves_fires_the_turn_signal(self):
+        out = D.alert(self._curve([-0.1, -0.15, -0.4, -0.7]), streak=2, swing=0.2)
+        assert list(out['signal']) == ['转向']
+        assert out.iloc[0]['period'] == '2024-05-04'
+        assert '0.5' in out.iloc[0]['reason'] or '0.3' in out.iloc[0]['reason']
+
+    def test_moves_in_different_directions_do_not_add_up_to_a_turn(self):
+        # One big drop then one big rise is a reaction to an event, not a crowd moving one way.
+        out = D.alert(self._curve([-0.1, -0.5, -0.1, -0.5]), streak=2, swing=0.2)
+        assert list(out['signal']) == ['未触发']
+
+    def test_an_intensity_climb_fires_the_heating_signal_even_with_a_calm_index(self):
+        frame = self._curve([-0.5, -0.5, -0.5, -0.5], intensity=[0.1, 0.1, 0.4, 0.7])
+        out = D.alert(frame, streak=2, swing=0.2, heating=0.1, intensity_col='intensity')
+        # The index never moves, so 转向 cannot fire; the crowd is nonetheless getting louder in
+        # both directions, which is the 二次爆发期 shape the signed curve alone would miss.
+        assert set(out['signal']) == {'升温'}
+        assert '2024-05-04' in set(out['period'])
+
+    def test_a_losing_crowd_suppresses_the_signal_and_the_row_says_so(self):
+        frame = self._curve([-0.1, -0.15, -0.4, -0.7], volume=[900, 800, 60, 12])
+        out = D.alert(frame, streak=2, swing=0.2, volume_col='total', volume_floor=0.6)
+        assert set(out['signal']) == {'转向（已抑制）'}, 'the swing fired and the volume said no'
+        assert '衰减' in ''.join(out['reason']) or '低于' in ''.join(out['reason'])
+
+    def test_nothing_firing_still_answers_with_the_largest_value_measured(self):
+        out = D.alert(self._curve([-0.1, -0.12, -0.14]), streak=2, swing=0.5)
+        assert list(out['signal']) == ['未触发']
+        assert out.iloc[0]['value'] == pytest.approx(0.02)
+        assert '2' in out.iloc[0]['reason']
+
+    def test_the_streak_is_a_consecutive_requirement_not_a_total(self):
+        calm = self._curve([-0.1, -0.11, -0.5, -0.9])
+        assert list(D.alert(calm, streak=2, swing=0.2)['signal']) == ['转向']
+        assert list(D.alert(calm, streak=3, swing=0.2)['signal']) == ['未触发']
+
+    def test_a_signal_column_that_was_named_but_is_absent_is_refused(self):
+        with pytest.raises(UnknownOperationError, match='没有这个列'):
+            D.alert(self._curve([-0.1, -0.2, -0.5]), intensity_col='没有这个列')
+
+    def test_a_table_shorter_than_the_streak_plus_one_is_refused(self):
+        with pytest.raises(UnknownOperationError, match='至少'):
+            D.alert(self._curve([-0.1, -0.5]), streak=2)
+
+    @pytest.mark.parametrize(
+        ('kwargs', 'needle'), [({'streak': 0}, '连续'), ({'swing': 0}, '阈值'), ({'volume_floor': 1.5}, '倍率')]
+    )
+    def test_an_impossible_rule_is_refused_with_the_setting_named(self, kwargs, needle):
+        with pytest.raises(UnknownOperationError, match=needle):
+            D.alert(self._curve([-0.1, -0.3, -0.6, -0.9]), **kwargs)
+
+    def test_rows_without_a_date_join_no_check_and_are_counted_out_loud(self):
+        frame = self._curve([-0.1, -0.3, -0.6, -0.9])
+        frame.loc[1, 'period'] = '还没有日期'
+        out = D.alert(frame, streak=2, swing=0.2)
+        assert len(out) >= 1
 
 
 class TestSentimentEvolution:

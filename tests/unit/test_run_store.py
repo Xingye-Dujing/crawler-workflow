@@ -43,7 +43,7 @@ pytestmark = pytest.mark.unit
 def store(tmp_path):
     s = RunStore(str(tmp_path / 'runs.db'))
     yield s
-    s._conn.close()
+    s.close()
 
 
 def _wf(nodes=None, conns=None):
@@ -803,6 +803,46 @@ class TestPurgeAndStats:
 
 
 class TestConcurrency:
+    def test_closing_waits_for_a_query_that_holds_the_store(self, store):
+        """The hazard: finalising the SQLite handle while another thread is inside ``execute``
+        on it does not raise, it faults the process (measured as a mid-suite
+        ``Windows fatal exception: access violation`` from a housekeeping sweep racing the
+        ``client`` fixture's teardown). The lock is what serialises the two, so a close that
+        respects it has to WAIT — and that is checkable without killing the run."""
+        _start(store)
+        store.row_count('r1', 'n1')  # warm the connection before anybody is allowed to hold it
+        held = threading.Event()
+        released = threading.Event()
+        closed = threading.Event()
+
+        def reader():
+            with store._lock:
+                held.set()
+                released.wait(2.0)
+                store.row_count('r1', 'n1')
+
+        def closer():
+            store.close()
+            closed.set()
+
+        reader_thread = threading.Thread(target=reader)
+        reader_thread.start()
+        assert held.wait(2.0), 'the reader never took the lock'
+        closer_thread = threading.Thread(target=closer)
+        closer_thread.start()
+        closer_thread.join(0.2)
+        assert closer_thread.is_alive(), 'close() went through without the store lock'
+        released.set()
+        closer_thread.join(2.0)
+        reader_thread.join(2.0)
+        assert closed.is_set(), 'the close never finished once the lock was free'
+
+    def test_close_is_idempotent(self, store):
+        """A teardown that runs twice must not turn into an error the caller cannot see past."""
+        store.close()
+        store.close()
+        assert store._conn is None
+
     def test_parallel_appends_under_shared_dedupe_scope(self, store, sample_rows):
         """Several worker threads claim rows simultaneously; the scope ledger
         must hand each unique item to exactly one writer."""

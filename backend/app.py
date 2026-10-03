@@ -3532,6 +3532,42 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         if window is not None:
             result['window'] = window
         return result
+    if op == 'forecast':
+        result = {
+            # The panel leaves the period box blank to mean "the column 情感演化曲线 writes",
+            # which is also the step's own default.
+            'column': str(params.get('forecast_period_col') or 'period').strip(),
+            'value_col': str(params.get('forecast_value_col') or 'sentiment_index').strip(),
+            'method': params.get('forecast_method') or 'moving_average',
+            'horizon': _optional_int(params.get('forecast_horizon')) or 3,
+            'window': _optional_int(params.get('forecast_window')) or 3,
+            'min_periods': _optional_int(params.get('forecast_min_periods')) or 4,
+        }
+        # Both smoothing factors are forwarded whenever a number was written: 0 is refused by the
+        # step as the degenerate setting it is, and swallowing it into the default would answer a
+        # question the user did not ask.
+        for key, source in (('alpha', 'forecast_alpha'), ('beta', 'forecast_beta')):
+            number = _optional_float(params.get(source))
+            if number is not None:
+                result[key] = number
+        return result
+    if op == 'alert':
+        result = {
+            'column': str(params.get('alert_period_col') or 'period').strip(),
+            'index_col': str(params.get('alert_index_col') or 'sentiment_index').strip(),
+            'streak': _optional_int(params.get('alert_streak')) or 2,
+            'swing': _optional_float(params.get('alert_swing')) or 0.2,
+            'heating': _optional_float(params.get('alert_heating')) or 0.15,
+            'volume_floor': _optional_float(params.get('alert_volume_floor')) or 0.6,
+        }
+        # The two optional signals are read exactly like ``score_col`` on 情感演化曲线: a blank
+        # box means that half of the rule is not wanted, so the key is not sent and the step's own
+        # '' answers. A name that is typed but missing IS refused, by the step.
+        for key, source in (('intensity_col', 'alert_intensity_col'), ('volume_col', 'alert_volume_col')):
+            value = str(params.get(source) or '').strip()
+            if value:
+                result[key] = value
+        return result
     if op == 'topic_label':
         # Every field falls back to the column 分阶段 LDA writes, so an untouched form is the
         # pipeline's own hand-off rather than a missing parameter; the step still refuses when

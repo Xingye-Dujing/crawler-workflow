@@ -472,7 +472,10 @@ def client(app_module, data_root, request):
         module._dataset_cache.clear()
         for store in (run_store, dataset_store):
             with contextlib.suppress(Exception):
-                store._conn.close()
+                # ``close()`` rather than ``_conn.close()``: a run worker's housekeeping sweep
+                # may be inside ``execute`` on that very connection, and finalising the handle
+                # under it faults the whole test process instead of raising.
+                store.close()
         module._RUN_STORE = None
         module._DATASET_STORE = None
 

@@ -447,6 +447,27 @@ _ZH = {
     'analysis.cooccur_words': '只选出 {found} 个候选词，凑不出一对共现（要求前 {topn} 个）',
     'analysis.cooccur_empty': ('没有一对词共现达到阈值 {floor}：{pairs} 对里最高只有 {top} 次，请降低阈值或放宽候选词'),
     'analysis.cooccur_done': '共词网络：{words} 个候选词、{docs} 篇文本，{pairs} 对里 {edges} 对达到阈值 {floor}',
+    # ── 往前看：曲线外推与二次爆发预警 ──
+    'analysis.forecast_horizon': '外推步数至少是 1，收到 {value}（0 步只是把最后一格再抄一遍）',
+    'analysis.forecast_window': '移动平均的窗口至少 2 期才能平均，收到 {value}',
+    'analysis.forecast_smooth': '平滑系数「{name}」要在 0 与 1 之间（不含两端），收到 {value}',
+    'analysis.forecast_dates': '「{col}」不是能解析成日期的时段列（一个日期都没有）：阶段名没法外推',
+    'analysis.forecast_rows': '外推至少要 {least} 期观测，这一列只有 {rows} 期同时给出时间与数值',
+    'analysis.forecast_window_rows': '窗口 {window} 期至少要留一期来预测，这一列只有 {rows} 期',
+    'analysis.forecast_duplicate': '「{col}」里有同一天出现两行：{days}（两行会被当成趋势的两步）',
+    'analysis.forecast_uneven': '时段间隔不齐：{rows} 期里有 {steps} 步不是 {gap} 天，未来格按 {gap} 天间隔标注',
+    'analysis.forecast_done': '{method} 外推：{rows} 期观测，往后 {horizon} 步，间隔 {gap} 天（末期 {last}）',
+    'analysis.alert_streak': '连续期数至少是 1，收到 {value}',
+    'analysis.alert_threshold': '「{name}」阈值必须大于 0，收到 {value}',
+    'analysis.alert_floor': '热度保持倍率不能超过 1（那等于要求热度上涨才算爆发），收到 {value}',
+    'analysis.alert_rows': '预警至少要比连续期数多一行：需要 {least} 行，只有 {rows} 行',
+    'analysis.alert_skipped': '「{col}」有 {n} 行解析不出日期，它们不参与预警判断',
+    'analysis.alert_reason': '连续 {streak} 期变化 {moves}；强度斜率 {intensity}；本期热度 {volume}（{held}）',
+    'analysis.alert_none': (
+        '未触发：幅度最大的是 {period}，连续 {streak} 期平均 |Δ| 未到 {swing}，强度斜率未到 {heating}'
+    ),
+    'analysis.alert_none_log': '预警检查了 {checked} 期：连续 {streak} 期、幅度阈值 {swing}，一条都没触发',
+    'analysis.alert_fired': '二次爆发预警：{period} 触发 {signal}，数值 {value}',
     'clean.unknown_mode': '清洗节点没有名为「{mode}」的模式（可用：regex、llm）',
     'clean.regex_done': '正则清洗：保留 {kept} 行、判定删除 {dropped} 行（未做主题相关性判断，那需要 llm 模式）',
     # A cleaning step that this table cannot carry out. `{op}` and `{param}` stay the
@@ -1581,6 +1602,39 @@ _EN = {
     'analysis.cooccur_done': (
         'co-occurrence network: {words} candidate words over {docs} texts, {edges} of {pairs} pairs at or above {floor}'
     ),
+    # ── Looking forward: extrapolating the curve, and the flare-up warning ──
+    'analysis.forecast_horizon': 'the horizon has to be at least 1 step, got {value} (0 just copies the last cell)',
+    'analysis.forecast_window': 'a moving average needs 2 periods to average, got {value}',
+    'analysis.forecast_smooth': 'the smoothing factor "{name}" has to be strictly between 0 and 1, got {value}',
+    'analysis.forecast_dates': '"{col}" is not a period column of dates: a phase NAME cannot be extrapolated',
+    'analysis.forecast_rows': (
+        'extrapolating needs at least {least} observed periods, this column gives {rows} with both a date and a number'
+    ),
+    'analysis.forecast_window_rows': (
+        'a window of {window} still needs one period left to forecast, this column has {rows}'
+    ),
+    'analysis.forecast_duplicate': '"{col}" has two rows for the same day: {days} (they read as two steps of a trend)',
+    'analysis.forecast_uneven': (
+        'the periods are not evenly spaced: {steps} of {rows} gaps are not {gap} days, '
+        'so future rows are labelled {gap} days apart'
+    ),
+    'analysis.forecast_done': (
+        '{method} forecast: {rows} observed periods, {horizon} steps ahead, {gap}-day spacing (last {last})'
+    ),
+    'analysis.alert_streak': 'the streak has to be at least 1 period, got {value}',
+    'analysis.alert_threshold': 'the "{name}" threshold has to be above 0, got {value}',
+    'analysis.alert_floor': 'the volume-hold ratio cannot exceed 1 (that asks for growth), got {value}',
+    'analysis.alert_rows': 'the warning needs one row more than the streak: asked for {least}, this table has {rows}',
+    'analysis.alert_skipped': '{n} rows of "{col}" parse to no date, so they join no warning check',
+    'analysis.alert_reason': (
+        'moves over the last {streak} periods {moves}; intensity slope {intensity}; volume {volume} ({held})'
+    ),
+    'analysis.alert_none': (
+        'nothing fired: the largest swing was {period}, and {streak} consecutive moves stayed under {swing} '
+        'while the intensity slope stayed under {heating}'
+    ),
+    'analysis.alert_none_log': 'warning checked {checked} periods (streak {streak}, swing {swing}) and fired on none',
+    'analysis.alert_fired': 'flare-up warning: {period} fired {signal} at {value}',
     'clean.unknown_mode': 'the clean node has no mode named "{mode}" (available: regex, llm)',
     'clean.regex_done': (
         'Regex clean: kept {kept} rows, marked {dropped} for deletion '

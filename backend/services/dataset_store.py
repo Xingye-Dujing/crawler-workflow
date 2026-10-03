@@ -141,6 +141,20 @@ class DatasetStore:
         with self._lock:
             return self._conn.execute(sql, params).fetchall()
 
+    def close(self) -> None:
+        """Release the connection, or do nothing if it is already gone.
+
+        Closing has to take the same lock every query takes: the housekeeping sweep runs on a run
+        worker's thread and the UI reads datasets on the request thread, so a bare
+        ``store._conn.close()`` can finalise the SQLite handle while another thread is inside
+        ``execute`` on it — which does not raise, it faults the process (measured as an
+        ``access violation`` part-way through a full suite run).
+        """
+        with self._lock:
+            if self._conn is not None:
+                self._conn.close()
+                self._conn = None
+
     # ── data ────────────────────────────────────────────────────
 
     def _encode(self, records: list) -> bytes:

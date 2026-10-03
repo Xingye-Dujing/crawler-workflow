@@ -481,7 +481,7 @@ class TestAnswerScope:
 def run_store(tmp_path):
     store = RunStore(str(tmp_path / 'runs.db'))
     yield store
-    store._conn.close()
+    store.close()
 
 
 def cached_scopes(store):

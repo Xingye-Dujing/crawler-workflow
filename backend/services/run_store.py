@@ -311,6 +311,18 @@ class RunStore:
 
     # ── schema ──────────────────────────────────────────────────
 
+    def close(self) -> None:
+        """Release the connection, or do nothing if it is already gone.
+
+        Same rule as :meth:`DatasetStore.close`: a close that skips ``self._lock`` can finalise
+        the SQLite handle while a worker thread is inside ``execute`` on it, and that is a fault,
+        not an exception.
+        """
+        with self._lock:
+            if self._conn is not None:
+                self._conn.close()
+                self._conn = None
+
     def _ensure_tables(self):
         with self._lock:
             self._conn.executescript(

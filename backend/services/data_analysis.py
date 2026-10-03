@@ -133,6 +133,11 @@ ON_FAIL = ('abort', 'blank')
 #: prints and the run record keeps — echoes every parameter it is given.
 LLM_OPS = frozenset({'topic_label'})
 
+#: What :meth:`DataAnalysisService.forecast` extrapolates with. Both are computed in this
+#: module: statsmodels is not a dependency of this project, and a two-parameter smoothing
+#: written out is short enough to read next to the numbers it produced.
+FORECAST_METHODS = ('moving_average', 'holt')
+
 #: The stage part of a topic id: 表 1 numbers its topics TopicⅠ-1 … TopicⅤ-4, and the numeral
 #: is the stage's POSITION in the lifecycle — which is why the order has to be declared rather
 #: than read off the code points of Chinese names ('二次爆发期' sorts before '发酵期').
@@ -218,6 +223,14 @@ STEP_PARAMS: dict = {
     # steps do: neither has a defensible fallback corpus to pick.
     'topic_coherence': {'one': ('column',)},
     'cooccur': {'one': ('column',)},
+    # Both look-forward steps read a CURVE, so the period column and the value column are each
+    # named: a forecast of whichever numeric column was nearest in the table would put a line on
+    # a chart nobody asked for and label it 预测情感走向.
+    'forecast': {
+        'one': ('column', 'value_col'),
+        'enums': {'method': ('moving_average', FORECAST_METHODS)},
+    },
+    'alert': {'one': ('column', 'index_col')},
 }
 
 
@@ -394,6 +407,36 @@ def _word_weights(value) -> dict:
             continue
         weights[word.strip()] = number
     return weights
+
+
+def _standard_deviation(values) -> float:
+    """Sample standard deviation (n−1), or 0.0 when there is nothing to spread.
+
+    Written here rather than taken from numpy because the two callers need the SAME convention
+    as each other: a band computed with n and one computed with n−1 are different widths, and a
+    forecast table whose intervals came from two rules would not be one model's answer.
+    """
+    if len(values) < 2:
+        return 0.0
+    mean = sum(values) / len(values)
+    return (sum((float(value) - mean) ** 2 for value in values) / (len(values) - 1)) ** 0.5
+
+
+def _forecast_row(stamp, actual, centre, band, horizon: int) -> dict:
+    """One row of the forecast table: a past point with its fit, or a future point alone.
+
+    A future row's ``actual`` is ``None`` and never a repeat of the last number: an export that
+    fills the cell the reader is looking for would claim the period was observed.
+    """
+    label = stamp.strftime('%Y-%m-%d') if hasattr(stamp, 'strftime') else str(stamp)
+    return {
+        'period': label,
+        'actual': None if actual is None else round(float(actual), 4),
+        'predicted': None if centre is None else round(float(centre), 4),
+        'lower': None if centre is None or band is None else round(float(centre) - float(band), 4),
+        'upper': None if centre is None or band is None else round(float(centre) + float(band), 4),
+        'horizon': horizon,
+    }
 
 
 def _prepare_topic_model(df, column, n_topics, max_features):
@@ -2275,6 +2318,324 @@ class DataAnalysisService:
                 logger.warning(t('analysis.evolution_unscored', col=score_col, periods='、'.join(unscored)))
         return grouped
 
+    # ── Looking forward: the paper's 预测情感走向 and 提前干预 ─────
+
+    @staticmethod
+    def forecast(
+        df: pd.DataFrame,
+        column: str = 'period',
+        value_col: str = 'sentiment_index',
+        method: str = 'moving_average',
+        horizon: int = 3,
+        window: int = 3,
+        alpha: float = 0.5,
+        beta: float = 0.3,
+        min_periods: int = 4,
+    ) -> pd.DataFrame:
+        """Extrapolate the sentiment CURVE a few periods ahead.
+
+        The study's closing argument is that a curve like this one could have been used to
+        intervene before the second flare-up, so the question worth asking of
+        :meth:`sentiment_evolution` is what the next few periods look like if nothing changes.
+        This is an extrapolation of a SHAPE, not a prediction of events: no model here knows
+        about a police notification, and the honest reading of the band is "where this curve's
+        own momentum and wobble put the next points", not "what will happen".
+
+        Two methods, both computed here rather than imported:
+
+        ``moving_average`` repeats the mean of the last ``window`` observations and keeps the
+        band FLAT, because a moving average has no trend to add and no more uncertainty the
+        further out it goes — a widening band here would be theatre.
+
+        ``holt`` is Holt's two-parameter linear method (level + trend), written out rather than
+        taken from a statsmodels dependency, and its band grows with ``sqrt(horizon)`` because a
+        trend extrapolated further really is less certain. The band uses the standard deviation
+        of the fitted one-step errors, which is the only uncertainty this model measured.
+
+        History is kept in the same table: every past period comes back with its ``actual`` and
+        the one-step-ahead ``predicted`` the model would have made from the period before it, at
+        ``horizon`` 0, so a chart shows the fit and the forecast as one line rather than two
+        tables the user has to join. A future row has ``actual`` empty — it has not happened.
+
+        Equal spacing is checked, not assumed: with missing days the "next period" the step
+        names on the axis is not the next day, so the modal gap is used for the labels and the
+        deviating count is logged. The input has to be dates for any of that to mean anything,
+        which is why a phase NAME column (发酵期…) is refused instead of being numbered 1, 2, 3.
+        """
+        steps = int(horizon)
+        for name in (column, value_col):
+            # Refused by name rather than reaching pandas, which answers a missing column with a
+            # bare KeyError: the gate catches this on both doors, but a hand-called step should
+            # still say which of its own inputs is gone.
+            if name not in df.columns:
+                raise UnknownOperationError(t('analysis.step_col_missing', op='forecast', col=name))
+        if steps < 1:
+            raise UnknownOperationError(t('analysis.forecast_horizon', value=horizon))
+        look = int(window)
+        if look < 2:
+            raise UnknownOperationError(t('analysis.forecast_window', value=window))
+        for name, value in (('alpha', alpha), ('beta', beta)):
+            number = float(value)
+            if not 0.0 < number < 1.0:
+                raise UnknownOperationError(t('analysis.forecast_smooth', name=name, value=value))
+        floor = int(min_periods)
+
+        stamps = _to_datetime(df[column])
+        if stamps.isna().all():
+            raise UnknownOperationError(t('analysis.forecast_dates', col=column))
+        work = pd.DataFrame({'stamp': stamps, 'actual': pd.to_numeric(df[value_col], errors='coerce')})
+        work = work[work['stamp'].notna() & work['actual'].notna()].sort_values('stamp', kind='stable')
+        if len(work) < floor:
+            raise UnknownOperationError(t('analysis.forecast_rows', rows=len(work), least=floor))
+        if len(work) < look + 1:
+            raise UnknownOperationError(t('analysis.forecast_window_rows', rows=len(work), window=look))
+        doubled = work['stamp'].duplicated()
+        if doubled.any():
+            # Two rows for one day would be read as two steps of a trend and quietly flatten or
+            # steepen it, so the duplicate is the finding here, not something to average away.
+            raise UnknownOperationError(
+                t(
+                    'analysis.forecast_duplicate',
+                    col=column,
+                    days='、'.join(str(value.date()) for value in work.loc[doubled, 'stamp'].head(5)),
+                )
+            )
+        gaps = work['stamp'].diff().dropna()
+        sizes = gaps.dt.days.value_counts()
+        modal = int(sizes.index[0])
+        uneven = int(sizes.drop(index=modal).sum()) if len(sizes) > 1 else 0
+        if uneven:
+            logger.warning(t('analysis.forecast_uneven', steps=uneven, gap=modal, rows=len(work)))
+        stamps_in = work['stamp'].tolist()
+        values = [float(value) for value in work['actual'].tolist()]
+        centres: list = []
+        spreads: list = []
+        future: list = []
+        if method == 'moving_average':
+            for position in range(len(values)):
+                if position < look:
+                    # Nothing is claimed for the first ``window`` points: the estimator has not
+                    # seen enough of the curve yet, and a value here would be a guess wearing
+                    # the same column heading as the forecasts.
+                    centres.append(None)
+                    spreads.append(None)
+                    continue
+                past = values[position - look : position]
+                centres.append(sum(past) / look)
+                spreads.append(1.96 * _standard_deviation(past))
+            tail = values[-look:]
+            centre = sum(tail) / look
+            band = 1.96 * _standard_deviation(tail)
+            # A moving average has no trend, so the forecast is flat and the band stays the same
+            # width: widening it here would be theatre about a model that adds nothing each step.
+            future = [(offset, centre, band) for offset in range(1, steps + 1)]
+        else:
+            level, slope = values[0], 0.0
+            errors: list = []
+            a = float(alpha)
+            b = float(beta)
+            for position, value in enumerate(values):
+                if position == 0:
+                    centres.append(None)
+                    spreads.append(None)
+                    continue
+                predicted = level + slope
+                errors.append(value - predicted)
+                centres.append(predicted)
+                # No band on a fitted point: an interval around a value already observed would
+                # be a second, wider answer to a question this table answers once.
+                spreads.append(None)
+                previous = level
+                level = a * value + (1.0 - a) * (level + slope)
+                slope = b * (level - previous) + (1.0 - b) * slope
+            spread = 1.96 * _standard_deviation(errors)
+            # The band grows with the square root of the horizon because a trend carried further
+            # really is less certain, and the only uncertainty this model measured is the
+            # standard deviation of its own one-step errors.
+            future = [(offset, level + offset * slope, spread * (offset**0.5)) for offset in range(1, steps + 1)]
+
+        rows = [
+            _forecast_row(stamps_in[position], values[position], centres[position], spreads[position], 0)
+            for position in range(len(values))
+        ]
+        final = stamps_in[-1]
+        for offset, centre, band in future:
+            rows.append(_forecast_row(final + pd.Timedelta(days=modal * offset), None, centre, band, offset))
+        logger.info(
+            t(
+                'analysis.forecast_done',
+                method=method,
+                rows=len(work),
+                horizon=steps,
+                gap=modal,
+                last=str(work['stamp'].iloc[-1].date()),
+            )
+        )
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def alert(
+        df: pd.DataFrame,
+        column: str = 'period',
+        index_col: str = 'sentiment_index',
+        intensity_col: str = '',
+        volume_col: str = '',
+        streak: int = 2,
+        swing: float = 0.2,
+        heating: float = 0.15,
+        volume_floor: float = 0.6,
+    ) -> pd.DataFrame:
+        """Say which periods look like the start of another flare-up — and why each one qualifies.
+
+        提前干预 in the study is an operational claim: someone has to be told while there is
+        still time. The rule here is deliberately plain and every row states the number it
+        checked, so a reader can disagree with the threshold rather than with a black box:
+
+        * **转向** — ``streak`` consecutive steps each moved the sentiment index by at least
+          ``swing``, in the same direction. One big jump is a reaction to an event; a run of
+          them in one direction is a crowd moving.
+        * **升温** — the sentiment INTENSITY rose by at least ``heating`` per step over the last
+          ``streak`` steps. The index can sit near zero while both sides get louder, which is the
+          二次爆发期 shape the paper describes, so the signed curve alone would miss it.
+        * Both are suppressed unless the volume is still holding: ``volume`` has to be at least
+          ``volume_floor`` times the mean of the previous ``streak`` periods, because a swing in
+          a period with almost nobody posting is a handful of people, not a flare-up. A
+          suppressed candidate is still reported as a row saying it was suppressed and by how
+          much — "nothing fired" and "the swing fired but the crowd had left" are different
+          answers, and only one of them is a reason to act.
+
+        ``intensity_col`` and ``volume_col`` are read exactly like ``score_col`` on
+        :meth:`sentiment_evolution`: left blank on the panel, that half of the rule is simply not
+        asked for (升温 never fires, and nothing is suppressed on volume); a name that is typed
+        and missing is refused, because a signal that silently stopped firing would make the
+        table look like a reading of both.
+
+        An empty result is never returned: when nothing fired the table answers with one row of
+        ``未触发`` carrying the strongest value that was measured. An empty table would read as
+        "not checked" — and in a monitoring step, that is the difference between calm and blind.
+        """
+        run = int(streak)
+        if run < 1:
+            raise UnknownOperationError(t('analysis.alert_streak', value=streak))
+        for name, value in (('swing', swing), ('heating', heating), ('volume_floor', volume_floor)):
+            number = float(value)
+            if number <= 0:
+                raise UnknownOperationError(t('analysis.alert_threshold', name=name, value=value))
+        if volume_floor > 1.0:
+            raise UnknownOperationError(t('analysis.alert_floor', value=volume_floor))
+        if len(df) < run + 1:
+            raise UnknownOperationError(t('analysis.alert_rows', rows=len(df), least=run + 1))
+        # A name typed here that the table does not hold is refused rather than dropped: the
+        # 升温 half of the rule would simply stop firing, and the table would look like a calm
+        # reading of both signals.
+        for name in (column, index_col, intensity_col, volume_col):
+            if name and name not in df.columns:
+                raise UnknownOperationError(t('analysis.step_col_missing', op='alert', col=name))
+
+        stamps = _to_datetime(df[column])
+        if stamps.isna().all():
+            raise UnknownOperationError(t('analysis.forecast_dates', col=column))
+        usable = [(stamp, number) for number, stamp in enumerate(stamps.tolist()) if pd.notna(stamp)]
+        skipped = len(df) - len(usable)
+        if skipped:
+            logger.warning(t('analysis.alert_skipped', col=column, n=skipped))
+        if len(usable) < run + 1:
+            raise UnknownOperationError(t('analysis.alert_rows', rows=len(usable), least=run + 1))
+        positions = [number for _stamp, number in sorted(usable, key=lambda pair: pair[0])]
+        periods = [str(df[column].iloc[position]) for position in positions]
+        indexes = [
+            float(value) if pd.notna(value) else None
+            for value in pd.to_numeric(df[index_col], errors='coerce').iloc[positions].tolist()
+        ]
+        intensities = (
+            [
+                float(value) if pd.notna(value) else None
+                for value in pd.to_numeric(df[intensity_col], errors='coerce').iloc[positions].tolist()
+            ]
+            if intensity_col and intensity_col in df.columns
+            else [None] * len(positions)
+        )
+        volumes = (
+            [
+                float(value) if pd.notna(value) else 0.0
+                for value in pd.to_numeric(df[volume_col], errors='coerce').iloc[positions].tolist()
+            ]
+            if volume_col and volume_col in df.columns
+            else [None] * len(positions)
+        )
+
+        rows = []
+        best_swing = (None, 0.0)
+        for position in range(run, len(positions)):
+            if indexes[position] is None or indexes[position - run] is None:
+                continue
+            moves = []
+            for step in range(position - run + 1, position + 1):
+                here, before = indexes[step], indexes[step - 1]
+                if here is None or before is None:
+                    moves.append(None)
+                    continue
+                moves.append(here - before)
+            if any(move is None for move in moves):
+                continue
+            biggest = max(abs(move) for move in moves)
+            if biggest >= abs(best_swing[1]):
+                best_swing = (periods[position], biggest)
+            same_direction = all(move > 0 for move in moves) or all(move < 0 for move in moves)
+            turned = same_direction and all(abs(move) >= float(swing) for move in moves)
+            heated = False
+            rise = None
+            if intensities[position] is not None and intensities[position - run] is not None:
+                rise = (intensities[position] - intensities[position - run]) / run
+                heated = rise >= float(heating)
+            if not (turned or heated):
+                continue
+            signal = '转向' if turned and not heated else ('升温' if heated and not turned else '转向+升温')
+            value = sum(abs(move) for move in moves) / run if turned else rise
+            held = True
+            if volumes[position] is not None:
+                previous = [volumes[step] for step in range(position - run, position) if volumes[step] is not None]
+                if previous:
+                    baseline = sum(previous) / len(previous)
+                    held = volumes[position] >= float(volume_floor) * baseline
+            rows.append(
+                {
+                    'period': periods[position],
+                    'signal': signal if held else f'{signal}（已抑制）',
+                    'value': round(float(value), 4) if value is not None else None,
+                    'threshold': round(float(swing), 4) if turned else round(float(heating), 4),
+                    'reason': t(
+                        'analysis.alert_reason',
+                        streak=run,
+                        moves='、'.join(f'{move:+.4f}' for move in moves),
+                        intensity='—' if rise is None else f'{rise:+.4f}',
+                        volume='未提供' if volumes[position] is None else f'{volumes[position]:.0f}',
+                        held='仍在线' if held else f'低于前 {run} 期均量的 {float(volume_floor):.2f} 倍',
+                    ),
+                }
+            )
+        if not rows:
+            rows.append(
+                {
+                    'period': periods[-1] if periods else '',
+                    'signal': '未触发',
+                    'value': round(float(best_swing[1]), 4) if best_swing[1] else None,
+                    'threshold': round(float(swing), 4),
+                    'reason': t(
+                        'analysis.alert_none',
+                        streak=run,
+                        period=best_swing[0] or '—',
+                        swing=float(swing),
+                        heating=float(heating),
+                    ),
+                }
+            )
+            logger.info(t('analysis.alert_none_log', checked=len(positions), streak=run, swing=float(swing)))
+        else:
+            for row in rows:
+                logger.info(t('analysis.alert_fired', period=row['period'], signal=row['signal'], value=row['value']))
+        return pd.DataFrame(rows)
+
     # ── Operation registry + pipeline runner ────────────────────
 
     @classmethod
@@ -2308,6 +2669,8 @@ class DataAnalysisService:
             'topic_coherence': cls.topic_coherence,
             'cooccur': cls.cooccur,
             'sentiment_evolution': cls.sentiment_evolution,
+            'forecast': cls.forecast,
+            'alert': cls.alert,
         }
 
     @classmethod

@@ -683,7 +683,72 @@ class TestAnalysisNodeOperations:
         assert [row['n_topics'] for row in rows] == [2, 3]
         assert all(row['documents'] == 12 for row in rows), 'the sample cap reached the table it limited'
 
+    #: One row per day of a curve falling and then steadying — the shape 情感演化曲线 answers with.
+    CURVE_RECORDS = [
+        {'period': '2024-05-01', 'sentiment_index': -0.1, 'intensity': 0.1, 'total': 900},
+        {'period': '2024-05-02', 'sentiment_index': -0.15, 'intensity': 0.15, 'total': 850},
+        {'period': '2024-05-03', 'sentiment_index': -0.4, 'intensity': 0.4, 'total': 800},
+        {'period': '2024-05-04', 'sentiment_index': -0.7, 'intensity': 0.65, 'total': 820},
+        {'period': '2024-05-05', 'sentiment_index': -0.75, 'intensity': 0.7, 'total': 700},
+    ]
+
+    def test_the_forecast_step_extrapolates_the_curve_as_a_node(self, client, app_module, paste):
+        _run, status, rows = self._run(
+            client,
+            app_module,
+            paste,
+            'forecast',
+            {'forecast_horizon': '2', 'forecast_window': '3', 'forecast_method': 'holt'},
+            records=self.CURVE_RECORDS,
+        )
+        assert status['status'] == 'done', status.get('error')
+        # The stored records come back with sorted keys, so the contract is the SET of columns:
+        # a renamed one is what would silently break a chart reading predicted/lower/upper.
+        assert set(rows[0]) == {'period', 'actual', 'predicted', 'lower', 'upper', 'horizon'}
+        future = [row for row in rows if row['horizon'] > 0]
+        assert [row['period'] for row in future] == ['2024-05-06', '2024-05-07']
+        assert all(row['actual'] is None for row in future), 'a future day is not an observation'
+
+    def test_the_warning_step_never_answers_with_an_empty_table(self, client, app_module, paste):
+        _run, status, rows = self._run(
+            client,
+            app_module,
+            paste,
+            'alert',
+            {
+                'alert_swing': '0.9',
+                'alert_heating': '0.9',
+                'alert_intensity_col': 'intensity',
+                'alert_volume_col': 'total',
+            },
+            records=self.CURVE_RECORDS,
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert len(rows) == 1, 'nothing firing is an answer, not an empty table'
+        assert rows[0]['signal'] == '未触发'
+        assert rows[0]['value'] is not None, 'the row carries the largest swing it measured'
+
+    def test_a_warning_that_fires_says_which_rule_fired(self, client, app_module, paste):
+        _run, status, rows = self._run(
+            client,
+            app_module,
+            paste,
+            'alert',
+            {'alert_streak': '2', 'alert_swing': '0.2', 'alert_volume_col': 'total'},
+            records=self.CURVE_RECORDS,
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert {row['signal'] for row in rows} == {'转向'}
+        # The numbers are asserted rather than the sentence, because the reason line comes back in
+        # whichever language the run was asked in. 05-02→05-04 moved −0.25 then −0.30, and
+        # 05-03→05-05 moved −0.30 then −0.05: the mean absolute move is what the row reports.
+        by_period = {row['period']: row for row in rows}
+        assert by_period['2024-05-04']['value'] == pytest.approx(0.275)
+        assert all(row['threshold'] == 0.2 for row in rows)
+        assert all(row['reason'] for row in rows), 'every fired row states what it checked'
+
     def test_a_step_pipeline_runs_in_order(self, client, app_module, paste):
+        ds = paste(CLEAN_RECORDS, name='matrix.csv')
         ds = paste(CLEAN_RECORDS, name='matrix.csv')
         steps = [
             {'op': 'drop_duplicates', 'params': {'columns': ['名称']}},
