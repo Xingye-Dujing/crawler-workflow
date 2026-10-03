@@ -48,6 +48,8 @@ CHART_TYPES = (
     'bar',
     'line',
     'dual_line',
+    'topic_map',
+    'topic_terms',
     'pie',
     'scatter',
     'histogram',
@@ -245,7 +247,7 @@ WORDCLOUD_STYLES = {
 # ``twinx()``, but the right-hand scale, legend and shared tooltip are the parts that make
 # 热度 and 强度 readable on one figure, and re-implementing them per engine is how the two
 # engines start telling the same data differently.
-ECHARTS_ONLY_TYPES = ('wordcloud', 'sankey', 'map', 'dual_line')
+ECHARTS_ONLY_TYPES = ('wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms')
 
 
 class ChartConfigError(ValueError):
@@ -305,6 +307,7 @@ class VisualizationService:
         agg: str = 'sum',
         y2: str = None,
         agg2: str = None,
+        label_field: str = 'topic',
         title: str = '',
         **kwargs,
     ) -> dict:
@@ -690,6 +693,125 @@ class VisualizationService:
                     },
                     'data': [{'name': n, 'value': v} for n, v in zip(labels, values, strict=True)],
                 }
+            ]
+            return base
+
+        # ── Intertopic distance map (the pyLDAvis left panel) ──
+        if chart_type == 'topic_map':
+            if not x or not y:
+                raise ChartConfigError('Intertopic map needs both coordinate fields (x = PC1, y = PC2)')
+            VisualizationService._require_columns(df, x, y)
+            has_label = bool(label_field) and label_field in df.columns
+            has_size = bool(value_field) and value_field in df.columns
+            first = pd.to_numeric(df[x], errors='coerce').tolist()
+            second = pd.to_numeric(df[y], errors='coerce').tolist()
+            labels = [str(name) for name in (df[label_field].tolist() if has_label else [''] * len(df))]
+            sizes = pd.to_numeric(df[value_field], errors='coerce').tolist() if has_size else [None] * len(df)
+            biggest = max((float(size) for size in sizes if size == size and size is not None), default=0.0)
+            points = []
+            for position, name in enumerate(labels):
+                size = sizes[position]
+                # AREA, not radius, carries the prevalence — a bubble drawn twice as wide for
+                # twice the share reads as four times the share, which is the mistake the
+                # original figure's square root is there to avoid. The floor is what keeps a
+                # zero-share (or unsized) topic visible rather than absent from the map.
+                radius = (
+                    10.0
+                    if not biggest or size != size or size is None
+                    else max(10.0, 70.0 * (float(size) / biggest) ** 0.5)
+                )
+                points.append(
+                    {
+                        'value': [_json_safe(first[position]), _json_safe(second[position])],
+                        'symbolSize': round(radius, 1),
+                        'name': name,
+                    }
+                )
+            base['grid'] = dict(_GRID)
+            base['tooltip']['formatter'] = '{a}<br/>{b}'
+            base['xAxis'] = {
+                'type': 'value',
+                'name': 'PC1',
+                'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
+                'splitLine': {'show': False},
+            }
+            base['yAxis'] = {
+                'type': 'value',
+                'name': 'PC2',
+                'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
+                'splitLine': {'show': False},
+            }
+            base['series'] = [
+                {
+                    'name': 'topics',
+                    'type': 'scatter',
+                    'data': points,
+                    'itemStyle': {'color': 'rgba(59,130,249,0.35)', 'borderColor': color[0], 'borderWidth': 1},
+                    'label': {
+                        'show': has_label,
+                        'formatter': '{b}',
+                        'position': 'inside',
+                        'color': '#1a1a1a',
+                        'fontWeight': 'bold',
+                        'fontSize': 12,
+                    },
+                    # The two reference lines the figure draws through the origin: without them
+                    # the reader cannot tell "far apart" from "both near zero".
+                    'markLine': {
+                        'silent': True,
+                        'symbol': 'none',
+                        'lineStyle': {'color': '#555', 'width': 1},
+                        'label': {'show': False},
+                        'data': [{'xAxis': 0}, {'yAxis': 0}],
+                    },
+                }
+            ]
+            return base
+
+        # ── Salient terms of one topic (the pyLDAvis right panel) ──
+        if chart_type == 'topic_terms':
+            if not x:
+                raise ChartConfigError('Salient terms chart requires a term field (x)')
+            if not y or not y2:
+                raise ChartConfigError(
+                    'Salient terms chart needs BOTH frequency fields (y = corpus-wide, y2 = within the topic)'
+                )
+            VisualizationService._require_columns(df, x, y, y2)
+            terms = [str(name) for name in df[x].tolist()]
+            overall = pd.to_numeric(df[y], errors='coerce').tolist()
+            within = pd.to_numeric(df[y2], errors='coerce').tolist()
+            base['grid'] = {**_GRID, 'left': 90}
+            base['legend'] = {'data': [y, y2], 'top': 28, 'textStyle': _TEXT_STYLE}
+            base['tooltip'] = {**base['tooltip'], 'trigger': 'axis', 'axisPointer': {'type': 'shadow'}}
+            base['xAxis'] = {
+                'type': 'value',
+                'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
+                'splitLine': {'lineStyle': {'color': '#2a2a2a', 'type': 'dashed'}},
+            }
+            # ``inverse`` puts rank 1 at the top, which is how the term list is read; pandas
+            # order alone would draw the most salient term at the bottom.
+            base['yAxis'] = {
+                'type': 'category',
+                'data': terms,
+                'inverse': True,
+                'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
+                'axisLine': {'lineStyle': {'color': '#444'}},
+                'axisTick': {'show': False},
+            }
+            base['series'] = [
+                {
+                    'name': y,
+                    'type': 'bar',
+                    'data': [_json_safe(value) for value in overall],
+                    'itemStyle': {'color': 'rgba(59,130,249,0.65)'},
+                    'barGap': 0,
+                },
+                {
+                    'name': y2,
+                    'type': 'bar',
+                    'data': [_json_safe(value) for value in within],
+                    'itemStyle': {'color': '#E15759'},
+                },
             ]
             return base
 

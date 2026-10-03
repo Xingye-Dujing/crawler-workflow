@@ -1,0 +1,823 @@
+{
+  "nodes": [
+    {
+      "id": "node-5",
+      "type": "output",
+      "title": "合并批次并导出",
+      "params": {
+        "enabled": true,
+        "filename": "刘学州-合并.csv",
+        "filename_timestamp": false,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 353,
+      "y": 392,
+      "folded": false
+    },
+    {
+      "id": "node-6",
+      "type": "process",
+      "title": "清洗（正则）",
+      "params": {
+        "enabled": true,
+        "format": "csv",
+        "live_export": false,
+        "mode": "regex",
+        "operation": "clean",
+        "text_column": "正文",
+        "topic": ""
+      },
+      "operation": "clean",
+      "x": 693,
+      "y": 392,
+      "folded": false
+    },
+    {
+      "id": "node-7",
+      "type": "analysis",
+      "title": "筛选：保留行",
+      "params": {
+        "column": "action",
+        "enabled": true,
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "保留"
+      },
+      "operation": "filter_rows",
+      "x": 1033,
+      "y": 322,
+      "folded": false
+    },
+    {
+      "id": "node-8",
+      "type": "analysis",
+      "title": "去重（归一化）",
+      "params": {
+        "columns": "cleaned_text",
+        "enabled": true,
+        "mode": "normalized",
+        "operation": "drop_duplicates"
+      },
+      "operation": "drop_duplicates",
+      "x": 1373,
+      "y": 322,
+      "folded": false
+    },
+    {
+      "id": "node-9",
+      "type": "analysis",
+      "title": "近重复去重（SimHash）",
+      "params": {
+        "column": "cleaned_text",
+        "enabled": true,
+        "max_distance": "8",
+        "operation": "dedupe_similar"
+      },
+      "operation": "dedupe_similar",
+      "x": 1713,
+      "y": 322,
+      "folded": false
+    },
+    {
+      "id": "node-10",
+      "type": "process",
+      "title": "情感极性",
+      "params": {
+        "enabled": true,
+        "mode": "snownlp",
+        "neg_threshold": "0.4",
+        "operation": "sentiment",
+        "pos_threshold": "0.6",
+        "text_column": "cleaned_text"
+      },
+      "operation": "sentiment",
+      "x": 2069,
+      "y": 322,
+      "folded": false
+    },
+    {
+      "id": "node-11",
+      "type": "analysis",
+      "title": "提取日期",
+      "params": {
+        "column": "发布时间",
+        "enabled": true,
+        "operation": "extract_time",
+        "time_new_col": "日期",
+        "time_part": "date"
+      },
+      "operation": "extract_time",
+      "x": 2409,
+      "y": 322,
+      "folded": false
+    },
+    {
+      "id": "node-12",
+      "type": "analysis",
+      "title": "划分阶段",
+      "params": {
+        "column": "发布时间",
+        "enabled": true,
+        "operation": "bin_time",
+        "phase_edges": "2022-01-16, 2022-01-23, 2022-01-27, 2022-04-02",
+        "phase_labels": "发酵期, 爆发期, 消退期",
+        "phase_new_col": "阶段"
+      },
+      "operation": "bin_time",
+      "x": 2749,
+      "y": 322,
+      "folded": false
+    },
+    {
+      "id": "node-13",
+      "type": "analysis",
+      "title": "每日情感演化指标",
+      "params": {
+        "column": "日期",
+        "enabled": true,
+        "index_new_col": "sentiment_index",
+        "label_col": "sentiment",
+        "label_negative": "negative",
+        "label_neutral": "neutral",
+        "label_positive": "positive",
+        "operation": "sentiment_evolution",
+        "score_col": "score"
+      },
+      "operation": "sentiment_evolution",
+      "x": 3099,
+      "y": 252,
+      "folded": false
+    },
+    {
+      "id": "node-14",
+      "type": "visualize",
+      "title": "图2 每日发帖量",
+      "params": {
+        "agg": "sum",
+        "chart_type": "line",
+        "enabled": true,
+        "engine": "echarts",
+        "title": "刘学州事件 每日发帖量",
+        "x_field": "period",
+        "y_field": "total"
+      },
+      "x": 3439,
+      "y": 91,
+      "folded": false
+    },
+    {
+      "id": "node-15",
+      "type": "visualize",
+      "title": "图8 每日情感倾向指数",
+      "params": {
+        "agg": "sum",
+        "chart_type": "line",
+        "enabled": true,
+        "engine": "echarts",
+        "title": "刘学州事件 每日情感倾向指数",
+        "x_field": "period",
+        "y_field": "sentiment_index"
+      },
+      "x": 3439,
+      "y": 245,
+      "folded": false
+    },
+    {
+      "id": "node-16",
+      "type": "analysis",
+      "title": "各阶段情感占比（表2）",
+      "params": {
+        "column": "阶段",
+        "enabled": true,
+        "index_new_col": "sentiment_index",
+        "label_col": "sentiment",
+        "label_negative": "negative",
+        "label_neutral": "neutral",
+        "label_positive": "positive",
+        "operation": "sentiment_evolution",
+        "score_col": "score"
+      },
+      "operation": "sentiment_evolution",
+      "x": 3099,
+      "y": 392,
+      "folded": false
+    },
+    {
+      "id": "node-17",
+      "type": "visualize",
+      "title": "图3 各阶段发帖量",
+      "params": {
+        "agg": "sum",
+        "chart_type": "bar",
+        "enabled": true,
+        "engine": "echarts",
+        "title": "刘学州事件 各阶段发帖量",
+        "x_field": "period",
+        "y_field": "total"
+      },
+      "x": 3439,
+      "y": 399,
+      "folded": false
+    },
+    {
+      "id": "node-18",
+      "type": "output",
+      "title": "导出 表2",
+      "params": {
+        "enabled": true,
+        "filename": "刘学州-表2-各阶段情感占比.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3439,
+      "y": 553,
+      "folded": false
+    },
+    {
+      "id": "node-19",
+      "type": "analysis",
+      "title": "分阶段 LDA（表1）",
+      "params": {
+        "column": "cleaned_text",
+        "enabled": true,
+        "operation": "topic_by_stage",
+        "stage_col": "阶段",
+        "stage_order_col": "日期",
+        "stage_topic_counts": "4,5,4",
+        "topic_max_features": "2000",
+        "topic_sample_n": "3",
+        "topic_topn": "7",
+        "word_source": "tfidf"
+      },
+      "operation": "topic_by_stage",
+      "x": 3099,
+      "y": 532,
+      "folded": false
+    },
+    {
+      "id": "node-37",
+      "type": "analysis",
+      "title": "主题概括（表1补全）",
+      "params": {
+        "enabled": true,
+        "label_max_topics": "30",
+        "label_on_fail": "abort",
+        "label_samples_col": "sample_texts",
+        "label_summary_col": "主题概括",
+        "label_words_col": "feature_words",
+        "operation": "topic_label"
+      },
+      "operation": "topic_label",
+      "x": 3439,
+      "y": 532,
+      "folded": false
+    },
+    {
+      "id": "node-20",
+      "type": "output",
+      "title": "导出 表1",
+      "params": {
+        "enabled": true,
+        "filename": "刘学州-表1-分阶段主题与概括.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3439,
+      "y": 693,
+      "folded": false
+    },
+    {
+      "id": "node-21",
+      "type": "upload",
+      "title": "上传文件",
+      "params": {
+        "dataset_id": "2838c7f2a333c704",
+        "dataset_name": "刘学州-20261002-044437.csv",
+        "row_count": 10000
+      },
+      "x": 0,
+      "y": 0,
+      "folded": false
+    },
+    {
+      "id": "node-22",
+      "type": "upload",
+      "title": "上传文件",
+      "params": {
+        "dataset_id": "1361f4aa6b42fb05",
+        "dataset_name": "刘学州-02-20261002-055637.csv",
+        "row_count": 10000
+      },
+      "x": 0,
+      "y": 154,
+      "folded": false
+    },
+    {
+      "id": "node-23",
+      "type": "upload",
+      "title": "上传文件",
+      "params": {
+        "dataset_id": "8c67e39f00181261",
+        "dataset_name": "刘学州-03-20261002-065756.csv",
+        "row_count": 10000
+      },
+      "x": 0,
+      "y": 308,
+      "folded": false
+    },
+    {
+      "id": "node-25",
+      "type": "upload",
+      "title": "上传文件",
+      "params": {
+        "dataset_id": "85ed2494423f89dd",
+        "dataset_name": "刘学州-04-20261001-212320.csv",
+        "row_count": 10000
+      },
+      "x": 0,
+      "y": 462,
+      "folded": false
+    },
+    {
+      "id": "node-26",
+      "type": "upload",
+      "title": "上传文件",
+      "params": {
+        "dataset_id": "e364706032318eca",
+        "dataset_name": "刘学州-05-20261001-214614.csv",
+        "row_count": 1562
+      },
+      "x": 0,
+      "y": 616,
+      "folded": false
+    },
+    {
+      "id": "node-27",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "刘学州-清洗.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1033,
+      "y": 462,
+      "folded": false
+    },
+    {
+      "id": "node-28",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "刘学州-筛选行.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1373,
+      "y": 462,
+      "folded": false
+    },
+    {
+      "id": "node-29",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "刘学州-去重.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1713,
+      "y": 462,
+      "folded": false
+    },
+    {
+      "id": "node-30",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "刘学州-近重复去重.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 2069,
+      "y": 462,
+      "folded": false
+    },
+    {
+      "id": "node-31",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "刘学州-情感极性.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 2409,
+      "y": 462,
+      "folded": false
+    },
+    {
+      "id": "node-32",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "刘学州-提取时间维度.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 2749,
+      "y": 462,
+      "folded": false
+    },
+    {
+      "id": "node-34",
+      "type": "upload",
+      "title": "上传文件",
+      "params": {
+        "dataset_id": "d2b28f134f35edb7",
+        "dataset_name": "刘学州-06-20261003-003249.csv",
+        "row_count": 2945
+      },
+      "x": 0,
+      "y": 770,
+      "folded": false
+    },
+    {
+      "id": "node-35",
+      "type": "analysis",
+      "title": "按发文量建议阶段边界",
+      "params": {
+        "column": "日期",
+        "enabled": true,
+        "operation": "suggest_stages",
+        "stages_max_windows": "6",
+        "stages_min_days": "3",
+        "stages_peak_ratio": "2"
+      },
+      "operation": "suggest_stages",
+      "x": 2749,
+      "y": 840,
+      "folded": false
+    },
+    {
+      "id": "node-36",
+      "type": "output",
+      "title": "导出 阶段边界建议",
+      "params": {
+        "enabled": true,
+        "filename": "刘学州-阶段边界建议.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3099,
+      "y": 840,
+      "folded": false
+    },
+    {
+      "id": "node-38",
+      "type": "visualize",
+      "title": "图9 每日热度与情感强度",
+      "params": {
+        "agg": "sum",
+        "agg2": "mean",
+        "chart_type": "dual_line",
+        "enabled": true,
+        "engine": "echarts",
+        "title": "刘学州事件 每日舆情热度与情感强度",
+        "x_field": "period",
+        "y2_field": "intensity",
+        "y_field": "total"
+      },
+      "x": 3779,
+      "y": 91,
+      "folded": false
+    },
+    {
+      "id": "node-39",
+      "type": "visualize",
+      "title": "图10 各阶段热度与情感强度",
+      "params": {
+        "agg": "sum",
+        "agg2": "mean",
+        "chart_type": "dual_line",
+        "enabled": true,
+        "engine": "echarts",
+        "title": "刘学州事件 各阶段舆情热度与情感强度",
+        "x_field": "period",
+        "y2_field": "intensity",
+        "y_field": "total"
+      },
+      "x": 3779,
+      "y": 399,
+      "folded": false
+    },
+    {
+      "id": "node-40",
+      "type": "analysis",
+      "title": "主题距离图数据（全库）",
+      "params": {
+        "column": "cleaned_text",
+        "enabled": true,
+        "n_topics": "5",
+        "operation": "topic_map",
+        "topic_max_features": "2000",
+        "topic_topn": "6"
+      },
+      "operation": "topic_map",
+      "x": 2069,
+      "y": 980,
+      "folded": false
+    },
+    {
+      "id": "node-41",
+      "type": "visualize",
+      "title": "图11 主题距离图",
+      "params": {
+        "chart_type": "topic_map",
+        "enabled": true,
+        "engine": "echarts",
+        "label_field": "topic",
+        "title": "刘学州事件 主题距离图（气泡大小=主题占比）",
+        "value_field": "prevalence_pct",
+        "x_field": "pc1",
+        "y_field": "pc2"
+      },
+      "x": 2409,
+      "y": 980,
+      "folded": false
+    },
+    {
+      "id": "node-42",
+      "type": "analysis",
+      "title": "各主题显著词数据（全库）",
+      "params": {
+        "column": "cleaned_text",
+        "enabled": true,
+        "n_topics": "5",
+        "operation": "topic_salience",
+        "topic_lambda": "0.5",
+        "topic_max_features": "2000",
+        "topic_topn": "30"
+      },
+      "operation": "topic_salience",
+      "x": 2749,
+      "y": 980,
+      "folded": false
+    },
+    {
+      "id": "node-43",
+      "type": "analysis",
+      "title": "只看 Topic-1 的词表",
+      "params": {
+        "column": "topic",
+        "enabled": true,
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "Topic-1"
+      },
+      "operation": "filter_rows",
+      "x": 3099,
+      "y": 980,
+      "folded": false
+    },
+    {
+      "id": "node-44",
+      "type": "visualize",
+      "title": "图12 Topic-1 显著词",
+      "params": {
+        "chart_type": "topic_terms",
+        "enabled": true,
+        "engine": "echarts",
+        "title": "刘学州事件 Topic-1 显著词（蓝=全库频次，红=主题内频次）",
+        "x_field": "term",
+        "y2_field": "within_freq",
+        "y_field": "overall_freq"
+      },
+      "x": 3439,
+      "y": 980,
+      "folded": false
+    },
+    {
+      "id": "node-45",
+      "type": "output",
+      "title": "导出 主题距离表",
+      "params": {
+        "enabled": true,
+        "filename": "刘学州-主题距离表.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 2409,
+      "y": 1120,
+      "folded": false
+    },
+    {
+      "id": "node-46",
+      "type": "output",
+      "title": "导出 显著词表（全部主题）",
+      "params": {
+        "enabled": true,
+        "filename": "刘学州-显著词表.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3099,
+      "y": 1120,
+      "folded": false
+    }
+  ],
+  "connections": [
+    {
+      "from": "node-5",
+      "to": "node-6"
+    },
+    {
+      "from": "node-6",
+      "to": "node-7"
+    },
+    {
+      "from": "node-7",
+      "to": "node-8"
+    },
+    {
+      "from": "node-8",
+      "to": "node-9"
+    },
+    {
+      "from": "node-9",
+      "to": "node-10"
+    },
+    {
+      "from": "node-10",
+      "to": "node-11"
+    },
+    {
+      "from": "node-11",
+      "to": "node-12"
+    },
+    {
+      "from": "node-12",
+      "to": "node-13"
+    },
+    {
+      "from": "node-13",
+      "to": "node-14"
+    },
+    {
+      "from": "node-13",
+      "to": "node-15"
+    },
+    {
+      "from": "node-12",
+      "to": "node-16"
+    },
+    {
+      "from": "node-16",
+      "to": "node-17"
+    },
+    {
+      "from": "node-16",
+      "to": "node-18"
+    },
+    {
+      "from": "node-12",
+      "to": "node-19"
+    },
+    {
+      "from": "node-13",
+      "to": "node-38"
+    },
+    {
+      "from": "node-16",
+      "to": "node-39"
+    },
+    {
+      "from": "node-11",
+      "to": "node-35"
+    },
+    {
+      "from": "node-35",
+      "to": "node-36"
+    },
+    {
+      "from": "node-19",
+      "to": "node-37"
+    },
+    {
+      "from": "node-37",
+      "to": "node-20"
+    },
+    {
+      "from": "node-21",
+      "to": "node-5"
+    },
+    {
+      "from": "node-22",
+      "to": "node-5"
+    },
+    {
+      "from": "node-23",
+      "to": "node-5"
+    },
+    {
+      "from": "node-25",
+      "to": "node-5"
+    },
+    {
+      "from": "node-26",
+      "to": "node-5"
+    },
+    {
+      "from": "node-6",
+      "to": "node-27"
+    },
+    {
+      "from": "node-7",
+      "to": "node-28"
+    },
+    {
+      "from": "node-8",
+      "to": "node-29"
+    },
+    {
+      "from": "node-9",
+      "to": "node-30"
+    },
+    {
+      "from": "node-10",
+      "to": "node-31"
+    },
+    {
+      "from": "node-11",
+      "to": "node-32"
+    },
+    {
+      "from": "node-34",
+      "to": "node-5"
+    },
+    {
+      "from": "node-9",
+      "to": "node-40"
+    },
+    {
+      "from": "node-40",
+      "to": "node-41"
+    },
+    {
+      "from": "node-40",
+      "to": "node-45"
+    },
+    {
+      "from": "node-9",
+      "to": "node-42"
+    },
+    {
+      "from": "node-42",
+      "to": "node-43"
+    },
+    {
+      "from": "node-43",
+      "to": "node-44"
+    },
+    {
+      "from": "node-42",
+      "to": "node-46"
+    }
+  ],
+  "settings": {
+    "mode": "serial",
+    "headless": false,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": 40,
+      "panY": 300.1906562246827,
+      "zoom": 0.4393734809613827
+    }
+  },
+  "name": "刘学州-情感演化分析"
+}

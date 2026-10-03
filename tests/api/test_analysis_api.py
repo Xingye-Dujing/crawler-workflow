@@ -729,6 +729,14 @@ NORMALIZED = {
         {'column': '城市', 'label_col': 'emotion', 'index_new_col': 'idx', 'score_col': 'score'},
         {'column': '城市', 'label_col': 'emotion', 'new_col': 'idx', 'score_col': 'score'},
     ),
+    'topic_map': (
+        {'column': '城市', 'n_topics': '3', 'topic_topn': '4', 'topic_max_features': '500'},
+        {'column': '城市', 'n_topics': 3, 'topn': 4, 'max_features': 500},
+    ),
+    'topic_salience': (
+        {'column': '城市', 'n_topics': '3', 'topic_topn': '12', 'topic_lambda': '0.5', 'topic_max_features': '500'},
+        {'column': '城市', 'n_topics': 3, 'topn': 12, 'relevance': 0.5, 'max_features': 500},
+    ),
     'topic_label': (
         {
             'label_words_col': '词',
@@ -821,6 +829,8 @@ BLANK_FORM = {
         'sample_n': 5,
         'word_source': 'tfidf',
     },
+    'topic_map': {'column': '', 'n_topics': 5, 'topn': 6},
+    'topic_salience': {'column': '', 'n_topics': 5, 'topn': 30},
     'topic_label': {
         'words_col': 'feature_words',
         'summary_col': '主题概括',
@@ -1422,6 +1432,7 @@ PARSED_FIELDS = {
     'stage_topic_counts',
     'topic_sample_n',
     'word_source',
+    'topic_lambda',
     # All five label fields are re-shaped: three fall back to a column name when blank, one is
     # a select with a declared default, one is a count.
     'label_words_col',
@@ -2118,6 +2129,9 @@ PANEL_VALUE = {
     'stage_topic_counts': '2, 3',
     'topic_sample_n': '2',
     'word_source': 'lda',
+    # λ is a float, and 0 is a real answer: the probe is 0.5 so that both a dropped field and
+    # an ``or``-style default would show up as a changed kwargs set.
+    'topic_lambda': '0.5',
     # The labelling step's boxes. None of them is the value an untouched form falls back to,
     # which is the only way to show the normalizer read the box at all.
     'label_words_col': '词',

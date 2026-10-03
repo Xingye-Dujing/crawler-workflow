@@ -3430,6 +3430,32 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         if features:
             result['max_features'] = features
         return result
+    if op == 'topic_map':
+        result = {
+            'column': params.get('column', ''),
+            'n_topics': _optional_int(params.get('n_topics')) or 5,
+            'topn': _optional_int(params.get('topic_topn')) or 6,
+        }
+        features = _optional_int(params.get('topic_max_features'))
+        if features:
+            result['max_features'] = features
+        return result
+    if op == 'topic_salience':
+        result = {
+            'column': params.get('column', ''),
+            'n_topics': _optional_int(params.get('n_topics')) or 5,
+            'topn': _optional_int(params.get('topic_topn')) or 30,
+        }
+        # λ is read as a float and only forwarded when a number was written: 0 is a real answer
+        # here (rank by over-representation only), so the ``or`` idiom used for counts would
+        # turn the most interesting setting into the default.
+        lam = _optional_float(params.get('topic_lambda'))
+        if lam is not None:
+            result['relevance'] = lam
+        features = _optional_int(params.get('topic_max_features'))
+        if features:
+            result['max_features'] = features
+        return result
     if op == 'topic_model':
         result = {
             'column': params.get('column', ''),
@@ -3505,6 +3531,11 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
     df = pd.DataFrame(current_input)
 
     steps = params.get('steps')
+    if isinstance(steps, dict):
+        # ``pd.DataFrame`` above turns a dict-shaped ``steps`` into rows and ``.get`` then dies
+        # with a TypeError, which the executor reports as an unexplained node failure. The
+        # normalizer's door refuses this shape; this door has to as well.
+        raise UnknownOperationError(t('wf.analysis_steps_shape'))
     if not steps:
         op = node.get('operation', params.get('operation', ''))
         steps = [{'op': op, 'params': _normalize_analysis_params(op, params)}] if op else []
@@ -3601,6 +3632,9 @@ def _execute_visualize_node(node: dict, current_input: list):
     # refusal when a type needs it and does not have it.
     y2_field = params.get('y2_field')
     agg2_field = params.get('agg2')
+    # The column that NAMES each bubble in the intertopic map (the topic label). Read like
+    # ``value_field``: the builder owns the refusal when a type needs it and does not have it.
+    label_field = params.get('label_field')
     title = params.get('title', '')
     tokenize = as_bool(params.get('tokenize'))
     wordcloud_style = params.get('wordcloud_style')
@@ -3633,6 +3667,7 @@ def _execute_visualize_node(node: dict, current_input: list):
                 agg=agg,
                 y2=y2_field,
                 agg2=agg2_field,
+                label_field=label_field,
                 title=title,
                 **kw,
             )
@@ -4919,6 +4954,7 @@ def render_visualization():
     agg = data.get('agg', 'sum')
     y2_field = data.get('y2_field')
     agg2_field = data.get('agg2')
+    label_field = data.get('label_field')
     title = data.get('title', '')
     tokenize = as_bool(data.get('tokenize'))
     wordcloud_style = data.get('wordcloud_style')
@@ -4942,6 +4978,7 @@ def render_visualization():
             agg=agg,
             y2=y2_field,
             agg2=agg2_field,
+            label_field=label_field,
             title=title,
             **kw,
         )

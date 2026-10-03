@@ -53,6 +53,8 @@ OPERATIONS = [
     'topic_model',
     'topic_by_stage',
     'topic_label',
+    'topic_map',
+    'topic_salience',
     'sentiment_evolution',
 ]
 
@@ -1638,6 +1640,111 @@ class TestTopicLabel:
         with pytest.raises(UnknownOperationError, match='on_fail'):
             validate_step(self._topics(), 'topic_label', {'words_col': 'feature_words', 'on_fail': 'ignore'})
         assert STEP_PARAMS['topic_label']['nonblank'] == ('summary_col',)
+
+
+class TestTopicViews:
+    """The two data steps behind the pyLDAvis figure, and the λ that decides its word list.
+
+    The figure itself is the visualizer's job (pinned in ``test_visualization.py``); what lives
+    here is the arithmetic it draws from: where the bubbles sit, how big they are, and which
+    terms a topic is ABOUT rather than merely loud about.
+    """
+
+    #: One word the whole corpus shares (通报) plus two vocabularies the topics can split on.
+    COMMON = '通报'
+    FAMILIES = ['警方 调查 依法 处置 行政处罚', '人肉 号码 隐私 曝光 个人信息']
+
+    @classmethod
+    def _corpus(cls, per_family: int = 20) -> pd.DataFrame:
+        rows = []
+        for index in range(per_family):
+            rows.append({'正文': f'{cls.COMMON} {cls.FAMILIES[0]} 第{index}条'})
+            rows.append({'正文': f'{cls.COMMON} {cls.FAMILIES[1]} 第{index}条'})
+        return pd.DataFrame(rows)
+
+    def test_the_map_answers_one_row_per_topic_with_the_models_own_prevalence(self):
+        out = D.topic_map(self._corpus(), '正文', n_topics=3, topn=4)
+        assert list(out.columns) == ['topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words']
+        assert list(out['topic']) == ['Topic-1', 'Topic-2', 'Topic-3']
+        assert out['prevalence_pct'].sum() == pytest.approx(100.0, abs=0.2)
+        assert sum(out['doc_n']) == 40, 'the argmax counts partition the corpus'
+        assert out[['pc1', 'pc2']].notna().all().all()
+        assert all(len(words.split('、')) == 4 for words in out['feature_words'])
+
+    def test_the_map_spreads_on_both_axes_rather_than_collapsing_onto_one_line(self):
+        """The scaling of each MDS axis must use the eigenvalue of the axis CHOSEN. Reading the
+        solver's first two slots instead takes its two smallest — numpy returns them ascending —
+        and every point lands on a vertical line with a confident-looking table beside it."""
+        out = D.topic_map(self._corpus(), '正文', n_topics=4)
+        assert float(out['pc1'].std()) > 0, 'PC1 collapsed to a constant'
+        assert float(out['pc2'].std()) > 0, 'PC2 collapsed to a constant'
+
+    def test_mds_of_a_known_square_comes_back_a_square(self):
+        # Four points at the corners of a unit square: the distances alone must recover two
+        # axes of equal spread and the right diagonal, with no help from the original layout.
+        from services.data_analysis import _mds_2d
+
+        sides, diagonal = 1.0, 2**0.5
+        distances = [
+            [0.0, sides, diagonal, sides],
+            [sides, 0.0, sides, diagonal],
+            [diagonal, sides, 0.0, sides],
+            [sides, diagonal, sides, 0.0],
+        ]
+        points = _mds_2d(distances)
+        assert len(points) == 4 and all(len(point) == 2 for point in points)
+        spread = [max(p[axis] for p in points) - min(p[axis] for p in points) for axis in (0, 1)]
+        assert spread[0] == pytest.approx(spread[1], abs=1e-6), 'a square is not drawn as a rectangle'
+        assert spread[0] == pytest.approx(diagonal, abs=1e-6)
+
+    def test_the_same_table_lays_the_same_map_twice(self):
+        # A figure whose bubbles move between two runs of identical input cannot be cited, so
+        # the MDS is an eigendecomposition with a fixed sign convention, not an iterative fit.
+        frame = self._corpus()
+        first = D.topic_map(frame, '正文', n_topics=3)
+        second = D.topic_map(frame, '正文', n_topics=3)
+        assert first[['pc1', 'pc2']].equals(second[['pc1', 'pc2']])
+
+    def test_the_map_refuses_a_question_it_cannot_ask(self):
+        with pytest.raises(UnknownOperationError, match='2'):
+            D.topic_map(self._corpus(), '正文', n_topics=1)
+        with pytest.raises(UnknownOperationError, match='有效文本'):
+            D.topic_map(self._corpus(per_family=1), '正文', n_topics=9)
+        with pytest.raises(UnknownOperationError):
+            D.topic_map(pd.DataFrame({'正文': ['。。。', '！！！', '？？']}), '正文', n_topics=2)
+
+    def test_the_salience_table_lists_terms_per_topic_in_ranking_order(self):
+        out = D.topic_salience(self._corpus(), '正文', n_topics=2, topn=6)
+        assert list(out.columns) == ['topic', 'rank', 'term', 'overall_freq', 'within_freq', 'relevance']
+        assert sorted(out['topic'].unique()) == ['Topic-1', 'Topic-2']
+        for _topic, rows in out.groupby('topic'):
+            assert list(rows['rank']) == list(range(1, len(rows) + 1)), 'ranks are dense and per topic'
+            assert list(rows['relevance']) == sorted(rows['relevance'], reverse=True), 'the order IS the score'
+            assert (rows['overall_freq'] > 0).all()
+
+    def test_lambda_trades_common_words_for_diagnostic_ones(self):
+        """The figure's slider is not decoration: λ=1 ranks by probability WITHIN the topic, so
+        the word the whole corpus shares tops every list; λ=0 ranks by over-representation, so
+        it drops out and the words that identify the topic come up. Both are honest answers and
+        they are different tables, which is why the value used is printed with them."""
+        frame = self._corpus()
+        loud = D.topic_salience(frame, '正文', n_topics=2, topn=10, relevance=1.0)
+        sharp = D.topic_salience(frame, '正文', n_topics=2, topn=10, relevance=0.0)
+        assert loud['overall_freq'].mean() > sharp['overall_freq'].mean(), (
+            'λ=1 must favour the globally common terms; the corpus word 通报 is the test case'
+        )
+        assert self.COMMON in set(loud['term'])
+        assert set(sharp['term']) - {self.COMMON}, 'λ=0 should surface the topic-specific words'
+
+    def test_a_lambda_outside_the_unit_interval_is_refused_by_name(self):
+        for value in (1.5, -0.1):
+            with pytest.raises(UnknownOperationError, match=str(value)):
+                D.topic_salience(self._corpus(per_family=3), '正文', n_topics=2, relevance=value)
+
+    def test_topn_caps_the_list_without_breaking_the_ranking(self):
+        out = D.topic_salience(self._corpus(), '正文', n_topics=2, topn=3)
+        assert len(out) <= 6
+        assert max(len(rows) for _topic, rows in out.groupby('topic')) == 3
 
 
 class TestSentimentEvolution:

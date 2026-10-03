@@ -137,8 +137,16 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
 
 ## Run, resume and record invariants
 
-- Runtime state lives in gitignored `data/` (SQLite `runs.db` / `datasets.db` / `history.db`) and `logs/`. Do not
-  delete `data/` casually — saved workflows reference uploaded datasets stored there.
+- Runtime state lives in gitignored `data/` (SQLite `runs.db` / `datasets.db` / `history.db`) and `logs/`.
+  `data/workflows/` is the ONE exception and is versioned on purpose: a workflow is authored work, not
+  runtime residue — but it references uploaded datasets **by id**, so a checked-out workflow is only
+  runnable next to the same `data/`, which the workflow's own README note has to keep honest.
+  Do not delete `data/` casually — saved workflows reference uploaded datasets stored there.
+- **A step's output column names are a chart's input contract.** 主题距离图 reads `pc1/pc2/topic/prevalence_pct`
+  and 显著词图 reads `term/overall_freq/within_freq` because the steps that write them use exactly those names;
+  both chart types take the names as parameters with those defaults and refuse a column that is not there, so a
+  rename on one side is a named refusal on the other rather than an empty figure (and a rename here means a test
+  on each side, not a silent drift).
 - **One server per data root, by design (local single-user tool).** `RunStore.__init__` calls
   `promote_stale_runs()`, which marks every run still `running` as interrupted, so a second instance on the same
   `data/` kills the first one's live run. `CRAWLER_DATA_ROOT` (config.py) gives a process its own `data/` + `logs/` —

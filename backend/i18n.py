@@ -75,6 +75,7 @@ _ZH = {
     # The labelling step needs a model: without one the step refuses instead of leaving the
     # column blank and settling the node DONE on work that did not happen.
     'wf.analysis_llm_no_model': '「主题概括」需要模型，但这条运行没有配置模型（设置 → 模型 / 节点模型）',
+    'wf.analysis_steps_shape': '「steps」必须是步骤列表（每个一步一个对象），收到的是一个对象',
     'wf.analysis_step_removed': '（-{removed}）',
     'wf.analysis_step_nochange': '（无变化）',
     'wf.tokenize_no_column': '未配置要分词的文本列',
@@ -380,6 +381,16 @@ _ZH = {
         '阶段「{stage}」的 {topic} 一个特征词都选不出来（没有文本归到这个主题，请调小该阶段的主题数）'
     ),
     'analysis.topic_stage_done': '阶段「{stage}」：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}',
+    # 主题可视化（pyLDAvis 那两张图的数据面）。λ 是「按主题自身概率」还是「按相对全库的溢出」
+    # 排序，同一模型会给出两份不同的词表，所以用了哪个值必须随表一起说出来。
+    'analysis.topic_map_done': (
+        '主题距离图：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}'
+        '（气泡大小=主题占比，坐标=两主题词分布的 JS 散度经 MDS）'
+    ),
+    'analysis.topic_salience_done': (
+        '主题显著词：{n} 个主题、{rows} 篇文本、共 {terms} 行，λ={value}（1=按主题内概率排序，0=按相对全库的溢出排序）'
+    ),
+    'analysis.topic_lambda': 'λ 要在 0 到 1 之间（0=只看相对溢出，1=只看主题内概率），收到 {value}',
     # 主题概括：一行一次模型调用，所以失败要说清是哪个主题，停手也要说清还剩几个没问。
     'analysis.label_no_llm': '「{op}」没有拿到模型客户端：只有画布上的运行才带模型',
     'analysis.label_too_many': '主题概括要逐主题问模型：{rows} 行超过了上限 {limit}，请先把主题表缩小',
@@ -1108,6 +1119,7 @@ _EN = {
     # repeats the wrapper, and the pair used to print the same sentence twice —
     # once here with no node named, once attributed.
     'wf.analysis_step': '[Analysis] {op}: {before} -> {after} rows',
+    'wf.analysis_steps_shape': '"steps" must be a LIST of steps (one object each), and this is a single object',
     'wf.analysis_llm_no_model': (
         'the 主题概括 step needs a model, and this run has none (Settings → model, or the node model box)'
     ),
@@ -1440,6 +1452,17 @@ _EN = {
         "so lower that stage's topic count"
     ),
     'analysis.topic_stage_done': 'phase "{stage}": {n} topics over {rows} texts, perplexity {perplexity}',
+    'analysis.topic_map_done': (
+        'intertopic map: {n} topics over {rows} texts, perplexity {perplexity} '
+        '(bubble size = topic share; coordinates = MDS of the Jensen-Shannon distance between word distributions)'
+    ),
+    'analysis.topic_salience_done': (
+        'salient terms: {terms} rows for {n} topics over {rows} texts, λ={value} '
+        '(1 ranks by probability within the topic, 0 by over-representation against the corpus)'
+    ),
+    'analysis.topic_lambda': (
+        'λ must sit between 0 and 1 (0 = over-representation only, 1 = within-topic probability only), got {value}'
+    ),
     'analysis.label_no_llm': '{op} was handed no model client: only a canvas run carries one',
     'analysis.label_too_many': (
         'the labelling step asks the model once per topic: {rows} rows is over the limit of {limit}, '

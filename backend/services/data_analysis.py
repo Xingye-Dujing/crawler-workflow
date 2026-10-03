@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import math
 import re
 
 import pandas as pd
@@ -194,6 +195,11 @@ STEP_PARAMS: dict = {
         'nonblank': ('topics',),
         'enums': {'word_source': ('tfidf', WORD_SOURCES)},
     },
+    # The two figure steps read a text column and fit their own model, so the column is the one
+    # thing they cannot do without. Their topic count keeps the declared default the panel
+    # shows, exactly as ``topic_model`` does.
+    'topic_map': {'one': ('column',)},
+    'topic_salience': {'one': ('column',)},
     # The labelling step reads the word cell and writes the summary cell; both are named, and
     # an unnamed 概括 column would "succeed" by adding a header the export shows as empty.
     'topic_label': {
@@ -311,6 +317,126 @@ def _stage_topic_counts(value, stages: list) -> list:
             t('analysis.topic_stage_counts', stages=len(stages), counts=','.join(str(n) for n in picked))
         )
     return picked
+
+
+def _prepare_topic_model(df, column, n_topics, max_features):
+    """The guards and the fit that every topic-VISUALISATION step shares.
+
+    Refusals live here rather than in each step because the two views ask the same question of
+    the same table, and a ``topic_map`` that answers "not enough texts" in different words from
+    ``topic_salience`` is two bugs pretending to be one contract.
+    """
+    topics = int(n_topics)
+    if topics < 2:
+        raise UnknownOperationError(t('analysis.topic_count', value=topics))
+    usable = df[df[column].notna() & (df[column].astype(str).str.strip() != '')]
+    texts = [str(value) for value in usable[column].tolist()]
+    if len(texts) < topics:
+        raise UnknownOperationError(t('analysis.topic_rows', rows=len(texts), topics=topics))
+    try:
+        model, matrix, doc_topic, vocabulary = _fit_topic_model(texts, topics, max_features)
+    except ValueError as e:
+        raise UnknownOperationError(t('analysis.topic_features', err=e)) from e
+    return texts, model, matrix, doc_topic, vocabulary
+
+
+def _fit_topic_model(texts, n_topics, max_features):
+    """Fit the LDA that both topic-view steps read, with the same conventions as the table.
+
+    Same tokenizer, same ``random_state`` and the same vectoriser as
+    :meth:`DataAnalysisService.topic_model`: a term's frequency in the map, in the salience
+    table and in the exported topic list has to be the same number, or the three artifacts
+    describe three different models while reading like one analysis.
+    """
+    import jieba
+    from sklearn.decomposition import LatentDirichletAllocation
+    from sklearn.feature_extraction.text import CountVectorizer
+
+    tokenized = [
+        ' '.join(token for token in jieba.cut(text) if any(char.isalnum() for char in token)) for text in texts
+    ]
+    vectorizer = CountVectorizer(
+        tokenizer=_split_tokens,
+        preprocessor=_keep_text,
+        token_pattern=None,
+        max_features=max(10, int(max_features)),
+    )
+    matrix = vectorizer.fit_transform(tokenized)
+    model = LatentDirichletAllocation(n_components=int(n_topics), random_state=42, learning_method='batch')
+    doc_topic = model.fit_transform(matrix)
+    return model, matrix, doc_topic, vectorizer.get_feature_names_out()
+
+
+def _kl2(p, q):
+    """KL(p‖q) in bits, over the support where both carry mass (a zero is not a ratio)."""
+    import numpy as np
+
+    mask = (p > 0) & (q > 0)
+    return float(np.sum(p[mask] * np.log2(p[mask] / q[mask])))
+
+
+def _jsd_matrix(distributions):
+    """Pairwise Jensen-Shannon divergence between topic-word distributions.
+
+    Euclidean distance on the probability vectors is not what this picture needs: two topics
+    that differ mostly in rare words are further apart in meaning than their raw distance
+    says. The divergence is the symmetric, bounded form of the KL comparison the topic-model
+    literature uses for exactly this plot (Sievert & Shirley's intertopic distance map).
+    """
+    import numpy as np
+
+    rows = np.asarray(distributions, dtype=float)
+    rows = rows / rows.sum(axis=1, keepdims=True)
+    size = len(rows)
+    out = [[0.0] * size for _ in range(size)]
+    for left in range(size):
+        for right in range(left + 1, size):
+            mixture = (rows[left] + rows[right]) / 2.0
+            out[left][right] = out[right][left] = 0.5 * _kl2(rows[left], mixture) + 0.5 * _kl2(rows[right], mixture)
+    return out
+
+
+def _mds_2d(distances):
+    """Classical (Torgerson) MDS of a distance matrix, as two stable-signed columns.
+
+    Eigendecomposition of the double-centred squared distances rather than scikit-learn's
+    iterative ``MDS``: it is deterministic, and a map whose bubbles move between two runs of
+    the SAME table is a figure nobody can cite. Eigenvector signs are arbitrary up to a flip,
+    so each axis is turned to make its largest-magnitude coordinate positive — the layout
+    then repeats byte for byte, which is what the test asserts.
+    """
+    import numpy as np
+
+    matrix = np.asarray(distances, dtype=float)
+    size = matrix.shape[0]
+    if size < 2:
+        return [[0.0, 0.0] for _ in range(size)]
+    centering = np.eye(size) - np.ones((size, size)) / size
+    doubled = -0.5 * (matrix**2) @ centering
+    # Symmetrised before the eigensolver: floating-point drift in the product above is real,
+    # and ``eigh`` on a non-symmetric input answers with numbers that mean nothing.
+    gram = (doubled + doubled.T) / 2.0
+    values, vectors = np.linalg.eigh(gram)
+    order = np.argsort(values)[::-1][:2]
+    coordinates = []
+    for position in range(size):
+        point = [vectors[position, axis] for axis in order]
+        coordinates.append(
+            [
+                # The eigenvalue of the axis actually chosen (``order`` is a descending
+                # permutation of an ASCENDING solver output), not of the solver's first slots:
+                # indexing ``values`` by ``axis`` reads the two SMALLEST eigenvalues, which are
+                # the noise floor, and silently flattens the map onto one line.
+                point[axis] * float(np.sqrt(max(values[order[axis]], 0.0))) if values[order[axis]] > 0 else 0.0
+                for axis in range(len(order))
+            ]
+        )
+    for axis in range(len(order)):
+        tallest = max(range(len(coordinates)), key=lambda row: abs(coordinates[row][axis]))
+        if coordinates[tallest][axis] < 0:
+            for row in coordinates:
+                row[axis] = -row[axis]
+    return [list(point) + [0.0] * (2 - len(point)) for point in coordinates]
 
 
 def _label_from(answer) -> str:
@@ -1312,6 +1438,126 @@ class DataAnalysisService:
         logger.info(t('analysis.label_done', n=labelled, model=getattr(llm, 'label', '')))
         return work
 
+    @staticmethod
+    def topic_map(
+        df: pd.DataFrame, column: str, n_topics: int = 5, max_features: int = 2000, topn: int = 6
+    ) -> pd.DataFrame:
+        """The intertopic distance map's DATA: where each topic sits, and how big it is.
+
+        pyLDAvis draws topics as bubbles placed by multidimensional scaling of the distance
+        between their word distributions, sized by how much of the corpus each one claims. It
+        is a picture of the MODEL rather than of the words, and it answers the question the
+        exported topic list cannot: are these five subjects actually distinct, or is one of
+        them a slightly louder copy of another? Overlapping bubbles say the split was not in
+        the text.
+
+        Prevalence is the model's own document mass (``doc_topic.sum(axis=0)``), not the argmax
+        count :meth:`topic_by_stage` files as ``doc_n``: a post that leans 40/60 between two
+        topics belongs to both here, because the map shows what the model is unsure about while
+        the table records what it decided. ``doc_n`` is still reported beside it so the two
+        readings can be compared rather than confused.
+        """
+        if column not in df.columns:
+            return df
+        topics = int(n_topics)
+        texts, model, matrix, doc_topic, vocabulary = _prepare_topic_model(df, column, topics, max_features)
+        mass = doc_topic.sum(axis=0)
+        total = float(mass.sum())
+        claimed = [int(owner) for owner in doc_topic.argmax(axis=1)]
+        points = _mds_2d(_jsd_matrix(model.components_))
+        rows = []
+        for index in range(topics):
+            component = model.components_[index]
+            best = component.argsort()[::-1][: max(1, int(topn))]
+            rows.append(
+                {
+                    'topic': f'Topic-{index + 1}',
+                    'pc1': round(float(points[index][0]), 6),
+                    'pc2': round(float(points[index][1]), 6),
+                    'prevalence_pct': round(float(mass[index]) / total * 100, 2) if total else 0.0,
+                    'doc_n': claimed.count(index),
+                    'feature_words': '、'.join(str(vocabulary[position]) for position in best),
+                }
+            )
+        logger.info(
+            t(
+                'analysis.topic_map_done',
+                n=topics,
+                rows=len(texts),
+                perplexity=round(float(model.perplexity(matrix)), 2),
+            )
+        )
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def topic_salience(
+        df: pd.DataFrame,
+        column: str,
+        n_topics: int = 5,
+        max_features: int = 2000,
+        topn: int = 30,
+        relevance: float = 1.0,
+    ) -> pd.DataFrame:
+        """The figure's right-hand panel: the terms a topic is ABOUT, with both counts.
+
+        Two bars per term, exactly as the study prints them — the corpus-wide frequency (blue)
+        and the frequency this topic alone would produce (red). Which terms belong on the list
+        at all is decided by the relevance weighting of Sievert & Shirley (2014):
+        ``λ·log p(w|t) + (1−λ)·log(p(w|t)/p(w))``. λ=1 ranks by the topic's own probability, so
+        a common word can win; λ=0 ranks by over-representation, so rare-but-diagnostic words
+        surface and a topic of nothing but 「的」 becomes impossible to read. The paper's figure
+        has a slider for this; here it is a parameter, and the number used is printed with the
+        rows because two λs give two different answers from one model.
+        """
+        import numpy as np
+
+        if column not in df.columns:
+            return df
+        topics = int(n_topics)
+        lam = float(relevance)
+        if not 0.0 <= lam <= 1.0:
+            raise UnknownOperationError(t('analysis.topic_lambda', value=relevance))
+        texts, model, matrix, _doc_topic, vocabulary = _prepare_topic_model(df, column, topics, max_features)
+        counts = np.asarray(matrix.sum(axis=0), dtype=float).ravel()
+        total_tokens = float(counts.sum())
+        if not total_tokens:
+            raise UnknownOperationError(t('analysis.topic_features', err='the corpus has no tokens left to count'))
+        p_w = counts / total_tokens
+        word_topic = np.asarray(model.components_, dtype=float)
+        word_topic = word_topic / word_topic.sum(axis=1, keepdims=True)
+        prior = word_topic.sum(axis=1) / len(word_topic)
+        rows = []
+        for index in range(topics):
+            own = word_topic[index]
+            within = own * float(prior[index]) * total_tokens
+            scored = []
+            for position in range(len(vocabulary)):
+                probability = float(own[position])
+                if probability <= 0.0:
+                    continue  # a term this topic never uses has no relevance to rank
+                share = float(p_w[position])
+                lift = probability / share if share > 0 else 0.0
+                if lift <= 0.0:
+                    continue
+                value = lam * math.log2(probability) + (1.0 - lam) * math.log2(lift)
+                # Ties break on the term itself so two runs of one table list the same words
+                # in the same order; numpy's argsort would leave the order to floating point.
+                scored.append((value, str(vocabulary[position]), position))
+            scored.sort(key=lambda pair: (-pair[0], pair[1]))
+            for rank, (value, term, position) in enumerate(scored[: max(1, int(topn))]):
+                rows.append(
+                    {
+                        'topic': f'Topic-{index + 1}',
+                        'rank': rank + 1,
+                        'term': term,
+                        'overall_freq': int(counts[position]),
+                        'within_freq': round(float(within[position]), 2),
+                        'relevance': round(value, 4),
+                    }
+                )
+        logger.info(t('analysis.topic_salience_done', n=topics, rows=len(texts), terms=len(rows), value=lam))
+        return pd.DataFrame(rows)
+
     # ── The sentiment curve ─────────────────────────────────────
 
     @staticmethod
@@ -1458,6 +1704,8 @@ class DataAnalysisService:
             'topic_model': cls.topic_model,
             'topic_by_stage': cls.topic_by_stage,
             'topic_label': cls.topic_label,
+            'topic_map': cls.topic_map,
+            'topic_salience': cls.topic_salience,
             'sentiment_evolution': cls.sentiment_evolution,
         }
 

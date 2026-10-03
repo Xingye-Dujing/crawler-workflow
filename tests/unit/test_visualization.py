@@ -39,6 +39,8 @@ USABLE = {
     'bar': {'x': '作者', 'y': '点赞'},
     'line': {'x': '作者', 'y': '点赞'},
     'dual_line': {'x': '作者', 'y': '点赞', 'y2': '阅读'},
+    'topic_map': {'x': '点赞', 'y': '阅读'},
+    'topic_terms': {'x': '作者', 'y': '点赞', 'y2': '阅读'},
     'pie': {'x': '作者', 'y': '点赞'},
     'scatter': {'x': '点赞', 'y': '阅读'},
     'histogram': {'x': '点赞'},
@@ -127,6 +129,84 @@ class TestDualAxisLine:
             V.render_image(df, 'dual_line', x='作者', y='点赞')
 
 
+class TestTopicFigureCharts:
+    """The two panels of the pyLDAvis figure, drawn from the tables the analysis steps write.
+
+    These types read the column names their steps emit, so the pair is a contract: a renamed
+    column must refuse by name rather than draw an empty figure, and the geometry that carries
+    the meaning (bubble AREA, rank-1-on-top) is exactly what a generic scatter or bar would get
+    wrong.
+    """
+
+    MAP = pd.DataFrame(
+        {
+            'topic': ['Topic-1', 'Topic-2', 'Topic-3'],
+            'pc1': [-0.4, 0.35, 0.05],
+            'pc2': [0.2, -0.3, 0.42],
+            'prevalence_pct': [12.5, 62.5, 25.0],
+        }
+    )
+
+    TERMS = pd.DataFrame(
+        {
+            'topic': ['Topic-1'] * 3,
+            'rank': [1, 2, 3],
+            'term': ['通报', '警方', '人肉'],
+            'overall_freq': [40, 8, 6],
+            'within_freq': [14.2, 7.5, 0.4],
+        }
+    )
+
+    def test_bubbles_are_placed_labelled_and_sized_by_area(self):
+        option = V.to_echarts_option(
+            self.MAP, 'topic_map', x='pc1', y='pc2', label_field='topic', value_field='prevalence_pct'
+        )
+        series = option['series'][0]
+        assert [point['value'] for point in series['data']] == [[-0.4, 0.2], [0.35, -0.3], [0.05, 0.42]]
+        assert [point['name'] for point in series['data']] == ['Topic-1', 'Topic-2', 'Topic-3']
+        assert series['label']['show'] is True and series['label']['formatter'] == '{b}'
+        sizes = [point['symbolSize'] for point in series['data']]
+        assert sizes[0] < sizes[2] < sizes[1], 'the bubble order follows the share, monotonically'
+        # Area, not radius: the 62.5% bubble is 2.5× the 25% one in AREA, so its radius grows
+        # by the square root — a linear scale would read as 2.5× the width, i.e. 6× the area.
+        assert (sizes[1] / sizes[2]) ** 2 == pytest.approx(62.5 / 25.0, rel=0.02)
+
+    def test_the_map_draws_the_reference_lines_the_reader_measures_against(self):
+        option = V.to_echarts_option(self.MAP, 'topic_map', x='pc1', y='pc2', label_field='topic')
+        marks = option['series'][0]['markLine']['data']
+        assert {'xAxis': 0} in marks and {'yAxis': 0} in marks
+        assert option['xAxis']['name'] == 'PC1' and option['yAxis']['name'] == 'PC2'
+
+    def test_a_map_without_label_or_size_columns_is_still_a_map(self):
+        # Both extras degrade to "uniform bubbles", because a map whose bubbles are all the
+        # same size still answers WHERE the topics are; only the coordinates are required.
+        option = V.to_echarts_option(self.MAP, 'topic_map', x='pc1', y='pc2', label_field='', value_field='')
+        series = option['series'][0]
+        assert len(series['data']) == 3
+        assert series['label']['show'] is False, 'no label column, no invented labels'
+        assert {point['symbolSize'] for point in series['data']} == {10.0}
+
+    def test_the_terms_panel_bars_both_counts_on_one_shared_scale(self):
+        option = V.to_echarts_option(self.TERMS, 'topic_terms', x='term', y='overall_freq', y2='within_freq')
+        assert option['yAxis']['type'] == 'category'
+        assert option['yAxis']['data'] == ['通报', '警方', '人肉']
+        assert option['yAxis']['inverse'] is True, 'rank 1 reads at the top'
+        assert option['xAxis']['type'] == 'value', 'both series share one count axis'
+        assert [series['name'] for series in option['series']] == ['overall_freq', 'within_freq']
+        assert option['series'][0]['data'] == [40, 8, 6]
+        assert option['series'][1]['data'] == [14.2, 7.5, 0.4]
+
+    def test_a_renamed_column_refuses_instead_of_drawing_nothing(self):
+        with pytest.raises(ChartConfigError, match='Field not found in the data: 词'):
+            V.to_echarts_option(self.TERMS, 'topic_terms', x='词', y='overall_freq', y2='within_freq')
+
+    def test_both_types_are_refused_by_the_image_engine(self):
+        # The refusal happens before any column is read, so the same frame answers both.
+        for chart_type in ('topic_map', 'topic_terms'):
+            with pytest.raises(ChartConfigError, match='engine=echarts'):
+                V.render_image(self.MAP, chart_type, x='pc1', y='pc2')
+
+
 # ─── option shape / JSON safety ────────────────────────────────────────
 
 
@@ -146,9 +226,10 @@ class TestOptionJsonSafety:
     @pytest.mark.parametrize('chart_type', CHART_TYPES)
     def test_a_frame_full_of_missing_numbers_still_serialises(self, chart_type):
         frame = pd.DataFrame({'g': ['a', 'b'], 'v': [None, None]})
-        # 双轴折线 needs its right-hand field like any other type needs x: without one it is
-        # a refused spec (pinned below), not a chart with a blank second line.
-        extra = {'y2': 'v'} if chart_type == 'dual_line' else {}
+        # 双轴折线 and 显著词图 need their second field like any other type needs x: without
+        # one they are a refused spec (pinned in TestConfigErrors), not a chart with a blank
+        # second series.
+        extra = {'y2': 'v'} if chart_type in ('dual_line', 'topic_terms') else {}
         option = V.to_echarts_option(frame, chart_type, x='g', y='v', value_field='v', **extra)
         assert json.dumps(option, allow_nan=False)
 
@@ -308,6 +389,9 @@ class TestConfigErrors:
             ('box', {'y': '点赞'}, 'Box plot requires a category field'),
             ('dual_line', {'x': '作者', 'y': '点赞'}, 'requires a second value field'),
             ('dual_line', {'y2': '阅读'}, 'requires a category field'),
+            ('topic_map', {'x': '点赞'}, 'needs both coordinate fields'),
+            ('topic_terms', {}, 'requires a term field'),
+            ('topic_terms', {'x': '作者', 'y': '点赞'}, 'needs BOTH frequency fields'),
         ],
     )
     def test_specs_missing_required_fields_name_the_gap(self, df, chart_type, kwargs, needle):

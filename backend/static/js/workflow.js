@@ -2429,7 +2429,7 @@ function renderParamCheckbox(nodeId, p, key, labelKey, defVal) {
 }
 
 /* ── Analysis node settings ── */
-var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'sentiment_evolution'];
+var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'topic_map', 'topic_salience', 'sentiment_evolution'];
 var FILTER_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains', 'not_contains', 'in', 'not_in', 'is_null', 'not_null'];
 var CONVERT_TYPES = ['str', 'int', 'float', 'bool', 'datetime'];
 
@@ -2548,6 +2548,27 @@ function renderAnalysisSettings(nodeId, p) {
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.topicLabelHint') + '</div></div>';
     }
+    if (op === 'topic_map') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'n_topics', 'settings.nTopics', 'number', 5);
+        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicMapTopn', 'number', 6);
+        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.topicMapHint') + '</div></div>';
+    }
+    if (op === 'topic_salience') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'n_topics', 'settings.nTopics', 'number', 5);
+        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTermsTopn', 'number', 30);
+        html += renderParamInput(nodeId, p, 'topic_lambda', 'settings.topicLambda', 'number', 1);
+        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.topicSalienceHint') + '</div></div>';
+    }
     if (op === 'sentiment_evolution') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
@@ -2653,7 +2674,7 @@ function renderAnalysisSettings(nodeId, p) {
 }
 
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'dual_line', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'wordcloud', 'map'];
+var CHART_TYPES = ['bar', 'line', 'dual_line', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'wordcloud', 'map'];
 
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
@@ -2669,13 +2690,17 @@ var CHART_X_LABEL_KEY = {
 };
 var CHART_Y_LABEL_KEY = { heatmap: 'settings.yFieldCat2', sankey: 'settings.targetField' };
 var CHARTS_WITH_Y_AS_CATEGORY = ['heatmap', 'sankey'];
-var CHARTS_WITH_VALUE_FIELD = ['heatmap', 'sankey', 'wordcloud', 'map'];
+var CHARTS_WITH_VALUE_FIELD = ['heatmap', 'sankey', 'wordcloud', 'map', 'topic_map'];
 var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map'].concat(CHARTS_WITH_Y_AS_CATEGORY);
 // The right-hand scale, which only 双轴折线 asks for. Kept equal to the backend's
 // ECHARTS_ONLY_TYPES by tests/unit/test_visualization.py, because the renderer that cannot
 // draw two axes refuses by name and the panel must not offer it silently.
-var CHARTS_WITH_Y2 = ['dual_line'];
-var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line'];
+// 显著词图 asks for y2 too, but as a SECOND BAR SERIES on the same scale, not as a second
+// axis — the two counts are in the same unit, and splitting them across scales would let a
+// rare word look bigger than a common one.
+var CHARTS_WITH_Y2 = ['dual_line', 'topic_terms'];
+var CHARTS_WITH_LABEL = ['topic_map'];
+var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms'];
 
 function renderVisualizeSettings(nodeId, p) {
     var upstream = canvas.getUpstreamNodeId(nodeId);
@@ -2774,6 +2799,11 @@ function renderVisualizeSettings(nodeId, p) {
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'agg\',this.value)">' +
             ['sum', 'mean', 'count', 'max', 'min'].map(function (a) { return '<option value="' + a + '"' + (p.agg === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') +
             '</select></div>';
+    }
+    if (CHARTS_WITH_LABEL.indexOf(ct) >= 0) {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.labelField') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.label_field || 'topic') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'label_field\',this.value)"></div>';
     }
     if (CHARTS_WITH_Y2.indexOf(ct) >= 0) {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.y2Field') + '</label>' +
