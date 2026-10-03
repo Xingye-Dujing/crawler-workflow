@@ -1981,7 +1981,7 @@ function openSettings(nodeId) {
             I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'process') {
         var p = node.params;
-        var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'anomaly', 'correlation'];
+        var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'anomaly', 'correlation'];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
             selectOptionTags(
@@ -2100,6 +2100,19 @@ function openSettings(nodeId) {
                 'onchange="updateParam(\'' + nodeId + '\',\'entity_types\',this.value)">' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.entityTypesHint') +
                 '</div></div>';
+        }
+
+        /* Cyberbullying speech — the study's own object. The word-list path needs no model,
+           costs nothing and gives the same answer twice; the model path is for the euphemisms
+           a fixed list cannot see. */
+        if (p.operation === 'aggression') {
+            html += renderParamSelect(nodeId, p, 'mode', 'settings.mode', 'lexicon',
+                [{ v: 'lexicon', l: I18n.t('mode.lexicon') }, { v: 'llm', l: llmModeLabel() }]);
+            if (p.mode === 'llm') {
+                html += renderParamInput(nodeId, p, 'model', 'settings.model', 'text', '');
+            }
+            html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+                I18n.t('settings.aggressionHint') + '</div></div>';
         }
 
         /* Anomaly detection */

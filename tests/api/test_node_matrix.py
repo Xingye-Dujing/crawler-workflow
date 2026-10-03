@@ -255,6 +255,54 @@ class TestProcessNodeOperations:
         assert [entry['mode'] for entry in seen] == ['llm', 'ml', 'llm', 'ml'], seen
         assert all(entry['text_column'] == '正文' for entry in seen)
 
+    def test_aggression_scans_the_text_column_and_adds_three_columns(self, client, app_module, paste):
+        """The word-list mode through the node: no model, no cost, and the same rows out as in.
+
+        The corpus is two abusive comments and one clean one, which is the smallest input where
+        "the detector ran" and "the detector found nothing" are different answers — a node that
+        settled DONE over an all-``none`` column would pass a shape-only test.
+        """
+        abusive = [
+            {'正文': '这种人怎么不去死，全家废物'},
+            {'正文': '他的手机号是13812345678，人肉出来了'},
+            {'正文': '这件事还需要更多证据'},
+        ]
+        _run, status, rows = _run_node(
+            client,
+            app_module,
+            paste,
+            'process',
+            {'operation': 'aggression', 'mode': 'lexicon'},
+            'aggression',
+            records=abusive,
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert {'aggression', 'aggression_score', 'aggression_hits'} <= set(rows[0])
+        assert [row['aggression'] for row in rows] == ['severe', 'severe', 'none']
+        assert 'privacy' in rows[1]['aggression_hits']
+
+    def test_an_unknown_aggression_mode_fails_the_node_by_name(self, client, app_module, paste):
+        _run, status, rows = _run_node(
+            client, app_module, paste, 'process', {'operation': 'aggression', 'mode': 'bertish'}, 'aggression'
+        )
+        assert status['status'] == 'failed', status
+        assert 'bertish' in (status.get('error') or '')
+        assert rows == [], 'a refused mode must not export a table of invented verdicts'
+
+    def test_a_process_node_on_a_missing_text_column_fails_instead_of_answering_blanks(self, client, app_module, paste):
+        # The rule that keeps a mis-typed column from becoming the study's finding: "this corpus
+        # contains no violent speech" is what an all-blank column would have said.
+        _run, status, rows = _run_node(
+            client,
+            app_module,
+            paste,
+            'process',
+            {'operation': 'aggression', 'text_column': '没有这一列', 'mode': 'lexicon'},
+            'aggression',
+        )
+        assert status['status'] == 'failed', status
+        assert '没有这一列' in (status.get('error') or '')
+
 
 class TestProcessNodeParameterEdges:
     """Values the panel can produce that no unit test of the helper covered.

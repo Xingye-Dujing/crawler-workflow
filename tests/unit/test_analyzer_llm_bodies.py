@@ -23,9 +23,11 @@ import re
 import pandas as pd
 import pytest
 
+import analyzers.aggression as aggression_module
 import analyzers.cleaner as cleaner_module
 import analyzers.emotion as emotion_module
 import analyzers.tendency as tendency_module
+from analyzers.aggression import AggressionAnalyzer
 from analyzers.cleaner import ContentCleaner
 from analyzers.clustering import TextCluster
 from analyzers.emotion import EmotionAnalyzer
@@ -630,3 +632,79 @@ class TestUnknownMethodDispatch:
     def test_clustering_refuses_the_same_typo_by_name(self, frame):
         with pytest.raises(ValueError, match='Unknown clustering method: yake'):
             TextCluster().analyze_dataframe(frame, method='yake')
+
+
+class TestAggressionLlmMode:
+    """The fourth LLM-backed analyzer: what its runner is handed, and one row end to end.
+
+    The real model is never called here (``chat`` is scripted and the fast tier runs with
+    sockets disabled), which is the point: the LLM path of this analyzer is code that can be
+    verified now, on a machine that cannot serve a model. What is pinned is the same shape the
+    other three analyzers pin — result-column names, the failure default, one prompt per
+    non-blank row — because a rename on either side is a hole in the exported table.
+    """
+
+    def test_the_llm_mode_declares_its_columns_and_failure_value(self, monkeypatch):
+        seen = TestRunnerDeclaration.capture(monkeypatch, aggression_module)
+        frame = pd.DataFrame({'正文': [LONG]})
+        AggressionAnalyzer(mode='llm').analyze_dataframe(frame, '正文', ctx={'client': ScriptedClient()})
+        assert seen['text_column'] == '正文'
+        assert seen['op'] == 'aggression'
+        assert seen['result_columns'] == ['aggression', 'aggression_score', 'aggression_hits']
+        # A row the model cannot judge is left at ``none`` with its raw words kept, NOT at some
+        # invented level: the lexicon column of the same run is comparable only if a failed row
+        # reads as "nothing found" rather than as a verdict.
+        assert seen['blank'] == ['none', '', '']
+        assert seen['fail_value'] == ('none', '', '模型未判定')
+
+    def test_one_row_is_asked_once_with_its_own_text_in_the_prompt(self):
+        client = ScriptedClient(default='severe|abuse')
+        result = AggressionAnalyzer(mode='llm').analyze_dataframe(
+            pd.DataFrame({'正文': ['这人怎么不去死']}), '正文', ctx={'client': client}
+        )
+        assert len(client.prompts) == 1
+        assert '这人怎么不去死' in client.prompts[0]
+        assert list(result.columns) == ['正文', 'aggression', 'aggression_score', 'aggression_hits']
+        assert result.loc[0, 'aggression'] == 'severe'
+        assert 'abuse' in result.loc[0, 'aggression_hits']
+
+    def test_a_chinese_answer_lands_on_the_same_level(self):
+        result = AggressionAnalyzer(mode='llm').analyze_dataframe(
+            pd.DataFrame({'正文': ['人肉他的手机号都发出来了']}),
+            '正文',
+            ctx={'client': ScriptedClient(default='严重|privacy')},
+        )
+        assert result.loc[0, 'aggression'] == 'severe'
+
+    def test_an_unparseable_answer_is_not_turned_into_a_verdict(self):
+        """Unlike emotion, where a bad answer becomes ``Neutral``, a violence level invented from
+        prose would put a row into the study's abusive-speech count that nobody judged."""
+        result = AggressionAnalyzer(mode='llm').analyze_dataframe(
+            pd.DataFrame({'正文': ['这评论我觉得不太合适']}),
+            '正文',
+            ctx={'client': ScriptedClient(default='这条评论语气不太友好，建议理性发言')},
+        )
+        assert result.loc[0, 'aggression'] == 'none'
+        assert str(result.loc[0, 'aggression_hits']), 'the model is answered with its own words kept'
+
+    def test_the_lexicon_mode_is_not_routed_through_the_runner(self, monkeypatch):
+        seen = TestRunnerDeclaration.capture(monkeypatch, aggression_module)
+        AggressionAnalyzer(mode='lexicon').analyze_dataframe(pd.DataFrame({'正文': ['傻逼滚开']}), '正文')
+        assert 'op' not in seen, 'the free mode must not reach the paid runner at all'
+
+
+class TestAggressionDispatch:
+    """``enum_param`` refuses a mode name the node does not serve, by name."""
+
+    def test_an_unknown_aggression_mode_is_refused_before_any_row_is_read(self):
+        from app import check_process_params
+
+        frame = pd.DataFrame({'正文': ['甲']})
+        with pytest.raises(ValueError, match='bertish'):
+            check_process_params('aggression', {'mode': 'bertish', 'text_column': '正文'}, frame)
+
+    def test_a_blank_mode_is_the_lexicon_the_panel_shows(self):
+        from app import _op_needs_llm
+
+        assert _op_needs_llm('aggression', {'mode': ''}) is False
+        assert _op_needs_llm('aggression', {'mode': 'llm'}) is True

@@ -367,6 +367,7 @@ _ZH = {
     ),
     'analysis.stage_order_col': '「{op}」的「阶段排序列」在表里不存在：{col}',
     'analysis.stage_order_unparsed': '「{col}」里排不出这些阶段的先后（没有任何可解析的时间）：{stages}',
+    'analysis.stage_order_unranked': '「{col}」里没有这些阶段的序号（分阶段 LDA 写的 stage_order 是数字）：{stages}',
     'analysis.topic_stage_number': '每阶段主题数只能是整数，收到「{value}」',
     'analysis.topic_stage_counts': (
         '每阶段主题数要与阶段一一对应：{stages} 个阶段，收到 {counts}（只填一个数字表示各阶段同数）'
@@ -380,6 +381,7 @@ _ZH = {
     'analysis.topic_stage_words': (
         '阶段「{stage}」的 {topic} 一个特征词都选不出来（没有文本归到这个主题，请调小该阶段的主题数）'
     ),
+    'analysis.topic_stage_unused': '阶段「{stage}」的 {topic} 没有分到任何文本（doc_n=0），特征词改用该主题的词分布',
     'analysis.topic_stage_done': '阶段「{stage}」：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}',
     # 主题可视化（pyLDAvis 那两张图的数据面）。λ 是「按主题自身概率」还是「按相对全库的溢出」
     # 排序，同一模型会给出两份不同的词表，所以用了哪个值必须随表一起说出来。
@@ -469,6 +471,10 @@ _ZH = {
     'analysis.alert_none_log': '预警检查了 {checked} 期：连续 {streak} 期、幅度阈值 {swing}，一条都没触发',
     'analysis.alert_fired': '二次爆发预警：{period} 触发 {signal}，数值 {value}',
     'clean.unknown_mode': '清洗节点没有名为「{mode}」的模式（可用：regex、llm）',
+    'aggression.lexicon_done': (
+        '网暴言论识别（词库）：{rows} 行中 {violent} 行含暴力言论，其中 {severe} 行为严重'
+        '（漏报无法度量：词表之外的说法看不见）'
+    ),
     'clean.regex_done': '正则清洗：保留 {kept} 行、判定删除 {dropped} 行（未做主题相关性判断，那需要 llm 模式）',
     # A cleaning step that this table cannot carry out. `{op}` and `{param}` stay the
     # storage names on purpose: they are what the caller of /api/analysis/run wrote,
@@ -1491,6 +1497,7 @@ _EN = {
     ),
     'analysis.stage_order_col': '{op}: the stage-order column "{col}" is not in this table',
     'analysis.stage_order_unparsed': 'no phase order can be read for {stages}: "{col}" holds no parsable time there',
+    'analysis.stage_order_unranked': 'no phase order can be read for {stages}: "{col}" holds no number there',
     'analysis.topic_stage_number': 'topics per stage must be a whole number, got "{value}"',
     'analysis.topic_stage_counts': (
         '{stages} stages need one topic count each, got {counts} (a single number means the same for every stage)'
@@ -1509,6 +1516,10 @@ _EN = {
     'analysis.topic_stage_words': (
         'nothing could be selected as a feature word for {topic} in phase "{stage}" — no text was assigned to it, '
         "so lower that stage's topic count"
+    ),
+    'analysis.topic_stage_unused': (
+        'no text was assigned to {topic} in phase "{stage}" (doc_n=0), '
+        'so its feature words come from the topic distribution'
     ),
     'analysis.topic_stage_done': 'phase "{stage}": {n} topics over {rows} texts, perplexity {perplexity}',
     'analysis.topic_map_done': (
@@ -1636,6 +1647,10 @@ _EN = {
     'analysis.alert_none_log': 'warning checked {checked} periods (streak {streak}, swing {swing}) and fired on none',
     'analysis.alert_fired': 'flare-up warning: {period} fired {signal} at {value}',
     'clean.unknown_mode': 'the clean node has no mode named "{mode}" (available: regex, llm)',
+    'aggression.lexicon_done': (
+        'cyberbullying scan (word list): {violent} of {rows} rows carry violent speech, {severe} severe '
+        '(misses cannot be measured here — wording outside the list is invisible)'
+    ),
     'clean.regex_done': (
         'Regex clean: kept {kept} rows, marked {dropped} for deletion '
         '(topic relevance is not judged here — that needs the llm mode)'

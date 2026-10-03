@@ -1,3 +1,4 @@
+from analyzers.aggression import AggressionAnalyzer
 from analyzers.anomaly import AnomalyDetector
 from analyzers.cleaner import ContentCleaner
 from analyzers.clustering import TextCluster
@@ -11,6 +12,7 @@ from analyzers.tendency import TendencyAnalyzer
 
 __all__ = [
     'BERT_BATCH',
+    'AggressionAnalyzer',
     'ContentCleaner',
     'EmotionAnalyzer',
     'TendencyAnalyzer',

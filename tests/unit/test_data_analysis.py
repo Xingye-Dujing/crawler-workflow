@@ -26,7 +26,7 @@ import pytest
 
 import services.data_analysis as _data_analysis_module
 from services.data_analysis import DataAnalysisService as D
-from services.data_analysis import UnknownOperationError
+from services.data_analysis import UnknownOperationError, _stage_order
 
 pytestmark = pytest.mark.unit
 
@@ -1488,6 +1488,16 @@ class TestTopicByStage:
         assert len(out) == 6
         assert all(len(row['feature_words'].split('、')) > 0 for row in out.to_dict('records'))
 
+    def test_an_unused_topic_falls_back_without_losing_the_weight_cell_agreement(self):
+        # Whatever filled the row, ``weights`` and ``feature_words`` must still be the same words:
+        # a chart that reads one and a table that reads the other cannot be allowed to disagree.
+        frame = self._frame()
+        out = self._run(frame, word_source='tfidf', topics=6)
+        assert all(len(row['feature_words']) > 0 for row in out.to_dict('records'))
+        for _, row in out.iterrows():
+            assert row['feature_words'].split('、') == [part.split(':')[0] for part in row['weights'].split()]
+        assert (out['doc_n'] == 0).any(), 'six topics over six posts per stage leaves topics unused'
+
     def test_an_unknown_word_source_is_refused_by_the_gate(self):
         from services.data_analysis import STEP_PARAMS, normalize_step_params, validate_step
 
@@ -1751,6 +1761,37 @@ class TestTopicViews:
         out = D.topic_salience(self._corpus(), '正文', n_topics=2, topn=3)
         assert len(out) <= 6
         assert max(len(rows) for _topic, rows in out.groupby('topic')) == 3
+
+    def test_a_numeric_stage_order_survives_the_round_trip_that_erased_the_categorical(self):
+        """``topic_by_stage`` writes ``stage_order`` precisely so the next step can recover the
+        lifecycle without a time column: the phase NAMES alone would sort 二次爆发期 first."""
+        frame = pd.DataFrame(
+            [
+                ('二次爆发期', 4),
+                ('发酵期', 1),
+                ('波动期', 3),
+                ('爆发期', 2),
+            ],
+            columns=['stage', 'stage_order'],
+        )
+        assert _stage_order(frame, 'stage', 'stage_order', op='topic_timeline') == [
+            '发酵期',
+            '爆发期',
+            '波动期',
+            '二次爆发期',
+        ]
+
+    def test_a_number_is_read_before_a_date_and_a_mixed_column_is_not_silently_sorted(self):
+        # A column where no row parses to a number falls through to the date reading, and a column
+        # that is neither is refused with the names that could not be placed.
+        frame = pd.DataFrame({'stage': ['发酵期', '爆发期'], 'x': ['a', 'b']})
+        with pytest.raises(UnknownOperationError, match='发酵期'):
+            _stage_order(frame, 'stage', 'x', op='topic_timeline')
+
+    def test_a_phase_with_no_rank_in_an_ordered_column_is_refused_not_appended(self):
+        frame = pd.DataFrame({'stage': ['发酵期', '爆发期', '波动期'], 'x': [1, None, 3]})
+        with pytest.raises(UnknownOperationError, match='爆发期'):
+            _stage_order(frame, 'stage', 'x', op='topic_timeline')
 
 
 class TestTopicTimeline:

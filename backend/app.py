@@ -26,6 +26,7 @@ from flask_cors import CORS
 import crawl_capabilities as capabilities
 from analyzers import (
     BERT_BATCH,
+    AggressionAnalyzer,
     AnomalyDetector,
     ContentCleaner,
     CorrelationAnalyzer,
@@ -2873,13 +2874,16 @@ PROCESS_ENUMS = {
     # SnowNLP is the default because it needs no model, no download and no GPU.
     'sentiment': {'mode': ('snownlp', ('llm', 'ml', 'snownlp', 'bert'))},
     'ner': {'mode': ('regex', ('regex', 'llm'))},
+    # The lexicon is the default because it needs no model, costs nothing, and answers the same
+    # table every run; ``llm`` is the opt-in that can see the euphemisms a fixed list cannot.
+    'aggression': {'mode': ('lexicon', ('lexicon', 'llm'))},
     'keyword': {'method': ('tfidf', ('tfidf', 'textrank', 'tfidf_corpus'))},
     'cluster': {'cluster_method': ('kmeans', ('kmeans', 'kmeans++', 'dbscan'))},
     'correlation': {'corr_method': ('pearson', ('pearson', 'spearman', 'kendall'))},
 }
 
 #: The operations whose whole job is to read one text column of the table.
-_TEXT_COLUMN_OPS = ('clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner')
+_TEXT_COLUMN_OPS = ('clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression')
 
 
 def enum_param(op: str, params: dict, key: str) -> str:
@@ -3057,6 +3061,17 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
             entity_types=params.get('entity_types'),
             ctx=run_ctx,
         )
+        return df.to_dict('records')
+
+    if op == 'aggression':
+        # The paper's own object: how violent the speech is, as opposed to how negative. The
+        # lexicon mode is the default (no model, no cost, reproducible), and ``llm`` reuses the
+        # shared row-by-row runner, so batching, checkpointing, Stop and 未处理 all arrive with it.
+        analyzer = AggressionAnalyzer(
+            mode=enum_param(op, params, 'mode'),
+            model_name=str(params.get('model') or '').strip(),
+        )
+        df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')
 
     if op == 'anomaly':

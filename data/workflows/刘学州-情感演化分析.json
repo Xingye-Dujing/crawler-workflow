@@ -648,6 +648,418 @@
       "x": 3099,
       "y": 1120,
       "folded": false
+    },
+    {
+      "id": "node-47",
+      "type": "analysis",
+      "title": "只留爆发期（论文图5）",
+      "params": {
+        "enabled": true,
+        "column": "阶段",
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "爆发期"
+      },
+      "operation": "filter_rows",
+      "x": 2069,
+      "y": 1260,
+      "folded": false
+    },
+    {
+      "id": "node-48",
+      "type": "analysis",
+      "title": "爆发期主题距离图数据",
+      "params": {
+        "enabled": true,
+        "column": "cleaned_text",
+        "n_topics": "5",
+        "operation": "topic_map",
+        "topic_max_features": "2000",
+        "topic_topn": "6"
+      },
+      "operation": "topic_map",
+      "x": 2409,
+      "y": 1260,
+      "folded": false
+    },
+    {
+      "id": "node-49",
+      "type": "visualize",
+      "title": "图13 爆发期主题距离图",
+      "params": {
+        "chart_type": "topic_map",
+        "engine": "echarts",
+        "label_field": "topic",
+        "value_field": "prevalence_pct",
+        "x_field": "pc1",
+        "y_field": "pc2"
+      },
+      "x": 2749,
+      "y": 1260,
+      "folded": false
+    },
+    {
+      "id": "node-50",
+      "type": "analysis",
+      "title": "爆发期各主题显著词",
+      "params": {
+        "column": "cleaned_text",
+        "n_topics": "5",
+        "operation": "topic_salience",
+        "topic_lambda": "1",
+        "topic_max_features": "2000",
+        "topic_topn": "30"
+      },
+      "x": 2749,
+      "y": 1414,
+      "folded": false
+    },
+    {
+      "id": "node-51",
+      "type": "analysis",
+      "title": "只留 Topic-1 的词表",
+      "params": {
+        "column": "topic",
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "Topic-1"
+      },
+      "x": 3099,
+      "y": 1414,
+      "folded": false
+    },
+    {
+      "id": "node-52",
+      "type": "visualize",
+      "title": "图14 爆发期 Topic-1 显著词",
+      "params": {
+        "chart_type": "topic_terms",
+        "engine": "echarts",
+        "value_field": "overall_freq",
+        "x_field": "term",
+        "y2_field": "within_freq",
+        "y_field": "overall_freq"
+      },
+      "x": 3439,
+      "y": 1414,
+      "folded": false
+    },
+    {
+      "id": "node-53",
+      "type": "output",
+      "title": "导出 爆发期显著词表",
+      "params": {
+        "filename": "刘学州-爆发期显著词.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3099,
+      "y": 1568,
+      "folded": false
+    },
+    {
+      "id": "node-54",
+      "type": "analysis",
+      "title": "主题生命周期（次生舆情）",
+      "params": {
+        "timeline_order_col": "stage_order",
+        "timeline_overlap": "0.5",
+        "timeline_size_col": "doc_n",
+        "timeline_stage_col": "stage",
+        "timeline_topic_col": "topic",
+        "timeline_words_col": "feature_words",
+        "operation": "topic_timeline"
+      },
+      "operation": "topic_timeline",
+      "x": 3439,
+      "y": 693,
+      "folded": false
+    },
+    {
+      "id": "node-55",
+      "type": "output",
+      "title": "导出 次生舆情表",
+      "params": {
+        "filename": "刘学州-次生舆情.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3779,
+      "y": 693,
+      "folded": false
+    },
+    {
+      "id": "node-56",
+      "type": "analysis",
+      "title": "主题跨阶段流向",
+      "params": {
+        "flow_min_similarity": "0.5",
+        "flow_order_col": "stage_order",
+        "flow_stage_col": "stage",
+        "flow_topic_col": "topic",
+        "flow_weights_col": "weights",
+        "flow_words_col": "feature_words",
+        "operation": "topic_flow"
+      },
+      "operation": "topic_flow",
+      "x": 3439,
+      "y": 840,
+      "folded": false
+    },
+    {
+      "id": "node-57",
+      "type": "visualize",
+      "title": "图15 主题流向（桑基）",
+      "params": {
+        "agg": "sum",
+        "chart_type": "sankey",
+        "engine": "echarts",
+        "value_field": "similarity",
+        "x_field": "source",
+        "y_field": "target"
+      },
+      "x": 3779,
+      "y": 840,
+      "folded": false
+    },
+    {
+      "id": "node-58",
+      "type": "output",
+      "title": "导出 主题流向边",
+      "params": {
+        "filename": "刘学州-主题流向.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3779,
+      "y": 980,
+      "folded": false
+    },
+    {
+      "id": "node-59",
+      "type": "analysis",
+      "title": "共词网络（论文知识图谱）",
+      "params": {
+        "cooccur_min_count": "5",
+        "cooccur_topn": "30",
+        "cooccur_window": "0",
+        "column": "cleaned_text",
+        "operation": "cooccur"
+      },
+      "operation": "cooccur",
+      "x": 2409,
+      "y": 1568,
+      "folded": false
+    },
+    {
+      "id": "node-60",
+      "type": "visualize",
+      "title": "图16 共词关系图",
+      "params": {
+        "agg": "sum",
+        "chart_type": "network",
+        "engine": "echarts",
+        "value_field": "value",
+        "x_field": "source",
+        "y_field": "target"
+      },
+      "x": 2749,
+      "y": 1568,
+      "folded": false
+    },
+    {
+      "id": "node-61",
+      "type": "output",
+      "title": "导出 共词边表",
+      "params": {
+        "filename": "刘学州-共词边.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 2749,
+      "y": 1722,
+      "folded": false
+    },
+    {
+      "id": "node-62",
+      "type": "analysis",
+      "title": "主题数扫描（2到8）",
+      "params": {
+        "coherence_max_documents": "2000",
+        "coherence_max_topics": "8",
+        "coherence_min_topics": "2",
+        "column": "cleaned_text",
+        "operation": "topic_coherence",
+        "topic_max_features": "2000",
+        "topic_topn": "10"
+      },
+      "operation": "topic_coherence",
+      "x": 2409,
+      "y": 1876,
+      "folded": false
+    },
+    {
+      "id": "node-63",
+      "type": "output",
+      "title": "导出 主题数扫描表",
+      "params": {
+        "filename": "刘学州-主题数扫描.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 2749,
+      "y": 1876,
+      "folded": false
+    },
+    {
+      "id": "node-64",
+      "type": "analysis",
+      "title": "情感走向外推（往后3天）",
+      "params": {
+        "forecast_horizon": "3",
+        "forecast_method": "holt",
+        "forecast_period_col": "period",
+        "forecast_value_col": "sentiment_index",
+        "forecast_window": "3",
+        "operation": "forecast"
+      },
+      "operation": "forecast",
+      "x": 3439,
+      "y": 112,
+      "folded": false
+    },
+    {
+      "id": "node-65",
+      "type": "visualize",
+      "title": "图17 每日情感指数与外推",
+      "params": {
+        "annotations": "",
+        "chart_type": "line",
+        "engine": "echarts",
+        "x_field": "period",
+        "y_field": "predicted"
+      },
+      "x": 3779,
+      "y": 112,
+      "folded": false
+    },
+    {
+      "id": "node-66",
+      "type": "output",
+      "title": "导出 预测表",
+      "params": {
+        "filename": "刘学州-情感走向预测.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3779,
+      "y": 252,
+      "folded": false
+    },
+    {
+      "id": "node-67",
+      "type": "analysis",
+      "title": "二次爆发预警",
+      "params": {
+        "alert_heating": "0.1",
+        "alert_index_col": "sentiment_index",
+        "alert_intensity_col": "intensity",
+        "alert_period_col": "period",
+        "alert_streak": "2",
+        "alert_swing": "0.2",
+        "alert_volume_col": "total",
+        "alert_volume_floor": "0.6",
+        "operation": "alert"
+      },
+      "operation": "alert",
+      "x": 3439,
+      "y": 392,
+      "folded": false
+    },
+    {
+      "id": "node-68",
+      "type": "output",
+      "title": "导出 预警表",
+      "params": {
+        "filename": "刘学州-二次爆发预警.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3779,
+      "y": 392,
+      "folded": false
+    },
+    {
+      "id": "node-69",
+      "type": "process",
+      "title": "网暴言论识别（词库）",
+      "params": {
+        "mode": "lexicon",
+        "operation": "aggression",
+        "text_column": "cleaned_text"
+      },
+      "operation": "aggression",
+      "x": 3099,
+      "y": 770,
+      "folded": false
+    },
+    {
+      "id": "node-70",
+      "type": "output",
+      "title": "导出 逐行暴力言论扫描",
+      "params": {
+        "filename": "刘学州-网暴言论.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3439,
+      "y": 770,
+      "folded": false
+    },
+    {
+      "id": "node-71",
+      "type": "analysis",
+      "title": "每日暴力言论平均分",
+      "params": {
+        "agg_col": "aggression_score",
+        "agg_func": "mean",
+        "group_col": "日期",
+        "operation": "groupby_agg"
+      },
+      "operation": "groupby_agg",
+      "x": 3439,
+      "y": 924,
+      "folded": false
+    },
+    {
+      "id": "node-72",
+      "type": "visualize",
+      "title": "图18 每日暴力言论强度",
+      "params": {
+        "chart_type": "line",
+        "engine": "echarts",
+        "x_field": "日期",
+        "y_field": "aggression_score"
+      },
+      "x": 3779,
+      "y": 924,
+      "folded": false
     }
   ],
   "connections": [
@@ -806,6 +1218,110 @@
     {
       "from": "node-42",
       "to": "node-46"
+    },
+    {
+      "from": "node-12",
+      "to": "node-47"
+    },
+    {
+      "from": "node-47",
+      "to": "node-48"
+    },
+    {
+      "from": "node-48",
+      "to": "node-49"
+    },
+    {
+      "from": "node-47",
+      "to": "node-50"
+    },
+    {
+      "from": "node-50",
+      "to": "node-51"
+    },
+    {
+      "from": "node-51",
+      "to": "node-52"
+    },
+    {
+      "from": "node-50",
+      "to": "node-53"
+    },
+    {
+      "from": "node-19",
+      "to": "node-54"
+    },
+    {
+      "from": "node-54",
+      "to": "node-55"
+    },
+    {
+      "from": "node-19",
+      "to": "node-56"
+    },
+    {
+      "from": "node-56",
+      "to": "node-57"
+    },
+    {
+      "from": "node-56",
+      "to": "node-58"
+    },
+    {
+      "from": "node-12",
+      "to": "node-59"
+    },
+    {
+      "from": "node-59",
+      "to": "node-60"
+    },
+    {
+      "from": "node-59",
+      "to": "node-61"
+    },
+    {
+      "from": "node-12",
+      "to": "node-62"
+    },
+    {
+      "from": "node-62",
+      "to": "node-63"
+    },
+    {
+      "from": "node-13",
+      "to": "node-64"
+    },
+    {
+      "from": "node-64",
+      "to": "node-65"
+    },
+    {
+      "from": "node-64",
+      "to": "node-66"
+    },
+    {
+      "from": "node-13",
+      "to": "node-67"
+    },
+    {
+      "from": "node-67",
+      "to": "node-68"
+    },
+    {
+      "from": "node-11",
+      "to": "node-69"
+    },
+    {
+      "from": "node-69",
+      "to": "node-70"
+    },
+    {
+      "from": "node-69",
+      "to": "node-71"
+    },
+    {
+      "from": "node-71",
+      "to": "node-72"
     }
   ],
   "settings": {

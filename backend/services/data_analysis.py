@@ -288,26 +288,58 @@ def _stage_order(df: pd.DataFrame, stage_col: str, order_col: str, op: str = 'to
     if order_col:
         if order_col not in df.columns:
             raise UnknownOperationError(t('analysis.stage_order_col', op=op, col=order_col))
+        # Two kinds of column answer this, in this order of preference. A NUMBER is the phase's
+        # own position — which is exactly what :meth:`DataAnalysisService.topic_by_stage` writes
+        # into ``stage_order`` so the lifecycle survives the records round trip that erases the
+        # categorical. A TIME places each phase at its earliest post, which is the only way to
+        # recover the order from a table that has never been modelled yet.
+        ranks = pd.to_numeric(df[order_col], errors='coerce')
+        if ranks.notna().any():
+            return _stage_order_by_rank(values, ranks, order_col, op, 'rank')
         stamps = _to_datetime(df[order_col])
-        first_seen: dict = {}
-        names: list = []
-        for value, stamp in zip(values.tolist(), stamps.tolist(), strict=True):
-            key = _stage_key(value)
-            if not key:
-                continue
-            if key not in names:
-                names.append(key)
-            if pd.notna(stamp) and (key not in first_seen or stamp < first_seen[key]):
-                first_seen[key] = stamp
-        adrift = [key for key in names if key not in first_seen]
-        if adrift:
-            # A phase whose rows carry no parsable time cannot be placed on a timeline, and
-            # appending it at the end would invent a position for it in the numbering.
-            raise UnknownOperationError(
-                t('analysis.stage_order_unparsed', op=op, col=order_col, stages='、'.join(adrift))
+        if stamps.notna().any():
+            return _stage_order_by_rank(values, stamps, order_col, op, 'time')
+        raise UnknownOperationError(
+            t(
+                'analysis.stage_order_unparsed',
+                op=op,
+                col=order_col,
+                stages='、'.join(key for key in dict.fromkeys(_stage_key(value) for value in values.tolist()) if key),
             )
-        return sorted(names, key=lambda key: first_seen[key])
+        )
     raise UnknownOperationError(t('analysis.stage_order', op=op, col=stage_col))
+
+
+def _stage_order_by_rank(values, ranks, order_col: str, op: str, kind: str) -> list:
+    """Order the phase names by the earliest rank (or timestamp) any of their rows carries.
+
+    ``kind`` only reaches the refusal: "no row of this phase has a number" and "no row of this
+    phase has a date" are different mistakes to fix, and a message that says ``{col}`` without
+    saying which reading of it failed sends the user to re-type a column that was right.
+    """
+    first_seen: dict = {}
+    names: list = []
+    for value, rank in zip(values.tolist(), ranks.tolist(), strict=True):
+        key = _stage_key(value)
+        if not key:
+            continue
+        if key not in names:
+            names.append(key)
+        if pd.notna(rank) and (key not in first_seen or rank < first_seen[key]):
+            first_seen[key] = rank
+    adrift = [key for key in names if key not in first_seen]
+    if adrift:
+        # A phase that cannot be placed on the ordering column has no position in the numbering,
+        # and appending it at the end would invent one.
+        raise UnknownOperationError(
+            t(
+                'analysis.stage_order_unranked' if kind == 'rank' else 'analysis.stage_order_unparsed',
+                op=op,
+                col=order_col,
+                stages='、'.join(adrift),
+            )
+        )
+    return sorted(names, key=lambda key: first_seen[key])
 
 
 def _stage_topic_counts(value, stages: list) -> list:
@@ -1386,6 +1418,12 @@ class DataAnalysisService:
         ``'lda'`` reads the weight matrix directly and is kept because the two lists differ
         (see :data:`WORD_SOURCES`).
 
+        An assignment can leave a topic with no posts at all — a property of the fit, not of the
+        user's choice — and then there is no bucket to score. The row is filled from that topic's
+        own word distribution, ``doc_n`` reports 0, and one warning names it: the stage's other
+        topics are real output, and dropping the table over an empty bucket (or printing an empty
+        特征词 cell) would each lose information the model actually has.
+
         Sample posts are the ``sample_n`` rows with the highest posterior probability for the
         topic — not a random draw. A random one would hand :meth:`topic_label` different
         evidence on every run, and a summary that changes between two identical runs is not a
@@ -1464,6 +1502,17 @@ class DataAnalysisService:
                         (str(word), float(weight))
                         for word, weight in zip(scored['keyword'], scored['weight'], strict=True)
                     ]
+                    if not words:
+                        # An argmax can leave a topic with NO documents, and then there is no
+                        # bucket to score TF-IDF over. That is a property of the fit, not a
+                        # mistake by the user, and killing a stage's other three topics for it
+                        # would be worse than saying so: the model does hold a word distribution
+                        # for the unused topic, so the row is filled from that and ``doc_n`` = 0
+                        # is what tells the reader no post was assigned to it.
+                        component = model.components_[topic_index]
+                        best = component.argsort()[::-1][: max(1, int(topn))]
+                        words = [(str(vocabulary[position]), float(component[position])) for position in best]
+                        logger.warning(t('analysis.topic_stage_unused', stage=stage, topic=label))
                 else:
                     component = model.components_[topic_index]
                     best = component.argsort()[::-1][: max(1, int(topn))]
