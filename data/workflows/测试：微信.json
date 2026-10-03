@@ -1,0 +1,78 @@
+{
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "source",
+      "title": "数据源",
+      "platform": "wechat",
+      "params": {
+        "keyword": "",
+        "target_count": 50,
+        "full_body": true,
+        "account": "",
+        "recrawl": false,
+        "part_size": 0,
+        "format": "csv",
+        "keep_parts": false,
+        "author": "",
+        "urls": "",
+        "input_column": "",
+        "comment_limit": 0,
+        "per_article_file": false,
+        "platform": "wechat",
+        "collect": "posts"
+      },
+      "x": 348,
+      "y": 0,
+      "folded": false
+    },
+    {
+      "id": "node-2",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：微信推文内容爬取"
+      },
+      "x": 0,
+      "y": 7,
+      "folded": false
+    },
+    {
+      "id": "node-3",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "operation": "save",
+        "format": "csv",
+        "filename": "微信推文内容爬取.csv",
+        "filename_timestamp": true
+      },
+      "operation": "save",
+      "x": 688,
+      "y": 7,
+      "folded": false
+    }
+  ],
+  "connections": [
+    {
+      "from": "node-2",
+      "to": "node-1"
+    },
+    {
+      "from": "node-1",
+      "to": "node-3"
+    }
+  ],
+  "settings": {
+    "mode": "parallel",
+    "headless": true,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": 399.5,
+      "panY": 443,
+      "zoom": 1
+    }
+  },
+  "name": "测试：微信"
+}

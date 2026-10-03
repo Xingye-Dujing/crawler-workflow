@@ -1,0 +1,190 @@
+{
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "source",
+      "title": "数据源",
+      "platform": "zhihu",
+      "params": {
+        "headless": true,
+        "keyword": "世界杯",
+        "platform": "zhihu",
+        "recrawl": true,
+        "target_count": 20
+      },
+      "x": 479,
+      "y": 338,
+      "folded": false
+    },
+    {
+      "id": "node-2",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "世界杯-知乎.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 819,
+      "y": 354,
+      "folded": false
+    },
+    {
+      "id": "node-3",
+      "type": "visualize",
+      "title": "可视化",
+      "params": {
+        "agg": "sum",
+        "chart_type": "wordcloud",
+        "data_source": "input",
+        "engine": "echarts",
+        "title": "",
+        "tokenize": true,
+        "value_field": "",
+        "wordcloud_style": "monoOrange",
+        "x_field": "正文",
+        "y_field": ""
+      },
+      "x": 1159,
+      "y": 277,
+      "folded": false
+    },
+    {
+      "id": "node-4",
+      "type": "analysis",
+      "title": "分析",
+      "params": {
+        "column": "",
+        "columns": "",
+        "dtype": "str",
+        "op": "eq",
+        "operation": "rename_columns",
+        "rename_from": "作者",
+        "rename_to": "发帖人",
+        "value": ""
+      },
+      "operation": "rename_columns",
+      "x": 1159,
+      "y": 431,
+      "folded": false
+    },
+    {
+      "id": "node-5",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "世界杯-知乎-改列名.csv",
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1499,
+      "y": 354,
+      "folded": false
+    },
+    {
+      "id": "node-6",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "世界杯"
+      },
+      "x": 139,
+      "y": 354,
+      "folded": false
+    },
+    {
+      "id": "node-7",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "DeepSeek"
+      },
+      "x": 139,
+      "y": 568,
+      "folded": false
+    },
+    {
+      "id": "node-8",
+      "type": "source",
+      "title": "数据源",
+      "platform": "zhihu",
+      "params": {
+        "author": "",
+        "collect": "posts",
+        "comment_limit": 0,
+        "format": "csv",
+        "keep_parts": false,
+        "keyword": "DeepSeek",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "zhihu",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 479,
+      "y": 551,
+      "folded": false
+    },
+    {
+      "id": "node-9",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "DeepSeek-知乎.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 819,
+      "y": 568,
+      "folded": false
+    }
+  ],
+  "connections": [
+    {
+      "from": "node-1",
+      "to": "node-2"
+    },
+    {
+      "from": "node-2",
+      "to": "node-3"
+    },
+    {
+      "from": "node-2",
+      "to": "node-4"
+    },
+    {
+      "from": "node-4",
+      "to": "node-5"
+    },
+    {
+      "from": "node-6",
+      "to": "node-1"
+    },
+    {
+      "from": "node-7",
+      "to": "node-8"
+    },
+    {
+      "from": "node-8",
+      "to": "node-9"
+    }
+  ],
+  "settings": {
+    "mode": "parallel",
+    "headless": false,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": -76.5,
+      "panY": 19.5,
+      "zoom": 1
+    }
+  },
+  "name": "测试：图表可视化"
+}

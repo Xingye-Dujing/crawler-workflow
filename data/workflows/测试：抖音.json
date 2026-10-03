@@ -1,0 +1,275 @@
+{
+  "nodes": [
+    {
+      "id": "node-10",
+      "type": "source",
+      "title": "数据源",
+      "platform": "douyin",
+      "params": {
+        "author": "https://www.douyin.com/user/MS4wLjABAAAA6xlnmUuddUZ7zQhYvd4TlOiLlEn2rQgY3Xjm-FAShgo",
+        "collect": "author",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "douyin",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 360,
+      "y": 516,
+      "folded": false
+    },
+    {
+      "id": "node-11",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "enabled": false,
+        "workflow_name": "测试：抖音某作者作品爬取"
+      },
+      "x": 0,
+      "y": 552,
+      "folded": false
+    },
+    {
+      "id": "node-12",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "抖音某作者作品.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 820,
+      "y": 552,
+      "folded": false
+    },
+    {
+      "id": "node-13",
+      "type": "source",
+      "title": "数据源",
+      "platform": "douyin",
+      "params": {
+        "author": "",
+        "collect": "hot",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "douyin",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 340,
+      "y": 707,
+      "folded": false
+    },
+    {
+      "id": "node-14",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "enabled": false,
+        "workflow_name": "测试：抖音热榜爬取"
+      },
+      "x": 0,
+      "y": 714,
+      "folded": false
+    },
+    {
+      "id": "node-15",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "抖音热榜.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 680,
+      "y": 714,
+      "folded": false
+    },
+    {
+      "id": "node-17",
+      "type": "source",
+      "title": "数据源",
+      "platform": "douyin",
+      "params": {
+        "author": "",
+        "collect": "comments",
+        "comment_limit": 50,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "douyin",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": "https://www.douyin.com/video/7653009893066067242"
+      },
+      "x": 340,
+      "y": 895,
+      "folded": false
+    },
+    {
+      "id": "node-18",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "enabled": true,
+        "workflow_name": "测试：抖音评论爬取"
+      },
+      "x": 0,
+      "y": 911,
+      "folded": false
+    },
+    {
+      "id": "node-19",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "抖音评论爬取.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 680,
+      "y": 911,
+      "folded": false
+    },
+    {
+      "id": "node-22",
+      "type": "process",
+      "title": "处理",
+      "params": {
+        "format": "csv",
+        "live_export": false,
+        "mode": "ml",
+        "operation": "emotion",
+        "text_column": "评论内容",
+        "topic": ""
+      },
+      "operation": "emotion",
+      "x": 1020,
+      "y": 841,
+      "folded": false
+    },
+    {
+      "id": "node-24",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "情感分析-ML.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1360,
+      "y": 841,
+      "folded": false
+    },
+    {
+      "id": "node-25",
+      "type": "process",
+      "title": "处理",
+      "params": {
+        "format": "csv",
+        "live_export": false,
+        "mode": "llm",
+        "operation": "emotion",
+        "text_column": "评论内容",
+        "topic": ""
+      },
+      "operation": "emotion",
+      "x": 1020,
+      "y": 981,
+      "folded": false
+    },
+    {
+      "id": "node-26",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "情感分析-LLM.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1360,
+      "y": 981,
+      "folded": false
+    }
+  ],
+  "connections": [
+    {
+      "from": "node-11",
+      "to": "node-10"
+    },
+    {
+      "from": "node-14",
+      "to": "node-13"
+    },
+    {
+      "from": "node-13",
+      "to": "node-15"
+    },
+    {
+      "from": "node-18",
+      "to": "node-17"
+    },
+    {
+      "from": "node-17",
+      "to": "node-19"
+    },
+    {
+      "from": "node-10",
+      "to": "node-12"
+    },
+    {
+      "from": "node-22",
+      "to": "node-24"
+    },
+    {
+      "from": "node-25",
+      "to": "node-26"
+    },
+    {
+      "from": "node-19",
+      "to": "node-22"
+    },
+    {
+      "from": "node-19",
+      "to": "node-25"
+    }
+  ],
+  "settings": {
+    "mode": "serial",
+    "headless": false,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": 63.5,
+      "panY": -298.5,
+      "zoom": 1
+    }
+  },
+  "name": "测试：抖音"
+}

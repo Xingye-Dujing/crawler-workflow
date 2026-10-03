@@ -1,0 +1,253 @@
+{
+  "nodes": [
+    {
+      "id": "node-2",
+      "type": "source",
+      "title": "数据源",
+      "platform": "zhihu",
+      "params": {
+        "author": "",
+        "collect": "hot",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "zhihu",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 724,
+      "y": 197,
+      "folded": false
+    },
+    {
+      "id": "node-3",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "知乎热榜.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1064,
+      "y": 204,
+      "folded": false
+    },
+    {
+      "id": "node-4",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：知乎热榜爬取",
+        "enabled": false
+      },
+      "x": 384,
+      "y": 204,
+      "folded": false
+    },
+    {
+      "id": "node-5",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：知乎关键词搜索爬取"
+      },
+      "x": 384,
+      "y": 347,
+      "folded": false
+    },
+    {
+      "id": "node-6",
+      "type": "source",
+      "title": "数据源",
+      "platform": "zhihu",
+      "params": {
+        "author": "",
+        "collect": "posts",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "DeepSeek",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "zhihu",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 744,
+      "y": 331,
+      "folded": false
+    },
+    {
+      "id": "node-7",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "知乎关键词搜索.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1084,
+      "y": 347,
+      "folded": false
+    },
+    {
+      "id": "node-8",
+      "type": "source",
+      "title": "数据源",
+      "platform": "zhihu",
+      "params": {
+        "author": "https://www.zhihu.com/people/la-la-la-4-25-46",
+        "collect": "author",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "zhihu",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 724,
+      "y": 484,
+      "folded": false
+    },
+    {
+      "id": "node-9",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：知乎某作者爬取",
+        "enabled": false
+      },
+      "x": 384,
+      "y": 500,
+      "folded": false
+    },
+    {
+      "id": "node-10",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "知乎某作者爬取.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1172,
+      "y": 500,
+      "folded": false
+    },
+    {
+      "id": "node-11",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：知乎文章评论爬取",
+        "enabled": false
+      },
+      "x": 384,
+      "y": 653,
+      "folded": false
+    },
+    {
+      "id": "node-12",
+      "type": "source",
+      "title": "数据源",
+      "platform": "zhihu",
+      "params": {
+        "author": "https://www.zhihu.com/people/la-la-la-4-25-46",
+        "collect": "comments",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "",
+        "part_size": 0,
+        "per_article_file": true,
+        "platform": "zhihu",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": "https://zhuanlan.zhihu.com/p/443599480\nhttps://www.zhihu.com/question/66165881/answer/2041877076106536509"
+      },
+      "x": 732,
+      "y": 637,
+      "folded": false
+    },
+    {
+      "id": "node-13",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "filename": "知乎文章评论爬取.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 1072,
+      "y": 653,
+      "folded": false
+    }
+  ],
+  "connections": [
+    {
+      "from": "node-2",
+      "to": "node-3"
+    },
+    {
+      "from": "node-4",
+      "to": "node-2"
+    },
+    {
+      "from": "node-5",
+      "to": "node-6"
+    },
+    {
+      "from": "node-6",
+      "to": "node-7"
+    },
+    {
+      "from": "node-9",
+      "to": "node-8"
+    },
+    {
+      "from": "node-8",
+      "to": "node-10"
+    },
+    {
+      "from": "node-11",
+      "to": "node-12"
+    },
+    {
+      "from": "node-12",
+      "to": "node-13"
+    }
+  ],
+  "settings": {
+    "mode": "serial",
+    "headless": false,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": -34.5,
+      "panY": 16.5,
+      "zoom": 1
+    }
+  },
+  "name": "测试：知乎"
+}

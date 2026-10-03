@@ -1,0 +1,308 @@
+{
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "source",
+      "title": "数据源",
+      "platform": "bilibili",
+      "params": {
+        "author": "",
+        "collect": "posts",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "IU",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "bilibili",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 384,
+      "y": 0,
+      "folded": false
+    },
+    {
+      "id": "node-2",
+      "type": "source",
+      "title": "数据源",
+      "platform": "bilibili",
+      "params": {
+        "author": "https://space.bilibili.com/502800507",
+        "collect": "author",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "IU",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "bilibili",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 417,
+      "y": 153,
+      "folded": false
+    },
+    {
+      "id": "node-3",
+      "type": "source",
+      "title": "数据源",
+      "platform": "bilibili",
+      "params": {
+        "author": "",
+        "collect": "hot",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "IU",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "bilibili",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 360,
+      "y": 306,
+      "folded": false
+    },
+    {
+      "id": "node-4",
+      "type": "source",
+      "title": "数据源",
+      "platform": "bilibili",
+      "params": {
+        "author": "",
+        "collect": "comments",
+        "comment_limit": 50,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "IU",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "bilibili",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": "https://www.bilibili.com/video/BV1NyhD6PEWM"
+      },
+      "x": 348,
+      "y": 459,
+      "folded": false
+    },
+    {
+      "id": "node-5",
+      "type": "source",
+      "title": "数据源",
+      "platform": "bilibili",
+      "params": {
+        "author": "",
+        "board": "ranking",
+        "collect": "hot",
+        "comment_limit": 0,
+        "format": "csv",
+        "full_body": true,
+        "keep_parts": false,
+        "keyword": "IU",
+        "part_size": 0,
+        "per_article_file": false,
+        "platform": "bilibili",
+        "recrawl": true,
+        "target_count": 50,
+        "urls": ""
+      },
+      "x": 372,
+      "y": 612,
+      "folded": false
+    },
+    {
+      "id": "node-6",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：哔哩哔哩关键词搜索爬取"
+      },
+      "x": 0,
+      "y": 17,
+      "folded": false
+    },
+    {
+      "id": "node-7",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：哔哩哔哩某 UP 主作品信息爬取"
+      },
+      "x": 0,
+      "y": 170,
+      "folded": false
+    },
+    {
+      "id": "node-8",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：哔哩哔哩热门榜爬取"
+      },
+      "x": 0,
+      "y": 323,
+      "folded": false
+    },
+    {
+      "id": "node-9",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：哔哩哔哩评论爬取"
+      },
+      "x": 0,
+      "y": 476,
+      "folded": false
+    },
+    {
+      "id": "node-10",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：哔哩哔哩周排行榜爬取"
+      },
+      "x": 0,
+      "y": 629,
+      "folded": false
+    },
+    {
+      "id": "node-12",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "operation": "save",
+        "format": "csv",
+        "filename": "哔哩哔哩关键词搜索爬取.csv"
+      },
+      "operation": "save",
+      "x": 724,
+      "y": 17,
+      "folded": false
+    },
+    {
+      "id": "node-13",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "operation": "save",
+        "format": "csv",
+        "filename": "哔哩哔哩某 UP 主作品信息爬取.csv",
+        "filename_timestamp": true
+      },
+      "operation": "save",
+      "x": 803,
+      "y": 170,
+      "folded": false
+    },
+    {
+      "id": "node-14",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "operation": "save",
+        "format": "csv",
+        "filename": "哔哩哔哩热门榜爬取.csv",
+        "filename_timestamp": true
+      },
+      "operation": "save",
+      "x": 700,
+      "y": 323,
+      "folded": false
+    },
+    {
+      "id": "node-15",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "operation": "save",
+        "format": "csv",
+        "filename": "哔哩哔哩评论爬取.csv",
+        "filename_timestamp": true
+      },
+      "operation": "save",
+      "x": 688,
+      "y": 476,
+      "folded": false
+    },
+    {
+      "id": "node-16",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "operation": "save",
+        "format": "csv",
+        "filename": "哔哩哔哩周排行榜爬取.csv",
+        "filename_timestamp": true
+      },
+      "operation": "save",
+      "x": 712,
+      "y": 629,
+      "folded": false
+    }
+  ],
+  "connections": [
+    {
+      "from": "node-6",
+      "to": "node-1"
+    },
+    {
+      "from": "node-1",
+      "to": "node-12"
+    },
+    {
+      "from": "node-7",
+      "to": "node-2"
+    },
+    {
+      "from": "node-2",
+      "to": "node-13"
+    },
+    {
+      "from": "node-3",
+      "to": "node-14"
+    },
+    {
+      "from": "node-4",
+      "to": "node-15"
+    },
+    {
+      "from": "node-5",
+      "to": "node-16"
+    },
+    {
+      "from": "node-8",
+      "to": "node-3"
+    },
+    {
+      "from": "node-9",
+      "to": "node-4"
+    },
+    {
+      "from": "node-10",
+      "to": "node-5"
+    }
+  ],
+  "settings": {
+    "mode": "parallel",
+    "headless": true,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": 310.5,
+      "panY": 127.5,
+      "zoom": 1
+    }
+  },
+  "name": "测试：哔哩哔哩"
+}
