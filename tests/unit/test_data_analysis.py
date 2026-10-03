@@ -49,7 +49,10 @@ OPERATIONS = [
     'bin_column',
     'extract_time',
     'bin_time',
+    'suggest_stages',
     'topic_model',
+    'topic_by_stage',
+    'topic_label',
     'sentiment_evolution',
 ]
 
@@ -1149,6 +1152,121 @@ class TestBinTime:
             D.bin_time(frame, '时间', edges=['2024-05-08', '2024-05-01'], labels=['甲'])
 
 
+class TestSuggestStages:
+    """The phase-boundary proposal, pinned on a curve whose cut is not debatable.
+
+    The step exists because the 胖猫 study drew its five phases by eye on a posts-per-day
+    chart. What is checkable here is the arithmetic of that eye: peaks found, valleys chosen
+    between them, and — the part that decides whether the printed boundaries can be pasted
+    into :meth:`bin_time` at all — an edge list that opens the day AFTER a valley and closes
+    the day after the last observed day.
+    """
+
+    #: Two peaks (05-05 and 05-10) with a quiet 05-07 between them.
+    CURVE = {
+        '2024-05-01': 1,
+        '2024-05-02': 1,
+        '2024-05-03': 1,
+        '2024-05-04': 4,
+        '2024-05-05': 6,
+        '2024-05-06': 3,
+        '2024-05-07': 1,
+        '2024-05-08': 2,
+        '2024-05-09': 5,
+        '2024-05-10': 8,
+        '2024-05-11': 2,
+    }
+
+    @classmethod
+    def _frame(cls, curve: dict) -> pd.DataFrame:
+        rows = []
+        for day, count in curve.items():
+            rows += [{'评论时间': f'{day} 12:00', '正文': '甲'} for _ in range(count)]
+        return pd.DataFrame(rows)
+
+    def test_two_peaks_cut_the_curve_into_two_windows(self):
+        out = D.suggest_stages(self._frame(self.CURVE), '评论时间')
+        assert list(out['起点']) == ['2024-05-01', '2024-05-08'], 'the new phase opens the day after the valley'
+        assert list(out['终点']) == ['2024-05-07', '2024-05-11']
+        assert list(out['天数']) == [7, 4]
+        assert list(out['行数']) == [17, 17]
+        assert sum(out['行数']) == len(self._frame(self.CURVE)), 'every row lands in exactly one window'
+
+    def test_the_reported_peak_is_that_day_s_raw_count_not_the_smoothed_one(self):
+        # The boundary search smooths, because a one-day spike is noise; what the user reads
+        # against 表 1 of the study (349/7624/1038/8029/2286) is the raw count of the day.
+        out = D.suggest_stages(self._frame(self.CURVE), '评论时间')
+        assert list(out['峰值日']) == ['2024-05-05', '2024-05-10']
+        assert list(out['峰值计数']) == [6, 8]
+
+    def test_the_basis_names_where_each_window_starts(self):
+        out = D.suggest_stages(self._frame(self.CURVE), '评论时间')
+        assert '2024-05-01' in out.at[0, '依据']
+        assert '2024-05-07' in out.at[1, '依据'], 'the valley that closed the first window'
+
+    def test_the_printed_boundaries_are_the_ones_bin_time_accepts(self, caplog):
+        """The whole point of the step is the paste, so the paste is executed rather than
+        admired: the interior edges are the windows' 起点, and the last edge is the day after
+        the final window — a list ending on 2024-05-11 would drop that day's 2 rows."""
+        with caplog.at_level('INFO'):
+            out = D.suggest_stages(self._frame(self.CURVE), '评论时间')
+        assert '2024-05-12' in caplog.text, 'the closing edge must be 终点 + 1 day'
+        edges = list(out['起点']) + ['2024-05-12']
+        binned = D.bin_time(self._frame(self.CURVE), '评论时间', edges=edges, labels=['阶段1', '阶段2'])
+        assert list(binned['阶段'].value_counts().sort_index()) == list(out['行数'])
+
+    def test_a_flat_curve_is_refused_rather_than_cut_anywhere(self):
+        flat = {
+            day: 2
+            for day in [
+                '2024-05-01',
+                '2024-05-02',
+                '2024-05-03',
+                '2024-05-04',
+                '2024-05-05',
+                '2024-05-06',
+                '2024-05-07',
+                '2024-05-08',
+            ]
+        }
+        with pytest.raises(UnknownOperationError, match='阶段划分'):
+            D.suggest_stages(self._frame(flat), '评论时间')
+
+    def test_too_few_days_of_records_is_refused_by_the_count_it_found(self):
+        with pytest.raises(UnknownOperationError, match='3 天'):
+            D.suggest_stages(self._frame({'2024-05-01': 4, '2024-05-02': 9, '2024-05-03': 4}), '评论时间')
+
+    def test_a_peak_ratio_below_one_is_not_a_peak(self):
+        # "twice the usual day" is the definition; 0.5 would call every ordinary day a peak
+        # and cut the curve at its own noise.
+        with pytest.raises(UnknownOperationError, match='0.5'):
+            D.suggest_stages(self._frame(self.CURVE), '评论时间', peak_ratio=0.5)
+
+    def test_more_peaks_than_the_ceiling_are_folded_and_said_so(self, caplog):
+        # Three humps (9, 11, 12 rows/day) and a ceiling of 2: the shortest phase is folded
+        # into its neighbour, and the console says so — a proposal that quietly lost a peak
+        # is a proposal the user cannot audit.
+        curve = dict(
+            zip(
+                pd.date_range('2024-05-01', periods=21).strftime('%Y-%m-%d'),
+                [1, 3, 6, 9, 6, 3, 1, 1, 4, 8, 11, 7, 3, 1, 1, 3, 7, 12, 8, 4, 1],
+                strict=True,
+            )
+        )
+        with caplog.at_level('WARNING'):
+            out = D.suggest_stages(self._frame(curve), '评论时间', max_windows=2)
+        assert len(out) == 2
+        assert '2' in caplog.text and '1' in caplog.text, 'the folded peak is reported, not hidden'
+        assert out.at[0, '起点'] == '2024-05-01', 'the 9-row hump stayed inside the first window'
+
+    def test_a_column_of_relative_labels_answers_nothing_and_says_so(self):
+        # Weibo hands back "09月26日 21:00" for a recent post: nothing to count by day, and
+        # an empty proposal would read as "this event has no phases".
+        frame = pd.DataFrame({'评论时间': ['今天', '昨天', '前天']})
+        with pytest.raises(UnknownOperationError):
+            D.suggest_stages(frame, '评论时间')
+
+
 class TestTopicModel:
     """LDA. Pinned for shape and for reproducibility, not for a topic's words."""
 
@@ -1195,6 +1313,331 @@ class TestTopicModel:
         # empty table would settle the node DONE over nothing.
         with pytest.raises(UnknownOperationError):
             D.topic_model(pd.DataFrame({'正文': ['。。。', '！！！']}), '正文', n_topics=2)
+
+
+class TestTopicByStage:
+    """LDA per 舆情阶段 — 表 1 of the study, and the refusals that keep it honest.
+
+    Nothing here asserts WHICH words a topic got: LDA on a twelve-post fixture picks its
+    buckets by luck, and a test that pinned them would be a test of scikit-learn's numerics.
+    What is pinned is the shape of the artifact (one row per phase × topic), the numbering by
+    lifecycle POSITION, the invariants (every post belongs to exactly one topic, the weight
+    list and the word list are the same words), and every way the step can be asked to guess.
+    """
+
+    #: Three phases, two clear vocabularies each. The NAMES are chosen so that a code-point
+    #: sort puts 二次爆发期 first — the exact mistake the order guard exists to stop.
+    FAMILIES = {
+        'police': '警方 通报 调查 结果 谣言 核实 依法 处理',
+        'delivery': '外卖 祭奠 点单 空包 商家 配送 退款 平台',
+    }
+
+    @classmethod
+    def _frame(cls, stages: dict | None = None, dated: bool = True) -> pd.DataFrame:
+        stages = stages or {'发酵期': 6, '爆发期': 6, '二次爆发期': 6}
+        first_day = pd.Timestamp('2024-04-11')
+        rows = []
+        for offset, (stage, count) in enumerate(stages.items()):
+            for index in range(count):
+                family = cls.FAMILIES['police' if index % 2 == 0 else 'delivery']
+                stamp = first_day + pd.Timedelta(days=10 * offset + index % 3)
+                rows.append({'阶段': stage, '评论时间': str(stamp), '正文': f'{family} 第{index}条'})
+        frame = pd.DataFrame(rows)
+        return frame if dated else frame.drop(columns=['评论时间'])
+
+    def _run(self, frame, **kwargs):
+        # ``order_col`` by default: the fixture's 阶段 is a plain string column, which is the
+        # shape two connected nodes hand each other, so the phase order has to be read from the
+        # timestamps rather than from a categorical that is no longer there.
+        params = {'column': '正文', 'stage_col': '阶段', 'order_col': '评论时间', 'topics': [2, 2, 2]}
+        params.update(kwargs)
+        return D.topic_by_stage(frame, **params)
+
+    def test_the_stages_are_modelled_separately_and_numbered_by_position(self):
+        out = self._run(self._frame())
+        assert list(out.columns) == [
+            'stage',
+            'stage_order',
+            'topic',
+            'feature_words',
+            'weights',
+            'doc_n',
+            'perplexity',
+            'sample_texts',
+        ]
+        assert list(out['topic']) == [
+            'TopicⅠ-1',
+            'TopicⅠ-2',
+            'TopicⅡ-1',
+            'TopicⅡ-2',
+            'TopicⅢ-1',
+            'TopicⅢ-2',
+        ]
+        # Ⅰ is U+2160, not the letter I: the paper's own table uses the Unicode numeral, and a
+        # CSV that silently carried 'TopicI-1' would not match it.
+        assert out.at[0, 'topic'][5] == 'Ⅰ'
+        assert list(out['stage_order']) == [1, 1, 2, 2, 3, 3]
+        assert list(out['stage']) == ['发酵期'] * 2 + ['爆发期'] * 2 + ['二次爆发期'] * 2
+
+    def test_a_phase_column_that_crossed_a_node_boundary_needs_its_order_named(self):
+        # Records round trip (what two connected nodes hand each other) erases the categorical,
+        # and Chinese phase names have no chronological code-point order.
+        frame = self._frame().drop(columns=['评论时间'])
+        with pytest.raises(UnknownOperationError, match='阶段先后'):
+            self._run(frame, order_col='')
+
+    def test_a_time_column_can_supply_the_order_the_categorical_lost(self):
+        shuffled = self._frame().sample(frac=1, random_state=7).reset_index(drop=True)
+        out = self._run(shuffled, order_col='评论时间')
+        assert list(out['stage']) == ['发酵期'] * 2 + ['爆发期'] * 2 + ['二次爆发期'] * 2
+
+    def test_the_order_column_is_not_allowed_to_place_a_phase_it_cannot_read(self):
+        # A phase whose every row carries a relative label ('刚刚') has no position on the
+        # timeline. Appending it at the end would invent one and renumber the table.
+        frame = self._frame()
+        frame.loc[frame['阶段'] == '二次爆发期', '评论时间'] = '刚刚'
+        with pytest.raises(UnknownOperationError, match='二次爆发期'):
+            self._run(frame, order_col='评论时间')
+
+    def test_the_ordered_categorical_from_the_same_pipeline_is_used_as_is(self):
+        # bin_time in the same node: no order column needed, because pd.cut kept the declared
+        # order and grouping by it preserves it.
+        tagged = D.bin_time(
+            self._frame(dated=True).drop(columns=['阶段']),
+            '评论时间',
+            edges=['2024-04-11', '2024-04-21', '2024-05-01', '2024-05-11'],
+            labels=['发酵期', '爆发期', '二次爆发期'],
+        )
+        out = self._run(tagged, order_col='')
+        assert list(out['stage']) == ['发酵期'] * 2 + ['爆发期'] * 2 + ['二次爆发期'] * 2
+
+    def test_a_declared_phase_that_turned_out_empty_is_refused_not_skipped(self):
+        # pd.cut names every window whether or not a row falls in it: these edges leave 爆发期
+        # ([04-25, 05-01)) with zero posts while 空窗期 takes them. Skipping the empty phase and
+        # modelling three would make TopicⅢ belong to the wrong name.
+        tagged = D.bin_time(
+            self._frame(dated=True).drop(columns=['阶段']),
+            '评论时间',
+            edges=['2024-04-11', '2024-04-21', '2024-04-25', '2024-05-01', '2024-05-11'],
+            labels=['发酵期', '空窗期', '爆发期', '二次爆发期'],
+        )
+        assert (tagged['阶段'] == '爆发期').sum() == 0
+        with pytest.raises(UnknownOperationError, match='爆发期'):
+            D.topic_by_stage(tagged, column='正文', stage_col='阶段', topics=[2, 2, 2, 2])
+
+    def test_a_time_column_that_is_not_in_the_table_is_refused_by_name(self):
+        with pytest.raises(UnknownOperationError, match='发布日'):
+            self._run(self._frame(), order_col='发布日')
+
+    def test_one_post_belongs_to_exactly_one_topic_of_its_phase(self):
+        frame = self._frame()
+        out = self._run(frame)
+        for stage in ('发酵期', '爆发期', '二次爆发期'):
+            rows = out[out['stage'] == stage]
+            assert sum(rows['doc_n']) == 6, f'{stage}: the buckets partition the phase'
+            assert (rows['perplexity'] == rows.iloc[0]['perplexity']).all(), 'perplexity is per phase'
+            assert rows['perplexity'].gt(0).all()
+
+    def test_the_word_list_and_the_weight_list_are_the_same_words(self):
+        out = self._run(self._frame())
+        for row in out.to_dict('records'):
+            words = row['feature_words'].split('、')
+            weighted = [pair.split(':')[0] for pair in row['weights'].split(' ')]
+            assert words == weighted, 'the cell a reader sees and the cell a chart reads agree'
+            assert words, 'a topic with no words is a refusal, not an empty cell'
+            assert row['sample_texts'], 'and a topic with no sample text was never assigned a post'
+
+    def test_one_topic_count_applies_to_every_phase(self):
+        out = self._run(self._frame(), topics='2')
+        assert len(out) == 6
+        assert list(out['topic'])[-2:] == ['TopicⅢ-1', 'TopicⅢ-2']
+
+    def test_a_count_list_that_does_not_fit_the_stages_is_refused_with_both_numbers(self):
+        with pytest.raises(UnknownOperationError, match='3 个阶段'):
+            self._run(self._frame(), topics=[2, 2])
+
+    def test_a_count_that_is_not_a_number_is_refused_by_its_own_text(self):
+        with pytest.raises(UnknownOperationError, match='很多'):
+            self._run(self._frame(), topics=['2', '很多', '2'])
+
+    def test_a_phase_shorter_than_its_topic_count_is_refused_not_shrunk(self):
+        # Two topics over two posts is a model that memorises; the study's own 发酵期 has 349
+        # rows, so a thin phase is a signal to lower the count, not to invent one.
+        frame = self._frame({'发酵期': 6, '爆发期': 6, '二次爆发期': 2})
+        with pytest.raises(UnknownOperationError, match='二次爆发期'):
+            self._run(frame, topics=[2, 2, 3])
+
+    def test_rows_without_a_phase_are_counted_once_and_left_out(self, caplog):
+        frame = self._frame()
+        frame.loc[frame.index[:3], '阶段'] = ''
+        with caplog.at_level('WARNING'):
+            out = self._run(frame, topics=2)
+        assert len(out) == 6, 'the three unphased rows join no model'
+        assert '3 行' in caplog.text
+
+    def test_the_lda_word_source_reads_the_weight_matrix_and_keeps_the_same_shape(self):
+        out = self._run(self._frame(), word_source='lda')
+        assert len(out) == 6
+        assert all(len(row['feature_words'].split('、')) > 0 for row in out.to_dict('records'))
+
+    def test_an_unknown_word_source_is_refused_by_the_gate(self):
+        from services.data_analysis import STEP_PARAMS, normalize_step_params, validate_step
+
+        params = normalize_step_params('topic_by_stage', {'column': '正文', 'stage_col': '阶段', 'topics': '2'})
+        assert 'word_source' not in params, 'an absent select is left to the operation itself'
+        assert normalize_step_params('topic_by_stage', {'word_source': '  ', 'topics': ''})['word_source'] == 'tfidf'
+        with pytest.raises(UnknownOperationError, match='word_source'):
+            validate_step(self._frame(), 'topic_by_stage', {**params, 'word_source': 'gensim'})
+        assert STEP_PARAMS['topic_by_stage']['nonblank'] == ('topics',)
+
+
+class TestTopicLabel:
+    """The 主题概括 column: one model call per topic, and no silent gap when it fails.
+
+    ``llm`` is always a stub here — the OpenRouter transport is never reached from a test, and
+    a real daemon would make this a device-tier test. What is pinned is the accounting around
+    the calls: how many, what went into the prompt, and what the table looks like when the
+    model says no.
+    """
+
+    class _Client:
+        """A stand-in for ``LLMClient`` that records prompts and can be made to fail."""
+
+        label = 'ollama:stub'
+
+        def __init__(self, answer='概括：对事件细节的追问', fail_when=None):
+            self.prompts = []
+            self.answer = answer
+            self.fail_when = fail_when
+
+        def chat(self, prompt, max_retries=2):
+            from analyzers.llm_client import LLMError
+
+            self.prompts.append(prompt)
+            if self.fail_when and self.fail_when(prompt):
+                raise LLMError('daemon answered nothing', 'bad_response')
+            return self.answer
+
+    @staticmethod
+    def _topics() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                'stage': ['发酵期', '发酵期', '爆发期'],
+                'topic': ['TopicⅠ-1', 'TopicⅠ-2', 'TopicⅡ-1'],
+                'feature_words': ['谣言、暴力、刘某', '谭某、感情、讨论', '性别、对立、煽动'],
+                'sample_texts': ['原文甲', '原文乙', '原文丙'],
+            }
+        )
+
+    def _run(self, frame=None, **kwargs):
+        params = {'words_col': 'feature_words', 'samples_col': 'sample_texts'}
+        params.update(kwargs)
+        client = params.pop('client', None) or self._Client()
+        return D.topic_label(frame if frame is not None else self._topics(), llm=client, **params), client
+
+    def test_one_call_per_topic_and_one_summary_per_row(self):
+        out, client = self._run()
+        assert len(client.prompts) == 3
+        assert list(out['主题概括']) == ['对事件细节的追问'] * 3
+        assert len(out) == 3, 'the step labels the table, it does not replace it'
+
+    def test_the_prompt_carries_the_phase_the_number_the_words_and_the_posts(self):
+        _out, client = self._run()
+        assert '发酵期' in client.prompts[0]
+        assert 'TopicⅠ-2' in client.prompts[1]
+        assert '谭某、感情、讨论' in client.prompts[1]
+        assert '原文丙' in client.prompts[2]
+
+    def test_the_wrapping_a_small_model_adds_comes_off_the_cell(self):
+        for answer, expected in [
+            ('概括：对事件细节的追问', '对事件细节的追问'),
+            ('"对事件细节的追问"', '对事件细节的追问'),
+            ('【对事件细节的追问】', '对事件细节的追问'),
+            ('Summary: the cost of chasing details', 'the cost of chasing details'),
+            ('第一行被截断\n第二行不要', '第一行被截断'),
+        ]:
+            out, _client = self._run(client=self._Client(answer=answer), max_topics=3)
+            assert out.at[0, '主题概括'] == expected, answer
+
+    def test_a_refusal_fails_the_node_and_names_the_topic(self):
+        client = self._Client(fail_when=lambda prompt: 'TopicⅡ-1' in prompt)
+        with pytest.raises(UnknownOperationError, match='TopicⅡ-1'):
+            D.topic_label(self._topics(), llm=client, on_fail='abort')
+
+    def test_the_opt_in_leaves_only_the_failed_cell_empty_and_logs_it(self, caplog):
+        client = self._Client(fail_when=lambda prompt: 'TopicⅠ-2' in prompt)
+        with caplog.at_level('WARNING'):
+            out = D.topic_label(self._topics(), llm=client, on_fail='blank')
+        assert out.at[0, '主题概括'] and out.at[2, '主题概括']
+        assert not out.at[1, '主题概括'], 'the topic that failed is the only empty cell'
+        assert caplog.text.count('TopicⅠ-2') == 1, 'one failure, one line'
+
+    def test_an_answer_of_punctuation_is_a_failure_not_an_empty_cell(self):
+        client = self._Client(answer='「」。')
+        with pytest.raises(UnknownOperationError, match='TopicⅠ-1'):
+            D.topic_label(self._topics(), llm=client)
+
+    def test_no_client_is_a_missing_input_not_a_skip(self):
+        with pytest.raises(UnknownOperationError, match='模型'):
+            D.topic_label(self._topics(), llm=None)
+
+    def test_a_topic_with_no_feature_words_is_refused_before_the_call(self):
+        frame = self._topics()
+        frame.loc[1, 'feature_words'] = ''
+        client = self._Client()
+        with pytest.raises(UnknownOperationError, match='TopicⅠ-2'):
+            D.topic_label(frame, llm=client)
+        assert len(client.prompts) == 1, 'the row that cannot be labelled is never asked'
+
+    def test_a_table_too_big_for_the_cap_is_refused_with_both_numbers(self):
+        with pytest.raises(UnknownOperationError, match='3 行'):
+            D.topic_label(self._topics(), llm=self._Client(), max_topics=2)
+
+    def test_a_stopped_run_marks_the_rows_the_model_never_saw(self):
+        class _Stop:
+            def __init__(self):
+                self.seen = 0
+
+            def is_set(self):
+                self.seen += 1
+                return self.seen > 1
+
+        from analyzers.llm_client import ABORT_MARK
+
+        client = self._Client()
+        out = D.topic_label(self._topics(), llm=client, cancel=_Stop())
+        assert len(client.prompts) == 1, 'Stop is checked before every call, not after the pass'
+        assert list(out['主题概括'][1:]) == [ABORT_MARK, ABORT_MARK]
+
+    def test_the_pipeline_hands_the_client_only_to_the_steps_that_need_it(self):
+        client = self._Client()
+        result, report = D.run_pipeline(
+            self._topics(),
+            [
+                {'op': 'select_columns', 'params': {'columns': ['stage', 'topic', 'feature_words', 'sample_texts']}},
+                # ``summary_col`` is spelled out because the gate treats a *new* column name as
+                # something the caller must state: an absent one would add a header nobody chose.
+                {
+                    'op': 'topic_label',
+                    'params': {'words_col': 'feature_words', 'samples_col': 'sample_texts', 'summary_col': '主题概括'},
+                },
+            ],
+            llm=client,
+        )
+        assert len(client.prompts) == 3
+        assert [entry['op'] for entry in report] == ['select_columns', 'topic_label']
+        assert result['主题概括'].notna().all()
+
+    def test_the_gate_knows_its_columns_and_its_switch(self):
+        from services.data_analysis import LLM_OPS, STEP_PARAMS, normalize_step_params, validate_step
+
+        assert frozenset({'topic_label'}) == LLM_OPS
+        params = normalize_step_params('topic_label', {'words_col': ' 词 ', 'summary_col': ' 概括 ', 'on_fail': ''})
+        assert params['words_col'] == '词' and params['summary_col'] == '概括'
+        assert params['on_fail'] == 'abort', 'a blank select is the declared default'
+        with pytest.raises(UnknownOperationError, match='on_fail'):
+            validate_step(self._topics(), 'topic_label', {'words_col': 'feature_words', 'on_fail': 'ignore'})
+        assert STEP_PARAMS['topic_label']['nonblank'] == ('summary_col',)
 
 
 class TestSentimentEvolution:
@@ -1306,3 +1749,71 @@ class TestSentimentEvolution:
     def test_a_missing_label_column_is_a_no_op(self):
         frame = pd.DataFrame({'日期': ['2024-05-02']})
         assert list(D.sentiment_evolution(frame, '日期').columns) == ['日期']
+
+    def test_the_intensity_columns_only_appear_when_a_score_column_is_named(self):
+        """A table of all-NA 强度 would read as "the curve was checked and the crowd was
+        mild", so the feature is absent from the output until the user asks for it."""
+        out = D.sentiment_evolution(self._frame({'发酵期': (1, 1, 1)}), 'period')
+        assert 'intensity' not in out.columns
+        assert 'score_n' not in out.columns
+
+    def test_volume_pct_is_the_heat_the_paper_reads_against_intensity(self):
+        # 发酵期 349 and 爆发期 7624 rows: the shares are over the rows that reached a
+        # period, so they add up to 100 and the 爆发期 bar is the tall one — which is the
+        # half of 「热度与情感强度成反比」 that is not about sentiment at all.
+        out = D.sentiment_evolution(self._frame({'发酵期': (349, 0, 0), '爆发期': (7624, 0, 0)}), 'period')
+        assert out.at[0, 'volume_pct'] == pytest.approx(4.38, abs=0.01)
+        assert out['volume_pct'].sum() == pytest.approx(100.0, abs=0.02)
+
+    def test_intensity_measures_how_hard_the_crowd_pushed_not_which_way(self):
+        """The distinction the 二次爆发期 finding rests on: two periods can share an index
+        of 0 and mean nothing alike — one all neutral, one all extremes. A signed mean
+        would report both as mild, so intensity is |score − 0.5| doubled."""
+        frame = pd.DataFrame(
+            [
+                {'period': '波动期', 'sentiment': 'neutral', 'score': 0.5},
+                {'period': '波动期', 'sentiment': 'neutral', 'score': 0.5},
+                {'period': '二次爆发期', 'sentiment': 'positive', 'score': 0.9},
+                {'period': '二次爆发期', 'sentiment': 'negative', 'score': 0.1},
+            ]
+        )
+        by = D.sentiment_evolution(frame, 'period', score_col='score').set_index('period')
+        assert by.at['波动期', 'sentiment_index'] == pytest.approx(0.0)
+        assert by.at['二次爆发期', 'sentiment_index'] == pytest.approx(0.0)
+        assert by.at['波动期', 'intensity'] == pytest.approx(0.0)
+        assert by.at['二次爆发期', 'intensity'] == pytest.approx(0.8)
+
+    def test_a_period_without_a_single_score_is_empty_and_says_which(self, caplog):
+        """0.5 would print as "measured, found neutral" — a finding this step does not
+        have. The cell stays empty, ``score_n`` says why, and the period is named once."""
+        frame = pd.DataFrame(
+            [
+                {'period': '发酵期', 'sentiment': 'neutral', 'score': ''},
+                {'period': '爆发期', 'sentiment': 'positive', 'score': 0.8},
+            ]
+        )
+        with caplog.at_level('WARNING'):
+            out = D.sentiment_evolution(frame, 'period', score_col='score')
+        by = out.set_index('period')
+        assert by.at['发酵期', 'score_n'] == 0
+        assert by.at['发酵期', 'intensity'] is None
+        assert by.at['爆发期', 'intensity'] == pytest.approx(0.6)
+        assert '发酵期' in caplog.text, 'the unjudged period must be named, not blanked'
+
+    def test_an_unscored_row_neither_lifts_nor_drags_the_intensity(self):
+        frame = pd.DataFrame(
+            [
+                {'period': '爆发期', 'sentiment': 'negative', 'score': 0.1},
+                {'period': '爆发期', 'sentiment': 'negative', 'score': None},
+            ]
+        )
+        by = D.sentiment_evolution(frame, 'period', score_col='score').set_index('period')
+        assert by.at['爆发期', 'score_n'] == 1, 'the blank is counted as unjudged, not as 0.5'
+        assert by.at['爆发期', 'intensity'] == pytest.approx(0.8)
+        assert by.at['爆发期', 'total'] == 2, 'and it is still part of what that period was'
+
+    def test_a_score_column_that_is_not_there_is_refused_by_name(self):
+        # A mistyped 分数列 must not settle the node DONE with the shares only: the chart
+        # the user then draws has one line where he asked for two, and no trace of why.
+        with pytest.raises(UnknownOperationError, match='强度分'):
+            D.sentiment_evolution(self._frame({'发酵期': (1, 1, 1)}), 'period', score_col='强度分')

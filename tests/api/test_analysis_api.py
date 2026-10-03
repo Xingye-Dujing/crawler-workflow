@@ -721,9 +721,45 @@ NORMALIZED = {
         {'column': '城市', 'n_topics': '3', 'topic_topn': '4', 'topic_max_features': '500'},
         {'column': '城市', 'n_topics': 3, 'topn': 4, 'max_features': 500},
     ),
+    'suggest_stages': (
+        {'column': '城市', 'stages_min_days': '4', 'stages_max_windows': '3', 'stages_peak_ratio': '3'},
+        {'column': '城市', 'min_days': 4, 'max_windows': 3, 'peak_ratio': 3.0},
+    ),
     'sentiment_evolution': (
-        {'column': '城市', 'label_col': 'emotion', 'index_new_col': 'idx'},
-        {'column': '城市', 'label_col': 'emotion', 'new_col': 'idx'},
+        {'column': '城市', 'label_col': 'emotion', 'index_new_col': 'idx', 'score_col': 'score'},
+        {'column': '城市', 'label_col': 'emotion', 'new_col': 'idx', 'score_col': 'score'},
+    ),
+    'topic_label': (
+        {
+            'label_words_col': '词',
+            'label_samples_col': '样本',
+            'label_summary_col': '概括',
+            'label_on_fail': 'blank',
+            'label_max_topics': '5',
+        },
+        {'words_col': '词', 'samples_col': '样本', 'summary_col': '概括', 'on_fail': 'blank', 'max_topics': 5},
+    ),
+    'topic_by_stage': (
+        {
+            'column': '城市',
+            'stage_col': '期',
+            'stage_order_col': '日期',
+            'stage_topic_counts': '2, 3',
+            'topic_topn': '4',
+            'topic_max_features': '500',
+            'topic_sample_n': '2',
+            'word_source': 'lda',
+        },
+        {
+            'column': '城市',
+            'stage_col': '期',
+            'order_col': '日期',
+            'topics': ['2', '3'],
+            'topn': 4,
+            'max_features': 500,
+            'sample_n': 2,
+            'word_source': 'lda',
+        },
     ),
     'filter_rows': (
         {'column': '城市', 'op': 'not_in', 'value': '北京, 上海'},
@@ -773,7 +809,25 @@ BLANK_FORM = {
     # blank column like the rest, but names the LABEL column too once one is given.
     'extract_time': {'column': '', 'new_col': '日期', 'part': 'date'},
     'bin_time': {'column': '', 'new_col': '阶段', 'edges': [], 'labels': []},
+    'suggest_stages': {'column': ''},
     'topic_model': {'column': '', 'n_topics': 5, 'topn': 10},
+    # ``topics`` stays empty on purpose: an untouched 每阶段主题数 box is a missing choice, and
+    # the step refuses it by that name rather than modelling five topics nobody asked for.
+    'topic_by_stage': {
+        'column': '',
+        'stage_col': '阶段',
+        'topics': [],
+        'topn': 10,
+        'sample_n': 5,
+        'word_source': 'tfidf',
+    },
+    'topic_label': {
+        'words_col': 'feature_words',
+        'summary_col': '主题概括',
+        'samples_col': 'sample_texts',
+        'on_fail': 'abort',
+        'max_topics': 30,
+    },
     'sentiment_evolution': {'column': ''},
 }
 
@@ -1352,7 +1406,107 @@ PARSED_FIELDS = {
     'label_positive',
     'label_neutral',
     'label_negative',
+    # Read and re-shaped like ``label_col``: a blank is omitted rather than forwarded, so
+    # the normalizer transforms it.
+    'score_col',
+    # The phase-proposal numbers all carry a declared default in the step, so a blank or a
+    # junk box becomes that default instead of reaching the curve as 0.
+    'stages_min_days',
+    'stages_max_windows',
+    'stages_peak_ratio',
+    # The staged model re-reads all five: two fall back to a declared default when blank
+    # (``stage_col``, ``word_source``), one is dropped when blank (``stage_order_col``) and two
+    # are counted (``stage_topic_counts``, ``topic_sample_n``).
+    'stage_col',
+    'stage_order_col',
+    'stage_topic_counts',
+    'topic_sample_n',
+    'word_source',
+    # All five label fields are re-shaped: three fall back to a column name when blank, one is
+    # a select with a declared default, one is a count.
+    'label_words_col',
+    'label_samples_col',
+    'label_summary_col',
+    'label_on_fail',
+    'label_max_topics',
 }
+
+
+class TestTheLabellingStepNeedsTheRunModel:
+    """The one analysis step that is not deterministic, and who hands it a model.
+
+    ``topic_label`` asks the model once per topic row. The client comes from the process node's
+    own builder, so these tests pin the WIRING — that a run without a model is refused before
+    any question is paid for, that a non-LLM step never builds one, and that the API door
+    (which has no run context at all) answers with a named refusal instead of an empty column.
+    """
+
+    TOPICS = [
+        {'stage': '发酵期', 'topic': 'TopicⅠ-1', 'feature_words': '谣言、暴力、捞', 'sample_texts': '原文甲'},
+        {'stage': '爆发期', 'topic': 'TopicⅡ-1', 'feature_words': '性别、对立、煽动', 'sample_texts': '原文乙'},
+    ]
+
+    class _Client:
+        label = 'ollama:stub'
+
+        def __init__(self):
+            self.prompts = []
+
+        def chat(self, prompt, max_retries=2):
+            self.prompts.append(prompt)
+            return '概括：网络暴力的谩骂'
+
+    def _node(self, operation='topic_label', **params):
+        return {'id': 'node-9', 'type': 'analysis', 'operation': operation, 'params': dict(params)}
+
+    def test_the_api_door_refuses_because_it_has_no_model_to_give(self, client, app_module, paste):
+        from i18n import t
+
+        dataset_id = paste(self.TOPICS, name='topics-for-label.csv')
+        response = client.post(
+            '/api/analysis/run',
+            json={
+                'dataset_id': dataset_id,
+                'steps': [{'op': 'topic_label', 'params': {'words_col': 'feature_words', 'summary_col': '概括'}}],
+            },
+        )
+        assert response.status_code == 400
+        assert t('analysis.label_no_llm', op='topic_label') in response.get_json()['error']
+
+    def test_a_run_without_a_model_is_refused_before_the_first_call(self, app_module, monkeypatch):
+        from services.data_analysis import UnknownOperationError
+
+        calls = []
+        monkeypatch.setattr(app_module, '_llm_run_ctx', lambda *a, **k: calls.append(a) or {'client': None})
+        monkeypatch.setitem(app_module.execution_state, 'llm', {})
+        with pytest.raises(UnknownOperationError, match='模型'):
+            app_module._execute_analysis_node(self._node(), list(self.TOPICS))
+        assert calls == [], 'the refusal is issued before a client is even built'
+
+    def test_a_node_model_override_counts_as_a_configured_model(self, app_module, monkeypatch):
+        client = self._Client()
+        seen = {}
+
+        def fake_ctx(node, op, ctx=None):
+            seen['op'] = op
+            return {'client': client, 'cancel_event': None}
+
+        monkeypatch.setattr(app_module, '_llm_run_ctx', fake_ctx)
+        monkeypatch.setitem(app_module.execution_state, 'llm', {'provider': 'ollama', 'model': ''})
+        rows = app_module._execute_analysis_node(self._node(model='qwen3'), list(self.TOPICS))
+        assert seen == {'op': 'topic_label'}, 'the step names itself so the client is built for it'
+        assert [row['主题概括'] for row in rows] == ['网络暴力的谩骂'] * 2
+        assert len(client.prompts) == 2
+
+    def test_a_deterministic_step_never_builds_a_client(self, app_module, monkeypatch):
+        def boom(*_args, **_kwargs):
+            raise AssertionError('a step that needs no model must not ask for one')
+
+        monkeypatch.setattr(app_module, '_llm_run_ctx', boom)
+        rows = app_module._execute_analysis_node(
+            self._node('select_columns', columns='stage, topic'), list(self.TOPICS)
+        )
+        assert set(rows[0]) == {'stage', 'topic'}
 
 
 class TestJunkAcrossEveryField:
@@ -1957,11 +2111,32 @@ PANEL_VALUE = {
     'n_topics': '3',
     'topic_topn': '4',
     'topic_max_features': '500',
+    # The staged model's own fields. ``stage_col`` is not the default it falls back to, and
+    # ``word_source`` is not the default a blank select would answer with.
+    'stage_col': '期',
+    'stage_order_col': '日期',
+    'stage_topic_counts': '2, 3',
+    'topic_sample_n': '2',
+    'word_source': 'lda',
+    # The labelling step's boxes. None of them is the value an untouched form falls back to,
+    # which is the only way to show the normalizer read the box at all.
+    'label_words_col': '词',
+    'label_samples_col': '样本',
+    'label_summary_col': '概括',
+    'label_on_fail': 'blank',
+    'label_max_topics': '5',
+    # None of these is the step's own default, for the same reason as time_part above.
+    'stages_min_days': '4',
+    'stages_max_windows': '3',
+    'stages_peak_ratio': '3',
     'label_col': 'emotion',
     'index_new_col': 'idx',
     'label_positive': 'Joy',
     'label_neutral': 'Neutral',
     'label_negative': 'Anger',
+    # Blank means "no intensity line", so the probe is a name: the only way to tell that
+    # the field reaches the kwargs at all.
+    'score_col': 'score',
 }
 
 

@@ -50,7 +50,7 @@ from services import StatsService, lock_store
 from services import net_probe as network_probe
 from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
-from services.data_analysis import DataAnalysisService, UnknownOperationError
+from services.data_analysis import LLM_OPS, DataAnalysisService, UnknownOperationError
 from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD, DatasetStore
 from services.execution_history import ExecutionHistoryService
 from services.exporter import DataExporter, UnsupportedFormatError
@@ -3396,6 +3396,40 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             'edges': _split_columns(params.get('phase_edges')),
             'labels': _split_columns(params.get('phase_labels')),
         }
+    if op == 'suggest_stages':
+        # Every number here has a declared default in the step, so a blank or a junk box is
+        # left to that default instead of reaching the curve as 0 or as a float('inf').
+        result = {'column': params.get('column', '')}
+        min_days = _optional_int(params.get('stages_min_days'))
+        if min_days:
+            result['min_days'] = min_days
+        max_windows = _optional_int(params.get('stages_max_windows'))
+        if max_windows:
+            result['max_windows'] = max_windows
+        ratio = _optional_float(params.get('stages_peak_ratio'))
+        if ratio is not None:
+            result['peak_ratio'] = ratio
+        return result
+    if op == 'topic_by_stage':
+        result = {
+            'column': params.get('column', ''),
+            # The panel leaves this blank to mean the column 按时间划分阶段 writes, which is
+            # also the step's own default; the gate must not refuse a box nobody typed in.
+            'stage_col': str(params.get('stage_col') or '阶段').strip(),
+            'topics': _split_columns(params.get('stage_topic_counts')),
+            'topn': _optional_int(params.get('topic_topn')) or 10,
+            'word_source': params.get('word_source') or 'tfidf',
+            'sample_n': _optional_int(params.get('topic_sample_n')) or 5,
+        }
+        # Omitted when blank, like ``label_col``: "sort the phases by this time column" is a
+        # choice the user makes, and an empty string is not a column to sort by.
+        order_column = str(params.get('stage_order_col') or '').strip()
+        if order_column:
+            result['order_col'] = order_column
+        features = _optional_int(params.get('topic_max_features'))
+        if features:
+            result['max_features'] = features
+        return result
     if op == 'topic_model':
         result = {
             'column': params.get('column', ''),
@@ -3406,6 +3440,17 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         if features:
             result['max_features'] = features
         return result
+    if op == 'topic_label':
+        # Every field falls back to the column 分阶段 LDA writes, so an untouched form is the
+        # pipeline's own hand-off rather than a missing parameter; the step still refuses when
+        # the table does not actually hold that column.
+        return {
+            'words_col': str(params.get('label_words_col') or 'feature_words').strip(),
+            'summary_col': str(params.get('label_summary_col') or '主题概括').strip(),
+            'samples_col': str(params.get('label_samples_col') or 'sample_texts').strip(),
+            'on_fail': params.get('label_on_fail') or 'abort',
+            'max_topics': _optional_int(params.get('label_max_topics')) or 30,
+        }
     if op == 'sentiment_evolution':
         result = {'column': params.get('column', '')}
         label_col = str(params.get('label_col') or '').strip()
@@ -3422,13 +3467,20 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             value = str(params.get(source) or '').strip()
             if value:
                 result[key] = value
+        # Same rule as ``label_col``: a blank 强度 column means "the curve has no intensity
+        # line", which is the step's own default. Sending ``score_col=''`` would be the same
+        # answer, and sending the literal text of a cleared box would refuse the node for a
+        # feature the user never asked for.
+        score_column = str(params.get('score_col') or '').strip()
+        if score_column:
+            result['score_col'] = score_column
         if str(params.get('index_new_col') or '').strip():
             result['new_col'] = str(params['index_new_col']).strip()
         return result
     return {}
 
 
-def _execute_analysis_node(node: dict, current_input: list, upstream: list = None):
+def _execute_analysis_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
     """Analysis node: runs a deterministic data-cleaning pipeline (null
     handling, de-duplication, filtering, renaming, ...) via
     DataAnalysisService. Supports either a single configured operation
@@ -3439,6 +3491,12 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
     incoming connection. The old design asked the user to paste an opaque
     12-character dataset id instead — an id produced by the Upload node and
     shown nowhere, so a join silently joined nothing.
+
+    A step in ``LLM_OPS`` (the 主题概括 labeler) is the one case this node is not
+    deterministic, so it borrows the process node's client builder rather than
+    inventing a second reading of the LLM settings: the per-node model override,
+    the daemon address pinned at run start and the run's Stop event all come from
+    there. Refusing for want of a model happens HERE, before any call is paid for.
     """
     params = node.get('params', {})
     if not current_input:
@@ -3468,7 +3526,23 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
     # header row and nothing else, and downstream nodes reported "no upstream data" for
     # a table that was really refused. Same contract as `/api/analysis/clean`, which
     # answers these with a 400 and this exact message.
-    cleaned, report = DataAnalysisService.run_pipeline(df, steps)
+    # A labelling step is the one thing in this node that cannot answer without the model, so
+    # the refusal is issued BEFORE any call is paid for. The client comes from the process
+    # node's own builder, because that is where the per-node model override, the daemon address
+    # pinned at run start and the run's Stop event are read: a second reader of those settings
+    # here would be a second opinion about which model this run is using.
+    llm = None
+    cancel = None
+    if any(str(step.get('op')) in LLM_OPS for step in steps):
+        cfg = execution_state.get('llm') or {}
+        node_model = str((node.get('params') or {}).get('model') or '').strip()
+        if not str(cfg.get('model') or '').strip() and not node_model:
+            raise UnknownOperationError(t('wf.analysis_llm_no_model'))
+        run_ctx = _llm_run_ctx(node, 'topic_label', ctx)
+        llm = run_ctx['client']
+        cancel = run_ctx.get('cancel_event')
+
+    cleaned, report = DataAnalysisService.run_pipeline(df, steps, llm=llm, cancel=cancel)
 
     for step in report:
         line = t('wf.analysis_step', op=step['op'], before=step['rows_before'], after=step['rows_after'])
@@ -3523,6 +3597,10 @@ def _execute_visualize_node(node: dict, current_input: list):
     y_field = params.get('y_field')
     value_field = params.get('value_field')
     agg = params.get('agg', 'sum')
+    # The right-hand scale of 双轴折线. Read like ``value_field`` — the service owns the
+    # refusal when a type needs it and does not have it.
+    y2_field = params.get('y2_field')
+    agg2_field = params.get('agg2')
     title = params.get('title', '')
     tokenize = as_bool(params.get('tokenize'))
     wordcloud_style = params.get('wordcloud_style')
@@ -3553,6 +3631,8 @@ def _execute_visualize_node(node: dict, current_input: list):
                 y=y_field,
                 value_field=value_field,
                 agg=agg,
+                y2=y2_field,
+                agg2=agg2_field,
                 title=title,
                 **kw,
             )
@@ -4138,7 +4218,7 @@ def _execute_node(
         op = node.get('operation') or node.get('params', {}).get('operation', '')
         return _execute_process_node(node, current_input, run_ctx=run_ctx or _llm_run_ctx(node, op, ctx))
     if ntype == 'analysis':
-        return _execute_analysis_node(node, current_input, upstream=upstream)
+        return _execute_analysis_node(node, current_input, upstream=upstream, ctx=ctx)
     if ntype == 'visualize':
         return _execute_visualize_node(node, current_input)
     if ntype == 'tokenize':
@@ -4837,6 +4917,8 @@ def render_visualization():
     y_field = data.get('y_field')
     value_field = data.get('value_field')
     agg = data.get('agg', 'sum')
+    y2_field = data.get('y2_field')
+    agg2_field = data.get('agg2')
     title = data.get('title', '')
     tokenize = as_bool(data.get('tokenize'))
     wordcloud_style = data.get('wordcloud_style')
@@ -4858,6 +4940,8 @@ def render_visualization():
             y=y_field,
             value_field=value_field,
             agg=agg,
+            y2=y2_field,
+            agg2=agg2_field,
             title=title,
             **kw,
         )

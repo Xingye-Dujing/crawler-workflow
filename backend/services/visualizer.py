@@ -44,7 +44,19 @@ plt.rcParams['axes.unicode_minus'] = False
 
 logger = logging.getLogger(__name__)
 
-CHART_TYPES = ('bar', 'line', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'wordcloud', 'map')
+CHART_TYPES = (
+    'bar',
+    'line',
+    'dual_line',
+    'pie',
+    'scatter',
+    'histogram',
+    'box',
+    'heatmap',
+    'sankey',
+    'wordcloud',
+    'map',
+)
 
 
 def _json_safe(value):
@@ -229,7 +241,11 @@ WORDCLOUD_STYLES = {
 # These have no sane matplotlib equivalent without extra heavy dependencies
 # (echarts-wordcloud, a sankey layout engine, GeoJSON map data) — they are
 # ECharts-only. render_image() raises a clear ChartConfigError for these.
-ECHARTS_ONLY_TYPES = ('wordcloud', 'sankey', 'map')
+# ``dual_line`` joins them for a different reason: a second axis is drawable with
+# ``twinx()``, but the right-hand scale, legend and shared tooltip are the parts that make
+# 热度 and 强度 readable on one figure, and re-implementing them per engine is how the two
+# engines start telling the same data differently.
+ECHARTS_ONLY_TYPES = ('wordcloud', 'sankey', 'map', 'dual_line')
 
 
 class ChartConfigError(ValueError):
@@ -287,6 +303,8 @@ class VisualizationService:
         value_field: str = None,
         _series: str = None,
         agg: str = 'sum',
+        y2: str = None,
+        agg2: str = None,
         title: str = '',
         **kwargs,
     ) -> dict:
@@ -672,6 +690,77 @@ class VisualizationService:
                     },
                     'data': [{'name': n, 'value': v} for n, v in zip(labels, values, strict=True)],
                 }
+            ]
+            return base
+
+        # ── Dual-axis line: two magnitudes on one time axis ──
+        if chart_type == 'dual_line':
+            if not x:
+                raise ChartConfigError('Dual-axis line chart requires a category field (x)')
+            if not y2:
+                raise ChartConfigError('Dual-axis line chart requires a second value field (y2) — the right axis')
+            left_name = y or f'count({x})'
+            labels, left = cls._aggregate(df, x, y, agg)
+            # Both series group by the SAME x, so they share the category axis by
+            # construction; only the second series' values are wanted here.
+            _, right = cls._aggregate(df, x, y2, agg2 or agg)
+            base['grid'] = {**_GRID, 'right': 60}
+            base['legend'] = {'data': [left_name, y2], 'top': 28, 'textStyle': _TEXT_STYLE}
+            base['xAxis'] = {
+                'type': 'category',
+                'data': labels,
+                'axisLabel': {'rotate': 35, 'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
+                'axisLine': {'lineStyle': {'color': '#444'}},
+                'axisTick': {'lineStyle': {'color': '#444'}},
+                'splitLine': {'show': False},
+            }
+            # A LIST is what makes ECharts draw two scales; each series then says which one
+            # it belongs to. The right axis carries no grid lines, or the plot area becomes a
+            # second graph paper laid over the first.
+            base['yAxis'] = [
+                {
+                    'type': 'value',
+                    'name': left_name,
+                    'nameTextStyle': _TEXT_STYLE,
+                    'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
+                    'axisLine': {'show': False},
+                    'axisTick': {'show': False},
+                    'splitLine': {'lineStyle': {'color': '#2a2a2a', 'type': 'dashed'}},
+                },
+                {
+                    'type': 'value',
+                    'name': y2,
+                    'nameTextStyle': _TEXT_STYLE,
+                    'position': 'right',
+                    'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
+                    'axisLine': {'show': False},
+                    'axisTick': {'show': False},
+                    'splitLine': {'show': False},
+                },
+            ]
+            base['series'] = [
+                {
+                    'name': left_name,
+                    'type': 'line',
+                    'yAxisIndex': 0,
+                    'data': left,
+                    'smooth': True,
+                    'symbol': 'circle',
+                    'symbolSize': 6,
+                    'lineStyle': {'width': 2.5, 'color': color[0]},
+                    'itemStyle': {'color': color[0]},
+                },
+                {
+                    'name': y2,
+                    'type': 'line',
+                    'yAxisIndex': 1,
+                    'data': right,
+                    'smooth': True,
+                    'symbol': 'rect',
+                    'symbolSize': 6,
+                    'lineStyle': {'width': 2.5, 'color': color[1], 'type': 'dashed'},
+                    'itemStyle': {'color': color[1]},
+                },
             ]
             return base
 

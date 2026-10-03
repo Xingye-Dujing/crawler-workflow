@@ -113,6 +113,30 @@ def _keep_text(text: str) -> str:
 
 JOIN_HOW = ('left', 'right', 'inner', 'outer', 'cross')
 
+#: Where a topic's 特征词 come from. ``tfidf`` is what the study says it used (TF-IDF over the
+#: words LDA put in a document), and it inherits jieba's candidate rule of two characters or
+#: more — so a single-character word like 捞, which is in the paper's own table, can only come
+#: out of ``lda`` (the topic-word distribution reads the vectoriser's vocabulary directly).
+#: That difference is why the switch is visible on the panel instead of being one behaviour.
+WORD_SOURCES = ('tfidf', 'lda')
+
+#: What :meth:`DataAnalysisService.topic_label` does when the model refuses one topic.
+#: ``abort`` is the default: a table whose 主题概括 column is quietly half empty is the paper's
+#: table with holes in it, and the export cannot tell an empty cell from a topic the model
+#: was never asked about. ``blank`` is the opt-in for a long run the user does not want to
+#: restart, and it logs one line per topic it gave up on.
+ON_FAIL = ('abort', 'blank')
+
+#: Steps that need the run's LLM client, and so are handed it by :func:`run_pipeline`.
+#: Kept out of the step's own ``params`` because the pipeline report — which the console
+#: prints and the run record keeps — echoes every parameter it is given.
+LLM_OPS = frozenset({'topic_label'})
+
+#: The stage part of a topic id: 表 1 numbers its topics TopicⅠ-1 … TopicⅤ-4, and the numeral
+#: is the stage's POSITION in the lifecycle — which is why the order has to be declared rather
+#: than read off the code points of Chinese names ('二次爆发期' sorts before '发酵期').
+STAGE_NUMERALS = ('Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ', 'Ⅺ', 'Ⅻ')
+
 #: Sentinel for a select with no fallback: leaving it blank is a missing choice, and
 #: guessing one is the bug this table exists to stop. ``filter_rows`` uses it — defaulting
 #: a blank comparison to ``eq`` would answer a mistyped filter with "the data was already
@@ -158,7 +182,25 @@ STEP_PARAMS: dict = {
     # a default there would model the wrong column and report it as a result.
     'extract_time': {'one': ('column',)},
     'bin_time': {'one': ('column',)},
+    # The boundary proposal reads one timestamp column and writes a table of its own, so a
+    # column it cannot find is a refusal, not an empty suggestion.
+    'suggest_stages': {'one': ('column',)},
     'topic_model': {'one': ('column',)},
+    # The staged model needs BOTH columns named: a phase column it has to guess would decide
+    # the paper's table by dict order. ``topics`` is nonblank because a blank stage-topic count
+    # has no defensible default — 5 would be this project's choice, not the user's.
+    'topic_by_stage': {
+        'one': ('column', 'stage_col'),
+        'nonblank': ('topics',),
+        'enums': {'word_source': ('tfidf', WORD_SOURCES)},
+    },
+    # The labelling step reads the word cell and writes the summary cell; both are named, and
+    # an unnamed 概括 column would "succeed" by adding a header the export shows as empty.
+    'topic_label': {
+        'one': ('words_col',),
+        'nonblank': ('summary_col',),
+        'enums': {'on_fail': ('abort', ON_FAIL)},
+    },
     'sentiment_evolution': {'one': ('column',)},
 }
 
@@ -192,6 +234,106 @@ def _to_datetime(values):
     text = values.astype('string')
     folded = text.str.replace(_CJK_DATE_RE, r'\1-\2-\3', regex=True)
     return pd.to_datetime(folded, errors='coerce', format='mixed')
+
+
+def _stage_key(value) -> str:
+    """One stage cell as the name it is matched by; ``''`` for "this row got no phase"."""
+    if value is None or (not isinstance(value, str) and pd.isna(value)):
+        return ''
+    return str(value).strip()
+
+
+def _stage_order(df: pd.DataFrame, stage_col: str, order_col: str) -> list:
+    """The lifecycle order of the stage names in this table, or a refusal naming the fix.
+
+    :meth:`DataAnalysisService.bin_time` builds an ORDERED categorical, so a phase column that
+    never left its own node carries the order the user typed. The moment the table crosses a
+    node boundary it is rebuilt from records (``pd.DataFrame(current_input)``) and the ordering
+    is gone: what remains is a column of Chinese strings whose code-point order puts 二次爆发期
+    before 发酵期. Sorting by that would reprint 表 1 out of sequence and renumber every Topic
+    numeral, so this asks for the order instead of guessing one.
+    """
+    values = df[stage_col]
+    if getattr(values.dtype, 'name', '') == 'category' and values.cat.ordered:
+        return [str(name) for name in values.cat.categories if str(name).strip()]
+    if order_col:
+        if order_col not in df.columns:
+            raise UnknownOperationError(t('analysis.stage_order_col', op='topic_by_stage', col=order_col))
+        stamps = _to_datetime(df[order_col])
+        first_seen: dict = {}
+        names: list = []
+        for value, stamp in zip(values.tolist(), stamps.tolist(), strict=True):
+            key = _stage_key(value)
+            if not key:
+                continue
+            if key not in names:
+                names.append(key)
+            if pd.notna(stamp) and (key not in first_seen or stamp < first_seen[key]):
+                first_seen[key] = stamp
+        adrift = [key for key in names if key not in first_seen]
+        if adrift:
+            # A phase whose rows carry no parsable time cannot be placed on a timeline, and
+            # appending it at the end would invent a position for it in the numbering.
+            raise UnknownOperationError(
+                t('analysis.stage_order_unparsed', op='topic_by_stage', col=order_col, stages='、'.join(adrift))
+            )
+        return sorted(names, key=lambda key: first_seen[key])
+    raise UnknownOperationError(t('analysis.stage_order', op='topic_by_stage', col=stage_col))
+
+
+def _stage_topic_counts(value, stages: list) -> list:
+    """Per-stage topic numbers aligned to the lifecycle order the caller resolved.
+
+    One number applies to every stage; a list is matched position by position, because the
+    study's own table runs 5/6/4/4/4. A length that does not fit is refused rather than
+    truncated or padded — the position is the meaning, and a padded list would silently put
+    four topics on the stage the user asked five questions about.
+    """
+    items = value if isinstance(value, (list, tuple)) else split_names(str(value or ''))
+    picked = []
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        try:
+            number = int(text)
+        except (TypeError, ValueError):
+            raise UnknownOperationError(t('analysis.topic_stage_number', value=text)) from None
+        if number < 2:
+            raise UnknownOperationError(t('analysis.topic_count', value=number))
+        picked.append(number)
+    if not picked:
+        raise UnknownOperationError(t('analysis.need_param', op='topic_by_stage', param='topics'))
+    if len(picked) == 1:
+        return picked * len(stages)
+    if len(picked) != len(stages):
+        raise UnknownOperationError(
+            t('analysis.topic_stage_counts', stages=len(stages), counts=','.join(str(n) for n in picked))
+        )
+    return picked
+
+
+def _label_from(answer) -> str:
+    """The model's phrase as ONE cell: first non-empty line, decoration off, capped.
+
+    A small local model wraps the phrase in quotes, in 【】, or prefixes it with 「概括：」 even
+    when the prompt says not to. The cell goes straight into an exported table, so that is
+    taken off here rather than in every reader's spreadsheet; the cap is what keeps one
+    rambling answer from turning a 概括 column into a paragraph. An answer that leaves nothing
+    returns ``''``, which the caller refuses instead of filing as a blank.
+    """
+    for line in str(answer or '').splitlines():
+        phrase = line.strip().strip('"“”\'`「」 ').strip()
+        for prefix in ('主题概括', '概括', 'Summary', 'summary', 'Label', 'label'):
+            if phrase.startswith(prefix):
+                phrase = phrase[len(prefix) :].lstrip('：: ').strip()
+        phrase = phrase.strip('【】《》').strip('：:　').strip()
+        # An answer with no letter, digit or ideograph in it is not a label: punctuation only
+        # is what a small model returns when it has nothing to say, and filing it as a summary
+        # would put 「。」 in the column the paper's findings are read from.
+        if phrase and any(char.isalnum() for char in phrase):
+            return phrase[:60]
+    return ''
 
 
 def normalize_step_params(op: str, params: dict) -> dict:
@@ -735,6 +877,132 @@ class DataAnalysisService:
     # ── Topic modelling ─────────────────────────────────────────
 
     @staticmethod
+    def suggest_stages(
+        df: pd.DataFrame,
+        column: str,
+        min_days: int = 3,
+        max_windows: int = 6,
+        peak_ratio: float = 2.0,
+    ) -> pd.DataFrame:
+        """Candidate 舆情阶段 boundaries, read off the daily post-count curve.
+
+        The study this exists for cut its five phases two ways at once: by eye on its 图 2
+        (posts per day) and on the dates the police issued a notice. Only the first is
+        something a table can answer, and it answers it as a PROPOSAL — the rows out of this
+        step are windows to consider and the console holds the ``edges``/``labels`` text that
+        pastes into :meth:`bin_time`. Nothing is applied, because a boundary this step
+        invented is a boundary the researcher did not take, and 「官方通报」 is not in the
+        post counts.
+
+        Two rules make the paste safe. The last edge is the day AFTER the final window,
+        because ``bin_time`` is left-closed/right-open and an edge list ending on the last
+        observed day would silently lose it. And a new window opens the day AFTER the valley
+        between two peaks, not on the valley itself: the quietest day belongs to the phase
+        that is winding down, and putting it at the head of the next one would make every
+        phase look like it began in silence.
+
+        Peak heights are reported as the RAW count of that day, not the smoothed one the
+        boundary search used — 349/7624/1038/8029/2286 are the numbers the paper prints, and
+        a proposal has to be comparable with them.
+        """
+        if column not in df.columns:
+            return df
+        stamps = _to_datetime(df[column])
+        unparsed = int(stamps.isna().sum())
+        if unparsed:
+            # The same rows :meth:`bin_time` will leave blank: said once, here, rather than
+            # discovered later as a phase table with fewer rows than the crawl reported.
+            logger.warning(t('analysis.time_unparsed', col=column, n=unparsed))
+        days = stamps.dt.normalize().value_counts().sort_index()
+        if days.empty:
+            raise UnknownOperationError(t('analysis.stages_sparse', days=0, least=int(min_days) * 2))
+        span = pd.date_range(days.index.min(), days.index.max(), freq='D')
+        counts = days.reindex(span, fill_value=0)
+        if len(counts) < int(min_days) * 2:
+            raise UnknownOperationError(t('analysis.stages_sparse', days=len(counts), least=int(min_days) * 2))
+        ratio = float(peak_ratio)
+        if ratio < 1:
+            # "twice the usual day" is what a peak means here. Below 1 every ordinary day
+            # clears the bar, and the curve would be cut at its own noise.
+            raise UnknownOperationError(t('analysis.stages_ratio', value=peak_ratio))
+        # The floor is put on the RAW day. The smoothing exists only to stop a one-day spike
+        # from reading as a turning point, and comparing a flattened peak with a floor taken
+        # from unflattened days would reject exactly the tall narrow 爆发期 a lifecycle is
+        # named for.
+        daily = counts.to_numpy()
+        live = float(counts[counts > 0].median())
+        floor = live * ratio
+        smoothed = counts.rolling(3, center=True, min_periods=1).mean().to_numpy()
+        peak_positions = [
+            position
+            for position in range(1, len(smoothed) - 1)
+            if smoothed[position] > smoothed[position - 1]
+            and smoothed[position] >= smoothed[position + 1]
+            and daily[position] >= floor
+        ]
+        if len(peak_positions) < 2:
+            raise UnknownOperationError(t('analysis.stages_no_peak', ratio=peak_ratio, floor=round(floor, 1)))
+        if len(peak_positions) > int(max_windows):
+            # The tallest peaks are the phases; folding the rest into their neighbours is a
+            # decision the user can reverse by raising the ceiling, so it is said out loud.
+            folded = len(peak_positions) - int(max_windows)
+            peak_positions = sorted(
+                sorted(peak_positions, key=lambda position: daily[position], reverse=True)[: int(max_windows)]
+            )
+            logger.warning(t('analysis.stages_folded', kept=int(max_windows), dropped=folded))
+
+        # A window's start carries the valley day that closed the previous one, so 依据 can
+        # name it: a parallel list would go out of step the moment a boundary is dropped.
+        starts = [(span[0], None)]
+        last_open = span[-1] + pd.Timedelta(days=1)
+        for left, right in zip(peak_positions[:-1], peak_positions[1:], strict=True):
+            between = range(left + 1, right)
+            if not between:
+                continue  # two adjacent peaks share no valley, so they stay in one window
+            valley = min(between, key=lambda position: smoothed[position])
+            boundary = span[valley] + pd.Timedelta(days=1)
+            if starts[-1][0] < boundary < last_open:
+                starts.append((boundary, span[valley]))
+        starts.append((last_open, None))
+
+        rows = []
+        for index in range(len(starts) - 1):
+            window = counts[(counts.index >= starts[index][0]) & (counts.index < starts[index + 1][0])]
+            peak_day = window.idxmax()
+            valley = starts[index][1]
+            rows.append(
+                {
+                    '序号': index + 1,
+                    '起点': starts[index][0].strftime('%Y-%m-%d'),
+                    '终点': (starts[index + 1][0] - pd.Timedelta(days=1)).strftime('%Y-%m-%d'),
+                    '天数': len(window),
+                    '行数': int(window.sum()),
+                    '峰值日': peak_day.strftime('%Y-%m-%d'),
+                    '峰值计数': int(window.max()),
+                    '依据': (
+                        t('analysis.stages_basis_first', day=starts[index][0].strftime('%Y-%m-%d'))
+                        if valley is None
+                        else t('analysis.stages_basis_valley', valley=valley.strftime('%Y-%m-%d'))
+                    ),
+                }
+            )
+        logger.info(
+            t(
+                'analysis.stages_done',
+                n=len(rows),
+                rows=int(counts.sum()),
+                span=f'{span[0].date()} … {span[-1].date()}',
+            )
+        )
+        # Two lines because the panel holds two boxes; a merged line cannot be pasted into
+        # either without editing, and the editing is where a boundary gets lost.
+        logger.info(t('analysis.stages_edges', edges=', '.join(start.strftime('%Y-%m-%d') for start, _ in starts)))
+        logger.info(
+            t('analysis.stages_labels', labels=', '.join(f'阶段{number}' for number in range(1, len(rows) + 1)))
+        )
+        return pd.DataFrame(rows)
+
+    @staticmethod
     def topic_model(
         df: pd.DataFrame, column: str, n_topics: int = 5, topn: int = 10, max_features: int = 2000
     ) -> pd.DataFrame:
@@ -819,6 +1087,231 @@ class DataAnalysisService:
             logger.info(line)
         return pd.DataFrame(rows, columns=['topic', 'rank', 'keyword', 'weight'])
 
+    @staticmethod
+    def topic_by_stage(
+        df: pd.DataFrame,
+        column: str,
+        stage_col: str = '阶段',
+        order_col: str = '',
+        topics=None,
+        topn: int = 10,
+        max_features: int = 2000,
+        word_source: str = 'tfidf',
+        sample_n: int = 5,
+    ) -> pd.DataFrame:
+        """LDA fitted **inside each 舆情阶段** — the table the study publishes.
+
+        One model over the whole corpus cannot produce it. A pooled LDA spends its topics on
+        whichever phase supplied most of the text (爆发期 and 二次爆发期 are 7624 and 8029 of the
+        paper's 19326 rows), so 发酵期's 349 rows either get no topic of their own or share one
+        with a phase three weeks later — and 「谣言、暴力、刘某、发布、捞、细节、谩骂」 would stop
+        being a description of the first week. So the corpus is split by the 阶段 column
+        :meth:`bin_time` wrote, modelled stage by stage, and numbered Ⅰ-1 … Ⅴ-4 by lifecycle
+        position, which is exactly how 表 1 reads.
+
+        The output is WIDE — one row per (stage, topic) — because that is the artifact: the
+        feature words go into one cell joined by 、, the same cell the paper prints. The long
+        (topic, keyword, weight) shape stays available from :meth:`topic_model`.
+
+        ``word_source='tfidf'`` follows the paper's stated method: LDA assigns each post to a
+        topic, and the words are then the corpus TF-IDF of THAT bucket, so the list is what is
+        distinctive about the posts rather than what the model's weight matrix happens to top.
+        ``'lda'`` reads the weight matrix directly and is kept because the two lists differ
+        (see :data:`WORD_SOURCES`).
+
+        Sample posts are the ``sample_n`` rows with the highest posterior probability for the
+        topic — not a random draw. A random one would hand :meth:`topic_label` different
+        evidence on every run, and a summary that changes between two identical runs is not a
+        finding.
+        """
+        import jieba
+        from sklearn.decomposition import LatentDirichletAllocation
+        from sklearn.feature_extraction.text import CountVectorizer
+
+        from analyzers.keyword import KeywordExtractor
+
+        if column not in df.columns or stage_col not in df.columns:
+            return df
+        stages = _stage_order(df, stage_col, order_col)
+        per_stage = _stage_topic_counts(topics, stages)
+        # Read once, positionally: ``Series.map`` on a categorical maps its CATEGORIES, not its
+        # values, so the comparison would silently match nothing and every phase would come
+        # back "has no rows".
+        stage_keys = pd.Series([_stage_key(value) for value in df[stage_col].tolist()], index=df.index)
+        blank = int((stage_keys == '').sum())
+        if blank:
+            logger.warning(t('analysis.stage_blank', col=stage_col, n=blank))
+
+        rows = []
+        for stage_index, stage in enumerate(stages):
+            stage_rows = df[stage_keys == stage]
+            # The rows the model actually reads: a blank text is not a document, and counting
+            # it would let the guard below pass on a stage that is really empty.
+            usable = stage_rows[stage_rows[column].notna() & (stage_rows[column].astype(str).str.strip() != '')]
+            wanted = per_stage[stage_index]
+            if not len(usable):
+                raise UnknownOperationError(t('analysis.topic_stage_empty', stage=stage, col=stage_col))
+            if len(usable) < wanted:
+                # Refusing rather than dropping to "3 topics for 2 texts": the stage would then
+                # report fewer numbered topics than the user asked for, and the numbering is the
+                # thing the paper's table is read by.
+                raise UnknownOperationError(
+                    t('analysis.topic_stage_rows', stage=stage, rows=len(usable), topics=wanted)
+                )
+            texts = [str(value) for value in usable[column].tolist()]
+            tokenized = [
+                ' '.join(token for token in jieba.cut(text) if any(char.isalnum() for char in token)) for text in texts
+            ]
+            vectorizer = CountVectorizer(
+                tokenizer=_split_tokens,
+                preprocessor=_keep_text,
+                token_pattern=None,
+                max_features=max(10, int(max_features)),
+            )
+            try:
+                matrix = vectorizer.fit_transform(tokenized)
+            except ValueError as e:
+                raise UnknownOperationError(t('analysis.topic_stage_features', stage=stage, err=e)) from e
+            model = LatentDirichletAllocation(n_components=wanted, random_state=42, learning_method='batch')
+            doc_topic = model.fit_transform(matrix)
+            perplexity = round(float(model.perplexity(matrix)), 2)
+            vocabulary = vectorizer.get_feature_names_out()
+            # One pass assigns every document to its strongest topic. Doing the argmax inside the
+            # topic loop would walk the whole stage again per topic, which on a 19,326-post
+            # corpus is the difference between seconds and minutes for no extra information.
+            buckets: dict = {}
+            for position, owner in enumerate(int(row) for row in doc_topic.argmax(axis=1)):
+                buckets.setdefault(owner, []).append(position)
+            # The stage's POSITION, not its name: 表 1 says TopicⅠ-1 belongs to 发酵期 because
+            # 发酵期 came first, and the numeral has to survive a rename of the phase labels.
+            numeral = STAGE_NUMERALS[stage_index] if stage_index < len(STAGE_NUMERALS) else str(stage_index + 1)
+            logger.info(t('analysis.topic_stage_done', stage=stage, n=wanted, rows=len(usable), perplexity=perplexity))
+            for topic_index in range(wanted):
+                label = f'Topic{numeral}-{topic_index + 1}'
+                members = buckets.get(topic_index, [])
+                doc_n = len(members)
+                if word_source == 'tfidf':
+                    bucket = usable.iloc[members]
+                    scored = KeywordExtractor().tfidf_corpus(bucket, text_column=column, topk=int(topn), merge=True)
+                    words = [
+                        (str(word), float(weight))
+                        for word, weight in zip(scored['keyword'], scored['weight'], strict=True)
+                    ]
+                else:
+                    component = model.components_[topic_index]
+                    best = component.argsort()[::-1][: max(1, int(topn))]
+                    words = [(str(vocabulary[position]), float(component[position])) for position in best]
+                if not words:
+                    raise UnknownOperationError(t('analysis.topic_stage_words', stage=stage, topic=label))
+                ranked = sorted(range(len(texts)), key=lambda position: -float(doc_topic[position][topic_index]))
+                samples = ' ／ '.join(texts[position][:80] for position in ranked[: max(0, int(sample_n))])
+                rows.append(
+                    {
+                        'stage': stage,
+                        'stage_order': stage_index + 1,
+                        'topic': label,
+                        'feature_words': '、'.join(word for word, _ in words),
+                        'weights': ' '.join(f'{word}:{weight:.6f}' for word, weight in words),
+                        'doc_n': doc_n,
+                        'perplexity': perplexity,
+                        'sample_texts': samples,
+                    }
+                )
+                logger.info(f'{label}（{stage}）: {" ".join(word for word, _ in words)}')
+        if not rows:
+            # Unreachable while ``stages`` is non-empty (the guard above raises on an empty
+            # stage), but a table with no topic rows must not settle the node DONE.
+            raise UnknownOperationError(t('analysis.topic_stage_rows', stage='、'.join(stages), rows=0, topics=1))
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def topic_label(
+        df: pd.DataFrame,
+        llm=None,
+        cancel=None,
+        words_col: str = 'feature_words',
+        samples_col: str = 'sample_texts',
+        summary_col: str = '主题概括',
+        on_fail: str = 'abort',
+        max_topics: int = 30,
+    ) -> pd.DataFrame:
+        """Ask the model for the 主题概括 column the study's authors wrote by hand.
+
+        One prompt per topic row and nothing else: the evidence handed over is the phase, the
+        topic's own number, its feature words and the sample posts :meth:`topic_by_stage`
+        already picked — which is what a reader of 表 1 sees. The paper's summaries came from
+        reading the corpus; these come from reading the same WORDS, so the column is data this
+        project produced, not the authors' finding restated.
+
+        The answer's language follows the run's own, because the prompt is an ``i18n`` string:
+        a node that answers English into a Chinese interface would have to be re-run to be
+        readable.
+
+        ``llm`` is handed in by :func:`run_pipeline` for the ops in :data:`LLM_OPS`, and a
+        missing one is a refusal rather than a skip — the column would come back empty and the
+        node would settle DONE over work that did not happen. ``cancel`` is the run's Stop
+        flag; a cut-short pass leaves :data:`ABORT_MARK` in the rows the model never saw, which
+        is how the executor already learns an LLM node was interrupted instead of finished.
+        """
+        from analyzers.llm_client import ABORT_MARK, LLMError
+
+        if llm is None:
+            raise UnknownOperationError(t('analysis.label_no_llm', op='topic_label'))
+        if words_col not in df.columns:
+            raise UnknownOperationError(t('analysis.step_col_missing', op='topic_label', col=words_col))
+        limit = int(max_topics)
+        if limit < 1 or len(df) > limit:
+            # One call per row, so a 5,000-row table is 5,000 paid questions nobody meant to
+            # ask. 表 1 is 25 rows; the ceiling is there to catch the mis-wired pipeline.
+            raise UnknownOperationError(t('analysis.label_too_many', rows=len(df), limit=limit))
+        work = df.copy()
+        work[summary_col] = ''
+        has_stage = 'stage' in work.columns
+        has_topic = 'topic' in work.columns
+        positions = list(work.index)
+        labelled = 0
+        for offset, position in enumerate(positions):
+            if cancel is not None and cancel.is_set():
+                for rest in positions[offset:]:
+                    work.at[rest, summary_col] = ABORT_MARK
+                logger.warning(t('analysis.label_cancelled', n=len(positions) - offset))
+                return work
+            name = str(work.at[position, 'topic']) if has_topic else f'#{offset + 1}'
+            words = str(work.at[position, words_col] or '').strip()
+            if not words:
+                raise UnknownOperationError(t('analysis.label_no_words', topic=name, col=words_col))
+            samples = ''
+            if samples_col and samples_col in work.columns:
+                samples = str(work.at[position, samples_col] or '').strip()
+            prompt = t(
+                'analysis.label_prompt',
+                stage=str(work.at[position, 'stage']) if has_stage else '',
+                topic=name,
+                words=words,
+                samples=samples or '—',
+            )
+            try:
+                answer = llm.chat(prompt)
+            except LLMError as e:
+                if on_fail != 'blank':
+                    raise UnknownOperationError(t('analysis.label_failed', topic=name, err=e)) from e
+                # One line per topic the model gave up on, and the cell stays empty: the user
+                # asked for the run to continue, not for the gap to be invisible.
+                logger.warning(t('analysis.label_failed', topic=name, err=e))
+                continue
+            label = _label_from(answer)
+            if not label:
+                # An answer of punctuation, or of nothing: a blank cell would be
+                # indistinguishable from a topic nobody asked the model about.
+                if on_fail != 'blank':
+                    raise UnknownOperationError(t('analysis.label_empty', topic=name))
+                logger.warning(t('analysis.label_empty', topic=name))
+                continue
+            work.at[position, summary_col] = label
+            labelled += 1
+        logger.info(t('analysis.label_done', n=labelled, model=getattr(llm, 'label', '')))
+        return work
+
     # ── The sentiment curve ─────────────────────────────────────
 
     @staticmethod
@@ -830,6 +1323,7 @@ class DataAnalysisService:
         neutral: str = 'neutral',
         negative: str = 'negative',
         new_col: str = 'sentiment_index',
+        score_col: str = '',
     ) -> pd.DataFrame:
         """Per-period sentiment shares and one signed intensity — the evolution curve.
 
@@ -847,20 +1341,47 @@ class DataAnalysisService:
         none of the three buckets — a blank the polarity node could not judge is not a
         neutral opinion, and folding it into 中性 would report a finding the data does not
         contain. Their count is ``other_n``, so the difference is visible rather than lost.
+
+        ``volume_pct`` is the other half of the figure the study is famous for: 舆情热度, the
+        share of the corpus each period holds. It is taken over the rows that reached a
+        period (a blank period belongs to none, so its share is not missing — it is
+        undefined), which is what makes the column add up to 100.
+
+        ``score_col`` adds the second curve the paper reads against 热度: 情感强度 =
+        mean(|score − 0.5|) × 2 over the rows that carry a score, which is how far the
+        crowd pushed, in either direction, from neutral. Signed means would answer "which
+        way" a second time and collapse toward 0 in a period where both sides are loud —
+        exactly the 二次爆发期 the paper says was COLDER in volume and HOTTER in intensity.
+        A period with no scored rows gets ``None``, never 0.5: a half-way value would read
+        as "measured and found neutral".
         """
         if column not in df.columns or label_col not in df.columns:
             return df
+        if score_col and score_col not in df.columns:
+            # The user asked for the intensity curve and named a column this table does not
+            # hold. Answering with the shares only would ship a chart with one line and no
+            # word about the missing one.
+            raise UnknownOperationError(t('analysis.step_col_missing', op='sentiment_evolution', col=score_col))
         work = df.copy()
         labels = work[label_col].astype('string').fillna('').str.strip()
         work['_pos'] = (labels == positive).astype(int)
         work['_neu'] = (labels == neutral).astype(int)
         work['_neg'] = (labels == negative).astype(int)
-        grouped = work.groupby(column, dropna=True).agg(
-            positive_n=('_pos', 'sum'),
-            neutral_n=('_neu', 'sum'),
-            negative_n=('_neg', 'sum'),
-            total=('_pos', 'size'),
-        )
+        agg_map = {
+            'positive_n': ('_pos', 'sum'),
+            'neutral_n': ('_neu', 'sum'),
+            'negative_n': ('_neg', 'sum'),
+            'total': ('_pos', 'size'),
+        }
+        if score_col:
+            scores = pd.to_numeric(work[score_col], errors='coerce')
+            work['_deviation'] = (scores - 0.5).abs() * 2
+            work['_scored'] = scores.notna().astype(int)
+            agg_map['score_n'] = ('_scored', 'sum')
+            # ``mean`` skips NaN, so an unscored row neither lifts nor drags the intensity —
+            # it is simply absent from it, and ``score_n`` says how many rows were.
+            agg_map['intensity'] = ('_deviation', 'mean')
+        grouped = work.groupby(column, dropna=True).agg(**agg_map)
         grouped = grouped.reset_index()
         grouped['other_n'] = grouped['total'] - grouped['positive_n'] - grouped['neutral_n'] - grouped['negative_n']
         # A zero total cannot happen (groupby only makes groups from rows) but the ratio is
@@ -874,6 +1395,21 @@ class DataAnalysisService:
         ):
             grouped[name] = (grouped[source] / totals * 100).round(2)
         grouped[new_col] = ((grouped['positive_n'] - grouped['negative_n']) / totals).round(4)
+        heat = int(grouped['total'].sum())
+        grouped['volume_pct'] = (grouped['total'] / max(1, heat) * 100).round(2)
+        if score_col:
+            # NaN would serialise as a bare ``NaN`` token, which the browser's JSON.parse
+            # rejects for the WHOLE response, and writing None back into the float column
+            # pandas already built just folds it back into NaN. An object column is the one
+            # spelling that keeps an unjudged period an empty cell.
+            grouped['intensity'] = pd.Series(
+                [
+                    None if not count else round(float(value), 4)
+                    for count, value in zip(grouped['score_n'], grouped['intensity'], strict=True)
+                ],
+                index=grouped.index,
+                dtype='object',
+            )
         # Ascending by the period so a line chart draws left-to-right in time without the
         # user having to add a sort step — and 'YYYY-MM-DD' sorts chronologically as text,
         # which is why extract_time answers with text.
@@ -888,6 +1424,12 @@ class DataAnalysisService:
                 else '',
             )
         )
+        if score_col:
+            unscored = [
+                str(name) for name, count in zip(grouped['period'], grouped['score_n'], strict=True) if not count
+            ]
+            if unscored:
+                logger.warning(t('analysis.evolution_unscored', col=score_col, periods='、'.join(unscored)))
         return grouped
 
     # ── Operation registry + pipeline runner ────────────────────
@@ -912,12 +1454,22 @@ class DataAnalysisService:
             'bin_column': cls.bin_column,
             'extract_time': cls.extract_time,
             'bin_time': cls.bin_time,
+            'suggest_stages': cls.suggest_stages,
             'topic_model': cls.topic_model,
+            'topic_by_stage': cls.topic_by_stage,
+            'topic_label': cls.topic_label,
             'sentiment_evolution': cls.sentiment_evolution,
         }
 
     @classmethod
-    def run_pipeline(cls, df: pd.DataFrame, steps: list) -> tuple:
+    def run_pipeline(cls, df: pd.DataFrame, steps: list, llm=None, cancel=None) -> tuple:
+        """Run the steps in order and report what each one did to the table.
+
+        ``llm`` and ``cancel`` reach only the steps in :data:`LLM_OPS`, and only as call
+        arguments: the report echoes every step's ``params`` into the console and the run
+        record, so a client object in there would be a live object written into a durable
+        ledger — and the checkpoint/reuse machinery keys on those params.
+        """
         operations = cls._operations()
         report = []
         current = df
@@ -929,7 +1481,9 @@ class DataAnalysisService:
                 raise UnknownOperationError(f'Unknown analysis operation: {op}')
             validate_step(current, op, params)
             before = len(current)
-            current = func(current, **params)
+            # Only the steps in LLM_OPS are handed the run's client and Stop flag; every other
+            # step is deterministic and gets the table alone.
+            current = func(current, **({'llm': llm, 'cancel': cancel} if op in LLM_OPS else {}), **params)
             report.append(
                 {
                     'op': op,

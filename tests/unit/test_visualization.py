@@ -13,6 +13,8 @@ ECharts option as raw JSON, so the contracts that matter are:
 
 import base64
 import json
+import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -22,10 +24,21 @@ from services.visualizer import VisualizationService as V
 
 pytestmark = pytest.mark.unit
 
+_WORKFLOW_JS = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'workflow.js'
+
+
+def _js_list(text: str, name: str) -> list:
+    """The quoted members of ``var NAME = […];`` in the browser's copy of a list."""
+    declaration = re.search(rf'var {name} = \[([^\]]*)\];', text)
+    assert declaration, f'workflow.js no longer declares {name} as a flat array'
+    return re.findall(r"'([^']*)'", declaration.group(1))
+
+
 # One usable spec per chart type, so the happy path can be swept in one test.
 USABLE = {
     'bar': {'x': '作者', 'y': '点赞'},
     'line': {'x': '作者', 'y': '点赞'},
+    'dual_line': {'x': '作者', 'y': '点赞', 'y2': '阅读'},
     'pie': {'x': '作者', 'y': '点赞'},
     'scatter': {'x': '点赞', 'y': '阅读'},
     'histogram': {'x': '点赞'},
@@ -64,6 +77,55 @@ class TestChartCatalogue:
     def test_echarts_only_types_are_a_subset_of_the_catalogue(self):
         assert set(ECHARTS_ONLY_TYPES) < set(CHART_TYPES)
 
+    def test_the_browser_advertises_exactly_the_types_this_builds(self):
+        """``workflow.js`` keeps its own copy of both lists, and the two drift apart in the
+        one direction no test on the Python side can see: a panel that offers 双轴折线 while
+        the service does not know the name hands the user an opaque node failure, and a panel
+        that hides a type the service draws is a feature nobody finds."""
+        text = _WORKFLOW_JS.read_text(encoding='utf-8')
+        assert _js_list(text, 'CHART_TYPES') == list(CHART_TYPES)
+        assert _js_list(text, 'ECHARTS_ONLY_CHARTS') == list(ECHARTS_ONLY_TYPES)
+
+
+class TestDualAxisLine:
+    """热度 and 强度 on one figure — the paper's inverse relationship, as a spec.
+
+    The one thing a single-axis chart cannot say is that the taller bar and the colder
+    sentiment belong to different phases, so the two series must be scaled independently
+    while sharing one category axis. ECharts reads that as ``yAxis`` being a LIST plus a
+    ``yAxisIndex`` on every series, which is what is pinned here rather than how it looks.
+    """
+
+    def test_each_series_is_scaled_by_its_own_axis(self, df):
+        option = V.to_echarts_option(df, 'dual_line', x='作者', y='点赞', y2='阅读')
+        assert [axis['name'] for axis in option['yAxis']] == ['点赞', '阅读']
+        assert [series['yAxisIndex'] for series in option['series']] == [0, 1]
+        assert option['legend']['data'] == ['点赞', '阅读']
+        # Group keys sort by code point, so 丙 乙 甲 — and both series land on the same days.
+        assert [series['data'] for series in option['series']] == [[40.0, 25.0, 15.0], [400, 200, 400]]
+
+    def test_the_right_axis_draws_no_second_graph_paper(self, df):
+        # Two sets of dashed grid lines at different scales is unreadable, and the left axis
+        # is the one the eye measures against.
+        option = V.to_echarts_option(df, 'dual_line', x='作者', y='点赞', y2='阅读')
+        assert option['yAxis'][1]['position'] == 'right'
+        assert option['yAxis'][1]['splitLine'] == {'show': False}
+        assert 'lineStyle' in option['yAxis'][0]['splitLine'], 'the left axis keeps its grid'
+
+    def test_an_empty_left_field_counts_rows_rather_than_defaulting_to_zero(self, df):
+        # 舆情热度 is exactly "how many rows this period has", which is why 左轴 may be left
+        # blank — and the legend has to say what it then drew.
+        option = V.to_echarts_option(df, 'dual_line', x='作者', y2='阅读')
+        assert option['series'][0]['name'] == 'count(作者)'
+        assert option['series'][0]['data'] == [1, 1, 2]
+
+    def test_the_image_engine_refuses_the_type_by_name(self, df):
+        # Matplotlib could draw a twinx, but the shared tooltip, the legend and the second
+        # scale are the readable half of this figure; two engines drawing one spec
+        # differently is how a chart starts meaning something else in a report.
+        with pytest.raises(ChartConfigError, match='engine=echarts'):
+            V.render_image(df, 'dual_line', x='作者', y='点赞')
+
 
 # ─── option shape / JSON safety ────────────────────────────────────────
 
@@ -84,7 +146,10 @@ class TestOptionJsonSafety:
     @pytest.mark.parametrize('chart_type', CHART_TYPES)
     def test_a_frame_full_of_missing_numbers_still_serialises(self, chart_type):
         frame = pd.DataFrame({'g': ['a', 'b'], 'v': [None, None]})
-        option = V.to_echarts_option(frame, chart_type, x='g', y='v', value_field='v')
+        # 双轴折线 needs its right-hand field like any other type needs x: without one it is
+        # a refused spec (pinned below), not a chart with a blank second line.
+        extra = {'y2': 'v'} if chart_type == 'dual_line' else {}
+        option = V.to_echarts_option(frame, chart_type, x='g', y='v', value_field='v', **extra)
         assert json.dumps(option, allow_nan=False)
 
     def test_numpy_scalars_are_folded_into_python_numbers(self, df):
@@ -241,6 +306,8 @@ class TestConfigErrors:
             ('map', {}, 'Map chart requires a region-name field'),
             ('box', {}, 'Box plot requires a category field'),
             ('box', {'y': '点赞'}, 'Box plot requires a category field'),
+            ('dual_line', {'x': '作者', 'y': '点赞'}, 'requires a second value field'),
+            ('dual_line', {'y2': '阅读'}, 'requires a category field'),
         ],
     )
     def test_specs_missing_required_fields_name_the_gap(self, df, chart_type, kwargs, needle):

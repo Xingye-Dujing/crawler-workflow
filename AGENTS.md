@@ -181,6 +181,20 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   `workflow_name`/`workflow_fingerprint`/`mode`/`headless`/`lang` (not `started_at`): left at their first-attempt
   values the 并行/串行 and 无头/窗口 chips describe a run that never happened, and the stale name — the key every
   preview/chart/export probe uses — makes the kept rows unfindable.
+- **A phase column's order is not data, and a records round trip erases it.** `bin_time` writes an
+  ORDERED categorical (`pd.cut`), but every node boundary rebuilds the table with
+  `pd.DataFrame(current_input)` (app.py), which leaves plain strings whose code-point order puts
+  二次爆发期 before 发酵期. Anything that groups BY phase — 分阶段 LDA, the `TopicⅠ-1 … TopicⅤ-4`
+  numbering — takes the order from the categorical while it still has one, otherwise from a time
+  column the user names, and otherwise REFUSES. Sorting the names is how a replicated 表 1 gets
+  renumbered while still looking complete.
+- **The analysis node's one non-deterministic step borrows the process node's client.**
+  `topic_label` asks the model once per topic row. `run_pipeline(df, steps, llm=, cancel=)` hands
+  those to the ops in `LLM_OPS` *only*, never through `params`: the run report echoes every step's
+  `params` into the console and the durable run record, so a client in there would be a live object
+  written into a ledger. No model configured is refused BEFORE the first call is paid for, and a
+  Stop leaves `未处理` in the rows the model never saw — which is how the executor settles that node
+  PARTIAL instead of DONE.
 - **Retention must release what it destroyed.** `purge` deletes a run's rows, so it also calls `forget_run_items` — an
   `item_seen` entry whose rows are gone would make a later crawl under-collect silently, with no way back except
   「重新采集」. An explicit `delete_run` still *keeps* claims: there the user removed a record knowing the crawl was

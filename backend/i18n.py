@@ -72,6 +72,9 @@ _ZH = {
     # 「分词失败：」/「可视化失败：」 inside them repeats the wrapper, and the node
     # used to be logged twice: once here without a name, once attributed.
     'wf.analysis_step': '[分析] {op}：{before} → {after} 行',
+    # The labelling step needs a model: without one the step refuses instead of leaving the
+    # column blank and settling the node DONE on work that did not happen.
+    'wf.analysis_llm_no_model': '「主题概括」需要模型，但这条运行没有配置模型（设置 → 模型 / 节点模型）',
     'wf.analysis_step_removed': '（-{removed}）',
     'wf.analysis_step_nochange': '（无变化）',
     'wf.tokenize_no_column': '未配置要分词的文本列',
@@ -335,17 +338,70 @@ _ZH = {
     ),
     'analysis.time_binned': '{col} 划分完成：{detail}',
     'analysis.time_bin_labels': '时间分段需要「边界数 = 阶段名数 + 1」，现在是 {edges} 个边界、{labels} 个名称',
+    # A boundary PROPOSAL: this step rewrites no row and does not decide when the event
+    # turned — that needs the dates the researcher knows (the notice, the apology, the
+    # filing), which are not in the post counts.
+    'analysis.stages_sparse': '这一列只有 {days} 天有记录，切不出阶段（至少需要 {least} 天）',
+    'analysis.stages_ratio': '「峰倍率」至少要是 1（高于平常的一天才算峰），收到 {value}',
+    'analysis.stages_no_peak': (
+        '发文量曲线里找不到 {ratio} 倍于日常（中位数 {floor} 行/日）的转折峰，'
+        '这一列撑不起阶段划分——曲线只有一段，就不要切成多段'
+    ),
+    'analysis.stages_folded': '曲线上的峰多于 {kept} 个，只保留最高的 {kept} 个（折掉了 {dropped} 个）',
+    'analysis.stages_done': '阶段建议：{n} 个候选窗口、覆盖 {rows} 行（{span}）',
+    'analysis.stages_edges': '建议边界 edges（左闭右开，末位是最后一天+1）：{edges}',
+    'analysis.stages_labels': '建议阶段名 labels（与 edges 一一对应，仅占位，可改名）：{labels}',
+    'analysis.stages_basis_first': '自曲线首日 {day} 起',
+    'analysis.stages_basis_valley': '自谷底 {valley} 的次日起',
     'analysis.time_bin_edges': '时间分段里有无法解析成日期的边界：{edges}',
     'analysis.time_bin_order': '{op} 的边界必须按时间从早到晚排列',
     'analysis.topic_count': 'LDA 主题数至少要 2，收到 {value}（1 个主题只是"整段文本"）',
     'analysis.topic_rows': 'LDA 需要至少和主题数一样多的文本：主题 {topics} 个、有效文本 {rows} 行',
     'analysis.topic_features': 'LDA 无法从这一列抽到特征词（可能整列都是标点或停用词）：{err}',
+    # 分阶段主题模型。每一句都点名是哪个阶段、哪个主题，因为「某个阶段没跑出来」在一堆
+    # TopicⅠ-1 … TopicⅤ-4 里是查不出来的。
+    'analysis.stage_order': (
+        '「{col}」这一列已经看不出阶段先后（跨节点会退化成普通文本）。把「按时间划分阶段」与它放在同一条'
+        '流水线，或填「阶段排序列」指向一个时间列'
+    ),
+    'analysis.stage_order_col': '「{op}」的「阶段排序列」在表里不存在：{col}',
+    'analysis.stage_order_unparsed': '「{col}」里排不出这些阶段的先后（没有任何可解析的时间）：{stages}',
+    'analysis.topic_stage_number': '每阶段主题数只能是整数，收到「{value}」',
+    'analysis.topic_stage_counts': (
+        '每阶段主题数要与阶段一一对应：{stages} 个阶段，收到 {counts}（只填一个数字表示各阶段同数）'
+    ),
+    'analysis.stage_blank': '「{col}」有 {n} 行没有阶段（时间戳没解析出来），它们不进任何主题模型',
+    'analysis.topic_stage_empty': '阶段「{stage}」一行都没有，无法为它建模（先检查「{col}」的边界）',
+    'analysis.topic_stage_rows': (
+        '阶段「{stage}」只有 {rows} 篇可用文本，撑不起 {topics} 个主题（LDA 至少要有和主题数一样多的文本）'
+    ),
+    'analysis.topic_stage_features': '阶段「{stage}」抽不到特征词：{err}',
+    'analysis.topic_stage_words': (
+        '阶段「{stage}」的 {topic} 一个特征词都选不出来（没有文本归到这个主题，请调小该阶段的主题数）'
+    ),
+    'analysis.topic_stage_done': '阶段「{stage}」：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}',
+    # 主题概括：一行一次模型调用，所以失败要说清是哪个主题，停手也要说清还剩几个没问。
+    'analysis.label_no_llm': '「{op}」没有拿到模型客户端：只有画布上的运行才带模型',
+    'analysis.label_too_many': '主题概括要逐主题问模型：{rows} 行超过了上限 {limit}，请先把主题表缩小',
+    'analysis.label_no_words': '{topic} 的「{col}」是空的，没有特征词就没有可概括的东西',
+    'analysis.label_failed': '{topic} 的主题概括失败：{err}',
+    'analysis.label_empty': '{topic} 的主题概括是空的（模型只回了标点）',
+    'analysis.label_cancelled': '已停止：还有 {n} 个主题没问模型，它们的概括标为未处理',
+    'analysis.label_done': '主题概括：{n} 个主题已写出（模型 {model}）',
+    'analysis.label_prompt': (
+        '你是舆情分析研究员。下面是某网络暴力事件在一个阶段里一个主题的特征词与代表文本。'
+        '请用不超过 15 个汉字概括这个主题在说什么；只输出概括本身，不要解释、不要引号。\n'
+        '阶段：{stage}\n主题编号：{topic}\n特征词：{words}\n代表文本：{samples}'
+    ),
     'analysis.topic_done': (
         'LDA 主题模型：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}（数值越低拟合越好，但过小意味着在记原文）'
     ),
     'analysis.evolution_done': (
         '情感演化：按「period」聚合出 {n} 个时段（{periods}），情感指数 =(积极−消极)/总数 ∈ [-1, 1]'
     ),
+    # The intensity curve is only honest if the periods it could not score say so: a blank
+    # in an exported table is invisible, and 0.5 would print as "measured, and neutral".
+    'analysis.evolution_unscored': '「{col}」在时段「{periods}」里一行分数都没有，这些时段的情感强度留空',
     'clean.unknown_mode': '清洗节点没有名为「{mode}」的模式（可用：regex、llm）',
     'clean.regex_done': '正则清洗：保留 {kept} 行、判定删除 {dropped} 行（未做主题相关性判断，那需要 llm 模式）',
     # A cleaning step that this table cannot carry out. `{op}` and `{param}` stay the
@@ -1052,6 +1108,9 @@ _EN = {
     # repeats the wrapper, and the pair used to print the same sentence twice —
     # once here with no node named, once attributed.
     'wf.analysis_step': '[Analysis] {op}: {before} -> {after} rows',
+    'wf.analysis_llm_no_model': (
+        'the 主题概括 step needs a model, and this run has none (Settings → model, or the node model box)'
+    ),
     'wf.analysis_step_removed': ' (-{removed})',
     'wf.analysis_step_nochange': ' (no change)',
     'wf.tokenize_no_column': 'no text column is configured for tokenizing',
@@ -1330,15 +1389,82 @@ _EN = {
     ),
     'analysis.time_bin_edges': 'time binning got a boundary that is not a date: {edges}',
     'analysis.time_bin_order': '{op} boundaries must run from earliest to latest',
+    # A boundary PROPOSAL: this step rewrites no row and does not decide when an event
+    # turned, because that needs the dates the researcher knows (the notice, the apology,
+    # the filing) and not the post counts.
+    'analysis.stages_sparse': (
+        'only {days} days carry records in this column, which cannot be cut into phases ({least} needed)'
+    ),
+    'analysis.stages_ratio': 'the peak ratio has to be at least 1 (a peak is a day above the usual), got {value}',
+    'analysis.stages_no_peak': (
+        'the post-count curve has no turning peak {ratio}× above the usual day (median {floor} rows/day): '
+        'one stretch of a curve must not be cut into several phases'
+    ),
+    'analysis.stages_folded': (
+        'the curve holds more than {kept} peaks; the tallest {kept} were kept ({dropped} folded away)'
+    ),
+    'analysis.stages_done': 'phase proposal: {n} candidate windows covering {rows} rows ({span})',
+    'analysis.stages_edges': 'suggested edges, left-closed/right-open, the last one is the final day + 1: {edges}',
+    'analysis.stages_labels': 'suggested labels, one per window (placeholders — rename them): {labels}',
+    'analysis.stages_basis_first': "opens on the curve's first day {day}",
+    'analysis.stages_basis_valley': 'opens the day after the valley on {valley}',
     'analysis.topic_count': 'LDA needs at least 2 topics, got {value} (one topic is just "the whole text")',
     'analysis.topic_rows': 'LDA needs at least as many texts as topics: {topics} topics, {rows} usable rows',
     'analysis.topic_features': 'LDA could find no features in this column (punctuation or stopwords only?): {err}',
+    # Staged topic modelling. Every one of these names WHICH stage and WHICH topic, because
+    # "one phase produced nothing" is undiagnosable once the table holds TopicⅠ-1 … TopicⅤ-4.
+    'analysis.stage_order': (
+        '"{col}" no longer says which phase came first (a column that crosses a node boundary '
+        'is rebuilt from records and loses its order). Keep 按时间划分阶段 in the same pipeline, '
+        'or name a 阶段排序列 that holds a time'
+    ),
+    'analysis.stage_order_col': '{op}: the stage-order column "{col}" is not in this table',
+    'analysis.stage_order_unparsed': 'no phase order can be read for {stages}: "{col}" holds no parsable time there',
+    'analysis.topic_stage_number': 'topics per stage must be a whole number, got "{value}"',
+    'analysis.topic_stage_counts': (
+        '{stages} stages need one topic count each, got {counts} (a single number means the same for every stage)'
+    ),
+    'analysis.stage_blank': (
+        '{n} rows have no "{col}" value (their timestamp did not parse), so they join no topic model'
+    ),
+    'analysis.topic_stage_empty': (
+        'phase "{stage}" holds no rows at all, so nothing can be modelled (check the boundaries in "{col}")'
+    ),
+    'analysis.topic_stage_rows': (
+        'phase "{stage}" has only {rows} usable texts, which cannot carry {topics} topics '
+        '(LDA needs at least as many texts as topics)'
+    ),
+    'analysis.topic_stage_features': 'phase "{stage}" yielded no feature words: {err}',
+    'analysis.topic_stage_words': (
+        'nothing could be selected as a feature word for {topic} in phase "{stage}" — no text was assigned to it, '
+        "so lower that stage's topic count"
+    ),
+    'analysis.topic_stage_done': 'phase "{stage}": {n} topics over {rows} texts, perplexity {perplexity}',
+    'analysis.label_no_llm': '{op} was handed no model client: only a canvas run carries one',
+    'analysis.label_too_many': (
+        'the labelling step asks the model once per topic: {rows} rows is over the limit of {limit}, '
+        'so filter the topic table first'
+    ),
+    'analysis.label_no_words': '{topic} has an empty "{col}", and there is nothing to summarise without feature words',
+    'analysis.label_failed': 'the summary for {topic} failed: {err}',
+    'analysis.label_empty': 'the summary for {topic} came back empty (the model answered with punctuation only)',
+    'analysis.label_cancelled': 'stopped: {n} topics were never asked, and their summaries are marked 未处理',
+    'analysis.label_done': 'topic summaries: {n} written (model {model})',
+    'analysis.label_prompt': (
+        'You are a public-opinion researcher. Below are the feature words and sample posts of one topic '
+        'inside one phase of a cyberbullying event. Summarise what this topic is about in at most six words; '
+        'output the phrase alone, no explanation, no quotes.\n'
+        'Phase: {stage}\nTopic: {topic}\nFeature words: {words}\nSample posts: {samples}'
+    ),
     'analysis.topic_done': (
         'LDA topic model: {n} topics over {rows} texts, perplexity {perplexity} '
         '(lower fits better, but far too low means it is memorising the corpus)'
     ),
     'analysis.evolution_done': (
         'Sentiment evolution: {n} periods from "period" ({periods}); index = (positive − negative) / total ∈ [-1, 1]'
+    ),
+    'analysis.evolution_unscored': (
+        'no rows of "{col}" carry a score in {periods}, so the sentiment intensity is left empty there'
     ),
     'clean.unknown_mode': 'the clean node has no mode named "{mode}" (available: regex, llm)',
     'clean.regex_done': (

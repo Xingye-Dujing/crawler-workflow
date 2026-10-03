@@ -2429,7 +2429,7 @@ function renderParamCheckbox(nodeId, p, key, labelKey, defVal) {
 }
 
 /* ── Analysis node settings ── */
-var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'topic_model', 'sentiment_evolution'];
+var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'sentiment_evolution'];
 var FILTER_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains', 'not_contains', 'in', 'not_in', 'is_null', 'not_null'];
 var CONVERT_TYPES = ['str', 'int', 'float', 'bool', 'datetime'];
 
@@ -2501,6 +2501,16 @@ function renderAnalysisSettings(nodeId, p) {
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.phaseHint') + '</div></div>';
     }
+    if (op === 'suggest_stages') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'stages_min_days', 'settings.stagesMinDays', 'number', 3);
+        html += renderParamInput(nodeId, p, 'stages_max_windows', 'settings.stagesMaxWindows', 'number', 6);
+        html += renderParamInput(nodeId, p, 'stages_peak_ratio', 'settings.stagesPeakRatio', 'number', 2);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.stagesHint') + '</div></div>';
+    }
     if (op === 'topic_model') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
@@ -2511,6 +2521,33 @@ function renderAnalysisSettings(nodeId, p) {
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.topicHint') + '</div></div>';
     }
+    if (op === 'topic_by_stage') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
+        html += renderParamInput(nodeId, p, 'stage_col', 'settings.stageColumn', 'text', '阶段');
+        html += renderParamInput(nodeId, p, 'stage_order_col', 'settings.stageOrderColumn', 'text', '');
+        html += renderParamInput(nodeId, p, 'stage_topic_counts', 'settings.stageTopicCounts', 'text', '5,6,4,4,4');
+        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTopn', 'number', 10);
+        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
+        html += renderParamInput(nodeId, p, 'topic_sample_n', 'settings.topicSampleN', 'number', 5);
+        html += renderParamSelect(nodeId, p, 'word_source', 'settings.topicWordSource', 'tfidf',
+            [{ v: 'tfidf', l: I18n.t('settings.topicWordSourceTfidf') },
+             { v: 'lda', l: I18n.t('settings.topicWordSourceLda') }]);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.topicStageHint') + '</div></div>';
+    }
+    if (op === 'topic_label') {
+        html += renderParamInput(nodeId, p, 'label_words_col', 'settings.labelWordsColumn', 'text', 'feature_words');
+        html += renderParamInput(nodeId, p, 'label_samples_col', 'settings.labelSamplesColumn', 'text', 'sample_texts');
+        html += renderParamInput(nodeId, p, 'label_summary_col', 'settings.labelSummaryColumn', 'text', '主题概括');
+        html += renderParamSelect(nodeId, p, 'label_on_fail', 'settings.labelOnFail', 'abort',
+            [{ v: 'abort', l: I18n.t('settings.labelOnFailAbort') },
+             { v: 'blank', l: I18n.t('settings.labelOnFailBlank') }]);
+        html += renderParamInput(nodeId, p, 'label_max_topics', 'settings.labelMaxTopics', 'number', 30);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.topicLabelHint') + '</div></div>';
+    }
     if (op === 'sentiment_evolution') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
@@ -2520,6 +2557,7 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'label_positive', 'settings.labelPositive', 'text', 'positive');
         html += renderParamInput(nodeId, p, 'label_neutral', 'settings.labelNeutral', 'text', 'neutral');
         html += renderParamInput(nodeId, p, 'label_negative', 'settings.labelNegative', 'text', 'negative');
+        html += renderParamInput(nodeId, p, 'score_col', 'settings.scoreColumn', 'text', 'score');
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.evolutionHint') + '</div></div>';
     }
@@ -2615,7 +2653,7 @@ function renderAnalysisSettings(nodeId, p) {
 }
 
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'wordcloud', 'map'];
+var CHART_TYPES = ['bar', 'line', 'dual_line', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'wordcloud', 'map'];
 
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
@@ -2633,6 +2671,11 @@ var CHART_Y_LABEL_KEY = { heatmap: 'settings.yFieldCat2', sankey: 'settings.targ
 var CHARTS_WITH_Y_AS_CATEGORY = ['heatmap', 'sankey'];
 var CHARTS_WITH_VALUE_FIELD = ['heatmap', 'sankey', 'wordcloud', 'map'];
 var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map'].concat(CHARTS_WITH_Y_AS_CATEGORY);
+// The right-hand scale, which only 双轴折线 asks for. Kept equal to the backend's
+// ECHARTS_ONLY_TYPES by tests/unit/test_visualization.py, because the renderer that cannot
+// draw two axes refuses by name and the panel must not offer it silently.
+var CHARTS_WITH_Y2 = ['dual_line'];
+var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line'];
 
 function renderVisualizeSettings(nodeId, p) {
     var upstream = canvas.getUpstreamNodeId(nodeId);
@@ -2704,7 +2747,7 @@ function renderVisualizeSettings(nodeId, p) {
         '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'engine\',this.value)">' +
         selectOptionTags(ENGINES, p.engine, 'echarts') +
         '</select></div>';
-    if (p.engine === 'matplotlib' && ['heatmap'].indexOf(ct) < 0 && ['wordcloud', 'sankey', 'map'].indexOf(ct) >= 0) {
+    if (p.engine === 'matplotlib' && ECHARTS_ONLY_CHARTS.indexOf(ct) >= 0) {
         html += '<div class="settings-group" style="color:#e67e22;font-size:11px;">' + I18n.t('warn.echartsOnly') + '</div>';
     }
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t(CHART_X_LABEL_KEY[ct] || 'settings.xField') + '</label>' +
@@ -2731,6 +2774,16 @@ function renderVisualizeSettings(nodeId, p) {
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'agg\',this.value)">' +
             ['sum', 'mean', 'count', 'max', 'min'].map(function (a) { return '<option value="' + a + '"' + (p.agg === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') +
             '</select></div>';
+    }
+    if (CHARTS_WITH_Y2.indexOf(ct) >= 0) {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.y2Field') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.y2_field || '') + '" placeholder="right-axis value column" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'y2_field\',this.value)"></div>' +
+            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agg2') + '</label>' +
+            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'agg2\',this.value)">' +
+            ['sum', 'mean', 'count', 'max', 'min'].map(function (a) { return '<option value="' + a + '"' + (p.agg2 === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') +
+            '</select></div>' +
+            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.dualLine') + '</div>';
     }
     if (ct === 'wordcloud') {
         html += '<div class="settings-group"><label class="settings-checkbox-label">' +
