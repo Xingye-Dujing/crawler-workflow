@@ -21,13 +21,24 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
 
 - Run: `cd backend && python app.py` → http://localhost:5000 (port via `PORT`). **Must run from `backend/`** — it
   is the `sys.path` root, so imports are top-level (`from config import Config`); never add a `backend.` prefix.
-- Lint: `ruff check backend/` (fast gate) then `pylint <module>` (deeper); format `ruff format backend/`.
+- Lint: `ruff check backend/ tests/` (fast gate, same scope as CI) then `pylint <module>` (deeper); format
+  `ruff format backend/ tests/`.
 - Deps: *every package imported directly by code* is installed into `.venv/` **and** declared in
   `requirements.txt` in the same change — even when it also arrives transitively. A new tool's caches go into
-  `.gitignore` in the same change that adds the tool.
+  `.gitignore` in the same change that adds the tool. The torch/transformers that `sentiment`'s `bert` mode
+  probes for go to `requirements-optional.txt` instead — they are never installed for CI, and code that needs
+  them may only refuse by name, never fall back to another model.
+- **CI** (`.github/workflows/ci.yml`, windows-latest): fast tier + `ruff check`/`ruff format --check` over
+  `backend/ tests/`. The local PostToolUse `ruff format` **silently fails on a restricted workspace** — measured
+  `os error 5`, because ruff writes through a temp file and a rename; the edit then stays unformatted while the
+  hook looks fine. If formatting seems not to happen, run `ruff format` by hand before committing; CI is the gate
+  that cannot be skipped.
 - `backend/test_*.py` are manual probe scripts, NOT pytest — the accepted place for a one-off measurement.
+- **`ml_train/`** (gitignored) holds `train_and_eval.py` and the CSVs that produce the sklearn models the
+  `emotion`/`tendency`/`sentiment` analyzers load: changing those analyzers' features or labels means a retrain
+  there, which nothing in `backend/` points at.
 - **Test tiers** (`pytest.ini` excludes the real tiers by default; pinned by `tests/unit/test_test_tiers.py`):
-  - Fast (~4.3k cases, ~2 min, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
+  - Fast (~5.2k cases, ~2 min, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
   - Device (real Chrome on `file://` fixtures + real Ollama; LLM boundary mocks run by default):
     `... -m "integration or live_ollama"`. **An unavailable browser or daemon SKIPS, which makes a whole tier
     look green without running** (measured: a chromedriver that starts and crashes left all 99 UI-layout cases
@@ -207,7 +218,8 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   `test_i18n.py::TestCallSitePlaceholders` walks every `t('literal', …)` in `backend/` with `ast` and refuses the
   mismatch.
 - **A `{platform}` slot is answered with a word, not the key.** `zhihu` keys the matrix and the cookie file; `i18n`
-  localizes it, splitting on `,`/`、` only; `TestPlatformLabelParity` keeps the two lists equal.
+  localizes it, splitting on `,`/`、` only; `test_frontend_contract.py` (`TestChromeOfThePageItself`) keeps the two
+  lists equal.
 - Console/validation messages reference nodes through `engine.workflow.node_label(node, nid)` (→ `title #nid`), never
   a bare `nid`, so a renamed node speaks with the user's name. Store keys, the results dict and resume plumbing still
   use the raw `nid`. The frontend keeps `node.title` in `getState` / `toWorkflowJSON`, and BOTH restore paths re-apply

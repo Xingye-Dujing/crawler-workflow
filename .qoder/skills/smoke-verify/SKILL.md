@@ -11,7 +11,7 @@ Verify recent changes to the crawler_workflow backend. Run steps in order; stop 
 .venv/Scripts/python.exe -m pytest -q
 ```
 
-All tests must pass (~860 cases, under a minute). If the change touched crawling, LLM transports,
+All tests must pass (~5.2k cases, a couple of minutes). If the change touched crawling, LLM transports,
 or checkpoint/resume, also run the device tier:
 `.venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"` (real Chrome + real Ollama).
 
