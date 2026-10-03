@@ -193,11 +193,12 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   ORDERED categorical (`pd.cut`), but every node boundary rebuilds the table with
   `pd.DataFrame(current_input)` (app.py), which leaves plain strings whose code-point order puts
   二次爆发期 before 发酵期. Anything that groups BY phase — 分阶段 LDA, the `TopicⅠ-1 … TopicⅤ-4`
-  numbering, 主题生命周期, 主题流向 — takes the order from the categorical while it still has one,
-  otherwise from a column the user names (a NUMBER like the `stage_order` 分阶段 LDA writes, or a
-  TIME), and otherwise REFUSES. Sorting the names is how a replicated 表 1 gets renumbered while
-  still looking complete. So a step that emits a phase table must also emit its position: that
-  column is the only thing that survives the boundary.
+  numbering, 主题生命周期, 主题流向, 表 2 的情感演化曲线, 分组聚合 — takes the order from the categorical
+  while it still has one, otherwise from a column the user names (a NUMBER like the `stage_order`
+  分阶段 LDA writes or the `阶段序号` 划分阶段 writes, or a TIME), and otherwise REFUSES. Sorting the
+  names is how a replicated 表 1 gets renumbered while still looking complete. So a step that emits
+  a phase table must also emit its position: that column is the only thing that survives the
+  boundary.
 - **An unused LDA topic is the model's answer, not the user's mistake.** An argmax can leave a
   topic with zero documents; the stage's other topics are still real output, so `topic_by_stage`
   fills that row from the topic's own word distribution, files `doc_n = 0`, and logs one named

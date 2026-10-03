@@ -367,7 +367,9 @@ _ZH = {
     ),
     'analysis.stage_order_col': '「{op}」的「阶段排序列」在表里不存在：{col}',
     'analysis.stage_order_unparsed': '「{col}」里排不出这些阶段的先后（没有任何可解析的时间）：{stages}',
-    'analysis.stage_order_unranked': '「{col}」里没有这些阶段的序号（分阶段 LDA 写的 stage_order 是数字）：{stages}',
+    'analysis.stage_order_unranked': (
+        '「{col}」里没有这些阶段的序号（要的是数字：划分阶段 的阶段序号，或 分阶段 LDA 的 stage_order）：{stages}'
+    ),
     'analysis.topic_stage_number': '每阶段主题数只能是整数，收到「{value}」',
     'analysis.topic_stage_counts': (
         '每阶段主题数要与阶段一一对应：{stages} 个阶段，收到 {counts}（只填一个数字表示各阶段同数）'

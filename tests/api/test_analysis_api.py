@@ -714,8 +714,19 @@ NORMALIZED = {
         {'column': '城市', 'new_col': '天', 'part': 'date'},
     ),
     'bin_time': (
-        {'column': '城市', 'phase_edges': '2024-05-01, 2024-05-08', 'phase_labels': '前'},
-        {'column': '城市', 'new_col': '阶段', 'edges': ['2024-05-01', '2024-05-08'], 'labels': ['前']},
+        {
+            'column': '城市',
+            'phase_edges': '2024-05-01, 2024-05-08',
+            'phase_labels': '前',
+            'phase_order_col': '阶段序号',
+        },
+        {
+            'column': '城市',
+            'new_col': '阶段',
+            'edges': ['2024-05-01', '2024-05-08'],
+            'labels': ['前'],
+            'order_new_col': '阶段序号',
+        },
     ),
     'topic_model': (
         {'column': '城市', 'n_topics': '3', 'topic_topn': '4', 'topic_max_features': '500'},
@@ -726,8 +737,20 @@ NORMALIZED = {
         {'column': '城市', 'min_days': 4, 'max_windows': 3, 'peak_ratio': 3.0},
     ),
     'sentiment_evolution': (
-        {'column': '城市', 'label_col': 'emotion', 'index_new_col': 'idx', 'score_col': 'score'},
-        {'column': '城市', 'label_col': 'emotion', 'new_col': 'idx', 'score_col': 'score'},
+        {
+            'column': '城市',
+            'label_col': 'emotion',
+            'index_new_col': 'idx',
+            'score_col': 'score',
+            'evolution_order_col': '阶段序号',
+        },
+        {
+            'column': '城市',
+            'label_col': 'emotion',
+            'new_col': 'idx',
+            'score_col': 'score',
+            'order_col': '阶段序号',
+        },
     ),
     'topic_map': (
         {'column': '城市', 'n_topics': '3', 'topic_topn': '4', 'topic_max_features': '500'},
@@ -882,8 +905,8 @@ NORMALIZED = {
     'sort_rows': ({'column': '序号', 'ascending': 'false'}, {'column': '序号', 'ascending': False}),
     'sample_rows': ({'n': '3', 'frac': '', 'seed': '7'}, {'n': 3, 'frac': None, 'seed': 7}),
     'groupby_agg': (
-        {'group_col': '城市', 'agg_col': '序号', 'agg_func': 'mean'},
-        {'group_col': '城市', 'agg_col': '序号', 'agg_func': 'mean'},
+        {'group_col': '城市', 'agg_col': '序号', 'agg_func': 'mean', 'group_order_col': '序号'},
+        {'group_col': '城市', 'agg_col': '序号', 'agg_func': 'mean', 'order_col': '序号'},
     ),
     'join_tables': (
         {'join_how': 'inner', 'left_on': '城市', 'right_on': '城市'},
@@ -1543,6 +1566,10 @@ PARSED_FIELDS = {
     'phase_new_col',
     'phase_edges',
     'phase_labels',
+    # Both are omitted when blank rather than defaulted, which makes them re-shaped fields.
+    'phase_order_col',
+    'evolution_order_col',
+    'group_order_col',
     'n_topics',
     'topic_topn',
     'topic_max_features',
@@ -2278,6 +2305,8 @@ PANEL_VALUE = {
     'group_col': 'a',
     'agg_col': 'b',
     'agg_func': 'mean',
+    # Omitted when blank, so the probe has to be a name to show the box is read at all.
+    'group_order_col': 'r',
     'join_how': 'inner',
     'left_on': 'a',
     'right_on': 'b',
@@ -2296,6 +2325,10 @@ PANEL_VALUE = {
     'phase_new_col': '期',
     'phase_edges': '2024-05-01, 2024-05-08',
     'phase_labels': '前, 后',
+    # Both order columns are read "blank = the feature is off", so the probe has to be a name:
+    # the only way to show the box reaches the operator at all.
+    'phase_order_col': '序号',
+    'evolution_order_col': '序号',
     'n_topics': '3',
     'topic_topn': '4',
     'topic_max_features': '500',

@@ -458,6 +458,31 @@ class TestReshaping:
         out = D.groupby_agg(frame, 'g', 'v', 'sum')
         assert dict(zip(out['g'], out['v'], strict=True)) == {'a': 4, 'b': 2}
 
+    def test_groupby_agg_orders_groups_by_name_when_no_order_column_is_given(self):
+        frame = pd.DataFrame({'阶段': ['二次爆发期', '发酵期', '爆发期'], '序': [4, 1, 2], 'v': [1, 2, 3]})
+        frame = pd.DataFrame(frame.to_dict('records'))
+        out = D.groupby_agg(frame, '阶段', 'v', 'sum')
+        assert out['阶段'].tolist()[0] == '二次爆发期', 'a name sort puts the fourth phase first'
+        assert list(out.columns) == ['阶段', 'v']
+
+    def test_naming_an_order_column_puts_the_groups_back_in_lifecycle_order(self):
+        frame = pd.DataFrame({'阶段': ['二次爆发期', '发酵期', '爆发期'], '序': [4, 1, 2], 'v': [1, 2, 3]})
+        frame = pd.DataFrame(frame.to_dict('records'))
+        out = D.groupby_agg(frame, '阶段', 'v', 'sum', order_col='序')
+        assert out['阶段'].tolist() == ['发酵期', '爆发期', '二次爆发期']
+        assert out['v'].tolist() == [2, 3, 1]
+        assert list(out.columns) == ['阶段', 'v'], 'the helper column is not left in the table'
+
+    def test_an_order_column_that_is_not_in_the_table_is_named(self):
+        frame = pd.DataFrame({'g': ['a'], 'v': [1]})
+        with pytest.raises(UnknownOperationError, match='没有这列'):
+            D.groupby_agg(frame, 'g', 'v', order_col='没有这列')
+
+    def test_a_group_with_no_rank_anywhere_is_refused_not_appended(self):
+        frame = pd.DataFrame({'阶段': ['发酵期', '爆发期', '衰退期'], '序': [1, 2, None], 'v': [1, 2, 3]})
+        with pytest.raises(UnknownOperationError, match='衰退期'):
+            D.groupby_agg(frame, '阶段', 'v', 'sum', order_col='序')
+
     def test_groupby_agg_with_a_missing_column_changes_nothing(self, df):
         assert D.groupby_agg(df, 'nope', '点赞') is df
         assert D.groupby_agg(df, '作者', 'nope') is df
@@ -1158,6 +1183,105 @@ class TestBinTime:
         frame = pd.DataFrame({'时间': ['2024-05-02']})
         with pytest.raises(UnknownOperationError):
             D.bin_time(frame, '时间', edges=['2024-05-08', '2024-05-01'], labels=['甲'])
+
+    def test_the_order_column_numbers_the_phases_in_lifecycle_order(self):
+        out = D.bin_time(
+            pd.DataFrame({'评论时间': ['2024-05-20 08:00', '2024-04-12 08:00', '2024-05-03 08:00']}),
+            '评论时间',
+            edges=self.EDGES,
+            labels=self.LABELS,
+            order_new_col='阶段序号',
+        )
+        assert out['阶段'].tolist() == ['二次爆发期', '发酵期', '爆发期']
+        # 4, 1, 2 — the number is what survives the node boundary that erases the categorical.
+        assert out['阶段序号'].tolist() == [4, 1, 2]
+
+    def test_a_row_in_no_phase_has_no_number_rather_than_a_zeroth_one(self):
+        out = D.bin_time(
+            pd.DataFrame({'评论时间': ['2024-04-12', '2020-01-01']}),
+            '评论时间',
+            edges=self.EDGES,
+            labels=self.LABELS,
+            order_new_col='阶段序号',
+        )
+        assert out['阶段序号'].tolist()[0] == 1
+        assert pd.isna(out['阶段序号'].iloc[1]), '0 would read as "the first phase", which is a lie'
+
+    def test_no_order_column_means_no_extra_column_and_the_old_behaviour(self):
+        out = D.bin_time(pd.DataFrame({'评论时间': ['2024-04-12']}), '评论时间', edges=self.EDGES, labels=self.LABELS)
+        assert list(out.columns) == ['评论时间', '阶段'], 'an untouched box adds nothing'
+        blank = D.bin_time(
+            pd.DataFrame({'评论时间': ['2024-04-12']}),
+            '评论时间',
+            edges=self.EDGES,
+            labels=self.LABELS,
+            order_new_col='   ',
+        )
+        assert list(blank.columns) == list(out.columns)
+
+
+class TestSentimentEvolutionOrdering:
+    """表 2 is read top-to-bottom as a lifecycle, so its ROW ORDER is a finding."""
+
+    LABELS = ['发酵期', '爆发期', '波动期', '二次爆发期', '衰退期']
+
+    @classmethod
+    def _phases(cls) -> pd.DataFrame:
+        """The shape a node boundary hands over: the phase column is plain strings."""
+        rows = []
+        for position, name in enumerate(cls.LABELS, start=1):
+            for index in range(6):
+                rows.append(
+                    {
+                        '阶段': name,
+                        '阶段序号': position,
+                        'sentiment': ['positive', 'neutral', 'negative'][index % 3],
+                        'score': [0.9, 0.5, 0.1][index % 3],
+                    }
+                )
+        return pd.DataFrame(list(pd.DataFrame(rows).to_dict('records')))
+
+    def test_grouping_by_a_phase_name_without_an_order_column_sorts_the_lifecycle_wrong(self):
+        # Pinned as a fact, not a wish: 二次爆发期 starts with U+4E8C, which is below 发 (U+53D1),
+        # so a name sort puts the fourth phase first and the export still looks complete.
+        out = D.sentiment_evolution(self._phases(), '阶段', label_col='sentiment')
+        assert out['period'].tolist()[0] == '二次爆发期'
+
+    def test_naming_the_order_column_puts_the_periods_back_in_lifecycle_order(self):
+        out = D.sentiment_evolution(self._phases(), '阶段', label_col='sentiment', order_col='阶段序号')
+        assert out['period'].tolist() == self.LABELS
+
+    def test_the_order_column_also_carries_the_numbers_that_make_a_chart_honour_it(self):
+        out = D.sentiment_evolution(self._phases(), '阶段', label_col='sentiment', order_col='阶段序号')
+        assert set(out.columns) >= {'period', 'total', 'volume_pct', 'sentiment_index'}
+        assert '阶段序号' not in out.columns, 'the helper column is not left in the table'
+
+    def test_a_time_column_orders_the_periods_the_same_way(self):
+        frame = self._phases()
+        frame['首日'] = pd.to_datetime([f'2022-01-{9 + position:02d}' for position in frame['阶段序号']])
+        out = D.sentiment_evolution(frame, '阶段', label_col='sentiment', order_col='首日')
+        assert out['period'].tolist() == self.LABELS
+
+    def test_a_phase_with_no_rank_anywhere_is_refused_not_appended(self):
+        frame = self._phases()
+        frame.loc[frame['阶段'] == '衰退期', '阶段序号'] = None
+        with pytest.raises(UnknownOperationError) as err:
+            D.sentiment_evolution(frame, '阶段', label_col='sentiment', order_col='阶段序号')
+        assert '衰退期' in str(err.value)
+
+    def test_an_order_column_that_is_not_in_the_table_is_named(self):
+        with pytest.raises(UnknownOperationError, match='没有这列'):
+            D.sentiment_evolution(self._phases(), '阶段', label_col='sentiment', order_col='没有这列')
+
+    def test_days_need_no_order_column_because_the_name_already_sorts_in_time(self):
+        frame = pd.DataFrame(
+            {
+                '日期': ['2022-01-16', '2022-01-17', '2022-01-16', '2022-01-17'],
+                'sentiment': ['positive', 'negative', 'neutral', 'negative'],
+            }
+        )
+        out = D.sentiment_evolution(frame, '日期', label_col='sentiment')
+        assert out['period'].tolist() == ['2022-01-16', '2022-01-17']
 
 
 class TestSuggestStages:

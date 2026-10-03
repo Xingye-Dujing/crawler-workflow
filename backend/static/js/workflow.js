@@ -2511,6 +2511,7 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'phase_new_col', 'settings.newColumn', 'text', '阶段');
         html += renderParamInput(nodeId, p, 'phase_edges', 'settings.phaseEdges', 'text', '');
         html += renderParamInput(nodeId, p, 'phase_labels', 'settings.phaseLabels', 'text', '');
+        html += renderParamInput(nodeId, p, 'phase_order_col', 'settings.phaseOrderColumn', 'text', '阶段序号');
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.phaseHint') + '</div></div>';
     }
@@ -2664,6 +2665,7 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'label_neutral', 'settings.labelNeutral', 'text', 'neutral');
         html += renderParamInput(nodeId, p, 'label_negative', 'settings.labelNegative', 'text', 'negative');
         html += renderParamInput(nodeId, p, 'score_col', 'settings.scoreColumn', 'text', 'score');
+        html += renderParamInput(nodeId, p, 'evolution_order_col', 'settings.evolutionOrderColumn', 'text', '');
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.evolutionHint') + '</div></div>';
     }
@@ -2731,6 +2733,7 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'agg_col', 'settings.aggCol', 'text', '');
         html += renderParamSelect(nodeId, p, 'agg_func', 'settings.aggFunc', 'sum',
             [{ v: 'sum', l: 'Sum' }, { v: 'mean', l: 'Mean' }, { v: 'count', l: 'Count' }, { v: 'max', l: 'Max' }, { v: 'min', l: 'Min' }]);
+        html += renderParamInput(nodeId, p, 'group_order_col', 'settings.groupOrderColumn', 'text', '');
     }
     if (op === 'join_tables') {
         /* The right table is the node's second incoming connection — the old

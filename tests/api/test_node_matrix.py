@@ -795,6 +795,52 @@ class TestAnalysisNodeOperations:
         assert all(row['threshold'] == 0.2 for row in rows)
         assert all(row['reason'] for row in rows), 'every fired row states what it checked'
 
+    #: Four phases whose Chinese names sort by code point into the WRONG lifecycle order —
+    #: the shape that makes 表 2 read the case backwards if nothing carries the order across
+    #: the node boundary. 二次爆发期 (U+4E8C…) sorts before 发酵期 (U+53D1…).
+    PHASE_RECORDS = [
+        {'评论内容': '甲', '发布时间': '2022-01-20 10:00', 'sentiment': 'negative', 'score': 0.1},
+        {'评论内容': '乙', '发布时间': '2022-01-30 10:00', 'sentiment': 'negative', 'score': 0.2},
+        {'评论内容': '丙', '发布时间': '2022-02-20 10:00', 'sentiment': 'positive', 'score': 0.9},
+        {'评论内容': '丁', '发布时间': '2022-03-27 10:00', 'sentiment': 'positive', 'score': 0.8},
+    ]
+
+    def test_the_phase_order_survives_the_node_boundary_that_erased_the_categorical(self, client, app_module, paste):
+        """划分阶段 → 情感演化曲线, driven as nodes, which is where the order is actually lost."""
+        ds = paste(self.PHASE_RECORDS, name='phases.csv')
+        steps = [
+            {'op': 'extract_time', 'params': {'column': '发布时间', 'new_col': '日期', 'part': 'date'}},
+            {
+                'op': 'bin_time',
+                'params': {
+                    'column': '发布时间',
+                    'new_col': '阶段',
+                    'edges': ['2022-01-16', '2022-01-25', '2022-02-14', '2022-03-25', '2022-04-03'],
+                    'labels': ['发酵期', '爆发期', '二次爆发期', '衰退期'],
+                    'order_new_col': '阶段序号',
+                },
+            },
+            {
+                'op': 'sentiment_evolution',
+                'params': {'column': '阶段', 'label_col': 'sentiment', 'score_col': 'score', 'order_col': '阶段序号'},
+            },
+        ]
+        chain = [
+            _node('node-1', 'upload', {'dataset_id': ds, 'row_count': len(self.PHASE_RECORDS)}),
+            _node('node-target', 'analysis', {'steps': steps}),
+        ]
+        started = client.post(
+            '/api/workflow/execute',
+            json={'workflow': _wf(chain, [{'from': 'node-1', 'to': 'node-target'}]), 'workflow_name': 'matrix'},
+        )
+        assert started.status_code == 200, started.get_json()
+        assert _wait(app_module), 'the run never finished'
+        rows = app_module._RUN_STORE.load_rows(started.get_json()['run_id'], 'node-target')
+        assert [row['period'] for row in rows] == ['发酵期', '爆发期', '二次爆发期', '衰退期'], (
+            'a name sort puts 二次爆发期 second; only the numbered column keeps the lifecycle straight'
+        )
+        assert '阶段序号' not in rows[0], 'the helper column is not left in the exported table'
+
     def test_a_step_pipeline_runs_in_order(self, client, app_module, paste):
         ds = paste(CLEAN_RECORDS, name='matrix.csv')
         ds = paste(CLEAN_RECORDS, name='matrix.csv')

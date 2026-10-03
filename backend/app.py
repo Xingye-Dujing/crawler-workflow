@@ -3357,11 +3357,17 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             result['seed'] = seed
         return result
     if op == 'groupby_agg':
-        return {
+        result = {
             'group_col': params.get('group_col', ''),
             'agg_col': params.get('agg_col', ''),
             'agg_func': params.get('agg_func', 'sum'),
         }
+        # Read like ``score_col``: a blank box means "sort the groups by their own name", the
+        # behaviour every saved pipeline already relies on, so the key is not sent.
+        order_column = str(params.get('group_order_col') or '').strip()
+        if order_column:
+            result['order_col'] = order_column
+        return result
     if op == 'join_tables':
         return {
             'how': params.get('join_how', 'left'),
@@ -3405,12 +3411,19 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         # The boundaries and the names are two parallel lists, so both are parsed here and
         # their lengths are checked by the step itself — that check is a refusal with a
         # reason, which is where a mismatched pair belongs.
-        return {
+        result = {
             'column': params.get('column', ''),
             'new_col': params.get('phase_new_col') or '阶段',
             'edges': _split_columns(params.get('phase_edges')),
             'labels': _split_columns(params.get('phase_labels')),
         }
+        # Like ``score_col``: a blank box means "no order column", which is the step's own
+        # default. The number is what lets 各阶段 tables and charts keep the lifecycle order
+        # across the node boundary that erases the categorical.
+        order_column = str(params.get('phase_order_col') or '').strip()
+        if order_column:
+            result['order_new_col'] = order_column
+        return result
     if op == 'suggest_stages':
         # Every number here has a declared default in the step, so a blank or a junk box is
         # left to that default instead of reaching the curve as 0 or as a float('inf').
@@ -3617,6 +3630,12 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         score_column = str(params.get('score_col') or '').strip()
         if score_column:
             result['score_col'] = score_column
+        # Read like ``score_col``: blank means "sort the periods by their own name", which is
+        # right for days and wrong for Chinese phase labels once the categorical is gone —
+        # the number 划分阶段's 阶段序号 writes is what restores the lifecycle order.
+        order_column = str(params.get('evolution_order_col') or '').strip()
+        if order_column:
+            result['order_col'] = order_column
         if str(params.get('index_new_col') or '').strip():
             result['new_col'] = str(params['index_new_col']).strip()
         return result

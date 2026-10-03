@@ -1009,16 +1009,45 @@ class DataAnalysisService:
         return df.sample(frac=frac, random_state=state).reset_index(drop=True)
 
     @staticmethod
-    def groupby_agg(df: pd.DataFrame, group_col: str, agg_col: str, agg_func: str = 'sum') -> pd.DataFrame:
+    def groupby_agg(
+        df: pd.DataFrame, group_col: str, agg_col: str, agg_func: str = 'sum', order_col: str = ''
+    ) -> pd.DataFrame:
+        """One row per group with the aggregate beside it.
+
+        ``order_col`` says which column decides the result's ROW ORDER. Left blank, groups come
+        back sorted by their own name — right for 'YYYY-MM-DD' days, wrong for Chinese phase
+        labels, where 二次爆发期 sorts before 发酵期 by code point and a 各阶段 table then reads
+        the lifecycle backwards while looking complete. The number 划分阶段's 阶段序号 writes is
+        what fixes it, and it is dropped afterwards: a helper column left in the export would be
+        a second opinion about the same group.
+        """
         if group_col not in df.columns or agg_col not in df.columns:
             return df
+        if order_col and order_col not in df.columns:
+            raise UnknownOperationError(t('analysis.step_col_missing', op='groupby_agg', col=order_col))
         try:
-            result = df.groupby(group_col, as_index=False)[agg_col].agg(agg_func)
+            agg_map = {agg_col: (agg_col, agg_func)}
+            if order_col:
+                agg_map['_group_rank'] = (order_col, 'min')
+            grouped = df.groupby(group_col, dropna=True).agg(**agg_map).reset_index()
+            if order_col:
+                ranks = pd.to_numeric(grouped['_group_rank'], errors='coerce')
+                adrift = [str(name) for name, rank in zip(grouped[group_col], ranks, strict=True) if pd.isna(rank)]
+                if adrift:
+                    # A group whose every row lacks a rank has no position; appending it at the
+                    # end would invent one.
+                    raise UnknownOperationError(
+                        t('analysis.stage_order_unranked', op='groupby_agg', col=order_col, stages='、'.join(adrift))
+                    )
+                grouped = grouped.assign(_group_rank=ranks).sort_values('_group_rank', kind='stable')
+                grouped = grouped.drop(columns=['_group_rank'])
+            else:
+                grouped = grouped.sort_values(group_col, kind='stable')
         except (TypeError, ValueError) as e:
             # e.g. sum() over a text column: report the operation instead of a
             # raw pandas error deeper in the pipeline.
             raise UnknownOperationError(f'groupby_agg({agg_func}) failed on "{agg_col}": {e}') from e
-        return result
+        return grouped.reset_index(drop=True)
 
     @staticmethod
     def join_tables(
@@ -1132,7 +1161,12 @@ class DataAnalysisService:
 
     @staticmethod
     def bin_time(
-        df: pd.DataFrame, column: str, edges: list = None, labels: list = None, new_col: str = '阶段'
+        df: pd.DataFrame,
+        column: str,
+        edges: list = None,
+        labels: list = None,
+        new_col: str = '阶段',
+        order_new_col: str = '',
     ) -> pd.DataFrame:
         """Cut a timestamp column into named windows — the event's lifecycle phases.
 
@@ -1145,6 +1179,14 @@ class DataAnalysisService:
         Which is why the comparison runs on the calendar DAY: a row stamped 23:59 on the
         day before a boundary belongs to the earlier phase, not to the next one by two
         minutes.
+
+        ``order_new_col`` adds the phase's POSITION as a number (first phase = 1). The label
+        column alone cannot survive the node boundary — ``pd.DataFrame(records)`` turns the
+        ordered categorical into plain strings, and the code-point order of Chinese phase
+        names puts 二次爆发期 first, so every 各阶段 chart and table would read the lifecycle
+        backwards. A number is the only spelling of the order that survives the round trip;
+        分阶段 LDA writes its own ``stage_order`` for the same reason. Left blank, no column is
+        added and this step behaves exactly as it always did.
         """
         if column not in df.columns:
             return df
@@ -1166,6 +1208,19 @@ class DataAnalysisService:
         stamps = _to_datetime(work[column])
         unparsed = int(stamps.isna().sum())
         work[new_col] = pd.cut(stamps.dt.normalize(), bins=parsed, labels=names, right=False)
+        if order_new_col and str(order_new_col).strip():
+            order_name = str(order_new_col).strip()
+            # The numeric position survives what the label cannot: pandas gives an unbinned row
+            # no category at all, so a missing phase stays missing here instead of being ranked.
+            positions = {name: number + 1 for number, name in enumerate(names)}
+            work[order_name] = pd.Series(
+                [
+                    positions.get(str(value).strip()) if str(value).strip() in positions else None
+                    for value in work[new_col].tolist()
+                ],
+                index=work.index,
+                dtype='object',
+            )
         if unparsed:
             logger.warning(t('analysis.time_unparsed', col=column, n=unparsed))
         counts = work[new_col].value_counts()
@@ -2259,6 +2314,7 @@ class DataAnalysisService:
         negative: str = 'negative',
         new_col: str = 'sentiment_index',
         score_col: str = '',
+        order_col: str = '',
     ) -> pd.DataFrame:
         """Per-period sentiment shares and one signed intensity — the evolution curve.
 
@@ -2289,6 +2345,13 @@ class DataAnalysisService:
         exactly the 二次爆发期 the paper says was COLDER in volume and HOTTER in intensity.
         A period with no scored rows gets ``None``, never 0.5: a half-way value would read
         as "measured and found neutral".
+
+        ``order_col`` is how a 阶段 grouping keeps its lifecycle order. The rows come back
+        sorted by PERIOD NAME, which is right for 'YYYY-MM-DD' days and wrong for Chinese
+        phase labels: 二次爆发期 sorts before 发酵期 by code point, so 表 2 and 图 3 would
+        present the case out of sequence while looking complete. The user names a column to
+        order by — the NUMBER 按时间划分阶段's 序号列 writes, or a time — and a group whose
+        rows hold none of it is refused by name rather than appended at the end.
         """
         if column not in df.columns or label_col not in df.columns:
             return df
@@ -2316,6 +2379,17 @@ class DataAnalysisService:
             # ``mean`` skips NaN, so an unscored row neither lifts nor drags the intensity —
             # it is simply absent from it, and ``score_n`` says how many rows were.
             agg_map['intensity'] = ('_deviation', 'mean')
+        if order_col:
+            if order_col not in df.columns:
+                raise UnknownOperationError(t('analysis.step_col_missing', op='sentiment_evolution', col=order_col))
+            # Numeric first (a 序号 column), then time (a 日期 column): the two ways this
+            # project's own steps say "which phase came first".
+            ranks = pd.to_numeric(work[order_col], errors='coerce')
+            if not ranks.notna().any():
+                ranks = _to_datetime(work[order_col]).astype('int64') / 1e9
+                ranks = ranks.where(ranks.notna() & (ranks > 0) & (ranks < 2**62))
+            work['_rank'] = ranks
+            agg_map['_rank'] = ('_rank', 'min')
         grouped = work.groupby(column, dropna=True).agg(**agg_map)
         grouped = grouped.reset_index()
         grouped['other_n'] = grouped['total'] - grouped['positive_n'] - grouped['neutral_n'] - grouped['negative_n']
@@ -2347,8 +2421,27 @@ class DataAnalysisService:
             )
         # Ascending by the period so a line chart draws left-to-right in time without the
         # user having to add a sort step — and 'YYYY-MM-DD' sorts chronologically as text,
-        # which is why extract_time answers with text.
-        grouped = grouped.sort_values(column, kind='stable').reset_index(drop=True)
+        # which is why extract_time answers with text. With ``order_col`` the lifecycle order
+        # comes from that column instead, because a phase NAME does not sort in time.
+        if order_col:
+            # ``grouped`` has already been reset_index()-ed above, so its index is 0..n-1 and
+            # naming a row from it would report "4" where the user needs the phase's name.
+            adrift = [str(name) for name, rank in zip(grouped[column], grouped['_rank'], strict=True) if pd.isna(rank)]
+            if adrift:
+                # A period with no rank has no position; putting it at the end would invent one.
+                raise UnknownOperationError(
+                    t(
+                        'analysis.stage_order_unranked',
+                        op='sentiment_evolution',
+                        col=order_col,
+                        stages='、'.join(adrift),
+                    )
+                )
+            grouped = grouped.sort_values('_rank', kind='stable')
+            grouped = grouped.drop(columns=['_rank'])
+        else:
+            grouped = grouped.sort_values(column, kind='stable')
+        grouped = grouped.reset_index(drop=True)
         grouped = grouped.rename(columns={column: 'period'})
         logger.info(
             t(
