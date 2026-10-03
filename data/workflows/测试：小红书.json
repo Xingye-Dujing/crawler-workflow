@@ -1,0 +1,139 @@
+{
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "source",
+      "title": "数据源",
+      "platform": "xiaohongshu",
+      "params": {
+        "keyword": "IU",
+        "target_count": 50,
+        "full_body": true,
+        "account": "",
+        "recrawl": true,
+        "part_size": 0,
+        "format": "csv",
+        "keep_parts": false,
+        "author": "",
+        "urls": "",
+        "input_column": "",
+        "comment_limit": 0,
+        "per_article_file": false,
+        "platform": "xiaohongshu",
+        "collect": "posts"
+      },
+      "x": 340,
+      "y": 0,
+      "folded": false
+    },
+    {
+      "id": "node-2",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：小红书帖子爬取",
+        "enabled": true
+      },
+      "x": 0,
+      "y": 17,
+      "folded": false
+    },
+    {
+      "id": "node-3",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "operation": "save",
+        "format": "csv",
+        "filename": "小红书帖子爬取.csv",
+        "filename_timestamp": true
+      },
+      "operation": "save",
+      "x": 680,
+      "y": 17,
+      "folded": false
+    },
+    {
+      "id": "node-4",
+      "type": "source",
+      "title": "数据源",
+      "platform": "xiaohongshu",
+      "params": {
+        "keyword": "",
+        "target_count": 50,
+        "full_body": true,
+        "account": "",
+        "recrawl": false,
+        "part_size": 0,
+        "format": "csv",
+        "keep_parts": false,
+        "author": "",
+        "urls": "https://www.xiaohongshu.com/explore/6a8cfd2a000000002202d93e?xsec_source=pc_feed",
+        "input_column": "",
+        "comment_limit": 0,
+        "per_article_file": false,
+        "platform": "xiaohongshu",
+        "collect": "comments"
+      },
+      "x": 340,
+      "y": 153,
+      "folded": false
+    },
+    {
+      "id": "node-5",
+      "type": "name",
+      "title": "工作流命名",
+      "params": {
+        "workflow_name": "测试：小红书评论爬取"
+      },
+      "x": 0,
+      "y": 170,
+      "folded": false
+    },
+    {
+      "id": "node-6",
+      "type": "output",
+      "title": "输出",
+      "params": {
+        "operation": "save",
+        "format": "csv",
+        "filename": "小红书评论爬取.csv",
+        "filename_timestamp": true
+      },
+      "operation": "save",
+      "x": 680,
+      "y": 170,
+      "folded": false
+    }
+  ],
+  "connections": [
+    {
+      "from": "node-2",
+      "to": "node-1"
+    },
+    {
+      "from": "node-1",
+      "to": "node-3"
+    },
+    {
+      "from": "node-5",
+      "to": "node-4"
+    },
+    {
+      "from": "node-4",
+      "to": "node-6"
+    }
+  ],
+  "settings": {
+    "mode": "serial",
+    "headless": false,
+    "max_workers": 4,
+    "disabledTypes": [],
+    "view": {
+      "panX": 403.5,
+      "panY": 357,
+      "zoom": 1
+    }
+  },
+  "name": "测试：小红书"
+}
