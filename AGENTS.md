@@ -199,6 +199,17 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   names is how a replicated 表 1 gets renumbered while still looking complete. So a step that emits
   a phase table must also emit its position: that column is the only thing that survives the
   boundary.
+- **A quoted row count is only true of the merge order that produced it.** 近重复去重（SimHash）keeps
+  whichever row of a group arrived first, so the same six files merged in canvas order give 3778/4366/
+  4993/4526/623 rows per phase and in filename order give 3620/4454/5032/4555/625 — and every 事件标注
+  volume with them. Any number written into a saved canvas, README or report has to be measured through
+  the canvas's OWN upstream order (walk `connections` into the merge node, don't glob the folder), and a
+  re-measurement that disagrees is a clue the order changed, not that the data did.
+- **A sampled coherence sweep is not a decision.** 主题数扫描 draws 2000 documents by default and the draw
+  follows the table's row order, so its argmax moved between merge orders (8,5,6,7,3 ↔ 2,7,3,4,2) while the
+  full-row sweep gave 2,6,4,4,3 with a 0.03–0.08 spread. Where a canvas quotes per-phase topic counts, the
+  scan node that justifies them must run `coherence_max_documents=0` (every row) — otherwise the tool and
+  the number it is supposed to defend are measuring two different samples.
 - **An unused LDA topic is the model's answer, not the user's mistake.** An argmax can leave a
   topic with zero documents; the stage's other topics are still real output, so `topic_by_stage`
   fills that row from the topic's own word distribution, files `doc_n = 0`, and logs one named
