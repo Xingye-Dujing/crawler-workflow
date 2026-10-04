@@ -205,11 +205,20 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   volume with them. Any number written into a saved canvas, README or report has to be measured through
   the canvas's OWN upstream order (walk `connections` into the merge node, don't glob the folder), and a
   re-measurement that disagrees is a clue the order changed, not that the data did.
-- **A sampled coherence sweep is not a decision.** 主题数扫描 draws 2000 documents by default and the draw
-  follows the table's row order, so its argmax moved between merge orders (8,5,6,7,3 ↔ 2,7,3,4,2) while the
-  full-row sweep gave 2,6,4,4,3 with a 0.03–0.08 spread. Where a canvas quotes per-phase topic counts, the
-  scan node that justifies them must run `coherence_max_documents=0` (every row) — otherwise the tool and
-  the number it is supposed to defend are measuring two different samples.
+- **A coherence sweep is not a decision, and only the canvas's own sweep may be quoted.** 主题数扫描 draws
+  2000 documents by default and the draw follows the table's row order, so its argmax moved between merge
+  orders (8,5,6,7,3 ↔ 2,7,3,4,2). Run per phase over every row it answers 5,6,2,6,2 — but 波动期's coherence
+  spans 0.227–0.337 across 2..8 and 发酵期's 5..8 sit within 0.004, so the argmax is noise with a number on it.
+  Two rules follow. (1) The scan node that justifies a canvas's `stage_topic_counts` must run
+  `coherence_max_documents=0` and must be fed by that canvas's own phase filters, or the tool and the number
+  it defends are measuring different tables. (2) Where the sweep is flat, say the rule out loud: this canvas
+  takes the highest coherence at **≥3 topics** (a 2-topic phase cannot show a lifecycle), and the node title
+  states that, because a floor the reader cannot see is a judgement dressed as a measurement.
+- **A score is a function of the column it was read from, so the column name belongs to the number.**
+  The same 18286 rows scored on `正文` give 0.211/0.200/0.217/0.228/0.238 per phase, and on
+  `cleaned_text` give 0.164/0.170/0.173/0.199/0.200 — same shape, ~0.04 apart, because a repost chain
+  carries the insult verbatim while the cleaner strips it. A quoted curve without its column cannot be
+  audited later: the reader cannot tell a wrong number from a different measurement.
 - **An unused LDA topic is the model's answer, not the user's mistake.** An argmax can leave a
   topic with zero documents; the stage's other topics are still real output, so `topic_by_stage`
   fills that row from the topic's own word distribution, files `doc_n = 0`, and logs one named

@@ -244,14 +244,14 @@
     {
       "id": "node-19",
       "type": "analysis",
-      "title": "分阶段 LDA（表1，主题数按实测一致性）",
+      "title": "分阶段 LDA（表1；主题数取本画布扫描里 ≥3 的一致性峰值）",
       "params": {
         "column": "cleaned_text",
         "enabled": true,
         "operation": "topic_by_stage",
         "stage_col": "阶段",
         "stage_order_col": "阶段序号",
-        "stage_topic_counts": "3,6,4,4,3",
+        "stage_topic_counts": "5,6,7,6,3",
         "topic_max_features": "2000",
         "topic_sample_n": "3",
         "topic_topn": "7",
@@ -898,7 +898,7 @@
     {
       "id": "node-62",
       "type": "analysis",
-      "title": "主题数扫描（2到8，每阶段全量不抽样）",
+      "title": "主题数扫描（2到8，全库不抽样）",
       "params": {
         "coherence_max_documents": "0",
         "coherence_max_topics": "8",
@@ -1756,6 +1756,171 @@
       "x": 4422,
       "y": 2828,
       "folded": false
+    },
+    {
+      "id": "node-114",
+      "type": "analysis",
+      "title": "发酵期 主题数扫描（全量）",
+      "params": {
+        "coherence_max_documents": "0",
+        "coherence_max_topics": "8",
+        "coherence_min_topics": "2",
+        "column": "cleaned_text",
+        "operation": "topic_coherence",
+        "topic_max_features": "2000",
+        "topic_topn": "10"
+      },
+      "operation": "topic_coherence",
+      "x": 3126,
+      "y": 4014,
+      "folded": false
+    },
+    {
+      "id": "node-115",
+      "type": "output",
+      "title": "导出 发酵期主题数扫描",
+      "params": {
+        "filename": "刘学州-发酵期主题数扫描.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3555,
+      "y": 4014,
+      "folded": false
+    },
+    {
+      "id": "node-116",
+      "type": "analysis",
+      "title": "爆发期 主题数扫描（全量）",
+      "params": {
+        "coherence_max_documents": "0",
+        "coherence_max_topics": "8",
+        "coherence_min_topics": "2",
+        "column": "cleaned_text",
+        "operation": "topic_coherence",
+        "topic_max_features": "2000",
+        "topic_topn": "10"
+      },
+      "operation": "topic_coherence",
+      "x": 3126,
+      "y": 4164,
+      "folded": false
+    },
+    {
+      "id": "node-117",
+      "type": "output",
+      "title": "导出 爆发期主题数扫描",
+      "params": {
+        "filename": "刘学州-爆发期主题数扫描.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3555,
+      "y": 4164,
+      "folded": false
+    },
+    {
+      "id": "node-118",
+      "type": "analysis",
+      "title": "波动期 主题数扫描（全量）",
+      "params": {
+        "coherence_max_documents": "0",
+        "coherence_max_topics": "8",
+        "coherence_min_topics": "2",
+        "column": "cleaned_text",
+        "operation": "topic_coherence",
+        "topic_max_features": "2000",
+        "topic_topn": "10"
+      },
+      "operation": "topic_coherence",
+      "x": 3126,
+      "y": 4314,
+      "folded": false
+    },
+    {
+      "id": "node-119",
+      "type": "output",
+      "title": "导出 波动期主题数扫描",
+      "params": {
+        "filename": "刘学州-波动期主题数扫描.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3555,
+      "y": 4314,
+      "folded": false
+    },
+    {
+      "id": "node-120",
+      "type": "analysis",
+      "title": "二次爆发期 主题数扫描（全量）",
+      "params": {
+        "coherence_max_documents": "0",
+        "coherence_max_topics": "8",
+        "coherence_min_topics": "2",
+        "column": "cleaned_text",
+        "operation": "topic_coherence",
+        "topic_max_features": "2000",
+        "topic_topn": "10"
+      },
+      "operation": "topic_coherence",
+      "x": 3126,
+      "y": 4464,
+      "folded": false
+    },
+    {
+      "id": "node-121",
+      "type": "output",
+      "title": "导出 二次爆发期主题数扫描",
+      "params": {
+        "filename": "刘学州-二次爆发期主题数扫描.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3555,
+      "y": 4464,
+      "folded": false
+    },
+    {
+      "id": "node-122",
+      "type": "analysis",
+      "title": "衰退期 主题数扫描（全量）",
+      "params": {
+        "coherence_max_documents": "0",
+        "coherence_max_topics": "8",
+        "coherence_min_topics": "2",
+        "column": "cleaned_text",
+        "operation": "topic_coherence",
+        "topic_max_features": "2000",
+        "topic_topn": "10"
+      },
+      "operation": "topic_coherence",
+      "x": 3126,
+      "y": 4614,
+      "folded": false
+    },
+    {
+      "id": "node-123",
+      "type": "output",
+      "title": "导出 衰退期主题数扫描",
+      "params": {
+        "filename": "刘学州-衰退期主题数扫描.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 3555,
+      "y": 4614,
+      "folded": false
     }
   ],
   "connections": [
@@ -2182,6 +2347,46 @@
     {
       "from": "node-111",
       "to": "node-113"
+    },
+    {
+      "from": "node-89",
+      "to": "node-114"
+    },
+    {
+      "from": "node-114",
+      "to": "node-115"
+    },
+    {
+      "from": "node-94",
+      "to": "node-116"
+    },
+    {
+      "from": "node-116",
+      "to": "node-117"
+    },
+    {
+      "from": "node-99",
+      "to": "node-118"
+    },
+    {
+      "from": "node-118",
+      "to": "node-119"
+    },
+    {
+      "from": "node-104",
+      "to": "node-120"
+    },
+    {
+      "from": "node-120",
+      "to": "node-121"
+    },
+    {
+      "from": "node-109",
+      "to": "node-122"
+    },
+    {
+      "from": "node-122",
+      "to": "node-123"
     }
   ],
   "settings": {
