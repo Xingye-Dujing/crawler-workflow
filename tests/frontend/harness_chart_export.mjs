@@ -182,11 +182,25 @@ async function previewRetargetCase() {
 }
 
 /* ── dashboard cells ───────────────────────────────────────────────────────── */
+function renders(w) {
+    return w.requests.filter((r) => r.url.indexOf('/api/visualize/render') >= 0);
+}
+
 async function dashboardCase(engine, rebuild) {
     const w = world(engine === 'matplotlib' ? RENDER_IMAGE : RENDER_ECHARTS);
-    addChart(w, 'v-1', '图15 主题流向', { chart_type: 'sankey', x_field: 'source', y_field: 'target', engine });
+    addChart(w, 'v-1', '图15 主题流向', {
+        chart_type: 'dual_line',
+        x_field: 'period',
+        y_field: 'total',
+        y2_field: 'intensity',
+        agg: 'sum',
+        agg2: 'mean',
+        annotations: '2022-01-24=本阶段峰3439条',
+        engine: 'echarts',
+    });
     w.x.dashboard.open();
     await ticks(6);
+    const asked = (renders(w)[0] || {}).body || {};
     if (rebuild) {
         /* Rebuilding the board twice: what has to stay true is that the cell's picture
            is the LIVE one and that the bookkeeping does not accumulate an instance per
@@ -217,6 +231,7 @@ async function dashboardCase(engine, rebuild) {
     return {
         instances: Object.keys(w.x.dashboard._instances).length,
         images: Object.keys(w.x.dashboard._images).length,
+        render: asked,
         name: post && post.body ? post.body.name : null,
         image: post && post.body ? String(post.body.image) : null,
         filename,

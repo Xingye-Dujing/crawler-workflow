@@ -127,6 +127,20 @@ class TestDashboardSave:
         assert case['images'] == 1 and case['instances'] == 0
         assert case['image'] == 'data:image/png;base64,MATPLOTLIBPICTURE'
 
+    def test_a_cell_asks_the_server_with_the_fields_its_panel_set(self, saved):
+        """The board's cells failed with "requires a second value field (y2)".
+
+        `_renderCell` built its own payload and left three of the node's settings out, so every
+        双轴折线 cell was refused and every cell drew without its event lines. The cell has to ask
+        with the same fields the panel previews with, or the board is a broken copy of the node.
+        """
+        render = saved['dashboard_echarts']['render']
+        assert render['chart_type'] == 'dual_line'
+        assert render['y2_field'] == 'intensity', 'the right axis is what the refusal was about'
+        assert render['agg2'] == 'mean'
+        assert render['annotations'] == '2022-01-24=本阶段峰3439条', 'a board without event lines is a different figure'
+        assert render['node_id'] == 'src-1', 'the rows come from the upstream node of the chart'
+
     def test_rebuilding_the_board_twice_keeps_one_live_cell_and_saves_that_one(self, saved):
         """A refresh replaces the grid; the bookkeeping must follow it, not accumulate.
 

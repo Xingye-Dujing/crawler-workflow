@@ -53,7 +53,12 @@ USABLE = {
 }
 
 # Group keys sort by code point, which is why 丙 precedes 乙 precedes 甲 here.
-LABELS = ['丙', '乙', '甲']
+#: The category axis keeps the TABLE's order — first appearance, not code-point order. This
+#: constant used to read ['丙', '乙', '甲'], which was the fixture's rows re-sorted by
+#: `_aggregate`'s `sort_index()`. That is the bug 图 3 showed: a phase table arrives sorted by
+#: 阶段序号, and a chart that alphabetises the axis puts 一次爆发期 in the first bar while the
+#: figure still looks complete.
+LABELS = ['甲', '乙', '丙']
 
 
 @pytest.fixture
@@ -214,8 +219,8 @@ class TestDualAxisLine:
         assert [axis['name'] for axis in option['yAxis']] == ['点赞', '阅读']
         assert [series['yAxisIndex'] for series in option['series']] == [0, 1]
         assert option['legend']['data'] == ['点赞', '阅读']
-        # Group keys sort by code point, so 丙 乙 甲 — and both series land on the same days.
-        assert [series['data'] for series in option['series']] == [[40.0, 25.0, 15.0], [400, 200, 400]]
+        # Both series land on the same categories, in the order the rows first showed them.
+        assert [series['data'] for series in option['series']] == [[15.0, 25.0, 40.0], [400, 200, 400]]
 
     def test_the_right_axis_draws_no_second_graph_paper(self, df):
         # Two sets of dashed grid lines at different scales is unreadable, and the left axis
@@ -230,7 +235,7 @@ class TestDualAxisLine:
         # blank — and the legend has to say what it then drew.
         option = V.to_echarts_option(df, 'dual_line', x='作者', y2='阅读')
         assert option['series'][0]['name'] == 'count(作者)'
-        assert option['series'][0]['data'] == [1, 1, 2]
+        assert option['series'][0]['data'] == [2, 1, 1]
 
     def test_the_image_engine_refuses_the_type_by_name(self, df):
         # Matplotlib could draw a twinx, but the shared tooltip, the legend and the second
@@ -358,8 +363,64 @@ class TestOptionJsonSafety:
 
     def test_colours_come_from_the_shared_palette(self, df):
         option = V.to_echarts_option(df, 'bar', x='作者', y='点赞')
-        assert option['color'][0] == '#3B82F9'
+        # The print palette, not the old UI accent: a figure in a paper is read in ink, so the
+        # first colour is a deep slate rather than dashboard blue.
+        assert option['color'][0] == '#2C4E6B'
         assert option['backgroundColor'] == 'transparent'
+        assert 'SimSun' in option['title']['textStyle']['fontFamily']
+
+    def test_a_dense_category_axis_keeps_every_tick_and_makes_room_for_it(self, df):
+        """The complaint was half a date, not an ugly colour.
+
+        ECharts drops category labels to avoid crowding, and the default margins clipped what
+        survived — so 图 2 showed every other day of an event whose whole point is the daily curve.
+        """
+        many = pd.DataFrame({'日期': [f'2022-01-{day:02d}' for day in range(1, 25)], '总数': range(24)})
+        option = V.to_echarts_option(many, 'line', x='日期', y='总数')
+        assert option['xAxis']['axisLabel']['interval'] == 0
+        assert option['xAxis']['axisLabel']['rotate'] == 45
+        assert option['xAxis']['axisLabel']['hideOverlap'] is False
+        assert option['grid']['containLabel'] is True
+        assert option['grid']['bottom'] >= 96
+
+    def test_a_short_category_axis_is_not_forced_to_the_dense_rule(self, df):
+        """The rotate/interval rule fires on crowding, not on every axis.
+
+        A bar chart rotates its category labels by design (they are often long names); what the
+        finalize pass adds is the *dense* case — a 24-day axis keeps every tick. So a short axis
+        must not be told to show `interval: 0`, which is ECharts' own "drop labels" setting.
+        """
+        option = V.to_echarts_option(df, 'line', x='作者', y='点赞')
+        assert option['xAxis']['axisLabel'].get('interval') != 0
+
+    def test_a_line_is_drawn_as_measured_points_not_a_smoothed_shaded_hill(self, df):
+        option = V.to_echarts_option(df, 'line', x='作者', y='点赞')
+        series = option['series'][0]
+        assert series['smooth'] is False, 'a spline invents the days between two measurements'
+        assert 'areaStyle' not in series, 'the gradient under the line reads as a quantity that is not one'
+
+    def test_a_force_graph_is_laid_out_before_it_is_shown(self, df):
+        """图 16 used to drift for tens of seconds: ECharts iterates the solver on screen."""
+        option = V.to_echarts_option(
+            pd.DataFrame({'source': ['甲', '乙'], 'target': ['乙', '丙'], 'value': [3, 5]}),
+            'network',
+            x='source',
+            y='target',
+            value_field='value',
+        )
+        series = option['series'][0]
+        assert series['force']['animate'] is False
+        assert series['layoutAnimation'] is False
+        assert series['force']['initLayout'] == 'circular'
+
+    def test_a_category_axis_keeps_the_tables_own_order(self, df):
+        """The 图 3 bug: 表 2 arrives in lifecycle order and the chart alphabetised it away."""
+        phases = pd.DataFrame(
+            {'阶段': ['二次爆发期', '发酵期', '波动期', '爆发期', '衰退期'], '发帖量': [4526, 3778, 4993, 4366, 623]}
+        )
+        option = V.to_echarts_option(phases, 'bar', x='阶段', y='发帖量')
+        assert option['xAxis']['data'] == ['二次爆发期', '发酵期', '波动期', '爆发期', '衰退期']
+        assert option['series'][0]['data'] == [4526, 3778, 4993, 4366, 623]
 
     def test_tooltip_trigger_follows_the_chart_kind(self, df):
         assert V.to_echarts_option(df, 'bar', x='作者')['tooltip']['trigger'] == 'axis'
@@ -373,18 +434,19 @@ class TestAggregation:
     def test_bar_sums_the_value_field_per_category(self, df):
         option = V.to_echarts_option(df, 'bar', x='作者', y='点赞')
         assert option['xAxis']['data'] == LABELS
-        assert option['series'][0]['data'] == [40.0, 25.0, 15.0]
+        assert option['series'][0]['data'] == [15.0, 25.0, 40.0]
 
     def test_counting_mode_when_no_value_field_is_given(self, df):
-        assert V.to_echarts_option(df, 'bar', x='作者')['series'][0]['data'] == [1, 1, 2]
+        assert V.to_echarts_option(df, 'bar', x='作者')['series'][0]['data'] == [2, 1, 1]
 
     @pytest.mark.parametrize(
         'agg, expected',
         [
-            ('mean', [40.0, 25.0, 7.5]),
-            ('max', [40.0, 25.0, 10.0]),
-            ('min', [40.0, 25.0, 5.0]),
-            ('count', [1.0, 1.0, 2.0]),
+            # One value per category, in the order the rows appear: 甲 (two rows), 乙, 丙.
+            ('mean', [7.5, 25.0, 40.0]),
+            ('max', [10.0, 25.0, 40.0]),
+            ('min', [5.0, 25.0, 40.0]),
+            ('count', [2.0, 1.0, 1.0]),
         ],
     )
     def test_alternative_aggregations(self, df, agg, expected):
@@ -416,7 +478,7 @@ class TestAggregation:
     def test_heatmap_cells_are_indexed_by_category_position(self, df):
         option = V.to_echarts_option(df, 'heatmap', x='作者', y='平台')
         assert option['xAxis']['data'] == LABELS
-        assert option['yAxis']['data'] == ['小红书', '微博', '知乎']
+        assert option['yAxis']['data'] == ['知乎', '微博', '小红书']
         assert len(option['series'][0]['data']) == 9
         assert option['visualMap']['min'] <= option['visualMap']['max']
 

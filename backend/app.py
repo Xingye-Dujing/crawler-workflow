@@ -3525,6 +3525,11 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         order_column = str(params.get('flow_order_col') or '').strip()
         if order_column:
             result['order_col'] = order_column
+        # Read like ``score_col``: blank means the sankey keeps drawing bare row labels, and a
+        # named column (表 1's 主题概括) is what makes the figure readable.
+        label_column = str(params.get('flow_label_col') or '').strip()
+        if label_column:
+            result['label_col'] = label_column
         return result
     if op == 'topic_coherence':
         result = {

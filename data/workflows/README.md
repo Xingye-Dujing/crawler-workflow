@@ -3,6 +3,32 @@
 `data/workflows/` 是**有意纳入版本管理**的：一张画布是创作物而不是运行残渣。但它按 **数据集 id** 引用上传的文件，
 所以一份检出的画布只有在**同一份 `data/` 旁边**才跑得起来——下面的数字都来自本机 `data/exports/刘学州最终`。
 
+## 两张刘学州画布必须成对同步
+
+`刘学州-情感演化分析.json`（六份博文导出）与 `刘学州-评论-情感演化分析.json`（六份评论导出）**除了上传节点
+指向的数据集不同，其余内容必须完全一致**——它们是同一个论文流程在两种语料上的两次复现，任何一处分析参数、
+连线或标题只改一张，两张图就在讲两个故事。改完一张跑这段核对（应打印 True）：
+
+```python
+import json, io
+
+def norm(p):
+    w = json.load(io.open(p, encoding='utf-8'))
+    for n in w['nodes']:
+        if n['type'] == 'upload':
+            n['params'] = {'u': 1}          # the datasets differ by design
+        n.pop('x', None); n.pop('y', None)  # where a node sits on the canvas is not content
+    w.get('settings', {}).pop('view', None)
+    w['name'] = 'X'
+    return json.dumps(w, sort_keys=True, ensure_ascii=False)
+
+a = 'data/workflows/刘学州-情感演化分析.json'
+b = 'data/workflows/刘学州-评论-情感演化分析.json'
+print(norm(a) == norm(b))
+```
+
+（节点坐标不算差异：画布上的摆位是各人自己的事。）
+
 ## 刘学州-情感演化分析.json（117 节点 / 116 连线）
 
 跑法：打开画布 → 点「执行」。串行模式，全量跑约 13 分钟（六次 snownlp + 五次分阶段 LDA + 五次全量一致性扫描），
@@ -19,6 +45,20 @@
 
 其余参数是**方法性**的，可以原样带过去：SimHash 距离 8、`timeline_overlap` 0.25（本语料跨阶段 Jaccard 的 p90 实测 0.273）、
 `flow_min_similarity` 0.5、`cooccur_min_count` 5、`coherence_max_documents` 0、预警的 0.2/0.1/0.6。
+
+### 图15 桑基现在依赖模型（这是有意的取舍）
+
+`主题跨阶段流向` 填了 `flow_label_col=主题概括`，上游也从 分阶段 LDA 改成了 **主题概括** 节点：
+图上每个节点因此写作「TopicⅡ-6｜网暴致刘学州绝望离世反思原生家庭」，而不是只有研究者自己看得懂的行标签
+（原始编号仍在 `source_topic`/`target_topic` 两列里，可追溯）。代价是**模型没起时这张图一起失败**——
+概括节点按名拒绝，流向节点就没数据。宁可少一张图，也不要一张节点名谁也读不懂的图。
+换数据时若暂时不想起模型，把这条连线改回 `node-19` 并清空 `flow_label_col` 即可。
+
+### 词表口径
+
+所有文本统计（LDA 特征词、显著词、共词网络、关键词节点、词云）共用 `backend/analyzers/stopwords.py`
+那一份中文停用词表。它保守收录：语法词进表，域内实词（网暴/警方/律师/生父/校园/私信/微博/网友/问题）一律保留，
+用例把这双向都钉住了。觉得某个词被误杀或被漏杀，改那一处列表就行。
 
 ### 这次真实跑出来的数字（换数据后请重新测，别沿用）
 

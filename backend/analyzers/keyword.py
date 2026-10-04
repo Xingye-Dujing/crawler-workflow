@@ -127,17 +127,19 @@ class KeywordExtractor:
     def _tokenize(text: str, pos_tags: frozenset[str] | None) -> list[str]:
         """Split one document into candidate terms, keeping only the requested POS categories.
 
-        A one-character term is dropped, which is the candidate rule both jieba analyzers apply
-        already (``len(w.strip()) < 2`` in ``extract_tags`` and ``textrank``). Without it the
-        punctuation jieba cuts out of a comment (``，``, ``。``) and the particles (``的``,
-        ``了``) are the top-scoring terms of every corpus, because jieba's stop-word list is
-        English and its IDF table is not consulted here.
+        The shape rule (two characters or more, some letter or digit) and the stop-word list are the
+        shared ones from :mod:`analyzers.stopwords`, because this tokenizer also feeds 共词网络 —
+        a graph built on 自己/一个 is a graph of grammar. Dropping the particles here is not optional:
+        jieba's own stop-word list is English, and its IDF table is not consulted on this path, so
+        的/了 would otherwise be the top-scoring term of every corpus.
         """
+        from analyzers.stopwords import filter_tokens
+
         if pos_tags:
             tokens = [word.word for word in jieba.posseg.cut(text) if word.flag in pos_tags]
         else:
             tokens = list(jieba.cut(text))
-        return [token for token in tokens if len(token.strip()) >= 2]
+        return filter_tokens(tokens)
 
     @staticmethod
     def extract_tfidf(text: str, topk: int = 10, allow_pos: str | list | None = '') -> list[dict]:

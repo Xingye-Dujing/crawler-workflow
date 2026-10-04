@@ -112,6 +112,26 @@ def _keep_text(text: str) -> str:
     return text
 
 
+def _tokenized(texts: list) -> list:
+    """Cut each document with the shared stop-word rule and hand back space-joined tokens.
+
+    This is the vocabulary the topic models are fitted on, so it is also the list of words a
+    特征词 cell can contain. The rule used to be "has a letter or digit in it", which let
+    自己/一直/成为/一个 into the top words of a phase — see :mod:`analyzers.stopwords` for why the
+    list lives in one place.
+    """
+    from analyzers.stopwords import cut
+
+    return [' '.join(cut(text)) for text in texts]
+
+
+def _token_set(text: str) -> frozenset:
+    """The same cut as a set, for the co-occurrence counts that must agree with the model."""
+    from analyzers.stopwords import cut
+
+    return frozenset(cut(text))
+
+
 JOIN_HOW = ('left', 'right', 'inner', 'outer', 'cross')
 
 #: Where a topic's 特征词 come from. ``tfidf`` is what the study says it used (TF-IDF over the
@@ -500,13 +520,10 @@ def _fit_topic_model(texts, n_topics, max_features):
     table and in the exported topic list has to be the same number, or the three artifacts
     describe three different models while reading like one analysis.
     """
-    import jieba
     from sklearn.decomposition import LatentDirichletAllocation
     from sklearn.feature_extraction.text import CountVectorizer
 
-    tokenized = [
-        ' '.join(token for token in jieba.cut(text) if any(char.isalnum() for char in token)) for text in texts
-    ]
+    tokenized = _tokenized(texts)
     vectorizer = CountVectorizer(
         tokenizer=_split_tokens,
         preprocessor=_keep_text,
@@ -1412,7 +1429,6 @@ class DataAnalysisService:
         number, which falls as the model fits better and stops meaning anything once it
         starts memorising rows.
         """
-        import jieba
         from sklearn.decomposition import LatentDirichletAllocation
         from sklearn.feature_extraction.text import CountVectorizer
 
@@ -1429,9 +1445,7 @@ class DataAnalysisService:
         # split on, and a topic model whose vocabulary is "。" and "！" has topics that are
         # punctuation. A corpus that is nothing BUT punctuation then has no vocabulary at
         # all, which is refused below rather than answered with an empty table.
-        tokenized = [
-            ' '.join(token for token in jieba.cut(text) if any(char.isalnum() for char in token)) for text in texts
-        ]
+        tokenized = _tokenized(texts)
         vectorizer = CountVectorizer(
             tokenizer=_split_tokens,
             preprocessor=_keep_text,
@@ -1517,7 +1531,6 @@ class DataAnalysisService:
         evidence on every run, and a summary that changes between two identical runs is not a
         finding.
         """
-        import jieba
         from sklearn.decomposition import LatentDirichletAllocation
         from sklearn.feature_extraction.text import CountVectorizer
 
@@ -1552,9 +1565,7 @@ class DataAnalysisService:
                     t('analysis.topic_stage_rows', stage=stage, rows=len(usable), topics=wanted)
                 )
             texts = [str(value) for value in usable[column].tolist()]
-            tokenized = [
-                ' '.join(token for token in jieba.cut(text) if any(char.isalnum() for char in token)) for text in texts
-            ]
+            tokenized = _tokenized(texts)
             vectorizer = CountVectorizer(
                 tokenizer=_split_tokens,
                 preprocessor=_keep_text,
@@ -2022,8 +2033,13 @@ class DataAnalysisService:
         weights_col: str = 'weights',
         order_col: str = '',
         min_similarity: float = 0.5,
+        label_col: str = '',
     ) -> pd.DataFrame:
         """Which topic of one phase carried over into the next — the sankey's edges.
+
+        ``label_col`` is optional and names the column whose text makes a topic readable (表 1's
+        主题概括): the sankey's node names come straight out of ``source``/``target``, so without it
+        图 15 is a diagram of row labels. The raw ids stay in ``source_topic``/``target_topic``.
 
         表 1 says what each phase was about; it does not say how one phase's subject BECAME the
         next one's. That is the paper's other structural claim (「外卖黑盒→外卖空包」 is one subject
@@ -2062,10 +2078,20 @@ class DataAnalysisService:
         # Positional reads, for the reason given in ``topic_timeline``: a filtered table's row
         # labels are not its positions, and ``df.at`` would answer with the wrong row.
         weights_list = [_word_weights(value) for value in df[weights_col].tolist()]
-        topic_list = [str(value).strip() for value in df[topic_col].tolist()]
         words_list = (
             ['、'.join(_word_cells(value)) for value in df[words_col].tolist()] if words_col else [''] * len(keys)
         )
+        # A sankey names its nodes with whatever this column says, so `TopicⅠ-2` on the figure is
+        # as informative as a row label in a spreadsheet. When the table carries the model's 主题概括
+        # the two are joined — the number stays first so the figure is still auditable against 表 1.
+        if label_col and label_col not in df.columns:
+            raise UnknownOperationError(t('analysis.step_col_missing', op='topic_flow', col=label_col))
+        summary_list = [str(value).strip() for value in df[label_col].tolist()] if label_col else [''] * len(keys)
+        raw_topics = [str(value).strip() for value in df[topic_col].tolist()]
+        topic_list = [
+            f'{name}｜{summary[:14]}' if summary else name
+            for name, summary in zip(raw_topics, summary_list, strict=True)
+        ]
         buckets: list = [[] for _ in stages]
         skipped = 0
         for number, key in enumerate(keys):
@@ -2081,7 +2107,12 @@ class DataAnalysisService:
                     t('analysis.flow_weights', topic=topic_list[number] or f'#{number + 1}', stage=key, col=weights_col)
                 )
             buckets[positions[key]].append(
-                {'topic': topic_list[number], 'words': words_list[number], 'weights': weights}
+                {
+                    'topic': topic_list[number],
+                    'id': raw_topics[number],
+                    'words': words_list[number],
+                    'weights': weights,
+                }
             )
         if skipped:
             logger.warning(t('analysis.timeline_blank', col=stage_col, n=skipped))
@@ -2107,6 +2138,8 @@ class DataAnalysisService:
                         {
                             'source': source['topic'],
                             'target': target['topic'],
+                            'source_topic': source['id'],
+                            'target_topic': target['id'],
                             'similarity': round(similarity, 6),
                             'divergence': round(divergence, 6),
                             'from_stage': stages[left_index],
@@ -2164,8 +2197,6 @@ class DataAnalysisService:
         """
         from itertools import combinations
 
-        import jieba
-
         if column not in df.columns:
             raise UnknownOperationError(t('analysis.step_col_missing', op='topic_coherence', col=column))
         texts = [str(value) for value in df[column].dropna().tolist() if str(value).strip()]
@@ -2193,9 +2224,7 @@ class DataAnalysisService:
         # ``_fit_topic_model`` re-cuts these texts (its contract is raw text, and sharing a
         # token list would make the two steps disagree the moment either changed its rule),
         # so this copy is for the co-occurrence counts only.
-        documents = [
-            frozenset(token for token in jieba.cut(text) if any(char.isalnum() for char in token)) for text in texts
-        ]
+        documents = [_token_set(text) for text in texts]
         keep = max(1, _whole(topn, 'topic_coherence', 'topn'))
         rows = []
         for topics in range(low, high + 1):

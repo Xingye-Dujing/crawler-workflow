@@ -165,17 +165,38 @@ CATEGORY_COLORS = [
     '#D946EF',
     '#0284C7',
 ]
+# A figure in a humanities paper is read in print, often in grayscale, and cited for its numbers —
+# so the palette is restrained and separated by lightness as much as by hue. The previous set was a
+# UI accent palette (neon blue first, gradient area fills), which is why every chart looked like a
+# dashboard rather than a 图.
+CATEGORY_COLORS = [
+    '#2C4E6B',
+    '#A85442',
+    '#4F7355',
+    '#8A7132',
+    '#5C5470',
+    '#3E6B73',
+    '#8B5E3C',
+    '#6B7F5C',
+    '#7A4A55',
+    '#4A5A73',
+]
 DIVERGING_CMAP = ['#0571B0', '#92C5DE', '#F7F7F7', '#F4A582', '#CA0020']
 SEQUENTIAL_CMAP = ['#F7FCF0', '#E0F3DB', '#CCEBC5', '#A8DDB5', '#7BCCC4', '#4EB3D3', '#2B8CBE', '#0868AC', '#084081']
 
-_TEXT_STYLE = {'color': '#e0e0e0', 'fontSize': 11, 'fontFamily': 'sans-serif'}
+#: A paper figure is set in a serif face (and 宋体 for Chinese labels), not in the UI's sans.
+PRINT_FONT = "'Times New Roman', 'SimSun', 'Songti SC', serif"
+_TEXT_STYLE = {'color': '#222', 'fontSize': 11, 'fontFamily': PRINT_FONT}
 _AXIS_STYLE = {
-    'axisLine': {'lineStyle': {'color': '#444'}},
-    'axisTick': {'lineStyle': {'color': '#444'}},
-    'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
-    'splitLine': {'lineStyle': {'color': '#2a2a2a', 'type': 'dashed'}},
+    'axisLine': {'lineStyle': {'color': '#666'}},
+    'axisTick': {'lineStyle': {'color': '#666'}},
+    'axisLabel': {'color': '#333', 'fontSize': 10, 'fontFamily': PRINT_FONT},
+    'splitLine': {'lineStyle': {'color': '#d9d9d9', 'type': 'dashed'}},
 }
-_GRID = {'left': 55, 'right': 20, 'top': 36, 'bottom': 36}
+# The room is generous on purpose and `containLabel` adds the tick text on top of it: every figure
+# whose x axis carried ISO dates had its labels cut in half at the panel edge, and a figure that
+# hides its own scale is not readable in a paper.
+_GRID = {'left': 72, 'right': 72, 'top': 56, 'bottom': 96, 'containLabel': True}
 
 # ── Word cloud style presets ──
 # Each preset defines textStyle options for the echarts-wordcloud extension.
@@ -334,14 +355,20 @@ class VisualizationService:
 
     @staticmethod
     def _aggregate(df: pd.DataFrame, x: str, y: str = None, agg: str = 'sum'):
-        """Group by *x* and aggregate *y* (or count rows if y is None)."""
+        """Group by *x* and aggregate *y* (or count rows if y is None).
+
+        The category order is the TABLE's, not an alphabetical one. This step is the last chance to
+        lose a lifecycle: 表 2 arrives sorted by 阶段序号, and `sort_index()` here put 一次爆发期 in
+        the first bar of 图 3 — a figure that reads the event backwards while looking complete. A
+        group that appears again later keeps its first position (`sort=False`), because "where the
+        user put it" is the only ordering this layer is allowed to trust.
+        """
         VisualizationService._require_columns(df, x, y)
         if y:
             numeric = pd.to_numeric(df[y], errors='coerce')
-            grouped = numeric.groupby(df[x]).agg(agg)
+            grouped = numeric.groupby(df[x], sort=False).agg(agg)
         else:
-            grouped = df.groupby(x).size()
-        grouped = grouped.sort_index()
+            grouped = df.groupby(x, sort=False).size()
         return grouped.index.astype(str).tolist(), grouped.values.tolist()
 
     # ── ECharts option builder ───────────────────────────────────
@@ -354,7 +381,88 @@ class VisualizationService:
         aggregations (a mean over an all-missing group is NaN) and a single
         ``NaN`` token would make the browser reject the entire response.
         """
-        return _json_safe(cls._build_option(df, chart_type, **kwargs))
+        return _json_safe(cls._print_style(cls._build_option(df, chart_type, **kwargs)))
+
+    @classmethod
+    def _print_style(cls, option: dict) -> dict:
+        """One pass that turns a dashboard drawing into a figure for a paper.
+
+        Three separate branches used to carry the same three complaints, so the fixes live together
+        where a missing one is visible:
+
+        * **Nothing is clipped.** Dense category axes are rotated and asked for every tick
+          (``interval: 0``) — ECharts' default drops labels to avoid crowding, which is how 图 2
+          lost days of its own x axis; and a cartesian grid gets ``containLabel`` plus real margins
+          so the rotated text and the axis names (PC1/PC2 were cut at the frame edge) are inside it.
+        * **The ink is print-safe.** A smoothed line over a gradient area fill is a UI affordance:
+          it invents shape between two measured days and shades the space under it. Lines are drawn
+          straight, thin, with small markers and no area.
+        * **A force graph is laid out before it is shown.** ``force.animate`` iterates the solver on
+          screen, so 图 16 drifted for tens of seconds before it balanced. With the animation off
+          and a circular seed, the first paint is the settled figure and it stays put.
+        """
+        for axis_key in ('xAxis', 'yAxis'):
+            axes = option.get(axis_key)
+            if not axes:
+                continue
+            for axis in axes if isinstance(axes, list) else [axes]:
+                if not isinstance(axis, dict):
+                    continue
+                label = axis.setdefault('axisLabel', {})
+                label['fontFamily'] = PRINT_FONT
+                label.setdefault('fontSize', 10)
+                if axis.get('type') == 'category' and len(label.get('data') or axis.get('data') or []) > 12:
+                    # Rotated and never dropped: the alternative is a figure whose axis lies about
+                    # its own granularity.
+                    label['rotate'] = 45
+                    label['interval'] = 0
+                    label['hideOverlap'] = False
+                if axis.get('name'):
+                    axis['nameLocation'] = axis.get('nameLocation') or 'middle'
+                    axis['nameGap'] = axis.get('nameGap') or (28 if axis_key == 'yAxis' else 34)
+                    axis['nameTextStyle'] = {**(axis.get('nameTextStyle') or {}), 'fontFamily': PRINT_FONT}
+
+        grid = option.get('grid')
+        if isinstance(grid, dict):
+            grid['containLabel'] = True
+            grid['bottom'] = max(int(grid.get('bottom') or 0), 96)
+            grid['right'] = max(int(grid.get('right') or 0), 72)
+            grid['left'] = max(int(grid.get('left') or 0), 64)
+
+        title = option.get('title')
+        if isinstance(title, dict):
+            title['textStyle'] = {
+                **(title.get('textStyle') or {}),
+                'fontFamily': PRINT_FONT,
+                'fontWeight': 'normal',
+                'fontSize': 15,
+            }
+        legend = option.get('legend')
+        if isinstance(legend, dict):
+            legend['textStyle'] = {**(legend.get('textStyle') or {}), 'fontFamily': PRINT_FONT}
+
+        for series in option.get('series') or []:
+            if not isinstance(series, dict):
+                continue
+            kind = series.get('type')
+            if kind == 'line':
+                series['smooth'] = False
+                series['symbol'] = series.get('symbol') or 'circle'
+                series['symbolSize'] = series.get('symbolSize') or 4
+                series['showSymbol'] = True
+                series['lineStyle'] = {**(series.get('lineStyle') or {}), 'width': 1.4}
+                # A gradient under a line reads as "this area means something"; between two measured
+                # days it means nothing, so the paper figure drops it.
+                series.pop('areaStyle', None)
+            elif kind == 'bar':
+                series['itemStyle'] = {**(series.get('itemStyle') or {}), 'borderRadius': 0}
+                series.setdefault('barMaxWidth', 42)
+            elif kind == 'graph':
+                series['force'] = {**(series.get('force') or {}), 'animate': False}
+                series['layoutAnimation'] = False
+            if series.get('label'):
+                series['label'] = {**series['label'], 'fontFamily': PRINT_FONT}
+        return option
 
     @classmethod
     def _build_option(
@@ -690,72 +798,6 @@ class VisualizationService:
                 # with no edge is not "a sparse relationship network", it is nothing measured.
                 raise ChartConfigError(
                     f'network graph has no edges: every {x}/{y} pair was blank, zero-weighted or unvalued'
-                )
-            incident: dict = {}
-            for link in links:
-                for name in (link['source'], link['target']):
-                    incident[name] = incident.get(name, 0.0) + link['value']
-            biggest_node = max(incident.values()) or 1.0
-            biggest_link = max(link['value'] for link in links) or 1.0
-            base['series'] = [
-                {
-                    'type': 'graph',
-                    'layout': 'force',
-                    # Circular first, then relaxed: an unconstrained force start is random, and
-                    # a figure whose clusters move between two runs of one table is a figure
-                    # nobody can put in a report.
-                    'force': {
-                        'initLayout': 'circular',
-                        'repulsion': 160,
-                        'edgeLength': [60, 160],
-                        'gravity': 0.06,
-                        'friction': 0.6,
-                    },
-                    'roam': True,
-                    'draggable': True,
-                    'data': [
-                        {
-                            'name': name,
-                            # The node's own number is the sum of the weights of the links it
-                            # carries, so the tooltip says what the bubble size means.
-                            'value': round(float(incident[name]), 6),
-                            # Area, not radius, carries the weight — the same rule as the topic map.
-                            'symbolSize': round(14.0 + 40.0 * (float(incident[name]) / biggest_node) ** 0.5, 2),
-                            'itemStyle': {'color': CATEGORY_COLORS[position % len(CATEGORY_COLORS)]},
-                        }
-                        for position, name in enumerate(nodes)
-                    ],
-                    'links': [
-                        {
-                            **link,
-                            'lineStyle': {'width': round(1.0 + 5.0 * (float(link['value']) / biggest_link) ** 0.5, 2)},
-                        }
-                        for link in links
-                    ],
-                    'label': {
-                        'show': True,
-                        'position': 'right',
-                        'color': '#ccc',
-                        'fontSize': 10,
-                        'fontFamily': 'sans-serif',
-                    },
-                    'lineStyle': {'color': 'source', 'curveness': 0.15, 'opacity': 0.55},
-                    'emphasis': {'focus': 'adjacency', 'lineStyle': {'width': 4}},
-                }
-            ]
-            return base
-
-        # ── Force-directed network: the co-occurrence and flow graphs ──
-        if chart_type == 'network':
-            if not x or not y:
-                raise ChartConfigError('Network graph requires a source field (x) and a target field (y)')
-            nodes, links = cls._sankey_links(df, x, y, value_field, agg)
-            if not links:
-                # A sankey with no links still shows its nodes; a force graph with no links shows
-                # a scatter of words and looks like a finished figure. Empty is an answer here,
-                # and it has to be said out loud rather than drawn.
-                raise ChartConfigError(
-                    f'network graph has no edges to draw: every {x}→{y} pair was blank, zero-weighted or unvalued'
                 )
             incident: dict = {}
             for link in links:
@@ -1165,85 +1207,30 @@ class VisualizationService:
         """Tokenize a free-text column into word frequencies for a word
         cloud. Uses jieba for Chinese segmentation (this app's crawler
         content is primarily Chinese); falls back to whitespace splitting
-        for non-Chinese text if jieba isn't installed."""
-        VisualizationService._require_columns(df, column)
+        for non-Chinese text if jieba isn't installed.
 
-        stopwords = {
-            '的',
-            '了',
-            '是',
-            '我',
-            '你',
-            '他',
-            '她',
-            '它',
-            '这',
-            '那',
-            '在',
-            '和',
-            '就',
-            '都',
-            '也',
-            '还',
-            '不',
-            '有',
-            '与',
-            '及',
-            '但',
-            '而',
-            '被',
-            '把',
-            '为',
-            '对',
-            '啊',
-            '吧',
-            '呢',
-            '吗',
-            '哦',
-            '呀',
-            '一个',
-            '一些',
-            '这个',
-            '那个',
-            '什么',
-            'the',
-            'a',
-            'an',
-            'is',
-            'are',
-            'was',
-            'were',
-            'and',
-            'or',
-            'to',
-            'of',
-            'in',
-            'it',
-            'this',
-            'that',
-            'for',
-            'on',
-            'with',
-            'as',
-            'at',
-            'by',
-        }
+        The stop-word rule is the shared one (:mod:`analyzers.stopwords`), not the small local set
+        this used to carry: a cloud drawn from a different vocabulary than 表 1's 特征词 is two
+        measurements of the same corpus that a reader cannot put side by side.
+        """
+        VisualizationService._require_columns(df, column)
+        from analyzers.stopwords import is_meaningful
+
         texts = df[column].dropna().astype(str).tolist()
         counter = Counter()
         try:
             for text in texts:
                 for token in jieba.lcut(text):
-                    token = token.strip()
-                    if len(token) < 2 or token in stopwords or not any(c.isalnum() for c in token):
+                    if not is_meaningful(token):
                         continue
                     counter[token] += 1
         except ImportError:
             for text in texts:
                 for token in text.split():
-                    token = token.strip().lower()
-                    if len(token) < 2 or token in stopwords:
-                        continue
-                    counter[token] += 1
+                    word = token.strip().lower()
+                    if word and is_meaningful(word):
+                        counter[word] += 1
+
         top = counter.most_common(top_n)
         if not top:
             return [], []
@@ -1253,17 +1240,27 @@ class VisualizationService:
     @staticmethod
     def _pivot(df: pd.DataFrame, x: str, y: str, value_field: str = None, agg: str = 'count'):
         """Build a y-by-x matrix for a heatmap: counts co-occurrences of
-        (x, y) pairs, or aggregates value_field over each pair if given."""
+        (x, y) pairs, or aggregates value_field over each pair if given.
+
+        Both axes keep the table's order, for the same reason `_aggregate` does — `pivot_table`
+        sorts its index and columns, which would put a heatmap's phases in code-point order and
+        make the picture disagree with the 表 it was built from.
+        """
         VisualizationService._require_columns(df, x, y)
         work = df[[x, y]].copy()
+        xcats = [str(value) for value in pd.unique(df[x].astype(str))]
+        ycats = [str(value) for value in pd.unique(df[y].astype(str))]
+        work['_xc'] = work[x].astype(str)
+        work['_yc'] = work[y].astype(str)
         if value_field and value_field in df.columns:
             work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
-            pivot = work.pivot_table(index=y, columns=x, values='_v', aggfunc=agg, fill_value=0)
+            grouped = work.groupby(['_yc', '_xc'], sort=False)['_v'].agg(agg)
         else:
-            pivot = work.pivot_table(index=y, columns=x, aggfunc='size', fill_value=0)
-        xcats = pivot.columns.astype(str).tolist()
-        ycats = pivot.index.astype(str).tolist()
-        matrix = pivot.values.tolist()
+            grouped = work.groupby(['_yc', '_xc'], sort=False).size()
+        cells = {
+            (str(ykey), str(xkey)): (value if np.isfinite(value) else 0) for (ykey, xkey), value in grouped.items()
+        }
+        matrix = [[cells.get((yy, xx), 0) for xx in xcats] for yy in ycats]
         return xcats, ycats, matrix
 
     @staticmethod

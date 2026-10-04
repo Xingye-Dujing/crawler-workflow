@@ -2601,6 +2601,7 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'flow_words_col', 'settings.flowWordsColumn', 'text', 'feature_words');
         html += renderParamInput(nodeId, p, 'flow_weights_col', 'settings.flowWeightsColumn', 'text', 'weights');
         html += renderParamInput(nodeId, p, 'flow_order_col', 'settings.flowOrderColumn', 'text', '');
+        html += renderParamInput(nodeId, p, 'flow_label_col', 'settings.flowLabelColumn', 'text', '');
         html += renderParamInput(nodeId, p, 'flow_min_similarity', 'settings.flowMinSimilarity', 'number', 0.5);
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.flowHint') + '</div></div>';
@@ -3574,6 +3575,11 @@ var dashboard = {
         var payload = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
             y_field: p.y_field, value_field: p.value_field, agg: p.agg,
+            /* The board has to ask with the SAME fields the panel previews with. These three
+               were left out, so every 双轴折线 cell answered "requires a second value field
+               (y2)" — the cell that looked like a board bug was a payload bug — and every cell
+               lost its event lines, which is the whole point of 图2/图8/图23~27. */
+            y2_field: p.y2_field, agg2: p.agg2, annotations: p.annotations,
             title: p.title, tokenize: boolParam(p.tokenize, false),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };

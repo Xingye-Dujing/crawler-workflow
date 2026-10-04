@@ -1974,8 +1974,11 @@ class TestTopicViews:
         it drops out and the words that identify the topic come up. Both are honest answers and
         they are different tables, which is why the value used is printed with them."""
         frame = self._corpus()
-        loud = D.topic_salience(frame, '正文', n_topics=2, topn=10, relevance=1.0)
-        sharp = D.topic_salience(frame, '正文', n_topics=2, topn=10, relevance=0.0)
+        # topn=4 because the shared filter now removes the fixture's counter tokens (第/0/条), and
+        # the vocabulary that survives is ten words: ask for ten per topic and both λ values return
+        # the whole of it, so the comparison would measure the list length instead of the ranking.
+        loud = D.topic_salience(frame, '正文', n_topics=2, topn=4, relevance=1.0)
+        sharp = D.topic_salience(frame, '正文', n_topics=2, topn=4, relevance=0.0)
         assert loud['overall_freq'].mean() > sharp['overall_freq'].mean(), (
             'λ=1 must favour the globally common terms; the corpus word 通报 is the test case'
         )
@@ -2201,6 +2204,8 @@ class TestTopicFlow:
         assert list(out.columns) == [
             'source',
             'target',
+            'source_topic',
+            'target_topic',
             'similarity',
             'divergence',
             'from_stage',
@@ -2210,6 +2215,24 @@ class TestTopicFlow:
         ]
         assert {('TopicⅠ-1', 'TopicⅡ-1')} <= {(row['source'], row['target']) for _, row in out.iterrows()}
         assert (out['source_words'] != '').all() and (out['target_words'] != '').all()
+
+    def test_a_summary_column_becomes_the_name_the_sankey_draws(self):
+        """A sankey of row labels tells the reader nothing; 表 1's 概括 is the readable name.
+
+        The chart's node names come from ``source``/``target``, so the composition belongs here —
+        and the raw ids stay beside them, because a figure whose nodes cannot be traced back to
+        表 1 is not auditable.
+        """
+        frame = self._frame()
+        frame['主题概括'] = ['控诉网暴', '追问责任', '外卖退款', '判决问责', '处理结果']
+        out = D.topic_flow(frame, min_similarity=0.01, label_col='主题概括')
+        assert (out['source'].str.contains('｜')).all(), 'every node carries its summary'
+        assert 'TopicⅠ-1｜控诉网暴' in set(out['source'])
+        assert 'TopicⅠ-1' in set(out['source_topic']), 'the 表 1 id is still what you audit against'
+
+    def test_a_summary_column_that_is_not_in_the_table_is_named(self):
+        with pytest.raises(UnknownOperationError, match='主题概括'):
+            D.topic_flow(self._frame(), label_col='主题概括')
 
     def test_only_adjacent_phases_are_compared(self):
         out = self._flow(min_similarity=0.01)

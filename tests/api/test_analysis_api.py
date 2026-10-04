@@ -221,8 +221,10 @@ class TestVisualizeRender:
         assert body['ok'] is True and body['engine'] == 'echarts'
         option = body['option']
         assert option['series'][0]['type'] == 'bar'
-        assert option['xAxis']['data'] == ['Haikou', 'Sanya']
-        assert option['series'][0]['data'] == [5, 17]
+        # The axis keeps the table's order — Sanya is the first row — rather than sorting the
+        # categories, which is what re-ordered a phase axis into 一次爆发期 first.
+        assert option['xAxis']['data'] == ['Sanya', 'Haikou']
+        assert option['series'][0]['data'] == [17, 5]
         # Re-parsing with a strict parser is what the browser does.
         assert json.loads(json.dumps(option)) == option
 
@@ -271,8 +273,9 @@ class TestVisualizeRender:
         )
         # A bare ``NaN`` token is valid for Python but fatal for JSON.parse.
         assert b'NaN' not in response.data
-        # ``mean`` of an all-missing group is genuinely undefined, unlike a sum.
-        assert response.get_json()['option']['series'][0]['data'] == [4.0, None]
+        # ``mean`` of an all-missing group is genuinely undefined, unlike a sum. The cells follow
+        # the row order the paste arrived in: Sanya (no likes at all) first, then Haikou.
+        assert response.get_json()['option']['series'][0]['data'] == [None, 4.0]
 
     def test_counting_rows_needs_only_a_category_field(self, client, paste):
         dataset_id = paste(VIZ_RECORDS, name='count.csv')
@@ -817,6 +820,7 @@ NORMALIZED = {
             'flow_words_col': '词',
             'flow_weights_col': '权重',
             'flow_order_col': '日期',
+            'flow_label_col': '主题概括',
             'flow_min_similarity': '0.6',
         },
         {
@@ -825,6 +829,7 @@ NORMALIZED = {
             'words_col': '词',
             'weights_col': '权重',
             'order_col': '日期',
+            'label_col': '主题概括',
             'min_similarity': 0.6,
         },
     ),
@@ -1616,6 +1621,7 @@ PARSED_FIELDS = {
     'flow_words_col',
     'flow_weights_col',
     'flow_order_col',
+    'flow_label_col',
     'flow_min_similarity',
     # The sweep's ends and the co-occurrence counts are all read through ``_optional_int``, so a
     # blank or junk box disappears into the step's default instead of reaching it as ''.
@@ -2375,6 +2381,8 @@ PANEL_VALUE = {
     'flow_words_col': '词',
     'flow_weights_col': '权重',
     'flow_order_col': '日期',
+    # Blank means the sankey keeps drawing bare row labels, so the probe has to be a name.
+    'flow_label_col': '主题概括',
     'flow_min_similarity': '0.6',
     # The sweep's two ends and its sample cap: none of the three is the step's own default.
     'coherence_min_topics': '3',
