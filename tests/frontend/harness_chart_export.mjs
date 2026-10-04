@@ -60,7 +60,8 @@ function world(render) {
                 const inst = {
                     setOption() {},
                     resize() {},
-                    dispose() {},
+                    disposed: 0,
+                    dispose() { inst.disposed += 1; },
                     getDataURL(spec) {
                         inst.lastSpec = spec;
                         return 'data:image/png;base64,FROMINSTANCE';
@@ -87,7 +88,10 @@ function world(render) {
         .join('\n;\n');
     vm.runInContext(
         `${sources}\n;globalThis.__x = { canvas, dataNodes, dashboard, I18n,` +
-            ' savePreviewImage, saveDashboardImage, saveChartPicture };',
+            ' savePreviewImage, saveDashboardImage, saveChartPicture,' +
+            ' openChartFullscreen, closeChartFullscreen, saveFullscreenImage,' +
+            ' getFullscreenInstance: () => _chartFullscreenInstance,' +
+            ' getPreviewNodeId: () => _chartPreviewNodeId };',
         sandbox
     );
 
@@ -249,6 +253,111 @@ out.dashboard_echarts = await dashboardCase('echarts', false);
 out.dashboard_matplotlib = await dashboardCase('matplotlib', false);
 out.dashboard_after_rebuild = await dashboardCase('echarts', true);
 
+/* ── full-screen window ─────────────────────────────────────────────────────── */
+function el(w, id) {
+    return w.sandbox.document.getElementById(id);
+}
+
+/* The board already holds the option, so opening full-screen must reuse it, not re-ask the
+   server (a re-ask of a 主题概括 cell would re-hit the endpoint on every click). */
+async function fullscreenFromBoardOptionCase() {
+    const w = world();
+    addChart(w, 'v-1', '图25 全库主题距离图', {
+        chart_type: 'topic_map', engine: 'echarts', x_field: 'pc1', y_field: 'pc2',
+        value_field: 'prevalence_pct', label_field: '主题概括',
+    });
+    w.x.dashboard.open();
+    await ticks(6);
+    const before = renders(w).length;
+    await w.x.openChartFullscreen('v-1');
+    await ticks();
+    return {
+        rendersExtra: renders(w).length - before,
+        boardInstances: Object.keys(w.x.dashboard._options).length,
+        fsAlive: !!w.x.getFullscreenInstance(),
+        panelOpen: el(w, 'chart-fullscreen-panel').classList.contains('open'),
+        title: el(w, 'chart-fullscreen-title').textContent,
+    };
+}
+
+async function fullscreenFromBoardImageCase() {
+    const w = world(RENDER_IMAGE);
+    addChart(w, 'v-1', '图26', { chart_type: 'bar', engine: 'echarts', x_field: '城市' });
+    w.x.dashboard.open();
+    await ticks(6);
+    const before = renders(w).length;
+    await w.x.openChartFullscreen('v-1');
+    await ticks();
+    return {
+        rendersExtra: renders(w).length - before,
+        fsInstance: !!w.x.getFullscreenInstance(),
+        // The stub stores an inline style="…" as a string, so a real `.style.display` write is
+        // a no-op here (a browser applies it). The src landing is the proof the image branch ran.
+        imgSrc: String(el(w, 'chart-fullscreen-image').src || ''),
+    };
+}
+
+/* A node the board never drew: the window re-renders from the server, and the request must
+   carry label_field or the 概括 column the chart was set to read is silently dropped. */
+async function fullscreenRefetchCase() {
+    const w = world();
+    addChart(w, 'v-1', '图27', {
+        chart_type: 'topic_map', engine: 'echarts', x_field: 'pc1', y_field: 'pc2',
+        value_field: 'prevalence_pct', label_field: '主题概括',
+    });
+    await w.x.openChartFullscreen('v-1');
+    await ticks();
+    const last = renders(w).slice(-1)[0] || {};
+    return { renders: renders(w).length, payload: last.body || {}, fsAlive: !!w.x.getFullscreenInstance() };
+}
+
+async function fullscreenFromPreviewCase() {
+    const w = world();
+    addChart(w, 'v-1', '图28', { chart_type: 'bar', engine: 'echarts', x_field: '城市' });
+    await w.x.dataNodes.previewVisualize('v-1');
+    await ticks();
+    const before = renders(w).length;
+    await w.x.openChartFullscreen('v-1');
+    await ticks();
+    return { rendersExtra: renders(w).length - before, fsAlive: !!w.x.getFullscreenInstance(), nodeId: w.x.getPreviewNodeId() };
+}
+
+async function fullscreenCloseCase() {
+    const w = world();
+    addChart(w, 'v-1', '图29', { chart_type: 'bar', engine: 'echarts', x_field: '城市' });
+    w.x.dashboard.open();
+    await ticks(6);
+    await w.x.openChartFullscreen('v-1');
+    await ticks();
+    const inst = w.x.getFullscreenInstance();
+    w.x.closeChartFullscreen();
+    await ticks();
+    return { disposed: inst ? inst.disposed : -1, cleared: w.x.getFullscreenInstance() === null };
+}
+
+async function fullscreenSaveCase() {
+    const w = world();
+    addChart(w, 'v-1', '图30 二次爆发期距离图', {
+        chart_type: 'topic_map', engine: 'echarts', x_field: 'pc1', y_field: 'pc2',
+        value_field: 'prevalence_pct', label_field: '主题概括',
+    });
+    w.x.dashboard.open();
+    await ticks(6);
+    await w.x.openChartFullscreen('v-1');
+    await ticks();
+    const filename = await w.x.saveFullscreenImage();
+    await ticks();
+    const post = saves(w).pop();
+    return { filename, name: post && post.body ? post.body.name : null, image: post && post.body ? String(post.body.image) : null };
+}
+
+out.fullscreen_from_board_option = await fullscreenFromBoardOptionCase();
+out.fullscreen_from_board_image = await fullscreenFromBoardImageCase();
+out.fullscreen_refetch = await fullscreenRefetchCase();
+out.fullscreen_from_preview = await fullscreenFromPreviewCase();
+out.fullscreen_close_disposes = await fullscreenCloseCase();
+out.fullscreen_save_named_after_title = await fullscreenSaveCase();
+
 /* Wording is asked of the loaded catalog in the sandbox's own language, so a renamed
    key fails here instead of silently changing what the assertions compare. */
 const probe = world();
@@ -256,11 +365,17 @@ out.catalog = {
     saveNothing: probe.x.I18n.t('chart.saveNothing'),
     saved: probe.x.I18n.t('studio.saved'),
     saveFailed: probe.x.I18n.t('studio.saveFailed'),
+    fullscreen: probe.x.I18n.t('chart.fullscreen'),
     lang: probe.x.I18n.lang,
 };
 
 out.panel_markup = {
     save_button: panelMarkup.indexOf('savePreviewImage()') >= 0,
+    fullscreen_panel: panelMarkup.indexOf('id="chart-fullscreen-panel"') >= 0,
+    fullscreen_open_from_preview: panelMarkup.indexOf('openChartFullscreen(_chartPreviewNodeId)') >= 0,
+    fullscreen_close: panelMarkup.indexOf('closeChartFullscreen()') >= 0,
+    fullscreen_save: panelMarkup.indexOf('saveFullscreenImage()') >= 0,
+    fullscreen_title_id: panelMarkup.indexOf('id="chart-fullscreen-title"') >= 0,
     keys: Array.from(panelMarkup.matchAll(/data-i18n="([^"]+)"/g), (m) => m[1]),
     onclicks: Array.from(panelMarkup.matchAll(/onclick="([^"]+)"/g), (m) => m[1]),
 };

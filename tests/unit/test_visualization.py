@@ -232,9 +232,10 @@ class TestDualAxisLine:
 
     def test_an_empty_left_field_counts_rows_rather_than_defaulting_to_zero(self, df):
         # 舆情热度 is exactly "how many rows this period has", which is why 左轴 may be left
-        # blank — and the legend has to say what it then drew.
+        # blank — and the legend has to say what it then drew. The display name is localised
+        # for the run's language; under zh the fallback reads 数量（作者） not count(作者).
         option = V.to_echarts_option(df, 'dual_line', x='作者', y2='阅读')
-        assert option['series'][0]['name'] == 'count(作者)'
+        assert option['series'][0]['name'] == '数量（作者）'
         assert option['series'][0]['data'] == [2, 1, 1]
 
     def test_the_image_engine_refuses_the_type_by_name(self, df):
@@ -279,7 +280,9 @@ class TestTopicFigureCharts:
         )
         series = option['series'][0]
         assert [point['value'] for point in series['data']] == [[-0.4, 0.2], [0.35, -0.3], [0.05, 0.42]]
-        assert [point['name'] for point in series['data']] == ['Topic-1', 'Topic-2', 'Topic-3']
+        assert [point['name'] for point in series['data']] == ['主题-1', '主题-2', '主题-3'], (
+            'Topic-N (the model numbering) is displayed as 主题N under zh; the raw value is unchanged'
+        )
         assert series['label']['show'] is True and series['label']['formatter'] == '{b}'
         sizes = [point['symbolSize'] for point in series['data']]
         assert sizes[0] < sizes[2] < sizes[1], 'the bubble order follows the share, monotonically'
@@ -291,7 +294,7 @@ class TestTopicFigureCharts:
         option = V.to_echarts_option(self.MAP, 'topic_map', x='pc1', y='pc2', label_field='topic')
         marks = option['series'][0]['markLine']['data']
         assert {'xAxis': 0} in marks and {'yAxis': 0} in marks
-        assert option['xAxis']['name'] == 'PC1' and option['yAxis']['name'] == 'PC2'
+        assert option['xAxis']['name'] == '第一主坐标' and option['yAxis']['name'] == '第二主坐标'
 
     def test_a_map_without_label_or_size_columns_is_still_a_map(self):
         # Both extras degrade to "uniform bubbles", because a map whose bubbles are all the
@@ -308,7 +311,7 @@ class TestTopicFigureCharts:
         assert option['yAxis']['data'] == ['通报', '警方', '人肉']
         assert option['yAxis']['inverse'] is True, 'rank 1 reads at the top'
         assert option['xAxis']['type'] == 'value', 'both series share one count axis'
-        assert [series['name'] for series in option['series']] == ['overall_freq', 'within_freq']
+        assert [series['name'] for series in option['series']] == ['总体词频', '主题内词频']
         assert option['series'][0]['data'] == [40, 8, 6]
         assert option['series'][1]['data'] == [14.2, 7.5, 0.4]
 
@@ -321,6 +324,74 @@ class TestTopicFigureCharts:
         for chart_type in ('topic_map', 'topic_terms'):
             with pytest.raises(ChartConfigError, match='engine=echarts'):
                 V.render_image(self.MAP, chart_type, x='pc1', y='pc2')
+
+
+class TestChartDisplayLocalisation:
+    """Charts render in the run's language; the stored column names and label values never change.
+
+    A humanities paper reads its own figures in Chinese, so a Chinese run must not print
+    Total / positive / PC1 — but the DataFrame keeps English columns and English analyzer labels
+    (the input contract every node depends on), and an English run must still read English.
+    :func:`_localize_label` is the single place a controlled token becomes display text; everything
+    else passes through, because category values are unbounded and guessing at one is worse than
+    leaving it.
+    """
+
+    def _map(self):
+        return pd.DataFrame(
+            {
+                'topic': ['Topic-1', 'Topic-2'],
+                'pc1': [-0.4, 0.35],
+                'pc2': [0.2, -0.3],
+                'prevalence_pct': [12.5, 62.5],
+            }
+        )
+
+    def test_controlled_tokens_follow_the_run_language(self):
+        from i18n import set_lang
+        from services.visualizer import _localize_label as localize
+
+        set_lang('zh')
+        assert localize('total') == '发帖量'
+        assert localize('positive') == '正面'
+        assert localize('Topic-1') == '主题-1'
+        assert localize('TopicⅠ-3') == '主题Ⅰ-3', 'the model numbering survives, the word does not'
+        set_lang('en')
+        assert localize('total') == 'Total'
+        assert localize('positive') == 'Positive'
+        assert localize('Topic-1') == 'Topic-1', 'an English run keeps the model numbering intact'
+
+    def test_unknown_and_non_text_values_pass_through_untouched(self):
+        from i18n import set_lang
+        from services.visualizer import _localize_label as localize
+
+        set_lang('zh')
+        assert localize('2022-01-24') == '2022-01-24', 'a date is not a label to translate'
+        assert localize('发酵期') == '发酵期', 'an already-Chinese phase is not re-translated'
+        assert localize('') == ''
+        assert localize('author') == 'author', 'a column the tool does not know is left alone'
+
+    def test_topic_map_series_and_axes_are_chinese_in_a_zh_run(self):
+        from i18n import set_lang
+
+        set_lang('zh')
+        option = V.to_echarts_option(
+            self._map(), 'topic_map', x='pc1', y='pc2', label_field='topic', value_field='prevalence_pct'
+        )
+        assert option['series'][0]['name'] == '主题'
+        assert option['xAxis']['name'] == '第一主坐标'
+        assert option['yAxis']['name'] == '第二主坐标'
+
+    def test_sankey_node_names_and_link_endpoints_localise_together(self):
+        # A sankey joins a node list to links BY NAME; if one side localises and the other does
+        # not, ECharts silently drops every link. Both go through the same map, so they agree.
+        from i18n import set_lang
+
+        set_lang('zh')
+        df = pd.DataFrame({'emotion': ['positive', 'negative', 'positive'], 'stage': ['发酵期', '发酵期', '爆发期']})
+        nodes, links = V._sankey_links(df, 'emotion', 'stage')
+        assert {'正面', '负面', '发酵期', '爆发期'} == set(nodes)
+        assert all(link['source'] in nodes and link['target'] in nodes for link in links), 'link names match node names'
 
 
 # ─── option shape / JSON safety ────────────────────────────────────────

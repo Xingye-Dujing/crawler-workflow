@@ -394,6 +394,13 @@
         <span data-i18n="chart.header">Chart Preview</span>
         <button
           class="panel-close"
+          data-i18n="chart.fullscreen"
+          onclick="openChartFullscreen(_chartPreviewNodeId)"
+        >
+          Fullscreen
+        </button>
+        <button
+          class="panel-close"
           data-i18n="chart.saveImage"
           onclick="savePreviewImage()"
         >
@@ -409,6 +416,21 @@
       </div>
       <div id="chart-preview-echarts" class="chart-container"></div>
       <img id="chart-preview-image" style="display: none; max-width: 100%" />
+    </div>
+
+    <!-- Full-screen chart window: draggable + resizable, one node at a time -->
+    <div id="chart-fullscreen-panel">
+      <div class="panel-header">
+        <span id="chart-fullscreen-title">Chart</span>
+        <button class="panel-close" data-i18n="chart.saveImage" onclick="saveFullscreenImage()">
+          Save image
+        </button>
+        <button class="panel-close" data-i18n="stats.close" onclick="closeChartFullscreen()">
+          Close
+        </button>
+      </div>
+      <div id="chart-fullscreen-echarts" class="chart-container"></div>
+      <img id="chart-fullscreen-image" style="display: none; max-width: 100%" />
     </div>
 
     <!-- Data Preview Panel (generic paginated table for any dataset) -->

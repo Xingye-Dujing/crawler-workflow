@@ -3035,10 +3035,12 @@ var dataNodes = {
         if (!node) return;
         var p = node.params;
         _chartPreviewName = node.title || nodeId;
+        _chartPreviewNodeId = nodeId;
         var payload = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
-            y_field: p.y_field, value_field: p.value_field, agg: p.agg, title: p.title,
-            tokenize: boolParam(p.tokenize, false),
+            y_field: p.y_field, value_field: p.value_field, agg: p.agg,
+            label_field: p.label_field,
+            title: p.title, tokenize: boolParam(p.tokenize, false),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
         /* A chart always renders whatever its upstream produced — a crawl or
@@ -3229,6 +3231,17 @@ var _chartPreviewResizeHandler = null;
 /* Which node the open preview belongs to: the saved picture has to be named after
    the chart the user was looking at, not after whichever node was clicked last. */
 var _chartPreviewName = '';
+/* The node id the preview was opened for, so the preview panel's 全屏 button can hand
+   the very same chart to the full-screen window instead of guessing from a title. */
+var _chartPreviewNodeId = '';
+/* One ECharts instance for the full-screen window, disposed on close so reopening a
+   different chart never paints into a stale canvas. */
+var _chartFullscreenInstance = null;
+var _chartFullscreenImage = '';
+/* The raw option each surface was drawn from. The full-screen window reuses THIS rather
+   than a live instance's getOption(), which returns an ECharts-resolved tree that is not
+   meant to be fed back as an authoring option. */
+var _chartPreviewOption = null;
 
 /* ── Saving a drawn chart as a file ─────────────────────────────────────────
    A chart exists on screen in three places — the studio, the preview panel and a
@@ -3305,11 +3318,13 @@ function renderChartPreview(result) {
     var echartsDiv = document.getElementById('chart-preview-echarts');
     var imgEl = document.getElementById('chart-preview-image');
     if (result.engine === 'matplotlib') {
+        _chartPreviewOption = null;
         echartsDiv.style.display = 'none';
         echartsDiv.innerHTML = '';
         imgEl.style.display = 'block';
         imgEl.src = result.image;
     } else {
+        _chartPreviewOption = result.option;
         imgEl.style.display = 'none';
         echartsDiv.style.display = 'block';
         if (!_chartPreviewInstance) {
@@ -3331,6 +3346,133 @@ function toggleChartPreview() {
         _chartPreviewInstance.dispose();
         _chartPreviewInstance = null;
     }
+}
+
+/* ── Full-screen chart window ──────────────────────────────────────────────
+   A dashboard tile is ~300px; a figure meant for a paper has to be read at size.
+   openChartFullscreen shows ONE chart in a draggable/resizable floating window (the
+   same makeDraggable/makeResizable surface the preview panel uses). It sources the
+   chart from what is already on screen — the board's stored option, then its
+   matplotlib image, then the open preview — and only re-requests the render when the
+   node has none of those. Nothing here pays for an LLM: a 主题概括 tile that has not
+   run yet re-renders from the stored last-run rows via the SAME endpoint the cell used,
+   and if that has no rows it says so rather than drawing an empty figure. */
+async function openChartFullscreen(nodeId) {
+    var node = canvas.nodes[nodeId];
+    if (!node) return;
+    var panel = document.getElementById('chart-fullscreen-panel');
+    var titleEl = document.getElementById('chart-fullscreen-title');
+    if (titleEl) titleEl.textContent = node.title || nodeId;
+    panel.classList.add('open');
+
+    if (!panel.dataset._uiInit) {
+        panel.dataset._uiInit = '1';
+        makeDraggable(panel, '.panel-header');
+        makeResizable(panel, {
+            minW: 320,
+            minH: 240,
+            maxW: window.innerWidth - 20,
+            maxH: window.innerHeight - 20,
+            onResize: function () { if (_chartFullscreenInstance) _chartFullscreenInstance.resize(); }
+        });
+        if (!panel.querySelector('.resize-handle')) {
+            var rh = document.createElement('div');
+            rh.className = 'resize-handle';
+            panel.appendChild(rh);
+        }
+    }
+
+    var opt = dashboard._options && dashboard._options[nodeId];
+    if (opt) { _paintFullscreenOption(opt); return; }
+    var img = dashboard._images && dashboard._images[nodeId];
+    if (img) { _paintFullscreenImage(img); return; }
+    if (nodeId === _chartPreviewNodeId) {
+        if (_chartPreviewOption) { _paintFullscreenOption(_chartPreviewOption); return; }
+        var previewImg = document.getElementById('chart-preview-image');
+        if (previewImg && previewImg.style.display !== 'none' && String(previewImg.src).indexOf('data:image/') === 0) {
+            _paintFullscreenImage(previewImg.src);
+            return;
+        }
+    }
+    if (node.type !== 'visualize') return;
+    var p = node.params;
+    var payload = {
+        chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
+        y_field: p.y_field, value_field: p.value_field, agg: p.agg,
+        y2_field: p.y2_field, agg2: p.agg2, annotations: p.annotations,
+        label_field: p.label_field, title: p.title, tokenize: boolParam(p.tokenize, false),
+        wordcloud_style: p.wordcloud_style || 'vibrant',
+    };
+    var upstream = canvas.getUpstreamNodeId(nodeId);
+    if (!upstream) { showToast(I18n.t('dashboard.noData')); return; }
+    payload.node_id = upstream;
+    try {
+        var resp = await fetch('/api/visualize/render', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        var result = await resp.json();
+        if (!result.ok) { _paintFullscreenError(result.error || 'render failed'); return; }
+        if (result.engine === 'matplotlib') _paintFullscreenImage(result.image);
+        else _paintFullscreenOption(result.option);
+    } catch (e) {
+        _paintFullscreenError(e.message);
+    }
+}
+
+function _disposeFullscreenInstance() {
+    if (_chartFullscreenInstance) {
+        _chartFullscreenInstance.dispose();
+        _chartFullscreenInstance = null;
+    }
+}
+
+function _paintFullscreenOption(option) {
+    var div = document.getElementById('chart-fullscreen-echarts');
+    var img = document.getElementById('chart-fullscreen-image');
+    _disposeFullscreenInstance();
+    _chartFullscreenImage = '';
+    if (img) img.style.display = 'none';
+    div.style.display = 'block';
+    div.innerHTML = '';
+    _chartFullscreenInstance = echarts.init(div);
+    applyEchartsOption(_chartFullscreenInstance, option);
+}
+
+function _paintFullscreenImage(dataUrl) {
+    var div = document.getElementById('chart-fullscreen-echarts');
+    var img = document.getElementById('chart-fullscreen-image');
+    _disposeFullscreenInstance();
+    div.style.display = 'none';
+    div.innerHTML = '';
+    _chartFullscreenImage = dataUrl || '';
+    if (img) { img.style.display = 'block'; img.src = dataUrl; }
+}
+
+function _paintFullscreenError(message) {
+    var div = document.getElementById('chart-fullscreen-echarts');
+    var img = document.getElementById('chart-fullscreen-image');
+    _disposeFullscreenInstance();
+    _chartFullscreenImage = '';
+    if (img) img.style.display = 'none';
+    div.style.display = 'block';
+    div.innerHTML = '<div class="dashboard-cell-error">' + escapeHtml(message) + '</div>';
+}
+
+function closeChartFullscreen() {
+    document.getElementById('chart-fullscreen-panel').classList.remove('open');
+    _disposeFullscreenInstance();
+    _chartFullscreenImage = '';
+}
+
+function saveFullscreenImage() {
+    var dataUrl = '';
+    if (_chartFullscreenInstance) {
+        dataUrl = _chartFullscreenInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+    } else if (_chartFullscreenImage) {
+        dataUrl = _chartFullscreenImage;
+    }
+    var titleEl = document.getElementById('chart-fullscreen-title');
+    return saveChartPicture(dataUrl, (titleEl && titleEl.textContent) || 'chart-fullscreen');
 }
 
 /* ── Data Preview: generic paginated table for any dataset ──
@@ -3520,6 +3662,9 @@ var dashboard = {
        sent one as a data URL; keeping it beside the instance is what lets the same
        存图 button serve both engines. */
     _images: {},
+    /* The raw authoring option each ECharts cell was drawn from, so the 全屏 window
+       reuses the exact option instead of an instance's resolved getOption() tree. */
+    _options: {},
 
     async open() {
         var panel = document.getElementById('dashboard-panel');
@@ -3528,6 +3673,7 @@ var dashboard = {
         grid.innerHTML = '';
         this._instances = {};
         this._images = {};
+        this._options = {};
 
         var vizNodeIds = Object.keys(canvas.nodes).filter(function (id) {
             return canvas.nodes[id].type === 'visualize';
@@ -3547,6 +3693,8 @@ var dashboard = {
                 '<div class="dashboard-cell-title">' + escapeHtml(node.title || id) +
                 /* A node id is minted, never typed, so it is safe to put in the handler: the
                    name that could need escaping (the title) is read back at click time. */
+                ' <button class="menu-btn" onclick="openChartFullscreen(\'' + id + '\')">' +
+                I18n.t('chart.fullscreen') + '</button>' +
                 ' <button class="menu-btn" onclick="saveDashboardImage(\'' + id + '\')">' +
                 I18n.t('chart.saveImage') + '</button></div>' +
                 '<div class="dashboard-cell-body"></div>';
@@ -3580,6 +3728,9 @@ var dashboard = {
                (y2)" — the cell that looked like a board bug was a payload bug — and every cell
                lost its event lines, which is the whole point of 图2/图8/图23~27. */
             y2_field: p.y2_field, agg2: p.agg2, annotations: p.annotations,
+            /* The 主题距离图 / 流向图 read their Chinese bubble name from this field; a board
+               that dropped it silently fell back to the Topic-1 code the user replaced. */
+            label_field: p.label_field,
             title: p.title, tokenize: boolParam(p.tokenize, false),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
@@ -3612,6 +3763,7 @@ var dashboard = {
             } else {
                 var inst = echarts.init(body);
                 this._instances[nodeId] = inst;
+                this._options[nodeId] = result.option;
                 applyEchartsOption(inst, result.option);
             }
         } catch (e) {

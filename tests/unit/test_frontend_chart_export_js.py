@@ -42,14 +42,8 @@ INDEX = REPO / 'backend' / 'static' / 'index.html'
 HARNESS = REPO / 'tests' / 'frontend' / 'harness_chart_export.mjs'
 
 
-def _panel_markup() -> str:
-    """The ``#chart-preview-panel`` element from index.html, braces balanced.
-
-    Read from the page rather than copied here: the fixture's point is that the panel the
-    product saves from is the panel the product ships.
-    """
-    src = INDEX.read_text(encoding='utf-8')
-    start = src.index('<div id="chart-preview-panel">')
+def _extract_div(src: str, marker: str) -> str:
+    start = src.index(marker)
     opens, closes = re.compile(r'<div\b'), re.compile(r'</div>')
     pos, depth = start, 0
     while True:
@@ -65,6 +59,20 @@ def _panel_markup() -> str:
         else:
             break
     return src[start:pos]
+
+
+def _panel_markup() -> str:
+    """Both floating chart panels from index.html, braces balanced.
+
+    Read from the page rather than copied here: the fixture's point is that the panels the
+    product saves and full-screens from are the panels the product ships. The full-screen
+    window lives in its own element, so the harness needs it present in the markup to call
+    ``openChartFullscreen`` against the real ids.
+    """
+    src = INDEX.read_text(encoding='utf-8')
+    preview = _extract_div(src, '<div id="chart-preview-panel">')
+    fullscreen = _extract_div(src, '<div id="chart-fullscreen-panel">')
+    return preview + '\n' + fullscreen
 
 
 @pytest.fixture(scope='module')
@@ -156,6 +164,54 @@ class TestDashboardSave:
         assert case['image'] == 'data:image/png;base64,FROMINSTANCE'
 
 
+class TestChartFullscreen:
+    """The 全屏 window: reuse what is on screen, re-render only when nothing is, dispose on close.
+
+    The harm each case blocks: re-fetching a cell the board already drew (a 主题概括 tile would
+    hit the render endpoint on every click); a full-screen window that drops the `label_field`
+    and so silently redraws the Topic-1 code the user replaced; an instance that is never
+    disposed (resized forever); and a picture saved under a generic name the reader cannot tie
+    back to its figure.
+    """
+
+    def test_a_board_cell_fullscreens_from_its_stored_option_without_refetching(self, saved):
+        case = saved['fullscreen_from_board_option']
+        assert case['rendersExtra'] == 0, 'the board already has the option; re-asking is the bug'
+        assert case['fsAlive'] is True
+        assert case['panelOpen'] is True
+        assert case['title'] == '图25 全库主题距离图', 'the window is named after the canvas node, not the chart id'
+
+    def test_a_matplotlib_board_cell_fullscreens_the_picture_it_shows(self, saved):
+        case = saved['fullscreen_from_board_image']
+        assert case['rendersExtra'] == 0, 'the board already banked the image, so no re-render'
+        assert case['fsInstance'] is False, 'a matplotlib cell has no ECharts instance to make'
+        assert case['imgSrc'] == 'data:image/png;base64,MATPLOTLIBPICTURE'
+
+    def test_a_never_drawn_node_re_renders_and_still_sends_label_field(self, saved):
+        case = saved['fullscreen_refetch']
+        assert case['renders'] == 1, 'nothing on screen yet, so the window must ask the server once'
+        assert case['payload']['label_field'] == '主题概括', 'a dropped label_field redraws the Topic-1 code'
+        assert case['payload']['node_id'] == 'src-1', 'the rows come from the chart node upstream'
+        assert case['fsAlive'] is True
+
+    def test_the_open_preview_can_be_fullscreened_by_its_own_node_id(self, saved):
+        case = saved['fullscreen_from_preview']
+        assert case['rendersExtra'] == 0, 'the preview option is reused, not refetched'
+        assert case['fsAlive'] is True
+        assert case['nodeId'] == 'v-1'
+
+    def test_closing_disposes_the_instance_so_no_stale_canvas_is_resized(self, saved):
+        case = saved['fullscreen_close_disposes']
+        assert case['disposed'] >= 1
+        assert case['cleared'] is True
+
+    def test_the_fullscreen_picture_is_saved_under_the_window_title(self, saved):
+        case = saved['fullscreen_save_named_after_title']
+        assert case['name'] == '图30 二次爆发期距离图'
+        assert case['image'] == 'data:image/png;base64,FROMINSTANCE'
+        assert case['filename'] == 'tu23-a1b2c3.png'
+
+
 class TestPageMarkupAgreesWithTheCode:
     def test_the_preview_panel_offers_the_button_and_the_function_exists(self, saved):
         markup = saved['panel_markup']
@@ -163,8 +219,17 @@ class TestPageMarkupAgreesWithTheCode:
         assert 'chart.saveImage' in markup['keys']
         assert 'savePreviewImage()' in markup['onclicks']
 
+    def test_the_fullscreen_panel_and_its_three_buttons_ship_in_the_page(self, saved):
+        markup = saved['panel_markup']
+        assert markup['fullscreen_panel'] is True
+        assert markup['fullscreen_open_from_preview'] is True, 'the preview panel offers 全屏 for its own node'
+        assert markup['fullscreen_close'] is True and markup['fullscreen_save'] is True
+        assert markup['fullscreen_title_id'] is True, 'the window needs its title element to name the export'
+        assert 'chart.fullscreen' in markup['keys']
+
     def test_the_labels_the_page_stamps_are_in_the_loaded_catalog(self, saved):
         """A data-i18n key the catalog does not hold renders as the key itself."""
         catalog = saved['catalog']
         assert catalog['saveNothing'].startswith('Nothing to save yet')
         assert '{path}' in catalog['saved'], 'the saved toast has to carry the file name'
+        assert catalog['fullscreen'] and catalog['fullscreen'] != 'chart.fullscreen', 'the 全屏 key resolves'

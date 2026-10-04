@@ -30,17 +30,22 @@ def norm(p):
     w['name'] = 'X'
     return json.dumps(w, sort_keys=True, ensure_ascii=False)
 
-a = 'data/workflows/刘学州-情感演化分析.json'
-b = 'data/workflows/刘学州-评论-情感演化分析.json'
+from pathlib import Path
+
+a = Path('data/workflows/刘学州-情感演化分析.json')
+b = Path('data/workflows/刘学州-评论-情感演化分析.json')
 print(norm(a) == norm(b))
 ```
 
 （节点坐标不算差异：画布上的摆位是各人自己的事。）
 
-## 刘学州-情感演化分析.json（117 节点 / 116 连线）
+## 刘学州-情感演化分析.json（121 节点 / 120 连线）
 
 跑法：打开画布 → 点「执行」。串行模式，全量跑约 13 分钟（六次 snownlp + 五次分阶段 LDA + 五次全量一致性扫描），
 `主题概括` 另需 Ollama 起来（节点已写死 `model: qwen3.5:9b`，不依赖 AI 面板的选择）。
+除 表1 的 27 次概括外，4 张 `主题距离图` 各挂了一个 `主题概括` 节点（node-124~127，喂 `topic_map` 数据、写 `主题概括`，
+图节点 `label_field` 读它），所以气泡显示中文概括而不是 `主题1`——这也是约 20 次额外模型调用，同样走 `llm_cache`，
+重跑不重付；Ollama 没起来时这 4 张图会按 `label_on_fail=abort` 明确报错，不会退回画一圈 `Topic-1` 空图。
 
 ### 换一份数据重跑，必须改的就这四处
 

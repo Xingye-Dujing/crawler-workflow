@@ -128,9 +128,16 @@ def _parse_annotations(text) -> list:
 
 
 def _annotation_lines(markers, labels, field) -> dict:
-    """One ECharts ``markLine`` for the markers, or a refusal naming what is not on the axis."""
+    """One ECharts ``markLine`` for the markers, or a refusal naming what is not on the axis.
+
+    ``labels`` is the axis' already-localised tick list; ``markers`` come from the user's raw
+    ``annotations`` string. Localise each ``when`` before comparing and again in the emitted
+    ``xAxis`` value, or an English token the run renders as Chinese would match nothing and the
+    vertical line would refuse on an axis that in fact has that category.
+    """
     available = [str(value) for value in labels]
-    missing = [when for when, _ in markers if when not in available]
+    located = [(_localize_label(when), caption) for when, caption in markers]
+    missing = [when for when, _ in located if when not in available]
     if missing:
         preview = '、'.join(available[:8]) + (' …' if len(available) > 8 else '')
         raise ChartConfigError(
@@ -143,7 +150,7 @@ def _annotation_lines(markers, labels, field) -> dict:
         'silent': True,
         'lineStyle': {'color': '#F59E0B', 'type': 'dashed', 'width': 1.5},
         'label': {'show': True, 'position': 'insideEndTop', 'color': '#F59E0B', 'fontSize': 10},
-        'data': [{'xAxis': when, 'label': {'formatter': caption}} for when, caption in markers],
+        'data': [{'xAxis': when, 'label': {'formatter': caption}} for when, caption in located],
     }
 
 
@@ -197,6 +204,52 @@ _AXIS_STYLE = {
 # whose x axis carried ISO dates had its labels cut in half at the panel edge, and a figure that
 # hides its own scale is not readable in a paper.
 _GRID = {'left': 72, 'right': 72, 'top': 56, 'bottom': 96, 'containLabel': True}
+
+# ── Chart display localisation ──────────────────────────────────
+# Stored column names and analyzer label VALUES stay English in the data and the run ledger;
+# only the rendered text is translated, so a Chinese run shows 发帖量 / 正面 while an English run
+# shows Total / Positive (t() reads the run's thread-local language). Unknown values pass through
+# unchanged — a number, a date, an already-Chinese phase, or the user's own column name must not
+# be touched, and category values are unbounded, so a miss is a no-op, never a refusal.
+_CHART_COL_TOKENS = {
+    'total': 'chart.col.total',
+    'sentiment_index': 'chart.col.sentiment_index',
+    'sentiment': 'chart.col.sentiment',
+    'prevalence_pct': 'chart.col.prevalence_pct',
+    'doc_n': 'chart.col.doc_n',
+    'feature_words': 'chart.col.feature_words',
+    'topic': 'chart.col.topic',
+    'score': 'chart.col.score',
+    'weights': 'chart.col.weights',
+    'period': 'chart.col.period',
+    'intensity': 'chart.col.intensity',
+    'term': 'chart.col.term',
+    'overall_freq': 'chart.col.overall_freq',
+    'within_freq': 'chart.col.within_freq',
+    'sample_texts': 'chart.col.sample_texts',
+}
+_CHART_VALUE_TOKENS = {
+    'positive': 'chart.value.positive',
+    'negative': 'chart.value.negative',
+    'neutral': 'chart.value.neutral',
+}
+
+
+def _localize_label(value) -> str:
+    """Translate a chart *display* string — a column-name-as-label or a category value.
+
+    Only controlled tokens change; a number, a date, an already-Chinese phase or a 主题概括 is
+    returned as its own string. A ``Topic…`` label (the model's numbering) keeps its suffix but
+    swaps the English word, so ``Topic-1`` / ``TopicⅠ-1`` read 主题-1 / 主题Ⅰ-1.
+    """
+    text = str(value)
+    key = _CHART_COL_TOKENS.get(text) or _CHART_VALUE_TOKENS.get(text)
+    if key:
+        return t(key)
+    if text.startswith('Topic'):
+        return t('chart.col.topic') + text[len('Topic') :]
+    return text
+
 
 # ── Word cloud style presets ──
 # Each preset defines textStyle options for the echarts-wordcloud extension.
@@ -369,7 +422,7 @@ class VisualizationService:
             grouped = numeric.groupby(df[x], sort=False).agg(agg)
         else:
             grouped = df.groupby(x, sort=False).size()
-        return grouped.index.astype(str).tolist(), grouped.values.tolist()
+        return [_localize_label(value) for value in grouped.index.astype(str)], grouped.values.tolist()
 
     # ── ECharts option builder ───────────────────────────────────
 
@@ -571,17 +624,19 @@ class VisualizationService:
             base['grid'] = dict(_GRID)
             base['xAxis'] = {
                 'type': 'value',
-                'name': x,
+                'name': _localize_label(x),
                 'nameTextStyle': _TEXT_STYLE,
                 **_AXIS_STYLE,
             }
             base['yAxis'] = {
                 'type': 'value',
-                'name': y,
+                'name': _localize_label(y),
                 'nameTextStyle': _TEXT_STYLE,
                 **_AXIS_STYLE,
             }
-            base['tooltip']['formatter'] = f'<b>{{@[0]}}</b><br/>{x}: {{@[0]}}<br/>{y}: {{@[1]}}'
+            base['tooltip']['formatter'] = (
+                f'<b>{{@[0]}}</b><br/>{_localize_label(x)}: {{@[0]}}<br/>{_localize_label(y)}: {{@[1]}}'
+            )
             base['series'] = [
                 {
                     'type': 'scatter',
@@ -608,7 +663,7 @@ class VisualizationService:
             base['xAxis'] = {
                 'type': 'category',
                 'data': labels_bin,
-                'name': x,
+                'name': _localize_label(x),
                 'nameTextStyle': _TEXT_STYLE,
                 **_AXIS_STYLE,
             }
@@ -639,7 +694,8 @@ class VisualizationService:
                 if not x:
                     raise ChartConfigError('Box plot requires a category field (x) for grouping')
                 groups = [
-                    (str(name), pd.to_numeric(group[y], errors='coerce').dropna()) for name, group in df.groupby(x)
+                    (_localize_label(name), pd.to_numeric(group[y], errors='coerce').dropna())
+                    for name, group in df.groupby(x)
                 ]
                 labels = [g[0] for g in groups]
                 data = [_box_stats(g[1]) for g in groups]
@@ -651,7 +707,7 @@ class VisualizationService:
                 # Single box plot: x = numeric value (backward compat)
                 values = pd.to_numeric(df[x], errors='coerce').dropna()
                 stats = _box_stats(values)
-                labels = [x]
+                labels = [_localize_label(x)]
                 data = [stats]
                 scatter_data = [[0, v] for v in values.tolist()]
             else:
@@ -911,7 +967,7 @@ class VisualizationService:
                 'max': max_val,
                 'left': 10,
                 'bottom': 10,
-                'text': ['High', 'Low'],
+                'text': [t('chart.range.high'), t('chart.range.low')],
                 'textStyle': {'color': '#aaa', 'fontSize': 10},
                 'inRange': {'color': ['#ffffff', '#fef0d9', '#fdcc8a', '#fc8d59', '#e34a33', '#b30000']},
             }
@@ -948,7 +1004,7 @@ class VisualizationService:
             has_size = bool(value_field) and value_field in df.columns
             first = pd.to_numeric(df[x], errors='coerce').tolist()
             second = pd.to_numeric(df[y], errors='coerce').tolist()
-            labels = [str(name) for name in (df[label_field].tolist() if has_label else [''] * len(df))]
+            labels = [_localize_label(name) for name in (df[label_field].tolist() if has_label else [''] * len(df))]
             sizes = pd.to_numeric(df[value_field], errors='coerce').tolist() if has_size else [None] * len(df)
             biggest = max((float(size) for size in sizes if size == size and size is not None), default=0.0)
             points = []
@@ -974,19 +1030,19 @@ class VisualizationService:
             base['tooltip']['formatter'] = '{a}<br/>{b}'
             base['xAxis'] = {
                 'type': 'value',
-                'name': 'PC1',
+                'name': t('chart.axis.pc1'),
                 'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
                 'splitLine': {'show': False},
             }
             base['yAxis'] = {
                 'type': 'value',
-                'name': 'PC2',
+                'name': t('chart.axis.pc2'),
                 'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
                 'splitLine': {'show': False},
             }
             base['series'] = [
                 {
-                    'name': 'topics',
+                    'name': t('chart.series.topics'),
                     'type': 'scatter',
                     'data': points,
                     'itemStyle': {'color': 'rgba(59,130,249,0.35)', 'borderColor': color[0], 'borderWidth': 1},
@@ -1023,8 +1079,9 @@ class VisualizationService:
             terms = [str(name) for name in df[x].tolist()]
             overall = pd.to_numeric(df[y], errors='coerce').tolist()
             within = pd.to_numeric(df[y2], errors='coerce').tolist()
+            y_disp, y2_disp = _localize_label(y), _localize_label(y2)
             base['grid'] = {**_GRID, 'left': 90}
-            base['legend'] = {'data': [y, y2], 'top': 28, 'textStyle': _TEXT_STYLE}
+            base['legend'] = {'data': [y_disp, y2_disp], 'top': 28, 'textStyle': _TEXT_STYLE}
             base['tooltip'] = {**base['tooltip'], 'trigger': 'axis', 'axisPointer': {'type': 'shadow'}}
             base['xAxis'] = {
                 'type': 'value',
@@ -1043,14 +1100,14 @@ class VisualizationService:
             }
             base['series'] = [
                 {
-                    'name': y,
+                    'name': y_disp,
                     'type': 'bar',
                     'data': [_json_safe(value) for value in overall],
                     'itemStyle': {'color': 'rgba(59,130,249,0.65)'},
                     'barGap': 0,
                 },
                 {
-                    'name': y2,
+                    'name': y2_disp,
                     'type': 'bar',
                     'data': [_json_safe(value) for value in within],
                     'itemStyle': {'color': '#E15759'},
@@ -1064,13 +1121,15 @@ class VisualizationService:
                 raise ChartConfigError('Dual-axis line chart requires a category field (x)')
             if not y2:
                 raise ChartConfigError('Dual-axis line chart requires a second value field (y2) — the right axis')
-            left_name = y or f'count({x})'
+            # Display names only; the grouping below still reads the raw columns.
+            left_name = _localize_label(y) if y else f'{t("chart.count")}（{_localize_label(x)}）'
+            y2_name = _localize_label(y2)
             labels, left = cls._aggregate(df, x, y, agg)
             # Both series group by the SAME x, so they share the category axis by
             # construction; only the second series' values are wanted here.
             _, right = cls._aggregate(df, x, y2, agg2 or agg)
             base['grid'] = {**_GRID, 'right': 60}
-            base['legend'] = {'data': [left_name, y2], 'top': 28, 'textStyle': _TEXT_STYLE}
+            base['legend'] = {'data': [left_name, y2_name], 'top': 28, 'textStyle': _TEXT_STYLE}
             base['xAxis'] = {
                 'type': 'category',
                 'data': labels,
@@ -1094,7 +1153,7 @@ class VisualizationService:
                 },
                 {
                     'type': 'value',
-                    'name': y2,
+                    'name': y2_name,
                     'nameTextStyle': _TEXT_STYLE,
                     'position': 'right',
                     'axisLabel': {'color': '#aaa', 'fontSize': 10, 'fontFamily': 'sans-serif'},
@@ -1116,7 +1175,7 @@ class VisualizationService:
                     'itemStyle': {'color': color[0]},
                 },
                 {
-                    'name': y2,
+                    'name': y2_name,
                     'type': 'line',
                     'yAxisIndex': 1,
                     'data': right,
@@ -1261,7 +1320,8 @@ class VisualizationService:
             (str(ykey), str(xkey)): (value if np.isfinite(value) else 0) for (ykey, xkey), value in grouped.items()
         }
         matrix = [[cells.get((yy, xx), 0) for xx in xcats] for yy in ycats]
-        return xcats, ycats, matrix
+        # The matrix is addressed by the RAW strings above; localise only what reaches the screen.
+        return [_localize_label(value) for value in xcats], [_localize_label(value) for value in ycats], matrix
 
     @staticmethod
     def _sankey_links(df: pd.DataFrame, source: str, target: str, value_field: str = None, agg: str = 'count'):
@@ -1285,8 +1345,17 @@ class VisualizationService:
         for _, row in grouped.iterrows():
             weights = _finite([row['_v']])
             if weights and weights[0]:
-                links.append({'source': str(row['_s']), 'target': str(row['_t']), 'value': weights[0]})
-        nodes = sorted(set(grouped['_s'].astype(str)) | set(grouped['_t'].astype(str)))
+                links.append(
+                    {
+                        'source': _localize_label(row['_s']),
+                        'target': _localize_label(row['_t']),
+                        'value': weights[0],
+                    }
+                )
+        nodes = sorted(
+            set(_localize_label(v) for v in grouped['_s'].astype(str))
+            | set(_localize_label(v) for v in grouped['_t'].astype(str))
+        )
         return nodes, links
 
     # ── Matplotlib renderer (server-side PNG) ───────────────────

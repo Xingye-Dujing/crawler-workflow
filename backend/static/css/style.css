@@ -1428,6 +1428,35 @@ body.style-menu-open #workspace #resume-banner {
   display: block;
 }
 
+/* ── Full-screen chart window (draggable + resizable, one chart at a time) ── */
+/* Starts centred via transform; makeDraggable's convertToFloating reads that transform
+   on first mousedown and pins left/top in its place, so the window is both centred and
+   draggable. It sits above the preview panel (1002) and coexists with it. */
+#chart-fullscreen-panel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 80vw;
+  height: 80vh;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  z-index: 1003;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+#chart-fullscreen-panel.open { display: flex; }
+#chart-fullscreen-echarts { flex: 1; min-height: 0; width: 100%; }
+#chart-fullscreen-image {
+  margin: auto;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  object-fit: contain;
+  display: block;
+}
+
 /* ── Loading spinner ────────────────────────────────────────────────────── */
 .loading-container {
   display: flex;
@@ -3189,6 +3218,7 @@ html[data-cloud='1'] .ai-only-ollama {
 #cookie-dialog.open .resize-handle,
 #processes-panel.open .resize-handle,
 #chart-preview-panel.open .resize-handle,
+#chart-fullscreen-panel.open .resize-handle,
 #data-preview-panel.open .resize-handle,
 #history-panel.open .resize-handle,
 .panel-dragging .resize-handle {

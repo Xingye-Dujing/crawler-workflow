@@ -13,7 +13,7 @@
       },
       "operation": "save",
       "x": 353,
-      "y": 2282,
+      "y": 2212,
       "folded": false
     },
     {
@@ -31,7 +31,7 @@
       },
       "operation": "clean",
       "x": 693,
-      "y": 2282,
+      "y": 2212,
       "folded": false
     },
     {
@@ -47,7 +47,7 @@
       },
       "operation": "filter_rows",
       "x": 1033,
-      "y": 2212,
+      "y": 2142,
       "folded": false
     },
     {
@@ -62,7 +62,7 @@
       },
       "operation": "drop_duplicates",
       "x": 1373,
-      "y": 2212,
+      "y": 2142,
       "folded": false
     },
     {
@@ -77,7 +77,7 @@
       },
       "operation": "dedupe_similar",
       "x": 1713,
-      "y": 2212,
+      "y": 2142,
       "folded": false
     },
     {
@@ -94,7 +94,7 @@
       },
       "operation": "sentiment",
       "x": 2069,
-      "y": 2072,
+      "y": 2002,
       "folded": false
     },
     {
@@ -110,7 +110,7 @@
       },
       "operation": "extract_time",
       "x": 2421,
-      "y": 1925,
+      "y": 1862,
       "folded": false
     },
     {
@@ -127,8 +127,8 @@
         "phase_order_col": "阶段序号"
       },
       "operation": "bin_time",
-      "x": 2776,
-      "y": 2065,
+      "x": 2784,
+      "y": 1918,
       "folded": false
     },
     {
@@ -147,8 +147,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 3126,
-      "y": 1302,
+      "x": 3134,
+      "y": 1232,
       "folded": false
     },
     {
@@ -165,7 +165,7 @@
         "x_field": "period",
         "y_field": "total"
       },
-      "x": 3586,
+      "x": 3594,
       "y": 0,
       "folded": false
     },
@@ -183,7 +183,7 @@
         "x_field": "period",
         "y_field": "sentiment_index"
       },
-      "x": 3586,
+      "x": 3594,
       "y": 154,
       "folded": false
     },
@@ -204,8 +204,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 3126,
-      "y": 1442,
+      "x": 3134,
+      "y": 1372,
       "folded": false
     },
     {
@@ -221,7 +221,7 @@
         "x_field": "period",
         "y_field": "total"
       },
-      "x": 3586,
+      "x": 3594,
       "y": 742,
       "folded": false
     },
@@ -237,7 +237,7 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 3586,
+      "x": 3594,
       "y": 896,
       "folded": false
     },
@@ -258,8 +258,8 @@
         "word_source": "tfidf"
       },
       "operation": "topic_by_stage",
-      "x": 3126,
-      "y": 1582,
+      "x": 3134,
+      "y": 1512,
       "folded": false
     },
     {
@@ -277,7 +277,7 @@
         "operation": "topic_label"
       },
       "operation": "topic_label",
-      "x": 3586,
+      "x": 3594,
       "y": 1190,
       "folded": false
     },
@@ -293,8 +293,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 784,
+      "x": 4033,
+      "y": 812,
       "folded": false
     },
     {
@@ -307,7 +307,7 @@
         "row_count": 10000
       },
       "x": 0,
-      "y": 1890,
+      "y": 1820,
       "folded": false
     },
     {
@@ -320,7 +320,7 @@
         "row_count": 10000
       },
       "x": 0,
-      "y": 2044,
+      "y": 1974,
       "folded": false
     },
     {
@@ -333,7 +333,7 @@
         "row_count": 10000
       },
       "x": 0,
-      "y": 2198,
+      "y": 2128,
       "folded": false
     },
     {
@@ -346,7 +346,7 @@
         "row_count": 10000
       },
       "x": 0,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -359,7 +359,7 @@
         "row_count": 1562
       },
       "x": 0,
-      "y": 2506,
+      "y": 2436,
       "folded": false
     },
     {
@@ -374,7 +374,7 @@
       },
       "operation": "save",
       "x": 1033,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -389,7 +389,7 @@
       },
       "operation": "save",
       "x": 1373,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -404,7 +404,7 @@
       },
       "operation": "save",
       "x": 1713,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -419,7 +419,7 @@
       },
       "operation": "save",
       "x": 2069,
-      "y": 2212,
+      "y": 2142,
       "folded": false
     },
     {
@@ -434,7 +434,7 @@
       },
       "operation": "save",
       "x": 2421,
-      "y": 2065,
+      "y": 2002,
       "folded": false
     },
     {
@@ -448,8 +448,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 2776,
-      "y": 2345,
+      "x": 2784,
+      "y": 2198,
       "folded": false
     },
     {
@@ -462,7 +462,7 @@
         "row_count": 2945
       },
       "x": 0,
-      "y": 2660,
+      "y": 2590,
       "folded": false
     },
     {
@@ -478,8 +478,8 @@
         "stages_peak_ratio": "2"
       },
       "operation": "suggest_stages",
-      "x": 2776,
-      "y": 2205,
+      "x": 2784,
+      "y": 2058,
       "folded": false
     },
     {
@@ -494,8 +494,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 3126,
-      "y": 3262,
+      "x": 3134,
+      "y": 3192,
       "folded": false
     },
     {
@@ -514,7 +514,7 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 3586,
+      "x": 3594,
       "y": 308,
       "folded": false
     },
@@ -533,7 +533,7 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 3586,
+      "x": 3594,
       "y": 1036,
       "folded": false
     },
@@ -551,7 +551,7 @@
       },
       "operation": "topic_map",
       "x": 2069,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -562,14 +562,14 @@
         "chart_type": "topic_map",
         "enabled": true,
         "engine": "echarts",
-        "label_field": "topic",
+        "label_field": "主题概括",
         "title": "刘学州事件 主题距离图（气泡大小=主题占比）",
         "value_field": "prevalence_pct",
         "x_field": "pc1",
         "y_field": "pc2"
       },
-      "x": 2421,
-      "y": 2205,
+      "x": 2784,
+      "y": 2338,
       "folded": false
     },
     {
@@ -587,7 +587,7 @@
       },
       "operation": "topic_salience",
       "x": 2069,
-      "y": 2492,
+      "y": 2422,
       "folded": false
     },
     {
@@ -603,7 +603,7 @@
       },
       "operation": "filter_rows",
       "x": 2421,
-      "y": 2499,
+      "y": 2422,
       "folded": false
     },
     {
@@ -619,8 +619,8 @@
         "y2_field": "within_freq",
         "y_field": "overall_freq"
       },
-      "x": 2776,
-      "y": 2485,
+      "x": 2784,
+      "y": 2492,
       "folded": false
     },
     {
@@ -636,7 +636,7 @@
       },
       "operation": "save",
       "x": 2421,
-      "y": 2359,
+      "y": 2282,
       "folded": false
     },
     {
@@ -652,7 +652,7 @@
       },
       "operation": "save",
       "x": 2421,
-      "y": 2639,
+      "y": 2562,
       "folded": false
     },
     {
@@ -667,8 +667,8 @@
         "value": "爆发期"
       },
       "operation": "filter_rows",
-      "x": 3126,
-      "y": 1722,
+      "x": 3134,
+      "y": 1652,
       "folded": false
     },
     {
@@ -684,8 +684,8 @@
         "topic_topn": "6"
       },
       "operation": "topic_map",
-      "x": 3586,
-      "y": 1610,
+      "x": 3594,
+      "y": 1470,
       "folded": false
     },
     {
@@ -695,13 +695,13 @@
       "params": {
         "chart_type": "topic_map",
         "engine": "echarts",
-        "label_field": "topic",
+        "label_field": "主题概括",
         "value_field": "prevalence_pct",
         "x_field": "pc1",
         "y_field": "pc2"
       },
-      "x": 4025,
-      "y": 1358,
+      "x": 4461,
+      "y": 1232,
       "folded": false
     },
     {
@@ -717,8 +717,8 @@
         "topic_topn": "30"
       },
       "operation": "topic_salience",
-      "x": 3586,
-      "y": 1750,
+      "x": 3594,
+      "y": 1610,
       "folded": false
     },
     {
@@ -732,8 +732,8 @@
         "value": "Topic-1"
       },
       "operation": "filter_rows",
-      "x": 4025,
-      "y": 1512,
+      "x": 4033,
+      "y": 1372,
       "folded": false
     },
     {
@@ -748,7 +748,7 @@
         "y2_field": "within_freq",
         "y_field": "overall_freq"
       },
-      "x": 4453,
+      "x": 4461,
       "y": 1386,
       "folded": false
     },
@@ -763,8 +763,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 1652,
+      "x": 4033,
+      "y": 1512,
       "folded": false
     },
     {
@@ -781,7 +781,7 @@
         "timeline_words_col": "feature_words"
       },
       "operation": "topic_timeline",
-      "x": 3586,
+      "x": 3594,
       "y": 1330,
       "folded": false
     },
@@ -796,8 +796,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 924,
+      "x": 4033,
+      "y": 1092,
       "folded": false
     },
     {
@@ -815,8 +815,8 @@
         "operation": "topic_flow"
       },
       "operation": "topic_flow",
-      "x": 3586,
-      "y": 1470,
+      "x": 4033,
+      "y": 952,
       "folded": false
     },
     {
@@ -831,8 +831,8 @@
         "x_field": "source",
         "y_field": "target"
       },
-      "x": 4025,
-      "y": 1064,
+      "x": 4461,
+      "y": 938,
       "folded": false
     },
     {
@@ -846,8 +846,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 1218,
+      "x": 4461,
+      "y": 1092,
       "folded": false
     },
     {
@@ -862,8 +862,8 @@
         "operation": "cooccur"
       },
       "operation": "cooccur",
-      "x": 3126,
-      "y": 1862,
+      "x": 3134,
+      "y": 1792,
       "folded": false
     },
     {
@@ -878,8 +878,8 @@
         "x_field": "source",
         "y_field": "target"
       },
-      "x": 3586,
-      "y": 1890,
+      "x": 3594,
+      "y": 1750,
       "folded": false
     },
     {
@@ -893,8 +893,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 3586,
-      "y": 2044,
+      "x": 3594,
+      "y": 1904,
       "folded": false
     },
     {
@@ -911,8 +911,8 @@
         "topic_topn": "10"
       },
       "operation": "topic_coherence",
-      "x": 3126,
-      "y": 2002,
+      "x": 3134,
+      "y": 1932,
       "folded": false
     },
     {
@@ -926,8 +926,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 3586,
-      "y": 2184,
+      "x": 3594,
+      "y": 2044,
       "folded": false
     },
     {
@@ -943,7 +943,7 @@
         "operation": "forecast"
       },
       "operation": "forecast",
-      "x": 3586,
+      "x": 3594,
       "y": 462,
       "folded": false
     },
@@ -958,8 +958,8 @@
         "x_field": "period",
         "y_field": "predicted"
       },
-      "x": 4025,
-      "y": 350,
+      "x": 4033,
+      "y": 378,
       "folded": false
     },
     {
@@ -973,8 +973,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 504,
+      "x": 4033,
+      "y": 532,
       "folded": false
     },
     {
@@ -993,7 +993,7 @@
         "operation": "alert"
       },
       "operation": "alert",
-      "x": 3586,
+      "x": 3594,
       "y": 602,
       "folded": false
     },
@@ -1008,8 +1008,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 644,
+      "x": 4033,
+      "y": 672,
       "folded": false
     },
     {
@@ -1022,8 +1022,8 @@
         "text_column": "cleaned_text"
       },
       "operation": "aggression",
-      "x": 3126,
-      "y": 2142,
+      "x": 3134,
+      "y": 2072,
       "folded": false
     },
     {
@@ -1037,8 +1037,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 3586,
-      "y": 2324,
+      "x": 3594,
+      "y": 2184,
       "folded": false
     },
     {
@@ -1052,8 +1052,8 @@
         "operation": "groupby_agg"
       },
       "operation": "groupby_agg",
-      "x": 3586,
-      "y": 2464,
+      "x": 3594,
+      "y": 2324,
       "folded": false
     },
     {
@@ -1066,8 +1066,8 @@
         "x_field": "日期",
         "y_field": "aggression_score"
       },
-      "x": 4025,
-      "y": 1792,
+      "x": 4033,
+      "y": 1652,
       "folded": false
     },
     {
@@ -1081,8 +1081,8 @@
         "value": "发酵期"
       },
       "operation": "filter_rows",
-      "x": 3126,
-      "y": 2282,
+      "x": 3134,
+      "y": 2212,
       "folded": false
     },
     {
@@ -1097,8 +1097,8 @@
         "topic_topn": "6"
       },
       "operation": "topic_map",
-      "x": 3586,
-      "y": 2744,
+      "x": 3594,
+      "y": 2604,
       "folded": false
     },
     {
@@ -1108,13 +1108,13 @@
       "params": {
         "chart_type": "topic_map",
         "engine": "echarts",
-        "label_field": "topic",
+        "label_field": "主题概括",
         "value_field": "prevalence_pct",
         "x_field": "pc1",
         "y_field": "pc2"
       },
-      "x": 4025,
-      "y": 2086,
+      "x": 4461,
+      "y": 1540,
       "folded": false
     },
     {
@@ -1130,8 +1130,8 @@
         "topic_topn": "30"
       },
       "operation": "topic_salience",
-      "x": 3586,
-      "y": 2884,
+      "x": 3594,
+      "y": 2744,
       "folded": false
     },
     {
@@ -1145,8 +1145,8 @@
         "value": "Topic-1"
       },
       "operation": "filter_rows",
-      "x": 4025,
-      "y": 2240,
+      "x": 4033,
+      "y": 2086,
       "folded": false
     },
     {
@@ -1160,8 +1160,8 @@
         "y2_field": "within_freq",
         "y_field": "overall_freq"
       },
-      "x": 4453,
-      "y": 1540,
+      "x": 4461,
+      "y": 1694,
       "folded": false
     },
     {
@@ -1175,8 +1175,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 2380,
+      "x": 4033,
+      "y": 2226,
       "folded": false
     },
     {
@@ -1190,8 +1190,8 @@
         "value": "二次爆发期"
       },
       "operation": "filter_rows",
-      "x": 3126,
-      "y": 2422,
+      "x": 3134,
+      "y": 2352,
       "folded": false
     },
     {
@@ -1206,8 +1206,8 @@
         "topic_topn": "6"
       },
       "operation": "topic_map",
-      "x": 3586,
-      "y": 3024,
+      "x": 3594,
+      "y": 2884,
       "folded": false
     },
     {
@@ -1217,13 +1217,13 @@
       "params": {
         "chart_type": "topic_map",
         "engine": "echarts",
-        "label_field": "topic",
+        "label_field": "主题概括",
         "value_field": "prevalence_pct",
         "x_field": "pc1",
         "y_field": "pc2"
       },
-      "x": 4025,
-      "y": 2520,
+      "x": 4461,
+      "y": 1848,
       "folded": false
     },
     {
@@ -1239,8 +1239,8 @@
         "topic_topn": "30"
       },
       "operation": "topic_salience",
-      "x": 3586,
-      "y": 3164,
+      "x": 3594,
+      "y": 3024,
       "folded": false
     },
     {
@@ -1254,8 +1254,8 @@
         "value": "Topic-1"
       },
       "operation": "filter_rows",
-      "x": 4025,
-      "y": 2674,
+      "x": 4033,
+      "y": 2506,
       "folded": false
     },
     {
@@ -1269,8 +1269,8 @@
         "y2_field": "within_freq",
         "y_field": "overall_freq"
       },
-      "x": 4453,
-      "y": 1694,
+      "x": 4461,
+      "y": 2002,
       "folded": false
     },
     {
@@ -1284,8 +1284,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 2814,
+      "x": 4033,
+      "y": 2646,
       "folded": false
     },
     {
@@ -1300,8 +1300,8 @@
         "operation": "groupby_agg"
       },
       "operation": "groupby_agg",
-      "x": 3586,
-      "y": 2604,
+      "x": 3594,
+      "y": 2464,
       "folded": false
     },
     {
@@ -1315,8 +1315,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 1946,
+      "x": 4033,
+      "y": 1806,
       "folded": false
     },
     {
@@ -1331,8 +1331,8 @@
         "value": "发酵期"
       },
       "operation": "filter_rows",
-      "x": 3126,
-      "y": 2562,
+      "x": 3134,
+      "y": 2492,
       "folded": false
     },
     {
@@ -1348,8 +1348,8 @@
         "text_column": "cleaned_text"
       },
       "operation": "sentiment",
-      "x": 3586,
-      "y": 3304,
+      "x": 3594,
+      "y": 3164,
       "folded": false
     },
     {
@@ -1368,8 +1368,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4025,
-      "y": 2954,
+      "x": 4033,
+      "y": 2786,
       "folded": false
     },
     {
@@ -1388,8 +1388,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4453,
-      "y": 1848,
+      "x": 4461,
+      "y": 2156,
       "folded": false
     },
     {
@@ -1403,8 +1403,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4453,
-      "y": 2002,
+      "x": 4461,
+      "y": 2310,
       "folded": false
     },
     {
@@ -1419,8 +1419,8 @@
         "value": "爆发期"
       },
       "operation": "filter_rows",
-      "x": 3126,
-      "y": 2702,
+      "x": 3134,
+      "y": 2632,
       "folded": false
     },
     {
@@ -1436,8 +1436,8 @@
         "text_column": "cleaned_text"
       },
       "operation": "sentiment",
-      "x": 3586,
-      "y": 3584,
+      "x": 3594,
+      "y": 3444,
       "folded": false
     },
     {
@@ -1456,8 +1456,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4025,
-      "y": 3234,
+      "x": 4033,
+      "y": 3066,
       "folded": false
     },
     {
@@ -1476,8 +1476,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4453,
-      "y": 2142,
+      "x": 4461,
+      "y": 2450,
       "folded": false
     },
     {
@@ -1491,8 +1491,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4453,
-      "y": 2296,
+      "x": 4461,
+      "y": 2604,
       "folded": false
     },
     {
@@ -1507,8 +1507,8 @@
         "value": "波动期"
       },
       "operation": "filter_rows",
-      "x": 3126,
-      "y": 2842,
+      "x": 3134,
+      "y": 2772,
       "folded": false
     },
     {
@@ -1524,8 +1524,8 @@
         "text_column": "cleaned_text"
       },
       "operation": "sentiment",
-      "x": 3586,
-      "y": 3864,
+      "x": 3594,
+      "y": 3724,
       "folded": false
     },
     {
@@ -1544,8 +1544,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4025,
-      "y": 3514,
+      "x": 4033,
+      "y": 3346,
       "folded": false
     },
     {
@@ -1564,8 +1564,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4453,
-      "y": 2436,
+      "x": 4461,
+      "y": 2744,
       "folded": false
     },
     {
@@ -1579,8 +1579,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4453,
-      "y": 2590,
+      "x": 4461,
+      "y": 2898,
       "folded": false
     },
     {
@@ -1595,8 +1595,8 @@
         "value": "二次爆发期"
       },
       "operation": "filter_rows",
-      "x": 3126,
-      "y": 2982,
+      "x": 3134,
+      "y": 2912,
       "folded": false
     },
     {
@@ -1612,8 +1612,8 @@
         "text_column": "cleaned_text"
       },
       "operation": "sentiment",
-      "x": 3586,
-      "y": 4144,
+      "x": 3594,
+      "y": 4004,
       "folded": false
     },
     {
@@ -1632,8 +1632,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4025,
-      "y": 3794,
+      "x": 4033,
+      "y": 3626,
       "folded": false
     },
     {
@@ -1652,8 +1652,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4453,
-      "y": 2730,
+      "x": 4461,
+      "y": 3038,
       "folded": false
     },
     {
@@ -1667,8 +1667,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4453,
-      "y": 2884,
+      "x": 4461,
+      "y": 3192,
       "folded": false
     },
     {
@@ -1683,8 +1683,8 @@
         "value": "衰退期"
       },
       "operation": "filter_rows",
-      "x": 3126,
-      "y": 3122,
+      "x": 3134,
+      "y": 3052,
       "folded": false
     },
     {
@@ -1700,8 +1700,8 @@
         "text_column": "cleaned_text"
       },
       "operation": "sentiment",
-      "x": 3586,
-      "y": 4424,
+      "x": 3594,
+      "y": 4284,
       "folded": false
     },
     {
@@ -1720,8 +1720,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4025,
-      "y": 4074,
+      "x": 4033,
+      "y": 3906,
       "folded": false
     },
     {
@@ -1740,8 +1740,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4453,
-      "y": 3024,
+      "x": 4461,
+      "y": 3332,
       "folded": false
     },
     {
@@ -1755,8 +1755,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4453,
-      "y": 3178,
+      "x": 4461,
+      "y": 3486,
       "folded": false
     },
     {
@@ -1773,8 +1773,8 @@
         "topic_topn": "10"
       },
       "operation": "topic_coherence",
-      "x": 3586,
-      "y": 3444,
+      "x": 3594,
+      "y": 3304,
       "folded": false
     },
     {
@@ -1788,8 +1788,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 3094,
+      "x": 4033,
+      "y": 2926,
       "folded": false
     },
     {
@@ -1806,8 +1806,8 @@
         "topic_topn": "10"
       },
       "operation": "topic_coherence",
-      "x": 3586,
-      "y": 3724,
+      "x": 3594,
+      "y": 3584,
       "folded": false
     },
     {
@@ -1821,8 +1821,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 3374,
+      "x": 4033,
+      "y": 3206,
       "folded": false
     },
     {
@@ -1839,8 +1839,8 @@
         "topic_topn": "10"
       },
       "operation": "topic_coherence",
-      "x": 3586,
-      "y": 4004,
+      "x": 3594,
+      "y": 3864,
       "folded": false
     },
     {
@@ -1854,8 +1854,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 3654,
+      "x": 4033,
+      "y": 3486,
       "folded": false
     },
     {
@@ -1872,8 +1872,8 @@
         "topic_topn": "10"
       },
       "operation": "topic_coherence",
-      "x": 3586,
-      "y": 4284,
+      "x": 3594,
+      "y": 4144,
       "folded": false
     },
     {
@@ -1887,8 +1887,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 3934,
+      "x": 4033,
+      "y": 3766,
       "folded": false
     },
     {
@@ -1905,8 +1905,8 @@
         "topic_topn": "10"
       },
       "operation": "topic_coherence",
-      "x": 3586,
-      "y": 4564,
+      "x": 3594,
+      "y": 4424,
       "folded": false
     },
     {
@@ -1920,8 +1920,84 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4025,
-      "y": 4214,
+      "x": 4033,
+      "y": 4046,
+      "folded": false
+    },
+    {
+      "id": "node-124",
+      "type": "analysis",
+      "title": "主题概括（全库主题距离图）",
+      "params": {
+        "enabled": true,
+        "label_max_topics": "30",
+        "label_on_fail": "abort",
+        "label_samples_col": "sample_texts",
+        "label_summary_col": "主题概括",
+        "label_words_col": "feature_words",
+        "model": "qwen3.5:9b",
+        "operation": "topic_label"
+      },
+      "operation": "topic_label",
+      "x": 2421,
+      "y": 2142,
+      "folded": false
+    },
+    {
+      "id": "node-125",
+      "type": "analysis",
+      "title": "主题概括（爆发期主题距离图）",
+      "params": {
+        "enabled": true,
+        "label_max_topics": "30",
+        "label_on_fail": "abort",
+        "label_samples_col": "sample_texts",
+        "label_summary_col": "主题概括",
+        "label_words_col": "feature_words",
+        "model": "qwen3.5:9b",
+        "operation": "topic_label"
+      },
+      "operation": "topic_label",
+      "x": 4033,
+      "y": 1232,
+      "folded": false
+    },
+    {
+      "id": "node-126",
+      "type": "analysis",
+      "title": "主题概括（发酵期主题距离图）",
+      "params": {
+        "enabled": true,
+        "label_max_topics": "30",
+        "label_on_fail": "abort",
+        "label_samples_col": "sample_texts",
+        "label_summary_col": "主题概括",
+        "label_words_col": "feature_words",
+        "model": "qwen3.5:9b",
+        "operation": "topic_label"
+      },
+      "operation": "topic_label",
+      "x": 4033,
+      "y": 1946,
+      "folded": false
+    },
+    {
+      "id": "node-127",
+      "type": "analysis",
+      "title": "主题概括（二次爆发期主题距离图）",
+      "params": {
+        "enabled": true,
+        "label_max_topics": "30",
+        "label_on_fail": "abort",
+        "label_samples_col": "sample_texts",
+        "label_summary_col": "主题概括",
+        "label_words_col": "feature_words",
+        "model": "qwen3.5:9b",
+        "operation": "topic_label"
+      },
+      "operation": "topic_label",
+      "x": 4033,
+      "y": 2366,
       "folded": false
     }
   ],
@@ -2060,7 +2136,7 @@
     },
     {
       "from": "node-40",
-      "to": "node-41"
+      "to": "node-124"
     },
     {
       "from": "node-40",
@@ -2092,7 +2168,7 @@
     },
     {
       "from": "node-48",
-      "to": "node-49"
+      "to": "node-125"
     },
     {
       "from": "node-47",
@@ -2196,7 +2272,7 @@
     },
     {
       "from": "node-74",
-      "to": "node-75"
+      "to": "node-126"
     },
     {
       "from": "node-73",
@@ -2224,7 +2300,7 @@
     },
     {
       "from": "node-81",
-      "to": "node-82"
+      "to": "node-127"
     },
     {
       "from": "node-80",
@@ -2389,6 +2465,22 @@
     {
       "from": "node-122",
       "to": "node-123"
+    },
+    {
+      "from": "node-124",
+      "to": "node-41"
+    },
+    {
+      "from": "node-125",
+      "to": "node-49"
+    },
+    {
+      "from": "node-126",
+      "to": "node-75"
+    },
+    {
+      "from": "node-127",
+      "to": "node-82"
     }
   ],
   "settings": {
@@ -2397,8 +2489,8 @@
     "max_workers": 4,
     "disabledTypes": [],
     "view": {
-      "panX": 377.59999999999997,
-      "panY": 25.599999999999966,
+      "panX": 376.79999999999995,
+      "panY": 39.599999999999966,
       "zoom": 0.2
     }
   },
