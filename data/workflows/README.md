@@ -5,9 +5,10 @@
 
 ## 两张刘学州画布必须成对同步
 
-`刘学州-情感演化分析.json`（六份博文导出）与 `刘学州-评论-情感演化分析.json`（六份评论导出）**除了上传节点
-指向的数据集不同，其余内容必须完全一致**——它们是同一个论文流程在两种语料上的两次复现，任何一处分析参数、
-连线或标题只改一张，两张图就在讲两个故事。改完一张跑这段核对（应打印 True）：
+`刘学州-情感演化分析.json`（六份博文导出）与 `刘学州-评论-情感演化分析.json`（六份评论导出）**除了两处按语料而
+异的地方，其余内容必须完全一致**：(1) 上传节点指向的数据集不同；(2) 评论语料没有 `正文`/`发布时间` 两列，所以清洗
+节点（node-6 `text_column`）读 `评论内容`、提取日期与划分阶段（node-11/12 `column`）读 `评论时间`。除这两类之外，
+任何一处分析参数、连线或标题只改一张，两张图就在讲两个故事。改完一张跑这段核对（应打印 True，其中已把上述语料列名归一）：
 
 ```python
 import json, io
@@ -17,6 +18,13 @@ def norm(p):
     for n in w['nodes']:
         if n['type'] == 'upload':
             n['params'] = {'u': 1}          # the datasets differ by design
+        pr = n['params']
+        # the raw text/time columns legitimately differ per corpus:
+        # 正文↔评论内容 (node-6 clean), 发布时间↔评论时间 (node-11 extract_time, node-12 bin_time)
+        if n['type'] == 'process' and pr.get('operation') == 'clean':
+            pr['text_column'] = 'TEXT'
+        if n['type'] == 'analysis' and pr.get('operation') in ('extract_time', 'bin_time'):
+            pr['column'] = 'TIME'
         n.pop('x', None); n.pop('y', None)  # where a node sits on the canvas is not content
     w.get('settings', {}).pop('view', None)
     w['name'] = 'X'

@@ -13,7 +13,7 @@
       },
       "operation": "save",
       "x": 371,
-      "y": 2282,
+      "y": 2212,
       "folded": false
     },
     {
@@ -26,12 +26,12 @@
         "live_export": false,
         "mode": "regex",
         "operation": "clean",
-        "text_column": "正文",
+        "text_column": "评论内容",
         "topic": ""
       },
       "operation": "clean",
       "x": 711,
-      "y": 2282,
+      "y": 2212,
       "folded": false
     },
     {
@@ -47,7 +47,7 @@
       },
       "operation": "filter_rows",
       "x": 1051,
-      "y": 2212,
+      "y": 2142,
       "folded": false
     },
     {
@@ -62,7 +62,7 @@
       },
       "operation": "drop_duplicates",
       "x": 1391,
-      "y": 2212,
+      "y": 2142,
       "folded": false
     },
     {
@@ -77,7 +77,7 @@
       },
       "operation": "dedupe_similar",
       "x": 1731,
-      "y": 2212,
+      "y": 2142,
       "folded": false
     },
     {
@@ -94,7 +94,7 @@
       },
       "operation": "sentiment",
       "x": 2087,
-      "y": 2072,
+      "y": 2002,
       "folded": false
     },
     {
@@ -102,7 +102,7 @@
       "type": "analysis",
       "title": "提取日期",
       "params": {
-        "column": "发布时间",
+        "column": "评论时间",
         "enabled": true,
         "operation": "extract_time",
         "time_new_col": "日期",
@@ -110,7 +110,7 @@
       },
       "operation": "extract_time",
       "x": 2439,
-      "y": 1925,
+      "y": 1855,
       "folded": false
     },
     {
@@ -118,7 +118,7 @@
       "type": "analysis",
       "title": "划分阶段（论文五段）",
       "params": {
-        "column": "发布时间",
+        "column": "评论时间",
         "enabled": true,
         "operation": "bin_time",
         "phase_edges": "2022-01-16, 2022-01-25, 2022-01-27, 2022-02-14, 2022-03-25, 2022-04-03",
@@ -128,7 +128,7 @@
       },
       "operation": "bin_time",
       "x": 2794,
-      "y": 2065,
+      "y": 1995,
       "folded": false
     },
     {
@@ -148,7 +148,7 @@
       },
       "operation": "sentiment_evolution",
       "x": 3144,
-      "y": 1302,
+      "y": 1232,
       "folded": false
     },
     {
@@ -205,7 +205,7 @@
       },
       "operation": "sentiment_evolution",
       "x": 3144,
-      "y": 1442,
+      "y": 1372,
       "folded": false
     },
     {
@@ -259,7 +259,7 @@
       },
       "operation": "topic_by_stage",
       "x": 3144,
-      "y": 1582,
+      "y": 1512,
       "folded": false
     },
     {
@@ -294,7 +294,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 784,
+      "y": 791,
       "folded": false
     },
     {
@@ -307,7 +307,7 @@
         "row_count": 10754
       },
       "x": 0,
-      "y": 1890,
+      "y": 1820,
       "folded": false
     },
     {
@@ -320,7 +320,7 @@
         "row_count": 10491
       },
       "x": 0,
-      "y": 2044,
+      "y": 1974,
       "folded": false
     },
     {
@@ -333,7 +333,7 @@
         "row_count": 9994
       },
       "x": 0,
-      "y": 2198,
+      "y": 2128,
       "folded": false
     },
     {
@@ -346,7 +346,7 @@
         "row_count": 10462
       },
       "x": 0,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -359,7 +359,7 @@
         "row_count": 2207
       },
       "x": 0,
-      "y": 2506,
+      "y": 2436,
       "folded": false
     },
     {
@@ -374,7 +374,7 @@
       },
       "operation": "save",
       "x": 1051,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -389,7 +389,7 @@
       },
       "operation": "save",
       "x": 1391,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -404,7 +404,7 @@
       },
       "operation": "save",
       "x": 1731,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -419,7 +419,7 @@
       },
       "operation": "save",
       "x": 2087,
-      "y": 2212,
+      "y": 2142,
       "folded": false
     },
     {
@@ -434,7 +434,7 @@
       },
       "operation": "save",
       "x": 2439,
-      "y": 2065,
+      "y": 1995,
       "folded": false
     },
     {
@@ -449,7 +449,7 @@
       },
       "operation": "save",
       "x": 2794,
-      "y": 2345,
+      "y": 2275,
       "folded": false
     },
     {
@@ -462,7 +462,7 @@
         "row_count": 1181
       },
       "x": 0,
-      "y": 2660,
+      "y": 2590,
       "folded": false
     },
     {
@@ -479,7 +479,7 @@
       },
       "operation": "suggest_stages",
       "x": 2794,
-      "y": 2205,
+      "y": 2135,
       "folded": false
     },
     {
@@ -495,7 +495,7 @@
       },
       "operation": "save",
       "x": 3144,
-      "y": 3262,
+      "y": 3192,
       "folded": false
     },
     {
@@ -551,7 +551,7 @@
       },
       "operation": "topic_map",
       "x": 2087,
-      "y": 2352,
+      "y": 2282,
       "folded": false
     },
     {
@@ -569,7 +569,7 @@
         "y_field": "pc2"
       },
       "x": 2439,
-      "y": 2205,
+      "y": 2135,
       "folded": false
     },
     {
@@ -587,7 +587,7 @@
       },
       "operation": "topic_salience",
       "x": 2087,
-      "y": 2492,
+      "y": 2422,
       "folded": false
     },
     {
@@ -603,7 +603,7 @@
       },
       "operation": "filter_rows",
       "x": 2439,
-      "y": 2499,
+      "y": 2429,
       "folded": false
     },
     {
@@ -620,7 +620,7 @@
         "y_field": "overall_freq"
       },
       "x": 2794,
-      "y": 2485,
+      "y": 2415,
       "folded": false
     },
     {
@@ -636,7 +636,7 @@
       },
       "operation": "save",
       "x": 2439,
-      "y": 2359,
+      "y": 2289,
       "folded": false
     },
     {
@@ -652,7 +652,7 @@
       },
       "operation": "save",
       "x": 2439,
-      "y": 2639,
+      "y": 2569,
       "folded": false
     },
     {
@@ -668,7 +668,7 @@
       },
       "operation": "filter_rows",
       "x": 3144,
-      "y": 1722,
+      "y": 1652,
       "folded": false
     },
     {
@@ -685,7 +685,7 @@
       },
       "operation": "topic_map",
       "x": 3604,
-      "y": 1610,
+      "y": 1470,
       "folded": false
     },
     {
@@ -701,7 +701,7 @@
         "y_field": "pc2"
       },
       "x": 4043,
-      "y": 1358,
+      "y": 1211,
       "folded": false
     },
     {
@@ -718,7 +718,7 @@
       },
       "operation": "topic_salience",
       "x": 3604,
-      "y": 1750,
+      "y": 1610,
       "folded": false
     },
     {
@@ -733,7 +733,7 @@
       },
       "operation": "filter_rows",
       "x": 4043,
-      "y": 1512,
+      "y": 1365,
       "folded": false
     },
     {
@@ -749,7 +749,7 @@
         "y_field": "overall_freq"
       },
       "x": 4471,
-      "y": 1386,
+      "y": 1463,
       "folded": false
     },
     {
@@ -764,7 +764,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 1652,
+      "y": 1505,
       "folded": false
     },
     {
@@ -797,7 +797,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 924,
+      "y": 1071,
       "folded": false
     },
     {
@@ -815,8 +815,8 @@
         "operation": "topic_flow"
       },
       "operation": "topic_flow",
-      "x": 3604,
-      "y": 1470,
+      "x": 4043,
+      "y": 931,
       "folded": false
     },
     {
@@ -831,8 +831,8 @@
         "x_field": "source",
         "y_field": "target"
       },
-      "x": 4043,
-      "y": 1064,
+      "x": 4471,
+      "y": 1169,
       "folded": false
     },
     {
@@ -846,8 +846,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4043,
-      "y": 1218,
+      "x": 4471,
+      "y": 1323,
       "folded": false
     },
     {
@@ -863,7 +863,7 @@
       },
       "operation": "cooccur",
       "x": 3144,
-      "y": 1862,
+      "y": 1792,
       "folded": false
     },
     {
@@ -879,7 +879,7 @@
         "y_field": "target"
       },
       "x": 3604,
-      "y": 1890,
+      "y": 1750,
       "folded": false
     },
     {
@@ -894,7 +894,7 @@
       },
       "operation": "save",
       "x": 3604,
-      "y": 2044,
+      "y": 1904,
       "folded": false
     },
     {
@@ -912,7 +912,7 @@
       },
       "operation": "topic_coherence",
       "x": 3144,
-      "y": 2002,
+      "y": 1932,
       "folded": false
     },
     {
@@ -927,7 +927,7 @@
       },
       "operation": "save",
       "x": 3604,
-      "y": 2184,
+      "y": 2044,
       "folded": false
     },
     {
@@ -959,7 +959,7 @@
         "y_field": "predicted"
       },
       "x": 4043,
-      "y": 350,
+      "y": 357,
       "folded": false
     },
     {
@@ -974,7 +974,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 504,
+      "y": 511,
       "folded": false
     },
     {
@@ -1009,7 +1009,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 644,
+      "y": 651,
       "folded": false
     },
     {
@@ -1023,7 +1023,7 @@
       },
       "operation": "aggression",
       "x": 3144,
-      "y": 2142,
+      "y": 2072,
       "folded": false
     },
     {
@@ -1038,7 +1038,7 @@
       },
       "operation": "save",
       "x": 3604,
-      "y": 2324,
+      "y": 2184,
       "folded": false
     },
     {
@@ -1053,7 +1053,7 @@
       },
       "operation": "groupby_agg",
       "x": 3604,
-      "y": 2464,
+      "y": 2324,
       "folded": false
     },
     {
@@ -1067,7 +1067,7 @@
         "y_field": "aggression_score"
       },
       "x": 4043,
-      "y": 1792,
+      "y": 1645,
       "folded": false
     },
     {
@@ -1082,7 +1082,7 @@
       },
       "operation": "filter_rows",
       "x": 3144,
-      "y": 2282,
+      "y": 2212,
       "folded": false
     },
     {
@@ -1098,7 +1098,7 @@
       },
       "operation": "topic_map",
       "x": 3604,
-      "y": 2744,
+      "y": 2604,
       "folded": false
     },
     {
@@ -1114,7 +1114,7 @@
         "y_field": "pc2"
       },
       "x": 4043,
-      "y": 2086,
+      "y": 1939,
       "folded": false
     },
     {
@@ -1131,7 +1131,7 @@
       },
       "operation": "topic_salience",
       "x": 3604,
-      "y": 2884,
+      "y": 2744,
       "folded": false
     },
     {
@@ -1146,7 +1146,7 @@
       },
       "operation": "filter_rows",
       "x": 4043,
-      "y": 2240,
+      "y": 2093,
       "folded": false
     },
     {
@@ -1161,7 +1161,7 @@
         "y_field": "overall_freq"
       },
       "x": 4471,
-      "y": 1540,
+      "y": 1617,
       "folded": false
     },
     {
@@ -1176,7 +1176,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 2380,
+      "y": 2233,
       "folded": false
     },
     {
@@ -1191,7 +1191,7 @@
       },
       "operation": "filter_rows",
       "x": 3144,
-      "y": 2422,
+      "y": 2352,
       "folded": false
     },
     {
@@ -1207,7 +1207,7 @@
       },
       "operation": "topic_map",
       "x": 3604,
-      "y": 3024,
+      "y": 2884,
       "folded": false
     },
     {
@@ -1223,7 +1223,7 @@
         "y_field": "pc2"
       },
       "x": 4043,
-      "y": 2520,
+      "y": 2373,
       "folded": false
     },
     {
@@ -1240,7 +1240,7 @@
       },
       "operation": "topic_salience",
       "x": 3604,
-      "y": 3164,
+      "y": 3024,
       "folded": false
     },
     {
@@ -1255,7 +1255,7 @@
       },
       "operation": "filter_rows",
       "x": 4043,
-      "y": 2674,
+      "y": 2527,
       "folded": false
     },
     {
@@ -1270,7 +1270,7 @@
         "y_field": "overall_freq"
       },
       "x": 4471,
-      "y": 1694,
+      "y": 1771,
       "folded": false
     },
     {
@@ -1285,7 +1285,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 2814,
+      "y": 2667,
       "folded": false
     },
     {
@@ -1301,7 +1301,7 @@
       },
       "operation": "groupby_agg",
       "x": 3604,
-      "y": 2604,
+      "y": 2464,
       "folded": false
     },
     {
@@ -1316,7 +1316,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 1946,
+      "y": 1799,
       "folded": false
     },
     {
@@ -1332,7 +1332,7 @@
       },
       "operation": "filter_rows",
       "x": 3144,
-      "y": 2562,
+      "y": 2492,
       "folded": false
     },
     {
@@ -1349,7 +1349,7 @@
       },
       "operation": "sentiment",
       "x": 3604,
-      "y": 3304,
+      "y": 3164,
       "folded": false
     },
     {
@@ -1369,7 +1369,7 @@
       },
       "operation": "sentiment_evolution",
       "x": 4043,
-      "y": 2954,
+      "y": 2807,
       "folded": false
     },
     {
@@ -1389,7 +1389,7 @@
         "y_field": "total"
       },
       "x": 4471,
-      "y": 1848,
+      "y": 1925,
       "folded": false
     },
     {
@@ -1404,7 +1404,7 @@
       },
       "operation": "save",
       "x": 4471,
-      "y": 2002,
+      "y": 2079,
       "folded": false
     },
     {
@@ -1420,7 +1420,7 @@
       },
       "operation": "filter_rows",
       "x": 3144,
-      "y": 2702,
+      "y": 2632,
       "folded": false
     },
     {
@@ -1437,7 +1437,7 @@
       },
       "operation": "sentiment",
       "x": 3604,
-      "y": 3584,
+      "y": 3444,
       "folded": false
     },
     {
@@ -1457,7 +1457,7 @@
       },
       "operation": "sentiment_evolution",
       "x": 4043,
-      "y": 3234,
+      "y": 3087,
       "folded": false
     },
     {
@@ -1477,7 +1477,7 @@
         "y_field": "total"
       },
       "x": 4471,
-      "y": 2142,
+      "y": 2219,
       "folded": false
     },
     {
@@ -1492,7 +1492,7 @@
       },
       "operation": "save",
       "x": 4471,
-      "y": 2296,
+      "y": 2373,
       "folded": false
     },
     {
@@ -1508,7 +1508,7 @@
       },
       "operation": "filter_rows",
       "x": 3144,
-      "y": 2842,
+      "y": 2772,
       "folded": false
     },
     {
@@ -1525,7 +1525,7 @@
       },
       "operation": "sentiment",
       "x": 3604,
-      "y": 3864,
+      "y": 3724,
       "folded": false
     },
     {
@@ -1545,7 +1545,7 @@
       },
       "operation": "sentiment_evolution",
       "x": 4043,
-      "y": 3514,
+      "y": 3367,
       "folded": false
     },
     {
@@ -1565,7 +1565,7 @@
         "y_field": "total"
       },
       "x": 4471,
-      "y": 2436,
+      "y": 2513,
       "folded": false
     },
     {
@@ -1580,7 +1580,7 @@
       },
       "operation": "save",
       "x": 4471,
-      "y": 2590,
+      "y": 2667,
       "folded": false
     },
     {
@@ -1596,7 +1596,7 @@
       },
       "operation": "filter_rows",
       "x": 3144,
-      "y": 2982,
+      "y": 2912,
       "folded": false
     },
     {
@@ -1613,7 +1613,7 @@
       },
       "operation": "sentiment",
       "x": 3604,
-      "y": 4144,
+      "y": 4004,
       "folded": false
     },
     {
@@ -1633,7 +1633,7 @@
       },
       "operation": "sentiment_evolution",
       "x": 4043,
-      "y": 3794,
+      "y": 3647,
       "folded": false
     },
     {
@@ -1653,7 +1653,7 @@
         "y_field": "total"
       },
       "x": 4471,
-      "y": 2730,
+      "y": 2807,
       "folded": false
     },
     {
@@ -1668,7 +1668,7 @@
       },
       "operation": "save",
       "x": 4471,
-      "y": 2884,
+      "y": 2961,
       "folded": false
     },
     {
@@ -1684,7 +1684,7 @@
       },
       "operation": "filter_rows",
       "x": 3144,
-      "y": 3122,
+      "y": 3052,
       "folded": false
     },
     {
@@ -1701,7 +1701,7 @@
       },
       "operation": "sentiment",
       "x": 3604,
-      "y": 4424,
+      "y": 4284,
       "folded": false
     },
     {
@@ -1721,7 +1721,7 @@
       },
       "operation": "sentiment_evolution",
       "x": 4043,
-      "y": 4074,
+      "y": 3927,
       "folded": false
     },
     {
@@ -1741,7 +1741,7 @@
         "y_field": "total"
       },
       "x": 4471,
-      "y": 3024,
+      "y": 3101,
       "folded": false
     },
     {
@@ -1756,7 +1756,7 @@
       },
       "operation": "save",
       "x": 4471,
-      "y": 3178,
+      "y": 3255,
       "folded": false
     },
     {
@@ -1774,7 +1774,7 @@
       },
       "operation": "topic_coherence",
       "x": 3604,
-      "y": 3444,
+      "y": 3304,
       "folded": false
     },
     {
@@ -1789,7 +1789,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 3094,
+      "y": 2947,
       "folded": false
     },
     {
@@ -1807,7 +1807,7 @@
       },
       "operation": "topic_coherence",
       "x": 3604,
-      "y": 3724,
+      "y": 3584,
       "folded": false
     },
     {
@@ -1822,7 +1822,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 3374,
+      "y": 3227,
       "folded": false
     },
     {
@@ -1840,7 +1840,7 @@
       },
       "operation": "topic_coherence",
       "x": 3604,
-      "y": 4004,
+      "y": 3864,
       "folded": false
     },
     {
@@ -1855,7 +1855,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 3654,
+      "y": 3507,
       "folded": false
     },
     {
@@ -1873,7 +1873,7 @@
       },
       "operation": "topic_coherence",
       "x": 3604,
-      "y": 4284,
+      "y": 4144,
       "folded": false
     },
     {
@@ -1888,7 +1888,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 3934,
+      "y": 3787,
       "folded": false
     },
     {
@@ -1906,7 +1906,7 @@
       },
       "operation": "topic_coherence",
       "x": 3604,
-      "y": 4564,
+      "y": 4424,
       "folded": false
     },
     {
@@ -1921,7 +1921,7 @@
       },
       "operation": "save",
       "x": 4043,
-      "y": 4214,
+      "y": 4067,
       "folded": false
     }
   ],
@@ -2397,9 +2397,9 @@
     "max_workers": 4,
     "disabledTypes": [],
     "view": {
-      "panX": 460.14907345734514,
-      "panY": -1504.0176745769966,
-      "zoom": 0.8550663829179127
+      "panX": 375.79999999999995,
+      "panY": 39.599999999999966,
+      "zoom": 0.2
     }
   },
   "name": "刘学州-评论-情感演化分析"
