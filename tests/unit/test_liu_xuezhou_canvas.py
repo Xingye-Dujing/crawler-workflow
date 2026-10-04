@@ -81,6 +81,14 @@ def test_the_two_canvases_stay_in_lockstep():
                 pr['text_column'] = 'TEXT'
             if n['type'] == 'analysis' and pr.get('operation') in ('extract_time', 'bin_time'):
                 pr['column'] = 'TIME'
+            # Per-corpus prose legitimately differs (发帖量↔评论量, filenames, event peaks):
+            # the two canvases measure different data, so their labels/numbers may not match;
+            # what MUST match is the structure — ids, types, operations, connections, and every
+            # method parameter. Blanking prose here keeps the lockstep test about structure.
+            n['title'] = 'T'
+            for key in ('title', 'filename', 'annotations'):
+                if key in pr:
+                    pr[key] = 'P'
             n.pop('x', None)
             n.pop('y', None)
         w.get('settings', {}).pop('view', None)
@@ -88,3 +96,43 @@ def test_the_two_canvases_stay_in_lockstep():
         return json.dumps(w, sort_keys=True, ensure_ascii=False)
 
     assert norm(POST) == norm(COMMENT)
+
+
+def test_the_two_canvases_share_one_phase_boundary_set():
+    """The five-stage periodization is one event, so both corpora cut it at the SAME dates."""
+    edges = '2022-01-16, 2022-01-24, 2022-01-29, 2022-02-26, 2022-03-25, 2022-04-06'
+    for path in CANVASES:
+        w = _load(path)
+        node12 = next(n for n in w['nodes'] if n['id'] == 'node-12')
+        assert node12['params']['phase_edges'] == edges, f'{path.name} drifted from the shared boundaries'
+
+
+def test_the_event_window_tail_is_cut_before_the_daily_chart():
+    """Both canvases drop out-of-phase days (the comment corpus runs to 2026) before 每日图."""
+    for path in CANVASES:
+        w = _load(path)
+        edges = {(c['from'], c['to']) for c in w['connections']}
+        assert ('node-12', 'node-128') in edges and ('node-128', 'node-13') in edges
+        assert ('node-12', 'node-13') not in edges, 'the daily series must pass through the cap'
+        cap = next(n for n in w['nodes'] if n['id'] == 'node-128')
+        assert cap['params']['column'] == '阶段' and cap['params']['op'] == 'not_null'
+
+
+def test_the_comment_canvas_is_labelled_as_comments():
+    """Item the copy-paste left wrong: the comment canvas spoke of 发帖量 and shared filenames."""
+    w = _load(COMMENT)
+    nodes = {n['id']: n for n in w['nodes']}
+    assert '评论量' in nodes['node-14']['params']['title'], '图2 must read 每日评论量, not 发帖量'
+    assert '评论量' in nodes['node-17']['params']['title'], '图3 must read 各阶段评论量'
+    for n in w['nodes']:
+        if n['type'] == 'output' and n['params'].get('operation') == 'save':
+            assert n['params']['filename'].startswith('刘学州-评论-'), f'{n["id"]} filename not namespaced'
+    # and the post canvas must NOT have been dragged into the rename
+    p = _load(POST)
+    pnodes = {n['id']: n for n in p['nodes']}
+    assert '发帖量' in pnodes['node-14']['params']['title']
+    for n in p['nodes']:
+        if n['type'] == 'output' and n['params'].get('operation') == 'save':
+            assert n['params']['filename'].startswith('刘学州-') and not n['params']['filename'].startswith(
+                '刘学州-评论-'
+            )

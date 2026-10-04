@@ -121,7 +121,7 @@
         "column": "发布时间",
         "enabled": true,
         "operation": "bin_time",
-        "phase_edges": "2022-01-16, 2022-01-25, 2022-01-27, 2022-02-14, 2022-03-25, 2022-04-03",
+        "phase_edges": "2022-01-16, 2022-01-24, 2022-01-29, 2022-02-26, 2022-03-25, 2022-04-06",
         "phase_labels": "发酵期, 爆发期, 波动期, 二次爆发期, 衰退期",
         "phase_new_col": "阶段",
         "phase_order_col": "阶段序号"
@@ -157,7 +157,7 @@
       "title": "图2 每日发帖量（含各阶段峰值日）",
       "params": {
         "agg": "sum",
-        "annotations": "2022-01-24=发酵期峰3439条; 2022-01-25=爆发期峰3183条; 2022-01-28=波动期峰1505条; 2022-02-16=二次爆发峰587条; 2022-03-29=衰退期峰94条",
+        "annotations": "2022-01-18=发酵期峰127条; 2022-01-24=爆发期峰3439条; 2022-02-16=波动期峰587条; 2022-03-01=二次爆发峰336条; 2022-03-29=衰退期峰94条",
         "chart_type": "line",
         "enabled": true,
         "engine": "echarts",
@@ -175,7 +175,7 @@
       "title": "图8 每日情感倾向指数（含事件线）",
       "params": {
         "agg": "sum",
-        "annotations": "2022-01-24=发酵期峰3439条; 2022-01-25=爆发期峰3183条; 2022-02-16=二次爆发峰587条",
+        "annotations": "2022-01-18=发酵期峰127条; 2022-01-24=爆发期峰3439条; 2022-03-01=二次爆发峰336条",
         "chart_type": "line",
         "enabled": true,
         "engine": "echarts",
@@ -505,7 +505,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-01-24=热度峰3439条; 2022-02-16=二次爆发587条",
+        "annotations": "2022-01-24=热度峰3439条; 2022-03-01=二次爆发336条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1379,7 +1379,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-01-24=本阶段峰3439条",
+        "annotations": "2022-01-18=本阶段峰127条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1467,7 +1467,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-01-25=本阶段峰3183条",
+        "annotations": "2022-01-24=本阶段峰3439条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1555,7 +1555,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-01-28=本阶段峰1505条",
+        "annotations": "2022-02-16=本阶段峰587条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1643,7 +1643,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-02-16=本阶段峰587条",
+        "annotations": "2022-03-01=本阶段峰336条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1999,6 +1999,21 @@
       "x": 4033,
       "y": 2366,
       "folded": false
+    },
+    {
+      "id": "node-128",
+      "type": "analysis",
+      "title": "裁剪事件窗口（去掉阶段外的长尾）",
+      "params": {
+        "column": "阶段",
+        "enabled": true,
+        "op": "not_null",
+        "operation": "filter_rows"
+      },
+      "operation": "filter_rows",
+      "x": 3152,
+      "y": 1752,
+      "folded": false
     }
   ],
   "connections": [
@@ -2032,7 +2047,7 @@
     },
     {
       "from": "node-12",
-      "to": "node-13"
+      "to": "node-128"
     },
     {
       "from": "node-13",
@@ -2481,6 +2496,10 @@
     {
       "from": "node-127",
       "to": "node-82"
+    },
+    {
+      "from": "node-128",
+      "to": "node-13"
     }
   ],
   "settings": {

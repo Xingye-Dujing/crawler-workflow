@@ -6,7 +6,7 @@
       "title": "合并批次并导出",
       "params": {
         "enabled": true,
-        "filename": "刘学州-合并.csv",
+        "filename": "刘学州-评论-合并.csv",
         "filename_timestamp": false,
         "format": "csv",
         "operation": "save"
@@ -121,7 +121,7 @@
         "column": "评论时间",
         "enabled": true,
         "operation": "bin_time",
-        "phase_edges": "2022-01-16, 2022-01-25, 2022-01-27, 2022-02-14, 2022-03-25, 2022-04-03",
+        "phase_edges": "2022-01-16, 2022-01-24, 2022-01-29, 2022-02-26, 2022-03-25, 2022-04-06",
         "phase_labels": "发酵期, 爆发期, 波动期, 二次爆发期, 衰退期",
         "phase_new_col": "阶段",
         "phase_order_col": "阶段序号"
@@ -154,14 +154,14 @@
     {
       "id": "node-14",
       "type": "visualize",
-      "title": "图2 每日发帖量（含各阶段峰值日）",
+      "title": "图2 每日评论量（含各阶段峰值日）",
       "params": {
         "agg": "sum",
-        "annotations": "2022-01-24=发酵期峰3439条; 2022-01-25=爆发期峰3183条; 2022-01-28=波动期峰1505条; 2022-02-16=二次爆发峰587条; 2022-03-29=衰退期峰94条",
+        "annotations": "2022-01-18=发酵期峰439条; 2022-01-25=爆发期峰4615条; 2022-01-29=波动期峰944条; 2022-03-01=二次爆发峰716条; 2022-03-29=衰退期峰242条",
         "chart_type": "line",
         "enabled": true,
         "engine": "echarts",
-        "title": "刘学州事件 每日发帖量",
+        "title": "刘学州事件 每日评论量",
         "x_field": "period",
         "y_field": "total"
       },
@@ -175,7 +175,7 @@
       "title": "图8 每日情感倾向指数（含事件线）",
       "params": {
         "agg": "sum",
-        "annotations": "2022-01-24=发酵期峰3439条; 2022-01-25=爆发期峰3183条; 2022-02-16=二次爆发峰587条",
+        "annotations": "2022-01-18=发酵期峰439条; 2022-01-25=爆发期峰4615条; 2022-03-01=二次爆发峰716条",
         "chart_type": "line",
         "enabled": true,
         "engine": "echarts",
@@ -211,13 +211,13 @@
     {
       "id": "node-17",
       "type": "visualize",
-      "title": "图3 各阶段发帖量",
+      "title": "图3 各阶段评论量",
       "params": {
         "agg": "sum",
         "chart_type": "bar",
         "enabled": true,
         "engine": "echarts",
-        "title": "刘学州事件 各阶段发帖量",
+        "title": "刘学州事件 各阶段评论量",
         "x_field": "period",
         "y_field": "total"
       },
@@ -231,7 +231,7 @@
       "title": "导出 表2",
       "params": {
         "enabled": true,
-        "filename": "刘学州-表2-各阶段情感占比.csv",
+        "filename": "刘学州-评论-表2-各阶段情感占比.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -287,7 +287,7 @@
       "title": "导出 表1",
       "params": {
         "enabled": true,
-        "filename": "刘学州-表1-分阶段主题与概括.csv",
+        "filename": "刘学州-评论-表1-分阶段主题与概括.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -367,7 +367,7 @@
       "type": "output",
       "title": "输出",
       "params": {
-        "filename": "刘学州-清洗.csv",
+        "filename": "刘学州-评论-清洗.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -382,7 +382,7 @@
       "type": "output",
       "title": "输出",
       "params": {
-        "filename": "刘学州-筛选行.csv",
+        "filename": "刘学州-评论-筛选行.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -397,7 +397,7 @@
       "type": "output",
       "title": "输出",
       "params": {
-        "filename": "刘学州-去重.csv",
+        "filename": "刘学州-评论-去重.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -412,7 +412,7 @@
       "type": "output",
       "title": "输出",
       "params": {
-        "filename": "刘学州-近重复去重.csv",
+        "filename": "刘学州-评论-近重复去重.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -427,7 +427,7 @@
       "type": "output",
       "title": "输出",
       "params": {
-        "filename": "刘学州-情感极性.csv",
+        "filename": "刘学州-评论-情感极性.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -442,7 +442,7 @@
       "type": "output",
       "title": "输出",
       "params": {
-        "filename": "刘学州-提取时间维度.csv",
+        "filename": "刘学州-评论-提取时间维度.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -488,7 +488,7 @@
       "title": "导出 阶段边界建议",
       "params": {
         "enabled": true,
-        "filename": "刘学州-阶段边界建议.csv",
+        "filename": "刘学州-评论-阶段边界建议.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -505,7 +505,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-01-24=热度峰3439条; 2022-02-16=二次爆发587条",
+        "annotations": "2022-01-25=热度峰4615条; 2022-03-01=二次爆发716条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -629,7 +629,7 @@
       "title": "导出 主题距离表",
       "params": {
         "enabled": true,
-        "filename": "刘学州-主题距离表.csv",
+        "filename": "刘学州-评论-主题距离表.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -645,7 +645,7 @@
       "title": "导出 显著词表（全部主题）",
       "params": {
         "enabled": true,
-        "filename": "刘学州-显著词表.csv",
+        "filename": "刘学州-评论-显著词表.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -757,7 +757,7 @@
       "type": "output",
       "title": "导出 爆发期显著词表",
       "params": {
-        "filename": "刘学州-爆发期显著词.csv",
+        "filename": "刘学州-评论-爆发期显著词.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -790,7 +790,7 @@
       "type": "output",
       "title": "导出 次生舆情表",
       "params": {
-        "filename": "刘学州-次生舆情.csv",
+        "filename": "刘学州-评论-次生舆情.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -840,7 +840,7 @@
       "type": "output",
       "title": "导出 主题流向边",
       "params": {
-        "filename": "刘学州-主题流向.csv",
+        "filename": "刘学州-评论-主题流向.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -887,7 +887,7 @@
       "type": "output",
       "title": "导出 共词边表",
       "params": {
-        "filename": "刘学州-共词边.csv",
+        "filename": "刘学州-评论-共词边.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -920,7 +920,7 @@
       "type": "output",
       "title": "导出 主题数扫描表",
       "params": {
-        "filename": "刘学州-主题数扫描.csv",
+        "filename": "刘学州-评论-主题数扫描.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -967,7 +967,7 @@
       "type": "output",
       "title": "导出 预测表",
       "params": {
-        "filename": "刘学州-情感走向预测.csv",
+        "filename": "刘学州-评论-情感走向预测.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1002,7 +1002,7 @@
       "type": "output",
       "title": "导出 预警表",
       "params": {
-        "filename": "刘学州-二次爆发预警.csv",
+        "filename": "刘学州-评论-二次爆发预警.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1031,7 +1031,7 @@
       "type": "output",
       "title": "导出 逐行暴力言论扫描",
       "params": {
-        "filename": "刘学州-网暴言论.csv",
+        "filename": "刘学州-评论-网暴言论.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1169,7 +1169,7 @@
       "type": "output",
       "title": "导出 发酵期显著词表",
       "params": {
-        "filename": "刘学州-发酵期显著词.csv",
+        "filename": "刘学州-评论-发酵期显著词.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1278,7 +1278,7 @@
       "type": "output",
       "title": "导出 二次爆发期显著词表",
       "params": {
-        "filename": "刘学州-二次爆发期显著词.csv",
+        "filename": "刘学州-评论-二次爆发期显著词.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1309,7 +1309,7 @@
       "type": "output",
       "title": "导出 各阶段暴力言论占比",
       "params": {
-        "filename": "刘学州-各阶段暴力言论.csv",
+        "filename": "刘学州-评论-各阶段暴力言论.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1379,7 +1379,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-01-24=本阶段峰3439条",
+        "annotations": "2022-01-18=本阶段峰439条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1397,7 +1397,7 @@
       "type": "output",
       "title": "导出 发酵期阶段内每日情感",
       "params": {
-        "filename": "刘学州-发酵期-阶段内每日情感.csv",
+        "filename": "刘学州-评论-发酵期-阶段内每日情感.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1467,7 +1467,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-01-25=本阶段峰3183条",
+        "annotations": "2022-01-25=本阶段峰4615条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1485,7 +1485,7 @@
       "type": "output",
       "title": "导出 爆发期阶段内每日情感",
       "params": {
-        "filename": "刘学州-爆发期-阶段内每日情感.csv",
+        "filename": "刘学州-评论-爆发期-阶段内每日情感.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1555,7 +1555,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-01-28=本阶段峰1505条",
+        "annotations": "2022-01-29=本阶段峰944条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1573,7 +1573,7 @@
       "type": "output",
       "title": "导出 波动期阶段内每日情感",
       "params": {
-        "filename": "刘学州-波动期-阶段内每日情感.csv",
+        "filename": "刘学州-评论-波动期-阶段内每日情感.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1643,7 +1643,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-02-16=本阶段峰587条",
+        "annotations": "2022-03-01=本阶段峰716条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1661,7 +1661,7 @@
       "type": "output",
       "title": "导出 二次爆发期阶段内每日情感",
       "params": {
-        "filename": "刘学州-二次爆发期-阶段内每日情感.csv",
+        "filename": "刘学州-评论-二次爆发期-阶段内每日情感.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1731,7 +1731,7 @@
       "params": {
         "agg": "sum",
         "agg2": "mean",
-        "annotations": "2022-03-29=本阶段峰94条",
+        "annotations": "2022-03-29=本阶段峰242条",
         "chart_type": "dual_line",
         "enabled": true,
         "engine": "echarts",
@@ -1749,7 +1749,7 @@
       "type": "output",
       "title": "导出 衰退期阶段内每日情感",
       "params": {
-        "filename": "刘学州-衰退期-阶段内每日情感.csv",
+        "filename": "刘学州-评论-衰退期-阶段内每日情感.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1782,7 +1782,7 @@
       "type": "output",
       "title": "导出 发酵期主题数扫描",
       "params": {
-        "filename": "刘学州-发酵期主题数扫描.csv",
+        "filename": "刘学州-评论-发酵期主题数扫描.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1815,7 +1815,7 @@
       "type": "output",
       "title": "导出 爆发期主题数扫描",
       "params": {
-        "filename": "刘学州-爆发期主题数扫描.csv",
+        "filename": "刘学州-评论-爆发期主题数扫描.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1848,7 +1848,7 @@
       "type": "output",
       "title": "导出 波动期主题数扫描",
       "params": {
-        "filename": "刘学州-波动期主题数扫描.csv",
+        "filename": "刘学州-评论-波动期主题数扫描.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1881,7 +1881,7 @@
       "type": "output",
       "title": "导出 二次爆发期主题数扫描",
       "params": {
-        "filename": "刘学州-二次爆发期主题数扫描.csv",
+        "filename": "刘学州-评论-二次爆发期主题数扫描.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1914,7 +1914,7 @@
       "type": "output",
       "title": "导出 衰退期主题数扫描",
       "params": {
-        "filename": "刘学州-衰退期主题数扫描.csv",
+        "filename": "刘学州-评论-衰退期主题数扫描.csv",
         "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
@@ -1999,6 +1999,21 @@
       "x": 4051,
       "y": 2366,
       "folded": false
+    },
+    {
+      "id": "node-128",
+      "type": "analysis",
+      "title": "裁剪事件窗口（去掉阶段外的长尾）",
+      "params": {
+        "column": "阶段",
+        "enabled": true,
+        "op": "not_null",
+        "operation": "filter_rows"
+      },
+      "operation": "filter_rows",
+      "x": 3152,
+      "y": 1752,
+      "folded": false
     }
   ],
   "connections": [
@@ -2032,7 +2047,7 @@
     },
     {
       "from": "node-12",
-      "to": "node-13"
+      "to": "node-128"
     },
     {
       "from": "node-13",
@@ -2481,6 +2496,10 @@
     {
       "from": "node-127",
       "to": "node-82"
+    },
+    {
+      "from": "node-128",
+      "to": "node-13"
     }
   ],
   "settings": {
