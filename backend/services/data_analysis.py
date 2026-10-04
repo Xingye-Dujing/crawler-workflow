@@ -1248,12 +1248,14 @@ class DataAnalysisService:
         invented is a boundary the researcher did not take, and 「官方通报」 is not in the
         post counts.
 
-        Two rules make the paste safe. The last edge is the day AFTER the final window,
+        Three rules make the paste safe. The last edge is the day AFTER the final window,
         because ``bin_time`` is left-closed/right-open and an edge list ending on the last
-        observed day would silently lose it. And a new window opens the day AFTER the valley
+        observed day would silently lose it. A new window opens the day AFTER the valley
         between two peaks, not on the valley itself: the quietest day belongs to the phase
         that is winding down, and putting it at the head of the next one would make every
-        phase look like it began in silence.
+        phase look like it began in silence. And a window shorter than ``min_days`` is folded
+        into the neighbour that carries more rows, because one day that happened to clear the
+        floor is not a phase.
 
         Peak heights are reported as the RAW count of that day, not the smoothed one the
         boundary search used — 349/7624/1038/8029/2286 are the numbers the paper prints, and
@@ -1279,21 +1281,27 @@ class DataAnalysisService:
             # "twice the usual day" is what a peak means here. Below 1 every ordinary day
             # clears the bar, and the curve would be cut at its own noise.
             raise UnknownOperationError(t('analysis.stages_ratio', value=peak_ratio))
-        # The floor is put on the RAW day. The smoothing exists only to stop a one-day spike
-        # from reading as a turning point, and comparing a flattened peak with a floor taken
-        # from unflattened days would reject exactly the tall narrow 爆发期 a lifecycle is
-        # named for.
+        # The floor is put on the RAW day. What groups two tall days into ONE summit is the
+        # smoothed curve — and the summit is then the tallest raw day inside that run, because
+        # asking the raw day to be a local maximum as well is what made the real 刘学州 curve
+        # answer "one phase": 01-24 (3439) and 01-25 (3183) are adjacent, so the flattened summit
+        # sits between them, its own raw value is the only one tested, and every other tall day
+        # of the event cancelled the same way. A run of days that clear the floor is the phase;
+        # the smoothing only decides whether two neighbouring runs are really one.
         daily = counts.to_numpy()
         live = float(counts[counts > 0].median())
         floor = live * ratio
         smoothed = counts.rolling(3, center=True, min_periods=1).mean().to_numpy()
-        peak_positions = [
-            position
-            for position in range(1, len(smoothed) - 1)
-            if smoothed[position] > smoothed[position - 1]
-            and smoothed[position] >= smoothed[position + 1]
-            and daily[position] >= floor
-        ]
+        runs: list = []
+        for position in [index for index, value in enumerate(daily) if value >= floor]:
+            joined = bool(runs) and position - runs[-1][1] <= 2
+            if joined and any(smoothed[q] < floor for q in range(runs[-1][1], position + 1)):
+                joined = False  # the curve really did fall back to an ordinary day between them
+            if joined:
+                runs[-1][1] = position
+            else:
+                runs.append([position, position])
+        peak_positions = [max(range(first, last + 1), key=lambda index: daily[index]) for first, last in runs]
         if len(peak_positions) < 2:
             raise UnknownOperationError(t('analysis.stages_no_peak', ratio=peak_ratio, floor=round(floor, 1)))
         if len(peak_positions) > int(max_windows):
@@ -1318,6 +1326,31 @@ class DataAnalysisService:
             if starts[-1][0] < boundary < last_open:
                 starts.append((boundary, span[valley]))
         starts.append((last_open, None))
+
+        # 最短窗口 is enforced here, not in the peak search: a single day that happened to clear
+        # the floor is not a phase, and the proposal that keeps it would be five windows of which
+        # three are one day long. Each too-short window goes to the neighbour that carries more
+        # rows, and the count is printed — a proposal that quietly lost a boundary is one the
+        # user cannot audit.
+        shortest_allowed = _whole(min_days, 'suggest_stages', 'min_days')
+        folded_windows = 0
+        while len(starts) > 2 and shortest_allowed > 1:
+            lengths = [(starts[k + 1][0] - starts[k][0]).days for k in range(len(starts) - 1)]
+            candidate = min(range(len(lengths)), key=lambda k: (lengths[k], k))
+            if lengths[candidate] >= shortest_allowed:
+                break
+            previous = lengths[candidate - 1] if candidate > 0 else -1
+            following = lengths[candidate + 1] if candidate + 1 < len(lengths) else -1
+            # Drop the boundary on the side of the smaller neighbour, so the short window joins
+            # the larger one; boundary index ``candidate`` opens this window, ``candidate + 1``
+            # closes it.
+            drop = candidate if previous >= following and candidate > 0 else candidate + 1
+            if drop >= len(starts) - 1:
+                drop = candidate
+            starts.pop(drop)
+            folded_windows += 1
+        if folded_windows:
+            logger.warning(t('analysis.stages_folded_windows', n=folded_windows, days=shortest_allowed))
 
         rows = []
         for index in range(len(starts) - 1):

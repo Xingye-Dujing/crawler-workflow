@@ -349,6 +349,9 @@ _ZH = {
         '这一列撑不起阶段划分——曲线只有一段，就不要切成多段'
     ),
     'analysis.stages_folded': '曲线上的峰多于 {kept} 个，只保留最高的 {kept} 个（折掉了 {dropped} 个）',
+    'analysis.stages_folded_windows': (
+        '{n} 个窗口短于「最短窗口」{days} 天，已并入相邻较长的窗口（一天冲上来的不算一个阶段）'
+    ),
     'analysis.stages_done': '阶段建议：{n} 个候选窗口、覆盖 {rows} 行（{span}）',
     'analysis.stages_edges': '建议边界 edges（左闭右开，末位是最后一天+1）：{edges}',
     'analysis.stages_labels': '建议阶段名 labels（与 edges 一一对应，仅占位，可改名）：{labels}',
@@ -1481,6 +1484,10 @@ _EN = {
     ),
     'analysis.stages_folded': (
         'the curve holds more than {kept} peaks; the tallest {kept} were kept ({dropped} folded away)'
+    ),
+    'analysis.stages_folded_windows': (
+        '{n} window(s) were shorter than the {days}-day minimum and joined their larger neighbour '
+        '(a single tall day is not a phase)'
     ),
     'analysis.stages_done': 'phase proposal: {n} candidate windows covering {rows} rows ({span})',
     'analysis.stages_edges': 'suggested edges, left-closed/right-open, the last one is the final day + 1: {edges}',

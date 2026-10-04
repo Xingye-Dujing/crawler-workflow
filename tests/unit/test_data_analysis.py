@@ -1391,6 +1391,60 @@ class TestSuggestStages:
         assert '2' in caplog.text and '1' in caplog.text, 'the folded peak is reported, not hidden'
         assert out.at[0, '起点'] == '2024-05-01', 'the 9-row hump stayed inside the first window'
 
+    def test_adjacent_tall_days_do_not_cancel_the_next_burst(self):
+        """The defect the real 刘学州 curve found.
+
+        Two days of a summit sit side by side (20 then 19), so the flattened curve puts its
+        maximum on the shoulder between them — and when the floor was then tested against the
+        RAW value at that position, the shoulder failed it and the whole burst disappeared.
+        On the event that is the flagship of this project, that left one peak in the 76-day
+        curve and the step answered 「曲线只有一段」 next to a secondary 587-row burst on 02-16.
+        A summit is now a RUN of days clearing the floor, so this curve cuts into two windows
+        and the second one still carries its own tallest day (8 rows on 05-10).
+        """
+        curve = dict(
+            zip(
+                pd.date_range('2024-05-01', periods=21).strftime('%Y-%m-%d'),
+                [5, 5, 5, 1, 20, 19, 1, 1, 1, 8, 1, 7, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                strict=True,
+            )
+        )
+        out = D.suggest_stages(self._frame(curve), '评论时间')
+        assert len(out) == 2, 'the 8/1/7 burst is a second summit, not noise inside the first'
+        assert list(out['起点']) == ['2024-05-01', '2024-05-09']
+        assert list(out['峰值日']) == ['2024-05-05', '2024-05-10']
+        assert list(out['峰值计数']) == [20, 8], 'the raw tallest day of each run, not the shoulder'
+
+    def test_a_window_shorter_than_the_minimum_joins_its_larger_neighbour(self, caplog):
+        # 最短窗口 was declared and only ever used as a "do we have enough days at all" floor: a
+        # two-day tail is a proposal the user cannot paste without noticing. It now folds, into
+        # the neighbour carrying more rows, and says how many windows it ate.
+        curve = dict(
+            zip(
+                pd.date_range('2024-05-01', periods=9).strftime('%Y-%m-%d'),
+                [5, 5, 12, 1, 12, 1, 5, 5, 20],
+                strict=True,
+            )
+        )
+        with caplog.at_level('WARNING'):
+            out = D.suggest_stages(self._frame(curve), '评论时间')
+        assert len(out) == 2
+        assert list(out['终点']) == ['2024-05-04', '2024-05-09'], 'the 2-day tail closed the 5-day window'
+        assert list(out['行数']) == [23, 43], '18 + 25: the tail joined the side that already had more rows'
+        assert '最短窗口' in caplog.text, 'the fold is reported, not hidden'
+
+    def test_the_minimum_window_is_the_box_that_decides_it(self):
+        curve = dict(
+            zip(
+                pd.date_range('2024-05-01', periods=9).strftime('%Y-%m-%d'),
+                [5, 5, 12, 1, 12, 1, 5, 5, 20],
+                strict=True,
+            )
+        )
+        out = D.suggest_stages(self._frame(curve), '评论时间', min_days=1)
+        assert len(out) == 3, 'asked for no minimum, and the 2-day tail stays its own proposal'
+        assert list(out['天数']) == [4, 3, 2]
+
     def test_a_column_of_relative_labels_answers_nothing_and_says_so(self):
         # Weibo hands back "09月26日 21:00" for a recent post: nothing to count by day, and
         # an empty proposal would read as "this event has no phases".
