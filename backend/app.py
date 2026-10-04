@@ -3709,7 +3709,10 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
         llm = run_ctx['client']
         cancel = run_ctx.get('cancel_event')
 
-    cleaned, report = DataAnalysisService.run_pipeline(df, steps, llm=llm, cancel=cancel)
+    # The store is the run ledger's own llm_cache: a summary the model already answered for this
+    # exact prompt is replayed instead of paid for again. It is passed beside ``llm`` rather than
+    # through params for the same reason the client is — the run record echoes params.
+    cleaned, report = DataAnalysisService.run_pipeline(df, steps, llm=llm, cancel=cancel, store=_RUN_STORE)
 
     for step in report:
         line = t('wf.analysis_step', op=step['op'], before=step['rows_before'], after=step['rows_after'])

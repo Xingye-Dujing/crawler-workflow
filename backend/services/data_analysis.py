@@ -1633,6 +1633,7 @@ class DataAnalysisService:
         df: pd.DataFrame,
         llm=None,
         cancel=None,
+        store=None,
         words_col: str = 'feature_words',
         samples_col: str = 'sample_texts',
         summary_col: str = '主题概括',
@@ -1674,6 +1675,13 @@ class DataAnalysisService:
         has_topic = 'topic' in work.columns
         positions = list(work.index)
         labelled = 0
+        # Answers are replayed from runs.db's llm_cache, the way the analyzers' rows are: a re-run
+        # of the same table must not re-pay 27 questions. The key is the prompt itself, so a changed
+        # model, a different language, or an edited 特征词/样本帖 column all re-ask on their own —
+        # a cache that survives the question it answers would be the bug this table exists to avoid.
+        scope = f'topic_label:{getattr(llm, "label", "") or "model"}'
+        asked = 0
+        replayed = 0
         for offset, position in enumerate(positions):
             if cancel is not None and cancel.is_set():
                 for rest in positions[offset:]:
@@ -1694,15 +1702,23 @@ class DataAnalysisService:
                 words=words,
                 samples=samples or '—',
             )
-            try:
-                answer = llm.chat(prompt)
-            except LLMError as e:
-                if on_fail != 'blank':
-                    raise UnknownOperationError(t('analysis.label_failed', topic=name, err=e)) from e
-                # One line per topic the model gave up on, and the cell stays empty: the user
-                # asked for the run to continue, not for the gap to be invisible.
-                logger.warning(t('analysis.label_failed', topic=name, err=e))
-                continue
+            key = hashlib.sha1(prompt.encode('utf-8')).hexdigest()
+            answer = store.cache_get(scope, key) if store is not None else None
+            if answer is not None:
+                replayed += 1
+            else:
+                asked += 1
+                try:
+                    answer = llm.chat(prompt)
+                except LLMError as e:
+                    if on_fail != 'blank':
+                        raise UnknownOperationError(t('analysis.label_failed', topic=name, err=e)) from e
+                    # One line per topic the model gave up on, and the cell stays empty: the user
+                    # asked for the run to continue, not for the gap to be invisible.
+                    logger.warning(t('analysis.label_failed', topic=name, err=e))
+                    continue
+                if store is not None:
+                    store.cache_put(scope, key, answer)
             label = _label_from(answer)
             if not label:
                 # An answer of punctuation, or of nothing: a blank cell would be
@@ -1714,6 +1730,8 @@ class DataAnalysisService:
             work.at[position, summary_col] = label
             labelled += 1
         logger.info(t('analysis.label_done', n=labelled, model=getattr(llm, 'label', '')))
+        if store is not None:
+            logger.info(t('analysis.label_cached', asked=asked, replayed=replayed))
         return work
 
     @staticmethod
@@ -2849,10 +2867,10 @@ class DataAnalysisService:
         }
 
     @classmethod
-    def run_pipeline(cls, df: pd.DataFrame, steps: list, llm=None, cancel=None) -> tuple:
+    def run_pipeline(cls, df: pd.DataFrame, steps: list, llm=None, cancel=None, store=None) -> tuple:
         """Run the steps in order and report what each one did to the table.
 
-        ``llm`` and ``cancel`` reach only the steps in :data:`LLM_OPS`, and only as call
+        ``llm``, ``cancel`` and ``store`` reach only the steps in :data:`LLM_OPS`, and only as call
         arguments: the report echoes every step's ``params`` into the console and the run
         record, so a client object in there would be a live object written into a durable
         ledger — and the checkpoint/reuse machinery keys on those params.
@@ -2868,9 +2886,10 @@ class DataAnalysisService:
                 raise UnknownOperationError(f'Unknown analysis operation: {op}')
             validate_step(current, op, params)
             before = len(current)
-            # Only the steps in LLM_OPS are handed the run's client and Stop flag; every other
-            # step is deterministic and gets the table alone.
-            current = func(current, **({'llm': llm, 'cancel': cancel} if op in LLM_OPS else {}), **params)
+            # Only the steps in LLM_OPS are handed the run's client, Stop flag and answer store;
+            # every other step is deterministic and gets the table alone.
+            injected = {'llm': llm, 'cancel': cancel, 'store': store} if op in LLM_OPS else {}
+            current = func(current, **injected, **params)
             report.append(
                 {
                     'op': op,

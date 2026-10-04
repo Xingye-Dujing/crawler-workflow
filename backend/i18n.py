@@ -406,6 +406,7 @@ _ZH = {
     'analysis.label_empty': '{topic} 的主题概括是空的（模型只回了标点）',
     'analysis.label_cancelled': '已停止：还有 {n} 个主题没问模型，它们的概括标为未处理',
     'analysis.label_done': '主题概括：{n} 个主题已写出（模型 {model}）',
+    'analysis.label_cached': '主题概括：新问模型 {asked} 次，重放缓存答案 {replayed} 次（同一张表重跑不再重复付费）',
     'analysis.label_prompt': (
         '你是舆情分析研究员。下面是某网络暴力事件在一个阶段里一个主题的特征词与代表文本。'
         '请用不超过 15 个汉字概括这个主题在说什么；只输出概括本身，不要解释、不要引号。\n'
@@ -1552,6 +1553,10 @@ _EN = {
     'analysis.label_empty': 'the summary for {topic} came back empty (the model answered with punctuation only)',
     'analysis.label_cancelled': 'stopped: {n} topics were never asked, and their summaries are marked 未处理',
     'analysis.label_done': 'topic summaries: {n} written (model {model})',
+    'analysis.label_cached': (
+        'topic summaries: {asked} new questions to the model, {replayed} answers replayed from the '
+        'cache (re-running the same table no longer pays twice)'
+    ),
     'analysis.label_prompt': (
         'You are a public-opinion researcher. Below are the feature words and sample posts of one topic '
         'inside one phase of a cyberbullying event. Summarise what this topic is about in at most six words; '

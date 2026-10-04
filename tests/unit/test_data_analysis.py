@@ -1785,6 +1785,58 @@ class TestTopicLabel:
             D.topic_label(frame, llm=client)
         assert len(client.prompts) == 1, 'the row that cannot be labelled is never asked'
 
+    class _Store:
+        """A stand-in for the run ledger's ``llm_cache``: same two methods, kept in a dict."""
+
+        def __init__(self):
+            self.rows = {}
+
+        def cache_get(self, scope, key):
+            return self.rows.get((scope, key))
+
+        def cache_put(self, scope, key, value):
+            self.rows[(scope, key)] = value
+
+    def test_a_store_makes_the_second_run_of_the_same_table_free(self):
+        store = self._Store()
+        first = self._Client(answer='概括：第一次的答复')
+        D.topic_label(self._topics(), llm=first, store=store, words_col='feature_words', samples_col='sample_texts')
+        assert len(first.prompts) == 3, 'the first pass pays for every topic'
+
+        second = self._Client(answer='概括：不该被用到的答复')
+        out = D.topic_label(
+            self._topics(), llm=second, store=store, words_col='feature_words', samples_col='sample_texts'
+        )
+        assert second.prompts == [], 'a re-run replays the cache and asks nothing'
+        assert list(out['主题概括']) == ['第一次的答复'] * 3, 'the cell holds the cached answer'
+
+    def test_a_different_model_does_not_replay_another_models_words(self):
+        store = self._Store()
+        D.topic_label(self._topics(), llm=self._Client(answer='概括：甲模型'), store=store)
+
+        class _OtherClient(TestTopicLabel._Client):
+            label = 'openrouter:other'
+
+        other = _OtherClient(answer='概括：乙模型')
+        out = D.topic_label(self._topics(), llm=other, store=store)
+        assert len(other.prompts) == 3, 'the cache is keyed by the model that answered'
+        assert out.at[0, '主题概括'] == '乙模型'
+
+    def test_edited_feature_words_re_ask_only_that_topic(self):
+        store = self._Store()
+        D.topic_label(self._topics(), llm=self._Client(), store=store)
+
+        frame = self._topics()
+        frame.loc[1, 'feature_words'] = '完全不同的、词、表'
+        client = self._Client(answer='概括：重问之后的')
+        D.topic_label(frame, llm=client, store=store)
+        assert len(client.prompts) == 1, 'the prompt is the key, so only the edited topic is asked again'
+
+    def test_no_store_still_works_and_asks_every_time(self):
+        client = self._Client()
+        D.topic_label(self._topics(), llm=client)
+        assert len(client.prompts) == 3
+
     def test_a_table_too_big_for_the_cap_is_refused_with_both_numbers(self):
         with pytest.raises(UnknownOperationError, match='3 行'):
             D.topic_label(self._topics(), llm=self._Client(), max_topics=2)

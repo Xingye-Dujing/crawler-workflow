@@ -3033,6 +3033,7 @@ var dataNodes = {
         var node = canvas.nodes[nodeId];
         if (!node) return;
         var p = node.params;
+        _chartPreviewName = node.title || nodeId;
         var payload = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
             y_field: p.y_field, value_field: p.value_field, agg: p.agg, title: p.title,
@@ -3224,6 +3225,61 @@ function applyEchartsOption(instance, option) {
 
 var _chartPreviewInstance = null;
 var _chartPreviewResizeHandler = null;
+/* Which node the open preview belongs to: the saved picture has to be named after
+   the chart the user was looking at, not after whichever node was clicked last. */
+var _chartPreviewName = '';
+
+/* ── Saving a drawn chart as a file ─────────────────────────────────────────
+   A chart exists on screen in three places — the studio, the preview panel and a
+   dashboard cell — and until now only the studio could put its picture on disk.
+   All three go through the same endpoint (the studio's own /api/studio/save-image),
+   and both engines are covered: an ECharts instance hands over a data URL, and a
+   Matplotlib preview already IS one (the <img> the panel was given).
+   A chart that was never drawn is refused with a sentence, because a silent button
+   reads as "saving is broken" and the real cause is that there is no picture yet. */
+async function saveChartPicture(dataUrl, name) {
+    if (!dataUrl) {
+        showToast(I18n.t('chart.saveNothing'));
+        return null;
+    }
+    try {
+        var resp = await fetch('/api/studio/save-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: dataUrl, name: name || 'chart' }),
+        });
+        var result = await resp.json();
+        if (!result.ok) throw new Error(result.error || 'request failed');
+        showToast(I18n.t('studio.saved').replace('{path}', result.filename));
+        return result.filename;
+    } catch (e) {
+        showToast(I18n.t('studio.saveFailed') + ': ' + e.message);
+        return null;
+    }
+}
+
+function savePreviewImage() {
+    var dataUrl = '';
+    if (_chartPreviewInstance) {
+        dataUrl = _chartPreviewInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+    } else {
+        var img = document.getElementById('chart-preview-image');
+        if (img && img.style.display !== 'none' && String(img.src || '').indexOf('data:image/') === 0) {
+            dataUrl = img.src;
+        }
+    }
+    return saveChartPicture(dataUrl, _chartPreviewName || 'chart-preview');
+}
+
+function saveDashboardImage(nodeId) {
+    var inst = dashboard._instances[nodeId];
+    var dataUrl = inst
+        ? inst.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' })
+        : dashboard._images[nodeId] || '';
+    var node = canvas.nodes[nodeId];
+    return saveChartPicture(dataUrl, (node && node.title) || nodeId);
+}
+
 function renderChartPreview(result) {
     var panel = document.getElementById('chart-preview-panel');
     panel.classList.add('open');
@@ -3459,6 +3515,10 @@ function toggleDataPreview() {
    (so there's an upstream result to render). */
 var dashboard = {
     _instances: {},
+    /* A Matplotlib cell has no instance to ask for a picture, but the server already
+       sent one as a data URL; keeping it beside the instance is what lets the same
+       存图 button serve both engines. */
+    _images: {},
 
     async open() {
         var panel = document.getElementById('dashboard-panel');
@@ -3466,6 +3526,7 @@ var dashboard = {
         var grid = document.getElementById('dashboard-grid');
         grid.innerHTML = '';
         this._instances = {};
+        this._images = {};
 
         var vizNodeIds = Object.keys(canvas.nodes).filter(function (id) {
             return canvas.nodes[id].type === 'visualize';
@@ -3482,7 +3543,11 @@ var dashboard = {
             var cell = document.createElement('div');
             cell.className = 'dashboard-cell';
             cell.innerHTML =
-                '<div class="dashboard-cell-title">' + escapeHtml(node.title || id) + '</div>' +
+                '<div class="dashboard-cell-title">' + escapeHtml(node.title || id) +
+                /* A node id is minted, never typed, so it is safe to put in the handler: the
+                   name that could need escaping (the title) is read back at click time. */
+                ' <button class="menu-btn" onclick="saveDashboardImage(\'' + id + '\')">' +
+                I18n.t('chart.saveImage') + '</button></div>' +
                 '<div class="dashboard-cell-body"></div>';
             grid.appendChild(cell);
             self._renderCell(id, node, cell, grid);
@@ -3537,6 +3602,7 @@ var dashboard = {
             }
             if (result.engine === 'matplotlib') {
                 body.innerHTML = '<img src="' + escapeHtml(result.image) + '" />';
+                this._images[nodeId] = result.image;
             } else {
                 var inst = echarts.init(body);
                 this._instances[nodeId] = inst;

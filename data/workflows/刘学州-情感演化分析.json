@@ -273,6 +273,7 @@
         "label_samples_col": "sample_texts",
         "label_summary_col": "主题概括",
         "label_words_col": "feature_words",
+        "model": "qwen3.5:9b",
         "operation": "topic_label"
       },
       "operation": "topic_label",
