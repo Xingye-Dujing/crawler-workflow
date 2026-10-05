@@ -359,6 +359,29 @@ def state(tmp_path_factory):
                 'view': {'panX': -70, 'panY': 15, 'zoom': 0.5},
             },
         },
+        {
+            # The user's report: a DISABLED 输出 node, copied then pasted, came back
+            # switched-on. The bug was never specific to the output node — a paste rewrites
+            # the node's params and title AFTER addNode has already saved a snapshot, and the
+            # paste saved nothing, so the draft (what a reload reads) kept the fresh defaults.
+            # Reading the DRAFT — not the live nodes — is what catches it.
+            'id': 'copy_paste_disabled',
+            'restore': {
+                'nodes': {
+                    'node-1': {
+                        'id': 'node-1',
+                        'type': 'output',
+                        'title': '禁用输出',
+                        'params': {'operation': 'save', 'enabled': False},
+                        'x': 10,
+                        'y': 20,
+                    },
+                },
+                'connections': [],
+            },
+            'copy': 'node-1',
+            'paste': 1,
+        },
     ]
     return _run('harness_state.mjs', [JS_DIR / 'canvas.js'], scenarios, tmp)
 
@@ -383,6 +406,26 @@ class TestCanvasState:
             assert n['params'] == nodes[0]['params'], 'the settings must travel with the name'
             assert n['id'] != nodes[0]['id'], 'a paste is a new node, not a second label on the old one'
         assert any(msg == 'toast.nodeCopied' for msg in state['copy_paste_named']['toasts'])
+
+    def test_pasting_a_disabled_node_persists_the_disable_in_the_draft(self, state):
+        """Copy/paste writes the node's params and name only after addNode had saved a
+        snapshot of the fresh defaults — so unless the paste saves again, a reload hands back
+        an ENABLED, unnamed node. The report was a disabled 输出 node coming back switched-on;
+        the loss was really every params field and the title, on a paste of any node type.
+
+        The live `nodes` would pass even with the bug (they hold the overwritten params);
+        only the persisted `draft` distinguishes saved from merely-in-memory.
+        """
+        case = state['copy_paste_disabled']
+        src, pasted = case['nodes'][0], case['nodes'][1]
+        assert src['params'].get('enabled') is False
+        assert pasted['type'] == 'output'
+        assert pasted['title'] == '禁用输出'
+        draft_nodes = case['draft']['nodes']
+        assert draft_nodes[pasted['id']]['params'].get('enabled') is False, (
+            'the disabled state must reach the persisted draft, not just memory'
+        )
+        assert draft_nodes[pasted['id']]['title'] == '禁用输出', 'the copied name must persist too'
 
     def test_a_pasted_default_label_still_translates_with_the_language(self, state):
         nodes = {n['id']: n for n in state['copy_paste_default_label']['nodes']}

@@ -339,6 +339,18 @@ const canvas = {
                                 if (titleEl) titleEl.textContent = this._clipboardData.title;
                             }
                             this.updateNodeDisplay(id);
+                            /* The params (and the copy's name) are written only AFTER addNode
+                               has already run its own saveState of the freshly-minted defaults,
+                               and updateNodeDisplay repaints the box's TEXT but not the
+                               enable/disable shading, which disableStates computes on a full
+                               render. So a paste has to re-render and re-save here, or the
+                               copied node's enabled:false and edited title never reach the draft
+                               and it comes back ENABLED (and unnamed) on the next load. This is
+                               why a disabled 输出 node pasted back looking switched-on — though
+                               the loss was never specific to that type: it was every params field
+                               and the title, copied into a node that had already been saved. */
+                            this.scheduleRender();
+                            this.saveState();
                         }
                         showToast(I18n.t('toast.nodePasted'));
                     }

@@ -239,6 +239,11 @@ for (const sc of scenarios) {
         })),
         connections: canvas.connections,
         serialized: canvas.toWorkflowJSON(),
+        /* The persisted draft — what a refresh hands back. Reading THIS (not the live
+           `nodes`, which show whatever the in-memory copy has since overwritten) is what
+           proves a paste was actually SAVED rather than merely held in memory: the
+           disabled-node bug was invisible to a memory read and only shows here. */
+        draft: JSON.parse(sandbox.localStorage.getItem('crawler_canvas') || 'null'),
         historyIdx: canvas._historyIdx,
         historyLen: canvas._history.length,
         clipboard: canvas._clipboardData,
