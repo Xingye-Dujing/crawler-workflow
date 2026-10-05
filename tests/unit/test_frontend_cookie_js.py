@@ -188,6 +188,18 @@ class TestDeleteCookie:
         urls = [item['url'] for item in panel['deleteConfirmed']['requests']]
         assert '/api/cookies/status' in urls, urls
 
+    def test_a_confirmed_deletion_re_reads_the_data_source_account_list(self, panel):
+        """Which logins exist reaches the data-source node only through /api/capabilities,
+        which was fetched once at startup — so after a login is deleted that endpoint must be
+        re-read, or the node keeps offering a cookie that no longer exists until a full reload
+        (the bug the user reported)."""
+        assert panel['deleteConfirmed']['capabilitiesRefetched'] is True
+
+    def test_a_cancelled_deletion_does_not_touch_the_account_list(self, panel):
+        """Nothing was removed when the confirmation was dismissed, so the candidate list
+        must not be re-fetched — this pins that the refresh rides the SUCCESS path only."""
+        assert panel['deleteCancelled']['capabilitiesRefetched'] is False
+
     def test_a_server_refusal_is_shown_rather_than_left_silent(self, panel):
         case = panel['deleteRefused']
         assert case['posted'] == 1
@@ -228,6 +240,14 @@ class TestSavePlantsItsOwnProfile:
         case = panel['savePlants']
         assert 'DEFERRED-PROFILE' in case['statusText'], case
         assert case['toasts'] == ['toast.cookiesSaved - platform.weibo@work'], case
+
+    def test_a_deferred_plant_still_refreshes_the_account_list(self, panel):
+        """Even when the browser-profile plant is deferred, the cookie FILE is on disk now,
+        so the data-source account box must offer the new login without a page reload — the
+        capabilities re-read runs on this branch too, and the deferred sentence is not lost."""
+        case = panel['savePlants']
+        assert case['capabilitiesRefetched'] is True
+        assert 'DEFERRED-PROFILE' in case['statusText'], 'the plant note must survive the refresh'
 
     def test_a_refused_save_is_the_servers_word_not_a_success_toast(self, panel):
         assert panel['saveRefused']['toasts'] == ['cookie.failed - BAD-JSON'], panel['saveRefused']

@@ -55,6 +55,18 @@ sandbox.fetchJSON = (url, opts) => {
     if (url === '/api/cookies/status' && payload && !payload.cookies) payload = { ...payload, cookies: {} };
     return Promise.resolve(payload);
 };
+/* Capabilities.load() reaches the server through the NATIVE fetch, not fetchJSON — and the
+   data-source node's account box reads its candidate list ONLY from /api/capabilities (the
+   backend rebuilds those options from the on-disk accounts at send time). A cookie mutation
+   must re-read that endpoint (refreshAccountCandidates) so a new/renamed/deleted login shows
+   up without a page reload. Recording the native fetch here is what proves it fired. */
+sandbox.__fetches = [];
+sandbox.fetch = (url) => {
+    sandbox.__fetches.push(url);
+    const body =
+        sandbox.__responses[url] !== undefined ? sandbox.__responses[url] : { platforms: [{ platform: 'weibo', modes: [] }] };
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+};
 sandbox.showToast = (msg) => {
     sandbox.__toasts.push(msg);
 };
@@ -252,15 +264,19 @@ setPlatform('bilibili');
 sandbox.__dialogAnswer = null; // the user closed the confirmation
 sandbox.__toasts.length = 0;
 let before = sandbox.__calls.length;
+const beforeFetchCancel = sandbox.__fetches.length;
 await sandbox.deleteCookie();
 await flush();
 out.deleteCancelled = {
     calls: sandbox.__calls.slice(before).map((call) => call.url),
     toasts: sandbox.__toasts.slice(),
     dialog: dialogs[dialogs.length - 1] || null,
+    // A cancelled confirmation changes nothing, so it must NOT re-read the account list.
+    capabilitiesRefetched: sandbox.__fetches.slice(beforeFetchCancel).includes('/api/capabilities'),
 };
 
 before = sandbox.__calls.length;
+const beforeFetchDel = sandbox.__fetches.length;
 sandbox.__dialogAnswer = 'delete';
 sandbox.__toasts.length = 0;
 await sandbox.deleteCookie();
@@ -269,6 +285,8 @@ out.deleteConfirmed = {
     requests: sandbox.__calls.slice(before).map((call) => ({ url: call.url, body: call.opts && call.opts.body })),
     toasts: sandbox.__toasts.slice(),
     dialog: dialogs[dialogs.length - 1] || null,
+    // A login really went away, so the data-source node's account box must be re-read.
+    capabilitiesRefetched: sandbox.__fetches.slice(beforeFetchDel).includes('/api/capabilities'),
 };
 
 /* ── 7. a refusal from the server is shown, not swallowed ───────────────── */
@@ -336,6 +354,7 @@ sandbox.__responses['/api/cookies/save'] = {
 sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: {}, accounts: { weibo: ['work'] } };
 sandbox.__toasts.length = 0;
 before = sandbox.__calls.length;
+const beforeFetchSave = sandbox.__fetches.length;
 sandbox.saveCookieConfig();
 await flush();
 out.savePlants = {
@@ -346,6 +365,9 @@ out.savePlants = {
         .map((call) => JSON.parse(call.opts.body)),
     statusText: doc.getElementById('cookie-status').textContent,
     toasts: sandbox.__toasts.slice(),
+    // Even when the profile plant is deferred, the login is on disk now — the account box
+    // must offer it without a reload, so /api/capabilities is re-read on this branch too.
+    capabilitiesRefetched: sandbox.__fetches.slice(beforeFetchSave).includes('/api/capabilities'),
 };
 
 /* ── 10. a refusal is shown as the server worded it ─────────────────────────── */

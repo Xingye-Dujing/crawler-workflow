@@ -1416,6 +1416,20 @@ function reloadCapabilities() {
     });
 }
 
+function refreshAccountCandidates() {
+    /* Which logins exist is which cookie files are on disk NOW, and that list reaches the
+       data-source node ONLY through GET /api/capabilities (its account options are rebuilt at
+       send time from the on-disk accounts) — the frontend never keeps its own second opinion
+       about which accounts a crawl may use. `refreshCookieStatus()` below repaints the cookie
+       panel from /api/cookies/status, but the node's account box reads the CAPABILITIES cache,
+       which was filled once at startup — so without this, a login created, deleted, renamed or
+       had its device retired stayed invisible to the data-source node until a full page reload.
+       Re-read that one endpoint and repaint a node panel the user may already have open. */
+    Capabilities.load().then(function () {
+        if (typeof canvas !== 'undefined' && canvas && canvas._settingsNodeId) openSettings(canvas._settingsNodeId);
+    });
+}
+
 /* A single screen that answers "which platform wants what" from the crawl matrix
    alone (#181). It never keeps its own platform list: every line is generated from
    the `profileRecommended` / `serialOnly` / `parallelRecommended` flags the backend
@@ -5084,6 +5098,9 @@ function saveCookieConfig() {
                     } else {
                         refreshCookieStatus();
                     }
+                    // The login is on disk now even when its profile plant was deferred, so
+                    // the data-source account box must offer it without a page reload.
+                    refreshAccountCandidates();
                 } else {
                     showToast(I18n.t('cookie.failed', { err: result.error || '' }));
                 }
@@ -5132,6 +5149,7 @@ async function deleteCookie(platform, account) {
         showToast(result.message || I18n.t('toast.cookieDeleted', { platform: who }));
         if (statusEl) statusEl.textContent = result.message || '';
         refreshCookieStatus();
+        refreshAccountCandidates();
     } else if (statusEl) {
         statusEl.textContent = result.error || I18n.t('cookie.failed').replace('{err}', '');
     }
@@ -5174,6 +5192,7 @@ async function deleteCookieProfile(platform, account) {
         if (statusEl) statusEl.textContent = result.message || '';
         // The device is gone, so the profile chip and the whole row state must be re-read.
         refreshCookieStatus();
+        refreshAccountCandidates();
     } else if (statusEl) {
         statusEl.textContent = result.error || '';
     }
@@ -5222,6 +5241,7 @@ async function renameCookieAccount(platform, account) {
         // under the name that was just freed, which is the opposite of what was asked for.
         setCookieAccountBox(result.account);
         refreshCookieStatus();
+        refreshAccountCandidates();
     } else if (statusEl) {
         statusEl.textContent = result.error || I18n.t('cookie.failed').replace('{err}', '');
         showToast(result.error || I18n.t('cookie.failed').replace('{err}', ''));
