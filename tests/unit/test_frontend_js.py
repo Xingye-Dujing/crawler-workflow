@@ -553,6 +553,16 @@ class TestSettingsPanel:
         for panel in ('panel_zhihu_posts', 'panel_weibo_posts'):
             assert 'comment_preview' not in results['settings'][panel], f'{panel} has no comment preview to set'
 
+    def test_the_comment_panel_offers_a_time_range_filter(self, results):
+        """The standalone comment node can drop comments outside a calendar range; the two
+        inputs are the only route to ``comment_start`` / ``comment_end``, which the backend
+        filter reads. They belong to the comment node itself (no upstream condition, unlike the
+        output node's crawl-window tag), so they render whenever the comment panel is open."""
+        html = results['settings']['panel_legacy_comment']
+        assert "updateParam('n1','comment_start',this.value)" in html
+        assert "updateParam('n1','comment_end',this.value)" in html
+        assert 'settings.commentStart' in html and 'settings.commentTimeHint' in html
+
     def test_the_output_panel_offers_the_run_time_in_the_filename(self, results):
         """The checkbox is the only route to ``params['filename_timestamp']``, which
         the backend reads when it names the file — and an unchecked box must render

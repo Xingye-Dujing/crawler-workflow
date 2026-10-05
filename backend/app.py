@@ -3843,6 +3843,56 @@ def _execute_visualize_node(node: dict, current_input: list):
     return spec
 
 
+def _filter_comments_by_time(rows: list, params: dict, label: str) -> list:
+    """Drop comments whose 评论时间 falls outside an optional [start, end] range.
+
+    This is a TABLE-side filter of comments already crawled, deliberately separate from a
+    crawl node's start_time/end_time (which decides how far back to CRAWL). The keys are
+    comment_start/comment_end so the two meanings never share a name. A range chooses which
+    data is kept, so a half range, an unparseable date or an inverted window is refused BY
+    NAME rather than guessed (the same discipline the crawl window uses), and a comment whose
+    time cell is blank or unrecognised is dropped and counted — never assigned a year, never
+    kept as though it matched. Comparison is by calendar day (normalised), inclusive at both
+    ends, matching bin_time.
+    """
+    start = str(params.get('comment_start') or '').strip()
+    end = str(params.get('comment_end') or '').strip()
+    if not start and not end:
+        return rows
+    if not start or not end:
+        raise ValueError(t('comment.need_both', nid=label))
+    lo = pd.to_datetime(start, errors='coerce')
+    hi = pd.to_datetime(end, errors='coerce')
+    if pd.isna(lo) or pd.isna(hi):
+        raise ValueError(t('comment.bad_date', nid=label))
+    if hi < lo:
+        raise ValueError(t('comment.bad_range', nid=label))
+    if not rows:
+        return rows
+    from services.data_analysis import _to_datetime
+
+    times = _to_datetime(pd.Series([r.get('评论时间') for r in rows], dtype='object'))
+    lo_day, hi_day = lo.normalize(), hi.normalize()
+    out, unparsed = [], 0
+    for row, valid, day in zip(rows, times.notna(), times.dt.normalize(), strict=True):
+        if not valid:
+            unparsed += 1  # a blank/unparseable 评论时间 is not a date; it cannot be shown to match
+            continue
+        if lo_day <= day <= hi_day:
+            out.append(row)
+    add_log(
+        t(
+            'comment.time_filtered',
+            nid=label,
+            start=start,
+            end=end,
+            kept=len(out),
+            dropped=len(rows) - len(out),
+        )
+    )
+    return out
+
+
 def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     """Comment crawler: article links in, comment rows out, batch by batch.
 
@@ -4088,6 +4138,7 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # cookie — that is the source crawler's rule, applied to the comment node too.
             raise ValueError(t('run.riskControlled', platform=target_word))
         raise ValueError(t('run.cookieExpired', platform=target_word))
+    rows_out = _filter_comments_by_time(rows_out, params, node_label(node, str(nid)))
     return rows_out
 
 

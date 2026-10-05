@@ -1970,6 +1970,17 @@ function openSettings(nodeId) {
             '<input class="settings-input" type="number" min="0" value="' + escapeHtml(p.comment_limit != null ? p.comment_limit : 0) + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'comment_limit\',parseInt(this.value)||0)">' +
             '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentLimitHint') + '</div></div>' +
+            /* A table-side time filter over the comments already crawled — distinct from a
+               crawl node's start/end (which bound how far back to CRAWL). Keys are
+               comment_start/comment_end so the two never share a name. Both ends or neither:
+               a half range is refused by the backend, not guessed. */
+            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentStart') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.comment_start || '') + '" placeholder="2026-01-01" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'comment_start\',this.value)"></div>' +
+            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.commentEnd') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.comment_end || '') + '" placeholder="2026-12-31" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'comment_end\',this.value)">' +
+            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentTimeHint') + '</div></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.partSize') + '</label>' +
             '<input class="settings-input" type="number" min="0" value="' + escapeHtml(p.part_size != null ? p.part_size : 50) + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'part_size\',parseInt(this.value)||0)">' +

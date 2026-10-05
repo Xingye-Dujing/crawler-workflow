@@ -778,6 +778,9 @@ const I18n = {
                 'plausible-looking data that is really a failure, so WeChat is limited to what it genuinely ' +
                 'serves — the article text — and comments are offered for 知乎 / 微博 / 小红书 instead.',
             'settings.commentUrlsHintMixed': 'One link per line; Zhihu / Weibo / Xiaohongshu may be mixed — each link is routed by its own domain',
+            'settings.commentStart': 'Comment time filter — start (YYYY-MM-DD)',
+            'settings.commentEnd': 'Comment time filter — end (YYYY-MM-DD)',
+            'settings.commentTimeHint': 'Keeps only comments whose 评论时间 falls within [start, end]; leave both blank to keep every comment. Fill BOTH ends or neither.',
             'settings.commentLimit': 'Comments Limit',
             'settings.commentLimitHint': '0 = every comment',
             'settings.partSize': 'Part Size',
@@ -1689,6 +1692,9 @@ const I18n = {
                 '如果返回一张空表，你拿到的就是一份看着正常、实则是失败的数据。' +
                 '因此微信只采集它真正开放的内容（文章正文），评论采集请使用 知乎 / 微博 / 小红书。',
             'settings.commentUrlsHintMixed': '每行一个文章链接，可混合知乎 / 微博 / 小红书，每个链接按域名自动识别平台',
+            'settings.commentStart': '评论时间筛选 · 开始（YYYY-MM-DD）',
+            'settings.commentEnd': '评论时间筛选 · 结束（YYYY-MM-DD）',
+            'settings.commentTimeHint': '只保留「评论时间」落在 [开始, 结束] 内的评论；两端都留空则保留全部。要填就两端都填，只填一端会被拒绝。',
             'settings.commentLimit': '评论条数上限',
             'settings.commentLimitHint': '0 表示采集全部评论',
             'settings.partSize': '分片大小',

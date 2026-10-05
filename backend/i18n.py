@@ -1026,6 +1026,10 @@ _ZH = {
     'run.restored': '节点 {nid} 沿用上次结果（{n} 行），不再重跑',
     'run.resume_crawl': '节点 {nid} 从上次中断处继续抓取（已有 {have} 行）',
     'run.heavy_result': '内存提示：节点「{nid}」产出 {n} 行，运行结束前每个节点的这份结果都留在内存里',
+    'comment.need_both': '节点 {nid}：按评论时间筛选必须同时给出开始和结束时间（半个区间无法界定范围）',
+    'comment.bad_date': '节点 {nid}：评论时间筛选的日期无法解析（请用 YYYY-MM-DD）',
+    'comment.bad_range': '节点 {nid}：评论时间筛选的结束时间早于开始时间',
+    'comment.time_filtered': '节点 {nid}：按评论时间 {start} ~ {end} 筛选，保留 {kept} 条、丢弃 {dropped} 条',
     'run.recrawl': '重新采集：已释放 {n} 条历史去重记录，本节点将重新抓取',
     'run.dedupe_skipped': '增量采集：{n} 条结果此前已采集，本次被跳过（如需重抓请在采集节点开启「重新采集」）',
     'run.dedupe_all_skipped': (
@@ -2286,6 +2290,13 @@ _EN = {
     'run.heavy_result': (
         'Memory note: node "{nid}" produced {n} rows, and every node\'s rows are held in memory until the run ends'
     ),
+    'comment.need_both': (
+        'Node {nid}: filtering comments by time needs BOTH a start and an end '
+        '(a half range cannot bound the window)'
+    ),
+    'comment.bad_date': 'Node {nid}: the comment time range could not be parsed (use YYYY-MM-DD)',
+    'comment.bad_range': 'Node {nid}: the comment time range ends before it starts',
+    'comment.time_filtered': 'Node {nid}: filtered comments by time {start} ~ {end}: kept {kept}, dropped {dropped}',
     'run.recrawl': 'Re-crawl: released {n} dedupe records; this node will collect again',
     'run.dedupe_skipped': (
         'Incremental: {n} already-collected items were skipped (enable Recrawl on the source node to re-collect)'
