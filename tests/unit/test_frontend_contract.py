@@ -716,3 +716,34 @@ class TestEveryServedScriptParses:
             if proc.returncode != 0:
                 broken.append(f'{script.name}: {(proc.stderr or proc.stdout).strip()[:300]}')
         assert not broken, '\n'.join(broken)
+
+
+class TestOverlayLayering:
+    """The full-screen chart window is opened FROM the dashboard board (and from the
+    preview panels), so it must be layered above them. All are position:fixed in one
+    stacking context; when the window and the board shared a z-index the board could bury
+    the very window launched from its own cells. The layering is a stylesheet constant, so
+    it is pinned against the CSS directly rather than by a click."""
+
+    @staticmethod
+    def _z_index(css: str, selector: str) -> int:
+        match = re.search(re.escape(selector) + r'\s*\{[^}]*?z-index:\s*(\d+)', css, re.S)
+        assert match, f'no z-index declared for {selector}'
+        return int(match.group(1))
+
+    def test_the_fullscreen_chart_window_out_ranks_the_dashboard(self):
+        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        fullscreen = self._z_index(css, '#chart-fullscreen-panel')
+        board = self._z_index(css, '#dashboard-panel')
+        assert fullscreen > board, (
+            f'the full-screen chart window ({fullscreen}) must sit above the dashboard ({board}) '
+            'it opens from; a tie lets the board bury the window'
+        )
+
+    def test_the_fullscreen_window_also_covers_the_preview_panels(self):
+        """It is also launched from the visualize / data preview surfaces, so it must clear
+        those too (they sit at 1002, under the board)."""
+        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        fullscreen = self._z_index(css, '#chart-fullscreen-panel')
+        for preview in ('#chart-preview-panel', '#data-preview-panel'):
+            assert fullscreen > self._z_index(css, preview), f'{preview} must stay under the full-screen window'

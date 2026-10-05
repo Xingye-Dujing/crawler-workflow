@@ -1431,7 +1431,11 @@ body.style-menu-open #workspace #resume-banner {
 /* ── Full-screen chart window (draggable + resizable, one chart at a time) ── */
 /* Starts centred via transform; makeDraggable's convertToFloating reads that transform
    on first mousedown and pins left/top in its place, so the window is both centred and
-   draggable. It sits above the preview panel (1002) and coexists with it. */
+   draggable. It must sit above BOTH the preview panel (1002) AND the board it opens from:
+   the dashboard grid is #dashboard-panel at 1003, so a full-screen chart launched from a
+   board cell used to TIE with the board and end up buried under it at an unstable DOM order.
+   One step above the dashboard (1004) keeps the full-screen window on top of everything it
+   can be opened over. */
 #chart-fullscreen-panel {
   position: fixed;
   left: 50%;
@@ -1442,7 +1446,7 @@ body.style-menu-open #workspace #resume-banner {
   background: var(--bg);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
-  z-index: 1003;
+  z-index: 1004;
   display: none;
   flex-direction: column;
   overflow: hidden;
