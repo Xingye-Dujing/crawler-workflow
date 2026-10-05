@@ -13,7 +13,7 @@
       },
       "operation": "save",
       "x": 353,
-      "y": 2212,
+      "y": 1988,
       "folded": false
     },
     {
@@ -31,7 +31,7 @@
       },
       "operation": "clean",
       "x": 693,
-      "y": 2212,
+      "y": 1988,
       "folded": false
     },
     {
@@ -47,7 +47,7 @@
       },
       "operation": "filter_rows",
       "x": 1033,
-      "y": 2142,
+      "y": 1918,
       "folded": false
     },
     {
@@ -62,7 +62,7 @@
       },
       "operation": "drop_duplicates",
       "x": 1373,
-      "y": 2142,
+      "y": 1918,
       "folded": false
     },
     {
@@ -77,7 +77,7 @@
       },
       "operation": "dedupe_similar",
       "x": 1713,
-      "y": 2142,
+      "y": 1918,
       "folded": false
     },
     {
@@ -94,7 +94,7 @@
       },
       "operation": "sentiment",
       "x": 2069,
-      "y": 2002,
+      "y": 1778,
       "folded": false
     },
     {
@@ -110,7 +110,7 @@
       },
       "operation": "extract_time",
       "x": 2421,
-      "y": 1862,
+      "y": 1638,
       "folded": false
     },
     {
@@ -128,7 +128,7 @@
       },
       "operation": "bin_time",
       "x": 2784,
-      "y": 1918,
+      "y": 1694,
       "folded": false
     },
     {
@@ -147,8 +147,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 3134,
-      "y": 1232,
+      "x": 3594,
+      "y": 77,
       "folded": false
     },
     {
@@ -165,7 +165,7 @@
         "x_field": "period",
         "y_field": "total"
       },
-      "x": 3594,
+      "x": 4015,
       "y": 0,
       "folded": false
     },
@@ -183,7 +183,7 @@
         "x_field": "period",
         "y_field": "sentiment_index"
       },
-      "x": 3594,
+      "x": 4015,
       "y": 154,
       "folded": false
     },
@@ -205,7 +205,7 @@
       },
       "operation": "sentiment_evolution",
       "x": 3134,
-      "y": 1372,
+      "y": 1148,
       "folded": false
     },
     {
@@ -222,7 +222,7 @@
         "y_field": "total"
       },
       "x": 3594,
-      "y": 742,
+      "y": 217,
       "folded": false
     },
     {
@@ -238,7 +238,7 @@
       },
       "operation": "save",
       "x": 3594,
-      "y": 896,
+      "y": 371,
       "folded": false
     },
     {
@@ -259,7 +259,7 @@
       },
       "operation": "topic_by_stage",
       "x": 3134,
-      "y": 1512,
+      "y": 1288,
       "folded": false
     },
     {
@@ -278,7 +278,7 @@
       },
       "operation": "topic_label",
       "x": 3594,
-      "y": 1190,
+      "y": 665,
       "folded": false
     },
     {
@@ -293,8 +293,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 812,
+      "x": 4015,
+      "y": 742,
       "folded": false
     },
     {
@@ -307,7 +307,7 @@
         "row_count": 10000
       },
       "x": 0,
-      "y": 1820,
+      "y": 1596,
       "folded": false
     },
     {
@@ -320,7 +320,7 @@
         "row_count": 10000
       },
       "x": 0,
-      "y": 1974,
+      "y": 1750,
       "folded": false
     },
     {
@@ -333,7 +333,7 @@
         "row_count": 10000
       },
       "x": 0,
-      "y": 2128,
+      "y": 1904,
       "folded": false
     },
     {
@@ -346,7 +346,7 @@
         "row_count": 10000
       },
       "x": 0,
-      "y": 2282,
+      "y": 2058,
       "folded": false
     },
     {
@@ -359,7 +359,7 @@
         "row_count": 1562
       },
       "x": 0,
-      "y": 2436,
+      "y": 2212,
       "folded": false
     },
     {
@@ -374,7 +374,7 @@
       },
       "operation": "save",
       "x": 1033,
-      "y": 2282,
+      "y": 2058,
       "folded": false
     },
     {
@@ -389,7 +389,7 @@
       },
       "operation": "save",
       "x": 1373,
-      "y": 2282,
+      "y": 2058,
       "folded": false
     },
     {
@@ -404,7 +404,7 @@
       },
       "operation": "save",
       "x": 1713,
-      "y": 2282,
+      "y": 2058,
       "folded": false
     },
     {
@@ -419,7 +419,7 @@
       },
       "operation": "save",
       "x": 2069,
-      "y": 2142,
+      "y": 1918,
       "folded": false
     },
     {
@@ -434,7 +434,7 @@
       },
       "operation": "save",
       "x": 2421,
-      "y": 2002,
+      "y": 1778,
       "folded": false
     },
     {
@@ -449,7 +449,7 @@
       },
       "operation": "save",
       "x": 2784,
-      "y": 2198,
+      "y": 1974,
       "folded": false
     },
     {
@@ -462,7 +462,7 @@
         "row_count": 2945
       },
       "x": 0,
-      "y": 2590,
+      "y": 2366,
       "folded": false
     },
     {
@@ -479,7 +479,7 @@
       },
       "operation": "suggest_stages",
       "x": 2784,
-      "y": 2058,
+      "y": 1834,
       "folded": false
     },
     {
@@ -495,7 +495,7 @@
       },
       "operation": "save",
       "x": 3134,
-      "y": 3192,
+      "y": 2968,
       "folded": false
     },
     {
@@ -514,7 +514,7 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 3594,
+      "x": 4015,
       "y": 308,
       "folded": false
     },
@@ -534,7 +534,7 @@
         "y_field": "total"
       },
       "x": 3594,
-      "y": 1036,
+      "y": 511,
       "folded": false
     },
     {
@@ -551,7 +551,7 @@
       },
       "operation": "topic_map",
       "x": 2069,
-      "y": 2282,
+      "y": 2058,
       "folded": false
     },
     {
@@ -569,7 +569,7 @@
         "y_field": "pc2"
       },
       "x": 2784,
-      "y": 2338,
+      "y": 2114,
       "folded": false
     },
     {
@@ -587,7 +587,7 @@
       },
       "operation": "topic_salience",
       "x": 2069,
-      "y": 2422,
+      "y": 2198,
       "folded": false
     },
     {
@@ -603,7 +603,7 @@
       },
       "operation": "filter_rows",
       "x": 2421,
-      "y": 2422,
+      "y": 2198,
       "folded": false
     },
     {
@@ -620,7 +620,7 @@
         "y_field": "overall_freq"
       },
       "x": 2784,
-      "y": 2492,
+      "y": 2268,
       "folded": false
     },
     {
@@ -636,7 +636,7 @@
       },
       "operation": "save",
       "x": 2421,
-      "y": 2282,
+      "y": 2058,
       "folded": false
     },
     {
@@ -652,7 +652,7 @@
       },
       "operation": "save",
       "x": 2421,
-      "y": 2562,
+      "y": 2338,
       "folded": false
     },
     {
@@ -668,7 +668,7 @@
       },
       "operation": "filter_rows",
       "x": 3134,
-      "y": 1652,
+      "y": 1428,
       "folded": false
     },
     {
@@ -685,7 +685,7 @@
       },
       "operation": "topic_map",
       "x": 3594,
-      "y": 1470,
+      "y": 945,
       "folded": false
     },
     {
@@ -700,8 +700,8 @@
         "x_field": "pc1",
         "y_field": "pc2"
       },
-      "x": 4461,
-      "y": 1232,
+      "x": 4454,
+      "y": 1225,
       "folded": false
     },
     {
@@ -718,7 +718,7 @@
       },
       "operation": "topic_salience",
       "x": 3594,
-      "y": 1610,
+      "y": 1085,
       "folded": false
     },
     {
@@ -732,8 +732,8 @@
         "value": "Topic-1"
       },
       "operation": "filter_rows",
-      "x": 4033,
-      "y": 1372,
+      "x": 4015,
+      "y": 1302,
       "folded": false
     },
     {
@@ -748,8 +748,8 @@
         "y2_field": "within_freq",
         "y_field": "overall_freq"
       },
-      "x": 4461,
-      "y": 1386,
+      "x": 4454,
+      "y": 1379,
       "folded": false
     },
     {
@@ -763,8 +763,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 1512,
+      "x": 4015,
+      "y": 1442,
       "folded": false
     },
     {
@@ -782,7 +782,7 @@
       },
       "operation": "topic_timeline",
       "x": 3594,
-      "y": 1330,
+      "y": 805,
       "folded": false
     },
     {
@@ -796,8 +796,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 1092,
+      "x": 4015,
+      "y": 1022,
       "folded": false
     },
     {
@@ -815,8 +815,8 @@
         "operation": "topic_flow"
       },
       "operation": "topic_flow",
-      "x": 4033,
-      "y": 952,
+      "x": 4015,
+      "y": 882,
       "folded": false
     },
     {
@@ -831,8 +831,8 @@
         "x_field": "source",
         "y_field": "target"
       },
-      "x": 4461,
-      "y": 938,
+      "x": 4454,
+      "y": 931,
       "folded": false
     },
     {
@@ -846,8 +846,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4461,
-      "y": 1092,
+      "x": 4454,
+      "y": 1085,
       "folded": false
     },
     {
@@ -863,7 +863,7 @@
       },
       "operation": "cooccur",
       "x": 3134,
-      "y": 1792,
+      "y": 1568,
       "folded": false
     },
     {
@@ -879,7 +879,7 @@
         "y_field": "target"
       },
       "x": 3594,
-      "y": 1750,
+      "y": 1225,
       "folded": false
     },
     {
@@ -894,7 +894,7 @@
       },
       "operation": "save",
       "x": 3594,
-      "y": 1904,
+      "y": 1379,
       "folded": false
     },
     {
@@ -912,7 +912,7 @@
       },
       "operation": "topic_coherence",
       "x": 3134,
-      "y": 1932,
+      "y": 1708,
       "folded": false
     },
     {
@@ -927,7 +927,7 @@
       },
       "operation": "save",
       "x": 3594,
-      "y": 2044,
+      "y": 1519,
       "folded": false
     },
     {
@@ -943,7 +943,7 @@
         "operation": "forecast"
       },
       "operation": "forecast",
-      "x": 3594,
+      "x": 4015,
       "y": 462,
       "folded": false
     },
@@ -958,8 +958,8 @@
         "x_field": "period",
         "y_field": "predicted"
       },
-      "x": 4033,
-      "y": 378,
+      "x": 4454,
+      "y": 497,
       "folded": false
     },
     {
@@ -973,8 +973,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 532,
+      "x": 4454,
+      "y": 651,
       "folded": false
     },
     {
@@ -993,7 +993,7 @@
         "operation": "alert"
       },
       "operation": "alert",
-      "x": 3594,
+      "x": 4015,
       "y": 602,
       "folded": false
     },
@@ -1008,8 +1008,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 672,
+      "x": 4454,
+      "y": 791,
       "folded": false
     },
     {
@@ -1023,7 +1023,7 @@
       },
       "operation": "aggression",
       "x": 3134,
-      "y": 2072,
+      "y": 1848,
       "folded": false
     },
     {
@@ -1038,7 +1038,7 @@
       },
       "operation": "save",
       "x": 3594,
-      "y": 2184,
+      "y": 1659,
       "folded": false
     },
     {
@@ -1053,7 +1053,7 @@
       },
       "operation": "groupby_agg",
       "x": 3594,
-      "y": 2324,
+      "y": 1799,
       "folded": false
     },
     {
@@ -1066,8 +1066,8 @@
         "x_field": "日期",
         "y_field": "aggression_score"
       },
-      "x": 4033,
-      "y": 1652,
+      "x": 4015,
+      "y": 1582,
       "folded": false
     },
     {
@@ -1082,7 +1082,7 @@
       },
       "operation": "filter_rows",
       "x": 3134,
-      "y": 2212,
+      "y": 1988,
       "folded": false
     },
     {
@@ -1098,7 +1098,7 @@
       },
       "operation": "topic_map",
       "x": 3594,
-      "y": 2604,
+      "y": 2079,
       "folded": false
     },
     {
@@ -1113,8 +1113,8 @@
         "x_field": "pc1",
         "y_field": "pc2"
       },
-      "x": 4461,
-      "y": 1540,
+      "x": 4454,
+      "y": 1533,
       "folded": false
     },
     {
@@ -1131,7 +1131,7 @@
       },
       "operation": "topic_salience",
       "x": 3594,
-      "y": 2744,
+      "y": 2219,
       "folded": false
     },
     {
@@ -1145,8 +1145,8 @@
         "value": "Topic-1"
       },
       "operation": "filter_rows",
-      "x": 4033,
-      "y": 2086,
+      "x": 4015,
+      "y": 2016,
       "folded": false
     },
     {
@@ -1160,8 +1160,8 @@
         "y2_field": "within_freq",
         "y_field": "overall_freq"
       },
-      "x": 4461,
-      "y": 1694,
+      "x": 4454,
+      "y": 1687,
       "folded": false
     },
     {
@@ -1175,8 +1175,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 2226,
+      "x": 4015,
+      "y": 2156,
       "folded": false
     },
     {
@@ -1191,7 +1191,7 @@
       },
       "operation": "filter_rows",
       "x": 3134,
-      "y": 2352,
+      "y": 2128,
       "folded": false
     },
     {
@@ -1207,7 +1207,7 @@
       },
       "operation": "topic_map",
       "x": 3594,
-      "y": 2884,
+      "y": 2359,
       "folded": false
     },
     {
@@ -1222,8 +1222,8 @@
         "x_field": "pc1",
         "y_field": "pc2"
       },
-      "x": 4461,
-      "y": 1848,
+      "x": 4454,
+      "y": 1841,
       "folded": false
     },
     {
@@ -1240,7 +1240,7 @@
       },
       "operation": "topic_salience",
       "x": 3594,
-      "y": 3024,
+      "y": 2499,
       "folded": false
     },
     {
@@ -1254,8 +1254,8 @@
         "value": "Topic-1"
       },
       "operation": "filter_rows",
-      "x": 4033,
-      "y": 2506,
+      "x": 4015,
+      "y": 2436,
       "folded": false
     },
     {
@@ -1269,8 +1269,8 @@
         "y2_field": "within_freq",
         "y_field": "overall_freq"
       },
-      "x": 4461,
-      "y": 2002,
+      "x": 4454,
+      "y": 1995,
       "folded": false
     },
     {
@@ -1284,8 +1284,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 2646,
+      "x": 4015,
+      "y": 2576,
       "folded": false
     },
     {
@@ -1301,7 +1301,7 @@
       },
       "operation": "groupby_agg",
       "x": 3594,
-      "y": 2464,
+      "y": 1939,
       "folded": false
     },
     {
@@ -1315,8 +1315,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 1806,
+      "x": 4015,
+      "y": 1736,
       "folded": false
     },
     {
@@ -1332,7 +1332,7 @@
       },
       "operation": "filter_rows",
       "x": 3134,
-      "y": 2492,
+      "y": 2268,
       "folded": false
     },
     {
@@ -1349,7 +1349,7 @@
       },
       "operation": "sentiment",
       "x": 3594,
-      "y": 3164,
+      "y": 2639,
       "folded": false
     },
     {
@@ -1368,8 +1368,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4033,
-      "y": 2786,
+      "x": 4015,
+      "y": 2716,
       "folded": false
     },
     {
@@ -1388,8 +1388,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4461,
-      "y": 2156,
+      "x": 4454,
+      "y": 2149,
       "folded": false
     },
     {
@@ -1403,8 +1403,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4461,
-      "y": 2310,
+      "x": 4454,
+      "y": 2303,
       "folded": false
     },
     {
@@ -1420,7 +1420,7 @@
       },
       "operation": "filter_rows",
       "x": 3134,
-      "y": 2632,
+      "y": 2408,
       "folded": false
     },
     {
@@ -1437,7 +1437,7 @@
       },
       "operation": "sentiment",
       "x": 3594,
-      "y": 3444,
+      "y": 2919,
       "folded": false
     },
     {
@@ -1456,8 +1456,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4033,
-      "y": 3066,
+      "x": 4015,
+      "y": 2996,
       "folded": false
     },
     {
@@ -1476,8 +1476,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4461,
-      "y": 2450,
+      "x": 4454,
+      "y": 2443,
       "folded": false
     },
     {
@@ -1491,8 +1491,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4461,
-      "y": 2604,
+      "x": 4454,
+      "y": 2597,
       "folded": false
     },
     {
@@ -1508,7 +1508,7 @@
       },
       "operation": "filter_rows",
       "x": 3134,
-      "y": 2772,
+      "y": 2548,
       "folded": false
     },
     {
@@ -1525,7 +1525,7 @@
       },
       "operation": "sentiment",
       "x": 3594,
-      "y": 3724,
+      "y": 3199,
       "folded": false
     },
     {
@@ -1544,8 +1544,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4033,
-      "y": 3346,
+      "x": 4015,
+      "y": 3276,
       "folded": false
     },
     {
@@ -1564,8 +1564,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4461,
-      "y": 2744,
+      "x": 4454,
+      "y": 2737,
       "folded": false
     },
     {
@@ -1579,8 +1579,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4461,
-      "y": 2898,
+      "x": 4454,
+      "y": 2891,
       "folded": false
     },
     {
@@ -1596,7 +1596,7 @@
       },
       "operation": "filter_rows",
       "x": 3134,
-      "y": 2912,
+      "y": 2688,
       "folded": false
     },
     {
@@ -1613,7 +1613,7 @@
       },
       "operation": "sentiment",
       "x": 3594,
-      "y": 4004,
+      "y": 3479,
       "folded": false
     },
     {
@@ -1632,8 +1632,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4033,
-      "y": 3626,
+      "x": 4015,
+      "y": 3556,
       "folded": false
     },
     {
@@ -1652,8 +1652,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4461,
-      "y": 3038,
+      "x": 4454,
+      "y": 3031,
       "folded": false
     },
     {
@@ -1667,8 +1667,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4461,
-      "y": 3192,
+      "x": 4454,
+      "y": 3185,
       "folded": false
     },
     {
@@ -1684,7 +1684,7 @@
       },
       "operation": "filter_rows",
       "x": 3134,
-      "y": 3052,
+      "y": 2828,
       "folded": false
     },
     {
@@ -1701,7 +1701,7 @@
       },
       "operation": "sentiment",
       "x": 3594,
-      "y": 4284,
+      "y": 3759,
       "folded": false
     },
     {
@@ -1720,8 +1720,8 @@
         "score_col": "score"
       },
       "operation": "sentiment_evolution",
-      "x": 4033,
-      "y": 3906,
+      "x": 4015,
+      "y": 3836,
       "folded": false
     },
     {
@@ -1740,8 +1740,8 @@
         "y2_field": "intensity",
         "y_field": "total"
       },
-      "x": 4461,
-      "y": 3332,
+      "x": 4454,
+      "y": 3325,
       "folded": false
     },
     {
@@ -1755,8 +1755,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4461,
-      "y": 3486,
+      "x": 4454,
+      "y": 3479,
       "folded": false
     },
     {
@@ -1774,7 +1774,7 @@
       },
       "operation": "topic_coherence",
       "x": 3594,
-      "y": 3304,
+      "y": 2779,
       "folded": false
     },
     {
@@ -1788,8 +1788,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 2926,
+      "x": 4015,
+      "y": 2856,
       "folded": false
     },
     {
@@ -1807,7 +1807,7 @@
       },
       "operation": "topic_coherence",
       "x": 3594,
-      "y": 3584,
+      "y": 3059,
       "folded": false
     },
     {
@@ -1821,8 +1821,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 3206,
+      "x": 4015,
+      "y": 3136,
       "folded": false
     },
     {
@@ -1840,7 +1840,7 @@
       },
       "operation": "topic_coherence",
       "x": 3594,
-      "y": 3864,
+      "y": 3339,
       "folded": false
     },
     {
@@ -1854,8 +1854,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 3486,
+      "x": 4015,
+      "y": 3416,
       "folded": false
     },
     {
@@ -1873,7 +1873,7 @@
       },
       "operation": "topic_coherence",
       "x": 3594,
-      "y": 4144,
+      "y": 3619,
       "folded": false
     },
     {
@@ -1887,8 +1887,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 3766,
+      "x": 4015,
+      "y": 3696,
       "folded": false
     },
     {
@@ -1906,7 +1906,7 @@
       },
       "operation": "topic_coherence",
       "x": 3594,
-      "y": 4424,
+      "y": 3899,
       "folded": false
     },
     {
@@ -1920,8 +1920,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 4033,
-      "y": 4046,
+      "x": 4015,
+      "y": 3976,
       "folded": false
     },
     {
@@ -1940,7 +1940,7 @@
       },
       "operation": "topic_label",
       "x": 2421,
-      "y": 2142,
+      "y": 1918,
       "folded": false
     },
     {
@@ -1958,8 +1958,8 @@
         "operation": "topic_label"
       },
       "operation": "topic_label",
-      "x": 4033,
-      "y": 1232,
+      "x": 4015,
+      "y": 1162,
       "folded": false
     },
     {
@@ -1977,8 +1977,8 @@
         "operation": "topic_label"
       },
       "operation": "topic_label",
-      "x": 4033,
-      "y": 1946,
+      "x": 4015,
+      "y": 1876,
       "folded": false
     },
     {
@@ -1996,8 +1996,8 @@
         "operation": "topic_label"
       },
       "operation": "topic_label",
-      "x": 4033,
-      "y": 2366,
+      "x": 4015,
+      "y": 2296,
       "folded": false
     },
     {
@@ -2011,8 +2011,8 @@
         "operation": "filter_rows"
       },
       "operation": "filter_rows",
-      "x": 3152,
-      "y": 1752,
+      "x": 3134,
+      "y": 1008,
       "folded": false
     }
   ],
@@ -2508,8 +2508,8 @@
     "max_workers": 4,
     "disabledTypes": [],
     "view": {
-      "panX": 376.79999999999995,
-      "panY": 39.599999999999966,
+      "panX": 377.5,
+      "panY": 84.39999999999998,
       "zoom": 0.2
     }
   },
