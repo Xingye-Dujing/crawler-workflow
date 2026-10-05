@@ -3209,8 +3209,14 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None)
             # chosen here.
             tag, refusal = _window_for_save(getattr(_wf_local, 'idx', None))
             if refusal:
-                return {'error': refusal}
-            filename = DataExporter.tagged_filename(filename, tag)
+                # A time range in the filename is decoration, never a reason to withhold the
+                # file. When the upstream crawl carried no single honest window (none, or two
+                # different ones), ignore the checkbox and export under the plain name — the
+                # user still gets their data and only the name loses the tag. Refusing here
+                # (the old behaviour) threw away the whole result over a label nobody needed.
+                add_log(t('export.window_ignored', nid=node_label(node, str(node.get('id') or '')), reason=refusal))
+            else:
+                filename = DataExporter.tagged_filename(filename, tag)
         if as_bool(params.get('filename_timestamp')):
             filename = DataExporter.stamp_filename(filename, Config.EXPORT_DIR)
         filepath = os.path.join(Config.EXPORT_DIR, filename)

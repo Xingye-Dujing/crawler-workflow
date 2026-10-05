@@ -127,6 +127,7 @@ for (const sc of scenarios) {
     if (sc.node) {
         // Settings-panel render: capture the exact HTML the user would see.
         const n = sc.node;
+        sandbox.canvas.nodes = {};
         sandbox.canvas.nodes[n.id] = {
             id: n.id,
             type: n.type,
@@ -134,6 +135,13 @@ for (const sc of scenarios) {
             params: n.params || {},
             el: null,
         };
+        // Extra nodes a panel scenario declares (a save node's time-range checkbox depends
+        // on an upstream crawl that set a window), so the panel render is not at the mercy
+        // of whatever connections the PREVIOUS scenario left on the canvas.
+        for (const e of sc.extraNodes || []) {
+            sandbox.canvas.nodes[e.id] = { id: e.id, type: e.type, title: e.title || '', params: e.params || {}, el: null };
+        }
+        sandbox.canvas.connections = sc.connections || [];
         sandbox.canvas._settingsNodeId = n.id;
         sandbox.__byId('settings-content').innerHTML = '';
         openSettings(n.id);

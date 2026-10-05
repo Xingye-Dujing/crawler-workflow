@@ -1430,6 +1430,34 @@ function refreshAccountCandidates() {
     });
 }
 
+function _upstreamDeclaresWindow(nodeId) {
+    /* Walk the wiring upstream from this node and ask whether ANY collection node set a
+       complete start AND end window. This reads the node's own parameters — the same "did a
+       range get stated" fact the backend records via _note_window — purely to decide whether
+       to OFFER the "append the crawled time range" checkbox. It is not a second opinion about
+       how a crawl behaves. A canvas can still carry the flag from an earlier wiring; the
+       backend ignores it then and writes the file anyway, so nothing is lost either way. */
+    var conns = (typeof canvas !== 'undefined' && canvas && canvas.connections) || [];
+    var nodes = (typeof canvas !== 'undefined' && canvas && canvas.nodes) || {};
+    var seen = {};
+    var stack = [nodeId];
+    seen[nodeId] = true;
+    while (stack.length) {
+        var cur = stack.pop();
+        for (var i = 0; i < conns.length; i++) {
+            var c = conns[i];
+            if (c.to !== cur || seen[c.from]) continue;
+            seen[c.from] = true;
+            var n = nodes[c.from];
+            if (n && n.params && String(n.params.start_time || '').trim() && String(n.params.end_time || '').trim()) {
+                return true;
+            }
+            stack.push(c.from);
+        }
+    }
+    return false;
+}
+
 /* A single screen that answers "which platform wants what" from the crawl matrix
    alone (#181). It never keeps its own platform list: every line is generated from
    the `profileRecommended` / `serialOnly` / `parallelRecommended` flags the backend
@@ -2243,11 +2271,18 @@ function openSettings(nodeId) {
             '<div class="settings-group"><label class="settings-checkbox-label">' +
             '<input type="checkbox" ' + (boolParam(p.filename_timestamp, false) ? 'checked' : '') + ' ' +
             'onchange="updateParam(\'' + nodeId + '\',\'filename_timestamp\',this.checked)"> ' +
-            I18n.t('settings.filenameTimestamp') + '</label></div>' +
-            '<div class="settings-group"><label class="settings-checkbox-label">' +
-            '<input type="checkbox" ' + (boolParam(p.filename_time_range, false) ? 'checked' : '') + ' ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'filename_time_range\',this.checked)"> ' +
-            I18n.t('settings.filenameTimeRange') + '</label></div>';
+            I18n.t('settings.filenameTimestamp') + '</label></div>';
+        /* The crawled time range only means something when an upstream collection node actually
+           set BOTH a start and an end — otherwise there is nothing honest to append, and the
+           backend would ignore it. Hiding the checkbox when no window exists keeps the panel
+           from offering a choice the user cannot act on; the backend still ignores a stale flag
+           (and writes the file), so an old canvas never loses its output. */
+        if (_upstreamDeclaresWindow(nodeId)) {
+            html += '<div class="settings-group"><label class="settings-checkbox-label">' +
+                '<input type="checkbox" ' + (boolParam(p.filename_time_range, false) ? 'checked' : '') + ' ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'filename_time_range\',this.checked)"> ' +
+                I18n.t('settings.filenameTimeRange') + '</label></div>';
+        }
         if (fmt === 'txt') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
                 '<input class="settings-input" value="' + escapeHtml(p.text_column || '') + '" placeholder="optional: one column per line" ' +

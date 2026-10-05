@@ -418,9 +418,10 @@ class TestWindowedFilenames:
 
     The window is a fact about the CRAWL and a save node is handed only rows, so the range
     travels through the run: ``_note_window`` records it where the crawl states it,
-    ``_window_for_save`` reads it back where the file is named. Anything that is not
-    exactly one window is a refusal rather than a guess, because a table quietly labelled
-    with the wrong month reads as evidence — and a filename is a name being chosen.
+    ``_window_for_save`` reads it back where the file is named. A range that cannot resolve
+    to exactly one window is IGNORED — the file is still written under its plain name. A time
+    range in the filename is decoration and must never be the reason a result is withheld; the
+    wrong-month table is avoided simply by not tagging, not by refusing the whole export.
     """
 
     ROWS = [{'正文': 'a'}, {'正文': 'b'}]
@@ -441,21 +442,24 @@ class TestWindowedFilenames:
         self._save(app_module, tmp_path, monkeypatch, filename='w.csv', filename_time_range=True)
         assert [p.name for p in tmp_path.iterdir()] == ['w_20260101_to_20260315.csv']
 
-    def test_a_chain_with_no_crawl_refuses_rather_than_naming_nothing(self, app_module, tmp_path, monkeypatch):
-        """An upload feeding a save node has no window at all. The switch the user ticked
-        is the thing that cannot be honoured, so the node fails saying why and writes
-        nothing — a plain file would look like the range-named one it is not."""
+    def test_a_chain_with_no_crawl_ignores_the_range_and_still_writes_the_file(self, app_module, tmp_path, monkeypatch):
+        """An upload feeding a save node has no window at all. The ticked switch cannot be
+        honoured, so it is ignored and the file is written under its plain name — the user keeps
+        their data. Refusing (the old behaviour) threw away the whole result over a filename
+        label, which is exactly the bug reported."""
         result = self._save(app_module, tmp_path, monkeypatch, filename='nowhere.csv', filename_time_range=True)
-        assert isinstance(result, dict) and result.get('error'), 'a switch that cannot be honoured must fail the node'
-        assert '时间' in result['error'] or 'time range' in result['error'], result['error']
-        assert list(tmp_path.iterdir()) == [], 'a refusal must not also write the un-named file'
+        assert isinstance(result, list) and len(result) == 2, 'a name we cannot honour must not block the table'
+        assert [p.name for p in tmp_path.iterdir()] == ['nowhere.csv'], 'written plain, with no time-range tag'
 
-    def test_two_windows_refuse_because_one_file_cannot_name_both(self, app_module, tmp_path, monkeypatch):
+    def test_two_windows_are_ignored_and_the_file_is_still_written(self, app_module, tmp_path, monkeypatch):
+        """Two different windows on one path cannot be named honestly, so the tag is dropped
+        rather than guessed — but the file is still produced: an ambiguous NAME is no reason to
+        lose the data."""
         app_module._note_window(None, '2026-01-01', '2026-01-31')
         app_module._note_window(None, '2026-03-01', '2026-03-31')
         result = self._save(app_module, tmp_path, monkeypatch, filename='two.csv', filename_time_range=True)
-        assert isinstance(result, dict) and result.get('error'), 'an ambiguous range must not be guessed'
-        assert list(tmp_path.iterdir()) == []
+        assert isinstance(result, list) and len(result) == 2, 'an ambiguous range is ignored, not fatal'
+        assert [p.name for p in tmp_path.iterdir()] == ['two.csv'], 'written plain rather than mis-tagged'
 
     def test_the_same_window_recorded_twice_is_still_one_window(self, app_module, tmp_path, monkeypatch):
         # Two crawl nodes over ONE range is the common shape of a keyword sweep. Calling

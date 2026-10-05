@@ -300,6 +300,33 @@ def results(tmp_path_factory, capabilities_matrix):
         },
         # ── settings-panel renders (node = openSettings target, HTML captured) ──
         *({'id': pid, 'node': _node('n1', ntype, params)} for pid, ntype, params in _PANELS),
+        # A save node's "append the crawled time range" checkbox appears ONLY when an upstream
+        # collection node actually set a start AND end. These two carry such a source, so the
+        # checkbox is offered; panel_output_csv above has no upstream and is the negative case.
+        {
+            'id': 'panel_output_windowed',
+            'node': _node('n1', 'output', {'operation': 'save', 'filename': 'win.csv'}),
+            'extraNodes': [
+                _node(
+                    'src',
+                    'source',
+                    {'platform': 'weibo', 'keyword': 'k', 'start_time': '2026-01-01', 'end_time': '2026-03-01'},
+                )
+            ],
+            'connections': [{'from': 'src', 'to': 'n1'}],
+        },
+        {
+            'id': 'panel_output_windowed_ranged',
+            'node': _node('n1', 'output', {'operation': 'save', 'filename': 'ranged.csv', 'filename_time_range': True}),
+            'extraNodes': [
+                _node(
+                    'src',
+                    'source',
+                    {'platform': 'weibo', 'keyword': 'k', 'start_time': '2026-01-01', 'end_time': '2026-03-01'},
+                )
+            ],
+            'connections': [{'from': 'src', 'to': 'n1'}],
+        },
         # …and the same panels again with a hostile value in every text field, which
         # is how the escaping rule below is asserted per panel rather than per guess.
         *({'id': 'hostile_' + pid, 'node': _node('n1', ntype, _poison(params))} for pid, ntype, params in _PANELS),
@@ -538,19 +565,23 @@ class TestSettingsPanel:
     def test_a_panel_that_stored_the_option_shows_it_ticked(self, results):
         assert '<input type="checkbox" checked ' in results['settings']['panel_output_stamped']
 
-    def test_the_output_panel_offers_the_time_range_in_the_filename(self, results):
-        """「文件名带时间范围」 is the save node's only route to ``filename_time_range``,
-        which is what makes the backend look the window up at all — a switch with no
-        widget is a switch nobody can turn on, and one that renders ticked from an absent
-        parameter would silently rename every existing workflow's output."""
-        html = results['settings']['panel_output_csv']
-        assert "updateParam('n1','filename_time_range',this.checked)" in html
-        assert 'settings.filenameTimeRange' in html
-        assert '<input type="checkbox" checked ' not in html, 'the default is off: old names must not move'
+    def test_the_time_range_checkbox_appears_only_when_an_upstream_set_a_window(self, results):
+        """「文件名带时间范围」 reaches ``filename_time_range``, and the backend now IGNORES
+        it (still writing the file) when there is no single honest window. The panel goes one
+        step further: it does not OFFER the box at all unless an upstream collection node set
+        both a start and an end — a checkbox with nothing honest to append is a choice the
+        user cannot act on. The timestamp box is unaffected; it asks nothing of the crawl."""
+        plain = results['settings']['panel_output_csv']  # an output node with no upstream
+        assert 'filename_timestamp' in plain, 'timestamp is always offered'
+        assert 'filename_time_range' not in plain, 'no window upstream, so the range box is hidden'
+        windowed = results['settings']['panel_output_windowed']  # a source set start+end upstream
+        assert "updateParam('n1','filename_time_range',this.checked)" in windowed
+        assert 'settings.filenameTimeRange' in windowed
+        assert '<input type="checkbox" checked ' not in windowed, 'the default is off: old names must not move'
 
     def test_a_stored_time_range_renders_ticked(self, results):
-        assert '<input type="checkbox" checked ' in results['settings']['panel_output_ranged'], (
-            'a saved workflow that asked for the range must show the box as it stored it'
+        assert '<input type="checkbox" checked ' in results['settings']['panel_output_windowed_ranged'], (
+            'a saved workflow that asked for the range, with a window upstream, must show it ticked'
         )
 
     def test_the_sentiment_panel_offers_all_four_methods_and_defaults_to_the_free_one(self, results):

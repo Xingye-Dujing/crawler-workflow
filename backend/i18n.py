@@ -326,6 +326,7 @@ _ZH = {
     # that was never written.
     'export.window_none': '文件名要求带时间范围，但这条链路上没有任何采集节点声明开始/结束时间',
     'export.window_many': '文件名要求带时间范围，但这条链路上有 {n} 个不同的时间窗，一个文件说不清它装的是哪一段',
+    'export.window_ignored': '节点 {nid}：结果文件照常生成，仅「文件名追加时间范围」被忽略——{reason}',
     'analysis.type_convert_failed': '列 {col} 转换为 {dtype} 失败：{err}',
     'analysis.calc_failed': '计算列 {col} = {expr} 失败：{err}',
     'analysis.bin_failed': '列 {col} 分箱失败：{err}',
@@ -1477,6 +1478,9 @@ _EN = {
     'export.done': 'Exported {n} rows to {path} ({fmt})',
     'export.window_none': 'the filename wants a time range, but no crawl here set a start/end time',
     'export.window_many': 'the filename wants a time range, but this path has {n} of them',
+    'export.window_ignored': (
+        'Node {nid}: the file is written as normal and only "append the crawled time range" was ignored — {reason}'
+    ),
     'analysis.type_convert_failed': 'Type conversion failed for column {col} -> {dtype}: {err}',
     'analysis.calc_failed': 'Column calc failed for {col} = {expr}: {err}',
     'analysis.bin_failed': 'Binning failed for {col}: {err}',
