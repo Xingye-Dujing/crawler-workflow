@@ -1405,6 +1405,53 @@ const Capabilities = {
 };
 window.Capabilities = Capabilities;
 
+function parseWorkflowFileText(text) {
+    /* Decide whether a file's contents are a workflow — WITHOUT touching the canvas. A
+       workflow file is JSON carrying a node list; anything else is named, never thrown.
+       Kept as a pure (string → verdict) function so the File menu's decision is testable
+       without a FileReader or a browser. loadFromJSON repeats the node-list guard, but this
+       answers BEFORE the canvas is torn down and lets the caller pick which toast to show. */
+    var data;
+    try {
+        data = JSON.parse(String(text || ''));
+    } catch (e) {
+        return { ok: false, reason: 'parse' };
+    }
+    if (!data || typeof data !== 'object' || !Array.isArray(data.nodes)) {
+        return { ok: false, reason: 'nodes' };
+    }
+    return { ok: true, workflow: data };
+}
+
+function openWorkflowImportPicker() {
+    var el = document.getElementById('workflow-import-file');
+    if (el) el.click();
+}
+
+function importWorkflowFile(input) {
+    /* Import a workflow file the user chose on disk (not one already saved to the server).
+       Read it as text, decide if it is a workflow, and only then hand a valid one to the SAME
+       loadFromJSON the Load panel uses — so an imported canvas is built identically (its own
+       node ids preserved, files the server still has re-attached). */
+    var file = input && input.files && input.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+        var parsed = parseWorkflowFileText(String(reader.result || ''));
+        if (!parsed.ok) {
+            showToast(I18n.t(parsed.reason === 'parse' ? 'toast.workflowImportFailed' : 'toast.workflowFileInvalid'));
+        } else if (workflow.loadFromJSON(parsed.workflow)) {
+            showToast(I18n.t('toast.workflowImported'));
+        }
+        input.value = '';  // let re-picking the SAME file fire onchange again
+    };
+    reader.onerror = function () {
+        showToast(I18n.t('toast.workflowImportFailed'));
+        input.value = '';
+    };
+    reader.readAsText(file);
+}
+
 function reloadCapabilities() {
     Capabilities.load().then(function () {
         /* Whoever is watching the panel has to be told the list came back: a

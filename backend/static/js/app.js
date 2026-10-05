@@ -27,7 +27,7 @@ const I18n = {
     lang: 'en',
     dict: {
         en: {
-            'menu.file': 'File', 'menu.save': 'Save', 'menu.load': 'Load', 'menu.new': 'New',
+            'menu.file': 'File', 'menu.save': 'Save', 'menu.load': 'Load', 'menu.new': 'New', 'menu.import': 'Import',
             'menu.edit': 'Edit',
             'menu.view': 'View',
             'menu.style': 'Style', 'style.bg': 'Background', 'style.radius': 'Radius',
@@ -184,6 +184,8 @@ const I18n = {
             'toast.workflowSaved': 'Workflow saved',
             'toast.workflowLoaded': 'Workflow loaded',
             'toast.workflowFileInvalid': 'That file is not a workflow — it holds no node list, so nothing was changed',
+            'toast.workflowImported': 'Imported — the workflow is on the canvas now (not yet saved to the server)',
+            'toast.workflowImportFailed': 'That file could not be read as JSON',
             'toast.workflowStarted': 'Workflow started',
             'toast.consoleReconnected': 'Reconnected to the run still going — its log is shown below',
             'toast.workflowEnded': 'Run ended — {done}/{total} nodes completed (continue is available)',
@@ -981,7 +983,7 @@ const I18n = {
             'validate.outputFilename': 'Output node "{title}": filename cannot be empty',
             'validate.noTerminal': 'At least one Output (Save) or Visualize node is required',        },
         zh: {
-            'menu.file': '文件', 'menu.save': '保存', 'menu.load': '打开', 'menu.new': '新建',
+            'menu.file': '文件', 'menu.save': '保存', 'menu.load': '打开', 'menu.new': '新建', 'menu.import': '导入',
             'menu.edit': '编辑',
             'menu.view': '视图',
             'menu.style': '样式', 'style.bg': '背景', 'style.radius': '圆角',
@@ -1123,6 +1125,8 @@ const I18n = {
             'toast.workflowSaved': '工作流已保存',
             'toast.workflowLoaded': '工作流已加载',
             'toast.workflowFileInvalid': '这个文件不是工作流（没有节点列表），画布内容未做任何改动',
+            'toast.workflowImported': '已导入——工作流已载入画布（尚未保存到服务器）',
+            'toast.workflowImportFailed': '无法把该文件读成 JSON',
             'toast.workflowStarted': '工作流已启动',
             'toast.consoleReconnected': '已重新接上仍在进行的运行，下面是它的日志',
             'toast.workflowEnded': '运行结束——完成 {done}/{total} 个节点（可继续）',

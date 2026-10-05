@@ -334,6 +334,25 @@ def results(tmp_path_factory, capabilities_matrix):
     return _run_validate(tmp, scenarios, capabilities_matrix)
 
 
+class TestWorkflowImportVerdict:
+    """The File menu decides "is this a workflow file" from raw text BEFORE the canvas is
+    touched, so a foreign or half-written file can never cost the user the workflow already
+    on screen. parseWorkflowFileText is that pure verdict — testable without a FileReader."""
+
+    def test_a_file_with_a_node_list_is_accepted(self, results):
+        assert results['parseWorkflow']['valid'] is True
+        assert results['parseWorkflow']['validKeys'] == 'connections,nodes'
+
+    def test_non_json_is_named_as_a_parse_failure(self, results):
+        assert results['parseWorkflow']['notjson'] == {'ok': False, 'reason': 'parse'}
+
+    def test_json_without_a_node_list_is_named_as_not_a_workflow(self, results):
+        assert results['parseWorkflow']['noNodes'] == {'ok': False, 'reason': 'nodes'}
+
+    def test_an_empty_file_is_a_parse_failure_not_a_crash(self, results):
+        assert results['parseWorkflow']['blank'] == {'ok': False, 'reason': 'parse'}
+
+
 class TestValidateGate:
     def test_a_wired_clean_canvas_passes(self, results):
         assert results['validate']['clean'] == []

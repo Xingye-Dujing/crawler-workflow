@@ -70,6 +70,21 @@
         >
           New
         </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="openWorkflowImportPicker()"
+          data-i18n="menu.import"
+        >
+          Import
+        </button>
+        <input
+          type="file"
+          id="workflow-import-file"
+          accept=".json,application/json"
+          style="display: none"
+          onchange="importWorkflowFile(this)"
+        />
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.edit">Edit</span>

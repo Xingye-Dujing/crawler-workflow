@@ -97,7 +97,9 @@ if (matrix) sandbox.__routes['/api/capabilities'] = matrix;
 /* `const workflow` is lexically scoped to its own script — append a capture
    line (same trick as harness_canvas.mjs) to reach it from the host. */
 vm.runInContext(
-    src + '\n;globalThis.__wf = {' + ' workflow, urlPlatform, selectSourcePlatform, openSettings, nodeNeedsLlm };',
+    src +
+        '\n;globalThis.__wf = {' +
+        ' workflow, urlPlatform, selectSourcePlatform, openSettings, nodeNeedsLlm, parseWorkflowFileText };',
     sandbox,
 );
 /* The panel render below is a synchronous read of what the fetch produced, so
@@ -204,5 +206,17 @@ for (const [from, to, name] of [
     switchResults[name] = sandbox.canvas.nodes.n1.params.collect;
 }
 out.platformSwitch = switchResults;
+
+/* Importing a workflow file decides "is this a workflow" from raw text BEFORE the canvas is
+   touched. parseWorkflowFileText is that pure verdict; driving it here pins which toast the
+   File menu shows and whether it loads — without a FileReader or a browser. */
+const parseWF = sandbox.__wf.parseWorkflowFileText;
+out.parseWorkflow = {
+    valid: parseWF('{"nodes": [], "connections": []}').ok,
+    validKeys: Object.keys(parseWF('{"nodes": [], "connections": []}').workflow || {}).sort().join(','),
+    notjson: parseWF('this is not json'),
+    noNodes: parseWF('{"foo": 1}'),
+    blank: parseWF(''),
+};
 
 process.stdout.write(JSON.stringify(out));
