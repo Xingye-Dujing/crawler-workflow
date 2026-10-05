@@ -85,6 +85,70 @@ class TestConnections:
         assert 'word_freq' in ix['tokenize_visualize']['content']
 
 
+class TestConnectionWarnings:
+    """A wire is explained the moment it is drawn, because the engine treats each
+    node type's fan-in differently and half of those differences are silent.
+
+    The harness (`connect_warnings`) drives the REAL async `finishConnection` and reads
+    back which warning fired, whether "undo" took the wire back, and whether ticking
+    "don't warn again" mutes only that one category. Message bodies are stubbed to
+    sentinels (FANIN-FIRST …), so an assertion names the OUTCOME, not a sentence.
+    """
+
+    def test_a_first_wire_into_a_process_is_a_normal_feed_and_is_not_warned(self, ix):
+        """One upstream is how a process node is meant to be fed — warning there would
+        cry wolf on every ordinary connection."""
+        assert ix['connect_warnings']['process_first_silent'] is True
+
+    def test_a_second_wire_into_a_process_warns_that_only_the_first_is_used(self, ix):
+        got = ix['connect_warnings']['process_fanin']
+        assert got['msg'].startswith('FANIN-FIRST'), got
+        assert got['toggles'] == ['conn_dismiss_fanin_first']
+        assert got['connections'] == 2, 'the wire is kept; the warning only explains it'
+
+    def test_two_tables_into_an_output_warn_that_they_merge(self, ix):
+        got = ix['connect_warnings']['output_merge']
+        assert got['msg'].startswith('FANIN-MERGE'), got
+        assert got['connections'] == 2
+
+    def test_a_second_wire_into_an_analysis_warns_about_the_join_limit(self, ix):
+        assert ix['connect_warnings']['analysis_fanin']['msg'].startswith('FANIN-ANALYSIS')
+
+    def test_two_upstreams_into_a_source_warn_without_the_canvas_deciding_the_mode(self, ix):
+        """The canvas must not hold a second opinion about which crawl can be fed — the
+        one fixed message carries both outcomes instead of consulting the capability
+        matrix here."""
+        assert ix['connect_warnings']['source_fanin']['msg'].startswith('FANIN-SOURCE')
+
+    def test_a_wire_into_an_upload_is_reported_as_ignored_from_the_first(self, ix):
+        got = ix['connect_warnings']['upload_ignore']
+        assert got['msg'].startswith('FANIN-IGNORE'), got
+        assert got['toggles'] == ['conn_dismiss_fanin_ignore']
+
+    def test_a_wire_into_a_name_node_is_reported_as_refused(self, ix):
+        assert ix['connect_warnings']['name_refused']['msg'].startswith('FANIN-NAME')
+
+    def test_undo_takes_the_second_wire_back_and_reports_it_removed(self, ix):
+        """The whole point of "written then explained": if the consequence is not what
+        the user wanted, the undo button must leave the canvas as it was."""
+        got = ix['connect_warnings']['undo']
+        assert got['after'] == got['before'] == 1, got
+        assert got['lastToast'] == 'CONN-REMOVED'
+
+    def test_dismissing_a_warning_mutes_only_that_category_for_the_session(self, ix):
+        got = ix['connect_warnings']['dismiss']
+        assert got['muted'] is True
+        assert got['afterThird'] == got['afterDismiss'], 'a silenced category adds no dialog'
+
+    def test_the_first_branch_out_explains_the_snapshot_once(self, ix):
+        """A fan-out is safe — every branch gets the same full copy — so it is explained
+        at the moment the first split happens and never repeated for a third branch."""
+        got = ix['connect_warnings']
+        assert got['fanout_first_silent'] is True
+        assert got['fanout_shown']['msg'].startswith('FANOUT')
+        assert got['fanout_third_silent'] is True
+
+
 class TestRepaint:
     def test_one_repaint_per_connection(self, ix):
         assert ix['repaint']['lines'] == 2

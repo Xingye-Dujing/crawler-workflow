@@ -57,6 +57,20 @@ const KEYS = {
     'dialog.renameNode': 'RENAME-NODE',
     'dialog.cancel': 'Cancel',
     'dialog.confirm': 'OK',
+    /* Fan-in / fan-out consequences, as stable sentinels so a scenario asserts WHICH
+       outcome fired, not a whole translated sentence. Slots are filled by the stub `t`
+       below, exactly as the real I18n.fill does. */
+    'conn.fanin.name': 'FANIN-NAME',
+    'conn.fanin.ignore': 'FANIN-IGNORE',
+    'conn.fanin.first': 'FANIN-FIRST',
+    'conn.fanin.source': 'FANIN-SOURCE',
+    'conn.fanin.analysis': 'FANIN-ANALYSIS',
+    'conn.fanin.merge': 'FANIN-MERGE',
+    'conn.fanout': 'FANOUT',
+    'conn.help': 'SEE-HELP',
+    'conn.undo': 'UNDO',
+    'conn.keep': 'KEEP',
+    'conn.dismiss': 'DISMISS',
 };
 /* The zh side exists so a language switch has somewhere to land: with an empty
    dictionary every "does the label follow the language" probe answers "no" for
@@ -83,7 +97,13 @@ const I18n = {
     get lang() { return LANG; },
     set lang(v) { LANG = v; },
     dict: DICT,
-    t(k) { return DICT[LANG][k] || k; },
+    t(k, vars) {
+        let s = DICT[LANG][k] || k;
+        if (vars) {
+            for (const name of Object.keys(vars)) s = s.split('{' + name + '}').join(String(vars[name]));
+        }
+        return s;
+    },
     apply() {},
 };
 
@@ -124,7 +144,12 @@ const dialogs = [];
 let dialogAnswer = null;
 sandbox.showToast = (msg) => toasts.push(String(msg));
 sandbox.showDialog = async (spec) => {
-    dialogs.push({ message: spec.message, initial: spec.input && spec.input.value, buttons: (spec.buttons || []).map((b) => b.label) });
+    dialogs.push({
+        message: spec.message,
+        initial: spec.input && spec.input.value,
+        buttons: (spec.buttons || []).map((b) => b.label),
+        toggles: (spec.toggles || []).map((t) => t.id),
+    });
     return dialogAnswer;
 };
 /* The panels fetch nothing here, but workflow.js polls on load; stop the timer so
@@ -169,6 +194,10 @@ function freshWorld() {
     toasts.length = 0;
     dialogs.length = 0;
     dialogAnswer = null;
+    /* A fresh page has muted nothing: a per-session wire-warning dismissal must not
+       leak from one scenario into the next, or a later assertion goes green for the
+       wrong reason (the warning was silenced, not absent). */
+    canvas._connWarningsDismissed = new Set();
     /* Yesterday's boxes must not receive today's resize: the observer outlives
        the page it was wired on, the scenario does not. */
     sandbox.__observed.length = 0;
@@ -857,6 +886,114 @@ canvas.editNode(cf1);
 out.comment_form = doc.getElementById('settings-content').innerHTML;
 
 /* ── the box that changes AFTER the wire was drawn ─────────────────── */
+/* ── fan-in / fan-out connect warnings ─────────────────────────────── */
+const KEEP = { value: true };
+
+/** Draw one wire the way `dragConnection` does, but await the ASYNC finishConnection
+ *  directly, so the warning dialog's undo branch (which runs after an await) has
+ *  settled before the scenario reads `connections`. */
+async function warnDrag(fromId, toId, answer) {
+    dialogAnswer = answer;
+    canvas.startConnection(fromId, ev());
+    const rect = portOf(toId, 'in').getBoundingClientRect();
+    await canvas.finishConnection({ clientX: rect.left + 5, clientY: rect.top + 5, target: null });
+}
+const lastDialog = () => dialogs[dialogs.length - 1];
+
+async function connectWarningsScenarios() {
+    const res = {};
+
+    /* process/tokenize/visualize: the FIRST parent feeds it normally (silent); the
+       SECOND triggers "only the first is used". */
+    freshWorld();
+    let s1 = addNode('source', 0, 0);
+    const p = addNode('process', 400, 0);
+    let s2 = addNode('upload', 0, 200);
+    await warnDrag(s1, p, KEEP);
+    res.process_first_silent = dialogs.length === 0;
+    await warnDrag(s2, p, KEEP);
+    res.process_fanin = { msg: lastDialog().message, toggles: lastDialog().toggles, connections: canvas.connections.length };
+
+    /* output merges from the second parent; analysis joins the same; source names one
+       consequence without deciding which mode can be fed. */
+    freshWorld();
+    s1 = addNode('source', 0, 0);
+    s2 = addNode('upload', 0, 200);
+    const outn = addNode('output', 400, 0);
+    await warnDrag(s1, outn, KEEP);
+    await warnDrag(s2, outn, KEEP);
+    res.output_merge = { msg: lastDialog().message, connections: canvas.connections.length };
+
+    freshWorld();
+    s1 = addNode('source', 0, 0);
+    s2 = addNode('upload', 0, 200);
+    const an = addNode('analysis', 400, 0);
+    await warnDrag(s1, an, KEEP);
+    await warnDrag(s2, an, KEEP);
+    res.analysis_fanin = { msg: lastDialog().message };
+
+    freshWorld();
+    s1 = addNode('upload', 0, 0);
+    s2 = addNode('resume', 0, 200);
+    const src = addNode('source', 400, 0);
+    await warnDrag(s1, src, KEEP);
+    await warnDrag(s2, src, KEEP);
+    res.source_fanin = { msg: lastDialog().message };
+
+    /* upload / comment / resume ignore upstream from the FIRST wire in; name rejects
+       any incoming wire. Both fire on a single-parent connection. */
+    freshWorld();
+    s1 = addNode('source', 0, 0);
+    const up = addNode('upload', 400, 0);
+    await warnDrag(s1, up, KEEP);
+    res.upload_ignore = { msg: lastDialog().message, toggles: lastDialog().toggles };
+
+    freshWorld();
+    s1 = addNode('source', 0, 0);
+    const nm = addNode('name', 400, 0);
+    await warnDrag(s1, nm, KEEP);
+    res.name_refused = { msg: lastDialog().message };
+
+    /* Undo: the wire is written, the dialog explains it, "undo" takes it back. */
+    freshWorld();
+    s1 = addNode('source', 0, 0);
+    s2 = addNode('upload', 0, 200);
+    let s3 = addNode('resume', 0, 400);
+    const out2 = addNode('output', 400, 0);
+    await warnDrag(s1, out2, KEEP);
+    const before = canvas.connections.length;
+    await warnDrag(s2, out2, { value: false });
+    res.undo = { before, after: canvas.connections.length, lastToast: toasts[toasts.length - 1] };
+
+    /* Dismiss: ticking "don't warn again" mutes ONLY that category for the session. */
+    freshWorld();
+    s1 = addNode('source', 0, 0);
+    s2 = addNode('upload', 0, 200);
+    s3 = addNode('resume', 0, 400);
+    const out3 = addNode('output', 400, 0);
+    await warnDrag(s1, out3, KEEP);
+    await warnDrag(s2, out3, { value: true, toggles: { conn_dismiss_fanin_merge: true } });
+    const afterDismiss = dialogs.length;
+    await warnDrag(s3, out3, KEEP);
+    res.dismiss = { afterDismiss, afterThird: dialogs.length, muted: dialogs.length === afterDismiss };
+
+    /* Fan-out: the first branch off a node explains the snapshot once; a third adds
+       nothing new, and the merge target it feeds never re-triggers a fan-in notice. */
+    freshWorld();
+    s1 = addNode('source', 0, 0);
+    const bA = addNode('analysis', 400, 0);
+    const bB = addNode('output', 400, 200);
+    const bC = addNode('process', 400, 400);
+    await warnDrag(s1, bA, KEEP);
+    res.fanout_first_silent = dialogs.length === 0;
+    await warnDrag(s1, bB, KEEP);
+    res.fanout_shown = { msg: lastDialog().message };
+    await warnDrag(s1, bC, KEEP);
+    res.fanout_third_silent = dialogs.length === 1;
+
+    out.connect_warnings = res;
+}
+
 function resizeRepaintScenario() {
     freshWorld();
     const fA = addNode('source', 0, 0);
@@ -887,8 +1024,11 @@ function resizeRepaintScenario() {
 
 Math.random = realRandom;
 resizeRepaintScenario();
-renameScenarios().then(() => {
-    process.stdout.write(JSON.stringify(out));
-}).catch((err) => {
-    process.stdout.write(JSON.stringify({ error: String(err && err.stack) }));
-});
+connectWarningsScenarios()
+    .then(() => renameScenarios())
+    .then(() => {
+        process.stdout.write(JSON.stringify(out));
+    })
+    .catch((err) => {
+        process.stdout.write(JSON.stringify({ error: String(err && err.stack) }));
+    });

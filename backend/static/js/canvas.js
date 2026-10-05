@@ -56,6 +56,11 @@ const canvas = {
     _clipboardData: null,
     _settingsNodeId: null,
     connectingFrom: null,
+    /* Per-session memory of the fan-in / fan-out wire warnings the user chose to
+       silence ("don't warn again this session"). It lives on the canvas instance, not a
+       module global, so a fresh canvas — and the frontend harness's freshWorld — starts
+       with an empty set and one scenario cannot mute another's warnings. */
+    _connWarningsDismissed: new Set(),
     tempLine: null,
     _renderPending: false,
     /* One observer for every node box, built on first use. See addNode. */
@@ -870,19 +875,26 @@ const canvas = {
         ].join(' '));
     },
 
-    finishConnection(e) {
+    async finishConnection(e) {
+        /* The wire is written first and explained second: the user is not asked to
+           pre-approve a shape, they are told what THIS engine will do with it and can
+           take it back. `fromId` is captured before the await because `cancelConnection`
+           (at the end) clears `connectingFrom`, and the undo must name the original edge. */
         const target = this._getPortAt(e.clientX, e.clientY);
+        const fromId = this.connectingFrom;
+        let toId = null;
+        let warn = null;
         if (target && target.dataset.port === 'in') {
-            const toId = target.dataset.node;
-            if (toId !== this.connectingFrom) {
-                const exists = this.connections.some(c => c.from === this.connectingFrom && c.to === toId);
+            toId = target.dataset.node;
+            if (toId !== fromId) {
+                const exists = this.connections.some(c => c.from === fromId && c.to === toId);
                 if (!exists) {
-                    this.connections.push({ from: this.connectingFrom, to: toId });
+                    this.connections.push({ from: fromId, to: toId });
                     this.scheduleRender();
                     this.saveState();
                     showToast(I18n.t('toast.connCreated'));
                     // Tokenize ↔ Visualize: force word_freq + refresh settings
-                    var nA = this.nodes[this.connectingFrom];
+                    var nA = this.nodes[fromId];
                     var nB = this.nodes[toId];
                     var tkNode = (nA && nA.type === 'tokenize') ? nA : (nB && nB.type === 'tokenize') ? nB : null;
                     var vzNode = (nA && nA.type === 'visualize') ? nA : (nB && nB.type === 'visualize') ? nB : null;
@@ -899,15 +911,107 @@ const canvas = {
                             }
                         }
                     }
+                    warn = this.classifyConnection(fromId, toId);
                 }
             }
         }
         this.cancelConnection();
+        if (warn && !this._connWarningsDismissed.has(warn.category)) {
+            const keep = await this._warnConnection(fromId, toId, warn);
+            if (!keep) this._undoConnection(fromId, toId);
+        }
     },
 
     cancelConnection() {
         this.connectingFrom = null;
         if (this.tempLine) { this.tempLine.remove(); this.tempLine = null; }
+    },
+
+    /* How THIS engine treats the wire that was just drawn, so the user learns the
+       consequence at the moment they cause it rather than after a wasted run. The
+       wording mirrors the executor; the numbers are read off the canvas's own flat
+       connection list (there is no adjacency table). A wire to a `source` deliberately
+       does NOT ask whether that mode can be fed from upstream — deciding that is the
+       backend's single job (a canvas must not hold a second opinion about a crawl), so
+       one sentence covers both the fed and the non-feedable outcome.
+
+       A wire counts as fan-in only at the target that actually consumes data
+       differently when a SECOND parent appears; `name`, `upload`, `comment` and
+       `resume` warn from the FIRST parent in, because that first parent is already
+       refused (`name`) or already ignored (the other three). */
+    classifyConnection(fromId, toId) {
+        const from = this.nodes[fromId];
+        const to = this.nodes[toId];
+        if (!from || !to) return null;
+        let inDeg = 0;
+        let outDeg = 0;
+        for (const c of this.connections) {
+            if (c.to === toId) inDeg += 1;
+            if (c.from === fromId) outDeg += 1;
+        }
+        const nameOf = (id) => {
+            const n = this.nodes[id] || {};
+            return n.title || I18n.t('node.' + n.type);
+        };
+        const t = to.type;
+        if (t === 'name') {
+            return { category: 'fanin_name', i18nKey: 'conn.fanin.name', vars: { node: nameOf(toId) } };
+        }
+        if (t === 'upload' || t === 'comment' || t === 'resume') {
+            return { category: 'fanin_ignore', i18nKey: 'conn.fanin.ignore', vars: { node: nameOf(toId) } };
+        }
+        // Not a data-consuming fan-in yet — the only thing left to explain is the first
+        // branch OUT. A second branch off the same node is still one snapshot to all.
+        if (inDeg < 2) {
+            if (outDeg === 2) {
+                return { category: 'fan_out', i18nKey: 'conn.fanout', vars: { node: nameOf(fromId), count: String(outDeg) } };
+            }
+            return null;
+        }
+        if (t === 'process' || t === 'tokenize' || t === 'visualize') {
+            return { category: 'fanin_first', i18nKey: 'conn.fanin.first', vars: { node: nameOf(toId) } };
+        }
+        if (t === 'source') {
+            return { category: 'fanin_source', i18nKey: 'conn.fanin.source', vars: { node: nameOf(toId) } };
+        }
+        if (t === 'analysis') {
+            return { category: 'fanin_analysis', i18nKey: 'conn.fanin.analysis', vars: { node: nameOf(toId) } };
+        }
+        if (t === 'output') {
+            return { category: 'fanin_merge', i18nKey: 'conn.fanin.merge', vars: { node: nameOf(toId) } };
+        }
+        return null;
+    },
+
+    /* One wire, one dialog. The connection already exists; this explains it and offers
+       to take it back. The dismiss checkbox is keyed per category, so silencing the
+       merge notice does not also silence the ignored-upstream one. Cancelling out
+       (X / backdrop / Esc) keeps the wire: this is information, not a deletion prompt. */
+    async _warnConnection(fromId, toId, warn) {
+        const toggleId = 'conn_dismiss_' + warn.category;
+        const answer = await showDialog({
+            message: I18n.t(warn.i18nKey, warn.vars) + ' ' + I18n.t('conn.help'),
+            toggles: [{ id: toggleId, label: I18n.t('conn.dismiss'), checked: false }],
+            buttons: [
+                { label: I18n.t('conn.undo'), value: false, collect: true },
+                { label: I18n.t('conn.keep'), value: true, collect: true, primary: true },
+            ],
+            cancelValue: true,
+        });
+        if (answer && typeof answer === 'object' && answer.toggles && answer.toggles[toggleId]) {
+            this._connWarningsDismissed.add(warn.category);
+        }
+        if (answer && typeof answer === 'object') return answer.value !== false;
+        return answer !== false;
+    },
+
+    _undoConnection(fromId, toId) {
+        const idx = this.connections.findIndex(c => c.from === fromId && c.to === toId);
+        if (idx < 0) return;
+        this.connections.splice(idx, 1);
+        this.scheduleRender();
+        this.saveState();
+        showToast(I18n.t('toast.connRemoved'));
     },
 
     scheduleRender() {
