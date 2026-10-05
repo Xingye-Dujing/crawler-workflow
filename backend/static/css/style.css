@@ -3301,3 +3301,32 @@ html[data-cloud='1'] .ai-only-ollama {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ── Coarse pointer (touch) targets ───────────────────────────────────────── */
+/* On a tablet or phone a finger replaces the cursor, and controls sized for a fine cursor
+   are hard to hit. Scope this to (pointer: coarse) so a desktop viewport — and every layout
+   test measured on one — is byte-for-byte unchanged; a desktop Chrome reports a fine pointer
+   and never enters this block. The canvas already opens its context menu on a long-press
+   (a touch fires contextmenu), so renaming a node and its per-node actions are reachable by
+   touch already. This only widens existing targets to finger size and stops the browser from
+   treating a drag inside the canvas as a page scroll. */
+@media (pointer: coarse) {
+  #workspace,
+  #svg-layer,
+  .node {
+    touch-action: none; /* a drag here is our gesture (move / wire / pan), not the browser's scroll */
+  }
+  .node-action-btn,
+  .node-power-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .menu-btn {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  .conn-delete-hit {
+    stroke-width: 30px; /* a finger needs a wide enough landing pad to tap a thin wire */
+  }
+}

@@ -747,3 +747,19 @@ class TestOverlayLayering:
         fullscreen = self._z_index(css, '#chart-fullscreen-panel')
         for preview in ('#chart-preview-panel', '#data-preview-panel'):
             assert fullscreen > self._z_index(css, preview), f'{preview} must stay under the full-screen window'
+
+
+class TestTouchTargets:
+    """Tablet/phone touch adaptation is a stylesheet rule scoped to (pointer: coarse), so a
+    desktop viewport (and every desktop-measured layout test) is untouched. Pinned by reading
+    the CSS: the coarse block exists, widens the canvas's per-node buttons and the line-delete
+    hit area to finger size, and stops the browser swallowing a canvas drag as a page scroll."""
+
+    def test_coarse_pointer_block_widens_targets_and_pins_touch_action(self):
+        css = (STATIC_DIR / 'css' / 'style.css').read_text(encoding='utf-8')
+        start = css.find('@media (pointer: coarse)')
+        assert start >= 0, 'no (pointer: coarse) touch-target block'
+        block = css[start:]
+        assert 'touch-action: none' in block, 'a canvas drag must not be treated as a page scroll'
+        for selector in ('#workspace', '.node-action-btn', '.node-power-btn', '.conn-delete-hit'):
+            assert selector in block, f'{selector} is not covered by the coarse-pointer block'
