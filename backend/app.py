@@ -6690,7 +6690,11 @@ def get_capabilities():
         options = []
         for account in accounts:
             label_key, _args = CookieManager.account_label_key(account)
-            options.append({'value': CookieManager.key(account), 'labelKey': label_key or account})
+            # A generated name (default/default2) travels as its catalogue key; a typed name has
+            # NO key — leave it empty so the panel shows the value as typed instead of asking i18n
+            # to translate a word the program never defined (which only logged a missing-string
+            # warning and echoed the raw name anyway). Same rule the cookie rows use above.
+            options.append({'value': CookieManager.key(account), 'labelKey': label_key or ''})
         if not options:
             # Nothing is saved anywhere: the row stays, because a structurally empty select
             # cannot show the account the user is about to save, and it is that account.

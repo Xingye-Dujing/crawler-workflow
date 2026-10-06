@@ -141,9 +141,12 @@ class TestCapabilitiesEndpoint:
 
         account_field = _field()
         assert [o['value'] for o in account_field['options']] == ['work'], account_field
-        # the label of a real account IS its name — the catalogue has no word for it,
-        # and I18n.t answers an unknown key verbatim, which is the intent.
-        assert account_field['options'][0]['labelKey'] == 'work'
+        # A typed account name has NO catalogue key — the panel shows the value as typed.
+        # Putting the raw name in ``labelKey`` made the select call I18n.t('work') and log a
+        # "missing string" warning for a word that is not this program's to translate; an empty
+        # labelKey is how a user-named account says "show me verbatim" (a generated name, e.g.
+        # the default, instead carries a real key — see the cookie-list label above).
+        assert account_field['options'][0]['labelKey'] == ''
         # A node added to this canvas logs in as the only login there is. Leaving the
         # default '' meant "the 默认账号 file", which on this machine does not exist —
         # the crawl would then hit a wall and hand back an empty table.

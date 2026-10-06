@@ -24,8 +24,11 @@ const scenarios = JSON.parse(fs.readFileSync(scPath, 'utf8'));
 
 const I18n = {
     lang: 'en',
+    asked: [],
     t(k) {
-        return k; // keys, not sentences: the assertions are about WHICH word shows
+        this.asked.push(k); // keys, not sentences: assertions read WHICH word shows AND that a
+        // user-typed value is never looked up at all (a bare name must not reach the catalogue).
+        return k;
     },
 };
 
@@ -66,10 +69,12 @@ for (const sc of scenarios) {
     canvas._settingsNodeId = id;
     sandbox.__byId('settings-content').innerHTML = '';
     sandbox.__wf_open = null;
+    I18n.asked = [];
     vm.runInContext('globalThis.openSettings(globalThis.__canvas._settingsNodeId);', sandbox);
     out[sc.id] = {
         html: sandbox.__byId('settings-content').innerHTML,
         defaults: canvas.getDefaultParams('source'),
+        asked: I18n.asked.slice(),
         /* The node card, in the same world as the panel that edits it: the panel
            was tested against the matrix for a year and the card never was, which
            is how every mode except 关键词 and 评论 kept printing a keyword the

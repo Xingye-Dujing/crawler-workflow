@@ -569,3 +569,25 @@ class TestNodeCardFollowsTheMatrix:
         _matrix, _keys, results = cards
         # `n1` is the scenario's own source node, added before the spy was wired.
         assert sorted(results['redraw']['restamped']) == ['a_source', 'c_source', 'n1'], results['redraw']['restamped']
+
+
+def test_a_typed_account_name_is_shown_but_never_looked_up_in_i18n(tmp_path):
+    """A login the user named (``suqi``) is data, not this program's word to translate. The
+    account select must show it verbatim and must not ask i18n for it. The old payload put the
+    raw name into ``labelKey``, so the panel called ``I18n.t('suqi')`` and logged a
+    "missing zh string" warning every time the card or select rendered that account."""
+    matrix = _matrix()
+    for cap in matrix['platforms']:
+        if cap['platform'] != 'zhihu':
+            continue
+        posts = next(m for m in cap['modes'] if m['key'] == 'posts')
+        account = next(f for f in posts['fields'] if f['key'] == 'account')
+        account['options'] = [
+            {'value': 'default', 'labelKey': 'cookies.accountDefault'},
+            {'value': 'suqi', 'labelKey': ''},
+        ]
+    run = _run(tmp_path, [{'id': 'acct', 'payload': matrix, 'params': {'platform': 'zhihu', 'account': 'suqi'}}])
+    asked = run['acct']['asked']
+    assert 'suqi' not in asked, f'a user-typed account name must not reach i18n: {asked}'
+    assert 'cookies.accountDefault' in asked, 'a generated name still travels as its catalogue key'
+    assert 'suqi' in run['acct']['html'], 'the typed name is still shown to the user, from its value'

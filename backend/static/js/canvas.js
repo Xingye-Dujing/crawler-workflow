@@ -672,7 +672,10 @@ const canvas = {
             var options = f.options || [];
             var chosen = (value === undefined || value === null || value === '') ? f.default : value;
             for (var i = 0; i < options.length; i++) {
-                if (String(options[i].value) === String(chosen)) return label + ': ' + I18n.t(options[i].labelKey);
+                if (String(options[i].value) === String(chosen)) {
+                    // Empty labelKey = a user-typed account name: show the value as typed.
+                    return label + ': ' + (options[i].labelKey ? I18n.t(options[i].labelKey) : options[i].value);
+                }
             }
             return label + ': ' + (chosen || '—');
         }

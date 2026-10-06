@@ -1886,7 +1886,9 @@ function sourceSelectHtml(nodeId, labelKey, options, value, onChange) {
         '">';
     html += selectOptionTags(
         options.map(function (o) {
-            return { value: o.value, label: I18n.t(o.labelKey) };
+            // A real catalogue key is translated; an empty one (a user-typed account name)
+            // shows the value as typed — a name they chose is not the program's word to look up.
+            return { value: o.value, label: o.labelKey ? I18n.t(o.labelKey) : o.value };
         }),
         value,
         ''
