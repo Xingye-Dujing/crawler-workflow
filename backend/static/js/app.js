@@ -564,6 +564,7 @@ const I18n = {
             'dataPreview.columns': 'Columns',
             'dashboard.header': 'Dashboard',
             'dashboard.empty': 'No Visualize nodes on the canvas yet — add one to see it here.',
+            'chart.noRunData': 'No run data yet — execute the workflow once first.',
             'dashboard.noData': 'No data yet — connect an upstream node and run the workflow, or set Data Source to Upload.',
             'history.header': 'Execution History',
             'history.allWorkflows': 'All workflows',
@@ -1500,6 +1501,7 @@ const I18n = {
             'dataPreview.columns': '列数',
             'dashboard.header': '仪表盘',
             'dashboard.empty': '画布上还没有可视化节点，添加一个即可在这里查看。',
+            'chart.noRunData': '尚无运行数据，请先运行一次工作流。',
             'dashboard.noData': '暂无数据——请连接上游节点并运行工作流，或将数据来源设为"上传文件"。',
             'history.header': '执行历史',
             'history.allWorkflows': '全部工作流',
@@ -2702,6 +2704,10 @@ document.addEventListener('DOMContentLoaded', () => {
     boot('settings', () => Settings.apply());
     boot('menu', () => TopMenu.init());
     boot('canvas', () => canvas.init());
+    // Restore which saved file this draft belongs to BEFORE anything reads runName()
+    // (resume bar, dashboard rehydrate, exports) — a refresh/restart reopens the file,
+    // and only 新建 starts a new one.
+    boot('openFile', () => workflow.restoreOpenFile());
     boot('stats', () => stats.init());
     /* Replace every OS-drawn candidate UI (select popups, datalist suggestions)
        with the themed equivalents. Runs last so it also catches anything the

@@ -114,6 +114,16 @@ for (const sc of scenarios) {
     canvas.panY = 0;
     canvas.zoom = 1;
     workflow.currentFile = sc.currentFile ?? null;
+    /* The open-file session record lives in localStorage and must be reset between
+       scenarios so one scenario's save/restore cannot leak into the next. A
+       'returning browser' seeds a draft (the canvas content) and optionally the name
+       of the file that draft belongs to; `hasDraft: false` simulates a fresh browser. */
+    delete sandbox.__stored.crawler_open_file;
+    delete sandbox.__stored.crawler_canvas;
+    if (sc.hasDraft !== false) sandbox.__stored.crawler_canvas = JSON.stringify({ nodes: [], view: {} });
+    if (sc.storedOpenFile !== undefined) sandbox.__stored.crawler_open_file = sc.storedOpenFile;
+    /* The boot step `openFile` runs restoreOpenFile(); a scenario opts into it. */
+    if (sc.restore) workflow.restoreOpenFile();
     sandbox.__dialogAnswer = sc.dialogAnswer ?? null;
     sandbox.__loadResponse = sc.loadResponse ?? null;
     vm.runInContext('globalThis.__fetchLog = [];', sandbox);
@@ -147,6 +157,10 @@ for (const sc of scenarios) {
         connections: canvas.connections,
         currentFile: workflow.currentFile,
         newfileDraftCleared: sandbox.__stored.crawler_canvas === undefined,
+        /* The persisted open-file record: which saved file the browser will reopen on the
+           next load, and whether it was cleared (only 新建 clears it). */
+        openFileStored: sandbox.__stored.crawler_open_file === undefined ? null : sandbox.__stored.crawler_open_file,
+        draftStored: sandbox.__stored.crawler_canvas === undefined ? null : true,
         fetches: vm.runInContext(
             'globalThis.__fetchLog.map(f => ({ url: f.url, body: (f.opts && f.opts.body) || null }))',
             sandbox,

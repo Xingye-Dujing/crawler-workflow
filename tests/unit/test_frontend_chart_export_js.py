@@ -122,6 +122,15 @@ class TestPreviewSave:
         assert case['toast']['text'].startswith(saved['catalog']['saveFailed'])
         assert 'image too large' in case['toast']['text'], 'the server reason reaches the user'
 
+    def test_an_unexecuted_node_reads_as_a_note_and_toasts_nothing(self, saved):
+        """The board's cold-load rehydrate previews every chart; a node nobody ran is an
+        expected empty state, so the panel shows the localized run-once-first note and stays
+        silent — no failure toast, and never the raw internal reference string."""
+        case = saved['preview_no_run_data']
+        assert case['note'] is True, 'the panel did not paint the run-once-first note'
+        assert case['rawLeaked'] is False, 'the internal "No tabular result" string reached the page'
+        assert case['toastShown'] is False, 'an expected empty state must not toast a failure'
+
     def test_a_chart_render_probe_names_its_workflow_so_a_reopened_canvas_can_redraw(self, saved):
         """A chart is re-rendered from its upstream node's rows. Right after a run those live
         in the server's memory; after a page refresh AND a server restart they exist only in

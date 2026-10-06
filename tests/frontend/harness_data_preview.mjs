@@ -127,6 +127,7 @@ function catalog(sandbox) {
             rows: I18n.t('dataPreview.rows'),
             columns: I18n.t('dataPreview.columns'),
             failed: I18n.t('toast.previewFailed'),
+            noRunData: I18n.t('chart.noRunData'),
             platform: {
                 douyin: I18n.t('platform.douyin'),
                 zhihu: I18n.t('platform.zhihu'),
@@ -153,6 +154,19 @@ async function runScenario(sc) {
         requests.push({ url: String(url), method: options.method || 'GET', body });
         if (sc.transport === 'reject') {
             return Promise.reject(new Error(sc.transportError || 'network is unreachable'));
+        }
+        if (sc.noRunData) {
+            /* An unexecuted node: the panel answers ok:false WITH code no_run_data, and the
+               product must render a muted note into the table wrap and toast nothing. */
+            return Promise.resolve({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        ok: false,
+                        code: 'no_run_data',
+                        error: sc.error || 'No tabular result available for node: node-9',
+                    }),
+            });
         }
         if (sc.fails) {
             return Promise.resolve({

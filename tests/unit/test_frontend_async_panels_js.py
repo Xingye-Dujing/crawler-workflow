@@ -135,6 +135,22 @@ class TestEmitLatexPanel:
         assert got['bodyEmitTable'] is True, f'table should default on, saw {got["bodyEmitTable"]!r}'
 
 
+class TestNoRunDataCell:
+    """A dashboard cell whose upstream is connected but never ran is an expected empty state,
+    not a fault: the board must show a muted 'run once first' note, never the raw internal
+    reference string and never the red error styling."""
+
+    def test_the_cell_shows_the_friendly_note(self, panels):
+        got = panels['noData']
+        assert got['friendly'] is True, 'the cell did not render the localized run-once-first note'
+        assert got['noteClass'] is True, 'the note must use the muted class, not the error class'
+
+    def test_the_raw_reference_string_never_reaches_the_page(self, panels):
+        got = panels['noData']
+        assert got['rawLeaked'] is False, 'the internal "No tabular result" string leaked into the cell'
+        assert got['redError'] is False, 'an expected empty state must not be styled as an error'
+
+
 class TestSwitchInTheRequestBody:
     """What the chart request carries for each spelling of the tokenize box."""
 

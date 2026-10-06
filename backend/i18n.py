@@ -802,6 +802,7 @@ _ZH = {
     'crawl.weibo.need_both_dates': '开始时间与结束时间必须同时填写（只填一个会被忽略，搜索范围会完全不同）',
     'crawl.weibo.bad_range': '结束时间（{end}）必须晚于开始时间（{start}）',
     'chart.count': '数量',
+    'chart.noRunData': '尚无运行数据，请先运行一次工作流。',
     # Chart display labels — the column tokens the tool emits and the category values it can
     # group by. These localize ONLY at render time (the stored column names are unchanged), so
     # a Chinese run prints 发帖量 while an English run prints Total; unknown values pass through.
@@ -2079,6 +2080,7 @@ _EN = {
     'crawl.weibo.need_both_dates': 'Set both a start and an end date — a single one searches a different range',
     'crawl.weibo.bad_range': 'The end date ({end}) must be later than the start date ({start})',
     'chart.count': 'count',
+    'chart.noRunData': 'No run data yet — execute the workflow once first.',
     'chart.col.total': 'Total',
     'chart.col.sentiment_index': 'Sentiment index',
     'chart.col.sentiment': 'Sentiment',

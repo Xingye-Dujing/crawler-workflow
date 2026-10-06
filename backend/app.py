@@ -423,6 +423,18 @@ def _durable_node_rows(node_id: str, workflow_name: str = '') -> list:
     return store.latest_rows(node_id, fingerprint=fingerprint, workflow_name=ambient)[1]
 
 
+class NoRunDataError(KeyError):
+    """Asked to draw from a node that produced no rows live and filed none away.
+
+    This is the expected state of a canvas nobody has executed yet, not a fault. It is a
+    named type so the API turns it into a friendly, non-error response rather than leaking a
+    raw ``KeyError`` string (whose ``str()`` even carries spurious quotes) into a cell that
+    the dashboard rehydrates on every cold load.
+    """
+
+    code = 'no_run_data'
+
+
 def _resolve_dataframe(payload: dict) -> pd.DataFrame:
     """Resolve a DataFrame from a request payload that may reference a
     persisted file, a workflow node's result (live *or* recorded), or inline
@@ -444,7 +456,7 @@ def _resolve_dataframe(payload: dict) -> pd.DataFrame:
         rows = _durable_node_rows(node_id, payload.get('workflow_name') or '')
         if rows:
             return pd.DataFrame(rows)
-        raise KeyError(f'No tabular result available for node: {node_id}')
+        raise NoRunDataError(f'No tabular result available for node: {node_id}')
 
     records = payload.get('data')
     if records is not None:
@@ -1070,6 +1082,11 @@ def _resolve_payload_dataframe(data: dict):
     """
     try:
         return _resolve_dataframe(data), None
+    except NoRunDataError as e:
+        # Expected empty on an unexecuted node: keep the 400 for callers that branch on
+        # status, but name it with a code so the browser shows "run once first" instead of
+        # the raw reference string.
+        return None, (jsonify({'ok': False, 'error': str(e), 'code': e.code}), 400)
     except (KeyError, TypeError, ValueError) as e:
         return None, (jsonify({'ok': False, 'error': str(e)}), 400)
 
@@ -5274,9 +5291,15 @@ def render_visualization():
     data = _json_body()
     if data is None:
         return _bad_body()
-    df, error = _resolve_payload_dataframe(data)
-    if error is not None:
-        return error
+    try:
+        df = _resolve_dataframe(data)
+    except NoRunDataError as e:
+        # A canvas nobody has run yet is expected, so answer 200 rather than a 400 the
+        # browser dev console would flag red once per cell the dashboard rehydrates on a
+        # cold load: ok:false + code + a localized reason the UI paints as a muted note.
+        return jsonify({'ok': False, 'code': e.code, 'error': t('chart.noRunData')})
+    except (KeyError, TypeError, ValueError) as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
 
     chart_type = data.get('chart_type', 'bar')
     x_field = data.get('x_field')

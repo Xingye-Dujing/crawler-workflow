@@ -277,6 +277,7 @@ class TestRecordedRowsIdentity:
         assert app_module.execution_state['fingerprint'] == ''
         body = client.post('/api/data/preview', json={'node_id': 'node-2'}).get_json()
         assert body['ok'] is False, "no guess may be presented as this node's data"
+        assert body['code'] == 'no_run_data', "the browser keys its friendly 'run once first' note on this code"
         assert 'node-2' in body['error']
 
     def test_the_named_workflow_is_the_one_whose_rows_come_back(self, client, two_runs):

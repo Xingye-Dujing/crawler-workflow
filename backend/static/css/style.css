@@ -1648,6 +1648,16 @@ button.history-del:hover {
   font-size: 11px;
   color: var(--err);
 }
+.dashboard-cell-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 12px;
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-dim);
+}
 .dashboard-empty {
   padding: 40px;
   text-align: center;

@@ -183,6 +183,33 @@ function consoleHasMultipleWf(result) {
 const workflow = {
     currentFile: null,
 
+    /* The file that is open is part of the session, not of a single page load: a refresh or a
+       backend restart must reopen what the user was editing, and only 新建 clears it. The canvas
+       itself is already drafted to localStorage; this records WHICH saved file that draft belongs
+       to, so runName()/export identity survives a restart instead of the draft reading as new. */
+    _persistOpenFile() {
+        try {
+            if (this.currentFile) localStorage.setItem('crawler_open_file', this.currentFile);
+            else localStorage.removeItem('crawler_open_file');
+        } catch (e) {
+            /* A browser that refuses localStorage (private mode) simply will not carry the name
+               across a reload; the canvas draft behaves the same way, so this is a soft decline. */
+        }
+    },
+
+    restoreOpenFile() {
+        /* Only worth restoring when a canvas draft actually came back: an empty browser has no
+           open file to remember, and claiming a name with nothing on screen would attribute the
+           next Save to a file the user never loaded. */
+        try {
+            if (!localStorage.getItem('crawler_canvas')) return;
+            var name = localStorage.getItem('crawler_open_file');
+            if (name) this.currentFile = name;
+        } catch (e) {
+            /* Same soft decline as _persistOpenFile. */
+        }
+    },
+
     async save() {
         const workflowData = canvas.toWorkflowJSON();
         let name = this.currentFile;
@@ -208,6 +235,7 @@ const workflow = {
             if (result.ok) {
                 showToast(I18n.t('toast.workflowSaved') + ': ' + name);
                 localStorage.setItem('crawler_canvas', JSON.stringify(canvas.serializeDraft()));
+                this._persistOpenFile();
             } else {
                 showToast(I18n.t('toast.saveFailed') + ': ' + result.error);
             }
@@ -256,6 +284,7 @@ const workflow = {
                    make the next Save overwrite a workflow the screen never showed. */
                 if (!this.loadFromJSON(result.workflow)) return;
                 this.currentFile = name;
+                this._persistOpenFile();
                 showToast(I18n.t('toast.workflowLoaded') + ': ' + name);
                 /* The workflow we just opened may have an unfinished run filed
                    under the same shape — offer to continue it before the user
@@ -353,6 +382,7 @@ const workflow = {
         if (canvas._settingsNodeId) closeSettings();
         this.currentFile = null;
         localStorage.removeItem('crawler_canvas');
+        this._persistOpenFile();
         showToast(I18n.t('toast.newWorkflow'));
     },
 
@@ -3213,8 +3243,11 @@ var dataNodes = {
             if (result.ok) {
                 renderChartPreview(result);
             } else {
-                showToast(I18n.t('toast.renderFailed') + ': ' + result.error);
-                echartsDiv.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px;">' + escapeHtml(result.error) + '</div>';
+                var fv = _renderFailureView(result);
+                if (!fv.note) showToast(I18n.t('toast.renderFailed') + ': ' + result.error);
+                echartsDiv.innerHTML = fv.note
+                    ? '<div class="dashboard-cell-note">' + escapeHtml(fv.message) + '</div>'
+                    : '<div style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px;">' + escapeHtml(fv.message) + '</div>';
             }
         } catch (e) {
             showToast(I18n.t('toast.renderFailed') + ': ' + e.message);
@@ -3639,7 +3672,7 @@ async function openChartFullscreen(nodeId) {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
         });
         var result = await resp.json();
-        if (!result.ok) { _paintFullscreenError(result.error || 'render failed'); return; }
+        if (!result.ok) { var fv = _renderFailureView(result); _paintFullscreenError(fv.message, fv.note); return; }
         if (result.engine === 'matplotlib') _paintFullscreenImage(result.image);
         else _paintFullscreenOption(result.option);
     } catch (e) {
@@ -3676,14 +3709,23 @@ function _paintFullscreenImage(dataUrl) {
     if (img) { img.style.display = 'block'; img.src = dataUrl; }
 }
 
-function _paintFullscreenError(message) {
+function _renderFailureView(result) {
+    /* 'No run data yet' is the expected state of a canvas nobody has executed, not a fault:
+       the board answers it HTTP 200 with code no_run_data so a cold-load rehydrate does not
+       fill the dev console with red 400s. Show it as a muted note and never a toast; anything
+       else is a real failure and keeps its red styling. */
+    if (result && result.code === 'no_run_data') return { note: true, message: I18n.t('chart.noRunData') };
+    return { note: false, message: (result && result.error) || 'render failed' };
+}
+
+function _paintFullscreenError(message, isNote) {
     var div = document.getElementById('chart-fullscreen-echarts');
     var img = document.getElementById('chart-fullscreen-image');
     _disposeFullscreenInstance();
     _chartFullscreenImage = '';
     if (img) img.style.display = 'none';
     div.style.display = 'block';
-    div.innerHTML = '<div class="dashboard-cell-error">' + escapeHtml(message) + '</div>';
+    div.innerHTML = '<div class="' + (isNote ? 'dashboard-cell-note' : 'dashboard-cell-error') + '">' + escapeHtml(message) + '</div>';
 }
 
 function closeChartFullscreen() {
@@ -3766,7 +3808,12 @@ var dataPreview = {
             });
             var result = await resp.json();
             if (!result.ok) {
-                showToast(I18n.t('toast.previewFailed') + ': ' + result.error);
+                var fv = _renderFailureView(result);
+                if (!fv.note) {
+                    showToast(I18n.t('toast.previewFailed') + ': ' + result.error);
+                    return;
+                }
+                document.getElementById('data-preview-table-wrap').innerHTML = '<div class="dashboard-cell-note">' + escapeHtml(fv.message) + '</div>';
                 return;
             }
             this._total = result.total_rows;
@@ -3990,7 +4037,8 @@ var dashboard = {
                No chart, no instance and no error text is the honest outcome. */
             if (!this._isLiveCell(grid, cell)) return;
             if (!result.ok) {
-                body.innerHTML = '<div class="dashboard-cell-error">' + escapeHtml(result.error) + '</div>';
+                var fv = _renderFailureView(result);
+                body.innerHTML = '<div class="' + (fv.note ? 'dashboard-cell-note' : 'dashboard-cell-error') + '">' + escapeHtml(fv.message) + '</div>';
                 return;
             }
             if (result.engine === 'matplotlib') {
@@ -7365,6 +7413,7 @@ var wfFiles = {
                leaving currentFile on the old name would make the next Save
                recreate the just-renamed-away file. */
             if (typeof workflow !== 'undefined' && workflow.currentFile === name) workflow.currentFile = result.name;
+            if (typeof workflow !== 'undefined') workflow._persistOpenFile();
             showToast(I18n.t('wfMgr.renameDone'));
             this.refresh();
         } else {

@@ -185,6 +185,21 @@ async function previewRetargetCase() {
     return { name: post && post.body ? post.body.name : null, asked: saves(w).length };
 }
 
+/* An unexecuted node: the preview panel must read the note, never toast a failure,
+   and the internal reference string must not reach the page. */
+async function previewNoDataCase() {
+    const w = world({ ok: false, code: 'no_run_data', error: 'No tabular result available for node: src-1' });
+    addChart(w, 'v-1', '图25 未运行');
+    await w.x.dataNodes.previewVisualize('v-1');
+    await ticks();
+    const html = String(el(w, 'chart-preview-echarts').innerHTML || '');
+    return {
+        note: html.indexOf(w.x.I18n.t('chart.noRunData')) >= 0,
+        rawLeaked: html.indexOf('No tabular result') >= 0,
+        toastShown: w.toast().shown,
+    };
+}
+
 /* ── dashboard cells ───────────────────────────────────────────────────────── */
 function renders(w) {
     return w.requests.filter((r) => r.url.indexOf('/api/visualize/render') >= 0);
@@ -249,6 +264,7 @@ out.preview_matplotlib = await previewCase('matplotlib');
 out.preview_nothing_drawn = await previewNothingCase();
 out.preview_server_refused = await previewRefusedCase();
 out.preview_retargeted_name = await previewRetargetCase();
+out.preview_no_run_data = await previewNoDataCase();
 out.dashboard_echarts = await dashboardCase('echarts', false);
 out.dashboard_matplotlib = await dashboardCase('matplotlib', false);
 out.dashboard_after_rebuild = await dashboardCase('echarts', true);

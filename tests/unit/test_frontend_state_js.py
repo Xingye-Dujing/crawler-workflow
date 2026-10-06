@@ -659,6 +659,21 @@ def life(tmp_path_factory, capabilities_matrix):
             'load': {'nodes': opened['nodes'], 'connections': opened['connections']},
         },
         {'id': 'newfile', 'add': ['source'], 'newFile': True},
+        {
+            # A reload/restart reopens the file the draft belongs to — the boot `openFile`
+            # step restores the persisted name, so runName()/export identity survives.
+            'id': 'restore_after_reload',
+            'storedOpenFile': '甲流程',
+            'restore': True,
+        },
+        {
+            # An empty browser (no draft) must not claim a file it never loaded: restoring a
+            # name with nothing on screen would attribute the next Save to a phantom.
+            'id': 'restore_without_a_draft',
+            'storedOpenFile': '幽灵',
+            'hasDraft': False,
+            'restore': True,
+        },
         {'id': 'save_named', 'currentFile': 'wf1', 'save': True},
         {
             # The camera a person panned to must ride into the saved file.
@@ -797,6 +812,9 @@ class TestFileLifecycle:
         assert r['nodes'] == [] and r['connections'] == []
         assert r['currentFile'] is None
         assert r['newfileDraftCleared']
+        # 新建 is the ONLY thing that starts a new file: it must also forget the open-file
+        # record, so the next reload does not resurrect the file the user just abandoned.
+        assert r['openFileStored'] is None, '新建 must clear the persisted open-file record'
 
     def test_saving_a_named_workflow_posts_its_name_and_canvas(self, life):
         r = life['save_named']
@@ -804,6 +822,7 @@ class TestFileLifecycle:
         body = json.loads(r['fetches'][0]['body'])
         assert body['name'] == 'wf1'
         assert r['currentFile'] == 'wf1'
+        assert r['openFileStored'] == 'wf1', 'a save records the file so a reload reopens it'
 
     def test_a_cancelled_name_prompt_saves_nothing(self, life):
         assert life['save_cancel']['fetches'] == []
@@ -818,8 +837,24 @@ class TestFileLifecycle:
     def test_open_by_name_loads_and_remembers_the_file(self, life):
         r = life['open_by_name']
         assert r['currentFile'] == '我的流程'
+        assert r['openFileStored'] == '我的流程', 'opening records the file for the next reload'
         assert [n['title'] for n in r['nodes']] == ['抓取微博', '清洗', 'Output']
         assert any(f['url'].startswith('/api/workflow/load') for f in r['fetches'])
+
+    def test_a_reload_reopens_the_file_the_draft_belongs_to(self, life):
+        """After a refresh or a backend restart the boot `openFile` step restores the persisted
+        name, so the canvas reopens as the SAME saved file — not a new one — and runName() (the
+        key every preview/chart/export/resume probe uses) is correct without a name node."""
+        r = life['restore_after_reload']
+        assert r['currentFile'] == '甲流程'
+        assert r['openFileStored'] == '甲流程'
+
+    def test_an_empty_browser_restores_no_file(self, life):
+        """A fresh browser has no draft, so it must not adopt a leftover name: claiming a file
+        with nothing on screen would attribute the next Save to a workflow the user never loaded."""
+        r = life['restore_without_a_draft']
+        assert r['currentFile'] is None, 'no draft means no reopened file'
+        assert r['draftStored'] is None
 
     def test_a_failed_open_leaves_the_current_canvas_and_name_intact(self, life):
         r = life['open_missing']

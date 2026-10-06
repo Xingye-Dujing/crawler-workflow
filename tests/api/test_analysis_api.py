@@ -393,6 +393,21 @@ class TestVisualizeRender:
         assert body['ok'] is True and 'latex' not in body and 'latex_file' not in body
         assert 'latex_table' not in body and 'latex_table_file' not in body
 
+    def test_an_unexecuted_node_answers_friendly_not_a_crash(self, client):
+        """The board rehydrates every cell on a cold load, so a node nobody has run must answer
+        200 + code ``no_run_data`` + a readable reason — never a 400 whose raw KeyError string
+        (with its spurious quotes) lands in the cell and lights up the browser console once per
+        cell. The status is the point: this is an expected empty state, not a request failure."""
+        response = client.post(
+            '/api/visualize/render',
+            json={'node_id': 'node-never-run', 'chart_type': 'bar', 'x_field': 'a', 'y_field': 'b'},
+        )
+        assert response.status_code == 200, 'an expected empty render must not read as a failure'
+        body = response.get_json()
+        assert body['ok'] is False
+        assert body['code'] == 'no_run_data'
+        assert 'No tabular result' not in body['error'], 'the internal reference string must not reach the UI'
+
     @pytest.mark.parametrize(
         ('spec', 'expected'),
         [

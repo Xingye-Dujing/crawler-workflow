@@ -180,6 +180,12 @@ SCENARIOS = [
         'transportError': 'network is unreachable',
         'steps': ['open'],
     },
+    {
+        'id': 'no-run-data',
+        'payload': {'node_id': '9'},
+        'noRunData': True,
+        'steps': ['open'],
+    },
     # ── values that are not words ────────────────────────────────────────────
     {
         'id': 'hostile-cells',
@@ -463,6 +469,19 @@ class TestNothingAndRefused:
         assert toast.startswith(report['catalog']['failed'])
         assert 'network is unreachable' in toast
         assert report['world']['table'] is None
+
+    def test_an_unexecuted_node_reads_as_a_note_and_toasts_nothing(self, world):
+        """ok:false WITH code no_run_data is the expected state of a node nobody ran: the
+        panel shows the localized run-once-first note in place of a table and stays silent —
+        no failure toast, and never the raw internal reference string."""
+        report = case(world, 'no-run-data')
+        assert report['world']['toast'] in ('', None), 'an expected empty state toasted a failure'
+        assert report['world']['toastShown'] is False
+        assert report['world']['table'] is None
+        wrap = report['world']['wrapHtml']
+        assert 'dashboard-cell-note' in wrap, 'the note did not use the muted styling'
+        assert report['catalog']['noRunData'] in wrap, 'the run-once-first wording did not reach the panel'
+        assert 'No tabular result' not in wrap, 'the internal reference string leaked into the panel'
 
 
 # ─── values that are not words ────────────────────────────────────────────

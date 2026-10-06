@@ -88,9 +88,14 @@ function world(provider) {
                 answer: () => {
                     const u = String(url);
                     let payload = { ok: true, engine: 'echarts', option: {} };
+                    let status = 200;
                     if (u.indexOf('/api/runs/resumable') >= 0) payload = { ok: true, runs: RESUME_RUNS };
                     else if (u.indexOf('/api/llm/ollama/models') >= 0) payload = { ok: true, models: OLLAMA_MODELS };
-                    resolve({ json: () => Promise.resolve(payload), status: 200 });
+                    else if (u.indexOf('/api/visualize/render') >= 0 && sandbox.__renderAnswer) {
+                        payload = sandbox.__renderAnswer;
+                        if (!payload.ok) status = payload.code === 'no_run_data' ? 200 : 400;
+                    }
+                    resolve({ json: () => Promise.resolve(payload), status });
                 },
             });
         });
@@ -229,9 +234,38 @@ async function latexCase() {
     };
 }
 
+/* ─── no_run_data: a cell whose upstream connected but never ran is a note, not a fault ── */
+async function noDataCase() {
+    const w = world();
+    /* getUpstreamNodeId returns 'src-1', so the board does fetch — and the server answers the
+       expected-empty state (200 + code). The cell must read as a muted note, and the internal
+       reference string must never reach the page. */
+    w.sandbox.__renderAnswer = { ok: false, code: 'no_run_data', error: 'No tabular result available for node: src-1' };
+    w.sandbox.canvas.nodes['nd-1'] = {
+        id: 'nd-1',
+        type: 'visualize',
+        title: '图',
+        params: { chart_type: 'bar', x_field: '城市', engine: 'echarts' },
+    };
+    w.x.dashboard.open();
+    await ticks(3);
+    for (const p of w.pending) p.answer();
+    await ticks();
+    const grid = w.sandbox.document.getElementById('dashboard-grid');
+    const cell = grid.querySelector('.dashboard-cell-body');
+    const html = cell ? String(cell.innerHTML || '') : '';
+    return {
+        friendly: html.indexOf('chart.noRunData') >= 0,
+        noteClass: html.indexOf('dashboard-cell-note') >= 0,
+        rawLeaked: html.indexOf('No tabular result') >= 0,
+        redError: html.indexOf('dashboard-cell-error') >= 0,
+    };
+}
+
 const resume = { calm: await resumeCase(false), raced: await resumeCase(true) };
 const stack = await stackCase();
 const latex = await latexCase();
+const noData = await noDataCase();
 const dash = { calm: await dashCase(false, 'false'), raced: await dashCase(true, 'false') };
 const model = {
     ollamaCalm: await modelCase('ollama', false, ''),
@@ -250,4 +284,4 @@ for (const spelling of spellings) {
     sent[JSON.stringify(spelling)] = one.sent;
 }
 
-process.stdout.write(JSON.stringify({ resume, stack, latex, dash, model, sent }));
+process.stdout.write(JSON.stringify({ resume, stack, latex, noData, dash, model, sent }));
