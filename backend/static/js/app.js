@@ -3050,12 +3050,16 @@ document.addEventListener('mousedown', (e) => {
      answer is pending would strand the dialog over an empty canvas. */
 document.addEventListener('mousedown', (e) => {
     if (!e.target || !e.target.closest) return;
-    /* A click inside the popup itself, the sibling history popup, or a chart
-       brought up to fullscreen OVER the board must not dismiss the board. The
-       fullscreen window is a top-level sibling, not a child of the dashboard, so
-       without this its own clicks (and its 关闭 button) read as "outside" and the
-       看板 vanished the moment a figure was opened or closed. */
-    if (e.target.closest('#dashboard-panel, #history-panel, #chart-fullscreen-panel')) return;
+    /* A click inside the board popup itself, the sibling history popup, or any overlay
+       the user legitimately stacks on top of the board — the fullscreen chart, the data
+       preview panel, the chart studio — must not dismiss the board. Those are top-level
+       siblings, not children of #dashboard-panel, so without this list every click in one
+       of them read as "outside" and the board vanished. (#node-settings stays OUTSIDE on
+       purpose: opening a node's settings is meant to close the board.) */
+    if (
+        e.target.closest('#dashboard-panel, #history-panel, #chart-fullscreen-panel, #data-preview-panel, #studio-overlay')
+    )
+        return;
     if (e.target.closest('.cselect-menu, .cand-menu')) return;
     if (e.target.closest('#dialog-overlay, #cookie-dialog')) return;
     ['dashboard-panel', 'history-panel'].forEach((id) => {

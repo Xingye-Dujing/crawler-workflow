@@ -804,6 +804,18 @@ _POPUP_CASES = [
         ['#chart-fullscreen-panel'],
         {'dashboard-panel', 'history-panel'},
     ),
+    (
+        'data-preview-keeps-dashboard',
+        ['dashboard-panel', 'history-panel'],
+        ['#data-preview-panel'],
+        {'dashboard-panel', 'history-panel'},
+    ),
+    (
+        'studio-overlay-keeps-dashboard',
+        ['dashboard-panel', 'history-panel'],
+        ['#studio-overlay'],
+        {'dashboard-panel', 'history-panel'},
+    ),
     ('settings-panel-is-outside', ['dashboard-panel'], ['#node-settings'], set()),
     ('nothing-open-is-harmless', [], ['#workspace'], set()),
 ]
