@@ -148,7 +148,7 @@
       },
       "operation": "sentiment_evolution",
       "x": 3659,
-      "y": 77,
+      "y": 0,
       "folded": false
     },
     {
@@ -209,6 +209,22 @@
       "folded": false
     },
     {
+      "id": "node-129",
+      "type": "visualize",
+      "title": "图28 各阶段情感占比堆叠图（100%）",
+      "params": {
+        "chart_type": "stack_pct",
+        "enabled": true,
+        "engine": "echarts",
+        "stack_fields": "positive_pct,neutral_pct,negative_pct",
+        "title": "刘学州事件 各阶段评论情感占比（100% 堆叠）",
+        "x_field": "period"
+      },
+      "x": 3659,
+      "y": 294,
+      "folded": false
+    },
+    {
       "id": "node-17",
       "type": "visualize",
       "title": "图3 各阶段评论量",
@@ -222,7 +238,7 @@
         "y_field": "total"
       },
       "x": 3659,
-      "y": 217,
+      "y": 140,
       "folded": false
     },
     {
@@ -238,7 +254,7 @@
       },
       "operation": "save",
       "x": 3659,
-      "y": 371,
+      "y": 448,
       "folded": false
     },
     {
@@ -278,7 +294,7 @@
       },
       "operation": "topic_label",
       "x": 3659,
-      "y": 665,
+      "y": 742,
       "folded": false
     },
     {
@@ -534,7 +550,7 @@
         "y_field": "total"
       },
       "x": 3659,
-      "y": 511,
+      "y": 588,
       "folded": false
     },
     {
@@ -685,7 +701,7 @@
       },
       "operation": "topic_map",
       "x": 3659,
-      "y": 945,
+      "y": 1022,
       "folded": false
     },
     {
@@ -718,7 +734,7 @@
       },
       "operation": "topic_salience",
       "x": 3659,
-      "y": 1085,
+      "y": 1162,
       "folded": false
     },
     {
@@ -782,7 +798,7 @@
       },
       "operation": "topic_timeline",
       "x": 3659,
-      "y": 805,
+      "y": 882,
       "folded": false
     },
     {
@@ -879,7 +895,7 @@
         "y_field": "target"
       },
       "x": 3659,
-      "y": 1225,
+      "y": 1302,
       "folded": false
     },
     {
@@ -894,7 +910,7 @@
       },
       "operation": "save",
       "x": 3659,
-      "y": 1379,
+      "y": 1456,
       "folded": false
     },
     {
@@ -927,7 +943,7 @@
       },
       "operation": "save",
       "x": 3659,
-      "y": 1519,
+      "y": 1596,
       "folded": false
     },
     {
@@ -1038,7 +1054,7 @@
       },
       "operation": "save",
       "x": 3659,
-      "y": 1659,
+      "y": 1736,
       "folded": false
     },
     {
@@ -1053,7 +1069,7 @@
       },
       "operation": "groupby_agg",
       "x": 3659,
-      "y": 1799,
+      "y": 1876,
       "folded": false
     },
     {
@@ -1098,7 +1114,7 @@
       },
       "operation": "topic_map",
       "x": 3659,
-      "y": 2079,
+      "y": 2156,
       "folded": false
     },
     {
@@ -1131,7 +1147,7 @@
       },
       "operation": "topic_salience",
       "x": 3659,
-      "y": 2219,
+      "y": 2296,
       "folded": false
     },
     {
@@ -1207,7 +1223,7 @@
       },
       "operation": "topic_map",
       "x": 3659,
-      "y": 2359,
+      "y": 2436,
       "folded": false
     },
     {
@@ -1240,7 +1256,7 @@
       },
       "operation": "topic_salience",
       "x": 3659,
-      "y": 2499,
+      "y": 2576,
       "folded": false
     },
     {
@@ -1301,7 +1317,7 @@
       },
       "operation": "groupby_agg",
       "x": 3659,
-      "y": 1939,
+      "y": 2016,
       "folded": false
     },
     {
@@ -1349,7 +1365,7 @@
       },
       "operation": "sentiment",
       "x": 3659,
-      "y": 2639,
+      "y": 2716,
       "folded": false
     },
     {
@@ -1437,7 +1453,7 @@
       },
       "operation": "sentiment",
       "x": 3659,
-      "y": 2919,
+      "y": 2996,
       "folded": false
     },
     {
@@ -1525,7 +1541,7 @@
       },
       "operation": "sentiment",
       "x": 3659,
-      "y": 3199,
+      "y": 3276,
       "folded": false
     },
     {
@@ -1613,7 +1629,7 @@
       },
       "operation": "sentiment",
       "x": 3659,
-      "y": 3479,
+      "y": 3556,
       "folded": false
     },
     {
@@ -1701,7 +1717,7 @@
       },
       "operation": "sentiment",
       "x": 3659,
-      "y": 3759,
+      "y": 3836,
       "folded": false
     },
     {
@@ -1774,7 +1790,7 @@
       },
       "operation": "topic_coherence",
       "x": 3659,
-      "y": 2779,
+      "y": 2856,
       "folded": false
     },
     {
@@ -1807,7 +1823,7 @@
       },
       "operation": "topic_coherence",
       "x": 3659,
-      "y": 3059,
+      "y": 3136,
       "folded": false
     },
     {
@@ -1840,7 +1856,7 @@
       },
       "operation": "topic_coherence",
       "x": 3659,
-      "y": 3339,
+      "y": 3416,
       "folded": false
     },
     {
@@ -1873,7 +1889,7 @@
       },
       "operation": "topic_coherence",
       "x": 3659,
-      "y": 3619,
+      "y": 3696,
       "folded": false
     },
     {
@@ -1906,7 +1922,7 @@
       },
       "operation": "topic_coherence",
       "x": 3659,
-      "y": 3899,
+      "y": 3976,
       "folded": false
     },
     {
@@ -2064,6 +2080,10 @@
     {
       "from": "node-16",
       "to": "node-17"
+    },
+    {
+      "from": "node-16",
+      "to": "node-129"
     },
     {
       "from": "node-16",
