@@ -80,7 +80,7 @@ const stats = {
         if (!chart) return;
         const colors = {
             'Anger': '#e74c3c', 'Joy': '#f1c40f', 'Sadness': '#3498db',
-            'Fear': '#9b59b6', 'Neutral': '#95a5a6',
+            'Fear': '#9b59b6', 'Surprise': '#e67e22', 'Neutral': '#95a5a6',
             'Objective Statement': '#95a5a6', 'Praise/Affirmation': '#2ecc71',
             'Criticism/Questioning': '#e74c3c', 'Controversy/Reflection': '#f39c12',
             'Advocacy/Call-to-action': '#3498db', 'Satire/Mockery': '#9b59b6',

@@ -4,26 +4,49 @@ import re
 import pandas as pd
 
 from analyzers.llm_client import run_llm_dataframe
+from analyzers.sentiment import BERT_BATCH, bert_backend, bert_device
 from i18n import t
 
 logger = logging.getLogger(__name__)
 
 
 class EmotionAnalyzer:
-    """Sentiment analysis — three modes:
+    """Emotion classification — three modes:
 
     Mode ``llm``: row-by-row classification via an LLM (local Ollama or an
     OpenRouter API model), batched and checkpointed so an interrupted run keeps
     everything it already finished.
     Mode ``ml``: batch classification via sklearn TF-IDF + LogisticRegression.
+    Mode ``bert``: a fine-tuned transformer sequence classifier run in batches, when this
+    machine can actually run one (``torch``/``transformers``). The six labels are the
+    SMP2020-EWECT scheme (see :data:`valid_labels`). Like the sentiment node's bert path it
+    refuses BY NAME when the stack or the model is missing and never falls back to ``llm``
+    or ``ml`` — putting one model's verdict in a column another mode claimed would be the
+    exact bug class this project has already paid for.
     """
 
     _ML_MODEL_NAME = 'emotion'
 
-    def __init__(self, model_name: str = 'qwen3.5:9b', mode: str = 'llm'):
+    def __init__(
+        self,
+        model_name: str = 'qwen3.5:9b',
+        mode: str = 'llm',
+        bert_model: str = '',
+        batch_size: int = BERT_BATCH,
+    ):
         self.model_name = model_name
         self.mode = mode
-        self.valid_labels = ['Anger', 'Joy', 'Sadness', 'Fear', 'Neutral']
+        # The bert pipeline path/name; blank is refused by name in _analyze_bert, never guessed.
+        self.bert_model = bert_model
+        # A configured 0 would make the bert chunking loop step zero times and score an empty
+        # column while reporting success, so the floor is one row.
+        self.batch_size = max(1, int(batch_size or BERT_BATCH))
+        # Six categories, matching the SMP2020-EWECT scheme the bert path is trained on
+        # (ml_train/train_bert_emotion.py). Surprise was added when the label set was
+        # realigned; keep the two lists identical or a model answer would fall through as
+        # an unknown label. Order is irrelevant (membership only), but the values are the
+        # exact strings the model's id2label and every chart/colour map use.
+        self.valid_labels = ['Anger', 'Joy', 'Sadness', 'Fear', 'Surprise', 'Neutral']
         # Lazily built: LLM mode never touches sklearn, and constructing the
         # classifier here would pull it in (and touch the model file) for
         # every run even when it is never used.
@@ -56,7 +79,10 @@ Emotion Categories & Definitions:
 3. Sadness: Explicitly expresses mourning, grief, crying, pain of loss using vocabulary like "heartbroken",
    "tears". Note: Mere notification of death without strong subjective sorrow descriptions is not this category.
 4. Fear: Expresses panic, worry, threat perception, or physiological fear reactions.
-5. Neutral:
+5. Surprise: Expresses astonishment, being taken aback, or an unexpected discovery ("I can't believe it",
+   "wow", "没想到"). It is the reaction to something unexpected and is distinct from Joy — a surprise can be
+   neutral or even unpleasant; choose Surprise when the dominant feeling is "unexpected" rather than delight.
+6. Neutral:
    - Objective statement of facts (news style).
    - Explanation of reasons, logical reasoning, information verification process.
    - Use of calm, rational, restrained tone even if the topic involves negative events (e.g., death), as long as
@@ -81,7 +107,8 @@ Processing Rules:
 
 Output Format:
 Strictly output ONLY a plain string (not JSON, not Markdown) with the following structure:
-`Emotion: {label}, Confidence: {score}` where label is one of ['Anger','Joy','Sadness','Fear','Neutral'] and score
+`Emotion: {label}, Confidence: {score}` where label is one of ['Anger','Joy','Sadness','Fear','Surprise','Neutral']
+and score
 is a number between 0-1 (with appropriate decimals). Do not include any additional text, explanations, or code
 blocks.
 
@@ -129,6 +156,8 @@ Analyze strictly and output only the required plain string."""
     ) -> pd.DataFrame:
         if self.mode == 'ml':
             return self._analyze_ml(df, text_column)
+        if self.mode == 'bert':
+            return self._analyze_bert(df, text_column)
 
         return run_llm_dataframe(
             df,
@@ -169,4 +198,77 @@ Analyze strictly and output only the required plain string."""
             df.at[idx, 'emotion'] = label
             df.at[idx, 'confidence'] = score
         logger.info(t('ml.emotion_done', n=total))
+        return df
+
+    # ── BERT mode ───────────────────────────────────────────────
+
+    def _analyze_bert(self, df: pd.DataFrame, text_column: str) -> pd.DataFrame:
+        """One fine-tuned sequence classifier read over a whole column, in batches.
+
+        Refuses BY NAME exactly like the sentiment node's bert path: a missing
+        ``torch``/``transformers`` stack or a blank model name raises rather than quietly
+        running the LLM or sklearn classifier behind a column this node said a transformer
+        produced. A row that fails is left BLANK, not stamped ``Neutral`` — 「没有判断」 and
+        「判断为中性」 are different statements, and only the first is honest about a row the
+        model never answered.
+
+        The whole column goes through in ``self.batch_size`` chunks; the pipeline applies
+        its own truncation so this module does not guess at a character count.
+        """
+        df['emotion'] = ''
+        df['confidence'] = None
+
+        missing = bert_backend()
+        if missing:
+            raise ValueError(t('emotion.bert_missing', need=missing))
+        model = str(self.bert_model or '').strip()
+        if not model:
+            raise ValueError(t('emotion.bert_no_model'))
+        if text_column not in df.columns:
+            logger.error(t('ml.missing_col', col=text_column))
+            return df
+
+        from transformers import pipeline
+
+        device = bert_device()
+        classify = pipeline('text-classification', model=model, device=device)
+        # Said out loud, because "did this use my GPU" is otherwise only answerable by timing
+        # the run, and a laptop falling back to CPU is the common surprise.
+        logger.info(t('emotion.bert_loaded', model=model, device='cuda' if device >= 0 else 'cpu'))
+
+        mask = df[text_column].notna() & (df[text_column].astype(str).str.strip() != '')
+        indices = df[mask].index.tolist()
+        if not indices:
+            logger.info(t('ml.no_rows'))
+            return df
+
+        valid = set(self.valid_labels)
+        scored = 0
+        failed = 0
+        for start in range(0, len(indices), self.batch_size):
+            chunk = indices[start : start + self.batch_size]
+            texts = [str(df.at[idx, text_column]).strip() for idx in chunk]
+            try:
+                answers = list(classify(texts, batch_size=len(texts), truncation=True, max_length=512))
+            except Exception as e:  # a batch that raises leaves only its own rows blank
+                logger.error(t('emotion.bert_failed', err=e))
+                failed += len(chunk)
+                continue
+            for idx, answer in zip(chunk, answers, strict=False):
+                label = str((answer or {}).get('label') or '')
+                if label not in valid:
+                    # A label this mapping does not know is a question about the MODEL, not
+                    # about one row; it still surfaces, but the row stays blank rather than
+                    # inventing a class the model did not name.
+                    logger.warning(t('emotion.bert_bad_label', label=(answer or {}).get('label')))
+                    failed += 1
+                    continue
+                try:
+                    score = float((answer or {}).get('score'))
+                except (TypeError, ValueError):
+                    score = None
+                df.at[idx, 'emotion'] = label
+                df.at[idx, 'confidence'] = score
+                scored += 1
+        logger.info(t('emotion.bert_done', n=scored, failed=failed))
         return df

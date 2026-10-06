@@ -89,7 +89,10 @@ _PANELS = [
     # have a field here, or it is unreachable.
     ('panel_ner_default', 'process', {'operation': 'ner'}),
     ('panel_ner_llm', 'process', {'operation': 'ner', 'mode': 'llm', 'entity_types': 'PERSON,DATE'}),
+    ('panel_emotion_default', 'process', {'operation': 'emotion'}),
     ('panel_emotion_ml', 'process', {'operation': 'emotion', 'mode': 'ml'}),
+    ('panel_emotion_bert', 'process', {'operation': 'emotion', 'mode': 'bert'}),
+    ('panel_tendency_default', 'process', {'operation': 'tendency'}),
     ('panel_keyword', 'process', {'operation': 'keyword', 'topk': '5'}),
     # The remaining text-bearing panels: each owns at least one field the escaping
     # below is asserted over, and each was written by a different hand.
@@ -684,6 +687,38 @@ class TestSettingsPanel:
         # an op with no parameters at all renders no leftovers.
         assert 'entity_types' not in results['settings']['panel_keyword']
         assert 'entity_types' not in results['settings']['panel_emotion_ml']
+
+    def test_the_emotion_panel_offers_bert_and_defaults_to_the_llm(self, results):
+        """The six-class emotion path gained a transformer mode beside llm/ml, offered in the
+        select but NOT made the default: an untouched node has no ``mode`` and must not suddenly
+        require a GPU and a model path."""
+        default = results['settings']['panel_emotion_default']
+        for value in ('llm', 'ml', 'bert'):
+            assert f'<option value="{value}"' in default, f'{value} is not offered'
+        assert '<option value="llm" selected>' in default, 'an untouched emotion node must not ask for a model'
+        assert '<option value="bert" selected>' not in default
+        assert 'mode.bert' in default
+
+    def test_the_emotion_bert_panel_asks_for_the_model_it_cannot_guess(self, results):
+        """Same refusal contract as sentiment: the bert row needs a model path the user chose,
+        and the sklearn train button does not belong on it."""
+        bert = results['settings']['panel_emotion_bert']
+        assert "updateParam('n1','bert_model'" in bert
+        assert "updateParam('n1','batch_size'" in bert
+        assert 'settings.bertModel' in bert and 'settings.bertModelHint' in bert
+        assert 'trainMLModel' not in bert, 'the train button belongs to the sklearn path'
+
+    def test_the_emotion_ml_panel_keeps_only_the_train_button(self, results):
+        ml = results['settings']['panel_emotion_ml']
+        assert 'trainMLModel' in ml
+        assert 'bert_model' not in ml
+
+    def test_the_tendency_panel_was_left_out_of_the_bert_rollout(self, results):
+        """Only emotion got the transformer this round; tendency keeps llm/ml. A bert option
+        appearing on tendency would offer a mode whose analyzer has no such path."""
+        tendency = results['settings']['panel_tendency_default']
+        assert '<option value="bert"' not in tendency
+        assert 'bert_model' not in tendency
 
 
 class TestUrlRoutingContract:

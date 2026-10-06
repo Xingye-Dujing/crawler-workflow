@@ -600,7 +600,13 @@ class TestSentimentNode:
         assert statuses['node-2']['status'] == 'failed', statuses['node-2']
         assert '0.2' in statuses['node-2']['error'], statuses['node-2']['error']
 
-    def test_a_machine_without_torch_refuses_bert_instead_of_running_snownlp(self, client, app_module, paste):
+    def test_bert_refuses_by_name_instead_of_running_snownlp(self, client, app_module, paste):
+        """The bert node must refuse with a NAMED BERT reason and store nothing — never fall
+        back to SnowNLP. Which reason fires is environment-dependent: a machine without the
+        torch/transformers stack refuses for the missing piece, and this machine (which HAS
+        torch) refuses because the chain names no model. Both sentences lead with ``BERT``,
+        so the pin is on the refusal being about the requested mode, not on which machine it is.
+        """
         ds = paste(self.ROWS, name='senti-bert.csv')
         started = client.post(
             '/api/workflow/execute', json={'workflow': self._chain(ds, mode='bert'), 'workflow_name': 'senti-bert'}
@@ -610,8 +616,8 @@ class TestSentimentNode:
         statuses = app_module._RUN_STORE.node_statuses(run_id)
         assert statuses['node-2']['status'] == 'failed', statuses['node-2']
         error = statuses['node-2']['error'] or ''
-        # The refusal names the missing piece, and never becomes another algorithm.
-        assert 'torch' in error or '模型' in error or 'Model' in error, error
+        # A named BERT refusal (missing backend OR unnamed model), never SnowNLP doing the work.
+        assert 'BERT' in error, error
         assert app_module._RUN_STORE.load_rows(run_id, 'node-2') == [], 'a refused mode stores nothing'
 
     def test_a_missing_text_column_is_refused_before_any_row_is_read(self, client, app_module, paste):

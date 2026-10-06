@@ -486,12 +486,19 @@
   模型选择、批量保存行数、截断长度均可在 AI 面板配置；OpenRouter Key 仅存浏览器 localStorage，不落服务器
 - **逐节点模型**：AI 面板选的是整轮运行的默认模型；每个用本地 Ollama 的分析节点（清洗 / 情感 / 倾向 / NER）
   还可在自己的面板单独挑一个模型，不必与其他节点一致。默认「跟随全局」即沿用运行级模型；OpenRouter 运行不提供此下拉
-- **情感分析（双模式）**：LLM 逐行深度分析，或传统 ML（sklearn TF-IDF + 逻辑回归）批量高速推理，随时切换
+- **情感分析（三模式）**：LLM 逐行深度分析、传统 ML（sklearn TF-IDF + 逻辑回归）批量推理，或**微调 BERT**；
+  情绪标签集现按 **SMP2020-EWECT 六类**（`Anger`/`Fear`/`Joy`/`Neutral`/`Sadness`/`Surprise`，此前是少了 `Surprise` 的五类）。
   - ML 通路现统一走 jieba 词 + **那份停用词表去噪** + `class_weight=balanced` 逻辑回归（子线性 TF）；`build_tfidf_pipeline(char_features=True)` 可再并入字 n-gram（字+词 FeatureUnion）。
     这把「文本统计统一走一份停用词表」的同一份表也接进了 ML 特征侧（此前 ML 管线 `stop_words=None`，是一个真实的准确率缺口）。`/api/analysis/train` 的自训与 `ml_train/` 的重训共用这一管线。
+  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：填一个本机 HuggingFace 目录路径即可整列**分批推理**（有显卡自动走显卡，
+    `batch_size` 可调）；`pipeline('text-classification')` 直接读模型的 `id2label`，**换任何一套六类情绪模型都不用改分析器**。
+    缺 `torch`/`transformers` 或模型名留空一律**按名拒绝、绝不回退到 `llm`/`ml`**（把 A 模型的结论写进 B 模型声称的列是本项目反复付过学费的 bug 形态）；读不出的行留空，不臆造 `Neutral`。
+    产出模型用 `ml_train/train_bert_emotion.py` 在 `SMP2020-EWECT/train/usual_train.txt`（通用微博 27,766 条）上微调 `hfl/chinese-roberta-wwm-ext`，
+    写到 `ml_train/bert_emotion_model/`、节点「模型名」填该绝对路径即可。**本机实测（2026-10-06）**：三 epoch、留出切片 **accuracy=0.811 / macro-F1=0.792**；
+    官方未见过的验证集（2000 条）**accuracy=0.792 / macro-F1=0.758**（六类不均衡，`Surprise`/`Fear` 最稀，故 macro-F1 低于二分类的情感极性）。
 - **情感极性（四模式）**：输出 `sentiment`（`positive`/`negative`/`neutral`）与 `score`（0–1 正极性概率）两列。
   它是**独立的一个操作**而不是「情感分析」的第三个开关：SnowNLP 与中文情感 BERT 回答的是"这段话偏正面吗"，
-  给不出 Anger/Joy/Sadness/Fear/Neutral 五分类、也给不出倾向性的六类传播标签，硬塞进去只能靠猜。
+  给不出 Anger/Fear/Joy/Neutral/Sadness/Surprise 六分类、也给不出倾向性的六类传播标签，硬塞进去只能靠猜。
   - `snownlp`（默认）：随包附带的朴素贝叶斯极性模型，不需要下载模型、不需要 GPU、不掏任何 API；
     另有「判定为正面的下限 / 判定为负面的上限」两个可调档位，落在两者之间记为中性。
     **实测要说清**：SnowNLP 是在购物评论上训出来的，对客观陈述明显偏负（"会议定于周三举行"实测 0.24），
@@ -1201,7 +1208,7 @@ crawler_workflow/
 │   │   ├── ml_base.py            # 传统 ML 底座（TF-IDF + 分类器）
 │   │   ├── llm_client.py         # Ollama / OpenRouter 客户端
 │   │   ├── cleaner.py            # 广告/噪声语义清洗（LLM）
-│   │   ├── emotion.py            # 情感分类（LLM + ML 可选）
+│   │   ├── emotion.py            # 情感分类（LLM + ML + BERT 可选）
 │   │   ├── tendency.py           # 倾向性分析（LLM + ML 可选）
 │   │   ├── keyword.py            # 关键词提取（TF-IDF / TextRank）
 │   │   ├── clustering.py         # 文本聚类（K-Means / DBSCAN）
@@ -1266,7 +1273,7 @@ crawler_workflow/
 | Data Source（数据源） | SRC | 从知乎/微博/小红书/哔哩哔哩/抖音/YouTube/X（推特） 按关键词采集，知乎、微博、YouTube、X（推特）、哔哩哔哩 与抖音 另可选「某作者的作品」（知乎填主页链接或 /people/ 后面的 id，微博填 weibo.com/u/<UID> 主页链接或数字 UID，YouTube 填 @handle/频道链接/UC… ID，X 填 @handle 或主页链接，哔哩哔哩填 space.bilibili.com/<UID> 链接或数字 UID，抖音填 douyin.com/user/… 链接或那串 sec_uid），哔哩哔哩 另有**热榜**（热门榜分页 / 周排行榜一次回整张表，均不需逐条请求），微博 有**热搜**（一次页内请求回整块榜，热度是精确整数，且**无需登录态**——矩阵里 `needs_session=False` 的两个模式之一（另一个是 微信 的正文采集：它根本不在 Cookie 平台名单里，
         没有会话可要），所以只挂热搜的画布不会被运行前 Cookie 预检拦下），知乎 有**热榜**（实测整块榜就是 30 条且站点无视一切翻页参数，目标数填得更大只会被告知"榜只有这么多"），抖音 也有**热榜**（一次回答就是整块榜：实测 51 行，用一个只由公开字面量拼出的 URL 页内取数、不需要任何签名，行里带精确热度与观看数；站点没给的那一行的数字留空而不写 0），微信按粘贴的推文链接采集正文；「采集内容」切到**评论**即变为评论采集器。可选项完全由后端 `/api/capabilities` 的采集矩阵生成，新增平台或模式不必再改前端；**运行前的本地校验也读同一份矩阵**（以前它自己写着"评论要链接、微信要链接、别都要关键词"，于是 5 个「某作者的作品」模式与 B 站热榜在界面上根本跑不了——填好了也报「缺少关键词」，请求都不会发出） | 是，需平台+关键词/作者（或评论/推文链接；热榜只需选榜单） |
 | Upload（上传） | UPL | 从持久化数据集中读取 CSV/TSV/JSON/TXT/Excel 作为输入 | 是 |
-| Process（处理） | PRC | 清洗(规则正则/LLM) / 情感极性(SnowNLP/BERT/ML/LLM) / 情绪(LLM/ML) / 倾向(LLM/ML) / 关键词(TF-IDF/TextRank/自建语料 IDF，可选词性) / 聚类 / NER(规则/LLM，可指定实体类型) / 网暴言论识别(词库/LLM) / 异常 / 相关性 | 否，需要上游文本数据 |
+| Process（处理） | PRC | 清洗(规则正则/LLM) / 情感极性(SnowNLP/BERT/ML/LLM) / 情绪(LLM/ML/BERT，SMP2020-EWECT 六类) / 倾向(LLM/ML) / 关键词(TF-IDF/TextRank/自建语料 IDF，可选词性) / 聚类 / NER(规则/LLM，可指定实体类型) / 网暴言论识别(词库/LLM) / 异常 / 相关性 | 否，需要上游文本数据 |
 | Analysis（分析） | ANL | 确定性数据清洗：去空/去重(逐字或归一化)/近重复去重(SimHash)/筛选/改名/类型转换/排序/采样/分组聚合/表关联/列计算/分箱，以及**事件研究套件**：提取时间维度 / 按时间划分阶段 / 按发文量建议阶段边界 / LDA 主题模型 / 分阶段 LDA / 主题概括(模型) / 主题距离图数据 / 各主题显著词数据 / 主题生命周期(次生舆情) / 主题跨阶段流向 / 主题数扫描 / 共词网络 / 情感走向外推 / 二次爆发预警 / 情感演化曲线 | **是**，可直接处理数据集 |
 | Visualize（可视化） | VIZ | 柱状/折线/双轴折线/主题距离图/显著词图/饼图/散点/直方/箱线/热力/桑基/关系图/词云/地图，ECharts 或 Matplotlib（五种新图型仅 ECharts；柱状/折线/双轴折线可加事件标注） | **是**，可直接处理数据集 |
 | Tokenize（分词） | TKN | jieba 分词输出词频，供导出或词云使用 | 否，需要上游数据 |

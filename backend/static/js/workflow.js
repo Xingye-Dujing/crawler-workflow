@@ -2115,21 +2115,30 @@ function openSettings(nodeId) {
             }
         }
 
-        /* ML mode selector for emotion / tendency */
+        /* Mode selector for emotion / tendency. emotion additionally offers the fine-tuned
+           BERT path (six SMP2020-EWECT classes, incl. Surprise); tendency keeps llm/ml only.
+           The bert option needs a model path, so it reveals the same two fields the sentiment
+           node's bert mode does. */
         if (p.operation === 'emotion' || p.operation === 'tendency') {
+            var modeOptions = [
+                { value: 'llm', label: llmModeLabel() },
+                { value: 'ml', label: I18n.t('mode.ml') },
+            ];
+            if (p.operation === 'emotion') {
+                modeOptions.push({ value: 'bert', label: I18n.t('mode.bert') });
+            }
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.mode') + '</label>' +
                 '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'mode\',this.value)">' +
-                selectOptionTags(
-                    [
-                        { value: 'llm', label: llmModeLabel() },
-                        { value: 'ml', label: I18n.t('mode.ml') },
-                    ],
-                    p.mode,
-                    'llm'
-                ) +
+                selectOptionTags(modeOptions, p.mode, 'llm') +
                 '</select></div>';
             if (p.mode === 'ml') {
                 html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
+            }
+            if (p.operation === 'emotion' && p.mode === 'bert') {
+                html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
+                html += renderParamInput(nodeId, p, 'batch_size', 'settings.batchSize', 'number', 32);
+                html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+                    I18n.t('settings.bertModelHint') + '</div></div>';
             }
         }
 
@@ -4005,6 +4014,7 @@ var historyPanel = {
         'Joy': '#9a7740',
         'Sadness': '#4a6fa5',
         'Fear': '#8a6ea8',
+        'Surprise': '#5f8a8a',
         'Neutral': '#6f7f8a',
         'Objective Statement': '#6f7f8a',
         'Praise/Affirmation': '#4e8061',

@@ -285,6 +285,25 @@ class TestPaletteContract:
         )
 
 
+class TestEmotionPaletteCoverage:
+    """Every emotion category the analyzer can answer must have a colour in BOTH the dashboard
+    chart (stats.js) and the run-pie palette (workflow.js). The six-class emotion set gained
+    ``Surprise``; a category that reaches a chart with no colour renders as an unnamed slice,
+    which is exactly the kind of silent gap this pin catches at the taxonomy boundary.
+    """
+
+    def test_every_emotion_label_has_a_colour_in_both_palettes(self):
+        from analyzers.emotion import EmotionAnalyzer
+
+        labels = EmotionAnalyzer().valid_labels
+        stats_src = (JS_DIR / 'stats.js').read_text(encoding='utf-8')
+        workflow_src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        assert 'Surprise' in labels, 'the emotion set must carry the SMP2020-EWECT Surprise class'
+        for label in labels:
+            assert f"'{label}':" in stats_src, f'stats.js has no colour for emotion {label}'
+            assert f"'{label}':" in workflow_src, f'workflow.js has no colour for emotion {label}'
+
+
 class TestCookiePanelParity:
     """The Cookie panel is wired together from three files that nothing else
     cross-checks: the platform list is HTML, its translation lives in app.js, the

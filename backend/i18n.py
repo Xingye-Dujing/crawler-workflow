@@ -526,6 +526,12 @@ _ZH = {
     'sentiment.bert_no_model': 'BERT 模式还需要在「模型」里填一个情感模型名（本地目录或仓库名），空着无法判断',
     'sentiment.bert_bad_label': 'BERT 模型回了一个不认识的标签「{label}」，无法归入正面/负面/中性',
     'sentiment.bert_loaded': 'BERT 情感模型已加载：{model}（运行在 {device} 上，逐批推理）',
+    'emotion.bert_missing': 'BERT 模式需要本机安装 {need}——当前环境没有，也不会改用别的方法代替',
+    'emotion.bert_no_model': 'BERT 模式还需要在「模型」里填一个情绪分类模型名（本地目录或仓库名），空着无法判断',
+    'emotion.bert_loaded': 'BERT 情绪模型已加载：{model}（运行在 {device} 上，逐批推理）',
+    'emotion.bert_failed': 'BERT 情绪判断失败：{err}',
+    'emotion.bert_bad_label': 'BERT 模型回了一个不认识的情绪标签「{label}」，无法归入这六类',
+    'emotion.bert_done': '[BERT] 情绪分类完成，{n} 行，失败 {failed} 行',
     'ml.tendency_failed': 'ML 倾向性预测失败：{err}——回退为 Objective Statement',
     'ml.emotion_done': '[ML] 情感分类完成，共处理 {n} 行，模式: ML',
     'ml.tendency_done': '[ML] 倾向性分析完成，共处理 {n} 行，模式: ML',
@@ -1736,6 +1742,12 @@ _EN = {
     'sentiment.bert_no_model': 'BERT mode needs a sentiment model named; empty means nothing can be judged',
     'sentiment.bert_bad_label': 'the BERT model answered an unrecognised label "{label}"',
     'sentiment.bert_loaded': 'BERT sentiment model loaded: {model} (running on {device}, in batches)',
+    'emotion.bert_missing': 'BERT mode needs {need} installed here — it is not, and nothing else will run instead',
+    'emotion.bert_no_model': 'BERT mode needs an emotion model named; empty means nothing can be judged',
+    'emotion.bert_loaded': 'BERT emotion model loaded: {model} (running on {device}, in batches)',
+    'emotion.bert_failed': 'BERT emotion failed: {err}',
+    'emotion.bert_bad_label': 'the BERT model answered an unrecognised emotion label "{label}"',
+    'emotion.bert_done': '[BERT] emotion classification done, {n} rows, {failed} failed',
     'ml.tendency_failed': 'ML tendency prediction failed: {err} — falling back to Objective Statement',
     'ml.emotion_done': '[ML] Emotion classification done, {n} rows, mode: ML',
     'ml.tendency_done': '[ML] Tendency analysis done, {n} rows, mode: ML',
@@ -2291,8 +2303,7 @@ _EN = {
         'Memory note: node "{nid}" produced {n} rows, and every node\'s rows are held in memory until the run ends'
     ),
     'comment.need_both': (
-        'Node {nid}: filtering comments by time needs BOTH a start and an end '
-        '(a half range cannot bound the window)'
+        'Node {nid}: filtering comments by time needs BOTH a start and an end (a half range cannot bound the window)'
     ),
     'comment.bad_date': 'Node {nid}: the comment time range could not be parsed (use YYYY-MM-DD)',
     'comment.bad_range': 'Node {nid}: the comment time range ends before it starts',
