@@ -100,7 +100,7 @@ function readWorld(sandbox) {
         /* Counted, not assumed: `makeDraggable` hangs a listener on the header every
            time it runs, so a re-render that re-ran the setup is visible here as a
            second handler even though the handle element itself is reused. */
-        dragListeners: header && header._events && header._events.mousedown ? header._events.mousedown.length : 0,
+        dragListeners: header && header._events && header._events.pointerdown ? header._events.pointerdown.length : 0,
         meta: textOf(doc.getElementById('data-preview-meta')),
         pageLabel: textOf(doc.getElementById('data-preview-page-label')),
         pagerDisplay: doc.getElementById('data-preview-pager').style.display,

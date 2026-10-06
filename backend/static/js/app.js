@@ -2767,8 +2767,11 @@ function makeDraggable(el, handleSelector) {
     const handle = typeof handleSelector === 'string'
         ? el.querySelector(handleSelector) : handleSelector;
     if (!handle) return;
+    /* Pointer events, not mouse: one code path serves mouse, touch and pen. touch-action:none
+       stops the browser claiming a finger drag as a page scroll before we see a pointermove. */
+    handle.style.touchAction = 'none';
 
-    handle.addEventListener('mousedown', (e) => {
+    handle.addEventListener('pointerdown', (e) => {
         if (e.target.closest('button, select, input, textarea')) return;
         e.preventDefault();
 
@@ -2787,13 +2790,13 @@ function makeDraggable(el, handleSelector) {
     });
 }
 
-document.addEventListener('mousemove', (e) => {
+document.addEventListener('pointermove', (e) => {
     if (!_DS.isDragging || !_DS.el) return;
     _DS.el.style.setProperty('left', (e.clientX - _DS.offX) + 'px', 'important');
     _DS.el.style.setProperty('top', (e.clientY - _DS.offY) + 'px', 'important');
 });
 
-document.addEventListener('mouseup', () => {
+document.addEventListener('pointerup', () => {
     if (_DS.isDragging && _DS.el) {
         _DS.el.classList.remove('panel-dragging');
         if (_DS.handle) _DS.handle.style.cursor = '';
@@ -2835,7 +2838,8 @@ function makeResizable(el, opts) {
     }
 
     let rs = {};
-    handle.addEventListener('mousedown', (e) => {
+    handle.style.touchAction = 'none'; /* a finger drag on the handle is ours, not the page's scroll */
+    handle.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
         e.preventDefault();
         convertToFloating(el);
@@ -2849,10 +2853,10 @@ function makeResizable(el, opts) {
         rs.active = true;
     });
 
-    /* Single shared mousemove/mouseup for resize */
+    /* One shared pointermove/pointerup for every resizable — mouse, touch and pen alike. */
     if (!window._resizeInit) {
         window._resizeInit = true;
-        document.addEventListener('mousemove', (e) => {
+        document.addEventListener('pointermove', (e) => {
             const r = window._rs;
             if (!r || !r.active) return;
             const newW = Math.max(r.minW, Math.min(r.maxW, r.startW + (e.clientX - r.startX)));
@@ -2861,7 +2865,7 @@ function makeResizable(el, opts) {
             r.el.style.setProperty('height', newH + 'px', 'important');
             if (r.onResize) r.onResize(newW, newH);
         });
-        document.addEventListener('mouseup', () => {
+        document.addEventListener('pointerup', () => {
             const r = window._rs;
             if (r) r.active = false;
         });
@@ -2918,7 +2922,8 @@ function toggleConsolePopout() {
     if (!handle) return;
     let cs = {};
 
-    handle.addEventListener('mousedown', (e) => {
+    handle.style.touchAction = 'none';
+    handle.addEventListener('pointerdown', (e) => {
         const panel = document.getElementById('console-panel');
         if (panel.classList.contains('popout')) return;
         e.preventDefault();
@@ -2929,14 +2934,14 @@ function toggleConsolePopout() {
         handle.classList.add('active');
     });
 
-    document.addEventListener('mousemove', (e) => {
+    document.addEventListener('pointermove', (e) => {
         if (!cs.active) return;
         const newH = Math.max(80, Math.min(window.innerHeight - 100, cs.startH + (cs.startY - e.clientY)));
         cs.panel.style.height = newH + 'px';
         cs.panel.classList.add('open'); /* keep open while resizing */
     });
 
-    document.addEventListener('mouseup', () => {
+    document.addEventListener('pointerup', () => {
         if (cs.active) {
             cs.active = false;
             handle.classList.remove('active');
@@ -2954,7 +2959,8 @@ function initDockResize(handleId, panelId) {
     if (!handle) return;
     let cs = {};
 
-    handle.addEventListener('mousedown', (e) => {
+    handle.style.touchAction = 'none';
+    handle.addEventListener('pointerdown', (e) => {
         const panel = document.getElementById(panelId);
         if (!panel || !panel.classList.contains('open')) return;
         e.preventDefault();
@@ -2965,14 +2971,14 @@ function initDockResize(handleId, panelId) {
         handle.classList.add('active');
     });
 
-    document.addEventListener('mousemove', (e) => {
+    document.addEventListener('pointermove', (e) => {
         if (!cs.active) return;
         const newH = Math.max(80, Math.min(window.innerHeight - 100, cs.startH + (cs.startY - e.clientY)));
         cs.panel.style.height = newH + 'px';
         cs.panel.classList.add('open'); /* keep open while resizing */
     });
 
-    document.addEventListener('mouseup', () => {
+    document.addEventListener('pointerup', () => {
         if (cs.active) {
             cs.active = false;
             handle.classList.remove('active');
