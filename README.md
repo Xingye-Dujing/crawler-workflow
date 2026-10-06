@@ -509,8 +509,8 @@
     不会静默改用 SnowNLP，那样等于把 A 模型的结论写进 B 模型声称的列里。因此这一条通路
     **在本仓库从未真跑过**（这台机器没有 torch），不要把它当作已验证功能
 - **倾向性分析（三模式）**：LLM 逐行、传统 ML（sklearn TF-IDF + 逻辑回归）批量，或**微调 BERT**（六类传播立场标签，与情感/情绪共用同一条 `bert` 后端与分批推理）
-  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/distill_tendency.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `1-clean_weibo_text.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/tendency_distilled.csv`（本次约 3,935 条）；再由 `ml_train/train_bert_tendency.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/bert_tendency_model/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空、以及模型回了不认识的标签，一律**按名拒绝、绝不回退**到 llm/ml；读不出的行留空，**不臆造 `Objective Statement`**。
-    **本机实测（2026-10-06）**：三 epoch、5% 留出 **accuracy=0.679 / macro-F1=0.572**。蒸馏语料六类不均衡（`Controversy/Reflection` 仅约 106 条——真实微博少有人作多视角讨论），故 macro-F1 明显低于情感极性(0.98)与情绪(0.76)，这是如实报告而非藏拙；想更准可加大 `--n` 再跑一轮蒸馏（脚本可续跑、自动跳过已标注文本）。
+  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/distill_tendency.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `1-clean_weibo_text.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/tendency_distilled.csv`（两轮蒸馏累计约 7,720 条）；再由 `ml_train/train_bert_tendency.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/bert_tendency_model/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空、以及模型回了不认识的标签，一律**按名拒绝、绝不回退**到 llm/ml；读不出的行留空，**不臆造 `Objective Statement`**。
+    **本机实测（2026-10-06）**：在约 7,720 条上微调、三 epoch、5% 留出 **accuracy=0.731 / macro-F1=0.681**（较首轮 3,935 条的 0.572 明显提升，主要靠稀有类样本变多：`Controversy/Reflection` 106→364、`Criticism`/`Advocacy` 各约 1,300）。仍如实说：`Controversy` 是最稀的一类（真实微博少有人作多视角讨论），它与讽刺(`Satire`)仍是最弱两格——端到端里「呵呵，某些人倒是挺会演戏的」被误判为 `Praise`（置信仅 0.46）。曾试把各类下采样到最少类（`--balance`，每类 364）以求均衡，macro-F1 反降到 0.561（丢掉约 5,500 条有效数据），故保留全量训练。要更高可加大 `--n` 续蒸馏（脚本自动跳过已标注文本）。
 - **语义数据清洗**：自动过滤广告、无关内容与低质量数据（LLM 判定）
 - **关键词提取**：TF-IDF / TextRank（依赖 jieba）
 - **文本聚类**：K-Means / DBSCAN 自动发现文本分组
