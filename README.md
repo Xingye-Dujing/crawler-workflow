@@ -487,6 +487,8 @@
 - **逐节点模型**：AI 面板选的是整轮运行的默认模型；每个用本地 Ollama 的分析节点（清洗 / 情感 / 倾向 / NER）
   还可在自己的面板单独挑一个模型，不必与其他节点一致。默认「跟随全局」即沿用运行级模型；OpenRouter 运行不提供此下拉
 - **情感分析（双模式）**：LLM 逐行深度分析，或传统 ML（sklearn TF-IDF + 逻辑回归）批量高速推理，随时切换
+  - ML 通路现统一走 jieba 词 + **那份停用词表去噪** + `class_weight=balanced` 逻辑回归（子线性 TF）；`build_tfidf_pipeline(char_features=True)` 可再并入字 n-gram（字+词 FeatureUnion）。
+    这把「文本统计统一走一份停用词表」的同一份表也接进了 ML 特征侧（此前 ML 管线 `stop_words=None`，是一个真实的准确率缺口）。`/api/analysis/train` 的自训与 `ml_train/` 的重训共用这一管线。
 - **情感极性（四模式）**：输出 `sentiment`（`positive`/`negative`/`neutral`）与 `score`（0–1 正极性概率）两列。
   它是**独立的一个操作**而不是「情感分析」的第三个开关：SnowNLP 与中文情感 BERT 回答的是"这段话偏正面吗"，
   给不出 Anger/Joy/Sadness/Fear/Neutral 五分类、也给不出倾向性的六类传播标签，硬塞进去只能靠猜。

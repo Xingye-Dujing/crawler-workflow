@@ -7,8 +7,9 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import FeatureUnion, Pipeline
 
+from analyzers.stopwords import STOPWORDS
 from config import Config
 from i18n import t
 from utils.helpers import sanitize_filename
@@ -37,21 +38,53 @@ def _no_preprocessing(text: str) -> str:
     return text
 
 
-def build_tfidf_pipeline(classifier=None, max_features: int = 5000):
+def build_tfidf_pipeline(
+    classifier=None, max_features: int = 20000, stop_words=None, ngram_range=(1, 2), char_features: bool = False
+):
+    """TF-IDF over jieba-tokenised text + a logistic classifier.
+
+    Two settings raised from the naive default because they are what a Chinese micro-text
+    classifier needs:  the shared stopword table is applied (the rest of the text stack already
+    denoises with it, and leaving the ML path to see 的/了/是 unfiltered was a real accuracy gap),
+    and  the classifier is class-weight-balanced (the labelled sets are imbalanced — one class
+    of 1-clean alone is ~60%), so the minority sentiment is not flattened by the majority.
+    `sublinear_tf` tames long posts' term counts. All three are overridable; passing
+    `stop_words=[]` restores the old no-filter behaviour, and a caller can still hand its own
+    `classifier`/`max_features`. The tokenizer stays whitespace-only because `fit`/`predict`
+    already jieba-split upstream (see `_tokenize`), so the vectorizer must not re-tokenise.
+
+    Set `char_features=True` to ALSO feed a character n-gram view of the same text through a
+    FeatureUnion. Chinese micro-text sentiment leans on characters, sub-words and emoji that a
+    jieba word vocabulary misses; a char_wb (2,4) branch unions with the word branch and is the
+    strongest no-deep-learning feature here. Default off keeps the plain word pipeline — and the
+    already-saved word-model .pkl files — byte-for-byte unchanged.
+    """
+    if stop_words is None:
+        stop_words = sorted(STOPWORDS)
     if classifier is None:
-        classifier = LogisticRegression(max_iter=1000)
+        classifier = LogisticRegression(max_iter=2000, class_weight='balanced')
+
+    word_tfidf = TfidfVectorizer(
+        tokenizer=_whitespace_tokenizer,
+        preprocessor=_no_preprocessing,
+        token_pattern=None,
+        max_features=max_features,
+        ngram_range=ngram_range,
+        sublinear_tf=True,
+        stop_words=stop_words,
+    )
+    if not char_features:
+        return Pipeline([('tfidf', word_tfidf), ('clf', classifier)])
+
+    char_tfidf = TfidfVectorizer(
+        analyzer='char_wb',
+        ngram_range=(2, 4),
+        max_features=100000,
+        sublinear_tf=True,
+    )
     return Pipeline(
         [
-            (
-                'tfidf',
-                TfidfVectorizer(
-                    tokenizer=_whitespace_tokenizer,
-                    preprocessor=_no_preprocessing,
-                    token_pattern=None,
-                    max_features=max_features,
-                    ngram_range=(1, 2),
-                ),
-            ),
+            ('features', FeatureUnion([('word', word_tfidf), ('char', char_tfidf)])),
             ('clf', classifier),
         ]
     )
