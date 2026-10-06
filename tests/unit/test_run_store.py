@@ -878,3 +878,37 @@ class TestConcurrency:
         for t in threads:
             t.join()
         assert sum(1 for w in winners if w) == 1
+
+
+# ─── run duration ────────────────────────────────────────────────────────
+
+
+class TestRunDuration:
+    def test_duration_is_finished_minus_started(self, store):
+        assert store._duration_seconds('2026-10-06T04:00:00', '2026-10-06T04:01:30') == 90
+
+    def test_an_open_run_has_no_duration(self, store):
+        # finished_at is null while a run is still in flight → no fabricated number.
+        assert store._duration_seconds('2026-10-06T04:00:00', None) is None
+        assert store._duration_seconds(None, '2026-10-06T04:01:00') is None
+
+    def test_a_missing_or_unparseable_stamp_is_not_a_duration(self, store):
+        assert store._duration_seconds('', '') is None
+        assert store._duration_seconds('garbage', '2026-10-06T04:00:00') is None
+
+    def test_a_resumed_run_measures_total_wall_time(self, store):
+        # A 继续 never refreshes started_at, so duration spans every attempt, not just the last.
+        store.start_run('r1', 'wf', 'fp')
+        store._execute("UPDATE runs SET started_at = '2026-10-06T04:00:00' WHERE run_id = 'r1'")
+        store.finish_run('r1', 'completed')
+        store._execute("UPDATE runs SET finished_at = '2026-10-06T04:05:00' WHERE run_id = 'r1'")
+        assert store.get_run('r1')['duration_seconds'] == 300
+
+    def test_list_and_get_report_a_finished_run_duration(self, store):
+        store.start_run('r1', 'wf', 'fp')
+        store.finish_run('r1', 'completed')
+        got = store.get_run('r1')
+        rows = store.list_resumable(include_finished=True)
+        assert got['duration_seconds'] == rows[0]['duration_seconds']
+        # A run started and finished within the same second reports 0, not None — it IS closed.
+        assert got['duration_seconds'] == 0

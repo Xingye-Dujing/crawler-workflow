@@ -945,6 +945,7 @@ def runsmgr(tmp_path_factory):
                 'node_total': 3,
                 'rows_kept': 17,
                 'started_at': '2026-09-01 10:00',
+                'duration_seconds': 90,
                 'mode': 'serial',
                 'wf_count': 1,
                 'headless': 0,
@@ -958,6 +959,7 @@ def runsmgr(tmp_path_factory):
                 'node_total': 3,
                 'rows_kept': 5,
                 'started_at': '',
+                'duration_seconds': None,
                 'mode': 'serial',
                 'wf_count': 1,
                 'headless': 1,
@@ -1163,6 +1165,12 @@ class TestRunRecordsPanel:
     def test_status_labels_map_every_known_state(self, runsmgr):
         assert 'interrupted' in runsmgr['html']
         assert 'completed' in runsmgr['html']
+
+    def test_the_table_shows_a_finished_run_duration_and_a_dash_when_none(self, runsmgr):
+        html = runsmgr['html']
+        assert 'duration' in html, 'the run table must have a duration column'
+        assert '01:30' in html, 'a 90s run renders as MM:SS'
+        assert '—' in html, 'a run with no duration (still open) shows a dash, not 0'
 
     def test_a_workflow_name_is_escaped_not_executed(self, runsmgr):
         # The name is user data straight from runs.db — markup must not live.

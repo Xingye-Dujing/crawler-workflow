@@ -442,6 +442,24 @@ class RunStore:
     def now() -> str:
         return time.strftime('%Y-%m-%dT%H:%M:%S')
 
+    @staticmethod
+    def _duration_seconds(started, finished):
+        """Whole seconds the run occupied (``finished_at`` − ``started_at``), or None while it is
+        still open (``finished_at`` null) or a stamp does not parse.
+
+        ``started_at`` is deliberately never refreshed on a 继续 (the record's date is when this work
+        began), so a resumed run's duration is its TOTAL wall-clock elapsed across every attempt — the
+        honest reading of "运行时长", not just the last attempt."""
+        if not started or not finished:
+            return None
+        fmt = '%Y-%m-%dT%H:%M:%S'
+        try:
+            t0 = time.mktime(time.strptime(str(started), fmt))
+            t1 = time.mktime(time.strptime(str(finished), fmt))
+        except (ValueError, OverflowError, TypeError):
+            return None
+        return max(0, int(round(t1 - t0)))
+
     def _execute(self, sql: str, params=()):
         with self._lock:
             cur = self._conn.execute(sql, params)
@@ -602,6 +620,7 @@ class RunStore:
                 node['cursor'] = json.loads(node.pop('cursor_json') or 'null')
             nodes.append(node)
         run['nodes'] = nodes
+        run['duration_seconds'] = self._duration_seconds(run.get('started_at'), run.get('finished_at'))
         return run
 
     def list_resumable(self, fingerprint: str = None, limit: int = 20, include_finished: bool = False) -> list:
@@ -630,6 +649,7 @@ class RunStore:
             run['resumable'] = run['status'] in RESUMABLE_RUN_STATUS
             run['partial_nodes'] = [n['node_id'] for n in nodes if n['status'] in (NODE_PARTIAL, NODE_FAILED)]
             run['rows_kept'] = sum(int(n.get('row_count') or 0) for n in nodes)
+            run['duration_seconds'] = self._duration_seconds(run.get('started_at'), run.get('finished_at'))
             out.append(run)
         return out
 

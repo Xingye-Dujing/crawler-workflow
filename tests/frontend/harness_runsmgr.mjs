@@ -26,7 +26,7 @@ const I18n = {
             'runsMgr.restart': 'Restart', 'runsMgr.remove': 'Delete', 'runsMgr.detail': 'Detail',
             'runsMgr.empty': 'empty', 'name.unnamed': 'unnamed', 'runsMgr.colWorkflow': 'wf',
             'runsMgr.colStatus': 'st', 'runsMgr.colNodes': 'nodes', 'runsMgr.colRows': 'rows',
-            'runsMgr.colStarted': 'started', 'runsMgr.report': 'Report',
+            'runsMgr.colStarted': 'started', 'runsMgr.colDuration': 'duration', 'runsMgr.report': 'Report',
             'runsMgr.queueHeader': 'WAITING({n})', 'runsMgr.queueCancel': 'CancelQueued',
             'runsMgr.queueCancelled': 'REMOVED', 'runsMgr.queueGone': 'GONE',
             'runsMgr.queueCancelFailed': 'FAILED',

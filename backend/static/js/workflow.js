@@ -6370,6 +6370,7 @@ var runsManager = {
                 '<td>' + (r.node_done || 0) + '/' + (r.node_total || 0) + '</td>' +
                 '<td>' + (r.rows_kept || 0) + '</td>' +
                 '<td class="runs-mgr-time">' + escapeHtml(r.started_at || '') + '</td>' +
+                '<td class="runs-mgr-time">' + escapeHtml(runsManager._formatDuration(r.duration_seconds)) + '</td>' +
                 '<td class="runs-mgr-ops">' + ops + '</td>' +
                 '</tr>';
         }).join('');
@@ -6382,8 +6383,21 @@ var runsManager = {
             '<th>' + I18n.t('runsMgr.colNodes') + '</th>' +
             '<th>' + I18n.t('runsMgr.colRows') + '</th>' +
             '<th>' + I18n.t('runsMgr.colStarted') + '</th>' +
+            '<th>' + I18n.t('runsMgr.colDuration') + '</th>' +
             '<th></th>' +
             '</tr></thead><tbody>' + rows + '</tbody></table>';
+    },
+
+    _formatDuration: function (seconds) {
+        /* Elapsed wall time as a language-neutral clock (MM:SS, H:MM:SS past an hour). A run still in
+           flight has no duration_seconds (the backend leaves it null) → a dash, not a fabricated 0. */
+        if (seconds === null || seconds === undefined || seconds < 0) return '—';
+        var s = Math.floor(seconds);
+        var h = Math.floor(s / 3600);
+        var m = Math.floor((s % 3600) / 60);
+        var sec = s % 60;
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        return h > 0 ? h + ':' + pad(m) + ':' + pad(sec) : pad(m) + ':' + pad(sec);
     },
 
     _busy() {
@@ -6626,13 +6640,16 @@ var runsManager = {
             }).join('');
             var tr = document.createElement('tr');
             tr.id = 'runs-mgr-detail-' + runId;
-            tr.innerHTML = '<td colspan="7" class="runs-mgr-detail">' +
+            tr.innerHTML = '<td colspan="8" class="runs-mgr-detail">' +
                 '<div class="rm-meta">' +
                 '<span class="rm-meta-title">' + I18n.t('runsMgr.detailNodes') + '</span>' +
                 '<span class="runs-mgr-status ' + this.nodeStatusInfo(run.status).cls + '">' +
                 I18n.t(this.statusKey(run.status)) + '</span>' +
                 '<span class="rm-meta-time">' + escapeHtml(run.started_at || '') +
                 (run.finished_at ? ' &rarr; ' + escapeHtml(run.finished_at) : '') +
+                (run.duration_seconds != null
+                    ? ' &middot; ' + escapeHtml(I18n.t('runsMgr.colDuration')) + ' ' + escapeHtml(this._formatDuration(run.duration_seconds))
+                    : '') +
                 '</span>' +
                 (run.note ? '<span class="rm-meta-note">' + escapeHtml(run.note) + '</span>' : '') +
                 (run.skipped_workflows
