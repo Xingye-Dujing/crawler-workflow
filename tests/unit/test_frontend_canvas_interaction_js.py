@@ -149,6 +149,23 @@ class TestConnectionWarnings:
         assert got['fanout_third_silent'] is True
 
 
+class TestTouchGestures:
+    """A finger drives the same gestures a mouse does — wire, pan, drag — because canvas.js
+    and makeDraggable/makeResizable now listen to Pointer events, not mouse. The harness
+    dispatches pointerdown/pointermove/pointerup with pointerType:'touch' to prove the
+    tablet path works, which is the whole point of the Pointer migration (a tablet has no
+    right button to pan with under the old mouse-only code)."""
+
+    def test_a_finger_drag_between_ports_wires_them(self, ix):
+        assert ix['touch_gestures']['wireFromFingerDrag'] is True
+
+    def test_a_finger_drag_on_the_background_pans_the_camera(self, ix):
+        assert ix['touch_gestures']['backgroundPanByFinger'] is True
+
+    def test_a_finger_drag_on_a_node_header_moves_the_node(self, ix):
+        assert ix['touch_gestures']['nodeMovedByFinger'] is True
+
+
 class TestRepaint:
     def test_one_repaint_per_connection(self, ix):
         assert ix['repaint']['lines'] == 2

@@ -254,14 +254,16 @@ function draft() {
 }
 
 function ev(extra = {}) {
-    return { button: 0, clientX: 100, clientY: 100, target: { closest: () => null }, ...extra };
+    // pointerType defaults to 'mouse' so a dispatched pointerdown follows the desktop path;
+    // a touch-only scenario overrides it with pointerType: 'touch'.
+    return { button: 0, pointerType: 'mouse', clientX: 100, clientY: 100, target: { closest: () => null }, ...extra };
 }
 
 /** Drop a connection from `fromId`'s out-port onto `toId`'s in-port. */
 function dragConnection(fromId, toId) {
-    dispatchOn(portOf(fromId, 'out'), 'mousedown', ev({ target: portOf(fromId, 'out') }));
+    dispatchOn(portOf(fromId, 'out'), 'pointerdown', ev({ target: portOf(fromId, 'out') }));
     const rect = toId === null ? { left: 10, top: 10 } : portOf(toId, 'in').getBoundingClientRect();
-    return dispatchDocument(sandbox.__handlers, 'mouseup', {
+    return dispatchDocument(sandbox.__handlers, 'pointerup', {
         clientX: rect.left + 5,
         clientY: rect.top + 5,
         target: { closest: () => null },
@@ -289,18 +291,18 @@ out.selection = {
 freshWorld();
 const cFrom = addNode('source', 0, 0);
 const cTo = addNode('analysis', 400, 0);
-dispatchOn(portOf(cFrom, 'out'), 'mousedown', ev({ target: portOf(cFrom, 'out') }));
+dispatchOn(portOf(cFrom, 'out'), 'pointerdown', ev({ target: portOf(cFrom, 'out') }));
 out.connect_started = {
     connectingFrom: canvas.connectingFrom,
     /* The temp line is the only feedback that a wire is being dragged. */
     tempLines: canvas.svgLayer.querySelectorAll('.conn-line.temp').length,
 };
-dispatchDocument(sandbox.__handlers, 'mousemove', { clientX: 500, clientY: 60 });
+dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 500, clientY: 60 });
 out.connect_temp_d = canvas.tempLine.d || '';
 /* Finish THIS drag rather than starting a second one, or the line above leaks
    into every later count in this scenario. */
 const firstDrop = portOf(cTo, 'in').getBoundingClientRect();
-dispatchDocument(sandbox.__handlers, 'mouseup', {
+dispatchDocument(sandbox.__handlers, 'pointerup', {
     clientX: firstDrop.left + 5,
     clientY: firstDrop.top + 5,
     target: { closest: () => null },
@@ -322,7 +324,7 @@ out.connect_duplicate = { connections: canvas.connections.length, toasts: toasts
 dragConnection(cFrom, cFrom);
 out.connect_self = { connections: canvas.connections.length };
 /* Mid-drag cancel leaves no temp line behind. */
-dispatchOn(portOf(cTo, 'out'), 'mousedown', ev());
+dispatchOn(portOf(cTo, 'out'), 'pointerdown', ev());
 const beforeCancel = canvas.svgLayer.querySelectorAll('.conn-line.temp').length;
 canvas.cancelConnection();
 out.connect_cancel = {
@@ -331,8 +333,8 @@ out.connect_cancel = {
     connectingFrom: canvas.connectingFrom,
 };
 /* Dropping on empty space creates nothing and ends the drag. */
-dispatchOn(portOf(cFrom, 'out'), 'mousedown', ev());
-dispatchDocument(sandbox.__handlers, 'mouseup', { clientX: -5000, clientY: -5000, target: { closest: () => null } });
+dispatchOn(portOf(cFrom, 'out'), 'pointerdown', ev());
+dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: -5000, clientY: -5000, target: { closest: () => null } });
 out.connect_dropped_on_nothing = { connections: canvas.connections.length, connectingFrom: canvas.connectingFrom };
 
 /* ── tokenize ↔ visualize coupling ─────────────────────────────────── */
@@ -656,22 +658,22 @@ freshWorld();
 out.wiring = {};
 const w1 = addNode('source', 40, 60);
 const header = doc.getElementById(w1).querySelector('.node-header');
-dispatchOn(header, 'mousedown', ev({ clientX: 140, clientY: 160, target: { closest: () => null } }));
+dispatchOn(header, 'pointerdown', ev({ clientX: 140, clientY: 160, target: { closest: () => null } }));
 out.wiring.drag = {
     isDragging: canvas.isDragging,
     dragTargetId: canvas.dragTarget && canvas.dragTarget.id,
     selected: canvas.selectedNode,
 };
-dispatchDocument(sandbox.__handlers, 'mousemove', { clientX: 240, clientY: 260 });
+dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 240, clientY: 260 });
 out.wiring.moved = { left: canvas.dragTarget.style.left, top: canvas.dragTarget.style.top };
-dispatchDocument(sandbox.__handlers, 'mouseup', { clientX: 240, clientY: 260, target: { closest: () => null } });
+dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: 240, clientY: 260, target: { closest: () => null } });
 out.wiring.released = {
     isDragging: canvas.isDragging,
     dragTarget: canvas.dragTarget,
     persistedX: draft().nodes[w1].x,
 };
 /* A mousedown that starts inside the action bar is a button press, not a drag. */
-dispatchOn(header, 'mousedown', ev({ target: { closest: (sel) => (sel === '.node-actions' ? { id: 'actions' } : null) } }));
+dispatchOn(header, 'pointerdown', ev({ target: { closest: (sel) => (sel === '.node-actions' ? { id: 'actions' } : null) } }));
 out.wiring.actions_press_does_not_drag = canvas.isDragging === false;
 const btns = doc.getElementById(w1).querySelectorAll('.node-action-btn');
 out.wiring.no_inline_handlers = {
@@ -698,7 +700,7 @@ const p1 = addNode('source', 0, 0);
 canvas.selectNode(p1);
 canvas._settingsNodeId = p1;
 const workspace = canvas.workspace;
-dispatchOn(workspace, 'mousedown', ev({ button: 2, clientX: 300, clientY: 300 }));
+dispatchOn(workspace, 'pointerdown', ev({ button: 2, clientX: 300, clientY: 300 }));
 out.pan = {
     isPanning: canvas.isPanning,
     deselected: canvas.selectedNode,
@@ -706,15 +708,15 @@ out.pan = {
     /* A right-press also dismisses an open context menu, so the panel it was on. */
     contextMenuOpen: doc.getElementById('context-menu').classList.contains('open'),
 };
-dispatchDocument(sandbox.__handlers, 'mousemove', { clientX: 302, clientY: 302 });
+dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 302, clientY: 302 });
 out.pan.below_threshold = { panX: canvas.panX, wasDragging: canvas.panWasDragging };
-dispatchDocument(sandbox.__handlers, 'mousemove', { clientX: 400, clientY: 300 });
+dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 400, clientY: 300 });
 out.pan.over_threshold = {
     panX: canvas.panX,
     wasDragging: canvas.panWasDragging,
     transform: doc.getElementById('canvas-inner').style.transform,
 };
-dispatchDocument(sandbox.__handlers, 'mouseup', { clientX: 400, clientY: 300, target: { closest: () => null } });
+dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: 400, clientY: 300, target: { closest: () => null } });
 out.pan.released = { isPanning: canvas.isPanning, cursor: workspace.style.cursor };
 /* After a pan, a right-click must NOT pop the menu — the user was moving the page. */
 canvas._contextMenuPos = null;
@@ -733,10 +735,10 @@ out.pan.contextmenu_on_empty_canvas = {
 };
 /* Left-click on the background closes settings; on a node it must not. */
 canvas._settingsNodeId = p1;
-dispatchOn(workspace, 'mousedown', ev({ button: 0, target: { closest: () => null } }));
+dispatchOn(workspace, 'pointerdown', ev({ button: 0, target: { closest: () => null } }));
 out.pan.background_click_closed_settings = canvas._settingsNodeId === null;
 canvas.editNode(p1);
-dispatchOn(workspace, 'mousedown', ev({
+dispatchOn(workspace, 'pointerdown', ev({
     button: 0,
     target: { closest: (sel) => (sel === '.node' ? doc.getElementById(p1) : null) },
 }));
@@ -994,6 +996,40 @@ async function connectWarningsScenarios() {
     out.connect_warnings = res;
 }
 
+/* ── touch (tablet/phone) gestures: what a finger drives through Pointer ── */
+async function touchGestureScenario() {
+    const res = {};
+
+    // A finger drag from an out-port to an in-port wires them.
+    freshWorld();
+    const tA = addNode('source', 0, 0);
+    const tB = addNode('analysis', 400, 0);
+    const inRect = portOf(tB, 'in').getBoundingClientRect();
+    dispatchOn(portOf(tA, 'out'), 'pointerdown', ev({ pointerType: 'touch', target: portOf(tA, 'out') }));
+    await canvas.finishConnection({ clientX: inRect.left + 5, clientY: inRect.top + 5 });
+    res.wireFromFingerDrag = canvas.connections.some((c) => c.from === tA && c.to === tB);
+
+    // A finger drag across the empty background pans the camera (a tablet has no right button).
+    freshWorld();
+    addNode('source', 100, 100);
+    const panBefore = canvas.panX;
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ pointerType: 'touch', clientX: 600, clientY: 600, target: { closest: () => null } }));
+    dispatchDocument(sandbox.__handlers, 'pointermove', { pointerType: 'touch', clientX: 500, clientY: 600, target: { closest: () => null } });
+    dispatchDocument(sandbox.__handlers, 'pointerup', { pointerType: 'touch', clientX: 500, clientY: 600, target: { closest: () => null } });
+    res.backgroundPanByFinger = canvas.panX !== panBefore;
+
+    // A finger drag on a node header moves the node.
+    freshWorld();
+    const tD = addNode('source', 40, 60);
+    const headerD = doc.getElementById(tD).querySelector('.node-header');
+    dispatchOn(headerD, 'pointerdown', ev({ pointerType: 'touch', clientX: 140, clientY: 160, target: { closest: () => null } }));
+    dispatchDocument(sandbox.__handlers, 'pointermove', { pointerType: 'touch', clientX: 240, clientY: 260, target: { closest: () => null } });
+    dispatchDocument(sandbox.__handlers, 'pointerup', { pointerType: 'touch', clientX: 240, clientY: 260, target: { closest: () => null } });
+    res.nodeMovedByFinger = doc.getElementById(tD).style.left !== '40px';
+
+    out.touch_gestures = res;
+}
+
 function resizeRepaintScenario() {
     freshWorld();
     const fA = addNode('source', 0, 0);
@@ -1025,6 +1061,7 @@ function resizeRepaintScenario() {
 Math.random = realRandom;
 resizeRepaintScenario();
 connectWarningsScenarios()
+    .then(() => touchGestureScenario())
     .then(() => renameScenarios())
     .then(() => {
         process.stdout.write(JSON.stringify(out));

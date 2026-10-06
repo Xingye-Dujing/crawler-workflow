@@ -123,31 +123,31 @@ const canvas = {
     },
 
     setupEvents() {
-        /* Right-click pan (with drag threshold for context menu) */
-        this.workspace.addEventListener('mousedown', (e) => {
-            if (e.button === 2) {
-                document.getElementById('context-menu').classList.remove('open');
+        /* One pointer path for mouse, touch and pen (matches makeDraggable). The workspace
+           claims the drag (touch-action:none) so a finger on the background pans the camera —
+           a tablet has no right button to hold. A background press that never moved is a
+           deselect + close (what the old left-click did); the right button still pans, so the
+           desktop gesture is unchanged. Nodes and ports stop propagation into their handlers. */
+        this.workspace.style.touchAction = 'none';
+        this.workspace.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.node') || e.target.closest('.node-port')) return;
+            document.getElementById('context-menu').classList.remove('open');
+            this.deselectNode();
+            this.panWasDragging = false;
+            if (e.button === 2 || e.pointerType !== 'mouse') {
                 this.isPanning = true;
                 this.panStartX = e.clientX;
                 this.panStartY = e.clientY;
                 this.panStartPX = this.panX;
                 this.panStartPY = this.panY;
-                this.panWasDragging = false;
-                this.deselectNode();
                 this.workspace.style.cursor = 'grabbing';
                 e.preventDefault();
-            }
-        });
-
-        /* Left-click on workspace background to deselect */
-        this.workspace.addEventListener('mousedown', (e) => {
-            if (e.button === 0 && !e.target.closest('.node') && !e.target.closest('.node-port')) {
-                this.deselectNode();
+            } else {
                 closeSettings();
             }
         });
 
-        document.addEventListener('mousemove', (e) => {
+        document.addEventListener('pointermove', (e) => {
             if (this.isPanning) {
                 const dx = e.clientX - this.panStartX;
                 const dy = e.clientY - this.panStartY;
@@ -173,13 +173,13 @@ const canvas = {
             }
         });
 
-        document.addEventListener('mouseup', (e) => {
+        document.addEventListener('pointerup', (e) => {
             if (this.isDragging && this.dragTarget) {
                 this.saveState();
             }
-            /* A pan moved the camera, not the model — but the camera is part of what
-               the draft owes the user, and an ended pan is the one moment that knows
-               the dragging actually stopped. */
+            /* A pan moved the camera, not the model — but the camera is part of what the
+               draft owes the user, and an ended pan is the one moment that knows the drag
+               actually stopped. */
             if (this.isPanning && this.panWasDragging) {
                 this.scheduleViewSave();
             }
@@ -592,8 +592,9 @@ const canvas = {
 
         /* Make draggable */
         const header = el.querySelector('.node-header');
-        header.addEventListener('mousedown', (e) => {
+        header.addEventListener('pointerdown', (e) => {
             if (e.target.closest('.node-actions')) return;
+            e.preventDefault(); /* one gesture: stop the compatible mousedown/mousemove */
             this.isDragging = true;
             this.dragTarget = el;
             const rect = el.getBoundingClientRect();
@@ -604,8 +605,9 @@ const canvas = {
 
         /* Port connection */
         el.querySelectorAll('.node-port').forEach(port => {
-            port.addEventListener('mousedown', (e) => {
+            port.addEventListener('pointerdown', (e) => {
                 e.stopPropagation();
+                e.preventDefault(); /* stop the compatible mouse events double-firing the wire */
                 if (port.dataset.port === 'out') this.startConnection(id, e);
             });
         });
