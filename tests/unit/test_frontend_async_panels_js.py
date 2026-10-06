@@ -120,8 +120,8 @@ class TestStackPctPanel:
 
 
 class TestEmitLatexPanel:
-    """The LaTeX export is two checkboxes on every visualize node — figure on by default,
-    booktabs table off — and BOTH must ride out to the render request, or the board draws a
+    """The LaTeX export is two checkboxes on every visualize node — figure and booktabs table
+    both on by default — and BOTH must ride out to the render request, or the board draws a
     chart but silently never files the .txt the user's paper needs."""
 
     def test_the_panel_offers_both_export_checkboxes(self, panels):
@@ -132,7 +132,7 @@ class TestEmitLatexPanel:
     def test_the_defaults_reach_the_request(self, panels):
         got = panels['latex']
         assert got['bodyEmitLatex'] is True, f'figure should default on, saw {got["bodyEmitLatex"]!r}'
-        assert got['bodyEmitTable'] is False, f'table should default off, saw {got["bodyEmitTable"]!r}'
+        assert got['bodyEmitTable'] is True, f'table should default on, saw {got["bodyEmitTable"]!r}'
 
 
 class TestSwitchInTheRequestBody:

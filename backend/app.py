@@ -3931,10 +3931,11 @@ def _execute_visualize_node(node: dict, current_input: list):
         # failure, the first of them undiagnosable because it named no node.
         return {'error': str(e)}
 
-    # emit_latex defaults ON: a chart a user drops on the canvas also owes them the figure
-    # source, since the point of the whole node is a paper-quality figure. The table is opt-in.
+    # Both LaTeX add-ons default ON: a chart a user drops on the canvas also owes them the
+    # figure source and the three-line table, since the point of the whole node is a
+    # paper-ready figure. Either box can be turned off on its own.
     emit_latex = as_bool(params.get('emit_latex', True))
-    emit_latex_table = as_bool(params.get('emit_latex_table', False))
+    emit_latex_table = as_bool(params.get('emit_latex_table', True))
     if emit_latex or emit_latex_table:
         spec.update(
             _latex_outputs(
@@ -5291,7 +5292,7 @@ def render_visualization():
     tokenize = as_bool(data.get('tokenize'))
     wordcloud_style = data.get('wordcloud_style')
     emit_latex = as_bool(data.get('emit_latex', True))
-    emit_latex_table = as_bool(data.get('emit_latex_table', False))
+    emit_latex_table = as_bool(data.get('emit_latex_table', True))
     latex_extra = {}
     if emit_latex or emit_latex_table:
         # Computed outside the render ``try`` because ``_latex_outputs`` guards each branch itself:

@@ -344,13 +344,23 @@ class TestVisualizeRender:
         dl = client.get('/api/exports/download?name=ltxfig.txt')
         assert dl.status_code == 200
 
-    def test_the_three_line_table_is_a_separate_opt_in(self, client, paste, data_root):
+    def test_the_three_line_table_can_be_turned_off_on_its_own(self, client, paste, data_root):
+        """Both add-ons default ON now, so an off-box is what proves the switch, not its absence:
+        untick the table and only the figure files, while the figure stays on."""
         dataset_id = paste(VIZ_RECORDS, name='ltxtab.csv')
         off = client.post(
             '/api/visualize/render',
-            json={'dataset_id': dataset_id, 'chart_type': 'bar', 'x_field': 'city', 'y_field': 'likes', 'agg': 'sum'},
+            json={
+                'dataset_id': dataset_id,
+                'chart_type': 'bar',
+                'x_field': 'city',
+                'y_field': 'likes',
+                'agg': 'sum',
+                'emit_latex_table': False,
+            },
         ).get_json()
-        assert 'latex_table' not in off, 'the table must not appear unless the box is ticked'
+        assert 'latex_table' not in off, 'the table must not appear once its box is unticked'
+        assert 'latex' in off, 'unticking the table must not drop the figure'
         on = client.post(
             '/api/visualize/render',
             json={
@@ -366,7 +376,7 @@ class TestVisualizeRender:
         assert '\\toprule' in on['latex_table'] and '\\bottomrule' in on['latex_table']
         assert (data_root / 'data' / 'exports' / 'ltxtab-表.txt').exists()
 
-    def test_turning_emit_latex_off_emits_nothing(self, client, paste):
+    def test_turning_both_latex_add_ons_off_emits_nothing(self, client, paste):
         dataset_id = paste(VIZ_RECORDS, name='ltxoff.csv')
         body = client.post(
             '/api/visualize/render',
@@ -377,9 +387,11 @@ class TestVisualizeRender:
                 'y_field': 'likes',
                 'agg': 'sum',
                 'emit_latex': False,
+                'emit_latex_table': False,
             },
         ).get_json()
         assert body['ok'] is True and 'latex' not in body and 'latex_file' not in body
+        assert 'latex_table' not in body and 'latex_table_file' not in body
 
     @pytest.mark.parametrize(
         ('spec', 'expected'),

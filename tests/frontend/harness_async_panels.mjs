@@ -207,7 +207,7 @@ async function stackCase() {
 /* ─── emit_latex: the two checkboxes the panel shows and the payload forwards ── */
 async function latexCase() {
     const w = world();
-    // No emit_latex/emit_latex_table in params: figure defaults ON, table defaults OFF.
+    // No emit_latex/emit_latex_table in params: figure and table both default ON.
     w.sandbox.canvas.nodes['lt-1'] = {
         id: 'lt-1',
         type: 'visualize',

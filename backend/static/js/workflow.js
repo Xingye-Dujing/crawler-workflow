@@ -3061,7 +3061,7 @@ function renderVisualizeSettings(nodeId, p) {
         I18n.t('settings.emitLatex') + '</label>' +
         '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + I18n.t('settings.emitLatexHint') + '</div></div>';
     html += '<div class="settings-group"><label class="settings-checkbox-label">' +
-        '<input type="checkbox" ' + (boolParam(p.emit_latex_table, false) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex_table\',this.checked)"> ' +
+        '<input type="checkbox" ' + (boolParam(p.emit_latex_table, true) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex_table\',this.checked)"> ' +
         I18n.t('settings.emitLatexTable') + '</label></div>';
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.title') + '</label>' +
         '<input class="settings-input" value="' + escapeHtml(p.title || '') + '" ' +
@@ -3175,7 +3175,7 @@ var dataNodes = {
             y_field: p.y_field, value_field: p.value_field, agg: p.agg,
             label_field: p.label_field, stack_fields: p.stack_fields,
             title: p.title, tokenize: boolParam(p.tokenize, false),
-            emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, false),
+            emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, true),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
         /* A chart always renders whatever its upstream produced — a crawl or
@@ -3624,7 +3624,7 @@ async function openChartFullscreen(nodeId) {
         y_field: p.y_field, value_field: p.value_field, agg: p.agg,
         y2_field: p.y2_field, agg2: p.agg2, annotations: p.annotations,
         label_field: p.label_field, stack_fields: p.stack_fields, title: p.title, tokenize: boolParam(p.tokenize, false),
-        emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, false),
+        emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, true),
         wordcloud_style: p.wordcloud_style || 'vibrant',
     };
     var upstream = canvas.getUpstreamNodeId(nodeId);
@@ -3963,7 +3963,7 @@ var dashboard = {
                dropped it asked the service for a stacked field and got an opaque refusal. */
             stack_fields: p.stack_fields,
             title: p.title, tokenize: boolParam(p.tokenize, false),
-            emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, false),
+            emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, true),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
         var upstream = canvas.getUpstreamNodeId(nodeId);
