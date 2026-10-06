@@ -122,6 +122,16 @@ class TestPreviewSave:
         assert case['toast']['text'].startswith(saved['catalog']['saveFailed'])
         assert 'image too large' in case['toast']['text'], 'the server reason reaches the user'
 
+    def test_a_chart_render_probe_names_its_workflow_so_a_reopened_canvas_can_redraw(self, saved):
+        """A chart is re-rendered from its upstream node's rows. Right after a run those live
+        in the server's memory; after a page refresh AND a server restart they exist only in
+        the run store, which refuses a bare node id (node-2 repeats on every canvas). The
+        render probe must carry the workflow name — the contract a table preview already kept
+        but previewVisualize did not, so a reopened canvas could not bring its figures back."""
+        case = saved['preview_identity']
+        assert case['node_id'] == 'src-1', 'the chart asks for its upstream node'
+        assert case['workflow_name'] == '情感演化分析', 'a render probe without the name finds no rows after a restart'
+
 
 class TestDashboardSave:
     def test_an_echarts_cell_saves_its_own_picture_under_its_own_title(self, saved):
@@ -148,6 +158,9 @@ class TestDashboardSave:
         assert render['agg2'] == 'mean'
         assert render['annotations'] == '2022-01-24=本阶段峰3439条', 'a board without event lines is a different figure'
         assert render['node_id'] == 'src-1', 'the rows come from the upstream node of the chart'
+        assert 'workflow_name' in render, (
+            'a rebuilt board must name the workflow so a cell still resolves rows after a restart'
+        )
 
     def test_rebuilding_the_board_twice_keeps_one_live_cell_and_saves_that_one(self, saved):
         """A refresh replaces the grid; the bookkeeping must follow it, not accumulate.
@@ -192,6 +205,9 @@ class TestChartFullscreen:
         assert case['renders'] == 1, 'nothing on screen yet, so the window must ask the server once'
         assert case['payload']['label_field'] == '主题概括', 'a dropped label_field redraws the Topic-1 code'
         assert case['payload']['node_id'] == 'src-1', 'the rows come from the chart node upstream'
+        assert 'workflow_name' in case['payload'], (
+            'a re-fetched fullscreen figure needs the workflow identity to find rows after a restart'
+        )
         assert case['fsAlive'] is True
 
     def test_the_open_preview_can_be_fullscreened_by_its_own_node_id(self, saved):

@@ -634,6 +634,13 @@ class TestChromeOfThePageItself:
         body = body[: body.index('\n}\n')]
         assert 'label_column' not in body, 'the browser is choosing the label column again'
         assert 'model_type = modelType' in body, 'the train call lost the model it was asked for'
+        # The training rows may live only in the run store after a refresh + server restart,
+        # which refuses a bare node id — so the train probe must name the workflow too.
+        head = body[: body.index('/api/analysis/train')]
+        assert 'payload.node_id = upstream;' in head
+        assert 'payload.workflow_name = workflow.runName();' in head, (
+            'a train probe without the workflow name cannot find its labels after a restart'
+        )
         # …and the backend really does answer it per model type, so nothing is unsent by accident.
         import app as app_module
 

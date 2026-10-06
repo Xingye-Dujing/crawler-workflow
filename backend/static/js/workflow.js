@@ -3165,6 +3165,12 @@ var dataNodes = {
             return;
         }
         payload.node_id = upstream;
+        /* The chart is re-rendered from the upstream node's rows. Right after a run
+           those are still in the server's memory; after a page refresh AND a server
+           restart they only exist in the run store, which is addressed by workflow —
+           so send the same identity `previewData` sends, or a chart cannot be brought
+           back once the process that ran it is gone. */
+        payload.workflow_name = workflow.runName();
         /* Show panel with loading spinner immediately */
         var panel = document.getElementById('chart-preview-panel');
         panel.classList.add('open');
@@ -3249,6 +3255,10 @@ async function trainMLModel(nodeId, modelType) {
         return;
     }
     payload.node_id = upstream;
+    // The rows to train on may live only in the run store (a page refresh and a server
+    // restart), and that store refuses a bare node id — name the workflow so training can
+    // still find the labels after the process that produced them is gone.
+    payload.workflow_name = workflow.runName();
     payload.model_type = modelType;
     payload.text_column = node.params.text_column || '正文';
     /* Which column holds the labels is the BACKEND's answer, not this file's. It used to be
@@ -3520,6 +3530,10 @@ async function openChartFullscreen(nodeId) {
     var upstream = canvas.getUpstreamNodeId(nodeId);
     if (!upstream) { showToast(I18n.t('dashboard.noData')); return; }
     payload.node_id = upstream;
+    // Re-fetched from the server when this node was never drawn on this page (a reopened
+    // canvas): name the workflow so the upstream rows resolve from the run store, not just
+    // from a live process that may have restarted.
+    payload.workflow_name = workflow.runName();
     try {
         var resp = await fetch('/api/visualize/render', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -3854,6 +3868,10 @@ var dashboard = {
             return;
         }
         payload.node_id = upstream;
+        // A rebuilt board re-renders every cell from the server; name the workflow so a
+        // cell still resolves its upstream rows after a page refresh AND a server restart,
+        // when the in-memory result that first painted it is gone.
+        payload.workflow_name = workflow.runName();
 
         try {
             var resp = await fetch('/api/visualize/render', {

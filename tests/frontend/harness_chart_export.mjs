@@ -351,12 +351,31 @@ async function fullscreenSaveCase() {
     return { filename, name: post && post.body ? post.body.name : null, image: post && post.body ? String(post.body.image) : null };
 }
 
+/* The chart render probe must carry the workflow identity. Right after a run the rows are
+   in the server's memory, but after a page refresh AND a server restart the upstream table
+   lives only in the run store, which refuses a bare node id (node-2 repeats on every canvas) —
+   so a chart can only be brought back when the request names its workflow, exactly like a
+   table preview does. */
+async function previewIdentityCase() {
+    const w = world();
+    w.x.canvas.nodes['nm-1'] = { id: 'nm-1', type: 'name', params: { workflow_name: '情感演化分析' } };
+    addChart(w, 'v-1', '图31 发酵期情感', { chart_type: 'bar', engine: 'echarts', x_field: '城市' });
+    await w.x.dataNodes.previewVisualize('v-1');
+    await ticks();
+    const last = renders(w).slice(-1)[0] || {};
+    return {
+        node_id: (last.body || {}).node_id || null,
+        workflow_name: (last.body || {}).workflow_name || null,
+    };
+}
+
 out.fullscreen_from_board_option = await fullscreenFromBoardOptionCase();
 out.fullscreen_from_board_image = await fullscreenFromBoardImageCase();
 out.fullscreen_refetch = await fullscreenRefetchCase();
 out.fullscreen_from_preview = await fullscreenFromPreviewCase();
 out.fullscreen_close_disposes = await fullscreenCloseCase();
 out.fullscreen_save_named_after_title = await fullscreenSaveCase();
+out.preview_identity = await previewIdentityCase();
 
 /* Wording is asked of the loaded catalog in the sandbox's own language, so a renamed
    key fails here instead of silently changing what the assertions compare. */
