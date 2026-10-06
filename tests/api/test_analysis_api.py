@@ -286,6 +286,41 @@ class TestVisualizeRender:
         assert option['series'][0]['type'] == 'pie'
         assert {entry['name'] for entry in option['series'][0]['data']} == {'Haikou', 'Sanya'}
 
+    def test_the_share_chart_normalises_each_period_and_is_plumbed_end_to_end(self, client, paste):
+        """`stack_fields` is a NEW render payload key; the service draws it (pinned in
+        test_visualization), but only an endpoint test proves app.py actually forwards it,
+        so a dropped plumb is not a silent empty figure the panel believes it asked for."""
+        shares = [
+            {'period': '发酵期', 'pos': 10, 'neu': 20, 'neg': 70},
+            {'period': '爆发期', 'pos': 30, 'neu': 40, 'neg': 30},
+        ]
+        dataset_id = paste(shares, name='shares.csv')
+        option = client.post(
+            '/api/visualize/render',
+            json={
+                'dataset_id': dataset_id,
+                'chart_type': 'stack_pct',
+                'x_field': 'period',
+                'stack_fields': 'pos,neu,neg',
+            },
+        ).get_json()['option']
+        assert len(option['series']) == 3
+        assert option['yAxis']['max'] == 100
+        # Each period adds to 100%, and the axis keeps the table's own phase order.
+        assert option['xAxis']['data'] == ['发酵期', '爆发期']
+        for i in range(2):
+            total = sum(series['data'][i] for series in option['series'])
+            assert round(total, 1) == 100.0, total
+
+    def test_a_share_chart_without_its_columns_is_a_readable_400(self, client, paste):
+        dataset_id = paste(VIZ_RECORDS, name='no-stack.csv')
+        response = client.post(
+            '/api/visualize/render',
+            json={'dataset_id': dataset_id, 'chart_type': 'stack_pct', 'x_field': 'city'},
+        )
+        assert response.status_code == 400
+        assert 'stacked fields' in response.get_json()['error']
+
     @pytest.mark.parametrize(
         ('spec', 'expected'),
         [

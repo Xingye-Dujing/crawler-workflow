@@ -2879,7 +2879,7 @@ function renderAnalysisSettings(nodeId, p) {
 }
 
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'dual_line', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'network', 'wordcloud', 'map'];
+var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'network', 'wordcloud', 'map'];
 
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
@@ -2896,7 +2896,7 @@ var CHART_X_LABEL_KEY = {
 var CHART_Y_LABEL_KEY = { heatmap: 'settings.yFieldCat2', sankey: 'settings.targetField', network: 'settings.targetField' };
 var CHARTS_WITH_Y_AS_CATEGORY = ['heatmap', 'sankey', 'network'];
 var CHARTS_WITH_VALUE_FIELD = ['heatmap', 'sankey', 'network', 'wordcloud', 'map', 'topic_map'];
-var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map'].concat(CHARTS_WITH_Y_AS_CATEGORY);
+var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct'].concat(CHARTS_WITH_Y_AS_CATEGORY);
 // The right-hand scale, which only 双轴折线 asks for. Kept equal to the backend's
 // ECHARTS_ONLY_TYPES by tests/unit/test_visualization.py, because the renderer that cannot
 // draw two axes refuses by name and the panel must not offer it silently.
@@ -2988,6 +2988,15 @@ function renderVisualizeSettings(nodeId, p) {
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t(CHART_X_LABEL_KEY[ct] || 'settings.xField') + '</label>' +
         '<input class="settings-input" value="' + escapeHtml(p.x_field || '') + '" placeholder="category / numeric column" ' +
         'onchange="updateParam(\'' + nodeId + '\',\'x_field\',this.value)"></div>';
+    if (ct === 'stack_pct') {
+        // A 100%-stacked share takes its segments from a LIST of columns, not one y: each period
+        // is normalised to 100%, so the box wants the positive/neutral/negative (or tendency,
+        // emotion, …) columns that the analysis step just wrote.
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.stackFields') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.stack_fields || '') + '" placeholder="积极占比, 中性占比, 消极占比" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'stack_fields\',this.value)"></div>' +
+            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.stackFields') + '</div>';
+    }
     if (CHARTS_WITH_Y_AS_CATEGORY.indexOf(ct) >= 0) {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t(CHART_Y_LABEL_KEY[ct]) + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.y_field || '') + '" ' +
@@ -3155,7 +3164,7 @@ var dataNodes = {
         var payload = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
             y_field: p.y_field, value_field: p.value_field, agg: p.agg,
-            label_field: p.label_field,
+            label_field: p.label_field, stack_fields: p.stack_fields,
             title: p.title, tokenize: boolParam(p.tokenize, false),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
@@ -3526,7 +3535,7 @@ async function openChartFullscreen(nodeId) {
         chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
         y_field: p.y_field, value_field: p.value_field, agg: p.agg,
         y2_field: p.y2_field, agg2: p.agg2, annotations: p.annotations,
-        label_field: p.label_field, title: p.title, tokenize: boolParam(p.tokenize, false),
+        label_field: p.label_field, stack_fields: p.stack_fields, title: p.title, tokenize: boolParam(p.tokenize, false),
         wordcloud_style: p.wordcloud_style || 'vibrant',
     };
     var upstream = canvas.getUpstreamNodeId(nodeId);
@@ -3861,6 +3870,9 @@ var dashboard = {
             /* The 主题距离图 / 流向图 read their Chinese bubble name from this field; a board
                that dropped it silently fell back to the Topic-1 code the user replaced. */
             label_field: p.label_field,
+            /* The 占比堆叠图 draws its segments from a column list, not one y; a board that
+               dropped it asked the service for a stacked field and got an opaque refusal. */
+            stack_fields: p.stack_fields,
             title: p.title, tokenize: boolParam(p.tokenize, false),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };

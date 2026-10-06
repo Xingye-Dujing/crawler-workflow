@@ -178,7 +178,34 @@ async function modelCase(provider, redrawMidFlight, current) {
     };
 }
 
+/* ─── stack_pct: the share chart the panel offers and the board forwards ── */
+async function stackCase() {
+    const w = world();
+    w.sandbox.canvas.nodes['st-1'] = {
+        id: 'st-1',
+        type: 'visualize',
+        title: '占比堆叠图',
+        params: { chart_type: 'stack_pct', engine: 'echarts', x_field: '阶段', stack_fields: '积极占比, 中性占比, 消极占比' },
+    };
+    w.x.openSettings('st-1');
+    const content = String(w.sandbox.document.getElementById('settings-content').innerHTML || '');
+    w.x.dashboard.open();
+    await ticks(3);
+    for (const p of w.pending) p.answer();
+    await ticks();
+    const render = w.pending.map((p) => p.body).find((b) => b && b.chart_type) || {};
+    return {
+        /* The panel is generated from CHART_TYPES, so the option must be there — and the
+           stack_fields box is the one input this type needs beyond the x axis. */
+        offersType: content.indexOf('chart.stack_pct') >= 0,
+        hasStackInput: content.indexOf('stack_fields') >= 0,
+        bodyChartType: render.chart_type,
+        bodyStackFields: render.stack_fields,
+    };
+}
+
 const resume = { calm: await resumeCase(false), raced: await resumeCase(true) };
+const stack = await stackCase();
 const dash = { calm: await dashCase(false, 'false'), raced: await dashCase(true, 'false') };
 const model = {
     ollamaCalm: await modelCase('ollama', false, ''),
@@ -197,4 +224,4 @@ for (const spelling of spellings) {
     sent[JSON.stringify(spelling)] = one.sent;
 }
 
-process.stdout.write(JSON.stringify({ resume, dash, model, sent }));
+process.stdout.write(JSON.stringify({ resume, stack, dash, model, sent }));

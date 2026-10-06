@@ -3797,6 +3797,9 @@ def _execute_visualize_node(node: dict, current_input: list):
     # The column that NAMES each bubble in the intertopic map (the topic label). Read like
     # ``value_field``: the builder owns the refusal when a type needs it and does not have it.
     label_field = params.get('label_field')
+    # The columns a 100% stacked-share figure lays on top of each other (e.g. the sentiment
+    # evolution's positive_pct/neutral_pct/negative_pct). Forwarded to both engines.
+    stack_fields = params.get('stack_fields')
     # Dated event markers for 折线/柱状/双轴折线. Forwarded to both engines: the matplotlib
     # renderer refuses it by name, which is the honest answer when a figure would lose its dates.
     annotations = params.get('annotations')
@@ -3824,6 +3827,7 @@ def _execute_visualize_node(node: dict, current_input: list):
                 agg=agg,
                 title=title,
                 annotations=annotations,
+                stack_fields=stack_fields,
             )
             spec = {'engine': 'matplotlib', 'image': image}
         else:
@@ -3842,6 +3846,7 @@ def _execute_visualize_node(node: dict, current_input: list):
                 label_field=label_field,
                 annotations=annotations,
                 title=title,
+                stack_fields=stack_fields,
                 **kw,
             )
             spec = {'engine': 'echarts', 'option': option}
@@ -5179,6 +5184,7 @@ def render_visualization():
     y2_field = data.get('y2_field')
     agg2_field = data.get('agg2')
     label_field = data.get('label_field')
+    stack_fields = data.get('stack_fields')
     annotations = data.get('annotations')
     title = data.get('title', '')
     tokenize = as_bool(data.get('tokenize'))
@@ -5196,6 +5202,7 @@ def render_visualization():
                 agg=agg,
                 title=title,
                 annotations=annotations,
+                stack_fields=stack_fields,
             )
             return jsonify({'ok': True, 'engine': 'matplotlib', 'image': image})
         kw = {'tokenize': tokenize}
@@ -5211,6 +5218,7 @@ def render_visualization():
             y2=y2_field,
             agg2=agg2_field,
             label_field=label_field,
+            stack_fields=stack_fields,
             annotations=annotations,
             title=title,
             **kw,

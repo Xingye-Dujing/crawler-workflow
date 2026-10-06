@@ -49,6 +49,7 @@ CHART_TYPES = (
     'bar',
     'line',
     'dual_line',
+    'stack_pct',
     'topic_map',
     'topic_terms',
     'pie',
@@ -215,6 +216,9 @@ _CHART_COL_TOKENS = {
     'total': 'chart.col.total',
     'sentiment_index': 'chart.col.sentiment_index',
     'sentiment': 'chart.col.sentiment',
+    'positive_pct': 'chart.col.positive_pct',
+    'neutral_pct': 'chart.col.neutral_pct',
+    'negative_pct': 'chart.col.negative_pct',
     'emotion': 'chart.col.emotion',
     'tendency': 'chart.col.tendency',
     'confidence': 'chart.col.confidence',
@@ -493,6 +497,16 @@ class VisualizationService:
                     axis['nameLocation'] = axis.get('nameLocation') or 'middle'
                     axis['nameGap'] = axis.get('nameGap') or (28 if axis_key == 'yAxis' else 34)
                     axis['nameTextStyle'] = {**(axis.get('nameTextStyle') or {}), 'fontFamily': PRINT_FONT}
+                # A paper figure has no graph paper and no floating box: gridlines off, and the
+                # axis lines that stay are the two the reader measures against, in dark ink. The
+                # per-type builders still carry the old dark-theme UI defaults (light labels,
+                # dashed splitLine); this pass is what makes every figure read as a 图, not a board.
+                axis.setdefault('splitLine', {})['show'] = False
+                axis.setdefault('axisLine', {})['show'] = True
+                axis['axisLine'].setdefault('lineStyle', {})['color'] = '#666'
+                axis.setdefault('axisTick', {})['show'] = True
+                axis['axisTick'].setdefault('lineStyle', {})['color'] = '#666'
+                label['color'] = '#333'
 
         grid = option.get('grid')
         if isinstance(grid, dict):
@@ -1211,6 +1225,43 @@ class VisualizationService:
                 base['series'][0]['markLine'] = _annotation_lines(_parse_annotations(annotations), labels, x)
             return base
 
+        # ── 100% stacked share (any independent distribution over a category axis) ──
+        if chart_type == 'stack_pct':
+            stack_fields = [
+                s.strip() for s in str(kwargs.get('stack_fields') or '').replace('，', ',').split(',') if s.strip()
+            ]
+            if not x:
+                raise ChartConfigError('stack_pct chart requires a category field (x)')
+            if not stack_fields:
+                raise ChartConfigError('stack_pct chart requires stacked fields (stack_fields)')
+            # One message shape for a missing column across every chart type, so a wrong field
+            # name reads the same whether it is the axis or one of the stacked shares.
+            cls._require_columns(df, x, *stack_fields)
+            grouped = df.groupby(x, sort=False)
+            keys = list(grouped.groups.keys())
+            labels = [str(k) for k in keys]
+            cols = {f: grouped[f].sum().reindex(keys).fillna(0).tolist() for f in stack_fields}
+            # Each period is normalised to 100%, so the figure reads as shares whether the
+            # source columns are already percentages or raw counts.
+            totals = [sum(cols[f][i] for f in stack_fields) for i in range(len(labels))]
+            series = [
+                {
+                    'name': _localize_label(f),
+                    'type': 'bar',
+                    'stack': 'total',
+                    'data': [round(cols[f][i] / totals[i] * 100, 2) if totals[i] else 0.0 for i in range(len(labels))],
+                    'barMaxWidth': 60,
+                    'itemStyle': {'color': color[idx % len(color)]},
+                }
+                for idx, f in enumerate(stack_fields)
+            ]
+            base['grid'] = dict(_GRID)
+            base['legend'] = {'data': [s['name'] for s in series], 'top': 28, 'textStyle': _TEXT_STYLE}
+            base['xAxis'] = {'type': 'category', 'data': labels}
+            base['yAxis'] = {'type': 'value', 'name': t('chart.col.share'), 'max': 100}
+            base['series'] = series
+            return base
+
         # ── Bar / Line ──
         if not x:
             raise ChartConfigError(f'{chart_type} chart requires a category field (x)')
@@ -1390,6 +1441,7 @@ class VisualizationService:
         agg: str = 'sum',
         title: str = '',
         annotations: str = '',
+        stack_fields: str = '',
     ) -> str:
         """Render the chart with matplotlib and return a base64 PNG data URI."""
 
@@ -1412,7 +1464,7 @@ class VisualizationService:
         if chart_type in ('scatter', 'heatmap'):
             if not x or not y:
                 raise ChartConfigError(f'{chart_type} chart requires both x and y fields')
-        elif chart_type in ('pie', 'histogram', 'box', 'line', 'bar') and not x:
+        elif chart_type in ('pie', 'histogram', 'box', 'line', 'bar', 'stack_pct') and not x:
             raise ChartConfigError(f'{chart_type} chart requires a field (x)')
         # Every branch below indexes the frame by the configured field names.
         cls._require_columns(df, x, y)
@@ -1450,10 +1502,43 @@ class VisualizationService:
                 labels, values = cls._aggregate(df, x, y, agg)
                 ax.plot(labels, values, marker='o')
                 ax.tick_params(axis='x', rotation=45)
+            elif chart_type == 'stack_pct':
+                fields = [s.strip() for s in str(stack_fields or '').replace('，', ',').split(',') if s.strip()]
+                if not fields:
+                    raise ChartConfigError('stack_pct chart requires stacked fields (stack_fields)')
+                cls._require_columns(df, *fields)
+                grouped = df.groupby(x, sort=False)
+                keys = list(grouped.groups.keys())
+                cats = [str(k) for k in keys]
+                cols = {f: grouped[f].sum().reindex(keys).fillna(0).tolist() for f in fields}
+                totals = [sum(cols[f][i] for f in fields) for i in range(len(cats))]
+                bottoms = [0.0] * len(cats)
+                for idx, f in enumerate(fields):
+                    shares = [cols[f][i] / totals[i] * 100 if totals[i] else 0.0 for i in range(len(cats))]
+                    ax.bar(
+                        cats,
+                        shares,
+                        bottom=bottoms,
+                        label=_localize_label(f),
+                        color=CATEGORY_COLORS[idx % len(CATEGORY_COLORS)],
+                    )
+                    bottoms = [b + s for b, s in zip(bottoms, shares, strict=True)]
+                ax.set_ylabel(t('chart.col.share'))
+                ax.set_ylim(0, 100)
+                ax.legend(frameon=False, fontsize=8, ncol=len(fields))
+                ax.tick_params(axis='x', rotation=45)
             else:  # bar
                 labels, values = cls._aggregate(df, x, y, agg)
                 ax.bar(labels, values)
                 ax.tick_params(axis='x', rotation=45)
+
+            if chart_type not in ('pie', 'heatmap'):
+                # A paper figure keeps the two axes the reader measures against and drops the
+                # box: no top/right spine, dark left/bottom, no gridlines.
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                for _spine in ('left', 'bottom'):
+                    ax.spines[_spine].set_color('#666')
 
             if title:
                 ax.set_title(title)

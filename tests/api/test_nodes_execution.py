@@ -160,6 +160,41 @@ class TestVisualizeNode:
         assert spec and spec['engine'] == 'echarts', 'the finished chart spec must reach the browser'
         assert 'series' in spec['option'] and 'xAxis' in spec['option']
 
+    def test_the_share_node_reads_its_stacked_columns(self, client, app_module, paste):
+        """`stack_fields` is read from the node params on the EXECUTOR path too, not only on
+        the live render endpoint — a plumb dropped here is a run whose stacked node fails with
+        no share chart, while the preview button (which uses the endpoint) still works."""
+        ds = _upload(client, paste)
+        workflow = _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 4}),
+                _node('node-2', 'visualize', {'chart_type': 'stack_pct', 'x_field': '城市', 'stack_fields': '分数'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'viz-share'})
+        assert _wait(app_module)
+        spec = client.get('/api/workflow/status').get_json()['chart_results'].get('node-2')
+        assert spec and spec['engine'] == 'echarts', spec
+        # One column listed → one full-height segment; the yAxis is the capped share scale.
+        assert len(spec['option']['series']) == 1
+        assert spec['option']['yAxis']['max'] == 100
+
+    def test_a_share_node_that_lists_no_columns_refuses_by_name(self, client, app_module, paste):
+        ds = _upload(client, paste)
+        workflow = _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 4}),
+                _node('node-2', 'visualize', {'chart_type': 'stack_pct', 'x_field': '城市'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'viz-nostack'})
+        assert _wait(app_module)
+        spec = app_module.execution_state['results'].get('node-2')
+        assert isinstance(spec, dict) and 'error' in spec and 'stacked fields' in str(spec['error'])
+        assert 'node-2' not in client.get('/api/workflow/status').get_json()['chart_results']
+
     def test_a_bad_field_is_reported_not_as_a_crash(self, client, app_module, paste):
         ds = _upload(client, paste)
         workflow = _wf(

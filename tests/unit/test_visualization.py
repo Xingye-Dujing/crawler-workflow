@@ -39,6 +39,7 @@ USABLE = {
     'bar': {'x': '作者', 'y': '点赞'},
     'line': {'x': '作者', 'y': '点赞'},
     'dual_line': {'x': '作者', 'y': '点赞', 'y2': '阅读'},
+    'stack_pct': {'x': '作者', 'stack_fields': '点赞,阅读'},
     'topic_map': {'x': '点赞', 'y': '阅读'},
     'topic_terms': {'x': '作者', 'y': '点赞', 'y2': '阅读'},
     'pie': {'x': '作者', 'y': '点赞'},
@@ -439,6 +440,8 @@ class TestOptionJsonSafety:
         # one they are a refused spec (pinned in TestConfigErrors), not a chart with a blank
         # second series.
         extra = {'y2': 'v'} if chart_type in ('dual_line', 'topic_terms') else {}
+        if chart_type == 'stack_pct':
+            extra = {'stack_fields': 'v'}
         option = V.to_echarts_option(frame, chart_type, x='g', y='v', value_field='v', **extra)
         assert json.dumps(option, allow_nan=False)
 
@@ -515,6 +518,102 @@ class TestOptionJsonSafety:
     def test_tooltip_trigger_follows_the_chart_kind(self, df):
         assert V.to_echarts_option(df, 'bar', x='作者')['tooltip']['trigger'] == 'axis'
         assert V.to_echarts_option(df, 'pie', x='作者')['tooltip']['trigger'] == 'item'
+
+
+# ─── 100% stacked share (stack_pct) ───────────────────────────────────
+
+
+class TestStackPct:
+    """Every category is normalised to 100%, so the figure reads as shares of one whole.
+
+    The chart is the one place a 情感演化 table (positive_pct / neutral_pct / negative_pct) becomes
+    a picture, and the whole point is the CONTRAST between periods — so a period that does not add
+    up to 100, an axis that alphabetises the phases, or a segment that keeps its English column
+    name each breaks the reading, not just the looks.
+    """
+
+    @staticmethod
+    def _periods():
+        return pd.DataFrame(
+            {
+                '阶段': ['发酵期', '爆发期', '衰退期'],
+                '积极': [10, 30, 20],
+                '中性': [20, 40, 30],
+                '消极': [70, 30, 50],
+            }
+        )
+
+    def test_each_period_normalises_to_a_hundred_percent(self):
+        option = V.to_echarts_option(self._periods(), 'stack_pct', x='阶段', stack_fields='积极,中性,消极')
+        # Three series, one per stacked column, all on the same stack.
+        assert len(option['series']) == 3
+        assert all(s['stack'] == 'total' for s in option['series'])
+        for i in range(3):
+            shares = [s['data'][i] for s in option['series']]
+            assert round(sum(shares), 1) == 100.0, f'{i} period does not add up: {shares}'
+
+    def test_raw_counts_are_shown_as_shares_not_heights(self):
+        # 1 of 4, 2 of 4, 3 of 4 — the column is a raw count, the figure must be a percentage.
+        frame = pd.DataFrame({'g': ['a', 'b', 'c'], 'pos': [1, 2, 3], 'neg': [3, 2, 1]})
+        option = V.to_echarts_option(frame, 'stack_pct', x='g', stack_fields='pos,neg')
+        assert option['series'][0]['data'] == [25.0, 50.0, 75.0]
+
+    def test_the_phases_keep_the_tables_own_order(self):
+        # A phase table arrives in lifecycle order; alphabetising the axis would reorder the story.
+        option = V.to_echarts_option(self._periods(), 'stack_pct', x='阶段', stack_fields='积极,中性,消极')
+        assert option['xAxis']['data'] == ['发酵期', '爆发期', '衰退期']
+
+    def test_the_y_axis_is_a_capped_share_scale(self):
+        option = V.to_echarts_option(self._periods(), 'stack_pct', x='阶段', stack_fields='积极,中性,消极')
+        assert option['yAxis']['max'] == 100
+        assert option['yAxis']['name']
+
+    def test_a_period_with_nothing_to_show_is_zero_not_a_crash(self):
+        frame = pd.DataFrame({'g': ['a', 'b'], 'pos': [0, 2], 'neg': [0, 2]})
+        option = V.to_echarts_option(frame, 'stack_pct', x='g', stack_fields='pos,neg')
+        # Period 'a' sums to zero: shares become 0.0 rather than a division by zero / NaN token.
+        assert option['series'][0]['data'][0] == 0.0
+        assert json.dumps(option, allow_nan=False)
+
+    def test_a_fullwidth_comma_in_the_field_box_is_understood(self):
+        # Users paste Chinese separators; the box must split on ， as well as ,.
+        option = V.to_echarts_option(self._periods(), 'stack_pct', x='阶段', stack_fields='积极，中性，消极')
+        assert len(option['series']) == 3
+
+    def test_the_segment_name_is_the_localised_column(self):
+        from i18n import set_lang
+
+        set_lang('zh')
+        frame = pd.DataFrame(
+            {'阶段': ['a', 'b'], 'positive_pct': [1, 2], 'neutral_pct': [2, 1], 'negative_pct': [3, 3]}
+        )
+        option = V.to_echarts_option(frame, 'stack_pct', x='阶段', stack_fields='positive_pct,neutral_pct,negative_pct')
+        assert [s['name'] for s in option['series']] == ['积极占比', '中性占比', '消极占比']
+
+    def test_the_axis_or_field_that_is_not_given_is_refused_by_name(self):
+        with pytest.raises(ChartConfigError, match='requires a category field'):
+            V.to_echarts_option(self._periods(), 'stack_pct', stack_fields='积极')
+        with pytest.raises(ChartConfigError, match='requires stacked fields'):
+            V.to_echarts_option(self._periods(), 'stack_pct', x='阶段')
+
+    def test_a_stacked_column_that_is_not_in_the_data_is_reported(self):
+        with pytest.raises(ChartConfigError, match='Field not found in the data'):
+            V.to_echarts_option(self._periods(), 'stack_pct', x='阶段', stack_fields='积极,不存在')
+
+    def test_the_matplotlib_renderer_draws_the_same_share(self):
+        url = V.render_image(self._periods(), 'stack_pct', x='阶段', stack_fields='积极,中性,消极')
+        assert url.startswith('data:image/png;base64,')
+        assert base64.b64decode(url.split(',', 1)[1])[:8] == b'\x89PNG\r\n\x1a\n'
+
+    def test_it_carries_the_paper_style_like_every_other_figure(self):
+        # The 文科论文 pass (_print_style) runs over all options; a share chart is no exception —
+        # no graph paper behind the bars, and the two axes that stay are drawn in ink.
+        option = V.to_echarts_option(self._periods(), 'stack_pct', x='阶段', stack_fields='积极,中性,消极')
+        for axis_key in ('xAxis', 'yAxis'):
+            axis = option[axis_key]
+            assert axis['splitLine']['show'] is False
+            assert axis['axisLine']['show'] is True
+            assert axis['axisLine']['lineStyle']['color'] == '#666'
 
 
 # ─── aggregation semantics ─────────────────────────────────────────────
@@ -685,7 +784,13 @@ class TestConfigErrors:
 class TestRenderImage:
     @pytest.mark.parametrize('chart_type', [c for c in CHART_TYPES if c not in ECHARTS_ONLY_TYPES])
     def test_png_data_url_is_produced(self, df, chart_type):
-        url = V.render_image(df, chart_type, x=USABLE[chart_type].get('x'), y=USABLE[chart_type].get('y'))
+        url = V.render_image(
+            df,
+            chart_type,
+            x=USABLE[chart_type].get('x'),
+            y=USABLE[chart_type].get('y'),
+            stack_fields=USABLE[chart_type].get('stack_fields'),
+        )
         assert url.startswith('data:image/png;base64,')
         payload = base64.b64decode(url.split(',', 1)[1])
         assert payload[:8] == b'\x89PNG\r\n\x1a\n'  # a real PNG; pixels are not compared

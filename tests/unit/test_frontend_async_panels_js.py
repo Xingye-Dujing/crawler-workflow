@@ -104,6 +104,21 @@ class TestDashboardCells:
         assert raced['instances'] == 0, 'the instance was kept for a cell that no longer exists'
 
 
+class TestStackPctPanel:
+    """The 占比堆叠图 is generated like any other type — the board must offer it, draw its
+    one extra box (the stacked column list), and forward that list, or the cell asks the
+    service for a stacked field it never sent and the figure is an opaque refusal."""
+
+    def test_the_panel_offers_the_share_chart_and_its_field_box(self, panels):
+        assert panels['stack']['offersType'] is True, 'the type select never gained 占比堆叠图'
+        assert panels['stack']['hasStackInput'] is True, 'selecting it drew no stack_fields input'
+
+    def test_the_board_forwards_the_stacked_columns(self, panels):
+        sent = panels['stack']
+        assert sent['bodyChartType'] == 'stack_pct', sent
+        assert sent['bodyStackFields'] == '积极占比, 中性占比, 消极占比', sent
+
+
 class TestSwitchInTheRequestBody:
     """What the chart request carries for each spelling of the tokenize box."""
 
