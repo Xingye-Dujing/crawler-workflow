@@ -56,6 +56,7 @@ from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD,
 from services.execution_history import ExecutionHistoryService
 from services.exporter import DataExporter, UnsupportedFormatError
 from services.housekeeping import Housekeeping
+from services.latex_charts import LatexChartService
 from services.run_store import (
     NODE_DONE,
     NODE_FAILED,
@@ -3775,6 +3776,80 @@ def _execute_tokenize_node(node: dict, current_input: list):
     return result_df.to_dict('records')
 
 
+def _write_latex_export(base: str, content: str, suffix: str) -> str:
+    """File a LaTeX source as ``<base><suffix>.txt`` under EXPORT_DIR; return the stored name.
+
+    ``.txt`` (not ``.tex``) is deliberate — the user copies the body into their paper and a plain
+    text artifact is what the exports browser and download route already serve without a new type.
+    """
+    name = sanitize_filename(f'{base or "chart"}{suffix}.txt')
+    os.makedirs(Config.EXPORT_DIR, exist_ok=True)
+    with open(os.path.join(Config.EXPORT_DIR, name), 'w', encoding='utf-8') as handle:
+        handle.write(content)
+    return name
+
+
+def _latex_outputs(
+    df,
+    *,
+    chart_type,
+    x_field,
+    y_field,
+    value_field,
+    agg,
+    y2_field,
+    agg2_field,
+    label_field,
+    stack_fields,
+    title,
+    tokenize,
+    emit_latex,
+    emit_latex_table,
+    base_name,
+    log,
+) -> dict:
+    """Generate the optional LaTeX figure / three-line table; never touch the chart on failure.
+
+    Both are add-ons to a visualize node: a broken TikZ branch must not drop the figure the node
+    already drew or fail the run, so any error is recorded as ``latex_error`` / ``latex_table_error``
+    and named on the console once (in a real run, not a transient preview).
+    """
+    out: dict = {}
+    common = dict(
+        x=x_field,
+        y=y_field,
+        value_field=value_field,
+        agg=agg,
+        label_field=label_field,
+        stack_fields=stack_fields,
+        title=title,
+        tokenize=tokenize,
+    )
+    if as_bool(emit_latex):
+        try:
+            tex = LatexChartService.to_latex_document(df, chart_type, y2=y2_field, agg2=agg2_field, **common)
+            name = _write_latex_export(base_name, tex, '')
+            out['latex'] = tex
+            out['latex_file'] = name
+            if log:
+                add_log(t('latex.done', file=name))
+        except Exception as exc:  # a LaTeX defect must not sink the chart — record and name it
+            out['latex_error'] = str(exc)
+            logger.warning(t('latex.failed', reason=str(exc)))
+    if as_bool(emit_latex_table):
+        try:
+            tex = LatexChartService.to_latex_table(df, chart_type, y2=y2_field, **common)
+            name = _write_latex_export(base_name, tex, '-表')
+            out['latex_table'] = tex
+            out['latex_table_file'] = name
+            if log:
+                add_log(t('latex.table_done', file=name))
+        except Exception as exc:
+            out['latex_table_error'] = str(exc)
+            logger.warning(t('latex.failed', reason=str(exc)))
+    return out
+
+
 def _execute_visualize_node(node: dict, current_input: list):
     """Visualize node: builds a chart from the upstream data and returns a
     chart spec dict the frontend renders — either an ECharts option or a
@@ -3855,6 +3930,32 @@ def _execute_visualize_node(node: dict, current_input: list):
         # with the node's label. Printing it here too gave two lines for one
         # failure, the first of them undiagnosable because it named no node.
         return {'error': str(e)}
+
+    # emit_latex defaults ON: a chart a user drops on the canvas also owes them the figure
+    # source, since the point of the whole node is a paper-quality figure. The table is opt-in.
+    emit_latex = as_bool(params.get('emit_latex', True))
+    emit_latex_table = as_bool(params.get('emit_latex_table', False))
+    if emit_latex or emit_latex_table:
+        spec.update(
+            _latex_outputs(
+                df,
+                chart_type=chart_type,
+                x_field=x_field,
+                y_field=y_field,
+                value_field=value_field,
+                agg=agg,
+                y2_field=y2_field,
+                agg2_field=agg2_field,
+                label_field=label_field,
+                stack_fields=stack_fields,
+                title=title,
+                tokenize=tokenize,
+                emit_latex=emit_latex,
+                emit_latex_table=emit_latex_table,
+                base_name=node.get('title') or node.get('id') or chart_type,
+                log=True,
+            )
+        )
 
     add_log(t('wf.visualize_done', chart=chart_type, engine=engine, n=len(df)))
     return spec
@@ -5189,6 +5290,30 @@ def render_visualization():
     title = data.get('title', '')
     tokenize = as_bool(data.get('tokenize'))
     wordcloud_style = data.get('wordcloud_style')
+    emit_latex = as_bool(data.get('emit_latex', True))
+    emit_latex_table = as_bool(data.get('emit_latex_table', False))
+    latex_extra = {}
+    if emit_latex or emit_latex_table:
+        # Computed outside the render ``try`` because ``_latex_outputs`` guards each branch itself:
+        # a bad TikZ body must annotate the response, not 400 a chart that already rendered.
+        latex_extra = _latex_outputs(
+            df,
+            chart_type=chart_type,
+            x_field=x_field,
+            y_field=y_field,
+            value_field=value_field,
+            agg=agg,
+            y2_field=y2_field,
+            agg2_field=agg2_field,
+            label_field=label_field,
+            stack_fields=stack_fields,
+            title=title,
+            tokenize=tokenize,
+            emit_latex=emit_latex,
+            emit_latex_table=emit_latex_table,
+            base_name=title or chart_type,
+            log=False,
+        )
 
     try:
         engine = chart_engine(data.get('engine'))
@@ -5204,7 +5329,7 @@ def render_visualization():
                 annotations=annotations,
                 stack_fields=stack_fields,
             )
-            return jsonify({'ok': True, 'engine': 'matplotlib', 'image': image})
+            return jsonify({'ok': True, 'engine': 'matplotlib', 'image': image, **latex_extra})
         kw = {'tokenize': tokenize}
         if wordcloud_style:
             kw['wordcloud_style'] = wordcloud_style
@@ -5223,7 +5348,7 @@ def render_visualization():
             title=title,
             **kw,
         )
-        return jsonify({'ok': True, 'engine': 'echarts', 'option': option})
+        return jsonify({'ok': True, 'engine': 'echarts', 'option': option, **latex_extra})
     except ChartConfigError as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
     except (ValueError, KeyError, TypeError) as e:

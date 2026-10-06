@@ -195,6 +195,27 @@ class TestVisualizeNode:
         assert isinstance(spec, dict) and 'error' in spec and 'stacked fields' in str(spec['error'])
         assert 'node-2' not in client.get('/api/workflow/status').get_json()['chart_results']
 
+    def test_a_visualize_node_also_emits_latex_and_files_a_txt(self, client, app_module, paste):
+        """emit_latex defaults on, so a running chart node answers with the source too —
+        the figure and its LaTeX are one projection of the same rows, not a separate artifact."""
+        ds = _upload(client, paste)
+        workflow = _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 4}),
+                _node(
+                    'node-2',
+                    'visualize',
+                    {'chart_type': 'bar', 'x_field': '城市', 'y_field': '分数', 'agg': 'sum', 'title': 'node图'},
+                ),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'viz-latex'})
+        assert _wait(app_module)
+        spec = client.get('/api/workflow/status').get_json()['chart_results'].get('node-2')
+        assert spec and spec['engine'] == 'echarts' and 'option' in spec, 'the chart itself must still be there'
+        assert '\\documentclass' in spec['latex'] and spec.get('latex_file'), spec
+
     def test_a_bad_field_is_reported_not_as_a_crash(self, client, app_module, paste):
         ds = _upload(client, paste)
         workflow = _wf(

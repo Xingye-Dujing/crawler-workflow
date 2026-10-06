@@ -204,8 +204,34 @@ async function stackCase() {
     };
 }
 
+/* ─── emit_latex: the two checkboxes the panel shows and the payload forwards ── */
+async function latexCase() {
+    const w = world();
+    // No emit_latex/emit_latex_table in params: figure defaults ON, table defaults OFF.
+    w.sandbox.canvas.nodes['lt-1'] = {
+        id: 'lt-1',
+        type: 'visualize',
+        title: '柱图',
+        params: { chart_type: 'bar', engine: 'echarts', x_field: '城市', y_field: '分数' },
+    };
+    w.x.openSettings('lt-1');
+    const content = String(w.sandbox.document.getElementById('settings-content').innerHTML || '');
+    w.x.dashboard.open();
+    await ticks(3);
+    for (const p of w.pending) p.answer();
+    await ticks();
+    const render = w.pending.map((p) => p.body).find((b) => b && b.chart_type) || {};
+    return {
+        panelHasEmitCheckbox: content.indexOf("'emit_latex'") >= 0 && content.indexOf('settings.emitLatex') >= 0,
+        panelHasTableCheckbox: content.indexOf("'emit_latex_table'") >= 0 && content.indexOf('settings.emitLatexTable') >= 0,
+        bodyEmitLatex: render.emit_latex,
+        bodyEmitTable: render.emit_latex_table,
+    };
+}
+
 const resume = { calm: await resumeCase(false), raced: await resumeCase(true) };
 const stack = await stackCase();
+const latex = await latexCase();
 const dash = { calm: await dashCase(false, 'false'), raced: await dashCase(true, 'false') };
 const model = {
     ollamaCalm: await modelCase('ollama', false, ''),
@@ -224,4 +250,4 @@ for (const spelling of spellings) {
     sent[JSON.stringify(spelling)] = one.sent;
 }
 
-process.stdout.write(JSON.stringify({ resume, stack, dash, model, sent }));
+process.stdout.write(JSON.stringify({ resume, stack, latex, dash, model, sent }));

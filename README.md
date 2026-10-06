@@ -701,6 +701,13 @@
 - **图表统一为文科论文印刷风格**：所有图表（两种引擎）都去掉网格线、只保留读者度量所依的左/下两条坐标轴并以墨色绘制、
   文字用衬线（Times New Roman / 宋体）；折线不再平滑、也不填色阶（两点之间没有测量过的数据，画出来等于编造），
   柱条直角、力导向图一次算定不再在屏上漂移——导出到论文里的每张图读起来是一幅「图」而非一块仪表盘。
+- **可视化节点另出 LaTeX（`emit_latex`，默认开）**：每个可视化节点除出图外，还生成一份 **可被 MiKTeX 编译的
+  LaTeX 图源码**，写为 `data/exports/<节点标题>.txt`（standalone 文档，`xelatex` 直接编译成矢量 PDF，也可把其中
+  figure 体复制进论文）。用 pgfplots + TikZ（ctex 中文、booktabs），延续论文风格：无网格、只留左下两轴、muted 配色，
+  分类过多时 X 轴自动倾斜并等距抽稀（数据点全留、可按点数还原标签）；**覆盖项目全部图型**——中国地图用省会质心
+  气泡图、词云用按词频字号的词块（无外部地理/排版数据下的近似，且全部数值另附三线表以保证「内容完整」）。
+  预览面板提供「复制 LaTeX / 下载 .txt」。另有默认关的 **`emit_latex_table` 复选框**，可再输出一份符合论文规范的
+  **booktabs 三线表** `.txt`。LaTeX 生成失败只记一条具名日志，不影响该节点照常出图。
 - **采集深度可调**：微信正文长度上限由 `Config.WECHAT_BODY_MAX_CHARS` 决定（默认 5000，
   填 0 完整保留；被截断时行尾带 `…` 标记，免得"半篇"看起来像"写完的短文"）；
   小红书数据源节点新增**每篇评论预览数**，填 `0` 真的跳过评论面板（以前即便只要 0 条，
@@ -712,7 +719,9 @@
   导出走 `DataExporter`（保存节点与手动导出共用一处），存储身份仍是原始 key
 - **评论采集前的一次性提示**：画布含评论节点时，运行前提示「部分平台/视频的评论区不发布 IP 属地，『评论地区』列可能为空」，
   避免把空列误当程序出错（纯搜索画布不打扰）
-- **仪表盘看板**：把画布上所有 Visualize 节点的图表拼在一个网格里一起查看
+- **仪表盘看板**：把画布上所有 Visualize 节点的图表拼在一个网格里一起查看；**重启后端 / 刷新页面后自动回填**——
+  只要该画布有最近一次运行，看板会按持久化的上游行把每张图重新渲染出来（图是数据行的投影，不额外写进运行库），
+  没有最近结果时格子才显示为空
 - **图表另存为图片**：图表预览面板与看板每个格子都有「存为图片」，落到 `data/exports/` 里（与导出表同处），
   文件名就是那张图的节点标题（第二张预览会把名字带走，否则「chart-preview.png」无法对应回 图23）。
   两种引擎都管：ECharts 现取 `pixelRatio=2` 的白底 PNG（透明图贴进白纸等于没图），Matplotlib 直接存节点
@@ -1246,6 +1255,7 @@ crawler_workflow/
 │   │   ├── housekeeping.py       # 运行记录/孤立文件/缓存的自动清理
 │   │   ├── data_analysis.py      # 通用数据清洗服务（Analysis 节点）
 │   │   ├── visualizer.py         # 通用可视化服务（Visualize 节点）
+│   │   ├── latex_charts.py       # 图表 → 可编译 LaTeX 图 / booktabs 三线表源码
 │   │   └── execution_history.py  # 执行历史记录（history.db）
 │   ├── utils/
 │   │   └── helpers.py            # 工具函数
@@ -1288,7 +1298,7 @@ crawler_workflow/
 | Upload（上传） | UPL | 从持久化数据集中读取 CSV/TSV/JSON/TXT/Excel 作为输入 | 是 |
 | Process（处理） | PRC | 清洗(规则正则/LLM) / 情感极性(SnowNLP/BERT/ML/LLM) / 情绪(LLM/ML/BERT，SMP2020-EWECT 六类) / 倾向(LLM/ML/BERT，六类立场·LLM蒸馏语料) / 关键词(TF-IDF/TextRank/自建语料 IDF，可选词性) / 聚类 / NER(规则/LLM，可指定实体类型) / 网暴言论识别(词库/LLM) / 异常 / 相关性 | 否，需要上游文本数据 |
 | Analysis（分析） | ANL | 确定性数据清洗：去空/去重(逐字或归一化)/近重复去重(SimHash)/筛选/改名/类型转换/排序/采样/分组聚合/表关联/列计算/分箱，以及**事件研究套件**：提取时间维度 / 按时间划分阶段 / 按发文量建议阶段边界 / LDA 主题模型 / 分阶段 LDA / 主题概括(模型) / 主题距离图数据 / 各主题显著词数据 / 主题生命周期(次生舆情) / 主题跨阶段流向 / 主题数扫描 / 共词网络 / 情感走向外推 / 二次爆发预警 / 情感演化曲线 | **是**，可直接处理数据集 |
-| Visualize（可视化） | VIZ | 柱状/折线/双轴折线/占比堆叠图/主题距离图/显著词图/饼图/散点/直方/箱线/热力/桑基/关系图/词云/地图，ECharts 或 Matplotlib（五种新图型仅 ECharts；柱状/折线/双轴折线可加事件标注；占比堆叠图填逗号分隔的「堆叠字段」，每分类归一到 100%） | **是**，可直接处理数据集 |
+| Visualize（可视化） | VIZ | 柱状/折线/双轴折线/占比堆叠图/主题距离图/显著词图/饼图/散点/直方/箱线/热力/桑基/关系图/词云/地图，ECharts 或 Matplotlib（五种新图型仅 ECharts；柱状/折线/双轴折线可加事件标注；占比堆叠图填逗号分隔的「堆叠字段」，每分类归一到 100%）；勾选 `emit_latex`（默认开）另出可编译 LaTeX 图 .txt，`emit_latex_table`（默认关）另出 booktabs 三线表 .txt | **是**，可直接处理数据集 |
 | Tokenize（分词） | TKN | jieba 分词输出词频，供导出或词云使用 | 否，需要上游数据 |
 | Output（保存） | OUT | 导出为 CSV / JSON / Excel / TXT / HTML / Markdown | 否，需要上游数据 |
 | Resume（续跑） | RSM | 收养历史运行的节点输出作为数据源（原上游不可用/已付费时） | 是 |
@@ -1346,7 +1356,7 @@ crawler_workflow/
 |------|------|------|
 | `/api/analysis/run` | POST | 对数据集执行清洗流水线，返回新数据集 id 及报告 |
 | `/api/analysis/train` | POST | 从已有 LLM 标注数据集训练传统 ML 模型（情感/倾向） |
-| `/api/visualize/render` | POST | 对数据集渲染图表，返回 ECharts option 或 Matplotlib 图片 |
+| `/api/visualize/render` | POST | 对数据集渲染图表，返回 ECharts option 或 Matplotlib 图片；带 `emit_latex`/`emit_latex_table`（默认前者开）时另返回 `latex`/`latex_file`、`latex_table`/`latex_table_file` 并写入导出目录 |
 | `/api/export/save` | POST | 将数据集导出为指定格式文件 |
 | `/api/exports/list` | GET | 按时间倒序列出导出文件（名称/类型/大小/可下载标记）与目录合计 |
 | `/api/exports/download` | GET | 按**文件名**下载某个导出文件（越界名→404，脚本类扩展名→404） |

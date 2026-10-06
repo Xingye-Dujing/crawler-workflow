@@ -3054,6 +3054,15 @@ function renderVisualizeSettings(nodeId, p) {
     if (ct === 'map') {
         html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.mapRegionNames') + '</div>';
     }
+    // LaTeX export is orthogonal to the renderer: the node still draws its chart, and these add a
+    // compilable figure source / a booktabs three-line table as .txt next to it.
+    html += '<div class="settings-group"><label class="settings-checkbox-label">' +
+        '<input type="checkbox" ' + (boolParam(p.emit_latex, true) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex\',this.checked)"> ' +
+        I18n.t('settings.emitLatex') + '</label>' +
+        '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + I18n.t('settings.emitLatexHint') + '</div></div>';
+    html += '<div class="settings-group"><label class="settings-checkbox-label">' +
+        '<input type="checkbox" ' + (boolParam(p.emit_latex_table, false) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex_table\',this.checked)"> ' +
+        I18n.t('settings.emitLatexTable') + '</label></div>';
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.title') + '</label>' +
         '<input class="settings-input" value="' + escapeHtml(p.title || '') + '" ' +
         'onchange="updateParam(\'' + nodeId + '\',\'title\',this.value)"></div>';
@@ -3166,6 +3175,7 @@ var dataNodes = {
             y_field: p.y_field, value_field: p.value_field, agg: p.agg,
             label_field: p.label_field, stack_fields: p.stack_fields,
             title: p.title, tokenize: boolParam(p.tokenize, false),
+            emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, false),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
         /* A chart always renders whatever its upstream produced — a crawl or
@@ -3181,7 +3191,7 @@ var dataNodes = {
            restart they only exist in the run store, which is addressed by workflow —
            so send the same identity `previewData` sends, or a chart cannot be brought
            back once the process that ran it is gone. */
-        payload.workflow_name = workflow.runName();
+        payload.workflow_name = workflow.runName() || (typeof resumeBar !== 'undefined' && resumeBar.candidate && resumeBar.candidate.workflow_name) || '';
         /* Show panel with loading spinner immediately */
         var panel = document.getElementById('chart-preview-panel');
         panel.classList.add('open');
@@ -3246,7 +3256,7 @@ var dataNodes = {
         if (payload.node_id) {
             /* Which workflow's rows this is: recorded rows are looked up by name
                once the live results are gone (a refresh, a server restart). */
-            payload.workflow_name = workflow.runName();
+            payload.workflow_name = workflow.runName() || (typeof resumeBar !== 'undefined' && resumeBar.candidate && resumeBar.candidate.workflow_name) || '';
         }
         await dataPreview.open(payload);
     },
@@ -3472,6 +3482,84 @@ function renderChartPreview(result) {
         }
         applyEchartsOption(_chartPreviewInstance, result.option);
     }
+    _renderLatexBar(result);
+}
+
+/* The preview's LaTeX controls. ``emit_latex`` is on by default, so a chart node also files a
+   compilable ``.txt``; here the user copies the source or downloads it. The file already lives in
+   EXPORT_DIR (written by the node / render path), so download hits the same endpoint the exports
+   browser uses; when a preview produced the text inline with no stored file, a Blob download covers it. */
+var _lastLatex = '';
+var _lastLatexTable = '';
+var _lastLatexFile = '';
+var _lastLatexTableFile = '';
+
+function _renderLatexBar(result) {
+    var panel = document.getElementById('chart-preview-panel');
+    if (!panel) return;
+    var old = document.getElementById('latex-action-bar');
+    if (old) old.remove();
+    _lastLatex = result.latex || '';
+    _lastLatexTable = result.latex_table || '';
+    _lastLatexFile = result.latex_file || '';
+    _lastLatexTableFile = result.latex_table_file || '';
+    if (!_lastLatex && !_lastLatexTable) return;
+    var html = '';
+    if (_lastLatex) {
+        html += '<button class="menu-btn" onclick="copyLatexSource(\'fig\')">' + I18n.t('chart.copyLatex') + '</button>' +
+            '<button class="menu-btn" onclick="downloadLatexFile(\'fig\')">' + I18n.t('chart.downloadLatex') + '</button>';
+    }
+    if (_lastLatexTable) {
+        html += '<button class="menu-btn" onclick="copyLatexSource(\'tab\')">' + I18n.t('chart.copyTable') + '</button>' +
+            '<button class="menu-btn" onclick="downloadLatexFile(\'tab\')">' + I18n.t('chart.downloadTable') + '</button>';
+    }
+    if (result.latex_error || result.latex_table_error) {
+        html += '<span style="font-size:11px;color:#e67e22;">' + escapeHtml(String(result.latex_error || result.latex_table_error)) + '</span>';
+    }
+    var bar = document.createElement('div');
+    bar.id = 'latex-action-bar';
+    bar.className = 'latex-action-bar';
+    bar.innerHTML = html;
+    panel.appendChild(bar);
+}
+
+function copyLatexSource(kind) {
+    var text = kind === 'tab' ? _lastLatexTable : _lastLatex;
+    if (!text) return;
+    var done = function () { if (typeof showToast === 'function') showToast(I18n.t('chart.copied')); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { _fallbackCopy(text); done(); });
+    } else {
+        _fallbackCopy(text); done();
+    }
+}
+
+function _fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* clipboard blocked: the download path still works */ }
+    document.body.removeChild(ta);
+}
+
+function downloadLatexFile(kind) {
+    var name = kind === 'tab' ? _lastLatexTableFile : _lastLatexFile;
+    if (name) {
+        window.location.href = '/api/exports/download?name=' + encodeURIComponent(name);
+        return;
+    }
+    var text = kind === 'tab' ? _lastLatexTable : _lastLatex;
+    if (!text) return;
+    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (kind === 'tab' ? 'latex-table' : 'latex-figure') + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
 function toggleChartPreview() {
@@ -3536,6 +3624,7 @@ async function openChartFullscreen(nodeId) {
         y_field: p.y_field, value_field: p.value_field, agg: p.agg,
         y2_field: p.y2_field, agg2: p.agg2, annotations: p.annotations,
         label_field: p.label_field, stack_fields: p.stack_fields, title: p.title, tokenize: boolParam(p.tokenize, false),
+        emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, false),
         wordcloud_style: p.wordcloud_style || 'vibrant',
     };
     var upstream = canvas.getUpstreamNodeId(nodeId);
@@ -3544,7 +3633,7 @@ async function openChartFullscreen(nodeId) {
     // Re-fetched from the server when this node was never drawn on this page (a reopened
     // canvas): name the workflow so the upstream rows resolve from the run store, not just
     // from a live process that may have restarted.
-    payload.workflow_name = workflow.runName();
+    payload.workflow_name = workflow.runName() || (typeof resumeBar !== 'undefined' && resumeBar.candidate && resumeBar.candidate.workflow_name) || '';
     try {
         var resp = await fetch('/api/visualize/render', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -3874,6 +3963,7 @@ var dashboard = {
                dropped it asked the service for a stacked field and got an opaque refusal. */
             stack_fields: p.stack_fields,
             title: p.title, tokenize: boolParam(p.tokenize, false),
+            emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, false),
             wordcloud_style: p.wordcloud_style || 'vibrant',
         };
         var upstream = canvas.getUpstreamNodeId(nodeId);
@@ -3885,7 +3975,7 @@ var dashboard = {
         // A rebuilt board re-renders every cell from the server; name the workflow so a
         // cell still resolves its upstream rows after a page refresh AND a server restart,
         // when the in-memory result that first painted it is gone.
-        payload.workflow_name = workflow.runName();
+        payload.workflow_name = workflow.runName() || (typeof resumeBar !== 'undefined' && resumeBar.candidate && resumeBar.candidate.workflow_name) || '';
 
         try {
             var resp = await fetch('/api/visualize/render', {
@@ -5848,6 +5938,17 @@ var resumeBar = {
         }
         /* Anything still running belongs to this moment, not to a past attempt. */
         this.candidate = runs[0] || null;
+        /* A cold load has no in-memory results, but the last run's upstream rows are durable and
+           the render endpoint resolves them by ``workflow_name`` — so open the board once and the
+           charts repaint themselves. Guarded so it fires on the load, never mid-session (a run
+           opens the board on its own), and only when the canvas actually has chart nodes. */
+        if (this.candidate && !this._rehydrated && typeof dashboard !== 'undefined') {
+            this._rehydrated = true;
+            const hasChart = Object.keys(canvas.nodes || {}).some(function (id) {
+                return canvas.nodes[id] && canvas.nodes[id].type === 'visualize';
+            });
+            if (hasChart) { dashboard.open(); }
+        }
         this.render();
         return this.candidate;
     },

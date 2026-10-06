@@ -119,6 +119,22 @@ class TestStackPctPanel:
         assert sent['bodyStackFields'] == '积极占比, 中性占比, 消极占比', sent
 
 
+class TestEmitLatexPanel:
+    """The LaTeX export is two checkboxes on every visualize node — figure on by default,
+    booktabs table off — and BOTH must ride out to the render request, or the board draws a
+    chart but silently never files the .txt the user's paper needs."""
+
+    def test_the_panel_offers_both_export_checkboxes(self, panels):
+        got = panels['latex']
+        assert got['panelHasEmitCheckbox'] is True, 'no emit_latex checkbox drawn'
+        assert got['panelHasTableCheckbox'] is True, 'no emit_latex_table checkbox drawn'
+
+    def test_the_defaults_reach_the_request(self, panels):
+        got = panels['latex']
+        assert got['bodyEmitLatex'] is True, f'figure should default on, saw {got["bodyEmitLatex"]!r}'
+        assert got['bodyEmitTable'] is False, f'table should default off, saw {got["bodyEmitTable"]!r}'
+
+
 class TestSwitchInTheRequestBody:
     """What the chart request carries for each spelling of the tokenize box."""
 

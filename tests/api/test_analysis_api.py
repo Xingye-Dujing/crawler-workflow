@@ -321,6 +321,66 @@ class TestVisualizeRender:
         assert response.status_code == 400
         assert 'stacked fields' in response.get_json()['error']
 
+    def test_emit_latex_returns_the_source_and_files_a_downloadable_txt(self, client, paste, data_root):
+        """emit_latex is on by default: the render answers with the LaTeX source AND stores a
+        ``.txt`` in the exports dir, which the exports browser downloads by name."""
+        dataset_id = paste(VIZ_RECORDS, name='ltx.csv')
+        body = client.post(
+            '/api/visualize/render',
+            json={
+                'dataset_id': dataset_id,
+                'chart_type': 'bar',
+                'x_field': 'city',
+                'y_field': 'likes',
+                'agg': 'sum',
+                'title': 'ltxfig',
+            },
+        ).get_json()
+        assert body['ok'] is True
+        assert '\\documentclass[border=6pt]{standalone}' in body['latex']
+        assert body['latex_file'] == 'ltxfig.txt'
+        written = data_root / 'data' / 'exports' / 'ltxfig.txt'
+        assert written.exists() and '\\addplot' in written.read_text(encoding='utf-8')
+        dl = client.get('/api/exports/download?name=ltxfig.txt')
+        assert dl.status_code == 200
+
+    def test_the_three_line_table_is_a_separate_opt_in(self, client, paste, data_root):
+        dataset_id = paste(VIZ_RECORDS, name='ltxtab.csv')
+        off = client.post(
+            '/api/visualize/render',
+            json={'dataset_id': dataset_id, 'chart_type': 'bar', 'x_field': 'city', 'y_field': 'likes', 'agg': 'sum'},
+        ).get_json()
+        assert 'latex_table' not in off, 'the table must not appear unless the box is ticked'
+        on = client.post(
+            '/api/visualize/render',
+            json={
+                'dataset_id': dataset_id,
+                'chart_type': 'bar',
+                'x_field': 'city',
+                'y_field': 'likes',
+                'agg': 'sum',
+                'title': 'ltxtab',
+                'emit_latex_table': True,
+            },
+        ).get_json()
+        assert '\\toprule' in on['latex_table'] and '\\bottomrule' in on['latex_table']
+        assert (data_root / 'data' / 'exports' / 'ltxtab-表.txt').exists()
+
+    def test_turning_emit_latex_off_emits_nothing(self, client, paste):
+        dataset_id = paste(VIZ_RECORDS, name='ltxoff.csv')
+        body = client.post(
+            '/api/visualize/render',
+            json={
+                'dataset_id': dataset_id,
+                'chart_type': 'bar',
+                'x_field': 'city',
+                'y_field': 'likes',
+                'agg': 'sum',
+                'emit_latex': False,
+            },
+        ).get_json()
+        assert body['ok'] is True and 'latex' not in body and 'latex_file' not in body
+
     @pytest.mark.parametrize(
         ('spec', 'expected'),
         [
