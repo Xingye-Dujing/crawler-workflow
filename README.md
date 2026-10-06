@@ -533,8 +533,19 @@
     **换任何 HF 情感模型都不用改分析器**。要"非常高"的准确率：用 `ml_train/train_bert.py` 在 `2-weibo_senti_100k`
     （正/负；`--with-clean` 可再并入 `1-clean` 的 喜悦→正、愤怒/厌恶/低落→负）上微调一个中文 base BERT
     （默认 `hfl/chinese-roberta-wwm-ext`，fp16 + batch 16 在 8GB 显存即可），产出本地 HF 目录 `ml_train/bert_sentiment_model/`、
-    把它的绝对路径填进节点"模型名"即可。词袋 `ml` 档 held-out 约 0.78，微调 BERT 常见 0.88–0.92。中性仍交给 snownlp
-    阈值（两数据源都只有正/负，勿臆造 neutral）。`torch`/`transformers` 在 `requirements-optional`，bert 模式缺之则**按名拒绝、绝不回退**
+    把它的绝对路径填进节点"模型名"即可。
+    **本机实测（2026-10-06）**：在 `2-weibo_senti_100k` 上微调 3 epoch、5% 留出集，**accuracy = macro-F1 = 0.9785**
+    （三个 epoch 分别 0.9782 / 0.9783 / 0.9785，取最优），RTX 4060 8GB、fp16+batch16 全程约 26 分钟、峰值显存 3.8GB；
+    作为对照，词袋 `ml` 档同一留出集约 **0.78**。`sentiment.py` 的 bert 通路本身经真实节点路径验证：有显卡时 `bert_device`
+    返回 `0` 自动走 GPU。
+  - **中性从哪来（用 bert 模式前必读）**：这条通路的模型是**正 / 负二分类**头，`_signed_polarity` 把正类概率签成一个 0–1
+    的极性分写进 `score`；模型**从不直接产出 `neutral`**（训练源 `2-weibo_senti_100k` 与 `1-clean` 都只有正/负标注，
+    也不要臆造 neutral 行去训练）。第三列 `sentiment` 的 `neutral` 完全由 `label_for_score` 用**正负阈值**卡出来：
+    默认「判定为正面的下限」0.6、「判定为负面的上限」0.4，`score ≥ 0.6` 判正面、`≤ 0.4` 判负面、之间记中性（边界含等号）。
+    所以一段温吞文本算不算中性取决于这两个阈值、而非模型「看懂了中性」——实测「这剧情也就一般吧，谈不上喜欢也不讨厌」
+    被给出 0.86 正极性，即二分类头对模糊文本本就偏向一边。想**扩大中性区间**就调高正面下限、调低负面上限（反之收窄）。
+    `torch`/`transformers` 在 `requirements-optional`，bert 模式缺之则**按名拒绝、绝不回退**（回退等于把 A 模型的结论
+    写进 B 模型声称的列里）；`pipeline` 推理不需要 `accelerate`，它只被 gitignore 的训练脚本 `train_bert.py` 用到。
   - **关键词节点**新增「基于自己语料的 TF-IDF」：jieba 内置 IDF 来自新闻语料，微博口语词会因此排错位；
     这一档直接用你自己的表拟合 IDF。另可填**词性过滤**（如 `n,vn,v,a`），去关键词表里的「转发/哈哈/回复」
   - **网暴言论识别**（算法处理节点的新操作 `aggression`）：论文的研究对象是**暴力言论**而不是负面情绪，

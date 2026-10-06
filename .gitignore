@@ -20,3 +20,6 @@ htmlcov/
 
 scratchpad/
 ml_train/
+# Project-local pip download cache + build temp (kept off the C: drive on purpose).
+.pip-cache/
+.tmp/
