@@ -215,6 +215,11 @@ _CHART_COL_TOKENS = {
     'total': 'chart.col.total',
     'sentiment_index': 'chart.col.sentiment_index',
     'sentiment': 'chart.col.sentiment',
+    'emotion': 'chart.col.emotion',
+    'tendency': 'chart.col.tendency',
+    'confidence': 'chart.col.confidence',
+    'tendency_confidence': 'chart.col.tendency_confidence',
+    'aggression_score': 'chart.col.aggression_score',
     'prevalence_pct': 'chart.col.prevalence_pct',
     'doc_n': 'chart.col.doc_n',
     'feature_words': 'chart.col.feature_words',
@@ -232,6 +237,20 @@ _CHART_VALUE_TOKENS = {
     'positive': 'chart.value.positive',
     'negative': 'chart.value.negative',
     'neutral': 'chart.value.neutral',
+    # The emotion node's six SMP2020-EWECT classes (stored as these exact strings).
+    'Anger': 'chart.value.anger',
+    'Fear': 'chart.value.fear',
+    'Joy': 'chart.value.joy',
+    'Sadness': 'chart.value.sadness',
+    'Surprise': 'chart.value.surprise',
+    'Neutral': 'chart.value.neutral',
+    # The tendency node's six stance classes (stored as these exact strings).
+    'Objective Statement': 'chart.value.tendency_objective',
+    'Praise/Affirmation': 'chart.value.tendency_praise',
+    'Criticism/Questioning': 'chart.value.tendency_criticism',
+    'Controversy/Reflection': 'chart.value.tendency_controversy',
+    'Advocacy/Call-to-action': 'chart.value.tendency_advocacy',
+    'Satire/Mockery': 'chart.value.tendency_satire',
 }
 
 
@@ -1405,18 +1424,18 @@ class VisualizationService:
                 ax.pie(values, labels=labels, autopct='%1.1f%%', textprops={'fontsize': 8})
             elif chart_type == 'scatter':
                 ax.scatter(pd.to_numeric(df[x], errors='coerce'), pd.to_numeric(df[y], errors='coerce'), s=18)
-                ax.set_xlabel(x)
-                ax.set_ylabel(y)
+                ax.set_xlabel(_localize_label(x))
+                ax.set_ylabel(_localize_label(y))
             elif chart_type == 'histogram':
                 ax.hist(pd.to_numeric(df[x], errors='coerce').dropna(), bins=20)
-                ax.set_xlabel(x)
+                ax.set_xlabel(_localize_label(x))
                 ax.set_ylabel(t('chart.count'))
             elif chart_type == 'box':
                 if y:
                     groups = [pd.to_numeric(group[y], errors='coerce').dropna().values for _, group in df.groupby(x)]
-                    grp_labels = [str(name) for name in df.groupby(x).groups]
+                    grp_labels = [_localize_label(str(name)) for name in df.groupby(x).groups]
                     _boxplot(ax, groups, grp_labels)
-                    ax.set_xlabel(str(x))
+                    ax.set_xlabel(_localize_label(x))
                 else:
                     _boxplot(ax, pd.to_numeric(df[x], errors='coerce').dropna(), [x])
             elif chart_type == 'heatmap':

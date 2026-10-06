@@ -90,6 +90,29 @@ class TestDocument:
         assert 'alert(&quot;crawled&quot;)' in markup
         assert 'a&#x27;b&quot;c' in markup
 
+    def test_a_report_localizes_platform_values_and_column_headers(self, service):
+        """The run report is a human document, so it must agree with the file exports: 平台 shows
+        微博/知乎 (not the raw key), and known analyzer columns read 情感/情绪 (not sentiment/emotion).
+        This was the inconsistency — CSV export localized 平台 but the report did not."""
+        from i18n import set_lang
+
+        set_lang('zh')
+        nodes = [
+            {
+                'id': 'n',
+                'title': '评论',
+                'rows': [
+                    {'平台': 'weibo', 'sentiment': 'positive', 'emotion': 'Joy'},
+                    {'平台': 'zhihu', 'sentiment': 'negative', 'emotion': 'Anger'},
+                ],
+            }
+        ]
+        markup = service.build('报告', nodes, {})
+        assert '微博' in markup and '知乎' in markup, '平台 cells read the readers word, like the CSV'
+        assert '<th>情感</th>' in markup and '<th>情绪</th>' in markup, 'known column headers localize'
+        assert '>weibo<' not in markup and '>zhihu<' not in markup, 'the raw platform key must not leak into a cell'
+        assert '<th>sentiment</th>' not in markup and '<th>emotion</th>' not in markup
+
     def test_an_empty_node_says_so_instead_of_disappearing(self, service):
         markup = service.build('报告', NODES, {})
         assert 'node-2' in markup or '输出' in markup

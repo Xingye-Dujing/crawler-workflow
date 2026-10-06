@@ -32,7 +32,8 @@ import pandas as pd
 from analyzers.llm_client import ABORT_MARK
 from i18n import t
 from services.export_browser import resolve_export_file
-from services.visualizer import VisualizationService
+from services.exporter import DataExporter
+from services.visualizer import VisualizationService, _localize_label
 
 logger = logging.getLogger(__name__)
 
@@ -247,13 +248,13 @@ class ReportService:
                     # already stated by the number itself.
                     continue
                 counts.name = column
-                charts.append((f'{title} · {column}', self._pie(counts)))
+                charts.append((f'{title} · {_localize_label(column)}', self._pie(counts)))
             for column in _numeric_columns(df):
                 if len(charts) >= MAX_CHARTS:
                     break
                 if df[column].dropna().nunique() < 2:
                     continue
-                charts.append((f'{title} · {column}', self._histogram(df, column)))
+                charts.append((f'{title} · {_localize_label(column)}', self._histogram(df, column)))
         return charts
 
     @staticmethod
@@ -324,11 +325,14 @@ class ReportService:
 
     def _table_block(self, entry: dict, row_limit: int = MAX_TABLE_ROWS) -> str:
         df = entry['frame']
+        # Match the file exports: the 平台 column shows the word the reader knows (微博, not
+        # weibo). The stored frame keeps the raw key; only this rendered copy is translated.
+        df = DataExporter._localized_platform(df)
         rows = len(df)
         if rows == 0:
             return f'<p class="muted">{_cell(entry["title"])} — {html.escape(t("report.no_rows"))}</p>'
         shown = df.head(row_limit)
-        head = ''.join(f'<th>{_cell(column)}</th>' for column in df.columns)
+        head = ''.join(f'<th>{_cell(_localize_label(column))}</th>' for column in df.columns)
         body = ''.join(
             '<tr>' + ''.join(f'<td>{_cell(value)}</td>' for value in record) + '</tr>'
             for record in shown.astype(str).values.tolist()

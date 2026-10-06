@@ -361,6 +361,25 @@ class TestChartDisplayLocalisation:
         assert localize('positive') == 'Positive'
         assert localize('Topic-1') == 'Topic-1', 'an English run keeps the model numbering intact'
 
+    def test_emotion_and_tendency_tokens_localize(self):
+        """The emotion/tendency nodes write English categories (Anger, Praise/Affirmation) into
+        stored columns; a chart of them must show the reader's own words in zh and the exact
+        analyzer spelling in en — the same display-only contract as sentiment."""
+        from i18n import set_lang
+        from services.visualizer import _localize_label as localize
+
+        set_lang('zh')
+        assert localize('emotion') == '情绪'
+        assert localize('tendency') == '倾向'
+        assert localize('Anger') == '愤怒'
+        assert localize('Surprise') == '惊讶'
+        assert localize('Praise/Affirmation') == '赞扬/肯定'
+        assert localize('Objective Statement') == '客观陈述'
+        set_lang('en')
+        assert localize('emotion') == 'Emotion'
+        assert localize('Anger') == 'Anger', 'an English run keeps the analyzer label itself'
+        assert localize('Praise/Affirmation') == 'Praise/Affirmation'
+
     def test_unknown_and_non_text_values_pass_through_untouched(self):
         from i18n import set_lang
         from services.visualizer import _localize_label as localize
