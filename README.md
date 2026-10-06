@@ -528,7 +528,13 @@
     「删除」。它**不判断主题相关性**——那是 `llm` 模式的职责，若把它当成了主题过滤会得出错误结论。
     源文本列原样保留，清洗结果写在 `cleaned_text` 旁边。留空=默认走 `llm`，与加这个选择器之前完全一致
   - **情感极性节点支持 BERT**：填一个本机模型名即可整列**分批推理**（有显卡自动走显卡，`batch_size` 可调，
-    默认 32），比逐行调用快一到两个数量级；模型给出的正/负标签按概率签名后套用同一组正负阈值
+    默认 32），比逐行调用快一到两个数量级；模型给出的正/负标签按概率签名后套用同一组正负阈值。
+    加载用 `pipeline('sentiment-analysis', model=路径)`、`_signed_polarity` 只认 `positive`/`negative` 子串，故
+    **换任何 HF 情感模型都不用改分析器**。要"非常高"的准确率：用 `ml_train/train_bert.py` 在 `2-weibo_senti_100k`
+    （正/负；`--with-clean` 可再并入 `1-clean` 的 喜悦→正、愤怒/厌恶/低落→负）上微调一个中文 base BERT
+    （默认 `hfl/chinese-roberta-wwm-ext`，fp16 + batch 16 在 8GB 显存即可），产出本地 HF 目录 `ml_train/bert_sentiment_model/`、
+    把它的绝对路径填进节点"模型名"即可。词袋 `ml` 档 held-out 约 0.78，微调 BERT 常见 0.88–0.92。中性仍交给 snownlp
+    阈值（两数据源都只有正/负，勿臆造 neutral）。`torch`/`transformers` 在 `requirements-optional`，bert 模式缺之则**按名拒绝、绝不回退**
   - **关键词节点**新增「基于自己语料的 TF-IDF」：jieba 内置 IDF 来自新闻语料，微博口语词会因此排错位；
     这一档直接用你自己的表拟合 IDF。另可填**词性过滤**（如 `n,vn,v,a`），去关键词表里的「转发/哈哈/回复」
   - **网暴言论识别**（算法处理节点的新操作 `aggression`）：论文的研究对象是**暴力言论**而不是负面情绪，
