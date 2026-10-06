@@ -2020,6 +2020,54 @@
       "x": 3199,
       "y": 1008,
       "folded": false
+    },
+    {
+      "id": "node-129",
+      "type": "process",
+      "title": "情绪分析（BERT·SMP2020-EWECT 六类）",
+      "params": {
+        "bert_model": "F:/python_project/crawls/crawler_workflow/ml_train/bert_emotion_model",
+        "enabled": true,
+        "mode": "bert",
+        "operation": "emotion",
+        "text_column": "cleaned_text"
+      },
+      "operation": "emotion",
+      "x": 1733,
+      "y": 1100,
+      "folded": false
+    },
+    {
+      "id": "node-130",
+      "type": "process",
+      "title": "倾向分析（BERT·LLM 蒸馏六类）",
+      "params": {
+        "bert_model": "F:/python_project/crawls/crawler_workflow/ml_train/bert_tendency_model",
+        "enabled": true,
+        "mode": "bert",
+        "operation": "tendency",
+        "text_column": "cleaned_text"
+      },
+      "operation": "tendency",
+      "x": 2089,
+      "y": 1100,
+      "folded": false
+    },
+    {
+      "id": "node-131",
+      "type": "output",
+      "title": "导出 情绪+倾向（BERT）",
+      "params": {
+        "enabled": true,
+        "filename": "刘学州-评论-情绪倾向BERT.csv",
+        "filename_timestamp": true,
+        "format": "csv",
+        "operation": "save"
+      },
+      "operation": "save",
+      "x": 2455,
+      "y": 1100,
+      "folded": false
     }
   ],
   "connections": [
@@ -2506,6 +2554,18 @@
     {
       "from": "node-128",
       "to": "node-13"
+    },
+    {
+      "from": "node-9",
+      "to": "node-129"
+    },
+    {
+      "from": "node-129",
+      "to": "node-130"
+    },
+    {
+      "from": "node-130",
+      "to": "node-131"
     }
   ],
   "settings": {
