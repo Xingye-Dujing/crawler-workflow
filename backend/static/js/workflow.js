@@ -2115,18 +2115,16 @@ function openSettings(nodeId) {
             }
         }
 
-        /* Mode selector for emotion / tendency. emotion additionally offers the fine-tuned
-           BERT path (six SMP2020-EWECT classes, incl. Surprise); tendency keeps llm/ml only.
-           The bert option needs a model path, so it reveals the same two fields the sentiment
-           node's bert mode does. */
+        /* Mode selector for emotion / tendency. Both additionally offer the fine-tuned BERT
+           path (emotion: six SMP2020-EWECT classes incl. Surprise; tendency: six stance
+           classes distilled from the LLM). The bert option needs a model path, so it reveals
+           the same two fields the sentiment node's bert mode does. */
         if (p.operation === 'emotion' || p.operation === 'tendency') {
             var modeOptions = [
                 { value: 'llm', label: llmModeLabel() },
                 { value: 'ml', label: I18n.t('mode.ml') },
+                { value: 'bert', label: I18n.t('mode.bert') },
             ];
-            if (p.operation === 'emotion') {
-                modeOptions.push({ value: 'bert', label: I18n.t('mode.bert') });
-            }
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.mode') + '</label>' +
                 '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'mode\',this.value)">' +
                 selectOptionTags(modeOptions, p.mode, 'llm') +
@@ -2134,7 +2132,7 @@ function openSettings(nodeId) {
             if (p.mode === 'ml') {
                 html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
             }
-            if (p.operation === 'emotion' && p.mode === 'bert') {
+            if (p.mode === 'bert') {
                 html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
                 html += renderParamInput(nodeId, p, 'batch_size', 'settings.batchSize', 'number', 32);
                 html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +

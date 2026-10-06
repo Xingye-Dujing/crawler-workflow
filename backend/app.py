@@ -2868,7 +2868,7 @@ PROCESS_ENUMS = {
     # was already doing — a blank must not silently change what a stored canvas produces.
     'clean': {'mode': ('llm', ('regex', 'llm'))},
     'emotion': {'mode': ('llm', ('llm', 'ml', 'bert'))},
-    'tendency': {'mode': ('llm', ('llm', 'ml'))},
+    'tendency': {'mode': ('llm', ('llm', 'ml', 'bert'))},
     # The traditional methods answer 正面/负面/中性, which is not the five-emotion or the
     # six-tendency label set — hence its own operation rather than a new mode on theirs.
     # SnowNLP is the default because it needs no model, no download and no GPU.
@@ -3002,7 +3002,13 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         return df.to_dict('records')
 
     if op == 'tendency':
-        analyzer = TendencyAnalyzer(mode=enum_param(op, params, 'mode'))
+        analyzer = TendencyAnalyzer(
+            mode=enum_param(op, params, 'mode'),
+            bert_model=str(params.get('bert_model') or '').strip(),
+            # Read by the transformer path; validated here for every mode so a stored 0
+            # cannot reach the chunking loop and score an empty column while reporting success.
+            batch_size=_safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256),
+        )
         df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')
 

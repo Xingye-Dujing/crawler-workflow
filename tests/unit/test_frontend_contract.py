@@ -304,6 +304,24 @@ class TestEmotionPaletteCoverage:
             assert f"'{label}':" in workflow_src, f'workflow.js has no colour for emotion {label}'
 
 
+class TestTendencyPaletteCoverage:
+    """tendency already coloured all six stances, so the bert rollout needed no chart change —
+    this pins that claim rather than assuming it. A stance with no colour would render an
+    unnamed slice on the dashboard and the run pie alike.
+    """
+
+    def test_every_tendency_label_has_a_colour_in_both_palettes(self):
+        from analyzers.tendency import TendencyAnalyzer
+
+        labels = TendencyAnalyzer().valid_labels
+        stats_src = (JS_DIR / 'stats.js').read_text(encoding='utf-8')
+        workflow_src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        assert len(labels) == 6
+        for label in labels:
+            assert f"'{label}':" in stats_src, f'stats.js has no colour for tendency {label}'
+            assert f"'{label}':" in workflow_src, f'workflow.js has no colour for tendency {label}'
+
+
 class TestCookiePanelParity:
     """The Cookie panel is wired together from three files that nothing else
     cross-checks: the platform list is HTML, its translation lives in app.js, the

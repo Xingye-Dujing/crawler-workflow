@@ -93,6 +93,9 @@ _PANELS = [
     ('panel_emotion_ml', 'process', {'operation': 'emotion', 'mode': 'ml'}),
     ('panel_emotion_bert', 'process', {'operation': 'emotion', 'mode': 'bert'}),
     ('panel_tendency_default', 'process', {'operation': 'tendency'}),
+    ('panel_tendency_bert', 'process', {'operation': 'tendency', 'mode': 'bert'}),
+    ('panel_tendency_ml', 'process', {'operation': 'tendency', 'mode': 'ml'}),
+    ('panel_tendency_bert', 'process', {'operation': 'tendency', 'mode': 'bert'}),
     ('panel_keyword', 'process', {'operation': 'keyword', 'topk': '5'}),
     # The remaining text-bearing panels: each owns at least one field the escaping
     # below is asserted over, and each was written by a different hand.
@@ -713,12 +716,22 @@ class TestSettingsPanel:
         assert 'trainMLModel' in ml
         assert 'bert_model' not in ml
 
-    def test_the_tendency_panel_was_left_out_of_the_bert_rollout(self, results):
-        """Only emotion got the transformer this round; tendency keeps llm/ml. A bert option
-        appearing on tendency would offer a mode whose analyzer has no such path."""
-        tendency = results['settings']['panel_tendency_default']
-        assert '<option value="bert"' not in tendency
-        assert 'bert_model' not in tendency
+    def test_the_tendency_panel_also_offers_bert(self, results):
+        """The stance node gained the same transformer path emotion got (its corpus was
+        distilled from the llm path). Default stays llm so an untouched node is unchanged."""
+        default = results['settings']['panel_tendency_default']
+        for value in ('llm', 'ml', 'bert'):
+            assert f'<option value="{value}"' in default, f'{value} is not offered'
+        assert '<option value="llm" selected>' in default
+        assert '<option value="bert" selected>' not in default
+        assert 'mode.bert' in default
+
+    def test_the_tendency_bert_panel_asks_for_the_model_it_cannot_guess(self, results):
+        bert = results['settings']['panel_tendency_bert']
+        assert "updateParam('n1','bert_model'" in bert
+        assert "updateParam('n1','batch_size'" in bert
+        assert 'settings.bertModel' in bert and 'settings.bertModelHint' in bert
+        assert 'trainMLModel' not in bert
 
 
 class TestUrlRoutingContract:

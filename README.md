@@ -508,7 +508,9 @@
   - `bert`：**接口保留**。本机没有 `torch` 时它按名拒绝并说清缺哪个包，模型名留空时也按名拒绝——
     不会静默改用 SnowNLP，那样等于把 A 模型的结论写进 B 模型声称的列里。因此这一条通路
     **在本仓库从未真跑过**（这台机器没有 torch），不要把它当作已验证功能
-- **倾向性分析（双模式）**：同上，LLM 或 ML 可选
+- **倾向性分析（三模式）**：LLM 逐行、传统 ML（sklearn TF-IDF + 逻辑回归）批量，或**微调 BERT**（六类传播立场标签，与情感/情绪共用同一条 `bert` 后端与分批推理）
+  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/distill_tendency.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `1-clean_weibo_text.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/tendency_distilled.csv`（本次约 3,935 条）；再由 `ml_train/train_bert_tendency.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/bert_tendency_model/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空、以及模型回了不认识的标签，一律**按名拒绝、绝不回退**到 llm/ml；读不出的行留空，**不臆造 `Objective Statement`**。
+    **本机实测（2026-10-06）**：三 epoch、5% 留出 **accuracy=0.679 / macro-F1=0.572**。蒸馏语料六类不均衡（`Controversy/Reflection` 仅约 106 条——真实微博少有人作多视角讨论），故 macro-F1 明显低于情感极性(0.98)与情绪(0.76)，这是如实报告而非藏拙；想更准可加大 `--n` 再跑一轮蒸馏（脚本可续跑、自动跳过已标注文本）。
 - **语义数据清洗**：自动过滤广告、无关内容与低质量数据（LLM 判定）
 - **关键词提取**：TF-IDF / TextRank（依赖 jieba）
 - **文本聚类**：K-Means / DBSCAN 自动发现文本分组
@@ -1209,7 +1211,7 @@ crawler_workflow/
 │   │   ├── llm_client.py         # Ollama / OpenRouter 客户端
 │   │   ├── cleaner.py            # 广告/噪声语义清洗（LLM）
 │   │   ├── emotion.py            # 情感分类（LLM + ML + BERT 可选）
-│   │   ├── tendency.py           # 倾向性分析（LLM + ML 可选）
+│   │   ├── tendency.py           # 倾向性分析（LLM + ML + BERT 可选）
 │   │   ├── keyword.py            # 关键词提取（TF-IDF / TextRank）
 │   │   ├── clustering.py         # 文本聚类（K-Means / DBSCAN）
 │   │   ├── ner.py                # 命名实体识别（正则规则 + LLM 双模式）
@@ -1273,7 +1275,7 @@ crawler_workflow/
 | Data Source（数据源） | SRC | 从知乎/微博/小红书/哔哩哔哩/抖音/YouTube/X（推特） 按关键词采集，知乎、微博、YouTube、X（推特）、哔哩哔哩 与抖音 另可选「某作者的作品」（知乎填主页链接或 /people/ 后面的 id，微博填 weibo.com/u/<UID> 主页链接或数字 UID，YouTube 填 @handle/频道链接/UC… ID，X 填 @handle 或主页链接，哔哩哔哩填 space.bilibili.com/<UID> 链接或数字 UID，抖音填 douyin.com/user/… 链接或那串 sec_uid），哔哩哔哩 另有**热榜**（热门榜分页 / 周排行榜一次回整张表，均不需逐条请求），微博 有**热搜**（一次页内请求回整块榜，热度是精确整数，且**无需登录态**——矩阵里 `needs_session=False` 的两个模式之一（另一个是 微信 的正文采集：它根本不在 Cookie 平台名单里，
         没有会话可要），所以只挂热搜的画布不会被运行前 Cookie 预检拦下），知乎 有**热榜**（实测整块榜就是 30 条且站点无视一切翻页参数，目标数填得更大只会被告知"榜只有这么多"），抖音 也有**热榜**（一次回答就是整块榜：实测 51 行，用一个只由公开字面量拼出的 URL 页内取数、不需要任何签名，行里带精确热度与观看数；站点没给的那一行的数字留空而不写 0），微信按粘贴的推文链接采集正文；「采集内容」切到**评论**即变为评论采集器。可选项完全由后端 `/api/capabilities` 的采集矩阵生成，新增平台或模式不必再改前端；**运行前的本地校验也读同一份矩阵**（以前它自己写着"评论要链接、微信要链接、别都要关键词"，于是 5 个「某作者的作品」模式与 B 站热榜在界面上根本跑不了——填好了也报「缺少关键词」，请求都不会发出） | 是，需平台+关键词/作者（或评论/推文链接；热榜只需选榜单） |
 | Upload（上传） | UPL | 从持久化数据集中读取 CSV/TSV/JSON/TXT/Excel 作为输入 | 是 |
-| Process（处理） | PRC | 清洗(规则正则/LLM) / 情感极性(SnowNLP/BERT/ML/LLM) / 情绪(LLM/ML/BERT，SMP2020-EWECT 六类) / 倾向(LLM/ML) / 关键词(TF-IDF/TextRank/自建语料 IDF，可选词性) / 聚类 / NER(规则/LLM，可指定实体类型) / 网暴言论识别(词库/LLM) / 异常 / 相关性 | 否，需要上游文本数据 |
+| Process（处理） | PRC | 清洗(规则正则/LLM) / 情感极性(SnowNLP/BERT/ML/LLM) / 情绪(LLM/ML/BERT，SMP2020-EWECT 六类) / 倾向(LLM/ML/BERT，六类立场·LLM蒸馏语料) / 关键词(TF-IDF/TextRank/自建语料 IDF，可选词性) / 聚类 / NER(规则/LLM，可指定实体类型) / 网暴言论识别(词库/LLM) / 异常 / 相关性 | 否，需要上游文本数据 |
 | Analysis（分析） | ANL | 确定性数据清洗：去空/去重(逐字或归一化)/近重复去重(SimHash)/筛选/改名/类型转换/排序/采样/分组聚合/表关联/列计算/分箱，以及**事件研究套件**：提取时间维度 / 按时间划分阶段 / 按发文量建议阶段边界 / LDA 主题模型 / 分阶段 LDA / 主题概括(模型) / 主题距离图数据 / 各主题显著词数据 / 主题生命周期(次生舆情) / 主题跨阶段流向 / 主题数扫描 / 共词网络 / 情感走向外推 / 二次爆发预警 / 情感演化曲线 | **是**，可直接处理数据集 |
 | Visualize（可视化） | VIZ | 柱状/折线/双轴折线/主题距离图/显著词图/饼图/散点/直方/箱线/热力/桑基/关系图/词云/地图，ECharts 或 Matplotlib（五种新图型仅 ECharts；柱状/折线/双轴折线可加事件标注） | **是**，可直接处理数据集 |
 | Tokenize（分词） | TKN | jieba 分词输出词频，供导出或词云使用 | 否，需要上游数据 |

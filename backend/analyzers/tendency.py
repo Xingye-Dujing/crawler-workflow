@@ -4,6 +4,7 @@ import re
 import pandas as pd
 
 from analyzers.llm_client import run_llm_dataframe
+from analyzers.sentiment import BERT_BATCH, bert_backend, bert_device
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -16,13 +17,28 @@ class TendencyAnalyzer:
     model), batched and checkpointed so an interrupted run keeps everything it
     already finished.
     Mode ``ml``: batch classification via sklearn TF-IDF + LogisticRegression.
+    Mode ``bert``: a fine-tuned transformer sequence classifier over the whole column in
+    batches, when this machine can run one. The six stance labels are the ones in
+    :data:`valid_labels`; like the sentiment and emotion bert paths it refuses BY NAME when
+    the stack or model is missing and never falls back to ``llm``/``ml``.
     """
 
     _ML_MODEL_NAME = 'tendency'
 
-    def __init__(self, model_name: str = 'qwen3.5:9b', mode: str = 'llm'):
+    def __init__(
+        self,
+        model_name: str = 'qwen3.5:9b',
+        mode: str = 'llm',
+        bert_model: str = '',
+        batch_size: int = BERT_BATCH,
+    ):
         self.model_name = model_name
         self.mode = mode
+        # The bert pipeline path/name; blank is refused by name in _analyze_bert, never guessed.
+        self.bert_model = bert_model
+        # A configured 0 would make the bert chunking loop step zero times and score an empty
+        # column while reporting success, so the floor is one row.
+        self.batch_size = max(1, int(batch_size or BERT_BATCH))
         self.valid_labels = [
             'Objective Statement',
             'Praise/Affirmation',
@@ -149,6 +165,8 @@ Analyze strictly and output only the required plain string."""
     ) -> pd.DataFrame:
         if self.mode == 'ml':
             return self._analyze_ml(df, text_column)
+        if self.mode == 'bert':
+            return self._analyze_bert(df, text_column)
 
         return run_llm_dataframe(
             df,
@@ -189,4 +207,69 @@ Analyze strictly and output only the required plain string."""
             df.at[idx, 'tendency'] = label
             df.at[idx, 'tendency_confidence'] = score
         logger.info(t('ml.tendency_done', n=total))
+        return df
+
+    # ── BERT mode ───────────────────────────────────────────────
+
+    def _analyze_bert(self, df: pd.DataFrame, text_column: str) -> pd.DataFrame:
+        """One fine-tuned sequence classifier read over a whole column, in batches.
+
+        Refuses BY NAME like the sentiment and emotion bert paths: a missing
+        ``torch``/``transformers`` stack or a blank model name raises rather than quietly
+        running the LLM or sklearn classifier behind a column this node said a transformer
+        produced. A row that fails is left BLANK, not stamped ``Objective Statement`` —
+        「没有判断」 and 「判断为客观陈述」 are different statements, and only the first is honest
+        about a row the model never answered.
+        """
+        df['tendency'] = ''
+        df['tendency_confidence'] = None
+
+        missing = bert_backend()
+        if missing:
+            raise ValueError(t('tendency.bert_missing', need=missing))
+        model = str(self.bert_model or '').strip()
+        if not model:
+            raise ValueError(t('tendency.bert_no_model'))
+        if text_column not in df.columns:
+            logger.error(t('ml.missing_col', col=text_column))
+            return df
+
+        from transformers import pipeline
+
+        device = bert_device()
+        classify = pipeline('text-classification', model=model, device=device)
+        logger.info(t('tendency.bert_loaded', model=model, device='cuda' if device >= 0 else 'cpu'))
+
+        mask = df[text_column].notna() & (df[text_column].astype(str).str.strip() != '')
+        indices = df[mask].index.tolist()
+        if not indices:
+            logger.info(t('ml.no_rows'))
+            return df
+
+        valid = set(self.valid_labels)
+        scored = 0
+        failed = 0
+        for start in range(0, len(indices), self.batch_size):
+            chunk = indices[start : start + self.batch_size]
+            texts = [str(df.at[idx, text_column]).strip() for idx in chunk]
+            try:
+                answers = list(classify(texts, batch_size=len(texts), truncation=True, max_length=512))
+            except Exception as e:  # a batch that raises leaves only its own rows blank
+                logger.error(t('tendency.bert_failed', err=e))
+                failed += len(chunk)
+                continue
+            for idx, answer in zip(chunk, answers, strict=False):
+                label = str((answer or {}).get('label') or '')
+                if label not in valid:
+                    logger.warning(t('tendency.bert_bad_label', label=(answer or {}).get('label')))
+                    failed += 1
+                    continue
+                try:
+                    score = float((answer or {}).get('score'))
+                except (TypeError, ValueError):
+                    score = None
+                df.at[idx, 'tendency'] = label
+                df.at[idx, 'tendency_confidence'] = score
+                scored += 1
+        logger.info(t('tendency.bert_done', n=scored, failed=failed))
         return df
