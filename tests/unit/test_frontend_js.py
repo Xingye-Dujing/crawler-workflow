@@ -795,6 +795,15 @@ _POPUP_CASES = [
     ('suggestion-menu-keeps-history', ['history-panel'], ['.cand-menu'], {'history-panel'}),
     ('modal-dialog-keeps-history', ['history-panel'], ['#dialog-overlay'], {'history-panel'}),
     ('cookie-dialog-keeps-dashboard', ['dashboard-panel'], ['#cookie-dialog'], {'dashboard-panel'}),
+    (
+        # The 全屏图 window is a floating overlay the user opens FROM a dashboard cell;
+        # clicking it (or its X to close) is NOT a click on the canvas, so it must not
+        # dismiss the board behind it — that was the bug: the popup was treated as "outside".
+        'fullscreen-chart-keeps-dashboard',
+        ['dashboard-panel', 'history-panel'],
+        ['#chart-fullscreen-panel'],
+        {'dashboard-panel', 'history-panel'},
+    ),
     ('settings-panel-is-outside', ['dashboard-panel'], ['#node-settings'], set()),
     ('nothing-open-is-harmless', [], ['#workspace'], set()),
 ]
