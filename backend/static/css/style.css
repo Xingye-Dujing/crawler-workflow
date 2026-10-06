@@ -47,6 +47,7 @@
   --accent-process: #a85454;
   --accent-analysis: #9a7740;
   --accent-visualize: #4e8061;
+  --accent-compile: #3d6b6b;
   --accent-tokenize: #8a6ea8;
   --accent-output: #6f7f8a;
   --accent-resume: #7a6a8a;
@@ -1036,6 +1037,9 @@ body.style-menu-open #workspace #resume-banner {
 .node-type-visualize .node-header {
   border-left: 3px solid var(--accent-visualize);
 }
+.node-type-compile .node-header {
+  border-left: 3px solid var(--accent-compile);
+}
 .node-type-tokenize .node-header {
   border-left: 3px solid var(--accent-tokenize);
 }
@@ -1065,6 +1069,9 @@ body.style-menu-open #workspace #resume-banner {
 }
 .node-type-visualize.selected {
   border-color: var(--accent-visualize);
+}
+.node-type-compile.selected {
+  border-color: var(--accent-compile);
 }
 .node-type-tokenize.selected {
   border-color: var(--accent-tokenize);
@@ -1936,6 +1943,7 @@ button.history-del:hover {
 .rm-node.nt-process { border-left-color: var(--accent-process); }
 .rm-node.nt-analysis { border-left-color: var(--accent-analysis); }
 .rm-node.nt-visualize { border-left-color: var(--accent-visualize); }
+.rm-node.nt-compile { border-left-color: var(--accent-compile); }
 .rm-node.nt-tokenize { border-left-color: var(--accent-tokenize); }
 .rm-node.nt-output { border-left-color: var(--accent-output); }
 .rm-node.nt-resume { border-left-color: var(--accent-resume); }

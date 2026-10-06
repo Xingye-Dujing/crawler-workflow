@@ -28,6 +28,9 @@ DEFAULTS = {
     'driver_path': Config.DRIVER_PATH,
     # Chrome executable itself; empty = let Selenium find the default install.
     'browser_binary': '',
+    # MiKTeX ``xelatex`` executable used by the 编译 (compile) node to turn LaTeX into a PDF.
+    # Empty = auto-detect (PATH, then the common MiKTeX install locations).
+    'latex_binary': '',
     # "--window-size=WxH" passed to every crawler browser.
     'window_size': '1920x1080',
     # driver.set_page_load_timeout — how long a page may take to load.
@@ -162,6 +165,11 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 v = str(raw or '').strip()
                 if v and not os.path.isfile(v):
                     warnings.append(t('set.browserMissing', path=v))
+                vals[key] = v
+            elif key == 'latex_binary':
+                v = str(raw or '').strip()
+                if v and not os.path.isfile(v):
+                    warnings.append(t('set.latexMissing', path=v))
                 vals[key] = v
             elif key == 'window_size':
                 v = str(raw or '').strip()

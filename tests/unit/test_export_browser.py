@@ -173,6 +173,17 @@ class TestDownloadRule:
         assert is_downloadable('/tmp/anything.html') is False
         assert is_downloadable('/tmp/x.exe') is False
 
+    def test_a_pdf_is_listed_as_pdf_and_stays_downloadable(self, tmp_path):
+        """The compile node writes PDFs; the exports panel must label them ``pdf`` and hand them
+        back — a document, not a script. ``.pdf`` is deliberately NOT in the unsafe list."""
+        directory = tmp_path / 'exports'
+        directory.mkdir()
+        (directory / 'fig.pdf').write_bytes(b'%PDF-1.4 fake')
+        row = next(r for r in list_exports(str(directory)) if r['name'] == 'fig.pdf')
+        assert row['kind'] == 'pdf'
+        assert row['downloadable'] is True
+        assert is_downloadable(str(directory / 'fig.pdf')) is True
+
     def test_a_script_can_still_be_deleted(self, exports):
         """Removal is not the same permission as serving: clearing a stray file out
         of the export folder is exactly what the delete button is for."""

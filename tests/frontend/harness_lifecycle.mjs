@@ -122,13 +122,17 @@ for (const sc of scenarios) {
     delete sandbox.__stored.crawler_canvas;
     if (sc.hasDraft !== false) sandbox.__stored.crawler_canvas = JSON.stringify({ nodes: [], view: {} });
     if (sc.storedOpenFile !== undefined) sandbox.__stored.crawler_open_file = sc.storedOpenFile;
-    /* The boot step `openFile` runs restoreOpenFile(); a scenario opts into it. */
-    if (sc.restore) workflow.restoreOpenFile();
     sandbox.__dialogAnswer = sc.dialogAnswer ?? null;
     sandbox.__loadResponse = sc.loadResponse ?? null;
     vm.runInContext('globalThis.__fetchLog = [];', sandbox);
     sandbox.RunState._calls = [];
     sandbox.__toasts.length = 0;
+    /* The boot step `openFile` runs restoreOpenFile() (sets currentFile from the remembered name when
+       a draft came back), then `reloadOpenFile()` re-fetches that file's content from the server — so a
+       file updated outside this browser is opened fresh, not from the stale draft. Both run AFTER the
+       fetch/response reset so the reload's own round-trip is what the snapshot reads. */
+    if (sc.restore) workflow.restoreOpenFile();
+    if (sc.reload) await workflow.reloadOpenFile();
 
     for (const t of sc.add || []) canvas.addNode(t);
     if (sc.load) workflow.loadFromJSON(sc.load);

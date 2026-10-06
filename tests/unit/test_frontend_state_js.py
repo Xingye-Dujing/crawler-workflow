@@ -674,6 +674,17 @@ def life(tmp_path_factory, capabilities_matrix):
             'hasDraft': False,
             'restore': True,
         },
+        {
+            # The draft is only a snapshot; the file can be updated outside this browser. On entry the
+            # remembered file must be RE-FETCHED by name so the latest server content loads, not the
+            # stale draft (the seeded draft has no nodes; the loaded workflow does — proving the reload won).
+            'id': 'reload_open_file_fetches_latest',
+            'storedOpenFile': '甲流程',
+            'hasDraft': True,
+            'restore': True,
+            'reload': True,
+            'loadResponse': {'ok': True, 'workflow': opened},
+        },
         {'id': 'save_named', 'currentFile': 'wf1', 'save': True},
         {
             # The camera a person panned to must ride into the saved file.
@@ -855,6 +866,17 @@ class TestFileLifecycle:
         r = life['restore_without_a_draft']
         assert r['currentFile'] is None, 'no draft means no reopened file'
         assert r['draftStored'] is None
+
+    def test_entry_reloads_the_open_files_latest_content(self, life):
+        """The remembered draft is a snapshot; the file may have changed outside this browser. On
+        entry the open file is RE-FETCHED by name so the latest server content loads — the seeded
+        draft has no nodes, so seeing the server's three nodes proves the reload (not the draft) won."""
+        r = life['reload_open_file_fetches_latest']
+        assert r['currentFile'] == '甲流程'
+        assert any(f['url'].startswith('/api/workflow/load') for f in r['fetches']), 'entry must re-fetch the open file'
+        assert [n['title'] for n in r['nodes']] == ['抓取微博', '清洗', 'Output'], (
+            'the server content loads, not the stale draft'
+        )
 
     def test_a_failed_open_leaves_the_current_canvas_and_name_intact(self, life):
         r = life['open_missing']

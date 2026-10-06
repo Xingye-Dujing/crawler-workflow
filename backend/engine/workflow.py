@@ -109,6 +109,12 @@ def node_label(node: dict, nid: str) -> str:
 #: this rule exists to refuse.
 TABLE_NODE_TYPES = frozenset({'source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'output'})
 
+#: Node types that carry a PDF-able LaTeX artifact downstream rather than a row table: ``visualize`` emits a
+#: chart SPEC whose ``latex``/``latex_table`` fields a save node can compile, and ``compile`` emits the PDF
+#: it already built. Neither is in ``TABLE_NODE_TYPES`` (no rows), and they are the ONLY parents an output
+#: may have when its format is ``pdf`` — conversely a tabular format must never be fed by these.
+PDF_SOURCE_NODE_TYPES = frozenset({'visualize', 'compile'})
+
 
 def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
     """Refuse a node whose account holds no login — named, never guessed around.
@@ -439,17 +445,49 @@ class WorkflowEngine:
                 errors.append(t('engine.process_no_op', nid=label))
             if ntype == 'output' and not operation:
                 errors.append(t('engine.output_no_op', nid=label))
-            if ntype == 'output':
-                # A save node is the canvas's merge point: several incoming tables become
-                # one file, and the merged table is what flows onwards. Both halves of
-                # "there is nothing to save here" were passing validation silently — a
-                # save node with no wire at all, and one fed only by a name node or a
-                # chart — and then wrote an empty file over a green node.
+            if ntype == 'compile':
+                # A compile node turns a visualize parent's LaTeX into a PDF. Its ONLY honest source is a
+                # visualize node that will actually emit some: every parent must be a visualize, and each one
+                # must have at least one LaTeX box on — a both-off chart gives the compiler nothing, which is
+                # checked here (before the run is paid for) rather than surfacing as an empty-page PDF.
                 parents = [str(c.get('from')) for c in self.connections if str(c.get('to')) == str(nid)]
                 if not parents:
+                    errors.append(t('engine.compile_no_upstream', nid=label))
+                for pid in parents:
+                    pnode = self.nodes.get(pid) or {}
+                    if pnode.get('type') != 'visualize':
+                        errors.append(t('engine.compile_bad_parent', nid=label, up=node_label(pnode, pid)))
+                    elif not (
+                        as_bool((pnode.get('params') or {}).get('emit_latex', True))
+                        or as_bool((pnode.get('params') or {}).get('emit_latex_table', True))
+                    ):
+                        errors.append(t('engine.compile_source_both_off', nid=label, up=node_label(pnode, pid)))
+            if ntype == 'output':
+                # A save node is the canvas's merge point: several incoming tables become one file. Two
+                # shapes are legitimate and mutually exclusive — a TABULAR export (merged row tables), and a
+                # PDF export (a visualize/compile parent's LaTeX). Both halves of "nothing to save here"
+                # once passed silently (no wire at all; a chart wired to a csv save), so each format is
+                # checked against the parent types it can actually consume.
+                parents = [str(c.get('from')) for c in self.connections if str(c.get('to')) == str(nid)]
+                ptypes = {(self.nodes.get(pid) or {}).get('type') for pid in parents}
+                is_pdf = operation in ('save', 'save_csv') and (
+                    str(params.get('format') or '').lower() == 'pdf'
+                    or str(params.get('filename') or '').lower().endswith('.pdf')
+                )
+                if not parents:
                     errors.append(t('engine.output_no_upstream', nid=label))
-                elif not any((self.nodes.get(pid) or {}).get('type') in TABLE_NODE_TYPES for pid in parents):
-                    errors.append(t('engine.output_no_table', nid=label))
+                elif is_pdf:
+                    if ptypes & TABLE_NODE_TYPES:
+                        errors.append(t('engine.output_pdf_mixed', nid=label))
+                    if not (ptypes & PDF_SOURCE_NODE_TYPES):
+                        errors.append(t('engine.output_pdf_only_pdfable', nid=label))
+                    if 'visualize' in ptypes and 'compile' in ptypes:
+                        errors.append(t('engine.output_pdf_two_sources', nid=label))
+                elif not (ptypes & TABLE_NODE_TYPES):
+                    if ptypes & PDF_SOURCE_NODE_TYPES:
+                        errors.append(t('engine.output_needs_pdf', nid=label))
+                    else:
+                        errors.append(t('engine.output_no_table', nid=label))
             if ntype == 'analysis' and not (params.get('steps') or operation):
                 errors.append(t('engine.analysis_no_op', nid=label))
             if ntype == 'tokenize' and not params.get('text_column'):

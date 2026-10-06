@@ -866,3 +866,64 @@ class TestEffectiveWorkflowHelper:
         assert is_effectively_enabled(off, set()) is False
         assert is_effectively_enabled(on, {'source'}) is False
         assert is_effectively_enabled(off, {'analysis'}) is False
+
+
+# ─── compile node + PDF output validation ────────────────────────────────
+
+
+def _viz(nid='v', **params):
+    p = {'chart_type': 'bar', 'x_field': 'a', 'y_field': 'b'}
+    p.update(params)
+    return _node(nid, 'visualize', params=p)
+
+
+def _compile(nid='c'):
+    return _node(nid, 'compile', params={})
+
+
+def _output(nid='o', **params):
+    p = {'operation': 'save', 'format': 'csv', 'filename': 'x.csv'}
+    p.update(params)
+    return _node(nid, 'output', params=p)
+
+
+class TestCompileAndPdfValidation:
+    def test_a_compile_with_no_upstream_is_refused(self, en):
+        errors = WorkflowEngine(_wf([_compile()], [])).validate()
+        assert any('has no incoming connection' in e for e in errors), errors
+
+    def test_a_compile_fed_by_a_non_visualize_is_refused(self, en):
+        nodes = [_node('p', 'process', params={'operation': 'clean'}), _compile()]
+        conns = [{'from': 'p', 'to': 'c'}]
+        errors = WorkflowEngine(_wf(nodes, conns)).validate()
+        assert any('only accepts a visualize' in e for e in errors), errors
+
+    def test_a_compile_fed_by_a_chart_with_both_boxes_off_is_refused(self, en):
+        nodes = [_viz(emit_latex=False, emit_latex_table=False), _compile()]
+        conns = [{'from': 'v', 'to': 'c'}]
+        errors = WorkflowEngine(_wf(nodes, conns)).validate()
+        assert any('neither the LaTeX figure' in e for e in errors), errors
+
+    def test_a_compile_fed_by_a_chart_that_emits_latex_is_clean(self, en):
+        nodes = [_viz(), _compile()]
+        conns = [{'from': 'v', 'to': 'c'}]
+        errors = WorkflowEngine(_wf(nodes, conns)).validate()
+        assert not any('compile node' in e or 'only accepts a visualize' in e for e in errors), errors
+
+    def test_a_pdf_output_fed_by_a_chart_is_clean(self, en):
+        nodes = [_viz(), _output(format='pdf', filename='x.pdf')]
+        conns = [{'from': 'v', 'to': 'o'}]
+        errors = WorkflowEngine(_wf(nodes, conns)).validate()
+        assert not any('PDF output' in e or 'must be PDF' in e for e in errors), errors
+
+    def test_a_pdf_output_mixed_with_a_table_is_refused(self, en):
+        nodes = [_node('p', 'process', params={'operation': 'clean'}), _output(format='pdf', filename='x.pdf')]
+        conns = [{'from': 'p', 'to': 'o'}]
+        errors = WorkflowEngine(_wf(nodes, conns)).validate()
+        assert any('cannot mix with tabular' in e for e in errors), errors
+
+    def test_a_chart_fed_to_a_csv_output_is_told_to_use_pdf(self, en):
+        nodes = [_viz(), _output(format='csv', filename='x.csv')]
+        conns = [{'from': 'v', 'to': 'o'}]
+        errors = WorkflowEngine(_wf(nodes, conns)).validate()
+        assert any('format must be PDF' in e for e in errors), errors

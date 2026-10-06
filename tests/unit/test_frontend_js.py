@@ -296,6 +296,64 @@ def results(tmp_path_factory, capabilities_matrix):
             'connections': [{'from': 'u1', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
         },
         {'id': 'empty', 'nodes': [], 'connections': []},
+        # ── compile node + PDF output validation (frontend mirror of engine.validate) ──
+        {'id': 'compile_no_up', 'nodes': [_node('c', 'compile', {})], 'connections': []},
+        {
+            'id': 'compile_bad_parent',
+            'nodes': [_node('p', 'process', {'operation': 'clean'}), _node('c', 'compile', {})],
+            'connections': [{'from': 'p', 'to': 'c'}],
+        },
+        {
+            'id': 'compile_both_off',
+            'nodes': [
+                _node(
+                    'v',
+                    'visualize',
+                    {'chart_type': 'bar', 'x_field': 'a', 'emit_latex': False, 'emit_latex_table': False},
+                ),
+                _node('c', 'compile', {}),
+            ],
+            'connections': [{'from': 'v', 'to': 'c'}],
+        },
+        {
+            'id': 'compile_clean',
+            'nodes': [_node('v', 'visualize', {'chart_type': 'bar', 'x_field': 'a'}), _node('c', 'compile', {})],
+            'connections': [{'from': 'v', 'to': 'c'}],
+        },
+        {
+            'id': 'output_chart_csv',
+            'nodes': [_node('v', 'visualize', {'chart_type': 'bar', 'x_field': 'a'}), _save('out-1', 'x.csv')],
+            'connections': [{'from': 'v', 'to': 'out-1'}],
+        },
+        {
+            'id': 'output_chart_pdf',
+            'nodes': [
+                _node('v', 'visualize', {'chart_type': 'bar', 'x_field': 'a'}),
+                _node('out-1', 'output', {'operation': 'save', 'format': 'pdf', 'filename': 'x.pdf'}),
+            ],
+            'connections': [{'from': 'v', 'to': 'out-1'}],
+        },
+        {
+            'id': 'output_pdf_mixed',
+            'nodes': [
+                _node('p', 'process', {'operation': 'clean'}),
+                _node('out-1', 'output', {'operation': 'save', 'format': 'pdf', 'filename': 'x.pdf'}),
+            ],
+            'connections': [{'from': 'p', 'to': 'out-1'}],
+        },
+        # ── the output format GATE on the panel: pdf-only behind a chart/compile upstream ──
+        {
+            'id': 'panel_output_pdf_gate',
+            'node': _node('n1', 'output', {'operation': 'save', 'filename': 'x.csv'}),
+            'extraNodes': [_node('viz', 'visualize', {'chart_type': 'bar', 'x_field': 'a'})],
+            'connections': [{'from': 'viz', 'to': 'n1'}],
+        },
+        {
+            'id': 'panel_output_no_gate',
+            'node': _node('n1', 'output', {'operation': 'save', 'filename': 'x.csv'}),
+            'extraNodes': [_node('proc', 'process', {'operation': 'clean'})],
+            'connections': [{'from': 'proc', 'to': 'n1'}],
+        },
         {
             'id': 'titleless',
             'nodes': [
@@ -1293,3 +1351,55 @@ class TestThePanelFollowsALiveRun:
         """A history panel is read for what happened; an unrecognised stored value must
         show that value rather than borrow the friendly verdict."""
         assert runsmgr['follow']['unknownLabel'] == 'undone-by-a-stranger', runsmgr['follow']
+
+
+class TestCompileAndPdfGate:
+    """The browser's half of the compile/PDF rules: which validate messages fire, and the output
+    node's format dropdown narrowing to PDF only when it is fed a chart / compile — the exact
+    rule the backend enforces, checked here against the REAL workflow.js (not a mirror)."""
+
+    @staticmethod
+    def _keys(messages):
+        return [_parse(m)[0] for m in messages]
+
+    def test_a_compile_with_no_upstream_is_named(self, results):
+        assert 'validate.compileInput' in self._keys(results['validate']['compile_no_up'])
+
+    def test_a_compile_fed_by_a_non_chart_is_named(self, results):
+        assert 'validate.compileBadParent' in self._keys(results['validate']['compile_bad_parent'])
+
+    def test_a_compile_fed_by_a_chart_with_both_boxes_off_is_named(self, results):
+        assert 'validate.compileSourceBothOff' in self._keys(results['validate']['compile_both_off'])
+
+    def test_a_compile_fed_by_a_chart_that_emits_latex_is_clean(self, results):
+        # The frontend also insists a chart has an upstream (validate.visualizeInput), which the
+        # backend does not — so assert the COMPILE rules specifically stayed silent.
+        keys = self._keys(results['validate']['compile_clean'])
+        assert not {'validate.compileInput', 'validate.compileBadParent', 'validate.compileSourceBothOff'} & set(
+            keys
+        ), keys
+
+    def test_a_chart_wired_to_a_csv_save_is_told_to_use_pdf(self, results):
+        assert 'validate.outputNeedsPdf' in self._keys(results['validate']['output_chart_csv'])
+
+    def test_a_chart_wired_to_a_pdf_save_is_clean(self, results):
+        keys = self._keys(results['validate']['output_chart_pdf'])
+        assert not {
+            'validate.outputPdfMixed',
+            'validate.outputPdfOnly',
+            'validate.outputPdfTwoSources',
+            'validate.outputNeedsPdf',
+        } & set(keys), keys
+
+    def test_a_pdf_save_mixed_with_a_table_is_named(self, results):
+        assert 'validate.outputPdfMixed' in self._keys(results['validate']['output_pdf_mixed'])
+
+    def test_the_output_dropdown_offers_only_pdf_behind_a_chart(self, results):
+        html = results['settings']['panel_output_pdf_gate']
+        assert 'value="pdf"' in html, 'a chart-fed save must offer PDF'
+        assert 'value="csv"' not in html, 'the tabular formats must disappear when the source is a chart'
+
+    def test_the_output_dropdown_hides_pdf_behind_a_table(self, results):
+        html = results['settings']['panel_output_no_gate']
+        assert 'value="csv"' in html
+        assert 'value="pdf"' not in html, 'a table-fed save must not be offered PDF'

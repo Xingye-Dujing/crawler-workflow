@@ -115,6 +115,11 @@ class TestFormatSelection:
         naming_formats = [names for names in offered if set(names) & set(E.SUPPORTED_FORMATS)]
         assert naming_formats, 'the scan found no format list at all'
         assert all(set(names) <= set(E.SUPPORTED_FORMATS) for names in naming_formats), naming_formats
+        # PDF is a compiled-LaTeX artifact, NOT a tabular exporter format, so it must stay out of
+        # SUPPORTED_FORMATS and never appear in a table `.map` list. It is offered only behind the
+        # output node's upstream-type gate.
+        assert 'pdf' not in E.SUPPORTED_FORMATS, 'PDF is not a DataExporter tabular format'
+        assert '_outputIsPdfOnly' in source, 'the panel must offer pdf only behind the upstream-type gate'
 
     def test_an_explicit_format_beats_the_extension(self, df, tmp_path):
         target = str(tmp_path / 'out.csv')

@@ -259,7 +259,7 @@ const canvas = {
             const newTypeByAction = {
                 ctxNewSource: 'source', ctxNewUpload: 'upload', ctxNewProcess: 'process',
                 ctxNewAnalysis: 'analysis', ctxNewVisualize: 'visualize', ctxNewTokenize: 'tokenize',
-                ctxNewOutput: 'output',
+                ctxNewOutput: 'output', ctxNewCompile: 'compile',
             };
             Object.keys(newTypeByAction).forEach((action) => {
                 const el = ctxMenu.querySelector('[data-action="' + action + '"]');
@@ -284,6 +284,7 @@ const canvas = {
                 case 'ctxNewAnalysis':
                 case 'ctxNewVisualize':
                 case 'ctxNewTokenize':
+                case 'ctxNewCompile':
                 case 'ctxNewOutput': {
                     const pos = this._contextMenuPos
                         ? this._screenToCanvas(this._contextMenuPos.x - 110, this._contextMenuPos.y - 40)
@@ -293,6 +294,7 @@ const canvas = {
                         ctxNewProcess: 'process',
                         ctxNewAnalysis: 'analysis', ctxNewVisualize: 'visualize',
                         ctxNewTokenize: 'tokenize',
+                        ctxNewCompile: 'compile',
                         ctxNewOutput: 'output',
                     };
                     this.addNode(typeMap[action], pos.x, pos.y);
@@ -515,6 +517,7 @@ const canvas = {
             visualize: I18n.t('node.visualize'),
             tokenize: I18n.t('node.tokenize'),
             output: I18n.t('node.output'),
+            compile: I18n.t('node.compile'),
             resume: I18n.t('node.resume'),
             comment: I18n.t('node.comment'),
         };
@@ -655,6 +658,9 @@ const canvas = {
            inside it whichever node holds the most rows. */
         if (type === 'resume') return { resume_run_id: '', resume_node_id: '', resume_limit: 0 };
         if (type === 'comment') return { urls: '', comment_limit: 0, part_size: 50, per_article_file: true, keep_parts: false, recrawl: false, format: 'csv' };
+        /* A compile node carries no fields of its own: it reads the LaTeX its upstream
+           visualize node produced. Its only setting is the MiKTeX path, which lives in 设置. */
+        if (type === 'compile') return {};
         if (type === 'output') return { operation: 'save', format: 'csv', filename: 'export.csv' };
         return {};
     },
@@ -771,6 +777,10 @@ const canvas = {
                 return I18n.t('settings.format') + ': ' + (params.format || 'csv') + ' \u2192 ' + (params.filename || 'export');
             }
             return I18n.t('settings.operation') + ': ' + (op ? I18n.t('op.' + op) : '?');
+        }
+        if (type === 'compile') {
+            /* No fields to show: it compiles whatever LaTeX its upstream visualize node emitted. */
+            return I18n.t('compile.summary');
         }
         return '';
     },

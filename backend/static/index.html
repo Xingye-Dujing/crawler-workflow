@@ -361,6 +361,10 @@
         <span class="palette-tag">[VIZ]</span>
         <span data-i18n="palette.visualize">Visualize</span>
       </div>
+      <div class="palette-item" data-type="compile" draggable="true">
+        <span class="palette-tag">[CMP]</span>
+        <span data-i18n="palette.compile">Compile (PDF)</span>
+      </div>
       <div class="palette-item" data-type="output" draggable="true">
         <span class="palette-tag">[OUT]</span>
         <span data-i18n="palette.output">Output</span>
@@ -962,6 +966,13 @@
       </div>
       <div
         class="ctx-item"
+        data-action="ctxNewCompile"
+        data-i18n="ctx.newCompile"
+      >
+        New Compile Node
+      </div>
+      <div
+        class="ctx-item"
         data-action="ctxNewOutput"
         data-i18n="ctx.newOutput"
       >
@@ -1512,6 +1523,18 @@
             class="settings-input"
             placeholder="chrome.exe（留空=自动）"
             oninput="onSettingInput('browser_binary', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.latexBinary">MiKTeX 编译程序路径</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-latex"
+            class="settings-input"
+            placeholder="xelatex.exe（留空=自动）"
+            oninput="onSettingInput('latex_binary', this.value)"
           />
         </span>
       </div>

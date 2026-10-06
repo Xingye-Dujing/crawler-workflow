@@ -51,6 +51,7 @@ _ZH = {
         '节点 {nid} 的上游「{up}」不产出表格（是图表配置或错误应答），无法合并——请断开这条连线，'
         '或改接一个产出表格的节点'
     ),
+    'wf.compile_no_source': '编译节点没有可编译的 LaTeX 来源（上游可视化节点既未产出图也未产出表）',
     'wf.merge_columns': (
         '节点 {nid} 合并上游表时列名不一致，对比「{up}」：多出 [{extra}]、缺少 [{missing}]。'
         '不做外连接合并——那会凭空补出空值，让文件看起来完整'
@@ -151,6 +152,7 @@ _ZH = {
     'node.output': '输出',
     'node.resume': '断点续跑',
     'node.comment': '评论采集',
+    'node.compile': '编译',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': '开始搜索知乎关键词: "{kw}"，目标获取 {n} 条结果',
     'crawl.zhihu.authorStart': '[知乎] 采集作者「{author}」的回答与文章，目标 {n} 条',
@@ -967,6 +969,15 @@ _ZH = {
     'engine.output_no_table': (
         '节点 {nid}：输出节点的上游都不产出表格（命名节点只是元数据，可视化节点产出的是图表配置）'
     ),
+    'engine.output_needs_pdf': '节点 {nid}：上游是可视化/编译节点时，输出格式必须为 PDF',
+    'engine.output_pdf_mixed': '节点 {nid}：PDF 输出不能与表格类上游混接（请只用可视化或编译节点作上游）',
+    'engine.output_pdf_only_pdfable': '节点 {nid}：PDF 输出的上游必须是可视化节点或编译节点',
+    'engine.output_pdf_two_sources': '节点 {nid}：PDF 输出不能同时接可视化节点与编译节点（二选一）',
+    'engine.compile_no_upstream': '节点 {nid}：编译节点没有上游连线（需要连接可视化节点）',
+    'engine.compile_bad_parent': '节点 {nid}：编译节点只能接收可视化节点的 LaTeX，上游「{up}」不是可视化节点',
+    'engine.compile_source_both_off': (
+        '节点 {nid}：上游可视化「{up}」的 LaTeX 图与三线表复选框都没勾选，编译节点无内容可编'
+    ),
     'engine.analysis_no_op': '节点 {nid}：分析节点没有配置操作或步骤',
     'engine.cycle': '工作流存在环，以下节点无法排序：{nodes}',
     # A wire whose end is not on the canvas is not a cycle. Reporting it as one
@@ -1036,6 +1047,7 @@ _ZH = {
     'set.driverMissing': '驱动文件不存在：{path}',
     'set.driverEmpty': '驱动路径为空，已恢复默认值',
     'set.browserMissing': '浏览器程序不存在：{path}',
+    'set.latexMissing': 'MiKTeX 编译程序不存在：{path}',
     'set.badWindow': '窗口大小格式应为 宽x高（如 1920x1080），已恢复默认 {default}',
     'set.badNumber': '{setting} 不是数字，已恢复默认 {value}',
     'set.outOfRange': '{setting} 超出范围 {lo}-{hi}，已恢复默认 {value}',
@@ -1202,6 +1214,10 @@ _ZH = {
     'api.reportPdfNotFound': '找不到可导出为 PDF 的报告：{name}',
     'api.reportPdfNoChrome': '找不到 Chrome 浏览器，无法导出 PDF（请在设置里指定浏览器路径）',
     'api.reportPdfFailed': 'PDF 导出失败：{err}',
+    'run.compileSaved': 'PDF 已编译：{name}（{size} 字节）',
+    'run.compileFailed': 'LaTeX 编译失败：{err}',
+    'api.compilePdfNoXelatex': '找不到 MiKTeX 的 xelatex，无法编译 PDF（可在设置里指定编译程序路径）',
+    'api.compilePdfFailed': 'LaTeX 编译为 PDF 失败：{err}',
     # ── 自动清理（housekeeping） ──────────────────────────────
     'housekeeping.done': (
         '自动清理：删除 {runs} 条过期运行记录、{files} 个孤立文件（另回收 {cache} 条模型缓存、{seen} 条去重记录）'
@@ -1236,6 +1252,9 @@ _EN = {
     'wf.merge_not_tabular': (
         'Node {nid}: upstream "{up}" produces no table (a chart spec or a refusal), so it cannot be merged — '
         'disconnect that wire or point it at a node that carries rows'
+    ),
+    'wf.compile_no_source': (
+        'The compile node has no LaTeX to compile (its upstream visualize produced neither a figure nor a table)'
     ),
     'wf.merge_columns': (
         'Node {nid}: the upstream tables have different columns, compared with "{up}": extra [{extra}], '
@@ -1338,6 +1357,7 @@ _EN = {
     'node.output': 'Output',
     'node.resume': 'Resume Run',
     'node.comment': 'Comments',
+    'node.compile': 'Compile',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': 'Searching Zhihu for "{kw}", target {n} results',
     'crawl.zhihu.authorStart': '[Zhihu] collecting answers and articles of "{author}", target {n} rows',
@@ -2254,6 +2274,25 @@ _EN = {
         "Node {nid}: none of the output node's upstreams produces a table "
         '(a name node is metadata, a visualize node answers a chart spec)'
     ),
+    'engine.output_needs_pdf': (
+        'Node {nid}: the upstream is a visualize/compile node, so the output format must be PDF'
+    ),
+    'engine.output_pdf_mixed': (
+        'Node {nid}: a PDF output cannot mix with tabular upstreams — '
+        'use only a visualize or compile node as the source'
+    ),
+    'engine.output_pdf_only_pdfable': 'Node {nid}: a PDF output must be fed by a visualize or compile node',
+    'engine.output_pdf_two_sources': (
+        'Node {nid}: a PDF output cannot take both a visualize node and a compile node — pick one'
+    ),
+    'engine.compile_no_upstream': 'Node {nid}: the compile node has no incoming connection (it needs a visualize node)',
+    'engine.compile_bad_parent': (
+        'Node {nid}: the compile node only accepts a visualize node’s LaTeX; upstream "{up}" is not one'
+    ),
+    'engine.compile_source_both_off': (
+        'Node {nid}: the upstream visualize "{up}" has neither the LaTeX figure nor the three-line table box checked, '
+        'so there is nothing to compile'
+    ),
     'engine.analysis_no_op': 'Node {nid}: analysis node has no operation/steps configured',
     'engine.cycle': 'the workflow contains a cycle; these nodes cannot be ordered: {nodes}',
     'engine.dangling_connection': 'a connection points at a node the canvas does not hold: {src} → {dst}',
@@ -2332,6 +2371,7 @@ _EN = {
     'set.driverMissing': 'Driver file does not exist: {path}',
     'set.driverEmpty': 'Driver path was empty — restored the default',
     'set.browserMissing': 'Browser executable does not exist: {path}',
+    'set.latexMissing': 'MiKTeX compiler does not exist: {path}',
     'set.badWindow': 'Window size must look like WIDTHxHEIGHT (e.g. 1920x1080) — restored the default {default}',
     'set.badNumber': '{setting} is not a number — restored the default {value}',
     'set.outOfRange': '{setting} is outside {lo}-{hi} — restored the default {value}',
@@ -2530,6 +2570,12 @@ _EN = {
     'api.reportPdfNotFound': 'No report to export as PDF: {name}',
     'api.reportPdfNoChrome': 'Chrome was not found, so the PDF cannot be exported (set a browser path in Settings)',
     'api.reportPdfFailed': 'PDF export failed: {err}',
+    'run.compileSaved': 'PDF compiled: {name} ({size} bytes)',
+    'run.compileFailed': 'LaTeX compilation failed: {err}',
+    'api.compilePdfNoXelatex': (
+        'MiKTeX xelatex was not found, so the PDF cannot be compiled (set the compiler path in Settings)'
+    ),
+    'api.compilePdfFailed': 'LaTeX to PDF compilation failed: {err}',
     # ── housekeeping ──────────────────────────────────────────
     'housekeeping.done': (
         'Housekeeping: dropped {runs} expired run record(s) and {files} orphaned file(s) '

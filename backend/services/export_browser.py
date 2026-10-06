@@ -43,6 +43,7 @@ KINDS = {
     '.txt': 'text',
     '.md': 'markdown',
     '.png': 'image',
+    '.pdf': 'pdf',
     '.html': 'report',
     '.htm': 'report',
 }

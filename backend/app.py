@@ -47,7 +47,7 @@ from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, effective_workflow, node_label
 from i18n import audit, get_lang, normalize, set_lang, t
-from services import StatsService, lock_store
+from services import StatsService, latex_compile, lock_store
 from services import net_probe as network_probe
 from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
@@ -3192,6 +3192,93 @@ def _merge_upstream_tables(current_input: list, upstream: list, label: str) -> t
     return merged.to_dict('records'), (str(label), len(merged))
 
 
+def _pdf_filename(params: dict) -> str:
+    """The final PDF file name from an output node's params: sanitized, extension forced to ``.pdf``.
+
+    Deliberately NOT ``DataExporter.normalize_filename`` — that re-applies a *tabular* extension from its
+    whitelist and would turn 「report.pdf」 into 「report.csv」. A PDF's name is its own contract.
+    """
+    base = os.path.splitext(sanitize_filename(params.get('filename', 'export.pdf')))[0]
+    name = f'{base}.pdf'
+    if as_bool(params.get('filename_timestamp')):
+        name = DataExporter.stamp_filename(name, Config.EXPORT_DIR)
+    return name
+
+
+def _output_pdf(node: dict, upstream: list) -> dict:
+    """Write the PDF an output node owes when its upstream carries LaTeX (visualize) or an already-compiled
+    artifact (compile). Validation guarantees every parent here is one of those two and never mixes them,
+    so exactly one source kind is present and ``xelatex`` runs once per chain — never twice.
+    """
+    params = node.get('params', {})
+    docs = []
+    staged_pdf = ''
+    for _pid, res in upstream or ():
+        if not isinstance(res, dict):
+            continue
+        if 'error' in res:
+            # The parent already failed for its OWN named reason; carry that up verbatim rather than
+            # inventing a second message for a single failure.
+            return {'error': str(res.get('error'))}
+        if res.get('pdf_file'):
+            staged_pdf = res['pdf_file']
+        if res.get('latex'):
+            docs.append(res['latex'])
+        if res.get('latex_table'):
+            docs.append(res['latex_table'])
+    filename = _pdf_filename(params)
+    if staged_pdf:
+        # The compile node already produced this (staged in EXPORT_DIR); finalize it under the user's name.
+        staged = os.path.join(Config.EXPORT_DIR, staged_pdf)
+        try:
+            os.replace(staged, os.path.join(Config.EXPORT_DIR, filename))
+        except OSError as e:
+            return {'error': t('api.compilePdfFailed', err=e)}
+        size = os.path.getsize(os.path.join(Config.EXPORT_DIR, filename))
+        add_log(t('run.compileSaved', name=filename, size=size))
+        return {'pdf_file': filename, 'pdf_bytes': size}
+    if not docs:
+        return {'error': t('wf.compile_no_source')}
+    out, name = latex_compile.compile_pdf(latex_compile.compose_tex(docs), filename, Config.EXPORT_DIR)
+    if 'error' in out:
+        return out
+    add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
+    return {'pdf_file': name, 'pdf_bytes': out.get('pdf_bytes', 0)}
+
+
+def _execute_compile_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
+    """Compile node: read the LaTeX one or more ``visualize`` parents produced — from their DICT results in
+    ``upstream``, because a visualize emits no rows so ``current_input`` is empty here — assemble it into
+    ONE document, and compile it to a staged PDF with the user's MiKTeX.
+
+    ``emit_latex``/``emit_latex_table`` already guarantee a source exists (``validate`` refuses a both-off
+    visualize upstream before a run); if nothing arrives anyway — a parent that failed — refuse BY NAME and
+    never emit an empty PDF. The PDF is staged under a deterministic per-node name; a downstream ``output``
+    renames it to the user's file, and a chain with no output simply leaves it in the export dir.
+    """
+    docs = []
+    sources = []
+    for pid, res in upstream or ():
+        if not isinstance(res, dict):
+            continue
+        if 'error' in res:
+            return {'error': str(res.get('error'))}
+        if res.get('latex'):
+            docs.append(res['latex'])
+        if res.get('latex_table'):
+            docs.append(res['latex_table'])
+        sources.append(str(pid))
+    if not docs:
+        return {'error': t('wf.compile_no_source')}
+    out_name = f'compile-{node.get("id")}.pdf'
+    out, name = latex_compile.compile_pdf(latex_compile.compose_tex(docs), out_name, Config.EXPORT_DIR)
+    if 'error' in out:
+        add_log(t('run.compileFailed', err=out['error']))
+        return out
+    add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
+    return {**out, 'sources': sources}
+
+
 def _execute_output_node(node: dict, current_input: list, upstream: list = None):
     """Save node: merges every incoming table, exports it, and passes it downstream.
 
@@ -3205,6 +3292,12 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None)
     """
     params = node.get('params', {})
     op = node.get('operation', params.get('operation', ''))
+    # PDF is not a tabular export: when the format is pdf the node compiles the LaTeX its upstream
+    # visualize / compile produced (see _output_pdf) and never reaches the row merge below, which would
+    # refuse a dict upstream with wf.merge_not_tabular.
+    _fmt = str(params.get('format') or DataExporter.infer_format(params.get('filename', '')) or '').lower()
+    if op in ('save', 'save_csv') and _fmt == 'pdf':
+        return _output_pdf(node, upstream)
     if not current_input and not upstream:
         return []
 
@@ -4338,12 +4431,14 @@ def _execute_resume_node(node: dict, ctx: dict):
     return rows
 
 
-# Node types that never read the rows their inputs carry. Their data comes
+# Node types that never read the ROWS their inputs carry. Their data comes
 # from somewhere else — the platform crawler, the already-uploaded file, the
-# run store, or (for `name`) nowhere at all. The "upstream came up empty →
-# skip" rule below must not apply to them, or a whole chain hanging off a
-# name node gets silently skipped: the name node produces no rows by design.
-_NON_INPUT_NODES = frozenset({'source', 'upload', 'resume', 'name', 'comment'})
+# run store, (for `name`) nowhere at all, or (for `compile`) a visualize parent's
+# LaTeX *dict*, which is not a row table at all. The "upstream came up empty →
+# skip" rule below keys on `any parent result is a non-empty list`, so a compile
+# hanging off a visualize (a dict) would be skipped as "no rows" — exempting it
+# is what lets it read its source. A whole chain off a name node is the other case.
+_NON_INPUT_NODES = frozenset({'source', 'upload', 'resume', 'name', 'comment', 'compile'})
 
 #: Node types the console stays quiet about. A 工作流命名 node carries a label and
 #: computes nothing; an 上传文件 node re-reads a file the user already pointed at.
@@ -4443,7 +4538,20 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         add_log(t('run.restored', nid=label, n=len(rows)), wf_idx=wf_idx)
         return rows, NODE_RESTORED
 
-    if upstream and ntype not in _NON_INPUT_NODES and not any(isinstance(res, list) and res for _pid, res in upstream):
+    def _carries_artifact(res: object) -> bool:
+        # A visualize / compile parent hands down a DICT, not rows; that dict IS its product (a chart spec
+        # carrying LaTeX, or a staged PDF). "empty upstream" must not read a chart as nothing, or a
+        # chart→save(PDF) and a chart→compile would both be skipped before either runs.
+        if not isinstance(res, dict) or res.get('error'):
+            return False
+        return any(key in res for key in ('latex', 'latex_table', 'pdf_file'))
+
+    if (
+        upstream
+        and ntype not in _NON_INPUT_NODES
+        and not any(isinstance(res, list) and res for _pid, res in upstream)
+        and not (ntype in ('compile', 'output') and any(_carries_artifact(res) for _pid, res in upstream))
+    ):
         # Everything this node would work on came up empty — usually because
         # its parent died with nothing. Skipping beats pretending we ran.
         # Types that ignore their inputs entirely are exempt: an empty
@@ -4606,6 +4714,10 @@ def _execute_node(
         return _execute_visualize_node(node, current_input)
     if ntype == 'tokenize':
         return _execute_tokenize_node(node, current_input)
+    if ntype == 'compile':
+        # ``upstream`` is the whole point: a compile node reads the LaTeX a visualize parent produced from
+        # the (parent_id, result-dict) pairs, NOT from ``current_input`` (a dict upstream arrives as []).
+        return _execute_compile_node(node, current_input, upstream=upstream, ctx=ctx)
     if ntype == 'output':
         # ``upstream`` reaches it so several incoming tables become ONE: a crawl split
         # over several batches is the normal reason a user wires two nodes into a save

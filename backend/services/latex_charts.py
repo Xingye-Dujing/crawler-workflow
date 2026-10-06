@@ -193,21 +193,19 @@ class LatexChartService:
     # ── document shell ────────────────────────────────────────────────
 
     @staticmethod
-    def _document(body: str, chart_type: str, title: str, *, table: bool) -> str:
-        """Wrap a body in a standalone doc that compiles.
-
-        ``standalone`` boxes its body, so a float (``figure``) or ``\\centering`` is illegal at its
-        top level ("Not allowed in LR mode"). The body is emitted bare; the paper ``figure`` wrapper
-        and the package list ride along as comments, which is what the user pastes into a real paper.
-        A bare ``axis`` must live inside a ``tikzpicture``; a ``tikzpicture``/``minipage``/``tabular``
+    def _wrap_body(body: str) -> str:
+        """A bare ``axis`` must live inside a ``tikzpicture``; a ``tikzpicture``/``minipage``/``tabular``
         body is already a box and is left alone.
         """
-        wrapped = body
         if '\\begin{axis}' in body and '\\begin{tikzpicture}' not in body:
-            wrapped = '\\begin{tikzpicture}\n' + body + '\n\\end{tikzpicture}'
-        kind = '三线表' if table else '图'
-        caption = _esc(title) if title else f'{_esc(chart_type)}（{kind}）'
-        head = (
+            return '\\begin{tikzpicture}\n' + body + '\n\\end{tikzpicture}'
+        return body
+
+    @staticmethod
+    def _standalone_head(kind: str, chart_type: str, title: str, caption: str) -> str:
+        """The comment block a paper author pastes around, then the documentclass + shared preamble up to
+        (and including) ``\\begin{document}``. The figure and the table share this one preamble."""
+        return (
             f'% 采析绘 LaTeX {kind}（chart_type={chart_type}）\n'
             '% 用 MiKTeX 的 xelatex 编译（含中文，依赖 ctex）。\n'
             '% 复制进论文：在导言区加载 ctex、pgfplots(compat=1.18)、tikz(+ 下列库)、booktabs、amssymb、xcolor，\n'
@@ -218,7 +216,42 @@ class LatexChartService:
             + '}\\end{figure}\n'
             '\\documentclass[border=6pt]{standalone}\n' + _PACKAGES + _preamble_extras() + '\n\\begin{document}\n'
         )
-        return head + wrapped + '\n\\end{document}\n'
+
+    @classmethod
+    def _document(cls, body: str, chart_type: str, title: str, *, table: bool) -> str:
+        """Wrap a body in a standalone doc that compiles.
+
+        ``standalone`` boxes its body, so a float (``figure``) or ``\\centering`` is illegal at its
+        top level ("Not allowed in LR mode"). The body is emitted bare; the paper ``figure`` wrapper
+        and the package list ride along as comments, which is what the user pastes into a real paper.
+        """
+        kind = '三线表' if table else '图'
+        caption = _esc(title) if title else f'{_esc(chart_type)}（{kind}）'
+        return cls._standalone_head(kind, chart_type, title, caption) + cls._wrap_body(body) + '\n\\end{document}\n'
+
+    @staticmethod
+    def _strip_shell(doc: str) -> str:
+        """The body this service put between the (exactly one) begin/end ``document`` of a standalone doc.
+
+        Safe to split on those markers because every document consumed here was produced by ``_document``,
+        which emits each marker once and nothing that looks like them in the body.
+        """
+        return doc.split(r'\begin{document}', 1)[1].rsplit(r'\end{document}', 1)[0].strip()
+
+    @classmethod
+    def compose_from_standalone(cls, docs: list[str]) -> str:
+        """Merge the bodies of several standalone documents (this service's own figure/table sources)
+        into ONE standalone sharing a single preamble — so a ``compile`` node emits figure and three-line
+        table together in one PDF with a single ``xelatex`` pass.
+
+        ``standalone`` keeps its body in LR mode, so adjacent boxes are separated with ``\\par`` (a bare
+        ``axis`` beside a ``tabular`` would otherwise collide). The stripped body is already box-wrapped by
+        ``_wrap_body`` from its own source, so it is joined verbatim.
+        """
+        bodies = [cls._strip_shell(doc) for doc in docs if doc]
+        body = '\n\\par\n\n'.join(bodies)
+        head = cls._standalone_head('组合', 'compile', '', _esc('图表'))
+        return head + body + '\n\\end{document}\n'
 
     # ── figure dispatch ───────────────────────────────────────────────
 

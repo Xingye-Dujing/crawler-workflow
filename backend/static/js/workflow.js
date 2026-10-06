@@ -210,6 +210,25 @@ const workflow = {
         }
     },
 
+    /* The remembered open file is the source of truth, but a local draft is only a SNAPSHOT of it:
+       the file can be changed out from under us (a re-save, another tab, an edit on the server). So on
+       entry we re-fetch the file's CONTENT by name and load the latest, rather than trusting the stale
+       draft. A genuinely new canvas (no currentFile) keeps its draft — there is no server file to be
+       stale against. A missing or failing load is non-destructive: the restored draft stays put. No
+       "loaded" toast is raised on this silent refresh; it is boot, not a user action. */
+    async reloadOpenFile() {
+        var name = this.currentFile;
+        if (!name) return;
+        try {
+            var resp = await fetch('/api/workflow/load?name=' + encodeURIComponent(name));
+            var result = await resp.json();
+            if (result && result.ok && result.workflow) this.loadFromJSON(result.workflow);
+        } catch (e) {
+            /* offline at boot, or the file is gone: leave the draft as-is, never throw into boot */
+        }
+        if (typeof resumeBar !== 'undefined' && resumeBar && resumeBar.refresh) resumeBar.refresh();
+    },
+
     async save() {
         const workflowData = canvas.toWorkflowJSON();
         let name = this.currentFile;
@@ -1535,6 +1554,37 @@ function _upstreamDeclaresWindow(nodeId) {
     return false;
 }
 
+/* The DIRECT parents' types. An output node's format has to match what it is actually fed, and that is
+   decided by its immediate upstream — the save node merges its direct tables, and a PDF is produced from a
+   direct visualize / compile parent. Not a transitive walk: two hops away is not "this node's input". */
+function _outputParentTypes(nodeId) {
+    var conns = (typeof canvas !== 'undefined' && canvas && canvas.connections) || [];
+    var nodes = (typeof canvas !== 'undefined' && canvas && canvas.nodes) || {};
+    var types = [];
+    for (var i = 0; i < conns.length; i++) {
+        if (String(conns[i].to) !== String(nodeId)) continue;
+        var n = nodes[conns[i].from];
+        if (n && n.type) types.push(n.type);
+    }
+    return types;
+}
+
+/* PDF is the ONLY honest format when every direct parent carries a LaTeX artifact (visualize) or an
+   already-compiled PDF (compile) and none carries a row table. A pdfable + tabular mix is deliberately
+   NOT offered as PDF — it shows the tabular list without pdf, exactly as the backend refuses to merge a
+   chart into a csv save. Mirrors the backend TABLE_NODE_TYPES; the backend is the authority. */
+function _outputIsPdfOnly(nodeId) {
+    var TABLE = ['source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'output'];
+    var types = _outputParentTypes(nodeId);
+    var pdfable = 0;
+    var tabular = 0;
+    for (var i = 0; i < types.length; i++) {
+        if (types[i] === 'visualize' || types[i] === 'compile') pdfable += 1;
+        else if (TABLE.indexOf(types[i]) >= 0) tabular += 1;
+    }
+    return pdfable > 0 && tabular === 0;
+}
+
 /* A single screen that answers "which platform wants what" from the crawl matrix
    alone (#181). It never keeps its own platform list: every line is generated from
    the `profileRecommended` / `serialOnly` / `parallelRecommended` flags the backend
@@ -2344,48 +2394,54 @@ function openSettings(nodeId) {
             '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">…</div></div>' +
             '<div class="settings-group"><button class="menu-btn" onclick="renderResumeSettings(\'' + nodeId + '\')">' +
             I18n.t('resume.refresh') + '</button></div>';
+    } else if (node.type === 'compile') {
+        /* The compile node has no fields of its own: it runs the LaTeX its upstream visualize node produced
+           through the local MiKTeX (the xelatex path is set under 设置) and hands a PDF downstream. The one
+           precondition worth stating is the one a run otherwise refuses. */
+        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.compileHint') + '</div>';
     } else if (node.type === 'output') {
         var p = node.params;
-        var fmt = p.format || (p.operation === 'save_csv' ? 'csv' : 'csv');
-        /* The save node is the canvas's merge point. Said on the panel because it is not
-           something a wire shows: several upstreams become ONE file, and the merged table
-           is what flows onwards — so a chain of analyses may hang off this node. */
+        var pdfOnly = _outputIsPdfOnly(nodeId);
+        /* An output fed only by a chart / compile has exactly one valid format; force and persist it so the
+           run sends pdf even if the select is never touched. The extension itself is enforced server-side. */
+        if (pdfOnly && p.format !== 'pdf') {
+            p.format = 'pdf';
+            canvas.saveState();
+        }
+        var fmt = pdfOnly ? 'pdf' : (p.format || 'csv');
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.outputMergeHint') + '</div></div>';
+            I18n.t(pdfOnly ? 'settings.outputPdfHint' : 'settings.outputMergeHint') + '</div></div>';
+        var formatOptions = pdfOnly
+            ? [{ value: 'pdf', label: I18n.t('format.pdf') }]
+            : ['csv', 'json', 'excel', 'txt', 'html', 'markdown'].map(function (f) {
+                  return { value: f, label: I18n.t('format.' + f) };
+              });
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.format') + '</label>' +
             '<select class="settings-select" onchange="onOutputFormatChange(\'' + nodeId + '\',this.value)">' +
-            selectOptionTags(
-                ['csv', 'json', 'excel', 'txt', 'html', 'markdown'].map(function (f) {
-                    return { value: f, label: I18n.t('format.' + f) };
-                }),
-                p.format,
-                'csv'
-            ) +
+            selectOptionTags(formatOptions, p.format, pdfOnly ? 'pdf' : 'csv') +
             '</select></div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.filename') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.filename || 'export.csv') + '" ' +
+            '<input class="settings-input" value="' + escapeHtml(p.filename || (pdfOnly ? 'export.pdf' : 'export.csv')) + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'filename\',this.value)"></div>' +
             '<div class="settings-group"><label class="settings-checkbox-label">' +
             '<input type="checkbox" ' + (boolParam(p.filename_timestamp, false) ? 'checked' : '') + ' ' +
             'onchange="updateParam(\'' + nodeId + '\',\'filename_timestamp\',this.checked)"> ' +
             I18n.t('settings.filenameTimestamp') + '</label></div>';
-        /* The crawled time range only means something when an upstream collection node actually
-           set BOTH a start and an end — otherwise there is nothing honest to append, and the
-           backend would ignore it. Hiding the checkbox when no window exists keeps the panel
-           from offering a choice the user cannot act on; the backend still ignores a stale flag
-           (and writes the file), so an old canvas never loses its output. */
-        if (_upstreamDeclaresWindow(nodeId)) {
+        if (!pdfOnly && _upstreamDeclaresWindow(nodeId)) {
             html += '<div class="settings-group"><label class="settings-checkbox-label">' +
                 '<input type="checkbox" ' + (boolParam(p.filename_time_range, false) ? 'checked' : '') + ' ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'filename_time_range\',this.checked)"> ' +
                 I18n.t('settings.filenameTimeRange') + '</label></div>';
         }
-        if (fmt === 'txt') {
+        if (!pdfOnly && fmt === 'txt') {
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
                 '<input class="settings-input" value="' + escapeHtml(p.text_column || '') + '" placeholder="optional: one column per line" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'text_column\',this.value)"></div>';
         }
-        html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
+        if (!pdfOnly) {
+            html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
+        }
     }
     content.innerHTML = html;
     if (node.type === 'resume') renderResumeSettings(nodeId);
@@ -2506,7 +2562,7 @@ async function renderResumeSettings(nodeId) {
 /* Format -> file-extension map for the Save node. Keeps the filename's
    extension in sync whenever the user picks a different export format,
    instead of leaving a stale ".csv" on a JSON/Excel/... export. */
-var FORMAT_EXTENSIONS = { csv: '.csv', json: '.json', excel: '.xlsx', txt: '.txt', html: '.html', markdown: '.md' };
+var FORMAT_EXTENSIONS = { csv: '.csv', json: '.json', excel: '.xlsx', txt: '.txt', html: '.html', markdown: '.md', pdf: '.pdf' };
 
 function onOutputFormatChange(nodeId, fmt) {
     var node = canvas.nodes[nodeId];
@@ -6634,6 +6690,14 @@ workflow.validate = function () {
         var src = nodes[c.from];
         if (src && src.type !== 'name' && nodes[c.to]) dataInput[c.to] = true;
     });
+    /* Direct parents' types per node — the compile/output rules below key on exactly the same
+       immediate-upstream distinction the backend validate builds. */
+    var parentTypes = {};
+    conns.forEach(function (c) {
+        var src = nodes[c.from];
+        if (src && nodes[c.to]) (parentTypes[c.to] = parentTypes[c.to] || []).push(src.type);
+    });
+    var TABLE_TYPES = ['source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'output'];
 
     Object.keys(nodes).forEach(function (id) {
         var node = nodes[id];
@@ -6723,12 +6787,53 @@ workflow.validate = function () {
             }
         }
 
+        if (type === 'compile') {
+            /* A compile node turns a visualize parent's LaTeX into a PDF. Its source must be a visualize
+               node that will actually emit some — mirrored off the same immediate-upstream rule as the
+               backend, so a chart with neither LaTeX box on, or a non-visualize wire, is refused here too. */
+            var cmpParents = parentTypes[id] || [];
+            if (!cmpParents.length) {
+                errors.push(I18n.t('validate.compileInput').replace('{title}', label));
+            }
+            cmpParents.forEach(function (ptype) {
+                if (ptype !== 'visualize') {
+                    errors.push(I18n.t('validate.compileBadParent').replace('{title}', label));
+                }
+            });
+            conns.forEach(function (c) {
+                if (String(c.to) !== String(id)) return;
+                var par = nodes[c.from];
+                if (par && par.type === 'visualize') {
+                    var pp = par.params || {};
+                    if (!boolParam(pp.emit_latex, true) && !boolParam(pp.emit_latex_table, true)) {
+                        errors.push(I18n.t('validate.compileSourceBothOff').replace('{title}', label));
+                    }
+                }
+            });
+        }
+
         if (type === 'output') {
             if (!hasInput[id]) {
                 errors.push(I18n.t('validate.outputInput').replace('{title}', label));
             }
             if ((params.operation === 'save' || params.operation === 'save_csv') && (!params.filename || !params.filename.trim())) {
                 errors.push(I18n.t('validate.outputFilename').replace('{title}', label));
+            }
+            /* PDF and a row table are mutually exclusive outputs: a pdf format needs a visualize/compile
+               source (and no table alongside); a table format must not be fed only by a chart/compile. */
+            var outTypes = parentTypes[id] || [];
+            var isPdf = (params.operation === 'save' || params.operation === 'save_csv') &&
+                (String(params.format || '').toLowerCase() === 'pdf' || String(params.filename || '').toLowerCase().endsWith('.pdf'));
+            var anyTable = outTypes.some(function (t) { return TABLE_TYPES.indexOf(t) >= 0; });
+            var anyPdfable = outTypes.some(function (t) { return t === 'visualize' || t === 'compile'; });
+            if (isPdf) {
+                if (anyTable) errors.push(I18n.t('validate.outputPdfMixed').replace('{title}', label));
+                if (!anyPdfable) errors.push(I18n.t('validate.outputPdfOnly').replace('{title}', label));
+                if (outTypes.indexOf('visualize') >= 0 && outTypes.indexOf('compile') >= 0) {
+                    errors.push(I18n.t('validate.outputPdfTwoSources').replace('{title}', label));
+                }
+            } else if (anyPdfable && !anyTable) {
+                errors.push(I18n.t('validate.outputNeedsPdf').replace('{title}', label));
             }
         }
     });
