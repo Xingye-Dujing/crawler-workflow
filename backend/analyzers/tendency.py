@@ -4,7 +4,7 @@ import re
 import pandas as pd
 
 from analyzers.llm_client import run_llm_dataframe
-from analyzers.sentiment import BERT_BATCH, bert_backend, bert_device
+from analyzers.sentiment import BERT_BATCH, bert_backend, bert_device, resolve_bert_model
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -227,7 +227,7 @@ Analyze strictly and output only the required plain string."""
         missing = bert_backend()
         if missing:
             raise ValueError(t('tendency.bert_missing', need=missing))
-        model = str(self.bert_model or '').strip()
+        model = resolve_bert_model(self.bert_model)
         if not model:
             raise ValueError(t('tendency.bert_no_model'))
         if text_column not in df.columns:

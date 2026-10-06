@@ -13,6 +13,8 @@ enough to pin the batching, the label signing and the refusals, and is stated as
 the README rather than pretended to be a real inference.
 """
 
+import os
+
 import pandas as pd
 import pytest
 
@@ -419,3 +421,37 @@ class TestOperationContract:
         # 'neutral' must be spelled exactly as the label set declares, or a distribution
         # chart groups it beside its own capitalised twin.
         assert set(out['sentiment'].unique()) <= {'', 'positive', 'negative', 'neutral'}
+
+
+class TestBertModelPathResolution:
+    """A workflow stores a model reference, but the model folder is gitignored and lives at a
+    machine-specific path. Resolution must let a RELATIVE path travel across machines while
+    still accepting an absolute path, a bare folder name, and a hub id.
+    """
+
+    def test_relative_path_resolves_under_the_project_root(self, tmp_path, monkeypatch):
+        # Use a name that cannot exist under the real cwd, so the test exercises the
+        # project-root join and not the "already-cwd-relative-and-real" short-circuit.
+        target = tmp_path / 'somewhere' / 'bert_portable'
+        target.mkdir(parents=True)
+        monkeypatch.setattr(sentiment_module, 'BASE_DIR', str(tmp_path))
+        assert sentiment_module.resolve_bert_model('somewhere/bert_portable') == str(target)
+
+    def test_bare_folder_name_is_found_under_ml_train(self, tmp_path, monkeypatch):
+        (tmp_path / 'ml_train' / 'bert_tendency_model').mkdir(parents=True)
+        monkeypatch.setattr(sentiment_module, 'BASE_DIR', str(tmp_path))
+        resolved = sentiment_module.resolve_bert_model('bert_tendency_model')
+        assert resolved == os.path.join(str(tmp_path), 'ml_train', 'bert_tendency_model')
+
+    def test_an_existing_absolute_path_is_left_untouched(self, tmp_path):
+        model = tmp_path / 'bert_sentiment_model'
+        model.mkdir()
+        assert sentiment_module.resolve_bert_model(str(model)) == str(model)
+
+    def test_an_unmatched_name_passes_through_as_a_hub_id(self):
+        # Not a local folder: hand it to transformers unchanged rather than guess a path,
+        # so a genuinely-remote model still loads and a wrong id refuses by name downstream.
+        assert sentiment_module.resolve_bert_model('someone/just-a-hub-id') == 'someone/just-a-hub-id'
+
+    def test_blank_resolves_to_blank_so_the_refusal_still_fires(self):
+        assert sentiment_module.resolve_bert_model('   ') == ''

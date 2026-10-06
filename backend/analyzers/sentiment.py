@@ -1,11 +1,13 @@
 import contextlib
 import logging
+import os
 import re
 from importlib.util import find_spec
 
 import pandas as pd
 
 from analyzers.llm_client import run_llm_dataframe
+from config import BASE_DIR
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -65,6 +67,33 @@ def bert_device() -> int:
         if torch.cuda.is_available():
             return 0
     return -1
+
+
+def resolve_bert_model(name: str) -> str:
+    """Turn a node's ``bert_model`` field into a path the pipeline can load on THIS machine.
+
+    A workflow is authored work and is versioned, but the models it names are not inside it —
+    so a stored absolute ``F:/Users/…/ml_train/bert_…`` is a dead reference the moment the
+    canvas is opened on another device or checkout location. A relative ``ml_train/bert_…``
+    resolves against the project root here, so the same canvas runs wherever the repo lives,
+    provided the (gitignored) model folder was copied next to it. An existing absolute/cwd path
+    wins first, a bare folder name is looked up under ``ml_train/``, and anything else is handed
+    through untouched so ``transformers`` treats it as a hub id — an unreachable one still
+    refuses BY NAME at the pipeline, never silently substitutes another model.
+    """
+    raw = (name or '').strip()
+    if not raw:
+        return ''
+    if os.path.isdir(raw) or os.path.isfile(raw):  # absolute, or already cwd-relative and real
+        return raw
+    rel = raw.replace('\\', '/').lstrip('/')
+    joined = os.path.normpath(os.path.join(BASE_DIR, rel))
+    if os.path.isdir(joined):  # relative to the project root — the portable form
+        return joined
+    under_ml = os.path.normpath(os.path.join(BASE_DIR, 'ml_train', os.path.basename(rel)))
+    if os.path.isdir(under_ml):  # a bare folder name
+        return under_ml
+    return raw  # assume an HF hub id; the pipeline refuses by name if it cannot load it
 
 
 def _signed_polarity(answer: dict) -> float:
@@ -170,7 +199,7 @@ class SentimentAnalyzer:
         missing = bert_backend()
         if missing:
             raise ValueError(t('sentiment.bert_missing', need=missing))
-        model = str(self.bert_model or '').strip()
+        model = resolve_bert_model(self.bert_model)
         if not model:
             raise ValueError(t('sentiment.bert_no_model'))
 
