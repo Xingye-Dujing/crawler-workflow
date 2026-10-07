@@ -127,6 +127,44 @@ class TestFigure:
             L.to_latex_document(_cat(), 'stack_pct', x='g')  # needs stack_fields
 
 
+class TestPaperStyle:
+    """The exported source must carry the hand-tuned paper's look, pinned so a future edit cannot quietly
+    drop it back to a dashboard: 仿宋 text, the paper's own palette, dotted grids, thousands-separated ticks,
+    a value label on every bar, boxed leader-line labels, and the reference tables' spacing."""
+
+    def test_preamble_locks_the_paper_font_and_palette(self):
+        out = L.to_latex_document(_cat(), 'bar', x='g', y='v')
+        assert r'\setCJKmainfont[scale=0.95,' in out
+        # the paper's own blue, decoupled from the on-screen accent palette
+        assert r'\definecolor{cA}{HTML}{22557A}' in out
+        assert r'\renewcommand{\arraystretch}{1.25}' in out
+
+    def test_shared_axis_style_grids_and_separates_thousands(self):
+        out = L.to_latex_document(_cat(), 'bar', x='g', y='v')
+        assert r'major grid style={black!12,dotted}' in out
+        assert r'scaled ticks=false' in out
+        assert r'/pgf/number format/1000 sep={,}' in out
+
+    def test_bar_wears_its_value(self):
+        out = L.to_latex_document(_cat(), 'bar', x='g', y='v')
+        assert 'nodes near coords' in out
+
+    def test_topic_map_uses_boxed_leader_line_labels(self):
+        out = L.to_latex_document(_tp(), 'topic_map', x='pc1', y='pc2', value_field='prev', label_field='主题概括')
+        assert 'lblbox' in out and 'leadline' in out
+        assert r'axis lines=middle' in out
+
+    def test_sankey_ribbons_are_colored_and_labels_boxed(self):
+        out = L.to_latex_document(_flow(), 'sankey', x='s', y='t', value_field='v')
+        assert 'opacity=0.4' in out
+        assert '!55,line width' in out  # a ribbon wearing the source's color, at 40%
+        assert 'lblbox' in out
+
+    def test_table_is_small_and_has_a_bold_header(self):
+        out = L.to_latex_table(_cat(), 'bar', x='g', y='v')
+        assert r'{\footnotesize' in out and r'\textbf{' in out
+
+
 class TestTable:
     @pytest.mark.parametrize('chart_type', CHART_TYPES)
     def test_every_type_makes_a_booktabs_three_line_table(self, chart_type):
