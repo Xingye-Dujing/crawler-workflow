@@ -115,6 +115,11 @@ TABLE_NODE_TYPES = frozenset({'source', 'upload', 'resume', 'comment', 'process'
 #: may have when its format is ``pdf`` — conversely a tabular format must never be fed by these.
 PDF_SOURCE_NODE_TYPES = frozenset({'visualize', 'compile'})
 
+#: Every node type the engine knows and can execute. A hand-edited canvas can name a node anything,
+#: and a type outside this set has no executor — so ``validate`` refuses it by name rather than letting
+#: the runner fall through to an empty table (which would settle the node DONE over nothing measured).
+NODE_TYPES = TABLE_NODE_TYPES | PDF_SOURCE_NODE_TYPES | frozenset({'name'})
+
 
 def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
     """Refuse a node whose account holds no login — named, never guessed around.
@@ -421,6 +426,11 @@ class WorkflowEngine:
             # Console references lead with the node's (possibly renamed) title
             # so "node-7" never has to be decoded against the canvas.
             label = node_label(node, nid)
+            if ntype not in NODE_TYPES:
+                # No executor knows this type: refuse it by name here, before the run is paid for,
+                # rather than falling through to an empty result the record would stamp 完成.
+                errors.append(t('engine.unknown_node_type', nid=label, type=str(ntype)))
+                continue
             if ntype == 'source':
                 platform = node.get('platform') or params.get('platform')
                 errors.extend(self._source_errors(node, params, platform, label, has_data_input=nid in data_inputs))

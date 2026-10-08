@@ -2774,8 +2774,6 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.saveState();
     }, 30000);
 
-    console.log('Crawler Workflow initialized');
-
     /* An interrupted run may be waiting from before this page opened. */
     boot('resumeBar', () => {
         if (typeof resumeBar !== 'undefined' && resumeBar) resumeBar.refresh();

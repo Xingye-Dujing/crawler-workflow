@@ -4723,7 +4723,10 @@ def _execute_node(
         # over several batches is the normal reason a user wires two nodes into a save
         # node, and taking only the first exported one of them as if it were all of them.
         return _execute_output_node(node, current_input, upstream=upstream)
-    return []
+    # No branch claimed this type. ``validate`` refuses an unknown type before a run, so
+    # this is defense in depth for a direct caller — but it must still refuse BY NAME:
+    # returning [] here would settle the node DONE over an empty table (see AGENTS.md).
+    raise ValueError(t('engine.unknown_node_type', nid=node_label(node, node.get('id')), type=str(ntype)))
 
 
 #: Rows above which a node's result is worth mentioning out loud.

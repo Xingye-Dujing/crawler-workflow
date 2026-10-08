@@ -22,6 +22,7 @@ Offline throughout: the crawler is a scripted stub, no browser, no network.
 import pytest
 
 import crawl_capabilities as capabilities
+import crawlers.comments as _comments  # the module object, so tests can monkeypatch its crawler factory
 from crawlers.base import LICENSED_ENDS, UNDER_TARGET, Crawler
 from i18n import t
 
@@ -365,8 +366,6 @@ def test_a_login_wall_outranks_risk_on_the_source_path(app_module, monkeypatch):
 
 
 # ─── the comment node's 风控-vs-cookie split (the regression B1 would have hidden) ───
-
-import crawlers.comments as _comments  # noqa: E402  (module object, for monkeypatching its name)
 
 
 class _FakeCommentCrawler:

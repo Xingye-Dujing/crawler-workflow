@@ -987,6 +987,7 @@ _ZH = {
     # An empty canvas is refused, never "completed": 0/0 nodes with a 已完成 toast
     # reads as a run that worked.
     'engine.empty_canvas': '画布上没有任何节点，没有可运行的工作流',
+    'engine.unknown_node_type': '节点 {nid}：未知的节点类型「{type}」，工作流引擎无法执行它',
     'engine.tokenize_no_column': '节点 {nid}：分词节点缺少文本列',
     'engine.visualize_no_chart': '节点 {nid}：可视化节点没有选择图表类型',
     'engine.visualize_no_x': '节点 {nid}：可视化节点缺少 X 字段',
@@ -2297,6 +2298,7 @@ _EN = {
     'engine.cycle': 'the workflow contains a cycle; these nodes cannot be ordered: {nodes}',
     'engine.dangling_connection': 'a connection points at a node the canvas does not hold: {src} → {dst}',
     'engine.empty_canvas': 'the canvas holds no nodes, so there is no workflow to run',
+    'engine.unknown_node_type': 'Node {nid}: unknown node type "{type}", the workflow engine cannot execute it',
     'engine.tokenize_no_column': 'Node {nid}: tokenize node is missing its text column',
     'engine.visualize_no_chart': 'Node {nid}: visualize node has no chart type',
     'engine.visualize_no_x': 'Node {nid}: visualize node is missing the x field',

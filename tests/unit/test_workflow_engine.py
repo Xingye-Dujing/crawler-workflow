@@ -524,10 +524,22 @@ class TestValidate:
         errors = WorkflowEngine(_wf([node], [])).validate()
         assert errors == ['Node Visualize #node-1: visualize node is missing the x field']
 
-    @pytest.mark.parametrize('ntype', ['resume', 'unknown', 'clean', ''])
-    def test_node_types_the_engine_does_not_own_pass_silently(self, en, ntype):
-        node = _node('node-1', ntype, params={})
-        assert WorkflowEngine(_wf([node], [])).validate() == []
+    def test_a_known_type_with_no_field_to_check_passes_silently(self, en):
+        # ``resume`` is a real node type but validate() has no per-field rule for it; the gate must
+        # not invent one. (An *unknown* type is the opposite case — refused by name just below.)
+        assert WorkflowEngine(_wf([_node('node-1', 'resume', params={})], [])).validate() == []
+
+    @pytest.mark.parametrize('ntype', ['unknown', 'clean', ''])
+    def test_an_unknown_node_type_is_refused_by_name(self, en, ntype):
+        """A hand-edited canvas can name a node anything.
+
+        A type with no executor used to pass validation silently, fall through ``_execute_node`` to
+        an empty table, and settle the node DONE on nothing measured — the silent completion AGENTS.md
+        forbids. validate now refuses it by name, before the run is paid for.
+        """
+        errors = WorkflowEngine(_wf([_node('node-1', ntype, params={})], [])).validate()
+        assert len(errors) == 1, errors
+        assert 'node-1' in errors[0], errors
 
     def test_every_node_is_checked(self, en):
         nodes = [

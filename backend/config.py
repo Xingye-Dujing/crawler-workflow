@@ -87,8 +87,6 @@ class Config:
     # Crawler defaults
     DEFAULT_HEADLESS = True
     DEFAULT_MAX_WORKERS = 4
-    PAGE_LOAD_TIMEOUT = 15
-    SCROLL_WAIT = 2.5
 
     #: How long a crawl waits for **one page's first content** before it says the page
     #: is not arriving. Two different clocks, routinely confused: the driver's

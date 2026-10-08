@@ -462,9 +462,16 @@ class TestAnswerScope:
         template hashes to a constant, so editing the template never invalidated the
         cache. ``prompt_template`` makes the underlying method's source the version."""
         client = LLMClient(model='m')
-        # Two distinct wrapper objects, byte-identical bodies → same wrapper digest.
-        fwd_one = lambda text: build_prompt(text)  # noqa: E731
-        fwd_two = lambda text: build_prompt(text)  # noqa: E731
+
+        # Two forwarding wrappers with DIFFERENT names (so different sources): once prompt_template
+        # supplies the real template, the wrapper must not touch the key at all — using two distinct
+        # sources is what proves the key is decoupled from the wrapper, not merely from an identical line.
+        def fwd_one(text):
+            return build_prompt(text)
+
+        def fwd_two(text):
+            return build_prompt(text)
+
         assert answer_scope('ner', client, '正文', '', fwd_one, prompt_template=build_prompt) == answer_scope(
             'ner', client, '正文', '', fwd_two, prompt_template=build_prompt
         )
