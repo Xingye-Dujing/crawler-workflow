@@ -6931,6 +6931,27 @@ def get_config():
     )
 
 
+@app.route('/api/models', methods=['GET'])
+def list_models():
+    """Registered fine-tuned models by friendly NAME, so the bert-mode picker can show 「网暴模型」
+    instead of a bare path. The registry is a runtime file (data/model_registry.json); a missing or
+    malformed one is an empty list, never an error — a node with no named models still accepts a path."""
+    path = os.path.join(Config.DATA_DIR, 'model_registry.json')
+    models = []
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        if isinstance(data, list):
+            models = [
+                {'name': str(m.get('name') or ''), 'path': str(m.get('path') or ''), 'desc': str(m.get('desc') or '')}
+                for m in data
+                if isinstance(m, dict) and str(m.get('path') or '').strip()
+            ]
+    except (OSError, ValueError):
+        models = []
+    return jsonify({'ok': True, 'models': models})
+
+
 @app.route('/api/capabilities', methods=['GET'])
 def get_capabilities():
     """The crawl matrix, so the browser can build the Data Source panel from it.

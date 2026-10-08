@@ -1454,6 +1454,78 @@ const Capabilities = {
 };
 window.Capabilities = Capabilities;
 
+/* Registered fine-tuned models, fetched once at boot so the bert-mode picker can
+   offer them by friendly NAME (「网暴模型」) instead of making the user type a path.
+   Same shape as Capabilities: a cold page starts the fetch before any node is
+   opened, so the first bert settings panel shows the list, not a spinner. The list
+   is OPTIONAL — a node always accepts a raw path, and a missing or malformed
+   registry (the backend returns an empty list, never an error) simply leaves the
+   text input as the only way in. `load()` re-renders the open settings panel,
+   because a node clicked in the sliver before the response arrives must not stay
+   stuck without its picker. */
+const BertModels = {
+    data: null,
+    load() {
+        if (this._pending) return this._pending;
+        var self = this;
+        this._pending = fetch('/api/models')
+            .then(function (resp) {
+                return resp.json();
+            })
+            .then(function (payload) {
+                self.data = payload && Array.isArray(payload.models) ? payload.models : [];
+                /* `canvas` is a top-level const in canvas.js — window.canvas never
+                   exists; `openSettings` is a top-level function in this file. */
+                if (typeof canvas !== 'undefined' && canvas && canvas._settingsNodeId &&
+                    typeof openSettings === 'function') {
+                    openSettings(canvas._settingsNodeId);
+                }
+                return self.data;
+            })
+            .catch(function () {
+                self.data = [];
+                return self.data;
+            })
+            .then(function (result) {
+                self._pending = null;
+                return result;
+            });
+        return this._pending;
+    },
+    list() {
+        return this.data || [];
+    },
+};
+window.BertModels = BertModels;
+
+/* The bert-mode fields, shared by the sentiment / emotion / tendency analyzers. When
+   the registry names any models a picker lists them by name (each option's value is
+   that model's path) above the raw path box; picking one writes the path into
+   bert_model and updateParam re-renders, so the text box shows what was chosen. A
+   leading blank option keeps "no registered model picked" an honest state: without it
+   a stored-but-blank path would visually land on option #0, which is a model the user
+   never selected. A stored path that is not a registered one still shows itself —
+   selectOptionTags appends it as 「不是可选项」, never reverting to the first model. */
+function renderBertField(nodeId, p) {
+    var html = '';
+    var models = BertModels.list();
+    if (models.length) {
+        var items = [{ value: '', label: I18n.t('settings.bertModelCustomOption') }];
+        models.forEach(function (m) {
+            items.push({ value: m.path, label: escapeHtml(m.name) });
+        });
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.bertModelPick') + '</label>' +
+            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'bert_model\',this.value)">' +
+            selectOptionTags(items, p.bert_model, '') +
+            '</select></div>';
+    }
+    html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
+    html += renderParamInput(nodeId, p, 'batch_size', 'settings.batchSize', 'number', 32);
+    html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+        I18n.t('settings.bertModelHint') + '</div></div>';
+    return html;
+}
+
 function parseWorkflowFileText(text) {
     /* Decide whether a file's contents are a workflow — WITHOUT touching the canvas. A
        workflow file is JSON carrying a node list; anything else is named, never thrown.
@@ -2215,10 +2287,7 @@ function openSettings(nodeId) {
                 html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
             }
             if (p.mode === 'bert') {
-                html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
-                html += renderParamInput(nodeId, p, 'batch_size', 'settings.batchSize', 'number', 32);
-                html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-                    I18n.t('settings.bertModelHint') + '</div></div>';
+                html += renderBertField(nodeId, p);
             }
         }
 
@@ -2242,10 +2311,7 @@ function openSettings(nodeId) {
                     I18n.t('settings.sentimentThresholdHint') + '</div></div>';
             }
             if (p.mode === 'bert') {
-                html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
-                html += renderParamInput(nodeId, p, 'batch_size', 'settings.batchSize', 'number', 32);
-                html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-                    I18n.t('settings.bertModelHint') + '</div></div>';
+                html += renderBertField(nodeId, p);
             }
             if (p.mode === 'ml') {
                 html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';

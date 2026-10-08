@@ -601,6 +601,8 @@ const I18n = {
             'settings.negThreshold': 'Negative at or below',
             'settings.sentimentThresholdHint': 'SnowNLP answers a 0–1 probability that the text is positive. Between the two figures the row is 中性; raise the band when a site writes neutrally, lower it when you want fewer neutral rows. The score column always keeps the raw figure.',
             'settings.bertModel': 'BERT model',
+            'settings.bertModelPick': 'Registered model',
+            'settings.bertModelCustomOption': '(custom path below)',
             'settings.batchSize': 'Batch size',
             'settings.bertModelHint': 'A local folder or a model name on this machine. Left empty, the node refuses to run rather than answering with a different model. The whole column is judged in batches, on the GPU when there is one.',
             'mode.regex': 'Rule-based regex (no model)',
@@ -1548,6 +1550,8 @@ const I18n = {
             'settings.negThreshold': '判定为负面的上限',
             'settings.sentimentThresholdHint': 'SnowNLP 给出的是「这段文本偏正面」的概率（0–1）。两个数之间记为中性：站子说话越客气越要把区间调宽，想少一些中性就把它调窄。score 列始终保留原始概率。',
             'settings.bertModel': 'BERT 模型',
+            'settings.bertModelPick': '已注册模型',
+            'settings.bertModelCustomOption': '（用下方自定义路径）',
             'settings.batchSize': '批大小',
             'settings.bertModelHint': '填本机已有的模型目录或模型名。留空时节点会直接拒绝运行，而不会改用别的方法代替。整列文本按批推理，有显卡时自动走显卡。',
             'mode.regex': '正则规则（无需模型）',
@@ -2748,6 +2752,10 @@ document.addEventListener('DOMContentLoaded', () => {
        start-up rather than on first open: the first settings panel should show a
        form, not a spinner, and a failure says so with a retry. */
     Capabilities.load();
+
+    /* Registered fine-tuned models (the 网暴模型 etc.) are fetched the same way, so
+       the bert-mode picker can name them instead of the user typing a path. */
+    BertModels.load();
 
     /* Uploaded files are stored on the server, so the canvas restored from
        localStorage very likely still owns every file it referenced. Verify

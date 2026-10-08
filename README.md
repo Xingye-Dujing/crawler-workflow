@@ -511,6 +511,11 @@
 - **倾向性分析（三模式）**：LLM 逐行、传统 ML（sklearn TF-IDF + 逻辑回归）批量，或**微调 BERT**（六类传播立场标签，与情感/情绪共用同一条 `bert` 后端与分批推理）
   - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/distill_tendency.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `1-clean_weibo_text.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/tendency_distilled.csv`（两轮蒸馏累计约 7,720 条）；再由 `ml_train/train_bert_tendency.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/bert_tendency_model/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空、以及模型回了不认识的标签，一律**按名拒绝、绝不回退**到 llm/ml；读不出的行留空，**不臆造 `Objective Statement`**。
     **本机实测（2026-10-06）**：在约 7,720 条上微调、三 epoch、5% 留出 **accuracy=0.731 / macro-F1=0.681**（较首轮 3,935 条的 0.572 明显提升，主要靠稀有类样本变多：`Controversy/Reflection` 106→364、`Criticism`/`Advocacy` 各约 1,300）。仍如实说：`Controversy` 是最稀的一类（真实微博少有人作多视角讨论），它与讽刺(`Satire`)仍是最弱两格——端到端里「呵呵，某些人倒是挺会演戏的」被误判为 `Praise`（置信仅 0.46）。曾试把各类下采样到最少类（`--balance`，每类 364）以求均衡，macro-F1 反降到 0.561（丢掉约 5,500 条有效数据），故保留全量训练。要更高可加大 `--n` 续蒸馏（脚本自动跳过已标注文本）。
+- **微调模型注册表（显示名）**：`bert` 模式的「模型名」不再只能手敲路径。运维在 `data/model_registry.json` 里
+  登记 `{name, path, desc}`，后端 `GET /api/models` 送出，节点面板就多出「已注册模型」下拉，按**显示名**（如
+  **「网暴模型」**——基于网络暴力事件真实语料微调的倾向六分类，产出在 `ml_train/bert_tendency_v2_model/`）选中，
+  选中的 value 其实是该模型的**路径**（运行仍按路径加载），名字只给人读；下面原样的路径输入框保留，二者写同一个 `bert_model`。
+  没登记的旧路径、手填的新路径都照常显示为自身（不会悄悄回退到第一个模型）；文件缺失或损坏时下拉整个消失、路径框仍在——**注册表是可选加速器，不是运行前提**。
 - **语义数据清洗**：自动过滤广告、无关内容与低质量数据（LLM 判定）
 - **关键词提取**：TF-IDF / TextRank（依赖 jieba）
 - **文本聚类**：K-Means / DBSCAN 自动发现文本分组
@@ -1428,6 +1433,7 @@ crawler_workflow/
 | `/api/browser/profiles/template` | POST | 用一台空白 Chrome 生成/重建那个初始模板（`{force?}`；已存在的脏模板会先销毁再建）。建不出来时是 **502 带原因**（本机没有 chromedriver / Chrome 拒了），不是 200 加一句谎；平时由第一次保存 Cookie 的那条路自己调用 |
 | `/api/config` | GET | 系统配置 |
 | `/api/capabilities` | GET | 采集矩阵：每个平台支持哪些采集模式、每种模式要填什么（数据源面板整块由它渲染，中英词条用 key 送出） |
+| `/api/models` | GET | 已注册微调模型清单（读 `data/model_registry.json`）：`{name, path, desc}`，情感/倾向/情绪节点的 `bert` 模式据此把「模型名」下拉列成**显示名**（如「网暴模型」）而不用手敲路径；下拉选项的 value 是路径（运行按它加载），name 只是给人读。文件缺失 / 不是列表 / JSON 损坏都回**空列表而非报错**（节点仍可手填路径），没有 `path` 的条目被丢弃（无路径的模型跑不起来）。只读 |
 
 ## 使用示例
 
