@@ -493,8 +493,8 @@
   - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：填一个本机 HuggingFace 目录路径即可整列**分批推理**（有显卡自动走显卡，
     `batch_size` 可调）；`pipeline('text-classification')` 直接读模型的 `id2label`，**换任何一套六类情绪模型都不用改分析器**。
     缺 `torch`/`transformers` 或模型名留空一律**按名拒绝、绝不回退到 `llm`/`ml`**（把 A 模型的结论写进 B 模型声称的列是本项目反复付过学费的 bug 形态）；读不出的行留空，不臆造 `Neutral`。
-    产出模型用 `ml_train/train_bert_emotion.py` 在 `SMP2020-EWECT/train/usual_train.txt`（通用微博 27,766 条）上微调 `hfl/chinese-roberta-wwm-ext`，
-    写到 `ml_train/bert_emotion_model/`、节点「模型名」填该绝对路径即可。**本机实测（2026-10-06）**：三 epoch、留出切片 **accuracy=0.811 / macro-F1=0.792**；
+    产出模型用 `ml_train/scripts/train_emotion_bert.py` 在 `ml_train/datasets/ewect_smp2020/train/usual_train.txt`（通用微博 27,766 条）上微调 `hfl/chinese-roberta-wwm-ext`，
+    写到 `ml_train/models/emotion_ewect_six/`、在节点「已注册模型」下拉按名选（或填相对路径 `ml_train/models/emotion_ewect_six`）即可。**本机实测（2026-10-06）**：三 epoch、留出切片 **accuracy=0.811 / macro-F1=0.792**；
     官方未见过的验证集（2000 条）**accuracy=0.792 / macro-F1=0.758**（六类不均衡，`Surprise`/`Fear` 最稀，故 macro-F1 低于二分类的情感极性）。
 - **情感极性（四模式）**：输出 `sentiment`（`positive`/`negative`/`neutral`）与 `score`（0–1 正极性概率）两列。
   它是**独立的一个操作**而不是「情感分析」的第三个开关：SnowNLP 与中文情感 BERT 回答的是"这段话偏正面吗"，
@@ -509,11 +509,11 @@
     不会静默改用 SnowNLP，那样等于把 A 模型的结论写进 B 模型声称的列里。因此这一条通路
     **在本仓库从未真跑过**（这台机器没有 torch），不要把它当作已验证功能
 - **倾向性分析（三模式）**：LLM 逐行、传统 ML（sklearn TF-IDF + 逻辑回归）批量，或**微调 BERT**（六类传播立场标签，与情感/情绪共用同一条 `bert` 后端与分批推理）
-  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/distill_tendency.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `1-clean_weibo_text.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/tendency_distilled.csv`（两轮蒸馏累计约 7,720 条）；再由 `ml_train/train_bert_tendency.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/bert_tendency_model/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空、以及模型回了不认识的标签，一律**按名拒绝、绝不回退**到 llm/ml；读不出的行留空，**不臆造 `Objective Statement`**。
+  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/scripts/distill_tendency_labels.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `ml_train/datasets/weibo_clean_265k.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/datasets/tendency_distilled.csv`（两轮蒸馏累计约 7,720 条）；再由 `ml_train/scripts/train_tendency_bert_v1.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/models/tendency_stance_v1/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空、以及模型回了不认识的标签，一律**按名拒绝、绝不回退**到 llm/ml；读不出的行留空，**不臆造 `Objective Statement`**。
     **本机实测（2026-10-06）**：在约 7,720 条上微调、三 epoch、5% 留出 **accuracy=0.731 / macro-F1=0.681**（较首轮 3,935 条的 0.572 明显提升，主要靠稀有类样本变多：`Controversy/Reflection` 106→364、`Criticism`/`Advocacy` 各约 1,300）。仍如实说：`Controversy` 是最稀的一类（真实微博少有人作多视角讨论），它与讽刺(`Satire`)仍是最弱两格——端到端里「呵呵，某些人倒是挺会演戏的」被误判为 `Praise`（置信仅 0.46）。曾试把各类下采样到最少类（`--balance`，每类 364）以求均衡，macro-F1 反降到 0.561（丢掉约 5,500 条有效数据），故保留全量训练。要更高可加大 `--n` 续蒸馏（脚本自动跳过已标注文本）。
 - **微调模型注册表（显示名）**：`bert` 模式的「模型名」不再只能手敲路径。运维在 `data/model_registry.json` 里
   登记 `{name, path, desc}`，后端 `GET /api/models` 送出，节点面板就多出「已注册模型」下拉，按**显示名**（如
-  **「网暴模型」**——基于网络暴力事件真实语料微调的倾向六分类，产出在 `ml_train/bert_tendency_v2_model/`）选中，
+  **「网暴模型」**——基于网络暴力事件真实语料微调的倾向六分类，产出在 `ml_train/models/tendency_stance_v2_cyberbully/`）选中，
   选中的 value 其实是该模型的**路径**（运行仍按路径加载），名字只给人读；下面原样的路径输入框保留，二者写同一个 `bert_model`。
   没登记的旧路径、手填的新路径都照常显示为自身（不会悄悄回退到第一个模型）；文件缺失或损坏时下拉整个消失、路径框仍在——**注册表是可选加速器，不是运行前提**。
 - **语义数据清洗**：自动过滤广告、无关内容与低质量数据（LLM 判定）
@@ -544,16 +544,16 @@
   - **情感极性节点支持 BERT**：填一个本机模型名即可整列**分批推理**（有显卡自动走显卡，`batch_size` 可调，
     默认 32），比逐行调用快一到两个数量级；模型给出的正/负标签按概率签名后套用同一组正负阈值。
     加载用 `pipeline('sentiment-analysis', model=路径)`、`_signed_polarity` 只认 `positive`/`negative` 子串，故
-    **换任何 HF 情感模型都不用改分析器**。要"非常高"的准确率：用 `ml_train/train_bert.py` 在 `2-weibo_senti_100k`
-    （正/负；`--with-clean` 可再并入 `1-clean` 的 喜悦→正、愤怒/厌恶/低落→负）上微调一个中文 base BERT
-    （默认 `hfl/chinese-roberta-wwm-ext`，fp16 + batch 16 在 8GB 显存即可），产出本地 HF 目录 `ml_train/bert_sentiment_model/`、
-    把它的绝对路径填进节点"模型名"即可。
-    **本机实测（2026-10-06）**：在 `2-weibo_senti_100k` 上微调 3 epoch、5% 留出集，**accuracy = macro-F1 = 0.9785**
+    **换任何 HF 情感模型都不用改分析器**。要"非常高"的准确率：用 `ml_train/scripts/train_sentiment_bert.py` 在 `ml_train/datasets/weibo_senti_100k`
+    （正/负；`--with-clean` 可再并入 `ml_train/datasets/weibo_clean_265k` 的 喜悦→正、愤怒/厌恶/低落→负）上微调一个中文 base BERT
+    （默认 `hfl/chinese-roberta-wwm-ext`，fp16 + batch 16 在 8GB 显存即可），产出本地 HF 目录 `ml_train/models/sentiment_weibosenti_bin/`、
+    在节点「已注册模型」下拉按名选（或填相对路径 `ml_train/models/sentiment_weibosenti_bin`）即可。
+    **本机实测（2026-10-06）**：在 `ml_train/datasets/weibo_senti_100k` 上微调 3 epoch、5% 留出集，**accuracy = macro-F1 = 0.9785**
     （三个 epoch 分别 0.9782 / 0.9783 / 0.9785，取最优），RTX 4060 8GB、fp16+batch16 全程约 26 分钟、峰值显存 3.8GB；
     作为对照，词袋 `ml` 档同一留出集约 **0.78**。`sentiment.py` 的 bert 通路本身经真实节点路径验证：有显卡时 `bert_device`
     返回 `0` 自动走 GPU。
   - **中性从哪来（用 bert 模式前必读）**：这条通路的模型是**正 / 负二分类**头，`_signed_polarity` 把正类概率签成一个 0–1
-    的极性分写进 `score`；模型**从不直接产出 `neutral`**（训练源 `2-weibo_senti_100k` 与 `1-clean` 都只有正/负标注，
+    的极性分写进 `score`；模型**从不直接产出 `neutral`**（训练源 `ml_train/datasets/weibo_senti_100k` 与 `ml_train/datasets/weibo_clean_265k` 都只有正/负标注，
     也不要臆造 neutral 行去训练）。第三列 `sentiment` 的 `neutral` 完全由 `label_for_score` 用**正负阈值**卡出来：
     默认「判定为正面的下限」0.6、「判定为负面的上限」0.4，`score ≥ 0.6` 判正面、`≤ 0.4` 判负面、之间记中性（边界含等号）。
     所以一段温吞文本算不算中性取决于这两个阈值、而非模型「看懂了中性」——实测「这剧情也就一般吧，谈不上喜欢也不讨厌」

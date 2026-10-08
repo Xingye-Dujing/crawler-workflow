@@ -1,7 +1,7 @@
 """``analyzers/tendency.py`` — the six-class stance operation, and its bert path.
 
 tendency has no public corpus, so the model behind its ``bert`` mode was distilled from the
-node's own ``llm`` path (ml_train/distill_tendency.py) and fine-tuned (train_bert_tendency.py).
+node's own ``llm`` path (ml_train/scripts/distill_tendency_labels.py) and fine-tuned (train_tendency_bert_v1.py).
 What is pinned here mirrors the emotion bert tests, at the seam that matters: the missing
 backend / unnamed model refuse BY NAME, a model answer that is not one of the six stances
 stays blank instead of defaulting to ``Objective Statement``, the column goes through in

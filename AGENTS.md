@@ -30,9 +30,11 @@ and scikit-learn, and renders a drag-and-drop workflow canvas. Single project, n
   `os error 5`: ruff writes through a temp file and a rename) — the edit stays unformatted while the hook looks
   fine, so run `ruff format` by hand before committing; CI is the gate that cannot be skipped.
 - `backend/test_*.py` are manual probe scripts, NOT pytest — the accepted place for a one-off measurement.
-- **`ml_train/`** (gitignored) holds `train_and_eval.py` and the CSVs that produce the sklearn models the
-  `emotion`/`tendency`/`sentiment` analyzers load: changing those analyzers' features or labels means a retrain
-  there, which nothing in `backend/` points at.
+- **`ml_train/`** (gitignored) is organised into `scripts/` (training, e.g. `scripts/train_sklearn_ml.py`),
+  `datasets/` (the CSVs that produce the sklearn + bert models the
+  `emotion`/`tendency`/`sentiment` analyzers load), `models/` (deployed HF dirs, registered in
+  `data/model_registry.json` by relative path) and `logs/`: changing those analyzers' features or labels means a retrain
+  there, which nothing in `backend/` points at. See `ml_train/README.md`.
 - **Test tiers** (`pytest.ini` excludes the real tiers by default; pinned by `tests/unit/test_test_tiers.py`):
   - Fast (~5.2k cases, ~2 min, no browser/daemon): `.venv/Scripts/python.exe -m pytest -q`.
   - Device (real Chrome on `file://` fixtures + real Ollama; LLM boundary mocks run by default):

@@ -42,7 +42,7 @@ class EmotionAnalyzer:
         # column while reporting success, so the floor is one row.
         self.batch_size = max(1, int(batch_size or BERT_BATCH))
         # Six categories, matching the SMP2020-EWECT scheme the bert path is trained on
-        # (ml_train/train_bert_emotion.py). Surprise was added when the label set was
+        # (ml_train/scripts/train_emotion_bert.py). Surprise was added when the label set was
         # realigned; keep the two lists identical or a model answer would fall through as
         # an unknown label. Order is irrelevant (membership only), but the values are the
         # exact strings the model's id2label and every chart/colour map use.

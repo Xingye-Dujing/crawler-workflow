@@ -1,28 +1,28 @@
 # 倾向六分类（tendency）模型对比与选型记录
 
 > 目的：在 7721 条、6 类、Controversy/Reflection 严重稀少的现状下，为倾向分类器选出更好的编码器与
-> 训练配置，并记录**事实与数据**供他人复算验证。所有实验在 `ml_train/`（gitignored 的实验目录）完成，
-> 不改动 `backend/` 的已部署模型；旧轨 `bert_tendency_model/` 与新轨 `bert_tendency_v2_model/` 相互独立，
-> 靠 tendency 节点「bert 模型名」粘贴的目录路径切换。
+> 训练配置，并记录**事实与数据**供他人复算验证。所有实验在 `ml_train/`（gitignored 的实验目录，已重排为 `models/`、`datasets/`、`scripts/`、`logs/`，见 `ml_train/README.md`）完成，
+> 不改动 `backend/` 的已部署模型；旧轨 `models/tendency_stance_v1/` 与新轨 `models/tendency_stance_v2_cyberbully/`（「网暴模型」）相互独立，
+> 靠 tendency 节点「已注册模型」下拉（或粘贴 `ml_train/models/…` 相对路径）切换。
 
 ## 1. 实验设置（可复现）
 
-- 数据：`ml_train/tendency_distilled.csv`，7721 行，6 类。类别分布（实测）：
+- 数据：`ml_train/datasets/tendency_distilled.csv`，7721 行，6 类。类别分布（实测）：
   Objective/Praise/Satire 各 1600、Criticism 1336、Advocacy 1221、**Controversy 仅 364（4.7%）**。
-- 标签来源：Qwen（本地 Ollama）蒸馏——即 `distill_tendency.py` 的输出。
+- 标签来源：Qwen（本地 Ollama）蒸馏——即 `scripts/distill_tendency_labels.py` 的输出。
   **含义**：本文件所有 macro-F1 都是「编码器 vs Qwen 标签」= 模仿度，不是对人工真值的准确度（见 §5 局限）。
 - 硬件/软件：RTX 4060 Laptop 8GB、torch 2.14.1+cu126、transformers 5.13.0、bf16、max_len 128、seed 42。
-- 脚本：`ml_train/train_bert_tendency_v2.py`（独立新轨），驱动 `run_tendency_comparison.py` / `run_tendency_tuning.py`。
+- 脚本：`ml_train/scripts/train_tendency_bert_v2.py`（独立新轨），驱动 `run_encoder_comparison.py` / `run_tuning_sweep.py`。
 - 指标：dev 划分 = 同一份 5% 随机切分（seed 42），`load_best_model_at_end` 按 f1_macro 选点。
 
 复现命令：
 ```bash
 # 编码器对比（5 配置）
-.venv/Scripts/python.exe ml_train/run_tendency_comparison.py
+.venv/Scripts/python.exe ml_train/scripts/run_encoder_comparison.py
 # 冠军调参（focal / LR / 混淆矩阵，4 配置）
-.venv/Scripts/python.exe ml_train/run_tendency_tuning.py
+.venv/Scripts/python.exe ml_train/scripts/run_tuning_sweep.py
 # 单个训练示例
-.venv/Scripts/python.exe ml_train/train_bert_tendency_v2.py \
+.venv/Scripts/python.exe ml_train/scripts/train_tendency_bert_v2.py \
     --base hfl/chinese-roberta-wwm-ext --class-weights --confusion
 ```
 
@@ -82,7 +82,7 @@ Top 误分：`Satire→Praise 15`、`Criticism→Controversy 10`、`Objective→
 **下一步（按 ROI）：**
 1. **人工留出集**（待你标注）：这是唯一能给出「真值准确度」和「Qwen 老师上限」的手段；在此之前所有分数都是模仿度。
 2. **软标签蒸馏**：让编码器学 Qwen 的概率分布而非 argmax（Ollama 已就绪），模型侧最可能再涨的一步。
-3. **补真实 Controversy 数据**：爬取通道已跑通（`ml_train/crawl_via_server.py`，两阶段：帖子→URL→评论），当前因账号被微博限流而产量低，冷却后换更热关键词/非无头重试。
+3. **补真实 Controversy 数据**：爬取通道已跑通（`ml_train/scripts/crawl_controversy.py`，两阶段：帖子→URL→评论），当前因账号被微博限流而产量低，冷却后换更热关键词/非无头重试。
 4. **备选编码器**：若优先救稀有类，可上 `chinese-modernbert-large-wwm`（Controversy 0.539 最高），代价是整体略低与显存（batch8/grad-accum4）。
 
 ## 6. 局限（诚实声明）
@@ -95,12 +95,12 @@ Top 误分：`Satire→Praise 15`、`Criticism→Controversy 10`、`Objective→
 
 ### 7.1 微博评论爬取（按事件热度窗口）
 - **教训**：不带时间窗口只拿到冷帖（4 关键词共 72 条评论、单帖评论数 ≤10）。改为「按事件热度窗口」爬取后才有效。
-- 工具 `ml_train/crawl_via_server.py`：两阶段（关键词→帖子→评论），走 app 已验证的执行路径（`POST /api/workflow/execute`），结果存 `data/exports/` + `ml_train/controversy_crawl.csv`（带 keyword/source_url/日期出处，可回溯）。
+- 工具 `ml_train/scripts/crawl_controversy.py`：两阶段（关键词→帖子→评论），走 app 已验证的执行路径（`POST /api/workflow/execute`），结果存 `data/exports/` + `ml_train/datasets/controversy_crawl.csv`（带 keyword/source_url/日期出处，可回溯）。
 - 三个近期网暴事件 + 各自热度窗口，共 **587 条真实评论**（郑智化 214 / 罗永浩·西贝 195 / 微博之夜座位 178；单帖最高评论数 971）。
 - Qwen 标注 487 条并入语料（7721→8208，Controversy 364→388）。重训冠军（wwmext+类权重）：dev macro-F1 0.668→**0.681**，**Controversy F1 0.452→0.537（+0.085，远超 ±0.011 噪声）**。→ 真实 Controversy 数据确实救稀有类。
 
 ### 7.2 自训练（伪标签，利用未标注池）
-- `ml_train/selftrain_tendency.py`：标注集训练 → 对未标注池（`1-clean_weibo_text.csv` 去掉已标注）打伪标签 → 仅保留置信 ≥0.9 → 并入**训练集**（验证集仍用真实标注，防自评分虚高）→ 重训。
+- `ml_train/scripts/selftrain_tendency.py`：标注集训练 → 对未标注池（`datasets/weibo_clean_265k.csv` 去掉已标注）打伪标签 → 仅保留置信 ≥0.9 → 并入**训练集**（验证集仍用真实标注，防自评分虚高）→ 重训。
 - 10000 未标注样本中 **1122 条**高置信伪标签；同一真实验证集上 macro-F1 0.654→0.682（**+0.029**）、Controversy F1 0.400→0.491（**+0.091**），均超噪声。
 - 关键细节：伪标签里 **Controversy 为 0**（模型对该类从不自信）→ 增益是**间接**的（其余 5 类边界更清晰，减少 Controversy 被吞并）。故 Controversy 的**直接**增益仍靠真实标注数据（7.1），自训练只能间接帮。
 - 风险：伪标签会随轮次累积模型自身错误；只跑 1 轮，更多轮需人工留出集把关。
@@ -120,7 +120,7 @@ Top 误分：`Satire→Praise 15`、`Criticism→Controversy 10`、`Objective→
 ### 7.4 反面教训：batch2「离题」真实数据反而有害（固定评估 A/B 实测）
 第二批又爬了 13 个网暴/争议事件（微博可回溯约 5 年，非仅 1 年），得 1549 条评论、Qwen 标注后并入语料（8208→9800，Controversy 388→491）。但直接重训的对比不可信——**换了语料就换了 5% 验证集**，0.537→0.453 的"下降"部分是评估集漂移造成的假象。
 
-为排除这个混淆，做了一次**固定评估 A/B**（`ml_train/ab_batch2_eval.py`）：从原始 7721 语料固定切一份 5% 真实标注验证集（386 行、Controversy 13），两臂**只差 batch2 的 1592 行**，在同一验证集上比：
+为排除这个混淆，做了一次**固定评估 A/B**（`ml_train/scripts/eval_ab_batch2.py`）：从原始 7721 语料固定切一份 5% 真实标注验证集（386 行、Controversy 13），两臂**只差 batch2 的 1592 行**，在同一验证集上比：
 
 | 臂 | 训练集 | macro-F1 | Controversy F1 |
 |---|---|---|---|

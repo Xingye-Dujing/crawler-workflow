@@ -85,7 +85,7 @@
       "type": "process",
       "title": "情感极性",
       "params": {
-        "bert_model": "ml_train/bert_sentiment_model",
+        "bert_model": "ml_train/models/sentiment_weibosenti_bin",
         "enabled": true,
         "mode": "bert",
         "neg_threshold": "0.4",
@@ -1375,7 +1375,7 @@
       "type": "process",
       "title": "发酵期 情感分析（阶段内再跑一次）",
       "params": {
-        "bert_model": "ml_train/bert_sentiment_model",
+        "bert_model": "ml_train/models/sentiment_weibosenti_bin",
         "enabled": true,
         "mode": "bert",
         "neg_threshold": "0.4",
@@ -1466,7 +1466,7 @@
       "type": "process",
       "title": "爆发期 情感分析（阶段内再跑一次）",
       "params": {
-        "bert_model": "ml_train/bert_sentiment_model",
+        "bert_model": "ml_train/models/sentiment_weibosenti_bin",
         "enabled": true,
         "mode": "bert",
         "neg_threshold": "0.4",
@@ -1557,7 +1557,7 @@
       "type": "process",
       "title": "波动期 情感分析（阶段内再跑一次）",
       "params": {
-        "bert_model": "ml_train/bert_sentiment_model",
+        "bert_model": "ml_train/models/sentiment_weibosenti_bin",
         "enabled": true,
         "mode": "bert",
         "neg_threshold": "0.4",
@@ -1648,7 +1648,7 @@
       "type": "process",
       "title": "二次爆发期 情感分析（阶段内再跑一次）",
       "params": {
-        "bert_model": "ml_train/bert_sentiment_model",
+        "bert_model": "ml_train/models/sentiment_weibosenti_bin",
         "enabled": true,
         "mode": "bert",
         "neg_threshold": "0.4",
@@ -1739,7 +1739,7 @@
       "type": "process",
       "title": "衰退期 情感分析（阶段内再跑一次）",
       "params": {
-        "bert_model": "ml_train/bert_sentiment_model",
+        "bert_model": "ml_train/models/sentiment_weibosenti_bin",
         "enabled": true,
         "mode": "bert",
         "neg_threshold": "0.4",
@@ -2070,7 +2070,7 @@
       "type": "process",
       "title": "情绪分析（BERT·SMP2020-EWECT 六类）",
       "params": {
-        "bert_model": "ml_train/bert_emotion_model",
+        "bert_model": "ml_train/models/emotion_ewect_six",
         "enabled": true,
         "mode": "bert",
         "operation": "emotion",
@@ -2086,7 +2086,7 @@
       "type": "process",
       "title": "倾向分析（BERT·LLM 蒸馏六类）",
       "params": {
-        "bert_model": "ml_train/bert_tendency_model",
+        "bert_model": "ml_train/models/tendency_stance_v1",
         "enabled": true,
         "mode": "bert",
         "operation": "tendency",
