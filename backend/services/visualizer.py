@@ -57,6 +57,7 @@ CHART_TYPES = (
     'histogram',
     'box',
     'heatmap',
+    'model_agreement',
     'sankey',
     'network',
     'wordcloud',
@@ -400,7 +401,16 @@ WORDCLOUD_STYLES = {
 # ``twinx()``, but the right-hand scale, legend and shared tooltip are the parts that make
 # 热度 and 强度 readable on one figure, and re-implementing them per engine is how the two
 # engines start telling the same data differently.
-ECHARTS_ONLY_TYPES = ('wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network')
+ECHARTS_ONLY_TYPES = (
+    'wordcloud',
+    'sankey',
+    'map',
+    'dual_line',
+    'topic_map',
+    'topic_terms',
+    'network',
+    'model_agreement',
+)
 
 #: Chart types that can carry dated event markers (a vertical line at one category). Any other
 #: type that is handed the box is refused rather than ignored: an annotation the figure does not
@@ -782,67 +792,25 @@ class VisualizationService:
             if not x or not y:
                 raise ChartConfigError('Heatmap requires two category fields (x and y)')
             xcats, ycats, matrix = cls._pivot(df, x, y, value_field, agg)
-            data = [[xi, yi, matrix[yi][xi]] for yi in range(len(ycats)) for xi in range(len(xcats))]
             # Bounds come from the usable numbers only: an all-missing cell makes
             # the aggregate NaN, and NaN bounds would leave the colour scale blank.
-            vals = _finite(row[2] for row in data)
-            max_val = max(vals) if vals else 1
-            min_val = min(vals) if vals else 0
-            base['grid'] = {'left': 80, 'right': 60, 'top': 10, 'bottom': 60}
-            base['xAxis'] = {
-                'type': 'category',
-                'data': xcats,
-                'splitArea': {'show': True, 'areaStyle': {'color': ['rgba(0,0,0,0)']}},
-                'axisLabel': {'rotate': 30, 'color': '#aaa', 'fontSize': 10},
-                'axisLine': {'show': False},
-            }
-            base['yAxis'] = {
-                'type': 'category',
-                'data': ycats,
-                'splitArea': {'show': True, 'areaStyle': {'color': ['rgba(0,0,0,0)']}},
-                'axisLabel': {'color': '#aaa', 'fontSize': 10},
-                'axisLine': {'show': False},
-            }
-            base['visualMap'] = {
-                'min': min_val,
-                'max': max_val,
-                'calculable': True,
-                'orient': 'horizontal',
-                'left': 'center',
-                'bottom': 8,
-                'inRange': {
-                    'color': [
-                        '#313695',
-                        '#4575B4',
-                        '#74ADD1',
-                        '#ABD9E9',
-                        '#E0F3F8',
-                        '#FFFFBF',
-                        '#FEE090',
-                        '#FDAE61',
-                        '#F46D43',
-                        '#D73027',
-                        '#A50026',
-                    ]
-                },
-                'textStyle': {'color': '#aaa', 'fontSize': 10},
-            }
-            base['series'] = [
-                {
-                    'type': 'heatmap',
-                    'data': data,
-                    'label': {
-                        'show': True,
-                        'color': '#ccc',
-                        'fontSize': 10,
-                        'fontFamily': 'sans-serif',
-                    },
-                    'emphasis': {
-                        'itemStyle': {'shadowBlur': 8, 'shadowColor': 'rgba(0,0,0,0.4)'},
-                    },
-                }
-            ]
-            return base
+            vals = _finite(v for row in matrix for v in row)
+            return cls._apply_heatmap_option(
+                base, xcats, ycats, matrix, min(vals) if vals else 0, max(vals) if vals else 1
+            )
+
+        # 模型一致率: pairwise label-agreement (percentage of the shared rows on which two
+        # models chose the SAME label) drawn as the same square heatmap. It reads the tidy
+        # multi-model table by its 模型 / 标签 / 原行 columns, so a renamed analysis output
+        # refuses by name rather than rendering a matrix of the wrong thing.
+        if chart_type == 'model_agreement':
+            cats, matrix = cls._agreement_matrix(
+                df,
+                kwargs.get('model_field') or '模型',
+                kwargs.get('agreement_label_field'),
+                kwargs.get('id_field') or '原行',
+            )
+            return cls._apply_heatmap_option(base, cats, cats, matrix, 0, 100)
 
         # ── Sankey ──
         if chart_type == 'sankey':
@@ -1365,6 +1333,107 @@ class VisualizationService:
             return [], []
         labels, values = zip(*top, strict=True)
         return list(labels), list(values)
+
+    @staticmethod
+    def _apply_heatmap_option(base, xcats, ycats, matrix, min_val, max_val):
+        """Turn an (xcats × ycats) numeric matrix into the shared ECharts heatmap spec.
+
+        Both the data heatmap and the 模型一致率 matrix draw identically, so the colour ramp,
+        axes and visualMap live in ONE place — a tweak to the figure reaches both, and the two
+        can never drift apart. Bounds are supplied by the caller (counts vs a fixed 0–100 %).
+        """
+        data = [[xi, yi, matrix[yi][xi]] for yi in range(len(ycats)) for xi in range(len(xcats))]
+        base['grid'] = {'left': 80, 'right': 60, 'top': 10, 'bottom': 60}
+        base['xAxis'] = {
+            'type': 'category',
+            'data': xcats,
+            'splitArea': {'show': True, 'areaStyle': {'color': ['rgba(0,0,0,0)']}},
+            'axisLabel': {'rotate': 30, 'color': '#aaa', 'fontSize': 10},
+            'axisLine': {'show': False},
+        }
+        base['yAxis'] = {
+            'type': 'category',
+            'data': ycats,
+            'splitArea': {'show': True, 'areaStyle': {'color': ['rgba(0,0,0,0)']}},
+            'axisLabel': {'color': '#aaa', 'fontSize': 10},
+            'axisLine': {'show': False},
+        }
+        base['visualMap'] = {
+            'min': min_val,
+            'max': max_val,
+            'calculable': True,
+            'orient': 'horizontal',
+            'left': 'center',
+            'bottom': 8,
+            'inRange': {
+                'color': [
+                    '#313695',
+                    '#4575B4',
+                    '#74ADD1',
+                    '#ABD9E9',
+                    '#E0F3F8',
+                    '#FFFFBF',
+                    '#FEE090',
+                    '#FDAE61',
+                    '#F46D43',
+                    '#D73027',
+                    '#A50026',
+                ]
+            },
+            'textStyle': {'color': '#aaa', 'fontSize': 10},
+        }
+        base['series'] = [
+            {
+                'type': 'heatmap',
+                'data': data,
+                'label': {'show': True, 'color': '#ccc', 'fontSize': 10, 'fontFamily': 'sans-serif'},
+                'emphasis': {'itemStyle': {'shadowBlur': 8, 'shadowColor': 'rgba(0,0,0,0.4)'}},
+            }
+        ]
+        return base
+
+    @classmethod
+    def _agreement_matrix(cls, df, model_col, label_col, id_col):
+        """Pairwise label-agreement (percent of the rows two models both answered where they
+        chose the same label), aligned by ``id_col`` across the tidy multi-model table.
+
+        The model order is the TABLE's first-appearance order (never alphabetical), for the
+        same reason `_aggregate`/`_pivot` keep it: the canvas put the models somewhere, and
+        an off-diagonal cell is read against that axis. A pair is scored only over rows where
+        BOTH models answered (a row one model left blank cannot be an agreement or a
+        disagreement); the diagonal is 100 by definition. Fewer than two models refuses — a
+        1×1 square is not a comparison and would hide that the node ran one model.
+        """
+        cls._require_columns(df, model_col, id_col)
+        if not label_col:
+            raise ChartConfigError('model_agreement needs the label column (agreement_label_field)')
+        cls._require_columns(df, label_col)
+        order = []
+        for value in df[model_col].astype(str):
+            if value not in order:
+                order.append(value)
+        if len(order) < 2:
+            raise ChartConfigError(f'model_agreement needs at least 2 models in {model_col!r}; found {len(order)}')
+        # One Series per model, indexed by the row id, so a pair aligns on 原行 not on position.
+        per_model = {name: g.set_index(id_col)[label_col] for name, g in df.groupby(df[model_col].astype(str))}
+        matrix = []
+        for a in order:
+            row = []
+            for b in order:
+                if a == b:
+                    row.append(100.0)
+                    continue
+                sa, sb = per_model[a], per_model[b]
+                joined = pd.concat([sa, sb], axis=1, join='inner', keys=['a', 'b'])
+                n = len(joined)
+                if n == 0:
+                    row.append(0.0)
+                    continue
+                agree = (joined['a'].astype(str) == joined['b'].astype(str)).sum() / n * 100.0
+                row.append(round(float(agree), 2))
+            matrix.append(row)
+        cats = [_localize_label(name) for name in order]
+        return cats, matrix
 
     @staticmethod
     def _pivot(df: pd.DataFrame, x: str, y: str, value_field: str = None, agg: str = 'count'):

@@ -1506,18 +1506,49 @@ window.BertModels = BertModels;
    a stored-but-blank path would visually land on option #0, which is a model the user
    never selected. A stored path that is not a registered one still shows itself —
    selectOptionTags appends it as 「不是可选项」, never reverting to the first model. */
+function _bertModelsSelected(p) {
+    /* The chosen model paths, de-duplicated, from the comma-joined bert_models param —
+       mirrored off the backend's bert_model_list so the checkbox echo and the run agree. */
+    var raw = String((p && p.bert_models) || '').replace(/，/g, ',');
+    var out = [];
+    raw.split(',').forEach(function (s) {
+        var t = s.trim();
+        if (t && out.indexOf(t) < 0) out.push(t);
+    });
+    return out;
+}
+
+function toggleBertModel(nodeId, path, checked) {
+    var node = canvas.nodes[nodeId];
+    if (!node) return;
+    var set = _bertModelsSelected(node.params);
+    var i = set.indexOf(path);
+    if (checked && i < 0) set.push(path);
+    if (!checked && i >= 0) set.splice(i, 1);
+    // Stored SORTED so one model set is one fingerprint whatever the click order.
+    updateParam(nodeId, 'bert_models', set.slice().sort().join(','));
+}
+
 function renderBertField(nodeId, p) {
     var html = '';
     var models = BertModels.list();
+    var chosen = _bertModelsSelected(p);
     if (models.length) {
-        var items = [{ value: '', label: I18n.t('settings.bertModelCustomOption') }];
-        models.forEach(function (m) {
-            items.push({ value: m.path, label: escapeHtml(m.name) });
-        });
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.bertModelPick') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'bert_model\',this.value)">' +
-            selectOptionTags(items, p.bert_model, '') +
-            '</select></div>';
+        // One checkbox per registered model; the label is the friendly NAME, the value written
+        // into bert_models is that model's PATH. Checking two or more switches the node to a
+        // tidy multi-model comparison table (see the note below); the raw path box beside it
+        // still accepts a model nobody registered.
+        var boxes = models.map(function (m) {
+            var ck = chosen.indexOf(m.path) >= 0 ? ' checked' : '';
+            return '<label class="settings-label" style="display:block;font-weight:normal;cursor:pointer;">' +
+                '<input type="checkbox"' + ck + ' ' +
+                'onchange="toggleBertModel(\'' + nodeId + '\',\'' + attrJsArg(m.path) + '\',this.checked)"> ' +
+                escapeHtml(m.name) + '</label>';
+        }).join('');
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.bertModelsPick') + '</label>' + boxes + '</div>';
+        if (chosen.length >= 2) {
+            html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('hint.bertModelsMulti') + '</div>';
+        }
     }
     html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
     html += renderParamInput(nodeId, p, 'batch_size', 'settings.batchSize', 'number', 32);
@@ -3031,7 +3062,7 @@ function renderAnalysisSettings(nodeId, p) {
 }
 
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'sankey', 'network', 'wordcloud', 'map'];
+var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'wordcloud', 'map'];
 
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
@@ -3048,7 +3079,7 @@ var CHART_X_LABEL_KEY = {
 var CHART_Y_LABEL_KEY = { heatmap: 'settings.yFieldCat2', sankey: 'settings.targetField', network: 'settings.targetField' };
 var CHARTS_WITH_Y_AS_CATEGORY = ['heatmap', 'sankey', 'network'];
 var CHARTS_WITH_VALUE_FIELD = ['heatmap', 'sankey', 'network', 'wordcloud', 'map', 'topic_map'];
-var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct'].concat(CHARTS_WITH_Y_AS_CATEGORY);
+var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct', 'model_agreement'].concat(CHARTS_WITH_Y_AS_CATEGORY);
 // The right-hand scale, which only 双轴折线 asks for. Kept equal to the backend's
 // ECHARTS_ONLY_TYPES by tests/unit/test_visualization.py, because the renderer that cannot
 // draw two axes refuses by name and the panel must not offer it silently.
@@ -3057,7 +3088,7 @@ var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct'].concat(CHARTS_W
 // rare word look bigger than a common one.
 var CHARTS_WITH_Y2 = ['dual_line', 'topic_terms'];
 var CHARTS_WITH_LABEL = ['topic_map'];
-var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network'];
+var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement'];
 // The types that draw a vertical line at one x-axis label, so an event ("5/19 公安通报") sits
 // on the curve it explains. Kept equal to the backend's ANNOTATED_TYPES by
 // tests/unit/test_visualization.py: a box the figure cannot honour would drop the date in
@@ -3137,9 +3168,25 @@ function renderVisualizeSettings(nodeId, p) {
     if (p.engine === 'matplotlib' && ECHARTS_ONLY_CHARTS.indexOf(ct) >= 0) {
         html += '<div class="settings-group" style="color:#e67e22;font-size:11px;">' + I18n.t('warn.echartsOnly') + '</div>';
     }
-    html += '<div class="settings-group"><label class="settings-label">' + I18n.t(CHART_X_LABEL_KEY[ct] || 'settings.xField') + '</label>' +
-        '<input class="settings-input" value="' + escapeHtml(p.x_field || '') + '" placeholder="category / numeric column" ' +
-        'onchange="updateParam(\'' + nodeId + '\',\'x_field\',this.value)"></div>';
+    if (ct === 'model_agreement') {
+        // 模型一致率 reads the tidy multi-model table by three columns, not x/y: which names a
+        // model, which holds its label, which aligns the same text across models. Defaults match
+        // what the analysis step writes, so a fresh chart needs no typing.
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.modelField') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.model_field || '模型') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'model_field\',this.value)"></div>';
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agreementLabelField') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.agreement_label_field || '') + '" placeholder="emotion / tendency / sentiment" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'agreement_label_field\',this.value)"></div>';
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.idField') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.id_field || '原行') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'id_field\',this.value)"></div>';
+        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.modelAgreement') + '</div>';
+    } else {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t(CHART_X_LABEL_KEY[ct] || 'settings.xField') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.x_field || '') + '" placeholder="category / numeric column" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'x_field\',this.value)"></div>';
+    }
     if (ct === 'stack_pct') {
         // A 100%-stacked share takes its segments from a LIST of columns, not one y: each period
         // is normalised to 100%, so the box wants the positive/neutral/negative (or tendency,
@@ -3326,6 +3373,7 @@ var dataNodes = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
             y_field: p.y_field, value_field: p.value_field, agg: p.agg,
             label_field: p.label_field, stack_fields: p.stack_fields,
+            model_field: p.model_field, agreement_label_field: p.agreement_label_field, id_field: p.id_field,
             title: p.title, tokenize: boolParam(p.tokenize, false),
             emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, true),
             wordcloud_style: p.wordcloud_style || 'vibrant',
@@ -3778,7 +3826,9 @@ async function openChartFullscreen(nodeId) {
         chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
         y_field: p.y_field, value_field: p.value_field, agg: p.agg,
         y2_field: p.y2_field, agg2: p.agg2, annotations: p.annotations,
-        label_field: p.label_field, stack_fields: p.stack_fields, title: p.title, tokenize: boolParam(p.tokenize, false),
+        label_field: p.label_field, stack_fields: p.stack_fields,
+        model_field: p.model_field, agreement_label_field: p.agreement_label_field, id_field: p.id_field,
+        title: p.title, tokenize: boolParam(p.tokenize, false),
         emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, true),
         wordcloud_style: p.wordcloud_style || 'vibrant',
     };
@@ -4131,6 +4181,7 @@ var dashboard = {
             /* The 占比堆叠图 draws its segments from a column list, not one y; a board that
                dropped it asked the service for a stacked field and got an opaque refusal. */
             stack_fields: p.stack_fields,
+            model_field: p.model_field, agreement_label_field: p.agreement_label_field, id_field: p.id_field,
             title: p.title, tokenize: boolParam(p.tokenize, false),
             emit_latex: boolParam(p.emit_latex, true), emit_latex_table: boolParam(p.emit_latex_table, true),
             wordcloud_style: p.wordcloud_style || 'vibrant',
@@ -6865,7 +6916,14 @@ workflow.validate = function () {
             if (!params.chart_type) {
                 errors.push(I18n.t('validate.visualizeChartType').replace('{title}', label));
             }
-            if (!params.x_field || !params.x_field.trim()) {
+            // 模型一致率 has no x/y — it reads the tidy table's label column (the model/id columns
+            // default to 模型/原行). Requiring x_field here would block a chart that never uses it,
+            // so ask for the field THIS type really needs, matching the backend's own refusal.
+            if (params.chart_type === 'model_agreement') {
+                if (!params.agreement_label_field || !String(params.agreement_label_field).trim()) {
+                    errors.push(I18n.t('validate.visualizeAgreementLabel').replace('{title}', label));
+                }
+            } else if (!params.x_field || !params.x_field.trim()) {
                 errors.push(I18n.t('validate.visualizeXField').replace('{title}', label));
             }
         }

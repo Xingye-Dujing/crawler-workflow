@@ -71,7 +71,7 @@ from services.run_store import (
     fingerprints_for_workflow,
     workflow_fingerprint,
 )
-from services.visualizer import ChartConfigError, VisualizationService
+from services.visualizer import ECHARTS_ONLY_TYPES, ChartConfigError, VisualizationService
 from services.workflow_manager import WorkflowManager
 from settings_store import all_settings, get_setting, save_settings
 from utils.helpers import (
@@ -2982,6 +2982,110 @@ def check_process_params(op: str, params: dict, df) -> None:
             raise UnknownOperationError(t('analysis.step_col_missing', op=op, col=name))
 
 
+# ─── Multi-model BERT comparison ──────────────────────────────
+#: The label/score columns each analyzer writes in bert mode. A multi-model run stacks
+#: several models into ONE tidy table and the 模型对比 charts read these names, so this
+#: mapping is the input contract between the analysis step and the comparison visualizations
+#: — renaming a column here must be reflected on the chart side or it refuses by name.
+BERT_RESULT_COLUMNS = {
+    'emotion': ('emotion', 'confidence'),
+    'tendency': ('tendency', 'tendency_confidence'),
+    'sentiment': ('sentiment', 'score'),
+}
+
+
+def _model_registry():
+    """The registered models as a list, or [] when absent/broken — the same graceful
+    reading `/api/models` uses, so a name lookup can never crash a run."""
+    path = os.path.join(Config.DATA_DIR, 'model_registry.json')
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _registry_name(model_path):
+    """Friendly NAME for a model path (registry reverse-lookup), else its folder name.
+    The 模型 column a comparison chart groups by is a word the user chose, not a path."""
+    for m in _model_registry():
+        if isinstance(m, dict) and str(m.get('path', '')).strip() == model_path:
+            return str(m.get('name') or '').strip() or os.path.basename(model_path)
+    return os.path.basename(model_path)
+
+
+def bert_model_list(params):
+    """The model paths an analysis node asked to run.
+
+    ``bert_models`` is a comma-separated list (the ``stack_fields`` shape): split, trimmed,
+    de-duplicated and **sorted**, so one model set is one fingerprint no matter the click
+    order. When it is empty the node falls back to the single ``bert_model`` field — every
+    canvas written before multi-model runs exactly one model as it always did, and only an
+    explicit multi-selection changes the output shape.
+    """
+    raw = str(params.get('bert_models') or '').replace('，', ',')
+    seen = []
+    for part in (p.strip() for p in raw.split(',')):
+        if part and part not in seen:
+            seen.append(part)
+    if len(seen) > 1:
+        return sorted(seen)
+    if seen:
+        return seen
+    single = str(params.get('bert_model') or '').strip()
+    return [single] if single else []
+
+
+def _build_bert_analyzer(op, params, model_path):
+    """Construct the one analyzer for (op, model), shared by the single and multi paths so
+    the batch_size/threshold validation is identical either way."""
+    batch = _safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256)
+    if op == 'emotion':
+        return EmotionAnalyzer(mode='bert', bert_model=model_path, batch_size=batch)
+    if op == 'tendency':
+        return TendencyAnalyzer(mode='bert', bert_model=model_path, batch_size=batch)
+    if op == 'sentiment':
+        pos, neg = sentiment_thresholds(params)
+        return SentimentAnalyzer(
+            mode='bert', pos_threshold=pos, neg_threshold=neg, bert_model=model_path, batch_size=batch
+        )
+    raise UnknownOperationError(
+        t('analysis.bad_option', op=op, param='operation', value=op, allowed=', '.join(BERT_RESULT_COLUMNS))
+    )
+
+
+def _run_bert_compare(op, params, df, text_column, run_ctx):
+    """Run every selected BERT model over the column and return ONE tidy table.
+
+    One row per (original row × model), tagged by 模型 and aligned across models by 原行,
+    plus the operation's own label/score columns — the shape the comparison charts read.
+    A single model never enters here (it keeps its in-place two-column shape), so fewer
+    than two is refused by name rather than silently returning a long table nobody asked
+    for. Each model's own analyzer still refuses by name for a missing stack or an unknown
+    label, and a row it cannot answer stays blank.
+    """
+    models = bert_model_list(params)
+    if len(models) < 2:
+        raise UnknownOperationError(t('analysis.need_multi_models', op=op, n=len(models)))
+    label_col, score_col = BERT_RESULT_COLUMNS[op]
+    base = df.copy()
+    base['原行'] = range(len(base))
+    collected = []
+    names = []
+    for path in models:
+        sub = base.copy()
+        analyzer = _build_bert_analyzer(op, params, path)
+        sub = analyzer.analyze_dataframe(sub, text_column=text_column, ctx=run_ctx)
+        name = _registry_name(path)
+        sub['模型'] = name
+        names.append(name)
+        collected.append(sub)
+    tidy = pd.concat(collected, ignore_index=True)
+    add_log(t('analysis.multi_models_run', op=op, n=len(models), models='、'.join(names)))
+    return tidy.to_dict('records')
+
+
 def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
     params = node.get('params', {})
     op = node.get('operation', params.get('operation', ''))
@@ -3009,6 +3113,8 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         return df.to_dict('records')
 
     if op == 'emotion':
+        if enum_param(op, params, 'mode') == 'bert' and len(bert_model_list(params)) > 1:
+            return _run_bert_compare(op, params, df, text_column, run_ctx)
         analyzer = EmotionAnalyzer(
             mode=enum_param(op, params, 'mode'),
             bert_model=str(params.get('bert_model') or '').strip(),
@@ -3020,6 +3126,8 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         return df.to_dict('records')
 
     if op == 'tendency':
+        if enum_param(op, params, 'mode') == 'bert' and len(bert_model_list(params)) > 1:
+            return _run_bert_compare(op, params, df, text_column, run_ctx)
         analyzer = TendencyAnalyzer(
             mode=enum_param(op, params, 'mode'),
             bert_model=str(params.get('bert_model') or '').strip(),
@@ -3031,6 +3139,8 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         return df.to_dict('records')
 
     if op == 'sentiment':
+        if enum_param(op, params, 'mode') == 'bert' and len(bert_model_list(params)) > 1:
+            return _run_bert_compare(op, params, df, text_column, run_ctx)
         pos, neg = sentiment_thresholds(params)
         analyzer = SentimentAnalyzer(
             mode=enum_param(op, params, 'mode'),
@@ -3925,6 +4035,10 @@ def _latex_outputs(
     and named on the console once (in a real run, not a transient preview).
     """
     out: dict = {}
+    if chart_type in ECHARTS_ONLY_TYPES:
+        # An echarts-only figure (wordcloud/sankey/网络图/模型一致率…) has no LaTeX twin by
+        # design; emitting would record a spurious latex_error for a chart that rendered fine.
+        return {}
     common = dict(
         x=x_field,
         y=y_field,
@@ -3985,6 +4099,12 @@ def _execute_visualize_node(node: dict, current_input: list):
     # The columns a 100% stacked-share figure lays on top of each other (e.g. the sentiment
     # evolution's positive_pct/neutral_pct/negative_pct). Forwarded to both engines.
     stack_fields = params.get('stack_fields')
+    # The three columns 模型一致率 reads from the tidy multi-model table: which column names a
+    # model, which holds its label, and which aligns the same text across models. Forwarded like
+    # the other optional fields; the builder owns the refusal when they name a missing column.
+    model_field = params.get('model_field')
+    agreement_label_field = params.get('agreement_label_field')
+    id_field = params.get('id_field')
     # Dated event markers for 折线/柱状/双轴折线. Forwarded to both engines: the matplotlib
     # renderer refuses it by name, which is the honest answer when a figure would lose its dates.
     annotations = params.get('annotations')
@@ -4032,6 +4152,9 @@ def _execute_visualize_node(node: dict, current_input: list):
                 annotations=annotations,
                 title=title,
                 stack_fields=stack_fields,
+                model_field=model_field,
+                agreement_label_field=agreement_label_field,
+                id_field=id_field,
                 **kw,
             )
             spec = {'engine': 'echarts', 'option': option}
@@ -5425,6 +5548,9 @@ def render_visualization():
     agg2_field = data.get('agg2')
     label_field = data.get('label_field')
     stack_fields = data.get('stack_fields')
+    model_field = data.get('model_field')
+    agreement_label_field = data.get('agreement_label_field')
+    id_field = data.get('id_field')
     annotations = data.get('annotations')
     title = data.get('title', '')
     tokenize = as_bool(data.get('tokenize'))
@@ -5485,6 +5611,9 @@ def render_visualization():
             stack_fields=stack_fields,
             annotations=annotations,
             title=title,
+            model_field=model_field,
+            agreement_label_field=agreement_label_field,
+            id_field=id_field,
             **kw,
         )
         return jsonify({'ok': True, 'engine': 'echarts', 'option': option, **latex_extra})

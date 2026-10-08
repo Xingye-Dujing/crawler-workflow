@@ -101,6 +101,11 @@ _PANELS = [
     # below is asserted over, and each was written by a different hand.
     ('panel_tokenize', 'tokenize', {'text_column': '正文', 'top_n': '20'}),
     ('panel_visualize_bar', 'visualize', {'chart_type': 'bar', 'x_field': '标题', 'y_field': '点赞', 'title': '统计'}),
+    (
+        'panel_visualize_model_agreement',
+        'visualize',
+        {'chart_type': 'model_agreement', 'agreement_label_field': 'emotion'},
+    ),
     ('panel_visualize_wordcloud', 'visualize', {'chart_type': 'wordcloud', 'value_field': '权重'}),
     ('panel_output_csv', 'output', {'operation': 'save_csv', 'filename': 'export.csv', 'text_column': '正文'}),
     ('panel_output_stamped', 'output', {'operation': 'save', 'filename': 'stamped.csv', 'filename_timestamp': True}),
@@ -361,6 +366,32 @@ def results(tmp_path_factory, capabilities_matrix):
                 _save(),
             ],
             'connections': [{'from': 'n1', 'to': 'out-1'}],
+        },
+        # ── 模型一致率 (model_agreement): the field a comparison chart really needs ──
+        # A model_agreement chart has no x/y — it reads the tidy table's label column. These three
+        # scenarios pin that the validate branch asks for the RIGHT field, and that ordinary charts
+        # (bar) still demand x_field: a node with no model set must not quietly become a chart that
+        # the backend then refuses for a missing column.
+        {
+            'id': 'viz_agreement_no_label',
+            'nodes': [
+                _node('u', 'process', {'operation': 'emotion'}),
+                _node('v', 'visualize', {'chart_type': 'model_agreement'}),
+            ],
+            'connections': [{'from': 'u', 'to': 'v'}],
+        },
+        {
+            'id': 'viz_agreement_with_label',
+            'nodes': [
+                _node('u', 'process', {'operation': 'emotion'}),
+                _node('v', 'visualize', {'chart_type': 'model_agreement', 'agreement_label_field': 'emotion'}),
+            ],
+            'connections': [{'from': 'u', 'to': 'v'}],
+        },
+        {
+            'id': 'viz_bar_no_x',
+            'nodes': [_node('u', 'process', {'operation': 'emotion'}), _node('v', 'visualize', {'chart_type': 'bar'})],
+            'connections': [{'from': 'u', 'to': 'v'}],
         },
         # ── settings-panel renders (node = openSettings target, HTML captured) ──
         *({'id': pid, 'node': _node('n1', ntype, params)} for pid, ntype, params in _PANELS),
@@ -1411,3 +1442,35 @@ class TestCompileAndPdfGate:
         html = results['settings']['panel_output_no_gate']
         assert 'value="csv"' in html
         assert 'value="pdf"' not in html, 'a table-fed save must not be offered PDF'
+
+
+class TestModelAgreementChart:
+    """The browser's half of 模型一致率: which field a comparison chart asks for, and what its
+    settings panel shows. The chart has no x/y (it reads the tidy 模型/标签/原行 table), so a node
+    must be refused for a missing LABEL column, never for a missing x_field — and an ordinary
+    chart like bar must STILL demand x_field. Checked against the REAL workflow.js, not a mirror.
+    """
+
+    @staticmethod
+    def _keys(messages):
+        return [str(m).split('|')[0] for m in messages]
+
+    def test_an_agreement_chart_without_a_label_column_is_named(self, results):
+        keys = self._keys(results['validate']['viz_agreement_no_label'])
+        assert 'validate.visualizeAgreementLabel' in keys, keys
+        assert 'validate.visualizeXField' not in keys, 'a comparison chart has no x field to miss'
+
+    def test_an_agreement_chart_with_a_label_column_passes_the_field_rule(self, results):
+        keys = self._keys(results['validate']['viz_agreement_with_label'])
+        assert 'validate.visualizeAgreementLabel' not in keys, keys
+        assert 'validate.visualizeXField' not in keys, keys
+
+    def test_a_normal_bar_chart_still_demands_x_field(self, results):
+        keys = self._keys(results['validate']['viz_bar_no_x'])
+        assert 'validate.visualizeXField' in keys, 'the agreement branch must not relax every other chart'
+
+    def test_the_agreement_panel_offers_its_three_fields_and_no_x_field(self, results):
+        html = results['settings']['panel_visualize_model_agreement']
+        for label in ('settings.modelField', 'settings.agreementLabelField', 'settings.idField'):
+            assert label in html, (label, html)
+        assert 'settings.xField' not in html, 'a chart with no x/y must not render an x field box'

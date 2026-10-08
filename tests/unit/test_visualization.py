@@ -51,6 +51,10 @@ USABLE = {
     'network': {'x': '作者', 'y': '平台'},
     'wordcloud': {'x': '作者'},
     'map': {'x': '作者', 'value_field': '点赞'},
+    # 模型一致率 reads a tidy multi-model table, not x/y: the generic fixture's 作者 stands in
+    # for 模型, 平台 for the compared label, 阅读 for the row id — enough to BUILD (each model
+    # here has its own rows, so it draws a diagonal-only matrix) without a bespoke frame.
+    'model_agreement': {'model_field': '作者', 'agreement_label_field': '平台', 'id_field': '阅读'},
 }
 
 # Group keys sort by code point, which is why 丙 precedes 乙 precedes 甲 here.
@@ -100,6 +104,67 @@ class TestChartCatalogue:
         # reader of the exported PNG believes is on the curve and never was.
         text = _WORKFLOW_JS.read_text(encoding='utf-8')
         assert _js_list(text, 'CHARTS_WITH_ANNOTATIONS') == list(ANNOTATED_TYPES)
+
+
+class TestModelAgreement:
+    """模型一致率 — pairwise agreement between models that ran the same texts.
+
+    The chart is the payoff of the multi-model analysis node, so it is pinned on the tidy
+    shape that node writes (模型 / 标签 / 原行), including the two rules the whole app lives by:
+    an axis keeps the TABLE's order, and a column the user named but the table lacks refuses
+    by name instead of drawing a confident wrong matrix.
+    """
+
+    @staticmethod
+    def _tidy():
+        # Two models (written B-first, A-second) over three shared 原行; they disagree only on id 1.
+        return pd.DataFrame(
+            {
+                '原行': [0, 1, 2, 0, 1, 2],
+                '模型': ['B', 'B', 'B', 'A', 'A', 'A'],
+                'emotion': ['Joy', 'Sad', 'Joy', 'Joy', 'Anger', 'Joy'],
+            }
+        )
+
+    def test_pairwise_rate_and_diagonal_on_the_shared_rows(self):
+        cats, matrix = V._agreement_matrix(self._tidy(), '模型', 'emotion', '原行')
+        assert matrix[0][0] == 100.0 == matrix[1][1], 'a model always agrees with itself'
+        assert matrix[0][1] == pytest.approx(round(2 / 3 * 100, 2)), '2 of 3 shared rows agree'
+        assert matrix[1][0] == matrix[0][1], 'the matrix is symmetric'
+
+    def test_the_model_axis_keeps_the_table_order_not_alphabetical(self):
+        cats, _ = V._agreement_matrix(self._tidy(), '模型', 'emotion', '原行')
+        assert cats == ['B', 'A'], 'first appearance in the table, never a re-sort'
+
+    def test_a_row_one_model_left_blank_is_neither_agreement_nor_disagreement(self):
+        tidy = self._tidy()
+        # Drop A's row 0 → the pair is scored over ids {1,2} only: 1 disagrees, 2 agrees → 50%.
+        tidy = tidy[~((tidy['模型'] == 'A') & (tidy['原行'] == 0))]
+        _, matrix = V._agreement_matrix(tidy, '模型', 'emotion', '原行')
+        assert matrix[0][1] == pytest.approx(50.0)
+
+    def test_it_draws_a_square_heatmap_scaled_noughto_100(self):
+        option = V.to_echarts_option(
+            self._tidy(), 'model_agreement', model_field='模型', agreement_label_field='emotion', id_field='原行'
+        )
+        assert option['series'][0]['type'] == 'heatmap'
+        assert option['visualMap']['min'] == 0 and option['visualMap']['max'] == 100
+        assert option['xAxis']['data'] == ['B', 'A']
+
+    def test_a_single_model_refuses_instead_of_painting_a_1x1_square(self):
+        single = pd.DataFrame({'原行': [0, 1], '模型': ['A', 'A'], 'emotion': ['Joy', 'Sad']})
+        with pytest.raises(ChartConfigError, match='at least 2 models'):
+            V._agreement_matrix(single, '模型', 'emotion', '原行')
+
+    def test_a_named_column_that_is_not_there_is_reported(self):
+        with pytest.raises(ChartConfigError, match='Field not found in the data: nope'):
+            V.to_echarts_option(
+                self._tidy(), 'model_agreement', model_field='模型', agreement_label_field='emotion', id_field='nope'
+            )
+
+    def test_no_label_column_given_is_refused_by_name(self):
+        with pytest.raises(ChartConfigError, match='label column'):
+            V.to_echarts_option(self._tidy(), 'model_agreement', model_field='模型', id_field='原行')
 
 
 class TestEventMarkers:
@@ -430,11 +495,13 @@ class TestOptionJsonSafety:
         assert values[0] is None
         assert json.dumps(values, allow_nan=False)
 
-    @pytest.mark.parametrize('chart_type', [c for c in CHART_TYPES if c != 'network'])
+    @pytest.mark.parametrize('chart_type', [c for c in CHART_TYPES if c not in ('network', 'model_agreement')])
     def test_a_frame_full_of_missing_numbers_still_serialises(self, chart_type):
         # ``network`` is out of this sweep for a reason, not by oversight: on a frame with no
         # usable numbers it has no edge to draw, and an edge-less graph is a refusal
-        # (TestRelationshipNetwork) rather than a serialisable empty figure.
+        # (TestRelationshipNetwork) rather than a serialisable empty figure. ``model_agreement``
+        # is out for a different reason: it reads the tidy 模型/标签/原行 table, so this g/v frame
+        # has none of its columns and it correctly refuses — its own happy path is TestModelAgreement.
         frame = pd.DataFrame({'g': ['a', 'b'], 'v': [None, None]})
         # 双轴折线 and 显著词图 need their second field like any other type needs x: without
         # one they are a refused spec (pinned in TestConfigErrors), not a chart with a blank
