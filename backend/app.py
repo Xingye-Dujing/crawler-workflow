@@ -20,9 +20,11 @@ import cookie_preflight
 import crawl_gate
 import pandas as pd
 import requests
+from api.history import bp as history_bp
+from api.http import _bad_body, _json_body, _safe_int
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from state import _RUN_QUEUE, _dataset_cache, execution_state
+from state import _RUN_QUEUE, _dataset_cache, execution_state, history_service
 
 import crawl_capabilities as capabilities
 from analyzers import (
@@ -54,7 +56,6 @@ from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, r
 from services.cookie_manager import CookieManager
 from services.data_analysis import LLM_OPS, DataAnalysisService, UnknownOperationError
 from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD, DatasetStore
-from services.execution_history import ExecutionHistoryService
 from services.exporter import DataExporter, UnsupportedFormatError
 from services.housekeeping import Housekeeping
 from services.latex_charts import LatexChartService
@@ -296,7 +297,7 @@ class _LogTee:
 
 cookie_manager = CookieManager(Config.COOKIE_DIR)
 workflow_manager = WorkflowManager()
-history_service = ExecutionHistoryService()
+# history_service lives in state.py (imported at top) so a Blueprint can read it.
 
 
 @app.before_request
@@ -980,33 +981,8 @@ def index():
 # ─── Request validation helpers ────────────────────────────────
 
 
-def _json_body() -> dict | None:
-    """The request's JSON body as an object, or ``None`` when it is unusable.
-
-    Every POST handler here used to open with ``request.get_json()`` (optionally
-    ``or {}``). A body that is *valid JSON but not an object* — ``null``,
-    ``[1, 2]``, ``"abc"`` — then reached ``data.get(...)`` and raised
-    AttributeError, i.e. an HTML 500 for what is a client mistake; and the
-    ``silent=True`` variants hid the same mistake behind an empty dict, so the
-    handler answered as if the user had sent nothing.
-
-    A request with no body at all keeps meaning "no fields" (``{}``), which is
-    what ``or {}`` did and what the frontend relies on for its optional
-    payloads. Only a body that *is* there but is not an object is refused.
-    """
-    data = request.get_json(silent=True)
-    if isinstance(data, dict):
-        return data
-    # ``get_json`` answers None both for "nothing to parse" and for the literal
-    # ``null``, so the raw bytes tell those two apart.
-    if not request.is_json or not request.get_data().strip():
-        return {}
-    return None
-
-
-def _bad_body():
-    """The 400 every route returns for a body :func:`_json_body` refused."""
-    return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
+# _json_body and _bad_body live in api.http now (imported at top) so a Blueprint can use them
+# without importing the whole Flask module. _bad_param stays: only app.py routes reach it.
 
 
 def _bad_param(name: str):
@@ -3409,31 +3385,7 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None)
     return merged_rows
 
 
-def _safe_int(value, default: int = 0, minimum: int = None, maximum: int = None) -> int:
-    """int() for numbers typed into the UI.
-
-    Every settings field arrives as a string, so "abc" used to raise a bare
-    ValueError from inside a request handler (HTTP 500) or from a node (opaque
-    node failure). A malformed value now falls back to the default.
-
-    ``inf`` / ``nan`` are the same class of mistake and used to escape it:
-    ``float('inf')`` parses fine and only ``int()`` then refuses it with an
-    OverflowError, which no ``except (TypeError, ValueError)`` catches — so
-    ``/api/history/runs?limit=inf`` answered 500. Anything not finite is
-    rejected up front, exactly like unparseable text.
-    """
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    if not math.isfinite(number):
-        return default
-    result = int(number)
-    if minimum is not None:
-        result = max(minimum, result)
-    if maximum is not None:
-        result = min(maximum, result)
-    return result
+# _safe_int lives in api.http now (imported at top).
 
 
 def _safe_float(value, default: float = 0.0) -> float:
@@ -7702,47 +7654,9 @@ def studio_save_image():
 # ─── Execution History API (time-series comparison across runs) ───
 
 
-@app.route('/api/history/runs', methods=['GET'])
-def history_runs():
-    limit = _safe_int(request.args.get('limit'), 50, minimum=1, maximum=1000)
-    df = history_service.list_runs(limit=limit)
-    return jsonify({'ok': True, 'runs': df.to_dict('records'), 'workflow_names': history_service.list_workflow_names()})
-
-
-@app.route('/api/history/series', methods=['GET'])
-def history_series():
-    workflow_name = request.args.get('workflow_name') or None
-    metric = request.args.get('metric') or None
-    node_id = request.args.get('node_id') or None
-    limit = _safe_int(request.args.get('limit'), 2000, minimum=1, maximum=20000)
-    df = history_service.series(workflow_name=workflow_name, metric=metric, node_id=node_id, limit=limit)
-    return jsonify({'ok': True, 'rows': df.to_dict('records')})
-
-
-@app.route('/api/history/clear', methods=['POST'])
-def history_clear():
-    history_service.clear()
-    return jsonify({'ok': True, 'message': t('history.cleared')})
-
-
-@app.route('/api/history/delete', methods=['POST'])
-def history_delete():
-    """Forget one run's recorded metrics, leaving the rest of the history alone.
-
-    «清空历史» was the only door out, so one bad run meant losing the whole
-    comparison chart to get rid of it. The answer carries the deleted row count
-    because an id that matched nothing is a different truth from a deletion:
-    the panel is looking at a list it loaded a moment ago, and a run can have
-    been aged out by the retention policy in between.
-    """
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    run_id = str(data.get('run_id') or '').strip()
-    if not run_id:
-        return jsonify({'ok': False, 'error': t('api.historyNoRunId')}), 400
-    deleted = history_service.delete_run(run_id)
-    return jsonify({'ok': True, 'deleted': deleted, 'run_id': run_id})
+# The /api/history/* cluster lives in api/history.py (imported at top) and is registered here so
+# app-level before_request / error handlers / CORS still wrap it, and the URLs are unchanged.
+app.register_blueprint(history_bp)
 
 
 # ─── Resumable runs ────────────────────────────────────────────

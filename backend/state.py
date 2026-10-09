@@ -16,6 +16,14 @@ one of these wholesale, mutate it (``clear()``/``update()``/slice-assign) instea
 
 import threading
 
+from services.execution_history import ExecutionHistoryService
+
+#: 执行历史 service: one process-wide instance that opens ``data/history.db`` at import (the path
+#: is whatever ``Config`` held when ``app`` — which imports this first — was loaded; the test
+#: harness redirects it to a throwaway root before importing). Moved out of ``app.py`` so a
+#: Blueprint can read it without importing the whole Flask module (a cycle).
+history_service = ExecutionHistoryService()
+
 #: Mutable per-process run state: one run in flight, its console buffer, its outcome counters
 #: and the LLM transport. Read ``stopping`` (not ``not running``) for a Stop — see app.stop_requested.
 execution_state: dict = {

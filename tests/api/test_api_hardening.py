@@ -92,29 +92,39 @@ def _wf_names(client) -> list:
     return [w['name'] for w in client.get('/api/workflow/list').get_json()['workflows']]
 
 
+def _route_source_files() -> list:
+    """Every module that declares HTTP routes: ``app.py`` plus the ``backend/api`` Blueprints."""
+    root = Path(__file__).resolve().parents[2] / 'backend'
+    return [root / 'app.py', *sorted((root / 'api').glob('*.py'))]
+
+
 def _post_route_policies() -> dict:
-    """{path: 'helper' | 'inline' | 'none'} for every POST route in app.py.
+    """{path: 'helper' | 'inline' | 'none'} for every POST route across app.py and the api/ Blueprints.
 
     Read from the source and not from Flask's URL map because the thing under
     test is which helper a handler calls, which the route table cannot show.
+    Handlers now live in ``app.py`` AND ``backend/api/*.py`` (split-out Blueprints,
+    see docs/ARCHITECTURE.md), and a Blueprint uses ``@bp.route`` not ``@app.route``,
+    so the scan covers every route-source file and matches either receiver.
     """
-    source = (Path(__file__).resolve().parents[2] / 'backend' / 'app.py').read_text(encoding='utf-8')
-    lines = source.splitlines()
-    starts = []
-    for index, line in enumerate(lines):
-        match = re.search(r"@app\.route\('([^']+)',\s*methods=\[([^\]]+)\]", line)
-        if match and 'POST' in match.group(2):
-            starts.append((index, match.group(1)))
+    route_re = re.compile(r"@\w+\.route\('([^']+)',\s*methods=\[([^\]]+)\]")
     policies = {}
-    for position, (index, path) in enumerate(starts):
-        end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
-        body = '\n'.join(lines[index:end])
-        if '_json_body()' in body:
-            policies[path] = 'helper'
-        elif 'request.get_json(' in body:
-            policies[path] = 'inline'
-        else:
-            policies[path] = 'none'
+    for file in _route_source_files():
+        lines = file.read_text(encoding='utf-8').splitlines()
+        starts = []
+        for index, line in enumerate(lines):
+            match = route_re.search(line)
+            if match and 'POST' in match.group(2):
+                starts.append((index, match.group(1)))
+        for position, (index, path) in enumerate(starts):
+            end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
+            body = '\n'.join(lines[index:end])
+            if '_json_body()' in body:
+                policies[path] = 'helper'
+            elif 'request.get_json(' in body:
+                policies[path] = 'inline'
+            else:
+                policies[path] = 'none'
     return policies
 
 
