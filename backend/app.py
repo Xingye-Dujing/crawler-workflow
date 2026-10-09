@@ -79,6 +79,7 @@ from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD,
 from services.exporter import DataExporter, UnsupportedFormatError
 from services.housekeeping import Housekeeping
 from services.latex_charts import LatexChartService
+from services.nodes import execute_compile_node as _execute_compile_node
 from services.nodes import execute_name_node as _execute_name_node
 from services.run_store import (
     NODE_DONE,
@@ -3180,39 +3181,6 @@ def _output_pdf(node: dict, upstream: list) -> dict:
         return out
     add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
     return {'pdf_file': name, 'pdf_bytes': out.get('pdf_bytes', 0)}
-
-
-def _execute_compile_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
-    """Compile node: read the LaTeX one or more ``visualize`` parents produced — from their DICT results in
-    ``upstream``, because a visualize emits no rows so ``current_input`` is empty here — assemble it into
-    ONE document, and compile it to a staged PDF with the user's MiKTeX.
-
-    ``emit_latex``/``emit_latex_table`` already guarantee a source exists (``validate`` refuses a both-off
-    visualize upstream before a run); if nothing arrives anyway — a parent that failed — refuse BY NAME and
-    never emit an empty PDF. The PDF is staged under a deterministic per-node name; a downstream ``output``
-    renames it to the user's file, and a chain with no output simply leaves it in the export dir.
-    """
-    docs = []
-    sources = []
-    for pid, res in upstream or ():
-        if not isinstance(res, dict):
-            continue
-        if 'error' in res:
-            return {'error': str(res.get('error'))}
-        if res.get('latex'):
-            docs.append(res['latex'])
-        if res.get('latex_table'):
-            docs.append(res['latex_table'])
-        sources.append(str(pid))
-    if not docs:
-        return {'error': t('wf.compile_no_source')}
-    out_name = f'compile-{node.get("id")}.pdf'
-    out, name = latex_compile.compile_pdf(latex_compile.compose_tex(docs), out_name, Config.EXPORT_DIR)
-    if 'error' in out:
-        add_log(t('run.compileFailed', err=out['error']))
-        return out
-    add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
-    return {**out, 'sources': sources}
 
 
 def _execute_output_node(node: dict, current_input: list, upstream: list = None):

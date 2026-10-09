@@ -13,6 +13,12 @@ First slice: ``execute_name_node`` — the metadata node, the most self-containe
 takes the node dict, returns no rows), so it proves the pattern with zero behaviour change.
 """
 
+from state import add_log
+
+from config import Config
+from i18n import t
+from services import latex_compile
+
 
 def execute_name_node(node: dict) -> list:
     """The name node is metadata, not data: its label was already lifted into
@@ -20,3 +26,36 @@ def execute_name_node(node: dict) -> list:
     it). It produces no rows — downstream source/upload nodes read nothing
     from their inputs, which is exactly why the node must connect to one."""
     return []
+
+
+def execute_compile_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
+    """Compile node: read the LaTeX one or more ``visualize`` parents produced — from their DICT results in
+    ``upstream``, because a visualize emits no rows so ``current_input`` is empty here — assemble it into
+    ONE document, and compile it to a staged PDF with the user's MiKTeX.
+
+    ``emit_latex``/``emit_latex_table`` already guarantee a source exists (``validate`` refuses a both-off
+    visualize upstream before a run); if nothing arrives anyway — a parent that failed — refuse BY NAME and
+    never emit an empty PDF. The PDF is staged under a deterministic per-node name; a downstream ``output``
+    renames it to the user's file, and a chain with no output simply leaves it in the export dir.
+    """
+    docs = []
+    sources = []
+    for pid, res in upstream or ():
+        if not isinstance(res, dict):
+            continue
+        if 'error' in res:
+            return {'error': str(res.get('error'))}
+        if res.get('latex'):
+            docs.append(res['latex'])
+        if res.get('latex_table'):
+            docs.append(res['latex_table'])
+        sources.append(str(pid))
+    if not docs:
+        return {'error': t('wf.compile_no_source')}
+    out_name = f'compile-{node.get("id")}.pdf'
+    out, name = latex_compile.compile_pdf(latex_compile.compose_tex(docs), out_name, Config.EXPORT_DIR)
+    if 'error' in out:
+        add_log(t('run.compileFailed', err=out['error']))
+        return out
+    add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
+    return {**out, 'sources': sources}
