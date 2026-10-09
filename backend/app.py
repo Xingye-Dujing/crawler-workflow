@@ -22,6 +22,7 @@ import pandas as pd
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from state import _RUN_QUEUE, _dataset_cache, execution_state
 
 import crawl_capabilities as capabilities
 from analyzers import (
@@ -318,7 +319,7 @@ def _apply_request_lang():
 #
 # The dictionary is only a read-through cache now: the store is the source of
 # truth, so anything registered days ago still resolves.
-_dataset_cache = {}
+# _dataset_cache is imported from state.py (mutated in place, never rebound).
 _DATASET_CACHE_MAX = 24
 _DATASET_STORE = None
 _DATASET_LOCK = threading.Lock()
@@ -500,67 +501,9 @@ def _tokenize_dataframe(df: pd.DataFrame, params: dict) -> pd.DataFrame | None:
     return pd.DataFrame([{'word': w, 'frequency': v} for w, v in zip(labels, values, strict=True)])
 
 
-execution_state = {
-    'running': False,
-    'executor': None,
-    'thread': None,
-    'results': {},
-    'logs': [],
-    '_log_total': 0,  # lines ever produced (the list itself is capped)
-    'total_nodes': 0,
-    'completed_nodes': 0,
-    # A run is not a binary. Nodes a dead upstream starved (`skipped`) and nodes
-    # that died (`failed_nodes`) are neither done nor nothing, and the browser
-    # used to guess the difference from `completed < total` — which called a
-    # clean run with one skipped node "ended, can continue". `outcome` is the
-    # worker's own verdict, published once the run stops.
-    'skipped_nodes': 0,
-    'failed_nodes': 0,
-    # Nodes cut short by the user's own 停止. Kept apart from `failed_nodes` because a
-    # stopped node is not a failure, and blaming one on the workflow is the last thing
-    # a run the user ended by hand should say.
-    'stopped_node_ids': set(),
-    # The run rows a live worker still owns (one per workflow in a serial
-    # multi-workflow canvas): 停止 writes to these, and nothing settles a row that
-    # is not on this list while its worker may still be running.
-    'open_records': [],
-    # Every record THIS process opened, kept across runs. It is what lets the panel
-    # settle a row its own worker abandoned without ever touching a row another
-    # server instance might be writing right now.
-    'owned_records': set(),
-    # Node ids the CURRENT attempt visited. `runs.db` keeps the status of every
-    # node ever run under this run id, including ones the canvas has since
-    # deleted, so a verdict read from the whole record can blame today's run for
-    # an older shape of the workflow.
-    'attempted_nodes': set(),
-    'outcome': '',
-    'active_crawlers': set(),
-    # Set by Stop, cleared when a run claims the slot: it means "the user has asked
-    # to stop and the worker has not written its verdict yet".
-    'stopping': False,
-    '_wf_logs': {},  # {wf_idx: [log lines]} per-workflow logs for parallel mode
-    '_wf_log_total': {},  # {wf_idx: lines ever produced} — see _push_log
-    '_wf_names': {},  # {wf_idx: the workflow's user-facing name} for console lines
-    # {wf_idx: [(start, end)]} of the time windows a crawl node in this workflow was
-    # asked to walk. A save node cannot see the crawl it sits downstream of — it gets a
-    # table — so this is how 「文件名带时间范围」 can say which window the table is.
-    '_time_windows': {},
-    '_mode': 'serial',
-    'llm': None,  # AI transport config from the settings panel (see /api/workflow/execute)
-    'cancel_event': threading.Event(),  # set by Stop; checked between LLM rows
-    # Which workflow was last opened, and what shape it has: previews resolve a
-    # node from the database when results are gone, and these tell it which
-    # workflow's rows count as "this node's".
-    'workflow_name': '',
-    # Every name node's label in canvas order — the record of a run that executed
-    # several workflows carries all of their names, not just the first.
-    'workflow_labels': [],
-    'fingerprint': '',
-    # Set when a crawl is bounced to a login wall mid-run (the cookie likely
-    # expired). Surfaced to the browser through /api/workflow/status so it can
-    # toast "refresh the cookie and resume" — the partial data is already safe.
-    'cookie_expired': False,
-}
+# The run's mutable state lives in `backend/state.py` (imported above) so the HTTP layer and
+# the test harness share ONE object; it is mutated in place and never rebound. `state`
+# carries the field-by-field comments; see docs/ARCHITECTURE.md (Refactor step A).
 _completed_lock = threading.Lock()
 _execute_lock = threading.Lock()  # serializes the guard-and-claim of a new run
 
@@ -1311,11 +1254,10 @@ def delete_workflow():
 # is busy — it used to be refused outright, and the user had to press Run again
 # at the right moment.
 
-#: Queued requests live in memory only. A restart drops them, which is the
-#: honest behaviour for a list of intentions nobody is here to confirm.
+#: Queued requests live in memory only (see state._RUN_QUEUE). A restart drops them, which is
+#: the honest behaviour for a list of intentions nobody is here to confirm.
 QUEUE_MAX = 8
 
-_RUN_QUEUE: list = []
 _queue_lock = threading.Lock()
 
 
