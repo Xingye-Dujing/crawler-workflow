@@ -1291,6 +1291,103 @@ body.style-menu-open #workspace #resume-banner {
   letter-spacing: 1px;
 }
 
+/* ── Outline sidebar (right) ──────────────────────────────────────────── */
+/* The canvas navigator: one row per node, a click pans+zooms to it. It mirrors
+   the palette's look and its collapse rule (only the list hides, the header —
+   with its toggle — always stays reachable). Docked right at z-index 100; the
+   node-settings slide-in sits above it (1001) because it is transient. */
+#outline-panel {
+  position: fixed;
+  right: 12px;
+  top: 60px;
+  width: 200px;
+  max-height: calc(100vh - 84px);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  z-index: 100;
+  padding: 8px;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+}
+.outline-header {
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  padding: 4px 6px 8px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+}
+.outline-toggle {
+  flex: none;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 5px;
+}
+.outline-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+.outline-list {
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+#outline-panel.collapsed .outline-list {
+  display: none;
+}
+.outline-empty {
+  padding: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.outline-row {
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 11px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  transition: all 0.1s;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.outline-row:hover {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--line);
+}
+.outline-row.outline-active {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--line);
+}
+/* A disabled / starved node is not on the run graph — still listed (the outline is
+   a complete map) but dimmed so it does not read as live. */
+.outline-row.outline-off {
+  opacity: 0.45;
+}
+.outline-type {
+  display: inline-block;
+  min-width: 34px;
+  margin-right: 6px;
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
 /* ── Generic panel chrome (shared by every side panel) ──────────────────── */
 .panel-header,
 .settings-header,
@@ -3294,6 +3391,9 @@ html[data-cloud='1'] .ai-only-ollama {
 
 @media (max-width: 768px) {
   #node-palette {
+    display: none;
+  }
+  #outline-panel {
     display: none;
   }
   #stats-panel {

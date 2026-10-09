@@ -64,7 +64,7 @@ python app.py
 - **可视化**：论文印刷风格图表（ECharts / Matplotlib 双引擎）、主题距离图 / 显著词图 / 关系图 / 桑基 /
   占比堆叠 / 模型一致率、LaTeX 图与三线表、MiKTeX 编译成 PDF、Chart Studio 工作台。→ [`docs/analysis.md`](docs/analysis.md)
 - **工作流引擎**：拖拽画布、连线 fan-in/fan-out 语义、禁用即等同于不存在、撤销/重做、视角持久化、
-  运行队列、停止与并行/串行执行。→ [`docs/workflow.md`](docs/workflow.md)
+  右侧大纲侧栏一键定位节点、自动排布上下顺序可指定、运行队列、停止与并行/串行执行。→ [`docs/workflow.md`](docs/workflow.md)
 - **断点续跑与运行记录**：节点级检查点、LLM 答案缓存、增量采集台账、Cookie 中途过期续跑、Resume 节点、
   保留策略与运行时长。→ [`docs/workflow.md`](docs/workflow.md)
 - **界面**：中英双语、亮色主题、启动步骤各自兜异常、离线不拖垮整页；画布支持触控板双指滚动平移 / 捏合缩放与平板双指手势。→ [`docs/workflow.md`](docs/workflow.md)

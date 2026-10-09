@@ -645,6 +645,22 @@
       <div id="settings-content"></div>
     </div>
 
+    <!-- Outline sidebar (right): lists every node so a click can pan+zoom the canvas there -->
+    <div id="outline-panel">
+      <div class="outline-header">
+        <span class="outline-title" data-i18n="outline.title">Outline</span>
+        <button
+          class="outline-toggle"
+          type="button"
+          onclick="toggleOutline()"
+          aria-expanded="true"
+        >
+          −
+        </button>
+      </div>
+      <div id="outline-list" class="outline-list"></div>
+    </div>
+
     <!-- Console Panel -->
     <div id="console-panel">
       <div id="console-resize-handle"></div>

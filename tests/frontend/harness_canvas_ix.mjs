@@ -135,7 +135,7 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(src + '\n;globalThis.__canvas = canvas; globalThis.__wf = workflow;', sandbox);
+vm.runInContext(src + '\n;globalThis.__canvas = canvas; globalThis.__wf = workflow; globalThis.__outline = Outline;', sandbox);
 
 /* Re-seeded after the load: workflow.js declares both of these itself, and a
    function declaration inside the script wins over anything seeded before it. */
@@ -157,6 +157,7 @@ sandbox.showDialog = async (spec) => {
 sandbox.clearInterval = () => {};
 
 const canvas = sandbox.__canvas;
+const Outline = sandbox.__outline;
 const doc = sandbox.document;
 const out = {};
 
@@ -602,6 +603,52 @@ canvas.connections = [{ from: cA, to: cAO }, { from: cB, to: cBO }];
 canvas.autoLayout();
 const ctrlTops = box([cA, cB]).map((b) => b[1]);
 out.auto_layout_order_default = { a_above_b: ctrlTops[0] < ctrlTops[1] };
+
+/* ── outline sidebar (a jump-to-node navigator) ───────────────────── */
+freshWorld();
+/* The three rows: a name (head, live), a source far off-screen (live), a visualize
+   node we disable (off → dimmed). Object.keys(canvas.nodes) order is creation order,
+   which is the flat list the outline shows. */
+const oName = addNode('name', 100, 100);
+const oSrc = addNode('source', 3000, 2000);
+const oVis = addNode('visualize', 500, 400);
+canvas.toggleEnabled(oVis);
+const collected = Outline._collect();
+/* focus(oSrc) must select it AND move the camera so it comes into view. */
+const panBefore = { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom };
+Outline.focus(oSrc);
+const panAfter = { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom };
+/* toggle: the outline collapses/expands like the palette, persisted to its own key. */
+const panelEl = doc.getElementById('outline-panel');
+Outline.toggle();
+const collapsedOnce = panelEl.classList.contains('collapsed');
+const persistedOnce = sandbox.localStorage.getItem('crawler_outline_collapsed');
+Outline.toggle();
+const collapsedTwice = panelEl.classList.contains('collapsed');
+const persistedTwice = sandbox.localStorage.getItem('crawler_outline_collapsed');
+/* The list is rebuilt by saveState on every mutation — a bare render() proves the DOM shape. */
+Outline.render();
+const listEl = doc.getElementById('outline-list');
+const rowEls = listEl.querySelectorAll('.outline-row');
+out.outline = {
+    count: collected.length,
+    labels: collected.map((r) => r.label),
+    tags: collected.map((r) => Outline._tag(r.type)),
+    offIds: collected.filter((r) => r.off).map((r) => r.id),
+    disabledId: oVis,
+    focusSelected: canvas.selectedNode,
+    focusMoved: panAfter.panX !== panBefore.panX || panAfter.panY !== panBefore.panY,
+    focusZoomInRange: panAfter.zoom >= 0.2 && panAfter.zoom <= 1.0,
+    statusZoom: doc.getElementById('status-zoom').textContent,
+    collapsedOnce,
+    collapsedTwice,
+    persistedOnce,
+    persistedTwice,
+    rows: rowEls.length,
+    /* A row's data attribute carries its node id (built via createElement, never an
+       inline handler keyed by the id). */
+    rowIds: rowEls.map((el) => el.dataset.node),
+};
 
 /* ── editNode / openSettings / closeSettings (all real) ────────────── */
 freshWorld();

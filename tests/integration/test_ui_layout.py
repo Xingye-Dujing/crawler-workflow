@@ -247,6 +247,7 @@ PANELS = [
     'history-panel',
     'studio-overlay',
     'node-settings',
+    'outline-panel',
     'console-panel',
     'runs-panel',
     'exports-panel',
@@ -289,6 +290,10 @@ MIN_MEASURED = {
     'history-panel': 13,
     'studio-overlay': 16,
     'node-settings': 3,
+    # The outline is a static header row (title + toggle) over a JS-rendered list; with an
+    # empty canvas it still shows the header, the two chrome parts and the list box, so 3
+    # is a safe floor. Node rows only ever add to the count, never reduce it.
+    'outline-panel': 3,
     'console-panel': 6,
     'runs-panel': 5,
     'exports-panel': 6,

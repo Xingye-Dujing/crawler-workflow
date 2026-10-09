@@ -4700,6 +4700,125 @@ function togglePalette() {
     btn.title = I18n.t(collapsed ? 'palette.expand' : 'palette.collapse');
 }
 
+/* ── Outline sidebar (right) ────────────────────────────────────────── */
+/* A flat map of every node on the canvas: click a row and the camera jumps to it at a
+   readable size. The list is rebuilt from the model inside canvas.saveState() (canvas.js),
+   which is the single chokepoint every structural change passes through — so it can never
+   drift from the graph, and this object owns only the DOM and the jump. Rows are built with
+   createElement + textContent (never an innerHTML string keyed by the node id), because a
+   workflow file can author any id and an inline handler would have to re-escape it. */
+const Outline = {
+    /* The rows as data (no DOM). `off` = outside the effective graph (disabled, starved,
+       or its type switched off): still listed — the outline is a complete map, not a run
+       preview — but dimmed so it does not read as live. */
+    _collect() {
+        var live = canvas.effectiveIds();
+        return Object.keys(canvas.nodes).map(function (id) {
+            var n = canvas.nodes[id];
+            return {
+                id: id,
+                type: n.type,
+                label: n.title || I18n.t('node.' + n.type),
+                off: live.indexOf(id) < 0,
+            };
+        });
+    },
+
+    _tag(type) {
+        var m = {
+            name: 'NAM', source: 'SRC', upload: 'UPL', resume: 'RSM', process: 'PRC',
+            analysis: 'ANL', tokenize: 'TKN', visualize: 'VIZ', compile: 'CMP', output: 'OUT', comment: 'CMT',
+        };
+        return m[type] || String(type).slice(0, 3).toUpperCase();
+    },
+
+    render() {
+        var list = document.getElementById('outline-list');
+        if (!list) return;
+        var rows = this._collect();
+        list.textContent = '';
+        if (rows.length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'outline-empty';
+            empty.textContent = I18n.t('outline.noNodes');
+            list.appendChild(empty);
+            return;
+        }
+        var self = this;
+        rows.forEach(function (r) {
+            var row = document.createElement('div');
+            row.className = 'outline-row' + (r.off ? ' outline-off' : '');
+            row.dataset.node = r.id;
+            row.title = r.label;
+            var chip = document.createElement('span');
+            chip.className = 'outline-type';
+            chip.textContent = self._tag(r.type);
+            var name = document.createElement('span');
+            name.className = 'outline-name';
+            name.textContent = r.label;
+            row.appendChild(chip);
+            row.appendChild(name);
+            row.addEventListener('click', function () { self.focus(r.id); });
+            list.appendChild(row);
+        });
+        this._markActive();
+    },
+
+    focus(id) {
+        if (!canvas.nodes[id]) return;
+        canvas.selectNode(id);
+        canvas.centerOnNode(id);
+        this._markActive();
+    },
+
+    _markActive() {
+        var list = document.getElementById('outline-list');
+        if (!list) return;
+        var sel = canvas.selectedNode;
+        list.querySelectorAll('.outline-row').forEach(function (row) {
+            row.classList.toggle('outline-active', row.dataset.node === sel);
+        });
+    },
+
+    toggle() {
+        var panel = document.getElementById('outline-panel');
+        if (!panel) return;
+        var btn = panel.querySelector('.outline-toggle');
+        var collapsed = panel.classList.toggle('collapsed');
+        if (btn) {
+            btn.textContent = collapsed ? '+' : '−';
+            btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            btn.title = I18n.t(collapsed ? 'outline.expand' : 'outline.collapse');
+        }
+        /* Kept beside the camera in the draft, not in getState(): a collapse is a view
+           preference, never an undo step. Its own key so toggling cannot churn a model save. */
+        try {
+            localStorage.setItem('crawler_outline_collapsed', collapsed ? '1' : '');
+        } catch (e) { /* a blocked store is not worth losing the sidebar over */ }
+    },
+
+    init() {
+        var panel = document.getElementById('outline-panel');
+        if (!panel) return;
+        var collapsed = false;
+        try {
+            collapsed = localStorage.getItem('crawler_outline_collapsed') === '1';
+        } catch (e) { collapsed = false; }
+        if (collapsed) panel.classList.add('collapsed');
+        var btn = panel.querySelector('.outline-toggle');
+        if (btn) {
+            btn.textContent = collapsed ? '+' : '−';
+            btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            btn.title = I18n.t(collapsed ? 'outline.expand' : 'outline.collapse');
+        }
+        this.render();
+    },
+};
+
+function toggleOutline() {
+    Outline.toggle();
+}
+
 /* Apply a canvas background. Called from the background swatches inside the
    View group of the flat bar, so the swatch that is current gets `.active`. */
 function setBg(bg, el) {

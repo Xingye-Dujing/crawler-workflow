@@ -1315,7 +1315,35 @@ const canvas = {
         this.scheduleViewSave();
     },
 
-    /* ---- State ---- */
+    /* Bring ONE node to the centre of the visible box at a readable size — the
+       outline's jump-to-node. It reuses resetView's exact framing (workspace client
+       rect, menu-height top inset, VIEW_FIT_MARGIN, "zoom only shrinks, never past
+       100%") but measures a single node's own box, so a far-off node lands dead
+       centre rather than somewhere the 适应 fit might still leave it clipped. */
+    centerOnNode(id) {
+        const el = this._nodeEl(id);
+        if (!el) return;
+        const vp = this.workspace || {};
+        const vw = vp.clientWidth || window.innerWidth;
+        const vh = vp.clientHeight || window.innerHeight;
+        const menu = document.getElementById('top-menu');
+        const topInset = (menu ? menu.offsetHeight : 0) + VIEW_FIT_MARGIN;
+        const nodeW = el.offsetWidth || 240;
+        const nodeH = el.offsetHeight || 80;
+        const availW = Math.max(1, vw - 2 * VIEW_FIT_MARGIN);
+        const availH = Math.max(1, vh - topInset - VIEW_FIT_MARGIN);
+        const fit = Math.min(availW / nodeW, availH / nodeH);
+        this.zoom = Math.max(0.2, Math.min(1, fit));
+        const cx = el.offsetLeft + nodeW / 2;
+        const cy = el.offsetTop + nodeH / 2;
+        this.panX = vw / 2 - cx * this.zoom;
+        const bandCentreY = (topInset + (vh - VIEW_FIT_MARGIN)) / 2;
+        this.panY = bandCentreY - cy * this.zoom;
+        this.updateTransform();
+        const z = document.getElementById('status-zoom');
+        if (z) z.textContent = Math.round(this.zoom * 100) + '%';
+        this.scheduleViewSave();
+    },
 
     /* The camera. It is deliberately NOT inside getState(): that dict is also one
        undo step, and rewinding an accidental node deletion must not also jump the
@@ -1545,6 +1573,18 @@ const canvas = {
     saveState() {
         localStorage.setItem('crawler_canvas', JSON.stringify(this.serializeDraft()));
         this._pushState();
+        /* The outline is a pure read of the model, and saveState is the ONE chokepoint
+           every structural change (add / delete / rename / enable / undo / load) passes
+           through — so the list can never drift from the graph. Kept in a try/catch and
+           guarded on `typeof`, because a canvas-only harness (which loads just this file)
+           has no Outline, and a broken sidebar must never take down a state write. */
+        if (typeof Outline !== 'undefined' && Outline.render) {
+            try {
+                Outline.render();
+            } catch (e) {
+                console.error('outline render failed', e);
+            }
+        }
     },
 
     updateStatus() {

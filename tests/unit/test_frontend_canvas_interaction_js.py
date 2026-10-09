@@ -349,6 +349,36 @@ class TestAutoLayout:
     def test_a_blank_layout_order_keeps_creation_order(self, ix):
         assert ix['auto_layout_order_default']['a_above_b'] is True
 
+
+class TestOutline:
+    """The right-side outline: a flat map of every node; a row jump selects + centred the camera."""
+
+    def test_it_lists_every_node_in_creation_order_with_its_label(self, ix):
+        o = ix['outline']
+        assert o['count'] == 3
+        assert o['labels'] == ['Workflow Name', 'Data Source', 'Visualize']
+        assert o['tags'] == ['NAM', 'SRC', 'VIZ']
+        assert o['rowIds'] == ['node-1', 'node-2', 'node-3']
+        assert o['rows'] == 3, 'the DOM list must match the data the sidebar renders from'
+
+    def test_a_disabled_node_is_listed_but_flagged_off(self, ix):
+        o = ix['outline']
+        # Still on the map (it is a canvas overview, not a run preview), just dimmed.
+        assert o['disabledId'] in o['rowIds']
+        assert o['offIds'] == [o['disabledId']]
+
+    def test_focusing_a_row_selects_the_node_and_moves_the_camera(self, ix):
+        o = ix['outline']
+        assert o['focusSelected'] == 'node-2'
+        assert o['focusMoved'] is True, 'a node off-screen must be brought into view'
+        assert o['focusZoomInRange'] is True
+        assert o['statusZoom'] == '100%', 'the status bar must follow the camera, like 适应'
+
+    def test_it_collapses_and_persists_like_the_palette(self, ix):
+        o = ix['outline']
+        assert o['collapsedOnce'] is True and o['persistedOnce'] == '1'
+        assert o['collapsedTwice'] is False and o['persistedTwice'] == '', 'toggle twice returns to expanded'
+
     def test_an_empty_canvas_survives_the_request(self, ix):
         assert ix['auto_layout_empty']['survived'] is True
 

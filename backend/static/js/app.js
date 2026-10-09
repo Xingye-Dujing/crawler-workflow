@@ -66,6 +66,8 @@ const I18n = {
             'stats.header': 'Statistics', 'stats.close': 'Close',
             'stats.emotion': 'Emotion', 'stats.tendency': 'Tendency',
             'settings.header': 'Node Settings', 'settings.close': 'Close',
+            'outline.title': 'Outline', 'outline.collapse': 'Collapse', 'outline.expand': 'Expand',
+            'outline.noNodes': 'No nodes yet',
             'status.ready': 'Ready', 'status.completed': 'Completed', 'status.running': 'Running...',
             'status.stopping': 'Stopping…',
             'ctx.newSource': 'New Source Node', 'ctx.newUpload': 'New Upload Node',
@@ -1054,6 +1056,8 @@ const I18n = {
             'stats.header': '统计', 'stats.close': '关闭',
             'stats.emotion': '情感', 'stats.tendency': '倾向',
             'settings.header': '节点设置', 'settings.close': '关闭',
+            'outline.title': '大纲', 'outline.collapse': '收起', 'outline.expand': '展开',
+            'outline.noNodes': '还没有节点',
             'status.ready': '就绪', 'status.completed': '已完成', 'status.running': '运行中...',
             'status.stopping': '正在停止…',
             'ctx.newSource': '新建数据源', 'ctx.newUpload': '新建上传文件',
@@ -2024,6 +2028,10 @@ const I18n = {
         /* Option text inside custom selects comes from the <option> nodes, so
            their trigger labels need re-reading once the locale changes. */
         if (window.CustomSelect) CustomSelect.refreshAll();
+        /* The outline rows are built by JS (not data-i18n), so their type chips and
+           labels must be re-rendered when the language flips. Guarded on typeof: this
+           is `const Outline` in another file, which is NOT a window property. */
+        if (typeof Outline !== 'undefined') Outline.render();
     },
 };
 
@@ -2796,6 +2804,10 @@ document.addEventListener('DOMContentLoaded', () => {
         var palToggle = document.querySelector('#node-palette .palette-toggle');
         if (palToggle) palToggle.title = I18n.t('palette.collapse');
     });
+
+    /* Outline sidebar: a jump-to-node navigator. Its rows re-render from the model on
+       every saveState, so init only has to restore the collapsed state and paint once. */
+    boot('outline', () => Outline.init());
 
     /* Auto-save every 30 seconds */
     setInterval(() => {
