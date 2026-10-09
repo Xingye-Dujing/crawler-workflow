@@ -642,10 +642,10 @@ class TestChromeOfThePageItself:
             'a train probe without the workflow name cannot find its labels after a restart'
         )
         # …and the backend really does answer it per model type, so nothing is unsent by accident.
-        import app as app_module
+        import api.analysis
 
-        assert app_module._ML_LABEL_COLUMNS['sentiment'] == 'sentiment'
-        assert set(app_module._ML_LABEL_COLUMNS) == set(app_module._ML_MODEL_TYPES), (
+        assert api.analysis._ML_LABEL_COLUMNS['sentiment'] == 'sentiment'
+        assert set(api.analysis._ML_LABEL_COLUMNS) == set(api.analysis._ML_MODEL_TYPES), (
             'a classifier can be trained whose label column nobody defaults'
         )
 
