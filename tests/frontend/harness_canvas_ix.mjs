@@ -653,6 +653,19 @@ out.outline = {
     rowIds: rowEls.map((el) => el.dataset.node),
 };
 
+/* The sidebar must mirror the graph's selection — including when the graph is
+   DEselected by clicking empty canvas. Previously selectNode/deselectNode never told the
+   outline (they are view-only, not saveState), so the last-highlighted row stayed lit after
+   the node was deselected, and a plain canvas click never lit the outline row at all. */
+canvas.deselectNode();
+out.outline_deselect = {
+    activeAfterDeselect: doc.getElementById('outline-list').querySelectorAll('.outline-active').length,
+};
+canvas.selectNode(oName);
+out.outline_reselect = {
+    activeIds: doc.getElementById('outline-list').querySelectorAll('.outline-active').map((el) => el.dataset.node),
+};
+
 /* ── editNode / openSettings / closeSettings (all real) ────────────── */
 freshWorld();
 const e1 = addNode('source', 0, 0);

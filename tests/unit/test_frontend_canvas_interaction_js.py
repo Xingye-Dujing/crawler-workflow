@@ -383,6 +383,14 @@ class TestOutline:
         assert o['collapsedOnce'] is True and o['persistedOnce'] == '1'
         assert o['collapsedTwice'] is False and o['persistedTwice'] == '', 'toggle twice returns to expanded'
 
+    def test_deselecting_the_graph_clears_the_sidebar_highlight(self, ix):
+        """Clicking empty canvas (no node selected) must not leave the last row lit."""
+        assert ix['outline_deselect']['activeAfterDeselect'] == 0
+
+    def test_selecting_a_node_on_the_canvas_lights_its_sidebar_row(self, ix):
+        # The selection sync must be bidirectional: a graph click drives the sidebar highlight too.
+        assert ix['outline_reselect']['activeIds'] == ['node-1']
+
     def test_an_empty_canvas_survives_the_request(self, ix):
         assert ix['auto_layout_empty']['survived'] is True
 

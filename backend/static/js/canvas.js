@@ -886,11 +886,22 @@ const canvas = {
         this.selectedNode = id;
         const el = this._nodeEl(id);
         if (el) el.classList.add('selected');
+        this._notifyOutlineActive();
     },
 
     deselectNode() {
         document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
         this.selectedNode = null;
+        this._notifyOutlineActive();
+    },
+
+    /* Mirror the graph's selection into the outline: the outline's active row must follow
+       selectNode/deselectNode directly. Selection is a VIEW change, not a model change, so it
+       deliberately does NOT go through saveState (that would make every click an undo step) —
+       which is exactly why the sidebar used to keep a stale highlight after the graph was
+       deselected. Guarded on `typeof Outline` so a canvas-only harness (no workflow.js) is safe. */
+    _notifyOutlineActive() {
+        if (typeof Outline !== 'undefined' && Outline._markActive) Outline._markActive();
     },
 
     editNode(id) {
