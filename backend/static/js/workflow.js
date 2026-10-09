@@ -3218,6 +3218,16 @@ function renderVisualizeSettings(nodeId, p) {
             ['sum', 'mean', 'count', 'max', 'min'].map(function (a) { return '<option value="' + a + '"' + (p.agg === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') +
             '</select></div>';
     }
+    if (ct === 'network') {
+        // A co-occurrence graph over the whole candidate set is unreadable past ~20 words, and
+        // its detail only surfaces on hover — which cannot be saved. Naming one word renders
+        // that word's ego-network instead (it + the words directly co-occurring with it): a
+        // persistent figure that exports exactly as it previews. Blank leaves the full graph.
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.networkCenter') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.center_node || '') + '" placeholder="' + I18n.t('settings.networkCenterPlaceholder') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'center_node\',this.value)"></div>' +
+            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.networkCenter') + '</div>';
+    }
     if (CHARTS_WITH_LABEL.indexOf(ct) >= 0) {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.labelField') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.label_field || 'topic') + '" ' +
@@ -3372,6 +3382,7 @@ var dataNodes = {
         var payload = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
             y_field: p.y_field, value_field: p.value_field, agg: p.agg,
+            center_node: p.center_node,
             label_field: p.label_field, stack_fields: p.stack_fields,
             model_field: p.model_field, agreement_label_field: p.agreement_label_field, id_field: p.id_field,
             title: p.title, tokenize: boolParam(p.tokenize, false),
@@ -3825,6 +3836,7 @@ async function openChartFullscreen(nodeId) {
     var payload = {
         chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
         y_field: p.y_field, value_field: p.value_field, agg: p.agg,
+        center_node: p.center_node,
         y2_field: p.y2_field, agg2: p.agg2, annotations: p.annotations,
         label_field: p.label_field, stack_fields: p.stack_fields,
         model_field: p.model_field, agreement_label_field: p.agreement_label_field, id_field: p.id_field,
@@ -4170,6 +4182,7 @@ var dashboard = {
         var payload = {
             chart_type: p.chart_type, engine: p.engine, x_field: p.x_field,
             y_field: p.y_field, value_field: p.value_field, agg: p.agg,
+            center_node: p.center_node,
             /* The board has to ask with the SAME fields the panel previews with. These three
                were left out, so every 双轴折线 cell answered "requires a second value field
                (y2)" — the cell that looked like a board bug was a payload bug — and every cell

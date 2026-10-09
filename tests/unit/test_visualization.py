@@ -106,6 +106,76 @@ class TestChartCatalogue:
         assert _js_list(text, 'CHARTS_WITH_ANNOTATIONS') == list(ANNOTATED_TYPES)
 
 
+class TestNetworkCenter:
+    """The co-occurrence 关系图 over the whole candidate set is unreadable past a couple of
+    dozen words, and its per-node detail only shows on hover — which cannot be exported. Naming
+    a ``center_node`` must draw that word's ego-network (it + its direct co-words), so the
+    reading is a persistent figure that exports exactly as it previews; a blank centre leaves
+    the full graph byte-for-byte as before."""
+
+    @staticmethod
+    def _cooccur_df():
+        return pd.DataFrame(
+            [
+                {'source': '甲', 'target': '乙', 'w': 5},
+                {'source': '甲', 'target': '丙', 'w': 3},
+                {'source': '乙', 'target': '丙', 'w': 2},
+                {'source': '丁', 'target': '戊', 'w': 4},  # an island, unrelated to 甲
+            ]
+        )
+
+    @staticmethod
+    def _names(option):
+        return {n['name'] for n in option['series'][0]['data']}
+
+    def test_an_unknown_centre_is_refused_by_name(self):
+        with pytest.raises(ChartConfigError, match='not a node'):
+            V.to_echarts_option(
+                self._cooccur_df(),
+                'network',
+                x='source',
+                y='target',
+                value_field='w',
+                center_node='己',
+            )
+
+    def test_a_blank_centre_draws_the_whole_candidate_graph(self):
+        option = V.to_echarts_option(self._cooccur_df(), 'network', x='source', y='target', value_field='w')
+        assert self._names(option) == {'甲', '乙', '丙', '丁', '戊'}
+
+    def test_centring_on_a_word_keeps_only_it_and_its_direct_co_words(self):
+        option = V.to_echarts_option(
+            self._cooccur_df(),
+            'network',
+            x='source',
+            y='target',
+            value_field='w',
+            center_node='甲',
+        )
+        assert self._names(option) == {'甲', '乙', '丙'}, 'the island 丁/戊 must not ride along'
+        pairs = {(lnk['source'], lnk['target']) for lnk in option['series'][0]['links']}
+        assert ('丁', '戊') not in pairs
+        assert all('甲' in pair or pair == ('乙', '丙') for pair in pairs)
+
+    def test_the_centre_word_carries_the_largest_bubble(self):
+        option = V.to_echarts_option(
+            self._cooccur_df(),
+            'network',
+            x='source',
+            y='target',
+            value_field='w',
+            center_node='甲',
+        )
+        data = {n['name']: n for n in option['series'][0]['data']}
+        assert max(data, key=lambda name: data[name]['symbolSize']) == '甲'
+
+    def test_the_browser_threads_center_node_into_the_graph(self):
+        text = _WORKFLOW_JS.read_text(encoding='utf-8')
+        # preview, fullscreen export and the board each send it, and the settings field exists.
+        assert text.count('center_node: p.center_node,') >= 3
+        assert "'settings.networkCenter'" in text, 'the 关系图 settings render the centre field'
+
+
 class TestModelAgreement:
     """模型一致率 — pairwise agreement between models that ran the same texts.
 

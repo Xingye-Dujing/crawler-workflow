@@ -4099,6 +4099,10 @@ def _execute_visualize_node(node: dict, current_input: list):
     # The columns a 100% stacked-share figure lays on top of each other (e.g. the sentiment
     # evolution's positive_pct/neutral_pct/negative_pct). Forwarded to both engines.
     stack_fields = params.get('stack_fields')
+    # The one word a 关系图 centres on: it + its directly co-occurring words only (an
+    # ego-network), not a hover hint. Blank = the full candidate graph. It chooses which
+    # rows reach the figure, so it feeds the node fingerprint (never a volatile label).
+    center_node = params.get('center_node')
     # The three columns 模型一致率 reads from the tidy multi-model table: which column names a
     # model, which holds its label, and which aligns the same text across models. Forwarded like
     # the other optional fields; the builder owns the refusal when they name a missing column.
@@ -4152,6 +4156,7 @@ def _execute_visualize_node(node: dict, current_input: list):
                 annotations=annotations,
                 title=title,
                 stack_fields=stack_fields,
+                center_node=center_node,
                 model_field=model_field,
                 agreement_label_field=agreement_label_field,
                 id_field=id_field,
@@ -5548,6 +5553,7 @@ def render_visualization():
     agg2_field = data.get('agg2')
     label_field = data.get('label_field')
     stack_fields = data.get('stack_fields')
+    center_node = data.get('center_node')
     model_field = data.get('model_field')
     agreement_label_field = data.get('agreement_label_field')
     id_field = data.get('id_field')
@@ -5609,6 +5615,7 @@ def render_visualization():
             agg2=agg2_field,
             label_field=label_field,
             stack_fields=stack_fields,
+            center_node=center_node,
             annotations=annotations,
             title=title,
             model_field=model_field,

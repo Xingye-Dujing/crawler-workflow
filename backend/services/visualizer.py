@@ -856,6 +856,13 @@ class VisualizationService:
                 raise ChartConfigError(
                     f'network graph has no edges: every {x}/{y} pair was blank, zero-weighted or unvalued'
                 )
+            # "以某个节点为中心" is a real figure, not a hover hint that vanishes before it can
+            # be saved: keep only the chosen word's ego-network (it + direct neighbours + the
+            # edges among them), so the reading is persistent and exports identically to how it
+            # previews. A blank centre leaves the full candidate graph exactly as before.
+            center = str(kwargs.get('center_node') or '').strip()
+            if center:
+                nodes, links = cls._ego_subgraph(nodes, links, center)
             incident: dict = {}
             for link in links:
                 for name in (link['source'], link['target']):
@@ -1496,6 +1503,29 @@ class VisualizationService:
             | set(_localize_label(v) for v in grouped['_t'].astype(str))
         )
         return nodes, links
+
+    @classmethod
+    def _ego_subgraph(cls, nodes, links, center):
+        """Reduce a co-occurrence graph to one node's ego-network: the centre word, the words
+        directly co-occurring with it, and the edges among that set. ``center`` must name a node
+        already in the graph — a word this data never linked is refused BY NAME, not quietly
+        returned as an empty figure. The centre then carries the largest incident weight, so it
+        is naturally the biggest bubble and the hub the force layout gathers around.
+        """
+        if center not in nodes:
+            raise ChartConfigError(
+                f'network center_node {center!r} is not a node in this graph (it must name one '
+                f'of the {len(nodes)} words this data already links)',
+            )
+        keep = {center}
+        for link in links:
+            if link['source'] == center:
+                keep.add(link['target'])
+            elif link['target'] == center:
+                keep.add(link['source'])
+        kept_nodes = [n for n in nodes if n in keep]
+        kept_links = [link for link in links if link['source'] in keep and link['target'] in keep]
+        return kept_nodes, kept_links
 
     # ── Matplotlib renderer (server-side PNG) ───────────────────
 
