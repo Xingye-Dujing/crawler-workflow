@@ -127,7 +127,7 @@ CSV/TSV/JSON/TXT/Excel，配好字段后点 Preview Chart 即可，不必跑整�
 | [`docs/crawler_rules.md`](docs/crawler_rules.md) | 采集端工程**规则** |
 | [`docs/live_test_plan.md`](docs/live_test_plan.md) | 全平台真机验收的用例矩阵与运行手册 |
 | [`docs/tendency_model_comparison.md`](docs/tendency_model_comparison.md) | 倾向性模型对比研究 |
-| [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md) | 为何这三类分析主推**微调 BERT** 而非通用大模型：质量/速度/成本对比（含实测，吞吐待补） |
+| [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md) | 为何这三类分析主推**微调 BERT** 而非通用大模型：质量/速度/成本对比（含实测 accuracy/F1 与本机 GPU 吞吐 rows/s） |
 | [`AGENTS.md`](AGENTS.md) | 面向 AI agent 的项目规则与改动流程（测试不变量在此，不在文档里重复） |
 
 ---
