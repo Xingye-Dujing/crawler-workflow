@@ -19,8 +19,11 @@ global in ``app`` and detach the two — which is why every store-object write s
 
 import threading
 
+import pandas as pd
+from state import _dataset_cache
+
 from config import Config
-from services.dataset_store import DatasetStore
+from services.dataset_store import SOURCE_UPLOAD, DatasetStore
 from services.housekeeping import Housekeeping
 from services.run_store import RunStore
 
@@ -86,3 +89,50 @@ def get_dataset_store() -> DatasetStore:
             if _DATASET_STORE is None:
                 _DATASET_STORE = DatasetStore()
     return _DATASET_STORE
+
+
+#: The read-through cache of loaded frames (``_dataset_cache``, from ``state``) is bounded so a
+#: long session does not hold every file it ever opened; the store stays the source of truth.
+_DATASET_CACHE_MAX = 24
+
+
+def _cache_dataset(dataset_id: str, df: pd.DataFrame):
+    """Remember a frame for a while. Bounded, because the store is not."""
+    with _DATASET_LOCK:
+        _dataset_cache[dataset_id] = df
+        while len(_dataset_cache) > _DATASET_CACHE_MAX:
+            _dataset_cache.pop(next(iter(_dataset_cache)), None)
+
+
+def _register_dataset(df: pd.DataFrame, name: str = 'dataset', source: str = SOURCE_UPLOAD) -> str:
+    """Persist a frame and return its id.
+
+    Content-addressed, so handing over the same rows twice reuses one copy
+    instead of piling up duplicates of a file somebody re-uploads every run.
+    """
+    meta = get_dataset_store().put(df, name=str(name), source=source)
+    _cache_dataset(meta['dataset_id'], df)
+    return meta['dataset_id']
+
+
+def _load_dataset(dataset_id: str) -> pd.DataFrame | None:
+    """A persisted frame by id, or None. Cache first, then the database."""
+    cached = _dataset_cache.get(dataset_id)
+    if cached is not None:
+        return cached
+    df = get_dataset_store().get(dataset_id)
+    if df is not None:
+        _cache_dataset(dataset_id, df)
+    return df
+
+
+def _apply_dataset_meta(params: dict, meta: dict):
+    """Write what is known about a stored file back into a node's params.
+
+    Keeping name and row count beside the id is what later makes a file whose
+    row went missing re-bindable: those two together identify it well enough
+    to find the same file again under a new id.
+    """
+    params['dataset_id'] = meta.get('dataset_id') or ''
+    params['dataset_name'] = meta.get('name') or ''
+    params['row_count'] = int(meta.get('row_count') or 0)

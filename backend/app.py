@@ -44,7 +44,14 @@ from state import (
     history_service,
     reset_console_state,
 )
-from stores import _DATASET_LOCK, get_dataset_store, get_housekeeper, get_run_store
+from stores import (
+    _apply_dataset_meta,
+    _load_dataset,
+    _register_dataset,
+    get_dataset_store,
+    get_housekeeper,
+    get_run_store,
+)
 from transport import _local_transport_refusal
 
 import crawl_capabilities as capabilities
@@ -299,52 +306,10 @@ def _apply_request_lang():
 # The dictionary is only a read-through cache now: the store is the source of
 # truth, so anything registered days ago still resolves.
 # _dataset_cache is imported from state.py (mutated in place, never rebound).
-_DATASET_CACHE_MAX = 24
-# The dataset singleton, its lock and get_dataset_store() now live in backend/stores.py.
-# app imports get_dataset_store and _DATASET_LOCK back, so _cache_dataset below keeps sharing
-# the one lock the store's own lazy creation uses (the object is never rebound).
-
-
-def _cache_dataset(dataset_id: str, df: pd.DataFrame):
-    """Remember a frame for a while. Bounded, because the store is not."""
-    with _DATASET_LOCK:
-        _dataset_cache[dataset_id] = df
-        while len(_dataset_cache) > _DATASET_CACHE_MAX:
-            _dataset_cache.pop(next(iter(_dataset_cache)), None)
-
-
-def _register_dataset(df: pd.DataFrame, name: str = 'dataset', source: str = SOURCE_UPLOAD) -> str:
-    """Persist a frame and return its id.
-
-    Content-addressed, so handing over the same rows twice reuses one copy
-    instead of piling up duplicates of a file somebody re-uploads every run.
-    """
-    meta = get_dataset_store().put(df, name=str(name), source=source)
-    _cache_dataset(meta['dataset_id'], df)
-    return meta['dataset_id']
-
-
-def _load_dataset(dataset_id: str) -> pd.DataFrame | None:
-    """A persisted frame by id, or None. Cache first, then the database."""
-    cached = _dataset_cache.get(dataset_id)
-    if cached is not None:
-        return cached
-    df = get_dataset_store().get(dataset_id)
-    if df is not None:
-        _cache_dataset(dataset_id, df)
-    return df
-
-
-def _apply_dataset_meta(params: dict, meta: dict):
-    """Write what is known about a stored file back into a node's params.
-
-    Keeping name and row count beside the id is what later makes a file whose
-    row went missing re-bindable: those two together identify it well enough
-    to find the same file again under a new id.
-    """
-    params['dataset_id'] = meta.get('dataset_id') or ''
-    params['dataset_name'] = meta.get('name') or ''
-    params['row_count'] = int(meta.get('row_count') or 0)
+# The dataset singleton, its lock, the read-through cache helpers (_cache_dataset/_register_dataset/
+# _load_dataset/_apply_dataset_meta) and get_dataset_store() now live in backend/stores.py. app
+# re-imports the three the routes call and keeps `_dataset_cache` (from state) for its own direct
+# pop/clear uses; every cache writer and the store creation still share the one `_DATASET_LOCK`.
 
 
 def _durable_node_rows(node_id: str, workflow_name: str = '') -> list:
