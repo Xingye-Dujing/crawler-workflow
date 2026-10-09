@@ -42,6 +42,11 @@ def _bad_body():
     return jsonify({'ok': False, 'error': t('api.bodyNotObject')}), 400
 
 
+def _bad_param(name: str):
+    """The 400 for one body field whose type a handler cannot work with."""
+    return jsonify({'ok': False, 'error': t('api.paramInvalid', name=name)}), 400
+
+
 def _safe_int(value, default: int = 0, minimum: int = None, maximum: int = None) -> int:
     """int() for numbers typed into the UI.
 

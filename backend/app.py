@@ -23,7 +23,7 @@ from api.browser_profiles import bp as browser_profiles_bp
 from api.capabilities import bp as capabilities_bp
 from api.config import bp as config_bp
 from api.history import bp as history_bp
-from api.http import _bad_body, _json_body, _optional_float, _optional_int, _safe_float, _safe_int
+from api.http import _bad_body, _bad_param, _json_body, _optional_float, _optional_int, _safe_float, _safe_int
 from api.llm import bp as llm_bp
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
@@ -805,11 +805,6 @@ def index():
 
 # _json_body and _bad_body live in api.http now (imported at top) so a Blueprint can use them
 # without importing the whole Flask module. _bad_param stays: only app.py routes reach it.
-
-
-def _bad_param(name: str):
-    """The 400 for one body field whose type a handler cannot work with."""
-    return jsonify({'ok': False, 'error': t('api.paramInvalid', name=name)}), 400
 
 
 def _resolve_payload_dataframe(data: dict):
