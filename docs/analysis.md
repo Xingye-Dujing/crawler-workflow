@@ -9,6 +9,7 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
   模型选择、批量保存行数、截断长度均可在 AI 面板配置；OpenRouter Key 仅存浏览器 localStorage，不落服务器
 - **逐节点模型**：AI 面板选的是整轮运行的默认模型；每个用本地 Ollama 的分析节点（清洗 / 情感 / 倾向 / NER）
   还可在自己的面板单独挑一个模型，不必与其他节点一致。默认「跟随全局」即沿用运行级模型；OpenRouter 运行不提供此下拉
+- **为什么默认主推微调 BERT（而非通用大模型）**：见 [`docs/why_finetuned_bert.md`](why_finetuned_bert.md)——质量、速度、成本、确定性四维对比，含本机实测的 accuracy/F1
 - **情感分析（三模式）**：LLM 逐行深度分析、传统 ML（sklearn TF-IDF + 逻辑回归）批量推理，或**微调 BERT**；
   情绪标签集现按 **SMP2020-EWECT 六类**（`Anger`/`Fear`/`Joy`/`Neutral`/`Sadness`/`Surprise`，此前是少了 `Surprise` 的五类）。
   - ML 通路现统一走 jieba 词 + **那份停用词表去噪** + `class_weight=balanced` 逻辑回归（子线性 TF）；`build_tfidf_pipeline(char_features=True)` 可再并入字 n-gram（字+词 FeatureUnion）。

@@ -58,7 +58,7 @@ python app.py
   （Instagram 已可存 Cookie，采集待接入），关键词 / 某作者的作品 / 热榜 / 评论多种模式，
   采集量只由你填的目标数决定，支持分批输出、上游喂链接、多账号与持久 Profile。→ [`docs/collection.md`](docs/collection.md)
 - **AI 分析**：Ollama / OpenRouter 双提供方，情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式）、
-  情感极性、NER、关键词、聚类、异常、相关性、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)
+  情感极性、NER、关键词、聚类、异常、相关性、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、为何主推微调 BERT → [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)
 - **数据处理**：确定性清洗算子、去重（含 SimHash 近重复）、**事件研究套件**（阶段划分 / 分阶段 LDA /
   主题流向 / 情感演化 / 二次爆发预警），通用导出、一键运行报告与「智能清除」（按运行、按节点分片）。→ [`docs/analysis.md`](docs/analysis.md)
 - **可视化**：论文印刷风格图表（ECharts / Matplotlib 双引擎）、主题距离图 / 显著词图 / 关系图 / 桑基 /
@@ -127,6 +127,7 @@ CSV/TSV/JSON/TXT/Excel，配好字段后点 Preview Chart 即可，不必跑整�
 | [`docs/crawler_rules.md`](docs/crawler_rules.md) | 采集端工程**规则** |
 | [`docs/live_test_plan.md`](docs/live_test_plan.md) | 全平台真机验收的用例矩阵与运行手册 |
 | [`docs/tendency_model_comparison.md`](docs/tendency_model_comparison.md) | 倾向性模型对比研究 |
+| [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md) | 为何这三类分析主推**微调 BERT** 而非通用大模型：质量/速度/成本对比（含实测，吞吐待补） |
 | [`AGENTS.md`](AGENTS.md) | 面向 AI agent 的项目规则与改动流程（测试不变量在此，不在文档里重复） |
 
 ---
