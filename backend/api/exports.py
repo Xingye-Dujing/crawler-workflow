@@ -1,10 +1,12 @@
-"""导出文件 Blueprint — the ``/api/exports/*`` cluster, split out of ``app.py``.
+"""导出文件 Blueprint — the ``/api/export/*`` cluster, split out of ``app.py``.
 
-The export folder's browser: list / download / delete / clear. Every helper it needs is
-already reachable without importing ``app`` — the file operations live in
-``services.export_browser`` (imported lazily, as before), the request coercions in
-``api.http``, the lock ledger in ``services.lock_store``, and the run-in-flight check in
-``state.execution_state``. Paths and behaviour are unchanged.
+The export folder's writer and browser: ``/api/export/save`` writes a table out in any
+format, and ``/api/exports/{list,download,delete,clear}`` read and manage what is there.
+Every helper it needs is already reachable without importing ``app`` — the file operations
+live in ``services.export_browser`` (imported lazily, as before), the request coercions in
+``api.http``, the dataframe resolution in ``api.resolution``, the lock ledger in
+``services.lock_store``, the format writers in ``services.exporter`` and the run-in-flight
+check in ``state.execution_state``. Paths and behaviour are unchanged.
 """
 
 import logging
@@ -14,13 +16,57 @@ from flask import Blueprint, jsonify, request
 from state import execution_state
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
+from api.resolution import _resolve_payload_dataframe
 from config import Config
 from i18n import t
 from services import lock_store
+from services.exporter import DataExporter, UnsupportedFormatError
+from utils.helpers import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('exports', __name__)
+
+
+@bp.route('/api/export/save', methods=['POST'])
+def export_dataset():
+    """Save any dataset (uploaded, pasted, cleaned, or a workflow result)
+    to disk in the requested format — independent of a workflow's Save node."""
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    df, error = _resolve_payload_dataframe(data)
+    if error is not None:
+        return error
+
+    # The exporter calls ``fmt.lower()`` and ``os.path.splitext(filename)`` on
+    # what it is handed, so a number in either field raised AttributeError — a
+    # 500 for a value the caller could simply have left out. The name is cleaned
+    # *before* the format is inferred from its extension, so both calls below see
+    # a real string.
+    raw_format = data.get('format')
+    if raw_format is not None and not isinstance(raw_format, str):
+        return _bad_param('format')
+    filename = sanitize_filename(data.get('filename', 'export.csv'))
+    fmt = raw_format.strip() if isinstance(raw_format, str) else ''
+    fmt = fmt or DataExporter.infer_format(filename)
+    filename = DataExporter.normalize_filename(filename, fmt)
+    filepath = os.path.join(Config.EXPORT_DIR, filename)
+    try:
+        text_column = data.get('text_column')
+        result = DataExporter.save(
+            df, filepath, fmt=fmt, text_column=text_column if isinstance(text_column, str) else None
+        )
+    except UnsupportedFormatError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    except (TypeError, ValueError) as e:
+        # A writer that cannot handle the frame's contents (an unhashable cell in
+        # a json export) is still a request the caller can fix.
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    except OSError as e:
+        logger.exception(t('misc.export_failed'))
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    return jsonify({'ok': True, **result})
 
 
 @bp.route('/api/exports/list', methods=['GET'])

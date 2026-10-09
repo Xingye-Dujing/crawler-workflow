@@ -30,7 +30,6 @@ from api.locks import bp as locks_bp
 from api.resolution import (
     NoRunDataError,
     _resolve_dataframe,
-    _resolve_payload_dataframe,
 )
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
@@ -4627,63 +4626,11 @@ def render_visualization():
         return jsonify({'ok': False, 'error': str(e)}), 400
 
 
-@app.route('/api/export/save', methods=['POST'])
-def export_dataset():
-    """Save any dataset (uploaded, pasted, cleaned, or a workflow result)
-    to disk in the requested format — independent of a workflow's Save node."""
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    df, error = _resolve_payload_dataframe(data)
-    if error is not None:
-        return error
-
-    # The exporter calls ``fmt.lower()`` and ``os.path.splitext(filename)`` on
-    # what it is handed, so a number in either field raised AttributeError — a
-    # 500 for a value the caller could simply have left out. The name is cleaned
-    # *before* the format is inferred from its extension, so both calls below see
-    # a real string.
-    raw_format = data.get('format')
-    if raw_format is not None and not isinstance(raw_format, str):
-        return _bad_param('format')
-    filename = sanitize_filename(data.get('filename', 'export.csv'))
-    fmt = raw_format.strip() if isinstance(raw_format, str) else ''
-    fmt = fmt or DataExporter.infer_format(filename)
-    filename = DataExporter.normalize_filename(filename, fmt)
-    filepath = os.path.join(Config.EXPORT_DIR, filename)
-    try:
-        text_column = data.get('text_column')
-        result = DataExporter.save(
-            df, filepath, fmt=fmt, text_column=text_column if isinstance(text_column, str) else None
-        )
-    except UnsupportedFormatError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 400
-    except (TypeError, ValueError) as e:
-        # A writer that cannot handle the frame's contents (an unhashable cell in
-        # a json export) is still a request the caller can fix.
-        return jsonify({'ok': False, 'error': str(e)}), 400
-    except OSError as e:
-        logger.exception(t('misc.export_failed'))
-        return jsonify({'ok': False, 'error': str(e)}), 500
-    return jsonify({'ok': True, **result})
-
-
-# ─── Export artefacts (read side) ──────────────────────────────
-
-# ``EXPORT_DIR`` was write-only: a run left files on disk and the only way to
-# find them again was a file manager. These three routes are the reader, and all
-# three resolve a *name* through export_browser, so no request can name a path.
-
-
-# The /api/exports/list|download|delete|clear cluster now lives in backend/api/exports.py
-# (Blueprint `exports_bp`); see app.register_blueprint(exports_bp). Paths and behaviour unchanged.
-
-
-# The /api/locks GET/POST pair now lives in backend/api/locks.py (Blueprint `locks_bp`);
-# see the app.register_blueprint(locks_bp) below. Paths and behaviour are unchanged.
-
-
 # ─── One-click report ──────────────────────────────────────────
+
+# The /api/export/save route now shares backend/api/exports.py (Blueprint `exports_bp`) with
+# the read side /api/exports/{list,download,delete,clear}; /api/locks lives in api/locks.py.
+# Paths and behaviour are unchanged — see the app.register_blueprint(...) calls below.
 
 
 def _report_nodes(data: dict) -> tuple:
