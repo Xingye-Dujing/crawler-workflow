@@ -20,6 +20,7 @@ import cookie_preflight
 import crawl_gate
 import pandas as pd
 import requests
+from api.config import bp as config_bp
 from api.history import bp as history_bp
 from api.http import _bad_body, _json_body, _safe_int
 from api.settings import bp as settings_bp
@@ -6905,41 +6906,10 @@ def cookie_generate_cancel():
 # ─── Config API ────────────────────────────────────────────────
 
 
-@app.route('/api/config', methods=['GET'])
-def get_config():
-    return jsonify(
-        {
-            'ollama_model': Config.OLLAMA_MODEL,
-            'default_headless': Config.DEFAULT_HEADLESS,
-            'max_workers': Config.DEFAULT_MAX_WORKERS,
-            # The browser hides what cannot work here (the whole Ollama UI, the headless switch,
-            # the cookie-generating button) and shows what a stranger on a shared server has to be
-            # told once: where its own data lands. It is a fact about the server, so the server
-            # says it — a frontend guess would be a second opinion about the deployment.
-            'cloud_mode': Config.CLOUD_MODE,
-        },
-    )
-
-
-@app.route('/api/models', methods=['GET'])
-def list_models():
-    """Registered fine-tuned models by friendly NAME, so the bert-mode picker can show 「网暴模型」
-    instead of a bare path. The registry is a runtime file (data/model_registry.json); a missing or
-    malformed one is an empty list, never an error — a node with no named models still accepts a path."""
-    path = os.path.join(Config.DATA_DIR, 'model_registry.json')
-    models = []
-    try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh)
-        if isinstance(data, list):
-            models = [
-                {'name': str(m.get('name') or ''), 'path': str(m.get('path') or ''), 'desc': str(m.get('desc') or '')}
-                for m in data
-                if isinstance(m, dict) and str(m.get('path') or '').strip()
-            ]
-    except (OSError, ValueError):
-        models = []
-    return jsonify({'ok': True, 'models': models})
+# /api/config and /api/models live in api/config.py (imported above); registered here so app-level
+# before_request / CORS still wrap them and the URLs are unchanged. /api/capabilities stays below:
+# it extends the matrix with cookie_manager's live account list, so it moves when cookie_manager does.
+app.register_blueprint(config_bp)
 
 
 @app.route('/api/capabilities', methods=['GET'])
