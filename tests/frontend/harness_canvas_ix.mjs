@@ -184,6 +184,9 @@ function freshWorld() {
     canvas.isPanning = false;
     canvas.panWasDragging = false;
     canvas.dragTarget = null;
+    canvas._panPointers = {};
+    canvas._pinchBase = null;
+    canvas._gestureMoved = false;
     canvas.zoom = 1;
     canvas.panX = 0;
     canvas.panY = 0;
@@ -744,6 +747,23 @@ dispatchOn(workspace, 'pointerdown', ev({
 }));
 out.pan.node_click_kept_settings = canvas._settingsNodeId === p1;
 
+/* ── wheel: trackpad two-finger pan, ctrl/pinch zoom, mouse-wheel zoom ── */
+freshWorld();
+dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: -80, deltaY: -20, ctrlKey: false, clientX: 200, clientY: 200 }));
+out.wheel = {
+    /* A trackpad scroll carries a horizontal delta → pan the canvas following the scroll,
+       zoom untouched. This is the two-finger "移动画布". */
+    trackpad: { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom },
+};
+canvas.panX = 0; canvas.panY = 0; canvas.zoom = 1;
+dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: 0, deltaY: -100, ctrlKey: true, clientX: 200, clientY: 200 }));
+/* Chrome/Edge report a trackpad pinch as a ctrlKey wheel → zoom in about the cursor. */
+out.wheel.ctrlPinch = { zoom: canvas.zoom, status: doc.getElementById('status-zoom').textContent };
+canvas.panX = 0; canvas.panY = 0; canvas.zoom = 1;
+dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: 0, deltaY: 120, ctrlKey: false, clientX: 200, clientY: 200 }));
+/* A mouse wheel has no horizontal travel and no modifier → keeps the old zoom behaviour. */
+out.wheel.mouseWheel = { zoom: canvas.zoom };
+
 /* ── context menu contents and actions ─────────────────────────────── */
 freshWorld();
 const cmNode = addNode('source', 0, 0);
@@ -1026,6 +1046,43 @@ async function touchGestureScenario() {
     dispatchDocument(sandbox.__handlers, 'pointermove', { pointerType: 'touch', clientX: 240, clientY: 260, target: { closest: () => null } });
     dispatchDocument(sandbox.__handlers, 'pointerup', { pointerType: 'touch', clientX: 240, clientY: 260, target: { closest: () => null } });
     res.nodeMovedByFinger = doc.getElementById(tD).style.left !== '40px';
+
+    // Two fingers spread apart on the background → pinch zooms IN. The base is the two
+    // fingers' landing positions, so one spread already reads as zoom (not a no-op).
+    freshWorld();
+    addNode('source', 100, 100);
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ pointerType: 'touch', pointerId: 11, clientX: 400, clientY: 300 }));
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ pointerType: 'touch', pointerId: 12, clientX: 600, clientY: 300 }));
+    res.pinchBaseCaptured = canvas._pinchBase !== null;
+    const pinchZoomBefore = canvas.zoom;
+    dispatchDocument(sandbox.__handlers, 'pointermove', { pointerType: 'touch', pointerId: 12, clientX: 900, clientY: 300, target: { closest: () => null } });
+    res.pinchZoomIn = { zoomedIn: canvas.zoom > pinchZoomBefore, status: doc.getElementById('status-zoom').textContent };
+
+    // Two fingers slide together at a CONSTANT distance → pan, and zoom stays exactly 1
+    // (a pinch resolves relative to the base, so equal spreads cannot creep the scale).
+    freshWorld();
+    addNode('source', 100, 100);
+    canvas.zoom = 1; canvas.panX = 0; canvas.panY = 0;
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ pointerType: 'touch', pointerId: 21, clientX: 300, clientY: 300 }));
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ pointerType: 'touch', pointerId: 22, clientX: 500, clientY: 300 }));
+    dispatchDocument(sandbox.__handlers, 'pointermove', { pointerType: 'touch', pointerId: 21, clientX: 400, clientY: 300, target: { closest: () => null } });
+    dispatchDocument(sandbox.__handlers, 'pointermove', { pointerType: 'touch', pointerId: 22, clientX: 600, clientY: 300, target: { closest: () => null } });
+    res.twoFingerSlide = { panned: canvas.panX !== 0, zoomUnchanged: canvas.zoom === 1 };
+
+    // Lift one finger of a pinch: the pan stays claimed for the finger still down; lifting
+    // the last one releases the gesture and clears its bookkeeping (never a stuck pan).
+    freshWorld();
+    addNode('source', 100, 100);
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ pointerType: 'touch', pointerId: 31, clientX: 300, clientY: 300 }));
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ pointerType: 'touch', pointerId: 32, clientX: 500, clientY: 300 }));
+    dispatchDocument(sandbox.__handlers, 'pointermove', { pointerType: 'touch', pointerId: 31, clientX: 350, clientY: 300, target: { closest: () => null } });
+    dispatchDocument(sandbox.__handlers, 'pointerup', { pointerType: 'touch', pointerId: 31, clientX: 350, clientY: 300, target: { closest: () => null } });
+    res.stillPanningWithOneFinger = canvas.isPanning === true;
+    dispatchDocument(sandbox.__handlers, 'pointerup', { pointerType: 'touch', pointerId: 32, clientX: 500, clientY: 300, target: { closest: () => null } });
+    res.gestureReleased = canvas.isPanning === false
+        && canvas._pinchBase === null
+        && canvas._gestureMoved === false
+        && Object.keys(canvas._panPointers).length === 0;
 
     out.touch_gestures = res;
 }

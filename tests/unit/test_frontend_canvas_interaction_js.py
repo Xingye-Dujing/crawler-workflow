@@ -165,6 +165,55 @@ class TestTouchGestures:
     def test_a_finger_drag_on_a_node_header_moves_the_node(self, ix):
         assert ix['touch_gestures']['nodeMovedByFinger'] is True
 
+    def test_the_pinch_base_is_the_two_fingers_landing_positions(self, ix):
+        """A pinch must remember where the two fingers first touched, or a single spread
+        would read as no zoom at all (the base would be the already-moved position)."""
+        assert ix['touch_gestures']['pinchBaseCaptured'] is True
+
+    def test_two_fingers_spread_apart_zoom_in(self, ix):
+        pinch = ix['touch_gestures']['pinchZoomIn']
+        assert pinch['zoomedIn'] is True, 'a wider gap between two fingers must scale the canvas up'
+        assert pinch['status'] == '250%', 'the readout follows the pinch, not a hidden state'
+
+    def test_two_fingers_slide_together_pans_without_changing_the_scale(self, ix):
+        """The other half of a tablet gesture: moving both fingers the same way pans the
+        canvas, and a pinch whose spread never changes must not creep the zoom."""
+        slide = ix['touch_gestures']['twoFingerSlide']
+        assert slide['panned'] is True
+        assert slide['zoomUnchanged'] is True
+
+    def test_a_pinch_that_lifts_to_one_finger_keeps_the_pan_then_releases_cleanly(self, ix):
+        """Lifting a finger mid-pinch must not drop the pan the moment it is a single
+        finger (a tablet user finishing a pinch and continuing to drag), and lifting the
+        last finger must clear all gesture bookkeeping so the next touch starts fresh."""
+        assert ix['touch_gestures']['stillPanningWithOneFinger'] is True
+        assert ix['touch_gestures']['gestureReleased'] is True
+
+
+class TestWheel:
+    """A two-finger trackpad scroll and a pinch arrive as wheel events; the canvas must
+    tell them apart (Chrome reports a trackpad pinch as a ctrlKey wheel) and keep the
+    plain mouse wheel zooming, since a desktop wheel carries no horizontal travel."""
+
+    def test_two_finger_scroll_pans_the_canvas(self, ix):
+        """A scroll with a horizontal delta (a trackpad) pans the surface with the gesture
+        and leaves the scale alone — this is the two-finger “移动画布”."""
+        trackpad = ix['wheel']['trackpad']
+        assert (trackpad['panX'], trackpad['panY']) == (-80, -20)
+        assert trackpad['zoom'] == 1, 'a plain two-finger scroll must never zoom'
+
+    def test_ctrl_or_pinch_wheel_zooms_in(self, ix):
+        """Holding Ctrl (a trackpad pinch in Chrome/Edge, or a deliberate ctrl-wheel)
+        scales up about the cursor and updates the readout."""
+        pinch = ix['wheel']['ctrlPinch']
+        assert pinch['zoom'] > 1
+        assert pinch['status'] == '111%'
+
+    def test_a_plain_mouse_wheel_still_zooms(self, ix):
+        """A desktop wheel has no horizontal delta and no modifier — it keeps the long-
+        standing zoom (down = out), so the mouse users' muscle memory is unchanged."""
+        assert ix['wheel']['mouseWheel']['zoom'] < 1
+
 
 class TestRepaint:
     def test_one_repaint_per_connection(self, ix):

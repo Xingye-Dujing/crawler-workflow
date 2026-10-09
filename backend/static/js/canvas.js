@@ -48,6 +48,13 @@ const canvas = {
     panStartPX: 0,
     panStartPY: 0,
     panWasDragging: false,
+    /* Multi-touch (tablet/phone) gesture bookkeeping. Only touch & pen pointers are
+       recorded here: one finger pans like before, a second turns the pair into a pinch
+       (spread/close = zoom, slide = pan). A mouse never enters this map, so the desktop
+       right-drag and wheel paths are untouched. */
+    _panPointers: {},
+    _pinchBase: null,
+    _gestureMoved: false,
     dragTarget: null,
     dragOffsetX: 0,
     dragOffsetY: 0,
@@ -135,6 +142,27 @@ const canvas = {
             this.deselectNode();
             this.panWasDragging = false;
             if (e.button === 2 || e.pointerType !== 'mouse') {
+                /* A touch/pen press may become a pinch, so record this pointer by id;
+                   a second finger then drives zoom. A mouse right-drag stays pan-only
+                   (never added), leaving the single-pointer baseline below intact. */
+                if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+                    this._panPointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+                    /* Capture the pinch base at the two fingers' first positions — the
+                       instant the second lands — so a single spread already reads as zoom,
+                       and the base never drifts with the first move. */
+                    const active = Object.keys(this._panPointers).length;
+                    if (active === 2) {
+                        const p = Object.values(this._panPointers);
+                        this._pinchBase = {
+                            dist: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y),
+                            midX: (p[0].x + p[1].x) / 2,
+                            midY: (p[0].y + p[1].y) / 2,
+                            zoom: this.zoom,
+                            panX: this.panX,
+                            panY: this.panY,
+                        };
+                    }
+                }
                 this.isPanning = true;
                 this.panStartX = e.clientX;
                 this.panStartY = e.clientY;
@@ -148,7 +176,16 @@ const canvas = {
         });
 
         document.addEventListener('pointermove', (e) => {
-            if (this.isPanning) {
+            if (e.pointerId in this._panPointers) {
+                this._panPointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+            }
+            const panPointerCount = Object.keys(this._panPointers).length;
+            if (this.isPanning && panPointerCount >= 2) {
+                /* Two or more fingers on the background: pinch-zoom + two-finger pan. */
+                this._applyPinch();
+                this.panWasDragging = true;
+                this._gestureMoved = true;
+            } else if (this.isPanning) {
                 const dx = e.clientX - this.panStartX;
                 const dy = e.clientY - this.panStartY;
                 if (dx * dx + dy * dy > 25) {
@@ -173,24 +210,53 @@ const canvas = {
             }
         });
 
+        /* A pan/pinch moves the camera, not the model — but the camera is part of what the
+           draft owes the user, and an ended gesture is the one moment that knows the drag
+           actually moved something. Shared by pointerup and pointercancel so a finger that
+           leaves the page cannot strand the pan in a half-claimed state. */
+        const endPanPointer = (e) => {
+            delete this._panPointers[e.pointerId];
+            const left = Object.keys(this._panPointers).length;
+            if (left < 2) {
+                this._pinchBase = null;
+            }
+            if (this.isPanning && (this.panWasDragging || this._gestureMoved)) {
+                this.scheduleViewSave();
+            }
+            if (left === 0) {
+                this.isPanning = false;
+                this.workspace.style.cursor = 'default';
+                this._gestureMoved = false;
+                /* panWasDragging is NOT cleared here: the contextmenu handler reads it to
+                   suppress a menu that would otherwise pop right after a pan/pinch (the
+                   user was moving the page, not asking for a menu). It resets on the next
+                   pointerdown and on the suppressed contextmenu itself. */
+            } else {
+                /* One finger is still down after a pinch collapsed: re-anchor the plain
+                   pan to it, so continuing that finger does not teleport the canvas. */
+                const remain = Object.values(this._panPointers)[0];
+                if (remain) {
+                    this.panStartX = remain.x;
+                    this.panStartY = remain.y;
+                    this.panStartPX = this.panX;
+                    this.panStartPY = this.panY;
+                }
+            }
+        };
+
         document.addEventListener('pointerup', (e) => {
             if (this.isDragging && this.dragTarget) {
                 this.saveState();
             }
-            /* A pan moved the camera, not the model — but the camera is part of what the
-               draft owes the user, and an ended pan is the one moment that knows the drag
-               actually stopped. */
-            if (this.isPanning && this.panWasDragging) {
-                this.scheduleViewSave();
-            }
-            this.isPanning = false;
-            this.workspace.style.cursor = 'default';
+            endPanPointer(e);
             this.isDragging = false;
             this.dragTarget = null;
             if (this.connectingFrom) {
                 this.finishConnection(e);
             }
         });
+
+        document.addEventListener('pointercancel', endPanPointer);
 
         /* Right-click context menu */
         this.workspace.addEventListener('contextmenu', (e) => {
@@ -391,27 +457,29 @@ const canvas = {
             }
         });
 
-        /* Zoom with the scroll wheel — no buttons. The point under the cursor
-           stays put, so zooming feels anchored rather than drifting. */
+        /* Wheel = a two-finger trackpad scroll or a mouse wheel. Chrome/Edge report a
+           trackpad pinch as a wheel event with ctrlKey set, so the gesture maps cleanly:
+             · Ctrl / Cmd held  → zoom about the cursor (a trackpad pinch, or ctrl-wheel);
+             · no modifier, only a vertical delta (a mouse wheel, no horizontal travel)
+               → zoom, the long-standing desktop behaviour;
+             · otherwise (a trackpad, which can carry a horizontal delta) → pan the canvas,
+               following the scroll direction so it feels like grabbing the surface.
+           The point under the cursor stays put when zooming, so it is anchored not drifting. */
         this.workspace.addEventListener('wheel', (e) => {
             e.preventDefault();
             const rect = this.workspace.getBoundingClientRect();
             const mx = e.clientX - rect.left;
             const my = e.clientY - rect.top;
-            const oldZoom = this.zoom;
-            /* 0.999^deltaY ≈ 10% per mouse notch, smooth on trackpads too */
-            const factor = Math.pow(0.999, e.deltaY);
-            const newZoom = Math.max(0.2, Math.min(3, oldZoom * factor));
-            if (newZoom === oldZoom) return;
-            /* pan' = cursor - (cursor - pan) * (zoom'/zoom) keeps that point fixed */
-            const ratio = newZoom / oldZoom;
-            this.panX = mx - (mx - this.panX) * ratio;
-            this.panY = my - (my - this.panY) * ratio;
-            this.zoom = newZoom;
-            this.updateTransform();
-            document.getElementById('status-zoom').textContent = Math.round(this.zoom * 100) + '%';
+            if (e.ctrlKey || e.metaKey) {
+                /* 0.999^deltaY ≈ 10% per notch; a pinch's deltas are small, so smooth. */
+                this._zoomAt(mx, my, Math.pow(0.999, e.deltaY));
+            } else if (e.deltaX === 0) {
+                this._zoomAt(mx, my, Math.pow(0.999, e.deltaY));
+            } else {
+                this._panBy(e.deltaX, e.deltaY);
+            }
             /* The camera is part of what a draft (and later a saved file) owes the
-               user, so a wheel-zoom that is never written back is a viewpoint that
+               user, so a wheel move that is never written back is a viewpoint that
                disappears on refresh. Debounced: a flick fires dozens of wheel events
                and each redraws nothing but a localStorage write. */
             this.scheduleViewSave();
@@ -1111,6 +1179,66 @@ const canvas = {
         const px = Math.round(this.panX);
         const py = Math.round(this.panY);
         this.container.style.transform = 'translate(' + px + 'px, ' + py + 'px) scale(' + this.zoom + ')';
+    },
+
+    /* Screen-space pan by (dx, dy). Used by a two-finger trackpad scroll and by the
+       axis of a pinch. The canvas is unbounded, so — like a pointer drag — there is no
+       clamp: the surface simply follows the gesture. */
+    _panBy(dx, dy) {
+        if (!dx && !dy) return;
+        this.panX += dx;
+        this.panY += dy;
+        this.updateTransform();
+    },
+
+    /* Zoom by `factor` about the workspace point (mx, my) so that point stays put — the
+       anchored feel that keeps a pinch or ctrl-wheel from drifting the view. */
+    _zoomAt(mx, my, factor) {
+        const oldZoom = this.zoom;
+        const newZoom = Math.max(0.2, Math.min(3, oldZoom * factor));
+        if (newZoom === oldZoom) return;
+        const ratio = newZoom / oldZoom;
+        this.panX = mx - (mx - this.panX) * ratio;
+        this.panY = my - (my - this.panY) * ratio;
+        this.zoom = newZoom;
+        this.updateTransform();
+        const el = document.getElementById('status-zoom');
+        if (el) el.textContent = Math.round(this.zoom * 100) + '%';
+    },
+
+    /* Two-finger gesture on the background: slide = pan, spread/close = zoom, both
+       anchored at the fingers' midpoint so the content between them holds still. The
+       first call only records the base; later calls are RELATIVE to that base, so the
+       two fingers' own micro-jitter during a pinch never compounds into a drift. */
+    _applyPinch() {
+        const pts = Object.values(this._panPointers);
+        if (pts.length < 2) return;
+        const a = pts[0];
+        const b = pts[1];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        if (!dist) return;
+        const midX = (a.x + b.x) / 2;
+        const midY = (a.y + b.y) / 2;
+        /* The base is captured the moment the second finger lands (pointerdown); a move
+           with no base is a can't-happen, so bail rather than invent one mid-gesture. */
+        if (!this._pinchBase) return;
+        const base = this._pinchBase;
+        const targetZoom = Math.max(0.2, Math.min(3, base.zoom * (dist / base.dist)));
+        const rect = this.workspace.getBoundingClientRect();
+        const cmx = midX - rect.left;
+        const cmy = midY - rect.top;
+        const baseCmx = base.midX - rect.left;
+        const baseCmy = base.midY - rect.top;
+        /* Resolve pan and zoom TOGETHER, relative to the base, so the canvas point that
+           sat under the fingers at pinch-start stays under their midpoint now — a spread
+           that also slides across the surface neither drifts nor compounds one frame's
+           rounding into the next. */
+        this.panX = cmx - targetZoom * ((baseCmx - base.panX) / base.zoom);
+        this.panY = cmy - targetZoom * ((baseCmy - base.panY) / base.zoom);
+        this.zoom = targetZoom;
+        this.updateTransform();
+        const el = document.getElementById('status-zoom');
+        if (el) el.textContent = Math.round(this.zoom * 100) + '%';
     },
 
     zoomIn() {
