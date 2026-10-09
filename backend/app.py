@@ -19,12 +19,12 @@ import browser_profiles
 import cookie_preflight
 import crawl_gate
 import pandas as pd
-import requests
 from api.browser_profiles import bp as browser_profiles_bp
 from api.capabilities import bp as capabilities_bp
 from api.config import bp as config_bp
 from api.history import bp as history_bp
 from api.http import _bad_body, _json_body, _safe_int
+from api.llm import bp as llm_bp
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
 from flask import Flask, jsonify, request, send_from_directory
@@ -39,6 +39,7 @@ from state import (
     execution_state,
     history_service,
 )
+from transport import _local_transport_refusal
 
 import crawl_capabilities as capabilities
 from analyzers import (
@@ -56,7 +57,7 @@ from analyzers import (
     build_training_data,
     get_classifier,
 )
-from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
+from analyzers.llm_client import ABORT_MARK, LLMClient
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
 from crawlers.base import UNDER_TARGET, CrawlerStopped, DeadDriver, PageNotArrivedError
@@ -1421,20 +1422,8 @@ def workflow_queue_clear():
     return jsonify({'ok': True, 'cleared': clear_queue()})
 
 
-def _local_transport_refusal(provider: str) -> str:
-    """Why a cloud host answers 「没有这种传输」, or '' when the choice is one it can honor.
-
-    The flag is the server's (`python app.py cloud`), because the panel only hides the
-    Ollama controls — a request still arrives from a saved workflow, an old tab, or a
-    hand-written POST, and hiding a button is not the same as permitting the thing it
-    does. Every transport that wants a daemon on the machine that hosts the crawl is
-    refused BY NAME here rather than being re-labelled or silently answered with one
-    model name: the other shape of this bug is a run that "succeeds" with no analysis
-    because nothing was ever listening on 11434.
-    """
-    if not Config.CLOUD_MODE or str(provider or '') == 'openrouter':
-        return ''
-    return t('api.cloudNoLocalModel', provider=str(provider or ''))
+# _local_transport_refusal lives in transport.py (imported at top); the run executor (via
+# _cloud_refusal_response below) and the /api/llm/* Blueprint both call that one function.
 
 
 def _cloud_refusal_response(provider: str) -> dict:
@@ -6952,95 +6941,10 @@ app.register_blueprint(browser_profiles_bp)
 
 # ─── AI (LLM) API ──────────────────────────────────────────────
 #
-# The settings panel picks a transport: the local Ollama daemon or OpenRouter
-# (aimed at :free models). The API key never touches disk here — the browser
-# keeps it in localStorage and posts it with each request.
-
-
-@app.route('/api/llm/models', methods=['GET'])
-def llm_models():
-    """Current OpenRouter catalog filtered to zero-cost models, so the
-    dropdown never goes stale the way a hardcoded list would."""
-    try:
-        models = list_free_models(timeout=15)
-        return jsonify({'ok': True, 'models': models})
-    except (requests.RequestException, ValueError, KeyError) as e:
-        # Offline / catalog changed shape: the panel just shows no models.
-        logger.warning(t('api.llmModelsFailed', err=e))
-        return jsonify({'ok': False, 'error': t('api.llmModelsFailed', err=e), 'models': []}), 502
-
-
-@app.route('/api/llm/ollama/models', methods=['GET'])
-def llm_ollama_models():
-    """Tags the local daemon has pulled, so the AI panel can offer a picker
-    instead of demanding a hand-typed model name.
-
-    Kept apart from /api/llm/models (the OpenRouter catalog) on purpose: the
-    two providers no longer share a model setting, so they must not share a
-    dropdown either.
-    """
-    host = str(get_setting('ollama_host') or '')
-    shown = host or 'http://localhost:11434'
-    if Config.CLOUD_MODE:
-        # Named, not empty: a 502 saying "connection refused on 11434" reads as a broken
-        # button, and this deployment has no button to break — the panel is told not to
-        # offer one, and a saved workflow or a stale tab that asks anyway gets the reason.
-        return jsonify({'ok': False, 'error': _local_transport_refusal('ollama'), 'models': []}), 400
-    try:
-        models = list_ollama_models(host, timeout=8)
-        return jsonify({'ok': True, 'models': models, 'host': shown})
-    except (requests.RequestException, ValueError) as e:
-        # Daemon not running / wrong address / something else answering on the
-        # port: the panel shows the reason *and* the address it tried, which is
-        # the whole point of the button.
-        logger.warning(t('api.ollamaModelsFailed', host=shown, err=e))
-        return jsonify({'ok': False, 'error': t('api.ollamaModelsFailed', host=shown, err=e), 'models': []}), 502
-
-
-@app.route('/api/llm/test', methods=['POST'])
-def llm_test():
-    """Tiny round-trip so the user can validate provider/model/key before
-    committing to a long row-by-row run."""
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    provider = data.get('provider') or 'ollama'
-    refusal = _local_transport_refusal(provider)
-    if refusal:
-        # Refused before a client is built: the point of this route is to tell the user
-        # whether a transport answers, and on a cloud host the answer to a local-daemon
-        # request is known before the request — nothing is listening on this machine.
-        return jsonify({'ok': False, 'error': refusal}), 400
-    client = LLMClient(
-        provider=provider,
-        model=data.get('model') or '',
-        api_key=data.get('api_key') or '',
-        max_tokens=16,
-        max_chars=0,
-        timeout=60 if provider == 'ollama' else 45,
-        host=str(get_setting('ollama_host') or '') if provider == 'ollama' else '',
-    )
-    started = time.time()
-    try:
-        reply = client.chat('Reply with exactly: OK', max_retries=1)
-        latency = int((time.time() - started) * 1000)
-        return jsonify(
-            {
-                'ok': True,
-                'latency_ms': latency,
-                'reply': reply.strip()[:80],
-                'provider': client.label,
-                'model': client.model,
-                # Which daemon answered — with the local transport the address
-                # is half of "why did this fail", so the panel can show it.
-                'host': client.host if provider == 'ollama' else '',
-            }
-        )
-    except LLMError as e:
-        return jsonify({'ok': False, 'error': str(e), 'kind': e.kind})
-    except Exception as e:
-        # The test endpoint reports the failure; it never raises.
-        return jsonify({'ok': False, 'error': str(e), 'kind': 'error'})
+# The three /api/llm/* transport endpoints live in api/llm.py (imported above); the shared
+# _local_transport_refusal lives in transport.py. Registered here; URLs unchanged, app-level
+# before_request / CORS still wrap them.
+app.register_blueprint(llm_bp)
 
 
 # ─── Clear Dataset Cache API ─────────────────────────────────────
