@@ -67,3 +67,43 @@ def _safe_int(value, default: int = 0, minimum: int = None, maximum: int = None)
     if maximum is not None:
         result = min(maximum, result)
     return result
+
+
+def _safe_float(value, default: float = 0.0) -> float:
+    """``_safe_int`` for a float field.
+
+    ``inf``/``nan`` poison every pandas call downstream instead of failing here, so they
+    are not usable numbers any more than "abc" is — both fall back to ``default``.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if math.isfinite(number) else default
+
+
+def _optional_int(value):
+    """Like :func:`_safe_int`, but blank or unparseable means "not configured" (None)."""
+    raw = str(value or '').strip()
+    if not raw:
+        return None
+    try:
+        number = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return int(number)
+
+
+def _optional_float(value):
+    """``_optional_int`` that keeps the fraction. ``frac=inf`` reached df.sample as a
+    ValueError and ``frac=nan`` as a silent no-op; both mean "no fraction configured"."""
+    raw = str(value or '').strip()
+    if not raw:
+        return None
+    try:
+        number = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None

@@ -23,7 +23,7 @@ from api.browser_profiles import bp as browser_profiles_bp
 from api.capabilities import bp as capabilities_bp
 from api.config import bp as config_bp
 from api.history import bp as history_bp
-from api.http import _bad_body, _json_body, _safe_int
+from api.http import _bad_body, _json_body, _optional_float, _optional_int, _safe_float, _safe_int
 from api.llm import bp as llm_bp
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
@@ -3198,44 +3198,8 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None)
     return merged_rows
 
 
-# _safe_int lives in api.http now (imported at top).
-
-
-def _safe_float(value, default: float = 0.0) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    # inf/nan poison every pandas call downstream instead of failing here, so
-    # they are not usable numbers any more than "abc" is.
-    return number if math.isfinite(number) else default
-
-
-def _optional_int(value):
-    """Like :func:`_safe_int`, but blank or unparseable means "not configured" (None)."""
-    raw = str(value or '').strip()
-    if not raw:
-        return None
-    try:
-        number = float(raw)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(number):
-        return None
-    return int(number)
-
-
-def _optional_float(value):
-    raw = str(value or '').strip()
-    if not raw:
-        return None
-    try:
-        number = float(raw)
-    except (TypeError, ValueError):
-        return None
-    # ``frac=inf`` reached df.sample as a ValueError, ``frac=nan`` as a silent
-    # no-op; both mean "no fraction configured" here.
-    return number if math.isfinite(number) else None
+# The numeric-coercion family (_safe_int / _safe_float / _optional_int / _optional_float) lives in
+# api.http now (imported at top); every app call site reads the app-level alias unchanged.
 
 
 def _split_columns(value) -> list:
