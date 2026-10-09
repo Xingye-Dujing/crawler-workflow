@@ -334,6 +334,27 @@ def stop_requested() -> bool:
     return bool(execution_state.get('stopping'))
 
 
+def _record_run_file(ctx: dict | None, node_id: str, path_or_name, kind: str) -> None:
+    """Register one export file a run produced, so 智能清除 can later name them all.
+
+    Best-effort by contract: a ledger hiccup must never break an export that already succeeded,
+    so everything is guarded — no run context (a direct executor call, a panel render outside a
+    run) records nothing, and an exception is swallowed after one console line. Outside a run the
+    files still exist and are still listed; they simply cannot be attributed to a record, which is
+    correct, because no record wrote them.
+    """
+    if not ctx:
+        return
+    store = ctx.get('store')
+    run_id = ctx.get('run_id')
+    if store is None or not run_id:
+        return
+    try:
+        store.record_file(run_id, node_id, path_or_name, kind)
+    except Exception as e:
+        logger.debug('run-file ledger failed for %s: %s', path_or_name, e)
+
+
 def _record_export_stamp(store, run_id: str) -> str:
     """The filename component that names one record, read from the record itself.
 
@@ -612,6 +633,9 @@ def _llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
         lfmt = 'json' if str((node.get('params') or {}).get('format') or 'csv') == 'json' else 'csv'
         live_writer = SnapshotWriter(Config.EXPORT_DIR, stem, lfmt)
         add_log(t('run.live_export', file=os.path.basename(live_writer.path)))
+        # The live file has one fixed name from the moment it is made, so it is registered once
+        # here rather than on every batch's rewrite — it is a run artifact and 智能清除 must find it.
+        _record_run_file(ctx, node_id, live_writer.path, 'live')
 
     def publish(df):
         records = df.to_dict('records')
@@ -2262,6 +2286,7 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
             # tee'd sink, so hand the rows to the writer directly.
             writer.add(partial_rows)
         info = writer.finish()
+        _record_run_file(ctx, nid, info['path'], 'merged')
         add_log(
             t(
                 'run.progress_file',
@@ -2292,7 +2317,17 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
             from services.part_writer import PartWriter, safe_stem
 
             stem = safe_stem(f'{execution_state.get("workflow_name") or platform}-src-{nid}{parts}')
-            writer = PartWriter(Config.EXPORT_DIR, stem, pfmt, part_size, keep_parts)
+            # Record each shard as it lands (so an interrupted run's parts are still attributed
+            # to the record) — but only when 「保留分片」 is on: with keep_parts off the writer
+            # deletes them the moment the merge succeeds, so there is nothing for 智能清除 to find.
+            writer = PartWriter(
+                Config.EXPORT_DIR,
+                stem,
+                pfmt,
+                part_size,
+                keep_parts,
+                on_write=(lambda path, kind: _record_run_file(ctx, nid, path, kind)) if keep_parts else None,
+            )
         if ctx is not None:
             scope = _item_scope(ctx, node)
             if as_bool(params.get('recrawl')) and not ctx.get('resume'):
@@ -2877,7 +2912,7 @@ def _pdf_filename(params: dict) -> str:
     return name
 
 
-def _output_pdf(node: dict, upstream: list) -> dict:
+def _output_pdf(node: dict, upstream: list, ctx: dict = None) -> dict:
     """Write the PDF an output node owes when its upstream carries LaTeX (visualize) or an already-compiled
     artifact (compile). Validation guarantees every parent here is one of those two and never mixes them,
     so exactly one source kind is present and ``xelatex`` runs once per chain — never twice.
@@ -2908,6 +2943,12 @@ def _output_pdf(node: dict, upstream: list) -> dict:
             return {'error': t('api.compilePdfFailed', err=e)}
         size = os.path.getsize(os.path.join(Config.EXPORT_DIR, filename))
         add_log(t('run.compileSaved', name=filename, size=size))
+        _record_run_file(ctx, str(node.get('id') or ''), filename, 'pdf')
+        # The compile node recorded the staged name; the rename made that file this one, so drop
+        # the stale row rather than leave 智能清除 pointing at a name that no longer exists.
+        if ctx and ctx.get('store'):
+            with contextlib.suppress(Exception):
+                ctx['store'].forget_file(staged_pdf)
         return {'pdf_file': filename, 'pdf_bytes': size}
     if not docs:
         return {'error': t('wf.compile_no_source')}
@@ -2915,10 +2956,11 @@ def _output_pdf(node: dict, upstream: list) -> dict:
     if 'error' in out:
         return out
     add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
+    _record_run_file(ctx, str(node.get('id') or ''), name, 'pdf')
     return {'pdf_file': name, 'pdf_bytes': out.get('pdf_bytes', 0)}
 
 
-def _execute_output_node(node: dict, current_input: list, upstream: list = None):
+def _execute_output_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
     """Save node: merges every incoming table, exports it, and passes it downstream.
 
     'save_csv' is kept as a back-compat alias for older saved workflows;
@@ -2928,6 +2970,10 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None)
 
     It hands ON the merged table rather than the first parent's rows, so a chain of
     analyses may hang off this node and see everything that was written to the file.
+
+    ``ctx`` is the run context (optional): a save written by a run is registered in the
+    run→files ledger so 智能清除 can find it; a direct call outside a run writes the file but
+    attributes it to no record — which is correct, because none made it.
     """
     params = node.get('params', {})
     op = node.get('operation', params.get('operation', ''))
@@ -2936,7 +2982,7 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None)
     # refuse a dict upstream with wf.merge_not_tabular.
     _fmt = str(params.get('format') or DataExporter.infer_format(params.get('filename', '')) or '').lower()
     if op in ('save', 'save_csv') and _fmt == 'pdf':
-        return _output_pdf(node, upstream)
+        return _output_pdf(node, upstream, ctx=ctx)
     if not current_input and not upstream:
         return []
 
@@ -2989,6 +3035,7 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None)
             # failure with the node's own label. A second add_log here said the same
             # sentence again, unattributed — the version the user could not act on.
             return {'error': str(e)}
+        _record_run_file(ctx, str(node.get('id') or ''), filename, 'export')
         # No "data saved to <path>" line: the exporter has already announced
         # "exported N rows to <path> (fmt)" one line above, and saying the same
         # fact twice in two wordings is two chances to word them differently.
@@ -3433,7 +3480,7 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
     return cleaned.to_dict('records')
 
 
-def _execute_visualize_node(node: dict, current_input: list):
+def _execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
     """Visualize node: builds a chart from the upstream data and returns a
     chart spec dict the frontend renders — either an ECharts option or a
     base64 image — so this node works identically to /api/visualize/render.
@@ -3554,6 +3601,13 @@ def _execute_visualize_node(node: dict, current_input: list):
                 log=True,
             )
         )
+        # The LaTeX add-ons are real files in the export folder (the figure source and the
+        # three-line table); the chart itself lives only in the returned spec. Register the
+        # written files so a run's paper artifacts are clearable and listed with its record.
+        nid = str(node.get('id') or '')
+        for _key, _kind in (('latex_file', 'latex'), ('latex_table_file', 'latex_table')):
+            if spec.get(_key):
+                _record_run_file(ctx, nid, spec[_key], _kind)
 
     add_log(t('wf.visualize_done', chart=chart_type, engine=engine, n=len(df)))
     return spec
@@ -3704,7 +3758,16 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     def _writer_for(idx: int, url: str) -> PartWriter:
         stem = f'{stem_base}-{idx:02d}' if per_article else stem_base
         if stem not in writers:
-            writers[stem] = PartWriter(Config.EXPORT_DIR, stem, fmt, part_size, keep_parts)
+            # Same ledger contract as a source crawl: shards are recorded as they land, and only
+            # when 「保留分片」 is on (with it off the merge deletes them, so there is nothing to clear).
+            writers[stem] = PartWriter(
+                Config.EXPORT_DIR,
+                stem,
+                fmt,
+                part_size,
+                keep_parts,
+                on_write=(lambda path, kind: _record_run_file(ctx, nid, path, kind)) if keep_parts else None,
+            )
         return writers[stem]
 
     try:
@@ -3799,6 +3862,8 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             _close_login_browser(crawler)
 
     files = [writer.finish() for writer in writers.values()]
+    for _info in files:
+        _record_run_file(ctx, nid, _info['path'], 'merged')
     if stop_requested():
         # The article loop above stops taking URLs once the run is not wanted, and then it
         # *returns* — so without this check a comment node cut short by 停止 settled DONE
@@ -4134,7 +4199,7 @@ def _execute_node(
     if ntype == 'analysis':
         return _execute_analysis_node(node, current_input, upstream=upstream, ctx=ctx)
     if ntype == 'visualize':
-        return _execute_visualize_node(node, current_input)
+        return _execute_visualize_node(node, current_input, ctx=ctx)
     if ntype == 'tokenize':
         return _execute_tokenize_node(node, current_input)
     if ntype == 'compile':
@@ -4145,7 +4210,7 @@ def _execute_node(
         # ``upstream`` reaches it so several incoming tables become ONE: a crawl split
         # over several batches is the normal reason a user wires two nodes into a save
         # node, and taking only the first exported one of them as if it were all of them.
-        return _execute_output_node(node, current_input, upstream=upstream)
+        return _execute_output_node(node, current_input, upstream=upstream, ctx=ctx)
     # No branch claimed this type. ``validate`` refuses an unknown type before a run, so
     # this is defense in depth for a direct caller — but it must still refuse BY NAME:
     # returning [] here would settle the node DONE over an empty table (see AGENTS.md).

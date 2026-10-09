@@ -83,7 +83,7 @@ crawler_workflow/
 │   │   ├── executor.py           # 线程池执行器
 │   │   └── logger.py             # 日志管理
 │   ├── services/                 # 服务模块
-│   │   ├── run_store.py          # 断点续跑核心：运行/节点/行/指纹/LLM缓存（runs.db）
+│   │   ├── run_store.py          # 断点续跑核心：运行/节点/行/指纹/LLM缓存/运行→文件台账（runs.db）
 │   │   ├── dataset_store.py      # 上传文件持久化与工作流引用（datasets.db）
 │   │   ├── stats.py              # 情感/倾向性统计服务
 │   │   ├── cookie_manager.py     # Cookie 管理
@@ -119,7 +119,7 @@ crawler_workflow/
 │           ├── zenviz.js         # 内嵌 Chart Studio 图表库
 │           └── zenviz-bridge.js  # Studio 与画布的数据桥接
 ├── data/                         # 运行时数据（gitignore；只有 workflows/ 例外，见下）
-│   ├── runs.db                   # 断点续跑状态（节点行/指纹/LLM缓存）
+│   ├── runs.db                   # 断点续跑状态（节点行/指纹/LLM缓存/运行→文件台账 run_files）
 │   ├── datasets.db               # 持久化的上传数据集与引用
 │   ├── history.db                # 执行历史与趋势
 │   ├── settings.json             # 运行时设置（驱动路径等）

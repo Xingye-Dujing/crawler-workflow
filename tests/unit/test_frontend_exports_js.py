@@ -41,6 +41,29 @@ PAYLOAD = {
         {'name': 'script.py', 'kind': 'other', 'size': 4096, 'mtime': 1700000200, 'downloadable': False},
         {'name': 'report-季度.html', 'kind': 'report', 'size': 9000, 'mtime': 1700000300, 'downloadable': False},
     ],
+    # The run→files ledger the smart-clear selectors read.
+    'ledger': [
+        {
+            'run_id': 'r1',
+            'workflow_name': '热门榜',
+            'started_at': '2026-10-09T10:00:00',
+            'status': 'completed',
+            'node_ids': ['node-2'],
+            'files': [
+                {'name': 'a.part001.csv', 'kind': 'part', 'node_id': 'node-2'},
+                {'name': 'a.part002.csv', 'kind': 'part', 'node_id': 'node-2'},
+                {'name': 'a.csv', 'kind': 'merged', 'node_id': 'node-2'},
+            ],
+        },
+        {
+            'run_id': 'r-merged',
+            'workflow_name': '仅合并',
+            'started_at': '2026-10-08T09:00:00',
+            'status': 'completed',
+            'node_ids': ['node-9'],
+            'files': [{'name': 'b.csv', 'kind': 'merged', 'node_id': 'node-9'}],
+        },
+    ],
 }
 
 
@@ -214,3 +237,48 @@ class TestReportButton:
     def test_a_written_report_is_opened_and_the_panel_refreshed(self, results):
         # Two plain creates, then the PDF create (PDF toast, then the open toast).
         assert results['toasts'] == ['DONE', 'DONE', 'PDFDONE', 'DONE']
+
+
+class TestSmartClear:
+    """智能清除: a ledger-driven run picker, then a confirm — and a node picker for shards.
+
+    These two are the only destructive bulk actions scoped by WHO wrote a file rather than by
+    what the folder happens to contain, so what is pinned here is which endpoint gets which body,
+    that a cancel sends nothing, that the shard list only offers nodes that actually left shards,
+    and that the selects are real ``<select>`` fields (the run/node identity must be data, never a
+    string the panel re-escapes into an inline handler).
+    """
+
+    def test_clear_a_run_posts_clear_run_after_a_confirm(self, results):
+        dialogs = results['smartRunDialogs']
+        assert len(dialogs) == 2, 'pick the run, then a second dialog confirms'
+        run_field = dialogs[0]['fields'][0]
+        assert run_field['type'] == 'select', 'the run picker is a dropdown, not a text field'
+        assert 'r1' in run_field['options']
+        assert ['go', True] in dialogs[0]['buttons'], 'the Next button collects the select'
+        assert dialogs[1]['fields'] == [], 'the confirm dialog has no field, only yes/no'
+        posts = results['smartRunPosts']
+        assert len(posts) == 1, 'a confirmed clear sends exactly one POST'
+        assert posts[0]['url'] == '/api/exports/clear-run'
+        assert posts[0]['body'] == {'run_id': 'r1', 'confirm': True}
+
+    def test_cancelling_the_confirm_sends_nothing(self, results):
+        # The run was picked, but the final yes/no was dismissed → no destructive POST.
+        assert results['smartRunCancelPosts'] == []
+
+    def test_clear_shards_scopes_to_one_node_of_one_run(self, results):
+        dialogs = results['smartPartsDialogs']
+        assert len(dialogs) == 2, 'pick the run, then pick the node (that dialog is the confirm)'
+        node_field = dialogs[1]['fields'][0]
+        assert node_field['id'] == 'scp-node' and node_field['type'] == 'select'
+        # Only node-2 left shards in r1; a node whose parts were merged away must not be offered.
+        assert node_field['options'] == ['node-2']
+        posts = results['smartPartsPosts']
+        assert len(posts) == 1
+        assert posts[0]['url'] == '/api/exports/clear-run-parts'
+        assert posts[0]['body'] == {'run_id': 'r1', 'node_id': 'node-2', 'confirm': True}
+
+    def test_a_run_with_no_shards_is_named_not_offered(self, results):
+        # r-merged wrote only a merged file: smart clear says so, shows no dead node list, sends nothing.
+        assert results['noPartsPosts'] == []
+        assert any('noParts' in toast for toast in results['noPartsToasts']), results['noPartsToasts']

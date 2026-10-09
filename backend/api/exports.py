@@ -14,6 +14,7 @@ import os
 
 from flask import Blueprint, jsonify, request
 from state import execution_state
+from stores import get_run_store
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from api.resolution import _resolve_payload_dataframe
@@ -26,6 +27,35 @@ from utils.helpers import sanitize_filename
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('exports', __name__)
+
+
+def _delete_export_names(names) -> dict:
+    """Delete a set of export files by name, one at a time, and keep the run ledger honest.
+
+    Locked (「固定」) files are SKIPPED, never removed — the same rule ``/clear`` and ``/delete``
+    already honour, so a pinned artefact outlives every bulk clear. A name already gone from disk
+    counts as ``missing`` but still drops its ledger row, because the whole point of the ledger is
+    to describe files that exist; a row pointing at nothing would make 智能清除 promise to delete
+    what is already gone. Deletion always goes through the export browser's resolver (refuses
+    traversal / outside-``EXPORT_DIR``), so a ledger row can never become a path oracle.
+    """
+    from services.export_browser import delete_export_file
+
+    store = get_run_store()
+    counts = {'removed': 0, 'skipped_locked': 0, 'missing': 0}
+    for name in names:
+        clean = os.path.basename(str(name or ''))
+        if not clean:
+            continue
+        if lock_store.is_locked('exports', clean):
+            counts['skipped_locked'] += 1
+            continue
+        if delete_export_file(Config.EXPORT_DIR, clean):
+            counts['removed'] += 1
+        else:
+            counts['missing'] += 1
+        store.forget_file(clean)
+    return counts
 
 
 @bp.route('/api/export/save', methods=['POST'])
@@ -114,6 +144,7 @@ def exports_delete():
     gone = delete_export_file(Config.EXPORT_DIR, name)
     if gone:
         lock_store.drop('exports', name.strip())
+        get_run_store().forget_file(name.strip())
     return jsonify({'ok': gone, 'deleted': gone, 'name': os.path.basename(name.strip())})
 
 
@@ -151,8 +182,87 @@ def exports_clear():
                 continue
             if delete_export_file(Config.EXPORT_DIR, row['name']):
                 removed += 1
+                get_run_store().forget_file(row['name'])
         if removed == before:
             break
     left = len(list_exports(Config.EXPORT_DIR))
     logger.warning(t('exports.cleared', n=removed))
     return jsonify({'ok': True, 'removed': removed, 'left': left})
+
+
+@bp.route('/api/exports/ledger', methods=['GET'])
+def exports_ledger():
+    """Every run that wrote export files, with its record header and its file list.
+
+    Backs the 智能清除 selectors. Reads the run→files ledger, never the directory scan: only a run
+    the ledger knows about can be cleared by record, so the panel offers exactly the actionable set.
+    """
+    return jsonify({'ok': True, 'ledger': get_run_store().run_ledger()})
+
+
+def _smart_clear_guards(data):
+    """Shared precondition for the two smart-clear routes: a response tuple to return, or None.
+
+    A bulk clear of a run's files while ANY run is live is refused with 409 for the same reason
+    ``/clear`` is: a streaming node is writing part files into this very directory and the ledger
+    cannot tell the file just flushed from one still being appended. Requiring ``confirm`` keeps the
+    door identical to every other destructive bulk action here (400 without it).
+    """
+    if data is None:
+        return _bad_body()
+    if data.get('confirm') is not True:
+        return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
+    if execution_state['running']:
+        return jsonify({'ok': False, 'error': t('exports.clearBusy')}), 409
+    return None
+
+
+@bp.route('/api/exports/clear-run', methods=['POST'])
+def exports_clear_run():
+    """Remove every file one run wrote, by that run's ledger — 智能清除「按运行」.
+
+    Deletes exactly the recorded names (through the browser's resolver, skipping 固定 files); the
+    run record and its checkpointed ROWS are untouched — this clears disk artefacts, not history.
+    """
+    data = _json_body()
+    refusal = _smart_clear_guards(data)
+    if refusal is not None:
+        return refusal
+    run_id = data.get('run_id')
+    if not isinstance(run_id, str) or not run_id.strip():
+        return _bad_param('run_id')
+    store = get_run_store()
+    files = store.files_for_run(run_id.strip())
+    result = _delete_export_names([f['name'] for f in files])
+    result['ok'] = True
+    result['run_id'] = run_id.strip()
+    result['requested'] = len(files)
+    return jsonify(result)
+
+
+@bp.route('/api/exports/clear-run-parts', methods=['POST'])
+def exports_clear_run_parts():
+    """Remove only one source node's shards from one run, keeping the merged file — 智能清除「按节点」.
+
+    Scoped to ``(run_id, node_id, kind='part')`` so it can never touch a different run, a different
+    node, or the merged/live result the run still needs. This is the routine cleanup after a
+    batched crawl: the parts did their job feeding the merge, and now they are just clutter.
+    """
+    data = _json_body()
+    refusal = _smart_clear_guards(data)
+    if refusal is not None:
+        return refusal
+    run_id = data.get('run_id')
+    node_id = data.get('node_id')
+    if not isinstance(run_id, str) or not run_id.strip():
+        return _bad_param('run_id')
+    if not isinstance(node_id, str) or not node_id.strip():
+        return _bad_param('node_id')
+    store = get_run_store()
+    files = store.files_for_run(run_id.strip(), node_id=node_id.strip(), kind='part')
+    result = _delete_export_names([f['name'] for f in files])
+    result['ok'] = True
+    result['run_id'] = run_id.strip()
+    result['node_id'] = node_id.strip()
+    result['requested'] = len(files)
+    return jsonify(result)

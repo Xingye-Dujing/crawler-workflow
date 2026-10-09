@@ -397,9 +397,25 @@ class RunStore:
                     created_at TEXT,
                     PRIMARY KEY (scope, cache_key)
                 );
+                -- Which files a run wrote into the export folder. The export listing is a flat
+                -- scan of the directory and carries no run identity (and shard names only embed
+                -- the record when 「分片带记录时间戳」 is on, which defaults off), so without this
+                -- table "clear everything one run produced" cannot be answered at all. ``node_id``
+                -- scopes the 分片-of-one-node clear; it is '' for run-level files (report, manual
+                -- save). ``(run_id, name)`` is the key so a live snapshot rewritten every batch
+                -- records once, not once per publish.
+                CREATE TABLE IF NOT EXISTS run_files (
+                    run_id TEXT NOT NULL,
+                    node_id TEXT NOT NULL DEFAULT '',
+                    name TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (run_id, name)
+                );
                 CREATE INDEX IF NOT EXISTS idx_runs_wf ON runs(workflow_fingerprint, started_at);
                 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
                 CREATE INDEX IF NOT EXISTS idx_node_runs_status ON node_runs(run_id, status);
+                CREATE INDEX IF NOT EXISTS idx_run_files_run ON run_files(run_id, node_id, kind);
                 """
             )
             self._conn.commit()
@@ -664,7 +680,10 @@ class RunStore:
         this post" stays true after the run that collected it is gone."""
         counts = {}
         # The table names are a fixed tuple written right here, never input.
-        for table in ('node_rows', 'node_runs', 'runs'):
+        # ``run_files`` goes with it: it is per-run bookkeeping of what that record wrote, and a
+        # map pointing at a record that no longer exists could never be queried anyway — the file
+        # themselves are left alone (a deleted record's exports are the user's to keep or clear).
+        for table in ('node_rows', 'node_runs', 'runs', 'run_files'):
             cur = self._execute(f'DELETE FROM {table} WHERE run_id = ?', (run_id,))
             counts[table] = cur.rowcount
         return counts
@@ -678,6 +697,79 @@ class RunStore:
         """
         cur = self._execute('DELETE FROM item_seen WHERE first_run_id = ?', (run_id,))
         return cur.rowcount
+
+    # ── run → produced-files ledger ─────────────────────────────
+    def record_file(self, run_id: str, node_id: str, path_or_name, kind: str) -> bool:
+        """Register one file a run wrote into the export folder, by basename.
+
+        Only the basename is kept (never a path): every reader of this table deletes through
+        the export browser, which resolves a *name* inside ``EXPORT_DIR`` and refuses anything
+        that escapes it — so a stored absolute path would be both a traversal surface and a
+        lie after the folder moves. Idempotent on ``(run_id, name)``: a live snapshot rewritten
+        each batch updates in place rather than stacking duplicate rows. Bookkeeping must never
+        take down an export, so callers guard this; a failure here only costs one ledger row.
+        """
+        name = os.path.basename(str(path_or_name or '').replace('\\', '/'))
+        if not run_id or not name:
+            return False
+        self._execute(
+            'INSERT INTO run_files(run_id, node_id, name, kind, created_at) VALUES(?,?,?,?,?) '
+            'ON CONFLICT(run_id, name) DO UPDATE SET kind=excluded.kind, node_id=excluded.node_id',
+            (str(run_id), str(node_id or ''), name, str(kind or ''), self.now()),
+        )
+        return True
+
+    def files_for_run(self, run_id: str, node_id: str = None, kind: str = None) -> list:
+        """The files a run wrote, optionally narrowed to one node and/or one kind."""
+        sql = 'SELECT name, kind, node_id FROM run_files WHERE run_id = ?'
+        params: list = [str(run_id)]
+        if node_id is not None:
+            sql += ' AND node_id = ?'
+            params.append(str(node_id))
+        if kind is not None:
+            sql += ' AND kind = ?'
+            params.append(str(kind))
+        sql += ' ORDER BY name'
+        return [dict(row) for row in self._query(sql, tuple(params))]
+
+    def run_ledger(self) -> list:
+        """Every run that wrote files, newest first, with its record header and file rows.
+
+        Backs the export panel's 智能清除 selectors; a run with no ledger rows never appears
+        (there is nothing to clear), so the list is only ever actionable entries.
+        """
+        out = []
+        for row in self._query('SELECT DISTINCT run_id FROM run_files'):
+            run_id = str(row['run_id'])
+            files = self.files_for_run(run_id)
+            if not files:
+                continue
+            run = self.get_run(run_id) or {}
+            out.append(
+                {
+                    'run_id': run_id,
+                    'workflow_name': run.get('workflow_name') or '',
+                    'started_at': run.get('started_at') or '',
+                    'status': run.get('status') or '',
+                    'node_ids': sorted({f['node_id'] for f in files if f['node_id']}),
+                    'files': files,
+                }
+            )
+        out.sort(key=lambda rec: rec['started_at'], reverse=True)
+        return out
+
+    def forget_run_files(self, run_id: str) -> int:
+        """Drop a run's file map (used once its files are cleared from disk)."""
+        return self._execute('DELETE FROM run_files WHERE run_id = ?', (str(run_id),)).rowcount
+
+    def forget_file(self, name) -> int:
+        """Forget every ledger row pointing at a file *name* that has since been deleted by
+        any other door (a single delete, the 清空 sweep), so the map never promises a file that
+        is already gone. Matched by basename, the same form ``record_file`` stored."""
+        name = os.path.basename(str(name or '').replace('\\', '/'))
+        if not name:
+            return 0
+        return self._execute('DELETE FROM run_files WHERE name = ?', (name,)).rowcount
 
     def clear_all(self, exclude_run_ids=()) -> dict:
         """Delete every run record, and the crawled-item claims those runs made with them.

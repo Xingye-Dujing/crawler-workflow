@@ -33,13 +33,19 @@ def dump_rows(rows, path: str, columns: list, fmt: str) -> None:
 
 
 class PartWriter:
-    def __init__(self, directory: str, stem: str, fmt: str = 'csv', batch_size: int = 0, keep_parts: bool = True):
+    def __init__(
+        self, directory: str, stem: str, fmt: str = 'csv', batch_size: int = 0, keep_parts: bool = True, on_write=None
+    ):
         self.dir = directory
         self.stem = stem
         self.fmt = fmt if fmt in ('csv', 'json') else 'csv'
         self.ext = '.csv' if self.fmt == 'csv' else '.json'
         self.batch_size = max(0, int(batch_size or 0))
         self.keep_parts = bool(keep_parts)
+        # Called with each shard path as it lands on disk, so a run can register the parts it
+        # produced even when it is interrupted before ``finish`` (an unrecorded shard would be
+        # invisible to 智能清除). Optional: callers outside a run pass nothing.
+        self._on_write = on_write
         self._buffer: list = []
         self._columns: list = []
         os.makedirs(self.dir, exist_ok=True)
@@ -83,6 +89,8 @@ class PartWriter:
         path = os.path.join(self.dir, f'{self.stem}.part{self._part_no:03d}{ext}')
         self._dump(rows, path)
         self._parts.append(path)
+        if self._on_write:
+            self._on_write(path, 'part')
 
     def _dump(self, rows, path: str) -> None:
         for row in rows:

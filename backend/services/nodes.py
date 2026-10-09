@@ -13,6 +13,8 @@ First slice: ``execute_name_node`` — the metadata node, the most self-containe
 takes the node dict, returns no rows), so it proves the pattern with zero behaviour change.
 """
 
+import contextlib
+
 import pandas as pd
 from api.http import _optional_int, _safe_int
 from state import add_log
@@ -63,6 +65,12 @@ def execute_compile_node(node: dict, current_input: list, upstream: list = None,
     if 'error' in out:
         add_log(t('run.compileFailed', err=out['error']))
         return out
+    # Register the staged PDF in the run→files ledger so 智能清除 can find a compile a chain
+    # leaves in the export folder with no downstream save. A later output renames it and forgets
+    # this name (see app._output_pdf); recording here covers the no-save case, which owns the file.
+    if ctx and ctx.get('store') and ctx.get('run_id'):
+        with contextlib.suppress(Exception):
+            ctx['store'].record_file(ctx['run_id'], str(node.get('id') or ''), name, 'compile')
     add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
     return {**out, 'sources': sources}
 

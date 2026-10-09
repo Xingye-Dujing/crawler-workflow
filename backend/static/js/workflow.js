@@ -5207,18 +5207,35 @@ function showDialog(opts) {
                 var row = document.createElement('label');
                 row.className = 'dialog-field';
                 row.appendChild(document.createTextNode(f.label));
-                var box = document.createElement('input');
-                /* The report dialog's 行数 box is a number input; without the house class it
-                   rendered as OS chrome (a bevelled white box) beside a text input that already
-                   wears .settings-input, so one form had two skins. Same class, same border,
-                   same focus ring, transparent ground — the number spinners are already stripped
-                   by the global ``input[type=number]`` rule. */
-                box.className = 'settings-input';
-                box.type = f.type || 'number';
-                box.id = f.id;
-                if (f.value !== undefined) box.value = f.value;
-                if (f.min !== undefined) box.min = f.min;
-                if (f.max !== undefined) box.max = f.max;
+                var box;
+                if (f.type === 'select') {
+                    /* A dropdown field: the smart-clear run/node pickers. ``collectForm`` reads
+                       every field by ``.value``, which a <select> answers with its chosen option,
+                       so the collection path is shared with the number/text fields unchanged. */
+                    box = document.createElement('select');
+                    box.className = 'settings-input';
+                    box.id = f.id;
+                    (f.options || []).forEach(function (opt) {
+                        var o = document.createElement('option');
+                        o.value = opt.value;
+                        o.textContent = opt.label;
+                        box.appendChild(o);
+                    });
+                    if (f.value !== undefined) box.value = f.value;
+                } else {
+                    box = document.createElement('input');
+                    /* The report dialog's 行数 box is a number input; without the house class it
+                       rendered as OS chrome (a bevelled white box) beside a text input that already
+                       wears .settings-input, so one form had two skins. Same class, same border,
+                       same focus ring, transparent ground — the number spinners are already stripped
+                       by the global ``input[type=number]`` rule. */
+                    box.className = 'settings-input';
+                    box.type = f.type || 'number';
+                    box.id = f.id;
+                    if (f.value !== undefined) box.value = f.value;
+                    if (f.min !== undefined) box.min = f.min;
+                    if (f.max !== undefined) box.max = f.max;
+                }
                 row.appendChild(box);
                 listArea.appendChild(row);
             });
@@ -7459,6 +7476,140 @@ var exportsManager = {
             showToast(I18n.t('exportsMgr.clearAllFailed'));
         }
         this.refresh();
+    },
+
+    /* 智能清除 — two scoped, LEDGER-driven bulk deletes. Unlike 清空 (the whole folder), these
+       act on the files ONE run wrote, or ONE source node of ONE run left behind as shards — read
+       back from the run→files ledger the server keeps, never guessed from a filename. Both keep
+       「固定」(pinned) files and are refused while any run is live; the server runs them through
+       the same per-name resolver as the single delete, so a ledger row can never become a path
+       reaching outside data/exports. */
+    async _ledger() {
+        try {
+            var resp = await fetch('/api/exports/ledger', { headers: { 'X-Lang': I18n.lang || 'zh' } });
+            var result = await resp.json();
+            if (result && result.ok) return result.ledger || [];
+        } catch (e) {
+            /* no-op */
+        }
+        return [];
+    },
+
+    _runLabel(entry) {
+        var name = entry.workflow_name || I18n.t('exportsMgr.unnamedRun');
+        return name + ' · ' + (entry.started_at || '') + ' · ' + (entry.files || []).length;
+    },
+
+    _nodeLabel(nid) {
+        if (typeof canvas !== 'undefined' && canvas.nodes && canvas.nodes[nid] && canvas.nodes[nid].title) {
+            return canvas.nodes[nid].title;
+        }
+        return nid;
+    },
+
+    async smartClearRun() {
+        var ledger = await this._ledger();
+        if (!ledger.length) {
+            showToast(I18n.t('exportsMgr.noLedger'));
+            return;
+        }
+        var answer = await showDialog({
+            message: I18n.t('exportsMgr.pickRun'),
+            fields: [{ id: 'scr-run', label: I18n.t('exportsMgr.runField'), type: 'select',
+                options: ledger.map((r) => ({ value: r.run_id, label: this._runLabel(r) })) }],
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('exportsMgr.next'), value: 'go', collect: true, primary: true },
+            ],
+        });
+        if (!answer || !answer.value) return;
+        var runId = answer.fields && answer.fields['scr-run'];
+        var entry = ledger.filter((r) => r.run_id === runId)[0];
+        if (!entry) return;
+        var go = await showDialog({
+            message: I18n.t('exportsMgr.confirmClearRun').replace('{n}', (entry.files || []).length),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('exportsMgr.clearGo'), value: 'go', primary: true },
+            ],
+        });
+        if (go !== 'go') return;
+        var r = await this._postClear('/api/exports/clear-run', { run_id: runId, confirm: true });
+        if (r && r.ok) {
+            showToast(I18n.t('exportsMgr.clearRunDone').replace('{removed}', r.removed || 0).replace('{skipped}', r.skipped_locked || 0));
+        } else {
+            showToast(I18n.t('exportsMgr.clearFailed') + ((r && r.error) ? ': ' + r.error : ''));
+        }
+        this.refresh();
+    },
+
+    async smartClearParts() {
+        var ledger = await this._ledger();
+        if (!ledger.length) {
+            showToast(I18n.t('exportsMgr.noLedger'));
+            return;
+        }
+        var answer = await showDialog({
+            message: I18n.t('exportsMgr.pickRun'),
+            fields: [{ id: 'scp-run', label: I18n.t('exportsMgr.runField'), type: 'select',
+                options: ledger.map((r) => ({ value: r.run_id, label: this._runLabel(r) })) }],
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('exportsMgr.next'), value: 'go', collect: true, primary: true },
+            ],
+        });
+        if (!answer || !answer.value) return;
+        var runId = answer.fields && answer.fields['scp-run'];
+        var entry = ledger.filter((r) => r.run_id === runId)[0];
+        if (!entry) return;
+        // Only nodes that actually LEFT shards (kind 'part') are offered: with 「保留分片」 off the
+        // merge already deleted them, so a run with none says so out loud rather than showing a dead
+        // list or silently deleting nothing.
+        var partNodes = {};
+        (entry.files || []).forEach(function (f) {
+            if (f.kind === 'part' && f.node_id) partNodes[f.node_id] = (partNodes[f.node_id] || 0) + 1;
+        });
+        var nodeIds = Object.keys(partNodes);
+        if (!nodeIds.length) {
+            showToast(I18n.t('exportsMgr.noParts'));
+            return;
+        }
+        var nodeAnswer = await showDialog({
+            message: I18n.t('exportsMgr.pickNode'),
+            fields: [{ id: 'scp-node', label: I18n.t('exportsMgr.nodeField'), type: 'select',
+                options: nodeIds.map((nid) => ({ value: nid, label: this._nodeLabel(nid) + ' · ' + partNodes[nid] })) }],
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('exportsMgr.clearGo'), value: 'go', collect: true, primary: true },
+            ],
+        });
+        if (!nodeAnswer || !nodeAnswer.value) return;
+        var nodeId = nodeAnswer.fields && nodeAnswer.fields['scp-node'];
+        if (!nodeId) return;
+        var r = await this._postClear('/api/exports/clear-run-parts', { run_id: runId, node_id: nodeId, confirm: true });
+        if (r && r.ok) {
+            showToast(I18n.t('exportsMgr.clearPartsDone').replace('{removed}', r.removed || 0).replace('{skipped}', r.skipped_locked || 0));
+        } else {
+            showToast(I18n.t('exportsMgr.clearFailed') + ((r && r.error) ? ': ' + r.error : ''));
+        }
+        this.refresh();
+    },
+
+    /* POST the bulk delete and hand back the parsed body (or null on a thrown request). The toast
+       is built by the CALLER, substituting the {removed}/{skipped} slots against the literal
+       `I18n.t('exportsMgr.clear…Done')` on the same line — a missing-argument check (test_i18n)
+       pairs a slot fill with that literal call, so it must not be hidden inside a shared helper. */
+    async _postClear(url, payload) {
+        try {
+            var resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+                body: JSON.stringify(payload),
+            });
+            return await resp.json();
+        } catch (e) {
+            return null;
+        }
     },
 };
 

@@ -62,6 +62,9 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/exports/download` | GET | 按**文件名**下载某个导出文件（越界名→404，脚本类扩展名→404） |
 | `/api/exports/delete` | POST | 删除单个导出文件（不接受路径、前缀或递归） |
 | `/api/exports/clear` | POST | 清空导出目录，**必须带 `{"confirm": true}`**（否则 400）：只逐个删面板列出的那些名字（复用单条删除的同一个解析器，所以子目录与被拒的符号链接不会因为"批量"就漏网），并**反复清到某一轮什么也没删掉为止**（面板列表有 500 条上限，只跑一轮会删掉最新的几百个然后重载出一堆"没清掉"的文件，还报一句已清空）；**有运行在跑时 409 整体拒绝**（流式节点正在往里写分片） |
+| `/api/exports/ledger` | GET | 列出**写过导出文件**的每一次运行及其文件清单（`run_id`/`workflow_name`/`started_at`/`files[{name,kind,node_id}]`）——「智能清除」选择器的数据源，读 `runs.db` 的运行→文件台账而非目录扫描，所以只给可操作的记录 |
+| `/api/exports/clear-run` | POST | 按**一次运行**清除它产生的全部文件，**必须 `{"run_id","confirm":true}`**（缺 confirm→400、缺 run_id→400）：只删台账登记的这些名字（复用单条删除解析器），**「固定」条目跳过**、返回 `{removed,skipped_locked,missing,requested}`；有运行在跑时 409；只删磁盘产物，不动 `runs.db` 记录与其已存的行 |
+| `/api/exports/clear-run-parts` | POST | 按**一次运行 × 一个数据源节点**只清除其分片文件（`kind='part'`），**保留合并文件**；必须 `{"run_id","node_id","confirm":true}`。作用域锁在 `(run_id,node_id,'part')`，绝不碰别的运行、别的节点或合并/实时文件。删成功的名字同步从台账遗忘 |
 | `/api/report/generate` | POST | 生成自包含 HTML 运行报告（本次运行的表格，或按 `run_id` 读历史运行；可选 AI 结论；可选 `options` 定制：`show_charts/tables/facts`、`max_rows`、`node_ids` 选节点、`images` 内联导出目录里的成图） |
 | `/api/report/view` | GET | 按名查看报告：仅接受 `report-` 前缀的 `.html`，响应带禁脚本 CSP |
 | `/api/report/pdf` | POST | 把已生成的报告按名用无头 Chrome 打印成 PDF（找不到 Chrome 或非报告名 → 报错，HTML 不受影响） |

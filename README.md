@@ -60,7 +60,7 @@ python app.py
 - **AI 分析**：Ollama / OpenRouter 双提供方，情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式）、
   情感极性、NER、关键词、聚类、异常、相关性、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)
 - **数据处理**：确定性清洗算子、去重（含 SimHash 近重复）、**事件研究套件**（阶段划分 / 分阶段 LDA /
-  主题流向 / 情感演化 / 二次爆发预警），通用导出与一键运行报告。→ [`docs/analysis.md`](docs/analysis.md)
+  主题流向 / 情感演化 / 二次爆发预警），通用导出、一键运行报告与「智能清除」（按运行、按节点分片）。→ [`docs/analysis.md`](docs/analysis.md)
 - **可视化**：论文印刷风格图表（ECharts / Matplotlib 双引擎）、主题距离图 / 显著词图 / 关系图 / 桑基 /
   占比堆叠 / 模型一致率、LaTeX 图与三线表、MiKTeX 编译成 PDF、Chart Studio 工作台。→ [`docs/analysis.md`](docs/analysis.md)
 - **工作流引擎**：拖拽画布、连线 fan-in/fan-out 语义、禁用即等同于不存在、撤销/重做、视角持久化、

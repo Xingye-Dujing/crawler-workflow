@@ -191,3 +191,135 @@ class TestClearAll:
         assert body['ok'] is True
         assert body['removed'] == before and body['left'] == 0
         assert os.listdir(export_dir) == []
+
+
+class TestSmartClear:
+    """``/api/exports/ledger`` + ``/clear-run`` + ``/clear-run-parts`` — the 智能清除 pair.
+
+    These act on the run→files ledger, not a directory scan: a run's files are what the ledger
+    says they are. The tests seed a run's files through the real store (the same singleton the
+    route reads), create them on disk in the temp export dir, then assert what a clear removes,
+    what it keeps (a 「固定」 file; the merged file under a shards-only clear; the OTHER node's
+    shards), and that the ledger tracks reality afterwards.
+    """
+
+    def _seed(self, app_module, export_dir, run_id, entries):
+        """Create each ``(node_id, name, kind)`` file on disk and record it against *run_id*."""
+        store = app_module.get_run_store()
+        store.start_run(run_id, '热门榜', 'fp-smart')
+        for node_id, name, kind in entries:
+            with open(os.path.join(export_dir, name), 'w', encoding='utf-8') as handle:
+                handle.write('x\n')
+            store.record_file(run_id, node_id, name, kind)
+        return store
+
+    def test_the_ledger_lists_only_runs_that_wrote_files(self, client, app_module, export_dir):
+        self._seed(app_module, export_dir, 'r1', [('node-2', 'a.part001.csv', 'part'), ('', 'a.csv', 'merged')])
+        ledger = client.get('/api/exports/ledger').get_json()['ledger']
+        assert [e['run_id'] for e in ledger] == ['r1']
+        assert ledger[0]['workflow_name'] == '热门榜'
+        assert {f['name'] for f in ledger[0]['files']} == {'a.part001.csv', 'a.csv'}
+        assert ledger[0]['node_ids'] == ['node-2']
+        # A run that wrote nothing is not offered — the selector is only ever actionable entries.
+        app_module.get_run_store().start_run('r-empty', '空', 'fp-e')
+        assert 'r-empty' not in [e['run_id'] for e in client.get('/api/exports/ledger').get_json()['ledger']]
+
+    def test_clear_run_removes_every_file_the_record_wrote(self, client, app_module, export_dir):
+        store = self._seed(
+            app_module,
+            export_dir,
+            'r1',
+            [
+                ('node-2', 'a.part001.csv', 'part'),
+                ('node-2', 'a.csv', 'merged'),
+                ('node-2', 'a.live.csv', 'live'),
+                ('', 'report-x.html', 'report'),
+            ],
+        )
+        body = client.post('/api/exports/clear-run', json={'run_id': 'r1', 'confirm': True}).get_json()
+        assert body['ok'] is True and body['removed'] == 4 and body['requested'] == 4
+        for name in ('a.part001.csv', 'a.csv', 'a.live.csv', 'report-x.html'):
+            assert not os.path.exists(os.path.join(export_dir, name))
+        assert os.path.exists(os.path.join(export_dir, 'run-a.csv')), (
+            '按运行清除 is not 清空: files no run wrote stay put'
+        )
+        assert store.files_for_run('r1') == [], 'the map follows the files it described'
+
+    def test_clear_run_skips_a_pinned_file_and_keeps_its_ledger_row(self, client, app_module, export_dir):
+        from services import lock_store
+
+        store = self._seed(app_module, export_dir, 'r1', [('node-2', 'a.csv', 'merged'), ('node-2', 'b.csv', 'export')])
+        lock_store.set_locked('exports', 'a.csv', True)
+        try:
+            body = client.post('/api/exports/clear-run', json={'run_id': 'r1', 'confirm': True}).get_json()
+        finally:
+            lock_store.set_locked('exports', 'a.csv', False)
+        assert body['removed'] == 1 and body['skipped_locked'] == 1
+        assert os.path.exists(os.path.join(export_dir, 'a.csv')), '「固定」 outlives a clear'
+        assert not os.path.exists(os.path.join(export_dir, 'b.csv'))
+        # The skipped file is still in the ledger (it exists); the removed one is forgotten.
+        assert {f['name'] for f in store.files_for_run('r1')} == {'a.csv'}
+
+    def test_clear_run_refuses_without_confirm_and_while_a_run_is_writing(self, client, app_module, export_dir):
+        self._seed(app_module, export_dir, 'r1', [('node-2', 'a.csv', 'merged')])
+        assert client.post('/api/exports/clear-run', json={'run_id': 'r1'}).status_code == 400
+        assert os.path.exists(os.path.join(export_dir, 'a.csv'))
+        assert client.post('/api/exports/clear-run', json={'run_id': '', 'confirm': True}).status_code == 400
+        app_module.execution_state.update({'running': True, 'run_id': 'r-live'})
+        try:
+            response = client.post('/api/exports/clear-run', json={'run_id': 'r1', 'confirm': True})
+        finally:
+            app_module.execution_state.update({'running': False, 'run_id': ''})
+        assert response.status_code == 409
+        assert t('exports.clearBusy') in response.get_json()['error']
+        assert os.path.exists(os.path.join(export_dir, 'a.csv'))
+
+    def test_clear_run_leaves_the_run_record_and_rows_untouched(self, client, app_module, export_dir):
+        # This clears DISK artefacts, not history: the record and its checkpointed rows survive.
+        store = self._seed(app_module, export_dir, 'r1', [('node-2', 'a.csv', 'merged')])
+        store.begin_node('r1', 'node-2', 'source', '标题', 'fp')
+        store.append_rows('r1', 'node-2', [{'正文': '三亚'}])
+        client.post('/api/exports/clear-run', json={'run_id': 'r1', 'confirm': True})
+        assert store.get_run('r1') is not None
+        assert len(store.load_rows('r1', 'node-2')) == 1
+
+    def test_clear_run_parts_targets_only_that_nodes_shards(self, client, app_module, export_dir):
+        store = self._seed(
+            app_module,
+            export_dir,
+            'r1',
+            [
+                ('node-2', 'a.part001.csv', 'part'),
+                ('node-2', 'a.part002.csv', 'part'),
+                ('node-2', 'a.csv', 'merged'),
+                ('node-3', 'b.part001.csv', 'part'),
+                ('node-3', 'b.csv', 'merged'),
+            ],
+        )
+        body = client.post(
+            '/api/exports/clear-run-parts', json={'run_id': 'r1', 'node_id': 'node-2', 'confirm': True}
+        ).get_json()
+        assert body['ok'] is True and body['removed'] == 2 and body['requested'] == 2
+        for name in ('a.part001.csv', 'a.part002.csv'):
+            assert not os.path.exists(os.path.join(export_dir, name)), 'the target node’s shards go'
+        for name in ('a.csv', 'b.part001.csv', 'b.csv'):
+            assert os.path.exists(os.path.join(export_dir, name)), 'merged + the OTHER node survive untouched'
+        # node-2 keeps its merged row but loses the part rows; node-3 is entirely intact.
+        assert {f['name'] for f in store.files_for_run('r1', node_id='node-2')} == {'a.csv'}
+        assert {f['name'] for f in store.files_for_run('r1', node_id='node-3')} == {'b.part001.csv', 'b.csv'}
+
+    def test_clear_run_parts_refuses_without_confirm(self, client, app_module, export_dir):
+        self._seed(app_module, export_dir, 'r1', [('node-2', 'a.part001.csv', 'part')])
+        assert (
+            client.post('/api/exports/clear-run-parts', json={'run_id': 'r1', 'node_id': 'node-2'}).status_code == 400
+        )
+        assert client.post('/api/exports/clear-run-parts', json={'run_id': 'r1', 'confirm': True}).status_code == 400, (
+            'a node_id is required'
+        )
+        assert os.path.exists(os.path.join(export_dir, 'a.part001.csv'))
+
+    def test_clearing_a_single_file_forgets_it_from_every_ledger(self, client, app_module, export_dir):
+        # The per-row 删除 and 清空 must not leave a ledger promising a file that is gone.
+        self._seed(app_module, export_dir, 'r1', [('node-2', 'a.csv', 'merged')])
+        client.post('/api/exports/delete', json={'name': 'a.csv'})
+        assert 'r1' not in [e['run_id'] for e in client.get('/api/exports/ledger').get_json()['ledger']]

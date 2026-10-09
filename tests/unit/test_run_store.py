@@ -803,6 +803,70 @@ class TestPurgeAndStats:
         assert all(r['resumable'] for r in store.list_resumable())
 
 
+# ─── run → produced-files ledger ─────────────────────────────────────────
+
+
+class TestRunFilesLedger:
+    def test_records_and_lists_a_run_files(self, store):
+        _start(store, 'r1', '热门榜')
+        store.record_file('r1', 'node-2', '热门榜-src-node-2.part001.csv', 'part')
+        store.record_file('r1', 'node-2', '热门榜-src-node-2.part002.csv', 'part')
+        store.record_file('r1', 'node-2', '热门榜-src-node-2.csv', 'merged')
+        store.record_file('r1', '', 'report-热门榜.html', 'report')
+        assert {f['name'] for f in store.files_for_run('r1')} == {
+            '热门榜-src-node-2.part001.csv',
+            '热门榜-src-node-2.part002.csv',
+            '热门榜-src-node-2.csv',
+            'report-热门榜.html',
+        }
+        # The 分片 clear scopes to exactly (run, node, kind='part').
+        parts = store.files_for_run('r1', node_id='node-2', kind='part')
+        assert len(parts) == 2
+        led = store.run_ledger()
+        assert [e['run_id'] for e in led] == ['r1']
+        assert led[0]['workflow_name'] == '热门榜'
+        assert 'node-2' in led[0]['node_ids']
+
+    def test_only_the_basename_is_stored(self, store):
+        # A path handed in is reduced to its name: the browser resolves a file by *name* inside
+        # EXPORT_DIR, so a stored path would be both a traversal surface and a lie once the folder
+        # moves. This is the whole reason the ledger is not a list of absolute paths.
+        _start(store, 'r2', 'wf', 'fp-b')
+        store.record_file('r2', 'node-1', '/var/data/exports/a.csv', 'export')
+        assert store.files_for_run('r2') == [{'name': 'a.csv', 'kind': 'export', 'node_id': 'node-1'}]
+
+    def test_re_recording_the_same_name_does_not_duplicate(self, store):
+        _start(store, 'r3', 'wf', 'fp-c')
+        store.record_file('r3', 'node-1', 'snap.live.csv', 'live')
+        store.record_file('r3', 'node-1', 'snap.live.csv', 'live')
+        assert len(store.files_for_run('r3')) == 1
+
+    def test_blank_run_or_name_records_nothing(self, store):
+        assert store.record_file('', 'n', 'x.csv', 'part') is False
+        assert store.record_file('r1', 'n', '', 'part') is False
+
+    def test_forget_file_drops_the_name_across_runs(self, store):
+        # A deleted file leaves a stale row for EVERY run that wrote it (two runs can collide on one
+        # name when 分片带时间戳 is off); forget_file takes them all out, since the file is gone.
+        _start(store, 'rA', 'a', 'fpA')
+        _start(store, 'rB', 'b', 'fpB')
+        store.record_file('rA', 'node-1', 'shared.csv', 'export')
+        store.record_file('rB', 'node-1', 'shared.csv', 'export')
+        assert store.forget_file('shared.csv') == 2
+        assert store.files_for_run('rA') == [] and store.files_for_run('rB') == []
+
+    def test_delete_run_and_purge_drop_the_ledger(self, store):
+        _start(store, 'r1', 'wf', 'fp')
+        store.record_file('r1', 'node-1', 'x.csv', 'export')
+        store.delete_run('r1')
+        assert store.files_for_run('r1') == []
+        # purge: the record ages out, so its file map goes with it (the files themselves stay).
+        _start(store, 'r2', 'wf', 'fp')
+        store.record_file('r2', 'node-1', 'y.csv', 'export')
+        store.purge(keep_per_workflow=0, keep_days=3650)
+        assert store.files_for_run('r2') == []
+
+
 # ─── concurrency ────────────────────────────────────────────────────────
 
 

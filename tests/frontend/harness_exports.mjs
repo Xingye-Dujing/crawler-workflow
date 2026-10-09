@@ -66,6 +66,10 @@ const I18n = {
    proven to distinguish "create", "create with the AI paragraph" and "cancel". */
 const captured = { dialogs: [], posts: [], opens: [], toasts: [] };
 const dialogAnswer = { value: null };
+/* A multi-dialog method (smart clear: pick run → confirm) needs a DIFFERENT answer for each
+   call; the queue feeds them in order and falls back to the single `dialogAnswer.value` for the
+   one-dialog methods, so the existing report / remove scenarios are untouched. */
+const dialogQueue = [];
 
 const sandbox = baseSandbox();
 /* In this DOM stub ``window`` *is* the sandbox object, so the globals the report
@@ -82,8 +86,15 @@ Object.assign(sandbox, {
             captured.posts.push({ url, method: options.method, lang: options.headers['X-Lang'], body });
         }
         let answer;
-        if (!body && url.indexOf('studio-images') >= 0) {
+        if (!body && url.indexOf('/api/exports/ledger') >= 0) {
+            answer = { ok: true, ledger: payload.ledger || [] };
+        } else if (!body && url.indexOf('studio-images') >= 0) {
             answer = { ok: true, images: [{ name: 'scatter-abc.png', size: 100, mtime: 1 }] };
+        } else if (body && url.indexOf('/clear-run-parts') >= 0) {
+            // checked before /clear-run: the shorter substring also matches the longer route.
+            answer = { ok: true, removed: 2, skipped_locked: 0, missing: 0, requested: 2, run_id: body.run_id, node_id: body.node_id };
+        } else if (body && url.indexOf('/clear-run') >= 0) {
+            answer = { ok: true, removed: 4, skipped_locked: 1, missing: 0, requested: 5, run_id: body.run_id };
         } else if (body && url.indexOf('/report/pdf') >= 0) {
             answer = { ok: true, name: 'report-x.pdf', bytes: 9 };
         } else if (body) {
@@ -109,7 +120,10 @@ const { exportsManager } = sandbox.__ex;
 sandbox.showToast = (msg) => captured.toasts.push(String(msg));
 sandbox.showDialog = (opts) => {
     captured.dialogs.push(opts);
-    return Promise.resolve(dialogAnswer.value);
+    /* A one-step dialog answers from `dialogAnswer.value`; a multi-step one (the smart-clear
+       pair: pick a run, then confirm) pops a QUEUE so each call gets its own scripted reply. */
+    const next = dialogQueue.length ? dialogQueue.shift() : dialogAnswer.value;
+    return Promise.resolve(next);
 };
 
 exportsManager._last = payload.exports;
@@ -207,5 +221,51 @@ await exportsManager.remove('ok.csv');
 out.deletedPosts = captured.posts.slice(postsBefore + out.cancelledPosts.length);
 out.deletedDialog = triples(captured.dialogs[dialogsBefore + 1]);
 out.deletedToasts = captured.toasts.slice(toastsBefore + out.cancelledPosts.length);
+
+/* ── 智能清除：按一次运行 & 按一个节点的分片 ───────────────────────────
+   Two-step dialogs (pick run → confirm / pick node), so each call pops its own
+   scripted answer off the queue. What matters is which endpoint gets POSTed with
+   which body, that a cancel posts nothing, and that a run with no shards says so
+   instead of offering a dead list. */
+const scPosts0 = captured.posts.length;
+const scDialogs0 = captured.dialogs.length;
+dialogQueue.length = 0;
+dialogQueue.push({ value: 'go', fields: { 'scr-run': 'r1' } });
+dialogQueue.push('go');
+await exportsManager.smartClearRun();
+out.smartRunDialogs = captured.dialogs.slice(scDialogs0).map((opts) => ({
+    fields: (opts.fields || []).map((f) => ({ id: f.id, type: f.type, options: (f.options || []).map((o) => o.value) })),
+    buttons: (opts.buttons || []).map((b) => [b.value, !!b.collect]),
+}));
+out.smartRunPosts = captured.posts.slice(scPosts0);
+
+/* Confirming the run picker but cancelling the final confirm → the run was chosen, nothing sent. */
+const cancelPosts0 = captured.posts.length;
+dialogQueue.length = 0;
+dialogQueue.push({ value: 'go', fields: { 'scr-run': 'r1' } });
+dialogQueue.push(null);
+await exportsManager.smartClearRun();
+out.smartRunCancelPosts = captured.posts.slice(cancelPosts0);
+
+/* Pick run → pick node (the node dialog doubles as the confirm) → clear-run-parts. */
+const spPosts0 = captured.posts.length;
+const spDialogs0 = captured.dialogs.length;
+dialogQueue.length = 0;
+dialogQueue.push({ value: 'go', fields: { 'scp-run': 'r1' } });
+dialogQueue.push({ value: 'go', fields: { 'scp-node': 'node-2' } });
+await exportsManager.smartClearParts();
+out.smartPartsDialogs = captured.dialogs.slice(spDialogs0).map((opts) => ({
+    fields: (opts.fields || []).map((f) => ({ id: f.id, type: f.type, options: (f.options || []).map((o) => o.value) })),
+}));
+out.smartPartsPosts = captured.posts.slice(spPosts0);
+
+/* A run whose batched crawl merged-and-removed its parts: named out loud, no dead node list, no POST. */
+const npPosts0 = captured.posts.length;
+const npToasts0 = captured.toasts.length;
+dialogQueue.length = 0;
+dialogQueue.push({ value: 'go', fields: { 'scp-run': 'r-merged' } });
+await exportsManager.smartClearParts();
+out.noPartsPosts = captured.posts.slice(npPosts0);
+out.noPartsToasts = captured.toasts.slice(npToasts0);
 
 process.stdout.write(JSON.stringify(out));
