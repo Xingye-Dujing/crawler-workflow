@@ -109,6 +109,9 @@ from utils.helpers import (
     split_urls,
     window_tag,
 )
+from utils.helpers import (
+    json_safe_records as _json_safe_records,
+)
 
 #: The comment router's supported platforms, as raw keys. They go into a
 #: ``{platforms}`` slot that localizes *and joins* them, so they must arrive as a
@@ -342,13 +345,6 @@ def _apply_dataset_meta(params: dict, meta: dict):
     params['dataset_id'] = meta.get('dataset_id') or ''
     params['dataset_name'] = meta.get('name') or ''
     params['row_count'] = int(meta.get('row_count') or 0)
-
-
-def _json_safe_records(df: pd.DataFrame, limit: int = None) -> list:
-    """Convert a DataFrame slice to JSON-safe records: NaN/NaT become None
-    (raw NaN is not valid JSON and breaks JSON.parse() in the browser)."""
-    page = df.head(limit) if limit is not None else df
-    return page.astype(object).where(pd.notna(page), None).to_dict('records')
 
 
 def _durable_node_rows(node_id: str, workflow_name: str = '') -> list:

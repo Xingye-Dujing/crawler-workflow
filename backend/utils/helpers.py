@@ -226,3 +226,10 @@ def merge_results(results: list, _key: str = 'platform') -> pd.DataFrame:
         elif isinstance(r, dict):
             all_items.append(r)
     return pd.DataFrame(all_items)
+
+
+def json_safe_records(df: pd.DataFrame, limit: int = None) -> list:
+    """Convert a DataFrame slice to JSON-safe records: NaN/NaT become None
+    (raw NaN is not valid JSON and breaks JSON.parse() in the browser)."""
+    page = df.head(limit) if limit is not None else df
+    return page.astype(object).where(pd.notna(page), None).to_dict('records')
