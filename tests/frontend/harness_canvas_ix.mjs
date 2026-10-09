@@ -569,6 +569,40 @@ canvas.autoLayout();
 const islands = box([iA, iB]);
 out.auto_layout_two_components = { positions: islands, separated: islands[0][1] !== islands[1][1] };
 
+/* 排布顺序 (layout_order) overrides creation order: numbered components stack ascending
+   (a LOWER number sits HIGHER), a blank one falls below every numbered one and keeps its
+   place among the other blanks. Creation order here is 1,2,3 but the numbers are 2,1,'' so
+   the expected top→bottom stack is component-2, component-1, component-3(blank). */
+freshWorld();
+const oName1 = addNode('name', 0, 0);
+const oOut1 = addNode('output', 0, 0);
+const oName2 = addNode('name', 0, 0);
+const oOut2 = addNode('output', 0, 0);
+const oName3 = addNode('name', 0, 0);
+const oOut3 = addNode('output', 0, 0);
+canvas.connections = [{ from: oName1, to: oOut1 }, { from: oName2, to: oOut2 }, { from: oName3, to: oOut3 }];
+canvas.nodes[oName1].params.layout_order = '2';
+canvas.nodes[oName2].params.layout_order = '1';
+canvas.nodes[oName3].params.layout_order = '';
+canvas.autoLayout();
+const orderTops = box([oName1, oName2, oName3]).map((b) => b[1]);
+out.auto_layout_order = {
+    tops: orderTops,
+    // component-2 ('1') above component-1 ('2') above component-3 (blank, last)
+    numbered_flip: orderTops[1] < orderTops[0],
+    numbered_above_blank: orderTops[0] < orderTops[2],
+};
+/* Control: when nobody numbers anything, the stack stays in creation order. */
+freshWorld();
+const cA = addNode('name', 0, 0);
+const cAO = addNode('output', 0, 0);
+const cB = addNode('name', 0, 0);
+const cBO = addNode('output', 0, 0);
+canvas.connections = [{ from: cA, to: cAO }, { from: cB, to: cBO }];
+canvas.autoLayout();
+const ctrlTops = box([cA, cB]).map((b) => b[1]);
+out.auto_layout_order_default = { a_above_b: ctrlTops[0] < ctrlTops[1] };
+
 /* ── editNode / openSettings / closeSettings (all real) ────────────── */
 freshWorld();
 const e1 = addNode('source', 0, 0);

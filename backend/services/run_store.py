@@ -180,7 +180,7 @@ def item_key(item) -> str:
 # *present at all* in the structure fingerprint is decided one level up — :func:`effective_workflow`
 # removes disabled nodes from the graph before the fingerprint is taken — so this only keeps the
 # surviving nodes' own data fingerprint free of the switch.
-_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count', 'workflow_name', 'recrawl', 'enabled'})
+_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count', 'workflow_name', 'recrawl', 'enabled', 'layout_order'})
 
 
 def stable_params(params) -> dict:

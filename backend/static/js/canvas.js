@@ -714,8 +714,9 @@ const canvas = {
 
     getDefaultParams(type) {
         /* The name node carries the workflow's label for the Execution History
-           panel — it is metadata, not data, so its params are just the name. */
-        if (type === 'name') return { workflow_name: '' };
+           panel and an optional 排布顺序 for auto-layout — both metadata, not data,
+           so its params never choose a crawl. layout_order blank = keep creation order. */
+        if (type === 'name') return { workflow_name: '', layout_order: '' };
         if (type === 'source') return this._defaultSourceParams();
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '', live_export: false, format: 'csv' };
@@ -1715,12 +1716,41 @@ const canvas = {
             components.push(comp);
         });
 
-        /* Step 2: layout each component independently (stacked vertically) */
+        /* Step 2: layout each component independently (stacked vertically).
+           The stack ORDER is the user's, not creation order: sort by the component's
+           排布顺序 (the smallest integer found on any of its name nodes). Numbered
+           components rise to the top, ascending — a LOWER number sits HIGHER, the same
+           convention as 阶段序号. A component whose name node left 排布顺序 blank has no
+           preference, so it drops below every numbered one and keeps its creation
+           order relative to the other blanks: Array.prototype.sort is stable (ES2019),
+           so an untouched canvas — nobody ever set the field — lays out byte-identically. */
+        const layoutOrderOf = (comp) => {
+            let key = null;
+            comp.forEach((nid) => {
+                const n = this.nodes[nid];
+                if (n && n.type === 'name' && n.params) {
+                    const raw = n.params.layout_order;
+                    if (raw !== '' && raw !== null && raw !== undefined) {
+                        const v = parseInt(raw, 10);
+                        if (Number.isFinite(v) && (key === null || v < key)) key = v;
+                    }
+                }
+            });
+            return key;
+        };
+        const ordered = components.slice().sort((a, b) => {
+            const ka = layoutOrderOf(a);
+            const kb = layoutOrderOf(b);
+            if (ka === null && kb === null) return 0;
+            if (ka === null) return 1;
+            if (kb === null) return -1;
+            return ka - kb;
+        });
         const allPositions = [];
         const compGap = 40;
         let cursorY = 0;
 
-        components.forEach(function (comp) {
+        ordered.forEach(function (comp) {
             const compSet = new Set(comp);
             const compConns = this.connections.filter(function (c) {
                 return compSet.has(c.from) && compSet.has(c.to);

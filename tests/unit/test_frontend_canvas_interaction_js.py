@@ -339,6 +339,16 @@ class TestAutoLayout:
     def test_two_unconnected_components_are_stacked_not_piled(self, ix):
         assert ix['auto_layout_two_components']['separated'] is True
 
+    def test_layout_order_sets_the_vertical_stack(self, ix):
+        """排布顺序 overrides creation order: a LOWER number stacks HIGHER, and a blank
+        name node falls below every numbered one."""
+        r = ix['auto_layout_order']
+        assert r['numbered_flip'] is True, r['tops']
+        assert r['numbered_above_blank'] is True, r['tops']
+
+    def test_a_blank_layout_order_keeps_creation_order(self, ix):
+        assert ix['auto_layout_order_default']['a_above_b'] is True
+
     def test_an_empty_canvas_survives_the_request(self, ix):
         assert ix['auto_layout_empty']['survived'] is True
 

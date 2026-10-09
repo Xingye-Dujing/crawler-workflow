@@ -2482,7 +2482,14 @@ function openSettings(nodeId) {
         html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('name.hint') + '</div>' +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.workflowName') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.workflow_name || '') + '" placeholder="' + I18n.t('name.unnamed') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'workflow_name\',this.value)"></div>';
+            'onchange="updateParam(\'' + nodeId + '\',\'workflow_name\',this.value)"></div>' +
+            /* 排布顺序 drives autoLayout's vertical stack. Store the RAW string (never
+               parseInt || 0): a cleared field must stay blank = "no preference", whereas
+               forcing 0 would silently pin this workflow above the other untouched ones. */
+            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.layoutOrder') + '</label>' +
+            '<input class="settings-input" type="number" value="' + escapeHtml(p.layout_order != null ? p.layout_order : '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'layout_order\',this.value)">' +
+            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.layoutOrderHint') + '</div></div>';
     } else if (node.type === 'resume') {
         /* Adopts rows a previous run already paid for. Both lists live on the
            server, so the panel fills them asynchronously below. */

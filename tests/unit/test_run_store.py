@@ -110,6 +110,10 @@ class TestFingerprints:
         plain = _node(params={'dataset_id': 'd1'})
         relabeled = _node(params={'dataset_id': 'd1', 'dataset_name': '新名字', 'row_count': 999})
         assert node_fingerprint(plain) == node_fingerprint(relabeled)
+        # A 排布顺序 only reorders the canvas: it chooses no data, so it must not
+        # re-key the name node's fingerprint (which feeds its children and the dedupe ledger).
+        ordered = _node(params={'dataset_id': 'd1', 'layout_order': '3'})
+        assert node_fingerprint(plain) == node_fingerprint(ordered)
 
     def test_renaming_the_workflow_is_not_a_new_computation(self):
         """A 工作流命名 label describes the record, not the data.

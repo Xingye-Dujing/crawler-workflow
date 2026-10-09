@@ -472,7 +472,7 @@ class TestCanvasState:
         assert {'dataset_id'} <= set(by_type['upload'])
         assert {'operation'} <= set(by_type['analysis'])
         assert {'chart_type', 'x_field'} <= set(by_type['visualize'])
-        assert {'workflow_name'} <= set(by_type['name'])
+        assert {'workflow_name', 'layout_order'} <= set(by_type['name'])
         assert {'resume_run_id', 'resume_node_id'} <= set(by_type['resume'])
 
 
