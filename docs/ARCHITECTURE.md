@@ -109,28 +109,62 @@ plan:** `app.py` module globals are used as *monkeypatch seams* by the tests (e.
 
 ### E. Store-registry keystone — design (NOT yet executed; touches the isolation core)
 
-Remaining route clusters (`workflow`, `runs`, `data`, `studio`, `report`, `exports`, cookie-write) all
-read `get_run_store()`/`get_dataset_store()`, which resolve through `app`-module globals
-(`_RUN_STORE`, `_DATASET_STORE`) that `conftest.client` rebinds per test and ~30 test sites read as
-`app_module._RUN_STORE`. A Blueprint cannot own a lazy getter whose `global` write diverges from the
-conftest injection point, so these clusters stay stuck until the seam is centralised. This is the
-biggest remaining lift and edits the test-isolation core — do it deliberately, on a branch, not as a
-quick route-move swing.
+#### Seam census (measured against the current tests, 2026-10-09)
 
-Design:
-1. New `backend/stores.py` owns `_RUN_STORE`/`_RUN_STORE_LOCK`/`get_run_store`,
-   `_DATASET_STORE`/`_DATASET_LOCK`/`get_dataset_store`, and `_HOUSEKEEPER`/`get_housekeeper`
-   (moved verbatim from `app.py`). Locks are only ever acquired; the store globals are rebound **only**
-   by conftest — so after the move the rebinding target and the readers must agree on `stores`.
-2. `app.py` imports the getters (`from stores import get_run_store, get_dataset_store, get_housekeeper`)
-   and replaces its one raw `_RUN_STORE` read (in `_execute_analysis_node`) with `get_run_store()`.
-3. **Centralise the injection**: `conftest.client` does `import stores` and sets
-   `stores._RUN_STORE = stores._DATASET_STORE = ...`, `stores._HOUSEKEEPER = None`. Replace the ~30
-   `app_module._RUN_STORE` / `_DATASET_STORE` test reads with a **`run_store` / `dataset_store`
-   fixture** (defined in `tests/conftest.py` or `tests/api/conftest.py`) that returns
-   `stores.get_run_store()` — one seam instead of per-test global pokes.
-4. Only then can the store-backed clusters move to `api/<cluster>.py` (importing `stores`), one per
-   green swing.
+The store seam has **3 module globals** in `app.py` and **3 lazy getters** around them:
+
+| owner (in `app.py`) | global | lock | getter | `global` sites |
+|---|---|---|---|---|
+| run store   | `_RUN_STORE`   | `_RUN_STORE_LOCK`   | `get_run_store`   | 1 (app.py:640) |
+| dataset store | `_DATASET_STORE` | `_DATASET_LOCK`   | `get_dataset_store` | 1 (app.py:346) |
+| housekeeper | `_HOUSEKEEPER` | `_HOUSEKEEPER_LOCK` | `get_housekeeper` | 1 (app.py:658) |
+
+Test access splits sharply between reads and writes:
+
+- **Reads: ~118** sites in tests, uniformly via `app_module._RUN_STORE` / `app_module.get_run_store()` / `app_module.get_dataset_store()`. A PEP-562 `app.__getattr__` delegating `_RUN_STORE`→`stores._RUN_STORE` and an `app.get_run_store = stores.get_run_store` re-export keep every one of them working unchanged.
+- **Writes/patches: exactly 9** sites (all in tests). These **must** move to the new owner in the same commit; leaving any behind is what caused the failed slice-1 attempt (43 errors):
+
+  | file:line | form | kind |
+  |---|---|---|
+  | `tests/conftest.py:454` | `module._RUN_STORE = run_store` | inject |
+  | `tests/conftest.py:455` | `module._DATASET_STORE = dataset_store` | inject |
+  | `tests/conftest.py:458` | `module._HOUSEKEEPER = None` | inject |
+  | `tests/conftest.py:479` | `module._RUN_STORE = None` (finally) | restore |
+  | `tests/conftest.py:480` | `module._DATASET_STORE = None` (finally) | restore |
+  | `tests/api/test_nodes_execution.py:745` | `app_module._RUN_STORE = RunStore(db)` | direct write |
+  | `tests/api/test_run_races.py:419` | `monkeypatch.setattr(app_module,'_RUN_STORE',restarted)` | global patch |
+  | `tests/api/test_run_races.py:598` | `monkeypatch.setattr(app_module,'get_run_store', refuse)` | **function patch** |
+  | `tests/api/test_run_races.py:614` | `monkeypatch.setattr(app_module,'get_run_store', lambda: app_module._RUN_STORE)` | **function patch** |
+
+#### The two function patches are the sharp edge
+
+`app.py`'s own internal code calls `get_run_store()` as a **module-level name**. If that name is re-bound to `stores.get_run_store`, monkeypatching `app_module.get_run_store` still redirects the calls inside `app.py` (because they resolve by name at call time), but it would **not** affect a Blueprint that imported the name from `stores` directly. So the design must pick one rule and keep it consistent:
+
+- **Rule R1 (app keeps the shim):** `app.get_run_store` is `stores.get_run_store` (same function object). Any patch of `app_module.get_run_store` shadows the app-module name; app's internal calls (which look up `get_run_store` by name) pick up the patched one; a Blueprint importing from `stores` bypasses the app-module name. → function-patch tests stay on `app_module`, Blueprints that need the *patched* store must ALSO go through `app_module.get_run_store`. Not recommended (leaks semantics).
+- **Rule R2 (single seam):** migrate every one of the 9 write sites to `stores`, and never bind `app.get_run_store` as an alias — every caller (app-internal and Blueprints) does `from stores import get_run_store` and calls it by that name. Function patches then target `stores.get_run_store` uniformly. Recommended.
+
+#### Design — R2 (single seam), one branch, four green swings
+
+**Swing 1 — introduce `backend/stores.py`** (no route moves yet):
+1. Move the 3 globals + 3 locks + 3 getters from `app.py` to `stores.py`.
+2. In `app.py`: `from stores import get_run_store, get_dataset_store, get_housekeeper`; add `import stores`; add a PEP-562 `def __getattr__(name)` that resolves `_RUN_STORE` / `_DATASET_STORE` / `_HOUSEKEEPER` to the `stores` module's live values and otherwise raises `AttributeError`. Replace the raw `_RUN_STORE` read in `_execute_analysis_node` (line 3845) with `get_run_store()`.
+3. Re-point the **9 write sites** above to `stores` (5 in `conftest.client`, 1 direct, 2 `_RUN_STORE` patches, 2 `get_run_store` function patches). Every other test file is untouched (118 reads keep working via the alias + `__getattr__`).
+4. Guards: fast suite green; the isolation byte-clean check still fires; the leaked-flag/queue tripwires still fire; `test_run_races::test_a_resume_node_with_nothing_to_adopt_produces_no_rows_no_crash` and the forged-store `test_nodes_execution:745` still pass (they were the ones that caught the slice-1 under-migration).
+
+**Swing 2 — extract one thin store-backed cluster** to prove the pattern: `api/runs.py` for `/api/runs/*` (9 routes). Each route is small; only import change is `from stores import get_run_store`. URLs unchanged. Fast suite green.
+
+**Swing 3 — extract the medium clusters** one per commit: `exports`, `report`, `studio`. Each has the same `from stores import get_run_store` shape and its own green swing. If a cluster's handler reaches `execution_state` or a store getter via a `global` name still bound to `app`, the migration keeps the alias in `app` (so those lookups keep working) — do **not** rewrite handlers in the same commit.
+
+**Swing 4 — the heavy clusters**: `workflow` (13), `runs`-of-the-cookies (cookie-write cluster is the deepest — it holds `_COOKIE_JOB`, `_plant_saved_cookie_into_profile`, and calls `get_dataset_store()`). Extract last, one endpoint at a time, keeping the executor wiring intact until A-4 moves the executors themselves.
+
+#### Alternative — A-4 first, keystone second
+
+Extract the **node executors** (`_execute_*_node` in `app.py`, 11 of them) into `services/nodes.py` first, passing `get_run_store`/`get_dataset_store`/`get_housekeeper` as **arguments** (dependency injection). This removes ~1 800 lines from `app.py`, is entirely test-transparent (executors are called from the worker, not from the seam), and **shrinks the surface that the keystone then has to cover** — after which the store-registry step in Swing 1 becomes mechanical instead of entangled. Recommended ordering: **A-4 → E**.
+
+#### Rollback + risk
+
+- Each Swing-1..4 commit is revertable in isolation; only Swing 1 (the alias) has cross-file impact — keep the branch off `main` until two consecutive full-suite-green runs on the same commit.
+- Never leave a *reader* still hitting the old global: an app module alias + `__getattr__` is the safety net, but it must be the **only** name app-internal code uses; if a function ever does `global _RUN_STORE`, that call site defeats the whole design. The grep above shows only 3 `global` sites, all inside the getters being moved — so this constraint is naturally satisfied after the move.
 
 Guards: every step keeps the fast suite green **and** the `data/`/`logs/` byte-clean session-finish
 check **and** the leaked-flag/queue/store tripwires — those are exactly what catch a broken seam.
