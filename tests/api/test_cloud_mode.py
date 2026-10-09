@@ -9,6 +9,7 @@ repo keeps paying for is a run that quietly does the other thing and reports suc
 
 import os
 
+import profiles
 import pytest
 
 from config import Config
@@ -243,7 +244,7 @@ class TestThePristineTemplateOnACloudBoot:
         self, client, cloud, app_module, monkeypatch, profiles_root
     ):
         calls = []
-        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher(calls))
+        monkeypatch.setattr(profiles, 'warm_profile_dir', self._launcher(calls))
         first = client.post('/api/browser/profiles/template')
         assert first.status_code == 200, first.get_json()
         assert first.get_json()['built'] is True, first.get_json()
@@ -253,7 +254,7 @@ class TestThePristineTemplateOnACloudBoot:
 
     def test_force_rebuilds_it(self, client, cloud, app_module, monkeypatch, profiles_root):
         calls = []
-        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher(calls))
+        monkeypatch.setattr(profiles, 'warm_profile_dir', self._launcher(calls))
         client.post('/api/browser/profiles/template')
         assert client.post('/api/browser/profiles/template', json={'force': True}).status_code == 200
         assert len(calls) == 2, calls
@@ -261,7 +262,7 @@ class TestThePristineTemplateOnACloudBoot:
     def test_a_browser_that_will_not_start_is_a_502_with_its_reason(
         self, client, cloud, app_module, monkeypatch, profiles_root
     ):
-        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher([], broken=True))
+        monkeypatch.setattr(profiles, 'warm_profile_dir', self._launcher([], broken=True))
         response = client.post('/api/browser/profiles/template')
         assert response.status_code == 502, response.get_json()
         assert 'chromedriver' in response.get_json()['reason'], response.get_json()
@@ -270,7 +271,7 @@ class TestThePristineTemplateOnACloudBoot:
         self, client, cloud, app_module, monkeypatch, profiles_root
     ):
         calls = []
-        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher(calls, dirty=True))
+        monkeypatch.setattr(profiles, 'warm_profile_dir', self._launcher(calls, dirty=True))
         response = client.post('/api/browser/profiles/template')
         assert response.status_code == 502, response.get_json()
         assert 'not-pristine' in response.get_json()['reason'], response.get_json()
@@ -287,7 +288,7 @@ class TestThePristineTemplateOnACloudBoot:
         import browser_profiles
 
         calls = []
-        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher(calls))
+        monkeypatch.setattr(profiles, 'warm_profile_dir', self._launcher(calls))
         # The plant still needs a browser; record that the template was already there when
         # the account directory was made, instead of letting this test launch a Chrome.
         order = []
@@ -305,7 +306,7 @@ class TestThePristineTemplateOnACloudBoot:
     def test_the_panel_can_ask_whether_a_template_is_there(self, client, cloud, app_module, monkeypatch, profiles_root):
         body = client.get('/api/browser/profiles').get_json()
         assert body['template'] == {'exists': False, 'pristine': True}, body['template']
-        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher([]))
+        monkeypatch.setattr(profiles, 'warm_profile_dir', self._launcher([]))
         client.post('/api/browser/profiles/template')
         assert client.get('/api/browser/profiles').get_json()['template'] == {'exists': True, 'pristine': True}
 
@@ -320,7 +321,7 @@ class TestThePristineTemplateOnACloudBoot:
         """
         import sqlite3
 
-        monkeypatch.setattr(app_module, 'warm_profile_dir', self._launcher([]))
+        monkeypatch.setattr(profiles, 'warm_profile_dir', self._launcher([]))
         client.post('/api/browser/profiles/template')
         store = str(profiles_root / '_template' / 'Default' / 'Network' / 'Cookies')
         os.makedirs(os.path.dirname(store), exist_ok=True)

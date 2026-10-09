@@ -20,6 +20,7 @@ import cookie_preflight
 import crawl_gate
 import pandas as pd
 import requests
+from api.browser_profiles import bp as browser_profiles_bp
 from api.capabilities import bp as capabilities_bp
 from api.config import bp as config_bp
 from api.history import bp as history_bp
@@ -28,6 +29,7 @@ from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from profiles import ensure_profile_template
 from state import (
     _RUN_QUEUE,
     _completed_lock,
@@ -57,7 +59,7 @@ from analyzers import (
 from analyzers.llm_client import ABORT_MARK, LLMClient, LLMError, list_free_models, list_ollama_models
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
-from crawlers.base import UNDER_TARGET, CrawlerStopped, DeadDriver, PageNotArrivedError, warm_profile_dir
+from crawlers.base import UNDER_TARGET, CrawlerStopped, DeadDriver, PageNotArrivedError
 from engine.executor import TaskExecutor
 from engine.logger import setup_logger
 from engine.workflow import WorkflowEngine, effective_workflow, node_label
@@ -6940,93 +6942,12 @@ app.register_blueprint(settings_bp)
 
 
 # ─── Browser profiles API ──────────────────────────────────────
-
-_TEMPLATE_BUILD_LOCK = threading.Lock()
-
-
-def ensure_profile_template(force: bool = False) -> dict:
-    """Make the pristine device directory, unless a clean one already exists.
-
-    One process at a time, because two blank Chromes pointed at the same
-    ``user-data-dir`` is the crash the profile module documents (Chrome pre-writes that
-    directory's preference file), and the answer the second caller wants is the same
-    directory, not a second one.
-
-    An existing-but-dirty template is rebuilt rather than trusted: :func:`build_template`
-    destroys it first, because copying a directory that someone logged into would hand
-    that session to every account created afterwards — which is the one outcome this
-    feature exists to avoid.
-    """
-    with _TEMPLATE_BUILD_LOCK:
-        if browser_profiles.template_exists() and not force and not browser_profiles.verify_pristine():
-            return {'ok': True, 'built': False, 'existed': True}
-        return browser_profiles.build_template(launch=warm_profile_dir)
-
-
-@app.route('/api/browser/profiles/template', methods=['POST'])
-def build_profile_template():
-    """One blank Chrome, once, to make the directory every new account starts from.
-
-    On a cloud host this is how a device comes into the world at all: the button that
-    used to create one by logging in is not offered there. The cookie-save path calls
-    the same function by itself (see :func:`_plant_saved_cookie_into_profile`), so this
-    route exists for an operator who wants to rebuild it now — and for a machine where
-    no cookie has been pasted yet.
-    """
-    body = _json_body()
-    if body is None:
-        return _bad_body()
-    force = as_bool(body.get('force'))
-    result = ensure_profile_template(force=force)
-    # 502, not 200-with-a-lie: the directory was asked for and does not exist, and the
-    # reason (no chromedriver, Chrome refused) is what the caller has to act on.
-    return jsonify(result), (200 if result.get('ok') else 502)
-
-
-@app.route('/api/browser/profiles', methods=['GET'])
-def get_browser_profiles():
-    """One row per platform that has a login session at all.
-
-    WeChat is deliberately absent: its article bodies need no login (there is no
-    cookie row for it anywhere in this app), so a browser profile would be a
-    directory of nothing — and a row in this table reads as "you should log in here".
-
-    Three things can only be checked from the request side:
-
-    * the payload covers **every platform the cookie panel can sign into**, in matrix
-      order (a platform missing here is one whose state the user cannot see);
-    * `recommended` is read off the crawl matrix, not from a second list this endpoint
-      keeps by hand;
-    * a directory is reported as *existing* only after something created it, and as
-      *imported* only after a cookie actually went in. Those two booleans are the whole
-      guidance sentence in the panel.
-    """
-    rows = {'ok': True, 'enabled': browser_profiles.is_enabled(), 'root': browser_profiles.root_dir()}
-    # The template's own row, because "no new account can be made without it" is the
-    # thing a cloud operator needs to see before they paste a cookie. The walk is over a
-    # first-run skeleton (hundreds of files at most), not over a used profile — which is
-    # why this may check the contents while the per-account rows below pass ``size=False``.
-    rows['template'] = {
-        'exists': browser_profiles.template_exists(),
-        'pristine': not browser_profiles.find_session_material(),
-    }
-    rows['profiles'] = []
-    for cap in capabilities.CAPABILITIES:
-        platform = cap.platform
-        if not CookieManager.is_supported(platform):
-            continue
-        saved = os.path.join(Config.COOKIE_DIR, f'{platform}_cookies.json')
-        rows['profiles'].append(
-            browser_profiles.status(
-                platform,
-                recommended=cap.profile_recommended,
-                has_cookie=os.path.isfile(saved),
-                # The path, not the contents: this is what lets the panel say "the file you
-                # saved is not the session this profile holds" without reading a cookie.
-                cookie_path=saved,
-            )
-        )
-    return jsonify(rows)
+#
+# The two /api/browser/profiles routes live in api/browser_profiles.py and the shared
+# ensure_profile_template lives in profiles.py (both imported at top), so the cookie-save path
+# and the route call one function. Registered here; URLs unchanged, app-level before_request /
+# CORS still wrap them. Tests that stub the launcher now patch profiles.warm_profile_dir.
+app.register_blueprint(browser_profiles_bp)
 
 
 # ─── AI (LLM) API ──────────────────────────────────────────────
