@@ -25,6 +25,7 @@ from api.config import bp as config_bp
 from api.history import bp as history_bp
 from api.http import _bad_body, _bad_param, _json_body, _optional_float, _optional_int, _safe_float, _safe_int
 from api.llm import bp as llm_bp
+from api.locks import bp as locks_bp
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
 from flask import Flask, jsonify, request, send_from_directory
@@ -5261,34 +5262,8 @@ def exports_clear():
     return jsonify({'ok': True, 'removed': removed, 'left': left})
 
 
-@app.route('/api/locks', methods=['GET'])
-def locks_list():
-    """Every locked key per panel, so a list panel can paint its lock icons on load.
-
-    One call for all four panels rather than four: the panels open one at a time but the
-    answer is tiny, and a single source means a row cannot be locked in one view and not
-    another.
-    """
-    return jsonify({'ok': True, 'locks': lock_store.all_locks()})
-
-
-@app.route('/api/locks', methods=['POST'])
-def locks_set():
-    """Lock or unlock one entry, and return that panel's full lock list.
-
-    Locking is a UI intent with no destructive consequence, so it needs no confirm; the
-    panels optimistically flip the icon and reconcile with the returned list.
-    """
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    panel = data.get('panel')
-    key = data.get('key')
-    if panel not in lock_store.PANELS or not isinstance(key, str) or not key.strip():
-        return jsonify({'ok': False, 'error': t('lock.badKey')}), 400
-    locked = bool(data.get('locked'))
-    current = lock_store.set_locked(panel, key.strip(), locked)
-    return jsonify({'ok': True, 'panel': panel, 'key': key.strip(), 'locked': locked, 'locks': current})
+# The /api/locks GET/POST pair now lives in backend/api/locks.py (Blueprint `locks_bp`);
+# see the app.register_blueprint(locks_bp) below. Paths and behaviour are unchanged.
 
 
 # ─── One-click report ──────────────────────────────────────────
@@ -5560,6 +5535,7 @@ def report_studio_images():
 # The /api/stats/* cluster lives in api/stats.py (imported above); registered here so app-level
 # before_request / CORS still wrap it and the URLs are unchanged.
 app.register_blueprint(stats_bp)
+app.register_blueprint(locks_bp)
 
 
 # ─── Cookie API ────────────────────────────────────────────────
