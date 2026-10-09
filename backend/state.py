@@ -16,6 +16,8 @@ one of these wholesale, mutate it (``clear()``/``update()``/slice-assign) instea
 
 import threading
 
+from config import Config
+from services.cookie_manager import CookieManager
 from services.execution_history import ExecutionHistoryService
 
 #: 执行历史 service: one process-wide instance that opens ``data/history.db`` at import (the path
@@ -23,6 +25,12 @@ from services.execution_history import ExecutionHistoryService
 #: harness redirects it to a throwaway root before importing). Moved out of ``app.py`` so a
 #: Blueprint can read it without importing the whole Flask module (a cycle).
 history_service = ExecutionHistoryService()
+
+#: Cookie store: one process-wide instance over ``Config.COOKIE_DIR``. Moved out of ``app.py`` so
+#: the ``/api/capabilities`` Blueprint can extend the matrix with the live account list without
+#: importing the whole Flask module. ``app`` imports it back; a store object is only ever used,
+#: never rebound, so ``app.cookie_manager`` stays the very instance the cookies tests call through.
+cookie_manager = CookieManager(Config.COOKIE_DIR)
 
 #: Mutable per-process run state: one run in flight, its console buffer, its outcome counters
 #: and the LLM transport. Read ``stopping`` (not ``not running``) for a Stop — see app.stop_requested.
