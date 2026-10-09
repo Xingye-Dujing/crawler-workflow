@@ -422,6 +422,29 @@ class ChartConfigError(ValueError):
     """Raised when the chart spec is missing required fields for the chosen type."""
 
 
+#: The two renderers a chart may ask for. A value off this list is refused by name rather
+#: than defaulted, so the figure never silently comes from the engine the user did not pick.
+_CHART_ENGINES = ('echarts', 'matplotlib')
+
+
+def chart_engine(value) -> str:
+    """The renderer this chart asked for, refused by name when it asked for neither.
+
+    Both visualize paths branched on ``engine == 'matplotlib'`` and sent everything
+    else to the browser library, so ``'mpl'``, ``'Matplotlib'`` or a key that named no
+    renderer produced the chart the user had *not* chosen — and, unlike a bad column
+    name, no line anywhere saying the choice was not understood. The chart's own error
+    channel is ``ChartConfigError``, which the node reports as its failure reason and
+    the HTTP route as a 400.
+    """
+    name = str(value or 'echarts').strip() or 'echarts'
+    if name not in _CHART_ENGINES:
+        raise ChartConfigError(
+            t('analysis.bad_option', op='visualize', param='engine', value=name, allowed=', '.join(_CHART_ENGINES))
+        )
+    return name
+
+
 class VisualizationService:
     """Builds chart specs from a DataFrame. Stateless / reusable."""
 

@@ -87,7 +87,7 @@ from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, r
 from services.cookie_manager import CookieManager
 from services.data_analysis import LLM_OPS, DataAnalysisService, UnknownOperationError
 from services.exporter import DataExporter, UnsupportedFormatError
-from services.latex_charts import LatexChartService
+from services.latex_outputs import build_latex_outputs as _latex_outputs
 from services.nodes import execute_compile_node as _execute_compile_node
 from services.nodes import execute_name_node as _execute_name_node
 from services.nodes import execute_resume_node as _execute_resume_node
@@ -106,7 +106,7 @@ from services.run_store import (
     fingerprints_for_workflow,
     workflow_fingerprint,
 )
-from services.visualizer import ECHARTS_ONLY_TYPES, ChartConfigError, VisualizationService
+from services.visualizer import ChartConfigError, VisualizationService, chart_engine
 from services.workflow_manager import WorkflowManager
 from settings_store import get_setting
 from utils.helpers import (
@@ -2512,28 +2512,6 @@ def enum_param(op: str, params: dict, key: str) -> str:
     return value
 
 
-#: The two chart renderers a visualize node can choose.
-_CHART_ENGINES = ('echarts', 'matplotlib')
-
-
-def chart_engine(value) -> str:
-    """The renderer this chart asked for, refused by name when it asked for neither.
-
-    Both visualize paths branched on ``engine == 'matplotlib'`` and sent everything
-    else to the browser library, so ``'mpl'``, ``'Matplotlib'`` or a key that named no
-    renderer produced the chart the user had *not* chosen — and, unlike a bad column
-    name, no line anywhere saying the choice was not understood. The chart's own error
-    channel is ``ChartConfigError``, which the node reports as its failure reason and
-    the HTTP route as a 400.
-    """
-    name = str(value or 'echarts').strip() or 'echarts'
-    if name not in _CHART_ENGINES:
-        raise ChartConfigError(
-            t('analysis.bad_option', op='visualize', param='engine', value=name, allowed=', '.join(_CHART_ENGINES))
-        )
-    return name
-
-
 def sentiment_thresholds(params: dict) -> tuple:
     """The two polarity cut-offs a sentiment node asked for, refused when they overlap.
 
@@ -3458,84 +3436,6 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
         )
         add_log(line)
     return cleaned.to_dict('records')
-
-
-def _write_latex_export(base: str, content: str, suffix: str) -> str:
-    """File a LaTeX source as ``<base><suffix>.txt`` under EXPORT_DIR; return the stored name.
-
-    ``.txt`` (not ``.tex``) is deliberate — the user copies the body into their paper and a plain
-    text artifact is what the exports browser and download route already serve without a new type.
-    """
-    name = sanitize_filename(f'{base or "chart"}{suffix}.txt')
-    os.makedirs(Config.EXPORT_DIR, exist_ok=True)
-    with open(os.path.join(Config.EXPORT_DIR, name), 'w', encoding='utf-8') as handle:
-        handle.write(content)
-    return name
-
-
-def _latex_outputs(
-    df,
-    *,
-    chart_type,
-    x_field,
-    y_field,
-    value_field,
-    agg,
-    y2_field,
-    agg2_field,
-    label_field,
-    stack_fields,
-    title,
-    tokenize,
-    emit_latex,
-    emit_latex_table,
-    base_name,
-    log,
-) -> dict:
-    """Generate the optional LaTeX figure / three-line table; never touch the chart on failure.
-
-    Both are add-ons to a visualize node: a broken TikZ branch must not drop the figure the node
-    already drew or fail the run, so any error is recorded as ``latex_error`` / ``latex_table_error``
-    and named on the console once (in a real run, not a transient preview).
-    """
-    out: dict = {}
-    if chart_type in ECHARTS_ONLY_TYPES:
-        # An echarts-only figure (wordcloud/sankey/网络图/模型一致率…) has no LaTeX twin by
-        # design; emitting would record a spurious latex_error for a chart that rendered fine.
-        return {}
-    common = dict(
-        x=x_field,
-        y=y_field,
-        value_field=value_field,
-        agg=agg,
-        label_field=label_field,
-        stack_fields=stack_fields,
-        title=title,
-        tokenize=tokenize,
-    )
-    if as_bool(emit_latex):
-        try:
-            tex = LatexChartService.to_latex_document(df, chart_type, y2=y2_field, agg2=agg2_field, **common)
-            name = _write_latex_export(base_name, tex, '')
-            out['latex'] = tex
-            out['latex_file'] = name
-            if log:
-                add_log(t('latex.done', file=name))
-        except Exception as exc:  # a LaTeX defect must not sink the chart — record and name it
-            out['latex_error'] = str(exc)
-            logger.warning(t('latex.failed', reason=str(exc)))
-    if as_bool(emit_latex_table):
-        try:
-            tex = LatexChartService.to_latex_table(df, chart_type, y2=y2_field, **common)
-            name = _write_latex_export(base_name, tex, '-表')
-            out['latex_table'] = tex
-            out['latex_table_file'] = name
-            if log:
-                add_log(t('latex.table_done', file=name))
-        except Exception as exc:
-            out['latex_table_error'] = str(exc)
-            logger.warning(t('latex.failed', reason=str(exc)))
-    return out
 
 
 def _execute_visualize_node(node: dict, current_input: list):
