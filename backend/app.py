@@ -22,9 +22,10 @@ import pandas as pd
 import requests
 from api.history import bp as history_bp
 from api.http import _bad_body, _json_body, _safe_int
+from api.stats import bp as stats_bp
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from state import _RUN_QUEUE, _dataset_cache, execution_state, history_service
+from state import _RUN_QUEUE, _completed_lock, _dataset_cache, _results_snapshot, execution_state, history_service
 
 import crawl_capabilities as capabilities
 from analyzers import (
@@ -505,7 +506,7 @@ def _tokenize_dataframe(df: pd.DataFrame, params: dict) -> pd.DataFrame | None:
 # The run's mutable state lives in `backend/state.py` (imported above) so the HTTP layer and
 # the test harness share ONE object; it is mutated in place and never rebound. `state`
 # carries the field-by-field comments; see docs/ARCHITECTURE.md (Refactor step A).
-_completed_lock = threading.Lock()
+# _completed_lock lives in state.py (imported above) so the snapshot readers share one lock.
 _execute_lock = threading.Lock()  # serializes the guard-and-claim of a new run
 
 
@@ -605,19 +606,8 @@ def _window_for_save(wf_idx) -> tuple:
     return found[0], ''
 
 
-def _results_snapshot() -> dict:
-    """A private copy of ``execution_state['results']``, taken under its lock.
-
-    The run publishes a node's rows the moment that node finishes (see the
-    ``publish`` callback in ``_llm_run_ctx``), so any read-only endpoint that
-    *iterated* the live dict — ``.items()``, ``.keys()`` — could be stepping
-    through it while that thread added the next node. Python then aborts the
-    request with "RuntimeError: dictionary changed size during iteration".
-    Copying under the same lock the writer holds is the cheap fix: the endpoint
-    walks a stable snapshot and the run never has to wait for a status poll.
-    """
-    with _completed_lock:
-        return dict(execution_state['results'])
+# _results_snapshot lives in state.py (imported above) so a read-only Blueprint can take a
+# stable copy of execution_state['results'] without importing the whole Flask module.
 
 
 # ─── Durable run state ──────────────────────────────────────────
@@ -5961,40 +5951,9 @@ def report_studio_images():
 # ─── Stats API ─────────────────────────────────────────────────
 
 
-@app.route('/api/stats/emotion', methods=['GET'])
-def emotion_stats():
-    all_data = []
-    # The snapshot is the point: these three routes can be polled *during* a run,
-    # and iterating the live results dict while the worker publishes the next
-    # node aborted the request with "dictionary changed size during iteration".
-    for _nid, data in _results_snapshot().items():
-        if isinstance(data, list):
-            for item in data:
-                if 'emotion' in item:
-                    all_data.append(item)
-    stats_data = StatsService.emotion_distribution(all_data)
-    return jsonify({'ok': True, 'stats': stats_data})
-
-
-@app.route('/api/stats/tendency', methods=['GET'])
-def tendency_stats():
-    all_data = []
-    for _nid, data in _results_snapshot().items():
-        if isinstance(data, list):
-            for item in data:
-                if 'tendency' in item:
-                    all_data.append(item)
-    stats_data = StatsService.tendency_distribution(all_data)
-    return jsonify({'ok': True, 'stats': stats_data})
-
-
-@app.route('/api/stats/summary', methods=['GET'])
-def platform_summary():
-    summary = {}
-    for nid, data in _results_snapshot().items():
-        if isinstance(data, list) and data:
-            summary[nid] = {'count': len(data), 'sample_keys': list(data[0].keys()) if data else []}
-    return jsonify({'ok': True, 'summary': summary})
+# The /api/stats/* cluster lives in api/stats.py (imported above); registered here so app-level
+# before_request / CORS still wrap it and the URLs are unchanged.
+app.register_blueprint(stats_bp)
 
 
 # ─── Cookie API ────────────────────────────────────────────────

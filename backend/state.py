@@ -98,3 +98,23 @@ _RUN_QUEUE: list = []
 #: registered days ago still resolves even after this empties; entries are inserted, popped
 #: and `.clear()`-ed in place.
 _dataset_cache: dict = {}
+
+#: Guards every reader and writer of ``execution_state`` (the console buffers and ``results``).
+#: A Lock is only ever acquired, never rebound, so ``app.py`` imports it back and its many
+#: ``with _completed_lock:`` sites keep sharing the exact object the snapshot below takes.
+#: It lives here (not ``app.py``) so a read-only Blueprint can use ``_results_snapshot`` without
+#: importing the whole Flask module (a cycle).
+_completed_lock = threading.Lock()
+
+
+def _results_snapshot() -> dict:
+    """A private copy of ``execution_state['results']``, taken under ``_completed_lock``.
+
+    The run publishes a node's rows the moment that node finishes, so any read-only endpoint
+    that *iterated* the live dict — ``.items()``, ``.keys()`` — could be stepping through it
+    while that thread added the next node (``RuntimeError: dictionary changed size during
+    iteration``). Copying under the same lock the writer holds is the cheap fix: the endpoint
+    walks a stable snapshot and the run never has to wait for a status poll.
+    """
+    with _completed_lock:
+        return dict(execution_state['results'])
