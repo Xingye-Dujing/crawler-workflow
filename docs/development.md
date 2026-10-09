@@ -9,11 +9,35 @@
 ```
 crawler_workflow/
 ├── backend/
-│   ├── app.py                    # Flask 主入口（路由 + 执行编排）
+│   ├── app.py                    # 引导（Flask 初始化 + 注册各 blueprint）+ 剩余 35 条路由 + 工作流节点执行编排
 │   ├── config.py                 # 配置与数据路径
 │   ├── i18n.py                   # zh/en 消息目录（X-Lang 请求头切换）
 │   ├── settings_store.py         # 运行时可改设置（data/settings.json）
 │   ├── crawl_capabilities.py     # 采集矩阵：平台 × 模式 × 字段 × handler（校验、执行、前端面板的唯一口径）
+│   ├── state.py                  # 进程内运行态与 console 缓冲（execution_state/_RUN_QUEUE/_results_snapshot/add_log…），app 与 tests/conftest 共引
+│   ├── stores.py                 # 存储登记处：run/dataset/housekeeper 单例与惰性 getter + 数据集缓存簇
+│   ├── transport.py              # Ollama/OpenRouter 传输选择与「本机端口没人听」拒绝
+│   ├── profiles.py               # Chrome profile 模板与登录副本（Cookie 播种）
+│   ├── browser_profiles.py       # 各平台登录 profile 根与「这个抓取有没有登录」判定
+│   ├── cookie_preflight.py       # 运行前 Cookie 预检：哪些模式需要登录态
+│   ├── crawl_gate.py             # 采集前置闸门（登录墙/风控判定入口）
+│   ├── api/                      # Flask Blueprint：按域拆出的路由簇（14 个已注册 + 2 个共享工具）
+│   │   ├── http.py               # 共享请求工具（_json_body/_bad_body/_safe_int/_bad_param 等）
+│   │   ├── resolution.py         # 数据帧解析（_resolve_dataframe/_resolve_payload_dataframe/NoRunDataError）
+│   │   ├── analysis.py           # /api/analysis/{run,train}（含 ML 训练常量）
+│   │   ├── browser_profiles.py   # /api/browser-profiles/*
+│   │   ├── capabilities.py       # /api/capabilities（采集面板的字段口径）
+│   │   ├── config.py             # /api/config/*（设置 + 已注册 BERT 模型表 /api/models）
+│   │   ├── data.py               # /api/data/*（上传/粘贴/预览/删除数据集）
+│   │   ├── exports.py            # /api/export/save + /api/exports/{list,download,delete,clear}
+│   │   ├── history.py            # /api/history/*（执行历史与趋势）
+│   │   ├── llm.py                # /api/llm/*（模型测试/补全）
+│   │   ├── locks.py              # /api/locks（导出产物钉住台账）
+│   │   ├── report.py             # /api/report/{generate,view,pdf,studio-images}
+│   │   ├── settings.py           # /api/settings/*
+│   │   ├── stats.py              # /api/stats/*（情感/倾向性统计）
+│   │   ├── studio.py             # /api/studio/*（Chart Studio 数据源与存图）
+│   │   └── visualize.py          # /api/visualize/render（独立出图，与 Visualize 节点共用 services 网）
 │   ├── crawlers/                 # 爬虫模块
 │   │   ├── base.py               # 爬虫基类（登录墙判定、Cookie 播种、流式落盘）
 │   │   ├── zhihu.py              # 知乎爬虫
@@ -74,6 +98,11 @@ crawler_workflow/
 │   │   ├── visualizer.py         # 通用可视化服务（Visualize 节点）
 │   │   ├── latex_charts.py       # 图表 → 可编译 LaTeX 图 / booktabs 三线表源码
 │   │   ├── latex_compile.py      # 用本机 MiKTeX xelatex 把 LaTeX 合成为一份并编译成 PDF（编译节点 / 输出 PDF）
+│   │   ├── latex_outputs.py      # Visualize 节点与 /api/visualize/render 共用的 TikZ 图 / 三线表产出网
+│   │   ├── nodes.py              # 从 app 抽出的节点执行器（name/compile/tokenize/resume/upload，别名回接 _execute_*_node）
+│   │   ├── text_dedupe.py        # 爬取文本的归一化与近重复检测（SimHash「近重复去重」步骤）
+│   │   ├── lock_store.py         # 面板条目的逐项钉住锁：导出产物 / 运行记录 / 历史 / 工作流文件（抗批量清空与单删）
+│   │   ├── net_probe.py          # 分网探测：把「够不到站点」与「站点只是慢」分开，别误判成抓取失败
 │   │   └── execution_history.py  # 执行历史记录（history.db）
 │   ├── utils/
 │   │   └── helpers.py            # 工具函数
