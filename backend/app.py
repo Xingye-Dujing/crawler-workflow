@@ -74,6 +74,7 @@ from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD,
 from services.exporter import DataExporter, UnsupportedFormatError
 from services.housekeeping import Housekeeping
 from services.latex_charts import LatexChartService
+from services.nodes import execute_name_node as _execute_name_node
 from services.run_store import (
     NODE_DONE,
     NODE_FAILED,
@@ -4672,14 +4673,6 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
         return result, NODE_PARTIAL
     store.finish_node(run_id, nid, NODE_DONE)
     return result, NODE_DONE
-
-
-def _execute_name_node(node: dict) -> list:
-    """The name node is metadata, not data: its label was already lifted into
-    ``workflow_name`` before the run started (so the history panel can group by
-    it). It produces no rows — downstream source/upload nodes read nothing
-    from their inputs, which is exactly why the node must connect to one."""
-    return []
 
 
 def _execute_node(
