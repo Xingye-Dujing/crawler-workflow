@@ -10,8 +10,17 @@ __pycache__/
 data/*
 !data/workflows/
 !data/workflows/**
+# The fine-tuned model registry is a name→relative-path map the model picker and docs cite;
+# tiny, no secrets — version it so others get the same display names.
+!data/model_registry.json
 logs/
 .pylintrc
+# backend/test_*.py are one-off measurement PROBES, kept out of git ON PURPOSE: ruff respects
+# .gitignore when discovering files, so tracking them would pull 125 never-authored-for-lint
+# throwaway scripts into CI's `ruff check backend/` and turn it red. The clean fix (move them to
+# scripts/probes/, out of that scope) is blocked because they rely on backend/ being the sys.path
+# root and don't self-locate it — so a move needs a per-file path shim first. Until that cleanup,
+# they stay ignored; the numbers they produced are cited in docs/crawler_notes.md & why_finetuned_bert.md.
 backend/test_*.py
 .qoder/settings.local.json
 .qoder/sessions/
@@ -19,7 +28,12 @@ backend/test_*.py
 htmlcov/
 
 scratchpad/
-ml_train/
+# ml_train holds the fine-tuning workspace. Keep the big/private subdirs out (datasets = crawled
+# social content, models = 1.6G weights, logs), but VERSION the scripts + dir-map README so every
+# cited accuracy/F1 has its producing code in the repo. These scripts self-locate their sys.path.
+ml_train/*
+!ml_train/scripts/
+!ml_train/README.md
 # Project-local pip download cache + build temp (kept off the C: drive on purpose).
 .pip-cache/
 .tmp/

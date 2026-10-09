@@ -1,0 +1,22 @@
+[
+  {
+    "name": "网暴模型（立场·六类·推荐）",
+    "path": "ml_train/models/tendency_stance_v2_cyberbully",
+    "desc": "网络暴力事件立场六分类：chinese-roberta-wwm-ext + 类权重 + 网暴真实语料 + 自训练。旧名 bert_tendency_v2_model。倾向/tendency 节点 bert 模式首选。"
+  },
+  {
+    "name": "立场倾向模型 v1（蒸馏基线）",
+    "path": "ml_train/models/tendency_stance_v1",
+    "desc": "仅 LLM 蒸馏语料训练的六类立场基线。旧名 bert_tendency_model。与网暴模型互斥对照用。"
+  },
+  {
+    "name": "情绪六类模型（SMP2020-EWECT）",
+    "path": "ml_train/models/emotion_ewect_six",
+    "desc": "Anger/Fear/Joy/Neutral/Sadness/Surprise 六类情绪。旧名 bert_emotion_model。情绪/emotion 节点 bert 模式用。"
+  },
+  {
+    "name": "情感极性模型（正负二分类）",
+    "path": "ml_train/models/sentiment_weibosenti_bin",
+    "desc": "正面/负面二分类，中性带交给阈值。旧名 bert_sentiment_model。情感/sentiment 节点 bert 模式用。"
+  }
+]
