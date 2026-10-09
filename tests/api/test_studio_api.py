@@ -198,8 +198,10 @@ class TestStudioSaveImage:
         assert response.status_code == 400
         assert 'Could not parse' in response.get_json()['error']
 
-    def test_an_oversized_image_is_refused(self, client, app_module, monkeypatch):
-        monkeypatch.setattr(app_module, 'MAX_IMAGE_BYTES', 8)
+    def test_an_oversized_image_is_refused(self, client, monkeypatch):
+        import api.studio
+
+        monkeypatch.setattr(api.studio, 'MAX_IMAGE_BYTES', 8)
         response = client.post('/api/studio/save-image', json={'image': PNG_DATA_URL})
         assert response.status_code == 400
         assert 'image too large' in response.get_json()['error']
