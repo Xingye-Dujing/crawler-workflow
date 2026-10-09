@@ -22,6 +22,7 @@ import pandas as pd
 import requests
 from api.history import bp as history_bp
 from api.http import _bad_body, _json_body, _safe_int
+from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -76,7 +77,7 @@ from services.run_store import (
 )
 from services.visualizer import ECHARTS_ONLY_TYPES, ChartConfigError, VisualizationService
 from services.workflow_manager import WorkflowManager
-from settings_store import all_settings, get_setting, save_settings
+from settings_store import get_setting
 from utils.helpers import (
     as_bool,
     comment_platforms,
@@ -7003,19 +7004,9 @@ def get_capabilities():
 # on the next execution without restarting the server.
 
 
-@app.route('/api/settings', methods=['GET'])
-def get_runtime_settings():
-    return jsonify({'ok': True, 'settings': all_settings()})
-
-
-@app.route('/api/settings', methods=['POST'])
-def set_runtime_settings():
-    data = _json_body()
-    if data is None:
-        return _bad_body()
-    patch = data.get('settings') if isinstance(data.get('settings'), dict) else data
-    values, warnings = save_settings(patch or {})
-    return jsonify({'ok': True, 'settings': values, 'warnings': warnings})
+# The /api/settings cluster lives in api/settings.py (imported above); registered here so
+# app-level before_request / CORS still wrap it and the URL is unchanged.
+app.register_blueprint(settings_bp)
 
 
 # ─── Browser profiles API ──────────────────────────────────────
