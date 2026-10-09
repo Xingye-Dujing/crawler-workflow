@@ -15,6 +15,7 @@ one of these wholesale, mutate it (``clear()``/``update()``/slice-assign) instea
 """
 
 import threading
+import time
 
 from config import Config
 from services.cookie_manager import CookieManager
@@ -126,3 +127,100 @@ def _results_snapshot() -> dict:
     """
     with _completed_lock:
         return dict(execution_state['results'])
+
+
+# ─── Console buffer ───
+# Every message that reaches the console is i18n.t(key, **params) — add_log, logging, and
+# print() all funnel through the two writers below. They live here (not ``app.py``) so the
+# executor modules under ``services/`` can log without importing the Flask module (a cycle),
+# which is what unblocks moving ``_execute_*_node`` out of ``app.py``.
+
+#: Thread-local storage: tracks which workflow index the current thread belongs to, so
+#: ``_push_log`` routes lines into the right per-workflow buffer (``_wf_logs[wf_idx]``) in
+#: parallel mode. A worker thread sets ``app._wf_local.idx``; ``app`` imports this object back
+#: and never rebinds it, so the same thread's ``_push_log`` reads the value it just wrote.
+_wf_local = threading.local()
+
+#: Console lines kept in memory. The frontend only ever renders the last 200, but the total
+#: count has to keep growing so the browser can tell how many it has not seen yet (see
+#: ``_push_log``). ``app.py`` imports this back for its ``_status_tail`` clamp.
+LOG_KEEP = 5000
+
+
+def _push_log(line: str, wf_idx: int = None):
+    """Append one console line, keeping the buffer bounded.
+
+    ``_log_total`` counts every line ever produced, not the number retained: the
+    status endpoint ships only the tail, so without a running total the browser
+    cannot work out the delta and the console silently freezes at 200 lines.
+
+    A payload carrying newlines is split into one entry per physical line. A
+    driver's ``Message: …`` block, a site's own multi-line refusal and a
+    ``logger.exception`` traceback all arrived as a SINGLE entry, which the browser
+    counts as one line while the DOM renders several (``.console-line`` is
+    ``white-space: pre-wrap``) — the delta cursor then skipped or repeated real
+    content, blank lines came back through this path after the logger handler
+    filtered them, and the 200-line tail could be spent by one traceback.
+    """
+    idx = wf_idx if wf_idx is not None else getattr(_wf_local, 'idx', None)
+    parts = [part for part in line.splitlines() if part.strip()]
+    if not parts:
+        return
+    # _completed_lock now guards every reader of the console buffers (status
+    # endpoint snapshots them), so the writers hold it too.
+    with _completed_lock:
+        logs = execution_state['logs']
+        logs.extend(parts)
+        if len(logs) > LOG_KEEP:
+            del logs[:-LOG_KEEP]
+        # The total moves by the number of LINES appended, not by the number of
+        # add_log calls — that total is what the browser's delta cursor reads.
+        execution_state['_log_total'] += len(parts)
+        if idx is not None:
+            buf = execution_state['_wf_logs'].setdefault(idx, [])
+            buf.extend(parts)
+            if len(buf) > LOG_KEEP:
+                del buf[:-LOG_KEEP]
+            execution_state['_wf_log_total'][idx] = execution_state['_wf_log_total'].get(idx, 0) + len(parts)
+
+
+def add_log(msg: str, wf_idx: int = None):
+    if not str(msg or '').strip():
+        # A blank console row is noise the logger path already filters; stamping it
+        # would turn ``''`` into a line carrying nothing but a clock.
+        return
+    _push_log(f'[{time.strftime("%H:%M:%S")}] {msg}', wf_idx)
+
+
+def _console_baseline() -> dict:
+    """The console and the progress counters, in their between-runs state.
+
+    A factory, not a constant: every value here is mutable-or-counted and must be
+    fresh each time, or two runs would append into one shared list.
+    """
+    return {
+        'logs': [],
+        '_log_total': 0,
+        '_wf_logs': {},
+        '_wf_log_total': {},
+        '_wf_names': {},
+        # A new run must not name its files after the window the last one walked.
+        '_time_windows': {},
+        'total_nodes': 0,
+        'completed_nodes': 0,
+        'skipped_nodes': 0,
+        'failed_nodes': 0,
+    }
+
+
+def reset_console_state() -> None:
+    """Put the console and the progress counters back to their between-runs state.
+
+    One answer for two callers. The run start needs it so a new console never
+    inherits the previous run's lines; the test suite needs it because a test can
+    reach ``_execute_source_node`` directly — no HTTP request, so no run start —
+    and still write narration into the very buffer the next test asserts on. When
+    that reset was inline, one crawl-matrix test leaked 25 lines three files
+    downstream, where they read as a run nobody had started.
+    """
+    execution_state.update(_console_baseline())

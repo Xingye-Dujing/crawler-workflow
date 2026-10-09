@@ -171,8 +171,13 @@ class TestConsoleReset:
     def test_the_baseline_names_only_keys_the_state_actually_has(self, console):
         """A key renamed on the dict and not here would silently stop being reset —
         the stale value would then outlive every run in the session."""
-        app = console[0]
-        missing = [key for key in app._console_baseline() if key not in app.execution_state]
+        # Both the baseline factory and the dict it names now live in ``state`` (the
+        # console subsystem moved out of ``app`` so the services/ executors can log
+        # without a Flask import cycle). A function-scope import — the file's own
+        # hygiene rule allows this, it only bans a module-level one.
+        import state
+
+        missing = [key for key in state._console_baseline() if key not in state.execution_state]
         assert missing == []
 
     def test_app_py_empties_the_console_in_exactly_one_place(self, console):
