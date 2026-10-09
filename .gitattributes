@@ -1,0 +1,31 @@
+# Normalize line endings to LF in both the repo and the working tree.
+#
+# On Windows (core.autocrlf) git kept rewriting the working copy to CRLF, which made
+# every `git add` print a "LF will be replaced by CRLF" warning and produced phantom
+# whitespace diffs. Pinning `eol=lf` stops that at the source; it is content-neutral
+# (the repo already stores LF) and applies progressively to files as they are touched.
+* text=auto eol=lf
+
+# Shell scripts must keep LF even on a Windows checkout — CRLF breaks a `#!/bin/sh` shebang.
+*.sh   text eol=lf
+*.bash text eol=lf
+*.bat  text eol=crlf
+
+# Never run text conversion over binaries: a CRLF rewrite would corrupt them.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.webp   binary
+*.pdf    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
+*.db     binary
+*.sqlite binary
+*.sqlite3 binary
+*.zip    binary
+*.gz     binary
+*.whl    binary

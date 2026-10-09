@@ -116,6 +116,7 @@ CSV/TSV/JSON/TXT/Excel，配好字段后点 Preview Chart 即可，不必跑整�
 
 | 文件 | 里面是什么 |
 |---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **代码结构地图**：后端/前端各模块、两个大文件的耦合约束、以及分步（每步过测试）的重构路线 |
 | [`docs/collection.md`](docs/collection.md) | 各平台采集的内容、字段、模式、选项与上限（面向使用者） |
 | [`docs/analysis.md`](docs/analysis.md) | AI 分析 · 数据处理 · 可视化 的完整细节 |
 | [`docs/workflow.md`](docs/workflow.md) | 工作流引擎 · 断点续跑 · 界面 · 节点类型 |
