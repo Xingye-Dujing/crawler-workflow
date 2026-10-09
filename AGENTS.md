@@ -63,7 +63,8 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   invisible to them); close file responses after reading; never let a cookie-save open a **real Chrome inside the
   fast tier** (the plant swallowed a socket failure, answered 「种入失败」, left a `UserWarning`). A no-browser test
   says so (`profiles_off` in `tests/api/conftest.py`); a dependency leaking its own handle is reported to the user,
-  not filtered.
+  not filtered. One not ours, left visible (never filtered): jieba 0.42.1 (final) imports deprecated `pkg_resources` →
+  one `DeprecationWarning` (`jieba_fast` too); see `docs/development.md`.
 - **A stateful rule needs a stateless suite.** The suite shares ONE cookie directory, so `quiet_jar`
   (`tests/conftest.py`) snapshots and restores it per test — a login another test saved is a precondition this one
   never set up, and "is this cookie here?" passes for the wrong reason when inherited. A test that starts a crawl

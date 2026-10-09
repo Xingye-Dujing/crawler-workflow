@@ -229,3 +229,24 @@ python -m pytest -q --cov=backend --cov-report=term
 
 修改代码后的完整验证流程见 `AGENTS.md` 的 "Change workflow"。全平台真机验收的用例矩阵、数量不达标的
 代码级嫌疑清单与运行手册见 `docs/live_test_plan.md`。
+
+## 已知的一个第三方警告（保持可见，绝不过滤）
+
+`AGENTS.md` 定「警告是测到了却没挂的测试——修它测到的东西，绝不消音」，`pytest.ini` 里没有 `filterwarnings`。
+快速套件目前始终恰好打印 **一个** `DeprecationWarning`：
+
+```
+.venv/.../jieba/_compat.py:18: DeprecationWarning: pkg_resources is deprecated as an API
+```
+
+- **出处不在本仓库代码**：`jieba/__init__ → _compat → import pkg_resources`（`_compat.py:18`），而 setuptools ≥74
+  一 `import pkg_resources` 就发这条 DeprecationWarning。本仓库自身代码零警告（5881 用例只此一条，且全属外部）。
+- **无法靠升级消除**：jieba 最新版即 0.42.1（已停更，PyPI 无更新版本），其 import 改不掉。
+- **实测「换 jieba_fast」不成立**：jieba_fast 0.53 的 `jieba_fast/_compat.py:6` 同样 `import pkg_resources`，照发此警告；
+  且它并非完全等价替身——`cut_for_search` 与 jieba 结果不同（lcut/extract_tags/textrank/posseg 相同）。
+- **清零只剩两条都不划算的路**：①换掉整个分词器（非 jieba 血缘，分词结果会变，tokenize/关键词/词云/聚类/LDA
+  一切派生数字与列契约都要重新推导核验）；②把 setuptools 钉到 <74（本质是把一条正当的前瞻性弃用警告压下去，
+  属「消音」，违反仓库规则）。
+
+结论：这条警告在 jieba 血缘内不可消除、又非本仓库代码，按「报告、不过滤」处理——保留可见，仅在此记明来历，
+既不写 `filterwarnings`，也不为此改动产品行为。将来若真替换分词器，须连同所有分词派生量一并重验，再删本节。
