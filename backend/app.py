@@ -44,6 +44,7 @@ from state import (
     history_service,
     reset_console_state,
 )
+from stores import _DATASET_LOCK, get_dataset_store, get_housekeeper, get_run_store
 from transport import _local_transport_refusal
 
 import crawl_capabilities as capabilities
@@ -75,9 +76,8 @@ from services import net_probe as network_probe
 from services.cookie_flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
 from services.cookie_manager import CookieManager
 from services.data_analysis import LLM_OPS, DataAnalysisService, UnknownOperationError
-from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD, DatasetStore
+from services.dataset_store import SOURCE_ANALYSIS, SOURCE_PASTE, SOURCE_UPLOAD
 from services.exporter import DataExporter, UnsupportedFormatError
-from services.housekeeping import Housekeeping
 from services.latex_charts import LatexChartService
 from services.nodes import execute_compile_node as _execute_compile_node
 from services.nodes import execute_name_node as _execute_name_node
@@ -92,7 +92,6 @@ from services.run_store import (
     RUN_FAILED,
     RUN_INTERRUPTED,
     RUN_RUNNING,
-    RunStore,
     fingerprints_for_workflow,
     workflow_fingerprint,
 )
@@ -297,18 +296,9 @@ def _apply_request_lang():
 # truth, so anything registered days ago still resolves.
 # _dataset_cache is imported from state.py (mutated in place, never rebound).
 _DATASET_CACHE_MAX = 24
-_DATASET_STORE = None
-_DATASET_LOCK = threading.Lock()
-
-
-def get_dataset_store() -> DatasetStore:
-    """The single SQLite store behind persisted files, opened on first use."""
-    global _DATASET_STORE
-    if _DATASET_STORE is None:
-        with _DATASET_LOCK:
-            if _DATASET_STORE is None:
-                _DATASET_STORE = DatasetStore()
-    return _DATASET_STORE
+# The dataset singleton, its lock and get_dataset_store() now live in backend/stores.py.
+# app imports get_dataset_store and _DATASET_LOCK back, so _cache_dataset below keeps sharing
+# the one lock the store's own lazy creation uses (the object is never rebound).
 
 
 def _cache_dataset(dataset_id: str, df: pd.DataFrame):
@@ -516,46 +506,26 @@ def _window_for_save(wf_idx) -> tuple:
 
 
 # ─── Durable run state ──────────────────────────────────────────
+# The run ledger + housekeeper singletons, their locks and get_run_store()/get_housekeeper()
+# now live in backend/stores.py (imported back near the top). They are reached here through
+# those getter names so a test that patches app.get_run_store still intercepts these calls.
 
-_RUN_STORE = None
-_RUN_STORE_LOCK = threading.Lock()
 
+def __getattr__(name):
+    """Delegate the three store singletons to ``stores`` (PEP 562 module ``__getattr__``).
 
-def get_run_store() -> RunStore:
-    """The single SQLite store behind resumable runs, opened on first use.
-
-    Deliberately lazy: at import time nothing here is ready, and anything that
-    merely imports app.py would otherwise pay for opening a connection and
-    running recovery on every start.
+    ``_RUN_STORE``/``_DATASET_STORE``/``_HOUSEKEEPER`` are no longer app globals — they are
+    rebound per test on ``stores`` by ``conftest``. ``app._RUN_STORE`` still has to answer,
+    because ~118 test reads (plus the resume/live harness) reach it as an app attribute, so
+    read it through to the live ``stores`` value. A store-object WRITE must target ``stores``
+    (see its module docstring); setting ``app._RUN_STORE`` here would shadow this delegation
+    and silently detach the reader from the injected store.
     """
-    global _RUN_STORE
-    if _RUN_STORE is None:
-        with _RUN_STORE_LOCK:
-            if _RUN_STORE is None:
-                _RUN_STORE = RunStore()
-    return _RUN_STORE
+    if name in ('_RUN_STORE', '_DATASET_STORE', '_HOUSEKEEPER'):
+        import stores
 
-
-_HOUSEKEEPER = None
-_HOUSEKEEPER_LOCK = threading.Lock()
-
-
-def get_housekeeper() -> Housekeeping:
-    """Retention sweep for run records and orphaned stored files.
-
-    Lazy for the same reason the stores are: it holds a handle on both, and
-    merely importing this module must not open a database.
-    """
-    global _HOUSEKEEPER
-    if _HOUSEKEEPER is None:
-        with _HOUSEKEEPER_LOCK:
-            if _HOUSEKEEPER is None:
-                _HOUSEKEEPER = Housekeeping(
-                    get_run_store(),
-                    get_dataset_store(),
-                    interval_seconds=max(0, int(Config.HOUSEKEEPING_INTERVAL_MINUTES)) * 60,
-                )
-    return _HOUSEKEEPER
+        return getattr(stores, name)
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
 def _as_run_ids(value) -> list[str]:
@@ -3692,7 +3662,7 @@ def _execute_analysis_node(node: dict, current_input: list, upstream: list = Non
     # The store is the run ledger's own llm_cache: a summary the model already answered for this
     # exact prompt is replayed instead of paid for again. It is passed beside ``llm`` rather than
     # through params for the same reason the client is — the run record echoes params.
-    cleaned, report = DataAnalysisService.run_pipeline(df, steps, llm=llm, cancel=cancel, store=_RUN_STORE)
+    cleaned, report = DataAnalysisService.run_pipeline(df, steps, llm=llm, cancel=cancel, store=get_run_store())
 
     for step in report:
         line = t('wf.analysis_step', op=step['op'], before=step['rows_before'], after=step['rows_after'])

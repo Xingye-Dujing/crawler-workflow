@@ -422,6 +422,9 @@ def client(app_module, data_root, request):
     independent. Requests default to ``X-Lang: en`` so message assertions do
     not depend on console language.
     """
+
+    import stores
+
     from services.dataset_store import DatasetStore
     from services.run_store import RunStore
 
@@ -451,11 +454,11 @@ def client(app_module, data_root, request):
     # but its own schema, so anything already in it means the file was shared.
     assert dataset_store.stats()['datasets'] == 0, f'{dataset_store.db_path} is not a fresh store'
     assert run_store.stats()['runs'] == 0, f'{run_store.db_path} is not a fresh store'
-    module._RUN_STORE = run_store
-    module._DATASET_STORE = dataset_store
+    stores._RUN_STORE = run_store
+    stores._DATASET_STORE = dataset_store
     # The housekeeper caches both store handles, so it has to be rebuilt
     # alongside them or a later test would sweep an already-closed database.
-    module._HOUSEKEEPER = None
+    stores._HOUSEKEEPER = None
     module._dataset_cache.clear()
     stdout_backup = sys.stdout
     # Default every request to English so message assertions don't track the
@@ -476,8 +479,8 @@ def client(app_module, data_root, request):
                 # may be inside ``execute`` on that very connection, and finalising the handle
                 # under it faults the whole test process instead of raising.
                 store.close()
-        module._RUN_STORE = None
-        module._DATASET_STORE = None
+        stores._RUN_STORE = None
+        stores._DATASET_STORE = None
 
 
 def _restore_state(state: dict, backup: dict) -> None:

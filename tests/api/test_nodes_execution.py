@@ -742,7 +742,9 @@ class TestResumeNode:
         maker.finish_run('forged-1', RUN_INTERRUPTED)
         maker._conn.close()
 
-        app_module._RUN_STORE = RunStore(db)
+        import stores
+
+        stores._RUN_STORE = RunStore(db)
         started = client.post('/api/workflow/execute', json={'workflow': lonely, 'workflow_name': 'auto-resume'})
         assert _wait(app_module)
         rows = app_module._RUN_STORE.load_rows(started.get_json()['run_id'], 'node-1')

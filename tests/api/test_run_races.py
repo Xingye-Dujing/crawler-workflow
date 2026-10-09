@@ -415,8 +415,10 @@ class TestResumeAfterInterruption:
         try:
             # Opening the store *is* the boot-time promotion (RunStore.__init__
             # calls promote_stale_runs), so the assertion is about its effect.
+            import stores
+
             restarted = RunStore(str(db_path))
-            monkeypatch.setattr(app_module, '_RUN_STORE', restarted)
+            monkeypatch.setattr(stores, '_RUN_STORE', restarted)
             assert restarted.get_run('orphan')['status'] == 'interrupted', 'a dead process record still claims to run'
             assert restarted.get_run(run_id)['status'] == 'interrupted', 'a settled run was re-labelled'
             listed = [entry['run_id'] for entry in restarted.list_resumable()]
