@@ -367,12 +367,16 @@ class TestOutline:
         assert o['disabledId'] in o['rowIds']
         assert o['offIds'] == [o['disabledId']]
 
-    def test_focusing_a_row_selects_the_node_and_moves_the_camera(self, ix):
+    def test_focusing_a_row_selects_the_node_and_zooms_in(self, ix):
+        """The jump frames the target WITH its neighbours, so it must ZOOM IN past 100% —
+        the whole reason it is not 适应 (fit-all), which shrinks every box to a thumbnail
+        once the graph is large."""
         o = ix['outline']
         assert o['focusSelected'] == 'node-2'
         assert o['focusMoved'] is True, 'a node off-screen must be brought into view'
-        assert o['focusZoomInRange'] is True
-        assert o['statusZoom'] == '100%', 'the status bar must follow the camera, like 适应'
+        assert o['focusZoomInRange'] is True, 'clamped to [50%, 150%]'
+        assert o['focusZoomPast100'] is True, 'the outline jump enlarges the node, never shrinks it'
+        assert o['statusZoom'] == f'{o["focusZoomPct"]}%', 'the status bar must follow the camera'
 
     def test_it_collapses_and_persists_like_the_palette(self, ix):
         o = ix['outline']

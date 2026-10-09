@@ -638,7 +638,10 @@ out.outline = {
     disabledId: oVis,
     focusSelected: canvas.selectedNode,
     focusMoved: panAfter.panX !== panBefore.panX || panAfter.panY !== panBefore.panY,
-    focusZoomInRange: panAfter.zoom >= 0.2 && panAfter.zoom <= 1.0,
+    focusZoomInRange: panAfter.zoom >= 0.5 && panAfter.zoom <= 1.5,
+    // The jump must ZOOM IN past 100% (the fix over the old shrink-only behaviour).
+    focusZoomPast100: panAfter.zoom > 1.0,
+    focusZoomPct: Math.round(panAfter.zoom * 100),
     statusZoom: doc.getElementById('status-zoom').textContent,
     collapsedOnce,
     collapsedTwice,

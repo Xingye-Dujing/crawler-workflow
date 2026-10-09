@@ -1315,11 +1315,14 @@ const canvas = {
         this.scheduleViewSave();
     },
 
-    /* Bring ONE node to the centre of the visible box at a readable size — the
-       outline's jump-to-node. It reuses resetView's exact framing (workspace client
-       rect, menu-height top inset, VIEW_FIT_MARGIN, "zoom only shrinks, never past
-       100%") but measures a single node's own box, so a far-off node lands dead
-       centre rather than somewhere the 适应 fit might still leave it clipped. */
+    /* Bring ONE node to the centre of the visible box and ZOOM IN enough to read it
+       with its neighbours — the outline's jump-to-node. Unlike resetView (适应), which
+       fits the WHOLE graph and so shrinks every box to a thumbnail once there are many,
+       this frames just the target plus a ring around it: the zoom window is 3× the node's
+       own size, so the node lands dead centre and one hop of neighbours stays visible. The
+       camera MAY zoom in here (past 100%) — that is the whole point — clamped to [0.5, 1.5]
+       so an extreme window can neither bury the node nor blow it into a pixel blob. It
+       still borrows resetView's viewport facts (workspace client rect, menu-height top inset, VIEW_FIT_MARGIN). */
     centerOnNode(id) {
         const el = this._nodeEl(id);
         if (!el) return;
@@ -1332,8 +1335,8 @@ const canvas = {
         const nodeH = el.offsetHeight || 80;
         const availW = Math.max(1, vw - 2 * VIEW_FIT_MARGIN);
         const availH = Math.max(1, vh - topInset - VIEW_FIT_MARGIN);
-        const fit = Math.min(availW / nodeW, availH / nodeH);
-        this.zoom = Math.max(0.2, Math.min(1, fit));
+        const fit = Math.min(availW / (nodeW * 3), availH / (nodeH * 3));
+        this.zoom = Math.max(0.5, Math.min(1.5, fit));
         const cx = el.offsetLeft + nodeW / 2;
         const cy = el.offsetTop + nodeH / 2;
         this.panX = vw / 2 - cx * this.zoom;
