@@ -90,6 +90,7 @@ from services.nodes import execute_compile_node as _execute_compile_node
 from services.nodes import execute_name_node as _execute_name_node
 from services.nodes import execute_resume_node as _execute_resume_node
 from services.nodes import execute_tokenize_node as _execute_tokenize_node
+from services.nodes import execute_upload_node as _execute_upload_node
 from services.run_store import (
     NODE_DONE,
     NODE_FAILED,
@@ -2539,52 +2540,8 @@ def _execute_source_node(node: dict, headless: bool, ctx: dict = None, upstream:
     return rows
 
 
-def _execute_upload_node(node: dict, headless: bool = True):
-    """Upload node — the one place a file can enter a workflow.
-
-    It publishes a stored file (``data/datasets.db``) as ordinary rows, so
-    every downstream node sees it exactly as it sees a crawl. That is why the
-    visualize and tokenize nodes no longer carry their own upload UI: any node
-    that needs data connects upstream, and the upstream may be a crawler or a
-    file.
-
-    The file is looked up by its id, and failing that by its *name* plus row
-    count: re-uploading after a row was lost hands back something usable
-    instead of forcing a second edit of the workflow.
-    """
-    params = node.get('params', {})
-    dataset_id = str(params.get('dataset_id') or '')
-    if not dataset_id:
-        raise ValueError(t('upload.no_file'))
-
-    df = _load_dataset(dataset_id)
-    if df is None:
-        replacement = get_dataset_store().find_replacement(
-            str(params.get('dataset_name') or ''),
-            _optional_int(params.get('row_count')),
-        )
-        if replacement:
-            df = _load_dataset(replacement)
-            if df is not None:
-                dataset_id = replacement
-                add_log(t('ds.rebound', name=params.get('dataset_name') or replacement, did=replacement))
-    if df is None:
-        # Nothing to publish, and pretending otherwise would hand downstream an
-        # empty table that looks like a successful run.
-        raise ValueError(t('upload.stale'))
-
-    stored = get_dataset_store().meta(dataset_id) or {}
-    # The name in storage is authoritative: it is the one every saved workflow
-    # knows the file by, and writing it back keeps this node's params usable as
-    # a re-binding hint later.
-    meta = {
-        'dataset_id': dataset_id,
-        'name': stored.get('name') or str(params.get('dataset_name') or '') or dataset_id,
-        'row_count': len(df),
-    }
-    _apply_dataset_meta(params, meta)
-    add_log(t('upload.loaded', name=params.get('dataset_name') or dataset_id, n=len(df)))
-    return _json_safe_records(df)
+# `_execute_upload_node` now lives in backend/services/nodes.py (execute_upload_node, imported
+# back under this name near the top); dispatch and every call site read the app-level alias.
 
 
 #: The select-shaped parameter of each analysis-algorithm node, and the spellings that

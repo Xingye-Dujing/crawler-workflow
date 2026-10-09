@@ -14,14 +14,16 @@ takes the node dict, returns no rows), so it proves the pattern with zero behavi
 """
 
 import pandas as pd
-from api.http import _safe_int
+from api.http import _optional_int, _safe_int
 from state import add_log
+from stores import _apply_dataset_meta, _load_dataset, get_dataset_store
 
 from config import Config
 from i18n import t
 from services import latex_compile
 from services.run_store import RUN_RUNNING
 from services.visualizer import VisualizationService
+from utils.helpers import json_safe_records as _json_safe_records
 
 
 def execute_name_node(node: dict) -> list:
@@ -186,3 +188,51 @@ def execute_resume_node(node: dict, ctx: dict):
         rows = rows[:limit]
     add_log(t('resume.loaded', rid=run_id, nid=_adopted_label(node_id), n=len(rows)))
     return rows
+
+
+def execute_upload_node(node: dict, headless: bool = True):
+    """Upload node — the one place a file can enter a workflow.
+
+    It publishes a stored file (``data/datasets.db``) as ordinary rows, so
+    every downstream node sees it exactly as it sees a crawl. That is why the
+    visualize and tokenize nodes no longer carry their own upload UI: any node
+    that needs data connects upstream, and the upstream may be a crawler or a
+    file.
+
+    The file is looked up by its id, and failing that by its *name* plus row
+    count: re-uploading after a row was lost hands back something usable
+    instead of forcing a second edit of the workflow.
+    """
+    params = node.get('params', {})
+    dataset_id = str(params.get('dataset_id') or '')
+    if not dataset_id:
+        raise ValueError(t('upload.no_file'))
+
+    df = _load_dataset(dataset_id)
+    if df is None:
+        replacement = get_dataset_store().find_replacement(
+            str(params.get('dataset_name') or ''),
+            _optional_int(params.get('row_count')),
+        )
+        if replacement:
+            df = _load_dataset(replacement)
+            if df is not None:
+                dataset_id = replacement
+                add_log(t('ds.rebound', name=params.get('dataset_name') or replacement, did=replacement))
+    if df is None:
+        # Nothing to publish, and pretending otherwise would hand downstream an
+        # empty table that looks like a successful run.
+        raise ValueError(t('upload.stale'))
+
+    stored = get_dataset_store().meta(dataset_id) or {}
+    # The name in storage is authoritative: it is the one every saved workflow
+    # knows the file by, and writing it back keeps this node's params usable as
+    # a re-binding hint later.
+    meta = {
+        'dataset_id': dataset_id,
+        'name': stored.get('name') or str(params.get('dataset_name') or '') or dataset_id,
+        'row_count': len(df),
+    }
+    _apply_dataset_meta(params, meta)
+    add_log(t('upload.loaded', name=params.get('dataset_name') or dataset_id, n=len(df)))
+    return _json_safe_records(df)
