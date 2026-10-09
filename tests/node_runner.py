@@ -26,7 +26,7 @@ import tempfile
 NODE = shutil.which('node')
 
 
-def run_node(script: str, *args: str, timeout: int = 90) -> subprocess.CompletedProcess:
+def run_node(script: str, *args: str, timeout: int = 90, tz: str | None = None) -> subprocess.CompletedProcess:
     """Run ``node script args...`` and return a CompletedProcess with ``stdout``.
 
     Output goes through temporary files rather than pipes (see the module
@@ -42,6 +42,9 @@ def run_node(script: str, *args: str, timeout: int = 90) -> subprocess.Completed
     err_handle, err_path = tempfile.mkstemp(suffix='.err')
     os.close(out_handle)
     os.close(err_handle)
+    # A tz-pinned child makes timezone-dependent harness assertions deterministic on any
+    # runner: Node reads TZ at process start, before the harness touches Date.
+    child_env = None if tz is None else {**os.environ, 'TZ': tz}
     try:
         with open(out_path, 'wb') as out_sink, open(err_path, 'wb') as err_sink:
             proc = subprocess.run(
@@ -49,6 +52,7 @@ def run_node(script: str, *args: str, timeout: int = 90) -> subprocess.Completed
                 stdout=out_sink,
                 stderr=err_sink,
                 timeout=timeout,
+                env=child_env,
             )
         with open(out_path, encoding='utf-8', errors='replace') as produced:
             stdout = produced.read()

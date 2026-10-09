@@ -6,7 +6,7 @@ means neither platform module re-declares them.
 """
 
 import logging
-import time
+from datetime import datetime, timedelta, timezone
 
 from i18n import t
 
@@ -16,13 +16,18 @@ from .engine import pagefetch
 logger = logging.getLogger(__name__)
 
 
+#: Chinese platforms stamp 发布时间 in Beijing time; render in that fixed zone so a crawler
+#: on a UTC cloud server does not shift every timestamp back eight hours.
+_CST = timezone(timedelta(hours=8))
+
+
 def _stamp(value) -> str:
-    """Unix seconds → the local datetime the platform shows; blank when absent."""
+    """Unix seconds → the platform's Beijing-time datetime; blank when absent."""
     try:
         seconds = int(value or 0)
     except (TypeError, ValueError):
         return ''
-    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(seconds)) if seconds else ''
+    return datetime.fromtimestamp(seconds, tz=_CST).strftime('%Y-%m-%d %H:%M:%S') if seconds else ''
 
 
 def _as_int(value) -> int:

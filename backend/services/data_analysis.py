@@ -60,6 +60,21 @@ def _to_bool(value) -> bool:
     return str(value).strip().lower() not in _FALSEY_TEXT
 
 
+def _checked_pattern(op: str, value) -> str:
+    """Return ``value`` as a regex string, refusing an invalid one BY NAME.
+
+    ``str.contains`` reads the filter value as a REGULAR EXPRESSION. An invalid
+    pattern surfaces as ``re.error`` from the object engine but a ``ValueError``
+    from the arrow engine — version-dependent — so compile it here and raise the
+    same ``ValueError`` on every engine/pandas version, never a raw ``re.error``.
+    """
+    try:
+        re.compile(str(value))
+    except re.error as exc:
+        raise ValueError(f'{op} 值 is not a valid regular expression: {exc}') from exc
+    return str(value)
+
+
 class UnknownOperationError(ValueError):
     pass
 
@@ -917,9 +932,9 @@ class DataAnalysisService:
                 'lte': numeric <= bound,
             }[op]
         elif op == 'contains':
-            mask = s.astype(str).str.contains(str(value), na=False)
+            mask = s.astype(str).str.contains(_checked_pattern(op, value), na=False)
         elif op == 'not_contains':
-            mask = ~s.astype(str).str.contains(str(value), na=False)
+            mask = ~s.astype(str).str.contains(_checked_pattern(op, value), na=False)
         elif op == 'in':
             values = value if isinstance(value, (list, tuple, set)) else [v.strip() for v in str(value).split(',')]
             mask = s.isin(values)

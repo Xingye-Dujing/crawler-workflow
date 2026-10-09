@@ -33,7 +33,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None,
 
 @pytest.fixture(scope='module')
 def rendered() -> dict:
-    proc = run_node(str(HARNESS), str(WORKFLOW_JS))
+    # The panel shows each file's mtime in the browser's local time; the assertions below
+    # read Beijing wall-clock (this is a Chinese-locale app), so pin the harness child's zone
+    # rather than bake the developer's machine TZ into the test.
+    proc = run_node(str(HARNESS), str(WORKFLOW_JS), tz='Asia/Shanghai')
     assert proc.returncode == 0, proc.stderr
     return json.loads(proc.stdout)
 

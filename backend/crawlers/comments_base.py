@@ -9,7 +9,7 @@ public surface so the rest of the program can keep importing from one place.
 
 import json
 import re
-import time
+from datetime import datetime, timedelta, timezone
 
 #: One article can fail for different reasons and they must not blur:
 #: ``ok`` (rows, maybe zero — zero means 无评论), ``blocked`` (risk-control or
@@ -37,12 +37,17 @@ def _strip_tags(html: str) -> str:
     return re.sub(r'\s+', ' ', text).strip()
 
 
+#: Comment timestamps are Beijing time too (see video_base._stamp); pinning the zone keeps a
+#: crawler on a UTC server from shifting them back eight hours.
+_CST = timezone(timedelta(hours=8))
+
+
 def _stamp(value) -> str:
     try:
         seconds = int(value or 0)
     except (TypeError, ValueError):
         return ''
-    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(seconds)) if seconds else ''
+    return datetime.fromtimestamp(seconds, tz=_CST).strftime('%Y-%m-%d %H:%M:%S') if seconds else ''
 
 
 def _query_value(url: str, name: str) -> str:

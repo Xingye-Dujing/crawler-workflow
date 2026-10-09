@@ -155,7 +155,12 @@ async function previewCase(engine) {
 async function previewNothingCase() {
     const w = world();
     const filename = await w.x.savePreviewImage();
-    await ticks();
+    /* Read the toast WITHOUT awaiting a tick: the DOM stub remaps setTimeout to 0 ms, so
+       showToast's hide is a pending macrotask. An ``await ticks()`` here drains macrotasks
+       and the hide fires first (``setImmediate`` vs ``setTimeout(0)`` order is not
+       guaranteed), making ``shown`` flip under full-suite load. The ``!dataUrl`` branch
+       toasts synchronously, so the continuation after this single ``await`` is still a
+       microtask and the ``.show`` class is provably present. */
     return { asked: saves(w).length, filename, toast: w.toast() };
 }
 
