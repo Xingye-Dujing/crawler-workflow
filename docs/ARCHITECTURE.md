@@ -94,3 +94,45 @@ over trusting prose. `AGENTS.md` is near its byte budget — trim it as evidence
 - `pytest-cov` is installed but unused; a coverage floor in CI is optional given the test count.
 - Multi-user / real job queue **only if** cloud multi-user becomes a goal; otherwise document
   single-user as an explicit non-goal (it currently is) and leave the one-server design intact.
+
+## Progress (as of the Blueprint extraction work)
+
+Step A-1 is done and went further than planned: `backend/state.py` now owns the in-place run state
+(`execution_state`, `_RUN_QUEUE`, `_dataset_cache`), the eager `history_service`/`cookie_manager`, and
+`_completed_lock` + `_results_snapshot`. Seven Blueprints live in `backend/api/`: `history`, `stats`,
+`settings`, `config`+`models`, `capabilities`, `browser_profiles` (+ shared `backend/profiles.py`),
+`llm` (+ shared `backend/transport.py`), with `api/http.py` holding the common request helpers
+(`_json_body`, `_bad_body`, `_safe_int`). `app.py` 8043 → ~7600 lines. **A finding that reshaped the
+plan:** `app.py` module globals are used as *monkeypatch seams* by the tests (e.g. `app.warm_profile_dir`,
+`app._RUN_STORE`), so each extraction that moves such a function also re-points the tests that patch it
+(done for `browser_profiles`). Every step was landed as its own full-suite-green, lint-clean commit.
+
+### E. Store-registry keystone — design (NOT yet executed; touches the isolation core)
+
+Remaining route clusters (`workflow`, `runs`, `data`, `studio`, `report`, `exports`, cookie-write) all
+read `get_run_store()`/`get_dataset_store()`, which resolve through `app`-module globals
+(`_RUN_STORE`, `_DATASET_STORE`) that `conftest.client` rebinds per test and ~30 test sites read as
+`app_module._RUN_STORE`. A Blueprint cannot own a lazy getter whose `global` write diverges from the
+conftest injection point, so these clusters stay stuck until the seam is centralised. This is the
+biggest remaining lift and edits the test-isolation core — do it deliberately, on a branch, not as a
+quick route-move swing.
+
+Design:
+1. New `backend/stores.py` owns `_RUN_STORE`/`_RUN_STORE_LOCK`/`get_run_store`,
+   `_DATASET_STORE`/`_DATASET_LOCK`/`get_dataset_store`, and `_HOUSEKEEPER`/`get_housekeeper`
+   (moved verbatim from `app.py`). Locks are only ever acquired; the store globals are rebound **only**
+   by conftest — so after the move the rebinding target and the readers must agree on `stores`.
+2. `app.py` imports the getters (`from stores import get_run_store, get_dataset_store, get_housekeeper`)
+   and replaces its one raw `_RUN_STORE` read (in `_execute_analysis_node`) with `get_run_store()`.
+3. **Centralise the injection**: `conftest.client` does `import stores` and sets
+   `stores._RUN_STORE = stores._DATASET_STORE = ...`, `stores._HOUSEKEEPER = None`. Replace the ~30
+   `app_module._RUN_STORE` / `_DATASET_STORE` test reads with a **`run_store` / `dataset_store`
+   fixture** (defined in `tests/conftest.py` or `tests/api/conftest.py`) that returns
+   `stores.get_run_store()` — one seam instead of per-test global pokes.
+4. Only then can the store-backed clusters move to `api/<cluster>.py` (importing `stores`), one per
+   green swing.
+
+Guards: every step keeps the fast suite green **and** the `data/`/`logs/` byte-clean session-finish
+check **and** the leaked-flag/queue/store tripwires — those are exactly what catch a broken seam.
+Ordering matters: create `stores.py`, re-point conftest + tests, *then* move clusters; never leave a
+module whose lazy getter and its injection target differ.
