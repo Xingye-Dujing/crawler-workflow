@@ -141,6 +141,16 @@ def split_names(value) -> list[str]:
     return [part.strip() for part in str(value or '').split(',') if part.strip()]
 
 
+def split_columns(value) -> list:
+    """The panel's ``列名`` box, read as names.
+
+    Delegates to :func:`split_names`, which the pipeline gate also uses, so a step's
+    ``columns`` cannot mean one thing to the executor and another to the check that
+    decides whether it can run.
+    """
+    return split_names(value)
+
+
 def sanitize_filename(name: str) -> str:
     """Make *name* safe to use as a single path component.
 

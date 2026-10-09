@@ -113,12 +113,14 @@ from utils.helpers import (
     export_stamp,
     platform_for,
     sanitize_filename,
-    split_names,
     split_urls,
     window_tag,
 )
 from utils.helpers import (
     json_safe_records as _json_safe_records,
+)
+from utils.helpers import (
+    split_columns as _split_columns,
 )
 
 #: The comment router's supported platforms, as raw keys. They go into a
@@ -3120,14 +3122,7 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None)
 # api.http now (imported at top); every app call site reads the app-level alias unchanged.
 
 
-def _split_columns(value) -> list:
-    """The panel's ``列名`` box, read as names.
-
-    Delegates to :func:`utils.helpers.split_names`, which the pipeline gate also uses,
-    so a step's ``columns`` cannot mean one thing to the executor and another to the
-    check that decides whether it can run.
-    """
-    return split_names(value)
+# `_split_columns` now lives in utils/helpers.py (split_columns, imported back under this name).
 
 
 def _normalize_analysis_params(op: str, params: dict) -> dict:
