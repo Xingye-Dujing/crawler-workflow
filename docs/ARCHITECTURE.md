@@ -15,12 +15,12 @@ file is about *shape*. The numbers below are measured, not estimated.
 ## Backend layout (~57k Python LOC)
 | area | contents |
 |---|---|
-| `app.py` | **8,043 LOC — the HTTP layer + the workflow node executors.** 78 `@app.route`, 0 Blueprints. |
+| `app.py` | **5,794 LOC — the remaining HTTP handlers (35 `@app.route`) + the workflow node executors.** 14 Blueprints in `backend/api/` now carry the other 43 handlers (43 + 35 = the original 78 routes; paths unchanged). |
 | `config.py` | paths, env, constants (retention/queue/preflight). |
 | `i18n.py` | 2,781-line zh/en message catalog (`t()`, `set_lang` thread-local, `audit`). |
 | `crawl_capabilities.py` | the single crawl matrix: platform × mode × field × handler. |
 | `engine/` | `workflow.py` (DAG resolve, `effective_workflow`, `node_label`), `executor.py`, `logger.py`. |
-| `services/` | `run_store`, `data_analysis` (2,931), `visualizer` (1,686), `latex_charts`/`latex_compile`, `dataset_store`, `execution_history`, `cookie_manager`/`cookie_flow`, `cookie_preflight.py` (top-level), `exporter`/`export_browser`, `report_service`, `housekeeping`, `lock_store`, `browser_profiles`, `net_probe`, `stats`, `workflow_manager`, `text_dedupe`, `part_writer`. |
+| `services/` | `run_store`, `data_analysis` (2,931), `visualizer` (owns `chart_engine`+`ChartConfigError`+`ECHARTS_ONLY_TYPES`), `latex_charts`/`latex_compile`/**`latex_outputs`** (the TikZ figure+table add-ons the render route and the visualize node share), **`nodes`** (extracted `_execute_*_node` executors), `dataset_store`, `execution_history`, `cookie_manager`/`cookie_flow`, `cookie_preflight.py` (top-level), `exporter`/`export_browser`, `report_service`, `housekeeping`, `lock_store`, `browser_profiles`, `net_probe`, `stats`, `workflow_manager`, `text_dedupe`, `part_writer`. |
 | `analyzers/` | `llm_client` (Ollama/OpenRouter), sklearn + BERT analyzers, `keyword`, `ner`, `stopwords`. |
 | `crawlers/` | `base.py` + per-platform (`weibo`/`zhihu`/`douyin`/`xiaohongshu`/`bilibili`/`twitter`/`youtube`/`wechat`/`instagram`) + `comments_*` + a site-independent `engine/`. **Well separated.** |
 | `utils/` | helpers (`as_bool`, `platform_for`, `sanitize_filename`). |
@@ -97,17 +97,25 @@ over trusting prose. `AGENTS.md` is near its byte budget — trim it as evidence
 
 ## Progress (as of the Blueprint extraction work)
 
-Step A-1 is done and went further than planned: `backend/state.py` now owns the in-place run state
-(`execution_state`, `_RUN_QUEUE`, `_dataset_cache`), the eager `history_service`/`cookie_manager`, and
-`_completed_lock` + `_results_snapshot`. Seven Blueprints live in `backend/api/`: `history`, `stats`,
-`settings`, `config`+`models`, `capabilities`, `browser_profiles` (+ shared `backend/profiles.py`),
-`llm` (+ shared `backend/transport.py`), with `api/http.py` holding the common request helpers
-(`_json_body`, `_bad_body`, `_safe_int`). `app.py` 8043 → ~7600 lines. **A finding that reshaped the
-plan:** `app.py` module globals are used as *monkeypatch seams* by the tests (e.g. `app.warm_profile_dir`,
-`app._RUN_STORE`), so each extraction that moves such a function also re-points the tests that patch it
-(done for `browser_profiles`). Every step was landed as its own full-suite-green, lint-clean commit.
+Step A-1 is done and went further than planned: `backend/state.py` owns the in-place run state
+(`execution_state`, `_RUN_QUEUE`, `_dataset_cache`, the console-buffer helpers), the eager
+`history_service`/`cookie_manager`, and `_completed_lock` + `_results_snapshot`; `backend/stores.py`
+owns the store registry (`_RUN_STORE`/`_DATASET_STORE`/`_HOUSEKEEPER` + getters, the dataset cache
+cluster). Fourteen Blueprints live in `backend/api/`: `history`, `stats`, `settings`, `config`+`models`,
+`capabilities`, `browser_profiles` (+ `backend/profiles.py`), `llm` (+ `backend/transport.py`), `locks`,
+`exports` (write `/api/export/save` + the read side), `data`, `studio`, `analysis`, `visualize`, `report`,
+with `api/http.py` (request coercions), `api/resolution.py` (`_resolve_dataframe`/`_resolve_payload_dataframe`/
+`NoRunDataError`) shared. `app.py` 8043 → **5,794 lines**. A-4 is partly landed: `services/nodes.py` holds the
+`name`/`compile`/`tokenize`/`resume`/`upload` executors (imported back as `_execute_*_node`); the executors that
+still reach a raw `app` global (`analysis`/`output`/`process`/`visualize`/`comment`/`source`) stay in `app.py`
+until their web is service-level — the visualize node's TikZ/`chart_engine` web is already in `services/`.
+**The finding that reshaped the plan** still holds: `app.py` module globals are used as *monkeypatch seams* by
+the tests (`app.warm_profile_dir`, `app._RUN_STORE`, `app._find_chrome`, `app.MAX_IMAGE_BYTES`,
+`app._ML_MODEL_TYPES`, …), so each extraction that moves such a function/name re-points the tests that patch it
+(browser_profiles, studio `MAX_IMAGE_BYTES`, analysis `_ML_*`, run-races/conftest store writes, report
+`_find_chrome`/`subprocess.run`). Every step was landed as its own full-suite-green, lint-clean commit.
 
-### E. Store-registry keystone — design (NOT yet executed; touches the isolation core)
+### E. Store-registry keystone — design (EXECUTED: `backend/stores.py` now owns the registry; kept here as the design record)
 
 #### Seam census (measured against the current tests, 2026-10-09)
 
