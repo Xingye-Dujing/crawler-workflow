@@ -1372,6 +1372,7 @@ body.style-menu-open #workspace #resume-banner {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  border-radius: var(--radius);
 }
 .outline-row:hover {
   background: var(--hover);

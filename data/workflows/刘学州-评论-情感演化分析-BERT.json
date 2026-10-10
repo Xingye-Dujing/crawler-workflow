@@ -7,7 +7,7 @@
       "params": {
         "enabled": true,
         "filename": "刘学州-评论-合并.csv",
-        "filename_timestamp": false,
+        "filename_timestamp": true,
         "format": "csv",
         "operation": "save"
       },
