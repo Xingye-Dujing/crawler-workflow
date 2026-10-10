@@ -351,7 +351,12 @@ sandbox.__responses['/api/cookies/save'] = {
     count: 1,
     profile_note: 'DEFERRED-PROFILE',
 };
-sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: {}, accounts: { weibo: ['work'] } };
+sandbox.__responses['/api/cookies/status'] = {
+    ok: true,
+    cookies: { weibo: true },
+    accounts: { weibo: ['work'] },
+    rows: [{ platform: 'weibo', account: 'work', entries: 21, saved_at: '2026-10-10 12:00', label_key: null, label_args: null }],
+};
 sandbox.__toasts.length = 0;
 before = sandbox.__calls.length;
 const beforeFetchSave = sandbox.__fetches.length;
@@ -364,6 +369,7 @@ out.savePlants = {
         .filter((call) => call.url === '/api/cookies/save' && call.opts && call.opts.body)
         .map((call) => JSON.parse(call.opts.body)),
     statusText: doc.getElementById('cookie-status').textContent,
+    accountLine: doc.getElementById('cookie-account-status').textContent,
     toasts: sandbox.__toasts.slice(),
     // Even when the profile plant is deferred, the login is on disk now — the account box
     // must offer it without a reload, so /api/capabilities is re-read on this branch too.

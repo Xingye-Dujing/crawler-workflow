@@ -5439,18 +5439,21 @@ function renderCookieGuide() {
     }
 }
 
-function refreshCookieStatus() {
+function refreshCookieStatus(updateSummary) {
     fetchJSON('/api/cookies/status').then(function (result) {
         var statusEl = document.getElementById('cookie-status');
         if (!statusEl || cookieJob.active) return;
         if (!result.ok) {
-            statusEl.textContent = I18n.t('cookie.unreachable');
+            if (updateSummary !== false) statusEl.textContent = I18n.t('cookie.unreachable');
             return;
         }
         /* One read, four renderers. The rows answer per (platform, account), and the
            account line has to repaint on every keystroke in the box — refetching for a
            character typed would make the panel ask the server eight file listings per
-           name. */
+           name. `updateSummary === false` still refreshes rows + the account renderers,
+           but leaves the #cookie-status sentence the caller just wrote (a save/plant note)
+           standing — used right after 保存 so the account line stops saying 「还没有保存过」
+           while that note says it is saved. */
         cookieRows = result.rows || [];
         var lines = [];
         Object.keys(result.cookies).forEach(function (p) {
@@ -5474,7 +5477,11 @@ function refreshCookieStatus() {
                 I18n.t('platform.' + p) + tag + ': ' + I18n.t(saved ? 'cookie.savedYes' : 'cookie.savedNo')
             );
         });
-        statusEl.textContent = lines.join('  |  ');
+        // With updateSummary === false the caller just wrote a save/plant message here that
+        // must survive; we still refresh the rows + the two account renderers below.
+        if (updateSummary !== false) {
+            statusEl.textContent = lines.join('  |  ');
+        }
         renderCookieAccounts();
         renderCookieAccountStatus();
         renderCookieManager();
@@ -5695,6 +5702,12 @@ function saveCookieConfig() {
                     var statusEl = document.getElementById('cookie-status');
                     if (result.profile_note && statusEl) {
                         statusEl.textContent = result.message || '';
+                        /* The cookie is on disk now, so refresh the cached rows — the per-account
+                           line reads them, and without this it keeps claiming 「还没有保存过 Cookie」
+                           while the summary right above says it is saved (the contradiction the user
+                           hit after a save-into-profile). updateSummary=false keeps THIS planted
+                           message: the refresh only re-reads rows + repaints the two account renderers. */
+                        refreshCookieStatus(false);
                     } else {
                         refreshCookieStatus();
                     }

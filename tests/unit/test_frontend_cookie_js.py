@@ -249,6 +249,17 @@ class TestSavePlantsItsOwnProfile:
         assert case['capabilitiesRefetched'] is True
         assert 'DEFERRED-PROFILE' in case['statusText'], 'the plant note must survive the refresh'
 
+    def test_the_plant_refresh_updates_the_account_line_too(self, panel):
+        """The contradiction the user hit: after a save-into-profile the summary said 「已保存…21 条」
+        but the per-account line still read 「还没有保存过 Cookie」 — that branch wrote the plant note
+        and skipped re-reading the rows the account line reads. The refresh (updateSummary=false)
+        must now flip the account line to saved AND leave the plant note standing."""
+        case = panel['savePlants']
+        line = case['accountLine']
+        assert '21' in line, f'the account line was not refreshed after the plant: {line}'
+        assert '还没有保存过' not in line and 'no cookie saved' not in line, line
+        assert 'DEFERRED-PROFILE' in case['statusText'], 'the plant note must survive the account refresh'
+
     def test_a_refused_save_is_the_servers_word_not_a_success_toast(self, panel):
         assert panel['saveRefused']['toasts'] == ['cookie.failed - BAD-JSON'], panel['saveRefused']
 
