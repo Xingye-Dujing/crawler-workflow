@@ -1301,7 +1301,11 @@ body.style-menu-open #workspace #resume-banner {
   right: 12px;
   top: 60px;
   width: 200px;
-  max-height: calc(100vh - 84px);
+  /* The ceiling leaves a bottom gap equal to the top one: the box sits 12px under
+     the 48px menu (60-48), so it must also stop 12px above the 28px status bar —
+     100vh-(60+28+12)=100vh-100px. The old 84px reserved only 24px, less than the
+     bar, so a full list slid behind it. */
+  max-height: calc(100vh - 100px);
   background: var(--bg);
   border: 1px solid var(--line);
   z-index: 100;
@@ -1555,8 +1559,14 @@ body.style-menu-open #workspace #resume-banner {
   flex-direction: column;
   overflow: hidden;
 }
-#chart-fullscreen-panel.open { display: flex; }
-#chart-fullscreen-echarts { flex: 1; min-height: 0; width: 100%; }
+#chart-fullscreen-panel.open {
+  display: flex;
+}
+#chart-fullscreen-echarts {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
 #chart-fullscreen-image {
   margin: auto;
   max-width: calc(100% - 24px);
@@ -2035,17 +2045,39 @@ button.history-del:hover {
 }
 /* Node cards take the canvas's own per-type accents, so the detail reads in
    the same colour language as the workflow it describes. */
-.rm-node.nt-source { border-left-color: var(--accent-source); }
-.rm-node.nt-upload { border-left-color: var(--accent-upload); }
-.rm-node.nt-process { border-left-color: var(--accent-process); }
-.rm-node.nt-analysis { border-left-color: var(--accent-analysis); }
-.rm-node.nt-visualize { border-left-color: var(--accent-visualize); }
-.rm-node.nt-compile { border-left-color: var(--accent-compile); }
-.rm-node.nt-tokenize { border-left-color: var(--accent-tokenize); }
-.rm-node.nt-output { border-left-color: var(--accent-output); }
-.rm-node.nt-resume { border-left-color: var(--accent-resume); }
-.rm-node.nt-name { border-left-color: var(--accent-name); }
-.rm-node.nt-comment { border-left-color: var(--accent-comment); }
+.rm-node.nt-source {
+  border-left-color: var(--accent-source);
+}
+.rm-node.nt-upload {
+  border-left-color: var(--accent-upload);
+}
+.rm-node.nt-process {
+  border-left-color: var(--accent-process);
+}
+.rm-node.nt-analysis {
+  border-left-color: var(--accent-analysis);
+}
+.rm-node.nt-visualize {
+  border-left-color: var(--accent-visualize);
+}
+.rm-node.nt-compile {
+  border-left-color: var(--accent-compile);
+}
+.rm-node.nt-tokenize {
+  border-left-color: var(--accent-tokenize);
+}
+.rm-node.nt-output {
+  border-left-color: var(--accent-output);
+}
+.rm-node.nt-resume {
+  border-left-color: var(--accent-resume);
+}
+.rm-node.nt-name {
+  border-left-color: var(--accent-name);
+}
+.rm-node.nt-comment {
+  border-left-color: var(--accent-comment);
+}
 .runs-mgr-status.st-skipped {
   background: rgba(26, 26, 26, 0.05);
   color: var(--text-faint);
@@ -2953,9 +2985,9 @@ input:-webkit-autofill:focus {
    Hiding is presentation only. Every route behind one of these controls still answers a
    request (a saved workflow, an old tab, a hand-written POST) and refuses it by name,
    because a button that disappeared is not a permission. */
-html[data-cloud='1'] .cloud-hide,
-html[data-cloud='1'] #btn-headless,
-html[data-cloud='1'] .ai-only-ollama {
+html[data-cloud="1"] .cloud-hide,
+html[data-cloud="1"] #btn-headless,
+html[data-cloud="1"] .ai-only-ollama {
   display: none !important;
 }
 /* The account candidates are CustomSelect's own popup shape (``.cand-menu`` / ``.cand-option``
