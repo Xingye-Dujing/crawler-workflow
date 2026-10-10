@@ -550,3 +550,24 @@ class TestItemLock:
         assert lock['unlockedIsSvg'] is True and lock['unlockedNoEmoji'] is True, 'unlocked glyph is still emoji'
         assert lock['lockedClosed'] is True, 'locked must draw a seated shackle'
         assert lock['unlockedOpen'] is True, 'unlocked must draw a swung-open shackle'
+
+
+class TestDatasetSourceLabels:
+    """The dataset 来源 cell stores a CODE (upload / paste / analysis), so the panel must
+    show the catalogue label — and an unknown code must fall through as itself rather than
+    a made-up translation."""
+
+    def test_each_known_source_code_shows_its_label(self, pa):
+        labels = pa['dataset_source_labels']
+        assert labels['upload'] == '上传文件'
+        assert labels['paste'] == '粘贴文本'
+        assert labels['analysis'] == '清洗结果'
+
+    def test_an_unknown_or_blank_code_shows_itself_not_a_fabrication(self, pa):
+        labels = pa['dataset_source_labels']
+        assert labels['unknown'] == 'mystery', 'an unseen code was translated instead of shown raw'
+        assert labels['empty'] == '', 'a blank code became non-blank'
+
+    def test_the_source_label_follows_the_language(self, pa):
+        en = pa['dataset_source_labels_en']
+        assert en == 'Uploaded file', f'the label did not switch to the English catalogue: {en}'

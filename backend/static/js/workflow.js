@@ -7693,7 +7693,7 @@ var datasetManager = {
                 I18n.t('datasetMgr.remove') + '</button>';
             return '<tr>' +
                 '<td class="runs-mgr-wf">' + escapeHtml(row.name || I18n.t('name.unnamed')) + '</td>' +
-                '<td>' + escapeHtml(row.source || '') + '</td>' +
+                '<td>' + escapeHtml(self._sourceLabel(row.source)) + '</td>' +
                 '<td>' + (row.row_count || 0) + '</td>' +
                 '<td>' + self.size(row.byte_size) + '</td>' +
                 '<td class="runs-mgr-id">' + escapeHtml(id.slice(0, 12)) + '</td>' +
@@ -7711,6 +7711,18 @@ var datasetManager = {
             '<th>' + I18n.t('datasetMgr.colUsedBy') + '</th>' +
             '<th></th>' +
             '</tr></thead><tbody>' + html + '</tbody></table>';
+    },
+
+    _sourceLabel(source) {
+        /* The stored value is a code, not display text. Map each known code to its label;
+           an unknown code shows as itself rather than a fabricated translation. */
+        var keys = {
+            upload: 'datasetMgr.sourceUpload',
+            paste: 'datasetMgr.sourcePaste',
+            analysis: 'datasetMgr.sourceAnalysis',
+        };
+        var key = keys[source];
+        return key ? I18n.t(key) : (source || '');
     },
 
     _quote(value) {

@@ -969,4 +969,19 @@ out.lock = {
     lockedClosed: lockRowHtml.indexOf('M8 11V8a4 4 0 0 1 8 0v3') >= 0,
 };
 
+/* The dataset 来源 cell holds a stored CODE (upload / paste / analysis), not display
+   text; the panel must print the catalogue label, and an unknown code must show raw
+   rather than a fabricated translation. */
+fresh();
+sandbox.setLang('zh');
+out.dataset_source_labels = {
+    upload: pa.datasetManager._sourceLabel('upload'),
+    paste: pa.datasetManager._sourceLabel('paste'),
+    analysis: pa.datasetManager._sourceLabel('analysis'),
+    unknown: pa.datasetManager._sourceLabel('mystery'),
+    empty: pa.datasetManager._sourceLabel(''),
+};
+sandbox.setLang('en');
+out.dataset_source_labels_en = pa.datasetManager._sourceLabel('upload');
+
 process.stdout.write(JSON.stringify(out));
