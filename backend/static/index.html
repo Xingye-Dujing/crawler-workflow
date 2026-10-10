@@ -1227,6 +1227,16 @@
           >
             Delete saved Cookie
           </button>
+          <!-- The device counterpart of 「删除 Cookie」: same destructive-asks-first rule, and it
+               names what a cookie-delete cannot — a live profile keeps its own session, so signing
+               that device out is THIS button. Refused for 默认账号 (its data is the platform folder). -->
+          <button
+            class="menu-btn"
+            onclick="deleteCookieProfile()"
+            data-i18n="cookies.deleteProfile"
+          >
+            Delete saved Profile
+          </button>
           <!-- No 「把 Cookie 更新进 Profile」 button: saving one already plants it into that
                account's own browser, and the one case that cannot happen on the spot (the
                profile is held by a running crawl) is said by the save reply itself.

@@ -216,6 +216,27 @@ class TestDeleteCookie:
         assert 'profile' in case['toasts'][0] and 'logged in' in case['toasts'][0], case['toasts']
 
 
+class TestDialogProfileDelete:
+    """The Cookie dialog's 「删除已存 Profile」 button reuses ``deleteCookieProfile()`` with no
+    arguments, so it must speak for the panel's OWN platform + account box (not a stale row),
+    post exactly that device for retirement, and refuse the default account with no dialog/request."""
+
+    def test_the_dialog_delete_posts_the_panels_own_selection(self, panel):
+        assert panel['dialogProfileDelete']['posted'] == [{'platform': 'zhihu', 'account': 'work'}], panel[
+            'dialogProfileDelete'
+        ]
+
+    def test_the_dialog_delete_shows_the_server_word_and_refreshes(self, panel):
+        case = panel['dialogProfileDelete']
+        assert 'PROFILE-DELETED' in ' '.join(case['toasts']), case
+        assert case['statusFetched'] is True, 'the rows were not re-read after the device went away'
+
+    def test_the_dialog_refuses_deleting_the_default_profile(self, panel):
+        case = panel['dialogProfileDeleteDefault']
+        assert case['posted'] == 0, 'a default-account profile delete was requested — it would wipe the platform root'
+        assert len(case['toasts']) >= 1, 'the refusal was silent'
+
+
 class TestSavePlantsItsOwnProfile:
     """Saving a cookie IS the plant (#108's button, deleted).
 

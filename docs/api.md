@@ -103,6 +103,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/cookies/generate` | POST | 打开浏览器引导扫码登录并捕获 Cookie；可选 `url` 指定入口链接（仅限该平台域名），取 Cookie 前先把浏览器带回本平台页面 |
 | `/api/cookies/verify` | POST | 用已存 Cookie 实地探测该平台还放行什么（结论逐条回显：可用 / 仍被挡在登录页 / 回的是验证码·风控所以**没有结论**） |
 | `/api/cookies/delete` | POST | 删除该平台的 Cookie 快照文件；回话里说清该平台的浏览器 profile 是否仍持有登录态（删文件不会把 profile 登出） |
+| `/api/profiles/delete` | POST | 删除某**命名账号**自己的浏览器 Profile 目录（真正退休那台设备、把它登出），**不动 Cookie 文件**；默认账号结构性拒绝（它就是平台根目录、别的账号都嵌在里面）、被占用 409、没有可删 404、非法名 400，删后作废预检缓存 |
 | `/api/cookies/rename` | POST | 给一个已存登录改名字——Cookie 文件与它自己的浏览器目录**一起搬或一样都不动**（目录先搬：被采集占用就 409「浏览器正被使用」、文件留原地）；默认那份结构性拒绝（它不拥有自己的目录），目标名被占用/非法/空/与原名相同各自点名拒绝，绝不静默覆盖或谎报成功 |
 | `/api/cookies/preflight` | POST | 运行前一次性验证画布要用到的多个平台：`{platforms, use_profile?, fresh?}` → 逐平台 `valid/expired/unknown/nocookie/nologin/notcrawlable` + 已渲染文案 + `blocked`/`unclear` 两个清单（结果按 `COOKIE_PREFLIGHT_TTL` 缓存） |
 | `/api/settings` | GET / POST | 读取 / 修改运行时设置（data/settings.json） |

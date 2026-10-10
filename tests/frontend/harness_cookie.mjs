@@ -289,6 +289,41 @@ out.deleteConfirmed = {
     capabilitiesRefetched: sandbox.__fetches.slice(beforeFetchDel).includes('/api/capabilities'),
 };
 
+/* ── 6b. the dialog's 「删除已存 Profile」 speaks for its OWN selection ─────── */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.cookieJob.active = false;
+sandbox.__toasts.length = 0;
+setPlatform('zhihu');
+sandbox.__byId('cookie-account').value = 'work';
+sandbox.__responses['/api/profiles/delete'] = { ok: true, message: 'PROFILE-DELETED' };
+sandbox.__responses['/api/cookies/status'] = { ok: true, cookies: {}, accounts: {}, rows: [] };
+sandbox.__dialogAnswer = 'delete';
+before = sandbox.__calls.length;
+await sandbox.deleteCookieProfile();
+await flush();
+out.dialogProfileDelete = {
+    posted: sandbox.__calls
+        .slice(before)
+        .filter((call) => call.url === '/api/profiles/delete')
+        .map((call) => JSON.parse(call.opts.body)),
+    toasts: sandbox.__toasts.slice(),
+    statusFetched: sandbox.__calls.slice(before).some((call) => call.url === '/api/cookies/status'),
+};
+
+/* The same button refuses 默认账号 (its dir is the platform root): no dialog, no request. */
+for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
+sandbox.__toasts.length = 0;
+setPlatform('zhihu');
+sandbox.__byId('cookie-account').value = '';
+sandbox.__dialogAnswer = 'delete';
+before = sandbox.__calls.length;
+await sandbox.deleteCookieProfile();
+await flush();
+out.dialogProfileDeleteDefault = {
+    posted: sandbox.__calls.slice(before).filter((call) => call.url === '/api/profiles/delete').length,
+    toasts: sandbox.__toasts.slice(),
+};
+
 /* ── 7. a refusal from the server is shown, not swallowed ───────────────── */
 for (const key of Object.keys(sandbox.__responses)) delete sandbox.__responses[key];
 sandbox.__responses['/api/cookies/delete'] = { ok: false, error: 'NOTHING-STORED' };

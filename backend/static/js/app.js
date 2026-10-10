@@ -101,6 +101,7 @@ const I18n = {
             'cookies.entryUrl': 'Login entry link (optional: empty opens the platform login page)',
             'cookies.verify': 'Verify cookie',
             'cookies.delete': 'Delete saved Cookie',
+            'cookies.deleteProfile': 'Delete saved Profile',
             'cookies.accountDefault': 'Default account',
             /* Sent as a labelKey by /api/cookies/status for a login this program named: the
                SECOND blank save is `default2` on disk. A key the server hands the browser and
@@ -1106,6 +1107,7 @@ const I18n = {
             'cookies.entryUrl': '登录入口链接（可留空：默认打开该平台登录页）',
             'cookies.verify': '验证 Cookie',
             'cookies.delete': '删除已存 Cookie',
+            'cookies.deleteProfile': '删除已存 Profile',
             'cookies.accountDefault': '默认账号',
             'cookies.accountDefaultNumbered': '默认账号{n}',
             'cookies.accountDefaultHint': '这个登录的名字就是 default',

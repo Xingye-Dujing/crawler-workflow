@@ -5774,12 +5774,21 @@ async function deleteCookieProfile(platform, account) {
        throwaway browser is planted from, and a platform crawled inside its own profile keeps
        its live session in that profile, so retiring the device needs this separate action.
 
+       Called with nothing it speaks for the dialog's own selection (platform dropdown + account
+       box) exactly like ``deleteCookie``, so the Cookie dialog's 「删除已存 Profile」 button reuses
+       it; a management row calls it WITH its row, because the clicked login is a different one
+       than whatever is typed in the box.
+
        The default account is refused here as well as in the panel button: its browser data is
        the platform root folder that nests every named account, so deleting it would silently
        wipe them all — the same structural reason rename refuses the default. The server repeats
        the refusal, so a hand-built request cannot reach the platform root either. */
+    var named = platform !== undefined && platform !== null && platform !== '';
+    if (!named) platform = cookiePlatform();
+    if (!platform) return;
+    if (account === undefined || account === null) account = cookieAccount();
     var from = cookieAccountKey(account);
-    if (!platform || from === COOKIE_DEFAULT_ACCOUNT) {
+    if (from === COOKIE_DEFAULT_ACCOUNT) {
         showToast(I18n.t('cookies.profileDeleteDefaultRefused'));
         return;
     }
