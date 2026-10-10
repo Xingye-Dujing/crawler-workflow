@@ -20,6 +20,7 @@ keep.
 
 import logging
 import os
+import re
 
 from i18n import t
 from utils.helpers import sanitize_filename
@@ -160,6 +161,34 @@ def delete_export_file(export_dir: str, name: str) -> bool:
         logger.warning(t('misc.exportDeleteFailed', name=name, err=e))
         return not os.path.exists(path)
     return not os.path.exists(path)
+
+
+#: One batched part file's shape, as ``PartWriter`` names them: ``{stem}.part{NNN}{ext}``.
+#: The greedy stem and the mandatory ``.part<digits>`` keep a merged ``{stem}{ext}`` or a live
+#: ``{stem}.live{ext}`` from ever matching — only a shard does.
+_PART_NAME = re.compile(r'^(?P<stem>.+)\.part(?P<n>\d+)\.(?P<ext>[A-Za-z0-9]+)$')
+
+
+def part_batch_names(export_dir: str, name: str):
+    """Every shard filename in *export_dir* that belongs to the SAME batch as *name*.
+
+    ``name`` is one clicked part file; the batch is all files sharing its stem and extension and
+    matching ``{stem}.part{NNN}{ext}`` — i.e. exactly the shards ``PartWriter`` flushed for that
+    one output. Returns ``None`` when *name* is not a shard at all (a merged file, another kind),
+    so the caller refuses rather than deleting nothing quietly. The merged file, other stems and
+    other extensions are NEVER included; matching reads the same directory listing the panel shows,
+    so a name here is always a real file inside the export folder.
+    """
+    clicked = _PART_NAME.match(sanitize_filename(name))
+    if not clicked:
+        return None
+    stem, ext = clicked.group('stem'), clicked.group('ext').lower()
+    batch = []
+    for row in list_exports(export_dir):
+        match = _PART_NAME.match(row['name'])
+        if match and match.group('stem') == stem and match.group('ext').lower() == ext:
+            batch.append(row['name'])
+    return batch
 
 
 def export_usage(export_dir: str) -> dict:

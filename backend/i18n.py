@@ -1009,6 +1009,7 @@ _ZH = {
     # workflow crawl twice as much needs this line to know why.
     'run.cleared': '已清空运行记录：{runs} 条，并交回 {claims} 条"已采集"认领（这些条目下次会重新爬）',
     'exports.cleared': '已清空导出目录：删除 {n} 个文件',
+    'exports.notAPart': '「{name}」不是分片文件（形如 名称.part000.csv），无法按名字清除它这一批',
     'exports.clearBusy': '正在运行的那次会把分片文件写进导出目录，请先停止或等它跑完再清空',
     'lock.refuse': '这一项已被锁定，请先解锁再删除/清空它',
     'lock.badKey': '锁定请求缺少有效的面板或条目名',
@@ -2318,6 +2319,7 @@ _EN = {
     'api.needConfirm': 'This acts on every record — send confirm=true explicitly to do it',
     'run.cleared': 'Run records cleared: {runs} removed, and {claims} "already crawled" claims handed back',
     'exports.cleared': 'Export folder cleared: {n} file(s) removed',
+    'exports.notAPart': '「{name}」 is not a shard file, so there is no batch to clear',
     'exports.clearBusy': 'A live run is writing part files into the export folder — stop it or wait before clearing',
     'lock.refuse': 'This item is locked — unlock it before deleting or clearing',
     'lock.badKey': 'The lock request is missing a valid panel or entry name',

@@ -323,3 +323,57 @@ class TestSmartClear:
         self._seed(app_module, export_dir, 'r1', [('node-2', 'a.csv', 'merged')])
         client.post('/api/exports/delete', json={'name': 'a.csv'})
         assert 'r1' not in [e['run_id'] for e in client.get('/api/exports/ledger').get_json()['ledger']]
+
+
+class TestClearName:
+    """``/api/exports/clear-name`` removes one shard BATCH by name (the panel's per-shard button).
+    The whole value is in what it refuses to touch: the merged file, other stems, other extensions
+    and 「固定」pinned shards survive, and a non-shard name / a missing confirm / a live run are each refused."""
+
+    def _seed_shards(self, export_dir):
+        for name in ['a.part000.csv', 'a.part001.csv', 'a.csv', 'b.part000.csv', 'a.part000.json']:
+            with open(os.path.join(export_dir, name), 'w', encoding='utf-8') as handle:
+                handle.write('x\n')
+
+    def test_clears_the_whole_batch_and_keeps_merged_and_other_kinds(self, client, export_dir):
+        self._seed_shards(export_dir)
+        body = client.post('/api/exports/clear-name', json={'name': 'a.part000.csv', 'confirm': True}).get_json()
+        assert body['ok'] is True and body['removed'] == 2 and body['requested'] == 2, body
+        assert not os.path.exists(os.path.join(export_dir, 'a.part000.csv'))
+        assert not os.path.exists(os.path.join(export_dir, 'a.part001.csv'))
+        assert os.path.exists(os.path.join(export_dir, 'a.csv')), 'the merged file must survive a shard-batch clear'
+        assert os.path.exists(os.path.join(export_dir, 'b.part000.csv')), 'a different stem must survive'
+        assert os.path.exists(os.path.join(export_dir, 'a.part000.json')), 'a different extension must survive'
+
+    def test_a_non_shard_name_is_refused_by_name(self, client, export_dir):
+        self._seed_shards(export_dir)
+        response = client.post('/api/exports/clear-name', json={'name': 'a.csv', 'confirm': True})
+        assert response.status_code == 400, 'a merged file is not a batch; the route must name the refusal'
+        assert os.path.exists(os.path.join(export_dir, 'a.part000.csv')), 'a refusal deletes nothing'
+
+    def test_it_refuses_without_an_explicit_confirm(self, client, export_dir):
+        self._seed_shards(export_dir)
+        assert client.post('/api/exports/clear-name', json={'name': 'a.part000.csv'}).status_code == 400
+        assert os.path.exists(os.path.join(export_dir, 'a.part001.csv'))
+
+    def test_a_live_run_is_refused_outright(self, client, app_module, export_dir):
+        self._seed_shards(export_dir)
+        app_module.execution_state.update({'running': True, 'run_id': 'r-live'})
+        try:
+            response = client.post('/api/exports/clear-name', json={'name': 'a.part000.csv', 'confirm': True})
+            assert response.status_code == 409, 'a streaming node is writing these very shards'
+        finally:
+            app_module.execution_state.update({'running': False, 'run_id': ''})
+        assert os.path.exists(os.path.join(export_dir, 'a.part001.csv')), 'a refused clear touches nothing'
+
+    def test_a_pinned_shard_is_kept_and_reported(self, client, export_dir):
+        self._seed_shards(export_dir)
+        client.post('/api/locks', json={'panel': 'exports', 'key': 'a.part001.csv', 'locked': True})
+        try:
+            body = client.post('/api/exports/clear-name', json={'name': 'a.part000.csv', 'confirm': True}).get_json()
+            assert body['removed'] == 1 and body['skipped_locked'] == 1, body
+            assert os.path.exists(os.path.join(export_dir, 'a.part001.csv')), 'a 固定 shard outlives the batch clear'
+        finally:
+            # Release the pin: the lock store is process-wide, and a left-behind 「固定」 entry
+            # would make a later test that asserts the exact lock set see a key it never added.
+            client.post('/api/locks', json={'panel': 'exports', 'key': 'a.part001.csv', 'locked': False})

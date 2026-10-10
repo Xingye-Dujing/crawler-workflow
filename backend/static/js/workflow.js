@@ -7278,6 +7278,12 @@ var exportsManager = {
                 ops += '<button class="runs-mgr-btn" onclick="exportsManager.view(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.view') + '</button>';
             }
             ops += '<button class="runs-mgr-btn del" onclick="exportsManager.remove(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.remove') + '</button>';
+            if (/\.part\d+\./.test(row.name)) {
+                /* A batched crawl leaves ``{stem}.part{NNN}{ext}`` shards. 删除 clears ONE file;
+                   this clears the WHOLE batch the clicked shard belongs to — the server keeps the
+                   merged ``{stem}.csv``, other stems/extensions and 「固定」pinned files. */
+                ops += '<button class="runs-mgr-btn del" onclick="exportsManager.clearPartsByName(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.clearParts') + '</button>';
+            }
             ops += lockButtonHtml('exports', row.name);
             return '<tr>' +
                 '<td class="runs-mgr-wf">' + name + '</td>' +
@@ -7464,6 +7470,28 @@ var exportsManager = {
             showToast(result.ok ? I18n.t('exportsMgr.removeDone') : I18n.t('exportsMgr.removeFailed'));
         } catch (e) {
             showToast(I18n.t('exportsMgr.removeFailed'));
+        }
+        this.refresh();
+    },
+
+    /* 依据名字「清除该批分片」 — the clicked shard's whole batch in one go. Destructive, so it
+       asks first and names what survives (the merged file + 固定); the server does the batch
+       lookup by name and deletes each through the same per-name resolver as 删除, refuses without
+       confirm and while a run is writing here. */
+    async clearPartsByName(name) {
+        var go = await showDialog({
+            message: I18n.t('exportsMgr.confirmClearName').replace('{name}', name),
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('exportsMgr.clearGo'), value: 'go', primary: true },
+            ],
+        });
+        if (go !== 'go') return;
+        var r = await this._postClear('/api/exports/clear-name', { name: name, confirm: true });
+        if (r && r.ok) {
+            showToast(I18n.t('exportsMgr.clearNameDone').replace('{removed}', r.removed || 0).replace('{skipped}', r.skipped_locked || 0));
+        } else {
+            showToast(I18n.t('exportsMgr.clearFailed') + ((r && r.error) ? ': ' + r.error : ''));
         }
         this.refresh();
     },

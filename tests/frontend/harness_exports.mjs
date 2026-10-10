@@ -95,6 +95,9 @@ Object.assign(sandbox, {
             answer = { ok: true, removed: 2, skipped_locked: 0, missing: 0, requested: 2, run_id: body.run_id, node_id: body.node_id };
         } else if (body && url.indexOf('/clear-run') >= 0) {
             answer = { ok: true, removed: 4, skipped_locked: 1, missing: 0, requested: 5, run_id: body.run_id };
+        } else if (body && url.indexOf('/clear-name') >= 0) {
+            // 依据名字清除该批分片: a batch of shards gone, one 固定 kept.
+            answer = { ok: true, removed: 2, skipped_locked: 1, missing: 0, requested: 3, name: body.name };
         } else if (body && url.indexOf('/report/pdf') >= 0) {
             answer = { ok: true, name: 'report-x.pdf', bytes: 9 };
         } else if (body) {
@@ -136,6 +139,8 @@ const out = {
     rows: (html.match(/<tr>/g) || []).length,
     downloads: (html.match(/exportsManager\.download\(/g) || []).length,
     deletes: (html.match(/exportsManager\.remove\(/g) || []).length,
+    // The per-batch clear button appears only on shard rows (name has .partNNN).
+    clearPartsBtns: (html.match(/exportsManager\.clearPartsByName\(/g) || []).length,
     size: [
         exportsManager.size(0),
         exportsManager.size(999),
@@ -221,6 +226,22 @@ await exportsManager.remove('ok.csv');
 out.deletedPosts = captured.posts.slice(postsBefore + out.cancelledPosts.length);
 out.deletedDialog = triples(captured.dialogs[dialogsBefore + 1]);
 out.deletedToasts = captured.toasts.slice(toastsBefore + out.cancelledPosts.length);
+
+/* ── 依据名字清除该批分片: the per-shard batch clear button ─────────── */
+const cnPosts0 = captured.posts.length;
+const cnToasts0 = captured.toasts.length;
+dialogAnswer.value = null;
+await exportsManager.clearPartsByName('a.part000.csv');
+out.clearNameCancelled = captured.posts.slice(cnPosts0).length;
+
+dialogAnswer.value = 'go';
+await exportsManager.clearPartsByName('a.part000.csv');
+const cnNew = captured.posts.slice(cnPosts0 + out.clearNameCancelled);
+out.clearNameConfirmed = {
+    url: cnNew.map((p) => p.url).filter((u) => u.indexOf('/clear-name') >= 0),
+    body: (cnNew.map((p) => p.body).find((b) => b && b.name === 'a.part000.csv')) || null,
+    toasts: captured.toasts.slice(cnToasts0).join(' '),
+};
 
 /* ── 智能清除：按一次运行 & 按一个节点的分片 ───────────────────────────
    Two-step dialogs (pick run → confirm / pick node), so each call pops its own

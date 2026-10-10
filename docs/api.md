@@ -65,6 +65,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/exports/ledger` | GET | 列出**写过导出文件**的每一次运行及其文件清单（`run_id`/`workflow_name`/`started_at`/`files[{name,kind,node_id}]`）——「智能清除」选择器的数据源，读 `runs.db` 的运行→文件台账而非目录扫描，所以只给可操作的记录 |
 | `/api/exports/clear-run` | POST | 按**一次运行**清除它产生的全部文件，**必须 `{"run_id","confirm":true}`**（缺 confirm→400、缺 run_id→400）：只删台账登记的这些名字（复用单条删除解析器），**「固定」条目跳过**、返回 `{removed,skipped_locked,missing,requested}`；有运行在跑时 409；只删磁盘产物，不动 `runs.db` 记录与其已存的行 |
 | `/api/exports/clear-run-parts` | POST | 按**一次运行 × 一个数据源节点**只清除其分片文件（`kind='part'`），**保留合并文件**；必须 `{"run_id","node_id","confirm":true}`。作用域锁在 `(run_id,node_id,'part')`，绝不碰别的运行、别的节点或合并/实时文件。删成功的名字同步从台账遗忘 |
+| `/api/exports/clear-name` | POST | 按**名字**清除某一批分片（面板分片行的「清除该批分片」按钮）：传入某个 `{stem}.part{NNN}{ext}`，删同名同扩展的全部 `.partNNN` 分片；**保留合并文件、别的 stem/扩展名与「固定」条目**，复用单条删除的解析器逐个删；必须 `{"name","confirm":true}`；传入的不是分片→400（点名）、有运行在跑→409；返回 `{removed,skipped_locked,missing,requested,name}` |
 | `/api/report/generate` | POST | 生成自包含 HTML 运行报告（本次运行的表格，或按 `run_id` 读历史运行；可选 AI 结论；可选 `options` 定制：`show_charts/tables/facts`、`max_rows`、`node_ids` 选节点、`images` 内联导出目录里的成图） |
 | `/api/report/view` | GET | 按名查看报告：仅接受 `report-` 前缀的 `.html`，响应带禁脚本 CSP |
 | `/api/report/pdf` | POST | 把已生成的报告按名用无头 Chrome 打印成 PDF（找不到 Chrome 或非报告名 → 报错，HTML 不受影响） |

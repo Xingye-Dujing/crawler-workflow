@@ -266,3 +266,33 @@ def exports_clear_run_parts():
     result['node_id'] = node_id.strip()
     result['requested'] = len(files)
     return jsonify(result)
+
+
+@bp.route('/api/exports/clear-name', methods=['POST'])
+def exports_clear_name():
+    """Remove one BATCH of shard files by name — 依据名字「清除该批分片」.
+
+    The panel clicks one part file; this deletes every ``{stem}.part{NNN}{ext}`` sharing its stem
+    and extension, and ONLY those: the merged ``{stem}{ext}``, other stems, other extensions and
+    「固定」(pinned) files are kept. It is name-scoped (no run/node ledger needed) so it works from
+    the flat listing, but every deletion still goes through the export browser's per-name resolver
+    (no second bulk path that could drift), and it is refused while any run is live and without an
+    explicit confirm — the same guards as the other bulk clears. A name that is not a shard is
+    refused by name, never answered as a silent no-op."""
+    from services.export_browser import part_batch_names
+
+    data = _json_body()
+    refusal = _smart_clear_guards(data)
+    if refusal is not None:
+        return refusal
+    name = data.get('name')
+    if not isinstance(name, str) or not name.strip():
+        return _bad_param('name')
+    batch = part_batch_names(Config.EXPORT_DIR, name)
+    if batch is None:
+        return jsonify({'ok': False, 'error': t('exports.notAPart', name=os.path.basename(name.strip()))}), 400
+    result = _delete_export_names(batch)
+    result['ok'] = True
+    result['name'] = os.path.basename(name.strip())
+    result['requested'] = len(batch)
+    return jsonify(result)

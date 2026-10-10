@@ -20,6 +20,7 @@ from services.export_browser import (
     export_usage,
     is_downloadable,
     list_exports,
+    part_batch_names,
     resolve_download_path,
     resolve_export_file,
 )
@@ -217,3 +218,48 @@ class TestDeletion:
         monkeypatch.setattr(os, 'remove', _refuse)
         assert delete_export_file(exports, 'run-a.csv') is False
         assert os.path.exists(os.path.join(exports, 'run-a.csv'))
+
+
+def _dir(tmp_path, names):
+    d = tmp_path / 'parts'
+    d.mkdir()
+    for name in names:
+        (d / name).write_text('x\n', encoding='utf-8')
+    return str(d)
+
+
+class TestPartBatchNames:
+    """``part_batch_names`` finds every shard of one batch. The danger is over-reach: a name that
+    is also a prefix of the merged file or of a different stem/extension must not sweep those in."""
+
+    def test_returns_every_shard_of_the_same_stem_and_extension(self, tmp_path):
+        d = _dir(
+            tmp_path,
+            [
+                'a.part000.csv',
+                'a.part001.csv',
+                'a.part012.csv',
+                'a.csv',
+                'a.live.csv',
+                'b.part000.csv',
+                'a.part000.json',
+            ],
+        )
+        assert sorted(part_batch_names(d, 'a.part001.csv')) == [
+            'a.part000.csv',
+            'a.part001.csv',
+            'a.part012.csv',
+        ], 'merged a.csv, live a.live.csv, other stem b.* and other extension a.*.json must all stay out'
+
+    def test_a_name_that_is_not_a_shard_has_no_batch(self, tmp_path):
+        d = _dir(tmp_path, ['a.csv', 'a.live.csv'])
+        assert part_batch_names(d, 'a.csv') is None, 'a merged file is not a batch; the route must refuse'
+        assert part_batch_names(d, 'a.live.csv') is None, 'a live file is not a shard either'
+
+    def test_a_batch_reduced_to_one_shard_still_clears_it(self, tmp_path):
+        d = _dir(tmp_path, ['a.part003.csv', 'a.csv'])
+        assert part_batch_names(d, 'a.part003.csv') == ['a.part003.csv']
+
+    def test_an_unknown_name_returns_empty_not_error(self, tmp_path):
+        d = _dir(tmp_path, ['a.part000.csv'])
+        assert part_batch_names(d, 'ghost.part000.csv') == [], 'a shard whose batch is already gone deletes nothing'

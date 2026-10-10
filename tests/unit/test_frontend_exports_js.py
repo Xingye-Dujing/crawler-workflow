@@ -37,6 +37,7 @@ PAYLOAD = {
     'bytes': 6000,
     'exports': [
         {'name': "it's.csv", 'kind': 'csv', 'size': 2048, 'mtime': 1700000000, 'downloadable': True},
+        {'name': 'a.part000.csv', 'kind': 'csv', 'size': 1024, 'mtime': 1699999000, 'downloadable': True},
         {'name': 'back\\slash.json', 'kind': 'json', 'size': 512, 'mtime': 1700000100, 'downloadable': True},
         {'name': 'script.py', 'kind': 'other', 'size': 4096, 'mtime': 1700000200, 'downloadable': False},
         {'name': 'report-季度.html', 'kind': 'report', 'size': 9000, 'mtime': 1700000300, 'downloadable': False},
@@ -82,8 +83,9 @@ class TestExportRows:
         assert results['rows'] == len(PAYLOAD['exports']) + 1
 
     def test_a_non_downloadable_file_gets_no_download_button(self, results):
-        assert results['downloads'] == 2, 'only the two downloadable rows may offer a download'
-        assert results['deletes'] == 4, 'every row may still be deleted'
+        assert results['downloads'] == 3, 'only the three downloadable rows (two csv + one shard) offer a download'
+        assert results['deletes'] == 5, 'every row may still be deleted'
+        assert results['clearPartsBtns'] == 1, 'only the .partNNN row offers a shard-batch clear'
         assert 'script.py' in results['html']
 
     def test_a_filename_is_escaped_for_display(self, results):
@@ -282,3 +284,22 @@ class TestSmartClear:
         # r-merged wrote only a merged file: smart clear says so, shows no dead node list, sends nothing.
         assert results['noPartsPosts'] == []
         assert any('noParts' in toast for toast in results['noPartsToasts']), results['noPartsToasts']
+
+
+class TestClearNameBatch:
+    """The shard row's 清除该批分片 button. It asks first (so a cancel posts nothing), and on confirm
+    POSTs exactly the clicked name + confirm — the server does the batch lookup."""
+
+    def test_a_cancel_posts_nothing(self, results):
+        assert results['clearNameCancelled'] == 0, 'a cancelled batch clear must send no request'
+
+    def test_confirming_clears_that_batch_by_name(self, results):
+        confirmed = results['clearNameConfirmed']
+        assert confirmed['url'] == ['/api/exports/clear-name'], confirmed['url']
+        assert confirmed['body'] == {'name': 'a.part000.csv', 'confirm': True}, confirmed['body']
+
+    def test_the_toast_reports_the_batch_was_cleared(self, results):
+        # The harness I18n returns the catalogue key, so the toast names the success message;
+        # the removed/kept counts themselves are pinned in the backend API test.
+        toasts = results['clearNameConfirmed']['toasts']
+        assert 'exportsMgr.clearNameDone' in toasts, toasts
