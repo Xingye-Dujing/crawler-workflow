@@ -300,6 +300,16 @@ _COMMENT_LIMIT = Field(
     minimum=0,
     coerce='number',
 )
+#: A table-side range over 评论时间, run by ``_filter_comments_by_time`` after the
+#: comments are crawled — deliberately NOT the crawl node's ``start_time``/``end_time``
+#: (which decide how far back to CRAWL). The comment node reads ``comment_start`` /
+#: ``comment_end`` so the two meanings never share a name; both ends or neither, which
+#: the filter refuses by name and this hint states.
+_COMMENT_TIMES = (
+    Field(key='comment_start', control='text', label_key='settings.commentStart', placeholder='2026-01-01'),
+    Field(key='comment_end', control='text', label_key='settings.commentEnd', placeholder='2026-12-31',
+          hint_key='settings.commentTimeHint'),
+)
 _PER_ARTICLE = Field(
     key='per_article_file',
     control='checkbox',
@@ -440,6 +450,7 @@ def _comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
             ),
             _INPUT_COLUMN,
             _COMMENT_LIMIT,
+            *_COMMENT_TIMES,
             _PER_ARTICLE,
             # The comment walk keeps the same ledger a source crawl does — an
             # already-stored comment is skipped, never re-fetched — so the switch that

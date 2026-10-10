@@ -601,8 +601,19 @@ class TestSettingsPanel:
         assert 'https://weibo.com/' in html
         assert 'zhihu.com' not in html
         assert 'xiaohongshu.com' not in html
-        # comments mode has no time range — weibo's start/end fields stay hidden
+        # the comments form has no CRAWL window (weibo's start_time/end_time stay hidden);
+        # its own time filter is the separate comment_start / comment_end pair below
         assert 'start_time' not in html
+
+    def test_data_source_comments_panel_offers_the_time_filter(self, results):
+        """The backend's 评论时间 range had no input on a DATA-SOURCE comment node — only the
+        legacy comment node hardcoded the two boxes. The boxes are the only route to
+        ``comment_start`` / ``comment_end``, so the matrix-driven comments panel must render
+        both ends and the hint that says "fill both or neither"."""
+        html = results['settings']['panel_weibo_comments']
+        assert "updateParam('n1','comment_start',this.value)" in html
+        assert "updateParam('n1','comment_end',this.value)" in html
+        assert 'settings.commentTimeHint' in html
 
     def test_xiaohongshu_comments_panel_offers_only_xhs_links(self, results):
         html = results['settings']['panel_xhs_comments']

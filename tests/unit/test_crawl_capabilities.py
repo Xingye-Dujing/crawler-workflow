@@ -779,6 +779,31 @@ class TestTheRecrawlSwitchIsOnEveryForm:
             assert 'forget_items' in body, f'{name} logs the switch but releases nothing'
 
 
+class TestTheCommentTimeFilterIsReachable:
+    """The backend already drops comments whose 评论时间 falls outside [comment_start,
+    comment_end], but a capability with no field is one the user cannot reach: 2026-10 found
+    weibo's DATA-SOURCE comment mode had the filter and no input (only the legacy standalone
+    comment node hardcoded the two boxes). So every comments form must declare BOTH ends —
+    walked off the matrix, not the helper, so a hand-written form cannot silently reopen the
+    hole — and the comment executor must actually run the filter it presents."""
+
+    def test_every_comments_mode_offers_both_ends_of_the_time_filter(self):
+        missing = [
+            f'{cap.platform}/{mode.key}'
+            for cap in CAPABILITIES
+            for mode in cap.modes
+            if mode.handler == 'comments'
+            and not {'comment_start', 'comment_end'} <= {field.key for field in mode.fields}
+        ]
+        assert missing == [], f'comment forms whose time filter has no input: {missing}'
+
+    def test_the_comment_executor_reads_the_filter_it_presents(self):
+        import app as app_module
+
+        body = inspect.getsource(app_module._execute_comment_node)
+        assert '_filter_comments_by_time' in body, 'the comment node renders a range nothing runs'
+
+
 class TestFeed:
     """Which forms accept an upstream table column, and what that costs the matrix.
 
