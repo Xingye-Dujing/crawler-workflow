@@ -1263,10 +1263,39 @@ function resizeRepaintScenario() {
 }
 
 Math.random = realRandom;
+
+/* ── 新建: the outline sidebar must empty at once and the camera reset to 100% ── */
+function newfileScenario() {
+    freshWorld();
+    const nfA = addNode('source', 10, 10);
+    addNode('output', 200, 200);
+    canvas.selectedNode = nfA;
+    canvas.zoom = 1.5;
+    canvas.panX = 120;
+    canvas.panY = -40;
+    canvas.updateTransform();
+    Outline.render();
+    const before = doc.getElementById('outline-list').querySelectorAll('.outline-row').length;
+    sandbox.__wf.newFile();
+    out.newfile = {
+        rowsBefore: before,
+        zoomAfter: canvas.zoom,
+        panAfter: [canvas.panX, canvas.panY],
+        statusAfter: doc.getElementById('status-zoom').textContent,
+        nodesAfter: Object.keys(canvas.nodes).length,
+        selectedAfter: canvas.selectedNode,
+        rowsAfter: doc.getElementById('outline-list').querySelectorAll('.outline-row').length,
+        emptyShown: !!doc.getElementById('outline-list').querySelector('.outline-empty'),
+    };
+}
+
 resizeRepaintScenario();
 connectWarningsScenarios()
     .then(() => touchGestureScenario())
     .then(() => renameScenarios())
+    .then(() => {
+        newfileScenario();
+    })
     .then(() => {
         process.stdout.write(JSON.stringify(out));
     })

@@ -396,9 +396,25 @@ const workflow = {
         canvas.nodes = {};
         canvas.connections = [];
         canvas.nextId = 1;
+        canvas.selectedNode = null;
+        if (canvas._settingsNodeId) closeSettings();
+        /* A new canvas is a fresh view, not the last one with its nodes deleted: 适应 on an
+           empty graph lands exactly at pan 0 / zoom 100%, so 新建 never inherits the previous
+           file's camera. resetView repaints the transform and re-paints the % readout. */
+        canvas.resetView();
         canvas.scheduleRender();
         canvas.updateStatus();
-        if (canvas._settingsNodeId) closeSettings();
+        /* The outline reads the model at saveState, which a bare 新建 never runs — so rebuild
+           it here, immediately, instead of leaving the previous canvas's rows on screen until
+           some later write. Guarded the same way saveState guards it (a canvas-only harness
+           has no Outline; a broken sidebar must not abort the reset). */
+        if (typeof Outline !== 'undefined' && Outline.render) {
+            try {
+                Outline.render();
+            } catch (e) {
+                console.error('outline render failed', e);
+            }
+        }
         this.currentFile = null;
         localStorage.removeItem('crawler_canvas');
         this._persistOpenFile();
