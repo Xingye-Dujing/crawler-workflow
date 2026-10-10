@@ -1345,6 +1345,9 @@ body.style-menu-open #workspace #resume-banner {
 .outline-list {
   overflow-y: auto;
   flex: 1 1 auto;
+  /* The universal `*` reset rounds every box; the list must stay square so a selected
+     row is not clipped at the container's corners (mirrors the squared .outline-row). */
+  border-radius: 0;
 }
 #outline-panel.collapsed .outline-list {
   display: none;
@@ -1360,7 +1363,10 @@ body.style-menu-open #workspace #resume-banner {
   color: var(--text-dim);
   font-size: 11px;
   border: 1px solid transparent;
-  border-radius: 3px;
+  /* No rounding: the active/hover selection is a 1px border all the way around, and
+     rounded corners (with the row's overflow:hidden for the ellipsis) clipped its ends
+     so the highlight read as cut off. A squared row shows the selection in full. */
+  border-radius: 0;
   transition: all 0.1s;
   margin-bottom: 2px;
   white-space: nowrap;
