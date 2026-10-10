@@ -18,16 +18,19 @@ from node_runner import run_node
 
 pytestmark = [
     pytest.mark.unit,
-    pytest.mark.skipif(shutil.which('node') is None, reason='node not installed'),
+    pytest.mark.skipif(shutil.which('node') is None,
+                       reason='node not installed'),
 ]
 
 JS_DIR = Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js'
-HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_canvas_ix.mjs'
+HARNESS = Path(__file__).resolve(
+).parents[1] / 'frontend' / 'harness_canvas_ix.mjs'
 
 
 @pytest.fixture(scope='module')
 def ix():
-    proc = run_node(str(HARNESS), str(JS_DIR / 'canvas.js'), str(JS_DIR / 'workflow.js'))
+    proc = run_node(str(HARNESS), str(JS_DIR / 'canvas.js'),
+                    str(JS_DIR / 'workflow.js'))
     assert proc.returncode == 0, f'canvas harness failed: {proc.stderr[-2000:]}: {proc.stdout[-2000:]}'
     return json.loads(proc.stdout)
 
@@ -47,7 +50,8 @@ class TestSelection:
 class TestConnections:
     def test_dragging_from_an_out_port_to_an_in_port_wires_them(self, ix):
         made = ix['connect_created']
-        assert made['connections'] == [{'from': ix['ids']['connect'][0], 'to': ix['ids']['connect'][1]}]
+        assert made['connections'] == [
+            {'from': ix['ids']['connect'][0], 'to': ix['ids']['connect'][1]}]
         assert made['toasts'] == ['CONN-CREATED']
         assert made['persisted'] == 1, 'a wire the draft does not carry is a wire lost on reload'
 
@@ -75,7 +79,8 @@ class TestConnections:
         assert ix['connect_self']['connections'] == 1
 
     def test_dropping_on_empty_canvas_creates_nothing(self, ix):
-        assert ix['connect_dropped_on_nothing'] == {'connections': 1, 'connectingFrom': None}
+        assert ix['connect_dropped_on_nothing'] == {
+            'connections': 1, 'connectingFrom': None}
 
     def test_tokenize_to_visualize_forces_the_word_frequency_output(self, ix):
         """The chart can only draw words a word-frequency table holds, so the link
@@ -112,13 +117,15 @@ class TestConnectionWarnings:
         assert got['connections'] == 2
 
     def test_a_second_wire_into_an_analysis_warns_about_the_join_limit(self, ix):
-        assert ix['connect_warnings']['analysis_fanin']['msg'].startswith('FANIN-ANALYSIS')
+        assert ix['connect_warnings']['analysis_fanin']['msg'].startswith(
+            'FANIN-ANALYSIS')
 
     def test_two_upstreams_into_a_source_warn_without_the_canvas_deciding_the_mode(self, ix):
         """The canvas must not hold a second opinion about which crawl can be fed — the
         one fixed message carries both outcomes instead of consulting the capability
         matrix here."""
-        assert ix['connect_warnings']['source_fanin']['msg'].startswith('FANIN-SOURCE')
+        assert ix['connect_warnings']['source_fanin']['msg'].startswith(
+            'FANIN-SOURCE')
 
     def test_a_wire_into_an_upload_is_reported_as_ignored_from_the_first(self, ix):
         got = ix['connect_warnings']['upload_ignore']
@@ -126,7 +133,8 @@ class TestConnectionWarnings:
         assert got['toggles'] == ['conn_dismiss_fanin_ignore']
 
     def test_a_wire_into_a_name_node_is_reported_as_refused(self, ix):
-        assert ix['connect_warnings']['name_refused']['msg'].startswith('FANIN-NAME')
+        assert ix['connect_warnings']['name_refused']['msg'].startswith(
+            'FANIN-NAME')
 
     def test_undo_takes_the_second_wire_back_and_reports_it_removed(self, ix):
         """The whole point of "written then explained": if the consequence is not what
@@ -191,16 +199,31 @@ class TestTouchGestures:
 
 
 class TestWheel:
-    """A two-finger trackpad scroll and a pinch arrive as wheel events; the canvas must
-    tell them apart (Chrome reports a trackpad pinch as a ctrlKey wheel) and keep the
-    plain mouse wheel zooming, since a desktop wheel carries no horizontal travel."""
+    """Three independent wheel roles that never grab one another: a pinch (Chrome reports
+    it as a ctrlKey wheel) zooms; a trackpad two-finger scroll pans the surface following
+    the fingers; a plain mouse-wheel notch zooms. Because a purely-vertical trackpad swipe
+    and a mouse notch are indistinguishable in one event on Windows/Chrome, the classifier
+    reads the STREAM — a horizontal delta, a fractional value, or a changing delta upgrades
+    the whole burst to a pan, so the brief horizontal-zero moment of a diagonal cannot
+    steal one axis."""
 
     def test_two_finger_scroll_pans_the_canvas(self, ix):
-        """A scroll with a horizontal delta (a trackpad) pans the surface with the gesture
-        and leaves the scale alone — this is the two-finger “移动画布”."""
+        """A scroll with a horizontal delta (a trackpad) pans the surface FOLLOWING the
+        fingers — the wheel delta is negated, so a leftward swipe drags the canvas left —
+        and leaves the scale alone. This is the two-finger “移动画布”."""
         trackpad = ix['wheel']['trackpad']
-        assert (trackpad['panX'], trackpad['panY']) == (-80, -20)
+        assert (trackpad['panX'], trackpad['panY']) == (80, 20), (
+            'the pan must follow the fingers (wheel delta negated), not run against them'
+        )
         assert trackpad['zoom'] == 1, 'a plain two-finger scroll must never zoom'
+
+    def test_a_vertical_trackpad_swipe_pans_instead_of_grabbing_a_zoom(self, ix):
+        """A purely VERTICAL fractional swipe is a scroll: it pans following the fingers and
+        must not touch the scale."""
+        swipe = ix['wheel']['verticalTrackpadSwipe']
+        assert (swipe['panX'], swipe['panY']) == (
+            0, 37.5), 'a vertical swipe must pan, following the fingers'
+        assert swipe['zoom'] == 1, 'a two-finger scroll that happens to be vertical must not zoom'
 
     def test_ctrl_or_pinch_wheel_zooms_in(self, ix):
         """Holding Ctrl (a trackpad pinch in Chrome/Edge, or a deliberate ctrl-wheel)
@@ -209,10 +232,48 @@ class TestWheel:
         assert pinch['zoom'] > 1
         assert pinch['status'] == '111%'
 
-    def test_a_plain_mouse_wheel_still_zooms(self, ix):
-        """A desktop wheel has no horizontal delta and no modifier — it keeps the long-
-        standing zoom (down = out), so the mouse users' muscle memory is unchanged."""
-        assert ix['wheel']['mouseWheel']['zoom'] < 1
+    def test_a_mouse_wheel_notch_zooms_and_does_not_pan(self, ix):
+        """A lone integer, pure-vertical notch with no trackpad evidence is a mouse wheel:
+        it zooms (down = out) — the scale moves, which is what separates it from a trackpad
+        scroll (whose scale stays 1). Zooming about the cursor also shifts the pan, as it
+        must, so the scale is the assertion, not the pan."""
+        wheel = ix['wheel']['mouseWheel']
+        assert wheel['zoom'] < 1, 'a downward mouse wheel (deltaY > 0) must zoom out'
+
+    def test_a_diagonal_scroll_never_locks_an_axis(self, ix):
+        """The regression: a two-finger diagonal whose horizontal delta flickers to 0 on
+        one event (with the vertical delta momentarily unchanged, so only the sticky
+        stream can rescue it) must pan through every event, never split into a zoom. The
+        negated sums prove all three panned: X -(12+0+9), Y -(6+6+4), scale untouched."""
+        diag = ix['wheel']['diagonalNoLock']
+        assert (diag['panX'], diag['panY']) == (-21, -
+                                                16), 'the horizontal-zero event stole an axis'
+        assert diag['zoom'] == 1, 'a trackpad diagonal must never zoom mid-scroll'
+
+
+class TestCameraAnimation:
+    """适应 (resetView) and the outline jump (centerOnNode) must GLIDE the camera, not
+    teleport it — while still committing the final state synchronously, and cancelling
+    the glide the instant the user takes over with a scroll."""
+
+    def test_fit_arms_a_camera_glide_and_commits_its_target(self, ix):
+        assert ix['view_anim']['resetArmsGlide'] is True, '适应 set no transform transition to ease along'
+        assert ix['view_anim']['resetCommittedTarget'] is True, '适应 did not commit a clamped zoom synchronously'
+
+    def test_the_outline_jump_arms_the_same_glide(self, ix):
+        assert ix['view_anim']['focusArmsGlide'] is True, 'the outline jump did not ease the camera'
+
+    def test_a_manual_scroll_cancels_the_glide(self, ix):
+        """A user gesture wins over an in-flight animation: the transition is removed
+        so panning tracks the state immediately instead of rubber-banding behind it."""
+        assert ix['view_anim']['gestureCancelsGlide'] is True, 'a scroll left the camera glide running'
+
+    def test_zero_duration_snaps_without_arming_a_glide(self, ix):
+        """The reduced-motion path (0 ms) applies the target but sets no transition."""
+        snap = ix['view_anim']['instantSnap']
+        assert snap['animating'] is False, 'a 0 ms camera move armed a glide'
+        assert (snap['panX'], snap['zoom']) == (
+            120, 1), 'the instant path did not apply the target synchronously'
 
 
 class TestRepaint:
@@ -256,7 +317,8 @@ class TestRepaint:
         assert ' C ' in ix['repaint']['back_edge_d'], ix['repaint']['back_edge_d']
 
     def test_deleting_a_node_prunes_the_wires_touching_it(self, ix):
-        assert ix['delete_node_prunes'] == [], 'orphaned wires would render as a path to nowhere'
+        assert ix['delete_node_prunes'] == [
+        ], 'orphaned wires would render as a path to nowhere'
 
 
 class TestFolding:
@@ -269,10 +331,12 @@ class TestFolding:
         """The bug this pins: `toggleFold` wrote a draft that had no fold field,
         so the layout the user arranged unfolded itself on the next page."""
         assert ix['fold']['persisted'] is True
-        assert ix['fold']['after_reload'] == {'folded': True, 'contentHidden': 'none'}
+        assert ix['fold']['after_reload'] == {
+            'folded': True, 'contentHidden': 'none'}
 
     def test_unfolding_persists_the_other_way(self, ix):
-        assert ix['fold']['unfolded'] == {'folded': False, 'contentShown': True, 'persisted': False}
+        assert ix['fold']['unfolded'] == {
+            'folded': False, 'contentShown': True, 'persisted': False}
 
     def test_a_fold_aimed_at_a_missing_node_is_harmless(self, ix):
         assert ix['fold']['missing_node_is_harmless'] is True
@@ -299,7 +363,8 @@ class TestViewTransform:
         band the menu does not cover starts below the 48px bar, not at y=0."""
         assert ix['reset_view']['zoom'] == 1
         assert ix['reset_view']['status'] == '100%'
-        assert (ix['reset_view']['panX'], ix['reset_view']['panY']) == (650, 304)
+        assert (ix['reset_view']['panX'],
+                ix['reset_view']['panY']) == (650, 304)
 
     def test_reset_view_on_an_empty_canvas_moves_nothing(self, ix):
         assert ix['reset_view_no_nodes'] == {'panX': 0, 'panY': 0, 'zoom': 1}
@@ -404,13 +469,16 @@ class TestSettingsPanelRoundTrip:
 
     def test_clicking_the_same_node_again_closes_and_clears(self, ix):
         off = ix['edit']['toggled_off']
-        assert off == {'settingsNode': None, 'panelOpen': False, 'buttonMarked': False}
+        assert off == {'settingsNode': None,
+                       'panelOpen': False, 'buttonMarked': False}
 
     def test_the_panel_can_be_reopened(self, ix):
-        assert ix['edit']['reopened'] == {'settingsNode': ix['ids']['edit'], 'panelOpen': True}
+        assert ix['edit']['reopened'] == {
+            'settingsNode': ix['ids']['edit'], 'panelOpen': True}
 
     def test_a_deleted_nodes_panel_does_not_outlive_it(self, ix):
-        assert ix['edit']['stale_closed'] == {'settingsNode': None, 'panelOpen': False}
+        assert ix['edit']['stale_closed'] == {
+            'settingsNode': None, 'panelOpen': False}
 
     def test_editing_a_node_that_is_not_there_opens_no_panel(self, ix):
         """The id came from a stale click target; the panel must not be left on
@@ -429,7 +497,8 @@ class TestRename:
         assert ix['rename']['typed']['dialog']['initial'] == 'Data Source'
 
     def test_an_empty_answer_clears_the_custom_name_back_to_the_type_label(self, ix):
-        assert ix['rename']['cleared_to_type_label'] == {'title': 'Data Source', 'stamped': 'Data Source'}
+        assert ix['rename']['cleared_to_type_label'] == {
+            'title': 'Data Source', 'stamped': 'Data Source'}
 
     def test_a_cancelled_dialog_changes_nothing(self, ix):
         assert ix['rename']['cancelled_leaves_it_alone'] is True
@@ -493,7 +562,8 @@ class TestWorkspacePointer:
     def test_a_small_move_is_not_a_pan(self, ix):
         """Below the threshold the gesture was a right-CLICK, and the context menu
         the user asked for must still appear."""
-        assert ix['pan']['below_threshold'] == {'panX': 0, 'wasDragging': False}
+        assert ix['pan']['below_threshold'] == {
+            'panX': 0, 'wasDragging': False}
 
     def test_past_the_threshold_the_canvas_follows_the_pointer(self, ix):
         over = ix['pan']['over_threshold']
@@ -502,7 +572,8 @@ class TestWorkspacePointer:
         assert 'translate(100px' in over['transform']
 
     def test_releasing_stops_the_pan(self, ix):
-        assert ix['pan']['released'] == {'isPanning': False, 'cursor': 'default'}
+        assert ix['pan']['released'] == {
+            'isPanning': False, 'cursor': 'default'}
 
     def test_a_pan_swallow_the_context_menu(self, ix):
         assert ix['pan']['pan_then_contextmenu_suppressed']['menuOpen'] is False
@@ -557,7 +628,8 @@ class TestContextMenu:
         """400×300 window, a 260×180 menu: only its real size says where the right
         edge is. The old constant margin parked the menu off-screen in one language
         and stopped it 100 px early in another."""
-        assert ix['context_menu']['clamped']['position'] == ['132px', '112px'], ix['context_menu']['clamped']
+        assert ix['context_menu']['clamped']['position'] == [
+            '132px', '112px'], ix['context_menu']['clamped']
 
     def test_the_delete_item_deletes_the_right_node(self, ix):
         assert ix['context_menu']['delete_action']['nodes'] == 0
@@ -565,7 +637,8 @@ class TestContextMenu:
     def test_a_new_node_lands_where_the_menu_was_opened(self, ix):
         created = ix['context_menu']['new_node']
         assert created['count'] == 1
-        assert created['at'] == [['190px', '260px']], 'a random position hides the node behind the menu'
+        assert created['at'] == [['190px', '260px']
+                                 ], 'a random position hides the node behind the menu'
 
     def test_a_click_outside_the_menu_closes_it(self, ix):
         assert ix['context_menu']['outside_click_closes'] is False
@@ -608,7 +681,8 @@ class TestInitFromDraft:
         assert ix['init']['nextId'] == 10
 
     def test_the_next_new_node_cannot_collide_with_a_restored_id(self, ix):
-        assert ix['init']['next_id_avoids_the_restored'] == {'id': 'node-10', 'taken': True}
+        assert ix['init']['next_id_avoids_the_restored'] == {
+            'id': 'node-10', 'taken': True}
 
     def test_a_fold_comes_back_folded(self, ix):
         assert ix['init']['contentHidden'] == 'none'
@@ -643,7 +717,8 @@ class TestCommentNodeForm:
 
     def test_the_form_renders_with_its_own_knobs(self, ix):
         html = ix['comment_form']
-        assert "'comment_limit'" in html and "'per_article_file'" in html and "'keep_parts'" in html, html[:400]
+        assert "'comment_limit'" in html and "'per_article_file'" in html and "'keep_parts'" in html, html[
+            :400]
 
     def test_the_comment_form_offers_to_recollect_what_its_ledger_would_skip(self, ix):
         """A comment walk dedupes through the same ledger a source walk does, so the way back

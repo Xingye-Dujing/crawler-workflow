@@ -104,7 +104,7 @@ const I18n = {
         }
         return s;
     },
-    apply() {},
+    apply() { },
 };
 
 const sandbox = {
@@ -124,8 +124,8 @@ const sandbox = {
         /* One batched delivery, the way a frame's resizes arrive together. */
         sandbox.__roCallbacks.forEach((cb) => cb([], null));
     },
-    RunState: { parallel: false, headless: true, setRunning() {}, set() {} },
-    resumeBar: { refresh() {} },
+    RunState: { parallel: false, headless: true, setRunning() { }, set() { } },
+    resumeBar: { refresh() { } },
     LLMSettings: { payload: () => ({ provider: 'ollama', model: 'm', api_key: '' }) },
     /* Settings lives in app.js, which is not loaded here — the canvas only ever
        calls `Settings.save()` to remember a view change, so the interesting part is
@@ -154,7 +154,7 @@ sandbox.showDialog = async (spec) => {
 };
 /* The panels fetch nothing here, but workflow.js polls on load; stop the timer so
    a pending tick cannot fire after the scenario that created it is gone. */
-sandbox.clearInterval = () => {};
+sandbox.clearInterval = () => { };
 
 const canvas = sandbox.__canvas;
 const Outline = sandbox.__outline;
@@ -188,6 +188,12 @@ function freshWorld() {
     canvas._panPointers = {};
     canvas._pinchBase = null;
     canvas._gestureMoved = false;
+    /* Wheel-stream classifier state: each scenario starts as if the wheel had been quiet
+       (a far-past last event), so the first dispatched event is judged on its own
+       evidence, not a previous scenario's burst. */
+    canvas._lastWheelAt = 0;
+    canvas._lastWheelDeltaY = 0;
+    canvas._wheelStreamTrackpad = false;
     canvas.zoom = 1;
     canvas.panX = 0;
     canvas.panY = 0;
@@ -477,6 +483,27 @@ out.reset_view = {
     panY: canvas.panY,
     status: doc.getElementById('status-zoom').textContent,
 };
+/* 适应 and the outline jump EASE the rendered transform, not the state: right after
+   the call the camera already sits at its target AND a glide is armed — a CSS
+   transition on #canvas-inner. (A browser runs the transition; the harness only
+   proves the hook is set, the state is committed, and a gesture cancels it.) */
+const inner = doc.getElementById('canvas-inner');
+out.view_anim = {
+    resetArmsGlide: canvas._viewAnimating === true && /transform/.test(inner.style.transition || ''),
+    /* The state is committed synchronously, so the math reads the target at once. */
+    resetCommittedTarget: canvas.zoom >= 0.2 && canvas.zoom <= 1,
+};
+/* A scroll is a manual gesture: it must cancel the glide, so panning never
+   rubber-bands behind an animation the user has just overridden. */
+dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: 0, deltaY: -40, ctrlKey: false, clientX: 200, clientY: 200 }));
+out.view_anim.gestureCancelsGlide = canvas._viewAnimating === false && inner.style.transition === '';
+/* An explicit 0 ms (the reduced-motion path in a real browser) snaps: no glide armed,
+   but the target is still applied to the state. */
+canvas._animateViewTo(120, 80, 1, 0);
+out.view_anim.instantSnap = { animating: canvas._viewAnimating, panX: canvas.panX, zoom: canvas.zoom };
+/* The outline's jump-to-node arms the very same glide. */
+canvas.centerOnNode(vA);
+out.view_anim.focusArmsGlide = canvas._viewAnimating === true && /transform/.test(inner.style.transition || '');
 freshWorld();
 canvas.resetView();
 out.reset_view_no_nodes = { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom };
@@ -844,22 +871,45 @@ dispatchOn(workspace, 'pointerdown', ev({
 }));
 out.pan.node_click_kept_settings = canvas._settingsNodeId === p1;
 
-/* ── wheel: trackpad two-finger pan, ctrl/pinch zoom, mouse-wheel zoom ── */
-freshWorld();
-dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: -80, deltaY: -20, ctrlKey: false, clientX: 200, clientY: 200 }));
-out.wheel = {
-    /* A trackpad scroll carries a horizontal delta → pan the canvas following the scroll,
-       zoom untouched. This is the two-finger "移动画布". */
-    trackpad: { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom },
+/* ── wheel: three independent roles (双指平移 / 捏合缩放 / 鼠标滚轮缩放) ── */
+/* Each single-event scenario resets the stream classifier and simulates a quiet gap
+   (lastWheelAt = 0) so the event is judged on its own evidence, not a prior burst. */
+const quietWheel = (extra) => {
+    canvas._lastWheelAt = 0; canvas._lastWheelDeltaY = 0; canvas._wheelStreamTrackpad = false;
+    canvas.panX = 0; canvas.panY = 0; canvas.zoom = 1;
+    dispatchOn(canvas.workspace, 'wheel', ev({ ctrlKey: false, clientX: 200, clientY: 200, ...extra }));
 };
-canvas.panX = 0; canvas.panY = 0; canvas.zoom = 1;
-dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: 0, deltaY: -100, ctrlKey: true, clientX: 200, clientY: 200 }));
-/* Chrome/Edge report a trackpad pinch as a ctrlKey wheel → zoom in about the cursor. */
+freshWorld();
+
+/* 1. A scroll with a horizontal delta is a trackpad → pan FOLLOWING the fingers (the
+      wheel delta is negated, so a leftward swipe drags the surface left), zoom untouched. */
+quietWheel({ deltaX: -80, deltaY: -20 });
+out.wheel = { trackpad: { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom } };
+
+/* 2. A pinch — Chrome/Edge report it as a ctrlKey wheel — zooms in about the cursor. */
+quietWheel({ deltaX: 0, deltaY: -100, ctrlKey: true });
 out.wheel.ctrlPinch = { zoom: canvas.zoom, status: doc.getElementById('status-zoom').textContent };
+
+/* 3. A lone integer, pure-vertical notch with no trackpad evidence is a MOUSE WHEEL →
+      zoom (down = out), and it must NOT pan — this is the restored desktop behaviour. */
+quietWheel({ deltaX: 0, deltaY: 120 });
+out.wheel.mouseWheel = { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom };
+
+/* 4. A fractional vertical swipe is a trackpad scroll → pan following the fingers. */
+quietWheel({ deltaX: 0, deltaY: -37.5 });
+out.wheel.verticalTrackpadSwipe = { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom };
+
+/* 5. The axis-lock regression, isolated: a diagonal burst whose horizontal component
+      flickers to 0 on one event (and whose deltaY is momentarily unchanged, so only the
+      sticky stream can save it) must KEEP panning every event, not split into a zoom.
+      Three back-to-back events, no quiet gap between them. Negated sum: panX=-(12+0+9),
+      panY=-(6+6+4), zoom unchanged. */
+canvas._lastWheelAt = 0; canvas._lastWheelDeltaY = 0; canvas._wheelStreamTrackpad = false;
 canvas.panX = 0; canvas.panY = 0; canvas.zoom = 1;
-dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: 0, deltaY: 120, ctrlKey: false, clientX: 200, clientY: 200 }));
-/* A mouse wheel has no horizontal travel and no modifier → keeps the old zoom behaviour. */
-out.wheel.mouseWheel = { zoom: canvas.zoom };
+dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: 12, deltaY: 6, ctrlKey: false, clientX: 200, clientY: 200 }));
+dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: 0, deltaY: 6, ctrlKey: false, clientX: 200, clientY: 200 }));
+dispatchOn(canvas.workspace, 'wheel', ev({ deltaX: 9, deltaY: 4, ctrlKey: false, clientX: 200, clientY: 200 }));
+out.wheel.diagonalNoLock = { panX: canvas.panX, panY: canvas.panY, zoom: canvas.zoom };
 
 /* ── context menu contents and actions ─────────────────────────────── */
 freshWorld();

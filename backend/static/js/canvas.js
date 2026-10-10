@@ -30,6 +30,14 @@ const WIRE_ALIGN_EPS = 1.0;
    is the same one the zoom-out button stops at. */
 const VIEW_FIT_MARGIN = 40;
 
+/* The camera glide for 适应 (resetView) and the outline's jump-to-node. The final
+   pan/zoom is committed to state synchronously (so the math and the tests read it at
+   once); only the RENDERED transform is eased, via a CSS transition on #canvas-inner,
+   from whatever was on screen to that target. Any manual gesture clears it so a
+   wheel/pan never rubber-bands behind the state. */
+const VIEW_ANIM_MS = 280;
+const VIEW_ANIM_EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)';
+
 const canvas = {
     nodes: {},
     connections: [],
@@ -55,6 +63,21 @@ const canvas = {
     _panPointers: {},
     _pinchBase: null,
     _gestureMoved: false,
+    /* The in-flight camera glide: the timer that removes the CSS transition when the
+       ease ends, and a flag so a manual gesture can tell whether one needs cancelling. */
+    _viewAnim: null,
+    _viewAnimating: false,
+    /* Wheel-stream bookkeeping for the three-role split (pan / pinch / mouse wheel). A
+       single wheel event on Windows/Chrome cannot always tell a trackpad vertical scroll
+       from a mouse notch (both are pure-vertical integer deltas), so the classifier
+       looks at the STREAM: any event carrying a horizontal delta, a fractional value, or
+       a delta that differs from the previous event within the same burst is proof of a
+       trackpad — and the whole burst then pans until it goes quiet. A burst whose events
+       are all pure-vertical integer constants with no history is treated as a mouse
+       wheel and zooms. This makes 双指平移 / 双指捏合 / 鼠标滚轮 independent roles. */
+    _lastWheelAt: 0,
+    _lastWheelDeltaY: 0,
+    _wheelStreamTrackpad: false,
     dragTarget: null,
     dragOffsetX: 0,
     dragOffsetY: 0,
@@ -141,6 +164,7 @@ const canvas = {
             document.getElementById('context-menu').classList.remove('open');
             this.deselectNode();
             this.panWasDragging = false;
+            this._clearViewAnim(); /* grabbing the surface ends any camera glide first */
             if (e.button === 2 || e.pointerType !== 'mouse') {
                 /* A touch/pen press may become a pinch, so record this pointer by id;
                    a second finger then drives zoom. A mouse right-drag stays pan-only
@@ -457,26 +481,61 @@ const canvas = {
             }
         });
 
-        /* Wheel = a two-finger trackpad scroll or a mouse wheel. Chrome/Edge report a
-           trackpad pinch as a wheel event with ctrlKey set, so the gesture maps cleanly:
-             · Ctrl / Cmd held  → zoom about the cursor (a trackpad pinch, or ctrl-wheel);
-             · no modifier, only a vertical delta (a mouse wheel, no horizontal travel)
-               → zoom, the long-standing desktop behaviour;
-             · otherwise (a trackpad, which can carry a horizontal delta) → pan the canvas,
-               following the scroll direction so it feels like grabbing the surface.
-           The point under the cursor stays put when zooming, so it is anchored not drifting. */
+        /* Wheel = three independent roles, none of which grabs another:
+             · Ctrl / Cmd held — Chrome/Edge report a trackpad pinch this way — zoom about
+               the cursor (a deliberate ctrl-wheel also zooms; it is the same intent).
+             · A trackpad two-finger scroll — pan the surface, FOLLOWING the fingers. The
+               wheel delta is negated because a delta is written in scrollbar space (positive
+               = the viewport moved down/right = content moved up/left), the opposite of
+               grabbing the canvas.
+             · A mouse wheel notch — zoom, the long-standing desktop behaviour.
+           Per-event, a purely-vertical trackpad swipe and a mouse notch can look identical
+           on Windows/Chrome (both are integer, pure-vertical pixel deltas), so the
+           classifier reads the STREAM, not one event. A burst is upgraded to trackpad
+           whenever any event in it carries a horizontal delta, a fractional value, or a
+           delta that differs from the previous event — evidence a mouse cannot produce.
+           Once upgraded, the rest of the burst pans too, so the brief horizontal-zero
+           moment of a diagonal no longer steals an axis. A burst whose events are all
+           pure-vertical integer constants is treated as a mouse wheel. */
         this.workspace.addEventListener('wheel', (e) => {
             e.preventDefault();
+            this._clearViewAnim(); /* a scroll/pinch wins over an in-flight camera glide */
             const rect = this.workspace.getBoundingClientRect();
             const mx = e.clientX - rect.left;
             const my = e.clientY - rect.top;
             if (e.ctrlKey || e.metaKey) {
-                /* 0.999^deltaY ≈ 10% per notch; a pinch's deltas are small, so smooth. */
+                /* Pinch (a Ctrl+wheel in Chrome/Edge) or a deliberate ctrl-wheel: zoom
+                   about the cursor. 0.999^deltaY ≈ 10% per notch; small pinch deltas
+                   already read smooth, so no bigger step is needed here. */
                 this._zoomAt(mx, my, Math.pow(0.999, e.deltaY));
-            } else if (e.deltaX === 0) {
-                this._zoomAt(mx, my, Math.pow(0.999, e.deltaY));
+                this._lastWheelAt = Date.now();
+                this._lastWheelDeltaY = e.deltaY;
+                this._wheelStreamTrackpad = true;
+                this.scheduleViewSave();
+                return;
+            }
+            const now = Date.now();
+            const inBurst = (now - this._lastWheelAt) < 180;
+            /* Any concrete sign of a trackpad: horizontal component, a fractional delta
+               on THIS event, a change in deltaY within the same burst, or an already-
+               trackpad burst. The last rule is what stops the brief deltaX === 0 moment
+               of a diagonal from misfiring as a mouse notch (and stealing one axis). */
+            const fractional = Math.abs(e.deltaY) % 1 !== 0;
+            const isTrackpad = e.deltaX !== 0
+                || fractional
+                || (inBurst && e.deltaY !== this._lastWheelDeltaY)
+                || (this._wheelStreamTrackpad && inBurst);
+            this._lastWheelAt = now;
+            this._lastWheelDeltaY = e.deltaY;
+            this._wheelStreamTrackpad = isTrackpad;
+            if (isTrackpad) {
+                this._panBy(-e.deltaX, -e.deltaY);
             } else {
-                this._panBy(e.deltaX, e.deltaY);
+                /* A lone integer, pure-vertical delta with no trackpad evidence around it:
+                   treat it as a mouse wheel and zoom (the desktop muscle memory). The step
+                   is 0.9^(dy/100) ≈ 10% per 100-px notch, matching the wheel's discrete
+                   feel rather than the smooth per-pixel pinch. */
+                this._zoomAt(mx, my, Math.pow(0.9, e.deltaY / 100));
             }
             /* The camera is part of what a draft (and later a saved file) owes the
                user, so a wheel move that is never written back is a viewpoint that
@@ -1193,6 +1252,58 @@ const canvas = {
         this.container.style.transform = 'translate(' + px + 'px, ' + py + 'px) scale(' + this.zoom + ')';
     },
 
+    _paintZoomReadout() {
+        const el = document.getElementById('status-zoom');
+        if (el) el.textContent = Math.round(this.zoom * 100) + '%';
+    },
+
+    _prefersReducedMotion() {
+        /* Honour the OS "reduce motion" setting: glide only when the user has not asked
+           the system to minimise animation. */
+        return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    },
+
+    /* Drop the camera glide: cancel the end timer and remove the CSS transition so the
+       next transform change is immediate. Called before a manual gesture (wheel / pan /
+       pinch / node drag) and whenever a new glide starts, so the surface never lags the
+       state that was already committed. */
+    _clearViewAnim() {
+        if (this._viewAnim) {
+            clearTimeout(this._viewAnim);
+            this._viewAnim = null;
+        }
+        if (this._viewAnimating) {
+            if (this.container && this.container.style) this.container.style.transition = '';
+            this._viewAnimating = false;
+        }
+    },
+
+    /* Ease the camera to (tx, ty, tz). The final state is committed SYNCHRONOUSLY — the
+       model, the coordinate math and the tests all read the target at once — and only the
+       rendered transform glides there from what is on screen, via a CSS transition. `ms`
+       overrides the default duration; 0 or a reduced-motion preference snaps instantly. */
+    _animateViewTo(tx, ty, tz, ms) {
+        this._clearViewAnim();
+        this.panX = tx;
+        this.panY = ty;
+        this.zoom = tz;
+        this._paintZoomReadout();
+        const duration = ms === undefined ? VIEW_ANIM_MS : ms;
+        const el = this.container;
+        if (duration <= 0 || this._prefersReducedMotion() || !el || !el.style) {
+            this.updateTransform();
+            this.scheduleViewSave();
+            return;
+        }
+        /* Set the transition BEFORE the transform changes, so the browser interpolates
+           from the currently-painted transform to the new one. */
+        el.style.transition = 'transform ' + duration + 'ms ' + VIEW_ANIM_EASE;
+        this._viewAnimating = true;
+        this.updateTransform();
+        this._viewAnim = setTimeout(() => this._clearViewAnim(), duration + 60);
+        this.scheduleViewSave();
+    },
+
     /* Screen-space pan by (dx, dy). Used by a two-finger trackpad scroll and by the
        axis of a pinch. The canvas is unbounded, so — like a pointer drag — there is no
        clamp: the surface simply follows the gesture. */
@@ -1288,12 +1399,7 @@ const canvas = {
         const menu = document.getElementById('top-menu');
         const topInset = (menu ? menu.offsetHeight : 0) + VIEW_FIT_MARGIN;
         if (ids.length === 0) {
-            this.panX = 0;
-            this.panY = 0;
-            this.zoom = 1;
-            this.updateTransform();
-            document.getElementById('status-zoom').textContent = '100%';
-            this.scheduleViewSave();
+            this._animateViewTo(0, 0, 1);
             return;
         }
         let minX = Infinity;
@@ -1313,17 +1419,13 @@ const canvas = {
         const availW = Math.max(1, vw - 2 * VIEW_FIT_MARGIN);
         const availH = Math.max(1, vh - topInset - VIEW_FIT_MARGIN);
         const fit = Math.min(availW / contentW, availH / contentH);
-        this.zoom = Math.max(0.2, Math.min(1, fit));
+        const tZoom = Math.max(0.2, Math.min(1, fit));
         const cx = (minX + maxX) / 2;
         const cy = (minY + maxY) / 2;
-        this.panX = vw / 2 - cx * this.zoom;
         /* Centre inside the band the menu does NOT cover, not inside the whole
            height — so the top margin is (menu + VIEW_FIT_MARGIN), never 0. */
         const bandCentreY = (topInset + (vh - VIEW_FIT_MARGIN)) / 2;
-        this.panY = bandCentreY - cy * this.zoom;
-        this.updateTransform();
-        document.getElementById('status-zoom').textContent = Math.round(this.zoom * 100) + '%';
-        this.scheduleViewSave();
+        this._animateViewTo(vw / 2 - cx * tZoom, bandCentreY - cy * tZoom, tZoom);
     },
 
     /* Bring ONE node to the centre of the visible box and ZOOM IN enough to read it
@@ -1347,16 +1449,11 @@ const canvas = {
         const availW = Math.max(1, vw - 2 * VIEW_FIT_MARGIN);
         const availH = Math.max(1, vh - topInset - VIEW_FIT_MARGIN);
         const fit = Math.min(availW / (nodeW * 3), availH / (nodeH * 3));
-        this.zoom = Math.max(0.5, Math.min(1.5, fit));
+        const tZoom = Math.max(0.5, Math.min(1.5, fit));
         const cx = el.offsetLeft + nodeW / 2;
         const cy = el.offsetTop + nodeH / 2;
-        this.panX = vw / 2 - cx * this.zoom;
         const bandCentreY = (topInset + (vh - VIEW_FIT_MARGIN)) / 2;
-        this.panY = bandCentreY - cy * this.zoom;
-        this.updateTransform();
-        const z = document.getElementById('status-zoom');
-        if (z) z.textContent = Math.round(this.zoom * 100) + '%';
-        this.scheduleViewSave();
+        this._animateViewTo(vw / 2 - cx * tZoom, bandCentreY - cy * tZoom, tZoom);
     },
 
     /* The camera. It is deliberately NOT inside getState(): that dict is also one
@@ -1370,6 +1467,7 @@ const canvas = {
 
     _applyView(view) {
         if (!view || typeof view !== 'object') return;
+        this._clearViewAnim(); /* a restore/load is a placement, not a glide to animate */
         const parts = [
             ['panX', view.panX, -Infinity, Infinity],
             ['panY', view.panY, -Infinity, Infinity],

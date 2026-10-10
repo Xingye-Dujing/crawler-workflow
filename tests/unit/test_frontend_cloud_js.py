@@ -30,14 +30,16 @@ HARNESS = ROOT / 'tests' / 'frontend' / 'harness_cloud.mjs'
 def booted():
     if shutil.which('node') is None:
         pytest.skip('node not on PATH')
-    proc = run_node(HARNESS, JS_DIR / 'canvas.js', JS_DIR / 'workflow.js', JS_DIR / 'app.js')
+    proc = run_node(HARNESS, JS_DIR / 'canvas.js', JS_DIR /
+                    'workflow.js', JS_DIR / 'app.js')
     assert proc.returncode == 0, f'harness failed: {proc.stderr[-2000:]}'
     return json.loads(proc.stdout)
 
 
 class TestDesktopBootKeepsEverything:
     def test_both_transports_are_still_offered(self, booted):
-        assert booted['desktop']['providers'] == ['ollama', 'openrouter'], booted['desktop']
+        assert booted['desktop']['providers'] == [
+            'ollama', 'openrouter'], booted['desktop']
 
     def test_a_stored_local_transport_stays_the_local_one(self, booted):
         """The normalization that moves a stored provider runs the other way on a machine
@@ -96,7 +98,8 @@ class TestCloudBoot:
     def test_the_flag_also_turns_the_page_back_on(self, booted):
         """Every control here is a switch the server can be moved off of; a one-way flag
         would leave a desktop boot stripped after any config read that said cloud."""
-        assert booted['turnsBack'] == {'flag': False, 'dataCloud': '0'}, booted['turnsBack']
+        assert booted['turnsBack'] == {
+            'flag': False, 'dataCloud': '0'}, booted['turnsBack']
 
 
 class TestTheWordFollowsTheLanguage:
@@ -118,17 +121,19 @@ class TestTheChromeIsMarked:
         # The login-browser button and the Ollama address field carry the marker class…
         for needle in ('cookies.generate', 'set-ollamahost'):
             site = html.index(needle)
-            assert 'cloud-hide' in html[site - 260 : site + 20], f'{needle} is not marked for a cloud boot'
+            assert 'cloud-hide' in html[site - 260: site +
+                                        20], f'{needle} is not marked for a cloud boot'
         # …and the headless switch is NOT, because TopMenu.sync() rewrites that button's
         # className wholesale. It is hidden by id instead; a marker class here would be
         # erased on the first state change and the test would still look green.
-        headless = html[html.index('id="btn-headless"') - 200 : html.index('id="btn-headless"') + 40]
+        headless = html[html.index(
+            'id="btn-headless"') - 200: html.index('id="btn-headless"') + 40]
         assert 'cloud-hide' not in headless, headless
         assert 'btn-headless' in headless
 
     def test_the_stylesheet_hides_the_marker_the_headless_switch_and_the_local_rows(self):
         css = (JS_DIR.parent / 'css' / 'style.css').read_text(encoding='utf-8')
-        block = css[css.index("html[data-cloud='1']") : css.index("html[data-cloud='1']") + 320]
+        block = css[css.index('html[data-cloud="1"]')                    : css.index('html[data-cloud="1"]') + 320]
         for needle in ('.cloud-hide', '#btn-headless', '.ai-only-ollama'):
             assert needle in block, f'{needle} is not covered by the cloud rule: {block}'
 
@@ -141,7 +146,8 @@ class TestTheChromeIsMarked:
 
     def test_the_cloud_wording_exists_in_both_browser_catalogues(self):
         app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
-        assert app.count("'mode.llmCloud'") == 2, 'both catalogues must carry the cloud wording'
+        assert app.count(
+            "'mode.llmCloud'") == 2, 'both catalogues must carry the cloud wording'
         assert 'CloudMode' in app, 'the flag stopped being read from /api/config'
 
 
@@ -161,7 +167,8 @@ class TestTheFirstEntryNotice:
         # loads app.js's REAL dictionary, so pinning the sentence would make the test
         # track translations, while a raw `privacy.*` on screen is the defect.
         for label in dialogs[0]['labels']:
-            assert label and not label.startswith('privacy.'), f'the button printed a key: {label}'
+            assert label and not label.startswith(
+                'privacy.'), f'the button printed a key: {label}'
         # The button values are the contract: 「不再提醒」 is the only one that writes an ack,
         # and the ordinary close resolves null. A `value` on the close button would make
         # dismissing the notice silently mean "never ask me again".
@@ -187,11 +194,13 @@ class TestTheFirstEntryNotice:
         assert booted['afterNeverAgain']['acked'] is True, booted['afterNeverAgain']
 
     def test_a_second_config_answer_does_not_stack_a_second_notice(self, booted):
-        assert booted['secondLanding']['dialogs'] == [], booted['secondLanding']
+        assert booted['secondLanding']['dialogs'] == [
+        ], booted['secondLanding']
 
     def test_the_notice_text_exists_in_both_languages(self):
         app = (JS_DIR / 'app.js').read_text(encoding='utf-8')
         # Count the CATALOGUE entries (a key followed by a colon), not every mention of
         # the string: the call site `I18n.t('privacy.body')` also names the key.
         for key in ('privacy.body', 'privacy.gotIt', 'privacy.never'):
-            assert app.count(f"'{key}':") == 2, f'{key} must be in the English and the Chinese catalogue'
+            assert app.count(
+                f"'{key}':") == 2, f'{key} must be in the English and the Chinese catalogue'
