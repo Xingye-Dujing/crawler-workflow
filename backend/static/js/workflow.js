@@ -1965,22 +1965,6 @@ function sourcePanelHtml(nodeId, p) {
     for (var i = 0; i < fields.length; i++) {
         html += sourceFieldHtml(nodeId, fields[i], p[fields[i].key], p);
     }
-    /* Which platforms a throwaway browser actively fails on is a measured fact about
-       the site, so it comes from the matrix (`profileRecommended`) rather than a list
-       the panel keeps by hand. The wording depends on the user's own setting, because
-       "turn it on" and "it is on, now log into it" are different next steps. */
-    var capEntry = Capabilities.platform(platform);
-    if (capEntry && capEntry.profileRecommended) {
-        var values = (window.AppSettings && AppSettings._values) || {};
-        html +=
-            '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">' +
-            I18n.t(values.use_browser_profile ? 'settings.profileOnHint' : 'settings.profileOffHint') +
-            '</div>';
-        if (ID_SHAPE.test(String(nodeId))) {
-            html += '<button class="menu-btn" type="button" onclick="openSettings(\'' + nodeId + '\');toggleSettingsMenu()">' + I18n.t('settings.profileGo') + '</button>';
-        }
-        html += '</div>';
-    }
     if (mode.noteKey) {
         html +=
             '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">' +

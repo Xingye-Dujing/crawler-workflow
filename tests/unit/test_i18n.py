@@ -615,7 +615,6 @@ class TestTheOneSessionRuleIsSpoken:
     @pytest.mark.parametrize(
         'key,en_words,zh_words',
         [
-            ('settings.profileOffHint', ('second device',), ('第二台设备',)),
             ('dialog.profileOff', ('second device',), ('第二台设备',)),
             ('dialog.serialWarn', ('parallel',), ('并行',)),
         ],

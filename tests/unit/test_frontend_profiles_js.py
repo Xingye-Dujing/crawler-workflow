@@ -451,25 +451,6 @@ class TestTemplateLine:
         assert len(ui['off-flagged']['rows']) == len(PLATFORMS)
 
 
-class TestPanelHint:
-    """The hint is rendered through the real app.js catalogue (the harness loads the
-    untouched files), so these assertions read the English sentences rather than the
-    keys — which is also what pins the two states apart."""
-
-    def test_a_flagged_platform_is_explained_in_the_source_panel(self, ui):
-        html = ui['off-flagged']['panelHint']
-        assert 'throwaway browser' in html, 'the panel never mentions the profile on a platform that needs one'
-        assert 'own browser profile' not in html
-
-    def test_the_sentence_changes_once_the_switch_is_on(self, ui):
-        html = ui['on-flagged']['panelHint']
-        assert 'own browser profile' in html and 'throwaway browser' not in html
-
-    def test_an_unflagged_platform_is_left_alone(self, ui):
-        html = ui['off-unflagged']['panelHint']
-        assert 'throwaway browser' not in html and "platform's own browser profile" not in html
-
-
 class TestStaticWiring:
     """The browser reads ids and labels that Python can check without a DOM."""
 
