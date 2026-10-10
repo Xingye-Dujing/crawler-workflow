@@ -26,4 +26,4 @@ with open(p, 'w', encoding='utf-8') as f:
 PY
 
 cd /app/backend
-exec python app.py
+exec python app.py cloud
