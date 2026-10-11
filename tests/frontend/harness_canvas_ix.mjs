@@ -73,6 +73,10 @@ const KEYS = {
     'conn.dismiss': 'DISMISS',
     'outline.noNodes': 'NO-NODES',
     'outline.noMatch': 'NO-MATCH',
+    /* The palette's keyboard/pointer add route: stable sentinels so a scenario asserts the
+       toast fired and WHICH node it named, not a whole translated sentence. */
+    'palette.added': '{label} added',
+    'palette.addHint': 'ADD-HINT',
 };
 /* The zh side exists so a language switch has somewhere to land: with an empty
    dictionary every "does the label follow the language" probe answers "no" for
@@ -1340,7 +1344,48 @@ out.outline_filter = {
     ctrlLeftSelected: canvas.selectedNode === fSrc,
 };
 
+/* ── palette keyboard/pointer add route (self-contained) ─────────── */
+/* A drag is mouse-only, so before this a keyboard user could not add a node at all. The
+   items become real buttons (role + tabindex) whose Enter/Space — or a plain click — call
+   addNodeFromPalette, which adds the node, selects it and toasts its type. Its own freshWorld
+   + a second init mirrors the outline finder scenario: freshWorld binds whatever palette items
+   exist at that moment, so the items are seeded first and the loop picks them up. */
+function paletteKeyboardScenario() {
+    freshWorld();
+    const mk = (type) => {
+        const el = doc.createElement('div');
+        el.className = 'palette-item';
+        el.dataset.type = type;
+        doc.body.appendChild(el);
+        return el;
+    };
+    const pSrc = mk('source');
+    const pOut = mk('output');
+    canvas.init();
+    const attrs = { role: pSrc.getAttribute('role'), tabindex: pSrc.tabIndex, title: pSrc.title };
+    const before = Object.keys(canvas.nodes).length;
+    dispatchOn(pSrc, 'keydown', { key: 'Enter', target: pSrc });
+    const afterEnter = Object.keys(canvas.nodes).length;
+    const enterId = canvas.selectedNode;
+    const toastEnter = toasts[toasts.length - 1];
+    dispatchOn(pOut, 'keydown', { key: ' ', target: pOut });
+    const afterSpace = Object.keys(canvas.nodes).length;
+    dispatchOn(pSrc, 'click', { target: pSrc });
+    const afterClick = Object.keys(canvas.nodes).length;
+    const emptyId = canvas.addNodeFromPalette('');
+    out.palette_keyboard = {
+        attrs,
+        addedByEnter: afterEnter - before,
+        enterIsSource: !!(enterId && canvas.nodes[enterId] && canvas.nodes[enterId].type === 'source'),
+        toastEnter,
+        addedBySpace: afterSpace - afterEnter,
+        addedByClick: afterClick - afterSpace,
+        emptyTypeNull: emptyId === null,
+    };
+}
+
 resizeRepaintScenario();
+paletteKeyboardScenario();
 connectWarningsScenarios()
     .then(() => touchGestureScenario())
     .then(() => renameScenarios())

@@ -544,10 +544,23 @@ const canvas = {
             this.scheduleViewSave();
         }, { passive: false });
 
-        /* Drag from palette */
+        /* Drag from palette — and the same items are the pointer/keyboard route in. A drag
+           is a mouse-only gesture, so before this a keyboard user had NO way to add a node.
+           Each item becomes a real button (role + tabindex) whose Enter/Space — or a plain
+           click, the pointer equivalent of that press — adds that node type at a fresh spot. */
         document.querySelectorAll('.palette-item').forEach(item => {
+            item.setAttribute('role', 'button');
+            item.tabIndex = 0;
+            item.title = I18n.t('palette.addHint');
             item.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('text/plain', item.dataset.type);
+            });
+            item.addEventListener('click', () => this.addNodeFromPalette(item.dataset.type));
+            item.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+                    e.preventDefault();
+                    this.addNodeFromPalette(item.dataset.type);
+                }
             });
         });
         this.workspace.addEventListener('dragover', (e) => e.preventDefault());
@@ -633,6 +646,23 @@ const canvas = {
     reserveId(id) {
         const match = /(\d+)\s*$/.exec(String(id || ''));
         if (match) this.nextId = Math.max(this.nextId, parseInt(match[1], 10) + 1);
+    },
+
+    /* Add a node from the palette the way a drag would drop one, but for the pointer and
+       keyboard routes a drag cannot serve. Position is left to addNode's own non-finite
+       fallback (a fresh random spot, never on top of the last node), and the new node is
+       selected so the arrow-key move / Ctrl+C / Delete shortcuts already know what "it" is.
+       A toast names the type added — a sighted keyboard user gets the same confirmation a
+       drop is, and a screen reader reads it from the live region. */
+    addNodeFromPalette(type) {
+        const t = String(type || '').trim();
+        if (!t) return null;
+        const id = this.addNode(t);
+        this.selectNode(id);
+        if (typeof showToast === 'function') {
+            showToast(I18n.t('palette.added', { label: I18n.t('node.' + t) }));
+        }
+        return id;
     },
 
     addNode(type, x, y, nodeId) {

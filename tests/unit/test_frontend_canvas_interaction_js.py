@@ -492,6 +492,32 @@ class TestOutline:
         assert ix['auto_layout_empty']['survived'] is True
 
 
+class TestPaletteKeyboardAdd:
+    """A drag is mouse-only; these are the keyboard/pointer routes into the canvas."""
+
+    def test_a_palette_item_is_a_real_button(self, ix):
+        """Each item carries role=button, is focusable (tabindex 0) and names the key that
+        adds it — the affordance a keyboard user needs to find the route at all."""
+        a = ix['palette_keyboard']['attrs']
+        assert a['role'] == 'button', 'a palette item is not announced as a button'
+        assert a['tabindex'] == 0, 'a palette item cannot be reached by Tab'
+        assert a['title'] == 'ADD-HINT', 'the item does not advertise its keyboard action'
+
+    def test_enter_adds_the_node_and_selects_it(self, ix):
+        p = ix['palette_keyboard']
+        assert p['addedByEnter'] == 1, 'Enter on a palette item added no node'
+        assert p['enterIsSource'] is True, 'the added node is not the source type the item names'
+        assert p['toastEnter'] == 'Data Source added', 'adding did not toast the node type'
+
+    def test_space_and_a_plain_click_add_through_the_same_route(self, ix):
+        """Space is the other key on a button, and a click is the pointer equivalent of that
+        press — all three must land one node, and a blank type must add none."""
+        p = ix['palette_keyboard']
+        assert p['addedBySpace'] == 1, 'Space added no node'
+        assert p['addedByClick'] == 1, 'a click on a palette item added no node'
+        assert p['emptyTypeNull'] is True, 'an empty palette type must be a no-op, not a node'
+
+
 class TestSettingsPanelRoundTrip:
     def test_opening_a_node_marks_the_node_and_opens_the_panel(self, ix):
         assert ix['edit']['settingsNode'] == ix['ids']['edit']
