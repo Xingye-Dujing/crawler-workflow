@@ -105,6 +105,9 @@ class TestRunListing:
         nodes = {node['node_id']: node for node in run['nodes']}
         assert [nodes[nid]['status'] for nid in ('node-1', 'node-2', 'node-3')] == ['done', 'partial', 'failed']
         assert [nodes[nid]['row_count'] for nid in ('node-1', 'node-2', 'node-3')] == [3, 2, 0]
+        # Every node that reached a finish carries its own wall time: an int >= 0 (second-granularity,
+        # so the value is 0 unless begin→finish crossed a second). Never None for a closed node.
+        assert [nodes[nid]['duration_seconds'] >= 0 for nid in ('node-1', 'node-2', 'node-3')] == [True, True, True]
         assert nodes['node-3']['error'] == 'selenium died'
         assert nodes['node-1']['fingerprint'] == 'fp-node-1'
 

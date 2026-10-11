@@ -980,3 +980,17 @@ class TestRunDuration:
         assert got['duration_seconds'] == rows[0]['duration_seconds']
         # A run started and finished within the same second reports 0, not None — it IS closed.
         assert got['duration_seconds'] == 0
+
+    def test_get_run_reports_each_nodes_wall_time(self, store):
+        _start(store)
+        store.begin_node('r1', 'slow', 'source')
+        store.begin_node('r1', 'open', 'process')  # never finished → still in flight
+        store.finish_node('r1', 'slow', NODE_DONE)
+        store._execute(
+            "UPDATE node_runs SET started_at = '2026-10-06T04:00:00', finished_at = '2026-10-06T04:02:15' "
+            "WHERE run_id = 'r1' AND node_id = 'slow'"
+        )
+        nodes = {n['node_id']: n for n in store.get_run('r1')['nodes']}
+        assert nodes['slow']['duration_seconds'] == 135
+        # An unfinished node has no wall time yet — a dash on the card, never a fabricated 0.
+        assert nodes['open']['duration_seconds'] is None

@@ -213,8 +213,23 @@ const FLAT = {
         wf_count: 1,
         workflow_name: '只看排行榜',
         nodes: [
-            { node_id: 'up-1', node_type: 'upload', status: 'done', row_count: 4, component: 0, component_name: '只看排行榜' },
-            { node_id: 'out-1', node_type: 'output', status: 'failed', row_count: 0, component: 0, component_name: '只看排行榜' },
+            {
+                node_id: 'up-1',
+                node_type: 'upload',
+                status: 'done',
+                row_count: 4,
+                duration_seconds: 75,
+                component: 0,
+                component_name: '只看排行榜',
+            },
+            {
+                node_id: 'out-1',
+                node_type: 'output',
+                status: 'failed',
+                row_count: 0,
+                component: 0,
+                component_name: '只看排行榜',
+            },
         ],
     },
 };

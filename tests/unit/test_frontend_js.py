@@ -1103,6 +1103,18 @@ class TestRunDetailGrouping:
         assert runsmgr['grouped']['legacyHeaders'] == []
         assert 'rm-node' in (runsmgr['grouped']['legacyHtml'] or '')
 
+    def test_each_node_card_shows_its_own_wall_time(self, runsmgr):
+        """The detail card now carries a per-node duration (run_store.get_run attaches
+        duration_seconds). A node that ran renders its clock; a node with no value (a run
+        still in flight, or a record written before the field existed) renders a dash, never
+        a fabricated 00:00."""
+        html = runsmgr['grouped']['flatHtml'] or ''
+        assert 'rm-node-duration' in html
+        assert '01:15' in html, 'up-1 (duration_seconds=75) shows MM:SS'
+        assert '—' in html, 'out-1 (no duration) shows the dash, not a made-up 0'
+        # A legacy record whose nodes have no duration_seconds still draws, all dashes.
+        assert '—' in (runsmgr['grouped']['legacyHtml'] or '')
+
 
 class TestPanelEscaping:
     """A node parameter is data, and the settings panel prints it into an attribute.

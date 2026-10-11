@@ -2158,6 +2158,15 @@ button.history-del:hover {
   color: var(--text-dim);
   white-space: nowrap;
 }
+.rm-node-duration {
+  /* Per-node wall time (runs-manager detail). Same language-neutral MM:SS the run row uses;
+     a node still in flight reads an em-dash, never a fabricated 0. */
+  min-width: 44px;
+  text-align: right;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .rm-node-err {
   margin-top: 5px;
   padding-top: 5px;

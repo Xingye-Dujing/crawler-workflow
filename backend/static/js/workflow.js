@@ -7016,6 +7016,7 @@ var runsManager = {
                     '<span class="rm-node-type">' + escapeHtml(typeLabel) + '</span>' +
                     '<span class="runs-mgr-status ' + info.cls + '">' + I18n.t(info.key) + '</span>' +
                     '<span class="rm-node-rows">' + (n.row_count || 0) + ' ' + I18n.t('runsMgr.colRows') + '</span>' +
+                    '<span class="rm-node-duration">' + escapeHtml(self._formatDuration(n.duration_seconds)) + '</span>' +
                     '</div>' +
                     (n.error ? '<div class="rm-node-err">' + escapeHtml(n.error) + '</div>' : '') +
                     '</div>';

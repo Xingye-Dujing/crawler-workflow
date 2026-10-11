@@ -634,6 +634,11 @@ class RunStore:
             node = dict(row)
             with contextlib.suppress(TypeError, ValueError):
                 node['cursor'] = json.loads(node.pop('cursor_json') or 'null')
+            # Per-node wall time, the same reading as the run's duration_seconds: whole seconds
+            # between the node's own started_at and finished_at, None while it is still open.
+            # Timestamps are second-granularity, so there is no sub-second precision to report —
+            # a fast node legitimately reads 0, never a fabricated millisecond.
+            node['duration_seconds'] = self._duration_seconds(node.get('started_at'), node.get('finished_at'))
             nodes.append(node)
         run['nodes'] = nodes
         run['duration_seconds'] = self._duration_seconds(run.get('started_at'), run.get('finished_at'))

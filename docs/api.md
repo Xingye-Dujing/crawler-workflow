@@ -35,7 +35,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/runs/purge` | POST | 按保留策略清理旧运行（中断的最后清理） |
 | `/api/runs/discard` | POST | 丢弃一次中断运行（不再提供续跑） |
 | `/api/runs/delete` | POST | 删除指定运行 |
-| `/api/runs/<run_id>` | GET | 运行详情（含节点行数据摘要） |
+| `/api/runs/<run_id>` | GET | 运行详情（含节点行数据摘要）；`run.nodes` 每个节点带 `duration_seconds`（该节点墙钟耗时 = 节点 `finished_at` − `started_at`，秒级、与运行时长同口径；节点未完成时为空，前端详情卡片据此渲染 `MM:SS`，无值为破折号——不谎报 0） |
 
 ### 数据与数据集
 
