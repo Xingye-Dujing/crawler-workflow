@@ -1396,6 +1396,32 @@ body.style-menu-open #workspace #resume-banner {
   color: var(--text);
   border-color: var(--text-faint);
 }
+/* The filter box is the flexible middle item of the header row; min-width:0 lets it
+   shrink to the panel's width instead of overflowing at its intrinsic default width. */
+.outline-filter {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 10px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--text);
+}
+/* Same care for the palette search: fill the panel width and never push past it. */
+.palette-search {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 16px);
+  min-width: 0;
+  margin: 6px 8px;
+  font-size: 11px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--text);
+}
 .outline-list {
   overflow-y: auto;
   flex: 1 1 auto;
