@@ -1697,6 +1697,7 @@ PARSED_FIELDS = {
     'phase_order_col',
     'evolution_order_col',
     'group_order_col',
+    'agg_metrics',
     'n_topics',
     'topic_topn',
     'topic_max_features',
@@ -2437,6 +2438,7 @@ PANEL_VALUE = {
     'agg_func': 'mean',
     # Omitted when blank, so the probe has to be a name to show the box is read at all.
     'group_order_col': 'r',
+    'agg_metrics': '值:mean',
     'join_how': 'inner',
     'left_on': 'a',
     'right_on': 'b',

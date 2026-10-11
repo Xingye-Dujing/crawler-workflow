@@ -1066,9 +1066,18 @@ class DataAnalysisService:
 
     @staticmethod
     def groupby_agg(
-        df: pd.DataFrame, group_col: str, agg_col: str, agg_func: str = 'sum', order_col: str = ''
+        df: pd.DataFrame,
+        group_col: str,
+        agg_col: str,
+        agg_func: str = 'sum',
+        order_col: str = '',
+        agg_metrics: list | None = None,
     ) -> pd.DataFrame:
-        """One row per group with the aggregate beside it.
+        """One row per group with the aggregate(s) beside it.
+
+        ``agg_col``/``agg_func`` is the primary metric and its output column keeps ``agg_col``'s own
+        name (the contract existing charts read). ``agg_metrics`` — a list of (column, func) pairs —
+        adds one column apiece named ``column_func``, without disturbing the primary one.
 
         ``order_col`` says which column decides the result's ROW ORDER. Left blank, groups come
         back sorted by their own name — right for 'YYYY-MM-DD' days, wrong for Chinese phase
@@ -1079,10 +1088,19 @@ class DataAnalysisService:
         """
         if group_col not in df.columns or agg_col not in df.columns:
             return df
+        metrics = list(agg_metrics or [])
+        for column, _func in metrics:
+            if column not in df.columns:
+                raise UnknownOperationError(t('analysis.step_col_missing', op='groupby_agg', col=column))
         if order_col and order_col not in df.columns:
             raise UnknownOperationError(t('analysis.step_col_missing', op='groupby_agg', col=order_col))
         try:
             agg_map = {agg_col: (agg_col, agg_func)}
+            for column, func in metrics:
+                name = f'{column}_{func}'
+                if name in agg_map:
+                    name = f'{name}_2'
+                agg_map[name] = (column, func)
             if order_col:
                 agg_map['_group_rank'] = (order_col, 'min')
             grouped = df.groupby(group_col, dropna=True).agg(**agg_map).reset_index()

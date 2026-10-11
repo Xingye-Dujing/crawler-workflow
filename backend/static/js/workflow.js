@@ -3047,6 +3047,7 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamSelect(nodeId, p, 'agg_func', 'settings.aggFunc', 'sum',
             [{ v: 'sum', l: 'Sum' }, { v: 'mean', l: 'Mean' }, { v: 'count', l: 'Count' }, { v: 'max', l: 'Max' }, { v: 'min', l: 'Min' }]);
         html += renderParamInput(nodeId, p, 'group_order_col', 'settings.groupOrderColumn', 'text', '');
+        html += renderParamInput(nodeId, p, 'agg_metrics', 'settings.aggMetrics', 'text', '');
     }
     if (op === 'join_tables') {
         /* The right table is the node's second incoming connection — the old

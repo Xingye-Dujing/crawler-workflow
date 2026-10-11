@@ -458,6 +458,22 @@ class TestReshaping:
         out = D.groupby_agg(frame, 'g', 'v', 'sum')
         assert dict(zip(out['g'], out['v'], strict=True)) == {'a': 4, 'b': 2}
 
+    def test_groupby_agg_extra_metrics_add_columns_without_touching_the_primary(self):
+        frame = pd.DataFrame({'g': ['a', 'b', 'a'], 'v': [1, 2, 3], 'w': [10, 20, 30]})
+        out = D.groupby_agg(frame, 'g', 'v', 'sum', agg_metrics=[('w', 'mean')])
+        assert list(out.columns) == ['g', 'v', 'w_mean'], 'primary keeps its name, extra is column_func'
+        rows = dict(zip(out['g'], zip(out['v'], out['w_mean'], strict=True), strict=True))
+        assert rows == {'a': (4, 20.0), 'b': (2, 20.0)}
+
+    def test_groupby_agg_without_extra_metrics_is_unchanged(self):
+        frame = pd.DataFrame({'g': ['a', 'b', 'a'], 'v': [1, 2, 3]})
+        assert list(D.groupby_agg(frame, 'g', 'v', 'sum').columns) == ['g', 'v']
+
+    def test_groupby_agg_a_missing_extra_metric_column_is_named(self):
+        frame = pd.DataFrame({'g': ['a'], 'v': [1]})
+        with pytest.raises(UnknownOperationError, match='nope'):
+            D.groupby_agg(frame, 'g', 'v', 'sum', agg_metrics=[('nope', 'mean')])
+
     def test_groupby_agg_orders_groups_by_name_when_no_order_column_is_given(self):
         frame = pd.DataFrame({'阶段': ['二次爆发期', '发酵期', '爆发期'], '序': [4, 1, 2], 'v': [1, 2, 3]})
         frame = pd.DataFrame(frame.to_dict('records'))

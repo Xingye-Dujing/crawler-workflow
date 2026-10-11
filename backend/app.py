@@ -3128,6 +3128,19 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         order_column = str(params.get('group_order_col') or '').strip()
         if order_column:
             result['order_col'] = order_column
+        # Each "column:func" in agg_metrics adds one more aggregate beside the primary one; the
+        # primary output column keeps agg_col's own name so existing charts are unaffected.
+        pairs = []
+        for chunk in str(params.get('agg_metrics') or '').split(','):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            column, _, func = chunk.partition(':')
+            column = column.strip()
+            if column:
+                pairs.append((column, func.strip() or 'sum'))
+        if pairs:
+            result['agg_metrics'] = pairs
         return result
     if op == 'join_tables':
         return {
