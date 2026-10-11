@@ -63,9 +63,12 @@ def _warm(path: str) -> None:
 
     Called straight from :mod:`crawlers.base` rather than through ``browser_profiles``:
     the profile module must not own a browser, and the app passes this same function in as
-    its launcher, so the template the tier measures is the one the route makes.
+    its launcher, so the template the tier measures is the one the route makes. Waits for
+    the write to settle before returning (see :func:`_settle`), so every caller reads a
+    directory Chrome is done with.
     """
     _browser_or_skip('warm', lambda: warm_profile_dir(path))
+    _settle(path)
 
 
 def _all_names(path: str) -> set:
@@ -92,6 +95,41 @@ def _stores_seen(path: str) -> list:
             full = os.path.join(walk_root, name)
             seen.append((os.path.relpath(full, path), browser_profiles._store_row_count(full, table)))
     return sorted(seen)
+
+
+def _settle(path: str, timeout: float = 20.0, stable: float = 0.6) -> None:
+    """Wait until Chrome has finished writing *path* — until its stores go *quiet*.
+
+    ``driver.quit()`` answers once chromedriver is signalled, but the ``chrome.exe`` child
+    keeps flushing for a beat after, and it writes its stores **one at a time**: so a
+    directory measured the instant it is merely *readable* can still be mid-stream — a
+    store opens locked next (``_store_row_count`` reads **-1**, "unreadable", which
+    ``find_session_material`` counts as session material) or gains a final row, and the
+    pristine check then reds a machine that was only slow, not wrong. That is the full-tier
+    flake: it only bites when ~130 earlier Chrome launches have made this teardown→flush
+    window long. Poll until the exact snapshot of stores is present, fully readable AND
+    unchanged for *stable* seconds — quiet means last write. On a timeout return anyway, so
+    a template that never settles still trips the caller's own assertion with its real
+    message. Waits out the race; never hides a defect.
+    """
+    deadline = time.monotonic() + timeout
+    last = None
+    quiet_since = None
+    while True:
+        stores = _stores_seen(path)
+        ready = bool(stores) and all(rows >= 0 for _name, rows in stores)
+        snapshot = tuple(stores)
+        if ready and snapshot == last:
+            if quiet_since is None:
+                quiet_since = time.monotonic()
+            elif time.monotonic() - quiet_since >= stable:
+                return
+        else:
+            quiet_since = None
+        last = snapshot
+        if time.monotonic() >= deadline:
+            return
+        time.sleep(0.2)
 
 
 def test_a_blank_chrome_leaves_a_directory_with_no_login_in_it(rooted):
