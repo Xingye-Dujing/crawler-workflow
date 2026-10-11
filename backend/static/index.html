@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="/css/style.css" />
     <link rel="icon" href="/icon.ico" type="image/x-icon" />
   </head>
-  <body class="theme-light bg-grid">
+  <body class="bg-grid">
     <script>
       /* Apply saved settings immediately to prevent flash */
       (function () {
@@ -21,7 +21,14 @@
           var s = JSON.parse(localStorage.getItem("crawler_settings"));
           if (s) {
             var body = document.body;
-            body.classList.add("theme-light"); /* light-only design system */
+            /* Resolve the saved theme (auto follows the OS) on <html> before first paint,
+               so a dark choice never flashes light. Nothing forces body.theme-light any more. */
+            var choice = s.theme || "auto";
+            var html = document.documentElement;
+            html.dataset.themeChoice = choice;
+            html.dataset.theme = choice !== "auto"
+              ? choice
+              : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
             var bgs = [
               "bg-void",
               "bg-grid",
@@ -1356,6 +1363,15 @@
             data-i18n-title="bg.diagonal"
             onclick="setBg('bg-diagonal', this)"
           ></button>
+        </div>
+      </div>
+      <div class="dd-divider"></div>
+      <div class="dd-item-row">
+        <span data-i18n="style.theme">Theme</span>
+        <div class="settings-bg-options settings-theme-options">
+          <button class="theme-opt" type="button" data-theme-choice="auto" data-i18n="style.themeAuto" data-i18n-title="style.themeAuto" onclick="setTheme('auto')">Auto</button>
+          <button class="theme-opt" type="button" data-theme-choice="light" data-i18n="style.themeLight" data-i18n-title="style.themeLight" onclick="setTheme('light')">Light</button>
+          <button class="theme-opt" type="button" data-theme-choice="dark" data-i18n="style.themeDark" data-i18n-title="style.themeDark" onclick="setTheme('dark')">Dark</button>
         </div>
       </div>
       <div class="dd-divider"></div>

@@ -31,6 +31,7 @@ const I18n = {
             'menu.edit': 'Edit',
             'menu.view': 'View',
             'menu.style': 'Style', 'style.bg': 'Background', 'style.radius': 'Radius',
+            'style.theme': 'Theme', 'style.themeAuto': 'Auto', 'style.themeLight': 'Light', 'style.themeDark': 'Dark',
             'btn.fit': 'Fit',
             'menu.run': 'Run', 'btn.execute': 'Execute', 'btn.queue': 'Queue this run', 'btn.stop': 'Stop',
             'btn.retry': 'Retry',
@@ -1044,6 +1045,7 @@ const I18n = {
             'menu.edit': '编辑',
             'menu.view': '视图',
             'menu.style': '样式', 'style.bg': '背景', 'style.radius': '圆角',
+            'style.theme': '主题', 'style.themeAuto': '自动', 'style.themeLight': '浅色', 'style.themeDark': '深色',
             'btn.fit': '适应',
             'menu.run': '运行', 'btn.execute': '执行', 'btn.queue': '排队运行', 'btn.stop': '停止',
             'btn.retry': '重试',
@@ -2111,6 +2113,7 @@ const Settings = {
     _key: 'crawler_settings',
     defaults: {
         bg: 'bg-grid',
+        theme: 'auto',
         parallel: true,
         headless: true,
         menuPinned: true,
@@ -2121,6 +2124,7 @@ const Settings = {
     save() {
         const data = {
             bg: Array.from(document.body.classList).find(c => c.startsWith('bg-')) || 'bg-grid',
+            theme: document.documentElement.dataset.themeChoice || 'auto',
             parallel: RunState.parallel,
             headless: RunState.headless,
             menuPinned: document.getElementById('top-menu').classList.contains('pinned'),
@@ -2151,8 +2155,10 @@ const Settings = {
         /* Language — set first so I18n.t() uses the correct locale */
         document.body.dataset.lang = s.lang || 'zh';
         I18n.apply();
-        /* Theme — the design system is light-only; no dark (black) surface exists. */
-        document.body.classList.add('theme-light');
+        /* Theme — the choice (auto/light/dark) is stored; auto follows the OS. The design
+           system is no longer light-only: html[data-theme] drives the token override. */
+        document.documentElement.dataset.themeChoice = s.theme || 'auto';
+        applyTheme();
         /* Background */
         document.body.className = document.body.className.replace(/bg-\S+/g, '').trim();
         document.body.classList.add(s.bg);
@@ -2175,6 +2181,39 @@ const Settings = {
         if (lbl) lbl.textContent = radius + 'px';
     },
 };
+
+/* ── Theme (auto / light / dark) ──────────────────────────────────────────
+   The choice lives in Settings (localStorage) and on <html data-theme-choice>;
+   `data-theme` is the RESOLVED value (auto collapses to the OS scheme) and is what the
+   CSS token override keys on. Resolved on <html> (not body) so a single rule flips every
+   surface that reads a var(); nothing sets body.theme-light any more, so the legacy
+   light override can no longer win over a dark canvas. */
+function resolveTheme(choice) {
+    if (choice === 'dark') return 'dark';
+    if (choice === 'light') return 'light';
+    try {
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch (e) {
+        return 'light';
+    }
+}
+
+function applyTheme() {
+    var html = document.documentElement;
+    var choice = html.dataset.themeChoice || 'auto';
+    html.dataset.themeChoice = choice;
+    html.dataset.theme = resolveTheme(choice);
+    document.querySelectorAll('.theme-opt').forEach(function (el) {
+        el.classList.toggle('active', el.dataset.themeChoice === choice);
+    });
+}
+
+function setTheme(choice) {
+    if (choice !== 'auto' && choice !== 'light' && choice !== 'dark') return;
+    document.documentElement.dataset.themeChoice = choice;
+    applyTheme();
+    Settings.save();
+}
 
 /* Filter the node library (left palette) by a query typed into #palette-search. Matching the
    data-type and the tag abbreviation as well as the label means a Chinese panel still answers

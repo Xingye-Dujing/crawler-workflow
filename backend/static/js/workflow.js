@@ -3543,39 +3543,54 @@ function ensureMapRegistered(mapName) {
     return _mapRegistryPromises[mapName];
 }
 
+/* Theme-aware chart colours. patchOptionForTheme is the single chokepoint every console chart
+   passes through, so reading the resolved <html data-theme> here recolours all of them at once;
+   the history panel builds its option inline and uses chartPalette() the same way. */
+function _isDarkTheme() {
+    return document.documentElement.dataset.theme === 'dark';
+}
+
+function chartPalette() {
+    if (_isDarkTheme()) {
+        return {
+            ink: '#e7e5df', dim: 'rgba(231,229,223,0.55)', faint: 'rgba(231,229,223,0.10)',
+            axisLine: '#4b525d', splitLine: 'rgba(231,229,223,0.10)', labelLine: '#8b909a',
+            tooltipBg: 'rgba(30,34,42,0.96)', tooltipBorder: '#3b414b', tooltipText: '#e7e5df',
+            exportBg: '#1c2027',
+        };
+    }
+    return {
+        ink: '#111', dim: 'rgba(26,26,26,0.55)', faint: 'rgba(26,26,26,0.06)',
+        axisLine: '#ccc', splitLine: '#e8e8e8', labelLine: '#bbb',
+        tooltipBg: 'rgba(248,248,248,0.95)', tooltipBorder: '#ddd', tooltipText: '#222',
+        exportBg: '#ffffff',
+    };
+}
+
 function patchOptionForTheme(option) {
-    /* Always applied: the design system is light-only. */
-    function pick(val) {
-        if (typeof val === 'string' && val.length) return val;
-    }
-    /* Title */
-    if (option.title && option.title.textStyle) option.title.textStyle.color = '#111';
-    /* Tooltip */
+    var p = chartPalette();
+    if (option.title && option.title.textStyle) option.title.textStyle.color = p.ink;
     if (option.tooltip) {
-        option.tooltip.backgroundColor = 'rgba(248,248,248,0.95)';
-        option.tooltip.borderColor = '#ddd';
-        if (option.tooltip.textStyle) option.tooltip.textStyle.color = '#222';
+        option.tooltip.backgroundColor = p.tooltipBg;
+        option.tooltip.borderColor = p.tooltipBorder;
+        if (option.tooltip.textStyle) option.tooltip.textStyle.color = p.tooltipText;
     }
-    /* Legend */
-    if (option.legend && option.legend.textStyle) option.legend.textStyle.color = '#222';
-    /* Axes */
+    if (option.legend && option.legend.textStyle) option.legend.textStyle.color = p.tooltipText;
     [].concat(option.xAxis || []).concat(option.yAxis || []).forEach(function (ax) {
         if (!ax) return;
-        if (ax.axisLabel) ax.axisLabel.color = '#444';
-        if (ax.nameTextStyle) ax.nameTextStyle.color = '#222';
-        if (ax.axisLine && ax.axisLine.lineStyle) ax.axisLine.lineStyle.color = '#ccc';
-        if (ax.axisTick && ax.axisTick.lineStyle) ax.axisTick.lineStyle.color = '#ccc';
-        if (ax.splitLine && ax.splitLine.lineStyle) ax.splitLine.lineStyle.color = '#e8e8e8';
+        if (ax.axisLabel) ax.axisLabel.color = p.ink;
+        if (ax.nameTextStyle) ax.nameTextStyle.color = p.tooltipText;
+        if (ax.axisLine && ax.axisLine.lineStyle) ax.axisLine.lineStyle.color = p.axisLine;
+        if (ax.axisTick && ax.axisTick.lineStyle) ax.axisTick.lineStyle.color = p.axisLine;
+        if (ax.splitLine && ax.splitLine.lineStyle) ax.splitLine.lineStyle.color = p.splitLine;
     });
-    /* Series labels */
     (option.series || []).forEach(function (s) {
         if (!s) return;
-        if (s.label) s.label.color = '#222';
-        if (s.labelLine && s.labelLine.lineStyle) s.labelLine.lineStyle.color = '#bbb';
-        if (s.type === 'wordCloud' && s.textStyle) s.textStyle.color = '#222';
+        if (s.label) s.label.color = p.tooltipText;
+        if (s.labelLine && s.labelLine.lineStyle) s.labelLine.lineStyle.color = p.labelLine;
+        if (s.type === 'wordCloud' && s.textStyle) s.textStyle.color = p.tooltipText;
     });
-    /* VisualMap */
-    if (option.visualMap && option.visualMap.textStyle) option.visualMap.textStyle.color = '#444';
+    if (option.visualMap && option.visualMap.textStyle) option.visualMap.textStyle.color = p.ink;
 }
 
 function applyEchartsOption(instance, option) {
@@ -3641,7 +3656,7 @@ async function saveChartPicture(dataUrl, name) {
 function savePreviewImage() {
     var dataUrl = '';
     if (_chartPreviewInstance) {
-        dataUrl = _chartPreviewInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+        dataUrl = _chartPreviewInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: chartPalette().exportBg });
     } else {
         var img = document.getElementById('chart-preview-image');
         if (img && img.style.display !== 'none' && String(img.src || '').indexOf('data:image/') === 0) {
@@ -3654,7 +3669,7 @@ function savePreviewImage() {
 function saveDashboardImage(nodeId) {
     var inst = dashboard._instances[nodeId];
     var dataUrl = inst
-        ? inst.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' })
+        ? inst.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: chartPalette().exportBg })
         : dashboard._images[nodeId] || '';
     var node = canvas.nodes[nodeId];
     return saveChartPicture(dataUrl, (node && node.title) || nodeId);
@@ -3928,7 +3943,7 @@ function closeChartFullscreen() {
 function saveFullscreenImage() {
     var dataUrl = '';
     if (_chartFullscreenInstance) {
-        dataUrl = _chartFullscreenInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+        dataUrl = _chartFullscreenInstance.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: chartPalette().exportBg });
     } else if (_chartFullscreenImage) {
         dataUrl = _chartFullscreenImage;
     }
@@ -4421,9 +4436,10 @@ var historyPanel = {
         var metricLabel = I18n.t('history.metric.' + (metric || 'rows'));
         var wf = document.getElementById('history-workflow-select').value;
         var subtext = wf ? wf : I18n.t('history.allWorkflows');
-        var ink = '#1a1a1a';
-        var dim = 'rgba(26,26,26,0.55)';
-        var faint = 'rgba(26,26,26,0.06)';
+        var pal = chartPalette();
+        var ink = pal.ink;
+        var dim = pal.dim;
+        var faint = pal.faint;
         /* Single source of truth is --font in style.css: Literata carries the
            latin glyphs and digits, 宋体/SimSun carries the CJK ones. ECharts
            text defaults to sans-serif, so the stack must be passed explicitly
@@ -4492,14 +4508,14 @@ var historyPanel = {
             title: {
                 text: metricLabel, subtext: subtext, left: 'center', top: 8,
                 textStyle: { color: ink, fontSize: 14, fontWeight: 500, fontFamily: chartFont },
-                subtextStyle: { color: 'rgba(26,26,26,0.45)', fontSize: 11, fontFamily: chartFont },
+                subtextStyle: { color: pal.dim, fontSize: 11, fontFamily: chartFont },
             },
             tooltip: {
                 trigger: 'axis',
-                backgroundColor: '#fff',
-                borderColor: 'rgba(26,26,26,0.15)', borderWidth: 1,
+                backgroundColor: pal.tooltipBg,
+                borderColor: pal.tooltipBorder, borderWidth: 1,
                 textStyle: { color: ink, fontSize: 12, fontFamily: chartFont },
-                axisPointer: { type: 'line', lineStyle: { color: 'rgba(26,26,26,0.25)', type: 'dashed' } },
+                axisPointer: { type: 'line', lineStyle: { color: pal.axisLine, type: 'dashed' } },
             },
             legend: {
                 data: labels, top: 50, left: 'center', icon: 'circle',
@@ -4510,7 +4526,7 @@ var historyPanel = {
             grid: { top: 84, left: 44, right: 44, bottom: 56, containLabel: true },
             xAxis: {
                 type: 'time',
-                axisLine: { lineStyle: { color: 'rgba(26,26,26,0.15)' } },
+                axisLine: { lineStyle: { color: pal.axisLine } },
                 axisLabel: { color: dim, fontSize: 10, hideOverlap: true, fontFamily: chartFont },
                 splitLine: { show: true, lineStyle: { color: faint } },
             },
@@ -4864,7 +4880,6 @@ function setBg(bg, el) {
     var body = document.body;
     body.className = body.className.replace(/bg-\S+/g, '').trim();
     body.classList.add(bg);
-    body.classList.add('theme-light');
     document.querySelectorAll('.bar-bg-dot').forEach(function (o) { o.classList.remove('active'); });
     if (el) el.classList.add('active');
     Settings.save();
