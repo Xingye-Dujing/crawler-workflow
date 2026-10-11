@@ -48,7 +48,7 @@
   - **计数解析**：`int` 类型纪律；万/千分位/`'w'`（`engine/counters.py` 的 `_UNITS` 隐患）逐例；禁 None/字符串混入；
   - **列集合精确**：该有的列一根不少、不该有的没有（热榜无作者/评论数、抖音无播放数、微信无互动列、评论列集含楼层连续性）；
   - **属性校验**：时间窗内产出全在窗内；发布时间格式合法；
-  - **正文完整**：展开后 ≥ 页面实际长的 0.7；微信 5000 字截断标记在场。
+  - **正文完整**：展开后 ≥ 页面实际长的 0.7；微信截断标记由强制低上限（A2 monkeypatch 200）触发，默认 0 不截。
 - **C 设置全生效**：每模式每字段按其取值轴测——`target_count`（合法/0→1/垃圾→50）、`full_body` 双态、
   `board`×2+大小写非法拒付、`comment_limit` 0/N、`comment_preview` 0/5/大、
   `with_facts` 2×2、`per_article_file` 双态+文件数==文章数、`recrawl` 双态+续跑强制失效、
@@ -247,7 +247,7 @@
 | 知乎 | cn | （=§4 模板本体） |
 | 微博 | cn | **serial_only**：并行组只测「强制排队+serialForced 行」；**双账号才允许真并行**（需第二个 cookie 文件 `weibo@<acct>`，没有该格则跳过并声明）；热搜 `needs_session=False`（无 cookie 可跑、无 account 字段）；时间窗 4 态（双无/单边/双有/非法）；mymblog 403 必须响亮拒；**窗口按 D9：副本取最近数天，验证 target 先满即收工且剩余窗口零付费**（原 Jan-1 大窗不跑） |
 | 小红书 | cn | XH6 修复回归 + comment_preview 三档 + 过期 xsec_token 链接=具名失效非空表；profile_recommended：一次性 profile 路许可具名被墙 |
-| 微信 | cn | 纯正文列集（无互动列/无 cookie 行）；无 target 语义（links 即预算；cookieExpired 分支对其不可达是**设计事实**）；粘贴/喂链两式；每行真导航（page_per_row）；正文 5000 字截断标记；链接取自 D7 |
+| 微信 | cn | 纯正文列集（无互动列/无 cookie 行）；无 target 语义（links 即预算；cookieExpired 分支对其不可达是**设计事实**）；粘贴/喂链两式；每行真导航（page_per_row）；正文截断标记（强制低上限触发，默认 0 不截）；链接取自 D7 |
 | B站 | cn | page=1 零卡（裸 URL 请求首页）；评论纯 API 游标翻页；`board=ranking` 一次整表≤100 且**无 cap 行=修复项**；作者走空间页非 wbi API；UP主 续跑游标点名是谁的空间 |
 | 抖音 | cn | 热榜反向语义（档案被验证码、一次性浏览器反通）；page_per_row 导航计数（列表是文档不是书签）；作者=每行一次详情导航、行内无播放数（关键词搜索 + 排序菜单已移除）|
 | X | **os·待VPN** | 虚拟时间线：进度=保住的行；续跑身份=status-id 集（不许索引）；五计数同源 aria-label、浏览数唯一来源；一卡一次 execute_script；settle 预算回归（TX3/TX15） |

@@ -47,12 +47,12 @@ class TestWechatBodyCeiling:
 
     def test_the_ceiling_is_configurable_not_hardcoded(self):
         assert hasattr(Config, 'WECHAT_BODY_MAX_CHARS'), 'the knob must live in Config'
-        monkey_value = 12345
-        Config.WECHAT_BODY_MAX_CHARS = monkey_value
+        original = Config.WECHAT_BODY_MAX_CHARS
+        Config.WECHAT_BODY_MAX_CHARS = 12345
         try:
             assert len(WechatCrawler._clip('字' * 20000)) == 12346
         finally:
-            Config.WECHAT_BODY_MAX_CHARS = 5000
+            Config.WECHAT_BODY_MAX_CHARS = original
 
     def test_an_empty_body_stays_empty(self, monkeypatch):
         monkeypatch.setattr(Config, 'WECHAT_BODY_MAX_CHARS', 10)

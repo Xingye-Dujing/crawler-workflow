@@ -154,10 +154,12 @@ class Config:
     #: from ten minutes ago. Saving, deleting or capturing a cookie drops it at once.
     COOKIE_PREFLIGHT_TTL = 300
 
-    #: How much of a 公众号 article body a row keeps. A long post runs past ten
-    #: thousand characters, and the crawler used to cut it at a hardcoded 5000 —
-    #: which silently dropped the ending of every analysis input. 0 keeps it all.
-    WECHAT_BODY_MAX_CHARS = 5000
+    #: How much of a 公众号 article body a row keeps. 0 (the default) keeps it all: the
+    #: crawler used to cut every post at a hardcoded 5000, which silently dropped the
+    #: ending of a long article from every analysis input, and a truncated body read
+    #: exactly like a short one that simply ended there. A positive limit only caps row
+    #: size, and a body over it still carries the trailing ``…`` marker.
+    WECHAT_BODY_MAX_CHARS = 0
 
     for d in [COOKIE_DIR, EXPORT_DIR, WORKFLOW_DIR, LOG_DIR, LLM_CHECKPOINT_DIR, BROWSER_PROFILE_DIR]:
         os.makedirs(d, exist_ok=True)

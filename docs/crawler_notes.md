@@ -810,7 +810,7 @@ harness samples real login platforms (bilibili/zhihu), never `wechat`.
 探针 `backend/test_wechat_step0.py` → `scratchpad/wechat_step0.json`。三条 D7 验收链接全活，五个字段选择器
 （标题 `#activity-name`、公众号 `#js_name`、时间 `#publish_time`/`.rich_media_meta_text`、地区 `#js_ip_wording`、
 正文容器 `#js_content`）每条**各命中一次**，正文长度 2903/2332/93 字都**完整**（原始与存储正文差 ≤1 字符，仅空白
-归一化），均低于 `WECHAT_BODY_MAX_CHARS=5000` 故**无 `…` 截断标记**（正确——短正文不该被截）。页面模型复核为真，
+归一化），均低于旧 `WECHAT_BODY_MAX_CHARS=5000` 上限（现默认 0=完整保留）故**无 `…` 截断标记**（正确——短正文不该被截）。页面模型复核为真，
 无 stale 选择器、无静默空列。真机运行级矩阵（`test_live_wechat_workflow.py` A1/A2/A4/C1/H1 全绿）另证：
 - **A2 用 monkeypatch 把上限设 200** 验截断标记在场（不依赖找一篇 5000+ 字的文章）——正文 201 字符且以 `…` 收尾。
 - **C1 抓到并修掉一处 §6 U5 同形**：`wechat.py:80` 曾 `mark_position(urls=urls,…)` 把整条粘贴 URL 写进续跑游标。
