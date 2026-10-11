@@ -1701,6 +1701,8 @@ PARSED_FIELDS = {
     'n_topics',
     'topic_topn',
     'topic_max_features',
+    'topic_method',
+    'embedding_model',
     'label_col',
     'index_new_col',
     'label_positive',
@@ -2464,6 +2466,8 @@ PANEL_VALUE = {
     'n_topics': '3',
     'topic_topn': '4',
     'topic_max_features': '500',
+    'topic_method': 'embedding',
+    'embedding_model': 'some/model',
     # The staged model's own fields. ``stage_col`` is not the default it falls back to, and
     # ``word_source`` is not the default a blank select would answer with.
     'stage_col': '期',

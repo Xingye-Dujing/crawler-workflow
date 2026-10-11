@@ -363,6 +363,9 @@ _ZH = {
     'analysis.time_bin_edges': '时间分段里有无法解析成日期的边界：{edges}',
     'analysis.time_bin_order': '{op} 的边界必须按时间从早到晚排列',
     'analysis.topic_count': 'LDA 主题数至少要 2，收到 {value}（1 个主题只是"整段文本"）',
+    'analysis.topic_embed_unavailable': '嵌入主题方法缺少可选依赖：{packages}（不回退到 LDA，请安装或改用 LDA）',
+    'analysis.topic_embed_failed': '句向量模型「{model}」加载或运行失败：{err}',
+    'analysis.topic_embed_done': '嵌入主题：{model}，{n} 个主题，{rows} 行文本',
     'analysis.topic_rows': 'LDA 需要至少和主题数一样多的文本：主题 {topics} 个、有效文本 {rows} 行',
     'analysis.topic_features': 'LDA 无法从这一列抽到特征词（可能整列都是标点或停用词）：{err}',
     # 分阶段主题模型。每一句都点名是哪个阶段、哪个主题，因为「某个阶段没跑出来」在一堆
@@ -1594,6 +1597,12 @@ _EN = {
     'analysis.stages_basis_first': "opens on the curve's first day {day}",
     'analysis.stages_basis_valley': 'opens the day after the valley on {valley}',
     'analysis.topic_count': 'LDA needs at least 2 topics, got {value} (one topic is just "the whole text")',
+    'analysis.topic_embed_unavailable': (
+        'the embedding topic method is missing optional packages: {packages} '
+        '(it does not fall back to LDA; install them or choose LDA)'
+    ),
+    'analysis.topic_embed_failed': 'embedding model "{model}" failed to load or run: {err}',
+    'analysis.topic_embed_done': 'embedding topics: {model}, {n} topics over {rows} texts',
     'analysis.topic_rows': 'LDA needs at least as many texts as topics: {topics} topics, {rows} usable rows',
     'analysis.topic_features': 'LDA could find no features in this column (punctuation or stopwords only?): {err}',
     # Staged topic modelling. Every one of these names WHICH stage and WHICH topic, because

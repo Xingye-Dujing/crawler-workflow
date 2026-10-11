@@ -1924,6 +1924,55 @@ class TestTopicLabel:
         assert STEP_PARAMS['topic_label']['nonblank'] == ('summary_col',)
 
 
+class TestTopicModelEmbedding:
+    """method='embedding' yields the SAME table shape as LDA, refuses by name without the
+    optional encoder, and never falls back to LDA."""
+
+    @staticmethod
+    def _frame():
+        return pd.DataFrame(
+            {'正文': ['猫 狗 宠物 可爱', '猫 狗 宠物 可爱', '股票 基金 涨跌 市场', '股票 基金 涨跌 市场']}
+        )
+
+    def test_a_missing_encoder_is_refused_by_name_not_fallen_back(self, monkeypatch):
+        import services.data_analysis as m
+
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        with pytest.raises(UnknownOperationError, match='sentence-transformers'):
+            m.DataAnalysisService.topic_model(self._frame(), '正文', n_topics=2, method='embedding')
+
+    def test_embedding_returns_the_lda_table_shape(self, monkeypatch):
+        import sys
+        import types
+
+        import numpy as np
+
+        import services.data_analysis as m
+
+        class _FakeST:
+            def __init__(self, name):
+                self.name = name
+
+            def encode(self, texts, **kw):
+                return np.array([[0.0, 0.0], [0.0, 0.0], [1.0, 1.0], [1.0, 1.0]])
+
+        fake = types.ModuleType('sentence_transformers')
+        fake.SentenceTransformer = _FakeST
+        monkeypatch.setitem(sys.modules, 'sentence_transformers', fake)
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
+        out = m.DataAnalysisService.topic_model(self._frame(), '正文', n_topics=2, topn=2, method='embedding')
+        assert list(out.columns) == ['topic', 'rank', 'keyword', 'weight']
+        assert set(out['topic']) == {'Topic-1', 'Topic-2'}, 'the two texts groups become two topics'
+        assert (out['weight'] <= 1.0 + 1e-9).all() and (out['weight'] > 0).all(), 'weights normalised per topic'
+
+    def test_blank_method_defaults_to_lda_and_a_bad_one_is_refused(self):
+        from services.data_analysis import normalize_step_params, validate_step
+
+        assert normalize_step_params('topic_model', {'column': '正文', 'method': ''})['method'] == 'lda'
+        with pytest.raises(UnknownOperationError, match='method'):
+            validate_step(self._frame(), 'topic_model', {'column': '正文', 'method': 'bogus'})
+
+
 class TestTopicViews:
     """The two data steps behind the pyLDAvis figure, and the λ that decides its word list.
 

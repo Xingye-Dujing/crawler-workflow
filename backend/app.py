@@ -3267,6 +3267,14 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         features = _optional_int(params.get('topic_max_features'))
         if features:
             result['max_features'] = features
+        # LDA is the implicit default, so ``method`` is only forwarded when the user left it
+        # (keeps existing pipelines' kwargs identical); the embedding path also carries its model.
+        method = str(params.get('topic_method') or 'lda').strip()
+        if method != 'lda':
+            result['method'] = method
+            embedding_model = str(params.get('embedding_model') or '').strip()
+            if embedding_model:
+                result['embedding_model'] = embedding_model
         return result
     if op == 'topic_timeline':
         # The four column names default to what 分阶段 LDA writes, so an untouched form is the

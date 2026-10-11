@@ -226,7 +226,7 @@ STEP_PARAMS: dict = {
     # The boundary proposal reads one timestamp column and writes a table of its own, so a
     # column it cannot find is a refusal, not an empty suggestion.
     'suggest_stages': {'one': ('column',)},
-    'topic_model': {'one': ('column',)},
+    'topic_model': {'one': ('column',), 'enums': {'method': ('lda', ('lda', 'embedding'))}},
     # The staged model needs BOTH columns named: a phase column it has to guess would decide
     # the paper's table by dict order. ``topics`` is nonblank because a blank stage-topic count
     # has no defensible default — 5 would be this project's choice, not the user's.
@@ -525,6 +525,76 @@ def _prepare_topic_model(df, column, n_topics, max_features):
     except ValueError as e:
         raise UnknownOperationError(t('analysis.topic_features', err=e)) from e
     return texts, model, matrix, doc_topic, vocabulary
+
+
+def _embed_missing_packages() -> str:
+    """The optional packages the embedding topic path needs but this machine lacks, or ``''``.
+
+    ``find_spec`` not ``import``: this decides whether to REFUSE, and importing a multi-GB torch to
+    discover it is absent is exactly the cost the bert path avoids. The embedding method never
+    falls back to LDA — a topic claimed from one model must not be answered by another.
+    """
+    from importlib.util import find_spec
+
+    need = {'torch': 'torch', 'transformers': 'transformers', 'sentence_transformers': 'sentence-transformers'}
+    return ', '.join(pip for mod, pip in need.items() if find_spec(mod) is None)
+
+
+def _embedding_topic_rows(texts, tokenized, topics, topn, embedding_model) -> pd.DataFrame:
+    """Embed each text with a sentence model, KMeans into ``topics`` clusters, and report each
+    cluster's top TF-IDF terms as ``{topic, rank, keyword, weight}`` — the SAME contract as the
+    LDA table, so the keyword chart and the 概括 step read either method unchanged.
+
+    Refuses BY NAME when the optional encoder stack is absent (see :func:`_embed_missing_packages`).
+    """
+    missing = _embed_missing_packages()
+    if missing:
+        raise UnknownOperationError(t('analysis.topic_embed_unavailable', packages=missing))
+
+    import numpy as np
+    from sentence_transformers import SentenceTransformer
+    from sklearn.cluster import KMeans
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    model_name = (embedding_model or 'BAAI/bge-small-zh-v1.5').strip()
+    try:
+        vectors = SentenceTransformer(model_name).encode(
+            texts, batch_size=64, show_progress_bar=False, normalize_embeddings=True
+        )
+    except Exception as e:  # a model that will not load or run is a named failure, not an empty table
+        raise UnknownOperationError(t('analysis.topic_embed_failed', model=model_name, err=e)) from e
+
+    labels = KMeans(n_clusters=topics, random_state=42, n_init=10).fit_predict(np.asarray(vectors))
+    tfidf = TfidfVectorizer(tokenizer=_split_tokens, preprocessor=_keep_text, token_pattern=None, max_features=4000)
+    tf = tfidf.fit_transform(tokenized)
+    names = tfidf.get_feature_names_out()
+
+    rows: list = []
+    lines: list = []
+    for cluster in range(topics):
+        members = np.where(labels == cluster)[0]
+        if len(members) == 0:
+            continue
+        centroid = np.asarray(tf[members].sum(axis=0)).ravel()
+        best = centroid.argsort()[::-1][: max(1, topn)]
+        words = [str(names[position]) for position in best]
+        lines.append(f'Topic-{cluster + 1}: {" ".join(words)}')
+        denom = float(centroid[best[0]]) if centroid[best[0]] > 0 else 1.0
+        for rank, position in enumerate(best):
+            rows.append(
+                {
+                    'topic': f'Topic-{cluster + 1}',
+                    'rank': rank + 1,
+                    'keyword': str(names[position]),
+                    'weight': round(float(centroid[position]) / denom, 6),
+                }
+            )
+    if not rows:
+        raise UnknownOperationError(t('analysis.topic_rows', rows=len(texts), topics=topics))
+    logger.info(t('analysis.topic_embed_done', model=model_name, n=topics, rows=len(texts)))
+    for line in lines:
+        logger.info(line)
+    return pd.DataFrame(rows, columns=['topic', 'rank', 'keyword', 'weight'])
 
 
 def _fit_topic_model(texts, n_topics, max_features):
@@ -1465,9 +1535,20 @@ class DataAnalysisService:
 
     @staticmethod
     def topic_model(
-        df: pd.DataFrame, column: str, n_topics: int = 5, topn: int = 10, max_features: int = 2000
+        df: pd.DataFrame,
+        column: str,
+        n_topics: int = 5,
+        topn: int = 10,
+        max_features: int = 2000,
+        method: str = 'lda',
+        embedding_model: str = '',
     ) -> pd.DataFrame:
-        """LDA over one text column: which subjects is this corpus made of.
+        """LDA (default) or embedding-cluster topic discovery over one text column.
+
+        ``method='embedding'`` (opt-in) embeds each text with a sentence model and KMeans-clusters
+        them; both methods emit the SAME ``{topic, rank, keyword, weight}`` table so the keyword
+        chart and the 概括 step read either unchanged. LDA stays the default and the entire existing
+        pipeline; the embedding path refuses by name when its optional encoder is not installed.
 
         ``sklearn``'s ``LatentDirichletAllocation``, not Gensim's: scikit-learn is already
         a dependency of this project and gensim is not, and a topic model that needs a
@@ -1503,6 +1584,8 @@ class DataAnalysisService:
         # punctuation. A corpus that is nothing BUT punctuation then has no vocabulary at
         # all, which is refused below rather than answered with an empty table.
         tokenized = _tokenized(texts)
+        if method == 'embedding':
+            return _embedding_topic_rows(texts, tokenized, topics, max(1, int(topn)), embedding_model)
         vectorizer = CountVectorizer(
             tokenizer=_split_tokens,
             preprocessor=_keep_text,
