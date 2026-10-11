@@ -651,9 +651,11 @@ const canvas = {
     /* Add a node from the palette the way a drag would drop one, but for the pointer and
        keyboard routes a drag cannot serve. Position is left to addNode's own non-finite
        fallback (a fresh random spot, never on top of the last node), and the new node is
-       selected so the arrow-key move / Ctrl+C / Delete shortcuts already know what "it" is.
-       A toast names the type added — a sighted keyboard user gets the same confirmation a
-       drop is, and a screen reader reads it from the live region. */
+       selected so the Delete and `f`-fold shortcuts act on it rather than on whatever was
+       selected before. (These are the only shortcuts that read selectedNode — there is no
+       arrow-key move or copy/paste shortcut.) A toast names the type added: a sighted
+       keyboard user gets the same confirmation a drop is, and a screen reader reads it from
+       the live region. */
     addNodeFromPalette(type) {
         const t = String(type || '').trim();
         if (!t) return null;
