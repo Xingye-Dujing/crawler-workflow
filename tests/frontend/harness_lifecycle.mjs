@@ -101,6 +101,16 @@ canvas.workspace = sandbox.__byId('workspace');
 canvas.container = sandbox.__byId('canvas-inner');
 
 const out = {};
+/* Drain the event loop so a scenario's own async tail — chiefly a source node's capability
+   fetch, which calls canvas.saveState() and rewrites the draft — cannot survive into the next
+   scenario's snapshot. The harness seeds the draft itself; letting a prior autosave land
+   mid-seed was the load-dependent race that flipped draft assertions between full-suite runs. */
+async function settle() {
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    await null;
+    await null;
+}
 for (const sc of scenarios) {
     canvas.nodes = {};
     canvas.connections = [];
@@ -140,7 +150,15 @@ for (const sc of scenarios) {
     /* A scenario pans before it saves, so the SAVE body shows whether the camera
        rides along with the file — which is what makes a saved 适应 survive reopen. */
     if (sc.setView) canvas._applyView(sc.setView);
-    if (sc.newFile) workflow.newFile();
+    /* Capture the draft-cleared contract at the instant newFile() runs. newFile removes the
+       draft synchronously, but a source node added earlier in this scenario has an async
+       capability fetch that fires canvas.saveState() during the flush below; snapshotting here
+       (before that resolves) pins exactly what newFile guarantees. */
+    let __newfileDraftCleared = null;
+    if (sc.newFile) {
+        workflow.newFile();
+        __newfileDraftCleared = sandbox.__stored.crawler_canvas === undefined;
+    }
     if (sc.save) await workflow.save();
     /* loadFromJSON fires reconcileDatasets() without awaiting; flush it so the
        upload node's dataset reconciliation is visible in the snapshot below. */
@@ -160,7 +178,7 @@ for (const sc of scenarios) {
         })),
         connections: canvas.connections,
         currentFile: workflow.currentFile,
-        newfileDraftCleared: sandbox.__stored.crawler_canvas === undefined,
+        newfileDraftCleared: sc.newFile ? __newfileDraftCleared : sandbox.__stored.crawler_canvas === undefined,
         /* The persisted open-file record: which saved file the browser will reopen on the
            next load, and whether it was cleared (only 新建 clears it). */
         openFileStored: sandbox.__stored.crawler_open_file === undefined ? null : sandbox.__stored.crawler_open_file,
@@ -175,5 +193,8 @@ for (const sc of scenarios) {
         view: canvas._viewState(),
         draftView: (draftObj && draftObj.view) || null,
     };
+    /* Let this scenario's async tail drain before the next one seeds, so no autosave leaks
+       across the boundary and flips the next scenario's draft assertion. */
+    await settle();
 }
 process.stdout.write(JSON.stringify(out));
