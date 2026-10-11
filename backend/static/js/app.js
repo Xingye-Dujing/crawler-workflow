@@ -41,6 +41,7 @@ const I18n = {
             'bg.cross': 'Cross', 'bg.diagonal': 'Diagonal',
             'palette.header': 'Node Library',
             'palette.collapse': 'Collapse', 'palette.expand': 'Expand',
+            'palette.searchPlaceholder': 'Search nodes…',
             'palette.cat.workflow': 'Workflow',
             'palette.cat.inputs': 'Data Inputs',
             'palette.cat.process': 'Processing',
@@ -1053,6 +1054,7 @@ const I18n = {
             'bg.cross': '十字', 'bg.diagonal': '斜纹',
             'palette.header': '节点库',
             'palette.collapse': '收起', 'palette.expand': '展开',
+            'palette.searchPlaceholder': '搜索节点…',
             'palette.cat.workflow': '工作流',
             'palette.cat.inputs': '数据输入',
             'palette.cat.process': '数据处理',
@@ -2174,6 +2176,39 @@ const Settings = {
     },
 };
 
+/* Filter the node library (left palette) by a query typed into #palette-search. Matching the
+   data-type and the tag abbreviation as well as the label means a Chinese panel still answers
+   an English fragment ("src"); a category header is hidden once every item under it is, so a
+   search reads as a flat result list rather than a column of empty headings. Top-level (not
+   inside the boot handler) so the popup/keyboard harnesses can drive it directly. */
+function filterPalette(query) {
+    var q = String(query == null ? '' : query).trim().toLowerCase();
+    document.querySelectorAll('.palette-item').forEach(function (item) {
+        var tagEl = item.querySelector('.palette-tag');
+        var labelEl = item.querySelector('[data-i18n]');
+        var hay = ((item.dataset && item.dataset.type) || '') + ' '
+            + ((tagEl && tagEl.textContent) || '') + ' '
+            + ((labelEl && labelEl.textContent) || '');
+        item.style.display = (!q || hay.toLowerCase().indexOf(q) >= 0) ? '' : 'none';
+    });
+    var scope = document.getElementById('node-palette');
+    if (!scope) return;
+    /* A category owns the items until the next category; hide it when none remain visible. */
+    var activeCat = null;
+    var catAny = false;
+    var flush = function () { if (activeCat) activeCat.style.display = catAny ? '' : 'none'; };
+    scope.querySelectorAll('.palette-cat, .palette-item').forEach(function (node) {
+        if (node.classList.contains('palette-cat')) {
+            flush();
+            activeCat = node;
+            catAny = false;
+        } else if (node.style.display !== 'none') {
+            catAny = true;
+        }
+    });
+    flush();
+}
+
 /* ── What this server can serve ─────────────────────────────────────────────
    The cloud flag is the SERVER's fact (`python app.py cloud`), read once from
    /api/config, and it decides which controls exist: a cloud host has no display to
@@ -2845,6 +2880,13 @@ document.addEventListener('DOMContentLoaded', () => {
         /* The panel boots expanded; label its toggle to say what the next click does. */
         var palToggle = document.querySelector('#node-palette .palette-toggle');
         if (palToggle) palToggle.title = I18n.t('palette.collapse');
+        var palSearch = document.getElementById('palette-search');
+        if (palSearch) {
+            palSearch.placeholder = I18n.t('palette.searchPlaceholder');
+            palSearch.addEventListener('input', function (e) {
+                filterPalette(e && e.target ? e.target.value : palSearch.value);
+            });
+        }
     });
 
     /* Outline sidebar: a jump-to-node navigator. Its rows re-render from the model on
