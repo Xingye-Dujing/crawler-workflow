@@ -90,9 +90,9 @@ class TestLabelSet:
 
     def test_the_emotion_modes_are_what_the_matrix_declares(self, exec_):
         default, allowed = exec_.PROCESS_ENUMS['emotion']['mode']
-        # bert was added as an opt-in; the default stays llm so an untouched node does not
-        # suddenly require a GPU and a model path.
-        assert default == 'llm'
+        # bert is the declared default now (the recommended main model); an untouched node that
+        # cannot run bert is degraded to ml by the executor with a printed line, so it still answers.
+        assert default == 'bert'
         assert allowed == ('llm', 'ml', 'bert')
 
 

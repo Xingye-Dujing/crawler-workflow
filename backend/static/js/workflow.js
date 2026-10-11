@@ -2301,19 +2301,19 @@ function openSettings(nodeId) {
             }
         }
 
-        /* Mode selector for emotion / tendency. Both additionally offer the fine-tuned BERT
-           path (emotion: six SMP2020-EWECT classes incl. Surprise; tendency: six stance
-           classes distilled from the LLM). The bert option needs a model path, so it reveals
-           the same two fields the sentiment node's bert mode does. */
+        /* Mode selector for emotion / tendency. The default is the fine-tuned BERT path (the
+           recommended main model — see docs/why_finetuned_bert.md); a node that names no model runs
+           the op's registered default, and the executor degrades to ml with a printed line when bert
+           truly cannot run. Both also offer llm (row-by-row) and ml (offline sklearn). */
         if (p.operation === 'emotion' || p.operation === 'tendency') {
             var modeOptions = [
+                { value: 'bert', label: I18n.t('mode.bert') },
                 { value: 'llm', label: llmModeLabel() },
                 { value: 'ml', label: I18n.t('mode.ml') },
-                { value: 'bert', label: I18n.t('mode.bert') },
             ];
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.mode') + '</label>' +
                 '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'mode\',this.value)">' +
-                selectOptionTags(modeOptions, p.mode, 'llm') +
+                selectOptionTags(modeOptions, p.mode, 'bert') +
                 '</select></div>';
             if (p.mode === 'ml') {
                 html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
@@ -2323,18 +2323,19 @@ function openSettings(nodeId) {
             }
         }
 
-        /* Sentiment polarity. Four ways to answer 正面/负面/中性, and the default is the one
-           that costs nothing: SnowNLP needs no model, no download and no GPU. The
-           thresholds only mean anything to the two modes that answer with a POLARITY
-           PROBABILITY — ml and llm answer with a label they were trained or prompted to
-           pick, and re-deciding it from their confidence number would be a second opinion
-           about the model's own answer (see analyzers/sentiment.py). */
+        /* Sentiment polarity. Four ways to answer 正面/负面/中性. The default is the fine-tuned BERT
+           path (the recommended main model): a node that names no model runs the op's registered
+           default, and the executor degrades to SnowNLP with a printed line when bert truly cannot
+           run. The thresholds only mean anything to the two modes that answer with a POLARITY
+           PROBABILITY — ml and llm answer with a label they were trained or prompted to pick, and
+           re-deciding it from their confidence number would be a second opinion about the model's
+           own answer (see analyzers/sentiment.py). */
         if (p.operation === 'sentiment') {
-            html += renderParamSelect(nodeId, p, 'mode', 'settings.mode', 'snownlp', [
+            html += renderParamSelect(nodeId, p, 'mode', 'settings.mode', 'bert', [
+                { v: 'bert', l: I18n.t('mode.bert') },
                 { v: 'snownlp', l: I18n.t('mode.snownlp') },
                 { v: 'ml', l: I18n.t('mode.ml') },
                 { v: 'llm', l: llmModeLabel() },
-                { v: 'bert', l: I18n.t('mode.bert') },
             ]);
             if (p.mode === 'snownlp') {
                 html += renderParamInput(nodeId, p, 'pos_threshold', 'settings.posThreshold', 'number', 0.6);
@@ -2715,8 +2716,8 @@ function nodeNeedsLlm(params, nodeOperation) {
        means the operation's own declared default, which is what the backend reads too
        (app.py `_op_needs_llm`). */
     if (op === 'clean') return (mode || 'llm') === 'llm';
-    if (op === 'emotion' || op === 'tendency') return (mode || 'llm') === 'llm';
-    if (op === 'sentiment') return (mode || 'snownlp') === 'llm';
+    if (op === 'emotion' || op === 'tendency') return (mode || 'bert') === 'llm';
+    if (op === 'sentiment') return (mode || 'bert') === 'llm';
     if (op === 'ner') return mode === 'llm';
     return false;
 }

@@ -14,27 +14,27 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
   情绪标签集现按 **SMP2020-EWECT 六类**（`Anger`/`Fear`/`Joy`/`Neutral`/`Sadness`/`Surprise`，此前是少了 `Surprise` 的五类）。
   - ML 通路现统一走 jieba 词 + **那份停用词表去噪** + `class_weight=balanced` 逻辑回归（子线性 TF）；`build_tfidf_pipeline(char_features=True)` 可再并入字 n-gram（字+词 FeatureUnion）。
     这把「文本统计统一走一份停用词表」的同一份表也接进了 ML 特征侧（此前 ML 管线 `stop_words=None`，是一个真实的准确率缺口）。`/api/analysis/train` 的自训与 `ml_train/` 的重训共用这一管线。
-  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：填一个本机 HuggingFace 目录路径即可整列**分批推理**（有显卡自动走显卡，
+  - `bert`（**默认**；未点名模型时自动取注册表里 emotion op 的默认模型）：填一个本机 HuggingFace 目录路径即可整列**分批推理**（有显卡自动走显卡，
     `batch_size`、截断长度 `max_length`（默认 512，长文可调大以免截掉尾部）均可调）；`pipeline('text-classification')` 直接读模型的 `id2label`，**换任何一套六类情绪模型都不用改分析器**。
-    缺 `torch`/`transformers` 或模型名留空一律**按名拒绝、绝不回退到 `llm`/`ml`**（把 A 模型的结论写进 B 模型声称的列是本项目反复付过学费的 bug 形态）；读不出的行留空，不臆造 `Neutral`。
+    缺 `torch`/`transformers` 或无注册模型可解析时，执行器**自动降级到 `ml` 并打印本次实际用的模式**（绝不静默把 ml 结论冒充成 bert）；分析器被直接当 bert 调用仍按名拒绝；读不出的行留空，不臆造 `Neutral`。
     产出模型用 `ml_train/scripts/train_emotion_bert.py` 在 `ml_train/datasets/ewect_smp2020/train/usual_train.txt`（通用微博 27,766 条）上微调 `hfl/chinese-roberta-wwm-ext`，
     写到 `ml_train/models/emotion_ewect_six/`、在节点「已注册模型」下拉按名选（或填相对路径 `ml_train/models/emotion_ewect_six`）即可。**本机实测（2026-10-06）**：三 epoch、留出切片 **accuracy=0.811 / macro-F1=0.792**；
     官方未见过的验证集（2000 条）**accuracy=0.792 / macro-F1=0.758**（六类不均衡，`Surprise`/`Fear` 最稀，故 macro-F1 低于二分类的情感极性）。
 - **情感极性（四模式）**：输出 `sentiment`（`positive`/`negative`/`neutral`）与 `score`（0–1 正极性概率）两列。
   它是**独立的一个操作**而不是「情感分析」的第三个开关：SnowNLP 与中文情感 BERT 回答的是"这段话偏正面吗"，
   给不出 Anger/Fear/Joy/Neutral/Sadness/Surprise 六分类、也给不出倾向性的六类传播标签，硬塞进去只能靠猜。
-  - `snownlp`（默认）：随包附带的朴素贝叶斯极性模型，不需要下载模型、不需要 GPU、不掏任何 API；
+  - `snownlp`（bert 跑不动时的默认回退，无需模型、无需 GPU、不掏任何 API）：随包附带的朴素贝叶斯极性模型；
     另有「判定为正面的下限 / 判定为负面的上限」两个可调档位，落在两者之间记为中性。
     **实测要说清**：SnowNLP 是在购物评论上训出来的，对客观陈述明显偏负（"会议定于周三举行"实测 0.24），
     所以阈值是节点参数而不是写死的 0.5，`score` 列始终保留原始概率，判错方向时重划档位即可。
   - `ml`：与情感/倾向同一条「训练模型」通路，从表里已标注的行拟合 `data/models/sentiment.pkl`
   - `llm`：逐行走大模型，与情感/倾向共用批量、缓存与断点检查点
-  - `bert`：**可选**（默认仍是 `snownlp`）。本机跑不动 bert（缺 `torch`/`transformers`，或模型名留空 / 无法解析）时，
+  - `bert`：**默认**（未点名模型时自动取注册表 sentiment op 的默认模型）。本机跑不动 bert（缺 `torch`/`transformers`，或无注册模型可解析）时，
     节点执行器**自动降级到 `snownlp`，并在控制台打印本次实际用了哪种**——绝不静默把 SnowNLP 的结论冒充成 bert。
     分析器**本身**被直接当 bert 调用仍按名拒绝（纵深防御）；勾 ≥2 模型的多模型对比不降级、维持按名拒绝。
     **注**：这一条通路在本仓库**从未真跑过**（开发机没有对应模型），不要把它当作已验证功能
 - **倾向性分析（三模式）**：LLM 逐行、传统 ML（sklearn TF-IDF + 逻辑回归）批量，或**微调 BERT**（六类传播立场标签，与情感/情绪共用同一条 `bert` 后端与分批推理）
-  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/scripts/distill_tendency_labels.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `ml_train/datasets/weibo_clean_265k.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/datasets/tendency_distilled.csv`（两轮蒸馏累计约 7,720 条）；再由 `ml_train/scripts/train_tendency_bert_v1.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/models/tendency_stance_v1/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空 / 无法解析时，执行器**自动降级到 `ml` 并打印实际模式**（分析器被直接当 bert 调用仍按名拒绝；多模型对比不降级），模型回了不认识的标签时该行留空、**不臆造 `Objective Statement`**。
+  - `bert`（**默认**；未点名模型时自动取注册表里 tendency op 的默认模型，缺栈/无模型时执行器降级到 `ml` 并打印）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/scripts/distill_tendency_labels.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `ml_train/datasets/weibo_clean_265k.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/datasets/tendency_distilled.csv`（两轮蒸馏累计约 7,720 条）；再由 `ml_train/scripts/train_tendency_bert_v1.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/models/tendency_stance_v1/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空 / 无法解析时，执行器**自动降级到 `ml` 并打印实际模式**（分析器被直接当 bert 调用仍按名拒绝；多模型对比不降级），模型回了不认识的标签时该行留空、**不臆造 `Objective Statement`**。
     **本机实测（2026-10-06）**：在约 7,720 条上微调、三 epoch、5% 留出 **accuracy=0.731 / macro-F1=0.681**（较首轮 3,935 条的 0.572 明显提升，主要靠稀有类样本变多：`Controversy/Reflection` 106→364、`Criticism`/`Advocacy` 各约 1,300）。仍如实说：`Controversy` 是最稀的一类（真实微博少有人作多视角讨论），它与讽刺(`Satire`)仍是最弱两格——端到端里「呵呵，某些人倒是挺会演戏的」被误判为 `Praise`（置信仅 0.46）。曾试把各类下采样到最少类（`--balance`，每类 364）以求均衡，macro-F1 反降到 0.561（丢掉约 5,500 条有效数据），故保留全量训练。要更高可加大 `--n` 续蒸馏（脚本自动跳过已标注文本）。
 - **微调模型注册表（显示名）**：`bert` 模式的「模型名」不再只能手敲路径。运维在 `data/model_registry.json` 里
   登记 `{name, path, desc}`（路径用**相对仓库根**的 `ml_train/models/…`，换机/换检出目录不失效，便于上传云盘共享），

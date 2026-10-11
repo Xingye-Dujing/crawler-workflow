@@ -19,6 +19,7 @@ from api.analysis import bp as analysis_bp
 from api.browser_profiles import bp as browser_profiles_bp
 from api.capabilities import bp as capabilities_bp
 from api.config import bp as config_bp
+from api.config import default_model_path_for
 from api.data import bp as data_bp
 from api.exports import bp as exports_bp
 from api.history import bp as history_bp
@@ -2505,12 +2506,15 @@ PROCESS_ENUMS = {
     # declared default because that is what a workflow saved before this selector existed
     # was already doing — a blank must not silently change what a stored canvas produces.
     'clean': {'mode': ('llm', ('regex', 'llm'))},
-    'emotion': {'mode': ('llm', ('llm', 'ml', 'bert'))},
-    'tendency': {'mode': ('llm', ('llm', 'ml', 'bert'))},
+    # All three default to bert (the recommended main path — see docs/why_finetuned_bert.md); the
+    # executor resolves the op's registered default model when a node names none, and degrades to a
+    # dependency-free mode with a PRINTED line when bert truly cannot run (see _resolve_bert_mode).
+    'emotion': {'mode': ('bert', ('llm', 'ml', 'bert'))},
+    'tendency': {'mode': ('bert', ('llm', 'ml', 'bert'))},
     # The traditional methods answer 正面/负面/中性, which is not the five-emotion or the
     # six-tendency label set — hence its own operation rather than a new mode on theirs.
-    # SnowNLP is the default because it needs no model, no download and no GPU.
-    'sentiment': {'mode': ('snownlp', ('llm', 'ml', 'snownlp', 'bert'))},
+    # bert is the default; snownlp is the no-model fallback the executor picks when bert cannot run.
+    'sentiment': {'mode': ('bert', ('llm', 'ml', 'snownlp', 'bert'))},
     'ner': {'mode': ('regex', ('regex', 'llm'))},
     # The lexicon is the default because it needs no model, costs nothing, and answers the same
     # table every run; ``llm`` is the opt-in that can see the euphemisms a fixed list cannot.
@@ -2716,22 +2720,34 @@ def _bert_runnable(bert_model: str) -> tuple:
     return True, ''
 
 
-def _resolve_bert_mode(op: str, mode: str, params: dict) -> str:
-    """Degrade an explicit ``bert`` the machine cannot run to the op's general mode, and SAY so.
+def _resolve_bert_mode(op: str, mode: str, bert_model: str) -> str:
+    """Degrade an explicit/default ``bert`` the machine cannot run to the op's general mode, and SAY so.
 
     ``mode`` has already been validated by ``enum_param``; anything other than ``bert`` returns
-    unchanged. When ``bert`` cannot run, the executor falls back to ``BERT_FALLBACK_MODE[op]`` and
-    ``add_log``s the mode that ACTUALLY ran, so the column is never silently mislabeled as bert. The
-    analyzer's own refuse-by-name is untouched — it simply is not reached from here when it would fail.
+    unchanged. When ``bert`` cannot run for the given ``bert_model`` (no torch/transformers, or no
+    resolvable model), the executor falls back to ``BERT_FALLBACK_MODE[op]`` and ``add_log``s the mode
+    that ACTUALLY ran, so the column is never silently mislabeled as bert. The analyzer's own
+    refuse-by-name is untouched — it simply is not reached from here when it would fail.
     """
     if str(mode) != 'bert':
         return mode
-    ok, reason = _bert_runnable(params.get('bert_model'))
+    ok, reason = _bert_runnable(bert_model)
     if ok:
         return mode
     fallback = BERT_FALLBACK_MODE[op]
     add_log(t('analysis.bert_fallback', op=op, reason=reason, used=fallback))
     return fallback
+
+
+def _effective_bert_model(op: str, params: dict) -> str:
+    """The model a bert run loads: the node's own path if named, else that op's registered default.
+
+    This is what makes the DEFAULT actually run bert — a node that names no model resolves
+    ``default_model_path_for(op)`` (registry order = the operator's preference). ``''`` means nothing
+    is registered for the op, which ``_resolve_bert_mode`` then treats as bert-unavailable and degrades.
+    """
+    named = str(params.get('bert_model') or '').strip()
+    return named or default_model_path_for(op)
 
 
 def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
@@ -2764,10 +2780,11 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         mode = enum_param(op, params, 'mode')
         if mode == 'bert' and len(bert_model_list(params)) > 1:
             return _run_bert_compare(op, params, df, text_column, run_ctx)
-        mode = _resolve_bert_mode(op, mode, params)
+        bert_model = _effective_bert_model(op, params)
+        mode = _resolve_bert_mode(op, mode, bert_model)
         analyzer = EmotionAnalyzer(
             mode=mode,
-            bert_model=str(params.get('bert_model') or '').strip(),
+            bert_model=bert_model,
             # Read by the transformer path; validated here for every mode so a stored 0
             # cannot reach the chunking loop and score an empty column while reporting success.
             batch_size=_safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256),
@@ -2782,10 +2799,11 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         mode = enum_param(op, params, 'mode')
         if mode == 'bert' and len(bert_model_list(params)) > 1:
             return _run_bert_compare(op, params, df, text_column, run_ctx)
-        mode = _resolve_bert_mode(op, mode, params)
+        bert_model = _effective_bert_model(op, params)
+        mode = _resolve_bert_mode(op, mode, bert_model)
         analyzer = TendencyAnalyzer(
             mode=mode,
-            bert_model=str(params.get('bert_model') or '').strip(),
+            bert_model=bert_model,
             # Read by the transformer path; validated here for every mode so a stored 0
             # cannot reach the chunking loop and score an empty column while reporting success.
             batch_size=_safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256),
@@ -2799,13 +2817,14 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         mode = enum_param(op, params, 'mode')
         if mode == 'bert' and len(bert_model_list(params)) > 1:
             return _run_bert_compare(op, params, df, text_column, run_ctx)
-        mode = _resolve_bert_mode(op, mode, params)
+        bert_model = _effective_bert_model(op, params)
+        mode = _resolve_bert_mode(op, mode, bert_model)
         pos, neg = sentiment_thresholds(params)
         analyzer = SentimentAnalyzer(
             mode=mode,
             pos_threshold=pos,
             neg_threshold=neg,
-            bert_model=str(params.get('bert_model') or '').strip(),
+            bert_model=bert_model,
             # Only the transformer path reads this, but it is validated here for every
             # mode so a stored 0 cannot reach the chunking loop and score nothing.
             batch_size=_safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256),

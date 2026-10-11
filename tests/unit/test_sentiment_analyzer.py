@@ -58,13 +58,13 @@ class TestDeclaredModes:
     def test_the_four_modes_are_what_the_matrix_declares(self, exec_):
         default, allowed = exec_.PROCESS_ENUMS['sentiment']['mode']
         assert allowed == ('llm', 'ml', 'snownlp', 'bert')
-        # SnowNLP needs no model, no download and no GPU, so an untouched node costs
-        # nothing and answers a real question.
-        assert default == 'snownlp'
+        # bert is the declared default now (the recommended main model); an untouched node that
+        # cannot run bert is degraded to SnowNLP by the executor with a printed line, so it still answers.
+        assert default == 'bert'
 
     def test_a_blank_mode_is_the_declared_default(self, exec_):
-        assert exec_.enum_param('sentiment', {'mode': ''}, 'mode') == 'snownlp'
-        assert exec_.enum_param('sentiment', {}, 'mode') == 'snownlp'
+        assert exec_.enum_param('sentiment', {'mode': ''}, 'mode') == 'bert'
+        assert exec_.enum_param('sentiment', {}, 'mode') == 'bert'
 
     @pytest.mark.parametrize('stored', ['LLM', 'SnowNLP', 'BERT', 'senti', 'senta', 'llm-mode', 'ML'])
     def test_a_spelling_the_operation_does_not_know_is_refused_by_name(self, exec_, stored):

@@ -26,9 +26,10 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   CI-installed, and code may never SILENTLY answer with a model other than the one it claims. Two degradations are
   sanctioned, each PRINTING the method that actually ran so a column is never mislabeled: (1) a topic step's
   `method=auto` default (resolved by `_resolve_topic_method`) picks embedding when the encoder imports and LDA when
-  it does not; (2) the node executor's `_resolve_bert_mode` turns an explicit `bert` the machine cannot run (missing
-  torch/transformers, or no resolvable model) into the op's dependency-free mode — `snownlp` for sentiment, `ml` for
-  emotion/tendency — and logs the substitution. The analyzers themselves still refuse a direct unrunnable `bert` by
+  it does not; (2) `sentiment`/`emotion`/`tendency` DEFAULT to `bert` — `_effective_bert_model` uses the node's own model
+  or that op's registered default from `model_registry.json` (each entry carries an `operation`), and `_resolve_bert_mode`
+  degrades to the dependency-free mode (`snownlp` / `ml`) with a printed line when bert cannot run (missing
+  torch/transformers, or nothing registered to load). The analyzers themselves still refuse a direct unrunnable `bert` by
   name (defense in depth), and a multi-model BERT comparison never degrades (it has no general-mode equivalent).
 - **CI** (`.github/workflows/ci.yml`, windows-latest): fast tier + `ruff check`/`ruff format --check` over
   `backend/ tests/`. The local PostToolUse `ruff format` **silently fails on a restricted workspace** (measured

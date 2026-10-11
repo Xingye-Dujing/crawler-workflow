@@ -1,8 +1,10 @@
-# Optional, per-feature dependencies — nothing here is needed for a crawl, a cleaning
-# pass, a keyword list or a SnowNLP polarity column. The topic step's DEFAULT is `auto`: it uses
-# sentence-transformers from here WHEN installed and falls back to LDA (printing which one actually
-# ran) when not, so a torch-less machine still gets a working topic step. An EXPLICIT 主题方法=embedding
-# with no encoder still refuses BY NAME and is never substituted; explicit 主题方法=lda needs nothing here.
+# Optional, per-feature dependencies — nothing here is needed for a crawl or a cleaning pass. The
+# topic step's DEFAULT is `auto` (embedding when sentence-transformers is installed, else LDA) and the
+# sentiment/emotion/tendency nodes DEFAULT to bert (the recommended main model) — both fall back to a
+# dependency-free mode (LDA / snownlp / sklearn ml) WITH a printed line naming the mode that actually
+# ran, so a torch-less machine still gets a working project. An EXPLICIT bert / 主题方法=embedding is
+# never silently substituted. Installing this stack upgrades those defaults; explicit LDA / snownlp /
+# ml need nothing from here.
 #
 # They live in their own file rather than in requirements.txt because of SIZE and because
 # of how the code treats them. `torch` is a multi-gigabyte download, and the three bert analyzers

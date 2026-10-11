@@ -76,7 +76,9 @@ class TestLabelSet:
 
     def test_the_tendency_modes_are_what_the_matrix_declares(self, exec_):
         default, allowed = exec_.PROCESS_ENUMS['tendency']['mode']
-        assert default == 'llm'
+        # bert is the declared default now (the recommended main model); a node that cannot run it
+        # is degraded to ml by the executor with a printed line, so an untouched node still answers.
+        assert default == 'bert'
         assert allowed == ('llm', 'ml', 'bert')
 
 

@@ -719,16 +719,18 @@ class TestSettingsPanel:
             'a saved workflow that asked for the range, with a window upstream, must show it ticked'
         )
 
-    def test_the_sentiment_panel_offers_all_four_methods_and_defaults_to_the_free_one(self, results):
-        """SnowNLP / sklearn / LLM / BERT all answer 正面·负面·中性, and the untouched node
-        must be the one that costs nothing and downloads nothing. A workflow saved before
-        the selector exists has no ``mode`` at all, so the default is the panel's figure
-        AND the executor's — never option #0 of whatever list happens to be rendered."""
+    def test_the_sentiment_panel_offers_all_four_methods_and_defaults_to_bert(self, results):
+        """SnowNLP / sklearn / LLM / BERT all answer 正面·负面·中性. The untouched node now
+        defaults to bert — the recommended main model — and the executor degrades it to SnowNLP
+        with a printed line when bert cannot run, so an untouched node still answers on a machine
+        without the stack. A workflow saved before the selector has no ``mode``; the panel's
+        default and the executor's agree — never option #0 of whatever list is rendered."""
         default = results['settings']['panel_sentiment_default']
         for value in ('snownlp', 'ml', 'llm', 'bert'):
             assert f'<option value="{value}"' in default, f'{value} is not offered'
-        assert '<option value="snownlp" selected>' in default, 'an untouched node must not ask for a model'
+        assert '<option value="bert" selected>' in default, 'an untouched node must default to bert'
         assert '<option value="llm" selected>' not in default
+        assert '<option value="snownlp" selected>' not in default
         assert 'mode.snownlp' in default and 'mode.bert' in default
 
     def test_the_polarity_band_is_offered_only_where_a_probability_is_produced(self, results):
@@ -791,15 +793,15 @@ class TestSettingsPanel:
         assert 'entity_types' not in results['settings']['panel_keyword']
         assert 'entity_types' not in results['settings']['panel_emotion_ml']
 
-    def test_the_emotion_panel_offers_bert_and_defaults_to_the_llm(self, results):
-        """The six-class emotion path gained a transformer mode beside llm/ml, offered in the
-        select but NOT made the default: an untouched node has no ``mode`` and must not suddenly
-        require a GPU and a model path."""
+    def test_the_emotion_panel_offers_bert_and_defaults_to_it(self, results):
+        """The six-class emotion path's transformer mode is now the DEFAULT; an untouched node
+        runs the op's registered default model and the executor degrades it to ml (printed) when
+        bert cannot run, so it still answers without a GPU."""
         default = results['settings']['panel_emotion_default']
         for value in ('llm', 'ml', 'bert'):
             assert f'<option value="{value}"' in default, f'{value} is not offered'
-        assert '<option value="llm" selected>' in default, 'an untouched emotion node must not ask for a model'
-        assert '<option value="bert" selected>' not in default
+        assert '<option value="bert" selected>' in default, 'an untouched emotion node must default to bert'
+        assert '<option value="llm" selected>' not in default
         assert 'mode.bert' in default
 
     def test_the_emotion_bert_panel_asks_for_the_model_it_cannot_guess(self, results):
@@ -816,14 +818,15 @@ class TestSettingsPanel:
         assert 'trainMLModel' in ml
         assert 'bert_model' not in ml
 
-    def test_the_tendency_panel_also_offers_bert(self, results):
-        """The stance node gained the same transformer path emotion got (its corpus was
-        distilled from the llm path). Default stays llm so an untouched node is unchanged."""
+    def test_the_tendency_panel_defaults_to_bert_too(self, results):
+        """The stance node shares emotion's transformer path (its corpus was distilled from the
+        llm path) and now defaults to it; an untouched node runs the registered default and
+        degrades to ml (printed) when bert cannot run."""
         default = results['settings']['panel_tendency_default']
         for value in ('llm', 'ml', 'bert'):
             assert f'<option value="{value}"' in default, f'{value} is not offered'
-        assert '<option value="llm" selected>' in default
-        assert '<option value="bert" selected>' not in default
+        assert '<option value="bert" selected>' in default
+        assert '<option value="llm" selected>' not in default
         assert 'mode.bert' in default
 
     def test_the_tendency_bert_panel_asks_for_the_model_it_cannot_guess(self, results):

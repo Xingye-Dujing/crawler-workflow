@@ -1578,10 +1578,17 @@ class TestSelectsAndSwitchesAsNodes:
     #: analyzer receives are ONE string. A gate that forgave padding the branch still
     #: read raw would pass ``' ML '`` on to a comparison against ``'ml'``, which is the
     #: same split that made a refused spelling pay for the LLM.
+    #:
+    #: emotion/tendency are listed with their env-INDEPENDENT modes only: their declared
+    #: DEFAULT (bert) resolves through the executor's degrade, so a blank here hands the
+    #: analyzer ``bert`` on a machine that can run it and ``ml`` on one that cannot — not a
+    #: stable string to pin in a shared table. That default+degrade is covered deterministically
+    #: in ``test_bert_degrade``; blank-still-takes-the-declared-default is pinned below by ner.
     _HANDOFF = [
-        ('emotion', 'mode', 'llm', ('', '  llm  ')),
+        ('emotion', 'mode', 'llm', ('llm', '  llm  ')),
         ('emotion', 'mode', 'ml', ('ml', ' ml ')),
-        ('tendency', 'mode', 'llm', ('', '  llm  ')),
+        ('tendency', 'mode', 'llm', ('llm', '  llm  ')),
+        ('tendency', 'mode', 'ml', ('ml', ' ml ')),
         ('ner', 'mode', 'regex', ('', ' regex ')),
         ('ner', 'mode', 'llm', ('llm', ' llm ')),
         ('cluster', 'cluster_method', 'kmeans', ('', ' kmeans ')),
