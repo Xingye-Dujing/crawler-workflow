@@ -2671,6 +2671,13 @@ input:-webkit-autofill:focus {
   min-width: 50px;
   text-align: right;
 }
+/* Unsaved-changes marker: a dot in the warning colour, present only while the canvas
+   differs from the file it was saved to. Empty when clean, so it takes no visual room. */
+.dirty-indicator {
+  color: var(--warn);
+  font-size: 13px;
+  line-height: 1;
+}
 
 /* ── Console ────────────────────────────────────────────────────────────── */
 #console-panel {

@@ -101,6 +101,14 @@ const canvas = {
     _historyIdx: -1,
     _historyMax: 50,
     _historySaving: false,
+    /* ── Unsaved-changes flag ── */
+    /* dirty = the model differs from the state that was last saved to (or loaded from) a
+       file. `_cleanState` is the JSON of getState() at that point; null means "no file
+       baseline yet" — a brand-new draft, where anything with nodes counts as unsaved.
+       Comparison is against getState() (which EXCLUDES the camera), so panning never
+       makes the canvas dirty — only real model edits do. */
+    dirty: false,
+    _cleanState: null,
 
     init() {
         this.container = document.getElementById('canvas-inner');
@@ -120,6 +128,10 @@ const canvas = {
            dataset_id is a pointer that outlives this page — it is kept and
            re-verified (see dataNodes.reconcileDatasets) rather than dropped. */
         this._pushState();
+        /* Boot starts from an empty file baseline: a restored draft that already holds nodes
+           is unsaved work (dirty) unless reloadOpenFile immediately re-syncs it to a file. */
+        this._cleanState = null;
+        this._refreshDirty();
     },
 
     /* ---- Coordinate helpers ---- */
@@ -1681,6 +1693,9 @@ const canvas = {
         this._historySaving = false;
         /* An undo/redo may have removed the node the settings panel is showing. */
         this.closeSettingsIfStale();
+        /* Undo can walk the model back onto the saved baseline (or off it), so the flag is
+           recomputed here — _pushState is suppressed during a history restore. */
+        this._refreshDirty();
     },
 
     refreshSourceSummaries() {
@@ -1738,6 +1753,36 @@ const canvas = {
                 console.error('outline render failed', e);
             }
         }
+        this._refreshDirty();
+    },
+
+    /* Baseline the dirty flag at the point the canvas matches a file on disk: after a
+       successful save, a load-by-name, or boot's re-fetch of the remembered file. The
+       empty canvas a 新建 leaves is also clean (nothing to save). */
+    markSaved() {
+        this._cleanState = JSON.stringify(this.getState());
+        this.dirty = false;
+        this._renderDirty();
+    },
+
+    _refreshDirty() {
+        var clean;
+        if (this._cleanState === null) {
+            clean = Object.keys(this.nodes).length === 0;
+        } else {
+            clean = JSON.stringify(this.getState()) === this._cleanState;
+        }
+        this.dirty = !clean;
+        this._renderDirty();
+    },
+
+    _renderDirty() {
+        if (typeof document === 'undefined' || !document.getElementById) return;
+        var el = document.getElementById('dirty-indicator');
+        if (!el) return;
+        el.textContent = this.dirty ? '●' : '';
+        el.title = this.dirty && typeof I18n !== 'undefined' ? I18n.t('canvas.dirtyUnsaved') : '';
+        el.setAttribute('aria-hidden', this.dirty ? 'false' : 'true');
     },
 
     updateStatus() {

@@ -22,6 +22,7 @@ const LABELS = {
         'node.process': 'Process', 'node.analysis': 'Analysis', 'node.visualize': 'Visualize',
         'node.tokenize': 'Tokenize', 'node.resume': 'Resume', 'node.name': 'Workflow Name',
         'node.comment': 'Comments', 'ctx.renameHint': 'x', 'status.nodes': 'Nodes: ',
+        'canvas.dirtyUnsaved': 'Unsaved changes',
         'toast.newWorkflow': 'new', 'toast.workflowSaved': 'saved', 'toast.saveFailed': 'fail',
         'toast.noWorkflows': 'none', 'toast.workflowLoaded': 'loaded', 'toast.loadFailed': 'loadfail',
         'dialog.workflowName': 'name?', 'dialog.cancel': 'cancel', 'dialog.confirm': 'ok',
@@ -117,6 +118,10 @@ for (const sc of scenarios) {
     canvas.nextId = 1;
     canvas._history = [];
     canvas._historyIdx = -1;
+    /* Dirty starts fresh each scenario the way init's baseline reset does: without this,
+       one scenario's markSaved/dirty leaks into the next (the harness never calls init). */
+    canvas._cleanState = null;
+    canvas.dirty = false;
     /* Reset the camera too, so one scenario's loaded view cannot leak into the next
        and a 'file with no view leaves the camera alone' test starts from a known
        default. */
@@ -178,6 +183,8 @@ for (const sc of scenarios) {
         })),
         connections: canvas.connections,
         currentFile: workflow.currentFile,
+        dirty: canvas.dirty,
+        dirtyDot: sandbox.__byId('dirty-indicator').textContent,
         newfileDraftCleared: sc.newFile ? __newfileDraftCleared : sandbox.__stored.crawler_canvas === undefined,
         /* The persisted open-file record: which saved file the browser will reopen on the
            next load, and whether it was cleared (only 新建 clears it). */

@@ -698,6 +698,35 @@ def life(tmp_path_factory, capabilities_matrix):
         {'id': 'save_prompt_ok', 'dialogAnswer': '新工作流', 'save': True},
         {'id': 'open_by_name', 'loadByName': '我的流程', 'loadResponse': {'ok': True, 'workflow': opened}},
         {
+            # A file with nothing the browser has to normalize (no dead upload id, so
+            # reconcileDatasets changes no node): opening it leaves the canvas clean.
+            'id': 'open_clean_file',
+            'loadByName': '健康',
+            'loadResponse': {
+                'ok': True,
+                'workflow': {
+                    'nodes': [
+                        {
+                            'id': 'cA',
+                            'type': 'source',
+                            'params': {'platform': 'weibo', 'keyword': 'AI'},
+                            'x': 5,
+                            'y': 5,
+                        },
+                        {
+                            'id': 'cB',
+                            'type': 'output',
+                            'params': {'operation': 'save', 'filename': 'o'},
+                            'x': 1,
+                            'y': 1,
+                        },
+                    ],
+                    'connections': [{'from': 'cA', 'to': 'cB'}],
+                    'settings': {'mode': 'serial'},
+                },
+            },
+        },
+        {
             'id': 'open_missing',
             'currentFile': 'old-name',
             'add': ['source'],
@@ -716,6 +745,18 @@ def life(tmp_path_factory, capabilities_matrix):
             # panel: the numbers it carries must be the server's, not a copy.
             'id': 'matrix_defaults',
             'add': ['source'],
+        },
+        {
+            # Adding a node is a real edit against an empty file baseline → unsaved.
+            'id': 'dirty_after_add',
+            'add': ['source'],
+        },
+        {
+            # Saving writes the canvas to the file and re-baselines: not unsaved again.
+            'id': 'clean_after_save',
+            'currentFile': 'wf1',
+            'add': ['source'],
+            'save': True,
         },
     ]
     return _run(
@@ -907,6 +948,39 @@ class TestFileLifecycle:
         assert len(r['nodes']) == 1, 'the canvas on screen must survive the bad file'
         assert r['currentFile'] == 'good-name', 'the next Save must not overwrite the junk file as if it were loaded'
         assert any('toast.workflowFileInvalid' in msg for msg in r['toasts']), r['toasts']
+
+
+class TestUnsavedChangesFlag:
+    """canvas.dirty is the gate for the open-confirm and the status-bar dot. It counts
+    model changes only — getState() excludes the camera, so a pan is never 'unsaved' —
+    and is re-baselined at every point the canvas matches a file on disk."""
+
+    def test_adding_a_node_marks_the_canvas_unsaved(self, life):
+        r = life['dirty_after_add']
+        assert r['dirty'] is True
+        assert r['dirtyDot'] == '●', 'the status-bar dot lights up with the flag'
+
+    def test_saving_clears_the_unsaved_flag(self, life):
+        r = life['clean_after_save']
+        assert r['dirty'] is False
+        assert r['dirtyDot'] == '', 'a save wipes the dot'
+
+    def test_a_new_empty_canvas_is_clean(self, life):
+        # 新建 empties the canvas; there is nothing to save, so it is not 'unsaved'.
+        assert life['newfile']['dirty'] is False
+
+    def test_opening_a_file_leaves_the_canvas_clean(self, life):
+        # A healthy file (no dead dataset to normalize) opens to an unmodified canvas.
+        assert life['open_clean_file']['dirty'] is False
+
+    def test_a_file_the_browser_must_normalize_opens_dirty(self, life):
+        # `opened` carries an upload whose dead dataset_id reconcileDatasets clears AFTER the
+        # load, so the on-screen canvas genuinely differs from the file — honestly unsaved.
+        assert life['open_by_name']['dirty'] is True
+
+    def test_a_failed_open_keeps_the_unsaved_work_flagged(self, life):
+        # The junk file refused, so the node the user added is still unsaved on screen.
+        assert life['open_file_without_nodes']['dirty'] is True
 
 
 class TestCanvasDisable:

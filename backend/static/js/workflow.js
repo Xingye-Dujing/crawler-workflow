@@ -222,7 +222,9 @@ const workflow = {
         try {
             var resp = await fetch('/api/workflow/load?name=' + encodeURIComponent(name));
             var result = await resp.json();
-            if (result && result.ok && result.workflow) this.loadFromJSON(result.workflow);
+            if (result && result.ok && result.workflow) {
+                if (this.loadFromJSON(result.workflow)) canvas.markSaved();
+            }
         } catch (e) {
             /* offline at boot, or the file is gone: leave the draft as-is, never throw into boot */
         }
@@ -255,6 +257,7 @@ const workflow = {
                 showToast(I18n.t('toast.workflowSaved') + ': ' + name);
                 localStorage.setItem('crawler_canvas', JSON.stringify(canvas.serializeDraft()));
                 this._persistOpenFile();
+                canvas.markSaved();
             } else {
                 showToast(I18n.t('toast.saveFailed') + ': ' + result.error);
             }
@@ -304,6 +307,7 @@ const workflow = {
                 if (!this.loadFromJSON(result.workflow)) return;
                 this.currentFile = name;
                 this._persistOpenFile();
+                canvas.markSaved();
                 showToast(I18n.t('toast.workflowLoaded') + ': ' + name);
                 /* The workflow we just opened may have an unfinished run filed
                    under the same shape — offer to continue it before the user
@@ -418,6 +422,9 @@ const workflow = {
         this.currentFile = null;
         localStorage.removeItem('crawler_canvas');
         this._persistOpenFile();
+        /* An empty canvas has nothing to save, so it is clean — and markSaved resets the
+           baseline, since 新建 rebuilds the canvas without going through saveState. */
+        canvas.markSaved();
         showToast(I18n.t('toast.newWorkflow'));
     },
 
@@ -8074,10 +8081,10 @@ var wfFiles = {
 
     async open(name) {
         if (refuseWhileRunning()) return;
-        /* Opening replaces the canvas (and its autosave draft) wholesale, and the
-           app tracks no dirty flag — so confirm first when the canvas is not empty,
-           exactly as the dataset delete confirms before it destroys. */
-        if (typeof canvas !== 'undefined' && Object.keys(canvas.nodes || {}).length) {
+        /* Opening replaces the canvas (and its autosave draft) wholesale. Confirm only when
+           there is genuinely UNSAVED work to lose — canvas.dirty — rather than on any non-empty
+           canvas, so reopening a file you just saved does not nag. */
+        if (typeof canvas !== 'undefined' && canvas.dirty) {
             var ok = await showDialog({
                 message: I18n.t('wfMgr.confirmOpen').replace('{name}', name),
                 buttons: [
