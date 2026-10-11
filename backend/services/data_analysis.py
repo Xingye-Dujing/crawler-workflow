@@ -161,7 +161,7 @@ WORD_SOURCES = ('tfidf', 'lda')
 #: table with holes in it, and the export cannot tell an empty cell from a topic the model
 #: was never asked about. ``blank`` is the opt-in for a long run the user does not want to
 #: restart, and it logs one line per topic it gave up on.
-ON_FAIL = ('abort', 'blank')
+ON_FAIL = ('abort', 'blank', 'fallback')
 
 #: Steps that need the run's LLM client, and so are handed it by :func:`run_pipeline`.
 #: Kept out of the step's own ``params`` because the pipeline report — which the console
@@ -642,6 +642,30 @@ def _mds_2d(distances):
             for row in coordinates:
                 row[axis] = -row[axis]
     return [list(point) + [0.0] * (2 - len(point)) for point in coordinates]
+
+
+def _fallback_topic_label(weights_str, words_str, topn: int = 6) -> str:
+    """A deterministic 概括 from the topic's OWN weighted words when no model answer exists.
+
+    The weights column (``word:weight`` tokens, space-separated) is what :meth:`topic_by_stage`
+    already computed; ordering it by weight and joining the top terms with '·' names the topic the
+    way a reader of 表 1 would, without inventing a sentence. With no weights it falls back to the
+    plain feature-word list. This never asks the model — it is a recall device, not a classifier.
+    """
+    parts = []
+    for token in str(weights_str or '').split():
+        word, _, weight = token.partition(':')
+        if word:
+            try:
+                w = float(weight)
+            except ValueError:
+                w = 0.0
+            parts.append((word, w))
+    if parts:
+        parts.sort(key=lambda item: -item[1])
+        return '·'.join(word for word, _ in parts[:topn])
+    words = [x.strip() for x in re.split('[、,]', str(words_str or '')) if x.strip()]
+    return '·'.join(words[:topn])
 
 
 def _label_from(answer) -> str:
@@ -1686,10 +1710,21 @@ class DataAnalysisService:
         """
         from analyzers.llm_client import ABORT_MARK, LLMError
 
-        if llm is None:
-            raise UnknownOperationError(t('analysis.label_no_llm', op='topic_label'))
         if words_col not in df.columns:
             raise UnknownOperationError(t('analysis.step_col_missing', op='topic_label', col=words_col))
+        if llm is None and on_fail != 'fallback':
+            raise UnknownOperationError(t('analysis.label_no_llm', op='topic_label'))
+        if llm is None:
+            # No model at all: name every topic from its OWN weighted words so the column is a
+            # named topic, not a blank nobody can tell apart from a topic never asked about.
+            work = df.copy()
+            work[summary_col] = ''
+            has_weights = 'weights' in work.columns
+            for position in work.index:
+                weights = str(work.at[position, 'weights'] or '') if has_weights else ''
+                work.at[position, summary_col] = _fallback_topic_label(weights, str(work.at[position, words_col] or ''))
+            logger.warning(t('analysis.label_fallback_all', n=len(work)))
+            return work
         limit = int(max_topics)
         if limit < 1 or len(df) > limit:
             # One call per row, so a 5,000-row table is 5,000 paid questions nobody meant to
@@ -1737,6 +1772,15 @@ class DataAnalysisService:
                 try:
                     answer = llm.chat(prompt)
                 except LLMError as e:
+                    if on_fail == 'fallback':
+                        # Name the topic from its weighted words rather than dropping the row or
+                        # aborting a long run the user asked to keep going.
+                        work.at[position, summary_col] = _fallback_topic_label(
+                            str(work.at[position, 'weights'] or '') if 'weights' in work.columns else '', words
+                        )
+                        labelled += 1
+                        logger.warning(t('analysis.label_fallback', topic=name, reason='error'))
+                        continue
                     if on_fail != 'blank':
                         raise UnknownOperationError(t('analysis.label_failed', topic=name, err=e)) from e
                     # One line per topic the model gave up on, and the cell stays empty: the user
@@ -1747,6 +1791,13 @@ class DataAnalysisService:
                     store.cache_put(scope, key, answer)
             label = _label_from(answer)
             if not label:
+                if on_fail == 'fallback':
+                    work.at[position, summary_col] = _fallback_topic_label(
+                        str(work.at[position, 'weights'] or '') if 'weights' in work.columns else '', words
+                    )
+                    labelled += 1
+                    logger.warning(t('analysis.label_fallback', topic=name, reason='empty'))
+                    continue
                 # An answer of punctuation, or of nothing: a blank cell would be
                 # indistinguishable from a topic nobody asked the model about.
                 if on_fail != 'blank':

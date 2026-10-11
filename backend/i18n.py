@@ -407,6 +407,8 @@ _ZH = {
     'analysis.label_no_words': '{topic} 的「{col}」是空的，没有特征词就没有可概括的东西',
     'analysis.label_failed': '{topic} 的主题概括失败：{err}',
     'analysis.label_empty': '{topic} 的主题概括是空的（模型只回了标点）',
+    'analysis.label_fallback': '主题「{topic}」未获模型概括，已按其权重词回退标注（{reason}）',
+    'analysis.label_fallback_all': '{n} 个主题无模型可用，全部按权重词回退标注',
     'analysis.label_cancelled': '已停止：还有 {n} 个主题没问模型，它们的概括标为未处理',
     'analysis.label_done': '主题概括：{n} 个主题已写出（模型 {model}）',
     'analysis.label_cached': '主题概括：新问模型 {asked} 次，重放缓存答案 {replayed} 次（同一张表重跑不再重复付费）',
@@ -1647,6 +1649,8 @@ _EN = {
     'analysis.label_no_words': '{topic} has an empty "{col}", and there is nothing to summarise without feature words',
     'analysis.label_failed': 'the summary for {topic} failed: {err}',
     'analysis.label_empty': 'the summary for {topic} came back empty (the model answered with punctuation only)',
+    'analysis.label_fallback': 'no model summary for {topic}; labelled from its weighted words ({reason})',
+    'analysis.label_fallback_all': 'no model available; {n} topics all labelled from their weighted words',
     'analysis.label_cancelled': 'stopped: {n} topics were never asked, and their summaries are marked 未处理',
     'analysis.label_done': 'topic summaries: {n} written (model {model})',
     'analysis.label_cached': (

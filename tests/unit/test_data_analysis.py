@@ -1777,6 +1777,26 @@ class TestTopicLabel:
         with pytest.raises(UnknownOperationError, match='模型'):
             D.topic_label(self._topics(), llm=None)
 
+    def test_fallback_with_no_model_names_every_topic_from_its_words(self):
+        out = D.topic_label(self._topics(), llm=None, on_fail='fallback')
+        assert (out['主题概括'] != '').all(), 'a topic with no model is named, not left blank'
+        assert all('·' in v for v in out['主题概括']), "the fallback joins the topic's own words"
+
+    def test_fallback_labels_a_refused_topic_instead_of_aborting(self):
+        client = self._Client(fail_when=lambda prompt: 'TopicⅡ-1' in prompt)
+        out = D.topic_label(self._topics(), llm=client, on_fail='fallback')
+        assert out.at[2, '主题概括'] and '·' in out.at[2, '主题概括'], 'the failing topic falls back to its words'
+        assert out.at[0, '主题概括'] == '对事件细节的追问', 'the topics the model answered keep that answer'
+
+    def test_fallback_labels_a_punctuation_answer_from_its_words(self):
+        out = D.topic_label(self._topics(), llm=self._Client(answer='「」。'), on_fail='fallback')
+        assert (out['主题概括'] != '').all() and all('·' in v for v in out['主题概括'])
+
+    def test_fallback_does_not_ask_the_model_any_fewer_times(self):
+        client = self._Client()
+        D.topic_label(self._topics(), llm=client, on_fail='fallback')
+        assert len(client.prompts) == 3, 'fallback answers when the model fails; it never skips a call'
+
     def test_a_topic_with_no_feature_words_is_refused_before_the_call(self):
         frame = self._topics()
         frame.loc[1, 'feature_words'] = ''

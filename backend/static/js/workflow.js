@@ -2864,7 +2864,8 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'label_summary_col', 'settings.labelSummaryColumn', 'text', '主题概括');
         html += renderParamSelect(nodeId, p, 'label_on_fail', 'settings.labelOnFail', 'abort',
             [{ v: 'abort', l: I18n.t('settings.labelOnFailAbort') },
-             { v: 'blank', l: I18n.t('settings.labelOnFailBlank') }]);
+             { v: 'blank', l: I18n.t('settings.labelOnFailBlank') },
+             { v: 'fallback', l: I18n.t('settings.labelOnFailFallback') }]);
         html += renderParamInput(nodeId, p, 'label_max_topics', 'settings.labelMaxTopics', 'number', 30);
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.topicLabelHint') + '</div></div>';
