@@ -102,17 +102,27 @@ canvas.workspace = sandbox.__byId('workspace');
 canvas.container = sandbox.__byId('canvas-inner');
 
 const out = {};
-/* Drain the event loop so a scenario's own async tail — chiefly a source node's capability
-   fetch, which calls canvas.saveState() and rewrites the draft — cannot survive into the next
-   scenario's snapshot. The harness seeds the draft itself; letting a prior autosave land
-   mid-seed was the load-dependent race that flipped draft assertions between full-suite runs. */
+/* Drain the event loop so a scenario's own async tail — chiefly an upload node's
+   `reconcileDatasets()` (fired UNAWAITED from loadFromJSON, ending in canvas.saveState())
+   — cannot survive into the next scenario's snapshot. Two `setImmediate` was NOT enough:
+   the saveState lands behind a fetch→then chain that can also cross a timer, so under
+   full-suite CPU load it fired after the next scenario had cleared its draft — the
+   load-dependent race that flipped the draft assertions between runs. Loop many macrotask
+   turns (each also flushing pending microtasks) so every deferred writer has run before
+   we look. No animation frames here on purpose: this harness leaves render frames queued,
+   and flushing them would run a repaint against a node the scenario already tore down. */
 async function settle() {
-    await new Promise((r) => setImmediate(r));
-    await new Promise((r) => setImmediate(r));
+    for (let i = 0; i < 12; i++) {
+        await new Promise((r) => setImmediate(r));
+    }
     await null;
     await null;
 }
 for (const sc of scenarios) {
+    /* Drain BEFORE resetting and clearing the draft, so any writer the PREVIOUS scenario
+       left unresolved lands first; the draft delete just below then wipes it, and this
+       scenario starts from a clean slate regardless of machine load. */
+    await settle();
     canvas.nodes = {};
     canvas.connections = [];
     canvas.nextId = 1;
