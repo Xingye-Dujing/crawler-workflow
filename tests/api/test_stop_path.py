@@ -673,9 +673,14 @@ class TestACrawlThatStopsByReturning:
         assert record['status'] == RUN_INTERRUPTED, 'a returning walk settled the run as if it had finished'
         node = _node_row(record, 'node-1')
         assert node['status'] == NODE_PARTIAL, node['status']
-        assert app_module.get_run_store().row_count(run_id, 'node-1') == 2
+        # `emit` is where 停止 is actually checked, so the stop can land BETWEEN the polite walk's
+        # two rows and suppress the second — the stored count is legitimately 1 or 2, never a magic 2.
+        # What must hold regardless: the PARTIAL node reports EXACTLY the rows it stored, and the walk
+        # reads as a user stop (below), not a failure. Pinning the real invariant, not the race's coin-flip.
+        stored = app_module.get_run_store().row_count(run_id, 'node-1')
+        assert stored in (1, 2), f'the polite walk offers two rows; a stop should store 1 or 2, got {stored}'
         blob = _logs(client)
-        assert t('run.nodeStopped', nid='source #node-1', n=2) in blob, blob
+        assert t('run.nodeStopped', nid='source #node-1', n=stored) in blob, blob
         assert t('wf.node_failed', wf='stop-returns-early', nid='source #node-1', err='') not in blob
 
     def test_the_console_says_the_user_ended_it_not_the_workflow(self, client, app_module, monkeypatch):
