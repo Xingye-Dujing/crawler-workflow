@@ -3064,19 +3064,23 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None,
 
 
 def _apply_topic_method(result: dict, params: dict) -> dict:
-    """Forward the opt-in topic ``method`` (and its encoder) the ONE way every embedding-capable
-    topic step reads it — ``topic_model`` and the three view steps (``topic_map``/``topic_salience``/
-    ``topic_by_stage``) share this so the default and the refuse-by-name contract cannot drift apart.
+    """Forward the topic ``method`` (and its encoder) for every embedding-capable topic step —
+    ``topic_model`` and the three view steps (``topic_map``/``topic_salience``/``topic_by_stage``)
+    share this so the default and the refuse-by-name contract cannot drift apart.
 
-    LDA is the implicit default, so ``method`` is only written when the user left it — keeping existing
-    pipelines' kwargs byte-identical — and the embedding path carries its model name only when one was
-    typed (the step's own ``DEFAULT_EMBED_MODEL`` answers otherwise)."""
-    method = str(params.get('topic_method') or 'lda').strip()
-    if method != 'lda':
-        result['method'] = method
-        embedding_model = str(params.get('embedding_model') or '').strip()
-        if embedding_model:
-            result['embedding_model'] = embedding_model
+    ``embedding`` is the product default (STEP_PARAMS agrees with it here), so ``method`` is ALWAYS
+    written: an untouched form becomes embedding and an explicit ``lda`` stays LDA. That is exactly why
+    the saved canvases that used to MEAN LDA-by-absence carry an explicit ``topic_method='lda'`` — a
+    default flip must not silently re-run them. ``embedding_model`` is forwarded whenever one was typed,
+    independent of the method, so the panel field is honest either way (the LDA branch simply ignores
+    it). The op's own signature still keeps ``method='lda'`` as the floor for a caller that bypasses
+    this normalization (a direct unit call), which is why the default lives HERE rather than there.
+    """
+    method = str(params.get('topic_method') or 'embedding').strip()
+    result['method'] = method
+    embedding_model = str(params.get('embedding_model') or '').strip()
+    if embedding_model:
+        result['embedding_model'] = embedding_model
     return result
 
 

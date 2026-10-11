@@ -226,20 +226,24 @@ STEP_PARAMS: dict = {
     # The boundary proposal reads one timestamp column and writes a table of its own, so a
     # column it cannot find is a refusal, not an empty suggestion.
     'suggest_stages': {'one': ('column',)},
-    'topic_model': {'one': ('column',), 'enums': {'method': ('lda', ('lda', 'embedding'))}},
+    # Every topic step defaults to the embedding method (LDA stays selectable); the encoder is an
+    # optional dependency, so a machine without it gets a NAMED refusal on the default path, never a
+    # silent fallback to LDA. The op's own signature keeps ``method='lda'`` as the floor for a caller
+    # that bypasses this normalization (a direct unit call), which is why the default lives HERE.
+    'topic_model': {'one': ('column',), 'enums': {'method': ('embedding', ('lda', 'embedding'))}},
     # The staged model needs BOTH columns named: a phase column it has to guess would decide
     # the paper's table by dict order. ``topics`` is nonblank because a blank stage-topic count
     # has no defensible default — 5 would be this project's choice, not the user's.
     'topic_by_stage': {
         'one': ('column', 'stage_col'),
         'nonblank': ('topics',),
-        'enums': {'word_source': ('tfidf', WORD_SOURCES), 'method': ('lda', ('lda', 'embedding'))},
+        'enums': {'word_source': ('tfidf', WORD_SOURCES), 'method': ('embedding', ('lda', 'embedding'))},
     },
     # The two figure steps read a text column and fit their own model, so the column is the one
     # thing they cannot do without. Their topic count keeps the declared default the panel
     # shows, exactly as ``topic_model`` does.
-    'topic_map': {'one': ('column',), 'enums': {'method': ('lda', ('lda', 'embedding'))}},
-    'topic_salience': {'one': ('column',), 'enums': {'method': ('lda', ('lda', 'embedding'))}},
+    'topic_map': {'one': ('column',), 'enums': {'method': ('embedding', ('lda', 'embedding'))}},
+    'topic_salience': {'one': ('column',), 'enums': {'method': ('embedding', ('lda', 'embedding'))}},
     # The labelling step reads the word cell and writes the summary cell; both are named, and
     # an unnamed 概括 column would "succeed" by adding a header the export shows as empty.
     'topic_label': {

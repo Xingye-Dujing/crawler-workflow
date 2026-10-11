@@ -1996,10 +1996,10 @@ class TestTopicModelEmbedding:
         m.DataAnalysisService.topic_map(frame, '正文', n_topics=2, method='embedding')
         assert len(builds) == 1, f'the encoder was rebuilt per call: {builds}'
 
-    def test_blank_method_defaults_to_lda_and_a_bad_one_is_refused(self):
+    def test_blank_method_defaults_to_embedding_and_a_bad_one_is_refused(self):
         from services.data_analysis import normalize_step_params, validate_step
 
-        assert normalize_step_params('topic_model', {'column': '正文', 'method': ''})['method'] == 'lda'
+        assert normalize_step_params('topic_model', {'column': '正文', 'method': ''})['method'] == 'embedding'
         with pytest.raises(UnknownOperationError, match='method'):
             validate_step(self._frame(), 'topic_model', {'column': '正文', 'method': 'bogus'})
 
@@ -2097,11 +2097,11 @@ class TestTopicViewsEmbedding:
         assert list(emb.columns) == list(lda.columns)
         assert len(emb) == len(lda), 'two stages x two topics each, for either method'
 
-    def test_the_method_enum_defaults_to_lda_and_refuses_a_bogus_one(self):
+    def test_the_method_enum_defaults_to_embedding_and_refuses_a_bogus_one(self):
         from services.data_analysis import normalize_step_params, validate_step
 
         for op in ('topic_map', 'topic_salience', 'topic_by_stage'):
-            assert normalize_step_params(op, {'column': '正文', 'method': ''})['method'] == 'lda'
+            assert normalize_step_params(op, {'column': '正文', 'method': ''})['method'] == 'embedding'
         for op in ('topic_map', 'topic_salience', 'topic_by_stage'):
             params = {'column': '正文', 'method': 'bogus'}
             if op == 'topic_by_stage':

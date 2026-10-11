@@ -119,10 +119,12 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
     两段之间只要平滑后的曲线没回落到日常水平就并成一个峰（相邻两个高峰日因此不会被当成两段，
     也不会像早前那样把「一个肩上的日子」判成峰、结果整座山消失——刘学州 76 天的曲线就是这么被读成「只有一段」的）；
     短于「最短窗口」的窗口并入行数更多的邻居并**警告说明**（冲上来一天的不算一个阶段，留空=3 天）；
-    **LDA 主题模型**用 scikit-learn 实现、不额外装依赖，输出「每(主题,特征词)一行」并把困惑度与每个主题的词打进控制台；
-    可选 `method`=`embedding` 换用句向量 + KMeans 聚类（默认 `BAAI/bge-small-zh-v1.5`，本机实测主题相干性优于 LDA），
-    产出**同一张**「每(主题,词)一行」表，显著词图 / 主题概括节点照读不误；它依赖 sentence-transformers 等可选包，缺则
-    按名拒绝、**绝不回退 LDA**，默认仍走 LDA（老画布不受影响）。实测对比脚本见 `ml_train/scripts/topic_bakeoff.py`。
+    **主题模型**（以及下面的距离图 / 显著词 / 分阶段）**默认 `method`=`embedding`**——句向量 + KMeans 聚类
+    （默认 `BAAI/bge-small-zh-v1.5`，本机实测主题相干性优于 LDA）；它依赖 sentence-transformers 等**可选包**
+    （`requirements-optional.txt`），没装的机器在默认主题步上会**按名拒绝、绝不回退**——要让主题默认能跑，先装那份
+    可选依赖，或在步骤里显式选 `method`=`lda`。**LDA 现在是可选项**：用 scikit-learn 实现、不额外装依赖，输出
+    「每(主题,特征词)一行」并把困惑度与每个主题的词打进控制台。此前靠「不写方法=LDA」的**已保存画布已显式钉成
+    `topic_method`=`lda`**，所以默认翻到 embedding 不会悄悄改它们的老结果。实测对比脚本见 `ml_train/scripts/topic_bakeoff.py`。
     **同一个 `method`=`embedding` 选项现在覆盖全部主题步骤**——`主题模型`、`分阶段 LDA`、`主题距离图数据`、
     `各主题显著词数据` 都接受它，且**输出列名逐字不变**（表还是同一张，图的 `pc1/pc2/prevalence_pct` 与
     `term/overall_freq/within_freq` 契约照旧），所以可在同一张画布就地做 LDA↔embedding 的 A/B，下游一行不用改；

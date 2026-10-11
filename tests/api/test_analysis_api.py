@@ -855,7 +855,7 @@ NORMALIZED = {
     ),
     'topic_model': (
         {'column': '城市', 'n_topics': '3', 'topic_topn': '4', 'topic_max_features': '500'},
-        {'column': '城市', 'n_topics': 3, 'topn': 4, 'max_features': 500},
+        {'column': '城市', 'n_topics': 3, 'topn': 4, 'max_features': 500, 'method': 'embedding'},
     ),
     'suggest_stages': (
         {'column': '城市', 'stages_min_days': '4', 'stages_max_windows': '3', 'stages_peak_ratio': '3'},
@@ -879,11 +879,11 @@ NORMALIZED = {
     ),
     'topic_map': (
         {'column': '城市', 'n_topics': '3', 'topic_topn': '4', 'topic_max_features': '500'},
-        {'column': '城市', 'n_topics': 3, 'topn': 4, 'max_features': 500},
+        {'column': '城市', 'n_topics': 3, 'topn': 4, 'max_features': 500, 'method': 'embedding'},
     ),
     'topic_salience': (
         {'column': '城市', 'n_topics': '3', 'topic_topn': '12', 'topic_lambda': '0.5', 'topic_max_features': '500'},
-        {'column': '城市', 'n_topics': 3, 'topn': 12, 'relevance': 0.5, 'max_features': 500},
+        {'column': '城市', 'n_topics': 3, 'topn': 12, 'relevance': 0.5, 'max_features': 500, 'method': 'embedding'},
     ),
     'topic_label': (
         {
@@ -915,6 +915,7 @@ NORMALIZED = {
             'max_features': 500,
             'sample_n': 2,
             'word_source': 'lda',
+            'method': 'embedding',
         },
     ),
     'topic_timeline': (
@@ -1070,7 +1071,7 @@ BLANK_FORM = {
     'extract_time': {'column': '', 'new_col': '日期', 'part': 'date'},
     'bin_time': {'column': '', 'new_col': '阶段', 'edges': [], 'labels': []},
     'suggest_stages': {'column': ''},
-    'topic_model': {'column': '', 'n_topics': 5, 'topn': 10},
+    'topic_model': {'column': '', 'n_topics': 5, 'topn': 10, 'method': 'embedding'},
     # ``topics`` stays empty on purpose: an untouched 每阶段主题数 box is a missing choice, and
     # the step refuses it by that name rather than modelling five topics nobody asked for.
     'topic_by_stage': {
@@ -1080,9 +1081,10 @@ BLANK_FORM = {
         'topn': 10,
         'sample_n': 5,
         'word_source': 'tfidf',
+        'method': 'embedding',
     },
-    'topic_map': {'column': '', 'n_topics': 5, 'topn': 6},
-    'topic_salience': {'column': '', 'n_topics': 5, 'topn': 30},
+    'topic_map': {'column': '', 'n_topics': 5, 'topn': 6, 'method': 'embedding'},
+    'topic_salience': {'column': '', 'n_topics': 5, 'topn': 30, 'method': 'embedding'},
     'topic_label': {
         'words_col': 'feature_words',
         'summary_col': '主题概括',
@@ -2466,7 +2468,7 @@ PANEL_VALUE = {
     'n_topics': '3',
     'topic_topn': '4',
     'topic_max_features': '500',
-    'topic_method': 'embedding',
+    'topic_method': 'lda',
     'embedding_model': 'some/model',
     # The staged model's own fields. ``stage_col`` is not the default it falls back to, and
     # ``word_source`` is not the default a blank select would answer with.

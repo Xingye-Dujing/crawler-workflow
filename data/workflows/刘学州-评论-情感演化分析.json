@@ -271,7 +271,8 @@
         "topic_max_features": "2000",
         "topic_sample_n": "3",
         "topic_topn": "7",
-        "word_source": "tfidf"
+        "word_source": "tfidf",
+        "topic_method": "lda"
       },
       "operation": "topic_by_stage",
       "x": 3199,
@@ -563,7 +564,8 @@
         "n_topics": "5",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6"
+        "topic_topn": "6",
+        "topic_method": "lda"
       },
       "operation": "topic_map",
       "x": 2089,
@@ -599,7 +601,8 @@
         "operation": "topic_salience",
         "topic_lambda": "0.5",
         "topic_max_features": "2000",
-        "topic_topn": "30"
+        "topic_topn": "30",
+        "topic_method": "lda"
       },
       "operation": "topic_salience",
       "x": 2089,
@@ -697,7 +700,8 @@
         "n_topics": "5",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6"
+        "topic_topn": "6",
+        "topic_method": "lda"
       },
       "operation": "topic_map",
       "x": 3659,
@@ -730,7 +734,8 @@
         "operation": "topic_salience",
         "topic_lambda": "1",
         "topic_max_features": "2000",
-        "topic_topn": "30"
+        "topic_topn": "30",
+        "topic_method": "lda"
       },
       "operation": "topic_salience",
       "x": 3659,
@@ -1110,7 +1115,8 @@
         "n_topics": "6",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6"
+        "topic_topn": "6",
+        "topic_method": "lda"
       },
       "operation": "topic_map",
       "x": 3659,
@@ -1143,7 +1149,8 @@
         "operation": "topic_salience",
         "topic_lambda": "1",
         "topic_max_features": "2000",
-        "topic_topn": "30"
+        "topic_topn": "30",
+        "topic_method": "lda"
       },
       "operation": "topic_salience",
       "x": 3659,
@@ -1219,7 +1226,8 @@
         "n_topics": "5",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6"
+        "topic_topn": "6",
+        "topic_method": "lda"
       },
       "operation": "topic_map",
       "x": 3659,
@@ -1252,7 +1260,8 @@
         "operation": "topic_salience",
         "topic_lambda": "1",
         "topic_max_features": "2000",
-        "topic_topn": "30"
+        "topic_topn": "30",
+        "topic_method": "lda"
       },
       "operation": "topic_salience",
       "x": 3659,
