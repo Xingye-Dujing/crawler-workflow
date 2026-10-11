@@ -21,3 +21,16 @@
 
 torch
 transformers
+
+# ── Topic bake-off / opt-in embedding topic method ─────────────────────────────────
+# These power ml_train/scripts/topic_bakeoff.py — the offline comparison that scored
+# sklearn LDA against sentence-transformer embeddings + KMeans (and BERTopic). With a real
+# small Chinese encoder the embedding path beat LDA on coherence on both corpora, so it is
+# slated as an OPT-IN topic `method` (LDA stays the default). Like the bert path above they
+# are never CI-installed, and any product code that imports them must refuse BY NAME when
+# absent — never silently fall back to LDA (that would put one model's topics in a column
+# another method claimed). `bertopic` pulls the other three transitively.
+sentence-transformers
+bertopic
+umap-learn
+hdbscan
