@@ -330,6 +330,12 @@ def clean_globals(request):
     ml = sys.modules.get('analyzers.ml_base')
     if ml is not None:
         ml._shared_classifiers.clear()
+    # The sentence-transformer weight cache is process-global for the same reason as the shared
+    # classifiers: a fake encoder installed by one case must not answer the next case's embedding
+    # call, or that case measures a model it never set up (a green that never built its own fake).
+    da = sys.modules.get('services.data_analysis')
+    if da is not None:
+        da._EMBED_MODEL_CACHE.clear()
     ss = sys.modules.get('settings_store')
     if ss is not None:
         ss._values = None

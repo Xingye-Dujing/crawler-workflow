@@ -1965,6 +1965,37 @@ class TestTopicModelEmbedding:
         assert set(out['topic']) == {'Topic-1', 'Topic-2'}, 'the two texts groups become two topics'
         assert (out['weight'] <= 1.0 + 1e-9).all() and (out['weight'] > 0).all(), 'weights normalised per topic'
 
+    def test_the_encoder_is_constructed_once_and_reused_across_steps(self, monkeypatch):
+        """The fix M1 is about: a run embeds once per stage AND once per figure step, so the encoder
+        must be built a single time and cached by model name — not reloaded from disk every call.
+        A fake that records every construction proves the second step reuses the first's instance."""
+        import sys
+        import types
+
+        import numpy as np
+
+        import services.data_analysis as m
+
+        builds = []
+
+        class _FakeST:
+            def __init__(self, name):
+                builds.append(name)
+                self.name = name
+
+            def encode(self, texts, **kw):
+                return np.array([[1.0, 0.0] if '猫' in str(t) else [0.0, 1.0] for t in texts])
+
+        fake = types.ModuleType('sentence_transformers')
+        fake.SentenceTransformer = _FakeST
+        monkeypatch.setitem(sys.modules, 'sentence_transformers', fake)
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
+        monkeypatch.setattr(m, '_EMBED_MODEL_CACHE', {})
+        frame = self._frame()
+        m.DataAnalysisService.topic_model(frame, '正文', n_topics=2, topn=2, method='embedding')
+        m.DataAnalysisService.topic_map(frame, '正文', n_topics=2, method='embedding')
+        assert len(builds) == 1, f'the encoder was rebuilt per call: {builds}'
+
     def test_blank_method_defaults_to_lda_and_a_bad_one_is_refused(self):
         from services.data_analysis import normalize_step_params, validate_step
 

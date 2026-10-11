@@ -544,6 +544,12 @@ def _embed_missing_packages() -> str:
 #: (``ml_train/scripts/topic_bakeoff.py``) as the fast, coherence-beating small Chinese model.
 DEFAULT_EMBED_MODEL = 'BAAI/bge-small-zh-v1.5'
 
+#: Loaded encoders, keyed by model name. One embedding run embeds once per stage AND once per
+#: figure step, so without this ``bge-small-zh-v1.5`` is constructed a dozen times and reloads its
+#: weights each time. Cleared between tests in ``conftest.clean_globals``, exactly like
+#: ``ml_base._shared_classifiers`` — a fake installed by one case must not be reused by the next.
+_EMBED_MODEL_CACHE: dict = {}
+
 
 def _embed_vectors(texts, embedding_model: str) -> tuple:
     """``(vectors, model_name)`` for the embedding topic path, or a named refusal.
@@ -552,21 +558,27 @@ def _embed_vectors(texts, embedding_model: str) -> tuple:
     and never falls back to LDA — a topic claimed from one model must not be answered by another.
     ``normalize_embeddings=True`` so KMeans' Euclidean split tracks the cosine similarity the bake-off
     scored on. Shared by EVERY embedding-capable topic step (``topic_model``'s table and the three view
-    steps) so the refusal, the default model name and the encode call are defined once, not copied per op.
+    steps) so the refusal, the default model name, the weight cache and the encode call are defined once,
+    not copied per op.
     """
     import numpy as np
 
     missing = _embed_missing_packages()
     if missing:
         raise UnknownOperationError(t('analysis.topic_embed_unavailable', packages=missing))
-    from sentence_transformers import SentenceTransformer
-
     model_name = (embedding_model or DEFAULT_EMBED_MODEL).strip()
+    model = _EMBED_MODEL_CACHE.get(model_name)
+    if model is None:
+        from sentence_transformers import SentenceTransformer
+
+        try:
+            model = SentenceTransformer(model_name)
+        except Exception as e:  # a model that will not load is a named failure, not an empty table
+            raise UnknownOperationError(t('analysis.topic_embed_failed', model=model_name, err=e)) from e
+        _EMBED_MODEL_CACHE[model_name] = model
     try:
-        vectors = SentenceTransformer(model_name).encode(
-            texts, batch_size=64, show_progress_bar=False, normalize_embeddings=True
-        )
-    except Exception as e:  # a model that will not load or run is a named failure, not an empty table
+        vectors = model.encode(texts, batch_size=64, show_progress_bar=False, normalize_embeddings=True)
+    except Exception as e:  # a model that will not run is a named failure, not an empty table
         raise UnknownOperationError(t('analysis.topic_embed_failed', model=model_name, err=e)) from e
     return np.asarray(vectors), model_name
 
