@@ -5195,6 +5195,7 @@ function showDialog(opts) {
         var cancelValue = opts.cancelValue !== undefined ? opts.cancelValue : null;
         var dismissed = false;
         var closeBtn = null;
+        var trap = null;
         function onBackdrop(e) {
             if (e.target === overlay && !cookieJob.active) {
                 // Do not let this click reach the top-menu outside-click handler,
@@ -5210,6 +5211,7 @@ function showDialog(opts) {
             overlay.classList.remove('open');
             overlay.removeEventListener('click', onBackdrop);
             document.removeEventListener('keydown', onEsc);
+            if (trap) document.removeEventListener('keydown', trap);
             if (closeBtn && closeBtn.parentNode) closeBtn.parentNode.removeChild(closeBtn);
             _resolve(value);
         }
@@ -5374,6 +5376,34 @@ function showDialog(opts) {
         if (dismissable) {
             overlay.addEventListener('click', onBackdrop);
             document.addEventListener('keydown', onEsc);
+        }
+        /* Modal accessibility: role/aria-modal/aria-labelledby mark the box as a real modal so a
+           screen reader announces it and not the background, and a Tab trap keeps the caret among
+           the dialog's own controls while it is open. The initial focus moves INTO the dialog so a
+           keyboard user is not left behind on the page body (an input dialog is focused below). */
+        if (box) {
+            box.setAttribute('role', 'dialog');
+            box.setAttribute('aria-modal', 'true');
+            if (msgEl && msgEl.id) box.setAttribute('aria-labelledby', msgEl.id);
+        }
+        function dialogFocusables() {
+            if (!box) return [];
+            return box.querySelectorAll('button, [href], input, select, textarea, [tabindex]');
+        }
+        function onDialogTab(e) {
+            if (e.key !== 'Tab') return;
+            var items = dialogFocusables();
+            if (!items.length) return;
+            var first = items[0];
+            var last = items[items.length - 1];
+            if (e.shiftKey && e.target === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && e.target === last) { e.preventDefault(); first.focus(); }
+        }
+        document.addEventListener('keydown', onDialogTab);
+        trap = onDialogTab;
+        if (!opts.input) {
+            var _first = dialogFocusables();
+            if (_first.length) _first[0].focus();
         }
         overlay.classList.add('open');
         if (opts.input) setTimeout(function () { inputEl.focus(); inputEl.select(); }, 100);
