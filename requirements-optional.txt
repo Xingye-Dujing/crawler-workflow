@@ -1,8 +1,8 @@
 # Optional, per-feature dependencies — nothing here is needed for a crawl, a cleaning
-# pass, a keyword list or a SnowNLP polarity column. The topic model's DEFAULT method is now
-# `embedding`, so a plain (untouched) topic step DOES want sentence-transformers from this file —
-# it refuses BY NAME when absent and never falls back; LDA remains the no-dependency opt-in you
-# select with 主题方法=lda, and saved canvases that meant LDA are pinned to it explicitly.
+# pass, a keyword list or a SnowNLP polarity column. The topic step's DEFAULT is `auto`: it uses
+# sentence-transformers from here WHEN installed and falls back to LDA (printing which one actually
+# ran) when not, so a torch-less machine still gets a working topic step. An EXPLICIT 主题方法=embedding
+# with no encoder still refuses BY NAME and is never substituted; explicit 主题方法=lda needs nothing here.
 #
 # They live in their own file rather than in requirements.txt because of SIZE and because
 # of how the code treats them. `torch` is a multi-gigabyte download, and `sentiment.py`
@@ -25,12 +25,13 @@
 torch
 transformers
 
-# ── Topic modeling: embedding is now the DEFAULT method ───────────────────────────
+# ── Topic modeling: `auto` uses embedding when this stack is present, else LDA ─────
 # `sentence-transformers` (with torch/transformers) is imported by product code —
 # `services/data_analysis.py::_embed_vectors` — and is what EVERY topic step (主题模型 / 分阶段 /
-# 距离图 / 显著词) uses on its default path, so an untouched canvas wants it installed. The step
-# refuses BY NAME when it is absent and NEVER falls back to LDA (that would put one model's topics
-# in a column another method claimed); LDA stays the no-dependency alternative you pick explicitly.
+# 距离图 / 显著词) prefers on its `auto` default. When it is absent `_resolve_topic_method` falls
+# back to LDA and LOGS that it did, so an `auto` result is never mislabeled; the step only REFUSES
+# by name when you EXPLICITLY pick embedding without the encoder. Installing this stack is optional —
+# it upgrades the default from LDA to the (measurably better) embedding path, nothing more.
 # The ml_train/scripts/topic_bakeoff.py comparison that justified the switch scored sklearn LDA
 # against embeddings + KMeans (and BERTopic) on the same NPMI coherence — with a real small Chinese
 # encoder the embedding path won on both corpora. `bertopic`/`umap-learn`/`hdbscan` are used ONLY by

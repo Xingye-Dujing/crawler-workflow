@@ -1996,10 +1996,10 @@ class TestTopicModelEmbedding:
         m.DataAnalysisService.topic_map(frame, '正文', n_topics=2, method='embedding')
         assert len(builds) == 1, f'the encoder was rebuilt per call: {builds}'
 
-    def test_blank_method_defaults_to_embedding_and_a_bad_one_is_refused(self):
+    def test_blank_method_defaults_to_auto_and_a_bad_one_is_refused(self):
         from services.data_analysis import normalize_step_params, validate_step
 
-        assert normalize_step_params('topic_model', {'column': '正文', 'method': ''})['method'] == 'embedding'
+        assert normalize_step_params('topic_model', {'column': '正文', 'method': ''})['method'] == 'auto'
         with pytest.raises(UnknownOperationError, match='method'):
             validate_step(self._frame(), 'topic_model', {'column': '正文', 'method': 'bogus'})
 
@@ -2097,17 +2097,89 @@ class TestTopicViewsEmbedding:
         assert list(emb.columns) == list(lda.columns)
         assert len(emb) == len(lda), 'two stages x two topics each, for either method'
 
-    def test_the_method_enum_defaults_to_embedding_and_refuses_a_bogus_one(self):
+    def test_the_method_enum_defaults_to_auto_and_refuses_a_bogus_one(self):
         from services.data_analysis import normalize_step_params, validate_step
 
         for op in ('topic_map', 'topic_salience', 'topic_by_stage'):
-            assert normalize_step_params(op, {'column': '正文', 'method': ''})['method'] == 'embedding'
+            assert normalize_step_params(op, {'column': '正文', 'method': ''})['method'] == 'auto'
         for op in ('topic_map', 'topic_salience', 'topic_by_stage'):
             params = {'column': '正文', 'method': 'bogus'}
             if op == 'topic_by_stage':
                 params.update(stage_col='阶段', topics='2,2')
             with pytest.raises(UnknownOperationError, match='method'):
                 validate_step(self._frame(), op, params)
+
+
+class TestTopicMethodAuto:
+    """``method='auto'`` (the new default) uses the encoder when it imports and LDA when it does
+    not, and an auto run on a torch-less machine STILL returns a table instead of refusing — the
+    whole point. The resolved method is printed (never a silent mislabel), while an EXPLICIT
+    ``embedding`` with no encoder still refuses BY NAME, because a chosen model is not substituted.
+    """
+
+    @staticmethod
+    def _frame():
+        return pd.DataFrame(
+            {
+                '正文': ['猫 狗 宠物 可爱', '股票 基金 涨跌 市场', '猫 狗 宠物 亲近', '股票 基金 大盘 走势'],
+                '阶段': pd.Categorical(
+                    ['发酵期', '发酵期', '波动期', '波动期'], categories=['发酵期', '波动期'], ordered=True
+                ),
+            }
+        )
+
+    def _install_encoder(self, monkeypatch):
+        import sys
+        import types
+
+        import numpy as np
+
+        import services.data_analysis as m
+
+        class _FakeST:
+            def __init__(self, name):
+                self.name = name
+
+            def encode(self, texts, **kw):
+                return np.array([[1.0, 0.0] if '猫' in str(t) else [0.0, 1.0] for t in texts])
+
+        fake = types.ModuleType('sentence_transformers')
+        fake.SentenceTransformer = _FakeST
+        monkeypatch.setitem(sys.modules, 'sentence_transformers', fake)
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
+
+    def test_auto_uses_the_encoder_and_gives_the_embedding_table(self, monkeypatch):
+        import services.data_analysis as m
+
+        self._install_encoder(monkeypatch)
+        out = m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='auto')
+        assert list(out.columns) == ['topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words']
+
+    def test_auto_falls_back_to_lda_without_raising_when_the_encoder_is_absent(self, monkeypatch):
+        import services.data_analysis as m
+
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        # No encoder available and none installed on this path: auto must answer with a real LDA
+        # table for BOTH figure steps, not refuse the untouched default.
+        mp = m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='auto')
+        sl = m.DataAnalysisService.topic_salience(self._frame(), '正文', n_topics=2, method='auto')
+        assert not mp.empty and not sl.empty, 'auto fell through but produced nothing'
+
+    def test_auto_falls_back_for_the_staged_step_too(self, monkeypatch):
+        import services.data_analysis as m
+
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        out = m.DataAnalysisService.topic_by_stage(
+            self._frame(), '正文', stage_col='阶段', topics=[2, 2], method='auto'
+        )
+        assert not out.empty, 'auto staged step produced nothing on a torch-less machine'
+
+    def test_explicit_embedding_still_refuses_by_name_when_absent(self, monkeypatch):
+        import services.data_analysis as m
+
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        with pytest.raises(UnknownOperationError, match='sentence-transformers'):
+            m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='embedding')
 
 
 class TestTopicViews:

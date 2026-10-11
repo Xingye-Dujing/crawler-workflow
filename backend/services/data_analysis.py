@@ -226,24 +226,26 @@ STEP_PARAMS: dict = {
     # The boundary proposal reads one timestamp column and writes a table of its own, so a
     # column it cannot find is a refusal, not an empty suggestion.
     'suggest_stages': {'one': ('column',)},
-    # Every topic step defaults to the embedding method (LDA stays selectable); the encoder is an
-    # optional dependency, so a machine without it gets a NAMED refusal on the default path, never a
-    # silent fallback to LDA. The op's own signature keeps ``method='lda'`` as the floor for a caller
-    # that bypasses this normalization (a direct unit call), which is why the default lives HERE.
-    'topic_model': {'one': ('column',), 'enums': {'method': ('embedding', ('lda', 'embedding'))}},
+    # Every topic step defaults to ``auto``: the encoder is used when its optional stack imports and
+    # LDA otherwise, and :func:`_resolve_topic_method` PRINTS which one actually ran, so an auto result
+    # is never mislabeled. An EXPLICIT ``embedding`` on a machine without the encoder still refuses BY
+    # NAME (a model you asked for is never substituted); explicit ``lda`` runs LDA. The op signatures
+    # keep ``method='lda'`` as the floor for a caller that bypasses this normalization (a direct unit
+    # call) — which is why the default lives HERE, not in the signature.
+    'topic_model': {'one': ('column',), 'enums': {'method': ('auto', ('lda', 'embedding', 'auto'))}},
     # The staged model needs BOTH columns named: a phase column it has to guess would decide
     # the paper's table by dict order. ``topics`` is nonblank because a blank stage-topic count
     # has no defensible default — 5 would be this project's choice, not the user's.
     'topic_by_stage': {
         'one': ('column', 'stage_col'),
         'nonblank': ('topics',),
-        'enums': {'word_source': ('tfidf', WORD_SOURCES), 'method': ('embedding', ('lda', 'embedding'))},
+        'enums': {'word_source': ('tfidf', WORD_SOURCES), 'method': ('auto', ('lda', 'embedding', 'auto'))},
     },
     # The two figure steps read a text column and fit their own model, so the column is the one
     # thing they cannot do without. Their topic count keeps the declared default the panel
     # shows, exactly as ``topic_model`` does.
-    'topic_map': {'one': ('column',), 'enums': {'method': ('embedding', ('lda', 'embedding'))}},
-    'topic_salience': {'one': ('column',), 'enums': {'method': ('embedding', ('lda', 'embedding'))}},
+    'topic_map': {'one': ('column',), 'enums': {'method': ('auto', ('lda', 'embedding', 'auto'))}},
+    'topic_salience': {'one': ('column',), 'enums': {'method': ('auto', ('lda', 'embedding', 'auto'))}},
     # The labelling step reads the word cell and writes the summary cell; both are named, and
     # an unnamed 概括 column would "succeed" by adding a header the export shows as empty.
     'topic_label': {
@@ -520,6 +522,7 @@ def _prepare_topic_model(df, column, n_topics, max_features, method='lda', embed
     topics = int(n_topics)
     if topics < 2:
         raise UnknownOperationError(t('analysis.topic_count', value=topics))
+    method = _resolve_topic_method(method)
     usable = df[df[column].notna() & (df[column].astype(str).str.strip() != '')]
     texts = [str(value) for value in usable[column].tolist()]
     if len(texts) < topics:
@@ -585,6 +588,26 @@ def _embed_vectors(texts, embedding_model: str) -> tuple:
     except Exception as e:  # a model that will not run is a named failure, not an empty table
         raise UnknownOperationError(t('analysis.topic_embed_failed', model=model_name, err=e)) from e
     return np.asarray(vectors), model_name
+
+
+def _resolve_topic_method(method: str) -> str:
+    """Turn the ``auto`` topic default into a concrete ``'lda'``/``'embedding'`` and SAY which ran.
+
+    ``auto`` (the untouched default) picks the encoder when the optional stack imports and LDA when it
+    does not — but unlike a silent fallback it logs the method that ACTUALLY ran, so an ``auto`` result
+    is never mislabeled as embedding when it was really LDA. An EXPLICIT ``'embedding'`` on a machine
+    without the encoder is NOT resolved here: it stays ``'embedding'`` and the embedding path refuses
+    BY NAME downstream, because a model the user specifically asked for must never be substituted.
+    Only ``auto`` degrades, and only with a printed line naming the resolved method.
+    """
+    resolved = str(method or 'lda').strip()
+    if resolved != 'auto':
+        return resolved
+    if _embed_missing_packages():
+        logger.info(t('analysis.topic_method_auto_lda'))
+        return 'lda'
+    logger.info(t('analysis.topic_method_auto_embedding', model=DEFAULT_EMBED_MODEL))
+    return 'embedding'
 
 
 def _embedding_topic_rows(texts, tokenized, topics, topn, embedding_model) -> pd.DataFrame:
@@ -1678,6 +1701,7 @@ class DataAnalysisService:
         # punctuation. A corpus that is nothing BUT punctuation then has no vocabulary at
         # all, which is refused below rather than answered with an empty table.
         tokenized = _tokenized(texts)
+        method = _resolve_topic_method(method)
         if method == 'embedding':
             return _embedding_topic_rows(texts, tokenized, topics, max(1, int(topn)), embedding_model)
         vectorizer = CountVectorizer(
@@ -1774,6 +1798,7 @@ class DataAnalysisService:
 
         if column not in df.columns or stage_col not in df.columns:
             return df
+        method = _resolve_topic_method(method)
         stages = _stage_order(df, stage_col, order_col)
         per_stage = _stage_topic_counts(topics, stages)
         # Read once, positionally: ``Series.map`` on a categorical maps its CATEGORIES, not its

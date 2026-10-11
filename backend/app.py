@@ -3068,15 +3068,15 @@ def _apply_topic_method(result: dict, params: dict) -> dict:
     ``topic_model`` and the three view steps (``topic_map``/``topic_salience``/``topic_by_stage``)
     share this so the default and the refuse-by-name contract cannot drift apart.
 
-    ``embedding`` is the product default (STEP_PARAMS agrees with it here), so ``method`` is ALWAYS
-    written: an untouched form becomes embedding and an explicit ``lda`` stays LDA. That is exactly why
-    the saved canvases that used to MEAN LDA-by-absence carry an explicit ``topic_method='lda'`` — a
-    default flip must not silently re-run them. ``embedding_model`` is forwarded whenever one was typed,
-    independent of the method, so the panel field is honest either way (the LDA branch simply ignores
-    it). The op's own signature still keeps ``method='lda'`` as the floor for a caller that bypasses
-    this normalization (a direct unit call), which is why the default lives HERE rather than there.
+    ``auto`` is the product default (STEP_PARAMS agrees): an untouched form becomes ``auto`` and the
+    op resolves it to embedding-or-LDA by availability, PRINTING which one ran. An explicit ``lda``
+    stays LDA and an explicit ``embedding`` stays embedding (and refuses by name downstream when the
+    encoder is absent — a chosen model is never substituted). Saved canvases that used to MEAN
+    LDA-by-absence carry an explicit ``topic_method='lda'``, so nothing here re-runs them.
+    ``embedding_model`` is forwarded whenever one was typed, independent of the method, so the panel
+    field is honest either way (the LDA branch simply ignores it).
     """
-    method = str(params.get('topic_method') or 'embedding').strip()
+    method = str(params.get('topic_method') or 'auto').strip()
     result['method'] = method
     embedding_model = str(params.get('embedding_model') or '').strip()
     if embedding_model:

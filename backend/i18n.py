@@ -366,6 +366,8 @@ _ZH = {
     'analysis.topic_embed_unavailable': '嵌入主题方法缺少可选依赖：{packages}（不回退到 LDA，请安装或改用 LDA）',
     'analysis.topic_embed_failed': '句向量模型「{model}」加载或运行失败：{err}',
     'analysis.topic_embed_done': '嵌入主题：{model}，{n} 个主题，{rows} 行文本',
+    'analysis.topic_method_auto_embedding': '主题方法 auto：检测到编码器，使用 embedding（{model}）',
+    'analysis.topic_method_auto_lda': '主题方法 auto：无编码器包，改用 LDA（结果按 LDA 计）',
     'analysis.topic_rows': 'LDA 需要至少和主题数一样多的文本：主题 {topics} 个、有效文本 {rows} 行',
     'analysis.topic_features': 'LDA 无法从这一列抽到特征词（可能整列都是标点或停用词）：{err}',
     # 分阶段主题模型。每一句都点名是哪个阶段、哪个主题，因为「某个阶段没跑出来」在一堆
@@ -1603,6 +1605,11 @@ _EN = {
     ),
     'analysis.topic_embed_failed': 'embedding model "{model}" failed to load or run: {err}',
     'analysis.topic_embed_done': 'embedding topics: {model}, {n} topics over {rows} texts',
+    'analysis.topic_method_auto_embedding': 'topic method auto: encoder detected, using embedding ({model})',
+    'analysis.topic_method_auto_lda': (
+        'topic method auto: sentence-transformers (or another optional package) is absent, '
+        'falling back to LDA — these results are LDA, not embedding'
+    ),
     'analysis.topic_rows': 'LDA needs at least as many texts as topics: {topics} topics, {rows} usable rows',
     'analysis.topic_features': 'LDA could find no features in this column (punctuation or stopwords only?): {err}',
     # Staged topic modelling. Every one of these names WHICH stage and WHICH topic, because
