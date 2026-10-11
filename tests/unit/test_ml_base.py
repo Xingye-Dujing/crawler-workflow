@@ -58,11 +58,11 @@ def _unique_name(node_name):
 
 
 def _picklable_pipeline():
-    """The same TF-IDF + logistic shape, without the unpicklable lambda.
+    """An explicit, fully-controlled TF-IDF + logistic pipeline.
 
-    ``build_tfidf_pipeline`` installs ``tokenizer=lambda ...``, which joblib
-    cannot serialise; supplying a pipeline is the only way ``fit`` can persist
-    today (see the xfail below).
+    Unlike ``build_tfidf_pipeline`` this applies no stopwords, class balancing or
+    sublinear_tf, so a test can pin a pipeline's behaviour and assert exact label
+    maps and confidence ranges against it.
     """
     return Pipeline(
         [
