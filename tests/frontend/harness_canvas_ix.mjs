@@ -77,6 +77,10 @@ const KEYS = {
        toast fired and WHICH node it named, not a whole translated sentence. */
     'palette.added': '{label} added',
     'palette.addHint': 'ADD-HINT',
+    /* Copy/paste sentinels so the shortcut scenario asserts a toast fired without pinning
+       a whole translated sentence. */
+    'toast.nodeCopied': 'COPIED',
+    'toast.nodePasted': 'PASTED',
 };
 /* The zh side exists so a language switch has somewhere to land: with an empty
    dictionary every "does the label follow the language" probe answers "no" for
@@ -1384,8 +1388,76 @@ function paletteKeyboardScenario() {
     };
 }
 
+/* Ctrl+C / Ctrl+V / arrow-nudge keyboard shortcuts (self-contained; freshWorld+init so the
+   keydown listener is bound exactly once and a dispatched keystroke does not fire two handlers). */
+function nodeClipboardScenario() {
+    /* freshWorld() already runs canvas.init() (it wires the document/workspace listeners
+       against the empty page), so calling init() again here would bind a SECOND keydown
+       listener and every keystroke below would fire twice. */
+    freshWorld();
+    const nid = addNode('source', 120, 90);
+    /* Name it and set a distinctive param, or a paste that dropped the title or the params
+       would still "look like it worked". */
+    canvas.nodes[nid].title = '源A';
+    canvas.nodes[nid].params = { platform: 'weibo', keyword: 'KEEPME' };
+    canvas.selectNode(nid);
+
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'c', ctrlKey: true, target: doc.body });
+    const clip = canvas._clipboardData && {
+        type: canvas._clipboardData.type,
+        title: canvas._clipboardData.title,
+        keyword: canvas._clipboardData.params.keyword,
+    };
+    const copyToast = toasts[toasts.length - 1];
+
+    const countBefore = Object.keys(canvas.nodes).length;
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'v', ctrlKey: true, target: doc.body });
+    const pastedId = Object.keys(canvas.nodes).find((id) => id !== nid);
+    const pasted = pastedId && {
+        title: canvas.nodes[pastedId].title,
+        keyword: canvas.nodes[pastedId].params.keyword,
+        /* The copy must land a cascade step off the selected node, not on top of it. */
+        leftDelta: parseInt(doc.getElementById(pastedId).style.left, 10) - 120,
+    };
+    const addedByPaste = Object.keys(canvas.nodes).length - countBefore;
+    const pasteToast = toasts[toasts.length - 1];
+
+    /* Arrow nudge moves the still-selected node 10px (Shift → 1px). */
+    const leftBefore = parseInt(doc.getElementById(nid).style.left, 10);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'ArrowRight', target: doc.body });
+    const nudgeStep = parseInt(doc.getElementById(nid).style.left, 10) - leftBefore;
+    const topBefore = parseInt(doc.getElementById(nid).style.top, 10);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'ArrowDown', shiftKey: true, target: doc.body });
+    const fineStep = parseInt(doc.getElementById(nid).style.top, 10) - topBefore;
+
+    /* Ctrl+C with nothing selected must not overwrite the clipboard. */
+    canvas._clipboardData = { type: 'output', title: '', params: {} };
+    canvas.selectedNode = null;
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'c', ctrlKey: true, target: doc.body });
+    const clipUntouchedWithNoSelection = canvas._clipboardData.type === 'output';
+
+    /* An empty-clipboard Ctrl+V must add nothing. */
+    canvas._clipboardData = null;
+    const beforeEmptyPaste = Object.keys(canvas.nodes).length;
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'v', ctrlKey: true, target: doc.body });
+    const emptyPasteAddsNothing = Object.keys(canvas.nodes).length === beforeEmptyPaste;
+
+    out.node_clipboard = {
+        clip,
+        copyToast,
+        addedByPaste,
+        pasted,
+        pasteToast,
+        nudgeStep,
+        fineStep,
+        clipUntouchedWithNoSelection,
+        emptyPasteAddsNothing,
+    };
+}
+
 resizeRepaintScenario();
 paletteKeyboardScenario();
+nodeClipboardScenario();
 connectWarningsScenarios()
     .then(() => touchGestureScenario())
     .then(() => renameScenarios())

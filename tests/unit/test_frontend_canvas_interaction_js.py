@@ -518,6 +518,37 @@ class TestPaletteKeyboardAdd:
         assert p['emptyTypeNull'] is True, 'an empty palette type must be a no-op, not a node'
 
 
+class TestNodeClipboardShortcuts:
+    """Ctrl+C / Ctrl+V / arrow-nudge — the keyboard routes that the copy/paste menu already
+    served. They must reach the SAME shared methods, so a pasted node comes out identical
+    whichever door it entered."""
+
+    def test_ctrl_c_copies_the_selected_nodes_type_name_and_params(self, ix):
+        c = ix['node_clipboard']['clip']
+        assert c == {'type': 'source', 'title': '源A', 'keyword': 'KEEPME'}, c
+        assert ix['node_clipboard']['copyToast'] == 'COPIED'
+
+    def test_ctrl_v_pastes_an_offset_copy_carrying_the_name_and_params(self, ix):
+        c = ix['node_clipboard']
+        assert c['addedByPaste'] == 1, 'Ctrl+V added no node'
+        assert c['pasted']['title'] == '源A', 'the copy lost the name the source was given'
+        assert c['pasted']['keyword'] == 'KEEPME', 'the copy did not carry the source params'
+        assert c['pasted']['leftDelta'] == 24, 'the copy must land a cascade step off the original'
+        assert c['pasteToast'] == 'PASTED'
+
+    def test_arrow_keys_nudge_the_selected_node(self, ix):
+        c = ix['node_clipboard']
+        assert c['nudgeStep'] == 10, 'ArrowRight must move the node 10px'
+        assert c['fineStep'] == 1, 'Shift+Arrow must move the node 1px (fine)'
+
+    def test_the_shortcuts_refuse_when_there_is_nothing_to_act_on(self, ix):
+        c = ix['node_clipboard']
+        # Ctrl+C with no selection must not overwrite the clipboard...
+        assert c['clipUntouchedWithNoSelection'] is True
+        # ...and Ctrl+V with an empty clipboard must add no node.
+        assert c['emptyPasteAddsNothing'] is True
+
+
 class TestSettingsPanelRoundTrip:
     def test_opening_a_node_marks_the_node_and_opens_the_panel(self, ix):
         assert ix['edit']['settingsNode'] == ix['ids']['edit']

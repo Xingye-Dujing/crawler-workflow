@@ -409,55 +409,18 @@ const canvas = {
                     if (this._contextNode) this.renameNode(this._contextNode);
                     break;
                 case 'ctxCopy':
-                    if (this._contextNode) {
-                        const n = this.nodes[this._contextNode];
-                        if (n) {
-                            /* The title belongs in the clipboard next to the type and
-                               params: a node the user bothered to name is copied to be
-                               edited again, and a paste that came back labelled
-                               "Data Source" threw the name away for no reason. */
-                            this._clipboardData = {
-                                type: n.type,
-                                title: n.title || '',
-                                params: JSON.parse(JSON.stringify(n.params)),
-                            };
-                            showToast(I18n.t('toast.nodeCopied'));
-                        }
-                    }
+                    if (this._contextNode) this.copyNodeToClipboard(this._contextNode);
                     break;
                 case 'ctxPasteNode':
-                    if (this._clipboardData) {
-                        const pp = this._contextMenuPos
+                    /* The menu pastes at the click hotspot (canvas space, menu offsets the
+                       hotspot); the keyboard route passes no pos and _nextPastePos cascades off
+                       the selected node. Both funnel through ONE pasteClipboardAt so a pasted
+                       node can never come out different depending on which door it entered. */
+                    this.pasteClipboardAt(
+                        this._contextMenuPos
                             ? this._screenToCanvas(this._contextMenuPos.x - 110, this._contextMenuPos.y - 40)
-                            : { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 };
-                        const id = this.addNode(this._clipboardData.type, pp.x, pp.y);
-                        if (this.nodes[id]) {
-                            this.nodes[id].params = JSON.parse(JSON.stringify(this._clipboardData.params));
-                            /* Same order restoreState needs: updateNodeDisplay only keeps
-                               a name that is already on both the node AND its element, so
-                               stamping it afterwards would let the re-stamp overwrite the
-                               copied name with the type's default label. */
-                            if (this._clipboardData.title) {
-                                this.nodes[id].title = this._clipboardData.title;
-                                const titleEl = this.nodes[id].el && this.nodes[id].el.querySelector('.node-title');
-                                if (titleEl) titleEl.textContent = this._clipboardData.title;
-                            }
-                            this.updateNodeDisplay(id);
-                            /* The params (and the copy's name) are written only AFTER addNode
-                               has already run its own saveState of the freshly-minted defaults,
-                               and updateNodeDisplay repaints the box's TEXT but not the
-                               enable/disable shading, which disableStates computes on a full
-                               render. So a paste has to re-render and re-save here, or the
-                               copied node's enabled:false and edited title never reach the draft
-                               and it comes back ENABLED (and unnamed) on the next load. This is
-                               why a disabled 输出 node pasted back looking switched-on — though
-                               the loss was never specific to that type: it was every params field
-                               and the title, copied into a node that had already been saved. */
-                            this.scheduleRender();
-                            this.saveState();
-                        }
-                        showToast(I18n.t('toast.nodePasted'));
-                    }
+                            : null
+                    );
                     break;
                 case 'ctxDeleteNode':
                     if (this._contextNode) this.deleteNode(this._contextNode);
@@ -613,6 +576,39 @@ const canvas = {
                 this.redo();
                 return;
             }
+            /* Ctrl/Cmd+C / Ctrl/Cmd+V: copy and paste a NODE. A text field is already
+               excluded above by _isTypingTarget, so these never hijack the OS text
+               clipboard while the user is typing; off-field, they act on the selection.
+               Neither fires without a target to act on (a selected node to copy, a filled
+               clipboard to paste), so Ctrl+C over some page text with nothing selected is
+               left to the browser. */
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+                if (this.selectedNode) {
+                    e.preventDefault();
+                    this.copyNodeToClipboard(this.selectedNode);
+                }
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                if (this._clipboardData) {
+                    e.preventDefault();
+                    this.pasteClipboardAt(null);
+                }
+                return;
+            }
+            /* Arrow keys nudge the selected node — 10px, or 1px with Shift for fine work.
+               Only when a node is selected and not typing; otherwise the key falls through
+               (a selected node with no clipboard, arrows still move it). */
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                if (this.selectedNode) {
+                    e.preventDefault();
+                    const step = e.shiftKey ? 1 : 10;
+                    const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+                    const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+                    this._nudgeSelected(dx, dy);
+                }
+                return;
+            }
             /* Ctrl/Cmd+F: jump to the outline finder. Handled before the plain-`f` fold so
                find does not fold the selected node; typing in a field is already excluded
                above, which is also what lets Ctrl+F inside the finder box itself be normal
@@ -663,9 +659,8 @@ const canvas = {
     /* Add a node from the palette the way a drag would drop one, but for the pointer and
        keyboard routes a drag cannot serve. Position is left to addNode's own non-finite
        fallback (a fresh random spot, never on top of the last node), and the new node is
-       selected so the Delete and `f`-fold shortcuts act on it rather than on whatever was
-       selected before. (These are the only shortcuts that read selectedNode — there is no
-       arrow-key move or copy/paste shortcut.) A toast names the type added: a sighted
+       selected so the Delete, `f`-fold, Ctrl+C/V and arrow-key nudge shortcuts act on it
+       rather than on whatever was selected before. A toast names the type added: a sighted
        keyboard user gets the same confirmation a drop is, and a screen reader reads it from
        the live region. */
     addNodeFromPalette(type) {
@@ -677,6 +672,92 @@ const canvas = {
             showToast(I18n.t('palette.added', { label: I18n.t('node.' + t) }));
         }
         return id;
+    },
+
+    /* ── Copy / paste / keyboard-nudge ── */
+    /* One implementation each, reached by BOTH the context menu and the keyboard shortcuts.
+       A pasted node must not come out different depending on which door it entered — a second
+       inline copy of the paste body is exactly the "wrapper in another file" drift this repo
+       keeps paying for. */
+    PASTE_CASCADE: 24,
+
+    copyNodeToClipboard(id) {
+        const n = this.nodes[id];
+        if (!n) return false;
+        /* The title belongs in the clipboard next to the type and params: a node the user
+           bothered to name is copied to be edited again, and a paste that came back labelled
+           "Data Source" threw the name away for no reason. */
+        this._clipboardData = {
+            type: n.type,
+            title: n.title || '',
+            params: JSON.parse(JSON.stringify(n.params)),
+        };
+        if (typeof showToast === 'function') showToast(I18n.t('toast.nodeCopied'));
+        return true;
+    },
+
+    /* pos is canvas-space (the space addNode writes straight to el.style.left). null → place
+       the copy a short diagonal step off the selected node, so repeated Ctrl+V cascades visibly
+       rather than stacking copies on one another or teleporting to a random spot. */
+    _nextPastePos() {
+        if (this.selectedNode) {
+            const el = this._nodeEl(this.selectedNode);
+            if (el) {
+                return {
+                    x: (parseInt(el.style.left, 10) || 0) + this.PASTE_CASCADE,
+                    y: (parseInt(el.style.top, 10) || 0) + this.PASTE_CASCADE,
+                };
+            }
+        }
+        return { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 };
+    },
+
+    pasteClipboardAt(pos) {
+        if (!this._clipboardData) return null;
+        const pp = pos || this._nextPastePos();
+        const id = this.addNode(this._clipboardData.type, pp.x, pp.y);
+        if (this.nodes[id]) {
+            this.nodes[id].params = JSON.parse(JSON.stringify(this._clipboardData.params));
+            /* Same order restoreState needs: updateNodeDisplay only keeps a name that is
+               already on both the node AND its element, so stamping it afterwards would let the
+               re-stamp overwrite the copied name with the type's default label. */
+            if (this._clipboardData.title) {
+                this.nodes[id].title = this._clipboardData.title;
+                const titleEl = this.nodes[id].el && this.nodes[id].el.querySelector('.node-title');
+                if (titleEl) titleEl.textContent = this._clipboardData.title;
+            }
+            this.updateNodeDisplay(id);
+            /* The params (and the copy's name) are written only AFTER addNode has already run
+               its own saveState of the freshly-minted defaults, and updateNodeDisplay repaints
+               the box's TEXT but not the enable/disable shading, which disableStates computes on
+               a full render. So a paste has to re-render and re-save here, or the copied node's
+               enabled:false and edited title never reach the draft and it comes back ENABLED (and
+               unnamed) on the next load. */
+            this.scheduleRender();
+            this.saveState();
+        }
+        if (typeof showToast === 'function') showToast(I18n.t('toast.nodePasted'));
+        return id;
+    },
+
+    /* Move the selected node by (dx,dy) canvas pixels. Position lives in el.style.left/top —
+       that is what getState snapshots and what the draft persists — so writing there (and
+       mirroring onto node.x/y) is what makes the nudge undoable and survive a reload. */
+    _nudgeSelected(dx, dy) {
+        const id = this.selectedNode;
+        if (!id) return;
+        const el = this._nodeEl(id);
+        if (!el) return;
+        const x = (parseInt(el.style.left, 10) || 0) + dx;
+        const y = (parseInt(el.style.top, 10) || 0) + dy;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        if (this.nodes[id]) {
+            this.nodes[id].x = x;
+            this.nodes[id].y = y;
+        }
+        this.scheduleRender();
+        this.saveState();
     },
 
     addNode(type, x, y, nodeId) {
