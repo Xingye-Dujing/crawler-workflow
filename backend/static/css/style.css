@@ -110,6 +110,42 @@
   --accent: #c79a5b;
 }
 
+/* A few chrome colours were written as literals, not tokens, because on the paper
+   ground they are one-off accents that never needed theming. On the dark ground those
+   same literals read poorly: a disabled connector at #b9bdc4 looks *live*, a #e9e9e9
+   checkbox is a bright box on a dark card, and every danger/interrupted/completed/failed
+   status is a dark-on-dark maroon or moss that nearly vanishes. Override only those,
+   scoped to the dark theme so light mode stays byte-identical — each lifted to the same
+   brighter variant the token block above already chose for --err/--warn/--ok. */
+:root[data-theme="dark"] input[type="checkbox"] {
+  background: #2a2f38;
+}
+:root[data-theme="dark"] #svg-layer .conn-line.conn-disabled {
+  stroke: #3b414b;
+}
+:root[data-theme="dark"] .panel-close.danger:hover {
+  color: #cf7a7a;
+  border-color: rgba(207, 122, 122, 0.4);
+  background: rgba(207, 122, 122, 0.12);
+}
+:root[data-theme="dark"] .runs-mgr-status.st-interrupted {
+  color: #c79a5b;
+}
+:root[data-theme="dark"] .runs-mgr-status.st-completed {
+  color: #6aa884;
+}
+:root[data-theme="dark"] .runs-mgr-status.st-failed,
+:root[data-theme="dark"] .runs-mgr-status.st-abandoned {
+  color: #cf7a7a;
+}
+:root[data-theme="dark"] .runs-mgr-btn.lock.locked {
+  color: #cf7a7a;
+  border-color: #cf7a7a;
+}
+:root[data-theme="dark"] .rm-node-err {
+  color: #cf7a7a;
+}
+
 /* Theme control chips in the Style menu. */
 .theme-opt {
   font: inherit;
