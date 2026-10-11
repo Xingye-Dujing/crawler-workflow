@@ -66,6 +66,7 @@ from analyzers import (
     KeywordExtractor,
     NamedEntityRecognizer,
     SentimentAnalyzer,
+    SignificanceAnalyzer,
     TendencyAnalyzer,
     TextCluster,
 )
@@ -2522,6 +2523,7 @@ PROCESS_ENUMS = {
     'keyword': {'method': ('tfidf', ('tfidf', 'textrank', 'tfidf_corpus'))},
     'cluster': {'cluster_method': ('kmeans', ('kmeans', 'kmeans++', 'dbscan'))},
     'correlation': {'corr_method': ('pearson', ('pearson', 'spearman', 'kendall'))},
+    'significance': {'sig_method': ('ttest', ('ttest', 'anova', 'mannwhitney', 'kruskal'))},
 }
 
 #: The operations whose whole job is to read one text column of the table.
@@ -2909,6 +2911,16 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         min_abs = _safe_float(params.get('min_abs'), 0.0)
         analyzer_corr = CorrelationAnalyzer()
         df = analyzer_corr.analyze_dataframe(df, columns=columns, method=corr_method, min_abs=min_abs)
+        return df.to_dict('records')
+
+    if op == 'significance':
+        # One group column and one value column, read whole (a single name, not a split list):
+        # the test compares ONE numeric field across the levels of ONE categorical field.
+        group_col = str(params.get('group_column') or '').strip()
+        value_col = str(params.get('value_column') or '').strip()
+        sig_method = enum_param(op, params, 'sig_method')
+        analyzer_sig = SignificanceAnalyzer()
+        df = analyzer_sig.analyze_dataframe(df, group_column=group_col, value_column=value_col, sig_method=sig_method)
         return df.to_dict('records')
 
     # An unknown operation is a broken node, not an empty table. Returning [] here

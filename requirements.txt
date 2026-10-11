@@ -17,5 +17,6 @@ pytest-cov
 pytest-socket
 pytest-timeout
 jieba
+scipy
 scikit-learn
 snownlp

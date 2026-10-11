@@ -56,6 +56,21 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
   不会给每行填 0 分冒充"已检查、无异常"）
 - **相关性分析**：Pearson / Spearman / Kendall 相关系数矩阵（点名的列全是文本时报错并点名该列；
   混选时只算可用列并在控制台说明跳过了哪些）
+- **显著性检验（跨组比较）**：拿**一个类别列当分组、一个数值列当取值**，检验各组之间这个数值有没有
+  统计意义上的差异。四种方法两两配对（参数 / 非参数）：
+  - `ttest` → **Welch's t**（`equal_var=False`），**恰好两组**；面板与统计标签都写 Welch，不冒充 Student's t——
+    情感分按阶段分组时两组方差往往不等，Welch 才是站得住的那个。
+  - `anova` → 单因素方差分析，**≥2 组**（统计量 F）。
+  - `mannwhitney` → Mann-Whitney U，两组，t 的秩检验替身（情感分非正态时更稳）。
+  - `kruskal` → Kruskal-Wallis H，≥2 组，ANOVA 的秩检验替身。
+  - p 值一律取 **scipy 的真实分布 CDF**（t / F / 秩检验），不用 numpy 近似；scipy 因此从「随 scikit-learn
+    传递引入」升为**直接声明依赖**（`requirements.txt`）。
+  - 输出**一行**整洁结果，列名固定为下游图/预览的输入合同：`method, group_column, value_column,
+    statistic, p_value, n_groups, group_sizes, significant_005`（后者按**固定 α=0.05** 判；要别的阈值就拿
+    `p_value` 自己比，这一版不开 alpha 参数以免扩面）。`group_sizes` 说明各组实际用了多少行——**先丢掉**
+    空分组标签与转不成数值的行，报的是「测了多少」，不是原始行数。
+  - **能算才算**：缺列、列名不在表里、数值列整列不可转数、方法要的组数不对（如给 ttest 却三组，句里点名
+    「试 ANOVA/Kruskal-Wallis」）、方差为零等退化情形一律**按名报错、绝不回一张空表**让节点绿着往下走。
 - **模型训练**：从已有 LLM 标注数据一键训练传统 ML 模型，后续推理无需 Ollama
 
 ## 数据处理

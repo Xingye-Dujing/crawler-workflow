@@ -221,6 +221,50 @@ class TestProcessNodeOperations:
         assert status['status'] == 'failed', 'a text-only selection is a wrong setting, not "no correlation"'
         assert '城市' in (status.get('error') or ''), status.get('error')
 
+    def test_significance_compares_the_numeric_column_across_two_groups(self, client, app_module, paste):
+        # The paste fixture alternates 城市 Haikou/Sanya with a numeric 点赞, so Welch's t has
+        # exactly two well-populated groups and the node answers one tidy result row.
+        _run, status, rows = _run_node(
+            client,
+            app_module,
+            paste,
+            'process',
+            {'operation': 'significance', 'group_column': '城市', 'value_column': '点赞', 'sig_method': 'ttest'},
+            'significance',
+        )
+        assert status['status'] == 'done', status.get('error')
+        assert len(rows) == 1, rows
+        row = rows[0]
+        assert row['method'] == 'ttest'
+        assert row['group_column'] == '城市'
+        assert row['value_column'] == '点赞'
+        assert row['n_groups'] == 2
+        assert isinstance(row['p_value'], (int, float))
+        assert set(row) == {
+            'method',
+            'group_column',
+            'value_column',
+            'statistic',
+            'p_value',
+            'n_groups',
+            'group_sizes',
+            'significant_005',
+        }
+
+    def test_significance_refuses_a_group_count_the_method_cannot_serve(self, client, app_module, paste):
+        # 城市 has exactly two levels here, so ANOVA is fine but there is no third group to
+        # prove it; ask for a value column that is text and the analyzer refuses by name.
+        _run, status, _rows = _run_node(
+            client,
+            app_module,
+            paste,
+            'process',
+            {'operation': 'significance', 'group_column': '城市', 'value_column': '城市', 'sig_method': 'ttest'},
+            'significance',
+        )
+        assert status['status'] == 'failed', 'a categorical value column is a wrong setting, not "no difference"'
+        assert '城市' in (status.get('error') or ''), status.get('error')
+
     def test_emotion_and_tendency_hand_their_mode_to_the_analyzer(self, client, app_module, paste, monkeypatch):
         """These two reach for a model or a daemon, so the node's contract here is
         that the configured mode and column actually arrive at the analyzer."""
@@ -1501,6 +1545,7 @@ class TestSelectsAndSwitchesAsNodes:
         'ner': ('analyzers.ner', 'NamedEntityRecognizer'),
         'cluster': ('analyzers.clustering', 'TextCluster'),
         'correlation': ('analyzers.correlation', 'CorrelationAnalyzer'),
+        'significance': ('analyzers.significance', 'SignificanceAnalyzer'),
     }
 
     @pytest.mark.parametrize(
@@ -1511,6 +1556,7 @@ class TestSelectsAndSwitchesAsNodes:
             ('ner', 'mode', 'Large'),
             ('cluster', 'cluster_method', 'KMeans'),
             ('correlation', 'corr_method', 'person'),
+            ('significance', 'sig_method', 'TTEST'),
         ],
     )
     def test_a_model_choice_is_refused_before_anything_is_paid_for(
@@ -1595,6 +1641,8 @@ class TestSelectsAndSwitchesAsNodes:
         ('cluster', 'cluster_method', 'kmeans++', ('kmeans++',)),
         ('correlation', 'corr_method', 'pearson', ('', ' pearson ')),
         ('correlation', 'corr_method', 'kendall', ('kendall',)),
+        ('significance', 'sig_method', 'ttest', ('', ' ttest ')),
+        ('significance', 'sig_method', 'anova', ('anova',)),
     ]
 
     @pytest.mark.parametrize(('operation', 'key', 'stored', 'cases'), _HANDOFF)
@@ -1608,7 +1656,7 @@ class TestSelectsAndSwitchesAsNodes:
         received = []
 
         def spy(self, df, *args, **kwargs):
-            received.append(getattr(self, 'mode', None) or kwargs.get('method'))
+            received.append(getattr(self, 'mode', None) or kwargs.get('method') or kwargs.get('sig_method'))
             return df
 
         monkeypatch.setattr(cls, 'analyze_dataframe', spy, raising=True)

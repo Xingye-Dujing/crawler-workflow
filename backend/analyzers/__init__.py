@@ -8,6 +8,7 @@ from analyzers.keyword import KeywordExtractor
 from analyzers.ml_base import MLClassifier, build_tfidf_pipeline, build_training_data, get_classifier
 from analyzers.ner import NamedEntityRecognizer
 from analyzers.sentiment import BERT_BATCH, SentimentAnalyzer
+from analyzers.significance import SignificanceAnalyzer
 from analyzers.tendency import TendencyAnalyzer
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     'NamedEntityRecognizer',
     'AnomalyDetector',
     'CorrelationAnalyzer',
+    'SignificanceAnalyzer',
     'MLClassifier',
     'build_tfidf_pipeline',
     'get_classifier',

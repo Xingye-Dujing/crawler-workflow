@@ -2274,7 +2274,7 @@ function openSettings(nodeId) {
             I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'process') {
         var p = node.params;
-        var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'anomaly', 'correlation'];
+        var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'anomaly', 'correlation', 'significance'];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
             selectOptionTags(
@@ -2422,6 +2422,21 @@ function openSettings(nodeId) {
             html += renderParamSelect(nodeId, p, 'corr_method', 'settings.corrMethod', 'pearson',
                 [{ v: 'pearson', l: 'Pearson' }, { v: 'spearman', l: 'Spearman' }, { v: 'kendall', l: 'Kendall' }]);
             html += renderParamInput(nodeId, p, 'min_abs', 'settings.minAbs', 'number', 0.0);
+        }
+
+        /* Significance test: compare one numeric column across the levels of one group column.
+           ttest/mannwhitney are two-group; anova/kruskal are two-or-more — the analyzer refuses a
+           method whose group count it cannot serve, by name, so the panel offers all four and the
+           server is the single authority on which is legal (mirrors PROCESS_ENUMS.sig_method). */
+        if (p.operation === 'significance') {
+            html += renderParamInput(nodeId, p, 'group_column', 'settings.groupColumn', 'text', '');
+            html += renderParamInput(nodeId, p, 'value_column', 'settings.valueColumn', 'text', '');
+            html += renderParamSelect(nodeId, p, 'sig_method', 'settings.sigMethod', 'ttest', [
+                { v: 'ttest', l: "Welch's t" },
+                { v: 'anova', l: 'ANOVA' },
+                { v: 'mannwhitney', l: 'Mann-Whitney U' },
+                { v: 'kruskal', l: 'Kruskal-Wallis H' },
+            ]);
         }
 
         /* AI 调用实时导出: the LLM ops rewrite a {stem}.live.{ext} snapshot
