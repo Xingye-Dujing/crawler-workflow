@@ -461,6 +461,8 @@ _ZH = {
     # ── 往前看：曲线外推与二次爆发预警 ──
     'analysis.forecast_horizon': '外推步数至少是 1，收到 {value}（0 步只是把最后一格再抄一遍）',
     'analysis.forecast_window': '移动平均的窗口至少 2 期才能平均，收到 {value}',
+    'analysis.forecast_season': '季节类方法的周期长度至少 2 期，收到 {value}',
+    'analysis.forecast_season_rows': '季节方法观测不足：至少要 {season} 期，本列只有 {rows} 期',
     'analysis.forecast_smooth': '平滑系数「{name}」要在 0 与 1 之间（不含两端），收到 {value}',
     'analysis.forecast_dates': '「{col}」不是能解析成日期的时段列（一个日期都没有）：阶段名没法外推',
     'analysis.forecast_rows': '外推至少要 {least} 期观测，这一列只有 {rows} 期同时给出时间与数值',
@@ -1724,6 +1726,8 @@ _EN = {
     # ── Looking forward: extrapolating the curve, and the flare-up warning ──
     'analysis.forecast_horizon': 'the horizon has to be at least 1 step, got {value} (0 just copies the last cell)',
     'analysis.forecast_window': 'a moving average needs 2 periods to average, got {value}',
+    'analysis.forecast_season': 'a seasonal method needs a cycle length of at least 2 periods, got {value}',
+    'analysis.forecast_season_rows': 'seasonal methods need at least {season} observed periods; this column has {rows}',
     'analysis.forecast_smooth': 'the smoothing factor "{name}" has to be strictly between 0 and 1, got {value}',
     'analysis.forecast_dates': '"{col}" is not a period column of dates: a phase NAME cannot be extrapolated',
     'analysis.forecast_rows': (

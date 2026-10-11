@@ -3337,13 +3337,17 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             'window': _optional_int(params.get('forecast_window')) or 3,
             'min_periods': _optional_int(params.get('forecast_min_periods')) or 4,
         }
-        # Both smoothing factors are forwarded whenever a number was written: 0 is refused by the
-        # step as the degenerate setting it is, and swallowing it into the default would answer a
-        # question the user did not ask.
-        for key, source in (('alpha', 'forecast_alpha'), ('beta', 'forecast_beta')):
+        # The smoothing factors are forwarded whenever a number was written (alpha/beta for
+        # Holt and Holt-Winters, gamma for Holt-Winters' seasonal): 0 is refused by the step as
+        # the degenerate setting it is, and swallowing it into the default would answer a
+        # question the user did not ask. `season` is the cycle length the seasonal methods need.
+        for key, source in (('alpha', 'forecast_alpha'), ('beta', 'forecast_beta'), ('gamma', 'forecast_gamma')):
             number = _optional_float(params.get(source))
             if number is not None:
                 result[key] = number
+        season = _optional_int(params.get('forecast_season'))
+        if season is not None:
+            result['season'] = season
         return result
     if op == 'alert':
         result = {

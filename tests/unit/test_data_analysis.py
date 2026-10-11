@@ -2540,6 +2540,42 @@ class TestForecast:
         with pytest.raises(UnknownOperationError, match='窗口'):
             D.forecast(self._curve(values=self.VALUES[:3]), window=3, min_periods=2)
 
+    def test_seasonal_naive_repeats_the_last_full_cycle(self):
+        curve = self._curve(values=[0.0, 0.4, -0.3, 0.1, 0.5, -0.2])  # two cycles, season 3
+        out = D.forecast(curve, method='seasonal_naive', season=3, window=2, min_periods=2, horizon=3)
+        tail = out[out['horizon'] > 0].reset_index(drop=True)
+        # Each future step copies the value one full cycle back: the forecast IS the last cycle.
+        assert [round(v, 4) for v in tail['predicted']] == [0.1, 0.5, -0.2]
+
+    def test_seasonal_naive_needs_a_full_cycle_of_history(self):
+        with pytest.raises(UnknownOperationError, match='季节'):
+            D.forecast(self._curve(values=[0.1, 0.2, 0.3]), method='seasonal_naive', season=5, window=2, min_periods=2)
+
+    def test_a_season_shorter_than_two_is_refused(self):
+        with pytest.raises(UnknownOperationError, match='季节'):
+            D.forecast(self._curve(), method='seasonal_naive', season=1)
+
+    def test_holt_winters_carries_the_cycle_not_a_flat_line(self):
+        vals = [0.0, 0.5, -0.4, 0.1, 0.6, -0.3]  # two cycles, season 3
+        out = D.forecast(self._curve(values=vals), method='holt_winters', season=3, window=2, min_periods=3, horizon=3)
+        tail = out[out['horizon'] > 0]
+        assert len(tail) == 3 and tail['predicted'].notna().all()
+        assert len({round(v, 6) for v in tail['predicted']}) > 1, 'a seasonal method must not flatten to one value'
+
+    def test_holt_winters_needs_two_cycles_of_history(self):
+        with pytest.raises(UnknownOperationError, match='季节'):
+            D.forecast(
+                self._curve(values=[0.1, 0.2, 0.3, 0.4]),
+                method='holt_winters',
+                season=3,
+                window=2,
+                min_periods=2,
+            )
+
+    def test_a_gamma_out_of_range_is_refused_by_name(self):
+        with pytest.raises(UnknownOperationError, match='gamma'):
+            D.forecast(self._curve(), method='holt_winters', season=3, gamma=1.5)
+
 
 class TestAlert:
     """The flare-up warning, and the rule that never answers with an empty table."""

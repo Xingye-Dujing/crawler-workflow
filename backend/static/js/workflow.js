@@ -2940,11 +2940,15 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'forecast_value_col', 'settings.forecastValueColumn', 'text', 'sentiment_index');
         html += renderParamSelect(nodeId, p, 'forecast_method', 'settings.forecastMethod', 'moving_average',
             [{ v: 'moving_average', l: I18n.t('settings.forecastMethodMa') },
-             { v: 'holt', l: I18n.t('settings.forecastMethodHolt') }]);
+             { v: 'holt', l: I18n.t('settings.forecastMethodHolt') },
+             { v: 'seasonal_naive', l: I18n.t('settings.forecastMethodSeasonalNaive') },
+             { v: 'holt_winters', l: I18n.t('settings.forecastMethodHoltWinters') }]);
         html += renderParamInput(nodeId, p, 'forecast_horizon', 'settings.forecastHorizon', 'number', 3);
         html += renderParamInput(nodeId, p, 'forecast_window', 'settings.forecastWindow', 'number', 3);
+        html += renderParamInput(nodeId, p, 'forecast_season', 'settings.forecastSeason', 'number', 7);
         html += renderParamInput(nodeId, p, 'forecast_alpha', 'settings.forecastAlpha', 'number', 0.5);
         html += renderParamInput(nodeId, p, 'forecast_beta', 'settings.forecastBeta', 'number', 0.3);
+        html += renderParamInput(nodeId, p, 'forecast_gamma', 'settings.forecastGamma', 'number', 0.35);
         html += renderParamInput(nodeId, p, 'forecast_min_periods', 'settings.forecastMinPeriods', 'number', 4);
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.forecastHint') + '</div></div>';

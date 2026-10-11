@@ -171,7 +171,7 @@ LLM_OPS = frozenset({'topic_label'})
 #: What :meth:`DataAnalysisService.forecast` extrapolates with. Both are computed in this
 #: module: statsmodels is not a dependency of this project, and a two-parameter smoothing
 #: written out is short enough to read next to the numbers it produced.
-FORECAST_METHODS = ('moving_average', 'holt')
+FORECAST_METHODS = ('moving_average', 'holt', 'seasonal_naive', 'holt_winters')
 
 #: The stage part of a topic id: 表 1 numbers its topics TopicⅠ-1 … TopicⅤ-4, and the numeral
 #: is the stage's POSITION in the lifecycle — which is why the order has to be declared rather
@@ -2568,6 +2568,8 @@ class DataAnalysisService:
         alpha: float = 0.5,
         beta: float = 0.3,
         min_periods: int = 4,
+        season: int = 7,
+        gamma: float = 0.35,
     ) -> pd.DataFrame:
         """Extrapolate the sentiment CURVE a few periods ahead.
 
@@ -2588,6 +2590,12 @@ class DataAnalysisService:
         taken from a statsmodels dependency, and its band grows with ``sqrt(horizon)`` because a
         trend extrapolated further really is less certain. The band uses the standard deviation
         of the fitted one-step errors, which is the only uncertainty this model measured.
+
+        Two seasonal methods, also hand-written (no statsmodels): ``seasonal_naive`` repeats the
+        value ``season`` periods back (a flat seasonal carry, band = the spread of those seasonal
+        errors), and ``holt_winters`` is additive Holt-Winters (level + trend + a length-``season``
+        cycle), its band growing with ``sqrt(horizon)`` like Holt. Both need ``season`` periods of
+        history to say anything, so a series shorter than that is refused by name.
 
         History is kept in the same table: every past period comes back with its ``actual`` and
         the one-step-ahead ``predicted`` the model would have made from the period before it, at
@@ -2615,6 +2623,13 @@ class DataAnalysisService:
             number = float(value)
             if not 0.0 < number < 1.0:
                 raise UnknownOperationError(t('analysis.forecast_smooth', name=name, value=value))
+        season_len = int(season)
+        if method in ('seasonal_naive', 'holt_winters') and season_len < 2:
+            raise UnknownOperationError(t('analysis.forecast_season', value=season))
+        if method == 'holt_winters':
+            g = float(gamma)
+            if not 0.0 < g < 1.0:
+                raise UnknownOperationError(t('analysis.forecast_smooth', name='gamma', value=gamma))
         floor = int(min_periods)
 
         stamps = _to_datetime(df[column])
@@ -2666,7 +2681,7 @@ class DataAnalysisService:
             # A moving average has no trend, so the forecast is flat and the band stays the same
             # width: widening it here would be theatre about a model that adds nothing each step.
             future = [(offset, centre, band) for offset in range(1, steps + 1)]
-        else:
+        elif method == 'holt':
             level, slope = values[0], 0.0
             errors: list = []
             a = float(alpha)
@@ -2690,6 +2705,63 @@ class DataAnalysisService:
             # really is less certain, and the only uncertainty this model measured is the
             # standard deviation of its own one-step errors.
             future = [(offset, level + offset * slope, spread * (offset**0.5)) for offset in range(1, steps + 1)]
+        elif method == 'seasonal_naive':
+            m = season_len
+            if len(values) < m:
+                raise UnknownOperationError(t('analysis.forecast_season_rows', rows=len(values), season=m))
+            s_errors = [values[i] - values[i - m] for i in range(m, len(values))]
+            s_spread = 1.96 * _standard_deviation(s_errors) if s_errors else 0.0
+            for position in range(len(values)):
+                if position < m:
+                    centres.append(None)
+                    spreads.append(None)
+                else:
+                    # The seasonal naive forecast of a period is simply the value one season back.
+                    centres.append(values[position - m])
+                    spreads.append(s_spread)
+            tail_season = values[-m:]
+            future = [(offset, tail_season[(offset - 1) % m], s_spread) for offset in range(1, steps + 1)]
+        elif method == 'holt_winters':
+            m = season_len
+            if len(values) < 2 * m:
+                raise UnknownOperationError(t('analysis.forecast_season_rows', rows=len(values), season=m))
+            hw_a, hw_b, hw_g = float(alpha), float(beta), float(gamma)
+            level = sum(values[:m]) / m
+            slope = (sum(values[m : 2 * m]) - sum(values[:m])) / (m * m)
+            seasonal = [values[j] - level for j in range(m)]
+            hw_errors: list = []
+            for position, value in enumerate(values):
+                si = position % m
+                predicted = level + slope + seasonal[si]
+                if position < m:
+                    # The first cycle only seeds the seasonal components; nothing is claimed as fit.
+                    centres.append(None)
+                    spreads.append(None)
+                else:
+                    centres.append(predicted)
+                    hw_errors.append(value - predicted)
+                    spreads.append(None)
+                prev_seasonal = seasonal[si]
+                new_level = hw_a * (value - prev_seasonal) + (1.0 - hw_a) * (level + slope)
+                new_slope = hw_b * (new_level - level) + (1.0 - hw_b) * slope
+                seasonal[si] = hw_g * (value - new_level) + (1.0 - hw_g) * prev_seasonal
+                level, slope = new_level, new_slope
+            hw_spread = 1.96 * _standard_deviation(hw_errors) if hw_errors else 0.0
+            future = []
+            for offset in range(1, steps + 1):
+                si = (len(values) + offset - 1) % m
+                centre = level + offset * slope + seasonal[si]
+                future.append((offset, centre, hw_spread * (offset**0.5)))
+        else:
+            raise UnknownOperationError(
+                t(
+                    'analysis.bad_option',
+                    op='forecast',
+                    param='method',
+                    value=method,
+                    allowed=', '.join(FORECAST_METHODS),
+                )
+            )
 
         rows = [
             _forecast_row(stamps_in[position], values[position], centres[position], spreads[position], 0)
