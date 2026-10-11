@@ -57,7 +57,8 @@ files into a node `vm`, driven by `tests/unit/test_frontend_*`.
 ## Test tiers
 `pytest.ini` runs **only the fast tier by default** and adds `--disable-socket`. Tiers: `unit`,
 `api` (tmp-isolated `test_client`), `integration` (real Chrome/Ollama), `live_ollama`, `live_quick`,
-`live_site`. Scale: 168 test files, **4,315 test functions**; the fast tier is ~5.8k cases / ~3.5 min.
+`live_site`. Scale: 170 test files, **4,399 test functions**; the fast tier is ~6.0k cases / ~3.5 min
+(the exact case count is parametrized, so treat `pytest -q` as the source of truth).
 Frontend needs `node` on `PATH` (those cases otherwise *skip*, which can look green). See `AGENTS.md`
 for the "nothing skipped" closure gate.
 

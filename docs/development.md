@@ -155,7 +155,7 @@ ML 模型保存在 `data/models/` 目录下，训练一次后持久可用。
 - 代码风格由 `ruff.toml` 约束（行宽 120、单引号），提交前必须通过
   `ruff check` 与 `ruff format --check`，且只允许真正修复，禁止 `# noqa` 式忽略
 
-### 自动化测试（pytest，快速层 3902 用例，设备层 99）
+### 自动化测试（pytest，快速层约 5977 用例，设备层 99；以 `pytest -q` 为准）
 
 测试体系分六层，位于 `tests/` 目录：所有写入都落在临时目录（绝不触碰真实 `data/`）；
 `live_site` 层会真实读取 `data/cookies/` 里的登录态去访问目标站点，而 `live_quick`
@@ -269,7 +269,7 @@ python -m pytest -q --cov=backend --cov-report=term
 ```
 
 - **出处不在本仓库代码**：`jieba/__init__ → _compat → import pkg_resources`（`_compat.py:18`），而 setuptools ≥74
-  一 `import pkg_resources` 就发这条 DeprecationWarning。本仓库自身代码零警告（5881 用例只此一条，且全属外部）。
+  一 `import pkg_resources` 就发这条 DeprecationWarning。本仓库自身代码零警告（约 5977 用例只此一条，且全属外部）。
 - **无法靠升级消除**：jieba 最新版即 0.42.1（已停更，PyPI 无更新版本），其 import 改不掉。
 - **实测「换 jieba_fast」不成立**：jieba_fast 0.53 的 `jieba_fast/_compat.py:6` 同样 `import pkg_resources`，照发此警告；
   且它并非完全等价替身——`cut_for_search` 与 jieba 结果不同（lcut/extract_tags/textrank/posseg 相同）。
