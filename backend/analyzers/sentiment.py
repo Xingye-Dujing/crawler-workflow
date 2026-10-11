@@ -140,6 +140,7 @@ class SentimentAnalyzer:
         neg_threshold: float = 0.4,
         bert_model: str = '',
         batch_size: int = BERT_BATCH,
+        max_length: int = 512,
     ):
         self.mode = mode
         self.model_name = model_name
@@ -149,6 +150,9 @@ class SentimentAnalyzer:
         # A configured 0 would make the chunking loop below step zero times and score an
         # empty column while reporting success, so the floor is one row.
         self.batch_size = max(1, int(batch_size or BERT_BATCH))
+        # Tokenizer per-sequence truncation for the bert path; configurable so a long post's
+        # tail is not silently dropped (floor one token; the caller clamps the range).
+        self.max_length = max(1, int(max_length or 512))
         # Lazily built, exactly as the other two classifiers build theirs: a run that
         # asks for SnowNLP must not touch sklearn, and one that asks for sklearn must not
         # pay for a model file it will never read.
@@ -221,7 +225,7 @@ class SentimentAnalyzer:
             to the batch, instead of this module guessing at a character count.
             """
             try:
-                answers = label_of(list(texts), batch_size=len(texts), truncation=True, max_length=512)
+                answers = label_of(list(texts), batch_size=len(texts), truncation=True, max_length=self.max_length)
             except Exception as e:
                 return [e] * len(texts)
             out = []

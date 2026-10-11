@@ -1568,6 +1568,7 @@ function renderBertField(nodeId, p) {
     }
     html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
     html += renderParamInput(nodeId, p, 'batch_size', 'settings.batchSize', 'number', 32);
+    html += renderParamInput(nodeId, p, 'max_length', 'settings.maxLength', 'number', 512);
     html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
         I18n.t('settings.bertModelHint') + '</div></div>';
     return html;

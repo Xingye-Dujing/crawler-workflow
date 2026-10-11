@@ -15,7 +15,7 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
   - ML 通路现统一走 jieba 词 + **那份停用词表去噪** + `class_weight=balanced` 逻辑回归（子线性 TF）；`build_tfidf_pipeline(char_features=True)` 可再并入字 n-gram（字+词 FeatureUnion）。
     这把「文本统计统一走一份停用词表」的同一份表也接进了 ML 特征侧（此前 ML 管线 `stop_words=None`，是一个真实的准确率缺口）。`/api/analysis/train` 的自训与 `ml_train/` 的重训共用这一管线。
   - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：填一个本机 HuggingFace 目录路径即可整列**分批推理**（有显卡自动走显卡，
-    `batch_size` 可调）；`pipeline('text-classification')` 直接读模型的 `id2label`，**换任何一套六类情绪模型都不用改分析器**。
+    `batch_size`、截断长度 `max_length`（默认 512，长文可调大以免截掉尾部）均可调）；`pipeline('text-classification')` 直接读模型的 `id2label`，**换任何一套六类情绪模型都不用改分析器**。
     缺 `torch`/`transformers` 或模型名留空一律**按名拒绝、绝不回退到 `llm`/`ml`**（把 A 模型的结论写进 B 模型声称的列是本项目反复付过学费的 bug 形态）；读不出的行留空，不臆造 `Neutral`。
     产出模型用 `ml_train/scripts/train_emotion_bert.py` 在 `ml_train/datasets/ewect_smp2020/train/usual_train.txt`（通用微博 27,766 条）上微调 `hfl/chinese-roberta-wwm-ext`，
     写到 `ml_train/models/emotion_ewect_six/`、在节点「已注册模型」下拉按名选（或填相对路径 `ml_train/models/emotion_ewect_six`）即可。**本机实测（2026-10-06）**：三 epoch、留出切片 **accuracy=0.811 / macro-F1=0.792**；

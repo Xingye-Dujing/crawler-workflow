@@ -2638,14 +2638,20 @@ def _build_bert_analyzer(op, params, model_path):
     """Construct the one analyzer for (op, model), shared by the single and multi paths so
     the batch_size/threshold validation is identical either way."""
     batch = _safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256)
+    max_len = _safe_int(params.get('max_length'), 512, minimum=16, maximum=2048)
     if op == 'emotion':
-        return EmotionAnalyzer(mode='bert', bert_model=model_path, batch_size=batch)
+        return EmotionAnalyzer(mode='bert', bert_model=model_path, batch_size=batch, max_length=max_len)
     if op == 'tendency':
-        return TendencyAnalyzer(mode='bert', bert_model=model_path, batch_size=batch)
+        return TendencyAnalyzer(mode='bert', bert_model=model_path, batch_size=batch, max_length=max_len)
     if op == 'sentiment':
         pos, neg = sentiment_thresholds(params)
         return SentimentAnalyzer(
-            mode='bert', pos_threshold=pos, neg_threshold=neg, bert_model=model_path, batch_size=batch
+            mode='bert',
+            pos_threshold=pos,
+            neg_threshold=neg,
+            bert_model=model_path,
+            batch_size=batch,
+            max_length=max_len,
         )
     raise UnknownOperationError(
         t('analysis.bad_option', op=op, param='operation', value=op, allowed=', '.join(BERT_RESULT_COLUMNS))
@@ -2718,6 +2724,9 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
             # Read by the transformer path; validated here for every mode so a stored 0
             # cannot reach the chunking loop and score an empty column while reporting success.
             batch_size=_safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256),
+            # Only the bert path truncates, but validated for every mode so a stored garbage
+            # value falls back to 512 rather than reaching the tokenizer.
+            max_length=_safe_int(params.get('max_length'), 512, minimum=16, maximum=2048),
         )
         df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')
@@ -2731,6 +2740,8 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
             # Read by the transformer path; validated here for every mode so a stored 0
             # cannot reach the chunking loop and score an empty column while reporting success.
             batch_size=_safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256),
+            # Only the bert path truncates; a garbage value falls back to 512, not the tokenizer.
+            max_length=_safe_int(params.get('max_length'), 512, minimum=16, maximum=2048),
         )
         df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')
@@ -2747,6 +2758,8 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
             # Only the transformer path reads this, but it is validated here for every
             # mode so a stored 0 cannot reach the chunking loop and score nothing.
             batch_size=_safe_int(params.get('batch_size'), BERT_BATCH, minimum=1, maximum=256),
+            # Only the bert path truncates; a garbage value falls back to 512, not the tokenizer.
+            max_length=_safe_int(params.get('max_length'), 512, minimum=16, maximum=2048),
         )
         df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')

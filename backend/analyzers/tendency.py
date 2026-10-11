@@ -31,6 +31,7 @@ class TendencyAnalyzer:
         mode: str = 'llm',
         bert_model: str = '',
         batch_size: int = BERT_BATCH,
+        max_length: int = 512,
     ):
         self.model_name = model_name
         self.mode = mode
@@ -39,6 +40,9 @@ class TendencyAnalyzer:
         # A configured 0 would make the bert chunking loop step zero times and score an empty
         # column while reporting success, so the floor is one row.
         self.batch_size = max(1, int(batch_size or BERT_BATCH))
+        # Tokenizer per-sequence truncation for the bert path; configurable so a long post's
+        # tail is not silently dropped (floor one token; the caller clamps the range).
+        self.max_length = max(1, int(max_length or 512))
         self.valid_labels = [
             'Objective Statement',
             'Praise/Affirmation',
@@ -253,7 +257,7 @@ Analyze strictly and output only the required plain string."""
             chunk = indices[start : start + self.batch_size]
             texts = [str(df.at[idx, text_column]).strip() for idx in chunk]
             try:
-                answers = list(classify(texts, batch_size=len(texts), truncation=True, max_length=512))
+                answers = list(classify(texts, batch_size=len(texts), truncation=True, max_length=self.max_length))
             except Exception as e:  # a batch that raises leaves only its own rows blank
                 logger.error(t('tendency.bert_failed', err=e))
                 failed += len(chunk)

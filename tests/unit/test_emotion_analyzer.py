@@ -49,13 +49,14 @@ def _chinese():
     set_lang('zh')
 
 
-def _install_bert_stub(monkeypatch, answer_for, batches=None):
+def _install_bert_stub(monkeypatch, answer_for, batches=None, runs=None):
     """A fake ``transformers`` in ``sys.modules`` that answers per BATCH.
 
     emotion binds ``bert_backend`` by value (``from ... import``), so the probe is patched on
     ``emotion_module`` — patching the sentiment original would not be seen here. The returned
     list receives one record per ``pipeline()`` call; ``batches`` receives the texts of every
-    call so a test can assert the column went through in chunks.
+    call so a test can assert the column went through in chunks; ``runs`` receives the keyword
+    arguments of every batch call so a test can assert the truncation length reaches the model.
     """
     stub = types.ModuleType('transformers')
     calls = []
@@ -68,6 +69,8 @@ def _install_bert_stub(monkeypatch, answer_for, batches=None):
                 raise AssertionError('the node must hand the pipeline a whole batch, not one row')
             if batches is not None:
                 batches.append(list(texts))
+            if runs is not None:
+                runs.append(dict(kwargs))
             return [answer_for(t) for t in texts]
 
         return run
@@ -175,3 +178,22 @@ class TestBertMode:
         monkeypatch.setattr(emotion_module, 'bert_device', lambda: 0)
         EmotionAnalyzer(mode='bert', bert_model='m').analyze_dataframe(frame(), '正文')
         assert calls[0]['device'] == 0, 'a card the machine has must not be left idle'
+
+    def test_the_bert_call_uses_the_analyzers_max_length(self, monkeypatch):
+        runs = []
+        _install_bert_stub(monkeypatch, lambda t: {'label': 'Joy', 'score': 0.9}, runs=runs)
+        EmotionAnalyzer(mode='bert', bert_model='m', max_length=128).analyze_dataframe(frame(), '正文')
+        assert runs and runs[0]['max_length'] == 128, 'the configured truncation must reach the pipeline'
+
+    def test_max_length_defaults_to_512_when_unset(self, monkeypatch):
+        runs = []
+        _install_bert_stub(monkeypatch, lambda t: {'label': 'Joy', 'score': 0.9}, runs=runs)
+        EmotionAnalyzer(mode='bert', bert_model='m').analyze_dataframe(frame(), '正文')
+        assert runs[0]['max_length'] == 512
+
+    def test_max_length_treats_a_blank_as_default_and_floors_a_negative(self):
+        assert EmotionAnalyzer(mode='bert', max_length=0).max_length == 512, (
+            'a blank (0) is the default, like batch_size'
+        )
+        assert EmotionAnalyzer(mode='bert', max_length=-3).max_length == 1, 'a negative cannot step below one token'
+        assert EmotionAnalyzer(mode='bert', max_length=256).max_length == 256

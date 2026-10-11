@@ -394,6 +394,14 @@ class TestBertMode:
         SentimentAnalyzer(mode='bert', bert_model='m').analyze_dataframe(frame(), '正文')
         assert calls[0]['device'] == 0, 'a card the machine has must not be left idle'
 
+    def test_max_length_defaults_and_clamps_in_the_bert_constructor(self):
+        """The truncation knob is stored on the analyzer (and floored at one token); the bert
+        path reads it at the pipeline call, the same single change the emotion path pins."""
+        assert SentimentAnalyzer(mode='bert').max_length == 512
+        assert SentimentAnalyzer(mode='bert', max_length=128).max_length == 128
+        assert SentimentAnalyzer(mode='bert', max_length=0).max_length == 512, 'a blank (0) is the default'
+        assert SentimentAnalyzer(mode='bert', max_length=-3).max_length == 1, 'a negative floors at one token'
+
     def test_the_device_probe_always_answers_something_a_pipeline_accepts(self):
         # -1 is the pipeline's own CPU default, so the no-torch case needs no branch.
         # Asserted as a member rather than as -1: whether this machine has torch is a

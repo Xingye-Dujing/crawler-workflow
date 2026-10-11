@@ -33,6 +33,7 @@ class EmotionAnalyzer:
         mode: str = 'llm',
         bert_model: str = '',
         batch_size: int = BERT_BATCH,
+        max_length: int = 512,
     ):
         self.model_name = model_name
         self.mode = mode
@@ -41,6 +42,10 @@ class EmotionAnalyzer:
         # A configured 0 would make the bert chunking loop step zero times and score an empty
         # column while reporting success, so the floor is one row.
         self.batch_size = max(1, int(batch_size or BERT_BATCH))
+        # The tokenizer's per-sequence truncation length for the bert path (one row is the
+        # floor; the caller clamps the range). Long posts past it lose their tail — the whole
+        # point of making it configurable rather than a hard-coded 512.
+        self.max_length = max(1, int(max_length or 512))
         # Six categories, matching the SMP2020-EWECT scheme the bert path is trained on
         # (ml_train/scripts/train_emotion_bert.py). Surprise was added when the label set was
         # realigned; keep the two lists identical or a model answer would fall through as
@@ -249,7 +254,7 @@ Analyze strictly and output only the required plain string."""
             chunk = indices[start : start + self.batch_size]
             texts = [str(df.at[idx, text_column]).strip() for idx in chunk]
             try:
-                answers = list(classify(texts, batch_size=len(texts), truncation=True, max_length=512))
+                answers = list(classify(texts, batch_size=len(texts), truncation=True, max_length=self.max_length))
             except Exception as e:  # a batch that raises leaves only its own rows blank
                 logger.error(t('emotion.bert_failed', err=e))
                 failed += len(chunk)
