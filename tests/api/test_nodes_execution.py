@@ -658,13 +658,12 @@ class TestSentimentNode:
         assert statuses['node-2']['status'] == 'failed', statuses['node-2']
         assert '0.2' in statuses['node-2']['error'], statuses['node-2']['error']
 
-    def test_bert_refuses_by_name_instead_of_running_snownlp(self, client, app_module, paste):
-        """The bert node must refuse with a NAMED BERT reason and store nothing — never fall
-        back to SnowNLP. Which reason fires is environment-dependent: a machine without the
-        torch/transformers stack refuses for the missing piece, and this machine (which HAS
-        torch) refuses because the chain names no model. Both sentences lead with ``BERT``,
-        so the pin is on the refusal being about the requested mode, not on which machine it is.
-        """
+    def test_bert_degrades_to_the_general_mode_and_completes_when_it_cannot_run(self, client, app_module, paste):
+        """An explicit ``bert`` the machine cannot run — no torch stack, or (as here) no model named
+        — now falls back to the op's dependency-free mode instead of failing the node. The node
+        COMPLETES with real SnowNLP scores. The never-silent rule is kept because the executor prints
+        which mode produced the column (the ``_resolve_bert_mode`` report is pinned directly in
+        ``TestBertDegrade``); a row was never going to be labeled bert that SnowNLP actually wrote."""
         ds = paste(self.ROWS, name='senti-bert.csv')
         started = client.post(
             '/api/workflow/execute', json={'workflow': self._chain(ds, mode='bert'), 'workflow_name': 'senti-bert'}
@@ -672,11 +671,11 @@ class TestSentimentNode:
         run_id = started.get_json()['run_id']
         assert _wait(app_module)
         statuses = app_module._RUN_STORE.node_statuses(run_id)
-        assert statuses['node-2']['status'] == 'failed', statuses['node-2']
-        error = statuses['node-2']['error'] or ''
-        # A named BERT refusal (missing backend OR unnamed model), never SnowNLP doing the work.
-        assert 'BERT' in error, error
-        assert app_module._RUN_STORE.load_rows(run_id, 'node-2') == [], 'a refused mode stores nothing'
+        assert statuses['node-2']['status'] == 'done', statuses['node-2']
+        rows = app_module._RUN_STORE.load_rows(run_id, 'node-2')
+        assert rows and all('score' in r and 'sentiment' in r for r in rows), (
+            'degraded sentiment must come back as SnowNLP scores, not an empty or failed table'
+        )
 
     def test_a_missing_text_column_is_refused_before_any_row_is_read(self, client, app_module, paste):
         ds = paste([{'标题': '只有标题'}] * 3, name='senti-nocol.csv')

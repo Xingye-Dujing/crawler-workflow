@@ -69,6 +69,7 @@ from analyzers import (
     TextCluster,
 )
 from analyzers.llm_client import ABORT_MARK, LLMClient
+from analyzers.sentiment import bert_backend, resolve_bert_model
 from config import Config
 from crawlers import cookie_hosts, crawler_class, get_crawler, is_crawlable
 from crawlers.base import UNDER_TARGET, CrawlerStopped, DeadDriver, PageNotArrivedError
@@ -2689,6 +2690,50 @@ def _run_bert_compare(op, params, df, text_column, run_ctx):
     return tidy.to_dict('records')
 
 
+#: When an explicitly-chosen ``bert`` run cannot execute on this machine, the node executor
+#: degrades that op to its dependency-free mode and PRINTS which mode actually produced the
+#: column — the analyzer itself still refuses by name if it is ever reached as bert (the never-
+#: SILENT-cross-model invariant, kept as the last line of defense). Multi-model BERT comparison
+#: does not degrade (it has no general-mode equivalent).
+BERT_FALLBACK_MODE = {'sentiment': 'snownlp', 'emotion': 'ml', 'tendency': 'ml'}
+
+
+def _bert_runnable(bert_model: str) -> tuple:
+    """``(ok, reason)`` using the SAME availability the analyzer's bert path applies.
+
+    ok iff ``bert_backend()`` finds torch+transformers and ``resolve_bert_model`` returns a path
+    for the requested model. ``reason`` is the missing package list, or the localized no-model text.
+    """
+    missing = bert_backend()
+    if missing:
+        return False, missing
+    try:
+        resolved = resolve_bert_model(str(bert_model or '').strip())
+    except Exception:
+        resolved = ''
+    if not resolved:
+        return False, t('sentiment.bert_no_model')
+    return True, ''
+
+
+def _resolve_bert_mode(op: str, mode: str, params: dict) -> str:
+    """Degrade an explicit ``bert`` the machine cannot run to the op's general mode, and SAY so.
+
+    ``mode`` has already been validated by ``enum_param``; anything other than ``bert`` returns
+    unchanged. When ``bert`` cannot run, the executor falls back to ``BERT_FALLBACK_MODE[op]`` and
+    ``add_log``s the mode that ACTUALLY ran, so the column is never silently mislabeled as bert. The
+    analyzer's own refuse-by-name is untouched — it simply is not reached from here when it would fail.
+    """
+    if str(mode) != 'bert':
+        return mode
+    ok, reason = _bert_runnable(params.get('bert_model'))
+    if ok:
+        return mode
+    fallback = BERT_FALLBACK_MODE[op]
+    add_log(t('analysis.bert_fallback', op=op, reason=reason, used=fallback))
+    return fallback
+
+
 def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
     params = node.get('params', {})
     op = node.get('operation', params.get('operation', ''))
@@ -2716,10 +2761,12 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         return df.to_dict('records')
 
     if op == 'emotion':
-        if enum_param(op, params, 'mode') == 'bert' and len(bert_model_list(params)) > 1:
+        mode = enum_param(op, params, 'mode')
+        if mode == 'bert' and len(bert_model_list(params)) > 1:
             return _run_bert_compare(op, params, df, text_column, run_ctx)
+        mode = _resolve_bert_mode(op, mode, params)
         analyzer = EmotionAnalyzer(
-            mode=enum_param(op, params, 'mode'),
+            mode=mode,
             bert_model=str(params.get('bert_model') or '').strip(),
             # Read by the transformer path; validated here for every mode so a stored 0
             # cannot reach the chunking loop and score an empty column while reporting success.
@@ -2732,10 +2779,12 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         return df.to_dict('records')
 
     if op == 'tendency':
-        if enum_param(op, params, 'mode') == 'bert' and len(bert_model_list(params)) > 1:
+        mode = enum_param(op, params, 'mode')
+        if mode == 'bert' and len(bert_model_list(params)) > 1:
             return _run_bert_compare(op, params, df, text_column, run_ctx)
+        mode = _resolve_bert_mode(op, mode, params)
         analyzer = TendencyAnalyzer(
-            mode=enum_param(op, params, 'mode'),
+            mode=mode,
             bert_model=str(params.get('bert_model') or '').strip(),
             # Read by the transformer path; validated here for every mode so a stored 0
             # cannot reach the chunking loop and score an empty column while reporting success.
@@ -2747,11 +2796,13 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         return df.to_dict('records')
 
     if op == 'sentiment':
-        if enum_param(op, params, 'mode') == 'bert' and len(bert_model_list(params)) > 1:
+        mode = enum_param(op, params, 'mode')
+        if mode == 'bert' and len(bert_model_list(params)) > 1:
             return _run_bert_compare(op, params, df, text_column, run_ctx)
+        mode = _resolve_bert_mode(op, mode, params)
         pos, neg = sentiment_thresholds(params)
         analyzer = SentimentAnalyzer(
-            mode=enum_param(op, params, 'mode'),
+            mode=mode,
             pos_threshold=pos,
             neg_threshold=neg,
             bert_model=str(params.get('bert_model') or '').strip(),

@@ -22,7 +22,8 @@ class EmotionAnalyzer:
     SMP2020-EWECT scheme (see :data:`valid_labels`). Like the sentiment node's bert path it
     refuses BY NAME when the stack or the model is missing and never falls back to ``llm``
     or ``ml`` — putting one model's verdict in a column another mode claimed would be the
-    exact bug class this project has already paid for.
+    exact bug class this project has already paid for. The node executor, however, degrades an
+    unrunnable explicit ``bert`` to ``ml`` before reaching here and prints which mode ran.
     """
 
     _ML_MODEL_NAME = 'emotion'

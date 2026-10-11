@@ -194,7 +194,10 @@ class SentimentAnalyzer:
 
         Every answer refuses BY NAME. Silently falling back to SnowNLP would put one
         model's verdict in a column the node said another model produced, which is the
-        exact shape of bug this project has already paid for twice.
+        exact shape of bug this project has already paid for twice. (The node executor
+        degrades an unrunnable explicit ``bert`` to the op's general mode BEFORE reaching
+        here, and prints which mode actually ran — so a real run never aborts on a missing
+        torch stack, while this method still refuses any direct bert call.)
 
         The whole column goes through in batches. That is the difference between a node
         that finishes a 100k-comment table in minutes and one that spends an hour in

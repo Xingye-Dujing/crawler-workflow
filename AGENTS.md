@@ -23,10 +23,13 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
 - Deps: *every package code imports directly* goes into `.venv/` **and** `requirements.txt` in the same change, even
   when it also arrives transitively; a new tool's caches go into `.gitignore` in the same change. The
   torch/transformers deps `sentiment`'s `bert` mode probes for go to `requirements-optional.txt` instead — never
-  CI-installed, and code needing them may only refuse by name, never fall back to another model. The one sanctioned
-  degradation is a topic step's **`method=auto` default**: `_resolve_topic_method` picks embedding when the encoder
-  imports and LDA when it does not, and **prints the method that actually ran**, so a result is never silently
-  mislabeled. An EXPLICIT `embedding` (or `bert`) with no encoder still refuses BY NAME and is never substituted.
+  CI-installed, and code may never SILENTLY answer with a model other than the one it claims. Two degradations are
+  sanctioned, each PRINTING the method that actually ran so a column is never mislabeled: (1) a topic step's
+  `method=auto` default (resolved by `_resolve_topic_method`) picks embedding when the encoder imports and LDA when
+  it does not; (2) the node executor's `_resolve_bert_mode` turns an explicit `bert` the machine cannot run (missing
+  torch/transformers, or no resolvable model) into the op's dependency-free mode — `snownlp` for sentiment, `ml` for
+  emotion/tendency — and logs the substitution. The analyzers themselves still refuse a direct unrunnable `bert` by
+  name (defense in depth), and a multi-model BERT comparison never degrades (it has no general-mode equivalent).
 - **CI** (`.github/workflows/ci.yml`, windows-latest): fast tier + `ruff check`/`ruff format --check` over
   `backend/ tests/`. The local PostToolUse `ruff format` **silently fails on a restricted workspace** (measured
   `os error 5`: ruff writes a temp file then renames) — the edit stays unformatted while the hook looks fine, so run

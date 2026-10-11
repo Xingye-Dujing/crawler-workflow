@@ -29,11 +29,12 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
     所以阈值是节点参数而不是写死的 0.5，`score` 列始终保留原始概率，判错方向时重划档位即可。
   - `ml`：与情感/倾向同一条「训练模型」通路，从表里已标注的行拟合 `data/models/sentiment.pkl`
   - `llm`：逐行走大模型，与情感/倾向共用批量、缓存与断点检查点
-  - `bert`：**接口保留**。本机没有 `torch` 时它按名拒绝并说清缺哪个包，模型名留空时也按名拒绝——
-    不会静默改用 SnowNLP，那样等于把 A 模型的结论写进 B 模型声称的列里。因此这一条通路
-    **在本仓库从未真跑过**（这台机器没有 torch），不要把它当作已验证功能
+  - `bert`：**可选**（默认仍是 `snownlp`）。本机跑不动 bert（缺 `torch`/`transformers`，或模型名留空 / 无法解析）时，
+    节点执行器**自动降级到 `snownlp`，并在控制台打印本次实际用了哪种**——绝不静默把 SnowNLP 的结论冒充成 bert。
+    分析器**本身**被直接当 bert 调用仍按名拒绝（纵深防御）；勾 ≥2 模型的多模型对比不降级、维持按名拒绝。
+    **注**：这一条通路在本仓库**从未真跑过**（开发机没有对应模型），不要把它当作已验证功能
 - **倾向性分析（三模式）**：LLM 逐行、传统 ML（sklearn TF-IDF + 逻辑回归）批量，或**微调 BERT**（六类传播立场标签，与情感/情绪共用同一条 `bert` 后端与分批推理）
-  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/scripts/distill_tendency_labels.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `ml_train/datasets/weibo_clean_265k.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/datasets/tendency_distilled.csv`（两轮蒸馏累计约 7,720 条）；再由 `ml_train/scripts/train_tendency_bert_v1.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/models/tendency_stance_v1/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空、以及模型回了不认识的标签，一律**按名拒绝、绝不回退**到 llm/ml；读不出的行留空，**不臆造 `Objective Statement`**。
+  - `bert`（**可选**，默认仍是 `llm`，老画布不受影响）：倾向**没有公开语料**，所以模型来自 **LLM 蒸馏**——`ml_train/scripts/distill_tendency_labels.py` 用节点自己的 `llm` 通路（qwen3.5:4b 在 `ml_train/datasets/weibo_clean_265k.csv` 的 26 万条真实微博上逐条打标签，只保留干净解析出的六类、按类封顶去偏），产出 `ml_train/datasets/tendency_distilled.csv`（两轮蒸馏累计约 7,720 条）；再由 `ml_train/scripts/train_tendency_bert_v1.py` 微调 `hfl/chinese-roberta-wwm-ext` 到 `ml_train/models/tendency_stance_v1/`。`pipeline('text-classification')` 直接读 `id2label`（六类标签含空格/斜杠，原样匹配），**换任何六类立场模型都不用改分析器**。缺 `torch`/`transformers` 或模型名留空 / 无法解析时，执行器**自动降级到 `ml` 并打印实际模式**（分析器被直接当 bert 调用仍按名拒绝；多模型对比不降级），模型回了不认识的标签时该行留空、**不臆造 `Objective Statement`**。
     **本机实测（2026-10-06）**：在约 7,720 条上微调、三 epoch、5% 留出 **accuracy=0.731 / macro-F1=0.681**（较首轮 3,935 条的 0.572 明显提升，主要靠稀有类样本变多：`Controversy/Reflection` 106→364、`Criticism`/`Advocacy` 各约 1,300）。仍如实说：`Controversy` 是最稀的一类（真实微博少有人作多视角讨论），它与讽刺(`Satire`)仍是最弱两格——端到端里「呵呵，某些人倒是挺会演戏的」被误判为 `Praise`（置信仅 0.46）。曾试把各类下采样到最少类（`--balance`，每类 364）以求均衡，macro-F1 反降到 0.561（丢掉约 5,500 条有效数据），故保留全量训练。要更高可加大 `--n` 续蒸馏（脚本自动跳过已标注文本）。
 - **微调模型注册表（显示名）**：`bert` 模式的「模型名」不再只能手敲路径。运维在 `data/model_registry.json` 里
   登记 `{name, path, desc}`（路径用**相对仓库根**的 `ml_train/models/…`，换机/换检出目录不失效，便于上传云盘共享），
@@ -89,8 +90,9 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
     默认「判定为正面的下限」0.6、「判定为负面的上限」0.4，`score ≥ 0.6` 判正面、`≤ 0.4` 判负面、之间记中性（边界含等号）。
     所以一段温吞文本算不算中性取决于这两个阈值、而非模型「看懂了中性」——实测「这剧情也就一般吧，谈不上喜欢也不讨厌」
     被给出 0.86 正极性，即二分类头对模糊文本本就偏向一边。想**扩大中性区间**就调高正面下限、调低负面上限（反之收窄）。
-    `torch`/`transformers` 在 `requirements-optional`，bert 模式缺之则**按名拒绝、绝不回退**（回退等于把 A 模型的结论
-    写进 B 模型声称的列里）；`pipeline` 推理不需要 `accelerate`，它只被 gitignore 的训练脚本 `train_bert.py` 用到。
+    `torch`/`transformers` 在 `requirements-optional`；bert 模式缺依赖或模型跑不动时，节点执行器**降级到 `snownlp`
+    并打印实际用的模式**（绝不静默把 A 模型结论写进 B 模型声称的列；分析器被直接当 bert 调用仍按名拒绝、多模型对比不降级）；
+    `pipeline` 推理不需要 `accelerate`，它只被 gitignore 的训练脚本 `train_bert.py` 用到。
   - **关键词节点**新增「基于自己语料的 TF-IDF」：jieba 内置 IDF 来自新闻语料，微博口语词会因此排错位；
     这一档直接用你自己的表拟合 IDF。另可填**词性过滤**（如 `n,vn,v,a`），去关键词表里的「转发/哈哈/回复」
   - **网暴言论识别**（算法处理节点的新操作 `aggression`）：论文的研究对象是**暴力言论**而不是负面情绪，

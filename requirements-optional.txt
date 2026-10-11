@@ -5,10 +5,12 @@
 # with no encoder still refuses BY NAME and is never substituted; explicit 主题方法=lda needs nothing here.
 #
 # They live in their own file rather than in requirements.txt because of SIZE and because
-# of how the code treats them. `torch` is a multi-gigabyte download, and `sentiment.py`
-# imports both packages inside a guard that PROBES for them first — a machine without them
-# gets a working project whose `bert` mode refuses and names the missing package, rather
-# than a broken install or a silent fallback to a different model.
+# of how the code treats them. `torch` is a multi-gigabyte download, and the three bert analyzers
+# (sentiment / emotion / tendency) import the packages inside a guard that PROBES for them first. A
+# machine without them STILL WORKS: the node executor degrades an unrunnable explicit `bert` to the
+# op's dependency-free mode and PRINTS which mode actually produced the column (never a silent
+# substitution), and the analyzer itself still refuses a direct, unrunnable bert by name — rather than
+# a broken install or a quiet cross-model swap.
 #
 # So this file exists to keep one rule honest: every package the code imports is declared
 # somewhere it can be found, instead of being discovered by reading the source.
@@ -19,8 +21,8 @@
 #     .venv/Scripts/pip.exe install -r requirements-optional.txt \
 #         --extra-index-url https://download.pytorch.org/whl/cu121
 #
-# Used by: the Process node's 情感极性 (sentiment) operation, mode `bert`.
-# The model itself is a separate download named in the node — see the README's bert note.
+# Used by: the Process nodes' 情感极性 / 情绪 / 倾向 (sentiment / emotion / tendency) operations, mode
+# `bert`. The model itself is a separate download named in the node — see the README's bert note.
 
 torch
 transformers
