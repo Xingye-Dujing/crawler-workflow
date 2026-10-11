@@ -456,6 +456,34 @@ class TestOutline:
         """Clicking empty canvas (no node selected) must not leave the last row lit."""
         assert ix['outline_deselect']['activeAfterDeselect'] == 0
 
+    def test_the_outline_filters_to_matching_rows(self, ix):
+        """setFilter narrows the list by label/type/tag; clearing restores the whole map.
+
+        Matching the type abbreviation (not just the label) is deliberate: a Chinese canvas
+        still answers "src"/"SRC", so a finder written in one language is not stranded.
+        """
+        f = ix['outline_filter']
+        assert f['unfiltered'] == 3, 'the scenario did not start with three nodes'
+        assert f['filtered'] == [f['disabledId']], 'only the visualize node should match "viz"'
+        assert f['inputCleared'] == 3, 'clearing the finder must restore every row'
+
+    def test_the_finder_is_driven_by_the_real_input_event(self, ix):
+        """The filter is wired to the box's own 'input' listener (Outline.init), not only to
+        setFilter: a keystroke routed through that listener narrows to the one source node."""
+        assert ix['outline_filter']['inputDriven'] == 1, 'typing "source" in the box did not filter to the source row'
+
+    def test_an_impossible_query_shows_no_match_not_no_nodes(self, ix):
+        """A filter matching nothing must say NO-MATCH, not reuse the empty-canvas NO-NODES
+        wording — otherwise "every node filtered out" is indistinguishable from "no nodes"."""
+        assert ix['outline_filter']['noMatchText'] == 'NO-MATCH'
+
+    def test_ctrl_f_reveals_the_finder_without_stealing_the_selection(self, ix):
+        """Ctrl/Cmd+F expands a collapsed sidebar and leaves the selection intact — it is the
+        finder, not the fold (the fold stays on plain `f`, covered by the canvas fold tests)."""
+        f = ix['outline_filter']
+        assert f['panelExpanded'] is True, 'Ctrl+F did not reveal a collapsed outline'
+        assert f['ctrlLeftSelected'] is True, 'Ctrl+F changed the selection'
+
     def test_selecting_a_node_on_the_canvas_lights_its_sidebar_row(self, ix):
         # The selection sync must be bidirectional: a graph click drives the sidebar highlight too.
         assert ix['outline_reselect']['activeIds'] == ['node-1']

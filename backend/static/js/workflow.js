@@ -4708,6 +4708,11 @@ function togglePalette() {
    createElement + textContent (never an innerHTML string keyed by the node id), because a
    workflow file can author any id and an inline handler would have to re-escape it. */
 const Outline = {
+    /* The active filter query (lower-cased); the finder input writes it via setFilter.
+       It lives on the object, not the DOM, so render() stays the single source of what
+       shows and a language switch repaint can re-apply it to the new labels. */
+    _query: '',
+
     /* The rows as data (no DOM). `off` = outside the effective graph (disabled, starved,
        or its type switched off): still listed — the outline is a complete map, not a run
        preview — but dimmed so it does not read as live. */
@@ -4732,15 +4737,41 @@ const Outline = {
         return m[type] || String(type).slice(0, 3).toUpperCase();
     },
 
+    /* Filter the list to rows whose label, node type or tag contain the query (matching the
+       type too lets "src"/"SRC" find sources whatever language the label is in). */
+    setFilter(query) {
+        this._query = String(query == null ? '' : query).toLowerCase();
+        this.render();
+    },
+
+    /* Ctrl/Cmd+F: reveal the finder — expand the sidebar if collapsed and focus its filter
+       box — so the user is typing to find a node, not folding the selected one. */
+    revealFilter() {
+        var panel = document.getElementById('outline-panel');
+        if (panel && panel.classList.contains('collapsed')) this.toggle();
+        var box = document.getElementById('outline-filter');
+        if (box) {
+            box.focus();
+            if (box.select) box.select();
+        }
+    },
+
     render() {
         var list = document.getElementById('outline-list');
         if (!list) return;
         var rows = this._collect();
+        if (this._query) {
+            var q = this._query;
+            var outline = this;
+            rows = rows.filter(function (r) {
+                return (r.label + ' ' + r.type + ' ' + outline._tag(r.type)).toLowerCase().indexOf(q) >= 0;
+            });
+        }
         list.textContent = '';
         if (rows.length === 0) {
             var empty = document.createElement('div');
             empty.className = 'outline-empty';
-            empty.textContent = I18n.t('outline.noNodes');
+            empty.textContent = this._query ? I18n.t('outline.noMatch') : I18n.t('outline.noNodes');
             list.appendChild(empty);
             return;
         }
@@ -4810,6 +4841,14 @@ const Outline = {
             btn.textContent = collapsed ? '+' : '−';
             btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
             btn.title = I18n.t(collapsed ? 'outline.expand' : 'outline.collapse');
+        }
+        var box = document.getElementById('outline-filter');
+        if (box) {
+            box.placeholder = I18n.t('outline.filterPlaceholder');
+            var outline = this;
+            box.addEventListener('input', function (e) {
+                outline.setFilter(e && e.target ? e.target.value : box.value);
+            });
         }
         this.render();
     },

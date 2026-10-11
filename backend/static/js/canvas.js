@@ -588,6 +588,15 @@ const canvas = {
                 this.redo();
                 return;
             }
+            /* Ctrl/Cmd+F: jump to the outline finder. Handled before the plain-`f` fold so
+               find does not fold the selected node; typing in a field is already excluded
+               above, which is also what lets Ctrl+F inside the finder box itself be normal
+               browser search. */
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                if (typeof Outline !== 'undefined' && Outline.revealFilter) Outline.revealFilter();
+                return;
+            }
             /* Fold/unfold selected node with F key */
             if (e.key === 'f' && this.selectedNode) {
                 e.preventDefault();

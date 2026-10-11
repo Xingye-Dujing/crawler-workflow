@@ -71,6 +71,8 @@ const KEYS = {
     'conn.undo': 'UNDO',
     'conn.keep': 'KEEP',
     'conn.dismiss': 'DISMISS',
+    'outline.noNodes': 'NO-NODES',
+    'outline.noMatch': 'NO-MATCH',
 };
 /* The zh side exists so a language switch has somewhere to land: with an empty
    dictionary every "does the label follow the language" probe answers "no" for
@@ -680,6 +682,10 @@ out.outline = {
     rowIds: rowEls.map((el) => el.dataset.node),
 };
 
+/* ── outline filter + Ctrl/Cmd+F finder ───────────────────────────── */
+/* removed: relocated to a self-contained scenario before the async chain */
+
+
 /* The sidebar must mirror the graph's selection — including when the graph is
    DEselected by clicking empty canvas. Previously selectNode/deselectNode never told the
    outline (they are view-only, not saveState), so the last-highlighted row stayed lit after
@@ -1288,6 +1294,51 @@ function newfileScenario() {
         emptyShown: !!doc.getElementById('outline-list').querySelector('.outline-empty'),
     };
 }
+
+/* ── outline filter + Ctrl/Cmd+F finder (self-contained; last, before the chain) ── */
+/* It runs its own freshWorld + canvas.init because resetWorld clears the document
+   handlers; giving it its own three nodes keeps it from leaking selection/collapse state
+   into the deselect/reselect scenario that follows the shared outline block above. */
+freshWorld();
+canvas.init();
+Outline.init(); /* wires the filter box's own 'input' listener that the keystroke drives */
+const fName = addNode('name', 100, 100);
+const fSrc = addNode('source', 300, 200);
+const fVis = addNode('visualize', 500, 400);
+/* setFilter narrows by label/type/tag; '' restores the whole map. */
+Outline.setFilter('viz');
+const fFiltered = doc.getElementById('outline-list').querySelectorAll('.outline-row').map((el) => el.dataset.node);
+Outline.setFilter('');
+const fAll = doc.getElementById('outline-list').querySelectorAll('.outline-row').length;
+/* An impossible query says NO-MATCH, not the empty-canvas NO-NODES wording. */
+Outline.setFilter('zzz-no-such');
+const fNoMatch = (doc.getElementById('outline-list').querySelector('.outline-empty') || {}).textContent;
+/* The 'input' listener Outline.init() wires is what a real keystroke reaches. */
+const fBox = doc.getElementById('outline-filter');
+fBox.value = 'source';
+dispatchOn(fBox, 'input', { target: fBox });
+flushFrames(sandbox);
+const fInputDriven = doc.getElementById('outline-list').querySelectorAll('.outline-row').length;
+fBox.value = '';
+dispatchOn(fBox, 'input', { target: fBox });
+flushFrames(sandbox);
+const fInputCleared = doc.getElementById('outline-list').querySelectorAll('.outline-row').length;
+/* Ctrl/Cmd+F expands a collapsed sidebar and leaves the selection untouched (the finder,
+   not the fold). */
+canvas.selectNode(fSrc);
+const fPanel = doc.getElementById('outline-panel');
+fPanel.classList.add('collapsed');
+dispatchDocument(sandbox.__handlers, 'keydown', { key: 'f', ctrlKey: true, target: doc.body });
+out.outline_filter = {
+    filtered: fFiltered,
+    disabledId: fVis,
+    unfiltered: fAll,
+    noMatchText: fNoMatch,
+    inputDriven: fInputDriven,
+    inputCleared: fInputCleared,
+    panelExpanded: !fPanel.classList.contains('collapsed'),
+    ctrlLeftSelected: canvas.selectedNode === fSrc,
+};
 
 resizeRepaintScenario();
 connectWarningsScenarios()
