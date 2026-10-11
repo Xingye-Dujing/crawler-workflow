@@ -2855,6 +2855,9 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTopn', 'number', 10);
         html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
         html += renderParamInput(nodeId, p, 'topic_sample_n', 'settings.topicSampleN', 'number', 5);
+        html += renderParamSelect(nodeId, p, 'topic_method', 'settings.topicMethod', 'lda',
+            [{ v: 'lda', l: I18n.t('settings.topicMethodLda') }, { v: 'embedding', l: I18n.t('settings.topicMethodEmbed') }]);
+        html += renderParamInput(nodeId, p, 'embedding_model', 'settings.embeddingModel', 'text', 'BAAI/bge-small-zh-v1.5');
         html += renderParamSelect(nodeId, p, 'word_source', 'settings.topicWordSource', 'tfidf',
             [{ v: 'tfidf', l: I18n.t('settings.topicWordSourceTfidf') },
              { v: 'lda', l: I18n.t('settings.topicWordSourceLda') }]);
@@ -2878,6 +2881,9 @@ function renderAnalysisSettings(nodeId, p) {
             '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
         html += renderParamInput(nodeId, p, 'n_topics', 'settings.nTopics', 'number', 5);
+        html += renderParamSelect(nodeId, p, 'topic_method', 'settings.topicMethod', 'lda',
+            [{ v: 'lda', l: I18n.t('settings.topicMethodLda') }, { v: 'embedding', l: I18n.t('settings.topicMethodEmbed') }]);
+        html += renderParamInput(nodeId, p, 'embedding_model', 'settings.embeddingModel', 'text', 'BAAI/bge-small-zh-v1.5');
         html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicMapTopn', 'number', 6);
         html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
@@ -2888,6 +2894,9 @@ function renderAnalysisSettings(nodeId, p) {
             '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
         html += renderParamInput(nodeId, p, 'n_topics', 'settings.nTopics', 'number', 5);
+        html += renderParamSelect(nodeId, p, 'topic_method', 'settings.topicMethod', 'lda',
+            [{ v: 'lda', l: I18n.t('settings.topicMethodLda') }, { v: 'embedding', l: I18n.t('settings.topicMethodEmbed') }]);
+        html += renderParamInput(nodeId, p, 'embedding_model', 'settings.embeddingModel', 'text', 'BAAI/bge-small-zh-v1.5');
         html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTermsTopn', 'number', 30);
         html += renderParamInput(nodeId, p, 'topic_lambda', 'settings.topicLambda', 'number', 1);
         html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);

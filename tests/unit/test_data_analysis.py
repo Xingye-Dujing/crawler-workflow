@@ -1973,6 +1973,112 @@ class TestTopicModelEmbedding:
             validate_step(self._frame(), 'topic_model', {'column': '正文', 'method': 'bogus'})
 
 
+class TestTopicViewsEmbedding:
+    """The three figure/stage steps accept ``method='embedding'`` exactly as ``topic_model`` does:
+    the SAME output columns as their LDA default (the charts read those names), a named refusal when
+    the optional encoder is absent, and never a silent fallback to LDA. The chart input contract is
+    the whole point — 主题距离图 reads pc1/pc2/prevalence_pct and 显著词图 reads
+    term/overall_freq/within_freq — so the embedding variant must reproduce them unchanged.
+    """
+
+    @staticmethod
+    def _frame():
+        return pd.DataFrame(
+            {
+                '正文': [
+                    '猫 狗 宠物 可爱',
+                    '股票 基金 涨跌 市场',
+                    '猫 狗 宠物 亲近',
+                    '股票 基金 大盘 走势',
+                ],
+                '阶段': pd.Categorical(
+                    ['发酵期', '发酵期', '波动期', '波动期'],
+                    categories=['发酵期', '波动期'],
+                    ordered=True,
+                ),
+            }
+        )
+
+    def _install_encoder(self, monkeypatch):
+        # The encoder is keyed on text CONTENT (猫 vs 股票), so any subset length — a whole frame or
+        # one stage inside topic_by_stage — gets one vector per text and KMeans separates the two kinds.
+        import sys
+        import types
+
+        import numpy as np
+
+        import services.data_analysis as m
+
+        class _FakeST:
+            def __init__(self, name):
+                self.name = name
+
+            def encode(self, texts, **kw):
+                return np.array([[1.0, 0.0] if '猫' in str(t) else [0.0, 1.0] for t in texts])
+
+        fake = types.ModuleType('sentence_transformers')
+        fake.SentenceTransformer = _FakeST
+        monkeypatch.setitem(sys.modules, 'sentence_transformers', fake)
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: '')
+
+    def test_a_missing_encoder_is_refused_by_name_for_all_three_views(self, monkeypatch):
+        import services.data_analysis as m
+
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers')
+        with pytest.raises(UnknownOperationError, match='sentence-transformers'):
+            m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='embedding')
+        with pytest.raises(UnknownOperationError, match='sentence-transformers'):
+            m.DataAnalysisService.topic_salience(self._frame(), '正文', n_topics=2, method='embedding')
+        with pytest.raises(UnknownOperationError, match='sentence-transformers'):
+            m.DataAnalysisService.topic_by_stage(
+                self._frame(), '正文', stage_col='阶段', topics=[2, 2], method='embedding'
+            )
+
+    def test_embedding_topic_map_reproduces_the_lda_columns(self, monkeypatch):
+        import services.data_analysis as m
+
+        lda = m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2)
+        self._install_encoder(monkeypatch)
+        emb = m.DataAnalysisService.topic_map(self._frame(), '正文', n_topics=2, method='embedding')
+        assert list(emb.columns) == list(lda.columns)
+        assert set(emb['topic']) == {'Topic-1', 'Topic-2'}
+        assert round(float(sum(emb['prevalence_pct'])), 2) == 100.0
+        assert all(str(words) for words in emb['feature_words'])
+
+    def test_embedding_topic_salience_reproduces_the_lda_columns(self, monkeypatch):
+        import services.data_analysis as m
+
+        lda = m.DataAnalysisService.topic_salience(self._frame(), '正文', n_topics=2)
+        self._install_encoder(monkeypatch)
+        emb = m.DataAnalysisService.topic_salience(self._frame(), '正文', n_topics=2, method='embedding')
+        assert list(emb.columns) == list(lda.columns)
+        assert {'term', 'overall_freq', 'within_freq'} <= set(emb.columns)
+        assert len(emb) > 0 and all(str(t) for t in emb['term'])
+
+    def test_embedding_topic_by_stage_reproduces_the_lda_columns(self, monkeypatch):
+        import services.data_analysis as m
+
+        lda = m.DataAnalysisService.topic_by_stage(self._frame(), '正文', stage_col='阶段', topics=[2, 2])
+        self._install_encoder(monkeypatch)
+        emb = m.DataAnalysisService.topic_by_stage(
+            self._frame(), '正文', stage_col='阶段', topics=[2, 2], method='embedding'
+        )
+        assert list(emb.columns) == list(lda.columns)
+        assert len(emb) == len(lda), 'two stages x two topics each, for either method'
+
+    def test_the_method_enum_defaults_to_lda_and_refuses_a_bogus_one(self):
+        from services.data_analysis import normalize_step_params, validate_step
+
+        for op in ('topic_map', 'topic_salience', 'topic_by_stage'):
+            assert normalize_step_params(op, {'column': '正文', 'method': ''})['method'] == 'lda'
+        for op in ('topic_map', 'topic_salience', 'topic_by_stage'):
+            params = {'column': '正文', 'method': 'bogus'}
+            if op == 'topic_by_stage':
+                params.update(stage_col='阶段', topics='2,2')
+            with pytest.raises(UnknownOperationError, match='method'):
+                validate_step(self._frame(), op, params)
+
+
 class TestTopicViews:
     """The two data steps behind the pyLDAvis figure, and the λ that decides its word list.
 

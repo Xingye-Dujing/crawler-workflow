@@ -233,13 +233,13 @@ STEP_PARAMS: dict = {
     'topic_by_stage': {
         'one': ('column', 'stage_col'),
         'nonblank': ('topics',),
-        'enums': {'word_source': ('tfidf', WORD_SOURCES)},
+        'enums': {'word_source': ('tfidf', WORD_SOURCES), 'method': ('lda', ('lda', 'embedding'))},
     },
     # The two figure steps read a text column and fit their own model, so the column is the one
     # thing they cannot do without. Their topic count keeps the declared default the panel
     # shows, exactly as ``topic_model`` does.
-    'topic_map': {'one': ('column',)},
-    'topic_salience': {'one': ('column',)},
+    'topic_map': {'one': ('column',), 'enums': {'method': ('lda', ('lda', 'embedding'))}},
+    'topic_salience': {'one': ('column',), 'enums': {'method': ('lda', ('lda', 'embedding'))}},
     # The labelling step reads the word cell and writes the summary cell; both are named, and
     # an unnamed 概括 column would "succeed" by adding a header the export shows as empty.
     'topic_label': {
@@ -506,7 +506,7 @@ def _forecast_row(stamp, actual, centre, band, horizon: int) -> dict:
     }
 
 
-def _prepare_topic_model(df, column, n_topics, max_features):
+def _prepare_topic_model(df, column, n_topics, max_features, method='lda', embedding_model=''):
     """The guards and the fit that every topic-VISUALISATION step shares.
 
     Refusals live here rather than in each step because the two views ask the same question of
@@ -521,7 +521,7 @@ def _prepare_topic_model(df, column, n_topics, max_features):
     if len(texts) < topics:
         raise UnknownOperationError(t('analysis.topic_rows', rows=len(texts), topics=topics))
     try:
-        model, matrix, doc_topic, vocabulary = _fit_topic_model(texts, topics, max_features)
+        model, matrix, doc_topic, vocabulary = _fit_topic_model(texts, topics, max_features, method, embedding_model)
     except ValueError as e:
         raise UnknownOperationError(t('analysis.topic_features', err=e)) from e
     return texts, model, matrix, doc_topic, vocabulary
@@ -540,6 +540,37 @@ def _embed_missing_packages() -> str:
     return ', '.join(pip for mod, pip in need.items() if find_spec(mod) is None)
 
 
+#: The encoder every embedding topic step defaults to — chosen by the bake-off
+#: (``ml_train/scripts/topic_bakeoff.py``) as the fast, coherence-beating small Chinese model.
+DEFAULT_EMBED_MODEL = 'BAAI/bge-small-zh-v1.5'
+
+
+def _embed_vectors(texts, embedding_model: str) -> tuple:
+    """``(vectors, model_name)`` for the embedding topic path, or a named refusal.
+
+    Refuses BY NAME when the optional encoder stack is absent (see :func:`_embed_missing_packages`)
+    and never falls back to LDA — a topic claimed from one model must not be answered by another.
+    ``normalize_embeddings=True`` so KMeans' Euclidean split tracks the cosine similarity the bake-off
+    scored on. Shared by EVERY embedding-capable topic step (``topic_model``'s table and the three view
+    steps) so the refusal, the default model name and the encode call are defined once, not copied per op.
+    """
+    import numpy as np
+
+    missing = _embed_missing_packages()
+    if missing:
+        raise UnknownOperationError(t('analysis.topic_embed_unavailable', packages=missing))
+    from sentence_transformers import SentenceTransformer
+
+    model_name = (embedding_model or DEFAULT_EMBED_MODEL).strip()
+    try:
+        vectors = SentenceTransformer(model_name).encode(
+            texts, batch_size=64, show_progress_bar=False, normalize_embeddings=True
+        )
+    except Exception as e:  # a model that will not load or run is a named failure, not an empty table
+        raise UnknownOperationError(t('analysis.topic_embed_failed', model=model_name, err=e)) from e
+    return np.asarray(vectors), model_name
+
+
 def _embedding_topic_rows(texts, tokenized, topics, topn, embedding_model) -> pd.DataFrame:
     """Embed each text with a sentence model, KMeans into ``topics`` clusters, and report each
     cluster's top TF-IDF terms as ``{topic, rank, keyword, weight}`` — the SAME contract as the
@@ -552,19 +583,12 @@ def _embedding_topic_rows(texts, tokenized, topics, topn, embedding_model) -> pd
         raise UnknownOperationError(t('analysis.topic_embed_unavailable', packages=missing))
 
     import numpy as np
-    from sentence_transformers import SentenceTransformer
     from sklearn.cluster import KMeans
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    model_name = (embedding_model or 'BAAI/bge-small-zh-v1.5').strip()
-    try:
-        vectors = SentenceTransformer(model_name).encode(
-            texts, batch_size=64, show_progress_bar=False, normalize_embeddings=True
-        )
-    except Exception as e:  # a model that will not load or run is a named failure, not an empty table
-        raise UnknownOperationError(t('analysis.topic_embed_failed', model=model_name, err=e)) from e
+    vectors, model_name = _embed_vectors(texts, embedding_model)
 
-    labels = KMeans(n_clusters=topics, random_state=42, n_init=10).fit_predict(np.asarray(vectors))
+    labels = KMeans(n_clusters=topics, random_state=42, n_init=10).fit_predict(vectors)
     tfidf = TfidfVectorizer(tokenizer=_split_tokens, preprocessor=_keep_text, token_pattern=None, max_features=4000)
     tf = tfidf.fit_transform(tokenized)
     names = tfidf.get_feature_names_out()
@@ -597,13 +621,62 @@ def _embedding_topic_rows(texts, tokenized, topics, topn, embedding_model) -> pd
     return pd.DataFrame(rows, columns=['topic', 'rank', 'keyword', 'weight'])
 
 
-def _fit_topic_model(texts, n_topics, max_features):
-    """Fit the LDA that both topic-view steps read, with the same conventions as the table.
+class _EmbeddingTopicModel:
+    """The small slice of an LDA model's surface the topic-VIEW steps actually read.
+
+    ``topic_map``/``topic_salience``/``topic_by_stage`` use only ``.components_`` (the topic-word
+    distribution) and ``.perplexity``. The first is answered from the embedding clustering; the second
+    is an LDA quantity with no meaning here, so it reports ``nan`` rather than inventing a number the
+    log line would present as comparable to LDA's. Keeping the same attribute names is what lets those
+    three steps fit either method without branching any of their downstream math.
+    """
+
+    def __init__(self, components):
+        self.components_ = components
+
+    def perplexity(self, _matrix):
+        return float('nan')
+
+
+def _embedding_assignment(vectors, matrix, n_topics):
+    """KMeans the embeddings into ``n_topics`` clusters, returned in LDA's shape.
+
+    ``doc_topic`` is the one-hot assignment (``argmax`` gives each document's cluster, ``sum(axis=0)``
+    is that cluster's document count — the map's prevalence), and ``components_`` is each cluster's
+    row-summed term counts normalised to a distribution over the SAME vocabulary the LDA path vectorises
+    with, so a term's overall/within frequency stays comparable between methods. Deterministic
+    ``random_state``/``n_init``, matching :func:`_fit_topic_model`; an empty cluster keeps an all-zero
+    row, which the caller's "unused topic" path already handles.
+    """
+    import numpy as np
+    from sklearn.cluster import KMeans
+
+    wanted = int(n_topics)
+    labels = KMeans(n_clusters=wanted, random_state=42, n_init=10).fit_predict(vectors)
+    n_terms = matrix.shape[1]
+    doc_topic = np.zeros((len(labels), wanted), dtype=float)
+    doc_topic[np.arange(len(labels)), labels] = 1.0
+    components = np.zeros((wanted, n_terms), dtype=float)
+    for cluster in range(wanted):
+        members = np.where(labels == cluster)[0]
+        if len(members):
+            components[cluster] = np.asarray(matrix[members].sum(axis=0)).ravel()
+        total = float(components[cluster].sum())
+        if total > 0:
+            components[cluster] /= total
+    return doc_topic, components
+
+
+def _fit_topic_model(texts, n_topics, max_features, method='lda', embedding_model=''):
+    """Fit the topic model both topic-view steps read, with the same conventions as the table.
 
     Same tokenizer, same ``random_state`` and the same vectoriser as
     :meth:`DataAnalysisService.topic_model`: a term's frequency in the map, in the salience
     table and in the exported topic list has to be the same number, or the three artifacts
-    describe three different models while reading like one analysis.
+    describe three different models while reading like one analysis. ``method='embedding'`` swaps only
+    the document→topic assignment and the topic-word distribution (KMeans on sentence vectors over the
+    SAME CountVectorizer matrix) for the LDA fit; the returned bundle keeps ``(model, matrix, doc_topic,
+    vocabulary)``, so ``topic_map``/``topic_salience`` fit either method unchanged.
     """
     from sklearn.decomposition import LatentDirichletAllocation
     from sklearn.feature_extraction.text import CountVectorizer
@@ -616,9 +689,14 @@ def _fit_topic_model(texts, n_topics, max_features):
         max_features=max(10, int(max_features)),
     )
     matrix = vectorizer.fit_transform(tokenized)
+    vocabulary = vectorizer.get_feature_names_out()
+    if str(method) == 'embedding':
+        vectors, _name = _embed_vectors(texts, embedding_model)
+        doc_topic, components = _embedding_assignment(vectors, matrix, int(n_topics))
+        return _EmbeddingTopicModel(components), matrix, doc_topic, vocabulary
     model = LatentDirichletAllocation(n_components=int(n_topics), random_state=42, learning_method='batch')
     doc_topic = model.fit_transform(matrix)
-    return model, matrix, doc_topic, vectorizer.get_feature_names_out()
+    return model, matrix, doc_topic, vocabulary
 
 
 def _kl2(p, q):
@@ -1639,6 +1717,8 @@ class DataAnalysisService:
         max_features: int = 2000,
         word_source: str = 'tfidf',
         sample_n: int = 5,
+        method: str = 'lda',
+        embedding_model: str = '',
     ) -> pd.DataFrame:
         """LDA fitted **inside each 舆情阶段** — the table the study publishes.
 
@@ -1716,10 +1796,19 @@ class DataAnalysisService:
                 matrix = vectorizer.fit_transform(tokenized)
             except ValueError as e:
                 raise UnknownOperationError(t('analysis.topic_stage_features', stage=stage, err=e)) from e
-            model = LatentDirichletAllocation(n_components=wanted, random_state=42, learning_method='batch')
-            doc_topic = model.fit_transform(matrix)
-            perplexity = round(float(model.perplexity(matrix)), 2)
             vocabulary = vectorizer.get_feature_names_out()
+            if str(method) == 'embedding':
+                # Embed this stage's texts and KMeans them, returning the same ``(doc_topic,
+                # components_)`` shape the LDA branch yields so the bucketing, the numbering and the
+                # empty-topic fallback below run unchanged for either method.
+                vectors, _name = _embed_vectors(texts, embedding_model)
+                doc_topic, components = _embedding_assignment(vectors, matrix, wanted)
+                model = _EmbeddingTopicModel(components)
+                perplexity = float('nan')
+            else:
+                model = LatentDirichletAllocation(n_components=wanted, random_state=42, learning_method='batch')
+                doc_topic = model.fit_transform(matrix)
+                perplexity = round(float(model.perplexity(matrix)), 2)
             # One pass assigns every document to its strongest topic. Doing the argmax inside the
             # topic loop would walk the whole stage again per topic, which on a 19,326-post
             # corpus is the difference between seconds and minutes for no extra information.
@@ -1914,7 +2003,13 @@ class DataAnalysisService:
 
     @staticmethod
     def topic_map(
-        df: pd.DataFrame, column: str, n_topics: int = 5, max_features: int = 2000, topn: int = 6
+        df: pd.DataFrame,
+        column: str,
+        n_topics: int = 5,
+        max_features: int = 2000,
+        topn: int = 6,
+        method: str = 'lda',
+        embedding_model: str = '',
     ) -> pd.DataFrame:
         """The intertopic distance map's DATA: where each topic sits, and how big it is.
 
@@ -1934,7 +2029,9 @@ class DataAnalysisService:
         if column not in df.columns:
             return df
         topics = int(n_topics)
-        texts, model, matrix, doc_topic, vocabulary = _prepare_topic_model(df, column, topics, max_features)
+        texts, model, matrix, doc_topic, vocabulary = _prepare_topic_model(
+            df, column, topics, max_features, method, embedding_model
+        )
         mass = doc_topic.sum(axis=0)
         total = float(mass.sum())
         claimed = [int(owner) for owner in doc_topic.argmax(axis=1)]
@@ -1971,6 +2068,8 @@ class DataAnalysisService:
         max_features: int = 2000,
         topn: int = 30,
         relevance: float = 1.0,
+        method: str = 'lda',
+        embedding_model: str = '',
     ) -> pd.DataFrame:
         """The figure's right-hand panel: the terms a topic is ABOUT, with both counts.
 
@@ -1991,7 +2090,9 @@ class DataAnalysisService:
         lam = float(relevance)
         if not 0.0 <= lam <= 1.0:
             raise UnknownOperationError(t('analysis.topic_lambda', value=relevance))
-        texts, model, matrix, _doc_topic, vocabulary = _prepare_topic_model(df, column, topics, max_features)
+        texts, model, matrix, _doc_topic, vocabulary = _prepare_topic_model(
+            df, column, topics, max_features, method, embedding_model
+        )
         counts = np.asarray(matrix.sum(axis=0), dtype=float).ravel()
         total_tokens = float(counts.sum())
         if not total_tokens:

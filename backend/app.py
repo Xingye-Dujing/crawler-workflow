@@ -3063,6 +3063,23 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None,
 # `_split_columns` now lives in utils/helpers.py (split_columns, imported back under this name).
 
 
+def _apply_topic_method(result: dict, params: dict) -> dict:
+    """Forward the opt-in topic ``method`` (and its encoder) the ONE way every embedding-capable
+    topic step reads it — ``topic_model`` and the three view steps (``topic_map``/``topic_salience``/
+    ``topic_by_stage``) share this so the default and the refuse-by-name contract cannot drift apart.
+
+    LDA is the implicit default, so ``method`` is only written when the user left it — keeping existing
+    pipelines' kwargs byte-identical — and the embedding path carries its model name only when one was
+    typed (the step's own ``DEFAULT_EMBED_MODEL`` answers otherwise)."""
+    method = str(params.get('topic_method') or 'lda').strip()
+    if method != 'lda':
+        result['method'] = method
+        embedding_model = str(params.get('embedding_model') or '').strip()
+        if embedding_model:
+            result['embedding_model'] = embedding_model
+    return result
+
+
 def _normalize_analysis_params(op: str, params: dict) -> dict:
     """The Settings panel stores everything as flat strings (e.g. a
     comma-separated 'columns' field). Translate that into the exact kwargs
@@ -3231,7 +3248,7 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         features = _optional_int(params.get('topic_max_features'))
         if features:
             result['max_features'] = features
-        return result
+        return _apply_topic_method(result, params)
     if op == 'topic_map':
         result = {
             'column': params.get('column', ''),
@@ -3241,7 +3258,7 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         features = _optional_int(params.get('topic_max_features'))
         if features:
             result['max_features'] = features
-        return result
+        return _apply_topic_method(result, params)
     if op == 'topic_salience':
         result = {
             'column': params.get('column', ''),
@@ -3257,7 +3274,7 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         features = _optional_int(params.get('topic_max_features'))
         if features:
             result['max_features'] = features
-        return result
+        return _apply_topic_method(result, params)
     if op == 'topic_model':
         result = {
             'column': params.get('column', ''),
@@ -3267,15 +3284,7 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
         features = _optional_int(params.get('topic_max_features'))
         if features:
             result['max_features'] = features
-        # LDA is the implicit default, so ``method`` is only forwarded when the user left it
-        # (keeps existing pipelines' kwargs identical); the embedding path also carries its model.
-        method = str(params.get('topic_method') or 'lda').strip()
-        if method != 'lda':
-            result['method'] = method
-            embedding_model = str(params.get('embedding_model') or '').strip()
-            if embedding_model:
-                result['embedding_model'] = embedding_model
-        return result
+        return _apply_topic_method(result, params)
     if op == 'topic_timeline':
         # The four column names default to what 分阶段 LDA writes, so an untouched form is the
         # pipeline's own hand-off. The step still refuses when this table does not hold them.
