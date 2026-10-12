@@ -138,6 +138,14 @@
         >
           Clipboard
         </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="toggleShortcutsHelp()"
+          data-i18n="help.title"
+        >
+          Shortcuts
+        </button>
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.style">Style</span>
@@ -1008,7 +1016,11 @@
       >
         Workflows
       </button>
-      <span id="status-zoom">100%</span>
+      <span id="status-zoom" class="zoom-readout" data-i18n-title="zoom.fit" title="Fit">100%</span>
+      <span class="zoom-controls">
+        <button class="status-btn zoom-btn" type="button" id="btn-zoom-out" onclick="canvas.zoomOut()" data-i18n-title="zoom.out">−</button>
+        <button class="status-btn zoom-btn" type="button" id="btn-zoom-in" onclick="canvas.zoomIn()" data-i18n-title="zoom.in">+</button>
+      </span>
     </div>
 
     <!-- Context Menu -->
@@ -1161,10 +1173,58 @@
       >
         Auto Layout
       </div>
+      <div class="ctx-divider" id="ctx-align-divider" style="display: none"></div>
+      <div class="ctx-item ctx-align" data-action="ctxAlign" data-mode="left" data-i18n="ctx.align.left" style="display: none">
+        Align Left
+      </div>
+      <div class="ctx-item ctx-align" data-action="ctxAlign" data-mode="right" data-i18n="ctx.align.right" style="display: none">
+        Align Right
+      </div>
+      <div class="ctx-item ctx-align" data-action="ctxAlign" data-mode="top" data-i18n="ctx.align.top" style="display: none">
+        Align Top
+      </div>
+      <div class="ctx-item ctx-align" data-action="ctxAlign" data-mode="bottom" data-i18n="ctx.align.bottom" style="display: none">
+        Align Bottom
+      </div>
+      <div class="ctx-item ctx-align" data-action="ctxAlign" data-mode="hcenter" data-i18n="ctx.align.hcenter" style="display: none">
+        Center Horizontally
+      </div>
+      <div class="ctx-item ctx-align" data-action="ctxAlign" data-mode="vcenter" data-i18n="ctx.align.vcenter" style="display: none">
+        Center Vertically
+      </div>
+      <div class="ctx-item ctx-align" data-action="ctxAlign" data-mode="distributeH" data-i18n="ctx.align.distributeH" style="display: none">
+        Distribute Horizontally
+      </div>
+      <div class="ctx-item ctx-align" data-action="ctxAlign" data-mode="distributeV" data-i18n="ctx.align.distributeV" style="display: none">
+        Distribute Vertically
+      </div>
     </div>
 
     <!-- Toast -->
     <div id="toast"></div>
+
+    <!-- Keyboard-shortcut help overlay (static cheat sheet, opened by the menu / ? / F1) -->
+    <div id="help-overlay">
+      <div id="help-box">
+        <div class="panel-header">
+          <span data-i18n="help.title">Shortcuts</span>
+          <button class="panel-close" type="button" onclick="closeShortcutsHelp()" data-i18n="help.close">Close</button>
+        </div>
+        <div class="help-body">
+          <div class="help-row"><span class="help-keys">Delete</span><span data-i18n="help.delete">Delete selection</span></div>
+          <div class="help-row"><span class="help-keys">Ctrl+C / Ctrl+V</span><span data-i18n="help.copyPaste">Copy / paste nodes</span></div>
+          <div class="help-row"><span class="help-keys">Ctrl+Z / Ctrl+Shift+Z</span><span data-i18n="help.undoRedo">Undo / redo</span></div>
+          <div class="help-row"><span class="help-keys">Arrows / Shift+Arrows</span><span data-i18n="help.nudge">Nudge node 10px / 1px</span></div>
+          <div class="help-row"><span class="help-keys">Ctrl+F</span><span data-i18n="help.find">Jump to outline finder</span></div>
+          <div class="help-row"><span class="help-keys">L</span><span data-i18n="help.link">Toggle link mode</span></div>
+          <div class="help-row"><span class="help-keys">F</span><span data-i18n="help.fold">Fold / unfold node</span></div>
+          <div class="help-row"><span class="help-keys">+ / −</span><span data-i18n="help.zoom">Zoom in / out</span></div>
+          <div class="help-row"><span class="help-keys">0</span><span data-i18n="help.fit">Fit view</span></div>
+          <div class="help-row"><span class="help-keys">? / F1</span><span data-i18n="help.open">Open this help</span></div>
+          <div class="help-row"><span class="help-keys">Esc</span><span data-i18n="help.escape">Cancel / close / deselect</span></div>
+        </div>
+      </div>
+    </div>
 
     <!-- Custom Dialog Overlay -->
     <div id="dialog-overlay">

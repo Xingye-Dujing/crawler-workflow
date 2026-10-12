@@ -153,7 +153,19 @@ const canvas = {
             if (clipSearch && clipSearch.addEventListener) {
                 clipSearch.addEventListener('input', (e) => Clipboard.setQuery(e.target.value));
             }
+            if (typeof window !== 'undefined' && window.addEventListener) {
+                window.addEventListener('storage', (e) => Clipboard.onStorageEvent(e));
+            }
         } catch (e) { /* a clipboard failure must never take down the canvas boot */ }
+        /* Help overlay: a click on the dimmed backdrop (not the sheet itself) closes it. */
+        try {
+            const helpOverlay = document.getElementById('help-overlay');
+            if (helpOverlay && helpOverlay.addEventListener) {
+                helpOverlay.addEventListener('click', (e) => {
+                    if (e.target === helpOverlay) closeShortcutsHelp();
+                });
+            }
+        } catch (e) { /* the cheat sheet is optional chrome, never a boot blocker */ }
         this.updateStatus();
         const saved = localStorage.getItem('crawler_canvas');
         if (saved) {
@@ -413,6 +425,14 @@ const canvas = {
                 const el = ctxMenu.querySelector('[data-action="' + action + '"]');
                 if (el) el.style.display = (this.disabledTypes || []).indexOf(newTypeByAction[action]) >= 0 ? 'none' : 'block';
             });
+            /* Align/distribute only makes sense with a group to align; the same >=2 rule the
+               copy-menu uses (464). Hidden otherwise so a single-node right-click stays clean. */
+            const multi = this.selectedNodes.length > 1;
+            const alignDivider = document.getElementById('ctx-align-divider');
+            if (alignDivider) alignDivider.style.display = multi ? 'block' : 'none';
+            ctxMenu.querySelectorAll('.ctx-align').forEach((el) => {
+                el.style.display = multi ? 'block' : 'none';
+            });
         });
         document.addEventListener('click', (e) => {
             const ctxMenu = document.getElementById('context-menu');
@@ -514,6 +534,9 @@ const canvas = {
                     break;
                 case 'autoLayout':
                     this.autoLayout();
+                    break;
+                case 'ctxAlign':
+                    this.alignSelected(item.dataset.mode);
                     break;
             }
         });
@@ -623,6 +646,7 @@ const canvas = {
                 this._linkFromId = null;
                 this.deselectNode();
                 closeSettings();
+                if (typeof closeShortcutsHelp === 'function') closeShortcutsHelp();
                 return;
             }
             /* Undo / Redo */
@@ -693,6 +717,29 @@ const canvas = {
             if (e.key === 'f' && this.selectedNode) {
                 e.preventDefault();
                 this.toggleFold(this.selectedNode);
+                return;
+            }
+            /* Zoom: +/= in, -/_ out, 0 fit. The view only — never an undo step (the camera
+               is excluded from history by design, same as pan/scroll). */
+            if (e.key === '+' || e.key === '=') {
+                e.preventDefault();
+                this.zoomIn();
+                return;
+            }
+            if (e.key === '-' || e.key === '_') {
+                e.preventDefault();
+                this.zoomOut();
+                return;
+            }
+            if (e.key === '0') {
+                e.preventDefault();
+                this.resetView();
+                return;
+            }
+            /* ? / F1: the keyboard-shortcut cheat sheet (a global overlay from app.js). */
+            if (e.key === '?' || e.key === 'F1') {
+                e.preventDefault();
+                if (typeof toggleShortcutsHelp === 'function') toggleShortcutsHelp();
             }
         });
     },
@@ -903,7 +950,65 @@ const canvas = {
         this.saveState();
     },
 
-    /* ── Cross-canvas share: one node to/from a JSON snippet ── */
+    /* Align / distribute the multi-selection as ONE undo step — the same batch-then-saveState
+       pattern autoLayout and _nudgeSelected use, so one click is one Ctrl+Z. Position lives in
+       el.style.left/top (mirrored onto node.x/y); size is the rendered box, exactly what
+       autoLayout advances by. Fewer than two selected nodes is a no-op (nothing to align to). */
+    alignSelected(mode) {
+        const ids = this.selectedNodes.length ? this.selectedNodes.slice() : (this.selectedNode ? [this.selectedNode] : []);
+        if (ids.length < 2) return false;
+        const boxes = ids.map((id) => {
+            const el = this._nodeEl(id);
+            return {
+                id,
+                el,
+                x: parseInt(el.style.left, 10) || 0,
+                y: parseInt(el.style.top, 10) || 0,
+                w: el.offsetWidth || 120,
+                h: el.offsetHeight || 60,
+            };
+        });
+        const minX = Math.min(...boxes.map((b) => b.x));
+        const maxX = Math.max(...boxes.map((b) => b.x + b.w));
+        const minY = Math.min(...boxes.map((b) => b.y));
+        const maxY = Math.max(...boxes.map((b) => b.y + b.h));
+        let apply = null;
+        if (mode === 'left') apply = (b) => ({ x: minX, y: b.y });
+        else if (mode === 'right') apply = (b) => ({ x: maxX - b.w, y: b.y });
+        else if (mode === 'top') apply = (b) => ({ x: b.x, y: minY });
+        else if (mode === 'bottom') apply = (b) => ({ x: b.x, y: maxY - b.h });
+        else if (mode === 'hcenter') apply = (b) => ({ x: (minX + maxX) / 2 - b.w / 2, y: b.y });
+        else if (mode === 'vcenter') apply = (b) => ({ x: b.x, y: (minY + maxY) / 2 - b.h / 2 });
+        else if (mode === 'distributeH' || mode === 'distributeV') {
+            const horizontal = mode === 'distributeH';
+            boxes.sort((a, b) => (horizontal ? a.x - b.x : a.y - b.y));
+            const first = boxes[0];
+            const last = boxes[boxes.length - 1];
+            const firstCenter = horizontal ? first.x + first.w / 2 : first.y + first.h / 2;
+            const lastCenter = horizontal ? last.x + last.w / 2 : last.y + last.h / 2;
+            const step = (lastCenter - firstCenter) / (boxes.length - 1);
+            apply = horizontal
+                ? (b, i) => ({ x: firstCenter + i * step - b.w / 2, y: b.y })
+                : (b, i) => ({ x: b.x, y: firstCenter + i * step - b.h / 2 });
+        }
+        if (!apply) return false;
+        boxes.forEach((b, i) => {
+            const t = apply(b, i);
+            const nx = Math.round(t.x === undefined ? b.x : t.x);
+            const ny = Math.round(t.y === undefined ? b.y : t.y);
+            if (!b.el) return;
+            b.el.style.left = nx + 'px';
+            b.el.style.top = ny + 'px';
+            if (this.nodes[b.id]) {
+                this.nodes[b.id].x = nx;
+                this.nodes[b.id].y = ny;
+            }
+        });
+        this.scheduleRender();
+        this.saveState();
+        if (typeof showToast === 'function') showToast(I18n.t('toast.alignApplied'));
+        return true;
+    },
     /* Ctrl+C/V is same-page. These put a single node on the OS clipboard as text and read one
        back, so a node config travels between canvases, machines or a chat message. The snippet
        is exactly the in-canvas clipboard shape ({type,title,params}), so import reuses
@@ -1512,14 +1617,44 @@ const canvas = {
         ].join(' '));
     },
 
+    /* Is `target` reachable from `start` by following existing directed wires? Iterative DFS
+       (no recursion) over the {from,to} connection list. Used to refuse a wire that would close
+       a loop before it is ever committed to the model. */
+    _reaches(start, target) {
+        if (start === target) return true;
+        const adj = {};
+        this.connections.forEach((c) => {
+            (adj[c.from] || (adj[c.from] = [])).push(c.to);
+        });
+        const seen = new Set([start]);
+        const stack = [start];
+        while (stack.length) {
+            const cur = stack.pop();
+            const nexts = adj[cur] || [];
+            for (let i = 0; i < nexts.length; i++) {
+                const nb = nexts[i];
+                if (nb === target) return true;
+                if (!seen.has(nb)) { seen.add(nb); stack.push(nb); }
+            }
+        }
+        return false;
+    },
+
     /* The one place a wire is committed: pure model mutation (edge + its side effects), no
        pointer event and no dialog. finishConnection and the keyboard link mode both call it,
-       so both share identical semantics. Returns {ok, warn} — ok is false for a self-edge or
-       a duplicate, in which case nothing was written. */
+       so both share identical semantics. Returns {ok, warn} — ok is false for a self-edge, a
+       duplicate, or a wire that would form a cycle, in which case nothing was written. */
     connectNodes(fromId, toId) {
         if (!fromId || !toId || fromId === toId) return { ok: false, warn: null };
         const exists = this.connections.some(c => c.from === fromId && c.to === toId);
         if (exists) return { ok: false, warn: null };
+        /* A cycle would make the graph unrunnable (the engine walks wires top-down). Refuse it
+           at the single commit point so BOTH the pointer drag and keyboard link mode are held
+           to the same rule: adding from→to loops iff `to` already reaches `from`. */
+        if (this._reaches(toId, fromId)) {
+            if (typeof showToast === 'function') showToast(I18n.t('toast.connCycle'));
+            return { ok: false, warn: null };
+        }
         this.connections.push({ from: fromId, to: toId });
         this.scheduleRender();
         this.saveState();
@@ -2749,6 +2884,15 @@ const Clipboard = {
         this._query = '';
     },
 
+    /* Another tab wrote the same key; this tab's in-memory items are now stale. A storage
+       event fires only in the OTHER tabs (never the one that called setItem), so reloading
+       from localStorage here is exactly the cross-tab pull — no echo, no loop. */
+    onStorageEvent(e) {
+        if (!e || e.key !== 'crawler_clipboard') return;
+        this.load();
+        this.render();
+    },
+
     /* A copy is a silent add: the node/nodes path already fires its own toast, so a
        second one would overwrite the copy toast every existing test asserts. */
     add(entry) {
@@ -3024,4 +3168,24 @@ function toggleClipboardDrawer() {
         drawer.classList.add('open');
         Clipboard.render();
     }
+}
+
+/* The keyboard-shortcut cheat sheet: an overlay opened from the View menu, `?` or F1 and
+   closed by its button, Escape, or a click on the backdrop. It paints a static list of the
+   shortcuts the canvas ACTUALLY binds (see the keydown handler) — never a guessed table. */
+function openShortcutsHelp() {
+    const box = document.getElementById('help-overlay');
+    if (box) box.classList.add('open');
+}
+
+function closeShortcutsHelp() {
+    const box = document.getElementById('help-overlay');
+    if (box) box.classList.remove('open');
+}
+
+function toggleShortcutsHelp() {
+    const box = document.getElementById('help-overlay');
+    if (!box) return;
+    if (box.classList.contains('open')) closeShortcutsHelp();
+    else openShortcutsHelp();
 }

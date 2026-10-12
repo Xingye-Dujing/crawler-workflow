@@ -259,6 +259,7 @@ PANELS = [
     'status-bar',
     'context-menu',
     'dialog-overlay',
+    'help-overlay',
     'cookie-dialog',
     'style-menu',
     'ai-menu',
@@ -314,6 +315,10 @@ MIN_MEASURED = {
     'status-bar': 7,
     'context-menu': 13,
     'dialog-overlay': 2,
+    # The cheat sheet paints a header (title + close) over one row per shortcut, each row
+    # a key span + a label span — 11 rows. 20 is a floor well under the ~39 real elements,
+    # so it only fails if the overlay lost its content, never if it grows.
+    'help-overlay': 20,
     'cookie-dialog': 20,
     'style-menu': 10,
     'ai-menu': 32,
@@ -601,6 +606,84 @@ def test_a_record_that_skipped_workflows_names_them_on_screen(app_url, driver, l
     assert not any('凌晨' in c for c in facts['cleanChips']), f'the clean row grew a skip chip: {facts["cleanChips"]}'
     assert facts['clipped'] == 0, f'a chip is silently cut off in {lang}: {facts["chips"]}'
     assert facts['pageBar'][0] <= facts['pageBar'][1] + 1, f'the page grew a horizontal bar: {facts["pageBar"]}'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_the_help_overlay_opens_over_the_page_without_breaking_layout(driver, app_url, lang):
+    """The cheat sheet is a fixed full-viewport backdrop; if its sheet or a row overflowed
+    (long English labels) it would grow a horizontal bar over the whole page. Opened in a
+    real engine, in both languages, it must stay inside its own box."""
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    opened = driver.execute_script(
+        f"""
+        document.body.dataset.lang = {lang!r};
+        I18n.apply();
+        toggleShortcutsHelp();
+        const el = document.getElementById('help-overlay');
+        return el.classList.contains('open');
+        """
+    )
+    assert opened, 'toggleShortcutsHelp() did not open the overlay'
+    result = driver.execute_script(_audit_js('help-overlay'), [])
+    _assert_contains_itself(result, f'#help-overlay in {lang}', may_be_wider_than_viewport=True, min_measured=20)
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_align_is_one_undo_step_and_a_cycle_is_refused_in_a_real_browser(driver, app_url, lang):
+    """Both claims are pure-JS behaviour the node harness cannot measure: an alignment that
+    pushes one history entry (not one per node), and a wire that would close a loop being
+    rejected at the single commit seam WITHOUT painting a path. Driven with `process` nodes
+    only — a `source` node would fire a capability fetch against the live server."""
+    driver.get(app_url + '/')
+    facts = driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        I18n.apply();
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {}; canvas.connections = []; canvas.selectedNodes = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        document.getElementById('svg-layer').innerHTML = '';
+
+        const a = canvas.addNode('process', 300, 40);
+        const b = canvas.addNode('process', 0, 120);
+        const c = canvas.addNode('process', 150, 240);
+        canvas.setSelectedNodes([a, b, c]);
+        const histBefore = canvas._history.length;
+        const aligned = canvas.alignSelected('left');
+        const xs = [a, b, c].map((id) => parseInt(canvas._nodeEl(id).style.left, 10));
+        const historySteps = canvas._history.length - histBefore;
+
+        const p = canvas.addNode('process', 0, 500);
+        const q = canvas.addNode('process', 0, 600);
+        const r = canvas.addNode('process', 0, 700);
+        canvas.connectNodes(p, q); canvas.connectNodes(q, r);
+        canvas.updateConnections();
+        // Two legitimate wires are now painted; measure AFTER the repaint (a wire only
+        // materialises on updateConnections).
+        const wiresBefore = document.querySelectorAll('#svg-layer .conn-line:not(.temp)').length;
+        const loop = canvas.connectNodes(r, p);
+        canvas.updateConnections();
+        const wiresAfter = document.querySelectorAll('#svg-layer .conn-line:not(.temp)').length;
+
+        return {
+            aligned, xs, historySteps,
+            cycleOk: loop.ok, edges: canvas.connections.length,
+            wiresBefore, wiresAfter,
+        };
+        """,
+        lang,
+    )
+    assert facts['aligned'] is True
+    assert facts['xs'] == [0, 0, 0], f'align left must collapse every box to the smallest x: {facts}'
+    assert facts['historySteps'] == 1, f'one alignment must be exactly one undo step, was {facts["historySteps"]}'
+    assert facts['cycleOk'] is False, 'a wire that closes a loop must be refused'
+    assert facts['edges'] == 2, 'the refused edge wrote nothing to the model'
+    # The two real wires paint (2), and the refused loop adds a THIRD path: it must not.
+    assert facts['wiresBefore'] == 2 and facts['wiresAfter'] == 2, (
+        f'a refused wire must not paint a path: before={facts["wiresBefore"]} after={facts["wiresAfter"]}'
+    )
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])

@@ -31,7 +31,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-import { baseSandbox, dispatchDocument, dispatchOn, fixWindow, flushFrames, resetWorld } from './harness_dom.mjs';
+import { baseSandbox, dispatchDocument, dispatchOn, dispatchWindow, fixWindow, flushFrames, resetWorld } from './harness_dom.mjs';
 
 const [canvasPath, wfPath] = process.argv.slice(2);
 const src = [canvasPath, wfPath].map((p) => fs.readFileSync(p, 'utf8')).join('\n;\n');
@@ -105,6 +105,10 @@ const KEYS = {
     'clipboard.addPrompt': 'CLIP-ADDPROMPT',
     'clipboard.clearConfirm': 'CLIP-CLEARCONFIRM',
     'clipboard.copy': 'CLIP-COPY',
+    /* Cycle-refusal and align-applied sentinels, so a scenario asserts WHICH toast fired
+       without pinning a whole translated sentence. */
+    'toast.connCycle': 'CONN-CYCLE',
+    'toast.alignApplied': 'ALIGN-APPLIED',
 };
 /* The zh side exists so a language switch has somewhere to land: with an empty
    dictionary every "does the label follow the language" probe answers "no" for
@@ -1810,6 +1814,129 @@ function multiSelectScenario() {
     out.multi_select = res;
 }
 
+/* ── cycle refusal at the single connect seam ──────────────────────── */
+/* connectNodes is the ONLY place a wire commits (pointer + link mode both funnel here), so
+   a cycle guard at that one seam covers every route. Uses `process` nodes (a `source` copy
+   would fire an async capability fetch that rewrites the draft mid-scenario). */
+function cycleScenario() {
+    const res = {};
+
+    freshWorld();
+    const a = addNode('process', 0, 0);
+    const b = addNode('process', 400, 0);
+    const c = addNode('process', 800, 0);
+    res.chain = {
+        abOk: canvas.connectNodes(a, b).ok,
+        bcOk: canvas.connectNodes(b, c).ok,
+    };
+    // a reaches c along a→b→c; c does NOT reach a yet.
+    res.reaches = { aToC: canvas._reaches(a, c), cToA: canvas._reaches(c, a) };
+    // Closing c→a would loop; it must be refused, write nothing, and toast the cycle reason.
+    toasts.length = 0;
+    const loop = canvas.connectNodes(c, a);
+    res.refused = {
+        ok: loop.ok,
+        count: canvas.connections.length,
+        toast: toasts[toasts.length - 1],
+    };
+    // A fresh target with no back-path still connects normally.
+    const d = addNode('process', 1200, 0);
+    res.normalStillWorks = canvas.connectNodes(c, d).ok === true && canvas.connections.length === 3;
+
+    out.cycle = res;
+}
+
+/* ── align / distribute as ONE undo step ──────────────────────────── */
+function alignScenario() {
+    const res = {};
+
+    freshWorld();
+    const a = addNode('process', 300, 0, 220, 120);
+    const b = addNode('process', 0, 400, 220, 120);
+    const c = addNode('process', 150, 800, 220, 120);
+    canvas.setSelectedNodes([a, b, c]);
+
+    const histBefore = canvas._history.length;
+    res.leftResult = canvas.alignSelected('left') === true;
+    res.leftPositions = [a, b, c].map((id) => parseInt(doc.getElementById(id).style.left, 10));
+    res.historyOneStep = canvas._history.length - histBefore;
+    res.toast = toasts[toasts.length - 1];
+
+    // top: every y collapses to the smallest.
+    canvas.alignSelected('top');
+    res.topPositions = [a, b, c].map((id) => parseInt(doc.getElementById(id).style.top, 10));
+
+    // distributeH: extremes fixed, the middle re-centred so centres are evenly spaced.
+    freshWorld();
+    const d1 = addNode('process', 0, 0, 220, 120);
+    const d2 = addNode('process', 100, 0, 220, 120);
+    const d3 = addNode('process', 400, 0, 220, 120);
+    canvas.setSelectedNodes([d1, d2, d3]);
+    canvas.alignSelected('distributeH');
+    const dx = [d1, d2, d3].map((id) => parseInt(doc.getElementById(id).style.left, 10));
+    const centres = dx.map((l) => l + 110);
+    res.distribute = {
+        firstUnchanged: dx[0] === 0,
+        lastUnchanged: dx[2] === 400,
+        evenSpacing: Math.abs((centres[1] - centres[0]) - (centres[2] - centres[1])) < 1,
+    };
+
+    // fewer than two selected is a silent no-op that writes no history.
+    freshWorld();
+    const solo = addNode('process', 0, 0, 220, 120);
+    canvas.setSelectedNodes([solo]);
+    const soloHist = canvas._history.length;
+    res.singleNoop = canvas.alignSelected('left') === false && canvas._history.length === soloHist;
+
+    out.align = res;
+}
+
+/* ── zoom + shortcut-help keyboard bindings ───────────────────────── */
+function zoomHelpScenario() {
+    const res = {};
+
+    freshWorld();
+    addNode('process', 0, 0);
+    canvas.zoom = 1;
+    const before = canvas.zoom;
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: '+', target: doc.body });
+    res.zoomIn = canvas.zoom > before;
+    const afterIn = canvas.zoom;
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: '-', target: doc.body });
+    res.zoomOut = canvas.zoom < afterIn;
+    // '0' fits: a single node cluster that already fits stays at 100% (shrink-only resetView).
+    canvas.zoom = 1;
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: '0', target: doc.body });
+    res.fitKeeps100 = Math.round(canvas.zoom * 100) === 100;
+
+    // '?' opens the overlay; Escape closes it (the cheat sheet is view chrome, not model).
+    freshWorld();
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: '?', target: doc.body });
+    const helpOpen = doc.getElementById('help-overlay').classList.contains('open');
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'Escape', target: doc.body });
+    res.helpToggle = { opened: helpOpen, closedOnEscape: !doc.getElementById('help-overlay').classList.contains('open') };
+
+    out.zoom_help = res;
+}
+
+/* ── cross-tab clipboard sync via the storage event ───────────────── */
+function crossTabClipboardScenario() {
+    const res = {};
+    freshWorld();
+    // Another tab wrote the same key: this tab is still empty, then reloads through the
+    // listener that init() registered on window.
+    const remote = JSON.stringify({ items: [{ id: 'x', kind: 'text', payload: 'REMOTE', label: 'REMOTE', pinned: false, ts: 1 }] });
+    sandbox.localStorage.setItem('crawler_clipboard', remote);
+    const emptyBefore = Clipboard.items.length;
+    dispatchWindow(sandbox.__handlers, 'storage', { key: 'crawler_clipboard' });
+    res.pulledFromStorage = { before: emptyBefore, after: Clipboard.items.length, label: Clipboard.items[0] && Clipboard.items[0].label };
+    // An unrelated key must not disturb the board.
+    const lenAfterPull = Clipboard.items.length;
+    dispatchWindow(sandbox.__handlers, 'storage', { key: 'something_else' });
+    res.unrelatedKeyIgnored = Clipboard.items.length === lenAfterPull;
+    out.crossTabClipboard = res;
+}
+
 /* ── clipboard drawer: the persisted board, its controls, and paste-via-funnel ──
    Async (rename / addText / clear / copyText all await a dialog or the clipboard), so it
    joins the .then chain. Node copies use `process`, not `source`, so no async capability
@@ -1955,6 +2082,10 @@ nodeClipboardScenario();
 keyboardConnectScenario();
 minimapScenario();
 multiSelectScenario();
+cycleScenario();
+alignScenario();
+zoomHelpScenario();
+crossTabClipboardScenario();
 connectWarningsScenarios()
     .then(() => touchGestureScenario())
     .then(() => renameScenarios())

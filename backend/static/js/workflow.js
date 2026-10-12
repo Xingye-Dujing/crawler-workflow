@@ -754,6 +754,31 @@ const workflow = {
         return choice === 'go';
     },
 
+    async rerunNode(nodeId, runId) {
+        /* Re-run one node + its downstream by replaying the SAME run as a resume after the
+           backend wipes that subtree's stored rows. The CURRENT canvas is what we send (not the
+           historical one) so the fingerprint matches what the user sees; a mismatch is refused by
+           name rather than silently mixing two workflows' rows under one run id. */
+        var result = await fetchJSON('/api/workflow/rerun-node', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({
+                workflow: canvas.toWorkflowJSON(),
+                workflow_name: this.runName(),
+                node_id: nodeId,
+                resume_run_id: runId,
+                lang: I18n.lang,
+            }),
+        }).catch(function () { return null; });
+        if (!result || !result.ok) {
+            showToast((result && result.error) || I18n.t('toast.rerunFailed'));
+            return null;
+        }
+        showToast(I18n.t('toast.rerunStarted', { n: (result.invalidated || []).length }));
+        if (typeof RunState !== 'undefined' && RunState.setRunning) RunState.setRunning(true);
+        return result;
+    },
+
     async _cookieGateBeforeRun(opts, profileChoice) {
         /* One place decides what this run has to know about its cookies, because the
            answers have to stay in one order:
@@ -7378,6 +7403,15 @@ var runsManager = {
                 var typeLabel = n.node_type
                     ? I18n.t('nodeType.' + n.node_type)
                     : '';
+                /* Re-run is offered only on a node that actually produced a reusable
+                   result (done/restored with rows). Anything else has nothing downstream
+                   could re-key off, so the button would only ever be refused. */
+                var canRerun = self.nodeDone(n.status) && (n.row_count || 0) > 0;
+                var rerunBtn = canRerun
+                    ? '<button class="runs-mgr-btn rm-node-rerun" onclick="workflow.rerunNode(\'' +
+                      attrJsArg(n.node_id || '') + '\', \'' + attrJsArg(run.run_id || '') + '\')">' +
+                      I18n.t('runsMgr.rerunFrom') + '</button>'
+                    : '';
                 return '<div class="rm-node nt-' + escapeHtml(n.node_type || 'misc') + '">' +
                     '<div class="rm-node-head">' +
                     '<span class="rm-node-id">' + escapeHtml(n.node_id || '') + '</span>' +
@@ -7385,6 +7419,7 @@ var runsManager = {
                     '<span class="runs-mgr-status ' + info.cls + '">' + I18n.t(info.key) + '</span>' +
                     '<span class="rm-node-rows">' + (n.row_count || 0) + ' ' + I18n.t('runsMgr.colRows') + '</span>' +
                     '<span class="rm-node-duration">' + escapeHtml(self._formatDuration(n.duration_seconds)) + '</span>' +
+                    rerunBtn +
                     '</div>' +
                     (n.error ? '<div class="rm-node-err">' + escapeHtml(n.error) + '</div>' : '') +
                     '</div>';
@@ -8205,7 +8240,12 @@ var datasetManager = {
     render() {
         var body = document.getElementById('dataset-mgr-body');
         if (!body) return;
+        this._compare = this._compare || [];
         var rows = this._last || [];
+        // A deleted or re-hashed file can no longer be a compare source; drop stale picks.
+        var alive = {};
+        rows.forEach(function (r) { alive[String(r.dataset_id || '')] = true; });
+        this._compare = this._compare.filter(function (id) { return alive[id]; });
         if (!rows.length) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('datasetMgr.empty') + '</div>';
             return;
@@ -8216,7 +8256,10 @@ var datasetManager = {
             /* A file a saved workflow reads is not the user's to delete quietly —
                the reference list is shown and the button refuses server-side too. */
             var refs = row.workflows || [];
-            var ops = '<button class="runs-mgr-btn" onclick="datasetManager.rename(\'' + self._quote(id) + '\', \'' +
+            var picked = self._compare.indexOf(id) >= 0;
+            var ops = '<button class="runs-mgr-btn" onclick="datasetManager.toggleCompare(\'' + self._quote(id) +
+                '\')">' + I18n.t(picked ? 'datasetMgr.compareOn' : 'datasetMgr.compare') + '</button>';
+            ops += '<button class="runs-mgr-btn" onclick="datasetManager.rename(\'' + self._quote(id) + '\', \'' +
                 self._quote(row.name || '') + '\')">' + I18n.t('datasetMgr.rename') + '</button>';
             ops += '<button class="runs-mgr-btn del" onclick="datasetManager.remove(\'' + self._quote(id) +
                 '\', \'' + self._quote(row.name || '') + '\', ' + (refs.length ? 'true' : 'false') + ')">' +
@@ -8231,7 +8274,13 @@ var datasetManager = {
                 '<td class="runs-mgr-ops">' + ops + '</td>' +
                 '</tr>';
         }).join('');
-        body.innerHTML =
+        var bar = '<div class="dataset-compare-bar">' +
+            '<button class="runs-mgr-btn" onclick="datasetManager.compareSelected()">' +
+            I18n.t('datasetMgr.compareRun') + ' (' + this._compare.length + '/2)</button>' +
+            (this._compare.length ? '<button class="runs-mgr-btn" onclick="datasetManager.clearCompare()">' +
+                I18n.t('datasetMgr.compareClear') + '</button>' : '') +
+            '</div>';
+        body.innerHTML = bar +
             '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
             '<th>' + I18n.t('datasetMgr.colName') + '</th>' +
             '<th>' + I18n.t('datasetMgr.colSource') + '</th>' +
@@ -8241,6 +8290,51 @@ var datasetManager = {
             '<th>' + I18n.t('datasetMgr.colUsedBy') + '</th>' +
             '<th></th>' +
             '</tr></thead><tbody>' + html + '</tbody></table>';
+    },
+
+    toggleCompare(id) {
+        var i = this._compare.indexOf(id);
+        if (i >= 0) this._compare.splice(i, 1);
+        else if (this._compare.length < 2) this._compare.push(id);
+        else {
+            showToast(I18n.t('datasetMgr.compareMaxTwo'));
+            return;
+        }
+        this.render();
+    },
+
+    clearCompare() {
+        this._compare = [];
+        this.render();
+    },
+
+    async compareSelected() {
+        if (!this._compare || this._compare.length !== 2) {
+            showToast(I18n.t('datasetMgr.compareNeedTwo'));
+            return;
+        }
+        var a = this._compare[0];
+        var b = this._compare[1];
+        var result = await fetchJSON('/api/data/diff', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ a: { dataset_id: a }, b: { dataset_id: b } }),
+        }).catch(function () { return null; });
+        if (!result || !result.ok) {
+            showToast(I18n.t('datasetMgr.diffFailed'));
+            return;
+        }
+        var d = result.diff || {};
+        var lines = [];
+        lines.push(I18n.t('datasetMgr.diffAdded') + ': ' + (d.added_count || 0));
+        lines.push(I18n.t('datasetMgr.diffRemoved') + ': ' + (d.removed_count || 0));
+        lines.push(I18n.t('datasetMgr.diffRows') + ': ' + (d.row_count_a || 0) + ' → ' + (d.row_count_b || 0));
+        if ((d.columns_added || []).length) lines.push(I18n.t('datasetMgr.diffColAdded') + ': ' + d.columns_added.join(', '));
+        if ((d.columns_removed || []).length) lines.push(I18n.t('datasetMgr.diffColRemoved') + ': ' + d.columns_removed.join(', '));
+        await showDialog({
+            message: lines.join('\n'),
+            buttons: [{ label: I18n.t('dialog.confirm'), value: null, primary: true }],
+        });
     },
 
     _sourceLabel(source) {

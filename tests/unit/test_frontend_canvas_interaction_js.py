@@ -1051,3 +1051,56 @@ class TestClipboardDrawer:
     def test_the_board_survives_a_reload_read(self, ix):
         p = ix['clipboard']['persist']
         assert p['same'] is True and p['reloadedLen'] == 1
+
+
+class TestCanvasCycleRefusal:
+    def test_closing_a_loop_is_refused_at_the_connect_seam(self, ix):
+        c = ix['cycle']
+        assert c['chain'] == {'abOk': True, 'bcOk': True}
+        assert c['refused']['ok'] is False, 'a wire that forms a cycle must never be written'
+        assert c['refused']['count'] == 2, 'the refusal writes nothing'
+        assert c['refused']['toast'] == 'CONN-CYCLE'
+
+    def test_the_reachability_helper_follows_directed_wires(self, ix):
+        r = ix['cycle']['reaches']
+        assert r['aToC'] is True and r['cToA'] is False
+
+    def test_a_normal_connection_still_succeeds_after_a_refusal(self, ix):
+        assert ix['cycle']['normalStillWorks'] is True
+
+
+class TestCanvasAlign:
+    def test_align_left_collapses_to_the_smallest_x_as_one_undo_step(self, ix):
+        a = ix['align']
+        assert a['leftResult'] is True and a['leftPositions'] == [0, 0, 0]
+        assert a['historyOneStep'] == 1, 'one alignment must be one undo point'
+        assert a['toast'] == 'ALIGN-APPLIED'
+
+    def test_align_top_collapses_to_the_smallest_y(self, ix):
+        assert ix['align']['topPositions'] == [0, 0, 0]
+
+    def test_distribute_fixes_the_extremes_and_spaces_the_centres(self, ix):
+        d = ix['align']['distribute']
+        assert d['firstUnchanged'] is True and d['lastUnchanged'] is True and d['evenSpacing'] is True
+
+    def test_fewer_than_two_selected_is_a_no_op(self, ix):
+        assert ix['align']['singleNoop'] is True
+
+
+class TestZoomAndHelpKeys:
+    def test_plus_minus_and_zero_are_bound_to_zoom(self, ix):
+        z = ix['zoom_help']
+        assert z['zoomIn'] is True and z['zoomOut'] is True and z['fitKeeps100'] is True
+
+    def test_question_mark_opens_help_and_escape_closes_it(self, ix):
+        h = ix['zoom_help']['helpToggle']
+        assert h['opened'] is True and h['closedOnEscape'] is True
+
+
+class TestCrossTabClipboard:
+    def test_a_storage_event_pulls_another_tabs_writes(self, ix):
+        p = ix['crossTabClipboard']['pulledFromStorage']
+        assert p['before'] == 0 and p['after'] == 1 and p['label'] == 'REMOTE'
+
+    def test_an_unrelated_key_is_ignored(self, ix):
+        assert ix['crossTabClipboard']['unrelatedKeyIgnored'] is True

@@ -3886,3 +3886,74 @@ html[data-cloud="1"] .ai-only-ollama {
   border-color: rgba(140, 40, 40, 0.4);
   background: rgba(140, 40, 40, 0.08);
 }
+
+/* ── Zoom controls (status bar) ── */
+.zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}
+.zoom-readout {
+  cursor: pointer;
+}
+.zoom-btn {
+  min-width: 22px;
+  padding: 0 6px;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+/* ── Keyboard-shortcut help overlay ── */
+#help-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#help-overlay.open {
+  display: flex;
+}
+#help-box {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  padding: 12px 16px 16px;
+  min-width: 340px;
+  max-width: 460px;
+  color: var(--text);
+}
+#help-box .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.help-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.help-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.help-keys {
+  flex: 0 0 168px;
+  text-align: right;
+  color: var(--text-dim);
+  font-family: monospace;
+  white-space: nowrap;
+}
+.dataset-compare-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
