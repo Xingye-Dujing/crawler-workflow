@@ -29,6 +29,18 @@
 torch
 transformers
 
+# ── Parquet export: the columnar engine behind the Output node's `parquet` format ───
+# `df.to_parquet` needs an engine; `pyarrow` is the one this project names. pandas resolves it
+# itself (nothing in backend/ imports pyarrow directly), so on a machine without one the format
+# REFUSES BY NAME (services/exporter.py::_write_parquet catches the ImportError and says install
+# pyarrow) — never a bare traceback, and every other export format keeps working. It lives here
+# rather than requirements.txt because it is a per-feature, sizeable wheel used by only the parquet
+# writer, mirroring the torch/transformers rule above.
+#
+# Used by: the Output node / /api/export/save with format `parquet`.
+
+pyarrow
+
 # ── Topic modeling: `auto` uses embedding when this stack is present, else LDA ─────
 # `sentence-transformers` (with torch/transformers) is imported by product code —
 # `services/data_analysis.py::_embed_vectors` — and is what EVERY topic step (主题模型 / 分阶段 /

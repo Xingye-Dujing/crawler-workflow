@@ -2542,7 +2542,7 @@ function openSettings(nodeId) {
             I18n.t(pdfOnly ? 'settings.outputPdfHint' : 'settings.outputMergeHint') + '</div></div>';
         var formatOptions = pdfOnly
             ? [{ value: 'pdf', label: I18n.t('format.pdf') }]
-            : ['csv', 'json', 'excel', 'txt', 'html', 'markdown'].map(function (f) {
+            : ['csv', 'json', 'excel', 'txt', 'html', 'markdown', 'parquet'].map(function (f) {
                   return { value: f, label: I18n.t('format.' + f) };
               });
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.format') + '</label>' +

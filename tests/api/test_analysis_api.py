@@ -608,9 +608,9 @@ class TestExportSave:
 
     def test_an_unsupported_format_is_a_400(self, client, paste):
         dataset_id = paste(VIZ_RECORDS, name='bad-format.csv')
-        response = client.post('/api/export/save', json={'dataset_id': dataset_id, 'format': 'parquet'})
+        response = client.post('/api/export/save', json={'dataset_id': dataset_id, 'format': 'toml'})
         assert response.status_code == 400
-        assert 'Unsupported export format: parquet' in response.get_json()['error']
+        assert 'Unsupported export format: toml' in response.get_json()['error']
 
     def test_export_resolves_a_workflow_node_by_id(self, client, app_module):
         app_module.execution_state['results'] = {'node-4': [{'city': 'Sanya', 'likes': 1}]}

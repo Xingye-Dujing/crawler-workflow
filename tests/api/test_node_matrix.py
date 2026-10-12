@@ -1451,6 +1451,10 @@ class TestOutputNodeOperations:
 
     @pytest.mark.parametrize('fmt', sorted(DataExporter.SUPPORTED_FORMATS))
     def test_every_supported_format_lands_a_file(self, client, app_module, paste, data_root, fmt):
+        import importlib.util
+
+        if fmt == 'parquet' and importlib.util.find_spec('pyarrow') is None:
+            pytest.skip('parquet engine (pyarrow) is an optional dependency, not installed here')
         _run, status, rows = self._run(client, app_module, paste, {'format': fmt, 'filename': 'matrix-out'})
         assert status['status'] == 'done', status.get('error')
         assert len(rows) == len(RICH_RECORDS), 'the node passes its input downstream'
@@ -1465,7 +1469,7 @@ class TestOutputNodeOperations:
     def test_an_unwritable_format_fails_the_node_rather_than_passing_quietly(
         self, client, app_module, paste, data_root
     ):
-        _run, status, rows = self._run(client, app_module, paste, {'format': 'parquet', 'filename': 'matrix-bad'})
+        _run, status, rows = self._run(client, app_module, paste, {'format': 'toml', 'filename': 'matrix-bad'})
         assert status['status'] == 'failed', status
         assert rows == [], 'a node that refused to write must not hand on rows as if it had saved them'
         assert not list((data_root / 'data' / 'exports').glob('matrix-bad*'))

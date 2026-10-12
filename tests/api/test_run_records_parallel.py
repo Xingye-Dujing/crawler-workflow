@@ -261,7 +261,7 @@ class TestParallelResumeIndependence:
 
     CITIES = [{'城市': '三亚', '热度': 1}, {'城市': '海口', '热度': 2}, {'城市': '三亚', '热度': 3}]
 
-    def _flow(self, ds, export_b='parquet', steps_a=None):
+    def _flow(self, ds, export_b='toml', steps_a=None):
         """Two chains; only B's export is broken, so the run is resumable."""
         nodes = [
             _node('name-1', 'name', {'workflow_name': '热门榜'}),

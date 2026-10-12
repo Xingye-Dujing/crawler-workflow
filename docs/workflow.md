@@ -430,7 +430,7 @@
 | Visualize（可视化） | VIZ | 柱状/折线/双轴折线/占比堆叠图/主题距离图/显著词图/饼图/散点/直方/箱线/热力/桑基/关系图/词云/地图，ECharts 或 Matplotlib（五种新图型仅 ECharts；柱状/折线/双轴折线可加事件标注；占比堆叠图填逗号分隔的「堆叠字段」，每分类归一到 100%）；勾选 `emit_latex`（默认开）另出可编译 LaTeX 图 .txt，`emit_latex_table`（默认开）另出 booktabs 三线表 .txt | **是**，可直接处理数据集 |
 | Compile（编译） | CMP | 用本机 MiKTeX `xelatex` 把上游可视化节点产出的 LaTeX（图/三线表）合成**一份**并编译成一个 PDF；唯一合法上游是勾选了任一 LaTeX 复选框的可视化节点（两者都没勾则运行前按名拒绝）；可再连输出节点落盘，`xelatex` 路径在设置里指定（留空自动探测） | 否，需要可视化上游 |
 | Tokenize（分词） | TKN | jieba 分词输出词频，供导出或词云使用 | 否，需要上游数据 |
-| Output（输出） | OUT | 保存节点：合并多张上游表格后按 `format` 落盘（csv/json/excel/txt/html/markdown）；**当上游是可视化或编译节点时，格式锁定为 PDF 且只有 PDF 可选**（把上游 LaTeX 编译成文件），其它上游则不出现 PDF 选项 | 是，可作合并点 |
-| Output（保存） | OUT | 导出为 CSV / JSON / Excel / TXT / HTML / Markdown | 否，需要上游数据 |
+| Output（输出） | OUT | 保存节点：合并多张上游表格后按 `format` 落盘（csv/json/excel/txt/html/markdown/parquet）；**当上游是可视化或编译节点时，格式锁定为 PDF 且只有 PDF 可选**（把上游 LaTeX 编译成文件），其它上游则不出现 PDF 选项 | 是，可作合并点 |
+| Output（保存） | OUT | 导出为 CSV / JSON / Excel / TXT / HTML / Markdown / Parquet（parquet 需可选引擎 pyarrow，缺则按名拒绝） | 否，需要上游数据 |
 | Resume（续跑） | RSM | 收养历史运行的节点输出作为数据源（原上游不可用/已付费时） | 是 |
 | Comment（评论采集） | CMT | 评论采集引擎（现为数据源的「采集内容=评论」模式）；独立节点仅保留给旧画布 | 是 |

@@ -35,6 +35,7 @@ class DataExporter:
         'txt': '.txt',
         'html': '.html',
         'markdown': '.md',
+        'parquet': '.parquet',
     }
 
     #: Accepted spellings that are not their own writer. ``xlsx`` used to sit in
@@ -165,6 +166,8 @@ class DataExporter:
             cls._write_html(df, filepath, **kwargs)
         elif fmt == 'markdown':
             cls._write_markdown(df, filepath, **kwargs)
+        elif fmt == 'parquet':
+            cls._write_parquet(df, filepath, **kwargs)
         else:
             raise UnsupportedFormatError(f'Unsupported export format: {fmt}')
 
@@ -191,6 +194,17 @@ class DataExporter:
     @staticmethod
     def _write_csv(df: pd.DataFrame, filepath: str, encoding: str = 'utf-8-sig', **_):
         df.to_csv(filepath, index=False, encoding=encoding)
+
+    @staticmethod
+    def _write_parquet(df: pd.DataFrame, filepath: str, **_):
+        # Parquet needs a columnar engine (pyarrow, declared in requirements-optional.txt and NOT
+        # CI-installed, exactly like the torch/transformers that bert mode probes for). pandas
+        # resolves the engine itself; on a machine without one it raises ImportError, which we turn
+        # into a refusal BY NAME with the fix — never a bare traceback from deep inside pandas.
+        try:
+            df.to_parquet(filepath, index=False)
+        except ImportError as exc:
+            raise UnsupportedFormatError(t('export.parquet_engine_missing')) from exc
 
     @staticmethod
     def _write_json(df: pd.DataFrame, filepath: str, orient: str = 'records', **_):

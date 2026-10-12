@@ -461,7 +461,7 @@ class TestContinueAfterAnEdit:
         # Attempt 1: the analysis node finishes, the export refuses -> resumable.
         started = client.post(
             '/api/workflow/execute',
-            json={'workflow': self._flow(self.STEPS_A, 'parquet'), 'workflow_name': 'edit'},
+            json={'workflow': self._flow(self.STEPS_A, 'toml'), 'workflow_name': 'edit'},
         )
         assert started.status_code == 200
         run_id = started.get_json()['run_id']
@@ -490,7 +490,7 @@ class TestContinueAfterAnEdit:
         earlier attempt paid for comes back rather than running again."""
         started = client.post(
             '/api/workflow/execute',
-            json={'workflow': self._flow(self.STEPS_A, 'parquet'), 'workflow_name': 'same'},
+            json={'workflow': self._flow(self.STEPS_A, 'toml'), 'workflow_name': 'same'},
         )
         run_id = started.get_json()['run_id']
         assert _wait(app_module)
@@ -517,7 +517,7 @@ class TestContinueAfterAnEdit:
         store = app_module._RUN_STORE
         started = client.post(
             '/api/workflow/execute',
-            json={'workflow': self._flow(self.STEPS_A, 'parquet'), 'workflow_name': 'twice'},
+            json={'workflow': self._flow(self.STEPS_A, 'toml'), 'workflow_name': 'twice'},
         )
         run_id = started.get_json()['run_id']
         assert _wait(app_module)
@@ -527,7 +527,7 @@ class TestContinueAfterAnEdit:
         # something left to continue.
         client.post(
             '/api/workflow/execute',
-            json={'workflow': self._flow(self.STEPS_A, 'parquet'), 'workflow_name': 'twice', 'resume_run_id': run_id},
+            json={'workflow': self._flow(self.STEPS_A, 'toml'), 'workflow_name': 'twice', 'resume_run_id': run_id},
         )
         assert _wait(app_module)
         assert store.node_statuses(run_id)['node-2']['status'] == 'restored'
@@ -558,7 +558,7 @@ class TestContinueAfterAnEdit:
         store = app_module._RUN_STORE
         started = client.post(
             '/api/workflow/execute',
-            json={'workflow': self._flow(self.STEPS_A, 'parquet'), 'workflow_name': 'ghost'},
+            json={'workflow': self._flow(self.STEPS_A, 'toml'), 'workflow_name': 'ghost'},
         )
         run_id = started.get_json()['run_id']
         assert _wait(app_module)

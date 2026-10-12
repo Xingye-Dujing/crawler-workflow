@@ -322,6 +322,7 @@ _ZH = {
     'crawl.xhs.comment_done': '[提取评论] 共提取 {n} 条评论',
     # ── analysis / services ───────────────────────────────────
     'export.done': '已导出 {n} 行至 {path}（{fmt}）',
+    'export.parquet_engine_missing': '导出 Parquet 需要列式引擎 pyarrow，请先安装：pip install pyarrow',
     # 「文件名带时间范围」 asks the save node to print a window it cannot see: the crawl
     # states it, this node receives a table. Both answers name the reason instead of
     # inventing a range, because a file labelled with the wrong month is worse than one
@@ -1561,6 +1562,7 @@ _EN = {
     'crawl.xhs.comment_done': '[Comments] Extracted {n} comments',
     # ── analysis / services ───────────────────────────────────
     'export.done': 'Exported {n} rows to {path} ({fmt})',
+    'export.parquet_engine_missing': 'Parquet export needs the pyarrow engine — install it: pip install pyarrow',
     'export.window_none': 'the filename wants a time range, but no crawl here set a start/end time',
     'export.window_many': 'the filename wants a time range, but this path has {n} of them',
     'export.window_ignored': (

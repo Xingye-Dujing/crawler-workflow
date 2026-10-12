@@ -61,7 +61,7 @@ python app.py
   情感极性、NER、关键词、聚类、异常、相关性、显著性检验（按分组列比较数值列：Welch t / ANOVA / Mann-Whitney / Kruskal-Wallis，p 值走 scipy 真实分布、非 Student 的 Welch 会如实标注）、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、为何主推微调 BERT → [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)
 - **数据处理**：确定性清洗算子、去重（含 SimHash 近重复）、分组聚合（多指标）、**事件研究套件**（阶段划分 / 分阶段 LDA /
   主题流向 / 情感演化 / 二次爆发预警 / 曲线外推（移动平均 · Holt · 季节 Holt-Winters/朴素）），主题步骤（主题模型 / 分阶段 / 距离图 / 显著词）默认
-`auto`（装了编码器用 embedding+KMeans，没装自动走 LDA，控制台都如实写明用了哪种；可选装 `requirements-optional.txt`，也可显式选 `embedding`/`lda`），输出列三种方法一致，通用导出、一键运行报告与「智能清除」（按运行、按节点分片）。→ [`docs/analysis.md`](docs/analysis.md)
+`auto`（装了编码器用 embedding+KMeans，没装自动走 LDA，控制台都如实写明用了哪种；可选装 `requirements-optional.txt`，也可显式选 `embedding`/`lda`），输出列三种方法一致，通用导出（CSV/JSON/Excel/TXT/HTML/Markdown，Parquet 需可选引擎 pyarrow）、一键运行报告与「智能清除」（按运行、按节点分片）。→ [`docs/analysis.md`](docs/analysis.md)
 - **可视化**：论文印刷风格图表（ECharts / Matplotlib 双引擎）、主题距离图 / 显著词图 / 关系图 / 桑基 /
   占比堆叠 / 模型一致率、LaTeX 图与三线表、MiKTeX 编译成 PDF、Chart Studio 工作台。→ [`docs/analysis.md`](docs/analysis.md)
 - **工作流引擎**：拖拽画布、连线 fan-in/fan-out 语义、禁用即等同于不存在、撤销/重做、视角持久化、

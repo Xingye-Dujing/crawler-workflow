@@ -10,6 +10,7 @@ contracts are about the file that lands on disk:
 - the returned metadata (path/format/rows) matches the file that was written.
 """
 
+import importlib.util
 import json
 import os
 import re
@@ -47,6 +48,7 @@ def df():
         ('txt', '.txt'),
         ('html', '.html'),
         ('markdown', '.md'),
+        ('parquet', '.parquet'),
     ],
 )
 def test_extension_matches_the_format(fmt, ext):
@@ -81,6 +83,7 @@ class TestFormatSelection:
             ('z.md', 'markdown'),
             ('w.html', 'html'),
             ('t.txt', 'txt'),
+            ('a.parquet', 'parquet'),
             ('no-extension', 'csv'),
             ('', 'csv'),
             ('.csv', 'csv'),
@@ -101,7 +104,7 @@ class TestFormatSelection:
         import re
         from pathlib import Path
 
-        assert E.SUPPORTED_FORMATS == ('csv', 'json', 'excel', 'txt', 'html', 'markdown')
+        assert E.SUPPORTED_FORMATS == ('csv', 'json', 'excel', 'txt', 'html', 'markdown', 'parquet')
         source = (Path(__file__).resolve().parents[2] / 'backend' / 'static' / 'js' / 'workflow.js').read_text(
             encoding='utf-8'
         )
@@ -133,7 +136,7 @@ class TestFormatSelection:
 
     def test_an_unknown_explicit_format_is_refused(self, df, tmp_path):
         with pytest.raises(UnsupportedFormatError):
-            E.save(df, str(tmp_path / 'a.csv'), fmt='parquet')
+            E.save(df, str(tmp_path / 'a.csv'), fmt='toml')
 
 
 class TestNormalizeFilename:
@@ -157,7 +160,7 @@ class TestNormalizeFilename:
         assert E.normalize_filename(filename, fmt) == expected
 
     def test_unknown_format_still_lands_on_csv(self):
-        assert E.normalize_filename('data', 'parquet') == 'data.csv'
+        assert E.normalize_filename('data', 'toml') == 'data.csv'
 
 
 class TestStampFilename:
@@ -240,6 +243,28 @@ class TestSave:
         target = str(tmp_path / 'named.xlsx')
         E.save(df, target, fmt='excel', sheet_name='数据')
         assert pd.read_excel(target, sheet_name='数据').equals(df)
+
+    def test_parquet_round_trips(self, df, tmp_path):
+        # pyarrow is an OPTIONAL engine (requirements-optional.txt, not CI-installed); a machine
+        # without one must not fail the suite — the format itself refuses by name at runtime, which
+        # test_parquet_without_an_engine_refuses_by_name pins. Here we only round-trip when present.
+        if importlib.util.find_spec('pyarrow') is None:
+            pytest.skip('parquet engine (pyarrow) is an optional dependency')
+        target = str(tmp_path / 'out.parquet')
+        assert E.save(df, target, fmt='parquet')['format'] == 'parquet'
+        assert pd.read_parquet(target).equals(df.reset_index(drop=True))
+
+    def test_parquet_without_an_engine_refuses_by_name(self, df, tmp_path, monkeypatch):
+        # Force the engine to be missing and confirm the refusal is a named UnsupportedFormatError,
+        # not a bare ImportError escaping from pandas.
+        import pandas as _pd
+
+        def _boom(*_a, **_k):
+            raise ImportError('no engine')
+
+        monkeypatch.setattr(_pd.DataFrame, 'to_parquet', _boom)
+        with pytest.raises(UnsupportedFormatError, match='pyarrow'):
+            E.save(df, str(tmp_path / 'x.parquet'), fmt='parquet')
 
     def test_txt_can_emit_one_column_per_line(self, df, tmp_path):
         target = str(tmp_path / 'out.txt')
