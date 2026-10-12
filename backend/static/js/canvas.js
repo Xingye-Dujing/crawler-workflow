@@ -309,12 +309,16 @@ const canvas = {
             document.getElementById('ctx-edit').style.display = node ? 'block' : 'none';
             document.getElementById('ctx-rename').style.display = node ? 'block' : 'none';
             document.getElementById('ctx-copy').style.display = node ? 'block' : 'none';
+            document.getElementById('ctx-copy-json').style.display = node ? 'block' : 'none';
             document.getElementById('ctx-delete-node').style.display = node ? 'block' : 'none';
             /* 粘贴节点 is offered only when something is actually on the clipboard.
                The action itself refuses silently, so the item used to sit there on every
                canvas with nothing copied and do nothing when clicked — which reads as a
                broken menu rather than as "there is nothing to paste". */
             document.getElementById('ctx-paste-node').style.display = this._clipboardData ? 'block' : 'none';
+            /* Import-from-JSON always applies: it takes its payload from the dialog, not the
+               in-canvas clipboard, so an empty clipboard must still leave it offered. */
+            document.getElementById('ctx-import-json').style.display = 'block';
             const foldItem = document.getElementById('ctx-fold-node');
             const typeItem = document.getElementById('ctx-toggle-type');
             if (node) {
@@ -411,12 +415,22 @@ const canvas = {
                 case 'ctxCopy':
                     if (this._contextNode) this.copyNodeToClipboard(this._contextNode);
                     break;
+                case 'ctxCopyJson':
+                    if (this._contextNode) this.copyNodeAsJson(this._contextNode);
+                    break;
                 case 'ctxPasteNode':
                     /* The menu pastes at the click hotspot (canvas space, menu offsets the
                        hotspot); the keyboard route passes no pos and _nextPastePos cascades off
                        the selected node. Both funnel through ONE pasteClipboardAt so a pasted
                        node can never come out different depending on which door it entered. */
                     this.pasteClipboardAt(
+                        this._contextMenuPos
+                            ? this._screenToCanvas(this._contextMenuPos.x - 110, this._contextMenuPos.y - 40)
+                            : null
+                    );
+                    break;
+                case 'ctxImportJson':
+                    this.importNodeFromJson(
                         this._contextMenuPos
                             ? this._screenToCanvas(this._contextMenuPos.x - 110, this._contextMenuPos.y - 40)
                             : null
@@ -758,6 +772,76 @@ const canvas = {
         }
         this.scheduleRender();
         this.saveState();
+    },
+
+    /* ── Cross-canvas share: one node to/from a JSON snippet ── */
+    /* Ctrl+C/V is same-page. These put a single node on the OS clipboard as text and read one
+       back, so a node config travels between canvases, machines or a chat message. The snippet
+       is exactly the in-canvas clipboard shape ({type,title,params}), so import reuses
+       pasteClipboardAt — one paste path, no second implementation to drift. */
+    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'analysis', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment'],
+
+    copyNodeAsJson(id) {
+        const n = this.nodes[id];
+        if (!n) return Promise.resolve(false);
+        const snippet = JSON.stringify({ type: n.type, title: n.title || '', params: n.params || {} });
+        const notify = () => {
+            if (typeof showToast === 'function') showToast(I18n.t('toast.nodeJsonCopied'));
+            return true;
+        };
+        /* The async Clipboard API is only exposed in a secure context (https or localhost);
+           served over a plain http LAN address it is undefined, so fall back to a dialog whose
+           input already holds the text (select-all + copy) rather than failing silently. */
+        if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(snippet).then(notify, () => this._showJsonCopyFallback(snippet));
+        }
+        return this._showJsonCopyFallback(snippet);
+    },
+
+    _showJsonCopyFallback(snippet) {
+        /* No Clipboard API here (plain-http context): show the text so the user can select +
+           copy it. We do NOT toast "copied" — nothing was put on the clipboard by us. */
+        return Promise.resolve(showDialog({
+            message: I18n.t('dialog.nodeJsonCopy'),
+            input: { value: snippet },
+            buttons: [{ label: I18n.t('dialog.confirm'), primary: true }],
+        })).then(() => true);
+    },
+
+    /* atPos is canvas-space (from a menu click), or null → _nextPastePos cascades off the
+       selected node / a random spot, exactly like pasteClipboardAt's keyboard route. */
+    importNodeFromJson(atPos) {
+        return Promise.resolve(showDialog({
+            message: I18n.t('dialog.nodeJsonImport'),
+            input: { placeholder: '{"type":"source", ...}', value: '' },
+            buttons: [
+                { label: I18n.t('dialog.cancel'), value: null },
+                { label: I18n.t('dialog.confirm'), primary: true },
+            ],
+        })).then((raw) => {
+            if (raw === null || raw === undefined) return null;
+            const text = String(raw).trim();
+            if (!text) return null;
+            let parsed;
+            try {
+                parsed = JSON.parse(text);
+            } catch (e) {
+                if (typeof showToast === 'function') showToast(I18n.t('toast.nodeJsonInvalid'));
+                return null;
+            }
+            if (!parsed || typeof parsed !== 'object'
+                || this._VALID_NODE_TYPES.indexOf(parsed.type) < 0
+                || typeof parsed.params !== 'object' || parsed.params === null) {
+                if (typeof showToast === 'function') showToast(I18n.t('toast.nodeJsonInvalid'));
+                return null;
+            }
+            this._clipboardData = {
+                type: parsed.type,
+                title: String(parsed.title || ''),
+                params: parsed.params,
+            };
+            return this.pasteClipboardAt(atPos || null);
+        });
     },
 
     addNode(type, x, y, nodeId) {

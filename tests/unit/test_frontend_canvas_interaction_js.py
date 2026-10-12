@@ -549,6 +549,40 @@ class TestNodeClipboardShortcuts:
         assert c['emptyPasteAddsNothing'] is True
 
 
+class TestNodeJsonShare:
+    """Copy a node to a JSON snippet on the OS clipboard, and add one back — cross-canvas
+    share. Import reuses the in-canvas paste path, so a snippet must come out identical to a
+    hand-copy, and a malformed snippet must refuse (no broken node, no silent DONE)."""
+
+    def test_copy_writes_the_node_as_a_roundtrippable_json_snippet(self, ix):
+        c = ix['node_json']['copy']
+        assert c['ok'] is True
+        assert c['wrote'] == 1, 'clipboard.writeText was not called exactly once'
+        assert c['parsed'] == {'type': 'process', 'title': '处理源', 'params': {'operation': 'keyword'}}, c['parsed']
+        assert c['toast'] == 'JSON-COPIED'
+
+    def test_import_adds_a_node_carrying_the_snippets_type_name_and_params(self, ix):
+        imp = ix['node_json']['imp']
+        assert imp['added'] == 1, 'importing a valid snippet added no node'
+        assert imp['madeNode'] is True
+        assert imp['node'] == {'type': 'source', 'title': '导入源', 'keyword': 'IMP'}, imp['node']
+
+    def test_garbage_json_is_refused_and_adds_no_node(self, ix):
+        bad = ix['node_json']['bad']
+        assert bad['added'] == 0 and bad['nullReturn'] is True
+        assert bad['toast'] == 'JSON-INVALID'
+
+    def test_an_unknown_node_type_is_refused_not_minted(self, ix):
+        ut = ix['node_json']['unknownType']
+        assert ut['added'] == 0, 'a made-up node type must not create a broken node'
+        assert ut['nullReturn'] is True
+        assert ut['toast'] == 'JSON-INVALID'
+
+    def test_cancelling_the_import_dialog_adds_nothing(self, ix):
+        cancel = ix['node_json']['cancelled']
+        assert cancel['added'] == 0 and cancel['nullReturn'] is True
+
+
 class TestSettingsPanelRoundTrip:
     def test_opening_a_node_marks_the_node_and_opens_the_panel(self, ix):
         assert ix['edit']['settingsNode'] == ix['ids']['edit']

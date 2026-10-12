@@ -81,6 +81,10 @@ const KEYS = {
        a whole translated sentence. */
     'toast.nodeCopied': 'COPIED',
     'toast.nodePasted': 'PASTED',
+    'toast.nodeJsonCopied': 'JSON-COPIED',
+    'toast.nodeJsonInvalid': 'JSON-INVALID',
+    'dialog.nodeJsonCopy': 'COPY-PROMPT',
+    'dialog.nodeJsonImport': 'IMPORT-PROMPT',
 };
 /* The zh side exists so a language switch has somewhere to land: with an empty
    dictionary every "does the label follow the language" probe answers "no" for
@@ -1455,6 +1459,60 @@ function nodeClipboardScenario() {
     };
 }
 
+/* Cross-canvas share: copy a node to a JSON snippet on the OS clipboard, and add a node back
+   from such a snippet. Async (clipboard + dialog are promise-based), so it joins the .then chain.
+   The copied node is a `process`, not a `source`, so its seeding never fires an async capability
+   fetch that could rewrite the draft behind this scenario's back. */
+async function nodeJsonScenario() {
+    freshWorld();
+    const written = [];
+    sandbox.navigator = { clipboard: { writeText: (t) => { written.push(String(t)); return Promise.resolve(); } } };
+    const nid = addNode('process', 140, 60);
+    canvas.nodes[nid].title = '处理源';
+    canvas.nodes[nid].params = { operation: 'keyword' };
+    canvas._contextNode = nid;
+
+    const copyOk = await canvas.copyNodeAsJson(nid);
+    const copy = {
+        ok: copyOk,
+        wrote: written.length,
+        parsed: written.length ? JSON.parse(written[0]) : null,
+        toast: toasts[toasts.length - 1],
+    };
+
+    const before = Object.keys(canvas.nodes).length;
+    dialogAnswer = JSON.stringify({ type: 'source', title: '导入源', params: { platform: 'weibo', keyword: 'IMP' } });
+    const newId = await canvas.importNodeFromJson({ x: 220, y: 220 });
+    const imp = {
+        added: Object.keys(canvas.nodes).length - before,
+        madeNode: !!newId,
+        node: newId && canvas.nodes[newId]
+            ? { type: canvas.nodes[newId].type, title: canvas.nodes[newId].title, keyword: canvas.nodes[newId].params.keyword }
+            : null,
+    };
+
+    /* Garbage → refused, no node, invalid toast. */
+    const beforeBad = Object.keys(canvas.nodes).length;
+    dialogAnswer = '这不是 JSON';
+    const badId = await canvas.importNodeFromJson({ x: 30, y: 30 });
+    const bad = { added: Object.keys(canvas.nodes).length - beforeBad, nullReturn: badId === null, toast: toasts[toasts.length - 1] };
+
+    /* A well-formed object with an unknown type → refused (must not mint a broken node). */
+    const beforeUT = Object.keys(canvas.nodes).length;
+    dialogAnswer = JSON.stringify({ type: 'canner', params: {} });
+    const utId = await canvas.importNodeFromJson({ x: 30, y: 30 });
+    const unknownType = { added: Object.keys(canvas.nodes).length - beforeUT, nullReturn: utId === null, toast: toasts[toasts.length - 1] };
+
+    /* Cancel (null answer) → no node. */
+    const beforeCancel = Object.keys(canvas.nodes).length;
+    dialogAnswer = null;
+    const cancelId = await canvas.importNodeFromJson({ x: 30, y: 30 });
+    const cancelled = { added: Object.keys(canvas.nodes).length - beforeCancel, nullReturn: cancelId === null };
+
+    out.node_json = { copy, imp, bad, unknownType, cancelled };
+    dialogAnswer = null;
+}
+
 resizeRepaintScenario();
 paletteKeyboardScenario();
 nodeClipboardScenario();
@@ -1464,6 +1522,7 @@ connectWarningsScenarios()
     .then(() => {
         newfileScenario();
     })
+    .then(() => nodeJsonScenario())
     .then(() => {
         process.stdout.write(JSON.stringify(out));
     })

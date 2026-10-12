@@ -68,7 +68,7 @@ python app.py
   右侧大纲侧栏一键定位节点、自动排布上下顺序可指定、运行队列、停止与并行/串行执行。→ [`docs/workflow.md`](docs/workflow.md)
 - **断点续跑与运行记录**：节点级检查点、LLM 答案缓存、增量采集台账、Cookie 中途过期续跑、Resume 节点、
   保留策略与运行时长。→ [`docs/workflow.md`](docs/workflow.md)
-- **界面**：中英双语、亮/暗主题（`自动`跟随系统或手动切换，图表配色与 PNG 导出同步跟随）、节点库与右侧大纲支持按名称/类型/缩写搜索过滤、节点库条目为 `role=button` 且 Tab 可达（`Enter`/空格或直接点击即在画布添加该类型节点）、`Ctrl`/`Cmd`+`F` 唤起大纲查找、选中节点 `Ctrl`/`Cmd`+`C`/`V` 复制粘贴（副本错位叠开）与方向键微移（`Shift` 精调 1px）在输入框外生效、框内不劫持、对话框为模态且键盘可达（Tab 焦点锁在框内、Esc 关闭、role/aria-modal 语义）、启动步骤各自兜异常、离线不拖垮整页；画布支持触控板双指滚动平移 / 捏合缩放与平板双指手势；状态栏一个 `●` 表示画布有未保存改动（只跟踪节点/连线模型，平移视角不算改动，保存/打开即清除），打开另一份工作流仅在确有未保存改动时才二次确认。→ [`docs/workflow.md`](docs/workflow.md)
+- **界面**：中英双语、亮/暗主题（`自动`跟随系统或手动切换，图表配色与 PNG 导出同步跟随）、节点库与右侧大纲支持按名称/类型/缩写搜索过滤、节点库条目为 `role=button` 且 Tab 可达（`Enter`/空格或直接点击即在画布添加该类型节点）、`Ctrl`/`Cmd`+`F` 唤起大纲查找、选中节点 `Ctrl`/`Cmd`+`C`/`V` 复制粘贴（副本错位叠开）与方向键微移（`Shift` 精调 1px）在输入框外生效、框内不劫持、右键「复制节点为 JSON / 从 JSON 导入节点」可跨画布分享单个节点、对话框为模态且键盘可达（Tab 焦点锁在框内、Esc 关闭、role/aria-modal 语义）、启动步骤各自兜异常、离线不拖垮整页；画布支持触控板双指滚动平移 / 捏合缩放与平板双指手势；状态栏一个 `●` 表示画布有未保存改动（只跟踪节点/连线模型，平移视角不算改动，保存/打开即清除），打开另一份工作流仅在确有未保存改动时才二次确认。→ [`docs/workflow.md`](docs/workflow.md)
 - **节点类型**：Name / Data Source / Upload / Process / Analysis / Visualize / Compile / Tokenize / Output / Resume / Comment。→ [`docs/workflow.md`](docs/workflow.md#节点类型)
 - **HTTP API**：工作流、运行记录、数据集、分析/可视化/导出、Chart Studio、统计/历史、AI/Cookie/系统全部端点。→ [`docs/api.md`](docs/api.md)
 - **配置**：环境变量、运行时设置（`data/settings.json`）、保留策略 / 内存 / 排队-错峰-预检常量、云端部署。→ [`docs/config.md`](docs/config.md)
