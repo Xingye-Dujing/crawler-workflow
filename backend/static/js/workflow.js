@@ -7279,7 +7279,7 @@ var runsManager = {
                 body: JSON.stringify({ run_id: runId }),
             });
             var result = await resp.json();
-            showToast(result.ok ? I18n.t('runsMgr.removeDone') : I18n.t('runsMgr.removeFailed'));
+            showToast(result.ok ? I18n.t('runsMgr.removeDone') : ((result && result.error) || I18n.t('runsMgr.removeFailed')));
         } catch (e) {
             showToast(I18n.t('runsMgr.removeFailed'));
         }
@@ -7982,7 +7982,7 @@ var exportsManager = {
                 body: JSON.stringify({ name: name }),
             });
             var result = await resp.json();
-            showToast(result.ok ? I18n.t('exportsMgr.removeDone') : I18n.t('exportsMgr.removeFailed'));
+            showToast(result.ok ? I18n.t('exportsMgr.removeDone') : ((result && result.error) || I18n.t('exportsMgr.removeFailed')));
         } catch (e) {
             showToast(I18n.t('exportsMgr.removeFailed'));
         }
@@ -8397,7 +8397,7 @@ var datasetManager = {
         });
         if (!ok) return;
         var result = await fetchJSON('/api/data/datasets/' + encodeURIComponent(id), { method: 'DELETE' });
-        showToast(result && result.ok ? I18n.t('datasetMgr.removeDone') : I18n.t('datasetMgr.removeFailed'));
+        showToast(result && result.ok ? I18n.t('datasetMgr.removeDone') : ((result && result.error) || I18n.t('datasetMgr.removeFailed')));
         this.refresh();
     },
 
@@ -8608,7 +8608,10 @@ var wfFiles = {
             headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
             body: JSON.stringify({ name: name }),
         });
-        showToast(result && result.ok ? I18n.t('wfMgr.removeDone') : I18n.t('wfMgr.removeFailed'));
+        /* A locked workflow is refused with HTTP 409 whose body already carries the
+           friendly 「这一项已被锁定…」 reason; surfacing result.error (as rename does)
+           tells the user WHY it failed, instead of a bare generic 删除失败 toast. */
+        showToast(result && result.ok ? I18n.t('wfMgr.removeDone') : ((result && result.error) || I18n.t('wfMgr.removeFailed')));
         if (typeof resumeBar !== 'undefined' && resumeBar.refresh) resumeBar.refresh();
         this.refresh();
     },

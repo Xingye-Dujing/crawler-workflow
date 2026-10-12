@@ -102,8 +102,10 @@ class TestRunRecordActions:
         assert pa['remove_resumable']['url'] == '/api/runs/discard'
         assert pa['remove_finished']['url'] == '/api/runs/delete'
 
-    def test_a_refused_delete_says_so(self, pa):
-        assert any('failed' in toast.lower() for toast in pa['remove_refused_by_server']['toasts'])
+    def test_a_refused_delete_surfaces_the_server_reason(self, pa):
+        # The old code threw away the 409 body's reason and toasted a generic failure;
+        # the reason (e.g. 「已被锁定」) must reach the user, and it must not read as success.
+        assert pa['remove_refused_by_server']['toasts'] == ['LOCK-REFUSED']
 
     def test_the_detail_row_fetches_once_and_lists_every_node(self, pa):
         detail = pa['detail_opened']
@@ -158,9 +160,9 @@ class TestExportActions:
         assert pa['export_remove']['url'] == '/api/exports/delete'
         assert pa['export_remove']['body'] == {'name': 'a.csv'}
 
-    def test_a_refused_delete_reports_failure_not_success(self, pa):
+    def test_a_refused_delete_reports_the_reason_not_a_false_success(self, pa):
         toasts = pa['export_remove_refused']['toasts']
-        assert toasts == ['Delete failed'], toasts
+        assert toasts == ['LOCK-REFUSED'], toasts
 
     def test_sizes_are_readable_not_raw_byte_counts(self, pa):
         assert pa['export_sizing'] == {
@@ -519,6 +521,14 @@ class TestWorkflowFilePanel:
 
     def test_a_declined_delete_sends_nothing(self, pa):
         assert pa['wf_remove_declined']['requested'] == 0
+
+    def test_a_locked_workflow_reports_the_lock_reason(self, pa):
+        """The reported bug: deleting a locked workflow popped a bare generic failure
+        (and the earlier code path treated it like any error) instead of the server's
+        「已被锁定」 reason. The 409 body's reason must reach the toast."""
+        got = pa['wf_remove_locked']
+        assert got['requested'] >= 1, 'the delete was still attempted (the panel then re-lists)'
+        assert got['toasts'] == ['LOCK-REFUSED'], 'the lock reason, not a generic/erroneous success'
 
     @pytest.mark.parametrize('action', ['wf_open_while_running', 'wf_rename_while_running'])
     def test_all_three_actions_refuse_while_a_run_is_live(self, pa, action):

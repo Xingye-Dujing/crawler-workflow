@@ -360,8 +360,8 @@ requests.length = 0;
 await pa.runsManager.remove('r9', false);
 out.remove_finished = { url: requests[0].url };
 fresh();
-route('/api/runs/delete', { ok: false, error: 'gone' });
-route('/api/runs/discard', { ok: false, error: 'gone' });
+route('/api/runs/delete', { ok: false, error: 'LOCK-REFUSED' });
+route('/api/runs/discard', { ok: false, error: 'LOCK-REFUSED' });
 requests.length = 0;
 await pa.runsManager.remove('r9', false);
 out.remove_refused_by_server = { toasts: toasts.slice() };
@@ -451,7 +451,7 @@ requests.length = 0;
 await pa.exportsManager.remove('a.csv');
 out.export_remove_declined = { requested: requests.length };
 fresh();
-route('/api/exports/delete', { ok: false, error: 'gone' });
+route('/api/exports/delete', { ok: false, error: 'LOCK-REFUSED' });
 await pa.exportsManager.remove('a.csv');
 out.export_remove_refused = { toasts: toasts.slice() };
 out.export_sizing = {
@@ -650,6 +650,15 @@ answers.dialog = false;
 requests.length = 0;
 await pa.wfFiles.remove('old');
 out.wf_remove_declined = { requested: requests.length };
+/* A LOCKED workflow is refused with the server's own reason in the body; the toast must
+   carry that reason ("已被锁定…"), not a bare generic 删除失败 and never a false success. */
+fresh();
+answers.dialog = true;
+answer = { ok: false, error: 'LOCK-REFUSED' };
+requests.length = 0;
+toasts.length = 0;
+await pa.wfFiles.remove('locked-file');
+out.wf_remove_locked = { toasts: toasts.slice(), requested: requests.length };
 fresh();
 /* An empty canvas has nothing to lose, so opening must not stop to ask. */
 route('/api/workflow/load', { ok: true, workflow: { nodes: [], connections: [] } });
