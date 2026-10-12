@@ -12,6 +12,16 @@ primitives stubbed, so they measure the decision + the report, not a real model 
 
 
 class TestBertDefaultModel:
+    def test_all_three_analysis_ops_declare_bert_as_the_default(self, app_module):
+        """The whole point of "默认 BERT + 跑不动自动退": the executor's declared default for each
+        bert-capable op IS bert (the frontend panel default is pinned in test_frontend_js). Without
+        this, someone could flip PROCESS_ENUMS['sentiment'/'tendency'] back to snownlp/llm — only
+        emotion was previously guarded — and an untouched node would silently stop running bert."""
+        for op in ('sentiment', 'emotion', 'tendency'):
+            default, allowed = app_module.PROCESS_ENUMS[op]['mode']
+            assert default == 'bert', f'{op} must default to the recommended main model, got {default!r}'
+            assert 'bert' in allowed, f'{op} must accept bert'
+
     def test_a_blank_model_resolves_to_the_op_registered_default(self, app_module, monkeypatch):
         monkeypatch.setattr(app_module, 'default_model_path_for', lambda op: f'/models/{op}')
         assert app_module._effective_bert_model('sentiment', {}) == '/models/sentiment'
