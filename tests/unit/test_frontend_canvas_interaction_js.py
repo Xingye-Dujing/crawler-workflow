@@ -854,3 +854,115 @@ class TestCommentNodeForm:
     def test_an_untouched_comment_node_starts_with_the_ledger_in_force(self, ix):
         """Default off: re-collecting everything is the expensive reading of an empty box."""
         assert ix['comment_form'], 'the form did not render at all'
+
+
+class TestKeyboardConnect:
+    """The wire is now reachable without a pointer. `connectNodes` is the one synchronous
+    model mutation the drag path and the L link-mode share, so these assert both the seam
+    (a connection created exactly once, self/duplicate refused, the tokenize↔visualize
+    coupling preserved) and the keyboard gesture itself."""
+
+    def test_connect_nodes_creates_once_and_refuses_self_and_duplicate(self, ix):
+        made = ix['keyboard_connect']['direct']
+        assert made['firstOk'] is True
+        assert made['dupOk'] is True and made['selfOk'] is True
+        assert made['count'] == 1, 'a duplicate or a self-edge must add no wire'
+
+    def test_connect_nodes_keeps_the_tokenize_visualize_coupling(self, ix):
+        """The output_mode rewrite moved into connectNodes with the extraction; if it had
+        stayed only in finishConnection, the keyboard path would wire the pair and leave the
+        tokenizer in a mode the visualizer cannot consume."""
+        assert ix['keyboard_connect']['tokenizeCoupling']['mode'] == 'word_freq'
+
+    def test_link_mode_arms_on_first_key_and_commits_on_the_second(self, ix):
+        lm = ix['keyboard_connect']['linkMode']
+        assert lm['armedFrom'] is True, 'the first L must remember the wire start'
+        assert lm['armedToast'] == 'LINK-HINT', 'arming a wire needs a visible next step'
+        assert lm['created'] is True
+        assert lm['clearedAfter'] is True, 'a committed wire must leave no stuck mode'
+
+    def test_link_key_without_a_selection_arms_nothing(self, ix):
+        ns = ix['keyboard_connect']['linkNoSelection']
+        assert ns['linkFrom'] is None
+        assert ns['toast'] == 'LINK-NOSEL'
+
+    def test_escape_clears_an_armed_link_start(self, ix):
+        esc = ix['keyboard_connect']['linkEscapeClears']
+        assert esc['armed'] is True
+        assert esc['afterEscape'] is None, 'Escape must abandon a half-started wire'
+
+    def test_re_pressing_the_key_on_the_same_start_cancels_without_wiring(self, ix):
+        cancel = ix['keyboard_connect']['linkSameStartCancel']
+        assert cancel['connections'] == 0
+        assert cancel['linkFrom'] is None
+
+    def test_a_cancelled_link_mode_can_be_started_again(self, ix):
+        """Cancel must not leave a flag that makes the next L a no-op — otherwise the gesture
+        silently dies after one abort."""
+        assert ix['keyboard_connect']['linkRetriable']['armedAgain'] is True
+
+
+class TestMinimap:
+    """The corner overview. The geometry is pure (bounds/scale/click→world) and the drawing is
+    an innerHTML string, so the harness checks both without a rendered canvas — and pins that
+    clicking the minimap is a VIEW change that never touches the model or the undo history."""
+
+    def test_an_empty_canvas_has_no_minimap(self, ix):
+        m = ix['minimap']['empty']
+        assert m['boundsNull'] is True
+        assert m['cleared'] is True, 'nothing to draw must not leave stale boxes'
+
+    def test_bounds_span_every_node(self, ix):
+        b = ix['minimap']['bounds']
+        assert (b['minX'], b['minY']) == (0, 0)
+        assert (b['maxX'], b['maxY']) == (1200, 700), 'both boxes, sized, not just their corners'
+        assert ix['minimap']['scale_positive'] is True
+
+    def test_click_maps_back_to_the_world_point(self, ix):
+        rt = ix['minimap']['click_roundtrip']
+        assert rt['dx'] < 1e-6 and rt['dy'] < 1e-6, 'the draw map and the click inverse must agree'
+
+    def test_the_map_draws_one_box_per_node_plus_a_viewport(self, ix):
+        assert ix['minimap']['render'] == {'nodes': 2, 'view': 1}
+
+    def test_a_disabled_node_shades_in_the_map(self, ix):
+        assert ix['minimap']['disabled'] is True
+
+    def test_clicking_recentres_without_moving_model_or_history(self, ix):
+        c = ix['minimap']['centre']
+        assert c['moved'] is True
+        assert c['panX'] == 100, 'centring world x=500 in a 1200 box at zoom 1 puts panX at 600-500'
+        assert c['stateUnchanged'] is True, 'a camera move must not enter the model'
+        assert c['historyUnchanged'] is True, 'a camera move must not be an undo step'
+
+
+class TestMultiSelect:
+    """Shift-click / marquee selection and the batch operations that follow. Selection is a view
+    concern (never in getState/history), so a multi-select must not become undo steps, and a batch
+    delete is ONE edit with ONE toast."""
+
+    def test_shift_click_accumulates_the_selection(self, ix):
+        s = ix['multi_select']['shiftAdd']
+        assert len(s['set']) == 2
+        assert s['anchor'] == s['set'][-1]
+        assert len(s['highlighted']) == 2, 'both boxes light, not just the last'
+
+    def test_a_plain_click_resets_to_one(self, ix):
+        assert len(ix['multi_select']['plainResets']['set']) == 1
+
+    def test_batch_nudge_moves_every_selected_box(self, ix):
+        n = ix['multi_select']['batchNudge']
+        assert n['aLeft'] == 10 and n['bLeft'] == 410, 'both selected nodes moved +10'
+
+    def test_batch_delete_is_one_edit_with_one_toast(self, ix):
+        d = ix['multi_select']['batchDelete']
+        assert len(d['remaining']) == 1, 'the two selected go, the third survives'
+        assert d['toast'] == 'toast.nodesDeleted', 'the plural path, not the single-node one'
+        assert d['setAfter'] == [], 'a deleted node leaves the selection set'
+
+    def test_the_marquee_selects_the_nodes_it_overlaps(self, ix):
+        m = ix['multi_select']['marquee']
+        assert m['set'] == m['expected'] and len(m['set']) == 2
+
+    def test_a_background_click_that_never_moved_selects_nothing(self, ix):
+        assert ix['multi_select']['clickNoDrag']['set'] == []

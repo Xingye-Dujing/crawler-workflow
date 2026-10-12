@@ -53,12 +53,15 @@ OPERATIONS = [
     'topic_model',
     'topic_by_stage',
     'topic_label',
+    'cluster_label',
     'topic_map',
     'topic_salience',
     'topic_timeline',
     'topic_flow',
     'topic_coherence',
     'cooccur',
+    'reply_graph',
+    'compare_platform',
     'forecast',
     'alert',
     'sentiment_evolution',
@@ -1915,13 +1918,199 @@ class TestTopicLabel:
     def test_the_gate_knows_its_columns_and_its_switch(self):
         from services.data_analysis import LLM_OPS, STEP_PARAMS, normalize_step_params, validate_step
 
-        assert frozenset({'topic_label'}) == LLM_OPS
+        assert frozenset({'topic_label', 'cluster_label'}) == LLM_OPS
         params = normalize_step_params('topic_label', {'words_col': ' 词 ', 'summary_col': ' 概括 ', 'on_fail': ''})
         assert params['words_col'] == '词' and params['summary_col'] == '概括'
         assert params['on_fail'] == 'abort', 'a blank select is the declared default'
         with pytest.raises(UnknownOperationError, match='on_fail'):
             validate_step(self._topics(), 'topic_label', {'words_col': 'feature_words', 'on_fail': 'ignore'})
         assert STEP_PARAMS['topic_label']['nonblank'] == ('summary_col',)
+
+
+class TestClusterLabel:
+    """聚类摘要: one model call per cluster over its OWN raw texts. Same refusal / Stop / cache
+    discipline as 主题概括 (a paid per-row step), but the input is documents grouped by a cluster
+    label, not a pre-reduced topic table — so the shape it returns is one row per cluster."""
+
+    class _Client:
+        label = 'ollama:stub'
+
+        def __init__(self, answer='这一簇在追问事件细节'):
+            self.prompts = []
+            self.answer = answer
+
+        def chat(self, prompt, max_retries=2):
+            self.prompts.append(prompt)
+            return self.answer
+
+    class _Store:
+        def __init__(self):
+            self._d = {}
+
+        def cache_get(self, scope, key):
+            return self._d.get(scope + '|' + key)
+
+        def cache_put(self, scope, key, value):
+            self._d[scope + '|' + key] = value
+
+    @staticmethod
+    def _docs() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                '正文': ['甲甲', '乙乙', '丙丙', '丁丁', '戊戊'],
+                'cluster': [0, 0, 1, 1, 2],
+            }
+        )
+
+    def test_one_summary_row_per_cluster(self):
+        out = D.cluster_label(self._docs(), llm=self._Client(), summary_col='摘要')
+        assert list(out.columns) == ['cluster', 'n_docs', '摘要']
+        assert len(out) == 3, 'three clusters → three rows, whatever the document count'
+        assert (out['n_docs'] == [2, 2, 1]).all()
+
+    def test_a_missing_group_column_is_refused_by_name(self):
+        frame = pd.DataFrame({'正文': ['甲']})
+        with pytest.raises(UnknownOperationError, match='cluster'):
+            D.cluster_label(frame, llm=self._Client())
+
+    def test_a_missing_text_column_is_refused_by_name(self):
+        frame = pd.DataFrame({'cluster': [0]})
+        with pytest.raises(UnknownOperationError, match='正文'):
+            D.cluster_label(frame, llm=self._Client())
+
+    def test_no_model_is_a_refusal_not_an_empty_column(self):
+        from i18n import t
+
+        with pytest.raises(UnknownOperationError) as exc:
+            D.cluster_label(self._docs(), llm=None)
+        assert t('analysis.label_no_llm', op='cluster_label') in str(exc.value)
+
+    def test_a_stopped_run_marks_the_clusters_the_model_never_saw(self):
+        class _Stop:
+            def __init__(self):
+                self.seen = 0
+
+            def is_set(self):
+                self.seen += 1
+                return self.seen > 1
+
+        from analyzers.llm_client import ABORT_MARK
+
+        client = self._Client()
+        out = D.cluster_label(self._docs(), llm=client, cancel=_Stop())
+        assert len(client.prompts) == 1, 'Stop is checked before every call, not after the pass'
+        assert list(out['摘要'][1:]) == [ABORT_MARK, ABORT_MARK]
+
+    def test_the_answer_is_cached_so_a_re_run_does_not_re_pay(self):
+        store = self._Store()
+        client = self._Client()
+        D.cluster_label(self._docs(), llm=client, store=store)
+        assert len(client.prompts) == 3
+        again = self._Client()
+        D.cluster_label(self._docs(), llm=again, store=store)
+        assert again.prompts == [], 'the same table is replayed from the cache'
+
+    def test_a_cluster_count_over_the_cap_is_refused_with_both_numbers(self):
+        with pytest.raises(UnknownOperationError, match='3 行'):
+            D.cluster_label(self._docs(), llm=self._Client(), max_groups=2)
+
+    def test_it_reaches_the_pipeline_only_through_llm_ops(self):
+        client = self._Client()
+        result, report = D.run_pipeline(
+            self._docs(),
+            [{'op': 'cluster_label', 'params': {'group_col': 'cluster', 'text_col': '正文', 'summary_col': '摘要'}}],
+            llm=client,
+        )
+        assert [entry['op'] for entry in report] == ['cluster_label']
+        assert len(result) == 3 and len(client.prompts) == 3
+
+
+class TestReplyGraph:
+    """回复传播边: parent floor → that floor's author, one directed edge per reply. Orphans (a
+    reply whose 父楼层 has no matching top-level row) and self-edges (the same author) are dropped,
+    and a thread with nothing to link refuses rather than returning an empty table."""
+
+    @staticmethod
+    def _thread() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                '评论者': ['甲', '乙', '丙', '丁', '乙'],
+                '楼层': ['1', '2', '3', '4', '5'],
+                '父楼层': ['', '', '1', '1', '9'],
+            }
+        )
+
+    def test_builds_directed_edges_from_the_parent_floor(self):
+        out = D.reply_graph(self._thread())
+        assert list(out.columns) == ['src_author', 'dst_author', 'weight']
+        pairs = {(r.src_author, r.dst_author): r.weight for r in out.itertuples()}
+        assert pairs == {('甲', '丙'): 1, ('甲', '丁'): 1}, 'floor 1 is 甲; 丙 and 丁 answer it'
+
+    def test_orphan_reply_and_self_edge_are_dropped(self):
+        frame = pd.DataFrame(
+            {
+                '评论者': ['甲', '甲', '乙', '乙'],
+                '楼层': ['1', '2', '3', '4'],
+                '父楼层': ['', '1', '1', '3'],
+            }
+        )
+        out = D.reply_graph(frame)
+        assert list(out['src_author']) == ['甲'] and list(out['dst_author']) == ['乙']
+
+    def test_weight_counts_repeats_between_the_same_pair(self):
+        frame = pd.DataFrame(
+            {
+                '评论者': ['甲', '乙', '乙'],
+                '楼层': ['1', '2', '3'],
+                '父楼层': ['', '1', '1'],
+            }
+        )
+        out = D.reply_graph(frame)
+        assert len(out) == 1 and int(out['weight'].iloc[0]) == 2
+
+    def test_no_resolvable_reply_raises_not_an_empty_table(self):
+        frame = pd.DataFrame({'评论者': ['甲', '乙'], '楼层': ['1', '2'], '父楼层': ['', '']})
+        with pytest.raises(UnknownOperationError):
+            D.reply_graph(frame)
+
+    def test_a_missing_named_column_is_refused_by_name(self):
+        frame = pd.DataFrame({'评论者': ['甲'], '楼层': ['1']})
+        with pytest.raises(UnknownOperationError, match='父楼层'):
+            D.reply_graph(frame)
+
+
+class TestComparePlatform:
+    """跨平台对比: one row per platform — a count always, an optional aggregate of a numeric
+    column. A value column that is not in the table is refused by name, never dropped silently."""
+
+    @staticmethod
+    def _merged() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                'platform': ['weibo', 'weibo', 'zhihu'],
+                '情感': [1.0, 3.0, 5.0],
+            }
+        )
+
+    def test_counts_and_mean_per_platform(self):
+        out = D.compare_platform(self._merged(), platform_col='platform', value_col='情感', agg='mean')
+        assert list(out.columns) == ['platform', 'n', '情感_mean']
+        assert out.iloc[0]['platform'] == 'weibo' and int(out.iloc[0]['n']) == 2
+        assert abs(float(out.iloc[0]['情感_mean']) - 2.0) < 1e-9
+        assert abs(float(out.iloc[1]['情感_mean']) - 5.0) < 1e-9
+
+    def test_without_a_value_column_it_is_counts_only(self):
+        out = D.compare_platform(self._merged())
+        assert list(out.columns) == ['platform', 'n']
+
+    def test_a_missing_value_column_is_refused_by_name(self):
+        with pytest.raises(UnknownOperationError, match='根本没有'):
+            D.compare_platform(self._merged(), value_col='根本没有')
+
+    def test_a_missing_platform_column_is_refused_by_name(self):
+        frame = pd.DataFrame({'情感': [1.0]})
+        with pytest.raises(UnknownOperationError, match='platform'):
+            D.compare_platform(frame)
 
 
 class TestTopicModelEmbedding:

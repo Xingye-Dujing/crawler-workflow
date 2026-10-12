@@ -895,6 +895,24 @@ NORMALIZED = {
         },
         {'words_col': '词', 'samples_col': '样本', 'summary_col': '概括', 'on_fail': 'blank', 'max_topics': 5},
     ),
+    'cluster_label': (
+        {
+            'cluster_group_col': '簇',
+            'cluster_text_col': '内容',
+            'cluster_summary_col': '概述',
+            'cluster_on_fail': 'blank',
+            'cluster_max_groups': '3',
+            'cluster_sample_n': '2',
+        },
+        {
+            'group_col': '簇',
+            'text_col': '内容',
+            'summary_col': '概述',
+            'on_fail': 'blank',
+            'max_groups': 3,
+            'sample_n': 2,
+        },
+    ),
     'topic_by_stage': (
         {
             'column': '城市',
@@ -977,6 +995,14 @@ NORMALIZED = {
     'cooccur': (
         {'column': '城市', 'cooccur_topn': '12', 'cooccur_min_count': '3', 'cooccur_window': '5'},
         {'column': '城市', 'topn': 12, 'min_count': 3, 'window': 5},
+    ),
+    'reply_graph': (
+        {'reply_author_col': '人', 'reply_floor_col': '层', 'reply_parent_col': '父'},
+        {'author_col': '人', 'floor_col': '层', 'parent_floor_col': '父'},
+    ),
+    'compare_platform': (
+        {'compare_platform_col': '平台', 'compare_value_col': '分数', 'compare_agg': 'sum'},
+        {'platform_col': '平台', 'value_col': '分数', 'agg': 'sum'},
     ),
     'forecast': (
         {
@@ -1092,6 +1118,14 @@ BLANK_FORM = {
         'on_fail': 'abort',
         'max_topics': 30,
     },
+    'cluster_label': {
+        'group_col': 'cluster',
+        'text_col': '正文',
+        'summary_col': '摘要',
+        'on_fail': 'abort',
+        'max_groups': 60,
+        'sample_n': 8,
+    },
     # The three reads that follow the staged model fall back to the column names
     # ``topic_by_stage`` writes, so an untouched form is the hand-off. The order column and
     # the numbers are omitted when blank: the first is a choice the step cannot make for the
@@ -1106,6 +1140,8 @@ BLANK_FORM = {
     },
     'topic_coherence': {'column': '', 'topn': 10},
     'cooccur': {'column': '', 'topn': 30},
+    'reply_graph': {'author_col': '评论者', 'floor_col': '楼层', 'parent_floor_col': '父楼层'},
+    'compare_platform': {'platform_col': 'platform', 'value_col': '', 'agg': 'mean'},
     # Both look-forward steps name the columns 情感演化曲线 writes, so an untouched form is the
     # hand-off. The two smoothing factors and the two optional alert signals are omitted when
     # blank: they are choices, not defaults to fall back on.
@@ -1734,6 +1770,14 @@ PARSED_FIELDS = {
     'label_summary_col',
     'label_on_fail',
     'label_max_topics',
+    # The cluster summariser re-shapes all six: three fall back to a column name when blank,
+    # one is a select with a declared default, two are counts.
+    'cluster_group_col',
+    'cluster_text_col',
+    'cluster_summary_col',
+    'cluster_on_fail',
+    'cluster_max_groups',
+    'cluster_sample_n',
     # The lifecycle and flow steps re-shape all six of their fields each: four fall back to a
     # 分阶段 LDA column name when blank, one is dropped when blank (the order column, which is a
     # choice rather than a default) and one is a number.
@@ -1758,6 +1802,15 @@ PARSED_FIELDS = {
     'cooccur_topn',
     'cooccur_min_count',
     'cooccur_window',
+    # The reply graph re-shapes all three: each column falls back to a comment-crawl name when blank.
+    'reply_author_col',
+    'reply_floor_col',
+    'reply_parent_col',
+    # The comparison re-shapes all three: platform and aggregate fall back to a declared default
+    # when blank, the value column is forwarded (an empty box means "counts only").
+    'compare_platform_col',
+    'compare_value_col',
+    'compare_agg',
     # Both look-forward steps re-shape every one of their fields: the four column names fall back
     # to what 情感演化曲线 writes (or are dropped, for the two optional alert signals), and every
     # number is read through ``_optional_int`` / ``_optional_float``.
@@ -2487,6 +2540,12 @@ PANEL_VALUE = {
     'label_summary_col': '概括',
     'label_on_fail': 'blank',
     'label_max_topics': '5',
+    'cluster_group_col': '簇',
+    'cluster_text_col': '内容',
+    'cluster_summary_col': '概述',
+    'cluster_on_fail': 'blank',
+    'cluster_max_groups': '3',
+    'cluster_sample_n': '2',
     # None of these is the step's own default, for the same reason as time_part above.
     'stages_min_days': '4',
     'stages_max_windows': '3',
@@ -2525,6 +2584,15 @@ PANEL_VALUE = {
     'cooccur_topn': '12',
     'cooccur_min_count': '3',
     'cooccur_window': '5',
+    # None of the reply-graph probes equals its fallback column name, so each proves its box is read.
+    'reply_author_col': '人',
+    'reply_floor_col': '层',
+    'reply_parent_col': '父',
+    # None equals its fallback: platform '平台' vs default 'platform', agg 'sum' vs 'mean', and the
+    # value probe is a name (blank would be indistinguishable from an untested box).
+    'compare_platform_col': '平台',
+    'compare_value_col': '分数',
+    'compare_agg': 'sum',
     # The forecast's boxes: none of these is the value an untouched form falls back to, and
     # ``forecast_alpha`` is 0.4 rather than 0 because a probe the normalizer would drop (a falsy
     # number) cannot show that the field reached the step.

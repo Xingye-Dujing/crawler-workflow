@@ -424,6 +424,30 @@ _ZH = {
         '请用不超过 15 个汉字概括这个主题在说什么；只输出概括本身，不要解释、不要引号。\n'
         '阶段：{stage}\n主题编号：{topic}\n特征词：{words}\n代表文本：{samples}'
     ),
+    'analysis.cluster_prompt': (
+        '你是舆情分析研究员。下面是某网络暴力事件语料按语义聚类后、同一个簇里的若干条原始文本。'
+        '请用不超过 40 个汉字概括这一簇在说什么；只输出概括本身，不要解释、不要引号。\n'
+        '簇号：{group}\n簇内条数：{size}\n代表文本：\n{texts}'
+    ),
+    'analysis.cluster_done': '聚类摘要：{n} 个簇已写出（模型 {model}）',
+    'analysis.cluster_failed': '簇 {group} 的摘要失败：{err}',
+    'analysis.cluster_cancelled': '已停止：还有 {n} 个簇没问模型，它们的摘要标为未处理',
+    'analysis.cluster_no_texts': '簇 {group} 里没有可摘要的文本，无法问模型',
+    'analysis.cluster_empty': '簇 {group} 的摘要返回为空',
+    'analysis.reply_graph_no_edges': (
+        '回复传播图找不到可关联的回复：请确认「评论者」「楼层」「父楼层」三列存在，'
+        '且确有回复行的「父楼层」能对上某条顶层评论的「楼层」'
+    ),
+    'analysis.reply_graph_done': '回复传播图：{edges} 条边、{nodes} 个节点',
+    'analysis.compare_done': '跨平台对比：{platforms} 个平台（数值列 {value}）',
+    'analysis.bot_col_missing': '水军可能性需要「{col}」列，表里没有',
+    'analysis.bot_done': '水军可能性：{rows} 行里 {flagged} 行被标为可疑（来自 {authors} 个作者）',
+    'analysis.bot_limit': (
+        '水军可能性只是召回线索、不是判决：它只能看见表内的跨账号重复文本与发帖突发，'
+        '改了措辞和时间的协同账号一律漏检，且漏检率不可测'
+    ),
+    'analysis.bot_evidence_dup': '与他人文本高度雷同（{ratio}）',
+    'analysis.bot_evidence_burst': '发帖突发：某10分钟窗内达 {peak} 条（各作者峰值中位 {median}）',
     'analysis.topic_done': (
         'LDA 主题模型：{n} 个主题、{rows} 篇文本，困惑度 {perplexity}（数值越低拟合越好，但过小意味着在记原文）'
     ),
@@ -1695,6 +1719,32 @@ _EN = {
         'output the phrase alone, no explanation, no quotes.\n'
         'Phase: {stage}\nTopic: {topic}\nFeature words: {words}\nSample posts: {samples}'
     ),
+    'analysis.cluster_prompt': (
+        'You are a public-opinion analyst. Below are several raw posts that fall in the SAME semantic cluster '
+        'of a cyberbullying corpus. Summarise what this cluster is about in one short sentence; output the '
+        'summary alone, no explanation, no quotes.\n'
+        'Cluster: {group}\nSize: {size}\nSample texts:\n{texts}'
+    ),
+    'analysis.cluster_done': 'cluster summaries: {n} clusters written (model {model})',
+    'analysis.cluster_failed': 'the summary for cluster {group} failed: {err}',
+    'analysis.cluster_cancelled': 'stopped: {n} clusters were never asked, and their summaries are marked 未处理',
+    'analysis.cluster_no_texts': 'cluster {group} has no text to summarise, so the model cannot be asked',
+    'analysis.cluster_empty': 'the summary for cluster {group} came back empty',
+    'analysis.reply_graph_no_edges': (
+        'the reply graph found no resolvable reply: check that 评论者 / 楼层 / 父楼层 exist and '
+        "that some reply's parent floor matches a top-level comment's floor"
+    ),
+    'analysis.reply_graph_done': 'reply graph: {edges} edges over {nodes} nodes',
+    'analysis.compare_done': 'cross-platform compare: {platforms} platforms (value column {value})',
+    'analysis.bot_col_missing': 'bot likelihood needs the "{col}" column, which is not in this table',
+    'analysis.bot_done': 'bot likelihood: {flagged} of {rows} rows flagged suspect (across {authors} authors)',
+    'analysis.bot_limit': (
+        'bot likelihood is a recall hint, not a verdict: it only sees cross-account near-duplicate text '
+        'and posting bursts inside the table; a coordinated account that varies wording and timing is '
+        'missed, and that miss rate is unmeasurable'
+    ),
+    'analysis.bot_evidence_dup': 'text highly similar to another account ({ratio})',
+    'analysis.bot_evidence_burst': 'posting burst: {peak} posts in one 10-minute window (author peaks median {median})',
     'analysis.topic_done': (
         'LDA topic model: {n} topics over {rows} texts, perplexity {perplexity} '
         '(lower fits better, but far too low means it is memorising the corpus)'

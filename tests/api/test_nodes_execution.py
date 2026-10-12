@@ -401,6 +401,33 @@ def _is_stamped(name: str, stem: str) -> bool:
     return bool(re.fullmatch(rf'{stem}-\d{{8}}-\d{{6}}(?:-\d+)?\.csv', name))
 
 
+class TestMergePlatformStamp:
+    """The merge is the fan-in point, so it is where a joined table gains the platform each
+    parent crawled — the key 跨平台对比 reads. Stamping must be strictly ADDITIVE: it must not
+    refuse a mix it used to accept, nor move or drop a row."""
+
+    def test_two_platforms_merge_to_one_table_carrying_platform(self, app_module):
+        rows_a = [{'正文': '甲'}, {'正文': '乙'}]
+        rows_b = [{'正文': '丙'}]
+        upstream = [('node-1', rows_a), ('node-2', rows_b)]
+        merged, _ = app_module._merge_upstream_tables(
+            [], upstream, '导出', platform_of={'node-1': 'weibo', 'node-2': 'zhihu'}
+        )
+        assert [r['正文'] for r in merged] == ['甲', '乙', '丙'], 'merge order (and so row counts) is untouched'
+        assert [r['platform'] for r in merged] == ['weibo', 'weibo', 'zhihu']
+
+    def test_an_upload_parent_is_stamped_blank_not_refused(self, app_module):
+        upstream = [('node-1', [{'正文': '甲'}]), ('node-2', [{'正文': '乙'}])]
+        merged, _ = app_module._merge_upstream_tables([], upstream, '导出', platform_of={'node-1': 'weibo'})
+        assert [r['platform'] for r in merged] == ['weibo', '']
+
+    def test_no_platform_map_leaves_the_old_merge_shape(self, app_module):
+        merged, _ = app_module._merge_upstream_tables(
+            [], [('node-1', [{'正文': '甲'}]), ('node-2', [{'正文': '乙'}])], '导出'
+        )
+        assert 'platform' not in merged[0], 'a direct caller without a platform map sees exactly the old columns'
+
+
 class TestStampedOutputFilenames:
     """「文件名追加本次运行时间」 — a workflow that runs daily keeps every result.
 

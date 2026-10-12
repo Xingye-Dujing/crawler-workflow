@@ -54,6 +54,11 @@ const KEYS = {
     'ctx.delete': 'delete',
     'canvas.fold': 'FOLD',
     'canvas.unfold': 'UNFOLD',
+    /* Keyboard link-mode (L) sentinels so a scenario asserts WHICH hint fired, not a
+       whole translated sentence. */
+    'canvas.linkNoSel': 'LINK-NOSEL',
+    'canvas.linkHint': 'LINK-HINT',
+    'canvas.linkCancel': 'LINK-CANCEL',
     'dialog.renameNode': 'RENAME-NODE',
     'dialog.cancel': 'Cancel',
     'dialog.confirm': 'OK',
@@ -187,12 +192,14 @@ function freshWorld() {
     canvas.nodes = {};
     canvas.connections = [];
     canvas.selectedNode = null;
+    canvas.selectedNodes = [];
     canvas.nextId = 1;
     canvas._history = [];
     canvas._historyIdx = -1;
     canvas._clipboardData = null;
     canvas._settingsNodeId = null;
     canvas.connectingFrom = null;
+    canvas._linkFromId = null;
     canvas.tempLine = null;
     canvas._renderPending = false;
     canvas.isDragging = false;
@@ -1467,6 +1474,90 @@ function nodeClipboardScenario() {
     };
 }
 
+/* ── keyboard node-connect (L link mode) + the connectNodes seam ───── */
+/* The wire that used to be creatable only by dragging an out-port onto an in-port is now
+   also reachable from the keyboard. `connectNodes` is the single synchronous model mutation
+   (edge + tokenize↔visualize coupling) shared by the pointer path and link mode; the async
+   fan-in/fan-out warning is separate and stays silent for a first parent. Every source→
+   target used here is a single-parent wire, so `_afterConnectWarning` no-ops and the
+   connection is readable immediately. */
+function keyboardConnectScenario() {
+    const res = {};
+
+    /* connectNodes: create once; a duplicate and a self-edge are refused and write nothing. */
+    freshWorld();
+    const a = addNode('source', 0, 0);
+    const b = addNode('output', 400, 0);
+    const first = canvas.connectNodes(a, b);
+    const dup = canvas.connectNodes(a, b);
+    const selfEdge = canvas.connectNodes(a, a);
+    res.direct = {
+        firstOk: first.ok === true,
+        dupOk: dup.ok === false,
+        selfOk: selfEdge.ok === false,
+        count: canvas.connections.length,
+    };
+
+    /* The coupling lives in connectNodes now, not finishConnection: wiring tokenize→visualize
+       still rewrites output_mode to word_freq. */
+    freshWorld();
+    const tk = addNode('tokenize', 0, 0);
+    const vz = addNode('visualize', 400, 0);
+    canvas.nodes[tk].params.output_mode = 'words_only';
+    canvas.connectNodes(tk, vz);
+    res.tokenizeCoupling = { mode: canvas.nodes[tk].params.output_mode };
+
+    /* Link mode with L: select A, L arms the start; select B, L commits A→B and clears. */
+    freshWorld();
+    const ka = addNode('source', 0, 0);
+    const kb = addNode('analysis', 400, 0);
+    canvas.selectNode(ka);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body });
+    const armed = canvas._linkFromId;
+    canvas.selectNode(kb);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body });
+    res.linkMode = {
+        armedFrom: armed === ka,
+        armedToast: toasts[0],
+        created: canvas.connections.some((c) => c.from === ka && c.to === kb),
+        clearedAfter: canvas._linkFromId === null,
+    };
+
+    /* L with nothing selected: the no-selection hint fires and NO start is armed. */
+    freshWorld();
+    toasts.length = 0;
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body });
+    res.linkNoSelection = { linkFrom: canvas._linkFromId, toast: toasts[toasts.length - 1] };
+
+    /* Escape clears an armed start. */
+    freshWorld();
+    const ea = addNode('source', 0, 0);
+    canvas.selectNode(ea);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body });
+    const armedBeforeEscape = canvas._linkFromId;
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'Escape', target: doc.body });
+    res.linkEscapeClears = { armed: armedBeforeEscape === ea, afterEscape: canvas._linkFromId };
+
+    /* L on the same node twice (start re-pressed) cancels the mode and wires nothing. */
+    freshWorld();
+    const ca = addNode('source', 0, 0);
+    canvas.selectNode(ca);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body });
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body });
+    res.linkSameStartCancel = { connections: canvas.connections.length, linkFrom: canvas._linkFromId };
+
+    /* A second L would start a fresh link, not a stuck mode. */
+    freshWorld();
+    const sa = addNode('source', 0, 0);
+    canvas.selectNode(sa);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body }); // arm
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body }); // cancel (same node)
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body }); // arm again
+    res.linkRetriable = { armedAgain: canvas._linkFromId === sa };
+
+    out.keyboard_connect = res;
+}
+
 /* Cross-canvas share: copy a node to a JSON snippet on the OS clipboard, and add a node back
    from such a snippet. Async (clipboard + dialog are promise-based), so it joins the .then chain.
    The copied node is a `process`, not a `source`, so its seeding never fires an async capability
@@ -1521,9 +1612,134 @@ async function nodeJsonScenario() {
     dialogAnswer = null;
 }
 
+/* ── minimap: bounds/scale math, the drawn boxes, and click-to-recentre ── */
+/* The overview box is drawn as an innerHTML string of positioned <i> elements (the DOM stub
+   stores innerHTML verbatim, and the real browser lays it out). The geometry is pure, so the
+   harness can assert bounds, the click→world inverse, and — crucially — that re-centring is a
+   VIEW change only: the model (getState) and the undo history must not move. */
+function minimapScenario() {
+    const res = {};
+    freshWorld();
+    canvas.renderMinimap();
+    res.empty = {
+        boundsNull: canvas._minimapBounds() === null,
+        cleared: doc.getElementById('minimap').innerHTML === '',
+    };
+
+    freshWorld();
+    canvas.workspace.clientWidth = 1200;
+    canvas.workspace.clientHeight = 800;
+    addNode('source', 0, 0, 200, 100);
+    const mB = addNode('output', 1000, 600, 200, 100);
+    const b = canvas._minimapBounds();
+    res.bounds = { minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY };
+    const scale = canvas._minimapScale(b, 176);
+    res.scale_positive = scale > 0;
+    const target = { x: 300, y: 250 };
+    const mmpx = { x: 10 + (target.x - b.minX) * scale, y: 10 + (target.y - b.minY) * scale };
+    const back = canvas._minimapClickToWorld(mmpx.x, mmpx.y, b, scale);
+    res.click_roundtrip = { dx: Math.abs(back.x - target.x), dy: Math.abs(back.y - target.y) };
+    canvas.renderMinimap();
+    const html = doc.getElementById('minimap').innerHTML || '';
+    res.render = {
+        nodes: (html.match(/minimap-node/g) || []).length,
+        view: (html.match(/minimap-view/g) || []).length,
+    };
+    canvas.toggleEnabled(mB);
+    canvas.renderMinimap();
+    res.disabled = ((doc.getElementById('minimap').innerHTML || '').match(/mm-off/g) || []).length === 1;
+
+    freshWorld();
+    canvas.workspace.clientWidth = 1200;
+    canvas.workspace.clientHeight = 800;
+    addNode('source', 0, 0, 200, 100);
+    addNode('output', 1000, 600, 200, 100);
+    const historyBefore = canvas._history.length;
+    const stateBefore = JSON.stringify(canvas.getState());
+    canvas._centerWorldPoint(500, 350);
+    res.centre = {
+        moved: canvas.panX !== 0 || canvas.panY !== 0,
+        historyUnchanged: canvas._history.length === historyBefore,
+        stateUnchanged: JSON.stringify(canvas.getState()) === stateBefore,
+        panX: canvas.panX,
+    };
+    out.minimap = res;
+}
+
+/* ── multi-select: shift-click, batch nudge/delete, and the marquee ── */
+function multiSelectScenario() {
+    const res = {};
+
+    // Shift-click accumulates; a plain click resets to one.
+    freshWorld();
+    const sA = addNode('source', 0, 0, 200, 100);
+    const sB = addNode('output', 400, 0, 200, 100);
+    canvas.selectNode(sA);
+    canvas.selectNode(sB, true);
+    res.shiftAdd = {
+        set: canvas.selectedNodes.slice(),
+        anchor: canvas.selectedNode,
+        highlighted: doc.querySelectorAll('.node.selected').map((el) => el.id).sort(),
+    };
+    canvas.selectNode(sA);
+    res.plainResets = { set: canvas.selectedNodes.slice() };
+
+    // Batch nudge moves every selected box.
+    freshWorld();
+    const nA = addNode('source', 0, 0, 200, 100);
+    const nB = addNode('output', 400, 0, 200, 100);
+    canvas.selectNode(nA);
+    canvas.selectNode(nB, true);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'ArrowRight', target: doc.body });
+    res.batchNudge = {
+        aLeft: parseInt(doc.getElementById(nA).style.left, 10),
+        bLeft: parseInt(doc.getElementById(nB).style.left, 10),
+    };
+
+    // Batch delete removes both as one edit with one toast.
+    freshWorld();
+    const dA = addNode('source', 0, 0, 200, 100);
+    const dB = addNode('output', 400, 0, 200, 100);
+    const dC = addNode('process', 800, 0, 200, 100);
+    canvas.selectNode(dA);
+    canvas.selectNode(dB, true);
+    toasts.length = 0;
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'Delete', target: doc.body });
+    res.batchDelete = {
+        remaining: Object.keys(canvas.nodes).sort(),
+        survivor: dC,
+        toast: toasts[toasts.length - 1],
+        setAfter: canvas.selectedNodes.slice(),
+    };
+
+    // Marquee selects the nodes its rectangle overlaps.
+    freshWorld();
+    canvas.workspace.clientWidth = 1920;
+    canvas.workspace.clientHeight = 1080;
+    const qA = addNode('source', 0, 0, 200, 100);
+    const qB = addNode('output', 100, 0, 200, 100);
+    const qC = addNode('process', 1000, 1000, 200, 100);
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ button: 0, clientX: 0, clientY: 0, target: { closest: () => null } }));
+    dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 350, clientY: 150, target: { closest: () => null } });
+    dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: 350, clientY: 150, target: { closest: () => null } });
+    res.marquee = { set: canvas.selectedNodes.slice().sort(), expected: [qA, qB].sort(), anchor: canvas.selectedNode };
+
+    // A background click that never moved selects nothing (stays a plain deselect).
+    freshWorld();
+    addNode('source', 0, 0, 200, 100);
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ button: 0, clientX: 5, clientY: 5, target: { closest: () => null } }));
+    dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: 5, clientY: 5, target: { closest: () => null } });
+    res.clickNoDrag = { set: canvas.selectedNodes.slice() };
+
+    out.multi_select = res;
+}
+
 resizeRepaintScenario();
 paletteKeyboardScenario();
 nodeClipboardScenario();
+keyboardConnectScenario();
+minimapScenario();
+multiSelectScenario();
 connectWarningsScenarios()
     .then(() => touchGestureScenario())
     .then(() => renameScenarios())

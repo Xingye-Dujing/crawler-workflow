@@ -166,7 +166,7 @@ ON_FAIL = ('abort', 'blank', 'fallback')
 #: Steps that need the run's LLM client, and so are handed it by :func:`run_pipeline`.
 #: Kept out of the step's own ``params`` because the pipeline report — which the console
 #: prints and the run record keeps — echoes every parameter it is given.
-LLM_OPS = frozenset({'topic_label'})
+LLM_OPS = frozenset({'topic_label', 'cluster_label'})
 
 #: What :meth:`DataAnalysisService.forecast` extrapolates with. Both are computed in this
 #: module: statsmodels is not a dependency of this project, and a two-parameter smoothing
@@ -253,6 +253,14 @@ STEP_PARAMS: dict = {
         'nonblank': ('summary_col',),
         'enums': {'on_fail': ('abort', ON_FAIL)},
     },
+    # The cluster summariser reads the cluster LABEL column the `cluster` op wrote and the raw
+    # TEXT column beside it; both must exist, so each goes in ``one``. ``summary_col`` is the
+    # column it writes — nonblank because an unnamed output column would "succeed" invisibly.
+    'cluster_label': {
+        'one': ('group_col', 'text_col'),
+        'nonblank': ('summary_col',),
+        'enums': {'on_fail': ('abort', ON_FAIL)},
+    },
     'sentiment_evolution': {'one': ('column',)},
     # The three reads that follow the staged model all name the columns 分阶段 LDA writes: a
     # lifecycle built on a guessed word column is a story about the wrong cell, and these steps
@@ -264,6 +272,11 @@ STEP_PARAMS: dict = {
     # steps do: neither has a defensible fallback corpus to pick.
     'topic_coherence': {'one': ('column',)},
     'cooccur': {'one': ('column',)},
+    # The reply graph names all three columns it joins on; each must exist, so all go in ``one``.
+    'reply_graph': {'one': ('author_col', 'floor_col', 'parent_floor_col')},
+    # The comparison groups on ONE named column (the platform the merge stamped); the optional
+    # value column is checked by the method itself (it is "" when the user asked for counts only).
+    'compare_platform': {'one': ('platform_col',)},
     # Both look-forward steps read a CURVE, so the period column and the value column are each
     # named: a forecast of whichever numeric column was nearest in the table would put a line on
     # a chart nobody asked for and label it 预测情感走向.
@@ -2043,6 +2056,195 @@ class DataAnalysisService:
         return work
 
     @staticmethod
+    def cluster_label(
+        df: pd.DataFrame,
+        llm=None,
+        cancel=None,
+        store=None,
+        group_col: str = 'cluster',
+        text_col: str = '正文',
+        summary_col: str = '摘要',
+        on_fail: str = 'abort',
+        max_groups: int = 60,
+        sample_n: int = 8,
+    ) -> pd.DataFrame:
+        """One paragraph per cluster of the raw documents — what the cluster is *about*.
+
+        :meth:`topic_label` names a topic from the WEIGHTED WORDS ``topic_by_stage`` already
+        reduced a corpus to; this is the other reading. The ``cluster`` process op labels rows
+        by embedding similarity and writes nothing else, so a cluster number on its own says
+        nothing about its meaning. Here the model reads the cluster's OWN texts (up to
+        ``sample_n``, the ones that actually exist, not a word list) and writes a paragraph, so
+        the cluster column becomes an interpretable table one row per cluster.
+
+        Same discipline as :meth:`topic_label` because the failure modes are the same: a
+        missing model is a refusal (not a silent empty column), Stop marks the not-yet-summarised
+        groups ``ABORT_MARK`` so the node settles PARTIAL, and a table with more clusters than
+        ``max_groups`` is a mis-wired pipeline (one paid call per group), not a run to bank.
+        """
+        from analyzers.llm_client import ABORT_MARK, LLMError
+
+        if group_col not in df.columns:
+            raise UnknownOperationError(t('analysis.step_col_missing', op='cluster_label', col=group_col))
+        if text_col not in df.columns:
+            raise UnknownOperationError(t('analysis.step_col_missing', op='cluster_label', col=text_col))
+        if not str(summary_col or '').strip():
+            raise UnknownOperationError(t('analysis.need_param', op='cluster_label', param='summary_col'))
+        if llm is None and on_fail != 'fallback':
+            raise UnknownOperationError(t('analysis.label_no_llm', op='cluster_label'))
+        groups = df.copy()
+        groups['_grp'] = pd.to_numeric(groups[group_col], errors='coerce')
+        groups = groups[groups['_grp'].notna()]
+        order = sorted(int(k) for k in groups['_grp'].unique())
+        limit = int(max_groups)
+        if len(order) > limit:
+            raise UnknownOperationError(t('analysis.label_too_many', rows=len(order), limit=limit))
+
+        scope = f'cluster_label:{getattr(llm, "label", "") or "model"}'
+        rows = []
+        summarised = 0
+        asked = 0
+        replayed = 0
+        for idx, key in enumerate(order):
+            if cancel is not None and cancel.is_set():
+                for rest in order[idx:]:
+                    rows.append(
+                        {'cluster': rest, 'n_docs': int((groups['_grp'] == rest).sum()), summary_col: ABORT_MARK}
+                    )
+                logger.warning(t('analysis.cluster_cancelled', n=len(order) - idx))
+                return pd.DataFrame(rows)
+            texts = [tx for tx in groups.loc[groups['_grp'] == key, text_col].dropna().astype(str) if tx.strip()]
+            n_docs = len(texts)
+            if not texts:
+                raise UnknownOperationError(t('analysis.cluster_no_texts', group=key))
+            take = max(1, int(sample_n))
+            sample = '\n'.join(texts[:take])
+            prompt = t('analysis.cluster_prompt', group=key, size=n_docs, texts=sample)
+            cache_key = hashlib.sha1(prompt.encode('utf-8')).hexdigest()
+            answer = store.cache_get(scope, cache_key) if store is not None else None
+            if answer is not None:
+                replayed += 1
+            else:
+                asked += 1
+                try:
+                    answer = llm.chat(prompt)
+                except LLMError as e:
+                    if on_fail == 'fallback':
+                        answer = texts[0][:40]
+                        logger.warning(t('analysis.cluster_failed', group=key, err=e))
+                    elif on_fail != 'blank':
+                        raise UnknownOperationError(t('analysis.cluster_failed', group=key, err=e)) from e
+                    else:
+                        answer = ''
+                        logger.warning(t('analysis.cluster_failed', group=key, err=e))
+                    rows.append({'cluster': key, 'n_docs': n_docs, summary_col: answer})
+                    if answer:
+                        summarised += 1
+                    continue
+                if store is not None:
+                    store.cache_put(scope, cache_key, answer)
+            summary = _label_from(answer)
+            if not summary:
+                if on_fail == 'fallback':
+                    summary = texts[0][:40]
+                elif on_fail != 'blank':
+                    raise UnknownOperationError(t('analysis.cluster_empty', group=key))
+                else:
+                    logger.warning(t('analysis.cluster_empty', group=key))
+            rows.append({'cluster': key, 'n_docs': n_docs, summary_col: summary})
+            if summary:
+                summarised += 1
+        logger.info(t('analysis.cluster_done', n=summarised, model=getattr(llm, 'label', '')))
+        if store is not None:
+            logger.info(t('analysis.label_cached', asked=asked, replayed=replayed))
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def reply_graph(
+        df: pd.DataFrame,
+        author_col: str = '评论者',
+        floor_col: str = '楼层',
+        parent_floor_col: str = '父楼层',
+    ) -> pd.DataFrame:
+        """Who replies to whom, as an edge table the 网络图 chart draws.
+
+        A comment row carries its own position (楼层) and, for a nested reply, the floor of the
+        comment it answers (父楼层). Joining a reply's 父楼层 back to the top-level row that holds
+        that 楼层 recovers the parent's author, so the pair (parent author → replying author) is a
+        directed edge and its count is the weight — exactly the ``x``/``y``/value a force graph
+        reads. Self-replies and replies whose parent is absent from the table are dropped.
+
+        It RAISES rather than returning an empty table when no reply link resolves: a zero-edge
+        graph would settle the node DONE and hand the chart nothing measured, which is the same
+        silent-success this project refuses everywhere else.
+        """
+        for name in (author_col, floor_col, parent_floor_col):
+            if name not in df.columns:
+                raise UnknownOperationError(t('analysis.step_col_missing', op='reply_graph', col=name))
+        floor_to_author = {}
+        records = df.to_dict('records')
+        for row in records:
+            floor = str(row.get(floor_col, '') or '').strip()
+            author = str(row.get(author_col, '') or '').strip()
+            parent = str(row.get(parent_floor_col, '') or '').strip()
+            if author and floor and not parent:
+                floor_to_author.setdefault(floor, author)
+        edges: dict = {}
+        for row in records:
+            author = str(row.get(author_col, '') or '').strip()
+            parent = str(row.get(parent_floor_col, '') or '').strip()
+            if not (author and parent):
+                continue
+            src = floor_to_author.get(parent)
+            if src and src != author:
+                edges[(src, author)] = edges.get((src, author), 0) + 1
+        if not edges:
+            raise UnknownOperationError(t('analysis.reply_graph_no_edges'))
+        rows = [{'src_author': s, 'dst_author': d, 'weight': w} for (s, d), w in edges.items()]
+        rows.sort(key=lambda r: r['weight'], reverse=True)
+        nodes = {n for r in rows for n in (r['src_author'], r['dst_author'])}
+        logger.info(t('analysis.reply_graph_done', edges=len(rows), nodes=len(nodes)))
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def compare_platform(
+        df: pd.DataFrame,
+        platform_col: str = 'platform',
+        value_col: str = '',
+        agg: str = 'mean',
+    ) -> pd.DataFrame:
+        """One row per platform: how much was collected, and (optionally) its mean score.
+
+        A table merged at a save node carries the ``platform`` the C1 stamp wrote on every
+        parent's rows, so this reads it and groups. The count is always there; ``value_col`` is
+        opt-in — name a numeric column (a sentiment score, a like count) and it appears as an
+        aggregate per platform. Refusing a ``value_col`` that is not in the table, rather than
+        dropping it silently, is the same rule the rest of the module obeys: a mistyped column
+        must not produce a complete-looking table missing the one number that mattered.
+        """
+        if df.empty:
+            return pd.DataFrame()
+        if platform_col not in df.columns:
+            raise UnknownOperationError(t('analysis.step_col_missing', op='compare_platform', col=platform_col))
+        groups = df.groupby(platform_col, dropna=False)
+        rows = []
+        for name, sub in groups:
+            row = {platform_col: ('' if name is None else str(name)), 'n': int(len(sub))}
+            if value_col:
+                if value_col not in df.columns:
+                    raise UnknownOperationError(t('analysis.step_col_missing', op='compare_platform', col=value_col))
+                series = pd.to_numeric(sub[value_col], errors='coerce').dropna()
+                if agg == 'sum':
+                    value = float(series.sum()) if len(series) else 0.0
+                else:
+                    value = float(series.mean()) if len(series) else 0.0
+                row[f'{value_col}_{agg}'] = round(value, 6)
+            rows.append(row)
+        rows.sort(key=lambda r: r['n'], reverse=True)
+        logger.info(t('analysis.compare_done', platforms=len(rows), value=value_col or '-'))
+        return pd.DataFrame(rows)
+
+    @staticmethod
     def topic_map(
         df: pd.DataFrame,
         column: str,
@@ -3265,12 +3467,15 @@ class DataAnalysisService:
             'topic_model': cls.topic_model,
             'topic_by_stage': cls.topic_by_stage,
             'topic_label': cls.topic_label,
+            'cluster_label': cls.cluster_label,
             'topic_map': cls.topic_map,
             'topic_salience': cls.topic_salience,
             'topic_timeline': cls.topic_timeline,
             'topic_flow': cls.topic_flow,
             'topic_coherence': cls.topic_coherence,
             'cooccur': cls.cooccur,
+            'reply_graph': cls.reply_graph,
+            'compare_platform': cls.compare_platform,
             'sentiment_evolution': cls.sentiment_evolution,
             'forecast': cls.forecast,
             'alert': cls.alert,

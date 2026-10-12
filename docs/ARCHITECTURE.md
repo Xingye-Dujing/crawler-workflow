@@ -92,7 +92,8 @@ over trusting prose. `AGENTS.md` is near its byte budget — trim it as evidence
 ### D. Hygiene (small, optional)
 - The 124 `backend/test_*.py` manual probes (gitignored) could move to `scripts/probes/` so the
   one-off measurement scripts stop visually colliding with the pytest suite.
-- `pytest-cov` is installed but unused; a coverage floor in CI is optional given the test count.
+- `pytest-cov` is installed and used **ad-hoc** — the `--cov` command is documented in
+  `docs/development.md`; it is deliberately not a CI floor (`pytest.ini`/CI run bare `pytest -q`) given the test count.
 - Multi-user / real job queue **only if** cloud multi-user becomes a goal; otherwise document
   single-user as an explicit non-goal (it currently is) and leave the one-server design intact.
 

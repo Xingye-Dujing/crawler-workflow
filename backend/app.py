@@ -71,6 +71,7 @@ from analyzers import (
     TendencyAnalyzer,
     TextCluster,
 )
+from analyzers.bot import BotLikelihoodAnalyzer
 from analyzers.llm_client import ABORT_MARK, LLMClient
 from analyzers.sentiment import bert_backend, resolve_bert_model
 from config import Config
@@ -1556,7 +1557,21 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                     # the finish line would filter the very node it exists to count.
                     execution_state['attempted_nodes'].add(nid)
                 primary, upstream = _inputs_for(nid)
-                result, status = _run_node_durable(ctx, node, headless, primary, upstream, wf_idx)
+                # The output (save) node merges every parent's rows into one table; to make that
+                # table say which rows came from which platform (what 跨平台对比 reads), the run
+                # loop — the only place holding the whole graph — resolves each parent's platform
+                # here. None for every other node type; a non-crawl parent (upload/resume) is '' ,
+                # never a guessed platform.
+                _platform_of = None
+                if node.get('type') == 'output' and upstream:
+                    _platform_of = {}
+                    for _pid, _res in upstream:
+                        _pn = _node_of(str(_pid))
+                        _p = _pn.get('platform') or (_pn.get('params') or {}).get('platform') or ''
+                        _platform_of[str(_pid)] = str(_p)
+                result, status = _run_node_durable(
+                    ctx, node, headless, primary, upstream, wf_idx, platform_of=_platform_of
+                )
                 results[nid] = result
                 if status == NODE_SKIPPED:
                     # Neither done nor failed: it never got input to work on. The
@@ -2688,6 +2703,15 @@ def check_process_params(op: str, params: dict, df) -> None:
         name = str(params.get('text_column') or '正文').strip()
         if name not in [str(col) for col in df.columns]:
             raise UnknownOperationError(t('analysis.step_col_missing', op=op, col=name))
+    if op == 'bot':
+        # bot reads three columns, not one: text alone would score the whole table as a single
+        # author. Each is refused by name so a missing 评论者 / 评论时间 fails the node rather than
+        # producing a plausible-looking all-zero column.
+        columns = [str(col) for col in df.columns]
+        for key, default in (('text_column', '正文'), ('author_column', '评论者'), ('time_column', '评论时间')):
+            name = str(params.get(key) or default).strip()
+            if name not in columns:
+                raise UnknownOperationError(t('analysis.step_col_missing', op=op, col=name))
 
 
 # ─── Multi-model BERT comparison ──────────────────────────────
@@ -3000,6 +3024,19 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         df = analyzer.analyze_dataframe(df, text_column=text_column, ctx=run_ctx)
         return df.to_dict('records')
 
+    if op == 'bot':
+        # A per-AUTHOR coordinated-posting signal read off the whole table (near-duplicate text
+        # across accounts + a posting burst). Like aggression it is a recall device, not a verdict,
+        # and it refuses by name when 评论者 / 评论时间 are absent — check_process_params has already
+        # run those guards by the time this branch executes.
+        analyzer_bot = BotLikelihoodAnalyzer()
+        author_column = str(params.get('author_column') or '评论者').strip()
+        time_column = str(params.get('time_column') or '评论时间').strip()
+        df = analyzer_bot.analyze_dataframe(
+            df, text_column=text_column, author_column=author_column, time_column=time_column
+        )
+        return df.to_dict('records')
+
     if op == 'anomaly':
         # _split_columns, not raw .split(','): a list like "a, b" used to keep
         # the leading space and match no column at all, silently.
@@ -3035,7 +3072,7 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
     raise ValueError(t('wf.unknown_process_op', op=op or '(empty)'))
 
 
-def _merge_upstream_tables(current_input: list, upstream: list, label: str) -> tuple:
+def _merge_upstream_tables(current_input: list, upstream: list, label: str, platform_of: dict | None = None) -> tuple:
     """Every incoming table as one, or the reason they cannot be one.
 
     A node with several incoming connections used to take only the FIRST and mention the
@@ -3072,6 +3109,17 @@ def _merge_upstream_tables(current_input: list, upstream: list, label: str) -> t
         return list(tables[0][1]), (tables[0][0], len(tables[0][1]))
 
     frames = [(pid, pd.DataFrame(rows)) for pid, rows in tables]
+    # Stamp the SOURCE PLATFORM onto every frame, uniformly, BEFORE the column-set comparison:
+    # this is what makes a merge of several crawls (the same column schema, different platforms)
+    # distinguishable downstream — the 跨平台对比 step reads it. It is strictly ADDITIVE: one new
+    # column, added to every frame, so the column-set-equality refusal below still sees matching
+    # sets, and no row is reordered or dropped, so the SimHash "row count only holds for this
+    # merge order" invariant is untouched. A frame that already names the platform keeps its own
+    # spelling (we never overwrite); unknown parents fall back to '' rather than a guess.
+    if platform_of is not None:
+        for _pid, _frame in frames:
+            if 'platform' not in _frame.columns:
+                _frame.insert(0, 'platform', str(platform_of.get(str(_pid), '') or ''))
     # The reference columns come from the first frame that HAS any: an empty table answers
     # with no columns at all, and taking its shape as the truth would call every other
     # table's columns "extra".
@@ -3159,7 +3207,13 @@ def _output_pdf(node: dict, upstream: list, ctx: dict = None) -> dict:
     return {'pdf_file': name, 'pdf_bytes': out.get('pdf_bytes', 0)}
 
 
-def _execute_output_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
+def _execute_output_node(
+    node: dict,
+    current_input: list,
+    upstream: list = None,
+    ctx: dict = None,
+    platform_of: dict | None = None,
+):
     """Save node: merges every incoming table, exports it, and passes it downstream.
 
     'save_csv' is kept as a back-compat alias for older saved workflows;
@@ -3185,7 +3239,9 @@ def _execute_output_node(node: dict, current_input: list, upstream: list = None,
     if not current_input and not upstream:
         return []
 
-    merged_rows, _ = _merge_upstream_tables(current_input, upstream, node_label(node, node.get('id', '')))
+    merged_rows, _ = _merge_upstream_tables(
+        current_input, upstream, node_label(node, node.get('id', '')), platform_of=platform_of
+    )
     if not merged_rows:
         return []
 
@@ -3596,6 +3652,36 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             'samples_col': str(params.get('label_samples_col') or 'sample_texts').strip(),
             'on_fail': params.get('label_on_fail') or 'abort',
             'max_topics': _optional_int(params.get('label_max_topics')) or 30,
+        }
+    if op == 'cluster_label':
+        # Same shape as ``topic_label``: untouched fields default to the columns the cluster op
+        # writes and the corpus's text, and the two numbers fall back to their declared defaults
+        # (an empty or junk box is "use the default", never a crash and never a paid call storm).
+        return {
+            'group_col': str(params.get('cluster_group_col') or 'cluster').strip(),
+            'text_col': str(params.get('cluster_text_col') or '正文').strip(),
+            'summary_col': str(params.get('cluster_summary_col') or '摘要').strip(),
+            'on_fail': params.get('cluster_on_fail') or 'abort',
+            'max_groups': _optional_int(params.get('cluster_max_groups')) or 60,
+            'sample_n': _optional_int(params.get('cluster_sample_n')) or 8,
+        }
+    if op == 'reply_graph':
+        # Three column names, each defaulting to what a comment crawl writes, so an untouched
+        # form reads the crawl's own reply relation. They go through `or` (blank = the default),
+        # which is why the panel/normalizer contract lists them as re-shaped, not pass-through.
+        return {
+            'author_col': str(params.get('reply_author_col') or '评论者').strip(),
+            'floor_col': str(params.get('reply_floor_col') or '楼层').strip(),
+            'parent_floor_col': str(params.get('reply_parent_col') or '父楼层').strip(),
+        }
+    if op == 'compare_platform':
+        # Platform + aggregate default to the merge-stamped column and the mean; the value column
+        # is deliberately blank-by-default ("counts only"), so it is forwarded as written and an
+        # empty box means "no value column", which the step handles.
+        return {
+            'platform_col': str(params.get('compare_platform_col') or 'platform').strip(),
+            'value_col': str(params.get('compare_value_col') or '').strip(),
+            'agg': str(params.get('compare_agg') or 'mean').strip(),
         }
     if op == 'sentiment_evolution':
         result = {'column': params.get('column', '')}
@@ -4206,7 +4292,9 @@ def _settle_node_as_stopped(store, run_id: str, nid: str, label: str, wf_idx: in
     return rows, NODE_PARTIAL
 
 
-def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upstream: list, wf_idx: int):
+def _run_node_durable(
+    ctx: dict, node: dict, headless: bool, primary: list, upstream: list, wf_idx: int, platform_of: dict | None = None
+):
     """Run one node with the run store underneath it. Returns (result, status).
 
     Three things it adds over calling ``_execute_node`` directly:
@@ -4315,7 +4403,7 @@ def _run_node_durable(ctx: dict, node: dict, headless: bool, primary: list, upst
                 t('wf.executing_node', wf=execution_state['_wf_names'].get(wf_idx) or '', nid=label, ntype=ntype_label),
                 wf_idx=wf_idx,
             )
-        result = _execute_node(node, headless, primary, upstream=upstream, ctx=ctx)
+        result = _execute_node(node, headless, primary, upstream=upstream, ctx=ctx, platform_of=platform_of)
     except CrawlerStopped:
         return _settle_node_as_stopped(store, run_id, nid, label, wf_idx)
     except Exception as e:
@@ -4400,6 +4488,7 @@ def _execute_node(
     run_ctx: dict = None,
     upstream: list = None,
     ctx: dict = None,
+    platform_of: dict | None = None,
 ):
     """Run one node. ``upstream`` is [(parent_id, result), …] in connection
     order — only the analysis node needs more than the first entry (a join uses
@@ -4447,7 +4536,10 @@ def _execute_node(
         # ``upstream`` reaches it so several incoming tables become ONE: a crawl split
         # over several batches is the normal reason a user wires two nodes into a save
         # node, and taking only the first exported one of them as if it were all of them.
-        return _execute_output_node(node, current_input, upstream=upstream, ctx=ctx)
+        # ``platform_of`` (parent id → crawled platform, built by the run loop where the node
+        # graph is in scope) lets the merge stamp which rows came from which platform; it is
+        # None for a direct caller, which then sees exactly the pre-stamp merge shape.
+        return _execute_output_node(node, current_input, upstream=upstream, ctx=ctx, platform_of=platform_of)
     # No branch claimed this type. ``validate`` refuses an unknown type before a run, so
     # this is defense in depth for a direct caller — but it must still refuse BY NAME:
     # returning [] here would settle the node DONE over an empty table (see AGENTS.md).

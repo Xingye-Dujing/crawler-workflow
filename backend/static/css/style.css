@@ -944,6 +944,51 @@ body.style-menu-open #workspace #resume-banner {
   color: var(--accent, var(--ink));
 }
 
+/* Overview minimap: a fixed corner box. Node rectangles and the viewport frame are
+   positioned children written by canvas.renderMinimap(); pointer-events lets a click
+   re-centre the camera. */
+#minimap {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 176px;
+  height: 176px;
+  border: 1px solid var(--border, #444);
+  border-radius: 8px;
+  background: var(--scrim, rgba(0, 0, 0, 0.35));
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 20;
+}
+
+#minimap .minimap-node {
+  position: absolute;
+  background: var(--accent, #4a90d9);
+  border-radius: 2px;
+  opacity: 0.85;
+}
+
+#minimap .minimap-node.mm-off {
+  opacity: 0.3;
+}
+
+#minimap .minimap-view {
+  position: absolute;
+  border: 1px solid var(--text, #ddd);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
+/* Rubber-band selection rectangle drawn on the empty canvas surface. */
+.marquee {
+  position: absolute;
+  border: 1px solid var(--accent, #4a90d9);
+  background: rgba(74, 144, 217, 0.12);
+  pointer-events: none;
+  z-index: 15;
+}
+
 #canvas-inner {
   position: absolute;
   top: 0;

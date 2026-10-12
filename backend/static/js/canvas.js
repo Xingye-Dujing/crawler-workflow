@@ -38,6 +38,14 @@ const VIEW_FIT_MARGIN = 40;
 const VIEW_ANIM_MS = 280;
 const VIEW_ANIM_EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)';
 
+/* The overview minimap: a fixed-size corner box that shows every node as a proportional
+   rectangle plus a viewport indicator. Clicking it re-centres the camera on that spot (a
+   view change only — never an undo step). The math is pure (bounds/scale/click→world) so a
+   harness can assert it without a rendered canvas; only the string it writes into #minimap's
+   innerHTML is browser-only. */
+const MINIMAP_SIZE = 176;
+const MINIMAP_PAD = 10;
+
 const canvas = {
     nodes: {},
     connections: [],
@@ -47,6 +55,11 @@ const canvas = {
        and to name the run; what actually executes stays the backend's decision. */
     disabledTypes: [],
     selectedNode: null,
+    /* The selected set. selectedNode stays as the ANCHOR (the last node touched) so every
+       single-selection caller (panel, copy, outline) keeps working; selectedNodes is the full
+       group for shift-click / marquee batch operations. Selection is view-only — it never
+       enters getState()/history — so a multi-select is not an undo step. */
+    selectedNodes: [],
     nextId: 1,
     panX: 0,
     panY: 0,
@@ -86,6 +99,9 @@ const canvas = {
     _clipboardData: null,
     _settingsNodeId: null,
     connectingFrom: null,
+    /* The node whose "wire start" the keyboard link mode is holding, waiting for a second
+       selected node to complete the edge. View-only, never in getState/history. */
+    _linkFromId: null,
     /* Per-session memory of the fan-in / fan-out wire warnings the user chose to
        silence ("don't warn again this session"). It lives on the canvas instance, not a
        module global, so a fresh canvas — and the frontend harness's freshWorld — starts
@@ -116,6 +132,12 @@ const canvas = {
         this.nodesContainer = document.getElementById('nodes-container');
         this.workspace = document.getElementById('workspace');
         this.setupEvents();
+        /* The minimap is a fixed corner box in the page markup; a click re-centres the
+           camera on the spot clicked. It is a view change only (never an undo step). */
+        const minimap = document.getElementById('minimap');
+        if (minimap && minimap.addEventListener) {
+            minimap.addEventListener('pointerdown', (e) => this.onMinimapClick(e));
+        }
         this.updateStatus();
         const saved = localStorage.getItem('crawler_canvas');
         if (saved) {
@@ -208,6 +230,10 @@ const canvas = {
                 e.preventDefault();
             } else {
                 closeSettings();
+                /* A left-drag on the empty surface draws a selection marquee (a click that never
+                   moved just deselects, as before). Isolated listeners so it never rides the
+                   pan/pinch path. */
+                this._startMarquee(e);
             }
         });
 
@@ -566,11 +592,13 @@ const canvas = {
         document.addEventListener('keydown', (e) => {
             if (this._isTypingTarget(e.target)) return;
             if (e.key === 'Delete' || e.key === 'Backspace') {
-                if (this.selectedNode) this.deleteNode(this.selectedNode);
+                if (this.selectedNodes.length > 1) this.deleteNodes(this.selectedNodes.slice());
+                else if (this.selectedNode) this.deleteNode(this.selectedNode);
                 return;
             }
             if (e.key === 'Escape') {
                 this.cancelConnection();
+                this._linkFromId = null;
                 this.deselectNode();
                 closeSettings();
                 return;
@@ -630,6 +658,13 @@ const canvas = {
             if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
                 e.preventDefault();
                 if (typeof Outline !== 'undefined' && Outline.revealFilter) Outline.revealFilter();
+                return;
+            }
+            /* L: keyboard node-connect (link mode) — see toggleLinkMode. Typing is already
+               excluded at the top of this handler; placed before the plain-f fold. */
+            if (e.key === 'l') {
+                e.preventDefault();
+                this.toggleLinkMode();
                 return;
             }
             /* Fold/unfold selected node with F key */
@@ -758,18 +793,20 @@ const canvas = {
        that is what getState snapshots and what the draft persists — so writing there (and
        mirroring onto node.x/y) is what makes the nudge undoable and survive a reload. */
     _nudgeSelected(dx, dy) {
-        const id = this.selectedNode;
-        if (!id) return;
-        const el = this._nodeEl(id);
-        if (!el) return;
-        const x = (parseInt(el.style.left, 10) || 0) + dx;
-        const y = (parseInt(el.style.top, 10) || 0) + dy;
-        el.style.left = x + 'px';
-        el.style.top = y + 'px';
-        if (this.nodes[id]) {
-            this.nodes[id].x = x;
-            this.nodes[id].y = y;
-        }
+        const ids = this.selectedNodes.length ? this.selectedNodes : (this.selectedNode ? [this.selectedNode] : []);
+        if (!ids.length) return;
+        ids.forEach((id) => {
+            const el = this._nodeEl(id);
+            if (!el) return;
+            const x = (parseInt(el.style.left, 10) || 0) + dx;
+            const y = (parseInt(el.style.top, 10) || 0) + dy;
+            el.style.left = x + 'px';
+            el.style.top = y + 'px';
+            if (this.nodes[id]) {
+                this.nodes[id].x = x;
+                this.nodes[id].y = y;
+            }
+        });
         this.scheduleRender();
         this.saveState();
     },
@@ -953,7 +990,7 @@ const canvas = {
             const rect = el.getBoundingClientRect();
             this.dragOffsetX = e.clientX - rect.left;
             this.dragOffsetY = e.clientY - rect.top;
-            this.selectNode(id);
+            this.selectNode(id, e.shiftKey);
         });
 
         /* Port connection */
@@ -1154,6 +1191,7 @@ const canvas = {
         delete this.nodes[id];
         this.connections = this.connections.filter(c => c.from !== id && c.to !== id);
         if (this.selectedNode === id) this.selectedNode = null;
+        this.selectedNodes = this.selectedNodes.filter(nid => nid !== id);
         /* The panel is bound to this node id — leaving it open would keep showing
            its old settings and let the user edit a node that no longer exists. */
         if (this._settingsNodeId === id) closeSettings();
@@ -1163,17 +1201,61 @@ const canvas = {
         showToast(I18n.t('toast.nodeDeleted'));
     },
 
-    selectNode(id) {
+    /* Delete a whole selection set as ONE edit: every box removed, every touching wire pruned,
+       one saveState (one undo step), one toast naming how many went. */
+    deleteNodes(ids) {
+        const list = (ids || []).filter((id) => this.nodes[id]);
+        if (!list.length) return;
+        list.forEach((id) => {
+            const el = this._nodeEl(id);
+            if (el) el.remove();
+            delete this.nodes[id];
+        });
+        this.connections = this.connections.filter(c => list.indexOf(c.from) < 0 && list.indexOf(c.to) < 0);
+        this.selectedNodes = this.selectedNodes.filter(nid => this.nodes[nid]);
+        if (list.indexOf(this.selectedNode) >= 0) {
+            this.selectedNode = this.selectedNodes.length ? this.selectedNodes[this.selectedNodes.length - 1] : null;
+        }
+        if (list.indexOf(this._settingsNodeId) >= 0) closeSettings();
+        this.scheduleRender();
+        this.updateStatus();
+        this.saveState();
+        showToast(I18n.t('toast.nodesDeleted', { n: list.length }));
+    },
+
+    selectNode(id, additive) {
+        if (additive) {
+            if (this.selectedNodes.indexOf(id) < 0) this.selectedNodes.push(id);
+            this.selectedNode = id;
+        } else {
+            this.selectedNodes = [id];
+            this.selectedNode = id;
+        }
         document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
-        this.selectedNode = id;
-        const el = this._nodeEl(id);
-        if (el) el.classList.add('selected');
+        this.selectedNodes.forEach((nid) => {
+            const el = this._nodeEl(nid);
+            if (el) el.classList.add('selected');
+        });
+        this._notifyOutlineActive();
+    },
+
+    /* Paint a selection set directly (marquee result): the anchor is the last id, and every
+       listed box lights. An empty set is a deselect. */
+    setSelectedNodes(ids) {
+        this.selectedNodes = (ids || []).slice();
+        this.selectedNode = this.selectedNodes.length ? this.selectedNodes[this.selectedNodes.length - 1] : null;
+        document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
+        this.selectedNodes.forEach((nid) => {
+            const el = this._nodeEl(nid);
+            if (el) el.classList.add('selected');
+        });
         this._notifyOutlineActive();
     },
 
     deselectNode() {
         document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
         this.selectedNode = null;
+        this.selectedNodes = [];
         this._notifyOutlineActive();
     },
 
@@ -1184,6 +1266,71 @@ const canvas = {
        deselected. Guarded on `typeof Outline` so a canvas-only harness (no workflow.js) is safe. */
     _notifyOutlineActive() {
         if (typeof Outline !== 'undefined' && Outline._markActive) Outline._markActive();
+    },
+
+    /* Rubber-band selection. Drawn as a positioned overlay div; its own one-shot document
+       listeners do the move/up so this never intersects the pan/pinch/node-drag paths (those
+       only act when isPanning/isDragging are set, which a plain background press does not). A
+       press that never moved is left as the deselect the caller already performed. */
+    _startMarquee(e) {
+        const wsRect = this.workspace.getBoundingClientRect();
+        const sx = e.clientX - wsRect.left;
+        const sy = e.clientY - wsRect.top;
+        const box = document.createElement('div');
+        box.className = 'marquee';
+        this.workspace.appendChild(box);
+        let moved = false;
+        let rect = { x: sx, y: sy, w: 0, h: 0 };
+        const paint = (cx, cy) => {
+            rect = { x: Math.min(sx, cx), y: Math.min(sy, cy), w: Math.abs(cx - sx), h: Math.abs(cy - sy) };
+            box.style.left = rect.x + 'px';
+            box.style.top = rect.y + 'px';
+            box.style.width = rect.w + 'px';
+            box.style.height = rect.h + 'px';
+        };
+        const onMove = (ev) => {
+            moved = true;
+            paint(ev.clientX - wsRect.left, ev.clientY - wsRect.top);
+        };
+        const cleanup = () => {
+            if (document.removeEventListener) {
+                document.removeEventListener('pointermove', onMove);
+                document.removeEventListener('pointerup', onUp);
+            }
+            if (box.parentNode && box.parentNode.removeChild) box.parentNode.removeChild(box);
+            else if (box.remove) box.remove();
+        };
+        const self = this;
+        function onUp(ev) {
+            cleanup();
+            if (!moved) return;
+            paint(ev.clientX - wsRect.left, ev.clientY - wsRect.top);
+            self._marqueeSelect(rect, wsRect);
+        }
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+    },
+
+    /* Select every node whose box the marquee rectangle (workspace pixels) overlaps. The rect's
+       corners are converted to canvas/world coordinates through the same transform the render
+       uses, so a zoomed/panned canvas still hits the right boxes. */
+    _marqueeSelect(rect, wsRect) {
+        const p0 = this._screenToCanvas(wsRect.left + rect.x, wsRect.top + rect.y);
+        const p1 = this._screenToCanvas(wsRect.left + rect.x + rect.w, wsRect.top + rect.y + rect.h);
+        const left = Math.min(p0.x, p1.x);
+        const right = Math.max(p0.x, p1.x);
+        const top = Math.min(p0.y, p1.y);
+        const bottom = Math.max(p0.y, p1.y);
+        const hits = Object.keys(this.nodes).filter((id) => {
+            const el = this._nodeEl(id);
+            if (!el) return false;
+            const l = el.offsetLeft;
+            const t = el.offsetTop;
+            const r = l + (el.offsetWidth || 240);
+            const b = t + (el.offsetHeight || 80);
+            return r > left && l < right && b > top && t < bottom;
+        });
+        this.setSelectedNodes(hits);
     },
 
     editNode(id) {
@@ -1265,51 +1412,87 @@ const canvas = {
         ].join(' '));
     },
 
+    /* The one place a wire is committed: pure model mutation (edge + its side effects), no
+       pointer event and no dialog. finishConnection and the keyboard link mode both call it,
+       so both share identical semantics. Returns {ok, warn} — ok is false for a self-edge or
+       a duplicate, in which case nothing was written. */
+    connectNodes(fromId, toId) {
+        if (!fromId || !toId || fromId === toId) return { ok: false, warn: null };
+        const exists = this.connections.some(c => c.from === fromId && c.to === toId);
+        if (exists) return { ok: false, warn: null };
+        this.connections.push({ from: fromId, to: toId });
+        this.scheduleRender();
+        this.saveState();
+        showToast(I18n.t('toast.connCreated'));
+        // Tokenize ↔ Visualize: force word_freq + refresh settings
+        var nA = this.nodes[fromId];
+        var nB = this.nodes[toId];
+        var tkNode = (nA && nA.type === 'tokenize') ? nA : (nB && nB.type === 'tokenize') ? nB : null;
+        var vzNode = (nA && nA.type === 'visualize') ? nA : (nB && nB.type === 'visualize') ? nB : null;
+        if (tkNode && vzNode) {
+            if (tkNode.params.output_mode !== 'word_freq') {
+                tkNode.params.output_mode = 'word_freq';
+                this.updateNodeDisplay(tkNode.id);
+                this.saveState();
+            }
+            if (typeof openSettings === 'function') {
+                var openId = this._settingsNodeId;
+                if (openId === tkNode.id || openId === vzNode.id) {
+                    openSettings(openId);
+                }
+            }
+        }
+        return { ok: true, warn: this.classifyConnection(fromId, toId) };
+    },
+
+    /* The wire is explained AFTER it is written: the user is told what THIS engine will do
+       with it and can take it back (undo the edge). Shared by the pointer and keyboard paths
+       so both warn identically; `warn` is null when nothing was created. */
+    async _afterConnectWarning(fromId, toId, warn) {
+        if (warn && !this._connWarningsDismissed.has(warn.category)) {
+            const keep = await this._warnConnection(fromId, toId, warn);
+            if (!keep) this._undoConnection(fromId, toId);
+        }
+    },
+
+    /* Keyboard link mode (L): with a node selected, the first L marks it the wire START and
+       tells you to pick the end; selecting a second node and pressing L again commits the
+       edge through connectNodes (so a fan-in warning can still offer to take it back). Same
+       L on the start again, or nothing selected, cancels the mode. Selection is view-only —
+       this never touches getState/history. */
+    toggleLinkMode() {
+        if (this._linkFromId == null) {
+            if (!this.selectedNode) {
+                showToast(I18n.t('canvas.linkNoSel'));
+                return;
+            }
+            this._linkFromId = this.selectedNode;
+            showToast(I18n.t('canvas.linkHint'));
+            return;
+        }
+        const fromId = this._linkFromId;
+        const toId = this.selectedNode;
+        this._linkFromId = null;
+        if (!toId || toId === fromId) {
+            showToast(I18n.t('canvas.linkCancel'));
+            return;
+        }
+        const res = this.connectNodes(fromId, toId);
+        if (res.ok) this._afterConnectWarning(fromId, toId, res.warn);
+    },
+
     async finishConnection(e) {
-        /* The wire is written first and explained second: the user is not asked to
-           pre-approve a shape, they are told what THIS engine will do with it and can
-           take it back. `fromId` is captured before the await because `cancelConnection`
-           (at the end) clears `connectingFrom`, and the undo must name the original edge. */
         const target = this._getPortAt(e.clientX, e.clientY);
         const fromId = this.connectingFrom;
         let toId = null;
         let warn = null;
         if (target && target.dataset.port === 'in') {
             toId = target.dataset.node;
-            if (toId !== fromId) {
-                const exists = this.connections.some(c => c.from === fromId && c.to === toId);
-                if (!exists) {
-                    this.connections.push({ from: fromId, to: toId });
-                    this.scheduleRender();
-                    this.saveState();
-                    showToast(I18n.t('toast.connCreated'));
-                    // Tokenize ↔ Visualize: force word_freq + refresh settings
-                    var nA = this.nodes[fromId];
-                    var nB = this.nodes[toId];
-                    var tkNode = (nA && nA.type === 'tokenize') ? nA : (nB && nB.type === 'tokenize') ? nB : null;
-                    var vzNode = (nA && nA.type === 'visualize') ? nA : (nB && nB.type === 'visualize') ? nB : null;
-                    if (tkNode && vzNode) {
-                        if (tkNode.params.output_mode !== 'word_freq') {
-                            tkNode.params.output_mode = 'word_freq';
-                            this.updateNodeDisplay(tkNode.id);
-                            this.saveState();
-                        }
-                        if (typeof openSettings === 'function') {
-                            var openId = this._settingsNodeId;
-                            if (openId === tkNode.id || openId === vzNode.id) {
-                                openSettings(openId);
-                            }
-                        }
-                    }
-                    warn = this.classifyConnection(fromId, toId);
-                }
-            }
+            const res = this.connectNodes(fromId, toId);
+            if (res.ok) warn = res.warn;
         }
         this.cancelConnection();
-        if (warn && !this._connWarningsDismissed.has(warn.category)) {
-            const keep = await this._warnConnection(fromId, toId, warn);
-            if (!keep) this._undoConnection(fromId, toId);
-        }
+        if (warn) await this._afterConnectWarning(fromId, toId, warn);
     },
 
     cancelConnection() {
@@ -1411,6 +1594,7 @@ const canvas = {
             this._renderPending = false;
             this.updateConnections();
             this.applyDisabledVisuals();
+            this.renderMinimap();
         });
     },
 
@@ -1474,6 +1658,7 @@ const canvas = {
         const px = Math.round(this.panX);
         const py = Math.round(this.panY);
         this.container.style.transform = 'translate(' + px + 'px, ' + py + 'px) scale(' + this.zoom + ')';
+        this.renderMinimap();
     },
 
     _paintZoomReadout() {
@@ -1678,6 +1863,104 @@ const canvas = {
         const cy = el.offsetTop + nodeH / 2;
         const bandCentreY = (topInset + (vh - VIEW_FIT_MARGIN)) / 2;
         this._animateViewTo(vw / 2 - cx * tZoom, bandCentreY - cy * tZoom, tZoom);
+    },
+
+    /* ── Minimap: an overview of the whole graph in a corner ── */
+
+    /* The world rectangle every node occupies, sized by each box's own DOM size (the
+       same facts resetView fits to). null when there is nothing to draw — an empty
+       canvas gets no minimap, not a lone point at the origin. */
+    _minimapBounds() {
+        const ids = Object.keys(this.nodes);
+        if (!ids.length) return null;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        ids.forEach((id) => {
+            const el = this._nodeEl(id);
+            if (!el) return;
+            minX = Math.min(minX, el.offsetLeft);
+            minY = Math.min(minY, el.offsetTop);
+            maxX = Math.max(maxX, el.offsetLeft + (el.offsetWidth || 240));
+            maxY = Math.max(maxY, el.offsetTop + (el.offsetHeight || 80));
+        });
+        if (!isFinite(minX)) return null;
+        return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+    },
+
+    /* Uniform scale (min of the two axes) that fits the world bounds into the box, so the
+       minimap never stretches a node sideways. */
+    _minimapScale(bounds, size) {
+        const contentW = Math.max(1, bounds.maxX - bounds.minX);
+        const contentH = Math.max(1, bounds.maxY - bounds.minY);
+        const avail = Math.max(1, size - 2 * MINIMAP_PAD);
+        return Math.min(avail / contentW, avail / contentH);
+    },
+
+    /* A click at minimap pixels → the world point it stands for (inverse of the draw map). */
+    _minimapClickToWorld(mx, my, bounds, scale) {
+        return { x: bounds.minX + (mx - MINIMAP_PAD) / scale, y: bounds.minY + (my - MINIMAP_PAD) / scale };
+    },
+
+    /* Re-centre the camera on a world point at the CURRENT zoom (kept — a minimap click is a
+       pan, not a zoom). Same viewport-box + menu-inset convention as resetView, so the point
+        lands in the band the top menu does not cover. */
+    _centerWorldPoint(wx, wy) {
+        const vp = this.workspace || {};
+        const vw = vp.clientWidth || window.innerWidth;
+        const vh = vp.clientHeight || window.innerHeight;
+        const menu = document.getElementById('top-menu');
+        const topInset = (menu ? menu.offsetHeight : 0) + VIEW_FIT_MARGIN;
+        const bandCentreY = (topInset + (vh - VIEW_FIT_MARGIN)) / 2;
+        this._animateViewTo(vw / 2 - wx * this.zoom, bandCentreY - wy * this.zoom, this.zoom);
+    },
+
+    onMinimapClick(e) {
+        const bounds = this._minimapBounds();
+        if (!bounds) return;
+        const scale = this._minimapScale(bounds, MINIMAP_SIZE);
+        const rect = (e.currentTarget && e.currentTarget.getBoundingClientRect) ? e.currentTarget.getBoundingClientRect() : { left: 0, top: 0 };
+        const world = this._minimapClickToWorld(e.clientX - rect.left, e.clientY - rect.top, bounds, scale);
+        this._centerWorldPoint(world.x, world.y);
+    },
+
+    /* Draws the minimap as positioned boxes in #minimap's innerHTML: one rectangle per node and
+       a viewport frame. Kept in one string (the DOM stub stores innerHTML verbatim, and the real
+       browser lays it out) so a harness can count node boxes without measuring drawn geometry. */
+    renderMinimap() {
+        const box = document.getElementById('minimap');
+        if (!box) return;
+        const bounds = this._minimapBounds();
+        if (!bounds) {
+            box.innerHTML = '';
+            return;
+        }
+        const scale = this._minimapScale(bounds, MINIMAP_SIZE);
+        const ids = Object.keys(this.nodes);
+        const states = this.disableStates();
+        let html = '';
+        ids.forEach((id) => {
+            const el = this._nodeEl(id);
+            if (!el) return;
+            const x = MINIMAP_PAD + (el.offsetLeft - bounds.minX) * scale;
+            const y = MINIMAP_PAD + (el.offsetTop - bounds.minY) * scale;
+            const w = Math.max(2, (el.offsetWidth || 240) * scale);
+            const h = Math.max(2, (el.offsetHeight || 80) * scale);
+            const off = states[id] !== 'on';
+            html += '<i class="minimap-node' + (off ? ' mm-off' : '') + '" style="left:' + x.toFixed(1) + 'px;top:' + y.toFixed(1) + 'px;width:' + w.toFixed(1) + 'px;height:' + h.toFixed(1) + 'px"></i>';
+        });
+        // The viewport frame: the world rectangle the canvas currently shows, mapped the same way.
+        const vw = (this.workspace && this.workspace.clientWidth) || 1200;
+        const vh = (this.workspace && this.workspace.clientHeight) || 700;
+        const vLeft = (0 - this.panX) / this.zoom;
+        const vTop = (0 - this.panY) / this.zoom;
+        const vx = MINIMAP_PAD + (vLeft - bounds.minX) * scale;
+        const vy = MINIMAP_PAD + (vTop - bounds.minY) * scale;
+        const vwid = Math.max(4, (vw / this.zoom) * scale);
+        const vhei = Math.max(4, (vh / this.zoom) * scale);
+        html += '<i class="minimap-view" style="left:' + vx.toFixed(1) + 'px;top:' + vy.toFixed(1) + 'px;width:' + vwid.toFixed(1) + 'px;height:' + vhei.toFixed(1) + 'px"></i>';
+        box.innerHTML = html;
     },
 
     /* The camera. It is deliberately NOT inside getState(): that dict is also one
@@ -1925,6 +2208,17 @@ const canvas = {
                 Outline.render();
             } catch (e) {
                 console.error('outline render failed', e);
+            }
+        }
+        /* Autosave hangs off this same chokepoint: every structural change passes here, so
+           the debounced file-save needs no per-caller wiring. Guarded and try/caught for the
+           same reason as Outline — a canvas-only harness has no workflow, and a failed
+           autosave schedule must never take down a state write. */
+        if (typeof workflow !== 'undefined' && workflow.scheduleAutosave) {
+            try {
+                workflow.scheduleAutosave();
+            } catch (e) {
+                console.error('autosave schedule failed', e);
             }
         }
         this._refreshDirty();

@@ -266,6 +266,57 @@ const workflow = {
         }
     },
 
+    /* Debounced, silent autosave — fires a couple seconds after the last structural change
+       and ONLY when a file is already open. A never-named canvas is deliberately left for the
+       explicit Save, so autosave never drops unexpected files into the folder; and it writes
+       no toast, because a background save that announces itself every few seconds is noise.
+       The dirty flag is the whole gate: nothing to flush, nothing scheduled. */
+    scheduleAutosave() {
+        if (!this.currentFile || !canvas.dirty) return;
+        if (this._autosaveTimer) clearTimeout(this._autosaveTimer);
+        this._autosaveTimer = setTimeout(() => {
+            this._autosaveTimer = null;
+            this._autosaveToFile();
+        }, 2000);
+    },
+
+    async _autosaveToFile() {
+        /* Re-check at fire time, not just schedule time: the user may have saved explicitly
+           (clearing dirty) or opened a new file inside the debounce window. */
+        if (!this.currentFile || !canvas.dirty) return;
+        try {
+            const resp = await fetch('/api/workflow/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: this.currentFile, workflow: canvas.toWorkflowJSON() }),
+            });
+            const result = await resp.json();
+            if (result.ok) {
+                canvas.markSaved();
+                this._persistOpenFile();
+            }
+        } catch (e) {
+            /* A failed background save stays silent by design: dirty stays up, the next change
+               re-schedules, and beforeunload still warns on close — the user never loses an
+               unsaved file to an autosave that could not reach the server. */
+        }
+    },
+
+    /* The last line before the browser throws an unsaved draft away. The logic lives HERE
+       (not in app.js) so a harness can drive the handler directly; app.js only invokes the
+       install — the AGENTS cross-file-wrapper rule in one place. The message text is
+       browser-owned, so only preventDefault / the truthy return matter. Installed once: a
+       re-entry (a soft reload) must not stack a second identical listener. */
+    installDirtyGuard() {
+        if (this._dirtyGuardInstalled) return;
+        this._dirtyGuardInstalled = true;
+        window.addEventListener('beforeunload', (e) => {
+            if (!canvas.dirty) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+    },
+
     async load() {
         try {
             const resp = await fetch('/api/workflow/list');
@@ -2282,7 +2333,7 @@ function openSettings(nodeId) {
             I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'process') {
         var p = node.params;
-        var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'anomaly', 'correlation', 'significance'];
+        var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
             selectOptionTags(
@@ -2416,6 +2467,15 @@ function openSettings(nodeId) {
             }
             html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
                 I18n.t('settings.aggressionHint') + '</div></div>';
+        }
+
+        /* Bot / 水军 likelihood — per-author coordinated posting, a recall device (not a classifier). */
+        if (p.operation === 'bot') {
+            html += renderParamInput(nodeId, p, 'text_column', 'settings.textColumn', 'text', '正文');
+            html += renderParamInput(nodeId, p, 'author_column', 'settings.botAuthorColumn', 'text', '评论者');
+            html += renderParamInput(nodeId, p, 'time_column', 'settings.botTimeColumn', 'text', '评论时间');
+            html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+                I18n.t('settings.botHint') + '</div></div>';
         }
 
         /* Anomaly detection */
@@ -2791,7 +2851,7 @@ function renderParamCheckbox(nodeId, p, key, labelKey, defVal) {
 }
 
 /* ── Analysis node settings ── */
-var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'forecast', 'alert', 'sentiment_evolution'];
+var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'cluster_label', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'reply_graph', 'compare_platform', 'forecast', 'alert', 'sentiment_evolution'];
 var FILTER_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains', 'not_contains', 'in', 'not_in', 'is_null', 'not_null'];
 var CONVERT_TYPES = ['str', 'int', 'float', 'bool', 'datetime'];
 
@@ -2918,6 +2978,19 @@ function renderAnalysisSettings(nodeId, p) {
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.topicLabelHint') + '</div></div>';
     }
+    if (op === 'cluster_label') {
+        html += renderParamInput(nodeId, p, 'cluster_group_col', 'settings.clusterGroupColumn', 'text', 'cluster');
+        html += renderParamInput(nodeId, p, 'cluster_text_col', 'settings.clusterTextColumn', 'text', '正文');
+        html += renderParamInput(nodeId, p, 'cluster_summary_col', 'settings.clusterSummaryColumn', 'text', '摘要');
+        html += renderParamSelect(nodeId, p, 'cluster_on_fail', 'settings.clusterOnFail', 'abort',
+            [{ v: 'abort', l: I18n.t('settings.labelOnFailAbort') },
+             { v: 'blank', l: I18n.t('settings.labelOnFailBlank') },
+             { v: 'fallback', l: I18n.t('settings.labelOnFailFallback') }]);
+        html += renderParamInput(nodeId, p, 'cluster_max_groups', 'settings.clusterMaxGroups', 'number', 60);
+        html += renderParamInput(nodeId, p, 'cluster_sample_n', 'settings.clusterSampleN', 'number', 8);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.clusterLabelHint') + '</div></div>';
+    }
     if (op === 'topic_map') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
@@ -2989,6 +3062,21 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'cooccur_window', 'settings.cooccurWindow', 'number', 0);
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.cooccurHint') + '</div></div>';
+    }
+    if (op === 'reply_graph') {
+        html += renderParamInput(nodeId, p, 'reply_author_col', 'settings.replyAuthorColumn', 'text', '评论者');
+        html += renderParamInput(nodeId, p, 'reply_floor_col', 'settings.replyFloorColumn', 'text', '楼层');
+        html += renderParamInput(nodeId, p, 'reply_parent_col', 'settings.replyParentColumn', 'text', '父楼层');
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.replyGraphHint') + '</div></div>';
+    }
+    if (op === 'compare_platform') {
+        html += renderParamInput(nodeId, p, 'compare_platform_col', 'settings.comparePlatformColumn', 'text', 'platform');
+        html += renderParamInput(nodeId, p, 'compare_value_col', 'settings.compareValueColumn', 'text', '');
+        html += renderParamSelect(nodeId, p, 'compare_agg', 'settings.compareAgg', 'mean',
+            [{ v: 'mean', l: I18n.t('settings.compareAggMean') }, { v: 'sum', l: I18n.t('settings.compareAggSum') }]);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.compareHint') + '</div></div>';
     }
     if (op === 'forecast') {
         html += renderParamInput(nodeId, p, 'forecast_period_col', 'settings.forecastPeriodColumn', 'text', 'period');
