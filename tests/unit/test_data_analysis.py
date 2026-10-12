@@ -2174,6 +2174,19 @@ class TestTopicMethodAuto:
         )
         assert not out.empty, 'auto staged step produced nothing on a torch-less machine'
 
+    def test_auto_falls_back_for_the_discovery_step_too(self, monkeypatch):
+        """The literal 「新建画布主题步」. An untouched topic_model defaults to auto, and on a
+        machine with no torch/sentence-transformers that default must return a real LDA table —
+        the optional encoder can never block the generic path. Only an EXPLICIT embedding choice
+        refuses (see the next test), because a model the user named is not silently swapped."""
+        import services.data_analysis as m
+
+        monkeypatch.setattr(m, '_embed_missing_packages', lambda: 'sentence-transformers, torch')
+        out = m.DataAnalysisService.topic_model(self._frame(), '正文', n_topics=2, topn=5, method='auto')
+        assert list(out.columns) == ['topic', 'rank', 'keyword', 'weight'], 'same shape whether LDA or embedding ran'
+        assert not out.empty, 'the default topic step produced nothing on a torch-less machine'
+        assert out['topic'].str.startswith('Topic-').all(), 'auto fell through but emitted no topic rows'
+
     def test_explicit_embedding_still_refuses_by_name_when_absent(self, monkeypatch):
         import services.data_analysis as m
 
