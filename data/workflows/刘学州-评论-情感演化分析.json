@@ -209,22 +209,6 @@
       "folded": false
     },
     {
-      "id": "node-129",
-      "type": "visualize",
-      "title": "图28 各阶段情感占比堆叠图（100%）",
-      "params": {
-        "chart_type": "stack_pct",
-        "enabled": true,
-        "engine": "echarts",
-        "stack_fields": "positive_pct,neutral_pct,negative_pct",
-        "title": "刘学州事件 各阶段评论情感占比（100% 堆叠）",
-        "x_field": "period"
-      },
-      "x": 3659,
-      "y": 294,
-      "folded": false
-    },
-    {
       "id": "node-17",
       "type": "visualize",
       "title": "图3 各阶段评论量",
@@ -277,25 +261,6 @@
       "operation": "topic_by_stage",
       "x": 3199,
       "y": 1288,
-      "folded": false
-    },
-    {
-      "id": "node-37",
-      "type": "analysis",
-      "title": "主题概括（表1补全）",
-      "params": {
-        "enabled": true,
-        "label_max_topics": "30",
-        "label_on_fail": "abort",
-        "label_samples_col": "sample_texts",
-        "label_summary_col": "主题概括",
-        "label_words_col": "feature_words",
-        "model": "qwen3.5:9b",
-        "operation": "topic_label"
-      },
-      "operation": "topic_label",
-      "x": 3659,
-      "y": 742,
       "folded": false
     },
     {
@@ -513,6 +478,25 @@
       "operation": "save",
       "x": 3199,
       "y": 2968,
+      "folded": false
+    },
+    {
+      "id": "node-37",
+      "type": "analysis",
+      "title": "主题概括（表1补全）",
+      "params": {
+        "enabled": true,
+        "label_max_topics": "30",
+        "label_on_fail": "abort",
+        "label_samples_col": "sample_texts",
+        "label_summary_col": "主题概括",
+        "label_words_col": "feature_words",
+        "model": "qwen3.5:9b",
+        "operation": "topic_label"
+      },
+      "operation": "topic_label",
+      "x": 3659,
+      "y": 742,
       "folded": false
     },
     {
@@ -2038,6 +2022,22 @@
       "operation": "filter_rows",
       "x": 3199,
       "y": 1008,
+      "folded": false
+    },
+    {
+      "id": "node-129",
+      "type": "visualize",
+      "title": "图28 各阶段情感占比堆叠图（100%）",
+      "params": {
+        "chart_type": "stack_pct",
+        "enabled": true,
+        "engine": "echarts",
+        "stack_fields": "positive_pct,neutral_pct,negative_pct",
+        "title": "刘学州事件 各阶段评论情感占比（100% 堆叠）",
+        "x_field": "period"
+      },
+      "x": 3659,
+      "y": 294,
       "folded": false
     }
   ],
