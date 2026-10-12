@@ -1197,6 +1197,7 @@ _ZH = {
     'resume.unpicked': '未指定节点',
     'resume.loaded': '续跑节点：载入运行 {rid} 中节点 {nid} 的 {n} 行',
     'api.runNotFound': '找不到运行记录：{rid}',
+    'api.runLogTruncated': '（日志过长，仅下载前 {n} 行）',
     'api.exportNotFound': '导出文件不存在（或不允许下载）：{name}',
     # ── 一键报告（自包含 HTML） ───────────────────────────────
     'report.generated': '生成时间',
@@ -2582,6 +2583,7 @@ _EN = {
     'resume.unpicked': 'no node picked',
     'resume.loaded': 'Resume node: loaded {n} rows from node {nid} of run {rid}',
     'api.runNotFound': 'No such run: {rid}',
+    'api.runLogTruncated': '(log too long — downloaded the first {n} lines only)',
     'api.exportNotFound': 'export file not found (or not downloadable): {name}',
     # ── one-click HTML report ───────────────────────────────────
     'report.generated': 'Generated',

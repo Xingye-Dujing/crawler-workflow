@@ -360,3 +360,106 @@ class TestRunHousekeeping:
             'ok': True,
             'removed': {'runs': 0, 'cache_entries': 0, 'seen_keys': 0},
         }
+
+
+# ─── persisted-console viewer endpoints ────────────────────────────────────
+
+
+def _seed_log(store, run_id, lines):
+    """File an ordered console for a run: ``(line, wf_idx, level)`` tuples → durable rows."""
+    rows = [(f'2026-10-06T04:00:{i:02d}', wf_idx, '', level, line) for i, (line, wf_idx, level) in enumerate(lines)]
+    store.append_log(run_id, rows)
+
+
+class TestRunLogEndpoints:
+    """``/api/runs/<id>/log`` (+ ``.txt``) read ONLY the durable ``run_log`` table.
+
+    The invariant that matters: these reads never touch ``execution_state``. The live
+    console and the page-refresh reattach run off that in-memory buffer; a durable viewer
+    that disturbed it (or that only worked while a run was in flight) would be worse than
+    no feature, because it would break the mechanism the user already relies on.
+    """
+
+    def test_page_returns_the_whole_log_ascending_with_a_window(self, client, app_module):
+        store = app_module._RUN_STORE
+        _seed(store, 'r1', name='wf', status=RUN_COMPLETED)
+        _seed_log(store, 'r1', [(f'l{i}', 0, 'info') for i in range(5)])
+        body = client.get('/api/runs/r1/log').get_json()
+        assert [r['line'] for r in body['rows']] == ['l0', 'l1', 'l2', 'l3', 'l4']
+        assert (body['min_seq'], body['max_seq']) == (0, 4)
+        assert body['has_more'] is False
+
+    def test_limit_pages_and_before_walks_older(self, client, app_module):
+        store = app_module._RUN_STORE
+        _seed(store, 'r1', status=RUN_COMPLETED)
+        _seed_log(store, 'r1', [(f'l{i}', 0, 'info') for i in range(7)])
+        newest = client.get('/api/runs/r1/log?limit=3').get_json()
+        assert [r['line'] for r in newest['rows']] == ['l4', 'l5', 'l6']
+        assert newest['has_more'] is True
+        older = client.get(f'/api/runs/r1/log?limit=3&before={newest["min_seq"]}').get_json()
+        assert [r['line'] for r in older['rows']] == ['l1', 'l2', 'l3']
+
+    def test_filters_on_level_wf_and_search(self, client, app_module):
+        store = app_module._RUN_STORE
+        _seed(store, 'r1', status=RUN_COMPLETED)
+        _seed_log(
+            store,
+            'r1',
+            [
+                ('抓取 三亚 完成', 0, 'info'),
+                ('登录墙', 0, 'error'),
+                ('抓取 海口 完成', 1, 'info'),
+            ],
+        )
+        assert [r['line'] for r in client.get('/api/runs/r1/log?level=error').get_json()['rows']] == ['登录墙']
+        assert [r['line'] for r in client.get('/api/runs/r1/log?wf=1').get_json()['rows']] == ['抓取 海口 完成']
+        assert [r['line'] for r in client.get('/api/runs/r1/log?q=三亚').get_json()['rows']] == ['抓取 三亚 完成']
+
+    def test_a_junk_level_or_wf_is_ignored_not_an_error(self, client, app_module):
+        """A hand-typed query parameter is a nicety on a read path, never a 400 — an
+        unrecognised level simply filters on nothing (so the whole log still shows)."""
+        store = app_module._RUN_STORE
+        _seed(store, 'r1', status=RUN_COMPLETED)
+        _seed_log(store, 'r1', [('a', 0, 'info'), ('b', 1, 'error')])
+        body = client.get('/api/runs/r1/log?level=bogus&wf=notanint').get_json()
+        assert [r['line'] for r in body['rows']] == ['a', 'b']
+
+    def test_unknown_run_is_a_404(self, client, app_module):
+        assert client.get('/api/runs/nope/log').status_code == 404
+
+    def test_reading_the_log_never_disturbs_the_live_console(self, client, app_module):
+        """The reattach safety, asserted at the endpoint the new feature adds."""
+        store = app_module._RUN_STORE
+        _seed(store, 'r1', status=RUN_COMPLETED)
+        _seed_log(store, 'r1', [('x', 0, 'info')])
+        before = {key: list(app_module.execution_state[key]) for key in ('logs',)}
+        before_total = app_module.execution_state['_log_total']
+        client.get('/api/runs/r1/log')
+        client.get('/api/runs/r1/log.txt')
+        assert app_module.execution_state['logs'] == before['logs']
+        assert app_module.execution_state['_log_total'] == before_total
+
+    def test_download_is_a_text_attachment_in_order(self, client, app_module):
+        store = app_module._RUN_STORE
+        _seed(store, 'r1', status=RUN_COMPLETED)
+        _seed_log(store, 'r1', [(f'l{i}', 0, 'info') for i in range(5)])
+        resp = client.get('/api/runs/r1/log.txt')
+        assert resp.status_code == 200
+        assert 'text/plain' in resp.mimetype
+        assert 'attachment' in resp.headers['Content-Disposition']
+        assert 'run-r1.log' in resp.headers['Content-Disposition']
+        text = resp.get_data(as_text=True)
+        assert [ln for ln in text.splitlines() if ln] == ['l0', 'l1', 'l2', 'l3', 'l4']
+
+    def test_download_honours_the_same_filters_as_the_page(self, client, app_module):
+        """The download must reproduce 「所见」: whatever the viewer is showing is what saves."""
+        store = app_module._RUN_STORE
+        _seed(store, 'r1', status=RUN_COMPLETED)
+        _seed_log(store, 'r1', [('a', 0, 'info'), ('登录墙', 0, 'error'), ('b', 1, 'info')])
+        text = client.get('/api/runs/r1/log.txt?level=error').get_data(as_text=True)
+        assert [ln for ln in text.splitlines() if ln] == ['登录墙']
+
+    def test_download_of_unknown_run_is_localized_text_404(self, client):
+        resp = client.get('/api/runs/nope/log.txt')
+        assert resp.status_code == 404
+        assert t('api.runNotFound', rid='nope') in resp.get_data(as_text=True)

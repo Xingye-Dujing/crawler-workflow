@@ -141,13 +141,29 @@ def _results_snapshot() -> dict:
 #: and never rebinds it, so the same thread's ``_push_log`` reads the value it just wrote.
 _wf_local = threading.local()
 
+#: Optional write-through sink for the durable per-run console. ``app`` injects a callable
+#: at run start (``set_log_sink``) that receives ``(parts, wf_idx, level)`` once per
+#: ``_push_log``; it is ``None`` otherwise, so ``state`` never imports the store and the
+#: in-memory buffers below stay the single source of truth for the live console. The sink is
+#: a pure SIDE EFFECT: it must never change what ``_push_log`` appends or the running totals,
+#: because the page-refresh reattach (``?tail=5000`` replay + cursor realign) reads exactly
+#: those values. ``app`` owns flushing it.
+_log_sink = None
+
+
+def set_log_sink(fn):
+    """Install (or clear, with ``None``) the durable-console sink. See ``_log_sink``."""
+    global _log_sink
+    _log_sink = fn
+
+
 #: Console lines kept in memory. The frontend only ever renders the last 200, but the total
 #: count has to keep growing so the browser can tell how many it has not seen yet (see
 #: ``_push_log``). ``app.py`` imports this back for its ``_status_tail`` clamp.
 LOG_KEEP = 5000
 
 
-def _push_log(line: str, wf_idx: int = None):
+def _push_log(line: str, wf_idx: int = None, level: str = None):
     """Append one console line, keeping the buffer bounded.
 
     ``_log_total`` counts every line ever produced, not the number retained: the
@@ -161,6 +177,10 @@ def _push_log(line: str, wf_idx: int = None):
     ``white-space: pre-wrap``) — the delta cursor then skipped or repeated real
     content, blank lines came back through this path after the logger handler
     filtered them, and the 200-line tail could be spent by one traceback.
+
+    ``level`` (best-effort: ``warning``/``error`` from the logger handler, else
+    ``info``) is metadata for the durable sink only — it never affects the in-memory
+    buffers or the running totals the live console and the refresh-reattach read.
     """
     idx = wf_idx if wf_idx is not None else getattr(_wf_local, 'idx', None)
     parts = [part for part in line.splitlines() if part.strip()]
@@ -182,14 +202,20 @@ def _push_log(line: str, wf_idx: int = None):
             if len(buf) > LOG_KEEP:
                 del buf[:-LOG_KEEP]
             execution_state['_wf_log_total'][idx] = execution_state['_wf_log_total'].get(idx, 0) + len(parts)
+        # Write-through to the durable per-run log, taken off the SAME ``parts`` the
+        # buffers just consumed. It is a side effect appended after every existing
+        # mutation, so a sink that raises cannot corrupt the totals: the live console
+        # and the refresh-reattach are already fully updated before this runs.
+        if _log_sink is not None:
+            _log_sink(list(parts), idx, level)
 
 
-def add_log(msg: str, wf_idx: int = None):
+def add_log(msg: str, wf_idx: int = None, level: str = 'info'):
     if not str(msg or '').strip():
         # A blank console row is noise the logger path already filters; stamping it
         # would turn ``''`` into a line carrying nothing but a clock.
         return
-    _push_log(f'[{time.strftime("%H:%M:%S")}] {msg}', wf_idx)
+    _push_log(f'[{time.strftime("%H:%M:%S")}] {msg}', wf_idx, level)
 
 
 def _console_baseline() -> dict:

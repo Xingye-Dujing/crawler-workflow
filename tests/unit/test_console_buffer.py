@@ -57,6 +57,115 @@ def console(app_module):
     state.update(saved)
 
 
+@pytest.fixture
+def sink(console):
+    """The console, plus a durable-sink recorder, with the global put back afterwards.
+
+    ``_log_sink`` is a module global, not a dict key, so the ``console`` fixture does not
+    restore it; leaving a recorder installed would let it leak into the next test in the
+    session (and into any real run another test drives). This fixture always clears it.
+    """
+    import state
+
+    received = []
+
+    def _record(parts, wf_idx, level):
+        received.append((list(parts), wf_idx, level))
+
+    app, buffer = console
+    state.set_log_sink(_record)
+    try:
+        yield app, buffer, state, received
+    finally:
+        state.set_log_sink(None)
+
+
+class TestDurableSink:
+    """The write-through sink that backs the per-run durable console.
+
+    It is a *pure side effect* of ``_push_log``: the live console and, above all, the
+    page-refresh reattach read the in-memory buffers and their running totals, and those
+    must not shift by a byte because a sink was installed. The tests below pin both halves
+    — the sink gets what the buffers kept, and the buffers keep exactly what they would
+    have kept with no sink at all.
+    """
+
+    def test_the_sink_receives_the_same_physical_lines_the_buffer_kept(self, sink):
+        app, buffer, _state, received = sink
+        app._push_log('第一行\n第二行\n\n   ')
+        # Blank/whitespace lines are dropped identically for the sink and the buffer.
+        assert received == [(['第一行', '第二行'], None, None)]
+        assert buffer['logs'] == ['第一行', '第二行']
+
+    def test_the_sink_is_told_the_level_and_the_workflow_index(self, sink):
+        app, _buffer, _state, received = sink
+        app.add_log('登录墙', wf_idx=2, level='error')
+        parts, wf_idx, level = received[0]
+        assert wf_idx == 2, 'a parallel run tab must be attributable'
+        assert level == 'error', 'the viewer filters by level, so the handler verdict must travel'
+        assert parts and parts[0].endswith('登录墙')
+
+    def test_add_log_defaults_the_level_to_info(self, sink):
+        app, _buffer, _state, received = sink
+        app.add_log('普通一行')
+        assert received[0][2] == 'info', 'an unclassified line is info, never None, so the filter always matches'
+
+    def test_the_wf_index_defaults_from_the_thread_local(self, sink):
+        app, _buffer, state, received = sink
+        state._wf_local.idx = 5
+        try:
+            app._push_log('线程内的一行')
+            assert received[0][1] == 5, 'the sink must route by the same thread-local the buffers use'
+        finally:
+            state._wf_local.idx = None
+
+    def test_the_buffers_are_byte_identical_with_and_without_a_sink(self, sink):
+        """The hard invariant behind "do not break my refresh-reattach".
+
+        Replay the exact same pushes twice — once with the sink installed, once with it
+        cleared — and every value the status endpoint ships must come out the same. If a
+        sink ever altered a total or the tail, the browser's delta cursor would skip or
+        repeat live console content after a reload.
+        """
+        app, buffer, state, _received = sink
+        script = [
+            ('抓取 三亚 完成', None, 'info'),
+            ('节点执行失败：Message: boom\nsecond line', 0, 'error'),
+            ('警告：慢', 1, 'warning'),
+        ]
+
+        def _replay():
+            for msg, idx, level in script:
+                app._push_log(f'[00:00:00] {msg}', idx, level)
+
+        _replay()
+        with_sink = copy.deepcopy({key: buffer[key] for key in ('logs', '_log_total', '_wf_logs', '_wf_log_total')})
+
+        app.reset_console_state()
+        state.set_log_sink(None)
+        _replay()
+        without_sink = {key: copy.deepcopy(buffer[key]) for key in with_sink}
+
+        assert with_sink == without_sink, (
+            'installing the durable sink changed a value the live console / refresh-reattach reads'
+        )
+
+    def test_a_raising_sink_leaves_the_totals_it_was_given_intact(self, sink):
+        app, buffer, state, _received = sink
+
+        def _boom(_parts, _idx, _level):
+            raise RuntimeError('sink blew up')
+
+        state.set_log_sink(_boom)
+        with pytest.raises(RuntimeError):
+            app._push_log('这一行', None, 'info')
+        # The buffers were fully updated before the sink ran, so a failure there cannot
+        # half-advance the cursor. (The real sink only appends to a list; the flush that
+        # touches SQLite is buffered and guarded in app.)
+        assert buffer['_log_total'] == 1
+        assert buffer['logs'] == ['这一行']
+
+
 class TestImportHygiene:
     def test_no_test_module_imports_app_at_module_scope(self):
         """A module-level ``import app`` defeats the suite's isolation.

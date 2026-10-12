@@ -31,7 +31,7 @@ from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
 from api.studio import bp as studio_bp
 from api.visualize import bp as visualize_bp
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 from profiles import ensure_profile_template
 from state import (
@@ -46,6 +46,7 @@ from state import (
     execution_state,
     history_service,
     reset_console_state,
+    set_log_sink,
 )
 from stores import (
     _apply_dataset_meta,
@@ -224,6 +225,20 @@ def _status_tail(req) -> int:
     return max(1, min(LOG_KEEP, asked))
 
 
+def _level_for_record(record) -> str:
+    """Coarse console level for the durable sink: ERROR+/WARNING/INFO.
+
+    Best-effort metadata for the after-the-fact viewer's filter — it never affects the
+    live console. A traceback forwarded by ``logger.exception`` arrives at ERROR, so the
+    durable log can say "this run had N errors" even after the in-memory tail rolled over.
+    """
+    if record.levelno >= logging.ERROR:
+        return 'error'
+    if record.levelno >= logging.WARNING:
+        return 'warning'
+    return 'info'
+
+
 class LogBufferHandler(logging.Handler):
     """Feed all logger.info/error/warning calls into execution_state['logs'] for the frontend."""
 
@@ -249,7 +264,7 @@ class LogBufferHandler(logging.Handler):
         # (root handler's twin) still receives every line.
         if not stripped or (len(set(stripped)) == 1 and stripped[0] in '=-*#─—'):
             return
-        _push_log(f'[{time.strftime("%H:%M:%S")}] {msg}')
+        _push_log(f'[{time.strftime("%H:%M:%S")}] {msg}', level=_level_for_record(record))
 
     def format(self, record):
         return record.getMessage()
@@ -278,6 +293,78 @@ class _LogTee:
 
     def flush(self):
         self._original.flush()
+
+
+class _RunLogWriter:
+    """Write-through of the live console into the durable per-run log (``run_store.run_log``).
+
+    Installed as ``state``'s log sink only for the window a run is in flight (armed in
+    ``_begin_run``, disarmed in the worker's ``finally``), so a message logged outside any
+    run never reaches it — otherwise a later cookie/preview ``add_log`` would append to a
+    completed record's log. The sink runs *inside* ``_push_log`` while it holds
+    ``_completed_lock``, so ``push`` may only touch in-memory state cheaply; it accumulates
+    lines and hands the batch to SQLite every ``FLUSH_EVERY`` lines or the moment one is an
+    error (so a crash leaves the tail it printed, not a whole run's worth unwritten).
+
+    It must never write the console back (no ``add_log``/``logger`` on failure — the log
+    handler forwards here, so a failure log would recurse). A store error keeps the batch for
+    the next flush, bounded by a hard cap so a permanently-dead DB cannot grow memory forever.
+    """
+
+    FLUSH_EVERY = 200
+    HARD_CAP = 2000
+
+    def __init__(self):
+        self._buf: list = []
+        self._buf_run_id: str | None = None
+
+    def reset(self) -> None:
+        """Drop any leftover batch without writing it (a new run, or an armed re-entry).
+
+        Called under ``_completed_lock`` so it cannot interleave with ``push``.
+        """
+        self._buf = []
+        self._buf_run_id = None
+
+    def push(self, parts, wf_idx, level) -> None:
+        # Runs while the caller holds ``_completed_lock`` (see ``state._push_log``); every
+        # mutation below is therefore serialized with every other console writer.
+        rid = str(execution_state.get('run_id') or '')
+        if not rid:
+            return
+        if rid != self._buf_run_id and self._buf:
+            # Serial split: the previous component's record is closed — flush its lines under
+            # ITS id before switching, or they would be re-filed onto the next workflow.
+            self._drain()
+        self._buf_run_id = rid
+        stamp = time.strftime('%Y-%m-%dT%H:%M:%S')
+        name = str((execution_state.get('_wf_names') or {}).get(wf_idx, '')) if wf_idx is not None else ''
+        lvl = level or 'info'
+        for line in parts:
+            self._buf.append((stamp, wf_idx, name, lvl, line))
+        if lvl == 'error' or len(self._buf) >= self.FLUSH_EVERY:
+            self._drain()
+
+    def _drain(self) -> None:
+        if not self._buf or not self._buf_run_id:
+            self._buf = []
+            return
+        rid = self._buf_run_id
+        batch = self._buf
+        try:
+            get_run_store().append_log(rid, batch)
+            self._buf = []
+        except Exception:
+            # Keep the batch for a later flush; bound it if the store stays down. No logging
+            # here — the console handler forwards back into ``push`` and would recurse.
+            self._buf = batch if len(batch) <= self.HARD_CAP else batch[-self.FLUSH_EVERY :]
+
+    def flush(self) -> None:
+        with _completed_lock:
+            self._drain()
+
+
+_run_log_writer = _RunLogWriter()
 
 
 # cookie_manager lives in state.py (imported at top) so the capabilities Blueprint can read it.
@@ -1341,6 +1428,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             execution_state['stopping'] = False
             execution_state['results'] = {}
             reset_console_state()
+            # Arm the durable per-run console for exactly this run's window: from here the
+            # sink is this run's writer, and the worker's ``finally`` flushes and disarms it.
+            # A run therefore owns every line it prints and no message logged outside a run
+            # (a later cookie/preview ``add_log``) can bleed into a finished record's log.
+            _run_log_writer.reset()
+            set_log_sink(_run_log_writer.push)
             # Node ids THIS attempt visited. The run record outlives the canvas:
             # nodes deleted between attempts keep their stored status, so any
             # verdict read from the whole record can blame a finished run for a
@@ -1926,6 +2019,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # request — also showed up in the console panel.
             if isinstance(sys.stdout, _LogTee):
                 sys.stdout = sys.stdout._original
+            # Flush the run's own trailing console lines to the durable log, then disarm: the
+            # sink must go before the slot is handed to the next run, so a queued run's first
+            # line never writes into this run's batch. Flushing first loses the finish line —
+            # every ``add_log`` up to and including the verdict has already been buffered.
+            _run_log_writer.flush()
+            set_log_sink(None)
             # Release the handle this thread was recognised by, then let the
             # queue have the slot. Both before anything else in this finally can
             # be reordered: _start_next_queued checks liveness through it.
@@ -1945,6 +2044,11 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         # held: ``running`` stuck True, ``_settle_orphaned_records`` (which skips a
         # running slot) never helps, and every later 运行 parks forever. Give the slot
         # back and let the queue drain instead.
+        # Disarm first: this run opened no record, so its start failure belongs to the
+        # live console and the file log only — writing it to the durable per-run log
+        # would orphan rows under a run id no record will ever list.
+        _run_log_writer.reset()
+        set_log_sink(None)
         execution_state['thread'] = None
         execution_state['running'] = False
         execution_state['stopping'] = False
@@ -5945,6 +6049,87 @@ def runs_detail(run_id: str):
     if run is None:
         return jsonify({'ok': False, 'error': t('api.runNotFound', rid=run_id)}), 404
     return jsonify({'ok': True, 'run': run})
+
+
+#: A durable log is stored in full, but a single HTTP read is page-boxed so no request can
+#: ask the store to materialise a run's whole console at once. The download walks pages of
+#: this size; a runaway crawl is bounded by this ceiling so the .txt stays openable.
+_LOG_PAGE = 500
+_LOG_PAGE_MAX = 2000
+_LOG_DOWNLOAD_CAP = 100_000
+
+
+def _log_filters(req):
+    """The shared ``wf``/``level``/``q`` query parameters for both log reads.
+
+    ``wf`` is a per-workflow tab (a parallel run's console splits by tab); an empty value
+    means 「全部」 and filters on nothing. Kept in one place so the JSON page and the .txt
+    download answer the exact same question — the download is 「所见即所存」.
+    """
+    wf_raw = str(req.args.get('wf') or '').strip()
+    wf_idx = int(wf_raw) if wf_raw.lstrip('-').isdigit() else None
+    level = str(req.args.get('level') or '').strip().lower()
+    level = level if level in ('info', 'warning', 'error') else None
+    q = str(req.args.get('q') or '').strip() or None
+    return wf_idx, level, q
+
+
+@app.route('/api/runs/<run_id>/log', methods=['GET'])
+def runs_log_page(run_id: str):
+    """One page of a run's persisted console, oldest→newest, for the after-the-fact viewer.
+
+    ``before`` walks 「加载更早」 (the smallest seq already shown); ``level``/``wf``/``q``
+    narrow it. This reads ONLY the durable ``run_log`` table — it never touches
+    ``execution_state`` and cannot affect the live console or the refresh-reattach.
+    """
+    store = get_run_store()
+    if store.get_run(run_id) is None:
+        return jsonify({'ok': False, 'error': t('api.runNotFound', rid=run_id)}), 404
+    wf_idx, level, q = _log_filters(request)
+    limit = _safe_int(request.args.get('limit'), _LOG_PAGE, minimum=1, maximum=_LOG_PAGE_MAX)
+    before_raw = str(request.args.get('before') or '').strip()
+    before_seq = int(before_raw) if before_raw.lstrip('-').isdigit() else None
+    page = store.read_log(run_id, wf_idx=wf_idx, level=level, q=q, before_seq=before_seq, limit=limit)
+    return jsonify({'ok': True, **page})
+
+
+@app.route('/api/runs/<run_id>/log.txt', methods=['GET'])
+def runs_log_download(run_id: str):
+    """The whole persisted console as a downloadable ``.txt`` — with the viewer's filters, so
+    a download reproduces exactly what the panel shows (「所见即所存」)."""
+    store = get_run_store()
+    if store.get_run(run_id) is None:
+        return t('api.runNotFound', rid=run_id), 404, {'Content-Type': 'text/plain; charset=utf-8'}
+    wf_idx, level, q = _log_filters(request)
+    # ``read_log`` walks backward (「加载更早」 hands back its smallest seq). So the download
+    # reads the newest page, then each strictly-older page, collecting blocks; the oldest
+    # page is collected LAST, and flattening the blocks in reverse gives the whole filtered
+    # console ascending in one pass (a repeated list prepend here would be quadratic).
+    blocks: list[list[str]] = []
+    total = 0
+    truncated = False
+    before_seq = None
+    while total < _LOG_DOWNLOAD_CAP:
+        page = store.read_log(run_id, wf_idx=wf_idx, level=level, q=q, before_seq=before_seq, limit=_LOG_PAGE_MAX)
+        rows = page['rows']
+        if not rows:
+            break
+        blocks.append([r['line'] for r in rows])
+        total += len(rows)
+        if not page['has_more']:
+            break
+        before_seq = page['min_seq']
+    else:
+        truncated = page.get('has_more', False)
+    lines = [line for block in reversed(blocks) for line in block][:_LOG_DOWNLOAD_CAP]
+    body = '\n'.join(lines)
+    if truncated:
+        body += '\n' + t('api.runLogTruncated', n=_LOG_DOWNLOAD_CAP) + '\n'
+    # The filename is built from a run id we mint as hex; strip anything not alphanumeric so a
+    # crafted path segment can never inject a quote or newline into the response header.
+    safe_id = ''.join(c for c in run_id if c.isalnum())[:40] or 'run'
+    headers = {'Content-Disposition': f'attachment; filename="run-{safe_id}.log"'}
+    return Response(body + '\n', mimetype='text/plain; charset=utf-8', headers=headers)
 
 
 # ─── Main ──────────────────────────────────────────────────────

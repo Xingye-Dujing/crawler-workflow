@@ -994,3 +994,134 @@ class TestRunDuration:
         assert nodes['slow']['duration_seconds'] == 135
         # An unfinished node has no wall time yet — a dash on the card, never a fabricated 0.
         assert nodes['open']['duration_seconds'] is None
+
+
+# ─── persisted run console (断点之后仍可查阅的日志) ──────────────────────
+
+
+def _log_row(line, ts='2026-10-06T04:00:00', wf_idx=0, wf_name='', level='info'):
+    """One ``(ts, wf_idx, wf_name, level, line)`` row in ``append_log``'s order."""
+    return (ts, wf_idx, wf_name, level, line)
+
+
+class TestRunLog:
+    def test_append_returns_the_count_and_is_a_noop_when_empty(self, store):
+        _start(store)
+        assert store.append_log('r1', []) == 0
+        assert store.append_log('r1', [_log_row('a'), _log_row('b')]) == 2
+
+    def test_seq_is_contiguous_across_flushes_and_never_collides(self, store):
+        """A flush is a batch, not one row — so ``MAX(seq)+1`` must carry across calls.
+
+        The console is written every N lines and again at the run's end; if each batch
+        restarted at 0 the ``(run_id, seq)`` PK would silently ``INSERT OR REPLACE``
+        earlier lines away and the viewer would show a truncated run.
+        """
+        _start(store)
+        store.append_log('r1', [_log_row('a'), _log_row('b'), _log_row('c')])
+        store.append_log('r1', [_log_row('d'), _log_row('e')])
+        got = store.read_log('r1', limit=100)
+        assert [r['seq'] for r in got['rows']] == [0, 1, 2, 3, 4]
+        assert [r['line'] for r in got['rows']] == ['a', 'b', 'c', 'd', 'e']
+
+    def test_two_runs_do_not_share_a_seq_space(self, store):
+        # The PK is (run_id, seq): seq restarts per run, so one run's rows never
+        # displace another's, and a resumed run re-opening a row does not collide.
+        _start(store, 'r1')
+        _start(store, 'r2', name='wf2', fp='fp-b')
+        store.append_log('r1', [_log_row('x'), _log_row('y')])
+        store.append_log('r2', [_log_row('z')])
+        assert [r['seq'] for r in store.read_log('r2', limit=10)['rows']] == [0]
+
+    def test_read_is_chronological_and_reports_the_page_window(self, store):
+        _start(store)
+        store.append_log('r1', [_log_row(f'line-{i}') for i in range(5)])
+        got = store.read_log('r1', limit=5)
+        assert [r['line'] for r in got['rows']] == ['line-0', 'line-1', 'line-2', 'line-3', 'line-4']
+        assert (got['min_seq'], got['max_seq']) == (0, 4)
+        assert got['has_more'] is False
+
+    def test_has_more_and_before_seq_walk_older_without_gaps(self, store):
+        """「加载更早」 hands back the smallest seq it saw as the next ``before_seq``.
+
+        Fetching the newest page then paging backward must reproduce the whole log in
+        order with neither a repeated line nor a dropped one — the limit is what makes
+        this a page rather than a full read, so it is exercised below the row count.
+        """
+        _start(store)
+        store.append_log('r1', [_log_row(f'l{i}') for i in range(7)])
+        newest = store.read_log('r1', limit=3)
+        assert [r['line'] for r in newest['rows']] == ['l4', 'l5', 'l6']
+        assert newest['has_more'] is True
+        older = store.read_log('r1', limit=3, before_seq=newest['min_seq'])
+        assert [r['line'] for r in older['rows']] == ['l1', 'l2', 'l3']
+        oldest = store.read_log('r1', limit=3, before_seq=older['min_seq'])
+        assert [r['line'] for r in oldest['rows']] == ['l0']
+        assert oldest['has_more'] is False
+
+    def test_filters_on_wf_idx_level_and_substring(self, store):
+        _start(store)
+        store.append_log(
+            'r1',
+            [
+                _log_row('抓取 三亚 完成', wf_idx=0, wf_name='微博', level='info'),
+                _log_row('登录墙', wf_idx=0, wf_name='微博', level='error'),
+                _log_row('抓取 海口 完成', wf_idx=1, wf_name='知乎', level='info'),
+            ],
+        )
+        assert [r['line'] for r in store.read_log('r1', wf_idx=1)['rows']] == ['抓取 海口 完成']
+        assert [r['line'] for r in store.read_log('r1', level='error')['rows']] == ['登录墙']
+        assert [r['line'] for r in store.read_log('r1', q='三亚')['rows']] == ['抓取 三亚 完成']
+
+    def test_search_text_is_bound_not_interpolated(self, store):
+        """A query is user input reaching a LIKE — it must never be read as SQL.
+
+        ``%`` and ``'`` are the two ways a naive f-string would break the statement; the
+        store only ever appends ``%{q}%`` as a *parameter*, so they match literally.
+        """
+        _start(store)
+        store.append_log('r1', [_log_row("has 'quote' and 100%"), _log_row('plain')])
+        assert [r['line'] for r in store.read_log('r1', q="quote' and 100%")['rows']] == ["has 'quote' and 100%"]
+        assert store.read_log('r1', q="') OR 1=1 --")['rows'] == []
+
+    def test_blank_level_and_name_fall_back_to_defaults(self, store):
+        # Best-effort levels: the sink passes None for a line the handler could not
+        # classify, and the column default keeps the viewer's filter usable.
+        _start(store)
+        store.append_log('r1', [(None, None, None, None, 'a line')])
+        row = store.read_log('r1')['rows'][0]
+        assert row['level'] == 'info'
+        assert row['wf_name'] == ''
+
+    def test_delete_run_and_purge_reclaim_the_log(self, store):
+        # Storing every line (not a bounded tail) grows the DB, so the retention that
+        # deletes a run must also drop its (potentially large) log — otherwise the
+        # feature is a disk leak dressed as durability.
+        _start(store, 'r1')
+        store.append_log('r1', [_log_row('x'), _log_row('y')])
+        assert store.stats()['run_log_lines'] == 2
+        store.delete_run('r1')
+        assert store.read_log('r1')['rows'] == []
+        assert store.stats()['run_log_lines'] == 0
+        _start(store, 'r2')
+        store.append_log('r2', [_log_row('z')])
+        store.finish_run('r2', RUN_COMPLETED)
+        store._execute("UPDATE runs SET started_at = '2019-01-01T00:00:00' WHERE run_id = 'r2'")
+        store.purge(keep_per_workflow=0, keep_days=30)
+        assert store.read_log('r2')['rows'] == []
+
+    def test_a_resumed_run_keeps_the_lines_from_both_attempts(self, store):
+        """续跑 must not clear what the interrupted attempt already printed.
+
+        The run_id is stable across a 继续, so append_log continues that run's seq; the
+        whole point is that the console of an interrupted run stays reviewable afterwards.
+        """
+        _start(store, 'r1')
+        store.append_log('r1', [_log_row('attempt-1 line')])
+        store.finish_run('r1', RUN_INTERRUPTED)
+        store.start_run('r1', 'wf', 'fp-a')
+        store.append_log('r1', [_log_row('attempt-2 line')])
+        assert [r['line'] for r in store.read_log('r1', limit=10)['rows']] == [
+            'attempt-1 line',
+            'attempt-2 line',
+        ]

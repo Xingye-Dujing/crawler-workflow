@@ -412,10 +412,29 @@ class RunStore:
                     created_at TEXT NOT NULL,
                     PRIMARY KEY (run_id, name)
                 );
+                -- The run console, persisted one physical line per row. Until this existed the
+                -- console lived only in an in-memory, per-run-reset buffer (capped, and wiped by
+                -- the NEXT run), so a finished run's early lines were unrecoverable — you could not
+                -- review a past run's log after refreshing late, starting another run, or a restart.
+                -- ``seq`` is the per-run line order (MAX(seq)+1, never COUNT(*), matching node_rows);
+                -- ``wf_idx``/``wf_name`` reconstruct the per-workflow tabs of a parallel run; ``level``
+                -- is best-effort (handler-derived WARN/ERROR, else info) so the viewer can filter.
+                -- Rows are deleted with their run (delete_run cascades), so retention bounds growth.
+                CREATE TABLE IF NOT EXISTS run_log (
+                    run_id TEXT NOT NULL,
+                    seq INTEGER NOT NULL,
+                    ts TEXT,
+                    wf_idx INTEGER,
+                    wf_name TEXT DEFAULT '',
+                    level TEXT DEFAULT 'info',
+                    line TEXT NOT NULL,
+                    PRIMARY KEY (run_id, seq)
+                );
                 CREATE INDEX IF NOT EXISTS idx_runs_wf ON runs(workflow_fingerprint, started_at);
                 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
                 CREATE INDEX IF NOT EXISTS idx_node_runs_status ON node_runs(run_id, status);
                 CREATE INDEX IF NOT EXISTS idx_run_files_run ON run_files(run_id, node_id, kind);
+                CREATE INDEX IF NOT EXISTS idx_run_log_wf ON run_log(run_id, wf_idx, seq);
                 """
             )
             self._conn.commit()
@@ -688,7 +707,10 @@ class RunStore:
         # ``run_files`` goes with it: it is per-run bookkeeping of what that record wrote, and a
         # map pointing at a record that no longer exists could never be queried anyway — the file
         # themselves are left alone (a deleted record's exports are the user's to keep or clear).
-        for table in ('node_rows', 'node_runs', 'runs', 'run_files'):
+        # ``run_log`` too: the console lines are per-run bookkeeping, so the retention policy that
+        # deletes the run also reclaims its (potentially large) log — the growth cap for storing
+        # every line rather than a bounded tail.
+        for table in ('node_rows', 'node_runs', 'runs', 'run_files', 'run_log'):
             cur = self._execute(f'DELETE FROM {table} WHERE run_id = ?', (run_id,))
             counts[table] = cur.rowcount
         return counts
@@ -877,6 +899,7 @@ class RunStore:
             'node_rows': count('SELECT COUNT(*) AS n FROM node_rows'),
             'cache_entries': count('SELECT COUNT(*) AS n FROM llm_cache'),
             'seen_keys': count('SELECT COUNT(*) AS n FROM item_seen'),
+            'run_log_lines': count('SELECT COUNT(*) AS n FROM run_log'),
             'bytes': size,
         }
 
@@ -1054,6 +1077,87 @@ class RunStore:
                 )
             self._conn.commit()
         return kept, dropped
+
+    def append_log(self, run_id: str, rows: list) -> int:
+        """Persist console lines for a run in one batch. Each row is a
+        ``(ts, wf_idx, wf_name, level, line)`` tuple, in the order produced.
+
+        ``seq`` is the next free slot via ``MAX(seq)+1`` (never ``COUNT(*)``) — same rule as
+        ``node_rows``: the PK is ``(run_id, seq)`` so the max is an index seek, and this is called
+        once per flush (many lines), not per line, so the read happens once per batch. Returns the
+        number of rows written.
+        """
+        if not rows:
+            return 0
+        with self._lock:
+            start = self._conn.execute(
+                'SELECT COALESCE(MAX(seq), -1) + 1 FROM run_log WHERE run_id = ?', (run_id,)
+            ).fetchone()[0]
+            batch = []
+            for offset, (ts, wf_idx, wf_name, level, line) in enumerate(rows):
+                batch.append((run_id, start + offset, ts, wf_idx, wf_name or '', level or 'info', line))
+            self._conn.executemany(
+                'INSERT OR REPLACE INTO run_log (run_id, seq, ts, wf_idx, wf_name, level, line) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                batch,
+            )
+            self._conn.commit()
+        return len(batch)
+
+    def read_log(
+        self,
+        run_id: str,
+        wf_idx: int = None,
+        level: str = None,
+        q: str = None,
+        before_seq: int = None,
+        limit: int = 500,
+    ) -> dict:
+        """One page of a run's persisted console, oldest→newest, for the after-the-fact viewer.
+
+        Filters are optional: ``wf_idx`` (a parallel run's tab), ``level``, and ``q`` (a substring
+        search). ``before_seq`` walks older ("加载更早"): it returns the ``limit`` lines immediately
+        older than that seq, so the newest page passes no ``before_seq`` and each older page passes
+        the smallest seq it already has. We take ``limit+1`` newest-first to learn ``has_more``
+        without a second query, then flip back to chronological order for display. Every value is a
+        bound parameter — never string-interpolated — so the search text cannot reach the SQL.
+        """
+        where = ['run_id = ?']
+        params: list = [run_id]
+        if wf_idx is not None:
+            where.append('wf_idx = ?')
+            params.append(int(wf_idx))
+        if level:
+            where.append('level = ?')
+            params.append(level)
+        if q:
+            where.append('line LIKE ?')
+            params.append(f'%{q}%')
+        if before_seq is not None:
+            where.append('seq < ?')
+            params.append(int(before_seq))
+        cap = max(1, int(limit))
+        clause = ' AND '.join(where)
+        fetched = self._query(
+            f'SELECT seq, ts, wf_idx, wf_name, level, line FROM run_log WHERE {clause} ORDER BY seq DESC LIMIT ?',
+            (*params, cap + 1),
+        )
+        has_more = len(fetched) > cap
+        page = fetched[:cap]
+        rows = [
+            {
+                'seq': r['seq'],
+                'ts': r['ts'],
+                'wf_idx': r['wf_idx'],
+                'wf_name': r['wf_name'],
+                'level': r['level'],
+                'line': r['line'],
+            }
+            for r in reversed(page)
+        ]
+        min_seq = rows[0]['seq'] if rows else None
+        max_seq = rows[-1]['seq'] if rows else None
+        return {'rows': rows, 'has_more': has_more, 'min_seq': min_seq, 'max_seq': max_seq}
 
     def replace_rows(self, run_id: str, node_id: str, rows: list, label: str = ''):
         """Store a node's complete output at once. Atomic nodes (pandas

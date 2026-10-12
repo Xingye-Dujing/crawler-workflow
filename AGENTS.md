@@ -269,6 +269,15 @@ scikit-learn, and renders a drag-and-drop workflow canvas. Single project, no bu
   200 lines of the *whole* run). `consoleViews` in workflow.js holds `{seen, lines}` per view (`'all'` plus each
   workflow id), **every** view is fed on every poll, and `switchWfTab` repaints from that view's history without
   moving its cursor.
+- **The console is ALSO persisted per run (`run_store.run_log`), but that durable log is a pure side effect of the
+  live path — it may never move the live console.** `_push_log` (state.py) writes through to `app`'s `_RunLogWriter`
+  via the `set_log_sink` seam, and the writer files every physical line under the run that printed it (flush every
+  200 lines + on any error + once in the worker's `finally`, and it is armed only inside a run's window so a stray
+  post-run `add_log` cannot orphan rows). The durable viewer (`/api/runs/<id>/log(.txt)`, `runLogViewer`) reads ONLY
+  that table. **The reattach reads `execution_state['logs']/_log_total/_wf_logs/_wf_log_total` and the `?tail=5000`
+  replay, and those values must stay byte-identical whether or not a sink is installed** — a total that shifts is a
+  cursor that skips or repeats live content after a reload. `test_console_buffer.py` fails the byte-identical
+  invariant; that is the guarantee, not a nuisance test.
 - **Every thread that logs must pin its own language.** `set_lang` is thread-local and a daemon thread starts fresh, so
   `run()`, the parallel pool wrapper and **both cookie workers** take the request's language and set it first,
   because a daemon thread that does not is Chinese in an English interface. A test asserting console text should

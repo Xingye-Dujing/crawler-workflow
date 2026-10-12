@@ -2731,6 +2731,103 @@ input:-webkit-autofill:focus {
   background: var(--line2);
 }
 
+/* Durable run-log viewer: a read-only modal over the persisted per-run console. It reuses
+   the console-line look so a saved run reads exactly like it did live, and the dialog scrim
+   so it sits above the panel chrome. */
+.run-log-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.run-log-overlay.open {
+  display: flex;
+}
+.run-log-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  box-shadow: var(--shadow);
+  width: min(1000px, 92vw);
+  height: min(80vh, 720px);
+  padding: 0;
+}
+.run-log-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line2);
+}
+.run-log-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-log-spacer {
+  flex: 1;
+}
+.run-log-filters {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line2);
+  flex-wrap: wrap;
+}
+.run-log-filters .settings-select,
+.run-log-filters .settings-input {
+  font-size: 12px;
+}
+.run-log-filters .settings-input {
+  flex: 1;
+  min-width: 160px;
+}
+.run-log-body {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-family: var(--font);
+  line-height: 1.6;
+  background: var(--bg);
+}
+.run-log-line {
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 1px 0;
+}
+.run-log-line.lvl-warning {
+  color: var(--warn, #b8860b);
+}
+.run-log-line.lvl-error {
+  color: var(--err, #c0392b);
+}
+.run-log-empty {
+  color: var(--text-dim);
+  padding: 12px 0;
+  font-style: italic;
+}
+.run-log-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line2);
+}
+.run-log-status {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 #console-tabs {
   display: flex;
   border-bottom: 1px solid var(--line2);

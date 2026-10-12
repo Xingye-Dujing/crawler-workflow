@@ -36,7 +36,8 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/runs/discard` | POST | 丢弃一次中断运行（不再提供续跑） |
 | `/api/runs/delete` | POST | 删除指定运行 |
 | `/api/runs/<run_id>` | GET | 运行详情（含节点行数据摘要）；`run.nodes` 每个节点带 `duration_seconds`（该节点墙钟耗时 = 节点 `finished_at` − `started_at`，秒级、与运行时长同口径；节点未完成时为空，前端详情卡片据此渲染 `MM:SS`，无值为破折号——不谎报 0） |
-
+| `/api/runs/<run_id>/log` | GET | 事后查阅该运行**持久化的控制台**（`runs.db` 的 `run_log`，每条物理行都存、不截断）。查询参数：`wf`（工作流标签下标，空为全部）、`level`（`info`/`warning`/`error`）、`q`（子串搜索）、`before`（「加载更早」游标=已显示最小 seq）、`limit`（缺省 500，夹到 2000）。返回 `{rows(oldest→newest), has_more, min_seq, max_seq}`。未知 run → 404。**只读持久表，绝不触碰 `execution_state`**——与实时控制台、刷新重连无关 |
+| `/api/runs/<run_id>/log.txt` | GET | 把同一份持久控制台按**当前过滤**（`wf`/`level`/`q`）整段拼齐，作为 `text/plain` 附件下载（`run-<id>.log`），即「所见即所存」；未知 run → 404 文本 |
 ### 数据与数据集
 
 | 端点 | 方法 | 描述 |
