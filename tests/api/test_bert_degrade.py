@@ -57,3 +57,17 @@ class TestBertDegrade:
         for mode in ('snownlp', 'ml', 'llm'):
             assert app_module._resolve_bert_mode('sentiment', mode, '') == mode
         assert logs == [], 'only a bert request is ever degraded'
+
+    def test_the_default_sentiment_node_completes_on_a_torch_less_machine(self, app_module, monkeypatch):
+        """The whole executor path, not just the helper: a freshly created sentiment node whose mode
+        was never touched defaults to ``bert``; on a machine with no torch it must still RUN — degrade
+        to the bundled SnowNLP and hand back a column — rather than refuse and leave the generic path
+        unusable. This is the end-to-end guarantee the topic step already has for its ``auto`` default."""
+        logs = self._capture_logs(app_module, monkeypatch)
+        monkeypatch.setattr(app_module, 'bert_backend', lambda: 'torch, transformers')
+        records = [{'正文': '很棒 我愛了 喜欢'}, {'正文': '太差了 垃圾 再也不买'}]
+        node = {'id': 'n1', 'type': 'process', 'operation': 'sentiment', 'params': {}}
+        out = app_module._execute_process_node(node, records, run_ctx=None)
+        assert len(out) == 2, 'a torch-less box must still get one row per input, not an abort'
+        assert 'sentiment' in out[0], f'expected a sentiment column, got {sorted(out[0])}'
+        assert any('snownlp' in line for line in logs), 'the degrade must be printed, never silent'
