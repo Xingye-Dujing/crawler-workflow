@@ -307,8 +307,13 @@ _COMMENT_LIMIT = Field(
 #: the filter refuses by name and this hint states.
 _COMMENT_TIMES = (
     Field(key='comment_start', control='text', label_key='settings.commentStart', placeholder='2026-01-01'),
-    Field(key='comment_end', control='text', label_key='settings.commentEnd', placeholder='2026-12-31',
-          hint_key='settings.commentTimeHint'),
+    Field(
+        key='comment_end',
+        control='text',
+        label_key='settings.commentEnd',
+        placeholder='2026-12-31',
+        hint_key='settings.commentTimeHint',
+    ),
 )
 _PER_ARTICLE = Field(
     key='per_article_file',
