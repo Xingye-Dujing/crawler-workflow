@@ -2210,6 +2210,9 @@ const canvas = {
                 console.error('outline render failed', e);
             }
         }
+        /* Recompute dirty BEFORE the autosave hook: addNode's saveState runs while the canvas was
+           still clean, so gating first would arm autosave only from the SECOND change onward. */
+        this._refreshDirty();
         /* Autosave hangs off this same chokepoint: every structural change passes here, so
            the debounced file-save needs no per-caller wiring. Guarded and try/caught for the
            same reason as Outline — a canvas-only harness has no workflow, and a failed
@@ -2221,7 +2224,6 @@ const canvas = {
                 console.error('autosave schedule failed', e);
             }
         }
-        this._refreshDirty();
     },
 
     /* Baseline the dirty flag at the point the canvas matches a file on disk: after a

@@ -2900,3 +2900,171 @@ def test_the_camera_and_a_zero_coordinate_survive_a_real_reload(app_url, driver)
     )
     # The node at the origin stayed at the origin instead of scattering to random ~100-300.
     assert facts['left'] == '0px' and facts['top'] == '0px', f'a 0-coordinate node moved on load: {facts}'
+
+
+# ─── features whose proof needs a real engine (node stub cannot render or time) ───
+
+
+def _reset_canvas(driver):
+    """Give the scenario a page-owned empty canvas: the shared Chrome profile can carry a
+    previous run's draft (nodes, camera, type switches) that would pollute the measurement."""
+    driver.execute_script(
+        """
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {};
+        canvas.connections = [];
+        canvas.selectedNode = null;
+        canvas.selectedNodes = [];
+        canvas.disabledTypes = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        document.getElementById('svg-layer').innerHTML = '';
+        canvas.panX = 0;
+        canvas.panY = 0;
+        canvas.zoom = 1;
+        canvas.updateTransform();
+        """,
+        [],
+    )
+
+
+def test_autosave_writes_the_open_file_over_a_real_debounce_timer(app_url, driver):
+    """The debounced autosave is a real setTimeout — the node harness fakes timers, so only a
+    browser can prove it fires, saves EXACTLY once for one quiet change, names the already-open
+    file (never invents a new one), and clears the dirty flag on success. It must also stay
+    SILENT (no toast), because a save that announces itself every few seconds is noise."""
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    _reset_canvas(driver)
+    driver.execute_script(
+        """
+        // Intercept instead of hitting the server: this tier performs no writes, and we need to
+        // observe the exact call the autosave makes.
+        window.__saves = [];
+        window.__toasts = [];
+        window.fetch = function (url, opts) {
+            if (String(url).indexOf('/api/workflow/save') >= 0) {
+                let name = null;
+                try {
+                    name = JSON.parse((opts && opts.body) || '{}').name;
+                } catch (e) { /* leave null */ }
+                window.__saves.push({url: String(url), name: name});
+            }
+            return Promise.resolve({ok: true, json: () => Promise.resolve({ok: true})});
+        };
+        const origToast = window.showToast;
+        window.showToast = function (m) {
+            window.__toasts.push(String(m));
+            if (origToast) origToast.call(window, m);
+        };
+        workflow.currentFile = 'autosave-target';
+        window.__historyBefore = canvas._history.length;
+        canvas.addNode('source', 60, 60);   // a real change: dirties the canvas and arms the timer
+        """,
+        [],
+    )
+    armed = driver.execute_script(
+        'return {dirty: canvas.dirty, timer: !!workflow._autosaveTimer, '
+        'hasFn: typeof workflow.scheduleAutosave, file: String(workflow.currentFile)};',
+        [],
+    )
+    assert armed['timer'] is True, f'adding a node did not arm the autosave debounce: {armed}'
+    assert armed['dirty'] is True, 'a fresh change must leave the canvas dirty'
+    # The debounce is 2000 ms; wait past it and let the awaited save settle.
+    time.sleep(2.6)
+    after = driver.execute_script(
+        'return {saves: window.__saves, toasts: window.__toasts, dirty: canvas.dirty, '
+        'hist: canvas._history.length, before: window.__historyBefore};',
+        [],
+    )
+    assert len(after['saves']) == 1, f'expected exactly one autosave POST, got {after["saves"]}'
+    assert after['saves'][0]['name'] == 'autosave-target', 'autosave must write the OPEN file, not a new name'
+    assert after['toasts'] == [], f'autosave must be silent, saw toasts: {after["toasts"]}'
+    assert after['dirty'] is False, 'a successful autosave must clear the dirty flag'
+
+
+def test_the_minimap_uses_real_box_geometry_and_a_click_is_a_view_only_change(app_url, driver):
+    """renderMinimap reads each box's real offsetLeft/offsetWidth — geometry the stub fakes.
+    A click must move the CAMERA (proving the click→world→recentre path runs in a browser) while
+    leaving getState() and the undo history untouched, because the camera is deliberately outside
+    the model."""
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    _reset_canvas(driver)
+    facts = driver.execute_script(
+        """
+        const a = canvas.addNode('source', 40, 40);
+        const b = canvas.addNode('process', 500, 40);
+        const c = canvas.addNode('output', 40, 460);
+        canvas.renderMinimap();
+        const box = document.getElementById('minimap');
+        const nodeBoxes = box.querySelectorAll('.minimap-node').length;
+        const hasView = !!box.querySelector('.minimap-view');
+        const stateBefore = JSON.stringify(canvas.getState());
+        const histBefore = canvas._history.length;
+        const panBefore = {x: canvas.panX, y: canvas.panY};
+        // Click the box's centre: the handler must read a real bounding rect and move the camera.
+        const r = box.getBoundingClientRect();
+        canvas.onMinimapClick({clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, currentTarget: box});
+        return {
+            nodeBoxes: nodeBoxes,
+            hasView: hasView,
+            moved: canvas.panX !== panBefore.x || canvas.panY !== panBefore.y,
+            stateSame: JSON.stringify(canvas.getState()) === stateBefore,
+            histSame: canvas._history.length === histBefore,
+        };
+        """,
+        [],
+    )
+    assert facts['nodeBoxes'] == 3, f'the minimap drew {facts["nodeBoxes"]} node boxes for 3 real nodes'
+    assert facts['hasView'] is True, 'no viewport rectangle was drawn'
+    assert facts['moved'] is True, 'a minimap click did not move the camera'
+    assert facts['stateSame'] is True, 'the camera must not enter getState()'
+    assert facts['histSame'] is True, 'a camera move must not be an undo step'
+
+
+def test_multi_select_marks_real_boxes_and_batch_delete_removes_them_from_the_dom(app_url, driver):
+    """Selection paints real DOM classes and the marquee hit-test reads real box geometry; a batch
+    delete must physically remove those boxes from #nodes-container. The stub records a fake
+    class list and layout — only here can we watch the boxes actually light and vanish."""
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    _reset_canvas(driver)
+    facts = driver.execute_script(
+        """
+        const a = canvas.addNode('source', 0, 0);
+        const b = canvas.addNode('process', 100, 0);
+        const far = canvas.addNode('output', 1200, 0);
+        // Marquee over the two near boxes only; pin pan/zoom and the workspace origin so the
+        // hit-test is measured purely against the nodes' real offsetLeft (geometry the stub fakes).
+        canvas.panX = 0;
+        canvas.panY = 0;
+        canvas.zoom = 1;
+        canvas._marqueeSelect({x: 0, y: 0, w: 300, h: 300}, {left: 0, top: 0});
+        const selectedAfterMarquee = Array.from(document.querySelectorAll('.node.selected')).map((el) => el.id).sort();
+        const marqueeSet = canvas.selectedNodes.slice().sort();
+        // One batch delete removes both from the model AND the real DOM.
+        const domBefore = document.querySelectorAll('#nodes-container .node').length;
+        canvas.deleteNodes([a, b]);
+        const domAfter = document.querySelectorAll('#nodes-container .node').length;
+        return {
+            selectedAfterMarquee: selectedAfterMarquee,
+            marqueeSet: marqueeSet,
+            farExcluded: marqueeSet.indexOf(far) < 0,
+            domBefore: domBefore,
+            domAfter: domAfter,
+            remaining: Object.keys(canvas.nodes).length,
+        };
+        """,
+        [],
+    )
+    assert facts['domBefore'] == 3, f'three nodes should be in the real DOM: {facts}'
+    assert sorted(facts['marqueeSet']) == sorted(facts['selectedAfterMarquee']), (
+        'the selection set and the lit DOM classes disagree'
+    )
+    assert len(facts['marqueeSet']) == 2, f'the marquee must catch the 2 near boxes: {facts["marqueeSet"]}'
+    assert facts['farExcluded'] is True, 'the far node must stay out of the band'
+    assert facts['remaining'] == 1, f'batch delete left {facts["remaining"]} nodes in the model'
+    assert facts['domAfter'] == 1, f'batch delete left {facts["domAfter"]} boxes in the DOM (el.remove() skipped)'

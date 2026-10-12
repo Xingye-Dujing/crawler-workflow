@@ -93,6 +93,10 @@ vm.runInContext(
      globalThis.showToast = function (m) { globalThis.__toasts.push(String(m)); };`,
     sandbox,
 );
+/* The lifecycle tests are about load/save/undo/dirty semantics. Autosave is a separate concern
+   with its own harness (harness_autosave.mjs) and a browser-tier case; neutralise its hook here so
+   a 0-timer flush does not auto-persist a legitimately-dirty open and mask the flag under test. */
+vm.runInContext('workflow.scheduleAutosave = function () {};', sandbox);
 
 const canvas = sandbox.__canvas;
 const workflow = sandbox.__workflow;
