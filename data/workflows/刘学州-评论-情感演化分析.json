@@ -269,10 +269,10 @@
         "stage_order_col": "阶段序号",
         "stage_topic_counts": "5,6,7,6,3",
         "topic_max_features": "2000",
+        "topic_method": "lda",
         "topic_sample_n": "3",
         "topic_topn": "7",
-        "word_source": "tfidf",
-        "topic_method": "lda"
+        "word_source": "tfidf"
       },
       "operation": "topic_by_stage",
       "x": 3199,
@@ -564,8 +564,8 @@
         "n_topics": "5",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6",
-        "topic_method": "lda"
+        "topic_method": "lda",
+        "topic_topn": "6"
       },
       "operation": "topic_map",
       "x": 2089,
@@ -601,8 +601,8 @@
         "operation": "topic_salience",
         "topic_lambda": "0.5",
         "topic_max_features": "2000",
-        "topic_topn": "30",
-        "topic_method": "lda"
+        "topic_method": "lda",
+        "topic_topn": "30"
       },
       "operation": "topic_salience",
       "x": 2089,
@@ -700,8 +700,8 @@
         "n_topics": "5",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6",
-        "topic_method": "lda"
+        "topic_method": "lda",
+        "topic_topn": "6"
       },
       "operation": "topic_map",
       "x": 3659,
@@ -734,8 +734,8 @@
         "operation": "topic_salience",
         "topic_lambda": "1",
         "topic_max_features": "2000",
-        "topic_topn": "30",
-        "topic_method": "lda"
+        "topic_method": "lda",
+        "topic_topn": "30"
       },
       "operation": "topic_salience",
       "x": 3659,
@@ -1115,8 +1115,8 @@
         "n_topics": "6",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6",
-        "topic_method": "lda"
+        "topic_method": "lda",
+        "topic_topn": "6"
       },
       "operation": "topic_map",
       "x": 3659,
@@ -1149,8 +1149,8 @@
         "operation": "topic_salience",
         "topic_lambda": "1",
         "topic_max_features": "2000",
-        "topic_topn": "30",
-        "topic_method": "lda"
+        "topic_method": "lda",
+        "topic_topn": "30"
       },
       "operation": "topic_salience",
       "x": 3659,
@@ -1226,8 +1226,8 @@
         "n_topics": "5",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6",
-        "topic_method": "lda"
+        "topic_method": "lda",
+        "topic_topn": "6"
       },
       "operation": "topic_map",
       "x": 3659,
@@ -1260,8 +1260,8 @@
         "operation": "topic_salience",
         "topic_lambda": "1",
         "topic_max_features": "2000",
-        "topic_topn": "30",
-        "topic_method": "lda"
+        "topic_method": "lda",
+        "topic_topn": "30"
       },
       "operation": "topic_salience",
       "x": 3659,
