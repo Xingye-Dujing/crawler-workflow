@@ -3967,8 +3967,20 @@ var runLogViewer = {
     },
 
     _title: function () {
-        var el = document.getElementById('workflow-name') || { textContent: this._runId };
-        var name = (el.textContent || this._runId).trim() || this._runId;
+        /* The name must belong to THIS run, not the canvas currently loaded: a person
+           opens a historical record precisely when it is a different workflow than what
+           is on screen, and titling it with `#workflow-name` (the live canvas) labelled a
+           run with the wrong name. The row we were launched from already carries the run's
+           own stored name as a (HTML-escaped) data attribute — read that, else the id. */
+        var name = '';
+        var rows = document.querySelectorAll('tr[data-run-id]') || [];
+        for (var i = 0; i < rows.length; i += 1) {
+            if (rows[i].dataset && rows[i].dataset.runId === this._runId) {
+                name = rows[i].dataset.runName || '';
+                break;
+            }
+        }
+        name = String(name || '').trim() || this._runId;
         this._dom.title.textContent = this._t('runLog.title', { name: name });
     },
 
@@ -7021,7 +7033,7 @@ var runsManager = {
             var tags = runsManager.tags(r).map(function (text) {
                 return '<span class="runs-mgr-tag">' + escapeHtml(text) + '</span>';
             }).join('');
-            return '<tr data-run-id="' + escapeHtml(r.run_id) + '">' +
+            return '<tr data-run-id="' + escapeHtml(r.run_id) + '" data-run-name="' + escapeHtml(r.workflow_name || '') + '">' +
                 '<td class="runs-mgr-wf">' + escapeHtml(r.workflow_name || I18n.t('name.unnamed')) + tags + '</td>' +
                 '<td class="runs-mgr-id">' + escapeHtml(r.run_id) + '</td>' +
                 '<td><span class="runs-mgr-status st-' + escapeHtml(r.status || '') + '">' + I18n.t(runsManager.statusKey(r.status)) + '</span></td>' +

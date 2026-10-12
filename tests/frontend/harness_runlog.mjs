@@ -47,9 +47,16 @@ const sandbox = {
     ...baseSandbox(),
     I18n: {
         lang: 'en',
-        dict: { en: {}, zh: {} },
+        dict: {
+            en: {
+                'runLog.title': 'Console log · {name}',
+                'console.all': 'All',
+                'name.unnamed': 'unnamed',
+            },
+            zh: {},
+        },
         t(k) {
-            return k;
+            return this.dict.en[k] || k;
         },
     },
     runsManager: null,
@@ -72,9 +79,33 @@ const viewer = sandbox.__wf.runLogViewer;
 
 const out = {};
 
+// ── the title names THIS run, not the canvas on screen ──
+// A decoy current-canvas name, plus a run-records row whose own name is different:
+// opening the viewer from that row must title the panel with the row's name, not the decoy.
+sandbox.__byId('workflow-name').textContent = 'CANVAS_DECOY';
+const mgr0 = sandbox.__wf.runsManager;
+mgr0._queue = [];
+sandbox.__byId('runs-mgr-body').innerHTML = '';
+mgr0.render([
+    {
+        run_id: 'r1',
+        workflow_name: '刘学州事件采集',
+        status: 'completed',
+        node_done: 1,
+        node_total: 1,
+        rows_kept: 0,
+        wf_count: 1,
+        mode: 'serial',
+        headless: 1,
+    },
+]);
+
 // ── opening pulls a page and renders it escaped, oldest→newest ──
 viewer.open('r1');
 await new Promise((r) => setImmediate(r)); // open() arms the panel then fires load() (unawaited)
+out.titleText = viewer._dom.title.textContent || '';
+out.titleHasRunName = out.titleText.indexOf('刘学州事件采集') >= 0;
+out.titleNotCanvasName = out.titleText.indexOf('CANVAS_DECOY') < 0;
 out.firstGet = captured.gets[0] || '';
 out.firstHasLimit = (captured.gets[0] || '').indexOf('limit=500') >= 0;
 out.bodyHtml = viewer._dom.body.innerHTML || '';

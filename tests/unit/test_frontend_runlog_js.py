@@ -33,6 +33,12 @@ def ix():
 
 
 class TestOpenAndRender:
+    def test_the_title_names_this_run_not_the_canvas(self, ix):
+        """The flaw this fixes: opening a historical record from ANOTHER canvas must title
+        the panel with that run's stored name, not whatever is loaded on the canvas now."""
+        assert ix['titleHasRunName'] is True
+        assert ix['titleNotCanvasName'] is True
+
     def test_opening_pulls_one_page_of_the_persisted_log(self, ix):
         assert ix['firstGet'].startswith('/api/runs/r1/log')
         assert ix['firstHasLimit'] is True
