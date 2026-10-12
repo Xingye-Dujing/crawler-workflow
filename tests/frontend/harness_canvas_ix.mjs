@@ -752,12 +752,20 @@ async function renameScenarios() {
 
     freshWorld();
     const r1 = addNode('source', 0, 0);
+    /* Screen-reader identity: the box is a named group, labelled by its visible name. */
+    const created = {
+        role: doc.getElementById(r1).getAttribute('role'),
+        aria: doc.getElementById(r1).getAttribute('aria-label'),
+    };
     dialogAnswer = '  我的爬虫  ';
     await canvas.renameNode(r1);
+    results.created = created;
     results.typed = {
         title: canvas.nodes[r1].title,
         stamped: doc.getElementById(r1).querySelector('.node-title').textContent,
         persisted: draft().nodes[r1].title,
+        /* The accessible name must follow the rename, not stay the creation-time type label. */
+        aria: doc.getElementById(r1).getAttribute('aria-label'),
         dialog: dialogs[0],
     };
 

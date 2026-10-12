@@ -900,6 +900,11 @@ const canvas = {
         ].join('');
         const titleEl = el.querySelector('.node-title');
         titleEl.textContent = title;
+        /* Screen-reader identity: the box is a named group, so Tab reaching it announces
+           "Data Source" (or the node's custom name) rather than reading a button soup. The
+           label is kept in step with the visible title in updateNodeDisplay (rename + language). */
+        el.setAttribute('role', 'group');
+        el.setAttribute('aria-label', title);
         titleEl.addEventListener('dblclick', (e) => {
             e.stopPropagation();
             this.renameNode(id);
@@ -1212,6 +1217,7 @@ const canvas = {
         node.title = title;
         const titleEl = node.el ? node.el.querySelector('.node-title') : null;
         if (titleEl) titleEl.textContent = title;
+        if (node.el) node.el.setAttribute('aria-label', title);
         this.saveState();
     },
 
@@ -1895,6 +1901,9 @@ const canvas = {
                 titleEl.textContent = label;
                 node.title = label;
             }
+            /* Keep the screen-reader name equal to whatever the header actually shows
+               (custom name or the type's current-language label). */
+            el.setAttribute('aria-label', titleEl.textContent);
         }
         /* The two header buttons are built once at creation time, so their
            tooltips have to be re-stamped whenever the language changes. */

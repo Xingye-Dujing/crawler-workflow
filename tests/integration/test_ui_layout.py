@@ -599,6 +599,38 @@ def test_a_record_that_skipped_workflows_names_them_on_screen(app_url, driver, l
 
 
 @pytest.mark.parametrize('lang', ['zh', 'en'])
+def test_opening_the_settings_panel_lands_focus_in_and_closing_returns_it(driver, app_url, lang):
+    """The panel's keyboard path, only provable in a real engine (the node stub has no
+    activeElement): freshly opening a node's settings must move focus INTO the form (a keyboard
+    user who reached a node lands in its fields, not behind the canvas), and closing must hand
+    focus back to whatever opened it — not dump the user at the top of the page."""
+    driver.get(app_url + '/')
+    facts = driver.execute_script(
+        """
+        document.body.dataset.lang = arguments[0];
+        I18n.apply();
+        localStorage.removeItem('crawler_canvas');
+        canvas.nodes = {};
+        canvas.connections = [];
+        document.getElementById('nodes-container').innerHTML = '';
+        const id = canvas.addNode('process', 200, 200);
+        const opener = canvas._nodeEl(id).querySelector('.node-action-btn');
+        opener.focus();
+        const focusedOpener = document.activeElement === opener;
+        openSettings(id);
+        const inPanel = !!(document.activeElement && document.activeElement.closest('#settings-content'));
+        closeSettings();
+        const returned = document.activeElement === opener;
+        return { focusedOpener, inPanel, returned };
+        """,
+        lang,
+    )
+    assert facts['focusedOpener'], 'test precondition: the opener button was not focusable'
+    assert facts['inPanel'], 'opening the panel did not move focus into the form'
+    assert facts['returned'], 'closing the panel did not return focus to the opener'
+
+
+@pytest.mark.parametrize('lang', ['zh', 'en'])
 def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, lang):
     """The disable visuals, read from computed styles — not from the class list.
 

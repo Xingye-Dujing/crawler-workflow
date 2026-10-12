@@ -613,6 +613,16 @@ class TestRename:
         assert typed['stamped'] == '我的爬虫', 'the element is what the re-stamp guard reads'
         assert typed['persisted'] == '我的爬虫'
 
+    def test_a_node_is_a_named_group_for_the_screen_reader(self, ix):
+        """Every node box announces as a group whose name is its visible title, so Tab
+        reaching it says "Data Source", not a run of unlabeled buttons."""
+        created = ix['rename']['created']
+        assert created['role'] == 'group', 'the node box has no ARIA role'
+        assert created['aria'] == 'Data Source', 'the accessible name is not the type label'
+
+    def test_the_accessible_name_follows_a_rename(self, ix):
+        assert ix['rename']['typed']['aria'] == '我的爬虫', 'aria-label still says the old name after rename'
+
     def test_the_dialog_opens_pre_filled_with_the_current_name(self, ix):
         assert ix['rename']['typed']['dialog']['initial'] == 'Data Source'
 

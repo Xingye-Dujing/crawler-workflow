@@ -2179,7 +2179,15 @@ function openSettings(nodeId) {
         canvas.closeSettingsIfStale();
         return;
     }
+    var wasOpen = !!canvas._settingsNodeId;
     canvas._settingsNodeId = nodeId;
+    /* Focus moves into the panel only on a CLOSED→OPEN transition. openSettings is also the
+       rebuild path after every parameter edit, and stealing focus there would drop the caret out
+       of the field the user is typing in. Remember the opener so closeSettings can hand focus
+       back to it (keyboard users are not dumped to the top of the page). */
+    if (!wasOpen) {
+        canvas._settingsReturnFocus = document.activeElement;
+    }
     var panel = document.getElementById('node-settings');
     var content = document.getElementById('settings-content');
     panel.classList.add('open');
@@ -2582,6 +2590,17 @@ function openSettings(nodeId) {
         renderNodeModelSelect(nodeId);
     }
     canvas.updateSettingsButton();
+    if (!wasOpen) _focusFirstSetting();
+}
+
+/* Move the caret to the panel's first editable control when it is freshly opened, so a
+   keyboard user who reaches a node lands inside its form rather than behind the canvas.
+   Only ever called on a closed→open transition, so a rebuild during typing never fires it. */
+function _focusFirstSetting() {
+    var content = document.getElementById('settings-content');
+    if (!content || !content.querySelector) return;
+    var first = content.querySelector('input:not([type=hidden]), select, textarea, button');
+    if (first && first.focus) first.focus();
 }
 
 /* ── Per-node Ollama model picker: fill the node's model select from the
@@ -4714,6 +4733,7 @@ function selectSourcePlatform(nodeId, value) {
 }
 
 function closeSettings() {
+    var hadPanel = !!canvas._settingsNodeId;
     document.getElementById('node-settings').classList.remove('open');
     canvas._settingsNodeId = null;
     canvas.updateSettingsButton();
@@ -4722,6 +4742,13 @@ function closeSettings() {
        keeps floating over the canvas and can edit a node that is no longer
        on screen. */
     if (window.CustomSelect) CustomSelect.close();
+    /* Hand focus back to whatever opened the panel (the node's ⚙ button), so a keyboard
+       user is not dumped at the top of the page. Only when a panel was actually closing,
+       and only if the opener is still in the document (undo/reload may have dropped it). */
+    var back = canvas._settingsReturnFocus;
+    canvas._settingsReturnFocus = null;
+    var alive = back && back.focus && (typeof document.contains === 'function' ? document.contains(back) : true);
+    if (hadPanel && alive) back.focus();
 }
 
 /* Toggle Functions */
