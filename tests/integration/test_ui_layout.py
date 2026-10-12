@@ -248,6 +248,7 @@ PANELS = [
     'studio-overlay',
     'node-settings',
     'outline-panel',
+    'clipboard-drawer',
     'console-panel',
     'runs-panel',
     'exports-panel',
@@ -294,6 +295,10 @@ MIN_MEASURED = {
     # empty canvas it still shows the header, the two chrome parts and the list box, so 3
     # is a safe floor. Node rows only ever add to the count, never reduce it.
     'outline-panel': 3,
+    # Opened with an empty board the drawer shows header chrome (title + Add/Clear/Close),
+    # the list box and the empty message — a floor of 4 leaves slack for a button's chrome
+    # to be counted separately in one language. Copied rows only ever add to the count.
+    'clipboard-drawer': 4,
     'console-panel': 6,
     'runs-panel': 5,
     'exports-panel': 6,
@@ -2911,6 +2916,10 @@ def _reset_canvas(driver):
     driver.execute_script(
         """
         localStorage.removeItem('crawler_canvas');
+        /* The clipboard board is separate persisted state; clear it here too so a board a
+           previous test wrote can never leak into this one's page boot (stateless suite). */
+        localStorage.removeItem('crawler_clipboard');
+        Clipboard.reset();
         canvas.nodes = {};
         canvas.connections = [];
         canvas.selectedNode = null;
@@ -3022,6 +3031,73 @@ def test_the_minimap_uses_real_box_geometry_and_a_click_is_a_view_only_change(ap
     assert facts['moved'] is True, 'a minimap click did not move the camera'
     assert facts['stateSame'] is True, 'the camera must not enter getState()'
     assert facts['histSame'] is True, 'a camera move must not be an undo step'
+
+
+def test_the_clipboard_drawer_renders_a_copy_and_pastes_it_as_one_undo_step(app_url, driver):
+    """The board is real DOM, and a paste must be a real graph edit.
+
+    The fast harness stubs layout and localStorage; only here can we watch the drawer
+    actually open, a copied node render a row with a paste control, and that paste add a
+    box to the canvas that one undo removes again — proving the board funnels through the
+    SAME canvas._pasteAt the keyboard uses, not a second implementation. It also pins that
+    the board lives in its OWN key, so a copy never dirties the workflow draft's clipboard.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    _reset_canvas(driver)
+    facts = driver.execute_script(
+        """
+        // A process node (not a source) so no async capability fetch rewrites the draft
+        // behind this test's back.
+        const a = canvas.addNode('process', 60, 60);
+        canvas.nodes[a].params = { operation: 'keyword', keyword: 'CLIPBRD' };
+        canvas.selectNode(a);
+        canvas.copyNodeToClipboard(a);
+        toggleClipboardDrawer();
+        const drawer = document.getElementById('clipboard-drawer');
+        const list = document.getElementById('clipboard-list');
+        const hasRow = !!list.querySelector('[data-clip-action="paste"]');
+        // Paste through the board entry, not Ctrl+V — the exact seam the feature adds.
+        const entryId = Clipboard.items[0].id;
+        const before = Object.keys(canvas.nodes).length;
+        const pasted = Clipboard.paste(entryId, { x: 400, y: 400 });
+        const after = Object.keys(canvas.nodes).length;
+        const pastedKeyword = pasted && canvas.nodes[pasted] ? canvas.nodes[pasted].params.keyword : null;
+        // The board paste went through the SAME funnel Ctrl+V uses, so it left the same
+        // number of snapshots (addNode's default save + the params save). Rewinding far
+        // enough to pass the pre-paste point must take the added box out of the real DOM —
+        // proving the paste is undoable, without pinning an exact step count that belongs
+        // to the shared paste path, not to this feature.
+        let guard = 0;
+        while (Object.keys(canvas.nodes).length > before && guard < 10) {
+            canvas.undo();
+            guard += 1;
+        }
+        const afterUndo = Object.keys(canvas.nodes).length;
+        const domAfterUndo = document.querySelectorAll('#nodes-container .node').length;
+        return {
+            opened: drawer.classList.contains('open'),
+            hasRow: hasRow,
+            added: after - before,
+            pastedKeyword: pastedKeyword,
+            undoRestoresCount: afterUndo === before,
+            domAfterUndo: domAfterUndo,
+            boardKey: localStorage.getItem('crawler_clipboard') !== null,
+            // The board content is NEVER inside the canvas draft key.
+            draftCarriesKeyword: (localStorage.getItem('crawler_canvas') || '').indexOf('CLIPBRD') >= 0,
+        };
+        """,
+        [],
+    )
+    assert facts['opened'] is True, 'toggleClipboardDrawer did not open the drawer'
+    assert facts['hasRow'] is True, 'a copied node produced no paste row in the real DOM'
+    assert facts['added'] == 1, f'a board paste added {facts["added"]} nodes (expected 1)'
+    assert facts['pastedKeyword'] == 'CLIPBRD', 'the paste dropped the copied param'
+    assert facts['undoRestoresCount'] is True, 'undoing back past the paste restores the original node count'
+    assert facts['domAfterUndo'] == 1, 'after rewinding past the paste only the 1 original box remains in the DOM'
+    assert facts['boardKey'] is True, 'the board was not persisted under crawler_clipboard'
+    assert facts['draftCarriesKeyword'] is False, 'copied content must never ride in the workflow draft'
 
 
 def test_multi_select_marks_real_boxes_and_batch_delete_removes_them_from_the_dom(app_url, driver):

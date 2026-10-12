@@ -3761,3 +3761,128 @@ html[data-cloud="1"] .ai-only-ollama {
     stroke-width: 30px; /* a finger needs a wide enough landing pad to tap a thin wire */
   }
 }
+
+/* ── Clipboard drawer (right slide-in) ───────────────────────────────────────
+   A persisted history of copied nodes/text. Fixed + off-screen via transform so a
+   CLOSED drawer never grows the page's horizontal bar (fixed content outside the
+   viewport is clipped, not scrollable); .open slides it in. The list is the only
+   internal scroller; the header title ellipsizes so English labels cannot overflow
+   the panel and trip the layout audit. */
+#clipboard-drawer {
+  position: fixed;
+  right: 0;
+  top: 48px;
+  width: 280px;
+  height: calc(100vh - 48px);
+  max-height: calc(100vh - 48px);
+  box-sizing: border-box;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.15s ease;
+}
+
+#clipboard-drawer.open {
+  transform: translateX(0);
+}
+
+#clipboard-drawer .clip-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#clipboard-drawer .clip-header-btns {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+#clipboard-drawer .clip-search {
+  margin: 8px;
+  box-sizing: border-box;
+  width: calc(100% - 16px);
+}
+
+.clipboard-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.clip-empty {
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 12px 4px;
+  text-align: center;
+}
+
+.clip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line2);
+}
+
+.clip-row.clip-pinned {
+  background: rgba(74, 144, 217, 0.06);
+}
+
+.clip-badge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.clip-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.clip-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+}
+
+.clip-btn {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.clip-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.clip-btn.clip-danger {
+  color: rgba(160, 60, 60, 0.9);
+}
+
+.clip-btn.clip-danger:hover {
+  color: #8c2828;
+  border-color: rgba(140, 40, 40, 0.4);
+  background: rgba(140, 40, 40, 0.08);
+}

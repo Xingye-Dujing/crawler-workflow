@@ -92,6 +92,19 @@ const KEYS = {
     'toast.nodeJsonInvalid': 'JSON-INVALID',
     'dialog.nodeJsonCopy': 'COPY-PROMPT',
     'dialog.nodeJsonImport': 'IMPORT-PROMPT',
+    /* Clipboard drawer sentinels so a scenario asserts WHICH toast/dialog fired and can
+       count rendered rows/badges without pinning a whole translated sentence. */
+    'toast.clipboardAdded': 'CLIP-ADDED',
+    'toast.clipboardCleared': 'CLIP-CLEARED',
+    'toast.clipboardTextCopied': 'CLIP-TEXT',
+    'clipboard.empty': 'CLIP-EMPTY',
+    'clipboard.kindNode': 'NODE',
+    'clipboard.kindNodes': '{n} nodes',
+    'clipboard.kindText': 'TEXT',
+    'clipboard.rename': 'CLIP-RENAME',
+    'clipboard.addPrompt': 'CLIP-ADDPROMPT',
+    'clipboard.clearConfirm': 'CLIP-CLEARCONFIRM',
+    'clipboard.copy': 'CLIP-COPY',
 };
 /* The zh side exists so a language switch has somewhere to land: with an empty
    dictionary every "does the label follow the language" probe answers "no" for
@@ -156,7 +169,7 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-vm.runInContext(src + '\n;globalThis.__canvas = canvas; globalThis.__wf = workflow; globalThis.__outline = Outline;', sandbox);
+vm.runInContext(src + '\n;globalThis.__canvas = canvas; globalThis.__wf = workflow; globalThis.__outline = Outline; globalThis.__clipboard = Clipboard;', sandbox);
 
 /* Re-seeded after the load: workflow.js declares both of these itself, and a
    function declaration inside the script wins over anything seeded before it. */
@@ -179,6 +192,7 @@ sandbox.clearInterval = () => { };
 
 const canvas = sandbox.__canvas;
 const Outline = sandbox.__outline;
+const Clipboard = sandbox.__clipboard;
 const doc = sandbox.document;
 const updateParam = vm.runInContext('updateParam', sandbox);
 const out = {};
@@ -200,6 +214,12 @@ function freshWorld() {
     canvas._history = [];
     canvas._historyIdx = -1;
     canvas._clipboardData = null;
+    canvas._clipboardNodes = null;
+    /* The persisted clipboard board is separate state: a fresh scenario is a fresh page
+       with an empty board, or one copy's history would leak into the next scenario's
+       eviction/paste assertions. */
+    Clipboard.reset();
+    sandbox.localStorage.removeItem('crawler_clipboard');
     canvas._settingsNodeId = null;
     canvas.connectingFrom = null;
     canvas._linkFromId = null;
@@ -1790,6 +1810,145 @@ function multiSelectScenario() {
     out.multi_select = res;
 }
 
+/* ── clipboard drawer: the persisted board, its controls, and paste-via-funnel ──
+   Async (rename / addText / clear / copyText all await a dialog or the clipboard), so it
+   joins the .then chain. Node copies use `process`, not `source`, so no async capability
+   fetch can rewrite the draft behind a scenario's back (same reason nodeJsonScenario does). */
+async function clipboardScenario() {
+    const res = {};
+
+    // A single-node copy records exactly one 'node' entry AND stays silent — the copy
+    // toast must still be node-copied, proving Clipboard.add does not overwrite it.
+    freshWorld();
+    const n1 = addNode('process', 100, 100);
+    canvas.nodes[n1].title = 'P-源';
+    canvas.nodes[n1].params = { operation: 'keyword', keyword: 'KP' };
+    canvas.selectNode(n1);
+    canvas.copyNodeToClipboard(n1);
+    res.singleCopy = {
+        entries: Clipboard.items.length,
+        kind: Clipboard.items[0] && Clipboard.items[0].kind,
+        label: Clipboard.items[0] && Clipboard.items[0].label,
+        slotStillSet: canvas._clipboardData && canvas._clipboardData.type === 'process',
+        toast: toasts[toasts.length - 1],
+    };
+
+    // A batch copy records one 'nodes' entry sized to the selection.
+    freshWorld();
+    const b1 = addNode('process', 0, 0);
+    const b2 = addNode('process', 400, 0);
+    canvas.setSelectedNodes([b1, b2]);
+    canvas.copySelection();
+    res.batchCopy = {
+        entries: Clipboard.items.length,
+        kind: Clipboard.items[0] && Clipboard.items[0].kind,
+        payloadLen: Clipboard.items[0] && Clipboard.items[0].payload.length,
+    };
+
+    // Pasting a stored entry funnels through canvas._pasteAt: it adds the node, is an
+    // undo step, carries the copied param, and the board lives in its OWN key, not the
+    // canvas draft.
+    freshWorld();
+    const ps = addNode('process', 0, 0);
+    canvas.nodes[ps].params = { operation: 'keyword', keyword: 'ONLYCLIP' };
+    canvas.selectNode(ps);
+    canvas.copyNodeToClipboard(ps);
+    const entryId = Clipboard.items[0].id;
+    const countBefore = Object.keys(canvas.nodes).length;
+    const histBefore = canvas._history.length;
+    const pastedId = Clipboard.paste(entryId, { x: 30, y: 40 });
+    res.paste = {
+        madeNode: !!pastedId,
+        added: Object.keys(canvas.nodes).length - countBefore,
+        historyGrew: canvas._history.length > histBefore,
+        keyword: pastedId && canvas.nodes[pastedId] ? canvas.nodes[pastedId].params.keyword : null,
+        boardKeySeparate: sandbox.localStorage.getItem('crawler_clipboard') !== null,
+    };
+
+    // Rename (dialog) + pin + remove all mutate the board.
+    freshWorld();
+    const r1 = addNode('process', 0, 0);
+    canvas.copyNodeToClipboard(r1);
+    const rid = Clipboard.items[0].id;
+    dialogAnswer = '自定义名字';
+    await Clipboard.rename(rid);
+    Clipboard.togglePin(rid);
+    res.mutations = {
+        renamed: Clipboard.items[0].label === '自定义名字',
+        pinned: Clipboard.items[0].pinned === true,
+    };
+    Clipboard.remove(rid);
+    res.mutations.afterRemove = Clipboard.items.length;
+
+    // The cap trims to CLIPBOARD_MAX=50 ...
+    freshWorld();
+    for (let i = 0; i < 52; i++) Clipboard.add({ kind: 'text', payload: 't' + i });
+    res.cap = { len: Clipboard.items.length };
+
+    // ... and eviction SPARES a pinned entry while dropping the oldest unpinned ones.
+    freshWorld();
+    Clipboard.add({ kind: 'text', payload: 'KEEPME' });
+    const keepId = Clipboard.items[0].id;
+    Clipboard.togglePin(keepId);
+    for (let i = 0; i < 60; i++) Clipboard.add({ kind: 'text', payload: 'f' + i });
+    res.pinImmune = {
+        len: Clipboard.items.length,
+        keepSurvives: Clipboard.items.some((it) => it.id === keepId && it.payload === 'KEEPME'),
+    };
+
+    // Search filters the rendered rows; clear-all empties the board with a toast.
+    freshWorld();
+    Clipboard.add({ kind: 'text', payload: 'alpha' });
+    Clipboard.add({ kind: 'text', payload: 'beta' });
+    Clipboard.setQuery('alph');
+    const rowsHtml = doc.getElementById('clipboard-list').innerHTML;
+    res.filter = { alphaShown: rowsHtml.indexOf('alpha') >= 0, betaHidden: rowsHtml.indexOf('beta') < 0 };
+    Clipboard.setQuery('');
+    dialogAnswer = 'clear';
+    await Clipboard.requestClearAll();
+    res.clear = { len: Clipboard.items.length, toast: toasts[toasts.length - 1] };
+
+    // addText records a text entry; a node-JSON text inserts a node, garbage is refused.
+    freshWorld();
+    dialogAnswer = 'hello clipboard';
+    const added = await Clipboard.addText();
+    res.addText = {
+        entry: !!added,
+        kind: Clipboard.items[0] && Clipboard.items[0].kind,
+        toast: toasts[toasts.length - 1],
+    };
+    const jsonText = JSON.stringify({ type: 'process', title: 'X', params: { operation: 'keyword', keyword: 'INS' } });
+    const jtId = Clipboard.add({ kind: 'text', payload: jsonText });
+    const beforeIns = Object.keys(canvas.nodes).length;
+    const insId = Clipboard.insertText(jtId, { x: 10, y: 10 });
+    res.insertText = {
+        added: Object.keys(canvas.nodes).length - beforeIns,
+        keyword: insId && canvas.nodes[insId] ? canvas.nodes[insId].params.keyword : null,
+    };
+    const badId = Clipboard.add({ kind: 'text', payload: 'not json' });
+    const beforeBad = Object.keys(canvas.nodes).length;
+    toasts.length = 0;
+    const badIns = Clipboard.insertText(badId, { x: 10, y: 10 });
+    res.insertBad = { added: Object.keys(canvas.nodes).length - beforeBad, nullReturn: badIns === null, toast: toasts[toasts.length - 1] };
+
+    // copyText writes to the OS clipboard and toasts; the board survives a reload read.
+    freshWorld();
+    const written = [];
+    sandbox.navigator = { clipboard: { writeText: (t) => { written.push(String(t)); return Promise.resolve(); } } };
+    const ctId = Clipboard.add({ kind: 'text', payload: 'to-os' });
+    await Clipboard.copyText(ctId);
+    res.copyText = { wrote: written[0], toast: toasts[toasts.length - 1] };
+
+    freshWorld();
+    const p1 = addNode('process', 0, 0);
+    canvas.copyNodeToClipboard(p1);
+    const savedLen = Clipboard.items.length;
+    Clipboard.load();
+    res.persist = { savedLen, reloadedLen: Clipboard.items.length, same: savedLen === 1 && Clipboard.items.length === 1 };
+
+    out.clipboard = res;
+}
+
 resizeRepaintScenario();
 paletteKeyboardScenario();
 nodeClipboardScenario();
@@ -1803,6 +1962,7 @@ connectWarningsScenarios()
         newfileScenario();
     })
     .then(() => nodeJsonScenario())
+    .then(() => clipboardScenario())
     .then(() => {
         process.stdout.write(JSON.stringify(out));
     })

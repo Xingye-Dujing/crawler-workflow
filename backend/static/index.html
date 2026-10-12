@@ -130,6 +130,14 @@
         >
           Fit
         </button>
+        <button
+          class="menu-btn"
+          type="button"
+          onclick="toggleClipboardDrawer()"
+          data-i18n="clipboard.title"
+        >
+          Clipboard
+        </button>
       </div>
       <div class="menu-group">
         <span class="menu-label" data-i18n="menu.style">Style</span>
@@ -687,6 +695,30 @@
         </button>
       </div>
       <div id="outline-list" class="outline-list"></div>
+    </div>
+
+    <!-- Clipboard drawer (right slide-in): a persisted history of copied nodes/text the
+         user can paste, rename, pin, delete or clear one at a time. Filled by
+         Clipboard.render(); kept empty until then. -->
+    <div id="clipboard-drawer">
+      <div class="panel-header">
+        <span class="clip-title" data-i18n="clipboard.title">Clipboard</span>
+        <span class="clip-header-btns">
+          <button class="clip-btn" type="button" onclick="Clipboard.addText()" data-i18n="clipboard.add">Add text</button>
+          <button class="panel-close danger" type="button" onclick="Clipboard.requestClearAll()" data-i18n="clipboard.clear">Clear all</button>
+          <button class="panel-close" type="button" onclick="toggleClipboardDrawer()" data-i18n="clipboard.close">Close</button>
+        </span>
+      </div>
+      <input
+        class="clip-search"
+        id="clipboard-search"
+        type="search"
+        autocomplete="off"
+        placeholder="Filter clipboard…"
+        data-i18n-placeholder="clipboard.searchPlaceholder"
+        aria-label="Filter clipboard"
+      />
+      <div id="clipboard-list" class="clipboard-list"></div>
     </div>
 
     <!-- Console Panel -->

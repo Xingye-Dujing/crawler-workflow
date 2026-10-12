@@ -986,3 +986,68 @@ class TestMultiSelect:
         assert m['targets'] == 0, 'multiEditTargets must refuse a mixed group'
         assert m['processGot'] == '只应落在处理节点'
         assert m['sourceUntouched'] is True, 'the source node must keep its own (absent) keyword'
+
+
+class TestClipboardDrawer:
+    """The persisted clipboard board is a SECOND thing beside the working slots: a copy
+    still sets `canvas._clipboardData`/`_clipboardNodes` (so Ctrl+V is unchanged), and only
+    additionally appends one entry to a localStorage board. Paste from the board must funnel
+    through the SAME `canvas._pasteAt` the keyboard/menu use — never a second paste body."""
+
+    def test_a_single_copy_records_one_node_entry_without_stealing_the_toast(self, ix):
+        s = ix['clipboard']['singleCopy']
+        assert s['entries'] == 1 and s['kind'] == 'node'
+        assert s['slotStillSet'] is True, 'the working slot must stay set (Ctrl+V unchanged)'
+        assert s['toast'] == 'COPIED', 'Clipboard.add is silent — it must not overwrite the copy toast'
+
+    def test_a_batch_copy_records_one_nodes_entry_sized_to_the_selection(self, ix):
+        b = ix['clipboard']['batchCopy']
+        assert b['entries'] == 1 and b['kind'] == 'nodes' and b['payloadLen'] == 2
+
+    def test_pasting_a_board_entry_uses_the_shared_funnel_and_its_own_key(self, ix):
+        p = ix['clipboard']['paste']
+        assert p['added'] == 1, 'pasting a stored node adds exactly one node'
+        assert p['keyword'] == 'ONLYCLIP', 'the paste must carry the copied param (one paste path)'
+        assert p['historyGrew'] is True, 'a board paste is an undo step'
+        assert p['boardKeySeparate'] is True, 'the board lives in crawler_clipboard, not the draft'
+
+    def test_rename_pin_and_remove_mutate_the_board(self, ix):
+        m = ix['clipboard']['mutations']
+        assert m['renamed'] is True and m['pinned'] is True
+        assert m['afterRemove'] == 0, 'remove takes the single entry out'
+
+    def test_the_board_trims_to_the_cap(self, ix):
+        assert ix['clipboard']['cap']['len'] == 50, 'CLIPBOARD_MAX bounds the history'
+
+    def test_eviction_spares_a_pinned_entry(self, ix):
+        e = ix['clipboard']['pinImmune']
+        assert e['len'] == 50, 'still within the cap ...'
+        assert e['keepSurvives'] is True, '... and an unpinned entry would have been evicted first'
+
+    def test_search_filters_the_rendered_rows(self, ix):
+        f = ix['clipboard']['filter']
+        assert f['alphaShown'] is True and f['betaHidden'] is True
+
+    def test_clear_all_empties_the_board_with_a_toast(self, ix):
+        c = ix['clipboard']['clear']
+        assert c['len'] == 0 and c['toast'] == 'CLIP-CLEARED'
+
+    def test_add_text_records_a_text_entry(self, ix):
+        a = ix['clipboard']['addText']
+        assert a['entry'] is True and a['kind'] == 'text' and a['toast'] == 'CLIP-ADDED'
+
+    def test_a_node_json_text_inserts_a_node(self, ix):
+        i = ix['clipboard']['insertText']
+        assert i['added'] == 1 and i['keyword'] == 'INS'
+
+    def test_a_non_json_text_is_refused_by_name_and_mints_no_node(self, ix):
+        b = ix['clipboard']['insertBad']
+        assert b['added'] == 0 and b['nullReturn'] is True and b['toast'] == 'JSON-INVALID'
+
+    def test_copy_text_writes_the_os_clipboard(self, ix):
+        c = ix['clipboard']['copyText']
+        assert c['wrote'] == 'to-os' and c['toast'] == 'CLIP-TEXT'
+
+    def test_the_board_survives_a_reload_read(self, ix):
+        p = ix['clipboard']['persist']
+        assert p['same'] is True and p['reloadedLen'] == 1
