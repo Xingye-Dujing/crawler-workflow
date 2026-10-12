@@ -3068,3 +3068,43 @@ def test_multi_select_marks_real_boxes_and_batch_delete_removes_them_from_the_do
     assert facts['farExcluded'] is True, 'the far node must stay out of the band'
     assert facts['remaining'] == 1, f'batch delete left {facts["remaining"]} nodes in the model'
     assert facts['domAfter'] == 1, f'batch delete left {facts["domAfter"]} boxes in the DOM (el.remove() skipped)'
+
+
+def test_batch_paste_and_apply_to_all_reach_the_real_dom(app_url, driver):
+    """Batch copy→paste adds real boxes (one undo step), and a same-type multi-select writes one
+    panel field to EVERY selected node's real params — the DOM/`getState` view of the apply-to-all
+    path the node harness checks only at the object level."""
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    _reset_canvas(driver)
+    facts = driver.execute_script(
+        """
+        const a = canvas.addNode('process', 40, 40);
+        const b = canvas.addNode('process', 40, 340);
+        canvas.nodes[a].params.keyword = 'A';
+        canvas.nodes[b].params.keyword = 'B';
+        canvas.selectedNodes = [a, b];
+        canvas.selectedNode = b;
+        const copyCount0 = document.querySelectorAll('#nodes-container .node').length;
+        canvas.copySelection();
+        canvas.pasteNodesAt({ x: 700, y: 40 });
+        const pasteDom = document.querySelectorAll('#nodes-container .node').length;
+
+        // Re-open the group selection and write one field through the real updateParam path.
+        const all = Object.keys(canvas.nodes);
+        canvas.setSelectedNodes(all);
+        canvas._settingsNodeId = all[0];
+        updateParam(all[0], 'keyword', '写到全部');
+        return {
+            copyCount0,
+            pasteDom,
+            targets: canvas.multiEditTargets(all[0]).length,
+            keywords: all.map((id) => canvas.nodes[id].params.keyword),
+        };
+        """,
+        [],
+    )
+    assert facts['pasteDom'] == facts['copyCount0'] + 2, f'batch paste must add 2 real boxes: {facts}'
+    assert facts['targets'] >= 2, 'the same-type group must resolve to a multi-edit set'
+    assert all(k == '写到全部' for k in facts['keywords']), f'apply-to-all must reach every node: {facts["keywords"]}'

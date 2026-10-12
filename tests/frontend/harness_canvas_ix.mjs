@@ -86,6 +86,8 @@ const KEYS = {
        a whole translated sentence. */
     'toast.nodeCopied': 'COPIED',
     'toast.nodePasted': 'PASTED',
+    'toast.nodesCopied': 'NODES-COPIED',
+    'toast.nodesPasted': 'NODES-PASTED',
     'toast.nodeJsonCopied': 'JSON-COPIED',
     'toast.nodeJsonInvalid': 'JSON-INVALID',
     'dialog.nodeJsonCopy': 'COPY-PROMPT',
@@ -178,6 +180,7 @@ sandbox.clearInterval = () => { };
 const canvas = sandbox.__canvas;
 const Outline = sandbox.__outline;
 const doc = sandbox.document;
+const updateParam = vm.runInContext('updateParam', sandbox);
 const out = {};
 
 /* `Math.random` seeds a node dropped with no coordinates; a fixed value makes
@@ -1452,6 +1455,7 @@ function nodeClipboardScenario() {
     /* Ctrl+C with nothing selected must not overwrite the clipboard. */
     canvas._clipboardData = { type: 'output', title: '', params: {} };
     canvas.selectedNode = null;
+    canvas.selectedNodes = [];
     dispatchDocument(sandbox.__handlers, 'keydown', { key: 'c', ctrlKey: true, target: doc.body });
     const clipUntouchedWithNoSelection = canvas._clipboardData.type === 'output';
 
@@ -1730,6 +1734,58 @@ function multiSelectScenario() {
     dispatchOn(canvas.workspace, 'pointerdown', ev({ button: 0, clientX: 5, clientY: 5, target: { closest: () => null } }));
     dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: 5, clientY: 5, target: { closest: () => null } });
     res.clickNoDrag = { set: canvas.selectedNodes.slice() };
+
+    // Batch copy → paste adds all as a single undo step and selects the new copies.
+    freshWorld();
+    const bA = addNode('source', 0, 0, 200, 100);
+    const bB = addNode('process', 400, 0, 200, 100);
+    canvas.setSelectedNodes([bA, bB]);
+    toasts.length = 0;
+    canvas.copySelection();
+    const clipLen = (canvas._clipboardNodes || []).length;
+    const copyToast = toasts[toasts.length - 1];
+    const countBefore = Object.keys(canvas.nodes).length;
+    const histBefore = canvas._history.length;
+    canvas.pasteNodesAt({ x: 0, y: 500 });
+    const pasteToast = toasts[toasts.length - 1];
+    const countAfter = Object.keys(canvas.nodes).length;
+    const newIds = canvas.selectedNodes.slice();
+    res.batchPaste = {
+        clipLen,
+        copyToast,
+        added: countAfter - countBefore,
+        // suppressed per-node pushState + one saveState → history grows by a single step
+        singleUndoStep: canvas._history.length - histBefore,
+        selectedNew: newIds.length === 2 && newIds.indexOf(bA) < 0 && newIds.indexOf(bB) < 0,
+        pasteToast,
+    };
+
+    // Same-type multi-select: one updateParam lands on every node in the group.
+    freshWorld();
+    const p1 = addNode('process', 0, 0);
+    const p2 = addNode('process', 400, 0);
+    const p3 = addNode('process', 800, 0);
+    canvas.setSelectedNodes([p1, p2, p3]);
+    canvas._settingsNodeId = null; // edit through the function, skip the panel re-open path
+    updateParam(p1, 'keyword', '群发到全部');
+    res.applyToAll = {
+        targets: canvas.multiEditTargets(p1).length,
+        all: [p1, p2, p3].map((id) => canvas.nodes[id].params.keyword),
+    };
+
+    // A mixed selection must NOT write this type's param onto the other type.
+    freshWorld();
+    const mp = addNode('process', 0, 0);
+    const ms = addNode('source', 400, 0);
+    canvas.setSelectedNodes([mp, ms]);
+    canvas._settingsNodeId = null;
+    const mixedTargets = canvas.multiEditTargets(mp);
+    updateParam(mp, 'keyword', '只应落在处理节点');
+    res.mixedSelection = {
+        targets: mixedTargets.length,
+        processGot: canvas.nodes[mp].params.keyword,
+        sourceUntouched: canvas.nodes[ms].params.keyword === undefined || canvas.nodes[ms].params.keyword === '',
+    };
 
     out.multi_select = res;
 }

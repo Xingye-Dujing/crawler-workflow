@@ -97,6 +97,7 @@ const canvas = {
     _contextNode: null,
     _contextMenuPos: null,
     _clipboardData: null,
+    _clipboardNodes: null,
     _settingsNodeId: null,
     connectingFrom: null,
     /* The node whose "wire start" the keyboard link mode is holding, waiting for a second
@@ -439,7 +440,15 @@ const canvas = {
                     if (this._contextNode) this.renameNode(this._contextNode);
                     break;
                 case 'ctxCopy':
-                    if (this._contextNode) this.copyNodeToClipboard(this._contextNode);
+                    if (this._contextNode) {
+                        /* A copy from the menu on a node that is part of a live multi-selection
+                           copies the whole group — same path as Ctrl+C, so the two doors agree. */
+                        if (this.selectedNodes.length > 1 && this.selectedNodes.indexOf(this._contextNode) >= 0) {
+                            this.copySelection();
+                        } else {
+                            this.copyNodeToClipboard(this._contextNode);
+                        }
+                    }
                     break;
                 case 'ctxCopyJson':
                     if (this._contextNode) this.copyNodeAsJson(this._contextNode);
@@ -447,13 +456,11 @@ const canvas = {
                 case 'ctxPasteNode':
                     /* The menu pastes at the click hotspot (canvas space, menu offsets the
                        hotspot); the keyboard route passes no pos and _nextPastePos cascades off
-                       the selected node. Both funnel through ONE pasteClipboardAt so a pasted
-                       node can never come out different depending on which door it entered. */
-                    this.pasteClipboardAt(
-                        this._contextMenuPos
-                            ? this._screenToCanvas(this._contextMenuPos.x - 110, this._contextMenuPos.y - 40)
-                            : null
-                    );
+                       the selected node. Both funnel through the SAME paste helpers (single vs
+                       batch) so a pasted node can never differ by which door it entered. */
+                    this._pasteAt(this._contextMenuPos
+                        ? this._screenToCanvas(this._contextMenuPos.x - 110, this._contextMenuPos.y - 40)
+                        : null);
                     break;
                 case 'ctxImportJson':
                     this.importNodeFromJson(
@@ -625,16 +632,16 @@ const canvas = {
                clipboard to paste), so Ctrl+C over some page text with nothing selected is
                left to the browser. */
             if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-                if (this.selectedNode) {
+                if (this.selectedNodes.length || this.selectedNode) {
                     e.preventDefault();
-                    this.copyNodeToClipboard(this.selectedNode);
+                    this.copySelection();
                 }
                 return;
             }
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-                if (this._clipboardData) {
+                if (this._clipboardNodes || this._clipboardData) {
                     e.preventDefault();
-                    this.pasteClipboardAt(null);
+                    this._pasteAt(null);
                 }
                 return;
             }
@@ -787,6 +794,72 @@ const canvas = {
         }
         if (typeof showToast === 'function') showToast(I18n.t('toast.nodePasted'));
         return id;
+    },
+
+    /* One paste door for the single and the batch clipboard, so the keyboard route and the
+       context menu can never paste a node differently. */
+    _pasteAt(pos) {
+        if (this._clipboardNodes && this._clipboardNodes.length) return this.pasteNodesAt(pos);
+        return this.pasteClipboardAt(pos);
+    },
+
+    /* Batch copy of the whole selection. One node delegates to the single-copy path so the
+       clipboard shape (and every existing paste consumer) is unchanged; two or more are stored as
+       a list pasteNodesAt reads back. */
+    copySelection() {
+        const ids = (this.selectedNodes.length ? this.selectedNodes : (this.selectedNode ? [this.selectedNode] : []))
+            .filter((id) => this.nodes[id]);
+        if (!ids.length) return false;
+        if (ids.length === 1) return this.copyNodeToClipboard(ids[0]);
+        this._clipboardNodes = ids.map((id) => {
+            const n = this.nodes[id];
+            return { type: n.type, title: n.title || '', params: JSON.parse(JSON.stringify(n.params || {})) };
+        });
+        this._clipboardData = null;
+        if (typeof showToast === 'function') showToast(I18n.t('toast.nodesCopied', { n: this._clipboardNodes.length }));
+        return true;
+    },
+
+    /* Paste the batch as ONE undo step: suppress per-node history while each addNode runs its own
+       saveState, then a single saveState records the whole group. Copies cascade and the new set
+       becomes the selection. */
+    pasteNodesAt(pos) {
+        const list = this._clipboardNodes;
+        if (!list || !list.length) return [];
+        const base = pos || this._nextPastePos();
+        this._historySaving = true;
+        const ids = [];
+        list.forEach((rec, i) => {
+            const id = this.addNode(rec.type, base.x + i * this.PASTE_CASCADE, base.y + i * this.PASTE_CASCADE);
+            if (this.nodes[id]) {
+                this.nodes[id].params = JSON.parse(JSON.stringify(rec.params || {}));
+                if (rec.title) {
+                    this.nodes[id].title = rec.title;
+                    const titleEl = this.nodes[id].el && this.nodes[id].el.querySelector('.node-title');
+                    if (titleEl) titleEl.textContent = rec.title;
+                }
+                this.updateNodeDisplay(id);
+            }
+            ids.push(id);
+        });
+        this._historySaving = false;
+        this.saveState();
+        this.scheduleRender();
+        this.setSelectedNodes(ids);
+        if (typeof showToast === 'function') showToast(I18n.t('toast.nodesPasted', { n: ids.length }));
+        return ids;
+    },
+
+    /* The same-type multi-edit target set: the whole selection, but ONLY when every selected node
+       shares the panel-open node's type. A mixed selection returns [] so the panel keeps editing
+       the one node it was opened on rather than writing this type's params onto another type. */
+    multiEditTargets(nodeId) {
+        if (!(this.selectedNodes.length > 1)) return [];
+        if (this.selectedNodes.indexOf(nodeId) < 0) return [];
+        const anchor = this.nodes[nodeId];
+        if (!anchor) return [];
+        const same = this.selectedNodes.every((id) => this.nodes[id] && this.nodes[id].type === anchor.type);
+        return same ? this.selectedNodes.slice() : [];
     },
 
     /* Move the selected node by (dx,dy) canvas pixels. Position lives in el.style.left/top —
@@ -1334,7 +1407,12 @@ const canvas = {
     },
 
     editNode(id) {
-        this.selectNode(id);
+        /* Preserve a live multi-selection when the edit is triggered on a node already in the
+           group — that is how the panel reaches the "apply to all" path. A plain edit of an
+           unselected or single node still selects just it. */
+        if (!(this.selectedNodes.indexOf(id) >= 0 && this.selectedNodes.length > 1)) {
+            this.selectNode(id);
+        }
         if (this._settingsNodeId === id) {
             closeSettings();
             return;

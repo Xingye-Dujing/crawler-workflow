@@ -966,3 +966,23 @@ class TestMultiSelect:
 
     def test_a_background_click_that_never_moved_selects_nothing(self, ix):
         assert ix['multi_select']['clickNoDrag']['set'] == []
+
+    def test_batch_copy_then_paste_adds_all_as_one_undo_step(self, ix):
+        b = ix['multi_select']['batchPaste']
+        assert b['clipLen'] == 2, 'copy of a 2-node selection must fill a 2-entry clipboard'
+        assert b['copyToast'] == 'NODES-COPIED', 'the batch (not single) copy toast must fire'
+        assert b['added'] == 2, 'pasting the batch must add both nodes'
+        assert b['singleUndoStep'] == 1, 'a batch paste is ONE undo step, not one per node'
+        assert b['selectedNew'] is True, 'the paste must select the new copies, not the originals'
+        assert b['pasteToast'] == 'NODES-PASTED'
+
+    def test_a_same_type_selection_writes_one_param_to_every_member(self, ix):
+        a = ix['multi_select']['applyToAll']
+        assert a['targets'] == 3
+        assert a['all'] == ['群发到全部'] * 3, 'the panel write must land on all selected same-type nodes'
+
+    def test_a_mixed_selection_does_not_write_the_param_onto_other_types(self, ix):
+        m = ix['multi_select']['mixedSelection']
+        assert m['targets'] == 0, 'multiEditTargets must refuse a mixed group'
+        assert m['processGot'] == '只应落在处理节点'
+        assert m['sourceUntouched'] is True, 'the source node must keep its own (absent) keyword'

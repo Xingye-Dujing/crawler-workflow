@@ -4976,12 +4976,28 @@ var historyPanel = {
 // updateParam with refresh=true by default
 function updateParam(nodeId, key, value) {
     var node = canvas.nodes[nodeId];
-    if (node) {
-        node.params[key] = value;
-        canvas.updateNodeDisplay(nodeId);
+    if (!node) return;
+    /* Same-type multi-edit: when the panel was opened on one node of a live all-same-type
+       selection, a field write lands on every node in that group. multiEditTargets returns []
+       for a mixed selection, so the panel then edits only this node (writing this type's params
+       onto another type would be nonsense). */
+    var targets = canvas.multiEditTargets ? canvas.multiEditTargets(nodeId) : [];
+    if (targets.length > 1) {
+        targets.forEach(function (id) {
+            var nd = canvas.nodes[id];
+            if (nd) {
+                nd.params[key] = value;
+                canvas.updateNodeDisplay(id);
+            }
+        });
         canvas.saveState();
         if (canvas._settingsNodeId === nodeId) openSettings(nodeId);
+        return;
     }
+    node.params[key] = value;
+    canvas.updateNodeDisplay(nodeId);
+    canvas.saveState();
+    if (canvas._settingsNodeId === nodeId) openSettings(nodeId);
 }
 
 /* ─── Data Source platform helpers (mirror the backend's routing rules) ───
