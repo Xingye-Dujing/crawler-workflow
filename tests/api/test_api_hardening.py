@@ -40,6 +40,7 @@ BODY_ROUTES = [
     '/api/cookies/save',
     '/api/cookies/verify',
     '/api/data/clear',
+    '/api/data/diff',
     '/api/data/datasets/<dataset_id>/rename',
     '/api/data/inspect',
     '/api/data/paste',
@@ -69,6 +70,7 @@ BODY_ROUTES = [
     '/api/workflow/execute',
     '/api/workflow/processes/kill',
     '/api/workflow/queue/cancel',
+    '/api/workflow/rerun-node',
     '/api/workflow/rename',
     '/api/workflow/save',
 ]

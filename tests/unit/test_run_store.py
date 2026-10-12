@@ -1125,3 +1125,43 @@ class TestRunLog:
             'attempt-1 line',
             'attempt-2 line',
         ]
+
+
+class TestRunQueue:
+    """The waiting-run mirror: a restart must give back the parked requests, in order,
+    or nothing at all — never a half-parsed body replayed into a worker thread."""
+
+    @staticmethod
+    def _entry(qid, name, nodes=1):
+        return {
+            'id': qid,
+            'workflow_name': name,
+            'nodes': nodes,
+            'data': {'workflow_name': name, 'workflow': _wf()},
+            'lang': 'zh',
+            'queued_at': '2026-01-01T00:00:00',
+        }
+
+    def test_a_saved_queue_comes_back_in_order(self, store):
+        store.save_queue([self._entry('a', 'first'), self._entry('b', 'second'), self._entry('c', 'third')])
+        got = store.load_queue()
+        assert [e['id'] for e in got] == ['a', 'b', 'c']
+        assert [e['workflow_name'] for e in got] == ['first', 'second', 'third']
+
+    def test_replacing_a_queue_leaves_no_stale_rows(self, store):
+        store.save_queue([self._entry('a', 'x'), self._entry('b', 'y')])
+        store.save_queue([self._entry('c', 'z')])
+        assert [e['id'] for e in store.load_queue()] == ['c']
+
+    def test_clearing_writes_an_empty_mirror(self, store):
+        store.save_queue([self._entry('a', 'x')])
+        store.save_queue([])
+        assert store.load_queue() == []
+
+    def test_a_corrupt_payload_row_is_skipped_not_resurrected(self, store):
+        store.save_queue([self._entry('a', 'x'), self._entry('b', 'y')])
+        # Simulate a disk row whose body cannot be parsed (a truncated write).
+        store._conn.execute("UPDATE run_queue SET payload='{not json' WHERE id='b'")
+        store._conn.commit()
+        got = store.load_queue()
+        assert [e['id'] for e in got] == ['a']

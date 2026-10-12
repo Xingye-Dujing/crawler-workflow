@@ -198,6 +198,42 @@ def inspect_dataset():
     return jsonify({'ok': True, 'report': DataAnalysisService.inspect(df)})
 
 
+@bp.route('/api/data/diff', methods=['POST'])
+def diff_datasets():
+    """Row-level comparison of any two tables — two saved datasets, two workflow
+    node outputs, or a mix. Each side is a resolver payload (``{dataset_id}`` or
+    ``{node_id, workflow_name}`` or inline ``{data}``), so this one endpoint answers
+    every pairing without a second reader.
+
+    Optional ``key`` names a column to detect *changed* rows by; without it only
+    ``added``/``removed`` are reported, because aligning whole rows by a column the
+    server picked for you would be guessing about the data."""
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    side_a, side_b = data.get('a'), data.get('b')
+    if not isinstance(side_a, dict) or not isinstance(side_b, dict):
+        return jsonify({'ok': False, 'error': t('api.diffTwoSources')}), 400
+    a_df, error_a = _resolve_payload_dataframe(side_a)
+    if error_a is not None:
+        return error_a
+    b_df, error_b = _resolve_payload_dataframe(side_b)
+    if error_b is not None:
+        return error_b
+    limit = _safe_int(data.get('limit'), 200, minimum=1, maximum=5000)
+    raw_key = data.get('key')
+    key = raw_key if isinstance(raw_key, str) and raw_key else None
+    report = DataAnalysisService.diff(a_df, b_df, key=key, limit=limit)
+    # The row samples carry raw numpy scalars; run them through the same JSON-safe
+    # record path the preview route uses, so the browser never sees a NaN or int64.
+    report['added'] = _json_safe_records(pd.DataFrame(report['added']))
+    report['removed'] = _json_safe_records(pd.DataFrame(report['removed']))
+    for pair in report['changed']:
+        pair['a'] = _json_safe_records(pd.DataFrame([pair['a']]))[0]
+        pair['b'] = _json_safe_records(pd.DataFrame([pair['b']]))[0]
+    return jsonify({'ok': True, 'diff': report})
+
+
 @bp.route('/api/data/preview', methods=['POST'])
 def preview_dataset():
     """Paginated tabular preview of any dataset (uploaded, pasted, a

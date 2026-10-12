@@ -3325,3 +3325,35 @@ class TestSentimentEvolution:
         # the user then draws has one line where he asked for two, and no trace of why.
         with pytest.raises(UnknownOperationError, match='强度分'):
             D.sentiment_evolution(self._frame({'发酵期': (1, 1, 1)}), 'period', score_col='强度分')
+
+
+class TestDiffRows:
+    """DataAnalysisService.diff — the pure row comparison the /api/data/diff endpoint
+    wraps. The API tests exercise it through Flask; these pin the edges a single request
+    cannot reach: two tables sharing no column, and a key that is not unique."""
+
+    def test_tables_with_no_column_in_common_mark_every_row_unmatched(self):
+        a = pd.DataFrame([{'id': 1}, {'id': 2}])
+        b = pd.DataFrame([{'name': 'x'}])
+        d = D.diff(a, b)
+        assert d['columns_common'] == []
+        assert d['added_count'] == 1 and d['removed_count'] == 2
+
+    def test_an_unshared_key_is_refused_by_name_not_used_to_match(self):
+        a = pd.DataFrame([{'id': 1}])
+        b = pd.DataFrame([{'name': 'x'}])
+        d = D.diff(a, b, key='id')
+        assert 'key_error' in d and 'id' in d['key_error']
+
+    def test_a_key_with_duplicate_values_cannot_align_rows(self):
+        a = pd.DataFrame([{'k': 1, 'v': 'a'}, {'k': 1, 'v': 'b'}])
+        b = pd.DataFrame([{'k': 1, 'v': 'a'}, {'k': 1, 'v': 'c'}])
+        d = D.diff(a, b, key='k')
+        assert d['key_used'] is None
+        assert 'k' in d['key_error']
+
+    def test_identical_frames_diff_to_nothing(self):
+        a = pd.DataFrame([{'x': 1}, {'x': 2}])
+        d = D.diff(a, a.copy())
+        assert d['added_count'] == d['removed_count'] == d['changed_count'] == 0
+        assert d['row_delta'] == 0

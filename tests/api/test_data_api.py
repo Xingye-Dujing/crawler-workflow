@@ -450,3 +450,59 @@ class TestDatasetDeletionGuards:
         did = _upload(client, 'loose.csv', CSV_BYTES).get_json()['dataset_id']
         assert client.delete(f'/api/data/datasets/{did}').get_json()['ok'] is True
         assert client.get(f'/api/data/datasets/{did}').status_code == 404
+
+
+class TestDiff:
+    """POST /api/data/diff — each side is a resolver payload; inline ``data`` keeps
+    the tests deterministic without registering a file."""
+
+    def _diff(self, client, a, b, **extra):
+        body = {'a': {'data': a}, 'b': {'data': b}, **extra}
+        response = client.post('/api/data/diff', json=body)
+        return response, response.get_json()
+
+    def test_two_identical_tables_report_no_change(self, client):
+        rows = [{'id': 1, 'text': 'a'}, {'id': 2, 'text': 'b'}]
+        response, body = self._diff(client, rows, list(rows))
+        assert response.status_code == 200
+        d = body['diff']
+        assert d['added_count'] == 0 and d['removed_count'] == 0
+        assert d['row_delta'] == 0
+        assert d['columns_common'] == ['id', 'text']
+
+    def test_added_and_removed_rows_are_counted_with_multiplicity(self, client):
+        a = [{'x': 1}, {'x': 2}, {'x': 2}]
+        b = [{'x': 2}, {'x': 3}, {'x': 3}]
+        _, body = self._diff(client, a, b)
+        d = body['diff']
+        # a holds an unmatched '1' and a second '2' that b does not; b holds two '3'.
+        assert d['added_count'] == 2
+        assert d['removed_count'] == 2
+        assert {r['x'] for r in d['added']} == {3}
+        assert {r['x'] for r in d['removed']} == {1, 2}
+
+    def test_a_column_present_only_in_b_is_listed_as_added(self, client):
+        _, body = self._diff(client, [{'id': 1}], [{'id': 1, 'score': 9}])
+        d = body['diff']
+        assert d['columns_added'] == ['score']
+        assert d['columns_removed'] == []
+
+    def test_changed_rows_need_an_explicit_unique_key(self, client):
+        a = [{'id': 1, 'v': 'x'}, {'id': 2, 'v': 'y'}]
+        b = [{'id': 1, 'v': 'X'}, {'id': 2, 'v': 'y'}]
+        _, body = self._diff(client, a, b, key='id')
+        d = body['diff']
+        assert d['key_used'] == 'id'
+        assert d['changed_count'] == 1
+        assert d['changed'][0]['key'] == 1
+        assert d['changed'][0]['a']['v'] == 'x' and d['changed'][0]['b']['v'] == 'X'
+
+    def test_a_key_that_is_not_shared_is_refused_by_name_not_guessed(self, client):
+        _, body = self._diff(client, [{'id': 1}], [{'name': 'a'}], key='id')
+        d = body['diff']
+        assert 'key_error' in d
+        assert 'id' in d['key_error']
+
+    def test_a_non_object_side_is_a_400(self, client):
+        response = client.post('/api/data/diff', json={'a': 5, 'b': {'data': []}})
+        assert response.status_code == 400

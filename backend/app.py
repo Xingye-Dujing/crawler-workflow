@@ -1149,6 +1149,7 @@ def _enqueue_run(data: dict, lang_header: str) -> dict:
     # this is a queue POSITION, and feeding one into the other printed 「已排队（第 2
     # 位）：未命名工作流2」 where the 2 happened to be the depth of the queue.
     add_log(t('run.queued', name=name or t('run.queuedUnnamed'), at=position))
+    _mirror_queue()
     return {
         'status': 200,
         'body': {
@@ -1173,15 +1174,51 @@ def cancel_queued(queue_id: str) -> bool:
         for position, entry in enumerate(_RUN_QUEUE):
             if entry['id'] == queue_id:
                 del _RUN_QUEUE[position]
-                return True
-    return False
+                break
+        else:
+            return False
+    _mirror_queue()
+    return True
 
 
 def clear_queue() -> int:
     with _queue_lock:
         count = len(_RUN_QUEUE)
         del _RUN_QUEUE[:]
+    _mirror_queue()
     return count
+
+
+def _mirror_queue() -> None:
+    """Write the current in-memory queue to ``runs.db`` so a restart does not lose it.
+
+    The in-memory list stays the runtime source of truth (ordering, drain, the liveness
+    check all read it); the DB row is only the recovery mirror, so a failure here must
+    never break the request that triggered it."""
+    try:
+        with _queue_lock:
+            snapshot = list(_RUN_QUEUE)
+        get_run_store().save_queue(snapshot)
+    except Exception:
+        logger.exception(t('run.queueMirrorFailed'))
+
+
+def _load_pending_queue() -> int:
+    """Re-populate ``_RUN_QUEUE`` from the mirror after a restart (called at boot).
+
+    Only fills an empty queue: a process that already has live in-memory entries (a test
+    harness, or a re-entrant boot) must not have them clobbered by an older disk snapshot.
+    Returns how many requests came back."""
+    with _queue_lock:
+        if _RUN_QUEUE:
+            return 0
+        try:
+            restored = get_run_store().load_queue()
+        except Exception:
+            logger.exception(t('run.queueLoadFailed'))
+            return 0
+        _RUN_QUEUE.extend(restored)
+    return len(restored)
 
 
 def _start_next_queued() -> None:
@@ -1194,6 +1231,9 @@ def _start_next_queued() -> None:
     """
     with _queue_lock:
         entry = _RUN_QUEUE.pop(0) if _RUN_QUEUE else None
+    # The pop removed an entry from the queue; mirror BEFORE branching so a run that
+    # starts (and is never put back) leaves the disk mirror without it too.
+    _mirror_queue()
     if entry is None:
         return
     try:
@@ -1219,6 +1259,7 @@ def _start_next_queued() -> None:
     with _queue_lock:
         _RUN_QUEUE.insert(0, entry)
         add_log(t('run.queue_waited', name=entry['workflow_name'] or entry['id']))
+    _mirror_queue()
 
 
 @app.route('/api/workflow/execute', methods=['POST'])
@@ -1253,6 +1294,84 @@ def workflow_queue_cancel():
 def workflow_queue_clear():
     """Empty the queue — 'do not start any of these', not 'stop the run'."""
     return jsonify({'ok': True, 'cleared': clear_queue()})
+
+
+def _downstream_closure(effective: dict, node_id: str) -> list:
+    """``node_id`` plus every node reachable by following wires forward.
+
+    A rerun of one node invalidates that node AND everything downstream of it, because a
+    child's input IS its parent's output — keeping a child's stale rows would let it feed
+    on a result that no longer exists. Walked over the effective (already-disabled-dropped)
+    graph so a disabled node is never resurrected by a rerun of its neighbour."""
+    adjacency: dict = {}
+    for conn in effective.get('connections') or []:
+        adjacency.setdefault(conn.get('from'), []).append(conn.get('to'))
+    seen = {node_id}
+    stack = [node_id]
+    while stack:
+        current = stack.pop()
+        for child in adjacency.get(current, []):
+            if child not in seen:
+                seen.add(child)
+                stack.append(child)
+    return list(seen)
+
+
+@app.route('/api/workflow/rerun-node', methods=['POST'])
+def workflow_rerun_node():
+    """Re-run ONE node and everything downstream of it, reusing the kept upstream rows.
+
+    This is a resume with a targeted wipe: the target subtree's stored results are deleted,
+    then the SAME run is started with ``resume_run_id``. The existing reuse predicate then
+    finds those nodes with no stored row (so it executes them) while every upstream node
+    still holds its ``done``/``restored`` rows (so it is reused, never re-crawled or
+    re-paid) — one paste path, one resume path, no second engine."""
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    node_id = data.get('node_id')
+    if not isinstance(node_id, str) or not node_id.strip():
+        return _bad_param('node_id')
+    node_id = node_id.strip()
+    workflow = data.get('workflow')
+    if not isinstance(workflow, dict) or not workflow.get('nodes'):
+        return jsonify({'ok': False, 'error': t('api.workflowShapeInvalid')}), 400
+
+    effective = effective_workflow(workflow)
+    fingerprint = workflow_fingerprint(effective)
+    store = get_run_store()
+
+    run_id = str(data.get('resume_run_id') or '').strip()
+    if run_id:
+        run = store.get_run(run_id)
+        if run is None:
+            return jsonify({'ok': False, 'error': t('api.resumeMissing', rid=run_id)}), 400
+        if run.get('workflow_fingerprint') != fingerprint:
+            # Reusing this run would mix two different workflows' rows under one id; refuse by name.
+            return jsonify({'ok': False, 'error': t('api.rerunFingerprintMismatch')}), 409
+    else:
+        candidates = store.list_resumable(fingerprint, limit=1, include_finished=True)
+        if not candidates:
+            return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
+        run_id = candidates[0]['run_id']
+
+    target = next((n for n in effective['nodes'] if n.get('id') == node_id), None)
+    if target is None:
+        return jsonify({'ok': False, 'error': t('api.rerunNoNode', node=node_id)}), 400
+    status = store.get_node_status(run_id, node_id)
+    if status not in (NODE_DONE, NODE_RESTORED):
+        return jsonify({'ok': False, 'error': t('api.rerunNoRows', node=node_label(target, node_id))}), 409
+
+    invalidated = _downstream_closure(effective, node_id)
+    store.invalidate_nodes(run_id, invalidated)
+
+    # Replay through the ordinary start path as a resume of the very run we just pruned.
+    data['resume_run_id'] = run_id
+    answer = _begin_run(data, request.headers.get('X-Lang') or '')
+    body = dict(answer['body'])
+    body['rerun_from'] = node_id
+    body['invalidated'] = invalidated
+    return jsonify(body), answer['status']
 
 
 # _local_transport_refusal lives in transport.py (imported at top); the run executor (via
@@ -6266,4 +6385,8 @@ if __name__ == '__main__':
     # Retention is applied on its own, not only when somebody remembers to
     # click: startup is the other moment nothing is writing.
     _housekeep(force=True)
+    # A restart must not silently drop the requests the user already parked.
+    restored = _load_pending_queue()
+    if restored:
+        logger.info(t('run.queue_restored', n=restored))
     app.run(host=host, port=port, debug=debug, threaded=True, use_reloader=debug)

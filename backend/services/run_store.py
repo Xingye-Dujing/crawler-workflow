@@ -435,6 +435,20 @@ class RunStore:
                 CREATE INDEX IF NOT EXISTS idx_node_runs_status ON node_runs(run_id, status);
                 CREATE INDEX IF NOT EXISTS idx_run_files_run ON run_files(run_id, node_id, kind);
                 CREATE INDEX IF NOT EXISTS idx_run_log_wf ON run_log(run_id, wf_idx, seq);
+                -- The waiting run queue, mirrored from the in-memory _RUN_QUEUE so a restart
+                -- does not silently drop the requests the user already parked. `position` is the
+                -- drain order (0..n-1, rewritten wholesale on every change — the queue is capped
+                -- at QUEUE_MAX, so a full replace is cheap and cannot drift). `payload` is the
+                -- exact POST body the entry will replay on drain.
+                CREATE TABLE IF NOT EXISTS run_queue (
+                    position INTEGER PRIMARY KEY,
+                    id TEXT NOT NULL,
+                    workflow_name TEXT,
+                    node_count INTEGER DEFAULT 0,
+                    lang TEXT,
+                    queued_at TEXT,
+                    payload TEXT NOT NULL
+                );
                 """
             )
             self._conn.commit()
@@ -504,6 +518,60 @@ class RunStore:
     def _query(self, sql: str, params=()):
         with self._lock:
             return self._conn.execute(sql, params).fetchall()
+
+    # ── waiting-run queue (restart durability) ──────────────────
+
+    def save_queue(self, entries: list) -> None:
+        """Mirror the in-memory queue to disk, exactly and in order.
+
+        A wholesale replace (the queue is capped at QUEUE_MAX, so this is a handful of
+        rows), which cannot drift the way an incremental upsert would if a drain popped
+        and another path re-inserted. Called under the queue lock by ``app._mirror_queue``.
+        """
+        with self._lock:
+            self._conn.execute('DELETE FROM run_queue')
+            for position, entry in enumerate(entries):
+                self._conn.execute(
+                    'INSERT INTO run_queue (position, id, workflow_name, node_count, lang, queued_at, payload) '
+                    'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    (
+                        position,
+                        entry['id'],
+                        entry.get('workflow_name') or '',
+                        int(entry.get('nodes') or 0),
+                        entry.get('lang') or '',
+                        entry.get('queued_at') or '',
+                        json.dumps(entry.get('data')),
+                    ),
+                )
+            self._conn.commit()
+
+    def load_queue(self) -> list:
+        """The parked requests in drain order, or [] when nothing survived the restart.
+
+        A row whose payload will not parse is skipped rather than half-resurrected —
+        replaying a corrupt body would fail minutes later in a worker nobody watches.
+        """
+        rows = self._query(
+            'SELECT id, workflow_name, node_count, lang, queued_at, payload FROM run_queue ORDER BY position'
+        )
+        entries = []
+        for row in rows:
+            try:
+                data = json.loads(row['payload'])
+            except (ValueError, TypeError):
+                continue
+            entries.append(
+                {
+                    'id': row['id'],
+                    'workflow_name': row['workflow_name'] or '',
+                    'nodes': row['node_count'],
+                    'data': data,
+                    'lang': row['lang'] or '',
+                    'queued_at': row['queued_at'] or '',
+                }
+            )
+        return entries
 
     # ── startup recovery ────────────────────────────────────────
 
@@ -662,6 +730,31 @@ class RunStore:
         run['nodes'] = nodes
         run['duration_seconds'] = self._duration_seconds(run.get('started_at'), run.get('finished_at'))
         return run
+
+    def get_node_status(self, run_id: str, node_id: str):
+        """The stored status of one node in one run, or None when it never ran there.
+
+        The single-node rerun asks only this: does the target already hold a completed
+        (done/restored) result worth re-executing downstream from?"""
+        rows = self._query('SELECT status FROM node_runs WHERE run_id = ? AND node_id = ?', (run_id, node_id))
+        return rows[0]['status'] if rows else None
+
+    def invalidate_nodes(self, run_id: str, node_ids: list) -> int:
+        """Drop every stored result for ``node_ids`` in one run, so a resume re-runs exactly them.
+
+        Deleting the ``node_rows`` (the data) AND the ``node_runs`` row (its done/restored status
+        and cursor) is what makes the reuse predicate treat these nodes as never-run while leaving
+        every OTHER node's kept rows in place to be reused. Returns how many node records were
+        cleared — one per targeted node that had a row."""
+        cleared = 0
+        with self._lock:
+            for node_id in node_ids:
+                self._conn.execute('DELETE FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))
+                cleared += self._conn.execute(
+                    'DELETE FROM node_runs WHERE run_id = ? AND node_id = ?', (run_id, node_id)
+                ).rowcount
+            self._conn.commit()
+        return cleared
 
     def list_resumable(self, fingerprint: str = None, limit: int = 20, include_finished: bool = False) -> list:
         """Runs worth offering to resume, newest first.

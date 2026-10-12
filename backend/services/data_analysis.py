@@ -1017,6 +1017,134 @@ class DataAnalysisService:
         }
 
     @staticmethod
+    def _row_hashes(df: pd.DataFrame, cols: list) -> list:
+        """A stable per-row fingerprint over the given columns. Falls back to a
+        textual sha1 when a cell is unhashable (a column of lists/dicts), so the
+        same rows always hash the same bytes and the diff never crashes on shape."""
+        sub = df[cols]
+        try:
+            return [int(h) for h in pd.util.hash_pandas_object(sub, index=False).to_numpy()]
+        except (TypeError, ValueError):
+            return [
+                hashlib.sha1(repr(row).encode('utf-8', 'replace')).hexdigest()
+                for row in sub.astype(str).values.tolist()
+            ]
+
+    @staticmethod
+    def diff(a_df: pd.DataFrame, b_df: pd.DataFrame, key: str | None = None, limit: int = 200) -> dict:
+        """Row-level comparison of two tables, with NO guessing about identity.
+
+        Rows are aligned by a per-row hash over the columns the two tables SHARE, so a
+        renamed/added column is reported as a column difference rather than silently
+        turning every row into "changed". ``added``/``removed`` are the honest multiset
+        answer (``*_count`` carries duplicates; the emitted samples are de-duplicated and
+        capped at ``limit``). ``changed`` is only produced when the caller NAMES a ``key``
+        column that is unique in both — matching a whole row by an auto-picked column
+        would choose data, which this codebase refuses to do.
+        """
+        from collections import Counter
+
+        cols_a = list(a_df.columns)
+        cols_b = list(b_df.columns)
+        set_a, set_b = set(cols_a), set(cols_b)
+        common = [c for c in cols_a if c in set_b]
+        result = {
+            'columns_a': cols_a,
+            'columns_b': cols_b,
+            'columns_added': [c for c in cols_b if c not in set_a],
+            'columns_removed': [c for c in cols_a if c not in set_b],
+            'columns_common': common,
+            'row_count_a': int(len(a_df)),
+            'row_count_b': int(len(b_df)),
+            'row_delta': int(len(b_df)) - int(len(a_df)),
+        }
+
+        if not common:
+            # Nothing shared to align on: every row of each side is, by definition,
+            # unmatched. Report that rather than an empty diff that reads as "identical".
+            result.update(
+                {
+                    'added': b_df.head(limit).to_dict('records'),
+                    'removed': a_df.head(limit).to_dict('records'),
+                    'added_count': int(len(b_df)),
+                    'removed_count': int(len(a_df)),
+                    'changed': [],
+                    'changed_count': 0,
+                    'key_used': None,
+                    'truncated': bool(len(b_df) > limit or len(a_df) > limit),
+                }
+            )
+            # A key was asked for but there is no shared column to hold it — name that
+            # refusal instead of silently returning an empty changed set.
+            if key is not None:
+                result['key_error'] = t('api.diffKeyMissing', name=key)
+            return result
+
+        ha = DataAnalysisService._row_hashes(a_df, common)
+        hb = DataAnalysisService._row_hashes(b_df, common)
+        ca, cb = Counter(ha), Counter(hb)
+        removed_counter = ca - cb
+        added_counter = cb - ca
+
+        # Representative sample per distinct hash, in table order, capped at limit.
+        first_a = {}
+        for idx, h in enumerate(ha):
+            first_a.setdefault(h, idx)
+        first_b = {}
+        for idx, h in enumerate(hb):
+            first_b.setdefault(h, idx)
+
+        removed_hashes = sorted(removed_counter)
+        added_hashes = sorted(added_counter)
+        a_common = a_df[common]
+        b_common = b_df[common]
+        removed_rows = [a_common.iloc[first_a[h]].to_dict() for h in removed_hashes[:limit] if h in first_a]
+        added_rows = [b_common.iloc[first_b[h]].to_dict() for h in added_hashes[:limit] if h in first_b]
+
+        result.update(
+            {
+                'added': added_rows,
+                'removed': removed_rows,
+                'added_count': int(sum(added_counter.values())),
+                'removed_count': int(sum(removed_counter.values())),
+            }
+        )
+
+        result['changed'] = []
+        result['changed_count'] = 0
+        result['key_used'] = None
+        if key is not None:
+            if key not in common:
+                result['key_error'] = t('api.diffKeyMissing', name=key)
+            else:
+                ka = a_df[key].tolist()
+                kb = b_df[key].tolist()
+                if len(set(ka)) != len(ka) or len(set(kb)) != len(kb):
+                    result['key_error'] = t('api.diffKeyNotUnique', name=key)
+                else:
+                    # key -> (row index, hash) on each side; the index is used to emit the
+                    # exact row for that key, never a first-match scan that a duplicate
+                    # hash could misattribute.
+                    result['key_used'] = key
+                    a_key = {ka[i]: (i, ha[i]) for i in range(len(ka))}
+                    b_key = {kb[i]: (i, hb[i]) for i in range(len(kb))}
+                    changed = []
+                    for k in set(a_key) & set(b_key):
+                        ai, ah = a_key[k]
+                        bi, bh = b_key[k]
+                        if ah != bh:
+                            changed.append(
+                                {'key': k, 'a': a_common.iloc[ai].to_dict(), 'b': b_common.iloc[bi].to_dict()}
+                            )
+                    result['changed'] = changed[:limit]
+                    result['changed_count'] = len(changed)
+
+        result['truncated'] = bool(
+            len(added_hashes) > limit or len(removed_hashes) > limit or result['changed_count'] > limit
+        )
+        return result
+
+    @staticmethod
     def drop_null(df: pd.DataFrame, columns: list = None, how: str = 'any') -> pd.DataFrame:
         subset = [c for c in (columns or []) if c in df.columns] or None
         work = df.copy()
