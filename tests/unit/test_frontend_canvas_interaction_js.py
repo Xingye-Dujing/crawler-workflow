@@ -518,6 +518,38 @@ class TestPaletteKeyboardAdd:
         assert p['emptyTypeNull'] is True, 'an empty palette type must be a no-op, not a node'
 
 
+class TestClipboardDragToCanvas:
+    """A clipboard NODE row drags onto the canvas the way a palette item does — through
+    the SAME paste funnel, so a dragged node comes out byte-identical to a clicked paste,
+    lands at the drop point, and never turns a text row into a node."""
+
+    def test_a_node_row_is_draggable(self, ix):
+        assert ix['clip_drag_to_canvas']['rowDraggable'] == 'true', 'a node row cannot be dragged'
+
+    def test_the_drag_hands_the_entry_id_to_a_private_mime(self, ix):
+        assert ix['clip_drag_to_canvas']['dragWroteClipId'] is True
+
+    def test_dropping_pastes_one_node_carrying_params_and_name(self, ix):
+        c = ix['clip_drag_to_canvas']
+        assert c['pastedOne'] is True, 'the drag-drop pasted a different number of nodes'
+        assert c['pastedKeyword'] == 'DRAGME', 'the dropped node lost its params'
+        assert c['pastedTitle'] == '源Z', 'the dropped node lost its name'
+
+    def test_the_palette_route_still_adds_a_node_of_that_type(self, ix):
+        """Widening the drop handler must not break what was already there."""
+        c = ix['clip_drag_to_canvas']
+        assert c['paletteAddedOne'] is True
+        assert c['paletteIsOutput'] is True
+
+    def test_a_drop_carrying_nothing_adds_nothing(self, ix):
+        assert ix['clip_drag_to_canvas']['emptyAddsNothing'] is True
+
+    def test_a_text_row_is_not_draggable_and_drags_no_node(self, ix):
+        c = ix['clip_drag_to_canvas']
+        assert c['textRowNotDraggable'] is True, 'a text row must not advertise itself as draggable'
+        assert c['textDragWroteNothing'] is True, 'dragging a text row must put nothing on the canvas'
+
+
 class TestNodeClipboardShortcuts:
     """Ctrl+C / Ctrl+V / arrow-nudge — the keyboard routes that the copy/paste menu already
     served. They must reach the SAME shared methods, so a pasted node comes out identical

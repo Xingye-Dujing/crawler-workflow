@@ -1502,6 +1502,77 @@ function nodeClipboardScenario() {
     };
 }
 
+/* Drag a clipboard NODE row onto the canvas — the palette drag, but for a saved record.
+   It must (a) land at the drop point, (b) reuse the SAME paste funnel (params + title
+   survive), (c) leave the palette's text/plain→type route working, and (d) never treat a
+   text row as draggable. Self-contained: freshWorld wires both the drawer dragstart and
+   the workspace drop listener against the live page. */
+function clipDragToCanvasScenario() {
+    freshWorld();
+    const srcId = addNode('source', 10, 10);
+    canvas.nodes[srcId].title = '源Z';
+    canvas.nodes[srcId].params = { platform: 'zhihu', keyword: 'DRAGME' };
+    canvas.copyNodeToClipboard(srcId);
+    const entry = Clipboard.items[Clipboard.items.length - 1];
+    Clipboard.render();
+
+    const drawer = doc.getElementById('clipboard-drawer');
+    const row = doc.getElementById('clipboard-list').querySelector('[data-clip-id]');
+
+    // The node row is marked draggable, so the browser will even start a drag for it.
+    const rowDraggable = row ? row.getAttribute('draggable') : null;
+
+    // A dragstart hands the entry id to the private MIME type, nothing else.
+    const dt = { _d: {}, setData(t, v) { this._d[t] = String(v); }, getData(t) { return this._d[t] || ''; }, effectAllowed: '' };
+    dispatchOn(drawer, 'dragstart', ev({ target: row, dataTransfer: dt }));
+    const dragWroteClipId = dt._d['application/x-canvas-clip'] === entry.id;
+
+    // Dropping it on the workspace pastes ONE node at the drop point, params + title kept.
+    const idsBefore = Object.keys(canvas.nodes);
+    dispatchOn(canvas.workspace, 'drop', ev({
+        target: { closest: () => null }, clientX: 410, clientY: 140,
+        dataTransfer: { getData: (t) => (t === 'application/x-canvas-clip' ? entry.id : '') },
+    }));
+    const dragNew = Object.keys(canvas.nodes).filter((id) => idsBefore.indexOf(id) < 0);
+    const pasted = dragNew.length === 1 && canvas.nodes[dragNew[0]]
+        ? { keyword: canvas.nodes[dragNew[0]].params.keyword, title: canvas.nodes[dragNew[0]].title }
+        : null;
+
+    // The palette's own text/plain route still adds a node of that TYPE.
+    const idsBefore2 = Object.keys(canvas.nodes);
+    dispatchOn(canvas.workspace, 'drop', ev({
+        target: { closest: () => null }, clientX: 410, clientY: 140,
+        dataTransfer: { getData: (t) => (t === 'text/plain' ? 'output' : '') },
+    }));
+    const palNew = Object.keys(canvas.nodes).filter((id) => idsBefore2.indexOf(id) < 0);
+
+    // A drop carrying neither type adds nothing.
+    const idsBefore3 = Object.keys(canvas.nodes).length;
+    dispatchOn(canvas.workspace, 'drop', ev({ target: { closest: () => null }, dataTransfer: { getData: () => '' } }));
+    const emptyAddsNothing = Object.keys(canvas.nodes).length === idsBefore3;
+
+    // A TEXT row is not draggable and drags nothing onto the canvas.
+    Clipboard.add({ kind: 'text', payload: 'plain note' });
+    Clipboard.render();
+    const textRow = doc.getElementById('clipboard-list').children
+        .find((c) => c.tagName === 'DIV' && c.getAttribute('draggable') === null);
+    const dt2 = { _d: {}, setData(t, v) { this._d[t] = String(v); }, getData(t) { return this._d[t] || ''; }, effectAllowed: '' };
+    dispatchOn(drawer, 'dragstart', ev({ target: textRow, dataTransfer: dt2 }));
+
+    out.clip_drag_to_canvas = {
+        rowDraggable,
+        dragWroteClipId,
+        pastedOne: dragNew.length === 1,
+        pastedKeyword: pasted ? pasted.keyword : null,
+        pastedTitle: pasted ? pasted.title : null,
+        paletteAddedOne: palNew.length === 1,
+        paletteIsOutput: palNew.length === 1 && canvas.nodes[palNew[0]].type === 'output',
+        emptyAddsNothing,
+        textRowNotDraggable: !!textRow,
+        textDragWroteNothing: dt2._d['application/x-canvas-clip'] === undefined,
+    };
+}
+
 /* ── keyboard node-connect (L link mode) + the connectNodes seam ───── */
 /* The wire that used to be creatable only by dragging an out-port onto an in-port is now
    also reachable from the keyboard. `connectNodes` is the single synchronous model mutation
@@ -2143,6 +2214,7 @@ function keyboardNavigationScenario() {
 resizeRepaintScenario();
 paletteKeyboardScenario();
 nodeClipboardScenario();
+clipDragToCanvasScenario();
 keyboardNavigationScenario();
 keyboardConnectScenario();
 minimapScenario();

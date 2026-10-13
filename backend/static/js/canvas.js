@@ -148,6 +148,18 @@ const canvas = {
             const drawer = document.getElementById('clipboard-drawer');
             if (drawer && drawer.addEventListener) {
                 drawer.addEventListener('click', (e) => Clipboard.onAction(e));
+                /* Delegated dragstart (rows are innerHTML, so no per-node listener survives
+                   a re-render): a node/nodes row hands its id to the workspace drop under a
+                   private type; a text row drags nothing onto the canvas. */
+                drawer.addEventListener('dragstart', (e) => {
+                    if (!e.dataTransfer || !e.target || !e.target.closest) return;
+                    const row = e.target.closest('[data-clip-id]');
+                    if (!row) return;
+                    const it = Clipboard.get(row.dataset.clipId);
+                    if (!it || (it.kind !== 'node' && it.kind !== 'nodes')) return;
+                    e.dataTransfer.setData('application/x-canvas-clip', it.id);
+                    e.dataTransfer.effectAllowed = 'copy';
+                });
             }
             const clipSearch = document.getElementById('clipboard-search');
             if (clipSearch && clipSearch.addEventListener) {
@@ -626,6 +638,16 @@ const canvas = {
         this.workspace.addEventListener('dragover', (e) => e.preventDefault());
         this.workspace.addEventListener('drop', (e) => {
             e.preventDefault();
+            /* A clipboard node dragged in carries its entry id under a private type; it
+               re-uses the SAME paste funnel as the drawer's 粘贴 button (Clipboard.paste),
+               so a drag can never paste a node differently from a click. Checked BEFORE the
+               palette's text/plain branch, which the drawer drop leaves empty. */
+            const clipId = e.dataTransfer.getData('application/x-canvas-clip');
+            if (clipId) {
+                const pos = this._screenToCanvas(e.clientX - 110, e.clientY - 40);
+                Clipboard.paste(clipId, pos);
+                return;
+            }
             const type = e.dataTransfer.getData('text/plain');
             if (type) {
                 const pos = this._screenToCanvas(e.clientX - 110, e.clientY - 40);
@@ -3256,7 +3278,11 @@ const Clipboard = {
                 + it.id + '">' + this._esc(I18n.t('clipboard.rename')) + '</button>';
             actions += '<button class="clip-btn clip-danger" type="button" data-clip-action="delete" data-clip-id="'
                 + it.id + '">' + this._esc(I18n.t('clipboard.delete')) + '</button>';
-            html += '<div class="clip-row' + (it.pinned ? ' clip-pinned' : '') + '" data-clip-id="' + it.id + '">'
+            const isNode = (it.kind === 'node' || it.kind === 'nodes');
+            const dragAttrs = isNode
+                ? ' draggable="true" title="' + this._esc(I18n.t('clipboard.dragHint')) + '"'
+                : '';
+            html += '<div class="clip-row' + (it.pinned ? ' clip-pinned' : '') + '"' + dragAttrs + ' data-clip-id="' + it.id + '">'
                 + '<span class="clip-badge">' + this._esc(badge) + '</span>'
                 + '<span class="clip-label" title="' + label + '">' + label + '</span>'
                 + '<span class="clip-actions">' + actions + '</span>'

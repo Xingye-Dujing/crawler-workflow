@@ -3880,14 +3880,18 @@ html[data-cloud="1"] .ai-only-ollama {
    the panel and trip the layout audit. */
 #clipboard-drawer {
   position: fixed;
-  right: 0;
-  top: 48px;
+  /* Floats off every edge like #outline-panel rather than flush to the right: 12px
+     under the 48px menu (top 60), and a bottom gap equal to the top one so a full
+     list stops 12px above the 28px status bar (100vh-100px) — never sliding behind
+     it. translateX(100%) still parks the whole box off the right edge when closed. */
+  right: 12px;
+  top: 60px;
   width: 280px;
-  height: calc(100vh - 48px);
-  max-height: calc(100vh - 48px);
+  height: calc(100vh - 100px);
+  max-height: calc(100vh - 100px);
   box-sizing: border-box;
   background: var(--bg);
-  border-left: 1px solid var(--line);
+  border: 1px solid var(--line);
   box-shadow: var(--shadow-soft);
   z-index: 1001;
   display: flex;
