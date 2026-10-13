@@ -655,6 +655,23 @@ const canvas = {
             }
         });
 
+        /* Enter also closes the settings panel from INSIDE it. A fresh open drops the caret
+           into the panel's first control, so the second Enter lands on a field — not the
+           canvas — and the canvas handler is (correctly) silent while typing. Delegated on
+           the stable panel element (its body is re-rendered per edit), it stays out of the
+           way of controls that OWN Enter: a button/link (they activate), a textarea (a
+           newline), or a CustomSelect list (it picks an option). */
+        const settingsPanel = document.getElementById('node-settings');
+        if (settingsPanel && settingsPanel.addEventListener) {
+            settingsPanel.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' || !this._settingsNodeId) return;
+                const t = e.target;
+                if (t && t.closest && t.closest('button, a, textarea, .cselect, [contenteditable="true"]')) return;
+                e.preventDefault();
+                closeSettings();
+            });
+        }
+
         /* Keyboard shortcuts */
         document.addEventListener('keydown', (e) => {
             if (this._isTypingTarget(e.target)) return;
@@ -719,14 +736,16 @@ const canvas = {
                 }
                 return;
             }
-            /* Enter opens the selected node's settings — the keyboard route to the same panel
-               a double-click or the gear button opens. It never steals Enter from a focused
-               control: typing is excluded above, and a button/link keeps its own activation. */
+            /* Enter toggles the selected node's settings — the keyboard route to the same
+               panel a double-click or the gear button opens. editNode is the shared toggle:
+               a closed panel opens, and pressing Enter again on the node whose panel is
+               already open closes it. It never steals Enter from a focused control: typing
+               is excluded above, and a button/link keeps its own activation. */
             if (e.key === 'Enter') {
-                if (this.selectedNode && typeof openSettings === 'function' &&
+                if (this.selectedNode && typeof this.editNode === 'function' &&
                     !(e.target && e.target.closest && e.target.closest('button, a'))) {
                     e.preventDefault();
-                    openSettings(this.selectedNode);
+                    this.editNode(this.selectedNode);
                 }
                 return;
             }

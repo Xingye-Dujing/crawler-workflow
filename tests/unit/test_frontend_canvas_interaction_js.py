@@ -1160,6 +1160,21 @@ class TestKeyboardNavigation:
         assert n['enterForNode'] == 1, 'Enter on a selected node opens its settings once'
         assert n['enterFromButton'] == 1, 'Enter while a button is focused must not also fire'
 
+    def test_enter_toggles_the_panel_closed_on_the_canvas(self, ix):
+        """The reported bug: Enter only opened. A second Enter on the same selected node must
+        close it — editNode is the shared toggle the gear button already uses."""
+        assert ix['keyboard_navigation']['enterClosesSecond'] is True
+
+    def test_enter_inside_the_panel_closes_it_but_owns_enter_for_fields_that_need_it(self, ix):
+        """A fresh open drops the caret into the first field, so the second Enter lands inside
+        the panel; it closes there too — yet never steals Enter from a textarea (a newline) or
+        a button (its own activation)."""
+        n = ix['keyboard_navigation']
+        assert n['reopenedForPanel'] is True
+        assert n['panelFieldEnterCloses'] is True, 'Enter in a panel field did not close the panel'
+        assert n['textareaKeepsOpen'] is True, 'Enter in a textarea must keep the panel open'
+        assert n['panelButtonKeepsOpen'] is True, 'Enter on a panel button must keep the panel open'
+
     def test_wasd_with_nothing_selected_seeds_a_selection(self, ix):
         assert ix['keyboard_navigation']['seededFromEmpty'] is True
 

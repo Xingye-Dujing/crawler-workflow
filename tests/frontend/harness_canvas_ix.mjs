@@ -2183,6 +2183,31 @@ function keyboardNavigationScenario() {
     dispatchDocument(sandbox.__handlers, 'keydown', { key: 'Enter', target: btn });
     const enterFromButton = enterOpens;
 
+    // Enter again on the canvas toggles the SAME node's panel closed (editNode is the toggle).
+    key('Enter');
+    const enterClosesSecond = canvas._settingsNodeId === null;
+
+    // Enter from INSIDE the panel closes it too: a fresh open drops the caret into the first
+    // field, so the second Enter lands there and the canvas handler is silent while typing.
+    const settingsPanel = doc.getElementById('node-settings');
+    const panelField = doc.createElement('input');
+    settingsPanel.appendChild(panelField);
+    canvas.editNode(B);
+    const reopenedForPanel = canvas._settingsNodeId === B;
+    dispatchOn(settingsPanel, 'keydown', ev({ key: 'Enter', target: panelField }));
+    const panelFieldEnterCloses = canvas._settingsNodeId === null;
+
+    // ... but a control that OWNS Enter keeps it: a textarea (a newline) and a button (it acts).
+    canvas.editNode(B);
+    const ta = doc.createElement('textarea');
+    settingsPanel.appendChild(ta);
+    dispatchOn(settingsPanel, 'keydown', ev({ key: 'Enter', target: ta }));
+    const textareaKeepsOpen = canvas._settingsNodeId === B;
+    const panelBtn = doc.createElement('button');
+    settingsPanel.appendChild(panelBtn);
+    dispatchOn(settingsPanel, 'keydown', ev({ key: 'Enter', target: panelBtn }));
+    const panelButtonKeepsOpen = canvas._settingsNodeId === B;
+
     // With nothing selected, WASD seeds a selection rather than crashing.
     canvas.deselectNode();
     key('d');
@@ -2206,6 +2231,11 @@ function keyboardNavigationScenario() {
         nudgedByWasd,
         enterForNode,
         enterFromButton,
+        enterClosesSecond,
+        reopenedForPanel,
+        panelFieldEnterCloses,
+        textareaKeepsOpen,
+        panelButtonKeepsOpen,
         seededFromEmpty,
         tall, anchor, below, downToBelow,
     };
