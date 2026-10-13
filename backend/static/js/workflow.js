@@ -2344,15 +2344,29 @@ function openSettings(nodeId) {
             '<span style="font-size:11px;color:var(--text-dim);">' +
             (p.dataset_id ? I18n.t('dataSource.loaded') + ': ' + escapeHtml(p.dataset_name || p.dataset_id) : I18n.t('dataSource.none')) +
             '</span></div>';
-        /* A file already in the dataset library (a prior upload, a paste, an
-           analysis result) can be attached without re-uploading it from disk:
-           the executor only needs a valid dataset_id, so a picked dataset runs
-           exactly like a fresh one. Its options are loaded after render. */
+        if (node._datasetMissing) {
+            /* The file this node pointed at is gone from the library, so its id was
+               cleared to keep a run off a dead pointer — say what happened, not just
+               "no file". */
+            html += '<div class="settings-group dataset-missing">' + I18n.t('dataSource.missingRef') + '</div>';
+        }
+        /* A file already in the dataset library (a prior upload, a paste, an analysis
+           result) can be attached without re-uploading it: the executor only needs a
+           valid dataset_id. The list is fetched and rendered after the panel opens
+           (loadDatasetOptions), so it can be filtered and carry per-file metadata. */
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chooseDataset') + '</label>' +
+            '<input class="settings-input" id="dataset-filter-' + nodeId + '" placeholder="' +
+            escapeHtml(I18n.t('settings.datasetFilter')) + '" oninput="dataNodes.filterDatasets(\'' + nodeId + '\', this.value)">' +
             '<select class="settings-select" id="dataset-pick-' + nodeId + '" ' +
             'onchange="dataNodes.pickFromDataset(\'' + nodeId + '\', this.value)">' +
             '<option value="' + escapeHtml(p.dataset_id || '') + '" selected>' +
-            escapeHtml(p.dataset_name || I18n.t('dataSource.chooseLoading')) + '</option></select></div>';
+            escapeHtml(p.dataset_name || I18n.t('dataSource.chooseLoading')) + '</option></select>' +
+            '<div id="dataset-hint-' + nodeId + '" class="dataset-hint" style="font-size:11px;color:var(--text-dim);"></div>' +
+            '<div style="display:flex;gap:8px;margin-top:6px;">' +
+            '<button class="menu-btn" onclick="dataNodes.toggleDatasetDetail(\'' + nodeId + '\')">' + I18n.t('settings.datasetDetail') + '</button>' +
+            (p.dataset_id ? '<button class="menu-btn" onclick="dataNodes.applyToOtherUploadNodes(\'' + nodeId + '\')">' + I18n.t('settings.applyToOthers') + '</button>' : '') +
+            '</div>' +
+            '<div id="dataset-detail-' + nodeId + '" class="dataset-detail" style="display:none;"></div></div>';
         if (p.dataset_id && p.row_count) {
             html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
                 p.row_count + ' ' + I18n.t('settings.rows') + '</div>';
@@ -3481,6 +3495,7 @@ function renderVisualizeSettings(nodeId, p) {
 var dataNodes = {
     _pendingNodeId: null,
     _datasets: null,
+    _filter: {},
 
     pickFile(nodeId) {
         this._pendingNodeId = nodeId;
@@ -3522,32 +3537,132 @@ var dataNodes = {
 
     /* Fill the Upload node's dataset dropdown from the stored files.
        The panel renders synchronously with only the current selection, so the
-       list is fetched here; the option set is rebuilt behind selectOptionTags,
-       which keeps a value that is no longer in the list visible rather than
-       silently dropping it to option #0. */
+       list is fetched here, cached with its full metadata, and rendered through
+       renderDatasetOptions (which can filter it). */
     async loadDatasetOptions(nodeId) {
         var result = await fetchJSON('/api/data/datasets?limit=1000').catch(function () { return null; });
         if (!result || !result.ok) return;
         var datasets = result.datasets || [];
         dataNodes._datasets = {};
-        var items = datasets.map(function (d) {
-            dataNodes._datasets[d.dataset_id] = d;
-            return {
-                value: d.dataset_id,
-                label: escapeHtml((d.name || I18n.t('name.unnamed')) + ' (' + (d.row_count || 0) + ')'),
-            };
-        });
+        datasets.forEach(function (d) { dataNodes._datasets[d.dataset_id] = d; });
         /* Re-look-up after the await: the panel may have been rebuilt or closed
            while the request was in flight. */
         if (canvas._settingsNodeId !== nodeId) return;
-        var node = canvas.nodes[nodeId];
-        if (!node) return;
+        if (!canvas.nodes[nodeId]) return;
+        dataNodes.renderDatasetOptions(nodeId);
+    },
+
+    /* A dropdown row is a whole file description, not just a name: many uploads share
+       a filename, so source, size and shape are what tell them apart. */
+    _dsLabel(d) {
+        var parts = [d.name || I18n.t('name.unnamed'), (d.row_count || 0) + ' ' + I18n.t('settings.rows')];
+        if (d.columns && d.columns.length) parts.push(d.columns.length + ' ' + I18n.t('settings.columns'));
+        if (d.source && typeof datasetManager !== 'undefined') parts.push(datasetManager._sourceLabel(d.source));
+        return parts.join(' · ');
+    },
+
+    /* Rebuild the dropdown from the cache, filtered by this node's search term and
+       ordered most-recently-used first. selectOptionTags keeps a value that is no
+       longer in the list visible rather than silently dropping it to option #0. */
+    renderDatasetOptions(nodeId) {
         var select = document.getElementById('dataset-pick-' + nodeId);
         if (!select) return;
-        var current = node.params && node.params.dataset_id ? node.params.dataset_id : '';
+        var all = dataNodes._datasets || {};
+        var ids = Object.keys(all);
+        var list = ids.map(function (id) { return all[id]; });
+        list.sort(function (a, b) {
+            var ka = String(a.last_used_at || a.created_at || '');
+            var kb = String(b.last_used_at || b.created_at || '');
+            return ka < kb ? 1 : (ka > kb ? -1 : 0);
+        });
+        var term = String((dataNodes._filter && dataNodes._filter[nodeId]) || '').trim().toLowerCase();
+        if (term) list = list.filter(function (d) { return String(d.name || '').toLowerCase().indexOf(term) >= 0; });
+        var node = canvas.nodes[nodeId];
+        var current = node && node.params && node.params.dataset_id ? node.params.dataset_id : '';
+        var items = list.map(function (d) {
+            return { value: d.dataset_id, label: escapeHtml(dataNodes._dsLabel(d)) };
+        });
         select.innerHTML = '<option value="">' + escapeHtml(I18n.t('dataSource.choosePlaceholder')) + '</option>' +
             selectOptionTags(items, current, '');
         select.value = current;
+        var hint = document.getElementById('dataset-hint-' + nodeId);
+        if (hint) {
+            if (!ids.length) {
+                hint.innerHTML = escapeHtml(I18n.t('dataSource.emptyLibrary')) +
+                    ' <button class="menu-btn" onclick="datasetManager.toggle()">' +
+                    escapeHtml(I18n.t('dataSource.openManager')) + '</button>';
+            } else if (!list.length) {
+                hint.textContent = I18n.t('dataSource.noMatch');
+            } else {
+                hint.innerHTML = '';
+            }
+        }
+    },
+
+    filterDatasets(nodeId, term) {
+        if (!dataNodes._filter) dataNodes._filter = {};
+        dataNodes._filter[nodeId] = term;
+        dataNodes.renderDatasetOptions(nodeId);
+    },
+
+    /* Show the attached file's shape and who reads it: the metadata the dropdown row
+       had no room for, plus which nodes on THIS canvas point at the same dataset. */
+    toggleDatasetDetail(nodeId) {
+        var box = document.getElementById('dataset-detail-' + nodeId);
+        if (!box) return;
+        if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+        var node = canvas.nodes[nodeId];
+        var id = node && node.params ? node.params.dataset_id : '';
+        if (!id) { box.style.display = 'none'; return; }
+        var render = function (meta) {
+            if (!meta) { box.style.display = 'none'; return; }
+            var users = Object.keys(canvas.nodes).filter(function (nid) {
+                var n = canvas.nodes[nid];
+                return n && n.type === 'upload' && n.params && n.params.dataset_id === meta.dataset_id;
+            });
+            var rows = [
+                [I18n.t('settings.file'), meta.name || I18n.t('name.unnamed')],
+                [I18n.t('datasetMgr.colSource'), typeof datasetManager !== 'undefined' ? datasetManager._sourceLabel(meta.source) : (meta.source || '-')],
+                [I18n.t('settings.rows'), String(meta.row_count || 0)],
+                [I18n.t('settings.columns'), (meta.columns && meta.columns.length) ? meta.columns.join(', ') : '-'],
+                ['id', meta.dataset_id],
+                [I18n.t('dataSource.thisCanvasNodes'), users.join(', ') || '-'],
+            ];
+            if (meta.workflows && meta.workflows.length) rows.push([I18n.t('datasetMgr.colUsedBy'), meta.workflows.join(', ')]);
+            box.innerHTML = '<table class="dataset-detail-table"><tbody>' + rows.map(function (r) {
+                return '<tr><th>' + escapeHtml(r[0]) + '</th><td>' + escapeHtml(r[1]) + '</td></tr>';
+            }).join('') + '</tbody></table>';
+            box.style.display = '';
+        };
+        var cached = dataNodes._datasets && dataNodes._datasets[id];
+        if (cached) { render(cached); return; }
+        fetchJSON('/api/data/datasets/' + encodeURIComponent(id))
+            .then(function (res) { render(res && res.ok ? res.dataset : null); })
+            .catch(function () { /* offline: leave it hidden */ });
+    },
+
+    /* One crawl paid for is worth reusing across every Upload node on the canvas:
+       copy this node's dataset pointer to all the others, no re-picking. */
+    applyToOtherUploadNodes(nodeId) {
+        var src = canvas.nodes[nodeId];
+        if (!src || !src.params || !src.params.dataset_id) return;
+        var others = Object.keys(canvas.nodes).filter(function (nid) {
+            var n = canvas.nodes[nid];
+            return nid !== nodeId && n && n.type === 'upload';
+        });
+        if (!others.length) { showToast(I18n.t('dataSource.noOtherUploadNodes')); return; }
+        others.forEach(function (nid) {
+            var n = canvas.nodes[nid];
+            n.params.dataset_id = src.params.dataset_id;
+            n.params.dataset_name = src.params.dataset_name;
+            n.params.row_count = src.params.row_count;
+            n._datasetMissing = false;
+            var el = canvas._nodeEl(nid);
+            if (el) el.classList.remove('node-missing');
+            canvas.updateNodeDisplay(nid);
+        });
+        canvas.saveState();
+        showToast(I18n.t('dataSource.appliedToOthers').replace('{n}', others.length));
     },
 
     /* Attach a stored dataset to the Upload node without re-uploading it: set the
@@ -3570,6 +3685,10 @@ var dataNodes = {
             node.params.dataset_id = meta.dataset_id;
             node.params.dataset_name = meta.name || '';
             node.params.row_count = meta.row_count || 0;
+            /* Attaching a live file clears any "reference is broken" state. */
+            node._datasetMissing = false;
+            var el = canvas._nodeEl(nodeId);
+            if (el) el.classList.remove('node-missing');
             canvas.updateNodeDisplay(nodeId);
             canvas.saveState();
             showToast(I18n.t('dataSource.datasetSelected').replace('{name}', meta.name || meta.dataset_id));
@@ -3618,10 +3737,19 @@ var dataNodes = {
                 node.params.dataset_id = '';
                 node.params.dataset_name = '';
                 node.params.row_count = '';
+                /* The file is gone: the id is cleared so a run never reads a dead
+                   pointer, but the node remembers it WAS broken so the panel and the
+                   box say so, not just "no file". */
+                node._datasetMissing = true;
+                var missEl = canvas._nodeEl(id);
+                if (missEl) missEl.classList.add('node-missing');
                 missing.push(node.title || id);
             } else {
                 node.params.dataset_name = meta.name || node.params.dataset_name || '';
                 node.params.row_count = meta.row_count || 0;
+                node._datasetMissing = false;
+                var okEl = canvas._nodeEl(id);
+                if (okEl) okEl.classList.remove('node-missing');
             }
             canvas.updateNodeDisplay(id);
             if (canvas._settingsNodeId === id) openSettings(id);

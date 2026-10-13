@@ -2076,9 +2076,74 @@ async function clipboardScenario() {
     out.clipboard = res;
 }
 
+/* ── WASD spatial navigation + Enter opens settings ───────────────────
+   Arrows nudge the selected node (nodeClipboardScenario pins that); W/A/S/D must move
+   the SELECTION to the nearest node in that direction without nudging, and Enter opens
+   the selected node's panel. This is the canvas's own traversal, so it is asserted here
+   against the real keydown handler. */
+function keyboardNavigationScenario() {
+    freshWorld();
+    const realOpenSettings = sandbox.openSettings;
+    let enterOpens = 0;
+    sandbox.openSettings = () => { enterOpens += 1; };
+    const A = addNode('source', 0, 0, 100, 60);      // centre 50,30
+    const B = addNode('output', 300, 0, 100, 60);    // centre 350,30 (right of A)
+    const C = addNode('output', 0, 300, 100, 60);    // centre 50,330 (below A)
+    canvas.selectNode(A);
+
+    const key = (k, extra = {}) => dispatchDocument(sandbox.__handlers, 'keydown', { key: k, target: doc.body, ...extra });
+
+    key('d');
+    const afterD = canvas.selectedNode;              // expect B
+    const nudgedByWasd = parseInt(doc.getElementById(B).style.left, 10) !== 300; // must NOT move
+    key('a');
+    const afterA = canvas.selectedNode;              // expect A
+    key('s');
+    const afterS = canvas.selectedNode;              // expect C
+    key('w');
+    const afterW = canvas.selectedNode;              // expect A
+
+    // Enter opens the selected node's settings; a focused button keeps its own Enter.
+    canvas.selectNode(B);
+    key('Enter');
+    const enterForNode = enterOpens;
+    const btn = doc.createElement('button');
+    doc.body.appendChild(btn);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'Enter', target: btn });
+    const enterFromButton = enterOpens;
+
+    // With nothing selected, WASD seeds a selection rather than crashing.
+    canvas.deselectNode();
+    key('d');
+    const seededFromEmpty = !!canvas.selectedNode;
+
+    // Regression: a TALLER node sharing the anchor's row must not be mistaken for one
+    // below it — down navigation is gated on box edges, not centre distance.
+    freshWorld();
+    const tall = addNode('source', 0, 0, 100, 200);      // top 0, but its centre is low
+    const anchor = addNode('output', 400, 0, 100, 60);   // anchor centre is higher than tall's
+    const below = addNode('output', 400, 400, 100, 60);  // genuinely below the anchor
+    canvas.selectNode(anchor);
+    key('s');
+    const downToBelow = canvas.selectedNode === below;
+
+    sandbox.openSettings = realOpenSettings;
+
+    out.keyboard_navigation = {
+        ids: { A, B, C },
+        afterD, afterA, afterS, afterW,
+        nudgedByWasd,
+        enterForNode,
+        enterFromButton,
+        seededFromEmpty,
+        tall, anchor, below, downToBelow,
+    };
+}
+
 resizeRepaintScenario();
 paletteKeyboardScenario();
 nodeClipboardScenario();
+keyboardNavigationScenario();
 keyboardConnectScenario();
 minimapScenario();
 multiSelectScenario();

@@ -697,6 +697,28 @@ const canvas = {
                 }
                 return;
             }
+            /* Enter opens the selected node's settings — the keyboard route to the same panel
+               a double-click or the gear button opens. It never steals Enter from a focused
+               control: typing is excluded above, and a button/link keeps its own activation. */
+            if (e.key === 'Enter') {
+                if (this.selectedNode && typeof openSettings === 'function' &&
+                    !(e.target && e.target.closest && e.target.closest('button, a'))) {
+                    e.preventDefault();
+                    openSettings(this.selectedNode);
+                }
+                return;
+            }
+            /* W/A/S/D move the selection to the nearest node in that direction (spatial
+               traversal). Arrow keys keep nudging the selected node above, so navigation and
+               repositioning never fight over one key. Ctrl/Meta/Alt are left to their own
+               bindings (copy, etc.). */
+            const NAV_DIR = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0] };
+            const nav = NAV_DIR[(e.key || '').toLowerCase()];
+            if (nav && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                this._navigateSelection(nav[0], nav[1]);
+                return;
+            }
             /* Ctrl/Cmd+F: jump to the outline finder. Handled before the plain-`f` fold so
                find does not fold the selected node; typing in a field is already excluded
                above, which is also what lets Ctrl+F inside the finder box itself be normal
@@ -948,6 +970,89 @@ const canvas = {
         });
         this.scheduleRender();
         this.saveState();
+    },
+
+    /* Spatial node traversal (W/A/S/D): from the current selection — or, when nothing
+       is selected, from the node nearest the viewport centre — move to the closest node
+       lying in the given world direction. A candidate must be genuinely ahead of the
+       current box on the axis of travel (its leading edge past the current box's far
+       edge), compared by perpendicular alignment first and gap second. Edge gating, not
+       centre distance, is what keeps a taller node in the SAME row from being mistaken
+       for one below. Position is read from el.style.left/top (the same world coordinates
+       _nudgeSelected writes), never offsetLeft — so it is deterministic under the DOM
+       stub and after a reload. */
+    _navigateSelection(dx, dy) {
+        const boxes = [];
+        Object.keys(this.nodes).forEach((id) => {
+            const el = this._nodeEl(id);
+            if (!el || el.style.display === 'none') return;
+            const w = el.offsetWidth || 240;
+            const h = el.offsetHeight || 80;
+            const x = parseFloat(el.style.left) || 0;
+            const y = parseFloat(el.style.top) || 0;
+            boxes.push({
+                id, left: x, top: y, right: x + w, bottom: y + h, cx: x + w / 2, cy: y + h / 2,
+            });
+        });
+        if (!boxes.length) return;
+        const cur = this.selectedNode ? boxes.find((b) => b.id === this.selectedNode) : null;
+        if (!cur) {
+            const vw = (this.workspace && this.workspace.clientWidth) || window.innerWidth;
+            const vh = (this.workspace && this.workspace.clientHeight) || window.innerHeight;
+            const ccx = (vw / 2 - this.panX) / this.zoom;
+            const ccy = (vh / 2 - this.panY) / this.zoom;
+            let best = null;
+            let bd = Infinity;
+            boxes.forEach((b) => {
+                const d = (b.cx - ccx) ** 2 + (b.cy - ccy) ** 2;
+                if (d < bd) { bd = d; best = b; }
+            });
+            if (best) { this.selectNode(best.id); this._ensureNodeVisible(best.id); }
+            return;
+        }
+        const horizontal = dx !== 0;
+        // A box is strictly ahead on the travel axis, past the current box's far edge.
+        const ahead = (b) => (horizontal
+            ? (dx > 0 ? b.left >= cur.right : b.right <= cur.left)
+            : (dy > 0 ? b.top >= cur.bottom : b.bottom <= cur.top));
+        let cands = boxes.filter((b) => b.id !== cur.id && ahead(b));
+        if (!cands.length) {
+            // Nothing is cleanly ahead (overlapping rows): fall back to centre-ahead so a
+            // clearly-lower/right node is still reachable.
+            cands = boxes.filter((b) => b.id !== cur.id && (horizontal
+                ? (dx > 0 ? b.cx > cur.cx : b.cx < cur.cx)
+                : (dy > 0 ? b.cy > cur.cy : b.cy < cur.cy)));
+        }
+        const score = (b) => {
+            const perp = horizontal ? Math.abs(b.cy - cur.cy) : Math.abs(b.cx - cur.cx);
+            const gap = horizontal
+                ? (dx > 0 ? b.left - cur.right : cur.left - b.right)
+                : (dy > 0 ? b.top - cur.bottom : cur.top - b.bottom);
+            return perp + Math.max(0, gap);
+        };
+        let best = null;
+        let bestScore = Infinity;
+        cands.forEach((b) => {
+            const s = score(b);
+            if (s < bestScore) { bestScore = s; best = b; }
+        });
+        if (best) { this.selectNode(best.id); this._ensureNodeVisible(best.id); }
+    },
+
+    /* Pan the camera onto a node only when it is off-screen, so traversal never yanks
+       the view for a node the user can already see. */
+    _ensureNodeVisible(id) {
+        const el = this._nodeEl(id);
+        if (!el) return;
+        const w = el.offsetWidth || 240;
+        const h = el.offsetHeight || 80;
+        const cx = (parseFloat(el.style.left) || 0) + w / 2;
+        const cy = (parseFloat(el.style.top) || 0) + h / 2;
+        const vw = (this.workspace && this.workspace.clientWidth) || window.innerWidth;
+        const vh = (this.workspace && this.workspace.clientHeight) || window.innerHeight;
+        const sx = cx * this.zoom + this.panX;
+        const sy = cy * this.zoom + this.panY;
+        if (sx < 0 || sy < 0 || sx > vw || sy > vh) this._centerWorldPoint(cx, cy);
     },
 
     /* Align / distribute the multi-selection as ONE undo step — the same batch-then-saveState

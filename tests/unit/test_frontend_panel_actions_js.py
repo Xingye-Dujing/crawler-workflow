@@ -269,6 +269,53 @@ class TestUploadDatasetPicker:
             'row_count': '',
         }
 
+    def test_rows_carry_source_and_shape_and_order_most_recent_first(self, pa):
+        """A bare name list is unusable once files pile up — many share a filename, so
+        the row says what the file is and the freshest sits on top."""
+        meta = pa['dataset_picker_meta']
+        assert meta['order'] == ['', 'dsNew', 'dsOld'], meta['order']
+        label = meta['freshLabel']
+        for part in ('fresh.csv', '3 rows', '2 Columns', 'Pasted text'):
+            assert part in label, label
+
+    def test_the_search_box_narrows_the_options(self, pa):
+        assert pa['dataset_picker_filter']['values'] == ['', 'dsNew']
+
+    def test_a_non_matching_search_leaves_only_the_placeholder_and_a_hint(self, pa):
+        nm = pa['dataset_picker_no_match']
+        assert nm['values'] == ['']
+        assert nm['hint'] == 'No dataset matches the search.'
+
+    def test_an_empty_library_points_at_the_manager(self, pa):
+        hint = pa['dataset_picker_empty']['hint']
+        assert 'No saved datasets yet.' in hint
+        assert 'datasetManager.toggle()' in hint, 'the guidance must be actionable'
+
+    def test_details_show_shape_and_who_reads_the_file(self, pa):
+        det = pa['dataset_detail']
+        assert det['shown'] == '', 'the details box must be revealed'
+        html = det['html']
+        assert 'x, y, z' in html, 'the columns are listed'
+        assert 'Cleaned result' in html, 'the source code is shown as its label'
+        assert 'WF1' in html, 'the workflows that read it are shown'
+        assert det['nodeId'] in html, 'the nodes on this canvas that read it are shown'
+
+    def test_a_pick_copies_to_the_other_upload_nodes(self, pa):
+        applied = pa['dataset_apply_others']
+        assert applied['dst'] == {'dataset_id': 'dsA', 'dataset_name': 'A.csv', 'row_count': 2}
+        assert applied['toast'] == 'Applied to 1 other upload node(s)'
+
+    def test_applying_with_no_other_upload_node_says_so(self, pa):
+        assert pa['dataset_apply_none']['toast'] == 'There are no other Upload nodes on this canvas.'
+
+    def test_a_deleted_file_is_a_visible_break_not_a_silent_empty_node(self, pa):
+        """The id is cleared so a run never reads a dead pointer, but the node keeps a
+        flag and a red box so the user can find which node lost its file."""
+        miss = pa['dataset_reconcile_missing']
+        assert miss['params'] == {'dataset_id': '', 'dataset_name': '', 'row_count': ''}
+        assert miss['flag'] is True
+        assert miss['cls'] is True
+
 
 class TestClearAllButtons:
     """The three bulk 清空 buttons — the only actions here that destroy a whole set.

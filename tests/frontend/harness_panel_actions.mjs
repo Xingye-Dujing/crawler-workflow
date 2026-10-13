@@ -569,6 +569,76 @@ pa.canvas._settingsNodeId = clrNode;
 pa.dataNodes.pickFromDataset(clrNode, '');
 out.dataset_picker_cleared = { params: pa.canvas.nodes[clrNode].params };
 
+/* The dropdown is more than a name list once files pile up: it filters, carries each
+   file's shape and source, orders most-recently-used first, guides an empty library,
+   reveals who reads a file, and copies one pick across the canvas. */
+fresh();
+const metaNode = addCanvasNode('upload', { dataset_id: '', dataset_name: '', row_count: '' });
+pa.canvas._settingsNodeId = metaNode;
+pa.dataNodes._datasets = {
+    dsOld: { dataset_id: 'dsOld', name: 'old.csv', row_count: 5, columns: ['a'], source: 'upload', last_used_at: '2020-01-01' },
+    dsNew: { dataset_id: 'dsNew', name: 'fresh.csv', row_count: 3, columns: ['name', 'score'], source: 'paste', last_used_at: '2026-09-09' },
+};
+pa.dataNodes.renderDatasetOptions(metaNode);
+const metaSel = id('dataset-pick-' + metaNode);
+out.dataset_picker_meta = {
+    order: metaSel.options.map((o) => o.value),
+    freshLabel: (metaSel.options.find((o) => o.value === 'dsNew') || {}).textContent || '',
+};
+pa.dataNodes.filterDatasets(metaNode, 'fresh');
+out.dataset_picker_filter = { values: id('dataset-pick-' + metaNode).options.map((o) => o.value) };
+pa.dataNodes.filterDatasets(metaNode, 'zzz');
+out.dataset_picker_no_match = {
+    values: id('dataset-pick-' + metaNode).options.map((o) => o.value),
+    hint: id('dataset-hint-' + metaNode).textContent,
+};
+
+fresh();
+const emptyNode = addCanvasNode('upload', { dataset_id: '', dataset_name: '', row_count: '' });
+pa.canvas._settingsNodeId = emptyNode;
+pa.dataNodes._datasets = {};
+pa.dataNodes.renderDatasetOptions(emptyNode);
+out.dataset_picker_empty = { hint: id('dataset-hint-' + emptyNode).innerHTML };
+
+fresh();
+const detNode = addCanvasNode('upload', { dataset_id: 'dsD', dataset_name: 'd.csv', row_count: 7 });
+pa.canvas._settingsNodeId = detNode;
+pa.dataNodes._datasets = {
+    dsD: { dataset_id: 'dsD', name: 'd.csv', row_count: 7, columns: ['x', 'y', 'z'], source: 'analysis', workflows: ['WF1'] },
+};
+// The rendered panel ships the details box hidden; mirror that so a toggle reveals it.
+id('dataset-detail-' + detNode).style.display = 'none';
+pa.dataNodes.toggleDatasetDetail(detNode);
+out.dataset_detail = {
+    html: id('dataset-detail-' + detNode).innerHTML,
+    shown: id('dataset-detail-' + detNode).style.display,
+    nodeId: detNode,
+};
+
+fresh();
+const apSrc = addCanvasNode('upload', { dataset_id: 'dsA', dataset_name: 'A.csv', row_count: 2 });
+const apDst = addCanvasNode('upload', { dataset_id: '', dataset_name: '', row_count: '' });
+pa.canvas._settingsNodeId = apSrc;
+toasts.length = 0;
+pa.dataNodes.applyToOtherUploadNodes(apSrc);
+out.dataset_apply_others = { dst: pa.canvas.nodes[apDst].params, toast: toasts[toasts.length - 1] };
+fresh();
+const apLone = addCanvasNode('upload', { dataset_id: 'dsA', dataset_name: 'A.csv', row_count: 2 });
+toasts.length = 0;
+pa.dataNodes.applyToOtherUploadNodes(apLone);
+out.dataset_apply_none = { toast: toasts[toasts.length - 1] };
+
+/* A deleted file is a visible break, not a silent empty node. */
+fresh();
+const refNode = addCanvasNode('upload', { dataset_id: 'gone', dataset_name: 'gone.csv', row_count: 1 });
+route('/api/data/datasets', { ok: true, datasets: [] });
+await pa.dataNodes.reconcileDatasets();
+out.dataset_reconcile_missing = {
+    params: pa.canvas.nodes[refNode].params,
+    flag: pa.canvas.nodes[refNode]._datasetMissing === true,
+    cls: pa.canvas._nodeEl(refNode).classList.contains('node-missing'),
+};
+
 /* ── 清空: the three bulk buttons ──────────────────────────────────────
    A bulk delete is the one action here whose mistake cannot be noticed row by row,
    so each is pinned on four things: it asks first, an answer of "no" sends nothing,

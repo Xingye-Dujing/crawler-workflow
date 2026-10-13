@@ -1104,3 +1104,35 @@ class TestCrossTabClipboard:
 
     def test_an_unrelated_key_is_ignored(self, ix):
         assert ix['crossTabClipboard']['unrelatedKeyIgnored'] is True
+
+
+class TestKeyboardNavigation:
+    """W/A/S/D move the selection to the nearest node in that direction; arrows still
+    nudge (pinned by the clipboard scenario). Enter opens the selected node's panel."""
+
+    def test_wasd_moves_selection_to_the_nearest_node_in_that_direction(self, ix):
+        n = ix['keyboard_navigation']
+        ids = n['ids']
+        assert n['afterD'] == ids['B'], 'from A, D selects the node to the right'
+        assert n['afterA'] == ids['A'], 'from B, A returns left'
+        assert n['afterS'] == ids['C'], 'from A, S selects the node below'
+        assert n['afterW'] == ids['A'], 'from C, W returns up'
+
+    def test_navigation_never_moves_a_node(self, ix):
+        """Traversal is a selection change, not a position change — a node nudged by a
+        stray W would silently rewrite the layout and cost an undo step."""
+        assert ix['keyboard_navigation']['nudgedByWasd'] is False
+
+    def test_enter_opens_the_selected_node_but_not_from_a_focused_button(self, ix):
+        n = ix['keyboard_navigation']
+        assert n['enterForNode'] == 1, 'Enter on a selected node opens its settings once'
+        assert n['enterFromButton'] == 1, 'Enter while a button is focused must not also fire'
+
+    def test_wasd_with_nothing_selected_seeds_a_selection(self, ix):
+        assert ix['keyboard_navigation']['seededFromEmpty'] is True
+
+    def test_a_taller_node_in_the_same_row_is_not_mistaken_for_one_below(self, ix):
+        """Down navigation is gated on box edges: a source node that shares the anchor's
+        top but is taller has a lower centre, and centre distance alone would wrongly
+        steer 'S' onto it instead of the node genuinely below."""
+        assert ix['keyboard_navigation']['downToBelow'] is True
