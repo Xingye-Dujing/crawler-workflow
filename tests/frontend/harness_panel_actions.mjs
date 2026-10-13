@@ -709,6 +709,35 @@ fresh();
 const cc = addCanvasNode('comment', { urls: 'http://x/1\nhttp://x/2', comment_limit: '0' });
 out.diagnostics_cost_unbounded = pa.estimateCost();
 
+/* A label node may be the analysis node's OWN operation (the shape the canvas saves), not
+   only a step inside p.steps — the bug this pins: such a node added 0 to the estimate. The
+   row-flow model over-counts it (upstream table, not the few topic rows), so label_max_topics
+   caps the calls: 500 upstream rows, cap 12 -> 12. */
+fresh();
+const tlSrc = addCanvasNode('source', { platform: 'zhihu', collect: 'posts', target_count: '500' });
+const tlNode = addCanvasNode('analysis', { operation: 'topic_label', label_max_topics: '12' });
+pa.canvas.connections = [{ from: tlSrc, to: tlNode }];
+out.diagnostics_cost_top_level_label = pa.estimateCost();
+
+/* cluster_label as the node's own operation caps by cluster_max_groups (40), not a flat 30. */
+fresh();
+const clSrc = addCanvasNode('source', { platform: 'zhihu', collect: 'posts', target_count: '900' });
+const clNode = addCanvasNode('analysis', { operation: 'cluster_label', cluster_max_groups: '40' });
+pa.canvas.connections = [{ from: clSrc, to: clNode }];
+out.diagnostics_cost_top_level_cluster = pa.estimateCost();
+
+/* The pre-existing p.steps shape still contributes, capped by the step's own max. */
+fresh();
+const stSrc = addCanvasNode('source', { platform: 'zhihu', collect: 'posts', target_count: '60' });
+const stNode = addCanvasNode('analysis', { steps: [{ op: 'topic_label', label_max_topics: '5' }] });
+pa.canvas.connections = [{ from: stSrc, to: stNode }];
+out.diagnostics_cost_step_label = pa.estimateCost();
+
+/* An empty label node (no upstream rows) is 0, not a guessed cap. */
+fresh();
+const emNode = addCanvasNode('analysis', { operation: 'topic_label', label_max_topics: '30' });
+out.diagnostics_cost_label_no_rows = pa.estimateCost();
+
 /* ── lexicon manager panel: render, add, filter ────────────────────── */
 fresh();
 route('/api/lexicon', {

@@ -357,6 +357,29 @@ class TestDiagnostics:
         assert cost['unbounded'] is True
         assert cost['crawlRows'] == 2, 'two links, each up to all its comments'
 
+    def test_a_label_node_that_is_its_own_operation_is_counted(self, pa):
+        """The bug this pins: topic_label saved as the analysis node's top-level
+        operation (the shape the canvas actually writes) added 0 calls. It is capped by
+        label_max_topics, because the row-flow model over-counts a label node."""
+        cost = pa['diagnostics_cost_top_level_label']
+        assert cost['crawlRows'] == 500
+        assert cost['llmCalls'] == 12, 'one call per labelled topic, capped at label_max_topics'
+
+    def test_a_cluster_label_that_is_its_own_operation_caps_by_its_groups(self, pa):
+        cost = pa['diagnostics_cost_top_level_cluster']
+        assert cost['llmCalls'] == 40, 'cluster_label caps at cluster_max_groups (40), not a flat 30'
+
+    def test_a_label_step_is_still_counted(self, pa):
+        """The pre-existing p.steps shape must not regress when the top-level one was added."""
+        cost = pa['diagnostics_cost_step_label']
+        assert cost['llmCalls'] == 5, 'the step cap (label_max_topics=5) bounds the calls'
+
+    def test_a_label_node_with_no_upstream_rows_is_zero(self, pa):
+        """A cap is not a floor: with nothing flowing in, the node makes no calls."""
+        cost = pa['diagnostics_cost_label_no_rows']
+        assert cost['llmCalls'] == 0
+        assert cost['crawlRows'] == 0
+
 
 class TestLexiconPanel:
     """The lexicon manager renders the user's terms, adds a pasted batch, and filters."""

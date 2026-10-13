@@ -8098,6 +8098,28 @@ function _processLlm(op, p) {
     return mode === 'llm';
 }
 
+/* A label step asks the LLM once per row it summarises, and the node caps how many rows
+   it will label (topic_label -> label_max_topics, cluster_label -> cluster_max_groups).
+   The row-flow model OVER-counts a label node: _rowsAt hands back the whole upstream
+   table, not the handful of topic/cluster rows the node actually reads, so the cap — not
+   the row sum — is what bounds the real spend. Defaults match the node renderers. */
+function _isLabelOp(op) {
+    return op === 'topic_label' || op === 'cluster_label';
+}
+
+function _labelCallCap(op, src) {
+    var s = src || {};
+    if (op === 'topic_label') {
+        var t = parseInt(s.label_max_topics, 10);
+        return isNaN(t) ? 30 : t;
+    }
+    if (op === 'cluster_label') {
+        var g = parseInt(s.cluster_max_groups, 10);
+        return isNaN(g) ? 60 : g;
+    }
+    return 0;
+}
+
 function estimateCost() {
     var memo = {};
     var crawlRows = 0;
@@ -8116,9 +8138,15 @@ function estimateCost() {
             llmCalls += here.rows;
             unbounded = unbounded || here.unbounded;
         } else if (node.type === 'analysis') {
+            /* A label op is either the analysis node's OWN operation (the shape the canvas
+               saves — this was the miss, contributing 0) or one of its p.steps. Both count. */
+            var ownOp = String(node.operation || p.operation || '');
+            if (_isLabelOp(ownOp)) {
+                llmCalls += Math.min(here.rows, _labelCallCap(ownOp, p));
+            }
             (p.steps || []).forEach(function (st) {
-                if (st && (st.op === 'topic_label' || st.op === 'cluster_label')) {
-                    llmCalls += Math.min(here.rows, 30);
+                if (st && _isLabelOp(st.op)) {
+                    llmCalls += Math.min(here.rows, _labelCallCap(st.op, st));
                 }
             });
         }
