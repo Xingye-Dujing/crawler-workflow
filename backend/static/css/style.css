@@ -1116,6 +1116,37 @@ body.style-menu-open #workspace #resume-banner {
   word-break: break-all;
 }
 
+/* Edit-time diagnostics: a count badge + red frame on a node with a problem, and the
+   pre-run cost line in the status bar. */
+.node.node-invalid {
+  border-color: var(--err);
+}
+.node-validate-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--err);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 5;
+}
+.node-output-cols {
+  line-height: 1.5;
+}
+.cost-summary {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: help;
+}
+
 .node-header {
   height: 30px;
   border-bottom: 1px solid var(--line2);

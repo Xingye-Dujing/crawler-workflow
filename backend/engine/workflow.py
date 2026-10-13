@@ -391,22 +391,33 @@ class WorkflowEngine:
         return errors
 
     def validate(self) -> list[str]:
-        """Everything that would make a node produce nothing.
+        """The console-facing view of validation: the same messages, in the same order,
+        as ``validate_detailed``. The run path and the parity tests read this; the
+        edit-time badges read ``validate_detailed`` to know WHICH node each message is
+        about. Kept as a one-line projection so there is exactly one rule body."""
+        return [entry['message'] for entry in self.validate_detailed()]
 
-        Messages go through i18n (the engine is loaded by the app, which has the
-        catalogues) so a validation failure reads in the console's language
-        instead of as a stray English line. The cycle check below is no
-        exception: it raises a ValueError whose text is catalogued too, because a
-        malformed workflow is still something the user has to fix from the
-        console's words.
+    def validate_detailed(self) -> list[dict]:
+        """Everything that would make a node produce nothing, as ``{id, code, message}``.
+
+        ``id`` is the node the problem belongs to (``None`` for a canvas-wide one —
+        an empty canvas, a dangling wire, a cycle), so the frontend can put a badge on
+        the right box; ``code`` is the ``engine.*`` key (or ``engine.source`` for the
+        matrix-driven source rules, whose message already names the field); ``message``
+        is the localised text. Order and text are identical to ``validate``.
         """
-        errors = []
+        entries: list[dict] = []
+
+        def add(nid, code, message):
+            entries.append({'id': nid, 'code': code, 'message': message})
+
         if not self.nodes:
             # An empty canvas has no cycle, no missing parameter and no node to
             # report — and used to "complete": 「发现 0 条工作流」, 0/0 nodes,
             # outcome completed, toast 已完成. A run of nothing is not a success;
             # the browser's own gate says so, and the backend must too.
-            return [t('engine.empty_canvas')]
+            add(None, 'engine.empty_canvas', t('engine.empty_canvas'))
+            return entries
         # Which nodes a DATA table can reach: an incoming wire from anything other
         # than a name node. ``name → source`` is the labelling pattern this canvas
         # has always had, and a name node produces no rows — treating "any wire" as
@@ -419,7 +430,11 @@ class WorkflowEngine:
         for conn in self.dangling_connections():
             # Named by the ids, because the node they point at is exactly the thing
             # the canvas no longer has — no title exists to resolve.
-            errors.append(t('engine.dangling_connection', src=str(conn['from']), dst=str(conn['to'])))
+            add(
+                None,
+                'engine.dangling_connection',
+                t('engine.dangling_connection', src=str(conn['from']), dst=str(conn['to'])),
+            )
         for nid, node in self.nodes.items():
             ntype = node.get('type')
             params = node.get('params', {})
@@ -429,15 +444,16 @@ class WorkflowEngine:
             if ntype not in NODE_TYPES:
                 # No executor knows this type: refuse it by name here, before the run is paid for,
                 # rather than falling through to an empty result the record would stamp 完成.
-                errors.append(t('engine.unknown_node_type', nid=label, type=str(ntype)))
+                add(nid, 'engine.unknown_node_type', t('engine.unknown_node_type', nid=label, type=str(ntype)))
                 continue
             if ntype == 'source':
                 platform = node.get('platform') or params.get('platform')
-                errors.extend(self._source_errors(node, params, platform, label, has_data_input=nid in data_inputs))
+                for msg in self._source_errors(node, params, platform, label, has_data_input=nid in data_inputs):
+                    add(nid, 'engine.source', msg)
             if ntype == 'upload' and not params.get('dataset_id'):
-                errors.append(t('engine.upload_no_file', nid=label))
+                add(nid, 'engine.upload_no_file', t('engine.upload_no_file', nid=label))
             if ntype == 'comment' and not str(params.get('urls') or '').strip():
-                errors.append(t('engine.comment_no_urls', nid=label))
+                add(nid, 'engine.comment_no_urls', t('engine.comment_no_urls', nid=label))
             elif ntype == 'comment':
                 # A comment crawl is always a logged-in one (its rate limit is per ACCOUNT,
                 # which is the reason accounts exist), and one node walks several feeds with
@@ -445,16 +461,17 @@ class WorkflowEngine:
                 # be able to answer for it. Unknown until the links are read, so this is the
                 # node's own text only: nothing is inferred about an upstream table.
                 links = split_urls(str(params.get('urls') or ''))
-                errors.extend(_account_session_errors([platform_for(u) for u in links], params, label))
+                for msg in _account_session_errors([platform_for(u) for u in links], params, label):
+                    add(nid, 'engine.source', msg)
             # The canvas writes ``operation`` on the node *and* in its params, and
             # every executor reads either. Validation has to accept the same pair,
             # or a hand-edited file that would run perfectly is refused as
             # misconfigured — the strictness has no counterpart in the runner.
             operation = node.get('operation') or params.get('operation')
             if ntype == 'process' and not operation:
-                errors.append(t('engine.process_no_op', nid=label))
+                add(nid, 'engine.process_no_op', t('engine.process_no_op', nid=label))
             if ntype == 'output' and not operation:
-                errors.append(t('engine.output_no_op', nid=label))
+                add(nid, 'engine.output_no_op', t('engine.output_no_op', nid=label))
             if ntype == 'compile':
                 # A compile node turns a visualize parent's LaTeX into a PDF. Its ONLY honest source is a
                 # visualize node that will actually emit some: every parent must be a visualize, and each one
@@ -462,16 +479,24 @@ class WorkflowEngine:
                 # checked here (before the run is paid for) rather than surfacing as an empty-page PDF.
                 parents = [str(c.get('from')) for c in self.connections if str(c.get('to')) == str(nid)]
                 if not parents:
-                    errors.append(t('engine.compile_no_upstream', nid=label))
+                    add(nid, 'engine.compile_no_upstream', t('engine.compile_no_upstream', nid=label))
                 for pid in parents:
                     pnode = self.nodes.get(pid) or {}
                     if pnode.get('type') != 'visualize':
-                        errors.append(t('engine.compile_bad_parent', nid=label, up=node_label(pnode, pid)))
+                        add(
+                            nid,
+                            'engine.compile_bad_parent',
+                            t('engine.compile_bad_parent', nid=label, up=node_label(pnode, pid)),
+                        )
                     elif not (
                         as_bool((pnode.get('params') or {}).get('emit_latex', True))
                         or as_bool((pnode.get('params') or {}).get('emit_latex_table', True))
                     ):
-                        errors.append(t('engine.compile_source_both_off', nid=label, up=node_label(pnode, pid)))
+                        add(
+                            nid,
+                            'engine.compile_source_both_off',
+                            t('engine.compile_source_both_off', nid=label, up=node_label(pnode, pid)),
+                        )
             if ntype == 'output':
                 # A save node is the canvas's merge point: several incoming tables become one file. Two
                 # shapes are legitimate and mutually exclusive — a TABULAR export (merged row tables), and a
@@ -485,41 +510,41 @@ class WorkflowEngine:
                     or str(params.get('filename') or '').lower().endswith('.pdf')
                 )
                 if not parents:
-                    errors.append(t('engine.output_no_upstream', nid=label))
+                    add(nid, 'engine.output_no_upstream', t('engine.output_no_upstream', nid=label))
                 elif is_pdf:
                     if ptypes & TABLE_NODE_TYPES:
-                        errors.append(t('engine.output_pdf_mixed', nid=label))
+                        add(nid, 'engine.output_pdf_mixed', t('engine.output_pdf_mixed', nid=label))
                     if not (ptypes & PDF_SOURCE_NODE_TYPES):
-                        errors.append(t('engine.output_pdf_only_pdfable', nid=label))
+                        add(nid, 'engine.output_pdf_only_pdfable', t('engine.output_pdf_only_pdfable', nid=label))
                     if 'visualize' in ptypes and 'compile' in ptypes:
-                        errors.append(t('engine.output_pdf_two_sources', nid=label))
+                        add(nid, 'engine.output_pdf_two_sources', t('engine.output_pdf_two_sources', nid=label))
                 elif not (ptypes & TABLE_NODE_TYPES):
                     if ptypes & PDF_SOURCE_NODE_TYPES:
-                        errors.append(t('engine.output_needs_pdf', nid=label))
+                        add(nid, 'engine.output_needs_pdf', t('engine.output_needs_pdf', nid=label))
                     else:
-                        errors.append(t('engine.output_no_table', nid=label))
+                        add(nid, 'engine.output_no_table', t('engine.output_no_table', nid=label))
             if ntype == 'analysis' and not (params.get('steps') or operation):
-                errors.append(t('engine.analysis_no_op', nid=label))
+                add(nid, 'engine.analysis_no_op', t('engine.analysis_no_op', nid=label))
             if ntype == 'tokenize' and not params.get('text_column'):
-                errors.append(t('engine.tokenize_no_column', nid=label))
+                add(nid, 'engine.tokenize_no_column', t('engine.tokenize_no_column', nid=label))
             if ntype == 'visualize':
                 if not params.get('chart_type'):
-                    errors.append(t('engine.visualize_no_chart', nid=label))
+                    add(nid, 'engine.visualize_no_chart', t('engine.visualize_no_chart', nid=label))
                 if not params.get('x_field'):
-                    errors.append(t('engine.visualize_no_x', nid=label))
+                    add(nid, 'engine.visualize_no_x', t('engine.visualize_no_x', nid=label))
             if ntype == 'name':
                 # The name node is pure metadata: it carries no data, so it
                 # must sit at the head (nothing feeds into it), wire into a
                 # real node, and carry a non-empty label — that label is what
                 # groups the run in the Execution History panel.
                 if not str(params.get('workflow_name') or '').strip():
-                    errors.append(t('engine.name_no_label', nid=label))
+                    add(nid, 'engine.name_no_label', t('engine.name_no_label', nid=label))
                 if any(c.get('to') == nid for c in self.connections):
-                    errors.append(t('engine.name_not_head', nid=label))
+                    add(nid, 'engine.name_not_head', t('engine.name_not_head', nid=label))
                 if not any(c.get('from') == nid for c in self.connections):
-                    errors.append(t('engine.name_no_downstream', nid=label))
+                    add(nid, 'engine.name_no_downstream', t('engine.name_no_downstream', nid=label))
         try:
             self.topological_sort()
         except ValueError as e:
-            errors.append(str(e))
-        return errors
+            add(None, 'engine.cycle', str(e))
+        return entries

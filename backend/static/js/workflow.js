@@ -1473,6 +1473,9 @@ const Capabilities = {
                 if (self.data && typeof canvas !== 'undefined' && canvas && canvas.refreshSourceSummaries) {
                     canvas.refreshSourceSummaries();
                 }
+                /* The cost estimate reads the matrix's own per-mode defaults, so it is
+                   only meaningful once they have loaded. */
+                if (self.data && typeof Diagnostics !== 'undefined' && Diagnostics.schedule) Diagnostics.schedule();
                 return self.data;
             })
             .catch(function (e) {
@@ -2271,6 +2274,17 @@ function openSettings(nodeId) {
         '<label class="settings-label">' + I18n.t('settings.nodeType') + '</label>' +
         '<span style="font-size:12px;color:var(--text-dim);">' + I18n.t('nodeType.' + node.type) + '</span>' +
         '</div>';
+    /* The columns this node will emit — the edit-time lineage. A producer whose shape
+       the server can see lists them; a crawl/comment/resume says so plainly rather than
+       guessing. */
+    var OUTPUT_PRODUCERS = ['source', 'upload', 'process', 'analysis', 'tokenize', 'resume', 'comment'];
+    if (OUTPUT_PRODUCERS.indexOf(node.type) >= 0 && typeof Diagnostics !== 'undefined') {
+        var _oc = Diagnostics.outputColumns(nodeId);
+        var _ocText = _oc === null
+            ? I18n.t('diagnostics.unknownCols')
+            : (_oc.length ? I18n.t('diagnostics.outputCols') + ': ' + escapeHtml(_oc.join(', ')) : I18n.t('diagnostics.outputColsNone'));
+        html += '<div class="settings-group node-output-cols" style="font-size:11px;color:var(--text-dim);">' + _ocText + '</div>';
+    }
     if (node.type === 'source') {
         /* The form is the matrix: which platforms exist, which of them want
            links instead of a keyword, and every field in between come from
@@ -7696,13 +7710,27 @@ var runsManager = {
 };
 
 workflow.validate = function () {
+    /* The run-gate and the parity tests read this flat, ordered list. It is a one-line
+       projection of validateDetailed so there is exactly ONE rule body; the edit-time
+       badges read validateDetailed to know WHICH node each message is about. */
+    return workflow.validateDetailed().messages;
+};
+
+workflow.validateDetailed = function () {
     var errors = [];
+    var perNode = {};
+    function add(id, msg) {
+        errors.push(msg);
+        if (id !== null && id !== undefined) {
+            (perNode[id] = perNode[id] || []).push(msg);
+        }
+    }
     var nodes = canvas.nodes;
     var conns = canvas.connections;
 
     if (Object.keys(nodes).length === 0) {
-        errors.push(I18n.t('validate.empty'));
-        return errors;
+        add(null, I18n.t('validate.empty'));
+        return { messages: errors, perNode: perNode };
     }
 
     /* Build lookup: which nodes have inputs/outputs, and how many inputs each
@@ -7739,45 +7767,45 @@ workflow.validate = function () {
         var label = node.title || I18n.t('node.' + type);
 
         if (type === 'source') {
-            errors.push.apply(errors, sourceNodeErrors(node, label, !!dataInput[id]));
+            sourceNodeErrors(node, label, !!dataInput[id]).forEach(function (m) { add(id, m); });
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.sourceDownstream').replace('{title}', label));
+                add(id, I18n.t('validate.sourceDownstream').replace('{title}', label));
             }
         }
 
         if (type === 'process') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.processInput').replace('{title}', label));
+                add(id, I18n.t('validate.processInput').replace('{title}', label));
             }
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.processDownstream').replace('{title}', label));
+                add(id, I18n.t('validate.processDownstream').replace('{title}', label));
             }
         }
 
         if (type === 'analysis') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.analysisInput').replace('{title}', label));
+                add(id, I18n.t('validate.analysisInput').replace('{title}', label));
             }
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.analysisDownstream').replace('{title}', label));
+                add(id, I18n.t('validate.analysisDownstream').replace('{title}', label));
             }
             if (!params.operation) {
-                errors.push(I18n.t('validate.analysisOperation').replace('{title}', label));
+                add(id, I18n.t('validate.analysisOperation').replace('{title}', label));
             }
             if (params.operation === 'join_tables' && (inputCount[id] || 0) < 2) {
                 /* The right-hand table is the node's second incoming
                    connection — without it the join has nothing to join with. */
-                errors.push(I18n.t('validate.joinNeedsTwo').replace('{title}', label));
+                add(id, I18n.t('validate.joinNeedsTwo').replace('{title}', label));
             }
         }
 
         if (type === 'upload') {
             /* A source like any other: nothing upstream, but it must have a file. */
             if (!params.dataset_id) {
-                errors.push(I18n.t('validate.uploadFile').replace('{title}', label));
+                add(id, I18n.t('validate.uploadFile').replace('{title}', label));
             }
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.uploadDownstream').replace('{title}', label));
+                add(id, I18n.t('validate.uploadDownstream').replace('{title}', label));
             }
         }
 
@@ -7787,41 +7815,41 @@ workflow.validate = function () {
                carry a non-empty label — that label is what groups the run in
                the Execution History panel. */
             if (!params.workflow_name || !String(params.workflow_name).trim()) {
-                errors.push(I18n.t('validate.nameEmpty').replace('{title}', label));
+                add(id, I18n.t('validate.nameEmpty').replace('{title}', label));
             }
             if (hasInput[id]) {
-                errors.push(I18n.t('validate.nameMustLead').replace('{title}', label));
+                add(id, I18n.t('validate.nameMustLead').replace('{title}', label));
             }
             if (!hasOutput[id]) {
-                errors.push(I18n.t('validate.nameDownstream').replace('{title}', label));
+                add(id, I18n.t('validate.nameDownstream').replace('{title}', label));
             }
         }
 
         if (type === 'tokenize') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.tokenizeInput').replace('{title}', label));
+                add(id, I18n.t('validate.tokenizeInput').replace('{title}', label));
             }
             if (!params.text_column || !params.text_column.trim()) {
-                errors.push(I18n.t('validate.tokenizeColumn').replace('{title}', label));
+                add(id, I18n.t('validate.tokenizeColumn').replace('{title}', label));
             }
         }
 
         if (type === 'visualize') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.visualizeInput').replace('{title}', label));
+                add(id, I18n.t('validate.visualizeInput').replace('{title}', label));
             }
             if (!params.chart_type) {
-                errors.push(I18n.t('validate.visualizeChartType').replace('{title}', label));
+                add(id, I18n.t('validate.visualizeChartType').replace('{title}', label));
             }
             // 模型一致率 has no x/y — it reads the tidy table's label column (the model/id columns
             // default to 模型/原行). Requiring x_field here would block a chart that never uses it,
             // so ask for the field THIS type really needs, matching the backend's own refusal.
             if (params.chart_type === 'model_agreement') {
                 if (!params.agreement_label_field || !String(params.agreement_label_field).trim()) {
-                    errors.push(I18n.t('validate.visualizeAgreementLabel').replace('{title}', label));
+                    add(id, I18n.t('validate.visualizeAgreementLabel').replace('{title}', label));
                 }
             } else if (!params.x_field || !params.x_field.trim()) {
-                errors.push(I18n.t('validate.visualizeXField').replace('{title}', label));
+                add(id, I18n.t('validate.visualizeXField').replace('{title}', label));
             }
         }
 
@@ -7831,11 +7859,11 @@ workflow.validate = function () {
                backend, so a chart with neither LaTeX box on, or a non-visualize wire, is refused here too. */
             var cmpParents = parentTypes[id] || [];
             if (!cmpParents.length) {
-                errors.push(I18n.t('validate.compileInput').replace('{title}', label));
+                add(id, I18n.t('validate.compileInput').replace('{title}', label));
             }
             cmpParents.forEach(function (ptype) {
                 if (ptype !== 'visualize') {
-                    errors.push(I18n.t('validate.compileBadParent').replace('{title}', label));
+                    add(id, I18n.t('validate.compileBadParent').replace('{title}', label));
                 }
             });
             conns.forEach(function (c) {
@@ -7844,7 +7872,7 @@ workflow.validate = function () {
                 if (par && par.type === 'visualize') {
                     var pp = par.params || {};
                     if (!boolParam(pp.emit_latex, true) && !boolParam(pp.emit_latex_table, true)) {
-                        errors.push(I18n.t('validate.compileSourceBothOff').replace('{title}', label));
+                        add(id, I18n.t('validate.compileSourceBothOff').replace('{title}', label));
                     }
                 }
             });
@@ -7852,10 +7880,10 @@ workflow.validate = function () {
 
         if (type === 'output') {
             if (!hasInput[id]) {
-                errors.push(I18n.t('validate.outputInput').replace('{title}', label));
+                add(id, I18n.t('validate.outputInput').replace('{title}', label));
             }
             if ((params.operation === 'save' || params.operation === 'save_csv') && (!params.filename || !params.filename.trim())) {
-                errors.push(I18n.t('validate.outputFilename').replace('{title}', label));
+                add(id, I18n.t('validate.outputFilename').replace('{title}', label));
             }
             /* PDF and a row table are mutually exclusive outputs: a pdf format needs a visualize/compile
                source (and no table alongside); a table format must not be fed only by a chart/compile. */
@@ -7865,13 +7893,13 @@ workflow.validate = function () {
             var anyTable = outTypes.some(function (t) { return TABLE_TYPES.indexOf(t) >= 0; });
             var anyPdfable = outTypes.some(function (t) { return t === 'visualize' || t === 'compile'; });
             if (isPdf) {
-                if (anyTable) errors.push(I18n.t('validate.outputPdfMixed').replace('{title}', label));
-                if (!anyPdfable) errors.push(I18n.t('validate.outputPdfOnly').replace('{title}', label));
+                if (anyTable) add(id, I18n.t('validate.outputPdfMixed').replace('{title}', label));
+                if (!anyPdfable) add(id, I18n.t('validate.outputPdfOnly').replace('{title}', label));
                 if (outTypes.indexOf('visualize') >= 0 && outTypes.indexOf('compile') >= 0) {
-                    errors.push(I18n.t('validate.outputPdfTwoSources').replace('{title}', label));
+                    add(id, I18n.t('validate.outputPdfTwoSources').replace('{title}', label));
                 }
             } else if (anyPdfable && !anyTable) {
-                errors.push(I18n.t('validate.outputNeedsPdf').replace('{title}', label));
+                add(id, I18n.t('validate.outputNeedsPdf').replace('{title}', label));
             }
         }
     });
@@ -7884,12 +7912,230 @@ workflow.validate = function () {
             return nodes[id].type === 'output' || nodes[id].type === 'visualize';
         });
         if (!hasTerminal) {
-            errors.push(I18n.t('validate.noTerminal'));
+            add(null, I18n.t('validate.noTerminal'));
         }
     }
 
-    return errors;
+    return { messages: errors, perNode: perNode };
 };
+
+/* ─── Edit-time diagnostics ───────────────────────────────────────────
+   Before this, a wrong column or a missing config only surfaced when a run was
+   already paid for. The backend answers WHAT each node emits and reads (the schema
+   truth lives beside the executors); the frontend decides WHICH nodes to flag and
+   words it in the UI's language. Config/wiring problems come from the offline
+   validateDetailed mirror; missing-column problems are the diff between a node's
+   reads and its upstream's known columns — never flagged when the upstream is a
+   crawl/comment/resume whose columns the server cannot see without running. */
+var Diagnostics = {
+    _timer: null,
+    _armed: false,
+    _columns: {},
+    _reads: {},
+    _problems: {},
+
+    schedule() {
+        // Armed only by the real page boot (app.js), so a workflow-only harness —
+        // or any scenario that never dispatches DOMContentLoaded — fires nothing.
+        if (!this._armed) return;
+        var self = this;
+        if (this._timer) clearTimeout(this._timer);
+        this._timer = setTimeout(function () {
+            self._timer = null;
+            try { self.refresh(); } catch (e) { /* a background diagnostic never breaks the page */ }
+        }, 500);
+    },
+
+    async refresh() {
+        /* A canvas-only or workflow-only harness has no `canvas`; and a failed
+           diagnostic must never crash the page it decorates — guard the whole body. */
+        if (typeof canvas === 'undefined' || !canvas || !canvas.nodes) return;
+        try {
+            /* Only the serialisable model goes over the wire: a node's `el` is a live DOM
+               element (circular), so the whole node object cannot be JSON.stringify'd. */
+            var clean = {};
+            Object.keys(canvas.nodes).forEach(function (id) {
+                var n = canvas.nodes[id];
+                clean[id] = { id: id, type: n.type, title: n.title || '', params: n.params || {} };
+            });
+            var payload = {
+                nodes: clean,
+                connections: canvas.connections,
+                settings: { disabledTypes: (canvas.disabledTypes || []).slice() },
+            };
+            var result = await fetchJSON('/api/workflow/diagnostics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }).catch(function () { return null; });
+            if (!result || !result.ok) return; /* offline: keep the last known picture */
+            this._columns = result.columns || {};
+            this._reads = result.reads || {};
+            this.recompute();
+        } catch (e) { /* diagnostics are decoration; a failure leaves the last picture */ }
+    },
+
+    /* The columns a node RECEIVES = union of its direct upstream producers' emitted
+       columns; unknown (null) if any upstream is unknown, so a crawl never triggers a
+       false "missing column" on everything below it. */
+    inputColumns(id) {
+        var ups = canvas.connections.filter(function (c) { return String(c.to) === String(id); }).map(function (c) { return c.from; });
+        if (!ups.length) return [];
+        var cols = [];
+        for (var i = 0; i < ups.length; i += 1) {
+            var c = this._columns[ups[i]];
+            if (c === null || c === undefined) return null;
+            c.forEach(function (x) { if (cols.indexOf(x) < 0) cols.push(x); });
+        }
+        return cols;
+    },
+
+    missingColumnProblems() {
+        var out = {};
+        var self = this;
+        var nodes = canvas.nodes;
+        Object.keys(this._reads).forEach(function (id) {
+            var reads = self._reads[id] || [];
+            if (!reads.length) return;
+            var input = self.inputColumns(id);
+            if (input === null) return; /* unknown upstream: never guess */
+            var missing = reads.filter(function (col) { return input.indexOf(col) < 0; });
+            if (missing.length) {
+                var node = nodes[id];
+                var label = (node && node.title) || id;
+                out[id] = [I18n.t('diagnostics.missingColumn').replace('{cols}', missing.join(', ')).replace('{node}', label)];
+            }
+        });
+        return out;
+    },
+
+    recompute() {
+        if (typeof canvas === 'undefined' || !canvas || !canvas.nodes) return;
+        var perNode = workflow.validateDetailed().perNode || {};
+        var merged = {};
+        Object.keys(perNode).forEach(function (id) { merged[id] = perNode[id].slice(); });
+        var missing = this.missingColumnProblems();
+        Object.keys(missing).forEach(function (id) {
+            (merged[id] = merged[id] || []).push.apply(merged[id], missing[id]);
+        });
+        this._problems = merged;
+        if (typeof canvas._applyValidationVisuals === 'function') canvas._applyValidationVisuals(merged);
+        renderCostSummary();
+    },
+
+    problems(id) { return this._problems[id] || []; },
+    outputColumns(id) {
+        var c = this._columns[id];
+        return (c === undefined) ? null : c;
+    },
+};
+
+/* Cost estimate: rows are read straight from the crawl matrix's own per-mode defaults
+   (target_count etc.), so nothing here re-declares a platform constant; LLM calls are
+   one per row for an llm-mode analyzer, and capped at 30 for a topic/cluster label.
+   Unbounded cases (a comment crawl with no limit) are reported as such, not as a
+   precise number. */
+function _matrixField(platform, modeKey, fieldKey) {
+    if (typeof Capabilities === 'undefined' || !Capabilities.ready()) return null;
+    var mode = Capabilities.mode(platform, modeKey);
+    if (!mode || !mode.fields) return null;
+    for (var i = 0; i < mode.fields.length; i += 1) {
+        if (mode.fields[i].key === fieldKey) return mode.fields[i];
+    }
+    return null;
+}
+
+function _splitUrls(value) {
+    return String(value || '').split(/[\r\n]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
+function _sourceRows(node) {
+    var p = node.params || {};
+    if (node.type === 'comment') {
+        var n = _splitUrls(p.urls).length;
+        var lim = parseInt(p.comment_limit, 10) || 0;
+        return lim > 0 ? { rows: n * lim, unbounded: false } : { rows: n, unbounded: n > 0 };
+    }
+    if (node.type === 'upload') {
+        return { rows: parseInt(p.row_count, 10) || 0, unbounded: false };
+    }
+    var f = _matrixField(p.platform, p.collect || p.mode || '', 'target_count');
+    var val = parseInt(p.target_count, 10);
+    if (isNaN(val)) val = f && f.default != null ? f.default : 50;
+    if (f && f.minimum != null) val = Math.max(val, f.minimum);
+    return { rows: val, unbounded: false };
+}
+
+function _rowsAt(id, memo, stack) {
+    memo = memo || {};
+    stack = stack || {};
+    if (memo[id] !== undefined) return memo[id];
+    if (stack[id]) return { rows: 0, unbounded: false };
+    stack[id] = true;
+    var node = canvas.nodes[id];
+    var r;
+    if (!node) {
+        r = { rows: 0, unbounded: false };
+    } else if (node.type === 'source' || node.type === 'comment' || node.type === 'upload') {
+        r = _sourceRows(node);
+    } else {
+        var ups = canvas.connections.filter(function (c) { return String(c.to) === String(id); }).map(function (c) { return c.from; });
+        var total = 0;
+        var unb = false;
+        ups.forEach(function (u) { var x = _rowsAt(u, memo, stack); total += x.rows; unb = unb || x.unbounded; });
+        r = { rows: total, unbounded: unb };
+    }
+    delete stack[id];
+    memo[id] = r;
+    return r;
+}
+
+function _processLlm(op, p) {
+    var llmOps = ['clean', 'emotion', 'tendency', 'sentiment', 'ner', 'aggression'];
+    if (llmOps.indexOf(op) < 0) return false;
+    var mode = String(p.mode || p.method || '');
+    return mode === 'llm';
+}
+
+function estimateCost() {
+    var memo = {};
+    var crawlRows = 0;
+    var llmCalls = 0;
+    var unbounded = false;
+    Object.keys(canvas.nodes).forEach(function (id) {
+        var node = canvas.nodes[id];
+        var p = node.params || {};
+        if (node.type === 'source' || node.type === 'comment' || node.type === 'upload') {
+            var s = _sourceRows(node);
+            crawlRows += s.rows;
+            unbounded = unbounded || s.unbounded;
+        }
+        var here = _rowsAt(id, memo);
+        if (node.type === 'process' && _processLlm(node.operation || p.operation, p)) {
+            llmCalls += here.rows;
+            unbounded = unbounded || here.unbounded;
+        } else if (node.type === 'analysis') {
+            (p.steps || []).forEach(function (st) {
+                if (st && (st.op === 'topic_label' || st.op === 'cluster_label')) {
+                    llmCalls += Math.min(here.rows, 30);
+                }
+            });
+        }
+    });
+    return { crawlRows: crawlRows, llmCalls: llmCalls, unbounded: unbounded };
+}
+
+function renderCostSummary() {
+    var el = document.getElementById('cost-summary');
+    if (!el) return;
+    var c = estimateCost();
+    if (!Object.keys(canvas.nodes).length) { el.textContent = ''; el.style.display = 'none'; return; }
+    var rows = c.unbounded ? I18n.t('diagnostics.costUnbounded') : ('≈' + c.crawlRows);
+    el.style.display = '';
+    el.textContent = I18n.t('diagnostics.costRows') + ' ' + rows + ' · ' +
+        I18n.t('diagnostics.costLlm') + ' ≈' + c.llmCalls;
+    el.title = I18n.t('diagnostics.costHint');
+}
 
 /* ─── Three docked panels share one slot ─────────────────────────
    Console, 运行记录 and 导出产物 are all bottom-docked, and each writes an inline

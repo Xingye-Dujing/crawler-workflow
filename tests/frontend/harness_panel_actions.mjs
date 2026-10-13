@@ -52,7 +52,8 @@ vm.runInContext(
     `${src}
      ;globalThis.__pa = { resumeBar, runsManager, exportsManager, datasetManager, dataNodes,
                           workflow, canvas, historyPanel, processesPoll, killProcess,
-                          togglePin, setBg, setLang, closeDockedPanels, RunState, wfFiles };`,
+                          togglePin, setBg, setLang, closeDockedPanels, RunState, wfFiles,
+                          Diagnostics, estimateCost, renderCostSummary };`,
     sandbox,
 );
 
@@ -165,6 +166,18 @@ function fresh() {
     Object.keys(pa.canvas.nodes).forEach((key) => delete pa.canvas.nodes[key]);
     pa.canvas.connections = [];
     pa.canvas._settingsNodeId = null;
+    /* Diagnostics auto-fires off saveState on a debounce; the sandbox runs timers
+       immediately, so a background /api/workflow/diagnostics POST would land inside an
+       unrelated scenario's exact-request assertion. Neutralise the schedule here; the
+       diagnostics scenarios call refresh()/recompute() directly. */
+    if (pa.Diagnostics) {
+        if (pa.Diagnostics._timer) clearTimeout(pa.Diagnostics._timer);
+        pa.Diagnostics._timer = null;
+        pa.Diagnostics.schedule = function () {};
+        pa.Diagnostics._columns = {};
+        pa.Diagnostics._reads = {};
+        pa.Diagnostics._problems = {};
+    }
     /* A scenario that pressed a run-starting button leaves the page "running",
        and every later continue/restart then refuses itself for the wrong reason. */
     pa.RunState.running = false;
@@ -638,6 +651,63 @@ out.dataset_reconcile_missing = {
     flag: pa.canvas.nodes[refNode]._datasetMissing === true,
     cls: pa.canvas._nodeEl(refNode).classList.contains('node-missing'),
 };
+
+/* ── edit-time diagnostics: badges, missing-column, cost ─────────────
+   The backend answers the columns; recompute() merges the offline validateDetailed
+   problems with a missing-column diff and paints. A node whose upstream is a crawl
+   (unknown columns) must NEVER be flagged — the whole point is to not guess a shape. */
+fresh();
+const dUp = addCanvasNode('upload', { dataset_id: 'd1', dataset_name: 'a.csv', row_count: 3 });
+const dProc = addCanvasNode('process', { operation: 'clean', text_column: '正文' });
+const dChart = addCanvasNode('visualize', { chart_type: 'topic_map', x_field: 'pc1', y_field: 'pc2', label_field: 'topic', value_field: 'ghost_col' });
+pa.canvas.connections = [{ from: dUp, to: dProc }, { from: dProc, to: dChart }];
+pa.Diagnostics._columns = {
+    [dUp]: ['正文', '评论数'],
+    [dProc]: ['正文', '评论数', 'action', 'cleaned_text'],
+    [dChart]: null,
+};
+pa.Diagnostics._reads = { [dUp]: [], [dProc]: ['正文'], [dChart]: ['pc1', 'pc2', 'topic', 'ghost_col'] };
+pa.Diagnostics.recompute();
+out.diagnostics_missing_column = {
+    chartInvalid: pa.canvas._nodeEl(dChart).classList.contains('node-invalid'),
+    chartBadgeShown: pa.canvas._nodeEl(dChart).querySelector('.node-validate-badge').style.display !== 'none',
+    chartTitle: pa.canvas._nodeEl(dChart).querySelector('.node-validate-badge').title,
+    procInvalid: pa.canvas._nodeEl(dProc).classList.contains('node-invalid'),
+    outputCols: pa.Diagnostics.outputColumns(dUp),
+};
+
+/* An unknown upstream (a crawl) suppresses the flag entirely. */
+fresh();
+const dSrc = addCanvasNode('source', { platform: 'zhihu', collect: 'posts' });
+const dChart2 = addCanvasNode('visualize', { chart_type: 'bar', x_field: 'anything', y_field: 'nope' });
+pa.canvas.connections = [{ from: dSrc, to: dChart2 }];
+pa.Diagnostics._columns = { [dSrc]: null, [dChart2]: null };
+pa.Diagnostics._reads = { [dSrc]: [], [dChart2]: ['anything', 'nope'] };
+pa.Diagnostics.recompute();
+out.diagnostics_unknown_upstream_no_flag = {
+    chartInvalid: pa.canvas._nodeEl(dChart2).classList.contains('node-invalid'),
+};
+
+/* A config problem (an upload with no file) still badges, offline. */
+fresh();
+const badUp = addCanvasNode('upload', { dataset_id: '', dataset_name: '', row_count: '' });
+pa.Diagnostics._columns = {}; pa.Diagnostics._reads = {};
+pa.Diagnostics.recompute();
+out.diagnostics_config_badge = {
+    invalid: pa.canvas._nodeEl(badUp).classList.contains('node-invalid'),
+    badgeText: pa.canvas._nodeEl(badUp).querySelector('.node-validate-badge').textContent,
+};
+
+/* Cost: rows come from the node's target_count (matrix default when absent); an
+   llm-mode analyzer adds one call per row; a comment crawl with no limit is unbounded. */
+fresh();
+const cs = addCanvasNode('source', { platform: 'zhihu', collect: 'posts', target_count: '80' });
+const cp = addCanvasNode('process', { operation: 'sentiment', mode: 'llm', text_column: '正文' });
+pa.canvas.connections = [{ from: cs, to: cp }];
+out.diagnostics_cost = pa.estimateCost();
+fresh();
+const cc = addCanvasNode('comment', { urls: 'http://x/1\nhttp://x/2', comment_limit: '0' });
+out.diagnostics_cost_unbounded = pa.estimateCost();
 
 /* ── 清空: the three bulk buttons ──────────────────────────────────────
    A bulk delete is the one action here whose mistake cannot be noticed row by row,

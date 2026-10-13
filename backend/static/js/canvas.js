@@ -1236,6 +1236,7 @@ const canvas = {
             '  </div>',
             '</div>',
             '<div class="node-state-badge"></div>',
+            '<div class="node-validate-badge" style="display:none"></div>',
             '<div class="node-content"></div>',
             '<div class="node-port node-port-in" data-port="in"></div>',
             '<div class="node-port node-port-out" data-port="out"></div>',
@@ -2564,6 +2565,15 @@ const canvas = {
                 console.error('autosave schedule failed', e);
             }
         }
+        /* Every structural change re-checks the edit-time diagnostics (badges, output
+           columns, cost) on a debounce; a failed request keeps the last picture. */
+        if (typeof Diagnostics !== 'undefined' && Diagnostics.schedule) {
+            try {
+                Diagnostics.schedule();
+            } catch (e) {
+                console.error('diagnostics schedule failed', e);
+            }
+        }
     },
 
     /* Baseline the dirty flag at the point the canvas matches a file on disk: after a
@@ -2699,6 +2709,34 @@ const canvas = {
                         : '';
                 badge.style.display = state === 'on' ? 'none' : '';
             }
+        });
+    },
+
+    /* Paint the edit-time diagnostics: a count badge + a red frame on every node that
+       has a problem, its `title` listing the reasons, and a click that selects and
+       scrolls to the node (so a badge on an off-screen box is actionable). Fed by
+       Diagnostics.recompute — the canvas holds no opinion about what is wrong, it only
+       draws what it is told. */
+    _applyValidationVisuals(perNode) {
+        const map = perNode || {};
+        Object.keys(this.nodes).forEach((id) => {
+            const el = this._nodeEl(id);
+            if (!el) return;
+            const problems = map[id] || [];
+            const invalid = problems.length > 0;
+            el.classList.toggle('node-invalid', invalid);
+            const badge = el.querySelector('.node-validate-badge');
+            if (!badge) return;
+            badge.style.display = invalid ? '' : 'none';
+            badge.textContent = invalid ? String(problems.length) : '';
+            badge.title = invalid ? problems.join('\n') : '';
+            badge.onclick = (function (self, nid) {
+                return function (ev) {
+                    if (ev) ev.stopPropagation();
+                    self.selectNode(nid);
+                    self._ensureNodeVisible(nid);
+                };
+            })(this, id);
         });
     },
 

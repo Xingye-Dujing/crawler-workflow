@@ -317,6 +317,47 @@ class TestUploadDatasetPicker:
         assert miss['cls'] is True
 
 
+class TestDiagnostics:
+    """Edit-time badges, missing-column lineage and the pre-run cost estimate.
+
+    The backend answers the columns; recompute() merges the offline validateDetailed
+    problems with a missing-column diff and paints. The cardinal rule: a node whose
+    upstream is a crawl (unknown columns) is never flagged.
+    """
+
+    def test_a_chart_reading_an_absent_column_is_badged(self, pa):
+        d = pa['diagnostics_missing_column']
+        assert d['chartInvalid'] is True
+        assert d['chartBadgeShown'] is True
+        assert 'ghost_col' in d['chartTitle']
+        assert 'pc1' in d['chartTitle']
+        assert d['procInvalid'] is False, 'a clean node reading a present column is fine'
+        assert d['outputCols'] == ['正文', '评论数']
+
+    def test_an_unknown_upstream_never_triggers_a_missing_column_flag(self, pa):
+        """A crawl's columns are unknown without a run; flagging everything below it
+        would be guessing a shape the server cannot see."""
+        assert pa['diagnostics_unknown_upstream_no_flag']['chartInvalid'] is False
+
+    def test_a_config_problem_badges_offline(self, pa):
+        """An upload with no file and no downstream is two problems — counted on the
+        badge without waiting for the server."""
+        d = pa['diagnostics_config_badge']
+        assert d['invalid'] is True
+        assert d['badgeText'] == '2'
+
+    def test_cost_reads_target_count_and_one_llm_call_per_row(self, pa):
+        cost = pa['diagnostics_cost']
+        assert cost['crawlRows'] == 80
+        assert cost['llmCalls'] == 80, 'an llm-mode analyzer over 80 rows is 80 calls'
+        assert cost['unbounded'] is False
+
+    def test_a_comment_crawl_with_no_limit_is_reported_unbounded(self, pa):
+        cost = pa['diagnostics_cost_unbounded']
+        assert cost['unbounded'] is True
+        assert cost['crawlRows'] == 2, 'two links, each up to all its comments'
+
+
 class TestClearAllButtons:
     """The three bulk 清空 buttons — the only actions here that destroy a whole set.
 

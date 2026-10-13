@@ -67,6 +67,7 @@ BODY_ROUTES = [
     '/api/studio/sources',
     '/api/visualize/render',
     '/api/workflow/delete',
+    '/api/workflow/diagnostics',
     '/api/workflow/execute',
     '/api/workflow/processes/kill',
     '/api/workflow/queue/cancel',

@@ -21,6 +21,7 @@ from api.capabilities import bp as capabilities_bp
 from api.config import bp as config_bp
 from api.config import default_model_path_for
 from api.data import bp as data_bp
+from api.diagnostics import bp as diagnostics_bp
 from api.exports import bp as exports_bp
 from api.history import bp as history_bp
 from api.http import _bad_body, _bad_param, _json_body, _optional_float, _optional_int, _safe_float, _safe_int
@@ -5052,6 +5053,7 @@ app.register_blueprint(stats_bp)
 app.register_blueprint(locks_bp)
 app.register_blueprint(exports_bp)
 app.register_blueprint(data_bp)
+app.register_blueprint(diagnostics_bp)
 app.register_blueprint(studio_bp)
 app.register_blueprint(analysis_bp)
 app.register_blueprint(visualize_bp)

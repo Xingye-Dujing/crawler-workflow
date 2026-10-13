@@ -593,6 +593,14 @@ const I18n = {
             'dataSource.thisCanvasNodes': 'Used by nodes here',
             'dataSource.noOtherUploadNodes': 'There are no other Upload nodes on this canvas.',
             'dataSource.appliedToOthers': 'Applied to {n} other upload node(s)',
+            'diagnostics.missingColumn': '{node} reads a column its input does not have: {cols}',
+            'diagnostics.outputCols': 'Output columns',
+            'diagnostics.outputColsNone': 'Output columns: (none)',
+            'diagnostics.unknownCols': 'Columns unknown until this node runs',
+            'diagnostics.costRows': 'est. rows',
+            'diagnostics.costLlm': 'est. LLM calls',
+            'diagnostics.costUnbounded': 'unbounded',
+            'diagnostics.costHint': 'Pre-run estimate from the crawl matrix defaults; filters and site limits may change the real numbers.',
             'toast.datasetsMissing': 'These Upload nodes need their file re-uploaded',
             'toast.datasetUploaded': 'Dataset uploaded',
             'toast.txtUploaded': 'Text file uploaded — ready for word cloud',
@@ -1726,6 +1734,14 @@ const I18n = {
             'dataSource.thisCanvasNodes': '本画布使用节点',
             'dataSource.noOtherUploadNodes': '当前画布没有其他上传节点。',
             'dataSource.appliedToOthers': '已应用到 {n} 个其他上传节点',
+            'diagnostics.missingColumn': '{node} 引用了输入中没有的列：{cols}',
+            'diagnostics.outputCols': '输出列',
+            'diagnostics.outputColsNone': '输出列：（无）',
+            'diagnostics.unknownCols': '该节点运行前列未知',
+            'diagnostics.costRows': '预计行数',
+            'diagnostics.costLlm': '预计 LLM 调用',
+            'diagnostics.costUnbounded': '不封顶',
+            'diagnostics.costHint': '按采集矩阵默认值预估；过滤与站点上限会改变实际数字。',
             'toast.datasetsMissing': '这些上传节点需要重新上传文件',
             'toast.datasetUploaded': '数据集已上传',
             'toast.txtUploaded': '文本文件已上传，已自动配置词云',
@@ -3193,6 +3209,14 @@ document.addEventListener('DOMContentLoaded', () => {
        localStorage very likely still owns every file it referenced. Verify
        each one instead of clearing it — see dataNodes.reconcileDatasets. */
     boot('datasets', () => dataNodes.reconcileDatasets());
+    /* Arm the edit-time diagnostics only now, on the real page boot: node/saveState
+       changes then refresh badges, output columns and the cost line on a debounce. */
+    boot('diagnostics', () => {
+        if (typeof Diagnostics !== 'undefined') {
+            Diagnostics._armed = true;
+            Diagnostics.schedule();
+        }
+    });
     /* Sweep orphaned files (only ones no saved workflow points at go). */
     fetch('/api/data/clear', { method: 'POST' }).catch(() => { });
 
