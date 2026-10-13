@@ -3966,6 +3966,16 @@ html[data-cloud="1"] .ai-only-ollama {
   background: rgba(74, 144, 217, 0.06);
 }
 
+/* Only the draggable (node/nodes) rows show the grab hand, keyed off the real
+   `draggable` attribute the renderer writes — so a text row never advertises a
+   drag it cannot start, and :active gives the same lift feedback the palette has. */
+.clip-row[draggable="true"] {
+  cursor: grab;
+}
+.clip-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .clip-badge {
   flex: 0 0 auto;
   font-size: 9px;
