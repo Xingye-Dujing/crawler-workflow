@@ -2344,6 +2344,15 @@ function openSettings(nodeId) {
             '<span style="font-size:11px;color:var(--text-dim);">' +
             (p.dataset_id ? I18n.t('dataSource.loaded') + ': ' + escapeHtml(p.dataset_name || p.dataset_id) : I18n.t('dataSource.none')) +
             '</span></div>';
+        /* A file already in the dataset library (a prior upload, a paste, an
+           analysis result) can be attached without re-uploading it from disk:
+           the executor only needs a valid dataset_id, so a picked dataset runs
+           exactly like a fresh one. Its options are loaded after render. */
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chooseDataset') + '</label>' +
+            '<select class="settings-select" id="dataset-pick-' + nodeId + '" ' +
+            'onchange="dataNodes.pickFromDataset(\'' + nodeId + '\', this.value)">' +
+            '<option value="' + escapeHtml(p.dataset_id || '') + '" selected>' +
+            escapeHtml(p.dataset_name || I18n.t('dataSource.chooseLoading')) + '</option></select></div>';
         if (p.dataset_id && p.row_count) {
             html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
                 p.row_count + ' ' + I18n.t('settings.rows') + '</div>';
@@ -2666,6 +2675,7 @@ function openSettings(nodeId) {
     }
     content.innerHTML = html;
     if (node.type === 'resume') renderResumeSettings(nodeId);
+    if (node.type === 'upload') dataNodes.loadDatasetOptions(nodeId);
     if (
         node.type === 'process' &&
         nodeNeedsLlm(node.params, node.operation) &&
@@ -3470,6 +3480,7 @@ function renderVisualizeSettings(nodeId, p) {
    nodes just see rows, whoever produced them. */
 var dataNodes = {
     _pendingNodeId: null,
+    _datasets: null,
 
     pickFile(nodeId) {
         this._pendingNodeId = nodeId;
@@ -3507,6 +3518,71 @@ var dataNodes = {
         } catch (e) {
             showToast(I18n.t('toast.uploadFailed') + ': ' + e.message);
         }
+    },
+
+    /* Fill the Upload node's dataset dropdown from the stored files.
+       The panel renders synchronously with only the current selection, so the
+       list is fetched here; the option set is rebuilt behind selectOptionTags,
+       which keeps a value that is no longer in the list visible rather than
+       silently dropping it to option #0. */
+    async loadDatasetOptions(nodeId) {
+        var result = await fetchJSON('/api/data/datasets?limit=1000').catch(function () { return null; });
+        if (!result || !result.ok) return;
+        var datasets = result.datasets || [];
+        dataNodes._datasets = {};
+        var items = datasets.map(function (d) {
+            dataNodes._datasets[d.dataset_id] = d;
+            return {
+                value: d.dataset_id,
+                label: escapeHtml((d.name || I18n.t('name.unnamed')) + ' (' + (d.row_count || 0) + ')'),
+            };
+        });
+        /* Re-look-up after the await: the panel may have been rebuilt or closed
+           while the request was in flight. */
+        if (canvas._settingsNodeId !== nodeId) return;
+        var node = canvas.nodes[nodeId];
+        if (!node) return;
+        var select = document.getElementById('dataset-pick-' + nodeId);
+        if (!select) return;
+        var current = node.params && node.params.dataset_id ? node.params.dataset_id : '';
+        select.innerHTML = '<option value="">' + escapeHtml(I18n.t('dataSource.choosePlaceholder')) + '</option>' +
+            selectOptionTags(items, current, '');
+        select.value = current;
+    },
+
+    /* Attach a stored dataset to the Upload node without re-uploading it: set the
+       same three params a fresh upload writes, so the card, preview and the run
+       executor all treat it identically. */
+    pickFromDataset(nodeId, datasetId) {
+        var node = canvas.nodes[nodeId];
+        if (!node) return;
+        if (!datasetId) {
+            node.params.dataset_id = '';
+            node.params.dataset_name = '';
+            node.params.row_count = '';
+            canvas.updateNodeDisplay(nodeId);
+            canvas.saveState();
+            if (canvas._settingsNodeId === nodeId) openSettings(nodeId);
+            return;
+        }
+        var apply = function (meta) {
+            if (!meta) return;
+            node.params.dataset_id = meta.dataset_id;
+            node.params.dataset_name = meta.name || '';
+            node.params.row_count = meta.row_count || 0;
+            canvas.updateNodeDisplay(nodeId);
+            canvas.saveState();
+            showToast(I18n.t('dataSource.datasetSelected').replace('{name}', meta.name || meta.dataset_id));
+            if (canvas._settingsNodeId === nodeId) openSettings(nodeId);
+        };
+        var cached = dataNodes._datasets && dataNodes._datasets[datasetId];
+        if (cached) {
+            apply(cached);
+            return;
+        }
+        fetchJSON('/api/data/datasets/' + encodeURIComponent(datasetId))
+            .then(function (result) { apply(result && result.ok ? result.dataset : null); })
+            .catch(function () { /* offline: leave the node untouched */ });
     },
 
     /* Keep every Upload node in touch with the file it points at.

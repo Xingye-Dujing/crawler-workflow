@@ -107,7 +107,8 @@ crawler_workflow/
 → 菜单 Execute 运行。
 
 **只处理已有数据（不采集）**：直接拖一个 Visualize（或 Analysis）节点，把数据源切成 Upload File 上传
-CSV/TSV/JSON/TXT/Excel，配好字段后点 Preview Chart 即可，不必跑整条工作流。
+CSV/TSV/JSON/TXT/Excel，配好字段后点 Preview Chart 即可，不必跑整条工作流。Upload 节点还能在面板的
+「从已保存数据集选择」下拉里直接挂载数据库里已存的文件（此前上传、粘贴或分析产出的），无需重复上传。
 
 **中断后续跑**：执行中 Stop、关服务或中途失败都没关系——已完成的节点与已处理的行都在 `data/runs.db`。
 重开工作流后顶部出现"检测到中断的运行"横幅，点「继续」只重跑缺失部分（LLM 走缓存不重付费），点「重新开始」

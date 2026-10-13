@@ -515,6 +515,60 @@ requests.length = 0;
 await pa.datasetManager.remove('ds1', 'old.csv', false);
 out.dataset_remove_declined = { requested: requests.length };
 
+/* ── Upload node: attach a saved dataset ─────────────────────────────
+   The run executor only needs a valid dataset_id, so selecting a stored file must
+   write the same three params a fresh upload writes — and never re-hash or
+   re-upload it. A dropdown value off the list shows itself rather than option #0,
+   and an id the dropdown never listed falls back to the detail endpoint instead of
+   guessing a name. */
+fresh();
+const pickNode = addCanvasNode('upload', { dataset_id: '', dataset_name: '', row_count: '' });
+pa.canvas._settingsNodeId = pickNode;
+route('/api/data/datasets', {
+    ok: true,
+    datasets: [
+        { dataset_id: 'dsA', name: 'A.csv', row_count: 5 },
+        { dataset_id: 'dsB', name: 'B.csv', row_count: 9 },
+    ],
+});
+await pa.dataNodes.loadDatasetOptions(pickNode);
+out.dataset_picker_loaded = {
+    cached: Object.keys(pa.dataNodes._datasets).sort(),
+    options: id('dataset-pick-' + pickNode).options.map((o) => o.value),
+};
+
+/* A cached id attaches with no per-dataset request. */
+toasts.length = 0;
+requests.length = 0;
+pa.dataNodes.pickFromDataset(pickNode, 'dsB');
+out.dataset_picker_attach_cached = {
+    params: pa.canvas.nodes[pickNode].params,
+    detailRequests: requests.filter((r) => /\/api\/data\/datasets\/[^?]/.test(r.url)).length,
+    toast: toasts[0],
+};
+
+/* An id the dropdown never listed (a node restored before the list loaded) resolves
+   through the detail endpoint, not a guess. */
+fresh();
+const lateNode = addCanvasNode('upload', { dataset_id: '', dataset_name: '', row_count: '' });
+pa.canvas._settingsNodeId = lateNode;
+route('/api/data/datasets/dsZ', { ok: true, dataset: { dataset_id: 'dsZ', name: 'Z.tsv', row_count: 2 } });
+toasts.length = 0;
+await pa.dataNodes.pickFromDataset(lateNode, 'dsZ');
+await drain();
+out.dataset_picker_attach_fallback = {
+    params: pa.canvas.nodes[lateNode].params,
+    detailUrls: requests.map((r) => r.url).filter((u) => /\/api\/data\/datasets\/[^?]/.test(u)),
+    toast: toasts[0],
+};
+
+/* The empty placeholder clears the pointer back to "no dataset". */
+fresh();
+const clrNode = addCanvasNode('upload', { dataset_id: 'dsA', dataset_name: 'A.csv', row_count: 5 });
+pa.canvas._settingsNodeId = clrNode;
+pa.dataNodes.pickFromDataset(clrNode, '');
+out.dataset_picker_cleared = { params: pa.canvas.nodes[clrNode].params };
+
 /* ── 清空: the three bulk buttons ──────────────────────────────────────
    A bulk delete is the one action here whose mistake cannot be noticed row by row,
    so each is pinned on four things: it asks first, an answer of "no" sends nothing,

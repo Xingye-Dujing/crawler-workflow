@@ -236,6 +236,40 @@ class TestDatasetActions:
         assert pa['dataset_remove_declined']['requested'] == 0
 
 
+class TestUploadDatasetPicker:
+    """A saved file can be attached to an Upload node without re-uploading it.
+
+    The run executor only needs a valid ``dataset_id``, so the picker must write the
+    same params a fresh upload writes, must not fabricate a name for an id it never
+    listed, and must let the empty placeholder detach again.
+    """
+
+    def test_the_dropdown_lists_every_stored_dataset(self, pa):
+        loaded = pa['dataset_picker_loaded']
+        assert loaded['cached'] == ['dsA', 'dsB']
+        assert loaded['options'] == ['', 'dsA', 'dsB'], loaded['options']
+
+    def test_a_listed_dataset_attaches_without_a_second_request(self, pa):
+        attached = pa['dataset_picker_attach_cached']
+        assert attached['params'] == {'dataset_id': 'dsB', 'dataset_name': 'B.csv', 'row_count': 9}
+        assert attached['detailRequests'] == 0
+        assert attached['toast'] == 'Attached dataset: B.csv'
+
+    def test_an_unlisted_dataset_resolves_its_name_from_the_detail_endpoint(self, pa):
+        """A node restored before the list loaded must not be shown a guessed name —
+        the id alone is not enough to describe the file to the user."""
+        fallback = pa['dataset_picker_attach_fallback']
+        assert fallback['params'] == {'dataset_id': 'dsZ', 'dataset_name': 'Z.tsv', 'row_count': 2}
+        assert fallback['detailUrls'] == ['/api/data/datasets/dsZ']
+
+    def test_the_placeholder_detaches_the_dataset(self, pa):
+        assert pa['dataset_picker_cleared']['params'] == {
+            'dataset_id': '',
+            'dataset_name': '',
+            'row_count': '',
+        }
+
+
 class TestClearAllButtons:
     """The three bulk 清空 buttons — the only actions here that destroy a whole set.
 
