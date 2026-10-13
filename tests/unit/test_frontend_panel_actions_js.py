@@ -358,6 +358,27 @@ class TestDiagnostics:
         assert cost['crawlRows'] == 2, 'two links, each up to all its comments'
 
 
+class TestLexiconPanel:
+    """The lexicon manager renders the user's terms, adds a pasted batch, and filters."""
+
+    def test_the_panel_renders_terms_and_both_kind_tabs(self, pa):
+        r = pa['lexicon_render']
+        assert r['hasChips'] is True
+        assert r['showsTerms'] is True
+        assert r['hasTabs'] is True
+
+    def test_add_posts_the_kind_and_the_split_terms(self, pa):
+        a = pa['lexicon_add']
+        assert a['posted'] is True
+        assert a['body']['kind'] == 'stopword'
+        assert a['body']['terms'] == ['新词', '另一个词'], 'the comma blob is split client-side'
+
+    def test_the_search_box_narrows_the_rendered_terms(self, pa):
+        f = pa['lexicon_filter']
+        assert f['showsHa'] is True
+        assert f['hidesMe'] is True
+
+
 class TestClearAllButtons:
     """The three bulk 清空 buttons — the only actions here that destroy a whole set.
 

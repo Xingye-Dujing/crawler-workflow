@@ -97,6 +97,7 @@ def _isolate_paths() -> Path:
         setattr(Config, attr, str(root / rel))
     Config.RUNS_DB = str(root / 'data' / 'runs.db')
     Config.DATASETS_DB = str(root / 'data' / 'datasets.db')
+    Config.LEXICON_DB = str(root / 'data' / 'lexicon.db')
 
     import settings_store
 
@@ -432,6 +433,7 @@ def client(app_module, data_root, request):
     import stores
 
     from services.dataset_store import DatasetStore
+    from services.lexicon_store import LexiconStore
     from services.run_store import RunStore
 
     # A serial test needs a genuinely quiet server before it presses Run.
@@ -456,12 +458,15 @@ def client(app_module, data_root, request):
     seq = next(_CLIENT_SEQ)
     run_store = RunStore(str(data_root / f'api-runs-{seq}.db'))
     dataset_store = DatasetStore(str(data_root / f'api-datasets-{seq}.db'))
+    lexicon_store = LexiconStore(str(data_root / f'api-lexicon-{seq}.db'))
     # Tripwire for that class of bug: a store built for this test holds nothing
     # but its own schema, so anything already in it means the file was shared.
     assert dataset_store.stats()['datasets'] == 0, f'{dataset_store.db_path} is not a fresh store'
     assert run_store.stats()['runs'] == 0, f'{run_store.db_path} is not a fresh store'
+    assert lexicon_store.count() == 0, f'{lexicon_store.db_path} is not a fresh store'
     stores._RUN_STORE = run_store
     stores._DATASET_STORE = dataset_store
+    stores._LEXICON_STORE = lexicon_store
     # The housekeeper caches both store handles, so it has to be rebuilt
     # alongside them or a later test would sweep an already-closed database.
     stores._HOUSEKEEPER = None
@@ -479,7 +484,7 @@ def client(app_module, data_root, request):
         _restore_state(module.execution_state, state_backup)
         module._RUN_QUEUE[:] = queue_backup
         module._dataset_cache.clear()
-        for store in (run_store, dataset_store):
+        for store in (run_store, dataset_store, lexicon_store):
             with contextlib.suppress(Exception):
                 # ``close()`` rather than ``_conn.close()``: a run worker's housekeeping sweep
                 # may be inside ``execute`` on that very connection, and finalising the handle
@@ -487,6 +492,7 @@ def client(app_module, data_root, request):
                 store.close()
         stores._RUN_STORE = None
         stores._DATASET_STORE = None
+        stores._LEXICON_STORE = None
 
 
 def _restore_state(state: dict, backup: dict) -> None:

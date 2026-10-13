@@ -53,7 +53,7 @@ vm.runInContext(
      ;globalThis.__pa = { resumeBar, runsManager, exportsManager, datasetManager, dataNodes,
                           workflow, canvas, historyPanel, processesPoll, killProcess,
                           togglePin, setBg, setLang, closeDockedPanels, RunState, wfFiles,
-                          Diagnostics, estimateCost, renderCostSummary };`,
+                          Diagnostics, estimateCost, renderCostSummary, lexiconManager };`,
     sandbox,
 );
 
@@ -708,6 +708,30 @@ out.diagnostics_cost = pa.estimateCost();
 fresh();
 const cc = addCanvasNode('comment', { urls: 'http://x/1\nhttp://x/2', comment_limit: '0' });
 out.diagnostics_cost_unbounded = pa.estimateCost();
+
+/* ── lexicon manager panel: render, add, filter ────────────────────── */
+fresh();
+route('/api/lexicon', {
+    ok: true,
+    entries: [{ term: '哈哈', kind: 'stopword' }, { term: '么么哒', kind: 'stopword' }],
+    counts: { stopword: 2, userdict: 0 },
+});
+pa.lexiconManager._kind = 'stopword';
+await pa.lexiconManager.refresh();
+const lexHtml = id('lexicon-body').innerHTML;
+out.lexicon_render = {
+    hasChips: lexHtml.indexOf('lexicon-chip') >= 0,
+    showsTerms: lexHtml.indexOf('哈哈') >= 0 && lexHtml.indexOf('么么哒') >= 0,
+    hasTabs: lexHtml.indexOf('Stop words') >= 0 && lexHtml.indexOf('Domain terms') >= 0,
+};
+requests.length = 0;
+answers.dialog = '新词, 另一个词';
+await pa.lexiconManager.add();
+const addReq = requests.find((r) => r.url === '/api/lexicon' && r.method === 'POST');
+out.lexicon_add = { posted: !!addReq, body: addReq ? JSON.parse(addReq.body) : null };
+pa.lexiconManager.setFilter('哈哈');
+const filtHtml = id('lexicon-body').innerHTML;
+out.lexicon_filter = { showsHa: filtHtml.indexOf('哈哈') >= 0, hidesMe: filtHtml.indexOf('么么哒') < 0 };
 
 /* ── 清空: the three bulk buttons ──────────────────────────────────────
    A bulk delete is the one action here whose mistake cannot be noticed row by row,

@@ -25,6 +25,7 @@ from api.diagnostics import bp as diagnostics_bp
 from api.exports import bp as exports_bp
 from api.history import bp as history_bp
 from api.http import _bad_body, _bad_param, _json_body, _optional_float, _optional_int, _safe_float, _safe_int
+from api.lexicon import bp as lexicon_bp
 from api.llm import bp as llm_bp
 from api.locks import bp as locks_bp
 from api.report import bp as report_bp
@@ -5054,6 +5055,7 @@ app.register_blueprint(locks_bp)
 app.register_blueprint(exports_bp)
 app.register_blueprint(data_bp)
 app.register_blueprint(diagnostics_bp)
+app.register_blueprint(lexicon_bp)
 app.register_blueprint(studio_bp)
 app.register_blueprint(analysis_bp)
 app.register_blueprint(visualize_bp)
@@ -6362,6 +6364,17 @@ def _open_browser(url: str):
 def _debug_enabled() -> bool:
     """FLASK_DEBUG as a plain yes/no (anything else, unset included, is no)."""
     return str(os.environ.get('FLASK_DEBUG', '')).strip().lower() in ('1', 'true', 'yes')
+
+
+# Load the user's jieba domain dictionary once, process-wide, so every tokenizer path
+# (keyword, tokenize, topic, ML, word cloud) sees the same words — not just the keyword
+# path that used to load it lazily. An empty lexicon writes nothing and is a no-op.
+try:
+    from services.lexicon import load_userdict as _load_userdict
+
+    _load_userdict()
+except Exception:  # a broken user dict must never stop the server from booting
+    logging.getLogger(__name__).warning('user dict load at startup skipped', exc_info=True)
 
 
 if __name__ == '__main__':

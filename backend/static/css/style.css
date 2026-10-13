@@ -1147,6 +1147,40 @@ body.style-menu-open #workspace #resume-banner {
   cursor: help;
 }
 
+/* Lexicon manager chips: one per term, each removable. */
+.lexicon-body {
+  padding: 8px;
+}
+.lexicon-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.lexicon-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 12px;
+  background: var(--surface, transparent);
+}
+.lexicon-chip-x {
+  border: none;
+  background: transparent;
+  color: var(--err);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.lexicon-hint {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 .node-header {
   height: 30px;
   border-bottom: 1px solid var(--line2);
@@ -2993,7 +3027,8 @@ input:-webkit-autofill:focus {
 #exports-panel,
 #dataset-panel,
 #workflows-panel,
-#cookies-panel {
+#cookies-panel,
+#lexicon-panel {
   position: fixed;
   bottom: var(--barH);
   left: 0;
@@ -3011,7 +3046,8 @@ input:-webkit-autofill:focus {
 #exports-panel.open,
 #dataset-panel.open,
 #workflows-panel.open,
-#cookies-panel.open {
+#cookies-panel.open,
+#lexicon-panel.open {
   height: 240px;
 }
 #runs-panel.open ~ #status-bar {
@@ -3021,7 +3057,8 @@ input:-webkit-autofill:focus {
 #exports-resize-handle,
 #dataset-resize-handle,
 #workflows-resize-handle,
-#cookies-resize-handle {
+#cookies-resize-handle,
+#lexicon-resize-handle {
   position: absolute;
   top: 0;
   left: 0;
@@ -3040,14 +3077,17 @@ input:-webkit-autofill:focus {
 #workflows-resize-handle:hover,
 #workflows-resize-handle.active,
 #cookies-resize-handle:hover,
-#cookies-resize-handle.active {
+#cookies-resize-handle.active,
+#lexicon-resize-handle:hover,
+#lexicon-resize-handle.active {
   background: var(--line);
 }
 #runs-mgr-body,
 #exports-mgr-body,
 #dataset-mgr-body,
 #workflows-mgr-body,
-#cookies-mgr-body {
+#cookies-mgr-body,
+#lexicon-body {
   flex: 1;
   overflow: auto;
   padding: 0 8px 8px;
@@ -3057,7 +3097,8 @@ input:-webkit-autofill:focus {
   #exports-panel.open,
   #dataset-panel.open,
   #workflows-panel.open,
-  #cookies-panel.open {
+  #cookies-panel.open,
+  #lexicon-panel.open {
     height: 140px;
   }
 }

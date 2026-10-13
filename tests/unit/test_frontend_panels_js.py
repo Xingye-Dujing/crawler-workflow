@@ -34,7 +34,7 @@ def results():
     return proc.stdout
 
 
-PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel']
+PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'lexicon-panel']
 
 
 @pytest.mark.parametrize('target', PANELS)
@@ -61,7 +61,7 @@ def test_the_export_panel_can_be_resized(results):
     assert json.loads(results)['exportHandle'] is True
 
 
-@pytest.mark.parametrize('handle', ['datasetHandle', 'workflowsHandle'])
+@pytest.mark.parametrize('handle', ['datasetHandle', 'workflowsHandle', 'lexiconHandle'])
 def test_a_docked_panel_without_a_handle_cannot_be_grown(results, handle):
     """The CSS hides a dock with `height: 0`; the handle is the only way to give a
     panel a real height, so a panel added to the dock list without one is stuck."""

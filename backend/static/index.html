@@ -905,6 +905,19 @@
       <div id="dataset-mgr-body" class="data-preview-table-wrap"></div>
     </div>
 
+    <!-- Lexicon Manager Panel — the user's stop words and jieba domain terms -->
+    <div id="lexicon-panel">
+      <div id="lexicon-resize-handle"></div>
+      <div class="console-header">
+        <span data-i18n="lexMgr.header">Lexicons</span>
+        <div class="console-actions">
+          <button class="panel-close" onclick="lexiconManager.refresh()" data-i18n="btn.refresh">Refresh</button>
+          <button class="panel-close" onclick="toggleLexiconPanel()" data-i18n="stats.close">Close</button>
+        </div>
+      </div>
+      <div id="lexicon-body" class="lexicon-body"></div>
+    </div>
+
     <!-- Workflow Files Panel — the saved canvases on disk (#115) -->
     <div id="workflows-panel">
       <div id="workflows-resize-handle"></div>
@@ -1008,6 +1021,14 @@
         data-i18n="datasetMgr.header"
       >
         Datasets
+      </button>
+      <button
+        class="status-btn"
+        id="btn-lexicon"
+        onclick="toggleLexiconPanel()"
+        data-i18n="lexMgr.header"
+      >
+        Lexicons
       </button>
       <button
         class="status-btn"

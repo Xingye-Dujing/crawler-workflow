@@ -52,6 +52,7 @@ BODY_ROUTES = [
     '/api/exports/clear-name',
     '/api/exports/delete',
     '/api/history/delete',
+    '/api/lexicon',
     '/api/llm/test',
     '/api/locks',
     '/api/profiles/delete',

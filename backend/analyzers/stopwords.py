@@ -414,6 +414,30 @@ _HAS_ALNUM = re.compile(r'[0-9A-Za-z\u4e00-\u9fff]')
 _ONLY_DIGITS = re.compile(r'^[\d.,%:\-]+$')
 
 
+#: The user's own extra stop words, cached in-process and reloaded only when the lexicon
+#: store's version changes — a 5000-row table calls :func:`is_meaningful` per token, and a
+#: SQLite read per token would be absurd. A missing store or a failed read falls back to the
+#: built-in list alone: a broken user lexicon must never take down a run.
+_USER_STOP = {'version': None, 'set': frozenset()}
+
+
+def _user_stopwords() -> frozenset:
+    try:
+        from stores import get_lexicon_store
+
+        store = get_lexicon_store()
+        version = store.version()
+    except Exception:
+        return frozenset()
+    if _USER_STOP['version'] != version:
+        try:
+            _USER_STOP['set'] = frozenset(store.terms('stopword'))
+        except Exception:
+            _USER_STOP['set'] = frozenset()
+        _USER_STOP['version'] = version
+    return _USER_STOP['set']
+
+
 def is_meaningful(token) -> bool:
     """Whether one token may enter a frequency table at all.
 
@@ -428,7 +452,7 @@ def is_meaningful(token) -> bool:
         return False
     if _ONLY_DIGITS.match(word):
         return False
-    return word not in STOPWORDS
+    return word not in STOPWORDS and word not in _user_stopwords()
 
 
 def filter_tokens(tokens) -> list:

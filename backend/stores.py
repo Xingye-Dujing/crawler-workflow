@@ -25,6 +25,7 @@ from state import _dataset_cache
 from config import Config
 from services.dataset_store import SOURCE_UPLOAD, DatasetStore
 from services.housekeeping import Housekeeping
+from services.lexicon_store import LexiconStore
 from services.run_store import RunStore
 
 # ─── Durable run state ──────────────────────────────────────────
@@ -89,6 +90,23 @@ def get_dataset_store() -> DatasetStore:
             if _DATASET_STORE is None:
                 _DATASET_STORE = DatasetStore()
     return _DATASET_STORE
+
+
+# ─── Lexicon store ──────────────────────────────────────────────
+
+#: The user-editable word lists (stopwords + jieba domain terms), opened on first use.
+_LEXICON_STORE = None
+_LEXICON_LOCK = threading.Lock()
+
+
+def get_lexicon_store() -> LexiconStore:
+    """The single store behind the editable lexicons, opened on first use."""
+    global _LEXICON_STORE
+    if _LEXICON_STORE is None:
+        with _LEXICON_LOCK:
+            if _LEXICON_STORE is None:
+                _LEXICON_STORE = LexiconStore()
+    return _LEXICON_STORE
 
 
 #: The read-through cache of loaded frames (``_dataset_cache``, from ``state``) is bounded so a

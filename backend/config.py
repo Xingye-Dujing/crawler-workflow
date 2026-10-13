@@ -56,6 +56,10 @@ class Config:
     # which one. Separate from RUNS_DB because these are inputs a saved
     # workflow must find again tomorrow, not the state of one execution.
     DATASETS_DB = os.path.join(DATA_DIR, 'datasets.db')
+    # User-editable word lists (stopwords + jieba domain terms) that the analysis
+    # pipeline reads at run time. Separate store because these are curated inputs a
+    # person maintains, not per-execution state.
+    LEXICON_DB = os.path.join(DATA_DIR, 'lexicon.db')
     # Housekeeping: keep the newest N runs per workflow, and never keep
     # anything older than this many days. Runs that finished cleanly are the
     # first to go; interrupted ones are kept to the end because they are the
