@@ -254,17 +254,17 @@
       "title": "分阶段 LDA（表1；主题数取本画布扫描里 ≥3 的一致性峰值）",
       "params": {
         "column": "cleaned_text",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
         "enabled": true,
         "operation": "topic_by_stage",
         "stage_col": "阶段",
         "stage_order_col": "阶段序号",
         "stage_topic_counts": "5,6,7,6,3",
         "topic_max_features": "2000",
+        "topic_method": "embedding",
         "topic_sample_n": "3",
         "topic_topn": "7",
-        "word_source": "tfidf",
-        "topic_method": "embedding",
-        "embedding_model": "BAAI/bge-small-zh-v1.5"
+        "word_source": "tfidf"
       },
       "operation": "topic_by_stage",
       "x": 3318,
@@ -556,13 +556,13 @@
       "title": "主题距离图数据（全库）",
       "params": {
         "column": "cleaned_text",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
         "enabled": true,
         "n_topics": "5",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6",
         "topic_method": "embedding",
-        "embedding_model": "BAAI/bge-small-zh-v1.5"
+        "topic_topn": "6"
       },
       "operation": "topic_map",
       "x": 2089,
@@ -595,14 +595,14 @@
       "title": "各主题显著词数据（全库）",
       "params": {
         "column": "cleaned_text",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
         "enabled": true,
         "n_topics": "5",
         "operation": "topic_salience",
         "topic_lambda": "0.5",
         "topic_max_features": "2000",
-        "topic_topn": "30",
         "topic_method": "embedding",
-        "embedding_model": "BAAI/bge-small-zh-v1.5"
+        "topic_topn": "30"
       },
       "operation": "topic_salience",
       "x": 2089,
@@ -698,13 +698,13 @@
       "title": "爆发期主题距离图数据",
       "params": {
         "column": "cleaned_text",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
         "enabled": true,
         "n_topics": "5",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6",
         "topic_method": "embedding",
-        "embedding_model": "BAAI/bge-small-zh-v1.5"
+        "topic_topn": "6"
       },
       "operation": "topic_map",
       "x": 3778,
@@ -735,13 +735,13 @@
       "title": "爆发期各主题显著词",
       "params": {
         "column": "cleaned_text",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
         "n_topics": "5",
         "operation": "topic_salience",
         "topic_lambda": "1",
         "topic_max_features": "2000",
-        "topic_topn": "30",
         "topic_method": "embedding",
-        "embedding_model": "BAAI/bge-small-zh-v1.5"
+        "topic_topn": "30"
       },
       "operation": "topic_salience",
       "x": 3778,
@@ -1128,12 +1128,12 @@
       "title": "发酵期主题距离图数据",
       "params": {
         "column": "cleaned_text",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
         "n_topics": "6",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6",
         "topic_method": "embedding",
-        "embedding_model": "BAAI/bge-small-zh-v1.5"
+        "topic_topn": "6"
       },
       "operation": "topic_map",
       "x": 3778,
@@ -1164,13 +1164,13 @@
       "title": "发酵期各主题显著词",
       "params": {
         "column": "cleaned_text",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
         "n_topics": "6",
         "operation": "topic_salience",
         "topic_lambda": "1",
         "topic_max_features": "2000",
-        "topic_topn": "30",
         "topic_method": "embedding",
-        "embedding_model": "BAAI/bge-small-zh-v1.5"
+        "topic_topn": "30"
       },
       "operation": "topic_salience",
       "x": 3778,
@@ -1245,12 +1245,12 @@
       "title": "二次爆发期主题距离图数据",
       "params": {
         "column": "cleaned_text",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
         "n_topics": "5",
         "operation": "topic_map",
         "topic_max_features": "2000",
-        "topic_topn": "6",
         "topic_method": "embedding",
-        "embedding_model": "BAAI/bge-small-zh-v1.5"
+        "topic_topn": "6"
       },
       "operation": "topic_map",
       "x": 3778,
@@ -1281,13 +1281,13 @@
       "title": "二次爆发期各主题显著词",
       "params": {
         "column": "cleaned_text",
+        "embedding_model": "BAAI/bge-small-zh-v1.5",
         "n_topics": "5",
         "operation": "topic_salience",
         "topic_lambda": "1",
         "topic_max_features": "2000",
-        "topic_topn": "30",
         "topic_method": "embedding",
-        "embedding_model": "BAAI/bge-small-zh-v1.5"
+        "topic_topn": "30"
       },
       "operation": "topic_salience",
       "x": 3778,
@@ -2161,6 +2161,248 @@
       "folded": false
     },
     {
+      "id": "node-502",
+      "type": "compile",
+      "title": "编译 图8 每日情感倾向指数（含事件线）",
+      "params": {
+        "enabled": true
+      },
+      "x": 4638,
+      "y": 350,
+      "folded": false
+    },
+    {
+      "id": "node-503",
+      "type": "compile",
+      "title": "编译 图3 各阶段评论量",
+      "params": {
+        "enabled": true
+      },
+      "x": 4199,
+      "y": 742,
+      "folded": false
+    },
+    {
+      "id": "node-504",
+      "type": "compile",
+      "title": "编译 图9 每日热度与情感强度（论文的反向关系）",
+      "params": {
+        "enabled": true
+      },
+      "x": 4638,
+      "y": 490,
+      "folded": false
+    },
+    {
+      "id": "node-505",
+      "type": "compile",
+      "title": "编译 图10 各阶段热度与情感强度",
+      "params": {
+        "enabled": true
+      },
+      "x": 4199,
+      "y": 1022,
+      "folded": false
+    },
+    {
+      "id": "node-506",
+      "type": "compile",
+      "title": "编译 图11 主题距离图",
+      "params": {
+        "enabled": true
+      },
+      "x": 3318,
+      "y": 3248,
+      "folded": false
+    },
+    {
+      "id": "node-507",
+      "type": "compile",
+      "title": "编译 图12 Topic-1 显著词",
+      "params": {
+        "enabled": true
+      },
+      "x": 3318,
+      "y": 3388,
+      "folded": false
+    },
+    {
+      "id": "node-508",
+      "type": "compile",
+      "title": "编译 图13 爆发期主题距离图",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 1869,
+      "folded": false
+    },
+    {
+      "id": "node-509",
+      "type": "compile",
+      "title": "编译 图14 爆发期 Topic-1 显著词",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 2009,
+      "folded": false
+    },
+    {
+      "id": "node-510",
+      "type": "compile",
+      "title": "编译 图15 主题流向（桑基）",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 1729,
+      "folded": false
+    },
+    {
+      "id": "node-511",
+      "type": "compile",
+      "title": "编译 图16 共词关系图",
+      "params": {
+        "enabled": true
+      },
+      "x": 4199,
+      "y": 2002,
+      "folded": false
+    },
+    {
+      "id": "node-512",
+      "type": "compile",
+      "title": "编译 图17 每日情感指数与外推",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 1589,
+      "folded": false
+    },
+    {
+      "id": "node-513",
+      "type": "compile",
+      "title": "编译 图18 每日暴力言论强度",
+      "params": {
+        "enabled": true
+      },
+      "x": 4638,
+      "y": 2240,
+      "folded": false
+    },
+    {
+      "id": "node-514",
+      "type": "compile",
+      "title": "编译 图19 发酵期主题距离图",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 2289,
+      "folded": false
+    },
+    {
+      "id": "node-515",
+      "type": "compile",
+      "title": "编译 图20 发酵期 Topic-1 显著词",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 2429,
+      "folded": false
+    },
+    {
+      "id": "node-516",
+      "type": "compile",
+      "title": "编译 图21 二次爆发期主题距离图",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 2569,
+      "folded": false
+    },
+    {
+      "id": "node-517",
+      "type": "compile",
+      "title": "编译 图22 二次爆发期 Topic-1 显著词",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 2709,
+      "folded": false
+    },
+    {
+      "id": "node-518",
+      "type": "compile",
+      "title": "编译 图23 发酵期 每日热度与情感强度",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 2849,
+      "folded": false
+    },
+    {
+      "id": "node-519",
+      "type": "compile",
+      "title": "编译 图24 爆发期 每日热度与情感强度",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 2989,
+      "folded": false
+    },
+    {
+      "id": "node-520",
+      "type": "compile",
+      "title": "编译 图25 波动期 每日热度与情感强度",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 3129,
+      "folded": false
+    },
+    {
+      "id": "node-521",
+      "type": "compile",
+      "title": "编译 图26 二次爆发期 每日热度与情感强度",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 3269,
+      "folded": false
+    },
+    {
+      "id": "node-522",
+      "type": "compile",
+      "title": "编译 图27 衰退期 每日热度与情感强度",
+      "params": {
+        "enabled": true
+      },
+      "x": 5098,
+      "y": 3409,
+      "folded": false
+    },
+    {
+      "id": "node-523",
+      "type": "compile",
+      "title": "编译 图28 各阶段情感占比堆叠图（100%）",
+      "params": {
+        "enabled": true
+      },
+      "x": 4199,
+      "y": 882,
+      "folded": false
+    },
+    {
       "id": "node-601",
       "type": "output",
       "title": "PDF 图2 每日评论量（含各阶段峰值日）",
@@ -2174,17 +2416,6 @@
       "operation": "save",
       "x": 5098,
       "y": 1127,
-      "folded": false
-    },
-    {
-      "id": "node-502",
-      "type": "compile",
-      "title": "编译 图8 每日情感倾向指数（含事件线）",
-      "params": {
-        "enabled": true
-      },
-      "x": 4638,
-      "y": 350,
       "folded": false
     },
     {
@@ -2204,17 +2435,6 @@
       "folded": false
     },
     {
-      "id": "node-503",
-      "type": "compile",
-      "title": "编译 图3 各阶段评论量",
-      "params": {
-        "enabled": true
-      },
-      "x": 4199,
-      "y": 742,
-      "folded": false
-    },
-    {
       "id": "node-603",
       "type": "output",
       "title": "PDF 图3 各阶段评论量",
@@ -2228,17 +2448,6 @@
       "operation": "save",
       "x": 4638,
       "y": 1064,
-      "folded": false
-    },
-    {
-      "id": "node-504",
-      "type": "compile",
-      "title": "编译 图9 每日热度与情感强度（论文的反向关系）",
-      "params": {
-        "enabled": true
-      },
-      "x": 4638,
-      "y": 490,
       "folded": false
     },
     {
@@ -2258,17 +2467,6 @@
       "folded": false
     },
     {
-      "id": "node-505",
-      "type": "compile",
-      "title": "编译 图10 各阶段热度与情感强度",
-      "params": {
-        "enabled": true
-      },
-      "x": 4199,
-      "y": 1022,
-      "folded": false
-    },
-    {
       "id": "node-605",
       "type": "output",
       "title": "PDF 图10 各阶段热度与情感强度",
@@ -2282,17 +2480,6 @@
       "operation": "save",
       "x": 4638,
       "y": 1358,
-      "folded": false
-    },
-    {
-      "id": "node-506",
-      "type": "compile",
-      "title": "编译 图11 主题距离图",
-      "params": {
-        "enabled": true
-      },
-      "x": 3318,
-      "y": 3248,
       "folded": false
     },
     {
@@ -2312,17 +2499,6 @@
       "folded": false
     },
     {
-      "id": "node-507",
-      "type": "compile",
-      "title": "编译 图12 Topic-1 显著词",
-      "params": {
-        "enabled": true
-      },
-      "x": 3318,
-      "y": 3388,
-      "folded": false
-    },
-    {
       "id": "node-607",
       "type": "output",
       "title": "PDF 图12 Topic-1 显著词",
@@ -2336,17 +2512,6 @@
       "operation": "save",
       "x": 3778,
       "y": 4396,
-      "folded": false
-    },
-    {
-      "id": "node-508",
-      "type": "compile",
-      "title": "编译 图13 爆发期主题距离图",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 1869,
       "folded": false
     },
     {
@@ -2366,17 +2531,6 @@
       "folded": false
     },
     {
-      "id": "node-509",
-      "type": "compile",
-      "title": "编译 图14 爆发期 Topic-1 显著词",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 2009,
-      "folded": false
-    },
-    {
       "id": "node-609",
       "type": "output",
       "title": "PDF 图14 爆发期 Topic-1 显著词",
@@ -2390,17 +2544,6 @@
       "operation": "save",
       "x": 5558,
       "y": 1806,
-      "folded": false
-    },
-    {
-      "id": "node-510",
-      "type": "compile",
-      "title": "编译 图15 主题流向（桑基）",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 1729,
       "folded": false
     },
     {
@@ -2420,17 +2563,6 @@
       "folded": false
     },
     {
-      "id": "node-511",
-      "type": "compile",
-      "title": "编译 图16 共词关系图",
-      "params": {
-        "enabled": true
-      },
-      "x": 4199,
-      "y": 2002,
-      "folded": false
-    },
-    {
       "id": "node-611",
       "type": "output",
       "title": "PDF 图16 共词关系图",
@@ -2444,17 +2576,6 @@
       "operation": "save",
       "x": 4638,
       "y": 2100,
-      "folded": false
-    },
-    {
-      "id": "node-512",
-      "type": "compile",
-      "title": "编译 图17 每日情感指数与外推",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 1589,
       "folded": false
     },
     {
@@ -2474,17 +2595,6 @@
       "folded": false
     },
     {
-      "id": "node-513",
-      "type": "compile",
-      "title": "编译 图18 每日暴力言论强度",
-      "params": {
-        "enabled": true
-      },
-      "x": 4638,
-      "y": 2240,
-      "folded": false
-    },
-    {
       "id": "node-613",
       "type": "output",
       "title": "PDF 图18 每日暴力言论强度",
@@ -2498,17 +2608,6 @@
       "operation": "save",
       "x": 5098,
       "y": 2149,
-      "folded": false
-    },
-    {
-      "id": "node-514",
-      "type": "compile",
-      "title": "编译 图19 发酵期主题距离图",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 2289,
       "folded": false
     },
     {
@@ -2528,17 +2627,6 @@
       "folded": false
     },
     {
-      "id": "node-515",
-      "type": "compile",
-      "title": "编译 图20 发酵期 Topic-1 显著词",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 2429,
-      "folded": false
-    },
-    {
       "id": "node-615",
       "type": "output",
       "title": "PDF 图20 发酵期 Topic-1 显著词",
@@ -2552,17 +2640,6 @@
       "operation": "save",
       "x": 5558,
       "y": 2086,
-      "folded": false
-    },
-    {
-      "id": "node-516",
-      "type": "compile",
-      "title": "编译 图21 二次爆发期主题距离图",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 2569,
       "folded": false
     },
     {
@@ -2582,17 +2659,6 @@
       "folded": false
     },
     {
-      "id": "node-517",
-      "type": "compile",
-      "title": "编译 图22 二次爆发期 Topic-1 显著词",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 2709,
-      "folded": false
-    },
-    {
       "id": "node-617",
       "type": "output",
       "title": "PDF 图22 二次爆发期 Topic-1 显著词",
@@ -2606,17 +2672,6 @@
       "operation": "save",
       "x": 5558,
       "y": 2366,
-      "folded": false
-    },
-    {
-      "id": "node-518",
-      "type": "compile",
-      "title": "编译 图23 发酵期 每日热度与情感强度",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 2849,
       "folded": false
     },
     {
@@ -2636,17 +2691,6 @@
       "folded": false
     },
     {
-      "id": "node-519",
-      "type": "compile",
-      "title": "编译 图24 爆发期 每日热度与情感强度",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 2989,
-      "folded": false
-    },
-    {
       "id": "node-619",
       "type": "output",
       "title": "PDF 图24 爆发期 每日热度与情感强度",
@@ -2660,17 +2704,6 @@
       "operation": "save",
       "x": 5558,
       "y": 2674,
-      "folded": false
-    },
-    {
-      "id": "node-520",
-      "type": "compile",
-      "title": "编译 图25 波动期 每日热度与情感强度",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 3129,
       "folded": false
     },
     {
@@ -2690,17 +2723,6 @@
       "folded": false
     },
     {
-      "id": "node-521",
-      "type": "compile",
-      "title": "编译 图26 二次爆发期 每日热度与情感强度",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 3269,
-      "folded": false
-    },
-    {
       "id": "node-621",
       "type": "output",
       "title": "PDF 图26 二次爆发期 每日热度与情感强度",
@@ -2717,17 +2739,6 @@
       "folded": false
     },
     {
-      "id": "node-522",
-      "type": "compile",
-      "title": "编译 图27 衰退期 每日热度与情感强度",
-      "params": {
-        "enabled": true
-      },
-      "x": 5098,
-      "y": 3409,
-      "folded": false
-    },
-    {
       "id": "node-622",
       "type": "output",
       "title": "PDF 图27 衰退期 每日热度与情感强度",
@@ -2741,17 +2752,6 @@
       "operation": "save",
       "x": 5558,
       "y": 3136,
-      "folded": false
-    },
-    {
-      "id": "node-523",
-      "type": "compile",
-      "title": "编译 图28 各阶段情感占比堆叠图（100%）",
-      "params": {
-        "enabled": true
-      },
-      "x": 4199,
-      "y": 882,
       "folded": false
     },
     {
@@ -3468,5 +3468,5 @@
       "zoom": 0.2
     }
   },
-  "name": "刘学州-评论-情感演化分析-BERT-embedding对比"
+  "name": "刘学州-评论-情感演化分析-BERT-embedding"
 }
