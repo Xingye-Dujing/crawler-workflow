@@ -949,8 +949,11 @@ body.style-menu-open #workspace #resume-banner {
    re-centre the camera. */
 #minimap {
   position: absolute;
-  right: 14px;
-  bottom: 14px;
+  left: 14px;
+  /* Docked bottom-LEFT: the right column already holds the outline sidebar, so a
+     bottom-right box slid under it. The offset also clears the fixed status bar
+     (height --barH) by the same 14px margin, so the box is never hidden behind it. */
+  bottom: calc(var(--barH) + 14px);
   width: 176px;
   height: 176px;
   border: 1px solid var(--border, #444);
@@ -1142,7 +1145,7 @@ body.style-menu-open #workspace #resume-banner {
 }
 .cost-summary {
   margin-left: 8px;
-  font-size: 12px;
+  font-size: 10px;
   color: var(--text-dim);
   cursor: help;
 }
@@ -3912,10 +3915,26 @@ html[data-cloud="1"] .ai-only-ollama {
   align-items: center;
 }
 
+/* The clipboard filter shares the app's one input look (.settings-input) — border,
+   focus accent and type — so it no longer renders as a bare browser search box. Its
+   corner comes from the global `*` reset (var(--radius)), never a literal here. */
 #clipboard-drawer .clip-search {
   margin: 8px;
   box-sizing: border-box;
   width: calc(100% - 16px);
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+#clipboard-drawer .clip-search::placeholder {
+  color: var(--text-dim);
+}
+#clipboard-drawer .clip-search:focus {
+  border-color: var(--ink);
 }
 
 .clipboard-list {
@@ -3948,7 +3967,6 @@ html[data-cloud="1"] .ai-only-ollama {
   font-size: 9px;
   color: var(--text-dim);
   border: 1px solid var(--line);
-  border-radius: 3px;
   padding: 1px 4px;
 }
 
@@ -3975,7 +3993,6 @@ html[data-cloud="1"] .ai-only-ollama {
   color: var(--text-dim);
   font-size: 10px;
   padding: 2px 5px;
-  border-radius: 3px;
   white-space: nowrap;
 }
 
