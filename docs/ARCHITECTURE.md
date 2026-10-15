@@ -12,21 +12,22 @@ file is about *shape*. The numbers below are measured, not estimated.
   exception. `CRAWLER_DATA_ROOT` gives a process its own `data/`+`logs/` — this is how a second
   server is meant to coexist (see *Run/resume state* and `AGENTS.md`).
 
-## Backend layout (~57k Python LOC)
+## Backend layout (~65k Python LOC)
 | area | contents |
 |---|---|
-| `app.py` | **5,794 LOC — the remaining HTTP handlers (35 `@app.route`) + the workflow node executors.** 14 Blueprints in `backend/api/` now carry the other 43 handlers (43 + 35 = the original 78 routes; paths unchanged). |
-| `config.py` | paths, env, constants (retention/queue/preflight). |
-| `i18n.py` | 2,781-line zh/en message catalog (`t()`, `set_lang` thread-local, `audit`). |
+| `app.py` | **6,457 LOC — the remaining HTTP handlers (38 `@app.route` decorators) + the workflow node executors.** 17 Blueprints in `backend/api/` carry the other 57 route decorators; the URL map holds 96 rules over 91 unique paths (re-measure: `len(app.url_map.iter_rules())` — the extraction moved handlers without changing a path). |
+| `config.py` | paths, env, constants (retention/queue/preflight/scheduler tick). |
+| `i18n.py` | the zh/en message catalog (`t()`, `set_lang` thread-local, `audit`). |
 | `crawl_capabilities.py` | the single crawl matrix: platform × mode × field × handler. |
+| `scheduler.py` | 定时任务 clock: an in-process daemon thread ticking `Config.SCHEDULER_TICK_SECONDS`, firing through the seam `app._start_scheduled_run` → `_begin_run` (never a second start path); `services/cron.py` parses/validates the time expressions. |
 | `engine/` | `workflow.py` (DAG resolve, `effective_workflow`, `node_label`), `executor.py`, `logger.py`. |
-| `services/` | `run_store`, `data_analysis` (2,931), `visualizer` (owns `chart_engine`+`ChartConfigError`+`ECHARTS_ONLY_TYPES`), `latex_charts`/`latex_compile`/**`latex_outputs`** (the TikZ figure+table add-ons the render route and the visualize node share), **`nodes`** (extracted `_execute_*_node` executors), `dataset_store`, `execution_history`, `cookie_manager`/`cookie_flow`, `cookie_preflight.py` (top-level), `exporter`/`export_browser`, `report_service`, `housekeeping`, `lock_store`, `browser_profiles`, `net_probe`, `stats`, `workflow_manager`, `text_dedupe`, `part_writer`. |
+| `services/` | `run_store`, `data_analysis`, `visualizer` (owns `chart_engine`+`ChartConfigError`+`ECHARTS_ONLY_TYPES`), `latex_charts`/`latex_compile`/**`latex_outputs`** (the TikZ figure+table add-ons the render route and the visualize node share), **`nodes`** (extracted `_execute_*_node` executors), `dataset_store`, `execution_history`, `cookie_manager`/`cookie_flow`, `cookie_preflight.py` (top-level), `exporter`/`export_browser`, `report_service`, `housekeeping`, `lock_store`, `schedule_store` + `cron` (定时任务台账与时间语法), `browser_profiles`, `net_probe`, `stats`, `workflow_manager`, `text_dedupe`, `part_writer`. |
 | `analyzers/` | `llm_client` (Ollama/OpenRouter), sklearn + BERT analyzers, `keyword`, `ner`, `stopwords`. |
 | `crawlers/` | `base.py` + per-platform (`weibo`/`zhihu`/`douyin`/`xiaohongshu`/`bilibili`/`twitter`/`youtube`/`wechat`/`instagram`) + `comments_*` + a site-independent `engine/`. **Well separated.** |
 | `utils/` | helpers (`as_bool`, `platform_for`, `sanitize_filename`). |
 
 ### Why `app.py` is big — and the coupling that constrains how to split it
-`app.py` mixes two different jobs: (a) the ~78 request handlers, and (b) the **node executors**
+`app.py` mixes two different jobs: (a) the ~95 route decorators, and (b) the **node executors**
 (`_execute_visualize_node`, `_execute_process_node`, …) plus a large set of module-level helpers
 (`_json_body`, `_results_snapshot`, `_safe_int`, `all_settings`, `execution_state`, …). Every new
 analyzer/chart forces an edit here, which is how it grew.
@@ -40,12 +41,13 @@ byte-clean — `AGENTS.md` calls it out explicitly. So **`create_app()` is not a
 module into a factory would orphan every one of those references and silently break isolation. Any
 split must move that shared state to a place both `app.py` and `conftest.py` can import from, *first*.
 
-## Frontend layout (~15k JS LOC, no build step)
+## Frontend layout (~19k JS LOC, no build step)
 | file | role |
 |---|---|
-| `workflow.js` | **7,713 LOC — 132 top-level functions, 59 col-0 globals.** Run console, panels/settings, execution, resume, Chart Studio glue. |
-| `app.js` | 3,210 LOC — i18n catalogs (en+zh) + `AppSettings`/`BrowserProfiles`/`CloudMode`/`RunState`/… namespaces, boot, cookie dialog. |
-| `canvas.js` | 1,864 LOC — node graph, camera (`pan/zoom`, kept out of `getState`), pointer/touch gestures. |
+| `workflow.js` | **9,276 LOC — 146 top-level `function`s, 63 col-0 `var/let/const`.** Run console, panels/settings, execution, resume, Chart Studio glue. |
+| `app.js` | 3,845 LOC — i18n catalogs (en+zh) + `AppSettings`/`BrowserProfiles`/`CloudMode`/`RunState`/… namespaces, boot, cookie dialog, every dock's resize wiring. |
+| `canvas.js` | 3,379 LOC — node graph, camera (`pan/zoom`, kept out of `getState`), pointer/touch gestures. |
+| `schedules.js` | 462 LOC — the 定时任务 dock: it renders the server's payload (`/api/schedules*`) and nothing else. Deliberately **no** time arithmetic and **no** status vocabulary of its own (a token the catalogue does not know shows as itself) — see the 定时任务 rules in `AGENTS.md`. |
 | `custom-select.js`, `menu.js`, `stats.js`, `zenviz*.js` | widget + Chart-Studio host/bridge. |
 
 The codebase already uses a lightweight namespace convention (`const Foo = { … }`), but everything
@@ -103,11 +105,13 @@ Step A-1 is done and went further than planned: `backend/state.py` owns the in-p
 (`execution_state`, `_RUN_QUEUE`, `_dataset_cache`, the console-buffer helpers), the eager
 `history_service`/`cookie_manager`, and `_completed_lock` + `_results_snapshot`; `backend/stores.py`
 owns the store registry (`_RUN_STORE`/`_DATASET_STORE`/`_HOUSEKEEPER` + getters, the dataset cache
-cluster). Fourteen Blueprints live in `backend/api/`: `history`, `stats`, `settings`, `config`+`models`,
+cluster). Seventeen Blueprints live in `backend/api/`: `history`, `stats`, `settings`, `config`+`models`,
 `capabilities`, `browser_profiles` (+ `backend/profiles.py`), `llm` (+ `backend/transport.py`), `locks`,
 `exports` (write `/api/export/save` + the read side), `data`, `studio`, `analysis`, `visualize`, `report`,
+`diagnostics`, `lexicon`, `schedules` (+ `backend/scheduler.py`),
 with `api/http.py` (request coercions), `api/resolution.py` (`_resolve_dataframe`/`_resolve_payload_dataframe`/
-`NoRunDataError`) shared. `app.py` 8043 → **5,794 lines**. A-4 is partly landed: `services/nodes.py` holds the
+`NoRunDataError`) shared. `app.py` shrank 8043 → **5,794 lines** in that work and has since grown back to
+**6,457** as later features landed. A-4 is partly landed: `services/nodes.py` holds the
 `name`/`compile`/`tokenize`/`resume`/`upload` executors (imported back as `_execute_*_node`); the executors that
 still reach a raw `app` global (`analysis`/`output`/`process`/`visualize`/`comment`/`source`) stay in `app.py`
 until their web is service-level — the visualize node's TikZ/`chart_engine` web is already in `services/`.

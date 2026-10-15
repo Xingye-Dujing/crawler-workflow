@@ -15,6 +15,7 @@ import browser_profiles
 import cookie_preflight
 import crawl_gate
 import pandas as pd
+import scheduler
 from api.analysis import bp as analysis_bp
 from api.browser_profiles import bp as browser_profiles_bp
 from api.capabilities import bp as capabilities_bp
@@ -29,6 +30,7 @@ from api.lexicon import bp as lexicon_bp
 from api.llm import bp as llm_bp
 from api.locks import bp as locks_bp
 from api.report import bp as report_bp
+from api.schedules import bp as schedules_bp
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
 from api.studio import bp as studio_bp
@@ -1262,6 +1264,66 @@ def _start_next_queued() -> None:
         _RUN_QUEUE.insert(0, entry)
         add_log(t('run.queue_waited', name=entry['workflow_name'] or entry['id']))
     _mirror_queue()
+
+
+# ─── Scheduled tasks (the clock lives in scheduler.py) ───
+#
+# The clock, the store and the history are in ``scheduler.py`` / ``services/schedule_store.py``,
+# which import without Flask. These two functions are the only parts it cannot own: reading the
+# canvas a task names, and starting the run its own way. A scheduled fire goes through
+# ``_begin_run`` — resolved at CALL time, since the run-start path is defined further down this
+# file — so a timer gets the same execution a manual 执行 does: same validations, same claim, and
+# the same queue when a run is already going.
+
+
+def _scheduled_canvas(name: str) -> dict:
+    """The saved canvas a scheduled task will run, or the reason it may not run on a timer.
+
+    One answer for two moments: the schedule form refuses a canvas that cannot run unattended
+    while the user is still choosing, and the fire refuses it again if the file changed since.
+    Both rules are enforced here rather than in the panel, because a hand-written POST would
+    otherwise skip them: the file must exist, and its steps must not need a model — a timer has no
+    browser request behind it, so there is nowhere for an API key to come from, and a run that
+    quietly skipped its analysis would look exactly like one that analysed something.
+    """
+    if not name:
+        return {'workflow': None, 'error': t('sched.workflowRequired')}
+    workflow = workflow_manager.load(name)
+    if not workflow:
+        return {'workflow': None, 'error': t('sched.canvasMissing', name=name)}
+    if _workflow_needs_llm(workflow):
+        return {'workflow': None, 'error': t('sched.canvasNeedsModel', name=name)}
+    return {'workflow': workflow, 'error': ''}
+
+
+def _start_scheduled_run(task: dict, manual: bool) -> dict:
+    """Start one scheduled run and say what happened (started / queued / refused).
+
+    ``run_id`` comes back so the task's own history can point at the record: that id is how the
+    user opens the console of the fire that just happened.
+    """
+    loaded = _scheduled_canvas(str(task.get('workflow') or ''))
+    if loaded['error']:
+        return {'ok': False, 'error': loaded['error']}
+    name = str(task.get('name') or '')
+    answer = _begin_run(
+        {'workflow': loaded['workflow'], 'workflow_name': name, 'lang': task.get('lang') or 'zh'},
+        '',
+    )
+    body = answer.get('body') or {}
+    if answer.get('status') != 200 or not body.get('ok'):
+        return {'ok': False, 'error': str(body.get('error') or '')}
+    queued = bool(body.get('queued'))
+    if not queued:
+        # Only a run that really started gets a console line. A queued fire has no console of its
+        # own yet (the queue narrates when it starts) and a refusal has none at all — that one is
+        # recorded in the task's own history, which is where the user looks for it.
+        add_log(t('sched.firedManual' if manual else 'sched.fired', name=name))
+    return {'ok': True, 'queued': queued, 'run_id': str(body.get('run_id') or ''), 'error': ''}
+
+
+scheduler.set_run_starter(_start_scheduled_run)
+scheduler.set_canvas_source(_scheduled_canvas)
 
 
 @app.route('/api/workflow/execute', methods=['POST'])
@@ -6071,6 +6133,14 @@ app.register_blueprint(llm_bp)
 app.register_blueprint(history_bp)
 
 
+# ─── Scheduled tasks API ───────────────────────────────────────
+#
+# /api/schedules* lives in api/schedules.py (imported above). It reads the task store and the
+# scheduler's two seams, never this module, so it registers like every other Blueprint; the clock
+# itself is started by the ``__main__`` block below.
+app.register_blueprint(schedules_bp)
+
+
 # ─── Resumable runs ────────────────────────────────────────────
 
 
@@ -6404,4 +6474,10 @@ if __name__ == '__main__':
     restored = _load_pending_queue()
     if restored:
         logger.info(t('run.queue_restored', n=restored))
+    # The scheduled-task clock. Started in the SERVING process only: with the reloader on this
+    # module is imported twice (the watcher and the child), and two clocks would fire one moment
+    # twice. ``start()`` also records whichever moments passed while the server was down, before
+    # its first tick — a restart counts what it missed, it never replays it.
+    if not debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        scheduler.start()
     app.run(host=host, port=port, debug=debug, threaded=True, use_reloader=debug)

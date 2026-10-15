@@ -1,18 +1,23 @@
-/* Drives the three bottom-docked panels in the REAL workflow.js + app.js.
+/* Drives every bottom-docked panel in the REAL workflow.js + app.js + schedules.js.
  *
- * Console, 运行记录 and 导出产物 share one screen slot, and each writes an inline
- * height when its resize handle is dragged. An inline height beats the CSS
+ * Console, 运行记录, 导出产物 and the rest share one screen slot, and each writes an
+ * inline height when its resize handle is dragged. An inline height beats the CSS
  * `height: 0` that hides a panel, so a panel that is closed by dropping `.open`
  * alone stays visually expanded — which is how two of them ended up stacked on
- * top of each other. This loads both scripts in one sandbox (workflow.js needs
- * what app.js defines and vice versa), and checks:
- *   · opening any one of the three closes the other two AND clears their inline
+ * top of each other. This loads all three scripts in one sandbox (workflow.js needs
+ * what app.js defines and vice versa; the schedule panel's toggle lives in
+ * schedules.js, so that file is loaded for the same reason), and checks:
+ *   · opening any one of them closes the others AND clears their inline
  *     height;
- *   · the export panel's resize handle really exists;
+ *   · each dock's resize handle really exists;
  *   · the cookie dialog's resize bounds follow the viewport instead of a fixed
  *     500px ceiling.
  *
- * Usage: node harness_panels.mjs <workflow.js> <app.js>
+ * The list below is the dock matrix and is meant to hold one entry per
+ * `DOCKED_PANELS` member — `test_frontend_schedules.py` fails a panel that is
+ * docked but missing here, because a dock nobody drives is a dock nobody checks.
+ *
+ * Usage: node harness_panels.mjs <workflow.js> <app.js> <schedules.js>
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -21,6 +26,7 @@ import { baseSandbox, fixWindow } from './harness_dom.mjs';
 
 const workflowSrc = fs.readFileSync(process.argv[2], 'utf8');
 const appSrc = fs.readFileSync(process.argv[3], 'utf8');
+const schedulesSrc = fs.readFileSync(process.argv[4], 'utf8');
 
 const sandbox = {
     ...baseSandbox(),
@@ -32,8 +38,9 @@ fixWindow(vm, sandbox);
 vm.runInContext(workflowSrc, sandbox);
 /* app.js is an IIFE-ish sibling of workflow.js in the browser: same global. */
 vm.runInContext(appSrc, sandbox);
+vm.runInContext(schedulesSrc, sandbox);
 
-const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'lexicon-panel'];
+const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel'];
 
 function state() {
     const out = {};
@@ -58,7 +65,9 @@ for (const target of ids) {
         'exports-panel': 'exportsManager.toggle()',
         'dataset-panel': 'datasetManager.toggle()',
         'workflows-panel': 'wfFiles.toggle()',
+        'cookies-panel': 'toggleCookiesPanel()',
         'lexicon-panel': 'lexiconManager.toggle()',
+        'schedules-panel': 'toggleSchedulesPanel()',
     };
     const toggler = togglers[target];
     sandbox.__byId(target).classList.remove('open');

@@ -248,3 +248,70 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
     on.
   - **A new settings key needs all four:** the bool branch in `settings_store.save_settings`, both app.js catalogs, and
     the `AppSettings` wiring.
+
+## 定时任务 (scheduler) — why the clock is narrow
+
+**The clock is one thread, and it is started from exactly one place.** Flask's reloader (`FLASK_DEBUG=1`) imports the
+module twice — parent and serving child — so a `scheduler.start()` at import scope gives **two clocks ticking the same
+`data/schedules.json`**: two threads that each see the task due, so the second fire is queued behind the first and the user
+gets a run nobody asked for (and a canvas that spends accounts gets crawled twice). Hence `start()` is called only under
+`__main__`, and only when `not debug or os.environ.get('WERKZEUG_RUN_MAIN') == 'true'` — i.e. in the process that really
+serves. `start`/`stop` are idempotent so a test (or a future caller) cannot stack threads.
+
+**A fire is the same start as a manual Run, because `_begin_run` owns the whole start path.** `scheduler` may not import
+`app` (the Blueprint imports the scheduler, so that would be a cycle), so app.py installs two seams at import:
+`set_run_starter(app._start_scheduled_run)` and `set_canvas_source(app._scheduled_canvas)`. `_start_scheduled_run` then
+calls `_begin_run` — the *only* start path — which is what makes a busy server **queue** the fire exactly like the Execute
+button instead of racing it (`queue:false` keeps the 400 for fail-fast callers, so a second path would have looked
+plausible). The scheduler is refused by name (`sched.notWired`) when nothing was wired, because a silently-dropped fire
+would look like "the scheduler does not work on this box" with no line saying why.
+
+**A crash in the starter is not a refusal.** `_fire` records `error` for an exception (with the traceback in the log file)
+and `refused` for an executor saying no. They mean different things to the user reading the task's history — "my canvas
+needs a model" versus "something is broken" — and the first version recorded both as `refused`. A crash also must not stop
+the clock for every other task, so the `except` is per-task and the tick continues.
+
+**One rule about a canvas, asked three times, from one function.** `app._scheduled_canvas` wraps the existing
+`_workflow_needs_llm` (the same test the executor uses), and the panel's `runnable`/`why_not`, the save-time check and the
+fire-time check all go through it. Three copies would drift, and the drift is invisible until 03:00. This is why a
+scheduled canvas may not need a model at all: a cloud box has neither Ollama nor a person to answer a provider question,
+and the user explicitly refused a server-side key — so the canvas is refused **while it is being chosen**, in the picker's
+own label, rather than at the moment of firing in a history row nobody is reading.
+
+**A missed moment is recorded, never replayed.** A restart after a night down must not fire a backlog (each fire spends
+accounts, and the user asked for one run per slot). `note_missed()` runs once before the thread starts and marks a past
+moment as missed, and `_reanchor()` re-arms the task from *now*; a task that is switched off or not yet due is left alone,
+and **at most one missed event is filed per restart** however many slots were skipped (`missed.count` accumulates across
+restarts, which is what the panel's 「错过 N 次」 chip reads).
+
+**Accounting goes to the task, and the console stays honest.** The run console is a per-run view: a queued fire has no
+console of its own yet (the queue narrates when it starts) and a refused one has none at all. So only a run that really
+started gets one attributed line (`sched.fired` / `sched.firedManual`), and everything else lands in the task's own
+`last_run`/`history` (20 entries, newest first) where the user is already looking. The language of those lines is pinned
+from the task (`set_lang` in `_fire`), because a daemon thread starts fresh and would otherwise print in whatever language
+the last request left behind.
+
+**The browser may not hold a second opinion about time or state.** A Beijing screen can be looking at a UTC cloud box, so
+a moment the browser formatted would name a time the schedule does not mean: `next_run_local`/`last_run_local` are
+rendered server-side in the *task's* zone, and the trigger sentence comes from the store's own `describe_trigger`. A
+status token the catalogue does not know shows **as itself** (the same rule as a stored value off an option list —
+`weird` is real information, and mapping it to a neighbouring word would be a lie). `schedules.js` therefore has no time
+arithmetic and no status vocabulary of its own; `tests/unit/test_frontend_schedules.py` drives the real file under node to
+keep it that way.
+
+**The dock list and the dock matrix are two places, and both are needed.** `DOCKED_PANELS` is the list
+`closeDockedPanels` walks — a panel missing from it stacks on top of the console instead of replacing it — while
+`tests/frontend/harness_panels.mjs` is the one place that proves "opening any one closes the others AND clears the stale
+inline height" (an inline height beats the CSS `height: 0`, which is how two panels once overlapped). Adding
+`schedules-panel` to the list surfaced that **`cookies-panel` had never been in the harness** — docked but undriven since
+it was added. Hence the test that fails a docked panel missing from the matrix
+(`test_the_dock_matrix_in_the_shared_harness_still_covers_every_panel`), and hence the shared harness now loads
+`schedules.js` too: the panel's toggle lives in its own file, unlike the other togglers.
+
+**cron is hand-rolled on purpose, and its edges are measured.** stdlib only (`zoneinfo`; zero new dependencies — the
+project's dependency rule), with `next_after()` strictly *after* the given moment so a tick landing exactly on the slot
+cannot fire the same slot twice. The edges a user hits once a year are pinned in `tests/unit/test_cron.py`: a
+spring-forward hour that does not exist is **skipped whole** (never fired twice), an autumn ambiguous hour runs on its
+**first** pass (`fold=0`), `0` and `7` are both Sunday, day-of-month and day-of-week are combined POSIX-style (OR), and an
+expression that can never fire (`0 0 30 2 *`) is refused **at save time** by name rather than stored and never answered.
+

@@ -13,6 +13,7 @@ crawler_workflow/
 │   ├── config.py                 # 配置与数据路径
 │   ├── i18n.py                   # zh/en 消息目录（X-Lang 请求头切换）
 │   ├── settings_store.py         # 运行时可改设置（data/settings.json）
+│   ├── scheduler.py              # 定时任务时钟：进程内 daemon 按 SECONDS tick，到点走 app 的唯一启动路径
 │   ├── crawl_capabilities.py     # 采集矩阵：平台 × 模式 × 字段 × handler（校验、执行、前端面板的唯一口径）
 │   ├── state.py                  # 进程内运行态与 console 缓冲（execution_state/_RUN_QUEUE/_results_snapshot/add_log…），app 与 tests/conftest 共引
 │   ├── stores.py                 # 存储登记处：run/dataset/housekeeper 单例与惰性 getter + 数据集缓存簇
@@ -21,7 +22,7 @@ crawler_workflow/
 │   ├── browser_profiles.py       # 各平台登录 profile 根与「这个抓取有没有登录」判定
 │   ├── cookie_preflight.py       # 运行前 Cookie 预检：哪些模式需要登录态
 │   ├── crawl_gate.py             # 采集前置闸门（登录墙/风控判定入口）
-│   ├── api/                      # Flask Blueprint：按域拆出的路由簇（14 个已注册 + 2 个共享工具）
+│   ├── api/                      # Flask Blueprint：按域拆出的路由簇（17 个已注册 + 2 个共享工具）
 │   │   ├── http.py               # 共享请求工具（_json_body/_bad_body/_safe_int/_bad_param 等）
 │   │   ├── resolution.py         # 数据帧解析（_resolve_dataframe/_resolve_payload_dataframe/NoRunDataError）
 │   │   ├── analysis.py           # /api/analysis/{run,train}（含 ML 训练常量）
@@ -34,6 +35,7 @@ crawler_workflow/
 │   │   ├── llm.py                # /api/llm/*（模型测试/补全）
 │   │   ├── locks.py              # /api/locks（导出产物钉住台账）
 │   │   ├── report.py             # /api/report/{generate,view,pdf,studio-images}
+│   │   ├── schedules.py          # /api/schedules*（定时任务：读/存/删/开关/立即执行）
 │   │   ├── settings.py           # /api/settings/*
 │   │   ├── stats.py              # /api/stats/*（情感/倾向性统计）
 │   │   ├── studio.py             # /api/studio/*（Chart Studio 数据源与存图）
@@ -102,6 +104,8 @@ crawler_workflow/
 │   │   ├── nodes.py              # 从 app 抽出的节点执行器（name/compile/tokenize/resume/upload，别名回接 _execute_*_node）
 │   │   ├── text_dedupe.py        # 爬取文本的归一化与近重复检测（SimHash「近重复去重」步骤）
 │   │   ├── lock_store.py         # 面板条目的逐项钉住锁：导出产物 / 运行记录 / 历史 / 工作流文件（抗批量清空与单删）
+│   │   ├── schedule_store.py     # 定时任务台账（data/schedules.json）：时间语法归一、下次运行、触发记账与「已错过」
+│   │   ├── cron.py               # cron 五段解析/校验/next_after 与 IANA 时区（只用 stdlib zoneinfo，零依赖）
 │   │   ├── net_probe.py          # 分网探测：把「够不到站点」与「站点只是慢」分开，别误判成抓取失败
 │   │   └── execution_history.py  # 执行历史记录（history.db）
 │   ├── utils/
@@ -116,6 +120,7 @@ crawler_workflow/
 │           ├── menu.js           # 顶栏菜单状态
 │           ├── stats.js          # 情感/倾向性 ECharts 统计
 │           ├── custom-select.js  # 主题化下拉组件
+│           ├── schedules.js      # 定时任务面板（停靠 dock）：读服务端给的整份 payload 渲染，不在前端算时间
 │           ├── zenviz.js         # 内嵌 Chart Studio 图表库
 │           └── zenviz-bridge.js  # Studio 与画布的数据桥接
 ├── data/                         # 运行时数据（gitignore；只有 workflows/ 例外，见下）
@@ -123,6 +128,7 @@ crawler_workflow/
 │   ├── datasets.db               # 持久化的上传数据集与引用
 │   ├── history.db                # 执行历史与趋势
 │   ├── settings.json             # 运行时设置（驱动路径等）
+│   ├── schedules.json            # 定时任务台账（任务、下次运行、最近一次、已错过次数、逐条历史）
 │   ├── cookies/                  # 平台 Cookie
 │   ├── exports/                  # 导出数据
 │   ├── workflows/                # 工作流配置（**进版本库**：这是作者写出来的成果，不是运行时垃圾）

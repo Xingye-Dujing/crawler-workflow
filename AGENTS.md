@@ -163,6 +163,24 @@ renders a drag-and-drop workflow canvas.
   row; 继续 adopts each by name. **A chip describes what happened:** `并行 ×N` only when `mode=='parallel'`, serial says
   `串行 ×1`; resume state stays **per workflow** (`fingerprints_for_workflow`) so B's failure restores A.
 
+## 定时任务 (scheduler)
+
+- **The clock is one thread inside the server process, started only from `__main__`** (and, under the reloader, only in
+  the real serving child), and **a fire takes the same start path as a manual Run** — `scheduler` never starts a run
+  itself, it calls the seam `app._start_scheduled_run` → `_begin_run`, so a busy server **queues** the fire like any
+  other request. Two clocks would double-fire; a second start path would bypass `_begin_run`'s single-run ownership.
+- **A scheduled canvas may not need a model, and the rule is one rule asked twice** (`app._scheduled_canvas`, shared by
+  the panel's verdict, save time and fire time): refused **by name**, never by a server-side key. **A moment missed while
+  the server was down is recorded (`missed.count`), never replayed** — at most one event per restart. Refusals and
+  accounting go to the task's own history (`last_run` + 20 entries), never into the run console, which gets exactly one
+  attributed line when a run really starts (a queued fire is narrated by the queue).
+- **The panel holds no second opinion about time or state:** `next_run_local`/`last_run_local` (rendered in the *task's*
+  zone), the trigger sentence, `runnable`/`why_not` and the clock status all come from the server, and a status token
+  becomes a catalogue word — an unknown token shows as itself. Never format a moment in the browser and never invent a
+  neighbouring word; `tests/unit/test_frontend_schedules.py` drives the real `schedules.js`. **A new dock belongs in
+  `DOCKED_PANELS` *and* in the dock matrix** (`tests/frontend/harness_panels.mjs`, enforced by
+  `TestTheDock`/`test_the_dock_matrix_in_the_shared_harness_still_covers_every_panel`).
+
 ## Console, messages and i18n
 
 - UI text supports zh/en via `backend/i18n.py` — add every new user-facing string there (both languages) **and** in the

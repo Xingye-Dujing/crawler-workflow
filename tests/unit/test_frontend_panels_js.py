@@ -29,12 +29,26 @@ pytestmark = [pytest.mark.unit, pytest.mark.skipif(shutil.which('node') is None,
 
 @pytest.fixture(scope='module')
 def results():
-    proc = run_node(str(HARNESS), str(JS_DIR / 'workflow.js'), str(JS_DIR / 'app.js'))
+    proc = run_node(
+        str(HARNESS),
+        str(JS_DIR / 'workflow.js'),
+        str(JS_DIR / 'app.js'),
+        str(JS_DIR / 'schedules.js'),
+    )
     assert proc.returncode == 0, proc.stderr
     return proc.stdout
 
 
-PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'lexicon-panel']
+PANELS = [
+    'console-panel',
+    'runs-panel',
+    'exports-panel',
+    'dataset-panel',
+    'workflows-panel',
+    'cookies-panel',
+    'lexicon-panel',
+    'schedules-panel',
+]
 
 
 @pytest.mark.parametrize('target', PANELS)

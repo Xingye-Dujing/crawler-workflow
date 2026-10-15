@@ -5568,6 +5568,10 @@ function setLang(nextLang) {
     if (typeof lexiconManager !== 'undefined') lexiconManager.onLanguageChange();
     if (typeof historyPanel !== 'undefined') historyPanel.onLanguageChange();
     if (typeof wfFiles !== 'undefined') wfFiles.onLanguageChange();
+    /* The scheduled-task dock is JS-rendered like those, and its table says 「下次运行」 in the
+       task's own zone — a row left in the old language would be the one word in the panel that
+       did not switch. */
+    if (typeof schedulesManager !== 'undefined') schedulesManager.onLanguageChange();
 }
 
 function showToast(msg, ms) {
@@ -8173,7 +8177,7 @@ function renderCostSummary() {
    leaves it visually expanded — two panels then overlap in the same slot. All
    three toggles live in this file, so the helper is called directly rather than
    reached for through `window`. */
-var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel'];
+var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel'];
 
 function closeDockedPanels(exceptId) {
     DOCKED_PANELS.forEach(function (id) {

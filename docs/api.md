@@ -114,3 +114,15 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/config` | GET | 系统配置 |
 | `/api/capabilities` | GET | 采集矩阵：每个平台支持哪些采集模式、每种模式要填什么（数据源面板整块由它渲染，中英词条用 key 送出） |
 | `/api/models` | GET | 已注册微调模型清单（读 `data/model_registry.json`）：`{name, path, desc}`，情绪/倾向/情感节点的 `bert` 模式据此把「模型名」列成**显示名复选框**（如「网暴模型」）——可勾选多个，勾选写入 `bert_models`（逗号分隔的**路径**），≥2 个时该节点逐模型跑一遍并输出**多模型对比长表**（新增 `模型`/`原行` 两列），供热力图与 `model_agreement` 一致率图对比。文件缺失 / 不是列表 / JSON 损坏都回**空列表而非报错**（节点仍可手填路径），没有 `path` 的条目被丢弃。只读 |
+
+### 定时任务
+
+面板只认一个载荷：**每个回答都带全量 `{ok, tasks, canvases, status}`**，所以任何一次请求回来都能整块重画，页面上不会出现半旧半新的表。`tasks` 是已存任务（`trigger_text`/`next_run_local`/`last_run_local` 由服务端按**任务自己的时区**渲染，浏览器时区与之无关），`canvases` 是每个已存画布能否上定时的结论（`runnable`/`why_not`），`status` 是调度时钟本身（`running`/`wired`/`tick_seconds`/`now_local`/`local_zone`）。
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/schedules` | GET | 任务 + 画布可跑性 + 时钟状态，面板开合与每次改动后刷新 |
+| `/api/schedules/save` | POST | 新建或按 `id` 原地更新一个任务。时间表达 `{kind:'daily'\|'weekly'\|'interval'\|'cron', ...}` 原样存；**保存期与触发期用同一条规则**——画布里有需要模型的节点就具名拒绝（400），画布不存在、时间写不通、cron 永不触发（如 `0 0 30 2 *`）、时区名不认识都各自点名拒绝，绝不猜一个差不多的 |
+| `/api/schedules/delete` | POST | 删除一个任务（没有此 id 回 404） |
+| `/api/schedules/toggle` | POST | 开关一个任务：关掉即清空 `next_run`（不再计时），重开当场重算 |
+| `/api/schedules/run` | POST | 「立即执行」：立刻跑一次并记账，**即使这个任务被关掉**。`result.status` 是 `started`/`queued`——服务正忙时和别处一样**排队**，不另开一条路；失败回 400 并在任务历史里留一条 `refused` |

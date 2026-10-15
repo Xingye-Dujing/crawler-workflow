@@ -180,6 +180,15 @@
           Stop
         </button>
         <button
+          class="menu-btn"
+          type="button"
+          id="btn-schedules"
+          onclick="toggleSchedulesPanel()"
+          data-i18n="schedMgr.header"
+        >
+          Scheduled Tasks
+        </button>
+        <button
           class="menu-btn toggle-on"
           type="button"
           id="btn-parallel"
@@ -943,6 +952,38 @@
       <div id="workflows-mgr-body" class="data-preview-table-wrap"></div>
     </div>
 
+    <!-- Scheduled Tasks Panel — a wall clock for a saved canvas -->
+    <div id="schedules-panel">
+      <div id="schedules-resize-handle"></div>
+      <div class="console-header">
+        <span data-i18n="schedMgr.header">Scheduled Tasks</span>
+        <div class="console-actions">
+          <button
+            class="panel-close"
+            onclick="schedulesManager.create()"
+            data-i18n="schedMgr.create"
+          >
+            New task
+          </button>
+          <button
+            class="panel-close"
+            onclick="schedulesManager.refresh()"
+            data-i18n="btn.refresh"
+          >
+            Refresh
+          </button>
+          <button
+            class="panel-close"
+            onclick="toggleSchedulesPanel()"
+            data-i18n="stats.close"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <div id="schedules-mgr-body" class="data-preview-table-wrap"></div>
+    </div>
+
     <!-- Processes Panel -->
     <div id="processes-panel">
       <div class="console-header">
@@ -989,6 +1030,14 @@
         data-i18n="runsMgr.header"
       >
         Run Records
+      </button>
+      <button
+        class="status-btn"
+        id="btn-schedules-dock"
+        onclick="toggleSchedulesPanel()"
+        data-i18n="schedMgr.header"
+      >
+        Scheduled Tasks
       </button>
       <button
         class="status-btn"
@@ -1983,5 +2032,6 @@
     <script src="/js/zenviz.js"></script>
     <script src="/js/custom-select.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/schedules.js"></script>
   </body>
 </html>

@@ -34,7 +34,7 @@ VALIDATE_HARNESS = Path(__file__).resolve().parents[1] / 'frontend' / 'harness_v
 CANVAS_JS = JS_DIR / 'canvas.js'
 
 # Files whose I18n.t('literal') calls are audited against the catalogues.
-I18N_USERS = ['app.js', 'canvas.js', 'workflow.js', 'menu.js', 'stats.js']
+I18N_USERS = ['app.js', 'canvas.js', 'workflow.js', 'menu.js', 'stats.js', 'schedules.js']
 
 _KEY_REF = re.compile(r"""I18n\.t\(\s*(['"])([A-Za-z][\w.]*)\1\s*\)""")
 _DICT_KEY = re.compile(r"""['"]([A-Za-z][\w.]*)['"]\s*:\s*['"]""")

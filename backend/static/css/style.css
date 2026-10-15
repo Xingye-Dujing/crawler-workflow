@@ -3031,7 +3031,8 @@ input:-webkit-autofill:focus {
 #dataset-panel,
 #workflows-panel,
 #cookies-panel,
-#lexicon-panel {
+#lexicon-panel,
+#schedules-panel {
   position: fixed;
   bottom: var(--barH);
   left: 0;
@@ -3050,7 +3051,8 @@ input:-webkit-autofill:focus {
 #dataset-panel.open,
 #workflows-panel.open,
 #cookies-panel.open,
-#lexicon-panel.open {
+#lexicon-panel.open,
+#schedules-panel.open {
   height: 240px;
 }
 #runs-panel.open ~ #status-bar {
@@ -3061,7 +3063,8 @@ input:-webkit-autofill:focus {
 #dataset-resize-handle,
 #workflows-resize-handle,
 #cookies-resize-handle,
-#lexicon-resize-handle {
+#lexicon-resize-handle,
+#schedules-resize-handle {
   position: absolute;
   top: 0;
   left: 0;
@@ -3082,7 +3085,9 @@ input:-webkit-autofill:focus {
 #cookies-resize-handle:hover,
 #cookies-resize-handle.active,
 #lexicon-resize-handle:hover,
-#lexicon-resize-handle.active {
+#lexicon-resize-handle.active,
+#schedules-resize-handle:hover,
+#schedules-resize-handle.active {
   background: var(--line);
 }
 #runs-mgr-body,
@@ -3090,7 +3095,8 @@ input:-webkit-autofill:focus {
 #dataset-mgr-body,
 #workflows-mgr-body,
 #cookies-mgr-body,
-#lexicon-body {
+#lexicon-body,
+#schedules-mgr-body {
   flex: 1;
   overflow: auto;
   padding: 0 8px 8px;
@@ -3101,7 +3107,8 @@ input:-webkit-autofill:focus {
   #dataset-panel.open,
   #workflows-panel.open,
   #cookies-panel.open,
-  #lexicon-panel.open {
+  #lexicon-panel.open,
+  #schedules-panel.open {
     height: 140px;
   }
 }
@@ -3110,6 +3117,43 @@ input:-webkit-autofill:focus {
   #console-panel.open {
     height: 120px;
   }
+}
+
+/* ── Scheduled tasks panel: the words only this panel prints ──
+   The table itself is the shared .runs-mgr-table; these classes carry the
+   operator's line, the two chips, and a refusal reason left under the row's
+   last outcome (the one line a user opens this panel to read at 09:00). */
+.sched-status {
+  padding: 6px 2px 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.sched-status-off {
+  color: var(--warn);
+}
+.sched-chip {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.sched-chip-missed {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.sched-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  max-width: 340px;
+  white-space: normal;
+}
+.sched-none {
+  color: var(--text-dim);
+}
+.sched-row-off td {
+  opacity: 0.6;
 }
 
 /* ── Processes panel ────────────────────────────────────────────────────── */

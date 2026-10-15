@@ -70,6 +70,10 @@ class Config:
     # anybody asking (see services/housekeeping.py). Startup, then at most once
     # per this many minutes.
     HOUSEKEEPING_INTERVAL_MINUTES = 60
+    #: How often the scheduled-task clock looks at its own list (backend/scheduler.py). A rule is
+    #: written in minutes, so anything well under a minute is precision nobody asked for, and one
+    #: tick is one small JSON read. This is also the worst-case lateness of a fire.
+    SCHEDULER_TICK_SECONDS = 20
     # Hard ceiling on rows persisted per node: a runaway crawl must not fill
     # the disk. Hitting it is reported in the console rather than silently
     # truncating the data handed downstream.
