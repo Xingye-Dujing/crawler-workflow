@@ -10,6 +10,7 @@ second opinion beside it.
 
 - [Weibo](#weibo) · [Zhihu](#zhihu) · [Douyin](#douyin) · [Bilibili](#bilibili)
 - [YouTube](#youtube) · [X (twitter)](#x-twitter) · [WeChat](#wechat) · [Xiaohongshu](#xiaohongshu)
+- [红果短剧（hongguo）](#红果短剧hongguo)
 - [Cookie capture vs crawling](#cookie-capture-vs-crawling)
 - [Browser options that were measured](#browser-options-that-were-measured)
 - [Crawl cost is a testable property](#crawl-cost-is-a-testable-property)
@@ -882,6 +883,44 @@ and aborted the whole harvest. Same shape as bilibili's U55 (a per-link code bla
 The note is now entered with `judge=False` and read with the non-latching `verdict`: a walled detail is
 a **named** dead note (`crawl.xhs.deadNote`), the grid card's real fields are kept, and one stale token
 no longer stops the run. The session wall is still checked where it belongs — on the search page, each round.
+
+## 红果短剧（hongguo）
+
+**四个榜都在文档自带的 loader 载荷里，且是延迟到货的**（measured 2026-10，一次性探针
+`backend/test_hongguo_step0*.py` → `scratchpad/hongguo_*.json`）。页面是 React Router 应用，
+榜单在 `window._ROUTER_DATA.loaderData['rank_<slug>/page'].content._data` 里，形如
+`{isSuccess, rankList[20], pagination:{pageNum,totalPages,nextUrl}}`——**读它，不读渲染出来的列**：
+一行 20 条自带 title/cover/href/playHref/heatText/statusTags/scoreText/favoriteText/likeText/tags/
+description/episodeVids/seriesId，任何字段都不需要再点一次。**到货有两个时刻**：`driver.get` 刚回来时
+loader 键已在但 `content` 还没有 `_data`（约 2 s 后才填），所以用 `wait_for_first_content` 轮询
+（`has_content` = `state=='ready'`），**不要固定 sleep**。四个榜（`/rank/hot-drama`、`hot-real-drama`、
+`hot-ai-drama`、`hot-comic-drama`）第 1/2/5 页实测都是 20 条、`totalPages=5`、排名跨页连续（第 5 页从 81 起），
+第 5 页 `nextUrl=None`；`?page=1` 与裸 URL 是同一页（所以第 1 页不带参数）。
+
+**一条探针返回字符串而不是对象，是这里第一次就踩到的坑**：`execute_script` 里
+`return JSON.stringify(...)` 回来后是 `str`，`content.get` 直接 `'str' object has no attribute 'get'`；
+改成 `return board`（对象）即可，别在爬虫里 `json.loads`（probe #11）。
+
+**`?page=6` 是「这一页不存在」，不是「这个榜是空的」**：站点只渲染 `rank_layout`
+（`loader_keys: ['rank_layout']`、0 张卡），而且**导航已经 settled、当下就是这样**。因此
+`wait_for_first_content` 的 `stalled` 判据写成「loader 里没有 `/page` 键 **且** 导航已 settled」，
+否则耐心预算会白白坐等 300 s；等到它触发就是 `PageNotArrivedError` **具名拒绝**
+（消息带 URL 与页面实际带的键），既不读成空表、也不当成循环自述。
+
+**收尾许可只有站点自己的两种话**：`pagination.nextUrl` 为空 → `site_end`；
+`isSuccess is True` 但 `rankList` 为空 → `empty`。翻页游标指回当前地址、或连续两页都没有新条目
+（`stuck >= 2`；续跑时已存页允许一次不出新）→ 留 `UNDER_TARGET`（「我们的循环停了」不等于
+「站点没有了」）。`if nxt == url: 停` 这条是必须的：站点给的下一页就是当前页时再问一次只是白付一次。
+
+**集数 = `episodeVids` 的条数**，不是屏上的链接数：实测同一部剧详情页自己印 222 集与载荷 222 一致
+（第二条 69 与 69 一致），而 DOM 播放窗只挂 25 个 `episode_links`——按屏上数会整整少一个数量级。
+分类里会出现站点自己没解析出来的数字标签（`205`，hot-ai-drama/hot-comic-drama 各 21 行），
+**按原样保留**：它是站点给的数据，不是解析失败。
+
+**四个榜都是匿名的**：一次性浏览器、无 Cookie 都直接给（所以矩阵里 `needs_session=False`，
+面板没有它的 Cookie 行、节点没有账号字段，真站层 `live_crawler` 与微信同列免 cookie 豁免）。
+热度/收藏/点赞是站点四舍五入后的「万」标签（`8134万热度`/`53.7万收藏`/`141.8万点赞`），
+用共享的 `parse_count` 展开；站点没印数字的格子留**空**，不填 0。
 
 ## A login page on the way through is not a wall (measured 2026-09-24)
 

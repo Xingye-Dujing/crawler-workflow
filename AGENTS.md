@@ -9,7 +9,7 @@ the matching section before rewriting, doubting, or "simplifying away" any rule 
 
 ## Project
 
-采析绘 (crawler_workflow): Flask + zero-build vanilla-JS that crawls Chinese and overseas social media (8 platforms;
+采析绘 (crawler_workflow): Flask + zero-build vanilla-JS that crawls Chinese and overseas social media (9 platforms;
 instagram cookie-capture only) via Selenium, cleans and analyzes the text with local Ollama LLMs and scikit-learn, and
 renders a drag-and-drop workflow canvas.
 

@@ -182,7 +182,7 @@ class TestSelectsAreHeldToTheirOptions:
             for f in mode.fields
             if f.control == 'select' and f.key != 'account'
         }
-        assert declared == {('bilibili', 'hot', 'board')}, declared
+        assert declared == {('bilibili', 'hot', 'board'), ('hongguo', 'hot', 'board')}, declared
         # The shared file tail is the other one, and it is on every mode.
         assert [f.key for f in FILE_FIELDS if f.control == 'select'] == ['format']
 
@@ -307,6 +307,7 @@ class TestModeResolution:
         assert mode_keys_for('zhihu') == ('posts', 'author', 'hot', 'comments')
         assert mode_keys_for('weibo') == ('posts', 'author', 'hot', 'comments')
         assert mode_keys_for('douyin') == ('author', 'hot', 'comments')
+        assert mode_keys_for('hongguo') == ('hot',), '红果 offers its boards and nothing else'
         assert mode_keys_for('wechat') == ('posts',), 'WeChat has no comment adapter'
         assert 'hot' not in mode_keys_for('xiaohongshu'), '小红书 has no measurable board'
 
@@ -624,6 +625,10 @@ class TestCollectionKind:
             # class carries ``never_headless`` to override that. ``collects`` describes what
             # the mode does on screen, and that is now the whole story.
             ('douyin', 'hot'),
+            # 红果's four boards ship the finished list inside the document each page load
+            # (``_ROUTER_DATA``), so a window would sit through a page load per board page
+            # and show nothing a user could act on.
+            ('hongguo', 'hot'),
             ('bilibili', 'comments'),
             ('youtube', 'posts'),
             ('youtube', 'author'),
@@ -632,19 +637,23 @@ class TestCollectionKind:
 
     def test_only_the_measured_board_answers_an_anonymous_browser(self):
         """`needs_session` is what stops the cookie gate refusing a crawl the site would
-        have served. Exactly two modes are exempt, for two different measured reasons, and
-        a third False would be a claim nobody re-measured.
+        have served. Exactly three modes are exempt, each for a measured reason, and a
+        fourth False would be a claim nobody re-measured.
 
         ``weibo/hot`` is anonymous *while the platform can hold a session* (the board answers
         a visitor). ``wechat/posts`` has no session to have: wechat has never been in
         ``CookieManager.PLATFORMS``, carries no ``login_url``, and its article bodies are
         served to anyone — so demanding a cookie there refuses a crawl that cannot use one.
+        ``hongguo/hot`` is the same shape as wechat's: the four boards are served to a
+        fresh browser (measured 2026-10), and the platform has no ``login_url`` for a
+        cookie to be valid on, so a session question here could only be answered "no".
         """
         anonymous = {(cap.platform, mode.key) for cap in CAPABILITIES for mode in cap.modes if not mode.needs_session}
-        assert anonymous == {('weibo', 'hot'), ('wechat', 'posts')}, anonymous
+        assert anonymous == {('weibo', 'hot'), ('wechat', 'posts'), ('hongguo', 'hot')}, anonymous
         assert needs_session('weibo', 'hot') is False
         assert needs_session('weibo', 'posts') is True, 'the same platform, a different answer'
         assert needs_session('wechat', 'posts') is False
+        assert needs_session('hongguo', 'hot') is False, 'all four boards answer a fresh browser (measured 2026-10)'
         assert needs_session('zhihu', 'hot') is True, 'the zhihu board is 401 without a session'
         # No answer is not evidence of anonymity: an unknown platform or mode keeps
         # the probe on.

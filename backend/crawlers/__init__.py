@@ -3,6 +3,7 @@ import browser_profiles
 from config import Config
 from crawlers.bilibili import BilibiliCrawler
 from crawlers.douyin import DouyinCrawler
+from crawlers.hongguo import HongguoCrawler
 from crawlers.instagram import InstagramCrawler
 from crawlers.twitter import TwitterCrawler
 from crawlers.wechat import WechatCrawler
@@ -21,6 +22,7 @@ CRAWLERS = {
     'wechat': WechatCrawler,
     'bilibili': BilibiliCrawler,
     'douyin': DouyinCrawler,
+    'hongguo': HongguoCrawler,
     'youtube': YouTubeCrawler,
     'twitter': TwitterCrawler,
     # Cookie capture only: the panel can save a login session for this one while

@@ -166,14 +166,15 @@ def live_crawler(cookie_dir_str):
     made = []
 
     def _make(platform, headless=True, use_profile=None):
-        # WeChat is the one platform crawled without a session: its article bodies
-        # are public, and it has no cookie row in the panel at all. Requiring one
-        # here would skip the only tier that proves that crawl still works.
+        # WeChat and 红果短剧 are the platforms crawled without a session: WeChat's article
+        # bodies are public and it has no cookie row in the panel at all, and 红果's four
+        # boards answer a fresh browser (measured 2026-10). Requiring one here would skip
+        # the only tier that proves those crawls still work.
         # These two ``pytest.skip`` calls, with these two reasons, are the tier's whole skip
         # allowance — pinned by name in ``tests/unit/test_test_tiers.py``. A run-level case that
         # wants to refuse to be skipped (``test_live_zhihu_workflow.py``) takes this fixture
         # lazily, through ``request.getfixturevalue``, behind its own precondition assert.
-        if platform != 'wechat' and not has_cookie(platform):
+        if platform not in ('wechat', 'hongguo') and not has_cookie(platform):
             pytest.skip(f'no saved cookies for {platform}')
         # A test that asks for a second browser of a platform it is still holding would
         # otherwise sit in the gate until PLATFORM_GATE_TIMEOUT — 900 seconds, with no

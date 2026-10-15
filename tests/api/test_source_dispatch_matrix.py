@@ -536,12 +536,13 @@ def _hot_modes(with_board: bool):
     return out
 
 
-def test_only_one_site_actually_publishes_more_than_one_board():
+def test_only_the_sites_that_publish_more_than_one_board_offer_the_choice():
     """``board`` is a choice, so it may exist only where the site has two answers.
 
-    Measured: bilibili serves 热门 and 排行榜 out of one endpoint shape, while zhihu's
-    ``hot-lists/total``, weibo's ``ajax/side/hotSearch`` and douyin's
-    ``hot/search/list`` each publish exactly one list. Offering a control that changes
+    Measured: bilibili serves 热门 and 排行榜 out of one endpoint shape, and 红果短剧
+    publishes four boards of one row shape, while zhihu's ``hot-lists/total``, weibo's
+    ``ajax/side/hotSearch`` and douyin's ``hot/search/list`` each publish exactly one
+    list. Offering a control that changes
     nothing is the harm — the handler would
     carry a parameter it cannot honour, and a node saved under the other value would
     look like it asked for something it never did. ``crawl_kwargs`` is the answer the
@@ -560,9 +561,9 @@ def test_only_one_site_actually_publishes_more_than_one_board():
         for mode in cap.modes
         if (mode.handler == 'hot' and not any(field.key == 'board' for field in mode.fields))
     }
-    assert hot_with_board == {('bilibili', 'hot')}, hot_with_board
+    assert hot_with_board == {('bilibili', 'hot'), ('hongguo', 'hot')}, hot_with_board
     assert hot_without_board == {('weibo', 'hot'), ('zhihu', 'hot'), ('douyin', 'hot')}, hot_without_board
-    # The whole grid: no mode besides bilibili's carries a board, hot or otherwise,
+    # The whole grid: no mode besides these two carries a board, hot or otherwise,
     # so nothing else can smuggle one into a call.
     declaring = [
         f'{cap.platform}/{mode.key}'
@@ -570,7 +571,7 @@ def test_only_one_site_actually_publishes_more_than_one_board():
         for mode in cap.modes
         if any(field.key == 'board' for field in mode.fields)
     ]
-    assert declaring == ['bilibili/hot'], declaring
+    assert declaring == ['bilibili/hot', 'hongguo/hot'], declaring
 
     for platform, mode_key in sorted(hot_without_board):
         mode = capabilities.mode_for(platform, mode_key)
@@ -621,7 +622,14 @@ def test_the_board_a_site_does_offer_reaches_the_crawler_as_a_value(app_module, 
     """
     mode = capabilities.mode_for(platform, mode_key)
     params = _params_for(platform, mode)
-    params['board'] = 'ranking'
+    # The value is taken from the mode's own option list rather than typed in: the point is
+    # that the matrix's value reaches the crawler, and a hardcoded token would quietly become
+    # an off-list value the day a platform names its boards differently (红果's are 热播/
+    # 真人/AI/漫剧). The last option is chosen because `_params_for` already fills option #0 —
+    # so a crawler that never read `params['board']` would answer the default and fail here.
+    board_field = next(field for field in mode.fields if field.key == 'board')
+    chosen = board_field.options[-1][0]
+    params['board'] = chosen
     node = {'id': 'node-1', 'type': 'source', 'title': '热榜', 'params': params, 'platform': platform}
 
     rows = app_module._execute_source_node(node, headless=True, ctx=None)
@@ -630,7 +638,7 @@ def test_the_board_a_site_does_offer_reaches_the_crawler_as_a_value(app_module, 
     assert len(recorder) == 1, f'{platform}/{mode_key} reached {len(recorder)} crawler methods: {recorder}'
     called, kwargs = recorder[0]
     assert called == mode.handler, f'{platform}/{mode_key} must run {mode.handler}(), ran {called}()'
-    assert kwargs.get('board') == 'ranking', f'{platform}/{mode_key} sent board={kwargs.get("board")!r}'
+    assert kwargs.get('board') == chosen, f'{platform}/{mode_key} sent board={kwargs.get("board")!r}'
 
 
 def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_two():
@@ -646,13 +654,14 @@ def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_two():
     """
     pairs = [(cap.platform, mode.key) for cap in capabilities.CAPABILITIES for mode in cap.modes]
     anonymous = [(platform, key) for platform, key in pairs if not capabilities.needs_session(platform, key)]
-    # Two exemptions, for two different measured reasons: weibo's board answers an anonymous
-    # browser, while wechat has no session to have at all (it has never been a cookie platform).
-    assert anonymous == [('weibo', 'hot'), ('wechat', 'posts')], (
+    # Three exemptions, each for a measured reason: weibo's board answers an anonymous
+    # browser, wechat has no session to have at all (it has never been a cookie platform),
+    # and 红果短剧's four boards are served to a fresh browser on a platform with no login_url.
+    assert anonymous == [('weibo', 'hot'), ('wechat', 'posts'), ('hongguo', 'hot')], (
         f'of {len(pairs)} pairs these asked for no session: {anonymous}'
     )
     for platform, key in pairs:
-        if (platform, key) in {('weibo', 'hot'), ('wechat', 'posts')}:
+        if (platform, key) in {('weibo', 'hot'), ('wechat', 'posts'), ('hongguo', 'hot')}:
             continue
         assert capabilities.needs_session(platform, key) is True, f'{platform}/{key} quietly stopped needing a cookie'
 

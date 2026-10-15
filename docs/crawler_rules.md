@@ -156,6 +156,16 @@
 - **wechat**: body-only by measurement — no comments/likes/forwards columns, **no cookie row at all**, no
   `mp_logged_in`/`login_url`/`diagnose`/`MULTI_PURPOSE`, no client impersonation or session replay. The `live_site`
   file visits article URLs only; panel harnesses sample bilibili/zhihu, never wechat.
+- **hongguo (红果短剧)**: four boards are **one mode + one board select** whose values are storage identifiers
+  (`crawlers/hongguo.py::BOARDS` is the single name list, order-pinned against the matrix); the board is read from the
+  document's own loader payload (`window._ROUTER_DATA` → `rank_<slug>/page.content._data`), **never from the rendered
+  columns** — and it is **deferred** (~2 s after `get`), so wait through `wait_for_first_content`, never a fixed sleep.
+  集数 is the length of the payload's `episodeVids`, not the DOM's 25-link player window. Paging follows the site's own
+  `pagination.nextUrl` (that URL is the cursor); `?page=1` is the bare URL, and the unserved `?page=6` renders
+  `rank_layout` alone → `stalled` → `PageNotArrivedError` **named refusal**, never an empty board. Anonymous: no
+  `login_url`, no cookie row, `needs_session=False`, and `live_crawler` exempts it like wechat. 热度/收藏/点赞 are
+  rounded 万-labels expanded by `parse_count` (absent → blank, never 0); 分类 keeps the site's literal `205` tag id.
+  `search`/`get_detail` are named refusals — no such mode was ever measured.
 - **instagram**: capture-only (`supports_crawl = False`), refused by `run.notCrawlable` and earlier by validation;
   such a platform still needs `domain` + `login_url`, stays OUT of `CAPABILITIES`, and must clear
   `TestCookiePanelParity` + `TestPlatformOrder`.
@@ -205,17 +215,23 @@
   rendered ONLY when all three were measured; a partial or absent funnel is omitted, never printed as fake zeros.
   **Current arming: the LICENSE side is wired for the platforms with a real site-attested end**
   (douyin author `empty`/`capped`/`site_end` marker, zhihu search `no_more` + hot `capped`, weibo hot
-  `capped`, youtube search `drained`, bilibili hot `empty`/`capped`), **but NO handler ever issues
-  `UNDER_TARGET`, so the gate never convicts anything yet.** Conviction is deliberately deferred: a
-  scroll/cursor walk's "stopped growing" / "cursor gave nothing new" fires *identically* on a soft
-  throttle and on an honest 继续 replay (the cursor points at a page the ledger already holds), so
-  convicting on it would false-fail good resumes — §6's conviction needs a POSITIVE incompleteness
-  signal, which only per-platform live measurement (#7) can supply before any `UNDER_TARGET` is
-  emitted. Arming a license changes no observable outcome today (a license and `None` both settle
-  clean); it exists so a future, live-validated conviction can exempt the honest ends. Platforms with
-  no reliable end signal stay fully un-armed (`end_reason=None`): weibo search (its `'end'` is a loop
-  fallback, not a site marker), weibo/youtube author, bilibili search/author, xiaohongshu, twitter,
-  zhihu author. Pinned: `tests/api/test_under_target.py`.
+  `capped`, youtube search `drained`, bilibili hot `empty`/`capped`, **hongguo hot `site_end`/`empty`**),
+  **and one handler now convicts: hongguo's `hot` issues `UNDER_TARGET`** — it is the first platform
+  whose short has a POSITIVE incompleteness signal instead of a self-summary. The site hands out the
+  next page address itself (`pagination.nextUrl`), so the three ways its walk can end short are each
+  attributable: a `nextUrl` that points back at the page just read, or two pages in a row that brought
+  nothing new while the pager still offered a next one (a resume of a page the ledger already holds is
+  why the first no-fresh page is tolerated) — those are our loop stopping, and the executor now refuses
+  them by name; the site's own "no next page" (`site_end`) and an `isSuccess`-attested empty list
+  (`empty`) license the rest. Every other platform stays as before: its license is armed (a license and
+  `None` both settle clean, so arming one changes no observable outcome), but its conviction is still
+  deferred — a scroll/cursor walk's "stopped growing" / "cursor gave nothing new" fires *identically* on
+  a soft throttle and on an honest 继续 replay (the cursor points at a page the ledger already holds), so
+  convicting on it would false-fail good resumes, and §6's conviction needs a POSITIVE incompleteness
+  signal which only per-platform live measurement (#7) can supply. Platforms with no reliable end signal
+  stay fully un-armed (`end_reason=None`): weibo search (its `'end'` is a loop fallback, not a site
+  marker), weibo/youtube author, bilibili search/author, xiaohongshu, twitter, zhihu author.
+  Pinned: `tests/api/test_under_target.py`, `tests/unit/test_hongguo_crawler.py`.
 
 - **A 分批输出 stem is a storage key, not a label: it must be identical across every attempt of
   one run.** `PartWriter` adopts the shards a crashed attempt already flushed by matching

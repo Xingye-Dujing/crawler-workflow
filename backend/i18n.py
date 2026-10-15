@@ -709,6 +709,25 @@ _ZH = {
         '[哔哩哔哩] 接口拒绝返回数据（code={code}）：Cookie 可能已失效或触发了风控，'
         '请在 Cookie 面板重新登录并保存后继续运行'
     ),
+    'crawl.hg.boardHotDrama': '热播榜',
+    'crawl.hg.boardRealDrama': '真人剧热播榜',
+    'crawl.hg.boardAiDrama': 'AI剧热播榜',
+    'crawl.hg.boardComicDrama': '漫剧热播榜',
+    'crawl.hg.boardUnknown': '[红果短剧] 没有这个榜单：{board}（可选：{options}）',
+    'crawl.hg.start': '[红果短剧] 开始采集{board}，目标 {n} 条（翻页只走站点自己给出的下一页地址）',
+    'crawl.hg.target_reached': '[红果短剧] 已采集到目标 {n} 条，不再翻页',
+    'crawl.hg.page': '[红果短剧] 第 {page} 页：{n} 条（新 {fresh} 条，已收录 {done} 条）',
+    'crawl.hg.lastPage': '[红果短剧] 第 {page} 页是站点给出的最后一页，不再翻页（已收录 {n} 条）',
+    'crawl.hg.replay': '[红果短剧] 第 {page} 页的「下一页」指回了当前地址（{url}），翻页停住：按未采满处理',
+    'crawl.hg.noFresh': '[红果短剧] 连续两页都没有新条目（第 {page} 页），翻页停住：按未采满处理',
+    'crawl.hg.finished': '[红果短剧] 采集结束，共 {n} 条（目标 {total} 条）',
+    'crawl.hg.noBoard': (
+        '[红果短剧] 等待 {seconds} 秒后这一页仍没有榜单数据（页面上的数据键：{keys}）：{url}'
+        '——可能是站点改版或网络没有把这一页送到'
+    ),
+    'crawl.hg.noPageRefused': '[红果短剧] 浏览器自己拒绝了这一页，因此不可能有榜单数据：{url}{detail}',
+    'crawl.hg.searchUnsupported': '[红果短剧] 该站点只提供四个热播榜单，没有关键词搜索（收到关键词：{keyword}）',
+    'crawl.hg.noDetail': '[红果短剧] 该平台没有「按链接采集」的模式，也还没有测量过详情页读取（{url}）',
     'crawl.platformNotCrawlable': '该平台目前只支持保存登录 Cookie，还不支持采集（{platform}）——'
     '请先改用已支持的平台，或等待该平台的抓取实现完成',
     'cookie.xiaohongshu.purpose': '解锁小红书搜索、笔记正文与评论；未登录会撞登录墙且只给首屏。',
@@ -2066,6 +2085,27 @@ _EN = {
         '[Bilibili] the endpoint refused to answer (code={code}): the cookie likely died or risk control '
         'kicked in — re-save the cookie in the Cookie panel, then resume this run'
     ),
+    'crawl.hg.boardHotDrama': 'hot board',
+    'crawl.hg.boardRealDrama': 'live-action hot board',
+    'crawl.hg.boardAiDrama': 'AI drama hot board',
+    'crawl.hg.boardComicDrama': 'comic drama hot board',
+    'crawl.hg.boardUnknown': '[Hongguo] there is no such board: {board} (available: {options})',
+    'crawl.hg.start': '[Hongguo] collecting the {board}, target {n} rows (paging follows the next link the site gives)',
+    'crawl.hg.target_reached': '[Hongguo] target of {n} rows reached, stop paging',
+    'crawl.hg.page': '[Hongguo] page {page}: {n} items ({fresh} new, {done} collected)',
+    'crawl.hg.lastPage': '[Hongguo] page {page} is the last the site offers, stop paging ({n} collected)',
+    'crawl.hg.replay': '[Hongguo] page {page} pointed "next" back at itself ({url}), paging stopped: counted as short',
+    'crawl.hg.noFresh': '[Hongguo] two pages in a row held nothing new (page {page}), paging stopped: counted as short',
+    'crawl.hg.finished': '[Hongguo] done, {n} rows (target {total})',
+    'crawl.hg.noBoard': (
+        '[Hongguo] after {seconds}s this page still carried no board data (data keys on the page: {keys}): {url} '
+        '\u2014 the site may have changed, or this machine never received the page'
+    ),
+    'crawl.hg.noPageRefused': '[Hongguo] the browser itself refused this page, so no board can be there: {url}{detail}',
+    'crawl.hg.searchUnsupported': '[Hongguo] this site offers only its four hot boards, no keyword search '
+    '(received keyword: {keyword})',
+    'crawl.hg.noDetail': '[Hongguo] no link-based mode exists for this platform, and its detail page has not '
+    'been measured yet ({url})',
     'crawl.platformNotCrawlable': 'This platform only supports storing a login cookie so far, not crawling '
     '({platform}) \u2014 use a supported platform, or wait for its crawler to land',
     'cookie.xiaohongshu.purpose': 'Unlocks Xiaohongshu search, note bodies and comments; logged out you hit the '
@@ -2780,6 +2820,7 @@ _PLATFORM_LABELS = {
         'wechat': '微信',
         'bilibili': '哔哩哔哩',
         'douyin': '抖音',
+        'hongguo': '红果短剧',
         'twitter': 'X（推特）',
         'instagram': 'Instagram',
         'youtube': 'YouTube',
@@ -2791,6 +2832,7 @@ _PLATFORM_LABELS = {
         'wechat': 'WeChat',
         'bilibili': 'Bilibili',
         'douyin': 'Douyin',
+        'hongguo': 'Hongguo Short Drama',
         'twitter': 'X (Twitter)',
         'instagram': 'Instagram',
         'youtube': 'YouTube',

@@ -443,6 +443,12 @@ class TestCrawlMatrixParity:
                 labels.add('settings.platform')
                 for field in mode.fields + crawl_capabilities.FILE_FIELDS:
                     labels.add(field.label_key)
+                    # A select's *option* labels are panel words too: the renderer prints them
+                    # as the choices, and until this loop existed only the field's own label
+                    # was checked — so a four-option board select could ship three labels
+                    # nobody had ever seen in one of the languages.
+                    for _value, option_label in field.options:
+                        labels.add(option_label)
                     if field.hint_key:
                         hints.add(field.hint_key)
                     if field.name_key:

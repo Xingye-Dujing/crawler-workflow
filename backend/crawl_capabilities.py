@@ -374,6 +374,24 @@ _BOARD = Field(
     options=(('popular', 'settings.hotBoardPopular'), ('ranking', 'settings.hotBoardRanking')),
 )
 
+#: 红果短剧's four boards. Same shape as bilibili's choice (one board, one row shape), so it
+#: is the same field key and the same refusal path; the stored values are identifiers because
+#: they are what a node holds, and the order here is the order the panel offers them (pinned
+#: against ``crawlers.hongguo.BOARDS`` by ``tests/unit/test_hongguo_crawler.py``).
+_HONGGUO_BOARD = Field(
+    key='board',
+    control='select',
+    label_key='settings.hotBoard',
+    name_key='field.board',
+    default='hot_drama',
+    options=(
+        ('hot_drama', 'settings.hotBoardHongguoDrama'),
+        ('hot_real_drama', 'settings.hotBoardHongguoReal'),
+        ('hot_ai_drama', 'settings.hotBoardHongguoAi'),
+        ('hot_comic_drama', 'settings.hotBoardHongguoComic'),
+    ),
+)
+
 #: How many rows zhihu's board really holds. Measured at 30 with ``limit=50``,
 #: ``limit=100`` and ``offset=30`` all returning the SAME 30 (30/30 ids overlap) and
 #: ``paging.next`` empty — so the target box is capped by the site, not by us, and the
@@ -684,6 +702,17 @@ CAPABILITIES: tuple[Capability, ...] = (
             # 需要登录 here is the truth rather than a hedge.
             _hot_mode(board=False),
             _comment_mode('douyin', 'https://www.douyin.com/video/...', collects='dom_scroll'),
+        ),
+    ),
+    Capability(
+        platform='hongguo',
+        modes=(
+            # 红果短剧's four 热播 boards each come back 20 works a page, five pages, all four
+            # in one measured shape — so this is one mode with a choice inside it, the same
+            # shape bilibili's board takes. Anonymous on purpose: measured 2026-10, every
+            # board is served to a fresh browser with no cookie, which is why the node
+            # carries no account field and the pre-run gate asks it no session question.
+            _hot_mode(_HONGGUO_BOARD, board=False, needs_session=False),
         ),
     ),
     # The overseas three come last on purpose: they are the newest entries and the
