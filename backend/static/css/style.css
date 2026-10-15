@@ -3917,17 +3917,37 @@ html[data-cloud="1"] .ai-only-ollama {
 }
 
 /* ── Clipboard drawer (right slide-in) ───────────────────────────────────────
-   A persisted history of copied nodes/text. Fixed + off-screen via transform so a
+   A persisted history of copied nodes/text. Fixed + parked outside the viewport so a
    CLOSED drawer never grows the page's horizontal bar (fixed content outside the
    viewport is clipped, not scrollable); .open slides it in. The list is the only
    internal scroller; the header title ellipsizes so English labels cannot overflow
-   the panel and trip the layout audit. */
+   the panel and trip the layout audit.
+
+   CLOSED MEANS GONE — and it takes both properties, because each one alone still left
+   part of the panel on screen. Measured in real Chrome (960px window, the drawer's own
+   280px box): the closed drawer used to paint its last 12 columns over the canvas, and
+   those 12 columns hit-tested as `clipboard-list`.
+
+   * the slide is `100% + 12px`, not `100%`. `100%` is the box's own width, but
+     `right: 12px` parks its right edge 12px INSIDE the layout viewport, so translating
+     by the width alone leaves exactly those 12px showing — which is the sliver the user
+     sees at the canvas's right edge;
+   * `visibility: hidden` (delayed past the 0.15s slide, so the drawer is still seen
+     leaving) because the box-shadow blurs 3px PAST the border box: parked at
+     `clientWidth` exactly, the smear alone still paints a few columns. A shadow is not
+     hit-testable, so only pixels can prove this — the integration tier compares the
+     closed drawer's right-edge strip byte-for-byte against the same box forced to
+     `display:none`, after a closed-vs-closed control that must match exactly (otherwise
+     the comparison is not reproducible and is refused, never quietly passed).
+
+   The column that matters is `clientWidth`, not `innerWidth`: it excludes a classic
+   scrollbar, so it is the right-most column the user can actually see. */
 #clipboard-drawer {
   position: fixed;
   /* Floats off every edge like #outline-panel rather than flush to the right: 12px
      under the 48px menu (top 60), and a bottom gap equal to the top one so a full
      list stops 12px above the 28px status bar (100vh-100px) — never sliding behind
-     it. translateX(100%) still parks the whole box off the right edge when closed. */
+     it. That 12px is also what the closed transform has to pay for, above. */
   right: 12px;
   top: 60px;
   width: 280px;
@@ -3940,12 +3960,17 @@ html[data-cloud="1"] .ai-only-ollama {
   z-index: 1001;
   display: flex;
   flex-direction: column;
-  transform: translateX(100%);
-  transition: transform 0.15s ease;
+  transform: translateX(calc(100% + 12px));
+  visibility: hidden;
+  transition:
+    transform 0.15s ease,
+    visibility 0s linear 0.15s;
 }
 
 #clipboard-drawer.open {
   transform: translateX(0);
+  visibility: visible;
+  transition: transform 0.15s ease;
 }
 
 #clipboard-drawer .clip-title {

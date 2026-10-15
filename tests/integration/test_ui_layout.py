@@ -3183,6 +3183,113 @@ def test_the_clipboard_drawer_renders_a_copy_and_pastes_it_as_one_undo_step(app_
     assert facts['draftCarriesKeyword'] is False, 'copied content must never ride in the workflow draft'
 
 
+def test_a_closed_clipboard_drawer_leaves_no_pixel_of_itself_on_the_canvas(app_url, driver):
+    """Closed means GONE — measured in the last painted column of the page, not in the CSS text.
+
+    ``translateX(100%)`` moves a box by its own width, but ``right: 12px`` parks the box's
+    right edge 12px INSIDE the layout viewport, so sliding by the width alone left exactly
+    those 12px painted over the canvas. Measured in Chrome before the fix (960x920 window,
+    the drawer's own 280px box): ``rect.left=926`` against ``clientWidth=938``, 12 of the
+    last 40 painted columns hit-tested as ``clipboard-list``, and a pixel diff of the
+    right-edge strip against the same box forced to ``display:none`` read **813 differing
+    pixels, worst channel delta 41** — a sliver the user sees and cannot explain.
+
+    Two properties are needed and both are pinned here, because either one alone still left
+    part of the panel on screen:
+
+    * the box sits beyond ``clientWidth`` (the ``100% + 12px`` translate), and
+    * it is ``visibility: hidden``, because the box-shadow blurs 3px PAST the border box and
+      a shadow is invisible to hit-testing — so the hit test alone would pass while a smear
+      still painted. The pixel comparison is what actually decides that, which is why the
+      strip is compared against ``display:none`` (the strongest possible "not there") with a
+      closed-vs-closed control first: if the control is not identical, the browser's PNG
+      encoder is not reproducible in this run and the comparison may not be quoted.
+
+    ``clientWidth`` and not ``innerWidth``: it excludes a classic scrollbar, so it is the
+    right-most column the user can actually see.
+    """
+    driver.set_window_size(1366, 768)
+    driver.get(app_url + '/')
+    _kill_animations(driver)
+    facts = driver.execute_script(
+        """
+        const d = document.getElementById('clipboard-drawer');
+        // The page's own default state; make sure nothing left it open.
+        d.classList.remove('open');
+        const cs = getComputedStyle(d);
+        const r = d.getBoundingClientRect();
+        const cw = document.documentElement.clientWidth;
+        const ch = document.documentElement.clientHeight;
+        // The direct "is any of it on screen" question: walk the last 40 painted columns
+        // and count the ones that land on the drawer (its own top 60px, since the box is
+        // 60px down, and its mid-height so a row of chrome cannot hide it).
+        let onDrawer = 0;
+        for (let i = 1; i <= 40; i += 1) {
+            const el = document.elementFromPoint(cw - i, Math.round(ch / 2));
+            if (el && (el === d || d.contains(el))) onDrawer += 1;
+        }
+        return {
+            clientWidth: cw,
+            clientHeight: ch,
+            innerWidth: window.innerWidth,
+            left: r.left,
+            right: r.right,
+            width: r.width,
+            top: r.top,
+            bottom: r.bottom,
+            visiblePx: Math.max(0, cw - r.left),
+            onDrawer: onDrawer,
+            visibility: cs.visibility,
+            transform: cs.transform,
+            open: d.classList.contains('open'),
+            viewport: window.innerWidth + 'x' + window.innerHeight,
+        };
+        """,
+        [],
+    )
+    measured = (
+        f'viewport {facts["viewport"]} (client {facts["clientWidth"]}x{facts["clientHeight"]}); '
+        f'drawer rect.left={facts["left"]} right={facts["right"]} width={facts["width"]} '
+        f'top={facts["top"]} bottom={facts["bottom"]}; transform={facts["transform"]}'
+    )
+    assert facts['open'] is False, f'the drawer was already open, so nothing was measured: {measured}'
+    assert facts['visibility'] == 'hidden', f'a closed drawer must not be painted at all: {measured}'
+    assert facts['left'] >= facts['clientWidth'], (
+        f'the closed drawer is inside the layout viewport by {facts["visiblePx"]}px '
+        f'(the `right: 12px` offset has to be paid for in the closed translate): {measured}'
+    )
+    assert facts['onDrawer'] == 0, (
+        f'{facts["onDrawer"]} of the last 40 painted columns belong to the closed drawer: {measured}'
+    )
+
+    # The strip a closed drawer would show: its own y-range, the last 60 painted columns.
+    strip = {
+        'x': max(0, facts['clientWidth'] - 60),
+        'y': max(0, int(facts['top'])),
+        'width': min(60, facts['clientWidth']),
+        'height': max(1, int(min(facts['bottom'], facts['clientHeight'])) - int(facts['top'])),
+        'scale': 1,
+    }
+    assert strip['width'] > 0 and strip['y'] < facts['clientHeight'], f'no strip over the canvas to compare: {measured}'
+
+    def shot():
+        answer = driver.execute_cdp_cmd('Page.captureScreenshot', {'format': 'png', 'clip': strip})
+        return answer['data']
+
+    closed, control = shot(), shot()
+    driver.execute_script("document.getElementById('clipboard-drawer').style.display = 'none';")
+    gone = shot()
+    driver.execute_script("document.getElementById('clipboard-drawer').style.display = '';")
+    assert closed == control, (
+        'the browser did not paint two identical states identically, so a pixel comparison here '
+        f'proves nothing and must not be quoted (strip {strip}, {measured})'
+    )
+    assert closed == gone, (
+        'the closed drawer is not identical to the same box at display:none — it still paints '
+        f'something the hit test cannot see (a shadow or an edge) (strip {strip}, {measured})'
+    )
+
+
 def test_multi_select_marks_real_boxes_and_batch_delete_removes_them_from_the_dom(app_url, driver):
     """Selection paints real DOM classes and the marquee hit-test reads real box geometry; a batch
     delete must physically remove those boxes from #nodes-container. The stub records a fake
