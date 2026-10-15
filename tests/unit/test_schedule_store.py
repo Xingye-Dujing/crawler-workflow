@@ -189,7 +189,12 @@ class TestWhatTheTaskMeans:
     def test_a_moment_is_rendered_in_the_task_own_zone(self):
         moment = datetime(2026, 10, 16, 0, 0, tzinfo=UTC)  # 08:00 Shanghai
         assert store.describe_time(moment.isoformat(), 'Asia/Shanghai') == '2026-10-16 08:00 (Asia/Shanghai)'
-        assert store.describe_time(moment.isoformat(), '') == f'2026-10-16 08:00 ({store.zone_label("")})'
+        # A blank zone is THIS machine's own zone, so the expected wall clock is asked of the
+        # machine (`astimezone()`, the same definition the store uses) and never written down:
+        # a literal 08:00 here was +08:00 wearing a test's clothes, and a UTC machine (CI) reads
+        # 00:00 for the very same instant — a green-on-my-laptop failure.
+        local_clock = f'{moment.astimezone():%Y-%m-%d %H:%M}'
+        assert store.describe_time(moment.isoformat(), '') == f'{local_clock} ({store.zone_label("")})'
         assert store.describe_time('', 'Asia/Shanghai') == ''
         assert store.describe_time('not a moment', 'Asia/Shanghai') == ''
 

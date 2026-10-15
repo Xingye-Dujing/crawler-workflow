@@ -89,6 +89,10 @@ renders a drag-and-drop workflow canvas.
   and a `box-shadow` blurs past the border box where no rect and no hit-test can see it. The real-browser tier compares
   the closed strip byte-for-byte against the same box at `display:none`, after a closed-vs-closed control that must match
   exactly — an unreproducible comparison is REFUSED, never quietly passed.
+- **A test may not assume the machine it runs on: CI is UTC, this box is UTC+8.** A wall-clock literal for the
+  blank/"server local" zone passes only where it was written; ask the machine (`astimezone()` is the definition the
+  product uses). `TZ` **is** honoured by Python on Windows, so the other machine is reproducible here
+  (`$env:TZ='UTC'`) — do that before believing a green run.
 - **The `integration` UI tier performs no server writes** (no data-dir switch exists) — stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`; assert a refusal that
   NAMES it (wall/risk) — an unnamed empty is real "found nothing" and stays red.
