@@ -8,7 +8,7 @@
         "workflow_name": "红果热播榜"
       },
       "x": 0,
-      "y": 0,
+      "y": 7,
       "folded": false
     },
     {
@@ -26,7 +26,7 @@
         "recrawl": true,
         "target_count": 100
       },
-      "x": 360,
+      "x": 340,
       "y": 0,
       "folded": false
     },
@@ -41,8 +41,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 760,
-      "y": 0,
+      "x": 680,
+      "y": 7,
       "folded": false
     },
     {
@@ -53,7 +53,7 @@
         "workflow_name": "红果真人剧热播榜"
       },
       "x": 0,
-      "y": 170,
+      "y": 141,
       "folded": false
     },
     {
@@ -71,8 +71,8 @@
         "recrawl": true,
         "target_count": 100
       },
-      "x": 360,
-      "y": 170,
+      "x": 340,
+      "y": 134,
       "folded": false
     },
     {
@@ -86,8 +86,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 760,
-      "y": 170,
+      "x": 680,
+      "y": 141,
       "folded": false
     },
     {
@@ -98,7 +98,7 @@
         "workflow_name": "红果AI剧热播榜"
       },
       "x": 0,
-      "y": 340,
+      "y": 275,
       "folded": false
     },
     {
@@ -116,8 +116,8 @@
         "recrawl": true,
         "target_count": 100
       },
-      "x": 360,
-      "y": 340,
+      "x": 340,
+      "y": 268,
       "folded": false
     },
     {
@@ -131,8 +131,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 760,
-      "y": 340,
+      "x": 680,
+      "y": 275,
       "folded": false
     },
     {
@@ -143,7 +143,7 @@
         "workflow_name": "红果漫剧热播榜"
       },
       "x": 0,
-      "y": 510,
+      "y": 409,
       "folded": false
     },
     {
@@ -161,8 +161,8 @@
         "recrawl": true,
         "target_count": 100
       },
-      "x": 360,
-      "y": 510,
+      "x": 340,
+      "y": 402,
       "folded": false
     },
     {
@@ -176,8 +176,8 @@
         "operation": "save"
       },
       "operation": "save",
-      "x": 760,
-      "y": 510,
+      "x": 680,
+      "y": 409,
       "folded": false
     }
   ],
@@ -221,8 +221,8 @@
     "max_workers": 4,
     "disabledTypes": [],
     "view": {
-      "panX": 300,
-      "panY": 100,
+      "panX": 403.5,
+      "panY": 242,
       "zoom": 1
     }
   },
