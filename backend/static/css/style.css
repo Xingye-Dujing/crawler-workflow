@@ -2508,7 +2508,11 @@ button.history-del:hover {
 .cselect-menu {
   display: none;
   position: fixed;
-  z-index: 2400;
+  /* Must outrank #dialog-overlay (z-index 9999): this popup is appended to
+     <body> as position:fixed, so a dropdown opened INSIDE a modal dialog (the
+     schedule editor, run-log, help, …) is stacked against the dialog itself.
+     At 2400 it sat under the dialog and the options could not be clicked. */
+  z-index: 10000;
   min-width: 90px;
   /* The ceiling place() aims for (MENU_MAX_WIDTH in custom-select.js); stated here
      too so a long option cannot widen the popup past the screen edge. */
@@ -2662,7 +2666,8 @@ button.history-del:hover {
 .cand-menu {
   display: none;
   position: fixed;
-  z-index: 2400;
+  /* same reasoning as .cselect-menu — outrank #dialog-overlay (9999) */
+  z-index: 10000;
   max-height: 220px;
   overflow-y: auto;
   padding: 3px;
