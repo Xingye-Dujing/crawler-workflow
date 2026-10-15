@@ -84,6 +84,11 @@ renders a drag-and-drop workflow canvas.
   `<body>`, report a per-container floor, resolve wording from `I18n`. **State the viewport:** Windows ignores
   `set_window_size`/`set_window_rect`, so emulate (`Emulation.setDeviceMetricsOverride`) and assert the size CSS sees
   with a `100vh` probe (`window.innerHeight` reports the un-emulated one).
+- **A closed panel must be GONE, not merely moved — and only pixels say so.** A fixed box whose side offset is not paid
+  for in its closed translate leaves exactly that offset on screen (`right: 12px` + `translateX(100%)` = a 12px sliver),
+  and a `box-shadow` blurs past the border box where no rect and no hit-test can see it. The real-browser tier compares
+  the closed strip byte-for-byte against the same box at `display:none`, after a closed-vs-closed control that must match
+  exactly — an unreproducible comparison is REFUSED, never quietly passed.
 - **The `integration` UI tier performs no server writes** (no data-dir switch exists) — stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`; assert a refusal that
   NAMES it (wall/risk) — an unnamed empty is real "found nothing" and stays red.

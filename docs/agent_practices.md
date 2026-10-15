@@ -82,6 +82,17 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   opens), so "fits a 1366×768 laptop" can be measuring a 1920×1080 window wearing another test's cap — emulate
   (`Emulation.setDeviceMetricsOverride`) and assert the size CSS sees with a `100vh` probe, because `window.innerHeight`
   reports the un-emulated one.
+- **A closed panel must be gone, not merely moved — and only pixels can prove it.** `#clipboard-drawer` hid itself with
+  `transform: translateX(100%)` under `right: 12px`, and a percentage translate is the box's own width: the closed drawer's
+  left edge landed exactly 12px INSIDE the layout viewport, so its last 12 columns painted over the canvas. Measured in
+  Chrome at 960×920 (`clientWidth` 938): `rect.left=926`, 12 of the last 40 painted columns hit-tested as
+  `clipboard-list`, and a 60×340 `Page.captureScreenshot` strip against the same box forced to `display:none` read **813
+  differing pixels, worst channel delta 41** (a closed-vs-closed control read 0/0 first, which is what makes those pixels
+  quotable). The shadow is why the rect fix alone is not the fix: `--shadow-soft` blurs 3px past the border box, and a
+  shadow is not hit-testable — so the drawer also carries `visibility: hidden`, delayed 0.15s so the drawer is still seen
+  leaving. `test_ui_layout.py` pins both halves (each fails independently: dropping `visibility` trips the paint
+  assertion, dropping the `+ 12px` trips the rect one) plus the byte-identical strip comparison. `clientWidth`, never
+  `innerWidth`: it excludes a classic scrollbar, so it is the right-most column the user can actually see.
 - **The `integration` UI tier performs no server writes** — no data-dir switch exists, so a run or upload lands in the
   user's real `data/`/`logs/`. Stub `fetch`.
 - The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall` (risk control can
