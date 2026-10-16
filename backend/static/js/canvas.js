@@ -66,6 +66,12 @@ const canvas = {
     zoom: 1,
     isDragging: false,
     isPanning: false,
+    /* A drag moves the whole selected group as one, so the press snapshots every member's
+       start position and the origin of the grabbed box; pointermove shifts each by the delta.
+       Cleared on pointerup. (Selection is view-only, but the drag must know what it grabbed.) */
+    _dragGroup: null,
+    _dragOriginX: 0,
+    _dragOriginY: 0,
     panStartPX: 0,
     panStartPY: 0,
     panWasDragging: false,
@@ -303,8 +309,25 @@ const canvas = {
                 const rect = this.workspace.getBoundingClientRect();
                 const x = (e.clientX - rect.left - this.dragOffsetX - this.panX) / this.zoom;
                 const y = (e.clientY - rect.top - this.dragOffsetY - this.panY) / this.zoom;
-                this.dragTarget.style.left = x + 'px';
-                this.dragTarget.style.top = y + 'px';
+                if (this._dragGroup && this._dragGroup.length > 1) {
+                    /* A multi-select drags as one: every selected box moves by the grabbed box's
+                       delta from where it started, so their relative layout survives. */
+                    const dx = x - this._dragOriginX;
+                    const dy = y - this._dragOriginY;
+                    this._dragGroup.forEach((m) => {
+                        const nx = m.x + dx;
+                        const ny = m.y + dy;
+                        m.el.style.left = nx + 'px';
+                        m.el.style.top = ny + 'px';
+                        if (this.nodes[m.id]) {
+                            this.nodes[m.id].x = nx;
+                            this.nodes[m.id].y = ny;
+                        }
+                    });
+                } else {
+                    this.dragTarget.style.left = x + 'px';
+                    this.dragTarget.style.top = y + 'px';
+                }
                 this.scheduleRender();
             }
             if (this.connectingFrom) {
@@ -353,6 +376,7 @@ const canvas = {
             endPanPointer(e);
             this.isDragging = false;
             this.dragTarget = null;
+            this._dragGroup = null;
             if (this.connectingFrom) {
                 this.finishConnection(e);
             }
@@ -1332,12 +1356,42 @@ const canvas = {
         header.addEventListener('pointerdown', (e) => {
             if (e.target.closest('.node-actions')) return;
             e.preventDefault(); /* one gesture: stop the compatible mousedown/mousemove */
+            /* The right button belongs to the context menu, never to a drag. A right-press must
+               not collapse a live multi-selection when it lands on a node already in the group —
+               the menu reads that group for 复制/对齐 — so it leaves the selection untouched; a
+               right-press on an unselected node selects just it, the way a fresh left-click does. */
+            if (e.button === 2) {
+                if (this.selectedNodes.indexOf(id) < 0) this.selectNode(id);
+                return;
+            }
             this.isDragging = true;
             this.dragTarget = el;
             const rect = el.getBoundingClientRect();
             this.dragOffsetX = e.clientX - rect.left;
             this.dragOffsetY = e.clientY - rect.top;
-            this.selectNode(id, e.shiftKey);
+            /* Keep the group when the pressed box is already one of it (the batch-op contract, as
+               in editNode/_nudgeSelected) so the drag moves every selected node together; a press
+               on a fresh box selects just it, and shift adds. */
+            if (!(this.selectedNodes.indexOf(id) >= 0 && this.selectedNodes.length > 1)) {
+                this.selectNode(id, e.shiftKey);
+            }
+            /* Snapshot the whole selected group with its start position; the drag moves each box
+               by the SAME delta, so a multi-select keeps its relative layout. */
+            const ids = this.selectedNodes.length ? this.selectedNodes : [id];
+            this._dragGroup = ids
+                .map((mid) => {
+                    const mel = this._nodeEl(mid);
+                    if (!mel) return null;
+                    return {
+                        el: mel,
+                        id: mid,
+                        x: parseInt(mel.style.left, 10) || 0,
+                        y: parseInt(mel.style.top, 10) || 0,
+                    };
+                })
+                .filter(Boolean);
+            this._dragOriginX = parseInt(el.style.left, 10) || 0;
+            this._dragOriginY = parseInt(el.style.top, 10) || 0;
         });
 
         /* Port connection */
@@ -1635,9 +1689,24 @@ const canvas = {
             box.style.width = rect.w + 'px';
             box.style.height = rect.h + 'px';
         };
+        const self = this;
+        /* Update the selection AS the band grows/shrinks, not only when the mouse is released: a
+           node the band has just swept over lights up the instant it is covered, and un-lights the
+           instant the band shrinks past it. Guarded by the hit-set so an unchanged band repaints
+           nothing (a bare re-paint would flash every box off and on per pointermove). */
+        let lastKey = '';
+        const apply = () => {
+            const hits = self._marqueeHits(rect, wsRect);
+            const key = hits.join(',');
+            if (key !== lastKey) {
+                lastKey = key;
+                self.setSelectedNodes(hits);
+            }
+        };
         const onMove = (ev) => {
             moved = true;
             paint(ev.clientX - wsRect.left, ev.clientY - wsRect.top);
+            apply();
         };
         const cleanup = () => {
             if (document.removeEventListener) {
@@ -1647,12 +1716,14 @@ const canvas = {
             if (box.parentNode && box.parentNode.removeChild) box.parentNode.removeChild(box);
             else if (box.remove) box.remove();
         };
-        const self = this;
         function onUp(ev) {
-            cleanup();
-            if (!moved) return;
+            if (!moved) {
+                cleanup();
+                return;
+            }
             paint(ev.clientX - wsRect.left, ev.clientY - wsRect.top);
-            self._marqueeSelect(rect, wsRect);
+            apply();
+            cleanup();
         }
         document.addEventListener('pointermove', onMove);
         document.addEventListener('pointerup', onUp);
@@ -1660,15 +1731,16 @@ const canvas = {
 
     /* Select every node whose box the marquee rectangle (workspace pixels) overlaps. The rect's
        corners are converted to canvas/world coordinates through the same transform the render
-       uses, so a zoomed/panned canvas still hits the right boxes. */
-    _marqueeSelect(rect, wsRect) {
+       uses, so a zoomed/panned canvas still hits the right boxes. Returns the ids; the caller
+       paints them (live during the drag, and once more at release). */
+    _marqueeHits(rect, wsRect) {
         const p0 = this._screenToCanvas(wsRect.left + rect.x, wsRect.top + rect.y);
         const p1 = this._screenToCanvas(wsRect.left + rect.x + rect.w, wsRect.top + rect.y + rect.h);
         const left = Math.min(p0.x, p1.x);
         const right = Math.max(p0.x, p1.x);
         const top = Math.min(p0.y, p1.y);
         const bottom = Math.max(p0.y, p1.y);
-        const hits = Object.keys(this.nodes).filter((id) => {
+        return Object.keys(this.nodes).filter((id) => {
             const el = this._nodeEl(id);
             if (!el) return false;
             const l = el.offsetLeft;
@@ -1677,7 +1749,13 @@ const canvas = {
             const b = t + (el.offsetHeight || 80);
             return r > left && l < right && b > top && t < bottom;
         });
-        this.setSelectedNodes(hits);
+    },
+
+    /* The marquee's final commit: compute the covered ids and paint them as one selection. The
+       live drag path calls _marqueeHits + setSelectedNodes directly (guarded per move); this is
+       the entry the browser tier and any whole-rect selection use. */
+    _marqueeSelect(rect, wsRect) {
+        this.setSelectedNodes(this._marqueeHits(rect, wsRect));
     },
 
     editNode(id) {

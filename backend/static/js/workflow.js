@@ -5455,9 +5455,18 @@ const Outline = {
     _markActive() {
         var list = document.getElementById('outline-list');
         if (!list) return;
-        var sel = canvas.selectedNode;
+        /* The outline mirrors the GRAPH's selection, and the graph can hold a whole group
+           (shift-click / marquee). Reading only the anchor lit just the last-clicked row while
+           every selected box on the canvas was highlighted — the sidebar disagreed with the
+           graph about what was selected. Highlight every member; fall back to the single anchor
+           so a caller that sets selectedNode without a group still lights its row. */
+        var group = canvas.selectedNodes && canvas.selectedNodes.length ? canvas.selectedNodes : [canvas.selectedNode];
+        var active = {};
+        group.forEach(function (id) {
+            if (id != null) active[id] = true;
+        });
         list.querySelectorAll('.outline-row').forEach(function (row) {
-            row.classList.toggle('outline-active', row.dataset.node === sel);
+            row.classList.toggle('outline-active', active[row.dataset.node] === true);
         });
     },
 

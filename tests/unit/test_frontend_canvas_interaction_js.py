@@ -456,6 +456,13 @@ class TestOutline:
         """Clicking empty canvas (no node selected) must not leave the last row lit."""
         assert ix['outline_deselect']['activeAfterDeselect'] == 0
 
+    def test_a_multi_selection_lights_every_selected_row(self, ix):
+        """The sidebar must agree with the graph: canvas.js highlights the whole group, so the
+        outline lights every selected row, not only the last-clicked anchor."""
+        m = ix['outline_multi']
+        assert m['activeIds'] == m['selected'], 'the outline lit only the anchor, not the group'
+        assert len(m['activeIds']) == 2, 'both selected nodes must be highlighted'
+
     def test_the_outline_filters_to_matching_rows(self, ix):
         """setFilter narrows the list by label/type/tag; clearing restores the whole map.
 
@@ -996,6 +1003,16 @@ class TestMultiSelect:
         m = ix['multi_select']['marquee']
         assert m['set'] == m['expected'] and len(m['set']) == 2
 
+    def test_the_marquee_lights_nodes_as_it_covers_them_not_only_on_release(self, ix):
+        """The band must answer while it is dragged, not only when the mouse is let go: a node
+        the band has just swept over lights up mid-drag, and shrinking the band past a node
+        un-lights it just as fast. The node outside the band (node-3) is never selected."""
+        m = ix['multi_select']['marqueeLive']
+        assert m['liveWide'] == m['coveredAB'], 'a node covered mid-drag must light before release'
+        assert m['liveShrunk'] == m['onlyA'], 'shrinking the band must un-light the node it no longer covers'
+        assert m['afterUp'] == m['onlyA'], 'the released set matches the live set at that point'
+        assert m['untouchedC'] not in m['liveWide'], 'a node outside the band must never be selected'
+
     def test_a_background_click_that_never_moved_selects_nothing(self, ix):
         assert ix['multi_select']['clickNoDrag']['set'] == []
 
@@ -1018,6 +1035,33 @@ class TestMultiSelect:
         assert m['targets'] == 0, 'multiEditTargets must refuse a mixed group'
         assert m['processGot'] == '只应落在处理节点'
         assert m['sourceUntouched'] is True, 'the source node must keep its own (absent) keyword'
+
+    def test_dragging_a_selected_box_moves_the_whole_group(self, ix):
+        """Pressing a member of a live group must move the group, not just the grabbed box —
+        the batch-op contract that shift-click/marquee/nudge/delete all already honour. A rigid
+        translation keeps every member's relative layout and persists every one."""
+        d = ix['multi_select']['batchDrag']
+        assert d['aLeft'] == 100 and d['aTop'] == 100, 'the grabbed box moved'
+        assert d['bLeft'] == 500 and d['bTop'] == 100, 'its group-mate moved by the same delta'
+        assert d['bLeft'] - d['aLeft'] == 400, 'the group keeps its 400px separation'
+        assert d['persistedA'] == 100 and d['persistedB'] == 500, 'the whole move persists, not one box'
+
+
+class TestRightPressKeepsTheSelection:
+    """pointerdown fires for the right button too, and used to reset a live multi-selection to
+    the single pressed node before the menu even opened — so 复制/对齐 on a group was silently
+    narrowed to one. The right button is the menu's gesture, never a drag."""
+
+    def test_a_right_press_on_a_group_member_keeps_the_whole_group(self, ix):
+        r = ix['right_press_on_group_member']
+        assert r['setAfter'] == r['expected'], 'the right-press collapsed the multi-selection'
+        assert r['startedDrag'] is False, 'a right-press must not start a drag'
+        assert r['menuSetAfter'] == r['expected'], 'opening the menu changed the selection'
+
+    def test_a_right_press_on_an_unselected_node_selects_just_it(self, ix):
+        r = ix['right_press_on_unselected']
+        assert r['set'] == [r['anchor']] and len(r['set']) == 1, 'a fresh right-press selects only itself'
+        assert r['startedDrag'] is False
 
 
 class TestClipboardDrawer:

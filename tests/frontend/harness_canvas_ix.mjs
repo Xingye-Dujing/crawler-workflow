@@ -744,6 +744,14 @@ canvas.selectNode(oName);
 out.outline_reselect = {
     activeIds: doc.getElementById('outline-list').querySelectorAll('.outline-active').map((el) => el.dataset.node),
 };
+/* A multi-selection lights EVERY selected row, not only the anchor: the sidebar must agree
+   with the graph (canvas.js highlights the whole group), so _markActive reads selectedNodes. */
+canvas.setSelectedNodes([oSrc, oName]);
+out.outline_multi = {
+    activeIds: doc.getElementById('outline-list').querySelectorAll('.outline-active').map((el) => el.dataset.node).sort(),
+    selected: canvas.selectedNodes.slice().sort(),
+};
+canvas.deselectNode();
 
 /* ── editNode / openSettings / closeSettings (all real) ────────────── */
 freshWorld();
@@ -1045,6 +1053,34 @@ out.context_menu.new_node = {
 };
 clickItem(null, false);
 out.context_menu.outside_click_closes = ctxMenu.classList.contains('open');
+
+/* ── a right-press must not collapse a live multi-selection ────────── */
+/* pointerdown fires for the right button too, and used to reset the group to the single
+   pressed node before the menu even opened (Bug 2). Right-pressing a member of the group
+   leaves the whole group selected and starts no drag; right-pressing an unselected node
+   selects just it, the way a fresh left-click would. */
+freshWorld();
+const rpA = addNode('source', 0, 0);
+const rpB = addNode('output', 400, 0);
+const rpC = addNode('process', 800, 0);
+canvas.selectNode(rpA);
+canvas.selectNode(rpB, true);
+dispatchOn(doc.getElementById(rpA).querySelector('.node-header'), 'pointerdown', ev({ button: 2, clientX: 50, clientY: 50 }));
+out.right_press_on_group_member = {
+    setAfter: canvas.selectedNodes.slice().sort(),
+    expected: [rpA, rpB].sort(),
+    startedDrag: canvas.isDragging,
+};
+/* …and the menu it summons still reads the same group (the handler never touched selection). */
+dispatchOn(workspace, 'contextmenu', ev({ clientX: 50, clientY: 50, target: { closest: (sel) => (sel === '.node' ? doc.getElementById(rpA) : null) } }));
+out.right_press_on_group_member.menuSetAfter = canvas.selectedNodes.slice().sort();
+/* A right-press on a node NOT in the group selects only it. */
+dispatchOn(doc.getElementById(rpC).querySelector('.node-header'), 'pointerdown', ev({ button: 2, clientX: 850, clientY: 50 }));
+out.right_press_on_unselected = {
+    set: canvas.selectedNodes.slice(),
+    anchor: canvas.selectedNode,
+    startedDrag: canvas.isDragging,
+};
 
 /* ── init() ────────────────────────────────────────────────────────── */
 freshWorld();
@@ -1823,6 +1859,29 @@ function multiSelectScenario() {
     dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: 350, clientY: 150, target: { closest: () => null } });
     res.marquee = { set: canvas.selectedNodes.slice().sort(), expected: [qA, qB].sort(), anchor: canvas.selectedNode };
 
+    // …and the band lights the nodes it ALREADY covers, mid-drag, before the release.
+    // Shrinking the band back past a node must un-light it just as fast.
+    freshWorld();
+    canvas.workspace.clientWidth = 1920;
+    canvas.workspace.clientHeight = 1080;
+    const mvA = addNode('source', 0, 0, 200, 100);
+    const mvB = addNode('process', 300, 0, 200, 100);
+    const mvC = addNode('output', 900, 900, 200, 100);
+    dispatchOn(canvas.workspace, 'pointerdown', ev({ button: 0, clientX: 0, clientY: 0, target: { closest: () => null } }));
+    dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 520, clientY: 150 });
+    const liveWide = canvas.selectedNodes.slice().sort();
+    dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 200, clientY: 150 });
+    const liveShrunk = canvas.selectedNodes.slice().sort();
+    dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: 200, clientY: 150, target: { closest: () => null } });
+    res.marqueeLive = {
+        liveWide,
+        liveShrunk,
+        afterUp: canvas.selectedNodes.slice().sort(),
+        coveredAB: [mvA, mvB].sort(),
+        onlyA: [mvA],
+        untouchedC: mvC,
+    };
+
     // A background click that never moved selects nothing (stays a plain deselect).
     freshWorld();
     addNode('source', 0, 0, 200, 100);
@@ -1880,6 +1939,28 @@ function multiSelectScenario() {
         targets: mixedTargets.length,
         processGot: canvas.nodes[mp].params.keyword,
         sourceUntouched: canvas.nodes[ms].params.keyword === undefined || canvas.nodes[ms].params.keyword === '',
+    };
+
+    // Dragging one selected box moves the WHOLE group by the same delta (rigid translation):
+    // pressing a member keeps the selection (Bug 2's group-preserve) and the pointermove shifts
+    // every selected box, so their relative layout survives.
+    freshWorld();
+    const gA = addNode('source', 0, 0, 200, 100);
+    const gB = addNode('output', 400, 0, 200, 100);
+    canvas.selectNode(gA);
+    canvas.selectNode(gB, true);
+    dispatchOn(doc.getElementById(gA).querySelector('.node-header'), 'pointerdown', ev({ clientX: 140, clientY: 160 }));
+    dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 240, clientY: 260 });
+    dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: 240, clientY: 260, target: { closest: () => null } });
+    res.batchDrag = {
+        aLeft: parseInt(doc.getElementById(gA).style.left, 10),
+        aTop: parseInt(doc.getElementById(gA).style.top, 10),
+        bLeft: parseInt(doc.getElementById(gB).style.left, 10),
+        bTop: parseInt(doc.getElementById(gB).style.top, 10),
+        // the grabbed box alone (a single press) moved only it; here BOTH moved by +100/+100.
+        group: canvas.selectedNodes.slice().sort(),
+        persistedA: draft().nodes[gA].x,
+        persistedB: draft().nodes[gB].x,
     };
 
     out.multi_select = res;
