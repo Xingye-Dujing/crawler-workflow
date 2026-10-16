@@ -449,6 +449,7 @@ _ZH = {
     ),
     'analysis.reply_graph_done': '回复传播图：{edges} 条边、{nodes} 个节点',
     'analysis.compare_done': '跨平台对比：{platforms} 个平台（数值列 {value}）',
+    'analysis.compare_agg': '{op}：未知聚合「{agg}」，数值列只支持 sum 或 mean（列名按聚合命名，名实必须相符）',
     'analysis.bot_col_missing': '水军可能性需要「{col}」列，表里没有',
     'analysis.bot_done': '水军可能性：{rows} 行里 {flagged} 行被标为可疑（来自 {authors} 个作者）',
     'analysis.bot_limit': (
@@ -1309,10 +1310,14 @@ _ZH = {
     'run.queueStartFailed': '排队的运行无法启动',
     'history.cleared': '执行历史已清空',
     'api.workflowShapeInvalid': '工作流内容无法理解：需要带 nodes 列表的对象',
+    'api.workflowNodeNoId': (
+        '画布上有一个节点没有 id，无法运行（id 是节点的存储键）——请重新拖入该节点，或修复工作流文件'
+    ),
     'api.resumeMissing': '无法继续：运行记录 {rid} 已被清理，继续会变成一次全新的从零采集，请改用「重新运行」',
     'api.rerunNoRun': '找不到这个工作流已保存的运行结果，无法从该节点重跑（请先运行一次）',
     'api.rerunNoNode': '当前画布里没有节点「{node}」，无从重跑',
     'api.rerunNoRows': '节点「{node}」在上次运行里没有可用的完成结果，无从重跑',
+    'api.rerunRunLive': '该运行仍在进行中（或正在停止），不能重跑它的节点——请等它跑完或先停止它',
     'api.rerunFingerprintMismatch': '画布与所选运行记录不是同一份工作流，无法复用其结果，请从运行详情重跑该节点',
     'api.historyNoRunId': '没有指定运行 ID，未删除任何执行历史',
     'run.store_unavailable': '本次运行无法开始：运行记录库打不开（磁盘满、文件损坏或被占用），未产生任何记录',
@@ -1851,6 +1856,10 @@ _EN = {
     ),
     'analysis.reply_graph_done': 'reply graph: {edges} edges over {nodes} nodes',
     'analysis.compare_done': 'cross-platform compare: {platforms} platforms (value column {value})',
+    'analysis.compare_agg': (
+        '{op}: unknown aggregate "{agg}" — the value column supports only sum or mean '
+        '(its name declares the aggregate, so the label must match how it was computed)'
+    ),
     'analysis.bot_col_missing': 'bot likelihood needs the "{col}" column, which is not in this table',
     'analysis.bot_done': 'bot likelihood: {flagged} of {rows} rows flagged suspect (across {authors} authors)',
     'analysis.bot_limit': (
@@ -2840,12 +2849,20 @@ _EN = {
     'run.queueStartFailed': 'a queued run could not be started',
     'history.cleared': 'Execution history cleared',
     'api.workflowShapeInvalid': 'the workflow could not be read: an object with a nodes list is required',
+    'api.workflowNodeNoId': (
+        'a node on the canvas has no id, so it cannot run (the id is a node storage key) — '
+        're-add the node or repair the workflow file'
+    ),
     'api.resumeMissing': (
         'cannot continue: run {rid} has been purged, so it would re-crawl everything — press Run instead'
     ),
     'api.rerunNoRun': 'no saved run for this workflow was found; run it once before re-running a node',
     'api.rerunNoNode': 'node "{node}" is not on the current canvas, so it cannot be re-run',
     'api.rerunNoRows': 'node "{node}" has no completed result in the last run, so there is nothing to re-run from',
+    'api.rerunRunLive': (
+        'this run is still executing (or stopping), so none of its nodes can be re-run — '
+        'wait for it to finish or stop it first'
+    ),
     'api.rerunFingerprintMismatch': 'the canvas is not the same workflow as the chosen run, so its results cannot be '
     'reused safely — re-run the node from the run details',
     'api.historyNoRunId': 'no run id given, so no execution history was deleted',

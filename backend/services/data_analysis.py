@@ -2370,11 +2370,14 @@ class DataAnalysisService:
             if value_col:
                 if value_col not in df.columns:
                     raise UnknownOperationError(t('analysis.step_col_missing', op='compare_platform', col=value_col))
+                # The column is named ``{value_col}_{agg}``, so the number under it MUST be that
+                # aggregate. Only sum and mean are computed here; anything else (a typed 'median')
+                # used to fall through to mean while still claiming 'median' in its name — a score
+                # whose label misdescribes how it was produced. Refuse it by name, like value_col.
+                if agg not in ('sum', 'mean'):
+                    raise UnknownOperationError(t('analysis.compare_agg', op='compare_platform', agg=agg))
                 series = pd.to_numeric(sub[value_col], errors='coerce').dropna()
-                if agg == 'sum':
-                    value = float(series.sum()) if len(series) else 0.0
-                else:
-                    value = float(series.mean()) if len(series) else 0.0
+                value = float(series.sum() if agg == 'sum' else series.mean()) if len(series) else 0.0
                 row[f'{value_col}_{agg}'] = round(value, 6)
             rows.append(row)
         rows.sort(key=lambda r: r['n'], reverse=True)

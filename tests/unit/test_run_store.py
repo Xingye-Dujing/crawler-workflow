@@ -396,7 +396,23 @@ class TestLifecycle:
         # The reset a resume needs, and the date the work began, which is not now.
         assert run['status'] == RUN_RUNNING and run['finished_at'] is None and run['note'] is None
 
-    def test_start_run_records_skipped_workflows(self, store):
+    def test_a_resume_resets_node_done_so_the_progress_never_lies(self, store):
+        """``node_done`` is written only at finish/settle, so a resume that refreshed ``node_total``
+        but left ``node_done`` would render the PREVIOUS attempt's 3/N for a run that has produced
+        nothing yet this time — the same 「4/3」 the finish path refuses. A re-described run must
+        start its done-count at 0."""
+        store.start_run('r1', 'wf', 'fp-a', node_total=5)
+        for nid in ('n1', 'n2', 'n3'):
+            store.begin_node('r1', nid, 'process', fingerprint='f-' + nid)
+            store.finish_node('r1', nid, NODE_DONE)
+        store.finish_run('r1', RUN_INTERRUPTED)
+        assert store.get_run('r1')['node_done'] == 3, 'the interrupted attempt recorded its 3 done nodes'
+
+        # Resume with a smaller graph (the user disabled 2 nodes): both counts must reflect THIS attempt.
+        store.start_run('r1', 'wf', 'fp-b', node_total=3)
+        run = store.get_run('r1')
+        assert run['node_total'] == 3 and run['node_done'] == 0, 'a resumed run showed old progress'
+
         """A named workflow the user switched off for this attempt owns no row of its own, so the
         record's only trace of it is ``skipped_workflows`` — what the panel names under 跳过."""
         store.start_run('r-skip', '跑', 'fp-s', wf_count=1, skipped_workflows='不跑 + 也不跑')

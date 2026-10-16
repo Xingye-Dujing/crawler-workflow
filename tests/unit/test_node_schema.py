@@ -171,7 +171,10 @@ class TestTheShapeTheCanvasActuallyStores:
             }
         )
         cols = compute_columns(without_score, [])['a']
-        assert cols[0] == '日期' and cols[1] == '期', cols
+        # The producer renames its period column to 'period' no matter what the box held, so the
+        # lineage must say 'period' — naming it after the input 日期 flagged a provable miss on a
+        # canvas that runs (invariant: a step's output names are the downstream chart's input names).
+        assert cols[0] == 'period' and cols[1] == '期', cols
         assert 'intensity' not in cols and 'score_n' not in cols, 'no 分值 column, so no score-derived column'
         with_score = self._analysis(
             {

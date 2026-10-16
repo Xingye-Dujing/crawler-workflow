@@ -27,7 +27,16 @@ from api.data import bp as data_bp
 from api.diagnostics import bp as diagnostics_bp
 from api.exports import bp as exports_bp
 from api.history import bp as history_bp
-from api.http import _bad_body, _bad_param, _json_body, _optional_float, _optional_int, _safe_float, _safe_int
+from api.http import (
+    _bad_body,
+    _bad_param,
+    _float_with_default,
+    _json_body,
+    _optional_float,
+    _optional_int,
+    _safe_float,
+    _safe_int,
+)
 from api.lexicon import bp as lexicon_bp
 from api.llm import bp as llm_bp
 from api.locks import bp as locks_bp
@@ -110,6 +119,7 @@ from services.run_store import (
     RUN_FAILED,
     RUN_INTERRUPTED,
     RUN_RUNNING,
+    RUN_STOPPING,
     fingerprints_for_workflow,
     workflow_fingerprint,
 )
@@ -1212,6 +1222,12 @@ def _workflow_shape_error(data: dict) -> str:
     # exists to prevent. Same for ``connections``: ``all_connections`` does not filter, so a
     # list of STRINGS reached ``dangling_connections``' ``c.get`` and threw mid-run.
     for node in nodes if isinstance(nodes, list) else []:
+        # A node's ``id`` is a storage key — the engine keys ``WorkflowEngine.nodes`` on ``n['id']``,
+        # so a node without one crashed the run thread with a raw KeyError before any record existed
+        # (and minutes later in an unwatched queued thread). Refuse it BY NAME here, at the payload
+        # boundary, so the user is told a canvas node has no id rather than watching an HTML 500.
+        if not isinstance(node.get('id'), str) or not node.get('id').strip():
+            return t('api.workflowNodeNoId')
         params = node.get('params')
         if params is not None and not isinstance(params, dict):
             return t('api.workflowShapeInvalid')
@@ -1548,6 +1564,16 @@ def workflow_rerun_node():
         if not candidates:
             return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
         run_id = candidates[0]['run_id']
+
+    # A run that is still executing is not a rerun target. The wipe below deletes this run's stored
+    # rows and releases its dedupe claims BEFORE ``_begin_run`` can serialize against the live
+    # worker (``invalidate_nodes`` runs first, so the single-run queue cannot help); a 继续 would
+    # then re-crawl and re-pay a thread that is still writing. Refuse by name, keeping the rows.
+    target_run = store.get_run(run_id)
+    if target_run is None:
+        return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
+    if target_run.get('status') in (RUN_RUNNING, RUN_STOPPING):
+        return jsonify({'ok': False, 'error': t('api.rerunRunLive')}), 409
 
     target = next((n for n in effective['nodes'] if n.get('id') == node_id), None)
     if target is None:
@@ -3930,7 +3956,10 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             'topic_col': str(params.get('flow_topic_col') or 'topic').strip(),
             'words_col': str(params.get('flow_words_col') or 'feature_words').strip(),
             'weights_col': str(params.get('flow_weights_col') or 'weights').strip(),
-            'min_similarity': _optional_float(params.get('flow_min_similarity')) or 0.5,
+            # A similarity threshold, not a count: 0 means "draw every edge", which the step either
+            # honours or refuses by name — so forward a typed 0 like ``timeline_overlap``/λ, never
+            # swallow it into the default the way a count would.
+            'min_similarity': _float_with_default(params.get('flow_min_similarity'), 0.5),
         }
         order_column = str(params.get('flow_order_col') or '').strip()
         if order_column:
@@ -4003,9 +4032,12 @@ def _normalize_analysis_params(op: str, params: dict) -> dict:
             'column': str(params.get('alert_period_col') or 'period').strip(),
             'index_col': str(params.get('alert_index_col') or 'sentiment_index').strip(),
             'streak': _optional_int(params.get('alert_streak')) or 2,
-            'swing': _optional_float(params.get('alert_swing')) or 0.2,
-            'heating': _optional_float(params.get('alert_heating')) or 0.15,
-            'volume_floor': _optional_float(params.get('alert_volume_floor')) or 0.6,
+            # streak is a count (0 consecutive steps is "not configured", so default 2). These three
+            # are thresholds: a typed 0 is a real rule ("flag any movement / any heating"), forwarded
+            # to the step which honours or refuses it — never swallowed into the default like a count.
+            'swing': _float_with_default(params.get('alert_swing'), 0.2),
+            'heating': _float_with_default(params.get('alert_heating'), 0.15),
+            'volume_floor': _float_with_default(params.get('alert_volume_floor'), 0.6),
         }
         # The two optional signals are read exactly like ``score_col`` on 情感演化曲线: a blank
         # box means that half of the rule is not wanted, so the key is not sent and the step's own

@@ -311,6 +311,14 @@ class TestEventMarkers:
         assert 'markLine' not in option['series'][0]
         assert 'markLine' not in V.to_echarts_option(df, 'line', x='作者', y='点赞', annotations='  ')
 
+    def test_the_box_axis_keeps_the_table_order_not_a_code_point_re_sort(self, df):
+        """The box used to call ``df.groupby(x)`` (default ``sort=True``) while ``_aggregate`` and
+        the bar/line paths use ``sort=False`` — so a box and a bar of the SAME phase column put the
+        categories in different orders, and a phase table that arrives sorted by 阶段序号 rendered
+        its boxes in code-point order. The box's axis must follow the table, like every other chart."""
+        option = V.to_echarts_option(df, 'box', x='作者', y='点赞')
+        assert option['xAxis']['data'] == LABELS, 'first appearance in the table, never a re-sort'
+
 
 class TestRelationshipNetwork:
     """The co-occurrence and flow graphs: edges are the data, so no edges is a refusal."""
@@ -822,7 +830,9 @@ class TestAggregation:
         option = V.to_echarts_option(df, 'box', x='作者', y='点赞')
         assert [series['type'] for series in option['series']] == ['boxplot', 'scatter']
         assert all(len(row) == 5 for row in option['series'][0]['data'])
-        assert option['series'][1]['data'] == [[0, 40.0], [1, 25.0], [2, 10.0], [2, 5.0]]
+        # The points are [axis-index, value]; the axis follows the TABLE (甲,乙,丙 → 0,1,2), so 甲's
+        # two 点赞 values sit at index 0 — this used to be a code-point sort with 丙 at index 0.
+        assert option['series'][1]['data'] == [[0, 10.0], [0, 5.0], [1, 25.0], [2, 40.0]]
 
     def test_box_plot_from_a_single_numeric_column(self, df):
         option = V.to_echarts_option(df, 'box', x='点赞')

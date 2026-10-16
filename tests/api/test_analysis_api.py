@@ -769,6 +769,23 @@ class TestPanelParamsReachTheOperator:
         assert filled == {'columns': ['a'], 'value': '0', 'method': 'ffill'}
         assert 'method' not in self._normalize('fill_null', columns='a', value='0', method='  ')
 
+    def test_a_threshold_of_zero_is_forwarded_not_swallowed_by_the_default(self):
+        """A rate/threshold's ``0`` is a real rule ("flag any movement", "draw every edge"), so it
+        must reach the step; a BLANK box keeps the documented default, so this stays blank-safe."""
+        assert self._normalize('alert', alert_streak='3', alert_swing='0')['swing'] == 0.0
+        assert self._normalize('alert', alert_streak='3', alert_heating='0')['heating'] == 0.0
+        assert self._normalize('alert', alert_streak='3', alert_volume_floor='0')['volume_floor'] == 0.0
+        assert self._normalize('topic_flow', flow_min_similarity='0')['min_similarity'] == 0.0
+        # blank → the same defaults the old ``or`` produced, so an untouched form is unchanged
+        assert self._normalize('alert', alert_streak='3', alert_swing='  ')['swing'] == 0.2
+        assert self._normalize('topic_flow')['min_similarity'] == 0.5
+
+    def test_a_count_of_zero_still_falls_back_to_its_default(self):
+        """Counts keep the ``or`` convention the code documents: 0 consecutive steps / 0 periods
+        ahead is "not configured", so the default holds rather than a degenerate zero."""
+        assert self._normalize('alert', alert_streak='0')['streak'] == 2
+        assert self._normalize('forecast', forecast_horizon='0')['horizon'] == 3
+
     def test_bins_is_a_count_or_a_list_of_edges(self):
         counted = self._normalize('bin_column', column='score', bins='4')
         assert counted['bins'] == 4 and 'labels' not in counted

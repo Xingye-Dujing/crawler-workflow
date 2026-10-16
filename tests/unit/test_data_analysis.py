@@ -2107,6 +2107,16 @@ class TestComparePlatform:
         with pytest.raises(UnknownOperationError, match='根本没有'):
             D.compare_platform(self._merged(), value_col='根本没有')
 
+    def test_an_aggregate_it_does_not_compute_is_refused_by_name(self):
+        """The column is named ``{value}_{agg}``, so the number under it must be that aggregate. A
+        typed 'median' used to silently answer the MEAN while claiming 'median' in its name."""
+        with pytest.raises(UnknownOperationError, match='median'):
+            D.compare_platform(self._merged(), platform_col='platform', value_col='情感', agg='median')
+
+    def test_sum_is_computed_and_named_as_sum(self):
+        out = D.compare_platform(self._merged(), platform_col='platform', value_col='情感', agg='sum')
+        assert '情感_sum' in out.columns, 'the only other computed aggregate names its own column'
+
     def test_a_missing_platform_column_is_refused_by_name(self):
         frame = pd.DataFrame({'情感': [1.0]})
         with pytest.raises(UnknownOperationError, match='platform'):

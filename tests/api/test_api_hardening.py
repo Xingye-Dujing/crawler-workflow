@@ -499,3 +499,22 @@ class TestNumericSettingsFields:
         assert response.status_code == 200, 'the picker reads code/error from the body, not the status'
         payload = response.get_json()
         assert payload['ok'] is False and payload['code'] == 'no_result'
+
+
+class TestWorkflowNodeIdGuard:
+    """A node's id is a storage key the engine keys on (``{n['id']: n}``); an id-less node raised a
+    raw ``KeyError`` inside ``WorkflowEngine.__init__`` — before any run record, and minutes later in
+    an unwatched queued thread. The payload guard must refuse it by name instead."""
+
+    def test_a_node_without_an_id_is_refused_by_name(self, app_module):
+        data = {'workflow': {'nodes': [{'type': 'source', 'params': {}}], 'connections': []}}
+        message = app_module._workflow_shape_error(data)
+        assert message and 'id' in message.lower(), f'expected an id-naming refusal, got {message!r}'
+
+    def test_a_blank_id_is_refused_too(self, app_module):
+        data = {'workflow': {'nodes': [{'id': '   ', 'type': 'source'}], 'connections': []}}
+        assert app_module._workflow_shape_error(data), 'a whitespace id is not an id'
+
+    def test_a_well_formed_node_still_passes_the_guard(self, app_module):
+        data = {'workflow': {'nodes': [{'id': 'n1', 'type': 'source', 'params': {}}], 'connections': []}}
+        assert app_module._workflow_shape_error(data) == ''

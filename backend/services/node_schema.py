@@ -125,9 +125,12 @@ def _replaced_columns(op: str, step: dict) -> list[str] | None:
             cols.append(f'{value_col}_{agg}')
         return cols
     if op == 'sentiment_evolution':
-        period = str(step.get('column') or '').strip()
+        # The step ALWAYS renames its period column to 'period' (data_analysis.py:3178) regardless of
+        # the input name, so naming the OUTPUT after the box the user filled was a lie: a chart that
+        # reads 'period' (the produced name, and the downstream default) was flagged as a provable
+        # miss on a canvas that runs. The lineage must equal what the producer emits.
         index_col = str(step.get('new_col') or 'sentiment_index').strip()
-        cols = ([period] if period else []) + [index_col]
+        cols = ['period', index_col]
         cols += ['positive_n', 'neutral_n', 'negative_n', 'total', 'other_n']
         cols += ['positive_pct', 'neutral_pct', 'negative_pct', 'volume_pct']
         if str(step.get('score_col') or '').strip():

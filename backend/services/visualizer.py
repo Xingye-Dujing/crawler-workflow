@@ -767,7 +767,7 @@ class VisualizationService:
                 VisualizationService._require_columns(df, x)
                 groups = [
                     (_localize_label(name), pd.to_numeric(group[y], errors='coerce').dropna())
-                    for name, group in df.groupby(x)
+                    for name, group in df.groupby(x, sort=False)
                 ]
                 labels = [g[0] for g in groups]
                 data = [_box_stats(g[1]) for g in groups]
@@ -1632,8 +1632,12 @@ class VisualizationService:
                 ax.set_ylabel(t('chart.count'))
             elif chart_type == 'box':
                 if y:
-                    groups = [pd.to_numeric(group[y], errors='coerce').dropna().values for _, group in df.groupby(x)]
-                    grp_labels = [_localize_label(str(name)) for name in df.groupby(x).groups]
+                    # One grouping, ``sort=False``: a box must sit under the same phase order the
+                    # bar/_aggregate paths use, not pandas' default code-point sort (which put
+                    # 二次爆发期 before 发酵期). One pass keeps labels and data aligned by construction.
+                    grouped = df.groupby(x, sort=False)
+                    groups = [pd.to_numeric(g[y], errors='coerce').dropna().values for _, g in grouped]
+                    grp_labels = [_localize_label(str(name)) for name in grouped.groups]
                     _boxplot(ax, groups, grp_labels)
                     ax.set_xlabel(_localize_label(x))
                 else:

@@ -659,7 +659,7 @@ class RunStore:
             'llm_provider = excluded.llm_provider, llm_model = excluded.llm_model, '
             'workflow_name = excluded.workflow_name, workflow_fingerprint = excluded.workflow_fingerprint, '
             'mode = excluded.mode, headless = excluded.headless, lang = excluded.lang, '
-            'node_total = excluded.node_total, wf_count = excluded.wf_count, '
+            'node_total = excluded.node_total, node_done = excluded.node_done, wf_count = excluded.wf_count, '
             'skipped_workflows = excluded.skipped_workflows, '
             'forced_visible = 0, finished_at = NULL, note = NULL',
             (

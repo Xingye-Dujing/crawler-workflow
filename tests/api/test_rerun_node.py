@@ -144,3 +144,45 @@ class TestRerunEndpoint:
         )
         assert response.status_code == 409
         assert fake_begin == []
+
+    def test_rerunning_a_node_of_a_live_run_is_refused_and_keeps_every_row(self, client, app_module, fake_begin):
+        """The wipe runs BEFORE ``_begin_run`` can serialize against a live worker, so a
+        ``重跑节点`` on a finished node of a still-running run would delete that run's rows
+        and release its dedupe claims mid-flight — the very loss ``继续`` from ``stopping`` is
+        excluded to prevent. It must refuse by name and leave the rows (and the run) intact."""
+        store = app_module.get_run_store()
+        wf = _workflow()
+        fp = app_module.workflow_fingerprint(app_module.effective_workflow(wf))
+        store.start_run('live1', 'wf', fp)  # no finish_run → the run stays RUN_RUNNING
+        for nid in ('n1', 'n2', 'n3'):
+            store.begin_node('live1', nid, 'process', fingerprint='node-' + nid)
+            store.finish_node('live1', nid, app_module.NODE_DONE)
+        store.claim_item('item:node-n2', 'ITEM-A', 'live1')
+
+        response = client.post(
+            '/api/workflow/rerun-node',
+            json={'workflow': wf, 'workflow_name': 'wf', 'node_id': 'n2', 'resume_run_id': 'live1'},
+        )
+        assert response.status_code == 409
+        assert fake_begin == [], 'a refused live rerun must not start anything'
+        assert store.get_node_status('live1', 'n2') == app_module.NODE_DONE, 'the live run was wiped anyway'
+        # The claim is still held → the running worker's dedupe was not released under it.
+        assert store.claim_item('item:node-n2', 'ITEM-A', 'live1') is False, 'a live run lost its dedupe claim'
+
+    def test_a_live_run_is_refused_even_on_the_probe_path(self, client, app_module, fake_begin):
+        """The records panel always sends ``resume_run_id``, but a hand-built call omits it and the
+        endpoint's ``include_finished=True`` probe would otherwise pick the newest (running) row."""
+        store = app_module.get_run_store()
+        wf = _workflow()
+        fp = app_module.workflow_fingerprint(app_module.effective_workflow(wf))
+        store.start_run('live2', 'wf', fp)
+        for nid in ('n1', 'n2', 'n3'):
+            store.begin_node('live2', nid, 'process', fingerprint='node-' + nid)
+            store.finish_node('live2', nid, app_module.NODE_DONE)
+
+        response = client.post(
+            '/api/workflow/rerun-node', json={'workflow': wf, 'workflow_name': 'wf', 'node_id': 'n2'}
+        )
+        assert response.status_code == 409
+        assert fake_begin == []
+        assert store.get_node_status('live2', 'n2') == app_module.NODE_DONE

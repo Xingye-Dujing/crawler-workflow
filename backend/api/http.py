@@ -112,3 +112,15 @@ def _optional_float(value):
     except (TypeError, ValueError):
         return None
     return number if math.isfinite(number) else None
+
+
+def _float_with_default(value, default: float) -> float:
+    """A rate/threshold field with a default, where a typed ``0`` is a real answer.
+
+    ``_optional_float(x) or default`` swallows a typed 0 into the default — the mistake the forecast
+    block's own comment warns against ("swallowing it into the default would answer a question the
+    user did not ask"). Unlike a COUNT (where 0 is "not configured", so ``or`` is right), a
+    threshold's 0 is meaningful, so the default is only for an ABSENT box; a typed 0 is forwarded to
+    the step, which honours or refuses it. Blank/unparseable → ``default`` (identical to the old ``or``)."""
+    parsed = _optional_float(value)
+    return default if parsed is None else parsed
