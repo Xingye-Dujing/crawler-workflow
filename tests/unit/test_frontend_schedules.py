@@ -6,8 +6,9 @@ Two halves, and neither is visible to the other.
   ``app.js``): the table is painted from ONE server payload, a status token becomes a catalogue word
   while an unknown token stays itself, the editor asks exactly what the server will be asked (a
   stored canvas that is no longer on the list shows AS ITSELF, a canvas that may not be scheduled
-  carries the server's own reason), a save posts only the keys the chosen kind means, and a refusal
-  is quoted rather than paraphrased.
+  carries the server's own reason), a save posts only the keys the chosen kind means, a refusal
+  is quoted rather than paraphrased, and a 立即执行 that really started takes the live console up
+  while a queued fire leaves it alone.
 * The static half is what a page boot needs, and every missing piece there is silent: a dock with no
   resize handle cannot be grown, a panel absent from ``DOCKED_PANELS`` stacks on top of the console,
   a dock that app.js does not wire has a handle that does nothing, and a panel left out of the
@@ -165,6 +166,13 @@ class TestTheEditor:
 class TestTheButtons:
     def test_immediate_execution_says_which_of_the_two_things_happened(self, results):
         assert results['runToasts'] == ['已开始运行：每天早八', '服务器正忙，已排队运行：每天早八']
+
+    def test_a_started_fire_attaches_the_console_but_a_queued_one_does_not(self, results):
+        """The fire that really started owns a live console; the panel must take the stream up now
+        (same attach the Run button and boot reconnect take), not make the user refresh. A queued
+        fire has no console of its own yet, so it must leave the running one attached — one attach
+        per fire, in the order 立即执行 was driven (started, then queued)."""
+        assert results['runReconnect'] == [1, 0]
 
     def test_removing_asks_first_and_the_answer_decides(self, results):
         assert results['removeCancelled'] == 0, 'a cancelled delete still posted'

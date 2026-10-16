@@ -204,11 +204,20 @@ await sandbox.schedulesManager.edit('gone-id');
 out.saved = { posts: calls.posts.slice(), toasts: calls.toasts.slice(-1) };
 
 /* ── 8. 立即执行 says which of the two things happened ─────────────────────── */
+/* The console stream only ever attached from a page load, so a fire that really
+   started left a live run the user could only watch by refreshing. The spy records
+   whether runNow took the same attach the Run button and boot reconnect take — the
+   real workflow.reconnectConsole is not run (it would open a poll timer here). */
+sandbox.__reconnectCount = 0;
+vm.runInContext('workflow.reconnectConsole = async function () { __reconnectCount += 1; };', sandbox);
 calls.posts.length = 0;
 calls.toasts.length = 0;
+out.runReconnect = [];
 for (const status of ['started', 'queued']) {
+    const before = sandbox.__reconnectCount;
     reply = { ok: true, tasks: [task({})], canvases: CANVASES, status: CLOCK, result: { status: status, name: '每天早八', run_id: 'run-9' } };
     await sandbox.schedulesManager.runNow('abc123');
+    out.runReconnect.push(sandbox.__reconnectCount - before);
 }
 out.runToasts = calls.toasts.slice();
 

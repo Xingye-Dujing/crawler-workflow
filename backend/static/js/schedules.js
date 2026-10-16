@@ -424,6 +424,15 @@ var schedulesManager = {
             showToast(I18n.t('schedMgr.runQueued').replace('{name}', result.name || ''), 4000);
         } else {
             showToast(I18n.t('schedMgr.runStarted').replace('{name}', result.name || ''));
+            /* A 立即执行 fire that really started owns a live console, but the stream only ever
+               took itself up from a page load — so the user had to refresh to watch it. Take the
+               same attach the Run button and the boot reconnect take, now. reconnectConsole reads
+               the running status, replays what the fire has written so far, opens the panel and
+               starts polling; it returns early when a stream is already attached, so a queued fire
+               (which never reaches here) and a double click cannot double-poll. */
+            if (result.status === 'started' && typeof workflow !== 'undefined' && workflow) {
+                workflow.reconnectConsole();
+            }
         }
     },
 
