@@ -7,10 +7,13 @@ refused by name. Timing is left coarse — the burst signal is relative to the c
 indirectly; the deterministic, falsifiable claims are the cross-account duplicate and the refusals.
 """
 
+import threading
+
 import pandas as pd
 import pytest
 
 from analyzers.bot import BotLikelihoodAnalyzer
+from crawlers.base import CrawlerStopped
 
 pytestmark = pytest.mark.unit
 
@@ -62,3 +65,52 @@ class TestBotLikelihood:
         assert len(out) == 3
         assert list(out['评论者']) == ['A', 'B', 'C'], 'the table must not be reordered'
         assert (out['bot_level'] == 'none').all()
+
+
+class _FlipEvent:
+    """A stand-in cancel event that reports itself stopped after N checks.
+
+    Used to prove the scan consults the event INSIDE the row loop: a check moved
+    back out to just-before-the-loop would be consumed once and never again, so the
+    raise would never land and ``calls`` would stay at 1.
+    """
+
+    def __init__(self, flips_after: int):
+        self.calls = 0
+        self.flips_after = flips_after
+
+    def is_set(self) -> bool:
+        self.calls += 1
+        return self.calls > self.flips_after
+
+
+class TestBotCancellation:
+    def _wide(self, n):
+        return pd.DataFrame(
+            {
+                '正文': [f'水军文案内容编号{i}' for i in range(n)],
+                '评论者': [f'账号{i}' for i in range(n)],
+                '评论时间': ['2024-05-01 10:00'] * n,
+            }
+        )
+
+    def test_a_stop_already_set_refuses_before_scanning(self):
+        stopped = threading.Event()
+        stopped.set()
+        with pytest.raises(CrawlerStopped):
+            BotLikelihoodAnalyzer().analyze_dataframe(self._wide(6), cancel_event=stopped)
+
+    def test_a_never_set_event_scores_the_whole_table(self):
+        # The signature gained cancel_event; the default and a fresh (unset) event must
+        # not change any previous behaviour — the table still lands, no exception.
+        out = BotLikelihoodAnalyzer().analyze_dataframe(self._wide(6), cancel_event=threading.Event())
+        assert len(out) == 6
+        assert list(out.columns)[-3:] == ['bot_score', 'bot_level', 'bot_evidence']
+
+    def test_a_stop_mid_scan_lands_within_a_bounded_number_of_rows(self):
+        # The O(n²) loop must notice the Stop and bail; flipping it after two checks means
+        # three outer rows ran, then the raise — not all six, and not zero of them.
+        flip = _FlipEvent(flips_after=2)
+        with pytest.raises(CrawlerStopped):
+            BotLikelihoodAnalyzer().analyze_dataframe(self._wide(6), cancel_event=flip)
+        assert 1 < flip.calls < 6, 'the check must run per row inside the loop, not once before it'

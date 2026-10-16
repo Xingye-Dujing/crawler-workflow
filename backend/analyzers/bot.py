@@ -52,6 +52,7 @@ class BotLikelihoodAnalyzer:
         text_column: str = '正文',
         author_column: str = '评论者',
         time_column: str = '评论时间',
+        cancel_event=None,
     ) -> pd.DataFrame:
         if text_column not in df.columns:
             raise ValueError(t('analysis.bot_col_missing', col=text_column))
@@ -69,7 +70,16 @@ class BotLikelihoodAnalyzer:
         hashes = [simhash64(tx) if tx else None for tx in texts]
 
         dup_partner = [False] * len(work)
+        # The pair scan is O(n²). Without a per-row check on ``cancel_event``, 停止
+        # pressed during a bot node would not land until the WHOLE scan finished —
+        # minutes on a large table, during which the run holds the single-run queue
+        # (AGENTS.md: "one run at a time; a busy server queues"). Checking once per
+        # outer row bounds the wait to a single row's inner scan.
         for i in range(len(work)):
+            if cancel_event is not None and cancel_event.is_set():
+                from crawlers.base import CrawlerStopped
+
+                raise CrawlerStopped(t('crawl.stopped'))
             if hashes[i] is None:
                 continue
             for j in range(len(work)):

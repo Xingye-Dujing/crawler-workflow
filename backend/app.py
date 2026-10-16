@@ -3379,7 +3379,11 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
         author_column = str(params.get('author_column') or '评论者').strip()
         time_column = str(params.get('time_column') or '评论时间').strip()
         df = analyzer_bot.analyze_dataframe(
-            df, text_column=text_column, author_column=author_column, time_column=time_column
+            df,
+            text_column=text_column,
+            author_column=author_column,
+            time_column=time_column,
+            cancel_event=(run_ctx or {}).get('cancel_event'),
         )
         return df.to_dict('records')
 
