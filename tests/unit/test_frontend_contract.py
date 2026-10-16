@@ -191,6 +191,36 @@ class TestLlmGateParity:
         assert 'canvas.saveState(' not in branch, 'opening the panel persisted an edit it never was'
         assert 'canvas.updateNodeDisplay(' not in branch, 'a mere view re-stamped the node and pushed history'
 
+    def test_opening_a_tokenize_node_panel_is_not_an_undo_step(self):
+        """Same rule on the OTHER side of the edge: the 分词 node fills word_freq when a chart sits
+        downstream, but a panel OPEN is not a user edit, so the branch may not persist it (connectNodes
+        already writes it as a real change when the wire is made)."""
+        source = (STATIC_DIR / 'js' / 'workflow.js').read_text(encoding='utf-8')
+        start = source.index("node.type === 'tokenize'")
+        branch = source[start : source.index("node.type === 'name'", start)]
+        assert "p.output_mode = 'word_freq'" in branch, 'the derived default was dropped (run would read a stale mode)'
+        assert 'canvas.saveState(' not in branch, 'opening the tokenize panel persisted an edit it never was'
+        assert 'canvas.updateNodeDisplay(' not in branch, 'a mere view re-stamped the node and pushed history'
+
+    def test_opening_an_output_panel_is_not_an_undo_step(self):
+        """A pdf-only output forces ``format='pdf'`` in the live model for the run, but must not
+        saveState() on the open."""
+        source = (STATIC_DIR / 'js' / 'workflow.js').read_text(encoding='utf-8')
+        start = source.index('var pdfOnly = _outputIsPdfOnly(nodeId);')
+        branch = source[start : source.index('var fmt = pdfOnly', start)]
+        assert "p.format = 'pdf'" in branch, 'the forced pdf default was dropped'
+        assert 'canvas.saveState(' not in branch, 'opening the output panel persisted an edit it never was'
+
+    def test_the_resume_default_pick_does_not_persist_on_render(self):
+        """renderResumeSettings back-fills the newest run when the stored one was purged — a derived
+        default, not a choice — so it writes the value but never saveState() from the render path."""
+        source = (STATIC_DIR / 'js' / 'workflow.js').read_text(encoding='utf-8')
+        marker = 'p.resume_run_id = runs[0].run_id;'
+        idx = source.index(marker)
+        window = source[idx : idx + 120]
+        assert marker in source, 'the newest-run fallback was dropped (node reads nothing)'
+        assert 'canvas.saveState(' not in window, 'the resume default pick persisted an edit on a render'
+
     def test_the_process_selector_offers_exactly_the_operations_the_executor_serves(self):
         """``PROCESS_OPS`` in workflow.js is what the 算法处理 node's dropdown offers; the
         branches inside ``_execute_process_node`` are what actually run. Read from the

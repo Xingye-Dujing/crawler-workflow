@@ -2608,12 +2608,14 @@ function openSettings(nodeId) {
         html += renderVisualizeSettings(nodeId, node.params);
     } else if (node.type === 'tokenize') {
         var p = node.params;
-        // Force word_freq when a visualize node is downstream
+        // Force word_freq when a visualize node is downstream. This is a derived default filled on a
+        // MERE OPEN, not a user edit: the value is written so the preview/run reads it, but the panel
+        // may not saveState() or updateNodeDisplay() here — that pushed an undo step and lit the dirty
+        // dot for looking at a node (the same rule test_opening_a_tokenize_visualize_panel… guards on
+        // the visualize side; connectNodes already persists it as a real edit at WIRING time).
         var hasDownstreamVisualize = canvas.connections.some(function (c) { return c.from === nodeId && canvas.nodes[c.to] && canvas.nodes[c.to].type === 'visualize'; });
         if (hasDownstreamVisualize && p.output_mode !== 'word_freq') {
             p.output_mode = 'word_freq';
-            canvas.updateNodeDisplay(nodeId);
-            canvas.saveState();
         }
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.text_column || '') + '" placeholder="' + I18n.t('settings.textColumnPlaceholder') + '" ' +
@@ -2667,11 +2669,12 @@ function openSettings(nodeId) {
     } else if (node.type === 'output') {
         var p = node.params;
         var pdfOnly = _outputIsPdfOnly(nodeId);
-        /* An output fed only by a chart / compile has exactly one valid format; force and persist it so the
-           run sends pdf even if the select is never touched. The extension itself is enforced server-side. */
+        /* An output fed only by a chart / compile has exactly one valid format; force it in the live
+           model so the run sends pdf even if the select is never touched (the extension itself is
+           enforced server-side). Filling a derived default on a mere OPEN is not a user edit, so this
+           branch must not saveState() — that pushed an undo step and lit the dirty dot for looking. */
         if (pdfOnly && p.format !== 'pdf') {
             p.format = 'pdf';
-            canvas.saveState();
         }
         var fmt = pdfOnly ? 'pdf' : (p.format || 'csv');
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
@@ -2803,10 +2806,12 @@ async function renderResumeSettings(nodeId) {
         return;
     }
     /* Whatever it was pointed at may have been purged since; falling back to
-       the newest keeps the node usable instead of silently reading nothing. */
+       the newest keeps the node usable instead of silently reading nothing. This is
+       the panel filling its own default on a render, not the user choosing — so it
+       writes the value (the dropdown and the run both read it) but must not saveState(),
+       or merely opening the resume panel would push an undo step and mark the file dirty. */
     if (!runs.some(function (r) { return r.run_id === p.resume_run_id; })) {
         p.resume_run_id = runs[0].run_id;
-        canvas.saveState();
     }
     var run = runs.filter(function (r) { return r.run_id === p.resume_run_id; })[0] || runs[0];
     var nodes = (run.nodes || []).filter(function (n) { return (n.row_count || 0) > 0; });
