@@ -1054,6 +1054,26 @@ out.context_menu.new_node = {
 clickItem(null, false);
 out.context_menu.outside_click_closes = ctxMenu.classList.contains('open');
 
+/* ── a multi-select copy must still offer the menu's 粘贴节点 ───────── */
+/* The group copy lands on _clipboardNodes and clears _clipboardData; the item's own visibility
+   checked only _clipboardData, so it hid itself right after a batch copy that pasted perfectly
+   well by Ctrl+V. Isolated freshWorld so it cannot disturb the context-menu scenario's element
+   references (a mid-scenario reset would desync ctxMenu). */
+freshWorld();
+const wsBatch = canvas.workspace;
+const ctxBatch = doc.getElementById('context-menu');
+const bpA = addNode('source', 0, 0);
+const bpB = addNode('process', 400, 0);
+canvas.setSelectedNodes([bpA, bpB]);
+const onBatchA = { closest: (sel) => (sel === '.node' ? doc.getElementById(bpA) : null) };
+dispatchOn(wsBatch, 'contextmenu', ev({ clientX: 50, clientY: 50, target: onBatchA }));
+canvas._contextNode = bpA;
+canvas.copySelection();
+dispatchOn(wsBatch, 'contextmenu', ev({ clientX: 120, clientY: 140, target: onBatchA }));
+out.paste_after_batch_copy = doc.getElementById('ctx-paste-node').style.display;
+out.batch_clipboard_shape = { nodes: !!canvas._clipboardNodes, data: !!canvas._clipboardData };
+out.batch_menu_open = ctxBatch.classList.contains('open');
+
 /* ── a right-press must not collapse a live multi-selection ────────── */
 /* pointerdown fires for the right button too, and used to reset the group to the single
    pressed node before the menu even opened (Bug 2). Right-pressing a member of the group

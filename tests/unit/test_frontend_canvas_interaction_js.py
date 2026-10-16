@@ -770,9 +770,16 @@ class TestContextMenu:
 
     def test_paste_is_offered_only_when_something_is_on_the_clipboard(self, ix):
         """The action itself refuses silently, so an always-visible item was a menu
-        entry that did nothing — reads as broken, not as "nothing copied yet"."""
+        entry that did nothing — reads as broken, not as "nothing copied yet". And the
+        batch clipboard is a SECOND shape: a multi-select copy lands on _clipboardNodes
+        and clears _clipboardData, so the item must check both shapes or it hides itself
+        right after a copy that pastes perfectly well by Ctrl+V."""
         assert ix['context_menu']['pasteVisible'] == 'none', ix['context_menu']
         assert ix['context_menu']['paste_after_copy'] == 'block'
+        assert ix['batch_clipboard_shape'] == {'nodes': True, 'data': False}, (
+            'a batch copy must land on the nodes clipboard, not the single one'
+        )
+        assert ix['paste_after_batch_copy'] == 'block', 'the menu hid its own paste after a multi-select copy'
 
     def test_the_menu_closes_as_it_acts(self, ix):
         assert ix['context_menu']['fold_action']['stillOpen'] is False

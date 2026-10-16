@@ -404,8 +404,13 @@ const canvas = {
             /* 粘贴节点 is offered only when something is actually on the clipboard.
                The action itself refuses silently, so the item used to sit there on every
                canvas with nothing copied and do nothing when clicked — which reads as a
-               broken menu rather than as "there is nothing to paste". */
-            document.getElementById('ctx-paste-node').style.display = this._clipboardData ? 'block' : 'none';
+               broken menu rather than as "there is nothing to paste". "Something copied" is
+               BOTH clipboard shapes: a single node lives on _clipboardData, a multi-select
+               copy on _clipboardNodes (and clears _clipboardData), so the check must mirror
+               the paste door (_pasteAt) — the item once checked only _clipboardData and so
+               hid itself right after a batch copy that pasted perfectly well by Ctrl+V. */
+            const pasteable = !!this._clipboardData || !!(this._clipboardNodes && this._clipboardNodes.length);
+            document.getElementById('ctx-paste-node').style.display = pasteable ? 'block' : 'none';
             /* Import-from-JSON always applies: it takes its payload from the dialog, not the
                in-canvas clipboard, so an empty clipboard must still leave it offered. */
             document.getElementById('ctx-import-json').style.display = 'block';
