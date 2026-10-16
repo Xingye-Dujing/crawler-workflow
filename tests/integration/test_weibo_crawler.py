@@ -379,17 +379,18 @@ class TestPagingWalk:
             in said
         ), said
 
-    def test_a_walk_that_empties_its_windows_below_target_is_a_licensed_site_end(self, make_walker):
-        # U1: the window walk ran out of its range (here, one window of two pages) with the ask still
-        # unmet and NO refusal. Every window the user's range gave was walked — that IS the site saying
-        # 「this is all there is in the range」 — so it is a site-attested short, licensed ``site_end``
-        # (settles clean, as before), not left ``end_reason=None``. A wall/risk/停止 would land a
-        # different reason and stay unfiled here; this is the honest 「范围就这么点」 outcome.
+    def test_a_walk_that_empties_its_windows_below_target_stays_un_armed(self, make_walker):
+        # U1: the window walk ran short with no refusal said why. docs/crawler_rules.md §6 keeps weibo
+        # search UN-ARMED because its ``'end'`` is a LOOP FALLBACK, not a site marker: a window that
+        # never rendered (the pending-wait breaker, or a swallowed per-window error) is skipped and
+        # still lands on ``'end'``, so licensing it ``site_end`` would stamp a thin table a
+        # site-attested finish and silence the under-target gate. The walk hands back NO license —
+        # ``end_reason`` stays ``None`` — so a shortfall the site never attested can still be caught.
         crawler, _driver = make_walker(50, total_pages=2)
         rows = crawler.search(keyword='三亚', target_count=50)
         assert len(rows) < 50, 'premise: the windows emptied well below the ask'
-        assert crawler.end_reason == 'site_end', (
-            f'a fully-walked range that ran short is attested, not silent: {crawler.end_reason}'
+        assert crawler.end_reason is None, (
+            f'weibo search is un-armed; a loop fallback may not license the short: {crawler.end_reason!r}'
         )
 
     def test_a_wall_shortfall_is_not_licensed_as_site_end(self, make_walker):

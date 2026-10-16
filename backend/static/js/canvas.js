@@ -704,6 +704,7 @@ const canvas = {
         /* Keyboard shortcuts */
         document.addEventListener('keydown', (e) => {
             if (this._isTypingTarget(e.target)) return;
+            if (this._modalIsOpen()) return;
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (this.selectedNodes.length > 1) this.deleteNodes(this.selectedNodes.slice());
                 else if (this.selectedNode) this.deleteNode(this.selectedNode);
@@ -855,6 +856,16 @@ const canvas = {
         return !!(target.closest && target.closest('.cselect, [contenteditable="true"]'));
     },
 
+    /* A confirm dialog whose focus sits on a BUTTON is not a typing target, yet it is a
+       modal: with 「删除运行」 open, a Backspace deleted the node BEHIND the dialog and a
+       fold/pan key fired unseen. The canvas may not act on a shortcut while a dialog owns
+       the screen — the same #dialog-overlay guard menu.js already honours. Null-safe because
+       the harness DOM may not carry the overlay at all. */
+    _modalIsOpen() {
+        const overlay = document.getElementById('dialog-overlay');
+        return !!(overlay && overlay.classList && overlay.classList.contains('open'));
+    },
+
     /* Node ids are keys, not labels: run records, resume cursors and the LLM
        answer cache are all filed under them, and the workflow fingerprint hashes
        them. Re-minting them on restore therefore breaks the resume banner for a
@@ -873,9 +884,23 @@ const canvas = {
        rather than on whatever was selected before. A toast names the type added: a sighted
        keyboard user gets the same confirmation a drop is, and a screen reader reads it from
        the live region. */
+    /* One definition of "this type is switched off on the canvas". The context menu hides a
+       disabled node's action with the same list; the palette used to have no check at all, so a
+       「禁用此类型」 node could be added straight back by clicking the left-hand library — one
+       rule asked twice, and the palette was the weaker door. */
+    isTypeDisabled(type) {
+        return (this.disabledTypes || []).indexOf(type) >= 0;
+    },
+
     addNodeFromPalette(type) {
         const t = String(type || '').trim();
         if (!t) return null;
+        // Refused by name, never silently: the library item still sits there, so the answer is a
+        // toast naming the type, not a node that appears and immediately greys out.
+        if (this.isTypeDisabled(t)) {
+            if (typeof showToast === 'function') showToast(I18n.t('palette.blocked', { label: I18n.t('node.' + t) }));
+            return null;
+        }
         const id = this.addNode(t);
         this.selectNode(id);
         if (typeof showToast === 'function') {
@@ -1132,17 +1157,20 @@ const canvas = {
     alignSelected(mode) {
         const ids = this.selectedNodes.length ? this.selectedNodes.slice() : (this.selectedNode ? [this.selectedNode] : []);
         if (ids.length < 2) return false;
-        const boxes = ids.map((id) => {
-            const el = this._nodeEl(id);
-            return {
-                id,
+        /* A ghost id (see _restoreHistory) has no element; skip it rather than read
+           el.style on null, exactly as _nudgeSelected and _ensureNodeVisible guard. */
+        const boxes = ids
+            .map((id) => this._nodeEl(id))
+            .filter(Boolean)
+            .map((el) => ({
+                id: el.id,
                 el,
                 x: parseInt(el.style.left, 10) || 0,
                 y: parseInt(el.style.top, 10) || 0,
                 w: el.offsetWidth || 120,
                 h: el.offsetHeight || 60,
-            };
-        });
+            }));
+        if (boxes.length < 2) return false;
         const minX = Math.min(...boxes.map((b) => b.x));
         const maxX = Math.max(...boxes.map((b) => b.x + b.w));
         const minY = Math.min(...boxes.map((b) => b.y));
@@ -1598,6 +1626,12 @@ const canvas = {
         this.connections = this.connections.filter(c => c.from !== id && c.to !== id);
         if (this.selectedNode === id) this.selectedNode = null;
         this.selectedNodes = this.selectedNodes.filter(nid => nid !== id);
+        /* The keyboard link origin lives only in this field, not on any box: leaving it set
+           to a deleted node let the next 「l」 write a wire FROM a node that no longer exists —
+           invisible on the canvas, nowhere to single-delete, yet it entered getState and the
+           backend's dangling_connection check then refused the WHOLE run over a wire the user
+           could not see. */
+        if (this._linkFromId === id) this._linkFromId = null;
         /* The panel is bound to this node id — leaving it open would keep showing
            its old settings and let the user edit a node that no longer exists. */
         if (this._settingsNodeId === id) closeSettings();
@@ -1622,6 +1656,7 @@ const canvas = {
         if (list.indexOf(this.selectedNode) >= 0) {
             this.selectedNode = this.selectedNodes.length ? this.selectedNodes[this.selectedNodes.length - 1] : null;
         }
+        if (list.indexOf(this._linkFromId) >= 0) this._linkFromId = null;
         if (list.indexOf(this._settingsNodeId) >= 0) closeSettings();
         this.scheduleRender();
         this.updateStatus();
@@ -1873,9 +1908,14 @@ const canvas = {
     /* The one place a wire is committed: pure model mutation (edge + its side effects), no
        pointer event and no dialog. finishConnection and the keyboard link mode both call it,
        so both share identical semantics. Returns {ok, warn} — ok is false for a self-edge, a
-       duplicate, or a wire that would form a cycle, in which case nothing was written. */
+       duplicate, an endpoint that is not on the canvas, or a wire that would form a cycle, in
+       which case nothing was written. */
     connectNodes(fromId, toId) {
         if (!fromId || !toId || fromId === toId) return { ok: false, warn: null };
+        /* An endpoint must be a node the canvas actually holds. The keyboard link origin
+           outlived its node before this check, so a wire from a deleted node reached getState
+           and the whole run was refused over a line no one could see. */
+        if (!this.nodes[fromId] || !this.nodes[toId]) return { ok: false, warn: null };
         const exists = this.connections.some(c => c.from === fromId && c.to === toId);
         if (exists) return { ok: false, warn: null };
         /* A cycle would make the graph unrunnable (the engine walks wires top-down). Refuse it
@@ -2503,6 +2543,30 @@ const canvas = {
         };
     },
 
+    /**
+     * Resolve a file's `{from,to}` ids against the ids the canvas actually ended
+     * up handing out, so a wire reconnects to the node it left from.
+     *
+     * The old code mapped by POSITION — `findIndex` into the file's node array,
+     * then `Object.keys(canvas.nodes)[thatIndex]` — but `Object.keys` returns a
+     * dict's integer-like keys first, in ascending numeric order, not insertion
+     * order. So a file with ids `['n9','2']` reads back as keys `['2','n9']`, and
+     * the wire authored as `n9 → 2` was written as `2 → n9` — the whole graph
+     * silently rewired to other nodes, with no refusal and nothing on screen to
+     * explain it. Identity is looked up by key now, never by array slot.
+     *
+     * @param {Array<{from:string,to:string}>} connections raw file connections
+     * @param {Object<string,string>} idMap keyed by the requested file id → the id
+     *   `addNode` actually returned (equal unless the id was rejected and re-minted)
+     * @returns {Array<{from:string,to:string}>} wires whose both ends still exist
+     */
+    _remapConnections(connections, idMap) {
+        const map = idMap || {};
+        return (Array.isArray(connections) ? connections : [])
+            .filter((c) => c && map[c.from] && map[c.to])
+            .map((c) => ({ from: map[c.from], to: map[c.to] }));
+    },
+
     restoreState(state) {
         /* A restore is ONE undo point, not one per node.
 
@@ -2526,8 +2590,13 @@ const canvas = {
         var nodeList = Object.values(state.nodes || {}).sort(function (a, b) {
             return ordinal(a.id) - ordinal(b.id);
         });
+        /* Keyed by the id the state ASKED for, not the id the canvas kept: a
+           malformed or already-taken id is re-minted by addNode, and the wires
+           have to find the node that was actually built. */
+        var idMap = {};
         nodeList.forEach(function (n) {
             const id = canvas.addNode(n.type, n.x, n.y, n.id);
+            idMap[n.id] = id;
             if (canvas.nodes[id]) {
                 canvas.nodes[id].params = n.params;
                 /* The renamed title must travel back BEFORE the display update
@@ -2546,15 +2615,7 @@ const canvas = {
                 if (n.folded) canvas._setFolded(id, true);
             }
         });
-        var ids = Object.keys(canvas.nodes);
-        this.connections = (state.connections || []).map(function (c) {
-            var fromIdx = nodeList.findIndex(function (n) { return n.id === c.from; });
-            var toIdx = nodeList.findIndex(function (n) { return n.id === c.to; });
-            if (fromIdx >= 0 && toIdx >= 0 && ids[fromIdx] && ids[toIdx]) {
-                return { from: ids[fromIdx], to: ids[toIdx] };
-            }
-            return null;
-        }).filter(Boolean);
+        this.connections = this._remapConnections(state.connections, idMap);
         this.disabledTypes = Array.isArray(state.disabledTypes) ? state.disabledTypes.slice() : [];
         /* A draft carries the camera the user was looking through; an UNDO state
            never does (getState is view-free), so rewinding a step rearranges nodes
@@ -2617,6 +2678,14 @@ const canvas = {
         this.connections = [];
         this.restoreState(state);
         this._historySaving = false;
+        /* The selection is view-only, so restoreState never rebuilds it: an undo that removed
+           a node left its id in ``selectedNodes`` as a ghost. ``alignSelected`` then read
+           ``el.style`` on a null box (TypeError), and Delete hit the ghost and still toasted
+           「节点已删除」 for a node that was already gone. Prune the selection to what survived,
+           exactly as the delete paths do. */
+        this.selectedNodes = this.selectedNodes.filter((id) => this.nodes[id]);
+        if (this.selectedNode && !this.nodes[this.selectedNode]) this.selectedNode = null;
+        if (this._linkFromId && !this.nodes[this._linkFromId]) this._linkFromId = null;
         /* An undo/redo may have removed the node the settings panel is showing. */
         this.closeSettingsIfStale();
         /* Undo can walk the model back onto the saved baseline (or off it), so the flag is

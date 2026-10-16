@@ -59,6 +59,24 @@ class TestInvalidateNodes:
         # Upstream kept: the whole point is that only the target subtree is re-run.
         assert store.get_node_status('rerun1', 'n1') == app_module.NODE_DONE
 
+    def test_invalidating_a_node_releases_the_dedupe_claims_it_bought(self, client, app_module):
+        """A rerun reuses the SAME per-node fingerprint, so leaving the ``item_seen`` rows
+        meant every freshly crawled item hit "already collected" and was dropped: 重跑节点 ran
+        the crawl and it settled with zero rows on data the user had just deleted. The claims
+        this run bought for THIS node go with its rows."""
+        store = app_module.get_run_store()
+        _seed_completed_run(store, app_module)
+        # n2's scope is 'item:node-n2' (fingerprint='node-'+nid, _item_scope's shape).
+        assert store.claim_item('item:node-n2', 'ITEM-A', 'rerun1') is True
+        assert store.claim_item('item:node-n2', 'ITEM-A', 'rerun1') is False, 'dedupe holds before the rerun'
+        # An upstream node the rerun keeps must keep its own claim.
+        assert store.claim_item('item:node-n1', 'KEEP-ME', 'rerun1') is True
+
+        store.invalidate_nodes('rerun1', ['n2', 'n3'])
+
+        assert store.claim_item('item:node-n2', 'ITEM-A', 'rerun1') is True, "n2's claim was not released"
+        assert store.claim_item('item:node-n1', 'KEEP-ME', 'rerun1') is False, 'a kept node lost its dedupe'
+
 
 class TestRerunEndpoint:
     def test_rerunning_a_middle_node_wipes_it_and_its_downstream(self, client, app_module, fake_begin):

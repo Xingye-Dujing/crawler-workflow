@@ -17,6 +17,7 @@ in a session that is fine — a cost they cannot undo and this suite cannot forg
 import contextlib
 import shutil
 import threading
+from concurrent.futures import Future
 
 import browser_profiles
 import cookie_preflight
@@ -361,6 +362,39 @@ class TestParallelAndDeadline:
         monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_MAX_PARALLEL', 1)
         answers = cookie_preflight.check(['zhihu', 'weibo'])
         assert {answers[p]['state'] for p in ('zhihu', 'weibo')} == {cookie_preflight.UNKNOWN}
+
+    def test_every_probe_is_awaited_with_the_full_timeout_not_a_shrinking_one(self, monkeypatch, with_cookie):
+        """The pool width is a real ceiling, so more platforms than workers means later probes
+        run in a second wave. The old shared ``deadline`` gave each awaited future only the time
+        LEFT before that one deadline — so once the first wave used it up, every later platform
+        was answered UNKNOWN (「无法核对」, non-blocking) WITHOUT EVER BEING PROBED, silently
+        un-guarding the run. Each future must get the full timeout from when we wait on it.
+
+        Pinned deterministically by spying on ``Future.result``'s ``timeout`` argument rather than
+        by sleeping: the fix hands every call the same budget, so the recorded timeouts are all
+        the configured value, never a decaying remainder."""
+        with_cookie('zhihu')
+        with_cookie('weibo')
+        with_cookie('douyin')
+        monkeypatch.setattr(
+            cookie_preflight, '_probe_live', lambda p, **k: {'login_wall': False, 'risk_blocked': False}
+        )
+        monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_MAX_PARALLEL', 1)
+        monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_TIMEOUT', 5)
+        awaited = []
+        real_result = Future.result
+
+        def spy(self, timeout=None):
+            # The preflight loop calls ``future.result(timeout=budget)`` only; recording that
+            # timeout is what shows whether a later probe was given a shrinking deadline.
+            awaited.append(timeout)
+            return real_result(self, timeout=timeout)
+
+        monkeypatch.setattr(Future, 'result', spy)
+        answers = cookie_preflight.check(['zhihu', 'weibo', 'douyin'])
+        assert awaited, 'no probe was awaited at all'
+        assert all(t == 5 for t in awaited), f'a probe was given a shrinking budget: {awaited}'
+        assert {answers[p]['state'] for p in ('zhihu', 'weibo', 'douyin')} == {'valid'}
 
     def test_a_probe_that_outruns_the_deadline_is_still_answered(self, monkeypatch, with_cookie):
         """The key must be present or the browser reads 「no answer」 as 「no opinion

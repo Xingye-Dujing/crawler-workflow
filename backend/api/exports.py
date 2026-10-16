@@ -6,14 +6,14 @@ Every helper it needs is already reachable without importing ``app`` — the fil
 live in ``services.export_browser`` (imported lazily, as before), the request coercions in
 ``api.http``, the dataframe resolution in ``api.resolution``, the lock ledger in
 ``services.lock_store``, the format writers in ``services.exporter`` and the run-in-flight
-check in ``state.execution_state``. Paths and behaviour are unchanged.
+check in ``state.any_run_live``. Paths and behaviour are unchanged.
 """
 
 import logging
 import os
 
 from flask import Blueprint, jsonify, request
-from state import execution_state
+from state import any_run_live
 from stores import get_run_store
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
@@ -167,7 +167,7 @@ def exports_clear():
         return _bad_body()
     if data.get('confirm') is not True:
         return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
-    if execution_state['running']:
+    if any_run_live():
         return jsonify({'ok': False, 'error': t('exports.clearBusy')}), 409
     removed = 0
     # The listing is capped, so one pass is not necessarily the whole folder: keep going
@@ -212,7 +212,7 @@ def _smart_clear_guards(data):
         return _bad_body()
     if data.get('confirm') is not True:
         return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
-    if execution_state['running']:
+    if any_run_live():
         return jsonify({'ok': False, 'error': t('exports.clearBusy')}), 409
     return None
 

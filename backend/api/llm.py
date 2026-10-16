@@ -73,7 +73,26 @@ def llm_test():
     data = _json_body()
     if data is None:
         return _bad_body()
-    provider = data.get('provider') or 'ollama'
+    raw_provider = data.get('provider')
+    provider = str(raw_provider or '').strip().lower() or 'ollama'
+    if provider not in LLMClient.PROVIDERS:
+        # Refused BY NAME, never folded to 'ollama': this route tells the user whether a
+        # transport answers, and answering a misspelled ``OpenRouter`` against the local daemon
+        # would report the wrong transport as the one that ran. Same closed set the run door uses.
+        return (
+            jsonify(
+                {
+                    'ok': False,
+                    'error': t(
+                        'api.runSettingOption',
+                        setting='provider',
+                        value=str(raw_provider),
+                        allowed=', '.join(LLMClient.PROVIDERS),
+                    ),
+                }
+            ),
+            400,
+        )
     refusal = _local_transport_refusal(provider)
     if refusal:
         # Refused before a client is built: the point of this route is to tell the user

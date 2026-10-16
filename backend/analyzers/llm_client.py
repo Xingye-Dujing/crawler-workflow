@@ -141,6 +141,12 @@ def _ollama_error(err: Exception, model: str) -> LLMError:
 class LLMClient:
     """One chat transport plus the token-throttling settings for a run."""
 
+    #: The transports this class can speak. ONE list, imported by the doors that refuse a
+    #: name it does not know — the client used to fold any other value to 'ollama', which let a
+    #: misspelled ``OpenRouter`` silently become a local-daemon call while the run record still
+    #: claimed OpenRouter ran.
+    PROVIDERS = ('ollama', 'openrouter')
+
     def __init__(
         self,
         provider: str = 'ollama',
@@ -153,7 +159,11 @@ class LLMClient:
         host: str = '',
         cancel_event=None,
     ):
-        self.provider = provider if provider in ('ollama', 'openrouter') else 'ollama'
+        # Refused, never guessed: a transport name outside the closed set is a caller bug, and
+        # silently becoming 'ollama' is what records a run under a transport that never ran.
+        if provider not in self.PROVIDERS:
+            raise ValueError(f'unknown LLM provider {provider!r}; expected one of {list(self.PROVIDERS)}')
+        self.provider = provider
         self.model = (model or '').strip()
         self.api_key = (api_key or '').strip()
         self.temperature = temperature

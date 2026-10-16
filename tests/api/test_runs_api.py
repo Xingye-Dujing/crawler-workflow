@@ -423,6 +423,9 @@ class TestRunLogEndpoints:
         _seed_log(store, 'r1', [('a', 0, 'info'), ('b', 1, 'error')])
         body = client.get('/api/runs/r1/log?level=bogus&wf=notanint').get_json()
         assert [r['line'] for r in body['rows']] == ['a', 'b']
+        # A negative tab index is not a tab that exists; it must be ignored (全部), not a filter
+        # that empties the viewer over a run that has lines.
+        assert [r['line'] for r in client.get('/api/runs/r1/log?wf=-3').get_json()['rows']] == ['a', 'b']
 
     def test_unknown_run_is_a_404(self, client, app_module):
         assert client.get('/api/runs/nope/log').status_code == 404

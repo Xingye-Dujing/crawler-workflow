@@ -52,11 +52,14 @@ def _durable_node_rows(node_id: str, workflow_name: str = '') -> list:
         # ``A + B`` is how a parallel run is recorded; the same canvas filed its
         # earlier runs under ``A`` alone, so both spellings are offered rather than
         # leaving a week-old run's rows unreachable behind one string. Only after the
-        # name the browser is showing matched nothing, though: a workflow genuinely
-        # called ``R&B`` would otherwise have the ``R`` of somebody else's
-        # ``R + B`` offered as a candidate, and a stranger's table under the user's
-        # own node name is exactly the false data this function exists to refuse.
-        parts = [part.strip() for part in requested.split('+') if part.strip()]
+        # name the browser is showing matched nothing, though: the separator is the
+        # composed key ``' + '`` WITH its spaces, never a bare ``'+'`` — a workflow
+        # genuinely called ``A+B`` (no spaces) is ONE name, and splitting it on ``+``
+        # would offer the ``A`` of somebody else's ``A + B`` as a candidate. A stranger's
+        # table under the user's own node name is exactly the false data this function refuses.
+        if ' + ' not in requested:
+            return []
+        parts = [part.strip() for part in requested.split(' + ') if part.strip()]
         if not parts or parts == [requested]:
             return []
         return store.latest_rows(node_id, workflow_name=requested, workflow_names=parts)[1]

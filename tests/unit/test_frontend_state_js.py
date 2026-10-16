@@ -72,6 +72,21 @@ def state(tmp_path_factory):
                 'connections': [{'from': 'node-1', 'to': 'node-2'}],
             },
         },
+        {
+            # Integer-looking ids: `Object.keys` answers those FIRST rather than in
+            # insertion order, so a connection resolved by array slot landed on the
+            # node that happened to sit at that index (measured before the fix:
+            # 「1 → node-2」 came back as 「1 → 3」). Identity is the only key.
+            'id': 'restore_integer_like_ids',
+            'restore': {
+                'nodes': {
+                    '1': {'id': '1', 'type': 'source', 'params': {}, 'x': 1, 'y': 1},
+                    'node-2': {'id': 'node-2', 'type': 'process', 'params': {}, 'x': 2, 'y': 2},
+                    '3': {'id': '3', 'type': 'output', 'params': {}, 'x': 3, 'y': 3},
+                },
+                'connections': [{'from': '1', 'to': 'node-2'}],
+            },
+        },
         {'id': 'undo_last', 'add': ['source', 'output'], 'undo': True},
         {'id': 'undo_redo', 'add': ['source', 'output'], 'undo': True, 'redo': True},
         {
@@ -457,6 +472,13 @@ class TestCanvasState:
         assert [n['id'] for n in r['nodes']] == ['node-1', 'node-5', 'node-6']
         assert r['connections'] == [{'from': 'node-1', 'to': 'node-5'}], 'the new node is not wired to anything'
 
+    def test_a_restore_with_integer_like_ids_keeps_every_wire_on_its_nodes(self, state):
+        """A node id is a storage key, and `Object.keys` returns integer-like keys
+        first — resolving a wire by its file array slot re-attached it to whichever
+        node sat at that index, silently changing which crawl feeds which analysis."""
+        r = state['restore_integer_like_ids']
+        assert r['connections'] == [{'from': '1', 'to': 'node-2'}], r['connections']
+
     def test_language_flip_restamps_only_default_labels(self, state):
         nodes = {n['id']: n for n in state['restamp']['nodes']}
         assert nodes['node-1']['title'] == '保留名', 'a renamed node keeps its name across languages'
@@ -621,6 +643,19 @@ def life(tmp_path_factory, capabilities_matrix):
     }
     scenarios = [
         {'id': 'load_open', 'load': opened},
+        {
+            # The same file authored with ids that read as integers — the case where a
+            # positional remap silently rewired the graph onto other nodes.
+            'id': 'load_integer_like_ids',
+            'load': {
+                'nodes': [
+                    {'id': '1', 'type': 'source', 'params': {}},
+                    {'id': 'node-2', 'type': 'process', 'params': {}},
+                    {'id': '3', 'type': 'output', 'params': {}},
+                ],
+                'connections': [{'from': '1', 'to': 'node-2'}],
+            },
+        },
         {
             # A file that also carries the camera its author arranged behind.
             'id': 'load_with_view',
@@ -831,6 +866,14 @@ class TestFileLifecycle:
         r = life['load_with_view']
         assert r['view'] == {'panX': -300, 'panY': -80, 'zoom': 0.8}, r['view']
         assert r['draftView'] == r['view'], 'the next refresh owes the same viewpoint'
+
+    def test_a_file_whose_ids_read_as_integers_opens_without_rewiring(self, life):
+        """「打开」 accepts a hand-edited file, and its ids need not look like node-7:
+        mapping a connection through the node array's slot rather than its key pointed
+        the wire at another node entirely, with no refusal and nothing on screen."""
+        r = life['load_integer_like_ids']
+        assert r['connections'] == [{'from': '1', 'to': 'node-2'}], r['connections']
+        assert sorted(n['id'] for n in r['nodes']) == ['1', '3', 'node-2'], r['nodes']
 
     def test_a_file_without_a_camera_leaves_the_viewport_where_it_was(self, life):
         """Old files predate the field; opening one must not yank the camera the

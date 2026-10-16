@@ -653,11 +653,31 @@ class TestAggressionLlmMode:
         assert seen['op'] == 'aggression'
         assert seen['result_columns'] == ['aggression', 'aggression_score', 'aggression_hits']
         # A row the model cannot judge is reported at the failure value with its raw words kept,
-        # while the BLANK must be a value the model can never answer: 'none' is what a clean
-        # comment legitimately gets, and using it here made the runner read every clean row as
-        # "never reached". 未处理 is the marker every other row-by-row analyzer uses.
-        assert seen['blank'] == ['未处理', '', '']
+        # while the BLANK sentinel must be a value the model can never answer: 'none' is what a
+        # clean comment legitimately gets, so a sentinel equal to it made the runner read every
+        # clean row as "never reached". '' is the same sentinel emotion/tendency/sentiment use, AND
+        # it is NOT 未处理 — the executor scans every cell for 未处理 to settle a node PARTIAL, so
+        # a genuinely empty comment must never carry it or a clean run pinned to PARTIAL forever.
+        assert seen['blank'] == ['', '', '']
         assert seen['fail_value'] == ('none', '', '模型未判定')
+
+    def test_a_genuinely_empty_row_is_answered_like_the_lexicon_not_left_unprocessed(self):
+        """An empty comment has nothing to judge, so it is not a row the model failed to reach:
+        it must read ('none', 0.0, '') exactly as lexicon mode answers it, and it must NOT carry
+        未处理 (which would pin the whole node PARTIAL on a run that was never interrupted)."""
+        client = ScriptedClient(default='severe|abuse')
+        result = AggressionAnalyzer(mode='llm').analyze_dataframe(
+            pd.DataFrame({'正文': ['   ', '这人怎么不去死', None]}), '正文', ctx={'client': client}
+        )
+        assert result.loc[0, 'aggression'] == 'none', 'blank row judged clean, like lexicon mode'
+        # This mode's score/hits columns are textual (parse writes ''); the VERDICT is what the
+        # two modes must agree on, and it is 'none' — not 未处理, which pinned a clean run PARTIAL.
+        assert result.loc[0, 'aggression_score'] == ''
+        assert result.loc[0, 'aggression_hits'] == ''
+        assert result.loc[2, 'aggression'] == 'none', 'a None row is the same'
+        assert result.loc[1, 'aggression'] == 'severe', 'the row WITH text still reached the model'
+        # No cell anywhere is the never-reached marker, so the executor settles DONE, not PARTIAL.
+        assert '未处理' not in set(result['aggression'])
 
     def test_one_row_is_asked_once_with_its_own_text_in_the_prompt(self):
         client = ScriptedClient(default='severe|abuse')

@@ -144,11 +144,24 @@ class TestHistoryEndpoints:
         # The client fixture sends X-Lang: en, so the catalogue's English text is
         # what comes back — the point of the assertion is that the message is
         # catalogued at all, not an English literal written into the handler.
-        assert client.post('/api/history/clear').get_json() == {'ok': True, 'message': 'Execution history cleared'}
+        # ``confirm: true`` is now the gate every bulk destructive route shares.
+        cleared = client.post('/api/history/clear', json={'confirm': True})
+        assert cleared.status_code == 200
+        assert cleared.get_json() == {'ok': True, 'message': 'Execution history cleared'}
         body = client.get('/api/history/runs').get_json()
         assert body['runs'] == []
         assert body['workflow_names'] == []
         assert name not in body['workflow_names']
+
+    def test_clear_without_confirm_refuses_and_keeps_every_row(self, client, recorded):
+        """The one bulk door that read no body at all is closed: a stray or cross-origin
+        POST can no longer wipe the whole comparison chart without the explicit gate its
+        siblings (runs_clear, exports_clear) already held."""
+        recorded('hist-noconfirm', [('node-1', 'upload', 'rows', 'count', 1)])
+        refused = client.post('/api/history/clear', json={})
+        assert refused.status_code == 400
+        assert refused.get_json()['ok'] is False
+        assert client.get('/api/history/runs').get_json()['runs'] != [], 'a refused clear must delete nothing'
 
     # ``series()`` de-duplicates identical points at read time to clean up rows
     # Read-time dedupe of legacy duplicate rows must key on node_id too, or

@@ -474,6 +474,15 @@ class TestTopicFigureCharts:
         with pytest.raises(ChartConfigError, match='Field not found in the data: 词'):
             V.to_echarts_option(self.TERMS, 'topic_terms', x='词', y='overall_freq', y2='within_freq')
 
+    def test_a_named_but_missing_topic_map_label_or_size_is_refused_not_emptied(self):
+        """The map used to read a NAMED-but-absent field as "no labels": every bubble came out
+        blank at the floor radius — a figure that looked valid and lied. A rename on one side is a
+        named refusal on the other, exactly as x/y already refuse. A BLANK box is still no labels."""
+        with pytest.raises(ChartConfigError, match='Field not found in the data: 名称'):
+            V.to_echarts_option(self.MAP, 'topic_map', x='pc1', y='pc2', label_field='名称')
+        with pytest.raises(ChartConfigError, match='Field not found in the data: 占比'):
+            V.to_echarts_option(self.MAP, 'topic_map', x='pc1', y='pc2', value_field='占比')
+
     def test_both_types_are_refused_by_the_image_engine(self):
         # The refusal happens before any column is read, so the same frame answers both.
         for chart_type in ('topic_map', 'topic_terms'):
@@ -836,6 +845,21 @@ class TestAggregation:
         frame = pd.DataFrame({'s': ['a', 'b'], 't': ['x', 'y'], 'v': [0.0, None]})
         links = V.to_echarts_option(frame, 'sankey', x='s', y='t', value_field='v', agg='sum')['series'][0]['links']
         assert links == []
+
+    def test_box_refuses_a_named_value_column_it_cannot_find(self, df):
+        """A typo'd ``y`` used to fall through to drawing the CATEGORY column ``x`` as numeric —
+        a plausible all-zero box whose axis was a group name. A named field is required by name."""
+        with pytest.raises(ChartConfigError, match='Field not found in the data: 分值'):
+            V.to_echarts_option(df, 'box', x='作者', y='分值')
+
+    def test_heatmap_refuses_a_named_value_column_it_cannot_find(self, df):
+        """Aggregation-by-a-named-column that is absent used to become a silent row count."""
+        with pytest.raises(ChartConfigError, match='Field not found in the data: 分值'):
+            V.to_echarts_option(df, 'heatmap', x='作者', y='平台', value_field='分值')
+
+    def test_sankey_refuses_a_named_value_column_it_cannot_find(self, df):
+        with pytest.raises(ChartConfigError, match='Field not found in the data: 分值'):
+            V.to_echarts_option(df, 'sankey', x='作者', y='平台', value_field='分值')
 
     def test_wordcloud_repeats_categories_with_counts(self, df):
         data = V.to_echarts_option(df, 'wordcloud', x='作者')['series'][0]['data']

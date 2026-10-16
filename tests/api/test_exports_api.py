@@ -366,6 +366,25 @@ class TestClearName:
             app_module.execution_state.update({'running': False, 'run_id': ''})
         assert os.path.exists(os.path.join(export_dir, 'a.part001.csv')), 'a refused clear touches nothing'
 
+    def test_the_post_stop_window_still_refuses_a_bulk_clear(self, client, app_module, export_dir):
+        """停止 clears ``running`` at its TOP, but the worker keeps merging part files for tens
+        of seconds. Asking only the flag let 「清空」 delete the shards mid-merge; the bulk clear
+        must ask the SAME live-run line the run-record routes do — a live thread is busy."""
+
+        class _AliveThread:
+            def is_alive(self):
+                return True
+
+        self._seed_shards(export_dir)
+        app_module.execution_state.update({'running': False, 'run_id': 'r-live', 'open_records': ['r-live']})
+        app_module.execution_state['thread'] = _AliveThread()
+        try:
+            response = client.post('/api/exports/clear', json={'confirm': True})
+            assert response.status_code == 409, 'the worker is still writing this very folder'
+        finally:
+            app_module.execution_state.update({'running': False, 'run_id': '', 'open_records': [], 'thread': None})
+        assert os.path.exists(os.path.join(export_dir, 'a.part001.csv')), 'a refused clear touches nothing'
+
     def test_a_pinned_shard_is_kept_and_reported(self, client, export_dir):
         self._seed_shards(export_dir)
         client.post('/api/locks', json={'panel': 'exports', 'key': 'a.part001.csv', 'locked': True})

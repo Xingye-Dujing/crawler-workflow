@@ -24,7 +24,7 @@ import re
 
 import pandas as pd
 
-from analyzers.llm_client import ABORT_MARK, run_llm_dataframe
+from analyzers.llm_client import run_llm_dataframe
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -227,19 +227,20 @@ class AggressionAnalyzer:
             level, kinds = self.parse_answer(answer)
             return [level, '', kinds]
 
-        return run_llm_dataframe(
+        result = run_llm_dataframe(
             work,
             text_column=text_column,
             op='aggression',
             result_columns=['aggression', 'aggression_score', 'aggression_hits'],
-            # The unreached marker must be a value the model can never ANSWER. ``parse_answer``
-            # legitimately returns ``'none'`` for a comment it judges non-violent, and the
-            # settlement below compares against ``blank[0]`` to find rows no model ever saw —
-            # so ``'none'`` here re-labelled every clean row as never-judged: a finished run
-            # stamped its genuinely-violent-free comments 模型未判定, and a Stop counted them into
-            # ``unfinished``. 未处理 is the marker every other row-by-row analyzer uses, exactly
-            # as this module's own docstring promises.
-            blank=[ABORT_MARK, '', ''],
+            # The sentinel is ``''`` — the SAME shape emotion/tendency/sentiment/cleaner use —
+            # for two reasons. It must differ from every value ``parse`` can produce: a genuinely
+            # non-violent comment answers ``'none'``, and a sentinel equal to a real answer would
+            # make the runner's ``!= blank[0]`` test read that answered row as never-judged and
+            # overwrite it. And it must NOT be ``未处理``: the executor scans every cell of every
+            # row for that marker to settle a node PARTIAL, and a GENUINELY EMPTY comment keeps
+            # the sentinel — stamped 未处理 it pinned a clean run to PARTIAL forever, the row
+            # counted into ``unfinished`` on every resume though the model was never owed it.
+            blank=['', '', ''],
             fail_value=('none', '', '模型未判定'),
             build_prompt=self.build_prompt,
             parse=parse,
@@ -247,3 +248,18 @@ class AggressionAnalyzer:
             label=f'aggression:{self.model_name}',
             default_model=self.model_name,
         )
+        # An empty comment has nothing for ANY analyzer to judge, so it is not a row the model
+        # failed to reach. Lexicon mode answers it ``('none', 0.0, [])`` (``score_text``); the LLM
+        # path agrees on the VERDICT (``none``) so one blank row is read the same whichever mode
+        # ran, and keeps the score/hits the LLM path always uses (this mode's score column is
+        # textual — ``parse`` writes ``''``). Rows the model was really stopped before still carry
+        # 未处理 — they had text, so they are not in this mask.
+        if text_column in result.columns:
+            empty = result[text_column].isna() | (result[text_column].astype(str).str.strip() == '')
+            for col, val in zip(
+                ('aggression', 'aggression_score', 'aggression_hits'),
+                ('none', '', ''),
+                strict=True,
+            ):
+                result.loc[empty, col] = val
+        return result

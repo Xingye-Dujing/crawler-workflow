@@ -116,6 +116,39 @@ _dataset_cache: dict = {}
 _completed_lock = threading.Lock()
 
 
+def live_run_ids() -> list:
+    """Every run id a live thread may still be writing — ONE definition of 「活着」.
+
+    ``execution_state['running']`` is cleared at the TOP of 停止 while the worker keeps
+    settling, still holds its browsers and still writes rows for tens of seconds. A route
+    that asks only that flag therefore allows exactly the window in which deleting is most
+    destructive: the record, its node rows, its export shards and its console log vanish
+    under the writer, ``finish_run``'s UPDATE then matches no row (so even the write-failure
+    line is lost), and the final flush re-inserts log lines for a run id no ``runs`` row
+    owns. It lives here (not ``app.py``) so the export Blueprint can hold the SAME line as
+    the run-record routes without importing the whole Flask module (a cycle).
+    """
+    thread = execution_state.get('thread')
+    if not execution_state['running'] and not (thread is not None and thread.is_alive()):
+        return []
+    ids = [str(rid) for rid in execution_state['open_records']]
+    current = str(execution_state.get('run_id') or '')
+    if current and current not in ids:
+        ids.append(current)
+    return ids
+
+
+def any_run_live() -> bool:
+    """Whether SOME run's worker thread could still be writing anything.
+
+    The bulk-clear routes used to ask ``execution_state['running']`` alone — which 停止 clears
+    while the worker is mid-settle, so 「清空」 during those tens of seconds deleted the part
+    files a streaming node was still merging into the export folder. A bulk wipe has no run id
+    to compare, so it asks the one live-run definition above.
+    """
+    return bool(live_run_ids())
+
+
 def _results_snapshot() -> dict:
     """A private copy of ``execution_state['results']``, taken under ``_completed_lock``.
 

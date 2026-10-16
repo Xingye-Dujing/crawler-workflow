@@ -57,6 +57,14 @@ class Housekeeping:
             removed_files = int(self._dataset_store.purge_unreferenced() or 0)
         except Exception:
             logger.exception(t('housekeeping.datasetStoreFailed'))
+        if removed_files:
+            # The rows are gone but the read-through cache still holds them, so /preview would
+            # keep serving a deleted dataset's rows while /datasets/<id> 404s. The two MANUAL
+            # clear paths (api/data.py) empty this cache; the automatic sweep must not be the
+            # one door that forgets, or the same divergence arrives on a schedule.
+            from state import _dataset_cache
+
+            _dataset_cache.clear()
         result = {
             'runs': removed_runs,
             'cache_entries': cache_entries,

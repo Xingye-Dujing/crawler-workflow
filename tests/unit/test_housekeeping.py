@@ -122,6 +122,26 @@ class TestSweep:
         Housekeeping(_FakeRunStore(result={}), _FakeDatasetStore(removed=0)).run_now()
         assert logs == []
 
+    def test_a_file_purge_drops_the_dataset_read_through_cache(self):
+        """The manual clear paths empty ``state._dataset_cache``; the automatic sweep deletes the
+        same rows, and if it left the cache standing, /preview would still serve a deleted
+        dataset's rows while /datasets/<id> 404s."""
+        from state import _dataset_cache
+
+        _dataset_cache['gone'] = object()
+        Housekeeping(_FakeRunStore(result={}), _FakeDatasetStore(removed=3)).run_now()
+        assert 'gone' not in _dataset_cache, 'a deleted dataset stayed reachable through the cache'
+
+    def test_a_purge_that_removed_nothing_leaves_the_cache_alone(self):
+        """Nothing went, so a still-live dataset the cache holds must not be dropped."""
+        from state import _dataset_cache
+
+        marker = object()
+        _dataset_cache['keep'] = marker
+        Housekeeping(_FakeRunStore(result={}), _FakeDatasetStore(removed=0)).run_now()
+        assert _dataset_cache.get('keep') is marker
+        _dataset_cache.pop('keep', None)
+
     def test_something_is_logged_when_it_dropped_something(self, logs):
         Housekeeping(_FakeRunStore(), _FakeDatasetStore(removed=1)).run_now()
         assert len(logs) == 1

@@ -53,8 +53,11 @@ def no_sleep(monkeypatch):
 
 
 class TestRouting:
-    def test_unknown_provider_falls_back_to_ollama(self):
-        assert LLMClient(provider='nonsense', model='m').provider == 'ollama'
+    def test_unknown_provider_is_refused_not_folded(self):
+        """A transport name outside the closed set raises rather than silently becoming
+        'ollama' — the fold made a run record a transport that never actually ran."""
+        with pytest.raises(ValueError, match='unknown LLM provider'):
+            LLMClient(provider='nonsense', model='m')
 
     def test_openrouter_without_key_never_reaches_http(self, monkeypatch):
         def boom(*a, **k):  # pragma: no cover - must not run

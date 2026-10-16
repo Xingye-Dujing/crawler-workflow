@@ -91,6 +91,107 @@ class TestReferencedColumns:
         assert referenced_columns(nodes)['a'] == ['cleaned_text']
 
 
+class TestTheShapeTheCanvasActuallyStores:
+    """Every case here is a verbatim flat node from ``data/workflows/*.json``.
+
+    A canvas writes ``operation`` plus every panel field BESIDE it — no saved file holds a
+    ``steps`` list — and the model used to throw those siblings away, computing the DEFAULT
+    column name for a node the user had renamed. A renamed 划分阶段 then hid 生命周期 and
+    阶段序号 from the lineage, so a downstream step reading them looked like an input nobody
+    made, while ``missingColumnProblems`` never fired for any analysis node at all.
+    """
+
+    @staticmethod
+    def _analysis(params):
+        return {'a': {'id': 'a', 'type': 'analysis', 'params': params}}
+
+    def test_a_renamed_phase_box_shows_the_column_it_writes(self):
+        nodes = self._analysis(
+            {
+                'operation': 'bin_time',
+                'column': '日期',
+                'phase_edges': '0,60',
+                'phase_labels': '前期,后期',
+                'phase_new_col': '生命周期',
+                'phase_order_col': '阶段序号',
+                'enabled': True,
+            }
+        )
+        assert compute_columns(nodes, [])['a'] == ['生命周期', '阶段序号'], (
+            'the default 阶段 is not what this node writes'
+        )
+
+    def test_a_renamed_label_box_shows_the_summary_column_it_writes(self):
+        nodes = self._analysis(
+            {
+                'operation': 'topic_label',
+                'label_max_topics': '30',
+                'label_on_fail': 'abort',
+                'label_samples_col': 'sample_texts',
+                'label_summary_col': '主题概括A',
+                'label_words_col': 'feature_words',
+                'model': 'qwen3.5:4b',
+                'enabled': True,
+            }
+        )
+        assert compute_columns(nodes, [])['a'] == ['主题概括A']
+
+    def test_an_empty_bin_name_box_still_writes_the_suffix_the_executor_writes(self):
+        """Blank is not "no column": the step answers ``f"{column}_bin"``, so the lineage
+        has to name it or the panel hides a column the run really produces."""
+        nodes = self._analysis({'operation': 'bin_column', 'column': '评论数', 'bins': '5'})
+        assert compute_columns(nodes, [])['a'] == ['评论数_bin']
+
+    def test_compare_platform_names_the_group_column_the_user_typed(self):
+        """The fixed ('platform','n') tuple promised a column a renamed 平台 never wrote,
+        and hid the real aggregate — both directions of the same lie."""
+        renamed = self._analysis(
+            {
+                'operation': 'compare_platform',
+                'compare_platform_col': '平台',
+                'compare_value_col': '情感分',
+                'compare_agg': 'mean',
+            }
+        )
+        assert compute_columns(renamed, [])['a'] == ['平台', 'n', '情感分_mean']
+        counts_only = self._analysis({'operation': 'compare_platform', 'compare_platform_col': '平台'})
+        assert compute_columns(counts_only, [])['a'] == ['平台', 'n'], 'no value box means no aggregate column'
+
+    def test_sentiment_evolution_reports_the_index_name_and_only_the_score_columns_given(self):
+        without_score = self._analysis(
+            {
+                'operation': 'sentiment_evolution',
+                'column': '日期',
+                'index_new_col': '期',
+                'label_col': '情感',
+                'label_negative': '消极',
+                'label_neutral': '中性',
+                'label_positive': '积极',
+                'enabled': True,
+            }
+        )
+        cols = compute_columns(without_score, [])['a']
+        assert cols[0] == '日期' and cols[1] == '期', cols
+        assert 'intensity' not in cols and 'score_n' not in cols, 'no 分值 column, so no score-derived column'
+        with_score = self._analysis(
+            {
+                'operation': 'sentiment_evolution',
+                'column': '日期',
+                'label_col': '情感',
+                'score_col': '分值',
+                'enabled': True,
+            }
+        )
+        scored = compute_columns(with_score, [])['a']
+        assert 'sentiment_index' in scored and 'intensity' in scored and 'score_n' in scored, scored
+
+    def test_a_flat_analysis_node_reads_the_column_it_names(self):
+        """``referenced_columns`` used to answer ``[]`` for every flat node, which is what
+        silenced the edit-time missing-column flag for the whole analysis family."""
+        nodes = self._analysis({'operation': 'bin_time', 'column': '日期', 'phase_new_col': '阶段'})
+        assert referenced_columns(nodes)['a'] == ['日期']
+
+
 class TestValidateDetailed:
     def _two_problem_canvas(self):
         return _wf(

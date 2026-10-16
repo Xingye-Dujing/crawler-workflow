@@ -218,6 +218,18 @@ class TestRowLookupStillWorks:
         alone = client.post('/api/data/preview', json={'node_id': 'out-1', 'workflow_name': '节奏'}).get_json()
         assert alone['ok'] is True and len(alone['rows']) == 4, alone
 
+    def test_a_name_holding_a_bare_plus_is_never_split_into_pieces(self, client, app_module, paste):
+        """The composed lookup key is ``' + '`` WITH spaces. A canvas genuinely named ``A+B``
+        (no spaces) is ONE name: splitting it on a bare ``+`` turned it into the candidates
+        ``A`` and ``B``, so a stranger's ``A`` table was handed back as if it were this
+        canvas's own data — exactly the false row this lookup exists to refuse."""
+        _run(client, app_module, _one_workflow(paste(RECORDS, name='a.csv')), 'A')
+        store = app_module.get_run_store()
+        node = _stored_node(store)
+        app_module.execution_state['results'] = {}
+        body = client.post('/api/data/preview', json={'node_id': node, 'workflow_name': 'A+B'}).get_json()
+        assert body['ok'] is False, f"``A+B`` is not ``A``; a bare plus must not reach A's rows: {body}"
+
 
 class TestOldDatabaseMigrates:
     def test_a_database_created_without_the_column_reads_as_one_workflow(self, tmp_path):

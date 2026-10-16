@@ -1080,15 +1080,20 @@ class TestRunLog:
         assert [r['line'] for r in store.read_log('r1', q='三亚')['rows']] == ['抓取 三亚 完成']
 
     def test_search_text_is_bound_not_interpolated(self, store):
-        """A query is user input reaching a LIKE — it must never be read as SQL.
+        """A query is user input reaching the WHERE clause — it must never be read as SQL, and
+        now never as a pattern either.
 
-        ``%`` and ``'`` are the two ways a naive f-string would break the statement; the
-        store only ever appends ``%{q}%`` as a *parameter*, so they match literally.
+        ``'`` is the injection case (the value is only ever a bound parameter, so it is inert);
+        ``%``/``_`` are the LIKE-wildcard case — the search box promised a SUBSTRING, so the
+        filter uses ``instr``, and a typed ``100%`` matches the literal text and nothing else.
         """
         _start(store)
-        store.append_log('r1', [_log_row("has 'quote' and 100%"), _log_row('plain')])
+        store.append_log('r1', [_log_row("has 'quote' and 100%"), _log_row('1000 行')])
         assert [r['line'] for r in store.read_log('r1', q="quote' and 100%")['rows']] == ["has 'quote' and 100%"]
         assert store.read_log('r1', q="') OR 1=1 --")['rows'] == []
+        # LIKE would read the trailing ``%`` as "anything after 100" and wrongly return 「1000 行」;
+        # a substring test returns only the line that literally holds ``100%``.
+        assert [r['line'] for r in store.read_log('r1', q='100%')['rows']] == ["has 'quote' and 100%"]
 
     def test_blank_level_and_name_fall_back_to_defaults(self, store):
         # Best-effort levels: the sink passes None for a line the handler could not

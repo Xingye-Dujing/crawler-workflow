@@ -49,7 +49,18 @@ def upload_dataset():
             # arrives in. Without this branch the file fell through to
             # ``read_csv`` and came back as one column of mojibake — a
             # "successful" import of nonsense.
-            df = pd.read_excel(file.stream)
+            book = pd.ExcelFile(file.stream)
+            sheet_names = list(book.sheet_names)
+            # ``read_excel`` defaults to the FIRST sheet, which silently imported one month of a
+            # January/February/March workbook and reported that sheet's row count and columns as
+            # if they were the whole file — a SILENT_SHORT the upload panel then analysed as truth.
+            # More than one sheet holding rows is a choice of data, so it is refused by name.
+            filled = [name for name in sheet_names if not book.parse(name, nrows=1).empty]
+            if len(filled) > 1:
+                return jsonify(
+                    {'ok': False, 'error': t('api.excelMultiSheet', name=filename, sheets='、'.join(filled))}
+                ), 400
+            df = book.parse(filled[0] if filled else (sheet_names[0] if sheet_names else 0))
         elif name_lower.endswith(('.csv', '.tsv')):
             # ``sep=None`` would make pandas *sniff* the delimiter, which turns a
             # comma file with a stray tab inside a quoted cell into a different

@@ -204,6 +204,18 @@ class TestSubworkflows:
         assert sub.settings == {'parallel': True}
         assert sub.executor == 'exec'
 
+    def test_extract_subworkflow_follows_the_canvas_order_not_the_set(self):
+        """A component is handed in as a SET, whose iteration order follows string hashing,
+        so building the sub-node list from the set made the component's node order (and hence
+        which ``name`` node came first, and a serial run's ``workflow_name``) vary with
+        PYTHONHASHSEED. The parent's own node order is the only stable one."""
+        engine = WorkflowEngine(
+            _wf([_node('node-3'), _node('node-1'), _node('node-2')], []),
+            executor='exec',
+        )
+        sub = engine.extract_subworkflow({'node-2', 'node-3', 'node-1'})
+        assert list(sub.nodes) == ['node-3', 'node-1', 'node-2'], 'the canvas order must win, not the set'
+
     def test_extract_subworkflow_drops_unknown_member_ids(self):
         # A wire to a deleted node no longer joins the component at all (naming an id
         # the canvas does not hold is how the ordering was once told there was a

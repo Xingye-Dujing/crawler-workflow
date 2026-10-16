@@ -420,12 +420,18 @@ def check(entries, *, use_profile: bool = None, fresh: bool = False) -> dict:
             pool.submit(probe, platform, use_profile=use_profile, fresh=fresh, account=account): (platform, account)
             for platform, account in pairs
         }
-        deadline = time.monotonic() + Config.COOKIE_PREFLIGHT_TIMEOUT
+        # Each probe gets its OWN budget, measured from the moment we start waiting on it.
+        # One shared deadline plus a capped pool starved every wave after the first: with more
+        # platforms than ``COOKIE_PREFLIGHT_MAX_PARALLEL``, the later futures had not run yet when
+        # their turn came, ``remaining`` was already ~0, and they were answered UNKNOWN (「无法核对」,
+        # which by design does NOT block a run) and then cancelled — so an expired cookie slipped
+        # past the gate silently on exactly those platforms. Waiting the full timeout per future
+        # still bounds the whole loop (a queued probe is awaited, so its wait includes its queue).
+        budget = float(Config.COOKIE_PREFLIGHT_TIMEOUT)
         for future, (platform, account) in futures.items():
-            remaining = max(0.0, deadline - time.monotonic())
             key = entry_key(platform, account)
             try:
-                answers[key] = future.result(timeout=remaining)
+                answers[key] = future.result(timeout=budget)
             except Exception:
                 answers[key] = _verdict(
                     platform,

@@ -320,8 +320,16 @@ class WorkflowEngine:
     def extract_subworkflow(self, component: set[str]) -> 'WorkflowEngine':
         """Create a new WorkflowEngine containing only the nodes and
         internal connections belonging to *component*."""
-        sub_nodes = [self.nodes[nid] for nid in component if nid in self.nodes]
-        sub_conns = [c for c in self.connections if c['from'] in component and c['to'] in component]
+        # Walk ``self.nodes`` (insertion order, i.e. the canvas's own node order) and keep the
+        # ones in this component — never iterate the ``component`` SET. A set's iteration order
+        # depends on string hashing (PYTHONHASHSEED), so a component holding two ``name`` nodes
+        # could emit them in either order, ``_component_name`` would pick a different label as
+        # the FIRST name node, and a serial run's per-workflow ``workflow_name`` would rename
+        # itself between two attempts of the same canvas. ``继续`` and the row lookup key on that
+        # name, so a renamed component orphaned rows the crawl had already paid for.
+        component_ids = set(component)
+        sub_nodes = [node for nid, node in self.nodes.items() if nid in component_ids]
+        sub_conns = [c for c in self.connections if c['from'] in component_ids and c['to'] in component_ids]
         sub_workflow = {
             'nodes': sub_nodes,
             'connections': sub_conns,

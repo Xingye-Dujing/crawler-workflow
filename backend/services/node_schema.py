@@ -98,29 +98,53 @@ STEP_REPLACE: dict[str, tuple[str, ...]] = {
         'source_words',
         'target_words',
     ),
-    'compare_platform': ('platform', 'n'),
-    'sentiment_evolution': (
-        'period',
-        'positive_n',
-        'neutral_n',
-        'negative_n',
-        'other_n',
-        'total',
-        'positive_pct',
-        'neutral_pct',
-        'negative_pct',
-        'volume_pct',
-        'intensity',
-        'score_n',
-    ),
+    # ``compare_platform`` and ``sentiment_evolution`` also replace the table, but name a
+    # column after what the user typed into a box — they are modelled in
+    # :func:`_replaced_columns`, never as a fixed tuple here.
 }
 
-# analysis steps that keep the upstream columns and add exactly one named column
-# (value = the param holding that new column's name, plus its default).
+#: Ops whose whole output is a fresh table whose names come from the node's own parameters.
+STEP_DYNAMIC_REPLACE = ('compare_platform', 'sentiment_evolution')
+
+
+def _replaced_columns(op: str, step: dict) -> list[str] | None:
+    """The columns a dynamic replace-step will write, taken from its resolved kwargs.
+
+    Both of these name a column after a box the user filled, so the fixed tuple they used
+    to carry was a lie in both directions: it promised a ``platform`` column a renamed 平台
+    never produced (a false missing-column flag downstream) and hid the real aggregate
+    column, while ``sentiment_evolution`` claimed ``intensity``/``score_n`` even when no
+    score column was given — a chart would read those and only find out at run time.
+    """
+    if op == 'compare_platform':
+        platform_col = str(step.get('platform_col') or 'platform').strip()
+        cols = [platform_col, 'n']
+        value_col = str(step.get('value_col') or '').strip()
+        if value_col:
+            agg = str(step.get('agg') or 'mean').strip()
+            cols.append(f'{value_col}_{agg}')
+        return cols
+    if op == 'sentiment_evolution':
+        period = str(step.get('column') or '').strip()
+        index_col = str(step.get('new_col') or 'sentiment_index').strip()
+        cols = ([period] if period else []) + [index_col]
+        cols += ['positive_n', 'neutral_n', 'negative_n', 'total', 'other_n']
+        cols += ['positive_pct', 'neutral_pct', 'negative_pct', 'volume_pct']
+        if str(step.get('score_col') or '').strip():
+            cols += ['score_n', 'intensity']
+        return cols
+    return None
+
+
+#: analysis steps that keep the upstream columns and add exactly one named column
+#: (value = the executor's own param holding that name, plus its default). These are the
+#: CANONICAL names — a panel's box (``phase_new_col``, ``label_summary_col``) is translated
+#: to them by :func:`_steps_of` through the executor's own normalizer, so one rule lives in
+#: one place and a renamed box can no longer hide the column it writes.
 STEP_ADD_ONE: dict[str, tuple[str, str]] = {
-    'bin_column': ('new_col', ''),  # falls back to f"{column}_bin" in the executor
-    'extract_time': ('time_new_col', '日期'),
-    'bin_time': ('phase_new_col', '阶段'),
+    'bin_column': ('new_col', ''),  # blank answers f"{column}_bin", the executor's own rule
+    'extract_time': ('new_col', '日期'),
+    'bin_time': ('new_col', '阶段'),
     'column_calc': ('new_col', ''),
     'topic_label': ('summary_col', '主题概括'),
     'cluster_label': ('summary_col', '摘要'),
@@ -132,7 +156,7 @@ STEP_ADD_ONE: dict[str, tuple[str, str]] = {
 # names one has to show it in the lineage — declared otherwise the panel hid the very
 # column its own downstream steps read, and an unselected box still stayed honest.
 STEP_ADD_MAYBE: dict[str, tuple[tuple[str, str], ...]] = {
-    'bin_time': (('phase_order_col', ''),),
+    'bin_time': (('order_new_col', ''),),
 }
 
 # analysis steps that pass the upstream columns through unchanged.
@@ -175,12 +199,57 @@ def _split_columns(value) -> list[str]:
     return [p.strip() for p in str(value or '').replace('，', ',').split(',') if p.strip()]
 
 
+def _normalized_kwargs(op: str, params: dict) -> dict:
+    """The executor's own kwargs for one panel's flat params, or the params themselves.
+
+    A canvas stores each field FLAT beside ``operation`` under the *panel's* name
+    (``phase_new_col``, ``label_summary_col``); the executor reads a *canonical* name
+    (``new_col``, ``summary_col``). app's single translator is the only authority on that
+    mapping, so it is asked here rather than duplicated — the old ``[{'op': op}]`` threw
+    every sibling away and the model computed the DEFAULT column name for a node the user
+    had given a new one, hiding the very column downstream steps read. Import is lazy (this
+    runs inside the request cycle, not module load) and a failure falls back to the raw
+    params so a lineage preview never turns into a 500.
+    """
+    try:
+        from app import _normalize_analysis_params
+
+        normalized = _normalize_analysis_params(op, params)
+    except Exception:  # a preview must degrade to "read what is there", never crash
+        normalized = {}
+    return {**params, **normalized} if isinstance(normalized, dict) else dict(params)
+
+
+def _step_kwargs(step: dict) -> dict:
+    """One entry of a ``steps`` list, with its column kwargs resolved to canonical names.
+
+    A step already carrying a ``params`` dict is an executor-shaped step (``/api/analysis``
+    hands these) and its names are canonical; a flat step is panel-shaped and goes through
+    the same translator.
+    """
+    nested = step.get('params')
+    if isinstance(nested, dict):
+        return {**step, **nested}
+    op = str(step.get('op') or step.get('operation') or '')
+    if not op:
+        return dict(step)
+    return _normalized_kwargs(op, step)
+
+
 def _steps_of(params: dict) -> list[dict]:
+    """The (op, canonical kwargs) pairs one analysis node will run, in order.
+
+    Two shapes reach this function: the canvas's single flat ``operation`` with its panel
+    fields beside it, and an API caller's ``steps`` list. Each is normalised through the
+    executor's own translator so the column model below can key on canonical names.
+    """
     steps = params.get('steps')
     if isinstance(steps, list):
-        return [s for s in steps if isinstance(s, dict)]
+        return [_step_kwargs(s) for s in steps if isinstance(s, dict)]
     op = params.get('operation')
-    return [{'op': op}] if op else []
+    if not op:
+        return []
+    return [{'op': op, **_normalized_kwargs(str(op), params)}]
 
 
 def _node_operation(node: dict) -> str:
@@ -209,6 +278,12 @@ def _analysis_output(params: dict, upstream: list[str] | None) -> list[str] | No
         op = str(step.get('op') or '')
         if op in STEP_UNKNOWN:
             return None
+        if op in STEP_DYNAMIC_REPLACE:
+            derived = _replaced_columns(op, step)
+            if derived is None:
+                return None
+            cols = derived
+            continue
         if op in STEP_REPLACE:
             cols = list(STEP_REPLACE[op])
             continue
@@ -221,6 +296,11 @@ def _analysis_output(params: dict, upstream: list[str] | None) -> list[str] | No
                 return None
             param, default = STEP_ADD_ONE[op]
             new_col = str(step.get(param) or default or '').strip()
+            if not new_col and op == 'bin_column':
+                # The executor writes f"{column}_bin" when the name box is blank, so the
+                # lineage has to say the same thing rather than drop the column entirely.
+                column = str(step.get('column') or '').strip()
+                new_col = f'{column}_bin' if column else ''
             if new_col:
                 cols = cols + [new_col]
             # `bin_time` is the one step that may add a SECOND column; every other single-add

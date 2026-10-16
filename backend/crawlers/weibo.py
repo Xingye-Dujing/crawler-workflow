@@ -117,15 +117,14 @@ class WeiboCrawler(Crawler):
 
     def search(self, keyword: str, start_time: str = None, end_time: str = None, target_count=None, **_kwargs):
         resume = self.resume_of(_kwargs)
-        stored = resume.get('urls')
-        # This crawl is a walk over a URL list, so the list plus the index into
-        # it *is* the resume point. It is reused when the keyword still matches;
-        # otherwise it is rebuilt from the (validated) dates.
-        if isinstance(stored, list) and stored and resume.get('keyword') == keyword:
-            urls = [str(u) for u in stored]
-            logger.info(t('crawl.resume_urls', n=len(urls)))
-        else:
-            urls = self._build_urls(keyword, start_time, end_time)
+        # The window list is a deterministic function of (keyword, start, end) — hourly buckets
+        # built by ``timedelta``, never by the clock — so a resume REBUILDS it rather than
+        # storing it. ``urls`` used to ride in the cursor, and since ``mark_position`` fires once
+        # per harvested card, every stored row rewrote the whole list (a one-year range is ~8.7k
+        # URLs, ~1 MB of JSON, re-serialised per row into the same table as the data). A cursor
+        # records POSITION, not content (AGENTS: Crawler.seed supplies ids; never re-feed an id
+        # list into mark_position).
+        urls = self._build_urls(keyword, start_time, end_time)
 
         have = self.collected()
         if have:
@@ -135,7 +134,7 @@ class WeiboCrawler(Crawler):
         start_index = as_index(resume.get('url_index'))
         total_urls = len(urls)
         walked = start_index
-        self.mark_position(keyword=keyword, urls=urls, url_index=start_index, url_total=total_urls, done=have)
+        self.mark_position(keyword=keyword, url_index=start_index, url_total=total_urls, done=have)
 
         for idx, url in enumerate(urls, start=1):
             if idx <= start_index:
@@ -206,13 +205,14 @@ class WeiboCrawler(Crawler):
                 reason=stop_reason_label(reason),
             )
         )
-        # U1: name how the window-walk ended. ``'end'`` is the only short that is the SITE's answer here —
-        # every hourly window in the user's range was walked and the range simply held this many posts,
-        # so it is a site-attested ``site_end`` (settles clean, exactly as ``end_reason=None`` did; the
-        # label just makes the reason visible to the panel). ``wall``/``risk``/``stopped``/``unreachable``
-        # are settled in their own upstream buckets and must not be re-filed here.
-        if reason == 'end':
-            self.note_end('site_end', kept=self.collected())
+        # U1: how this window-walk ended. ``wall``/``risk``/``unreachable``/``stopped``/``target`` are
+        # each settled in their own upstream bucket and must not be re-filed here. ``'end'`` — every
+        # hourly URL was iterated and the target was never crossed — is a LOOP FALLBACK, not a site
+        # marker: a window that never rendered (the pending-wait breaker returns False, or a per-window
+        # exception is swallowed) is skipped and still lands here, so a thin table would be stamped a
+        # site-attested ``site_end`` and the U1 gate would fall silent on a crawl that really ran short.
+        # weibo search therefore stays UN-ARMED (``end_reason`` remains ``None``): a license needs a
+        # fact the SITE told us, and this loop has none. docs/crawler_rules.md §6 names this exact case.
         return self.results()
 
     def _refused(self) -> bool:

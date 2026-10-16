@@ -1479,6 +1479,13 @@ function paletteKeyboardScenario() {
     dispatchOn(pSrc, 'click', { target: pSrc });
     const afterClick = Object.keys(canvas.nodes).length;
     const emptyId = canvas.addNodeFromPalette('');
+    /* 「禁用此类型」 hides the context-menu action, but the left-hand library had no check at
+       all — so a disabled type could be added straight back by a click. One rule, asked once. */
+    canvas.disabledTypes = ['output'];
+    const beforeDisabled = Object.keys(canvas.nodes).length;
+    toasts.length = 0;
+    const blockedId = canvas.addNodeFromPalette('output');
+    const afterDisabledTry = Object.keys(canvas.nodes).length;
     out.palette_keyboard = {
         attrs,
         addedByEnter: afterEnter - before,
@@ -1487,6 +1494,9 @@ function paletteKeyboardScenario() {
         addedBySpace: afterSpace - afterEnter,
         addedByClick: afterClick - afterSpace,
         emptyTypeNull: emptyId === null,
+        disabledAddNull: blockedId === null,
+        disabledAddsNothing: afterDisabledTry === beforeDisabled,
+        disabledToasts: toasts.length === 1,
     };
 }
 
@@ -1710,7 +1720,70 @@ function keyboardConnectScenario() {
     dispatchDocument(sandbox.__handlers, 'keydown', { key: 'l', target: doc.body }); // arm again
     res.linkRetriable = { armedAgain: canvas._linkFromId === sa };
 
+    /* A wire may not name a node that is not on the canvas. The keyboard origin outlived its
+       node before this guard: select A, arm L, delete A, then L on B wrote `{A→B}` — invisible,
+       undeletable by click, yet it reached the run and the backend refused the WHOLE canvas for
+       a dangling connection the user could not see. */
+    freshWorld();
+    const ga = addNode('source', 0, 0);
+    const gb = addNode('output', 400, 0);
+    const wiresBefore = canvas.connections.length;
+    canvas._linkFromId = ga;
+    canvas.deleteNode(ga);
+    const afterDelete = canvas.connectNodes(ga, gb);
+    res.ghostWire = {
+        originClearedOnDelete: canvas._linkFromId === null,
+        endpointRejected: afterDelete.ok === false,
+        wroteNothing: canvas.connections.length === wiresBefore,
+    };
+
     out.keyboard_connect = res;
+}
+
+/* A modal confirm is not a typing target (its focus sits on a BUTTON), yet the canvas must not
+   act on a shortcut behind it: with a 「删除运行」 dialog open, Backspace deleted the node BEHIND
+   the dialog. And an undo that dropped a node left it in selectedNodes as a ghost — alignSelected
+   then read el.style on a null box and threw. Both are self-contained (freshWorld+bound listeners). */
+function modalAndUndoSelectionScenario() {
+    const res = {};
+
+    /* Shortcut refused while the dialog overlay is open; honoured once it is closed. */
+    freshWorld();
+    const m = addNode('source', 0, 0);
+    canvas.selectNode(m);
+    const overlay = doc.createElement('div');
+    overlay.id = 'dialog-overlay';
+    overlay.className = 'open';
+    doc.body.appendChild(overlay);
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'Delete', target: doc.body });
+    const survivesOpenModal = !!canvas.nodes[m] && canvas.selectedNode === m;
+    overlay.className = '';
+    dispatchDocument(sandbox.__handlers, 'keydown', { key: 'Delete', target: doc.body });
+    res.modalGuard = { survivesOpenModal, deletedWhenClosed: !canvas.nodes[m] };
+
+    /* Undo past a node that was selected leaves no ghost, and alignSelected stays a boolean
+       rather than throwing on the missing box. */
+    freshWorld();
+    const a = addNode('source', 0, 0);
+    canvas.selectedNodes = [a];
+    canvas._pushState();               // snapshot holding only A
+    const b = addNode('output', 400, 0);
+    canvas.selectNode(b);              // selection now holds B (a real node)
+    canvas.undo();                     // restore the A-only snapshot: B is now a ghost id
+    const ghost = canvas.selectedNodes.filter((id) => !canvas.nodes[id]);
+    let threw = false;
+    try {
+        canvas.alignSelected('left');
+    } catch (e) {
+        threw = true;
+    }
+    res.undoSelection = {
+        ghostsPruned: ghost.length === 0,
+        bGoneFromModel: !canvas.nodes[b],
+        alignDidNotThrow: !threw,
+    };
+
+    out.modal_undo_selection = res;
 }
 
 /* Cross-canvas share: copy a node to a JSON snippet on the OS clipboard, and add a node back
@@ -2375,6 +2448,7 @@ nodeClipboardScenario();
 clipDragToCanvasScenario();
 keyboardNavigationScenario();
 keyboardConnectScenario();
+modalAndUndoSelectionScenario();
 minimapScenario();
 multiSelectScenario();
 cycleScenario();

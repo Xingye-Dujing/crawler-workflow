@@ -34,6 +34,18 @@ def history_series():
 
 @bp.route('/api/history/clear', methods=['POST'])
 def history_clear():
+    """Forget every recorded run metric — a bulk destructive write, so it asks first.
+
+    ``runs_clear``, ``exports_clear`` and both smart-clears all answer a body without
+    ``confirm: true`` with a 400, and this route was the lone bulk door that read no body at
+    all: an unauthenticated cross-origin request (or a stray call) wiped the whole comparison
+    chart with no gate. It now holds the same line as its siblings.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    if data.get('confirm') is not True:
+        return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
     history_service.clear()
     return jsonify({'ok': True, 'message': t('history.cleared')})
 

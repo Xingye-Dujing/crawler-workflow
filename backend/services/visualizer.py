@@ -595,7 +595,7 @@ class VisualizationService:
         agg: str = 'sum',
         y2: str = None,
         agg2: str = None,
-        label_field: str = 'topic',
+        label_field: str = None,
         annotations: str = '',
         title: str = '',
         **kwargs,
@@ -755,10 +755,16 @@ class VisualizationService:
 
         # ── Box ──
         if chart_type == 'box':
-            if y and y in df.columns:
+            # A NAMED field that the table does not hold is refused by name, never swapped for a
+            # different column: the old ``elif x and x in df.columns`` fell through to drawing the
+            # CATEGORY column x as numeric when a typo'd ``y`` was absent, producing a plausible
+            # all-zero box whose axis was a phase name — the figure lied.
+            if y:
+                VisualizationService._require_columns(df, y)
                 # Grouped box plot: x = category, y = numeric value
                 if not x:
                     raise ChartConfigError('Box plot requires a category field (x) for grouping')
+                VisualizationService._require_columns(df, x)
                 groups = [
                     (_localize_label(name), pd.to_numeric(group[y], errors='coerce').dropna())
                     for name, group in df.groupby(x)
@@ -769,7 +775,8 @@ class VisualizationService:
                 for i, (_, vals) in enumerate(groups):
                     for v in vals.tolist():
                         scatter_data.append([i, v])
-            elif x and x in df.columns:
+            elif x:
+                VisualizationService._require_columns(df, x)
                 # Single box plot: x = numeric value (backward compat)
                 values = pd.to_numeric(df[x], errors='coerce').dropna()
                 stats = _box_stats(values)
@@ -1031,8 +1038,17 @@ class VisualizationService:
             if not x or not y:
                 raise ChartConfigError('Intertopic map needs both coordinate fields (x = PC1, y = PC2)')
             VisualizationService._require_columns(df, x, y)
-            has_label = bool(label_field) and label_field in df.columns
-            has_size = bool(value_field) and value_field in df.columns
+            # ``x``/``y`` are refused by name above; the label and size fields must hold the same
+            # line. A field the user TYPED into a box but that the table does not hold used to
+            # read as "no label", so every bubble came out with an empty name at the floor radius
+            # and the figure looked like a valid map of nothing — the rename-on-one-side / silent-
+            # empty-figure this project bans. A blank box is genuinely "no labels" and stays.
+            if label_field:
+                VisualizationService._require_columns(df, label_field)
+            if value_field:
+                VisualizationService._require_columns(df, value_field)
+            has_label = bool(label_field)
+            has_size = bool(value_field)
             first = pd.to_numeric(df[x], errors='coerce').tolist()
             second = pd.to_numeric(df[y], errors='coerce').tolist()
             labels = [_localize_label(name) for name in (df[label_field].tolist() if has_label else [''] * len(df))]
@@ -1486,7 +1502,10 @@ class VisualizationService:
         ycats = [str(value) for value in pd.unique(df[y].astype(str))]
         work['_xc'] = work[x].astype(str)
         work['_yc'] = work[y].astype(str)
-        if value_field and value_field in df.columns:
+        if value_field:
+            # A value field named but absent is refused by name, not silently replaced by a row
+            # count — a heatmap the user asked to aggregate by 「分值」 that quietly showed 条数 lies.
+            VisualizationService._require_columns(df, value_field)
             work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
             grouped = work.groupby(['_yc', '_xc'], sort=False)['_v'].agg(agg)
         else:
@@ -1505,7 +1524,8 @@ class VisualizationService:
         VisualizationService._require_columns(df, source, target)
         work = df[[source, target]].copy()
         work.columns = ['_s', '_t']
-        if value_field and value_field in df.columns:
+        if value_field:
+            VisualizationService._require_columns(df, value_field)
             work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
             grouped = work.groupby(['_s', '_t'])['_v'].agg(agg).reset_index()
         else:

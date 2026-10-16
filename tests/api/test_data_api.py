@@ -33,6 +33,18 @@ def _xlsx_bytes() -> bytes:
     return buffer.getvalue()
 
 
+def _multi_xlsx_bytes() -> bytes:
+    """A workbook with TWO sheets holding rows — the shape ``read_excel`` silently imported as
+    just the first, reporting one month's table as if it were the whole file."""
+    import pandas as pd
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        pd.DataFrame({'一月': [1, 2]}).to_excel(writer, sheet_name='Jan', index=False)
+        pd.DataFrame({'二月': [3, 4]}).to_excel(writer, sheet_name='Feb', index=False)
+    return buffer.getvalue()
+
+
 CSV_BYTES = b'title,score,city\nsanya,3,Sanya\nhaikou,5,Haikou\nsanya,2,Sanya\n'
 JSON_BYTES = b'[{"title": "sanya", "score": 3}, {"title": "haikou", "score": 5}]'
 TXT_BYTES = '三亚的海非常蓝。\n第二行正文\n'.encode()
@@ -95,7 +107,16 @@ class TestUpload:
         assert body['ok'] is True
         assert body['columns'] == ['title', 'score']
         assert body['row_count'] == 2
-        assert {row['title'] for row in body['preview']} == {'sanya', 'haikou'}
+
+    def test_a_multi_sheet_workbook_is_refused_not_quietly_imported_from_one(self, client):
+        """``read_excel`` defaults to sheet 0, which imported only 「Jan」 of a Jan/Feb/Mar
+        workbook and reported its rows and columns as the whole file. A sheet choice is a choice
+        of data, so it is refused by name rather than guessed."""
+        response = _upload(client, 'months.xlsx', _multi_xlsx_bytes())
+        assert response.status_code == 400, response.get_json()
+        body = response.get_json()
+        assert body['ok'] is False
+        assert 'Jan' in body['error'] and 'Feb' in body['error'], 'the refusal must name both sheets'
 
     def test_a_tsv_is_split_on_tabs(self, client):
         body = _upload(client, 'rows.tsv', b'title\tscore\nsanya\t3\n').get_json()

@@ -751,15 +751,37 @@ class RunStore:
         Deleting the ``node_rows`` (the data) AND the ``node_runs`` row (its done/restored status
         and cursor) is what makes the reuse predicate treat these nodes as never-run while leaving
         every OTHER node's kept rows in place to be reused. Returns how many node records were
-        cleared — one per targeted node that had a row."""
+        cleared — one per targeted node that had a row.
+
+        The deleted rows' dedupe claims go with them. A crawl's ``item_seen`` scope is
+        ``'item:'+node_fingerprint``, and a rerun reuses the SAME fingerprint (the node was not
+        edited), so leaving the claims in place meant every freshly fetched item hit "already
+        collected" and was dropped: the user pressed 重跑节点, the crawl really ran, and it settled
+        with zero rows on a canvas whose data they had just deleted. Only what THIS run bought for
+        THESE nodes is released — an earlier run's identical claim still dedupes as it always did.
+        """
         cleared = 0
+        released = 0
         with self._lock:
             for node_id in node_ids:
+                # Read the fingerprint BEFORE the row goes: it is the only key back to the
+                # claims this node bought, and the node_runs row is where it is stored.
+                row = self._conn.execute(
+                    'SELECT fingerprint FROM node_runs WHERE run_id = ? AND node_id = ?', (run_id, node_id)
+                ).fetchone()
+                fingerprint = (row[0] if row else None) or ''
+                if fingerprint:
+                    released += self._conn.execute(
+                        'DELETE FROM item_seen WHERE scope = ? AND first_run_id = ?',
+                        ('item:' + str(fingerprint), run_id),
+                    ).rowcount
                 self._conn.execute('DELETE FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))
                 cleared += self._conn.execute(
                     'DELETE FROM node_runs WHERE run_id = ? AND node_id = ?', (run_id, node_id)
                 ).rowcount
             self._conn.commit()
+        if released:
+            logger.info(t('run.claims_released', n=released, rid=run_id))
         return cleared
 
     def list_resumable(self, fingerprint: str = None, limit: int = 20, include_finished: bool = False) -> list:
@@ -1237,8 +1259,12 @@ class RunStore:
             where.append('level = ?')
             params.append(level)
         if q:
-            where.append('line LIKE ?')
-            params.append(f'%{q}%')
+            # A SUBSTRING test, not a LIKE pattern: the search box takes what the user typed, and
+            # LIKE would read their ``%``/``_`` as wildcards — filtering ``100%`` then matched every
+            # 「1000 行」 line too, and the .txt download (which re-uses these filters and promises
+            # 「所见即所存」) exported rows the user never asked to see. ``instr`` compares bytes.
+            where.append('instr(line, ?) > 0')
+            params.append(q)
         if before_seq is not None:
             where.append('seq < ?')
             params.append(int(before_seq))

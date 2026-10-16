@@ -178,6 +178,19 @@ class TestLlmGateParity:
         assert 'canvas.effectiveIds()' in gate, 'the model gate walked the DRAWN nodes'
         assert 'Object.keys(canvas.nodes)' not in gate, 'a second opinion about which nodes exist'
 
+    def test_opening_a_tokenize_visualize_panel_is_not_an_undo_step(self):
+        """Merely LOOKING at a tokenize-fed chart must not push a history entry or light the dirty
+        dot: the panel fills its own derived defaults (word/frequency), and that used to end in
+        ``saveState()`` + ``updateNodeDisplay()`` every open, so Ctrl+Z walked back through a stack
+        of panel views and the file looked modified after nothing was edited. Read from the source:
+        the defaults are still written (the preview needs them), but the branch may not persist."""
+        source = (STATIC_DIR / 'js' / 'workflow.js').read_text(encoding='utf-8')
+        start = source.index('if (isTokenizeUpstream) {')
+        branch = source[start : source.index('return html;', start)]
+        assert "p.x_field = 'word'" in branch, 'the derived default was dropped (preview would break)'
+        assert 'canvas.saveState(' not in branch, 'opening the panel persisted an edit it never was'
+        assert 'canvas.updateNodeDisplay(' not in branch, 'a mere view re-stamped the node and pushed history'
+
     def test_the_process_selector_offers_exactly_the_operations_the_executor_serves(self):
         """``PROCESS_OPS`` in workflow.js is what the 算法处理 node's dropdown offers; the
         branches inside ``_execute_process_node`` are what actually run. Read from the

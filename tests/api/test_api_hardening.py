@@ -51,6 +51,7 @@ BODY_ROUTES = [
     '/api/exports/clear-run-parts',
     '/api/exports/clear-name',
     '/api/exports/delete',
+    '/api/history/clear',
     '/api/history/delete',
     '/api/lexicon',
     '/api/llm/test',
@@ -90,7 +91,6 @@ BODYLESS_POSTS = {
     '/api/cookies/generate/cancel': 'signals the login window to close',
     '/api/cookies/generate/confirm': 'signals the login window that the user is done',
     '/api/data/upload': 'multipart form field, not a JSON body',
-    '/api/history/clear': 'empties the history table',
     '/api/runs/purge': 'applies the retention policy, which lives in settings',
     '/api/workflow/queue/clear': 'drops every parked request',
     '/api/workflow/stop': 'sets the stop flag',
@@ -433,6 +433,12 @@ class TestRunPayloadShape:
             {'nodes': 'node-1'},
             {'nodes': ['node-1']},
             {'nodes': [{'id': 'node-1'}], 'settings': 5},
+            # A node's params is walked by ``.get`` everywhere; a truthy non-dict died inside the
+            # worker, and the queued path had no handler for it.
+            {'nodes': [{'id': 'node-1', 'params': 'x'}]},
+            # ``all_connections`` does not filter, so a list of STRINGS reached
+            # ``dangling_connections``' ``c.get`` and threw mid-run — an HTML 500.
+            {'nodes': [{'id': 'node-1'}], 'connections': ['a>b']},
         ],
     )
     def test_a_workflow_that_cannot_be_walked_is_a_400(self, client, workflow):

@@ -524,6 +524,14 @@ class TestPaletteKeyboardAdd:
         assert p['addedByClick'] == 1, 'a click on a palette item added no node'
         assert p['emptyTypeNull'] is True, 'an empty palette type must be a no-op, not a node'
 
+    def test_a_disabled_type_cannot_be_added_from_the_library(self, ix):
+        """「禁用此类型」 hid the context-menu action, but the palette had no check — a disabled
+        type came straight back on a click, so one rule was asked twice with different answers."""
+        p = ix['palette_keyboard']
+        assert p['disabledAddNull'] is True, 'a disabled type still added a node'
+        assert p['disabledAddsNothing'] is True, 'a node appeared even though the add returned null'
+        assert p['disabledToasts'] is True, 'the refusal must name the type it turned away'
+
 
 class TestClipboardDragToCanvas:
     """A clipboard NODE row drags onto the canvas the way a palette item does — through
@@ -946,6 +954,33 @@ class TestKeyboardConnect:
         """Cancel must not leave a flag that makes the next L a no-op — otherwise the gesture
         silently dies after one abort."""
         assert ix['keyboard_connect']['linkRetriable']['armedAgain'] is True
+
+    def test_a_wire_may_not_name_a_deleted_node(self, ix):
+        """The keyboard link origin outlived its node, so the next L wrote a wire from a node
+        that was gone — invisible on the canvas, and it reached the run so the backend refused
+        the WHOLE canvas for a dangling connection the user could not see."""
+        ghost = ix['keyboard_connect']['ghostWire']
+        assert ghost['originClearedOnDelete'] is True
+        assert ghost['endpointRejected'] is True
+        assert ghost['wroteNothing'] is True
+
+
+class TestAModalOwnsTheKeyboard:
+    """A confirm dialog puts focus on a BUTTON, not a text field, so the canvas must still stand
+    down — and an undo must not leave a selected-but-deleted node behind as a ghost."""
+
+    def test_a_shortcut_is_refused_while_a_dialog_is_open(self, ix):
+        guard = ix['modal_undo_selection']['modalGuard']
+        assert guard['survivesOpenModal'] is True, 'Backspace deleted the node behind the dialog'
+        assert guard['deletedWhenClosed'] is True, 'the same key must still work with no dialog'
+
+    def test_undo_prunes_the_selected_node_it_removed(self, ix):
+        """The selection is view-only, so restoreState left a deleted id in it; alignSelected then
+        read el.style on a null box and threw, and Delete toasted success over a ghost."""
+        undo = ix['modal_undo_selection']['undoSelection']
+        assert undo['ghostsPruned'] is True, undo
+        assert undo['bGoneFromModel'] is True
+        assert undo['alignDidNotThrow'] is True
 
 
 class TestMinimap:

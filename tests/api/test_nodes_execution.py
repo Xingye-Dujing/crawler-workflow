@@ -793,6 +793,39 @@ class TestRunShapeIsReadNotCompared:
             app_module._run_mode({'mode': 'concurrent'})
         assert 'concurrent' in str(bad.value) and 'parallel' in str(bad.value)
 
+    def test_the_transport_is_read_and_anything_else_is_refused_by_name(self, app_module):
+        """The provider decides which transport really runs; the client used to fold an unknown
+        name to 'ollama', so a bogus transport hit the local daemon while the record claimed
+        otherwise. The door normalizes spelling and refuses a NON-transport by name instead."""
+        assert app_module._llm_provider({'provider': 'openrouter'}) == 'openrouter'
+        # Spelling is not meaning: a casing/whitespace difference is still that transport.
+        assert app_module._llm_provider({'provider': ' Ollama '}) == 'ollama'
+        assert app_module._llm_provider({'provider': 'OpenRouter'}) == 'openrouter'
+        # A blank states nothing → the declared default, not a refusal.
+        assert app_module._llm_provider({}) == 'ollama'
+        with pytest.raises(app_module.UnknownOperationError) as bad:
+            app_module._llm_provider({'provider': 'nonsense'})
+        assert 'nonsense' in str(bad.value) and 'openrouter' in str(bad.value)
+        # The client itself never folds an un-normalized name — a caller that bypasses the door
+        # cannot smuggle one either.
+        with pytest.raises(ValueError, match='unknown LLM provider'):
+            app_module.LLMClient(provider='OpenRouter')
+
+    def test_an_unknown_transport_is_refused_before_the_slot_is_claimed(self, client, app_module):
+        data = {
+            'workflow': {
+                'nodes': [_node('n', 'process', {'operation': 'sentiment'})],
+                'connections': [],
+                'settings': {'mode': 'serial'},
+            },
+            'llm': {'provider': 'nonsense', 'model': 'm'},
+        }
+        answer = app_module._begin_run(data, 'en')
+        assert answer['status'] == 400, answer
+        assert 'nonsense' in answer['body']['error']
+        assert 'openrouter' in answer['body']['error'], 'the refusal must name the legal transports'
+        assert app_module.execution_state['running'] is False, 'a refused transport must not claim the slot'
+
     def test_a_run_whose_shape_is_not_a_name_is_refused_before_the_slot_is_claimed(self, client, app_module):
         """Refusing inside the worker would be a FAILED run record for a canvas that never
         started; the gate belongs beside the shape check, before the claim."""

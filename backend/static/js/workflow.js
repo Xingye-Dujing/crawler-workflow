@@ -392,12 +392,17 @@ const workflow = {
         canvas.nodes = {};
         canvas.connections = [];
         canvas.nextId = 1;
+        /* Keyed by the id the file ASKED for, not the id the canvas kept: addNode
+           re-mints a malformed or already-taken id, and the wires must follow the
+           node that was actually built (see canvas._remapConnections). */
+        var idMap = {};
         workflowData.nodes.forEach(function (n) {
             /* The file's own ids come back unchanged: run records and resume
                cursors are filed under them, so a re-mint on open would leave
                the interrupted run unreachable from the canvas it belongs to
                (see canvas.addNode's nodeId). */
             var id = canvas.addNode(n.type, n.x, n.y, n.id);
+            idMap[n.id] = id;
             if (canvas.nodes[id]) {
                 canvas.nodes[id].params = n.params || {};
                 // A renamed node must come back renamed (see canvas.restoreState).
@@ -411,15 +416,7 @@ const workflow = {
                 if (n.folded) canvas._setFolded(id, true);
             }
         });
-        var ids = Object.keys(canvas.nodes);
-        canvas.connections = (workflowData.connections || []).map(function (c) {
-            var fromIdx = workflowData.nodes.findIndex(function (n) { return n.id === c.from; });
-            var toIdx = workflowData.nodes.findIndex(function (n) { return n.id === c.to; });
-            if (fromIdx >= 0 && toIdx >= 0 && ids[fromIdx] && ids[toIdx]) {
-                return { from: ids[fromIdx], to: ids[toIdx] };
-            }
-            return null;
-        }).filter(Boolean);
+        canvas.connections = canvas._remapConnections(workflowData.connections, idMap);
         canvas.scheduleRender();
         canvas.updateStatus();
         canvas.saveState();
@@ -3330,22 +3327,22 @@ function renderVisualizeSettings(nodeId, p) {
 
     // Simplified settings when connected to a tokenize node
     if (isTokenizeUpstream) {
-        var changed = false;
-        if (!p.x_field) { p.x_field = 'word'; changed = true; }
-        if (!p.y_field) { p.y_field = 'frequency'; changed = true; }
-        if (!p.value_field) { p.value_field = 'frequency'; changed = true; }
-        if (changed) { canvas.updateNodeDisplay(nodeId); canvas.saveState(); }
+        /* The tokenize columns have fixed names, so a never-configured chart still knows what to
+           read. Filling them here is a DISPLAY default only — it must NOT call saveState() or
+           updateNodeDisplay: opening a panel is not an edit, and stamping an undo step + the dirty
+           dot every time the user merely looked at the node was the bug. The values reach the
+           preview/executor from the params, so they are set without persisting. */
+        if (!p.x_field) p.x_field = 'word';
+        if (!p.y_field) p.y_field = 'frequency';
+        if (!p.value_field) p.value_field = 'frequency';
 
         var ct = p.chart_type || 'bar';
         var TOKENIZE_CHART_TYPES = ['bar', 'pie', 'wordcloud'];
 
-        // Wordcloud only supports ECharts engine
+        // Wordcloud only supports ECharts engine. Corrected in the params (not saved), because a
+        // stored 'matplotlib' would fail the run — but a mere panel open still earns no undo step.
         var isWordcloud = ct === 'wordcloud';
-        if (isWordcloud && p.engine !== 'echarts') {
-            p.engine = 'echarts';
-            canvas.updateNodeDisplay(nodeId);
-            canvas.saveState();
-        }
+        if (isWordcloud && p.engine !== 'echarts') p.engine = 'echarts';
 
         var html = '<div class="settings-group" style="margin-bottom:6px;">' +
             '<span style="font-size:11px;color:var(--accent);">' + I18n.t('settings.tokenizeUpstream') + '</span></div>' +
@@ -5178,7 +5175,19 @@ var historyPanel = {
         });
         if (!confirmed) return;
         try {
-            await fetch('/api/history/clear', { method: 'POST' });
+            // The dialog above is the human half; ``confirm: true`` is the server's own gate,
+            // held by every other bulk destructive route so a stray or cross-origin call cannot
+            // wipe the whole comparison chart (see ``/api/history/clear``).
+            const resp = await fetch('/api/history/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirm: true }),
+            });
+            const result = await resp.json();
+            if (!result.ok) {
+                showToast(I18n.t('toast.previewFailed') + ': ' + (result.error || resp.status));
+                return;
+            }
             showToast(I18n.t('history.cleared'));
             await this._loadRuns();
             await this.loadSeries();

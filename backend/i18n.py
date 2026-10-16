@@ -57,6 +57,8 @@ _ZH = {
         '不做外连接合并——那会凭空补出空值，让文件看起来完整'
     ),
     'wf.merge_done': '节点 {nid} 合并 {tables} 张上游表 → {n} 行（{detail}）',
+    'wf.merge_detail_sep': '、',
+    'wf.merge_table_detail': '{name} {n} 行',
     'wf.validation_error': '校验错误：{err}',
     'wf.found': '发现 {n} 条工作流',
     'wf.starting': '开始执行工作流「{name}」',
@@ -265,7 +267,6 @@ _ZH = {
     'crawl.wechat.no_urls': '未提供 URL，返回空结果。',
     # ── 断点续跑与去重（爬虫侧） ──────────────────────────────
     'crawl.resume_have': '断点续跑：已采集 {n} 条，接着往下采而不是重来',
-    'crawl.resume_urls': '断点续跑：沿用上次生成的 {n} 个链接，不重新翻页',
     'crawl.sink_failed': '增量落盘失败（这条仍然在本次结果里，但可能没进库）：{err}',
     'crawl.wechat.duplicate': '跳过重复的推文链接：{url}',
     'crawl.xhs.note_dup': '跳过重复的笔记：{url}',
@@ -1082,6 +1083,15 @@ _ZH = {
     'analysis.join_missing_cols': '合并失败：这些列不存在：{cols}',
     'api.alreadyRunning': '已有工作流正在运行，请先停止或等它跑完',
     'api.needConfirm': '这个操作会动到全部记录，请把 confirm 显式设为 true 再来',
+    'api.foreignOriginRefused': '本站只服务本机浏览器：这个请求来自「{origin}」，未鉴权又握着真实账号，故拒绝',
+    'api.killNoIdent': '没有给出线程 ID',
+    'api.killNotFound': '找不到该线程',
+    'api.killProtected': '不能结束受保护的线程：{name}',
+    'api.killLiveWorker': '这是正在运行的采集线程，请点「停止」而不是强杀它',
+    'api.killNotAlive': '该线程已不存活',
+    'api.killInvalidId': '无效的线程 ID',
+    'api.killFailedGeneric': '结束线程失败',
+    'api.killDone': '线程「{name}」已结束',
     # Two bulk deletions, each naming what it destroyed. The claims figure is not decoration:
     # 清空运行记录 also hands back the "已采集" ledger, so the next crawl really will re-fetch
     # what an earlier one collected — a user who reads 「清空了 3 条」 and then watches the same
@@ -1122,6 +1132,7 @@ _ZH = {
     'api.ollamaModelsFailed': '读取本地 Ollama 模型列表失败：{host}（请确认 ollama 已启动、服务地址正确）：{err}',
     'api.parseFailed': '文件解析失败：{err}',
     'api.unsupportedUpload': '不支持的文件类型：{name}（可用 .csv .tsv .json .txt .xlsx .xls）',
+    'api.excelMultiSheet': '工作簿「{name}」有多个非空工作表（{sheets}），一次只能导入一张表，请先拆成单个表再上传',
     'api.columnMissing': '数据里没有这一列：{column}',
     'api.needLabeledRows': '至少需要 10 行带标签的数据，当前只有 {n} 行',
     'api.noSourceTable': '所选节点都没有可用的数据表',
@@ -1143,6 +1154,7 @@ _ZH = {
     'run.interrupted_by_restart': '服务重启时被打断',
     'run.interrupted_by_dead_worker': '执行线程已不在，记录自动判定为中断',
     'run.promoted': '发现 {n} 条上次没跑完的记录，已标记为「可续跑」',
+    'run.claims_released': '重跑节点：已归还 {n} 条「已采集」认领（运行 {rid}），这些条目会重新采',
     'run.reconciled': '发现 {n} 条线程已结束却没写下结论的记录，已判定为「已中断」',
     'run.recordWriteFailed': '记录 {rid} 的结论没能写进数据库（{err}）：运行记录会在下次刷新时自动补上判定',
     'run.start_failed': '运行线程启动失败（{err}）：本次运行已放弃，队列继续处理下一个',
@@ -1400,6 +1412,8 @@ _EN = {
         'missing [{missing}]. Not merged as an outer join — that fabricates empty cells and the file looks complete'
     ),
     'wf.merge_done': 'Node {nid} merged {tables} upstream tables → {n} rows ({detail})',
+    'wf.merge_detail_sep': ', ',
+    'wf.merge_table_detail': '{name} {n} rows',
     'wf.validation_error': 'Validation error: {err}',
     'wf.found': 'Found {n} workflow(s)',
     'wf.starting': 'Starting workflow "{name}"',
@@ -1622,7 +1636,6 @@ _EN = {
     'crawl.wechat.no_urls': 'No URLs provided, returning empty results.',
     # ── resume and dedupe (crawler side) ────────────────────────
     'crawl.resume_have': 'Resuming: {n} item(s) already collected, continuing instead of starting over',
-    'crawl.resume_urls': 'Resuming: reusing the {n} link(s) of the last attempt, no re-paging',
     'crawl.sink_failed': 'Incremental save failed (this row is still in the results, but may not be stored): {err}',
     'crawl.wechat.duplicate': 'Skipping a duplicate article link: {url}',
     'crawl.xhs.note_dup': 'Skipping a duplicate note: {url}',
@@ -2542,6 +2555,18 @@ _EN = {
     'analysis.join_missing_cols': 'Join failed — no such column: {cols}',
     'api.alreadyRunning': 'A workflow is already running — stop it or wait for it to finish',
     'api.needConfirm': 'This acts on every record — send confirm=true explicitly to do it',
+    'api.foreignOriginRefused': (
+        'This server answers the local browser only: the request came from "{origin}" '
+        'and is refused — the API is unauthenticated and holds real accounts'
+    ),
+    'api.killNoIdent': 'missing thread ident',
+    'api.killNotFound': 'thread not found',
+    'api.killProtected': 'cannot kill protected thread: {name}',
+    'api.killLiveWorker': 'this is a live crawl worker; use Stop rather than killing it',
+    'api.killNotAlive': 'thread is not alive',
+    'api.killInvalidId': 'invalid thread ID',
+    'api.killFailedGeneric': 'failed to kill thread',
+    'api.killDone': 'thread "{name}" terminated',
     'run.cleared': 'Run records cleared: {runs} removed, and {claims} "already crawled" claims handed back',
     'exports.cleared': 'Export folder cleared: {n} file(s) removed',
     'exports.notAPart': '「{name}」 is not a shard file, so there is no batch to clear',
@@ -2596,6 +2621,9 @@ _EN = {
     'api.ollamaModelsFailed': 'Could not list local Ollama models at {host} (running? address right?): {err}',
     'api.parseFailed': 'Could not parse the file: {err}',
     'api.unsupportedUpload': 'unsupported file type: {name} (accepted: .csv .tsv .json .txt .xlsx .xls)',
+    'api.excelMultiSheet': (
+        'workbook "{name}" has several non-empty sheets ({sheets}); one upload imports one sheet — split it first'
+    ),
     'api.columnMissing': 'No such column in the data: {column}',
     'api.needLabeledRows': 'At least 10 labelled rows are needed, this data has {n}',
     'api.noSourceTable': 'None of the selected nodes could supply a table',
@@ -2617,6 +2645,9 @@ _EN = {
     'run.interrupted_by_restart': 'Interrupted by a service restart',
     'run.interrupted_by_dead_worker': 'Its worker thread is gone, so the record was settled as interrupted',
     'run.promoted': '{n} unfinished run(s) from an earlier session marked resumable',
+    'run.claims_released': (
+        'Rerun: handed back {n} "already crawled" claim(s) for run {rid} — those items will be crawled again'
+    ),
     'run.reconciled': '{n} record(s) whose worker had already gone were settled as interrupted',
     'run.recordWriteFailed': (
         'Could not write the verdict for record {rid} ({err}): the run list settles it on the next refresh'

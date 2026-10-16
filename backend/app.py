@@ -4,12 +4,14 @@ import json
 import logging
 import math
 import os
+import re
 import subprocess
 import sys
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlsplit
 
 import browser_profiles
 import cookie_preflight
@@ -49,6 +51,7 @@ from state import (
     cookie_manager,
     execution_state,
     history_service,
+    live_run_ids,
     reset_console_state,
     set_log_sink,
 )
@@ -151,7 +154,57 @@ if _cloud_requested(sys.argv[1:]):
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
-CORS(app)
+
+# The UI is served by THIS process and every one of its ``fetch`` calls uses a relative
+# ``/api/...`` path, so no legitimate request is ever cross-origin. The old ``CORS(app)``
+# ran on flask-cors's default ``origins='*'``, which let any page the user visits while the
+# server is up READ the unauthenticated ``/api/cookies/status`` (the account list), the run
+# history and dataset contents. Restrict the ACAO header to loopback. The pattern is
+# end-anchored on purpose: flask-cors matches origins with ``re.match``, which would otherwise
+# let ``http://localhost.evil.com`` through the ``localhost`` branch.
+_LOOPBACK_ORIGIN = re.compile(r'https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$', re.IGNORECASE)
+CORS(app, origins=_LOOPBACK_ORIGIN)
+
+
+def _origin_is_local(origin: str, server_host: str = '') -> bool:
+    """Whether a request's ``Origin`` is this machine, not a page that merely names it.
+
+    Loopback hosts are trusted; so is any origin whose host equals the host the request was
+    addressed to (a deliberate ``HOST=`` LAN bind stays usable). The match is on the parsed
+    host, never a substring — ``localhost.evil.com`` starts with ``localhost`` but is not it.
+    ``server_host`` is passed in rather than read from ``request`` so this stays a pure
+    function the tests can drive outside an HTTP context.
+    """
+    if not origin:
+        return True  # a header-less call (curl, test_client, same-origin GET) is not cross-origin
+    try:
+        netloc = urlsplit(origin).netloc
+    except ValueError:
+        return False
+    host = netloc.rsplit('@', 1)[-1]
+    if host.startswith('['):  # IPv6 literal: [::1] or [::1]:5000 — the port is after the ]
+        host = host[1:].split(']', 1)[0]
+    elif ':' in host:
+        host = host.split(':', 1)[0]
+    if host in ('127.0.0.1', 'localhost', '::1'):
+        return True
+    return bool(server_host) and host == server_host.rsplit(':', 1)[0]
+
+
+@app.before_request
+def _reject_foreign_origin():
+    """Refuse a cross-origin request outright, not just its read-back.
+
+    Tightening the CORS header only stops a browser from READING a response; a simple
+    cross-origin ``POST`` (no custom header, form/JSON body) is still sent and still executed,
+    which on this unauthenticated server means a foreign page could run a crawl on the user's
+    logged-in accounts or fire ``/api/history/clear``. The ``Origin`` a browser attaches to
+    every cross-origin XHR/fetch is the one signal that names the caller, so it is refused here
+    with a named 403 rather than silently answered.
+    """
+    origin = request.headers.get('Origin') or request.headers.get('Referer')
+    if origin and not _origin_is_local(origin, request.host):
+        return jsonify({'ok': False, 'error': t('api.foreignOriginRefused', origin=origin)}), 403
 
 
 @app.after_request
@@ -1110,6 +1163,32 @@ def _run_mode(settings: dict) -> str:
     return value
 
 
+#: The AI transports this app can actually speak. Kept next to the reader that refuses anything
+#: else so a second spelling cannot drift — the single source is ``LLMClient.PROVIDERS``.
+LLM_PROVIDERS = LLMClient.PROVIDERS
+
+
+def _llm_provider(llm_cfg: dict) -> str:
+    """The transport name, READ — an unrecognised one is refused BY NAME, never folded.
+
+    The request's ``provider`` reaches ``LLMClient``, which used to write
+    ``provider if provider in (...) else 'ollama'``: a hand-typed or stale-tab
+    ``"OpenRouter"`` (wrong case) became a silent local-daemon call looking for a tag that does
+    not exist, the whole node failed, yet the durable run record still claimed the transport was
+    OpenRouter — a record naming a transport that never ran. ``transport.py`` already refuses
+    this shape for the cloud host; a local host must refuse it too rather than guess.
+    """
+    raw = (llm_cfg or {}).get('provider')
+    value = str(raw or '').strip().lower()
+    if not value:
+        return LLM_PROVIDERS[0]
+    if value not in LLM_PROVIDERS:
+        raise UnknownOperationError(
+            t('api.runSettingOption', setting='provider', value=str(raw), allowed=', '.join(LLM_PROVIDERS))
+        )
+    return value
+
+
 def _workflow_shape_error(data: dict) -> str:
     """Why this payload cannot become a run, or '' when it can.
 
@@ -1126,6 +1205,20 @@ def _workflow_shape_error(data: dict) -> str:
         return t('api.workflowShapeInvalid')
     nodes = workflow.get('nodes')
     if nodes is not None and (not isinstance(nodes, list) or any(not isinstance(node, dict) for node in nodes)):
+        return t('api.workflowShapeInvalid')
+    # A node's ``params`` is walked by ``.get`` all through the engine and the executor; a
+    # truthy non-dict (``params: 'x'``) raised AttributeError inside ``_begin_run`` before the
+    # slot, and the queued path had no handler for it — an HTML 500, exactly what this guard
+    # exists to prevent. Same for ``connections``: ``all_connections`` does not filter, so a
+    # list of STRINGS reached ``dangling_connections``' ``c.get`` and threw mid-run.
+    for node in nodes if isinstance(nodes, list) else []:
+        params = node.get('params')
+        if params is not None and not isinstance(params, dict):
+            return t('api.workflowShapeInvalid')
+    connections = workflow.get('connections')
+    if connections is not None and (
+        not isinstance(connections, list) or any(not isinstance(conn, dict) for conn in connections)
+    ):
         return t('api.workflowShapeInvalid')
     settings = workflow.get('settings')
     if settings is not None and not isinstance(settings, dict):
@@ -1503,9 +1596,12 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         return {'status': 400, 'body': {'ok': False, 'error': shape_error}}
     # The run shape is asked BEFORE the claim too, and it raises rather than answering
     # "parallel" to a token it does not know: the mode decides both how many records this run
-    # writes and whether two same-platform crawls may breathe at once on one profile.
+    # writes and whether two same-platform crawls may breathe at once on one profile. The
+    # transport is asked by the same door — an unknown provider must not fold to a local daemon
+    # the record then falsely claims ran.
     try:
         _run_mode(((data.get('workflow') or {}).get('settings')) or {})
+        _llm_provider(data.get('llm') or {})
     except UnknownOperationError as e:
         return {'status': 400, 'body': {'ok': False, 'error': str(e)}}
     resume_error = _resume_refusal(data)
@@ -1623,7 +1719,7 @@ def _begin_run(data: dict, lang_header: str) -> dict:
 
             llm_cfg = data.get('llm') or {}
             llm = {
-                'provider': llm_cfg.get('provider') or 'ollama',
+                'provider': _llm_provider(llm_cfg),
                 'model': (llm_cfg.get('model') or '').strip(),
                 'api_key': (llm_cfg.get('api_key') or '').strip(),
                 'ollama_host': str(get_setting('ollama_host') or ''),
@@ -3403,7 +3499,13 @@ def _merge_upstream_tables(
                 )
             )
     merged = pd.concat([frame for _pid, frame in frames], ignore_index=True, sort=False)
-    detail = '、'.join(f'{name_parent(pid)} {len(frame)} 行' for pid, frame in frames)
+    # One fragment per upstream table, each built by ``t()`` — the row-count word (行 / rows)
+    # belongs to the language catalogue, not to a sentence pasted into the console. Joining with
+    # a catalogued separator keeps 中文 the 「、」 list it reads as and English a comma list; a
+    # 「」-joined literal once leaked 「…40 行」 into the ENGLISH console line.
+    detail = t('wf.merge_detail_sep').join(
+        t('wf.merge_table_detail', name=name_parent(pid), n=len(frame)) for pid, frame in frames
+    )
     add_log(t('wf.merge_done', nid=label, n=len(merged), tables=len(frames), detail=detail))
     return merged.to_dict('records'), (str(label), len(merged))
 
@@ -5138,7 +5240,7 @@ def kill_process():
         return _bad_body()
     ident = data.get('ident')
     if ident is None:
-        return jsonify({'ok': False, 'error': 'Missing thread ident'}), 400
+        return jsonify({'ok': False, 'error': t('api.killNoIdent')}), 400
 
     target = None
     for thread in threading.enumerate():
@@ -5147,10 +5249,10 @@ def kill_process():
             break
 
     if target is None:
-        return jsonify({'ok': False, 'error': 'Thread not found'}), 404
+        return jsonify({'ok': False, 'error': t('api.killNotFound')}), 404
 
     if target.name in ('MainThread', 'run'):
-        return jsonify({'ok': False, 'error': f'Cannot kill protected thread: {target.name}'}), 403
+        return jsonify({'ok': False, 'error': t('api.killProtected', name=target.name)}), 403
 
     # A live run's crawls execute on the executor's pool threads (parallel mode), not
     # on 'run'. Killing one injects SystemExit between acquiring a browser and
@@ -5158,19 +5260,19 @@ def kill_process():
     # 'run' guard exists for. While a run is live those threads are off-limits; Stop is
     # the graceful door.
     if execution_state['running'] and target.name.startswith('ThreadPoolExecutor'):
-        return jsonify({'ok': False, 'error': 'This is a live crawl worker; use Stop rather than killing it'}), 403
+        return jsonify({'ok': False, 'error': t('api.killLiveWorker')}), 403
 
     if not target.is_alive():
-        return jsonify({'ok': False, 'error': 'Thread is not alive'}), 400
+        return jsonify({'ok': False, 'error': t('api.killNotAlive')}), 400
 
     try:
         ret = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(ident), ctypes.py_object(SystemExit))
         if ret == 0:
-            return jsonify({'ok': False, 'error': 'Invalid thread ID'}), 400
+            return jsonify({'ok': False, 'error': t('api.killInvalidId')}), 400
         if ret > 1:
             ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(ident), None)
-            return jsonify({'ok': False, 'error': 'Failed to kill thread'}), 500
-        return jsonify({'ok': True, 'message': f'Thread "{target.name}" terminated'})
+            return jsonify({'ok': False, 'error': t('api.killFailedGeneric')}), 500
+        return jsonify({'ok': True, 'message': t('api.killDone', name=target.name)})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
@@ -6319,24 +6421,10 @@ def runs_stats():
 
 
 def _live_run_ids() -> list:
-    """Every run id a live thread may still be writing — ONE definition of 「活着」.
-
-    ``execution_state['running']`` is cleared at the TOP of 停止 while the worker keeps
-    settling, still holds its browsers and still writes rows for tens of seconds. A route
-    that asks only that flag therefore allows exactly the window in which deleting rows is
-    most destructive: the record, its node rows and its console log vanish under the writer,
-    ``finish_run``'s UPDATE then matches no row (so even the write-failure line is lost), and
-    the final flush re-inserts log lines for a run id no ``runs`` row owns — which
-    ``purge``/``clear_all`` walk by ``runs``, so those lines can never be reclaimed.
-    """
-    thread = execution_state.get('thread')
-    if not execution_state['running'] and not (thread is not None and thread.is_alive()):
-        return []
-    ids = [str(rid) for rid in execution_state['open_records']]
-    current = str(execution_state.get('run_id') or '')
-    if current and current not in ids:
-        ids.append(current)
-    return ids
+    """Every run id a live thread may still be writing. The one definition moved to
+    ``state.live_run_ids`` so the export Blueprint holds the same line without importing
+    this module (a cycle); this alias keeps the run-record routes' call sites unchanged."""
+    return live_run_ids()
 
 
 def _reject_live_run(run_id: str):
@@ -6469,7 +6557,10 @@ def _log_filters(req):
     download answer the exact same question — the download is 「所见即所存」.
     """
     wf_raw = str(req.args.get('wf') or '').strip()
-    wf_idx = int(wf_raw) if wf_raw.lstrip('-').isdigit() else None
+    # ``wf`` is a tab ORDINAL (0..N-1). A negative value is not a tab that exists; filtering on
+    # it matched nothing and left the viewer showing 「无内容」 for a run that has lines. Read an
+    # impossible index as the 「全部」 tab (no filter) rather than a filter that empties the panel.
+    wf_idx = int(wf_raw) if wf_raw.isdigit() else None
     level = str(req.args.get('level') or '').strip().lower()
     level = level if level in ('info', 'warning', 'error') else None
     q = str(req.args.get('q') or '').strip() or None
