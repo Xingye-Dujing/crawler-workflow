@@ -58,17 +58,25 @@ vm.runInContext(
          globalThis.__fetchLog.push({ url, opts });
          if (String(url).indexOf('/api/workflow/load') === 0) {
              var r = globalThis.__loadResponse || { ok: false, error: 'no stub' };
-             return Promise.resolve({ json: () => Promise.resolve(r) });
+             return Promise.resolve({ ok: r.ok !== false, json: () => Promise.resolve(r) });
          }
          /* The crawl matrix, answered with the payload the pytest driver dumped
             from the backend: a new Data Source node seeds its numbers from it, so
             pretending it is absent would test a browser that never boots. */
          if (String(url).indexOf('/api/capabilities') === 0) {
              var caps = globalThis.__capabilities || { ok: true };
-             return Promise.resolve({ json: () => Promise.resolve(caps) });
+             return Promise.resolve({ ok: caps.ok !== false, json: () => Promise.resolve(caps) });
+         }
+         /* /api/data/datasets: a scenario may override the answer to exercise the two
+            distinguishable cases — a refusal (ok:false, the cross-origin guard) vs a
+            genuine empty library (ok:true, datasets:[]). The DEFAULT stays a successful
+            empty list so every pre-existing lifecycle scenario keeps its current behaviour. */
+         if (String(url).indexOf('/api/data/datasets') === 0 && globalThis.__datasetsResponse) {
+             var dresp = globalThis.__datasetsResponse;
+             return Promise.resolve({ ok: dresp.ok !== false, json: () => Promise.resolve(dresp) });
          }
          var body = { ok: true, workflows: [], datasets: [] };
-         return Promise.resolve({ json: () => Promise.resolve(body) });
+         return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
      };`,
     sandbox,
 );
@@ -153,6 +161,7 @@ for (const sc of scenarios) {
     if (sc.storedOpenFile !== undefined) sandbox.__stored.crawler_open_file = sc.storedOpenFile;
     sandbox.__dialogAnswer = sc.dialogAnswer ?? null;
     sandbox.__loadResponse = sc.loadResponse ?? null;
+    sandbox.__datasetsResponse = sc.datasetsResponse ?? null;
     vm.runInContext('globalThis.__fetchLog = [];', sandbox);
     sandbox.RunState._calls = [];
     sandbox.__toasts.length = 0;

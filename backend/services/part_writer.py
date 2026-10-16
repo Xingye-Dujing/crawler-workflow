@@ -15,8 +15,21 @@ import contextlib
 import csv
 import json
 import os
+import re
 
 import pandas as pd
+
+# A trailing extension the user may have typed into a filename. ``os.path.splitext`` would cut at
+# the LAST dot of ANY name, so a workflow literally named 「v2.0调研」 (a dot is legal) turned the
+# composed stem 「v2.0调研-src-2_...」 into 「v2」 — the node id and window suffix fell off the end as
+# a fake "extension", and two source nodes on that canvas then shared one stem: their part files
+# collided, the prefix-adoption merged one node's shards into the other, and the final files
+# overwrote each other. A stem is a storage key, so only a REAL export extension is ever removed.
+_TRAILING_EXT = re.compile(r'\.(csv|json|tsv|xlsx|xls|txt|md|html|parquet)$', re.IGNORECASE)
+
+# The number a shard carries in its name: ``{stem}.part{NNN}{ext}``. ``search`` finds the LAST
+# ``.part…`` so a stem that itself contains the literal ``.part`` still yields the real index.
+_PART_NUMBER = re.compile(r'\.part(\d+)\.[A-Za-z0-9]+$')
 
 
 def dump_rows(rows, path: str, columns: list, fmt: str) -> None:
@@ -57,7 +70,18 @@ class PartWriter:
         self._parts = sorted(
             os.path.join(self.dir, f) for f in os.listdir(self.dir) if f.startswith(prefix) and f.endswith(self.ext)
         )
-        self._part_no = len(self._parts)
+        # The next slot is the HIGHEST adopted part number + 1, never ``len(parts)``: a hole
+        # (a middle shard deleted from the export panel while a different run is live) made
+        # ``len`` reuse an existing number, so ``_write_part`` overwrote an adopted shard AND
+        # appended the same path twice — the final merge then dropped one batch's rows and
+        # duplicated another's, while reporting a rows/parts count that matched neither. Same
+        # rule as the run store's ``MAX(seq)+1, never COUNT(*)``.
+        highest = 0
+        for part in self._parts:
+            match = _PART_NUMBER.search(os.path.basename(part))
+            if match:
+                highest = max(highest, int(match.group(1)))
+        self._part_no = highest
 
     @property
     def batching(self) -> bool:
@@ -97,7 +121,20 @@ class PartWriter:
             for key in row:
                 if key not in self._columns:
                     self._columns.append(key)
-        dump_rows(rows, path, self._columns, self.fmt)
+        # tmp + replace (the same guarantee ``SnapshotWriter`` gives): a kill between the open and
+        # the close used to leave a half-written ``.partNNN.json`` ON the part path, which adoption
+        # then tried to read, swallowed (``contextlib.suppress``) and STILL counted in the report —
+        # a silent shortfall dressed as a merged batch. The temp ends in ``.tmp``, which the
+        # adoption glob never picks up, so a torn write is simply invisible to the next attempt.
+        tmp = f'{path}.tmp'
+        try:
+            dump_rows(rows, tmp, self._columns, self.fmt)
+            os.replace(tmp, path)
+        except Exception:
+            with contextlib.suppress(OSError):
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            raise
 
     # ─── finish ─────────────────────────────────────────────────
 
@@ -187,4 +224,7 @@ def safe_stem(name: str) -> str:
     from utils.helpers import sanitize_filename
 
     stem = sanitize_filename(name) or 'export'
-    return os.path.splitext(stem)[0] or 'export'
+    # Remove a trailing export extension the user typed (「data.csv」 → 「data」), but ONLY that:
+    # never an internal dot, which is the storage-key collision above.
+    stem = _TRAILING_EXT.sub('', stem, count=1)
+    return stem or 'export'

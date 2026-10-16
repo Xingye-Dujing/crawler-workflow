@@ -693,6 +693,22 @@ def life(tmp_path_factory, capabilities_matrix):
             'id': 'load_without_settings',
             'load': {'nodes': opened['nodes'], 'connections': opened['connections']},
         },
+        {
+            # A server that gave NO opinion (the cross-origin guard answers ok:false/403) must not be
+            # read as "every dataset is gone" and wipe the upload node's file pointer.
+            'id': 'reconcile_refused',
+            'load': opened,
+            'datasetsResponse': {'ok': False, 'error': 'cross-origin refused'},
+        },
+        {
+            # A successful list that still holds the file: the id survives and the name refreshes.
+            'id': 'reconcile_known',
+            'load': opened,
+            'datasetsResponse': {
+                'ok': True,
+                'datasets': [{'dataset_id': 'dead-id', 'name': 'old.csv', 'row_count': 3}],
+            },
+        },
         {'id': 'newfile', 'add': ['source'], 'newFile': True},
         {
             # A reload/restart reopens the file the draft belongs to — the boot `openFile`
@@ -901,6 +917,22 @@ class TestFileLifecycle:
         upload = next(n for n in r['nodes'] if n['type'] == 'upload')
         assert upload['params']['dataset_id'] == '', 'the dead file id must not survive to a doomed run'
         assert any('toast.datasetsMissing' in msg for msg in r['toasts'])
+
+    def test_a_server_that_refused_keeps_the_upload_pointer(self, life):
+        """The reconciliation may clear an id only on a SUCCESSFUL list. A refusal (ok:false, the
+        cross-origin guard) or a malformed body is no opinion; treating it as "all gone" would clear
+        every Upload node and autosave the emptied canvas over the author's workflow file."""
+        r = life['reconcile_refused']
+        upload = next(n for n in r['nodes'] if n['type'] == 'upload')
+        assert upload['params']['dataset_id'] == 'dead-id', 'a refusal must not wipe a live pointer'
+        assert not any('datasetsMissing' in msg for msg in r['toasts']), r['toasts']
+
+    def test_a_known_dataset_keeps_its_id_and_refreshes_the_name(self, life):
+        r = life['reconcile_known']
+        upload = next(n for n in r['nodes'] if n['type'] == 'upload')
+        assert upload['params']['dataset_id'] == 'dead-id'
+        assert upload['params']['dataset_name'] == 'old.csv'
+        assert not any('datasetsMissing' in msg for msg in r['toasts']), r['toasts']
 
     def test_newfile_empties_canvas_and_draft(self, life):
         r = life['newfile']

@@ -3742,13 +3742,21 @@ var dataNodes = {
         try {
             var resp = await fetch('/api/data/datasets?limit=1000');
             var result = await resp.json();
-            (result.datasets || []).forEach(function (d) { known[d.dataset_id] = d; });
+            /* A SUCCESSFUL list is the only answer that licenses clearing an id. A non-OK status,
+               a refusal body (the cross-origin guard answers ``{ok:false}`` with a 403), or a shape
+               with no ``datasets`` array is the server saying NOTHING — reading it as "every file is
+               gone" would clear every Upload node's ``dataset_id`` and then autosave the emptied
+               canvas over the author's workflow file. A genuinely empty library returns
+               ``{ok:true, datasets:[]}`` and is still honoured below. */
+            if (!resp.ok || !result || result.ok === false || !Array.isArray(result.datasets)) return;
+            result.datasets.forEach(function (d) { known[d.dataset_id] = d; });
         } catch (e) {
             /* Offline or a dead server: keep the ids. Losing them would mean
                re-uploading a file that is very likely still on disk. */
             return;
         }
         var missing = [];
+        var changed = false;
         pending.forEach(function (id) {
             var node = canvas.nodes[id];
             if (!node) return;
@@ -3764,17 +3772,26 @@ var dataNodes = {
                 var missEl = canvas._nodeEl(id);
                 if (missEl) missEl.classList.add('node-missing');
                 missing.push(node.title || id);
+                changed = true;
             } else {
+                var beforeName = node.params.dataset_name;
+                var beforeCount = node.params.row_count;
                 node.params.dataset_name = meta.name || node.params.dataset_name || '';
                 node.params.row_count = meta.row_count || 0;
-                node._datasetMissing = false;
+                if (beforeName !== node.params.dataset_name || beforeCount !== node.params.row_count) changed = true;
+                if (node._datasetMissing) {
+                    node._datasetMissing = false;
+                    changed = true;
+                }
                 var okEl = canvas._nodeEl(id);
                 if (okEl) okEl.classList.remove('node-missing');
             }
             canvas.updateNodeDisplay(id);
             if (canvas._settingsNodeId === id) openSettings(id);
         });
-        canvas.saveState();
+        /* Only a real change earns a save; a healthy canvas merely refreshed must not push an undo
+           step, light the dirty dot, or rewrite the workflow file every time it loads. */
+        if (changed) canvas.saveState();
         if (missing.length) showToast(I18n.t('toast.datasetsMissing') + ': ' + missing.join(', '));
     },
 

@@ -102,6 +102,60 @@ class TestStem:
         assert safe_stem('..') == 'export'
         assert safe_stem('中文名.csv') == '中文名'
 
+    def test_an_internal_dot_is_not_treated_as_an_extension(self):
+        """The stem is a storage key. A workflow named 「v2.0调研」 (a legal dot) used to have
+        ``os.path.splitext`` cut at that dot, dropping ``-src-2…`` entirely so two source nodes
+        collided on one stem and overwrote each other's parts. Only a REAL trailing export
+        extension may be removed."""
+        assert safe_stem('v2.0调研-src-2_20260101_to_20260315') == 'v2.0调研-src-2_20260101_to_20260315'
+        # A dotted name with no export extension is kept whole; only a known suffix is stripped.
+        assert safe_stem('a.b.c.csv') == 'a.b.c'
+
+    def test_two_dotted_workflow_nodes_keep_distinct_stems(self, tmp_path):
+        """The collision proven end to end: two source nodes on a dotted-name canvas must write
+        different files, not merge into one."""
+        wf = 'v2.0调研'
+        s1 = safe_stem(f'{wf}-src-node-2')
+        s2 = safe_stem(f'{wf}-src-node-3')
+        assert s1 != s2, 'both nodes collapse to the same stem → their parts overwrite each other'
+
+
+class TestAdoptionAndAtomicity:
+    def test_part_number_continues_past_the_highest_adopted_number_not_the_count(self, tmp_path):
+        """A deleted middle shard (a hole) used to make ``_part_no = len(parts)`` REUSE an
+        existing number, so the next write overwrote an adopted shard and listed the path twice —
+        the merged file dropped one batch and duplicated another. The next slot is MAX+1."""
+        # Seed adopted parts 001 and 003 with a hole at 002.
+        (tmp_path / 'wf.part001.csv').write_text('c\nrow1\n', encoding='utf-8-sig')
+        (tmp_path / 'wf.part003.csv').write_text('c\nrow3\n', encoding='utf-8-sig')
+        writer = PartWriter(str(tmp_path), 'wf', 'csv', batch_size=1)
+        assert writer._part_no == 3, 'adopted max is 3, not len=2'
+        writer.add([{'x': 'new'}])
+        assert (tmp_path / 'wf.part004.csv').exists(), 'the next shard must be 004, not reuse 003'
+        assert not (tmp_path / 'wf.part002.csv').exists()  # the hole stays a hole, never re-filled wrong
+
+    def test_a_completed_part_leaves_no_temp_file(self, tmp_path):
+        """Atomic tmp+replace: a settled batch lands as exactly ``{stem}.partNNN.ext``. A crash
+        mid-write would leave only ``.tmp`` — which the adoption glob never picks up — never a
+        half-written part that reads back empty yet is counted."""
+        writer = PartWriter(str(tmp_path), 'wf', 'csv', batch_size=2)
+        writer.add(_rows(2))
+        temps = [f for f in os.listdir(tmp_path) if f.endswith('.tmp')]
+        assert temps == [], f'a torn write left temp files: {temps}'
+        assert os.path.isfile(tmp_path / 'wf.part001.csv')
+
+    def test_adopted_parts_are_merged_without_duplication(self, tmp_path):
+        """The whole point of adoption: a prior attempt's shards plus this attempt's tail read
+        back as the union, each row once."""
+        writer1 = PartWriter(str(tmp_path), 'wf', 'csv', batch_size=2)
+        writer1.add(_rows(2))  # part001
+        writer2 = PartWriter(str(tmp_path), 'wf', 'csv', batch_size=2)
+        writer2.add(_rows(2, start=2))  # adopts part001, writes part002
+        info = writer2.finish()
+        assert info['rows'] == 4, info
+        seen = [r['评论者'] for r in pd.read_csv(info['path']).to_dict('records')]
+        assert sorted(seen) == ['u0', 'u1', 'u2', 'u3'], 'each adopted + new row exactly once'
+
 
 class TestHasParts:
     def test_fresh_writer_has_no_parts(self, tmp_path):
