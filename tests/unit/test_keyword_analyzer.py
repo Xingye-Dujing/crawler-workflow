@@ -155,6 +155,19 @@ class TestAllowPos:
     def test_a_category_the_text_does_not_carry_yields_nothing(self, method):
         assert getattr(KeywordExtractor, method)(TAGGED_TEXT, topk=5, allow_pos='eng') == []
 
+    def test_a_filter_that_wipes_every_token_is_named_not_silently_empty(self, extractor, caplog):
+        """A POS tag jieba never assigns (a Chinese name like 名词 where it wants ``n``/``v``) filters
+        every token out. The corpus still returns its shaped empty answer — but it must SAY the
+        filter emptied the table, not settle the node DONE on silence (the silent-success this
+        project refuses everywhere else; a blank corpus stays silent, this is not one)."""
+        df = pd.DataFrame({'正文': ['三亚的海滩度假很棒', '海风很舒服度假很愉快']})
+        out = extractor.tfidf_corpus(df, '正文', allow_pos='名词')
+        assert out is not None, 'the empty result must still be shaped, not a crash'
+        warned = [r for r in caplog.records if 'keyword' in r.name and r.levelno >= 30]
+        assert warned, (
+            f'a POS filter that emptied the corpus logged nothing: {[r.getMessage() for r in caplog.records]}'
+        )
+
     def test_the_stored_string_the_comma_and_the_list_forms_agree(self):
         """The panel sends ``'n、v'``, a saved workflow may hold a list: one filter, one answer."""
         list_form = KeywordExtractor.extract_tfidf(TAGGED_TEXT, topk=20, allow_pos=['n', 'v'])

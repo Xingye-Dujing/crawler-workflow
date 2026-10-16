@@ -188,6 +188,15 @@ class KeywordExtractor:
         # answer here (every row blank, or every token filtered out), not an error condition.
         # Return the method's empty table so the caller's column contract still holds.
         if not any(tokenized):
+            # A blank corpus and a POS filter that let nothing through produce the same empty table,
+            # but only one is what the user meant. When they set ``allow_pos`` and every token was
+            # filtered out, name that — an unrecognised tag (a typo, or a 词性 written where jieba
+            # wants ``n``/``v``) used to settle the node DONE over an empty table with no word of
+            # why, which is the silent-success this project refuses everywhere else.
+            if pos_tags and documents:
+                logger.warning(
+                    t('analysis.keyword_pos_no_match', tags='、'.join(sorted(pos_tags)), rows=len(documents))
+                )
             return self._empty_result(merge)
 
         vectorizer = TfidfVectorizer(

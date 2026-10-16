@@ -335,6 +335,10 @@ _ZH = {
     'analysis.calc_failed': '计算列 {col} = {expr} 失败：{err}',
     'analysis.bin_failed': '列 {col} 分箱失败：{err}',
     'analysis.col_missing': '未找到列“{col}”',
+    'analysis.keyword_pos_no_match': (
+        '按词性 {tags} 过滤后，{rows} 行文本一个关键词都没留下——多半是词性写法不对：'
+        '请用 jieba 的标签（如 n、v、vn、a），而不是中文词性名'
+    ),
     'analysis.dedupe_similar': (
         '近重复去重：在「{column}」上按 SimHash 距离 ≤{distance} 判定，删除 {n} 行（每组保留首次出现的那行）'
     ),
@@ -1698,6 +1702,10 @@ _EN = {
     'analysis.calc_failed': 'Column calc failed for {col} = {expr}: {err}',
     'analysis.bin_failed': 'Binning failed for {col}: {err}',
     'analysis.col_missing': 'Column "{col}" not found',
+    'analysis.keyword_pos_no_match': (
+        'After the POS filter {tags}, none of the {rows} text rows kept a single keyword — '
+        'the tag spelling is likely wrong: use jieba tags (n, v, vn, a), not Chinese POS names'
+    ),
     'analysis.dedupe_similar': (
         'Near-duplicate dedupe: SimHash distance ≤{distance} on "{column}", dropped {n} rows (first of each group kept)'
     ),

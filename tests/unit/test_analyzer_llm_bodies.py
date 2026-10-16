@@ -444,9 +444,11 @@ class TestRunnerDeclaration:
         assert seen['op'] == 'clean'
         assert seen['result_columns'] == ['action', 'cleaned_text']
         assert seen['blank'] == ['', None]
-        # A failed cleaning answer deletes the row, so a node that cannot reach a
-        # model never leaves an undecided row downstream. There is no length gate.
-        assert seen['fail_value'] == ('删除', None)
+        # A row the model could not answer is a FAILURE, not a delete. The old
+        # ('删除', None) let one model hiccup silently drop a real comment; 未判定 is a third
+        # state that is NOT '删除', so a downstream keep filter keeps the row and the gap is
+        # visible (the runner logs each parse failure) rather than faked as a decision.
+        assert seen['fail_value'] == ('未判定', None)
         assert 'skip_value' not in seen and 'min_len' not in seen
         assert seen['label'] == t('label.clean')
         # The topic is the cleaner's own cache scope: the prompt builder is a
@@ -533,12 +535,14 @@ class TestAnalyzerRows:
         assert (result.loc[0, 'action'], result.loc[0, 'cleaned_text']) == ('保留', '三亚的海非常蓝')
         assert len(client.prompts) == 1
 
-    def test_an_unparseable_cleaning_answer_deletes_the_row(self, cleaner):
-        # fail_value is ('删除', None): the model's silence is a deletion, so a
-        # transport hiccup shrinks the table instead of leaving it undecided.
+    def test_an_unparseable_cleaning_answer_is_undecided_not_a_silent_delete(self, cleaner):
+        # fail_value is ('未判定', None): the model's silence is a FAILURE, not a deletion. The old
+        # ('删除', None) let one transport hiccup shrink the table by silently deleting a real
+        # comment; 未判定 keeps the row (a ``action != 删除`` filter retains it) and the runner logs
+        # the parse failure, so the gap is named rather than faked as a verdict.
         client = ScriptedClient(default='我不确定')
         result = cleaner.clean_dataframe(one_row_frame(), '正文', ctx={'client': client})
-        assert (result.loc[0, 'action'], result.loc[0, 'cleaned_text']) == ('删除', None)
+        assert (result.loc[0, 'action'], result.loc[0, 'cleaned_text']) == ('未判定', None)
 
     def test_an_empty_row_is_never_asked_about(self, emotion):
         client = ScriptedClient()

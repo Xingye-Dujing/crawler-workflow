@@ -169,7 +169,13 @@ class ContentCleaner:
             op='clean',
             result_columns=['action', 'cleaned_text'],
             blank=['', None],
-            fail_value=('删除', None),
+            # A row whose model answer could not be parsed is a FAILURE, not a verdict. The old
+            # ``('删除', None)`` made such a row read as "the cleaner deleted this comment", so a
+            # single model hiccup silently shrank the table — indistinguishable in the export from a
+            # real DELETE, and unrecoverable downstream. 未判定 is a third state (the same shape as
+            # aggression's 模型未判定): it is NOT ``删除``, so a ``action != 删除`` filter keeps the row,
+            # and the runner already logs each parse failure, so the gap is named, not faked.
+            fail_value=('未判定', None),
             build_prompt=lambda text: self.build_prompt(text, topic),
             # The lambda only forwards; the version that invalidates the cache is
             # the real template method, whose source a wording edit changes.
