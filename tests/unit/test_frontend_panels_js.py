@@ -48,6 +48,7 @@ PANELS = [
     'cookies-panel',
     'lexicon-panel',
     'schedules-panel',
+    'processes-panel',
 ]
 
 

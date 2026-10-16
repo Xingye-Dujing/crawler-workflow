@@ -40,7 +40,7 @@ vm.runInContext(workflowSrc, sandbox);
 vm.runInContext(appSrc, sandbox);
 vm.runInContext(schedulesSrc, sandbox);
 
-const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel'];
+const ids = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel', 'processes-panel'];
 
 function state() {
     const out = {};
@@ -68,6 +68,7 @@ for (const target of ids) {
         'cookies-panel': 'toggleCookiesPanel()',
         'lexicon-panel': 'lexiconManager.toggle()',
         'schedules-panel': 'toggleSchedulesPanel()',
+        'processes-panel': 'toggleProcessesPanel()',
     };
     const toggler = togglers[target];
     sandbox.__byId(target).classList.remove('open');

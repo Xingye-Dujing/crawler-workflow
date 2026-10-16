@@ -355,15 +355,43 @@ class TestClear:
         workflow = {'nodes': [upload_node], 'connections': [], 'settings': {'mode': 'serial'}}
         client.post('/api/workflow/save', json={'name': 'wipe-test', 'workflow': workflow})
         if wanted == 'all':
-            response = client.post('/api/data/clear', json={'all': True})
+            response = client.post('/api/data/clear', json={'all': True, 'confirm': True})
         else:
-            response = client.post('/api/data/clear?all=1', json={})
+            response = client.post('/api/data/clear?all=1', json={'confirm': True})
         assert response.get_json() == {
             'ok': True,
             'removed': 1,
             'orphans': 0,
         }
         assert app_module._DATASET_STORE.stats() == {'datasets': 0, 'rows': 0, 'bytes': 0, 'refs': 0}
+
+    def test_a_full_wipe_needs_an_explicit_confirm(self, client, app_module, paste):
+        """A body without ``confirm: true`` must NOT empty the store — the same line
+        ``exports_clear`` / ``history_clear`` hold, so a stray or cross-origin POST cannot
+        wipe every saved dataset."""
+        ds = paste([{'a': 1}], name='keep-me.csv')
+        response = client.post('/api/data/clear', json={'all': True})
+        assert response.status_code == 400
+        assert response.get_json()['ok'] is False
+        assert app_module._DATASET_STORE.exists(ds), 'a refused wipe must not delete anything'
+
+    def test_a_full_wipe_is_refused_while_a_run_is_live(self, client, app_module, paste, monkeypatch):
+        """A running node may be reading one of these datasets, so the wipe waits for the run
+        the same way the export wipe waits for its part files."""
+        ds = paste([{'a': 1}], name='in-use.csv')
+        monkeypatch.setattr('api.data.any_run_live', lambda: True)
+        response = client.post('/api/data/clear', json={'all': True, 'confirm': True})
+        assert response.status_code == 409
+        assert response.get_json()['ok'] is False
+        assert app_module._DATASET_STORE.exists(ds), 'a busy refusal must keep the store whole'
+
+    def test_the_orphan_sweep_needs_neither_confirm_nor_an_idle_server(self, client, app_module, paste):
+        """The default (no ``all``) is the non-destructive sweep the boot fires with an empty
+        body; it must keep working and must not inherit the wipe's two gates."""
+        paste([{'a': 1}], name='orphan.csv')
+        response = client.post('/api/data/clear', json={})
+        assert response.status_code == 200
+        assert response.get_json()['ok'] is True
 
 
 class TestDatasetRename:

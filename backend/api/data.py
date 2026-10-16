@@ -14,7 +14,7 @@ import logging
 
 import pandas as pd
 from flask import Blueprint, jsonify, request
-from state import _dataset_cache
+from state import _dataset_cache, any_run_live
 from stores import _load_dataset, _register_dataset, get_dataset_store
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
@@ -293,6 +293,14 @@ def clear_datasets():
     # never happened. The query-string form stays valid for a hand-typed call.
     wipe = as_bool(payload.get('all')) or str(request.args.get('all') or '') in ('1', 'true', 'yes')
     if wipe:
+        # A full-store wipe is a bulk destructive write, so it holds the same two lines as
+        # ``exports_clear`` / ``history_clear``: an explicit ``confirm: true`` (a stray or
+        # cross-origin call must not empty the store) and a live-run guard (a running node may
+        # be reading one of these very datasets). The orphan sweep below needs neither.
+        if payload.get('confirm') is not True:
+            return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
+        if any_run_live():
+            return jsonify({'ok': False, 'error': t('ds.clearBusy')}), 409
         removed = store.clear()
         _dataset_cache.clear()
         logger.warning(t('ds.cleared', n=removed))

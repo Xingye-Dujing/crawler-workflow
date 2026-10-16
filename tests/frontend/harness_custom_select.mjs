@@ -415,6 +415,11 @@ function runScenario(sc) {
             sandbox.CustomSelect.refreshAll();
         } else if (step.do === 'removeControl') {
             c.wrap.remove();
+        } else if (step.do === 'bodyMenus') {
+            /* Every popup lives in <body>, outside its panel, so an orphan is counted here,
+               not under the control. Proves `scan` prunes the menu of a control the panel
+               re-rendered away. */
+            probes.push({ bodyMenus: doc.body.querySelectorAll('.cselect-menu').length });
         } else if (step.do === 'remember') {
             mem[step.as] = c[step.part];
         } else if (step.do === 'ownsPopup') {

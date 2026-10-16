@@ -20,8 +20,11 @@ from config import Config
 _lock = threading.Lock()
 
 #: The panels that honour a lock. Kept as a closed set so a typo'd panel cannot create
-#: an orphan bucket the UI never reads back.
-PANELS = ('exports', 'runs', 'history', 'workflows')
+#: an orphan bucket the UI never reads back — and every entry here MUST have a reader, or it is
+#: only a guarantee that looks enforced. ``history`` was once listed although no code ever called
+#: ``is_locked('history', …)``, so a "locked" history row could still be wiped by 清空历史; it is
+#: removed rather than silently kept. The three below are each checked on a destructive route.
+PANELS = ('exports', 'runs', 'workflows')
 
 
 def _path() -> str:

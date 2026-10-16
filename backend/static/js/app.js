@@ -130,6 +130,7 @@ const I18n = {
             'processes.pool': 'Pool Active', 'processes.yes': 'Yes', 'processes.no': 'No',
             'processes.name': 'Name', 'processes.status': 'Status', 'processes.type': 'Type',
             'processes.kill': 'Kill',
+            'processes.fetchFailed': 'Failed to fetch process info',
             'cookies.header': 'Cookie Settings', 'cookies.platform': 'Platform',
             'cookies.paste': 'Paste Cookies JSON', 'cookies.save': 'Save Cookies',
             'cookies.generate': 'Generate via Browser', 'cookies.waitTime': 'Wait time (seconds) for login:',
@@ -1384,6 +1385,7 @@ const I18n = {
             'processes.pool': '线程池活跃', 'processes.yes': '是', 'processes.no': '否',
             'processes.name': '名称', 'processes.status': '状态', 'processes.type': '类型',
             'processes.kill': '结束',
+            'processes.fetchFailed': '获取进程信息失败',
             'cookies.header': 'Cookie 设置', 'cookies.platform': '平台',
             'cookies.paste': '粘贴 Cookies JSON', 'cookies.save': '保存 Cookies',
             'cookies.generate': '浏览器生成', 'cookies.waitTime': '等待时间（秒）用于登录:',
@@ -3707,6 +3709,9 @@ initDockResize('cookies-resize-handle', 'cookies-panel');
 /* The scheduled-task dock is a dock like these: same bottom slot, same one-handle-to-resize,
    and ``closeDockedPanels`` lists it, so opening it shuts the other six. */
 initDockResize('schedules-resize-handle', 'schedules-panel');
+/* The lexicon dock carries the same handle markup but was never given a handler, so the bar
+   dragged with no effect — the eighth dock wired exactly like the other seven. */
+initDockResize('lexicon-resize-handle', 'lexicon-panel');
 
 /* ── Cookie dialog: close on outside click ──
    The platform dropdown is a CustomSelect: its menu is rendered into <body>,

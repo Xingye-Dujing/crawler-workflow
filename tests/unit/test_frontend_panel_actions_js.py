@@ -452,7 +452,7 @@ class TestClearAllButtons:
         """
         cleared = pa['datasets_clear']
         assert cleared['url'] == '/api/data/clear'
-        assert cleared['body'] == {'all': True}
+        assert cleared['body'] == {'all': True, 'confirm': True}
         assert cleared['reloaded'] is True
         assert '4' in cleared['toast'], cleared['toast']
 

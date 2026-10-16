@@ -431,6 +431,18 @@ SCENARIOS = [
         ],
     },
     {
+        'id': 'scan-prunes-an-orphaned-menu',
+        'html': select('kw', CHOICES) + select('gone', [opt('z', 'Z', selected=True)]),
+        'ids': ['kw'],
+        'steps': [
+            {'do': 'bodyMenus'},
+            {'do': 'removeControl', 'target': 'gone'},
+            {'do': 'bodyMenus'},
+            {'do': 'scan'},
+            {'do': 'bodyMenus'},
+        ],
+    },
+    {
         'id': 'disabled-state-follows-the-control',
         'html': select('kw', CHOICES),
         'ids': ['kw'],
@@ -822,6 +834,14 @@ class TestScanAndRefresh:
         redraw would leak one orphan popup per discarded control."""
         gone = world['refresh-follows-a-dying-control']['remembered']['goneMenu']
         assert gone['stillInPage'] is False and gone['connected'] is False
+
+    def test_scan_also_prunes_an_orphaned_popup_between_two_language_flips(self, world):
+        """A node panel re-renders with innerHTML on every param change and the MutationObserver
+        re-scans, but a language flip (refreshAll) is rare — so if only refreshAll pruned, the
+        body-attached popup of each discarded control leaked until the next 中/EN toggle. The count
+        must fall on the SCAN itself: 2 live, still 2 the instant the control detaches, then 1."""
+        menus = [p['bodyMenus'] for p in world['scan-prunes-an-orphaned-menu']['probes'] if 'bodyMenus' in p]
+        assert menus == [2, 2, 1], f'scan must prune the orphaned popup: {menus}'
 
     def test_the_wrapper_follows_a_disabled_flag_flipped_after_boot(self, world):
         """A source list starts empty and fills in later; `sel.disabled` flips over

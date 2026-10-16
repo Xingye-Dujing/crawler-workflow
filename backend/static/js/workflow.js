@@ -5740,6 +5740,9 @@ function toggleProcessesPanel() {
     var panel = document.getElementById('processes-panel');
     panel.classList.toggle('open');
     if (panel.classList.contains('open')) {
+        /* It lives in the same bottom slot as the other docks: opening it must shut them, and it
+           is listed in DOCKED_PANELS so opening any of THEM shuts this one. */
+        closeDockedPanels('processes-panel');
         processesPoll();
     }
 }
@@ -5796,7 +5799,7 @@ function processesPoll() {
         .catch(function () {
             if (document.getElementById('processes-panel').classList.contains('open')) {
                 document.getElementById('processes-output').innerHTML =
-                    '<div class="proc-line proc-err">Failed to fetch process info</div>';
+                    '<div class="proc-line proc-err">' + I18n.t('processes.fetchFailed') + '</div>';
             }
         });
 
@@ -8226,7 +8229,7 @@ function renderCostSummary() {
    leaves it visually expanded — two panels then overlap in the same slot. All
    three toggles live in this file, so the helper is called directly rather than
    reached for through `window`. */
-var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel'];
+var DOCKED_PANELS = ['console-panel', 'runs-panel', 'exports-panel', 'dataset-panel', 'workflows-panel', 'cookies-panel', 'lexicon-panel', 'schedules-panel', 'processes-panel'];
 
 function closeDockedPanels(exceptId) {
     DOCKED_PANELS.forEach(function (id) {
@@ -8949,7 +8952,7 @@ var datasetManager = {
         var result = await fetchJSON('/api/data/clear', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
-            body: JSON.stringify({ all: true }),
+            body: JSON.stringify({ all: true, confirm: true }),
         });
         if (result && result.ok) {
             showToast(I18n.t('datasetMgr.clearAllDone').replace('{n}', result.removed || 0));

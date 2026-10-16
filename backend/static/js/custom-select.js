@@ -560,6 +560,20 @@
     })
   }
 
+  /* Drop instances whose control has left the document, with the body-appended
+     popup that belonged to it. A node panel is re-rendered with innerHTML on every
+     param change, so its <select> is replaced by a fresh one (the MutationObserver
+     re-enhances it into a NEW menu) while the OLD menu — a <body> sibling, not inside
+     the panel — would otherwise linger forever. Only refreshAll used to clean these,
+     so the orphans piled up between two language toggles. */
+  function pruneOrphans() {
+    INSTANCES = INSTANCES.filter(function (inst) {
+      if (inst.wrap.isConnected) return true
+      if (inst.menu.parentNode) inst.menu.parentNode.removeChild(inst.menu)
+      return false
+    })
+  }
+
   /* ── public surface ────────────────────────────────────────────────────── */
   var CustomSelect = {
     init() {
@@ -581,6 +595,7 @@
     },
 
     scan(root) {
+      pruneOrphans()
       this.enhanceAll(root)
       this.enhanceInputs(root)
       killAutofill(root)
@@ -598,15 +613,11 @@
 
     /* Re-read every trigger label (option text follows the active language). */
     refreshAll() {
-      INSTANCES = INSTANCES.filter(function (inst) {
-        if (!inst.wrap.isConnected) {
-          if (inst.menu.parentNode) inst.menu.parentNode.removeChild(inst.menu)
-          return false
-        }
+      pruneOrphans()
+      INSTANCES.forEach(function (inst) {
         if (inst.syncDisabled) inst.syncDisabled()
         inst.value.textContent = labelFor(inst.sel)
         inst.trigger.title = inst.value.textContent
-        return true
       })
     },
 
