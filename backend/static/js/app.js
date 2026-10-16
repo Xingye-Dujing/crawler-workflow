@@ -3373,12 +3373,16 @@ document.addEventListener('DOMContentLoaded', () => {
     /* The Data Source panel is generated from the backend's crawl matrix, so the
        browser has to have it before a source node can be configured. Fetched at
        start-up rather than on first open: the first settings panel should show a
-       form, not a spinner, and a failure says so with a retry. */
-    Capabilities.load();
+       form, not a spinner, and a failure says so with a retry.
+       Through boot(): these were the only two of ~16 start-up steps outside it, so a
+       throw here (workflow.js failing to evaluate, say) skipped every step AFTER them
+       — datasets, palette, outline, dirtyGuard, resumeBar, the console reconnect, the
+       locks and the autosave — and the partial-boot message never printed either. */
+    boot('capabilities', () => Capabilities.load());
 
     /* Registered fine-tuned models (the 网暴模型 etc.) are fetched the same way, so
        the bert-mode picker can name them instead of the user typing a path. */
-    BertModels.load();
+    boot('bertModels', () => BertModels.load());
 
     /* Uploaded files are stored on the server, so the canvas restored from
        localStorage very likely still owns every file it referenced. Verify

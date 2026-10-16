@@ -163,6 +163,21 @@ class TestLlmGateParity:
             node['operation'] = operation
         assert js_answers[name] == _workflow_needs_llm({'nodes': [node]}), name
 
+    def test_the_execute_gate_asks_the_effective_graph_not_the_drawn_one(self):
+        """The gate refuses a run before it starts, so it may not hold up a canvas whose only
+        model-shaped node the user switched off — a disabled node is not on the canvas, which is
+        the rule validate/naming/fingerprint/execution and ``_workflow_needs_llm`` all obey.
+
+        Read from the source, because the equivalence cannot be walked per case here: the browser
+        owns its own mirror of the effective graph (``canvas.effectiveIds()``, which the parity
+        above does not exercise), and reaching past it for ``Object.keys(canvas.nodes)`` is the
+        bug — a hand-built node list would prove the rule without ever running the real gate.
+        """
+        source = (STATIC_DIR / 'js' / 'workflow.js').read_text(encoding='utf-8')
+        gate = source[source.index('AI transport check') : source.index('AI transport check') + 900]
+        assert 'canvas.effectiveIds()' in gate, 'the model gate walked the DRAWN nodes'
+        assert 'Object.keys(canvas.nodes)' not in gate, 'a second opinion about which nodes exist'
+
     def test_the_process_selector_offers_exactly_the_operations_the_executor_serves(self):
         """``PROCESS_OPS`` in workflow.js is what the 算法处理 node's dropdown offers; the
         branches inside ``_execute_process_node`` are what actually run. Read from the

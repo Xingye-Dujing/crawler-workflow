@@ -115,6 +115,11 @@ function toggleStyleMenu(e) {
         closeStyleMenu();
         return;
     }
+    /* The three top-menu dropdowns share one slot: its two siblings close each other before
+       opening, and 样式 not doing so left two wide panels on screen at once, overlapping — the
+       same defect class that had the console dropdown clipped. */
+    closeAiMenu();
+    closeSettingsMenu();
     TopMenu.sync();               /* reflect current bg / radius before showing */
     menu.classList.add('open');
     document.body.classList.add('style-menu-open');

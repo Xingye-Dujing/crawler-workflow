@@ -1053,6 +1053,19 @@ class TestMultiSelect:
         assert d['bLeft'] - d['aLeft'] == 400, 'the group keeps its 400px separation'
         assert d['persistedA'] == 100 and d['persistedB'] == 500, 'the whole move persists, not one box'
 
+    def test_a_wire_is_its_own_undo_step_and_earlier_entries_keep_their_own_snapshot(self, ix):
+        """History entries are snapshots. getState() used to hand out the LIVE connections array,
+        so connectNodes' push rewrote every earlier entry retroactively: wiring two nodes added no
+        undo step (an entry compared against itself looks identical) and the next Ctrl+Z deleted a
+        node the user never added instead of removing the wire."""
+        h = ix['history_snapshot']
+        assert h['histAfterWire'] == h['histAfterAdds'] + 1, 'a wire is a real edit and owes an undo step'
+        assert h['beforeConns'] == [0, 0, 0], 'entries made before the wire must not carry it'
+        assert h['afterConns'] == [0, 0, 0, 1], 'only the newest entry describes the wired canvas'
+        assert h['firstEntryIsLive'] is False, 'a snapshot must not be the live array'
+        assert h['undidWire'] == {'nodes': 2, 'conns': 0}, 'undoing a wire removes the WIRE, not a node'
+        assert h['undidSecondNode'] == {'nodes': 1, 'conns': 0}, 'the next undo is the second node'
+
 
 class TestRightPressKeepsTheSelection:
     """pointerdown fires for the right button too, and used to reset a live multi-selection to

@@ -205,6 +205,12 @@ Analyze strictly and output only the required plain string."""
         try:
             predictions = self._ml_predict(texts)
         except Exception as e:
+            # Refused, not manufactured — see the same guard in emotion.py. An untrained tendency
+            # model must not hand back a column that reads as a measured 立场分布.
+            from analyzers.ml_base import ModelNotTrainedError
+
+            if isinstance(e, ModelNotTrainedError):
+                raise
             logger.error(t('ml.tendency_failed', err=e))
             predictions = [('Objective Statement', 0.5)] * len(texts)
         for idx, (label, score) in zip(process_indices, predictions, strict=False):

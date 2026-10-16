@@ -31,6 +31,21 @@ class TestBertDefaultModel:
         monkeypatch.setattr(app_module, 'default_model_path_for', lambda op: '/models/default')
         assert app_module._effective_bert_model('sentiment', {'bert_model': '/my/path'}) == '/my/path'
 
+    def test_the_single_ticked_model_is_the_one_that_runs(self, app_module, monkeypatch):
+        """The panel's checkboxes write ``bert_models``, not the legacy ``bert_model`` box. Exactly
+        ONE ticked model goes down this single path (the executor branches to the comparison only on
+        ``> 1``), so reading only the legacy field made a ticked model load NOTHING and fall to the
+        registry default: a different model produced the column, claimed none of it, and printed
+        nothing. That is the forbidden silent cross-model swap, and it decided degrade-vs-keep on the
+        wrong path too."""
+        monkeypatch.setattr(app_module, 'default_model_path_for', lambda op: '/models/registry')
+        picked = {'bert_models': '/models/ticked'}
+        assert app_module._effective_bert_model('tendency', picked) == '/models/ticked'
+        # Blank/spaces in the list box state nothing, so the registry default still answers.
+        assert app_module._effective_bert_model('tendency', {'bert_models': '  , , '}) == '/models/registry'
+        # A MULTI selection is not this path at all: it has no single answer to name.
+        assert app_module._effective_bert_model('tendency', {'bert_models': '/b,/a'}) == '/models/registry'
+
 
 class TestBertDegrade:
     @staticmethod

@@ -222,6 +222,31 @@ class TestTheRecordFlipsWithTheRequest:
         assert run_finished(app_module)
         assert _record(client, app_module, run_id)['status'] == RUN_INTERRUPTED
 
+    def test_the_bulk_sweeps_spare_the_run_the_worker_still_writes(self, client, app_module, monkeypatch):
+        """The 清空/清理 routes asked ``execution_state['running']`` who was live — and 停止
+        clears that flag FIRST while the worker keeps settling, still holds its browsers and
+        still writes rows. So in the one window where deleting a run is most destructive, both
+        bulk sweeps handed it over: the record, its node rows and its console went under the
+        writer, ``finish_run``'s UPDATE matched no row (losing even the write-failure line), and
+        the final flush re-inserted log lines for a run id no ``runs`` row owns — which
+        ``purge``/``clear_all`` walk by ``runs``, so those lines are unreclaimable."""
+        gate = {'inside': threading.Event(), 'release': threading.Event()}
+        _crawler_factory(app_module, monkeypatch, gate=gate)
+        run_id = _start(client, _wf([_source()]), 'stop-bulk-clear')
+        assert gate['inside'].wait(10), 'the crawl never started'
+        client.post('/api/workflow/stop')
+        assert app_module.execution_state['running'] is False, 'the premise: Stop already cleared the flag'
+        assert app_module._reject_live_run(run_id) is True
+
+        for route in ('/api/runs/clear', '/api/runs/purge'):
+            answer = client.post(route, json={'confirm': True})
+            assert answer.status_code == 200, (route, answer.get_json())
+            assert app_module.get_run_store().get_run(run_id) is not None, f'{route} deleted a live record'
+
+        gate['release'].set()
+        assert run_finished(app_module)
+        assert _record(client, app_module, run_id)['status'] == RUN_INTERRUPTED
+
     def test_an_idle_stop_claims_nothing(self, client, app_module):
         """With no run in flight, 停止 must not leave `stopping` standing.
 

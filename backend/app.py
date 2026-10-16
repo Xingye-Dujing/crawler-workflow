@@ -660,8 +660,14 @@ def _workflow_needs_llm(workflow: dict) -> bool:
     picked the model. A crawl-and-save workflow must not be blocked by a missing API key or
     an unpicked Ollama tag — the frontend makes the same distinction (``nodeNeedsLlm``)
     before it opens the console, and both read one table of which mode means which model.
+
+    Read off the EFFECTIVE graph, not the drawn one. A switched-off node is not on the canvas
+    (the engine's own rule, which validate/naming/fingerprint/execution all obey), and this is
+    a COST question: walking the raw nodes refused 「请选择模型」 for a run that would call no
+    model at all, and refused a scheduled canvas — forever, at save time and again at every
+    fire — over a node the user had deliberately turned off.
     """
-    for node in workflow.get('nodes') or []:
+    for node in effective_workflow(workflow).get('nodes') or []:
         if not isinstance(node, dict) or node.get('type') != 'process':
             continue
         params = node.get('params') or {}
@@ -1078,6 +1084,32 @@ QUEUE_MAX = 8
 _queue_lock = threading.Lock()
 
 
+#: The two run shapes the canvas settings can name. Kept next to the reader that refuses
+#: anything else, so a second spelling of this list cannot drift away from the first.
+RUN_MODES = ('parallel', 'serial')
+
+
+def _run_mode(settings: dict) -> str:
+    """The run's shape, READ — and an unrecognised name is refused, never guessed.
+
+    ``mode == 'serial'`` was the old test, so every other token ran PARALLEL while the browser
+    asked the same question the safe way round (`workflow.js`: ``mode !== 'parallel'`` means
+    serial). A draft whose settings said anything else therefore started two same-platform
+    crawls at once while the panel believed it was running one, and the 「本次不用 Profile」
+    question — which is what keeps two crawls off one browser profile — never fired. That is
+    the measured login-wall collision, decided by a string comparison nobody validated.
+    """
+    raw = (settings or {}).get('mode')
+    value = str(raw or '').strip().lower()
+    if not value:
+        return RUN_MODES[0]
+    if value not in RUN_MODES:
+        raise UnknownOperationError(
+            t('api.runSettingOption', setting='mode', value=str(raw), allowed=', '.join(RUN_MODES))
+        )
+    return value
+
+
 def _workflow_shape_error(data: dict) -> str:
     """Why this payload cannot become a run, or '' when it can.
 
@@ -1198,11 +1230,16 @@ def _mirror_queue() -> None:
 
     The in-memory list stays the runtime source of truth (ordering, drain, the liveness
     check all read it); the DB row is only the recovery mirror, so a failure here must
-    never break the request that triggered it."""
+    never break the request that triggered it.
+
+    The snapshot AND the write are one critical section. Read-then-write outside the lock let
+    two concurrent mirrors land in either order: the older, shorter snapshot could arrive last
+    and leave the disk mirror one entry short, so a request the user was told 「已排队（第 2
+    位）」 silently vanished on the next restart — the exact thing this mirror exists to prevent.
+    """
     try:
         with _queue_lock:
-            snapshot = list(_RUN_QUEUE)
-        get_run_store().save_queue(snapshot)
+            get_run_store().save_queue(list(_RUN_QUEUE))
     except Exception:
         logger.exception(t('run.queueMirrorFailed'))
 
@@ -1464,6 +1501,13 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         # must not become a failed run record, let alone a queued one that dies
         # in a thread nobody is watching.
         return {'status': 400, 'body': {'ok': False, 'error': shape_error}}
+    # The run shape is asked BEFORE the claim too, and it raises rather than answering
+    # "parallel" to a token it does not know: the mode decides both how many records this run
+    # writes and whether two same-platform crawls may breathe at once on one profile.
+    try:
+        _run_mode(((data.get('workflow') or {}).get('settings')) or {})
+    except UnknownOperationError as e:
+        return {'status': 400, 'body': {'ok': False, 'error': str(e)}}
     resume_error = _resume_refusal(data)
     if resume_error:
         # 'drop' tells the queue this entry can never start, so it is discarded
@@ -1491,13 +1535,13 @@ def _begin_run(data: dict, lang_header: str) -> dict:
         try:
             workflow = data.get('workflow', {})
             settings = workflow.get('settings', {})
-            mode = settings.get('mode', 'parallel')
+            mode = _run_mode(settings)
             # A cloud host has no display, so headless is not a preference here — the
             # browser would never come up. The panel hides the switch (it is told the
             # server's shape by /api/config), but the run record is written from THIS
             # value, and a record that said 「窗口」 for a crawl that could only have run
             # headless would be a chip describing a run that never happened.
-            headless = True if Config.CLOUD_MODE else settings.get('headless', True)
+            headless = True if Config.CLOUD_MODE else as_bool(settings.get('headless'), True)
             # A parallel run holds at most one browser per concurrently-running workflow,
             # so the pool width IS the "max simultaneous browsers" lever. It used to be
             # the hardcoded Config.DEFAULT_MAX_WORKERS for both shapes; it is now a user
@@ -1511,8 +1555,10 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             # user was never asked (or the canvas has no same-platform collision), so
             # the stored setting decides. Absence must not read as False: a browser
             # that sends nothing would otherwise switch profiles off for everyone.
-            raw_profile = settings.get('use_profile')
-            use_profile = None if raw_profile is None else bool(raw_profile)
+            # Read through the repo's own tri-state reader: ``bool(raw)`` answered True to the
+            # text 'false' — a draft that says 「不用 Profile」 in a hand-edited file would have
+            # been crawled WITH one, which is the device a wall is measured against.
+            use_profile = _flag_or_none(settings.get('use_profile'))
             # Recorded with the run so the history panel can group by workflow rather
             # than showing every run as "untitled".
             # ── Resumable run identity ─────────────────────────────────
@@ -1746,14 +1792,27 @@ def _begin_run(data: dict, lang_header: str) -> dict:
                 # here. None for every other node type; a non-crawl parent (upload/resume) is '' ,
                 # never a guessed platform.
                 _platform_of = None
+                _labels_of = None
                 if node.get('type') == 'output' and upstream:
                     _platform_of = {}
+                    # The same graph reach the merge needs to NAME its parents: its refusals and
+                    # its 「已合并」 line quote the parent, and a bare `node-2` in a message about
+                    # which WIRE to cut is the one thing the console rule exists to stop.
+                    _labels_of = {}
                     for _pid, _res in upstream:
                         _pn = _node_of(str(_pid))
                         _p = _pn.get('platform') or (_pn.get('params') or {}).get('platform') or ''
                         _platform_of[str(_pid)] = str(_p)
+                        _labels_of[str(_pid)] = node_label(_pn, str(_pid))
                 result, status = _run_node_durable(
-                    ctx, node, headless, primary, upstream, wf_idx, platform_of=_platform_of
+                    ctx,
+                    node,
+                    headless,
+                    primary,
+                    upstream,
+                    wf_idx,
+                    platform_of=_platform_of,
+                    label_of=_labels_of,
                 )
                 results[nid] = result
                 if status == NODE_SKIPPED:
@@ -3058,9 +3117,17 @@ def _effective_bert_model(op: str, params: dict) -> str:
     This is what makes the DEFAULT actually run bert — a node that names no model resolves
     ``default_model_path_for(op)`` (registry order = the operator's preference). ``''`` means nothing
     is registered for the op, which ``_resolve_bert_mode`` then treats as bert-unavailable and degrades.
+
+    Read through :func:`bert_model_list`, the one function that knows where a node keeps its models:
+    the panel's checkboxes write ``bert_models``, while ``bert_model`` is the legacy single-path box.
+    Reading only the latter meant a user who ticked exactly ONE model — the ``> 1`` branch below sends
+    that to this path, not to the comparison — watched a DIFFERENT model produce the column, with the
+    registry default chosen silently and nothing printed about it. That is the one thing the model
+    rule forbids: never answer with a model other than the one it claims.
     """
-    named = str(params.get('bert_model') or '').strip()
-    return named or default_model_path_for(op)
+    listed = bert_model_list(params)
+    named = listed[0] if len(listed) == 1 else ''
+    return named or str(params.get('bert_model') or '').strip() or default_model_path_for(op)
 
 
 def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
@@ -3255,7 +3322,13 @@ def _execute_process_node(node: dict, current_input: list, run_ctx: dict = None)
     raise ValueError(t('wf.unknown_process_op', op=op or '(empty)'))
 
 
-def _merge_upstream_tables(current_input: list, upstream: list, label: str, platform_of: dict | None = None) -> tuple:
+def _merge_upstream_tables(
+    current_input: list,
+    upstream: list,
+    label: str,
+    platform_of: dict | None = None,
+    label_of=None,
+) -> tuple:
     """Every incoming table as one, or the reason they cannot be one.
 
     A node with several incoming connections used to take only the FIRST and mention the
@@ -3277,13 +3350,19 @@ def _merge_upstream_tables(current_input: list, upstream: list, label: str, plat
 
     A parent with ZERO rows is not a refusal — an empty batch is a real answer, and it is
     reported so the row counts still add up to what was written.
+
+    ``label_of`` turns a parent's id into the console's 「title #id」 the way every other
+    message in this file does (``node_label``), defaulting to the bare id for a direct
+    caller with no graph in scope: these sentences name THE PARENT — the wire the user has
+    to go cut — and 「上游 node-2」 sends them counting boxes to work out which one that was.
     """
+    name_parent = label_of if callable(label_of) else (str)
     tables = []
     for pid, result in upstream or ():
         if isinstance(result, list):
             tables.append((str(pid), result))
             continue
-        raise ValueError(t('wf.merge_not_tabular', nid=label, up=str(pid)))
+        raise ValueError(t('wf.merge_not_tabular', nid=label, up=name_parent(pid)))
     if not tables:
         # No upstream list at all (a direct caller, or a node with no wire): the rows in
         # hand are the whole answer, which is what this node did before merging existed.
@@ -3318,13 +3397,13 @@ def _merge_upstream_tables(current_input: list, upstream: list, label: str, plat
                 t(
                     'wf.merge_columns',
                     nid=label,
-                    up=pid,
+                    up=name_parent(pid),
                     extra=', '.join(extra) or '-',
                     missing=', '.join(missing) or '-',
                 )
             )
     merged = pd.concat([frame for _pid, frame in frames], ignore_index=True, sort=False)
-    detail = '、'.join(f'{pid} {len(frame)} 行' for pid, frame in frames)
+    detail = '、'.join(f'{name_parent(pid)} {len(frame)} 行' for pid, frame in frames)
     add_log(t('wf.merge_done', nid=label, n=len(merged), tables=len(frames), detail=detail))
     return merged.to_dict('records'), (str(label), len(merged))
 
@@ -3396,6 +3475,7 @@ def _execute_output_node(
     upstream: list = None,
     ctx: dict = None,
     platform_of: dict | None = None,
+    label_of=None,
 ):
     """Save node: merges every incoming table, exports it, and passes it downstream.
 
@@ -3423,7 +3503,11 @@ def _execute_output_node(
         return []
 
     merged_rows, _ = _merge_upstream_tables(
-        current_input, upstream, node_label(node, node.get('id', '')), platform_of=platform_of
+        current_input,
+        upstream,
+        node_label(node, node.get('id', '')),
+        platform_of=platform_of,
+        label_of=label_of,
     )
     if not merged_rows:
         return []
@@ -4476,7 +4560,14 @@ def _settle_node_as_stopped(store, run_id: str, nid: str, label: str, wf_idx: in
 
 
 def _run_node_durable(
-    ctx: dict, node: dict, headless: bool, primary: list, upstream: list, wf_idx: int, platform_of: dict | None = None
+    ctx: dict,
+    node: dict,
+    headless: bool,
+    primary: list,
+    upstream: list,
+    wf_idx: int,
+    platform_of: dict | None = None,
+    label_of=None,
 ):
     """Run one node with the run store underneath it. Returns (result, status).
 
@@ -4586,7 +4677,9 @@ def _run_node_durable(
                 t('wf.executing_node', wf=execution_state['_wf_names'].get(wf_idx) or '', nid=label, ntype=ntype_label),
                 wf_idx=wf_idx,
             )
-        result = _execute_node(node, headless, primary, upstream=upstream, ctx=ctx, platform_of=platform_of)
+        result = _execute_node(
+            node, headless, primary, upstream=upstream, ctx=ctx, platform_of=platform_of, label_of=label_of
+        )
     except CrawlerStopped:
         return _settle_node_as_stopped(store, run_id, nid, label, wf_idx)
     except Exception as e:
@@ -4672,6 +4765,7 @@ def _execute_node(
     upstream: list = None,
     ctx: dict = None,
     platform_of: dict | None = None,
+    label_of=None,
 ):
     """Run one node. ``upstream`` is [(parent_id, result), …] in connection
     order — only the analysis node needs more than the first entry (a join uses
@@ -4685,8 +4779,9 @@ def _execute_node(
         # The platform's turn is taken *here*, around the whole node, so the retry
         # inside the crawl runs within it: a retry that released the queue first would
         # collide with the very workflow it had been waiting behind. 评论采集 opens one
-        # browser per platform it finds in its links and is not gated yet (stated in
-        # the README next to the setting, so it is a known gap rather than a promise).
+        # browser per platform it finds in its links and is NOT gated by this lane yet, so two
+        # comment crawls of one platform can hold one session concurrently — a known gap, written
+        # up with the live-test rows that measure it (docs/live_test_plan.md), not a promise.
         platform = node.get('platform') or (node.get('params') or {}).get('platform', '')
         # The lane splits per ACCOUNT (crawl_gate._lane): the measured wall is one
         # SESSION searching twice, so two logins of one platform are two lanes and
@@ -4696,7 +4791,11 @@ def _execute_node(
         # upstream column reads the parent table here. Dropping it (the old behaviour)
         # made the wire a lie — the canvas showed a feed and the crawl ran the pasted
         # list nobody asked for.
-        with crawl_gate.hold(platform, log=add_log, abort=lambda: not execution_state['running'], account=account):
+        # ``stop_requested()``, never ``not running``: its own docstring spells out why — a
+        # caller that reaches this function without a claim in place has no run to be "not
+        # running", and inferring 「the user pressed 停止」 from that abandoned the queue for
+        # every such call instead of holding the lane.
+        with crawl_gate.hold(platform, log=add_log, abort=stop_requested, account=account):
             return _execute_source_node(node, headless, ctx=ctx, upstream=upstream)
     if ntype == 'upload':
         return _execute_upload_node(node)
@@ -4722,7 +4821,9 @@ def _execute_node(
         # ``platform_of`` (parent id → crawled platform, built by the run loop where the node
         # graph is in scope) lets the merge stamp which rows came from which platform; it is
         # None for a direct caller, which then sees exactly the pre-stamp merge shape.
-        return _execute_output_node(node, current_input, upstream=upstream, ctx=ctx, platform_of=platform_of)
+        return _execute_output_node(
+            node, current_input, upstream=upstream, ctx=ctx, platform_of=platform_of, label_of=label_of
+        )
     # No branch claimed this type. ``validate`` refuses an unknown type before a run, so
     # this is defense in depth for a direct caller — but it must still refuse BY NAME:
     # returning [] here would settle the node DONE over an empty table (see AGENTS.md).
@@ -6217,6 +6318,27 @@ def runs_stats():
     return jsonify({'ok': True, 'stats': get_run_store().stats()})
 
 
+def _live_run_ids() -> list:
+    """Every run id a live thread may still be writing — ONE definition of 「活着」.
+
+    ``execution_state['running']`` is cleared at the TOP of 停止 while the worker keeps
+    settling, still holds its browsers and still writes rows for tens of seconds. A route
+    that asks only that flag therefore allows exactly the window in which deleting rows is
+    most destructive: the record, its node rows and its console log vanish under the writer,
+    ``finish_run``'s UPDATE then matches no row (so even the write-failure line is lost), and
+    the final flush re-inserts log lines for a run id no ``runs`` row owns — which
+    ``purge``/``clear_all`` walk by ``runs``, so those lines can never be reclaimed.
+    """
+    thread = execution_state.get('thread')
+    if not execution_state['running'] and not (thread is not None and thread.is_alive()):
+        return []
+    ids = [str(rid) for rid in execution_state['open_records']]
+    current = str(execution_state.get('run_id') or '')
+    if current and current not in ids:
+        ids.append(current)
+    return ids
+
+
 def _reject_live_run(run_id: str):
     """True when run_id names a run a live thread is still writing.
 
@@ -6231,13 +6353,7 @@ def _reject_live_run(run_id: str):
     """
     if not run_id:
         return False
-    thread = execution_state.get('thread')
-    live = bool(execution_state['running']) or bool(thread is not None and thread.is_alive())
-    if not live:
-        return False
-    return run_id in {str(r) for r in execution_state['open_records']} or run_id == str(
-        execution_state.get('run_id') or ''
-    )
+    return str(run_id) in _live_run_ids()
 
 
 @app.route('/api/runs/purge', methods=['POST'])
@@ -6246,8 +6362,7 @@ def runs_purge():
     somebody may still want to continue. The live run, if any, is exempt, and so
     is every 置顶 record (a manual purge must not silently undo a pin either)."""
     keep: list[str] = []
-    if execution_state['running']:
-        keep = _as_run_ids(execution_state.get('run_id') or '')
+    keep += _live_run_ids()
     keep += sorted(_locked_run_ids())
     removed = get_run_store().purge(exclude_run_id=keep)
     _prune_orphan_run_locks()
@@ -6318,9 +6433,11 @@ def runs_clear():
         return _bad_body()
     if data.get('confirm') is not True:
         return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
-    live = str(execution_state.get('run_id') or '') if execution_state['running'] else ''
-    # 清空 spares the live run AND every locked one — the user pinned those on purpose.
-    keep = [live] if live else []
+    live = _live_run_ids()
+    # 清空 spares every run a live thread is still writing AND every locked one — the user
+    # pinned those on purpose. A serial pass closes one record per workflow, so this is a set
+    # rather than the single id the request thread happens to hold.
+    keep = list(live)
     keep.extend(lock_store.all_locks()['runs'])
     removed = get_run_store().clear_all(exclude_run_ids=keep)
     logger.warning(t('run.cleared', runs=removed['runs'], claims=removed['item_claims']))

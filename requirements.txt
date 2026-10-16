@@ -1,6 +1,10 @@
 flask
 flask-cors
 requests
+# Directly imported by backend/test_dead_driver.py (Retry). Declared rather than leaned on:
+# urllib3 arrives today only as requests' own dependency, and a transitive package is not an
+# API another module may import through — a resolver change would break the probe silently.
+urllib3
 selenium
 pandas
 numpy

@@ -248,3 +248,16 @@ class TestConsoleReconnect:
         twice = console['reconnectTwice']
         assert twice['painted'] == twice['afterFirst'] == 1, twice
         assert twice['lines'] == ['once'], f'the second reconnect duplicated the console: {twice["lines"]}'
+
+
+class TestConsoleStickToBottom:
+    def test_a_full_view_trims_every_line_and_a_trim_is_not_a_scroll(self, console):
+        """Stick-to-bottom means FOLLOW when the user is at the bottom, not force-to-bottom on
+        every read. Past the view cap a trim happens on EVERY later line, so this was the normal
+        state of a long crawl: the trim rebuilt the box with the caret pinned down, dragging a
+        user who had scrolled up back down once per second and wiping their selection."""
+        trim = console['trimKeepsPosition']
+        assert trim['keptBottom'] == 600, 'a following view still ends at the bottom'
+        assert trim['stayedPut'] is True, f'a scrolled-up view was yanked to {trim["movedTo"]}'
+        assert trim['domLines'] == 500, 'the box must still hold the cap, so the rebuild really ran'
+        assert trim['lastLine'] == 'G2', 'keeping the position must not drop the newest line'

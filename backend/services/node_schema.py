@@ -126,6 +126,15 @@ STEP_ADD_ONE: dict[str, tuple[str, str]] = {
     'cluster_label': ('summary_col', '摘要'),
 }
 
+# analysis steps that may ALSO add a further column, only when its box is filled.
+# ``bin_time`` is the case: 阶段序号列 is what lets 各阶段 tables and charts keep the
+# lifecycle order across the node boundary that erases the categorical, so a canvas that
+# names one has to show it in the lineage — declared otherwise the panel hid the very
+# column its own downstream steps read, and an unselected box still stayed honest.
+STEP_ADD_MAYBE: dict[str, tuple[tuple[str, str], ...]] = {
+    'bin_time': (('phase_order_col', ''),),
+}
+
 # analysis steps that pass the upstream columns through unchanged.
 STEP_PASSTHROUGH = {
     'drop_null',
@@ -214,6 +223,18 @@ def _analysis_output(params: dict, upstream: list[str] | None) -> list[str] | No
             new_col = str(step.get(param) or default or '').strip()
             if new_col:
                 cols = cols + [new_col]
+            # `bin_time` is the one step that may add a SECOND column; every other single-add
+            # step ends here, so the extra read below is skipped rather than falling through
+            # (falling through would reach `return None` and call a known op unknown).
+            if op not in STEP_ADD_MAYBE:
+                continue
+        if op in STEP_ADD_MAYBE:
+            if cols is None:
+                return None
+            for param, default in STEP_ADD_MAYBE[op]:
+                added = str(step.get(param) or default or '').strip()
+                if added and added not in cols:
+                    cols = cols + [added]
             continue
         if op in STEP_PASSTHROUGH:
             continue

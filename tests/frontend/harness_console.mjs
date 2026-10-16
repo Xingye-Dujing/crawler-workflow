@@ -479,4 +479,41 @@ out.reconnectTwice = {
     lines: lines(),
 };
 
+/* ── 12. a full view trims EVERY line, and a trim is not a scroll ─────────
+   Past CONSOLE_VIEW_CAP (500) lines, `feedConsoleView` reports `trimmed` on every later
+   line, so the trim branch is the normal state of a long crawl — not a rare event. It
+   rebuilt the box with the caret pinned to the bottom, which dragged a user who had
+   scrolled up to read the log back down once per second and wiped their text selection,
+   breaking the stick-to-bottom rule the poller states two functions earlier. */
+const CAP = 500;
+wf._stopPoll();
+freshPage();
+wf.pollStatus();
+const flood = [];
+for (let i = 1; i <= CAP + 20; i++) flood.push('F' + i);
+await answer(status(flood, flood.length));
+const box = sandbox.__byId('console-output');
+
+// Following: near the bottom, the rebuild keeps it at the bottom.
+box.scrollTop = 0;
+box.clientHeight = 600;
+box.scrollHeight = 600;
+await answer(status(flood.concat('G1'), flood.length + 1));
+const keptBottom = box.scrollTop;
+
+// Scrolled up to read: the same trim must leave the caret exactly where the user put it.
+box.scrollTop = 10;
+box.scrollHeight = 4000;
+const beforeScrollTop = box.scrollTop;
+await answer(status(flood.concat('G1', 'G2'), flood.length + 2));
+out.trimKeepsPosition = {
+    keptBottom,
+    stayedPut: box.scrollTop === beforeScrollTop,
+    movedTo: box.scrollTop,
+    // the rebuild really happened (the box holds the cap, not the whole flood)…
+    domLines: lines().length,
+    // …and the newest line is still in it, so nothing was dropped to keep position
+    lastLine: lines()[lines().length - 1],
+};
+
 process.stdout.write(JSON.stringify(out));

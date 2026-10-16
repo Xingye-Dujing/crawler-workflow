@@ -134,6 +134,20 @@ class TestSubmenus:
         assert bar['settings_closes_ai']['ai'] is False
         assert bar['settings_closes_ai']['settings'] is True
 
+    def test_the_style_menu_closes_both_of_its_siblings(self, bar):
+        """The exclusivity has THREE directions, and the matrix only had two: 样式 opened without
+        closing 设置 or AI, so two wide dropdowns sat on the screen at once — and a scenario that
+        only ever opens 样式 LAST cannot see the missing pair."""
+        assert bar['style_closes_the_others'] == {
+            'style': True,
+            'ai': False,
+            'settings': False,
+            'styleBtn': True,
+            'aiBtn': False,
+            'settingsBtn': False,
+            'bodyFlag': True,
+        }
+
     def test_a_click_inside_the_open_menu_keeps_it_open(self, bar):
         assert bar['style_survives_inside_click'] is True
 

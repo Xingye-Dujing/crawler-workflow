@@ -76,18 +76,31 @@ def _picklable_pipeline():
 
 
 class TestFallback:
-    def test_an_untrained_model_answers_neutral(self, model_dir):
+    def test_an_untrained_model_refuses_instead_of_answering(self, model_dir):
+        """A model that was never fitted, with nothing saved to load, has no answer to give.
+        Manufacturing the caller's neutral for every row read as a finished analysis: the node
+        settled DONE, the table came back 100% one class at 0.5, and the charts could not tell a
+        prediction from a placeholder. A degradation is allowed only SANCTIONED and PRINTED — and
+        that belongs to the executor (``_resolve_bert_mode``), which picks the mode that can run
+        and says so, not to a class that silently fills a column."""
         classifier = MLClassifier(model_name=_unique_name('untrained'))
-        assert classifier.predict(['随便一句话', '另一句']) == [('Neutral', 0.5), ('Neutral', 0.5)]
+        with pytest.raises(ml_base.ModelNotTrainedError) as refused:
+            classifier.predict(['随便一句话', '另一句'])
+        assert classifier.model_name in str(refused.value), 'the refusal must name the model'
 
-    def test_an_untrained_model_honours_the_caller_neutral(self, model_dir):
-        """tendency has no 'Neutral' label; the missing-model fallback must use the
-        label the analyzer supplies, or an out-of-vocabulary class leaks into charts."""
+    def test_an_untrained_model_refuses_whatever_neutral_word_is_offered(self, model_dir):
+        """The caller's neutral was the old safety valve (tendency has no 'Neutral' label, and one
+        leaked here became an out-of-vocabulary class). The label was never the bug — the invented
+        answer was — so the refusal stands whichever word the caller offers."""
         classifier = MLClassifier(model_name=_unique_name('tendency-ish'))
-        assert classifier.predict(['一句话'], neutral='Objective Statement') == [('Objective Statement', 0.5)]
+        with pytest.raises(ml_base.ModelNotTrainedError):
+            classifier.predict(['一句话'], neutral='Objective Statement')
 
-    def test_no_text_means_no_answers(self, model_dir):
-        assert MLClassifier(model_name=_unique_name('empty')).predict([]) == []
+    def test_no_text_still_means_no_answers_but_the_model_is_still_missing(self, model_dir):
+        """Absence is answered by absence, not by a crash-free empty table: a caller that asks
+        nothing gets nothing, and the refusal keeps its reason for whoever asks afterwards."""
+        with pytest.raises(ml_base.ModelNotTrainedError):
+            MLClassifier(model_name=_unique_name('empty')).predict([])
 
     def test_a_saved_model_is_picked_up_by_a_fresh_instance(self, model_dir, request):
         name = _unique_name(request.node.name)

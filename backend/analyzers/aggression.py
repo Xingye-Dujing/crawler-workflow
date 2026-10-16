@@ -24,7 +24,7 @@ import re
 
 import pandas as pd
 
-from analyzers.llm_client import run_llm_dataframe
+from analyzers.llm_client import ABORT_MARK, run_llm_dataframe
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -232,7 +232,14 @@ class AggressionAnalyzer:
             text_column=text_column,
             op='aggression',
             result_columns=['aggression', 'aggression_score', 'aggression_hits'],
-            blank=['none', '', ''],
+            # The unreached marker must be a value the model can never ANSWER. ``parse_answer``
+            # legitimately returns ``'none'`` for a comment it judges non-violent, and the
+            # settlement below compares against ``blank[0]`` to find rows no model ever saw —
+            # so ``'none'`` here re-labelled every clean row as never-judged: a finished run
+            # stamped its genuinely-violent-free comments 模型未判定, and a Stop counted them into
+            # ``unfinished``. 未处理 is the marker every other row-by-row analyzer uses, exactly
+            # as this module's own docstring promises.
+            blank=[ABORT_MARK, '', ''],
             fail_value=('none', '', '模型未判定'),
             build_prompt=self.build_prompt,
             parse=parse,

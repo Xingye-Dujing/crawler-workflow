@@ -305,7 +305,10 @@ class CookieManager:
         path = self.path_for(platform, account)
         if os.path.exists(path):
             os.remove(path)
-            logger.info(t('cookie.deleted', platform=platform))
+            # The account belongs here for the same reason it belongs in 「已保存」: with one
+            # platform holding several logins, a line naming only the platform cannot say which
+            # session just went away — and this one is a destructive act the user is reading back.
+            logger.info(t('cookie.deletedAccount', platform=platform, account=self.label_of(account)))
 
     def rename(self, platform: str, account: str, to: str) -> bool:
         """Move a saved login to a new label. True when the file moved, False when it did not exist.

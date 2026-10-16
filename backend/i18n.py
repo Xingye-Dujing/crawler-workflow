@@ -367,6 +367,10 @@ _ZH = {
     'analysis.topic_embed_unavailable': '嵌入主题方法缺少可选依赖：{packages}（不回退到 LDA，请安装或改用 LDA）',
     'analysis.topic_embed_failed': '句向量模型「{model}」加载或运行失败：{err}',
     'analysis.topic_embed_done': '嵌入主题：{model}，{n} 个主题，{rows} 行文本',
+    'analysis.topic_empty_cluster': (
+        '嵌入主题「{topic}」没有分到任何文本：这是模型的答复，不是画布的错——'
+        '主题数 {n} 是请求值，模型实际只切出 {got} 个'
+    ),
     'analysis.topic_method_auto_embedding': '主题方法 auto：检测到编码器，使用 embedding（{model}）',
     'analysis.topic_method_auto_lda': '主题方法 auto：无编码器包，改用 LDA（结果按 LDA 计）',
     'analysis.bert_fallback': '{op} 的 bert 不可用（{reason}），本次改用 {used} 产出结果（非 bert）',
@@ -558,7 +562,9 @@ _ZH = {
     'sig.degenerate': '显著性检验：{method} 无法计算（组数或组内样本不足、方差为零），不给假 p 值',
     'sig.unknown_method': '显著性检验：未知方法“{method}”',
     'sig.done': '显著性检验（{method}）：{n_groups} 组、共 {n} 行，统计量={statistic}，p={p}',
-    'ml.model_missing': '模型 {name} 未训练且无已保存模型——回退为默认值',
+    'ml.model_untrained_refused': (
+        '「{name}」模型尚未训练，也没有可加载的已保存模型 —— 拒绝作答，而不是给每行编一个中性结果'
+    ),
     'ml.missing_col': 'DataFrame 缺少必需的列“{col}”。跳过分析。',
     'ml.no_rows': '没有需要处理的行（目标列为空）。',
     'ml.emotion_failed': 'ML 情感预测失败：{err}——回退为 Neutral',
@@ -813,6 +819,7 @@ _ZH = {
     'api.stepsMustBeObjects': 'steps 必须是对象列表，每项含 "op" 与可选 "params"',
     'api.noCookieJob': '当前没有进行中的登录窗口',
     'cookie.deleted': '已删除 {platform} 的 Cookie',
+    'cookie.deletedAccount': '已删除 {platform}（账号：{account}）的 Cookie',
     'cookie.renamed': '已把 {platform} 的登录改名：{old} → {new}（Cookie 文件与浏览器目录一起搬）',
     'cookie.renamedFileOnly': '已把 {platform} 的登录改名：{old} → {new}（该账号还没开过浏览器，只动了文件）',
     'cookie.profileDeleted': '已删除 {platform} · {account} 的浏览器 Profile（该设备已登出；Cookie 文件不动）',
@@ -1247,6 +1254,7 @@ _ZH = {
     'resume.unpicked': '未指定节点',
     'resume.loaded': '续跑节点：载入运行 {rid} 中节点 {nid} 的 {n} 行',
     'api.runNotFound': '找不到运行记录：{rid}',
+    'api.runSettingOption': '画布设置里的「{setting}」没有「{value}」这个取值（可用：{allowed}）',
     'api.runLogTruncated': '（日志过长，仅下载前 {n} 行）',
     'api.exportNotFound': '导出文件不存在（或不允许下载）：{name}',
     # ── 一键报告（自包含 HTML） ───────────────────────────────
@@ -1724,6 +1732,10 @@ _EN = {
     ),
     'analysis.topic_embed_failed': 'embedding model "{model}" failed to load or run: {err}',
     'analysis.topic_embed_done': 'embedding topics: {model}, {n} topics over {rows} texts',
+    'analysis.topic_empty_cluster': (
+        'embedding topic "{topic}" received no documents: that is the model\'s answer, not a canvas '
+        'error — {n} was the requested count and the clustering produced {got}'
+    ),
     'analysis.topic_method_auto_embedding': 'topic method auto: encoder detected, using embedding ({model})',
     'analysis.topic_method_auto_lda': (
         'topic method auto: sentence-transformers (or another optional package) is absent, '
@@ -1964,7 +1976,10 @@ _EN = {
     'sig.degenerate': 'Significance test: {method} cannot be computed (few samples or zero variance) — no fake p',
     'sig.unknown_method': 'Significance test: unknown method "{method}"',
     'sig.done': 'Significance test ({method}): {n_groups} groups, {n} rows, statistic={statistic}, p={p}',
-    'ml.model_missing': 'Model {name} not trained and no saved model found — falling back to default',
+    'ml.model_untrained_refused': (
+        '"{name}" has no trained model and nothing saved to load — refusing to answer '
+        'rather than inventing a neutral verdict for every row'
+    ),
     'ml.missing_col': 'DataFrame is missing the required column "{col}". Skipping analysis.',
     'ml.no_rows': 'Nothing to process (the target column is empty).',
     'ml.emotion_failed': 'ML emotion prediction failed: {err} — falling back to Neutral',
@@ -2244,6 +2259,7 @@ _EN = {
     'api.stepsMustBeObjects': 'steps must be a list of objects, each with an "op" and optional "params"',
     'api.noCookieJob': 'No cookie login is currently active',
     'cookie.deleted': 'Cookies deleted for {platform}',
+    'cookie.deletedAccount': 'Cookies deleted for {platform} (account: {account})',
     'cookie.renamed': (
         'Renamed the {platform} login “{old}” to “{new}” (its cookie file and its own browser directory moved together)'
     ),
@@ -2741,6 +2757,7 @@ _EN = {
     'resume.unpicked': 'no node picked',
     'resume.loaded': 'Resume node: loaded {n} rows from node {nid} of run {rid}',
     'api.runNotFound': 'No such run: {rid}',
+    'api.runSettingOption': 'The canvas setting "{setting}" has no value "{value}" (available: {allowed})',
     'api.runLogTruncated': '(log too long — downloaded the first {n} lines only)',
     'api.exportNotFound': 'export file not found (or not downloadable): {name}',
     # ── one-click HTML report ───────────────────────────────────

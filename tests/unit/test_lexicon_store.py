@@ -8,10 +8,13 @@ a broken or empty lexicon can never take down a run.
 
 import os
 
+import jieba
+import pytest
 import stores
 
 from analyzers import stopwords
-from services.lexicon import materialize_userdict, userdict_path
+from services import lexicon as lexicon_service
+from services.lexicon import materialize_userdict, reload_userdict, userdict_path
 from services.lexicon_store import LexiconStore
 
 
@@ -96,3 +99,40 @@ class TestUserdictFile:
             content = handle.read()
         assert '绝绝子 200' in content
         assert '超话' in content
+
+
+class TestLiveReloadWithdrawsDeletedTerms:
+    """``jieba.load_userdict`` only ADDS. The module promises a panel edit is live for the next
+    run without a restart, and while the reload was additive a DELETED term stayed glued into
+    every segmentation until the process restarted — the opposite of the edit the user made."""
+
+    WORD = '啉嘟噜啦'
+    OTHER = '啦噜嘟啉'
+
+    @pytest.fixture
+    def lex(self, tmp_path):
+        store = _store(tmp_path)
+        if os.path.isfile(userdict_path()):
+            os.remove(userdict_path())
+        # jieba's dictionary is one process-wide object: forget what an earlier test loaded,
+        # so this test withdraws only its own words.
+        lexicon_service._loaded_terms = set()
+        yield store
+        lexicon_service._loaded_terms = set()
+
+    def test_an_added_term_is_one_token(self, lex):
+        lex.add('userdict', [self.WORD])
+        assert self.WORD not in jieba.lcut(self.WORD), 'the premise: the built-in dict splits it'
+        reload_userdict()
+        assert self.WORD in jieba.lcut(self.WORD), 'the panel added a domain term and nothing glued it'
+
+    def test_a_deleted_term_is_taken_back_out_of_the_tokenizer(self, lex):
+        lex.add('userdict', [self.WORD, self.OTHER])
+        reload_userdict()
+        assert self.WORD in jieba.lcut(self.WORD)
+        lex.remove('userdict', self.WORD)
+        reload_userdict()
+        assert self.WORD not in jieba.lcut(self.WORD), 'a deleted term survived the reload'
+        # …while the term that was NOT deleted stays, or the fix would be a blanket reset that
+        # silently throws away the rest of the lexicon.
+        assert self.OTHER in jieba.lcut(self.OTHER), 'the reload withdrew more than was deleted'

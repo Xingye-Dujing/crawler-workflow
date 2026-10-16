@@ -73,7 +73,10 @@ def get_browser_profiles():
         platform = cap.platform
         if not CookieManager.is_supported(platform):
             continue
-        saved = os.path.join(Config.COOKIE_DIR, f'{platform}_cookies.json')
+        # The ONE filename rule, from CookieManager — splicing ``{platform}_cookies.json`` here
+        # was a second spelling of where a login lives, and it can only ever name the default
+        # account: the panel would say 「no cookie」 about an account whose file it never looked at.
+        saved = CookieManager(Config.COOKIE_DIR).path_for(platform, '')
         rows['profiles'].append(
             browser_profiles.status(
                 platform,

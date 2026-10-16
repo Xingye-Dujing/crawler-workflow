@@ -2490,7 +2490,14 @@ const canvas = {
         });
         return {
             nodes: nodes,
-            connections: this.connections,
+            /* A history entry has to be a SNAPSHOT. Handing out the live array let
+               connectNodes' push and _undoConnection's splice rewrite every EARLIER entry
+               retroactively, so wiring two nodes added no undo step at all (the identity test
+               below compared the same array to itself) and the next Ctrl+Z deleted a node the
+               user never added instead of removing the wire. Connections are whole entries that
+               get added or removed, never mutated in place, so a copy of each {from,to} is all
+               it takes. */
+            connections: (this.connections || []).map((c) => ({ from: c.from, to: c.to })),
             nextId: this.nextId,
             disabledTypes: (this.disabledTypes || []).slice(),
         };

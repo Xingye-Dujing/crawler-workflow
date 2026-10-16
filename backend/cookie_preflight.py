@@ -85,9 +85,22 @@ def invalidate(platform: str = None) -> None:
                 _cache.pop(key, None)
 
 
+def _cache_key(platform: str, account: str = '') -> tuple:
+    """The ONE key a verdict is stored under.
+
+    ``entry_key``/``entry_of`` above already fold ``default`` onto the platform's own login,
+    and :func:`entry_key`'s docstring names the cost of getting this wrong: two spellings of
+    one login landing in two cache slots is how a probe runs a browser twice and answers
+    「没有登录」 from the slot nobody filled. The panel's 验证 wrote the folded name while the
+    preflight at Run read the blank one, so the 「已失效」 the user had just measured never
+    blocked the run.
+    """
+    return str(platform), CookieManager.path_segment(account)
+
+
 def cached(platform: str, account: str = '') -> dict | None:
     """The stored verdict for one (platform, account) while it is young enough to quote."""
-    key = (str(platform), str(account or '').strip())
+    key = _cache_key(platform, account)
     with _lock:
         entry = _cache.get(key)
         if not entry:
@@ -108,7 +121,7 @@ def _remember(platform: str, verdict: dict, account: str = '') -> None:
     if verdict.get('state') not in (VALID, EXPIRED):
         return
     with _lock:
-        _cache[(str(platform), str(account or '').strip())] = {**verdict, 'at': time.monotonic()}
+        _cache[_cache_key(platform, account)] = {**verdict, 'at': time.monotonic()}
 
 
 def classify_probe(facts: dict) -> str:
@@ -141,7 +154,7 @@ def record(platform: str, facts: dict, account: str = '') -> dict:
     user who just watched it answer 「已失效」 should not pay for a second probe to be
     told so again — and a stale 「可用」 must not survive the check that contradicted it.
     """
-    account = str(account or '').strip()
+    account = CookieManager.key(account)
     verdict = _verdict(str(platform), classify_probe(facts), probed=True, account=account)
     _remember(platform, verdict, account)
     return verdict

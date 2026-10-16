@@ -131,11 +131,18 @@ function appendConsoleLines(out, lines) {
     });
 }
 
-/** Rebuild the box from the view's own history (a tab switch, or a trim). */
-function repaintConsoleView(out, key) {
+/** Rebuild the box from the view's own history (a tab switch, or a trim).
+ *
+ *  ``stick`` is why the trim is not automatically a scroll: a view at its cap trims on EVERY
+ *  later line, so rebuilding it with the caret pinned to the bottom yanked a user who had
+ *  scrolled up to read the crawl back down once per second — and wiped whatever they had
+ *  selected. The caller decides; a tab switch keeps its own meaning of "show me this now". */
+function repaintConsoleView(out, key, stick) {
     out.textContent = '';
     appendConsoleLines(out, consoleViewFor(key).lines);
-    out.scrollTop = out.scrollHeight;
+    if (stick !== false) {
+        out.scrollTop = out.scrollHeight;
+    }
 }
 
 /* What a refreshed page asks the server for on its first read. The buffer behind
@@ -962,11 +969,13 @@ const workflow = {
                would turn a per-run choice into a silent override of the setting. */
             workflowData.settings.use_profile = profileChoice;
         }
-        /* AI transport check — fail fast instead of dying 200 rows into a run. */
+        /* AI transport check — fail fast instead of dying 200 rows into a run. Asked of the
+           EFFECTIVE nodes, the same graph the server walks: a node the user switched off is not
+           on the canvas, so it must not be able to hold up a run that would call no model at all. */
         var llm = LLMSettings.payload();
-        if (canvas.nodes && Object.keys(canvas.nodes).some(function (id) {
+        if (canvas.effectiveIds && canvas.effectiveIds().some(function (id) {
             var n = canvas.nodes[id];
-            return n.type === 'process' && nodeNeedsLlm(n.params, n.operation);
+            return n && n.type === 'process' && nodeNeedsLlm(n.params, n.operation);
         })) {
             /* Each transport has its own prerequisite: OpenRouter needs a key
                *and* a catalog model, the local daemon needs a tag it has pulled.
@@ -1238,7 +1247,7 @@ const workflow = {
                         if (shown) {
                             var follow = shown.fresh.length > 0 && consoleWantsFollow(consoleOut);
                             if (shown.trimmed) {
-                                repaintConsoleView(consoleOut, activeTab);
+                                repaintConsoleView(consoleOut, activeTab, follow);
                             } else {
                                 appendConsoleLines(consoleOut, shown.fresh);
                                 if (follow) {
@@ -1253,7 +1262,7 @@ const workflow = {
                         var feedSingle = feedConsoleView(consoleViews.all, result.logs, result.log_total);
                         var followSingle = feedSingle.fresh.length > 0 && consoleWantsFollow(consoleOut);
                         if (feedSingle.trimmed) {
-                            repaintConsoleView(consoleOut, 'all');
+                            repaintConsoleView(consoleOut, 'all', followSingle);
                         } else {
                             appendConsoleLines(consoleOut, feedSingle.fresh);
                             if (followSingle) {

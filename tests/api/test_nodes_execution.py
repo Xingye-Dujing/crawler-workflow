@@ -427,6 +427,41 @@ class TestMergePlatformStamp:
         )
         assert 'platform' not in merged[0], 'a direct caller without a platform map sees exactly the old columns'
 
+    def test_a_merge_refusal_names_its_parent_the_way_the_console_names_nodes(self, app_module):
+        """The merge's refusals name THE PARENT — the wire the user has to go cut — so quoting a
+        bare `node-2` sends them counting boxes on a dozen-node canvas to work out which one was
+        meant. Every other console message goes through ``node_label``; these three did not."""
+        labels = {'node-2': '微博第二批 #node-2'}
+        name_parent = labels.get
+        with pytest.raises(ValueError) as not_table:
+            app_module._merge_upstream_tables(
+                [], [('node-1', [{'正文': '甲'}]), ('node-2', {'chart': 'spec'})], '导出', label_of=name_parent
+            )
+        assert '微博第二批 #node-2' in str(not_table.value), str(not_table.value)
+        assert 'node-2' in str(not_table.value), 'the id must stay in the sentence (names repeat)'
+
+        mismatch = [
+            ('node-1', [{'正文': '甲', '作者': '甲'}]),
+            ('node-2', [{'正文': '乙'}]),
+        ]
+        with pytest.raises(ValueError) as columns:
+            app_module._merge_upstream_tables([], mismatch, '导出', label_of=name_parent)
+        assert '微博第二批 #node-2' in str(columns.value), str(columns.value)
+
+    def test_the_merge_line_in_the_console_names_every_parent_it_joined(self, app_module, monkeypatch):
+        """The 「已合并」 line is the receipt that says WHICH tables went in; bare ids make it a
+        receipt the user cannot check against the canvas."""
+        lines = []
+        monkeypatch.setattr(app_module, 'add_log', lambda msg, **kw: lines.append(msg))
+        merged, _ = app_module._merge_upstream_tables(
+            [],
+            [('node-1', [{'正文': '甲'}]), ('node-2', [{'正文': '乙'}])],
+            '导出',
+            label_of=lambda pid: {'node-1': '微博第一批 #node-1', 'node-2': '知乎 #node-2'}.get(str(pid), str(pid)),
+        )
+        assert len(merged) == 2
+        assert '微博第一批 #node-1' in lines[-1] and '知乎 #node-2' in lines[-1], lines[-1]
+
 
 class TestStampedOutputFilenames:
     """「文件名追加本次运行时间」 — a workflow that runs daily keeps every result.
@@ -720,6 +755,67 @@ class TestSentimentNode:
         assert statuses['node-2']['status'] == 'failed', (
             'a node that read nothing and changed nothing must not settle DONE'
         )
+
+    def test_a_switched_off_node_is_not_asked_about_its_model(self, app_module):
+        """The cost gate reads the EFFECTIVE graph, like validate/naming/fingerprint/execution.
+        A disabled box still sat in the DRAWN node list, so it could hold a run (and a whole
+        scheduled canvas) hostage for a key the run would never have used."""
+        off = _node('n', 'process', {'operation': 'sentiment', 'mode': 'llm', 'enabled': False}, 'sentiment')
+        assert app_module._workflow_needs_llm({'nodes': [off]}) is False
+        # Starvation counts too: a model node whose only feeder is off runs nothing.
+        feeder = _node('f', 'source', {'platform': 'weibo', 'keyword': 'k'})
+        starved = _node('n', 'process', {'operation': 'sentiment', 'mode': 'llm'}, 'sentiment')
+        graph = {
+            'nodes': [feeder, starved],
+            'connections': [{'from': 'f', 'to': 'n'}],
+            'settings': {'disabledTypes': ['source']},
+        }
+        assert app_module._workflow_needs_llm(graph) is False
+        # …and the same canvas with the type back on is still refused-for-a-model, by name.
+        assert app_module._workflow_needs_llm({'nodes': [feeder, starved], 'connections': graph['connections']}) is True
+
+
+class TestRunShapeIsReadNotCompared:
+    """``mode`` chooses how many records a run writes AND whether two same-platform crawls may
+    share one browser profile; ``use_profile`` chooses the device. Both are switches, so they are
+    READ — and an unknown name is refused, because a guessed shape is a guess about cost."""
+
+    def test_the_two_named_shapes_are_read_and_anything_else_is_refused_by_name(self, app_module):
+        assert app_module._run_mode({'mode': 'serial'}) == 'serial'
+        assert app_module._run_mode({'mode': 'parallel'}) == 'parallel'
+        # The spelling is not the meaning: a UI that wrote 「Serial」 meant serial, and the old
+        # equality test ran it parallel while the panel believed the opposite.
+        assert app_module._run_mode({'mode': ' Serial '}) == 'serial'
+        # A blank states nothing, which is the declared default — not a refusal.
+        assert app_module._run_mode({}) == 'parallel'
+        assert app_module._run_mode({'mode': '   '}) == 'parallel'
+        with pytest.raises(app_module.UnknownOperationError) as bad:
+            app_module._run_mode({'mode': 'concurrent'})
+        assert 'concurrent' in str(bad.value) and 'parallel' in str(bad.value)
+
+    def test_a_run_whose_shape_is_not_a_name_is_refused_before_the_slot_is_claimed(self, client, app_module):
+        """Refusing inside the worker would be a FAILED run record for a canvas that never
+        started; the gate belongs beside the shape check, before the claim."""
+        data = {
+            'workflow': {
+                'nodes': [_node('n', 'source', {'platform': 'weibo', 'keyword': 'k'})],
+                'connections': [],
+                'settings': {'mode': 'concurrent'},
+            }
+        }
+        answer = app_module._begin_run(data, 'en')
+        assert answer['status'] == 400, answer
+        assert 'concurrent' in answer['body']['error']
+        assert 'parallel' in answer['body']['error'], 'the refusal must say what the legal names are'
+
+    def test_the_profile_switch_is_read_so_the_text_false_means_off(self, app_module):
+        """``bool('false')`` is True. A hand-edited draft saying 「不用 Profile」 would have been
+        crawled WITH one — the device the measured login wall is about. Absence still stays
+        absence, because a browser that sends nothing must not switch the setting off."""
+        assert app_module._flag_or_none('false') is False
+        assert app_module._flag_or_none('true') is True
+        assert app_module._flag_or_none(None) is None
+        assert app_module._flag_or_none(False) is False
 
 
 class TestResumeNode:

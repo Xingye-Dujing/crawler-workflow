@@ -8,6 +8,7 @@ in the process sees the same words. A write from the panel calls :func:`reload_u
 change is live for the next run without a restart.
 """
 
+import contextlib
 import logging
 import os
 
@@ -62,14 +63,48 @@ def materialize_userdict() -> int:
 
 
 def load_userdict() -> None:
-    """Materialise and load the user dict into the process-wide jieba tokenizer."""
+    """Materialise and load the user dict into the process-wide jieba tokenizer.
+
+    The words LOADED last time are remembered, because ``jieba.load_userdict`` only ever ADDS:
+    a term deleted in the panel stayed part of every segmentation until the process restarted,
+    contradicting this module's own promise that 「A write from the panel calls
+    :func:`reload_userdict` so the change is live for the next run without a restart」. Deleted
+    terms are taken back out with ``jieba.del_word`` (which restores the built-in cutting for
+    that string) before the new set is loaded, so one lexicon has one live state.
+
+    ``jieba`` holds ONE process-wide dictionary, so the remembered set is process state and
+    lives in the module global it is written back to — a per-call copy could not withdraw what
+    a PREVIOUS call added, which is the whole defect.
+    """
+    global _loaded_terms
     count = materialize_userdict()
     path = userdict_path()
+    loaded_here: set[str] = set()
     if count and os.path.isfile(path):
+        try:
+            with open(path, encoding='utf-8') as handle:
+                for line in handle:
+                    term = line.strip().split(' ')[0].strip()
+                    if term:
+                        loaded_here.add(term)
+        except OSError:
+            logger.warning(t('lex.userdictLoadFailed'), exc_info=True)
+            return
+        for gone in _loaded_terms - loaded_here:
+            with contextlib.suppress(Exception):
+                jieba.del_word(gone)
         try:
             jieba.load_userdict(path)
         except Exception:
             logger.warning(t('lex.userdictLoadFailed'), exc_info=True)
+            return
+        # Only a load that got this far replaces the remembered set: a failed reload must
+        # leave the previous words on record rather than orphan them in the tokenizer.
+        _loaded_terms = loaded_here
+
+
+#: The terms the process loaded into jieba last, so a reload can withdraw the ones deleted.
+_loaded_terms: set[str] = set()
 
 
 def reload_userdict() -> int:

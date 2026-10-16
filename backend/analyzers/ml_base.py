@@ -16,6 +16,12 @@ from utils.helpers import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
+
+class ModelNotTrainedError(ValueError):
+    """No model to predict with. Distinct so a caller can tell 「nothing to load」 apart from
+    「the load broke」, and raised instead of the answer being manufactured."""
+
+
 # Derived from ``Config.DATA_DIR`` rather than from this file's location: the test harness
 # redirects Config before anything is imported, and a path computed here would be a second,
 # unredirectable answer to "where do trained models live".
@@ -132,11 +138,14 @@ class MLClassifier:
                 self._label_map = data['label_map']
                 self._fitted = True
             else:
-                # An untrained model must answer with the *caller's* neutral, not a
-                # fixed 'Neutral': tendency has no such label, and one leaked here
-                # became an out-of-vocabulary class its charts treated as real.
-                logger.warning(t('ml.model_missing', name=self.model_name))
-                return [(neutral, 0.5) for _ in texts]
+                # REFUSED, not manufactured. Handing back the caller's neutral for every row read
+                # as a finished analysis: the node settled DONE, the table printed a column that
+                # was 100% one class at 0.5, and the study's charts treated it as measured opinion.
+                # (An untrained model still must not leak a fixed 'Neutral' into a label set that
+                # has no such class — that is why the refusal names the model rather than guessing
+                # a label.) A degradation is allowed only when it is SANCTIONED and PRINTED, which
+                # is the executor's job one level up (``_resolve_bert_mode``), not this class's.
+                raise ModelNotTrainedError(t('ml.model_untrained_refused', name=self.model_name))
         tokenized = [_tokenize(t) for t in texts]
         probs = self.pipeline.predict_proba(tokenized)
         indices = np.argmax(probs, axis=1)

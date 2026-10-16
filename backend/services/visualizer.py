@@ -1454,6 +1454,12 @@ class VisualizationService:
                     row.append(100.0)
                     continue
                 sa, sb = per_model[a], per_model[b]
+                # A blank is "this model answered nothing", and blank against blank is NOT
+                # agreement: an inner join alone scored every row both models left empty as a
+                # pair the two chose identically, inflating the cell the docstring promises is
+                # computed only "where BOTH models answered".
+                sa = sa[(sa.astype(str).str.strip() != '') & (sa.notna())]
+                sb = sb[(sb.astype(str).str.strip() != '') & (sb.notna())]
                 joined = pd.concat([sa, sb], axis=1, join='inner', keys=['a', 'b'])
                 n = len(joined)
                 if n == 0:

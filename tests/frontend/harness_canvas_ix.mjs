@@ -1986,6 +1986,33 @@ function multiSelectScenario() {
     out.multi_select = res;
 }
 
+/* ── a history entry is a SNAPSHOT: wiring must not rewrite earlier entries ── */
+function historySnapshotScenario() {
+    freshWorld();
+    const hA = addNode('source', 0, 0);
+    const hB = addNode('output', 400, 0);
+    const histAfterAdds = canvas._history.length;
+    const beforeConns = canvas._history.map((s) => (s.connections || []).length);
+    const firstEntryIsLive = canvas._history[0].connections === canvas.connections;
+    canvas.connectNodes(hA, hB);
+    const histAfterWire = canvas._history.length;
+    const afterConns = canvas._history.map((s) => (s.connections || []).length);
+    canvas.undo();
+    const undidWire = { nodes: Object.keys(canvas.nodes).length, conns: canvas.connections.length };
+    canvas.undo();
+    const undidSecondNode = { nodes: Object.keys(canvas.nodes).length, conns: canvas.connections.length };
+    out.history_snapshot = {
+        histAfterAdds,
+        histAfterWire,
+        beforeConns,
+        afterConns,
+        firstEntryIsLive,
+        undidWire,
+        undidSecondNode,
+    };
+}
+historySnapshotScenario();
+
 /* ── cycle refusal at the single connect seam ──────────────────────── */
 /* connectNodes is the ONLY place a wire commits (pointer + link mode both funnel here), so
    a cycle guard at that one seam covers every route. Uses `process` nodes (a `source` copy

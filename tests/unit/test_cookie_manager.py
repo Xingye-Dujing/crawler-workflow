@@ -344,6 +344,15 @@ class TestAccounts:
         assert manager.exists('weibo', 'a') is False
         assert manager.exists('weibo', 'b') is True
 
+    def test_deleting_says_which_login_went(self, manager, caplog):
+        """「已删除 微博 的 Cookie」 cannot answer 「哪个账号?」 once one platform holds several
+        logins — and this line describes a destructive act the user is reading back. Saving
+        already names the account; deleting must not be the half that stays silent."""
+        manager.save('weibo', COOKIES, 'work')
+        with caplog.at_level('INFO'):
+            manager.delete('weibo', 'work')
+        assert 'work' in caplog.text, caplog.text
+
     def test_the_account_list_reads_filenames_not_sessions(self, manager):
         """The panel and the matrix options ask "which accounts exist"; the answer
         comes from the file listing, and no cookie value is opened for it."""

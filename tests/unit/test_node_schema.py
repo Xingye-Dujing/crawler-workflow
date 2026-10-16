@@ -46,6 +46,36 @@ class TestComputeColumns:
         nodes = {'t': {'id': 't', 'type': 'tokenize', 'params': {'text_column': '正文', 'output_mode': 'word_freq'}}}
         assert compute_columns(nodes, [])['t'] == ['word', 'frequency']
 
+    def test_bin_time_declares_the_order_column_it_actually_writes(self):
+        """阶段序号列 is a real emitted column whenever the box names one — and 各阶段's
+        lifecycle tables/charts READ it. Left out of the model, the lineage panel hid the column
+        this canvas produced, so a downstream step that asked for it looked like an input nobody
+        made."""
+        nodes = {
+            'a': {
+                'id': 'a',
+                'type': 'analysis',
+                'params': {
+                    'steps': [
+                        {'op': 'bin_time', 'column': '时间', 'phase_new_col': '阶段', 'phase_order_col': '阶段序号'}
+                    ]
+                },
+            }
+        }
+        assert compute_columns(nodes, [])['a'] == ['阶段', '阶段序号']
+
+    def test_bin_time_without_an_order_box_keeps_its_single_column(self):
+        """A blank order box really does mean "no order column" — the model must not invent one,
+        or the panel would promise a column the run never writes."""
+        nodes = {
+            'a': {
+                'id': 'a',
+                'type': 'analysis',
+                'params': {'steps': [{'op': 'bin_time', 'column': '时间', 'phase_new_col': '阶段'}]},
+            }
+        }
+        assert compute_columns(nodes, [])['a'] == ['阶段']
+
 
 class TestReferencedColumns:
     def test_a_chart_reads_its_named_fields(self):

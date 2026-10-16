@@ -11,6 +11,7 @@ from crawlers.weibo import WeiboCrawler
 from crawlers.xiaohongshu import XiaohongshuCrawler
 from crawlers.youtube import YouTubeCrawler
 from crawlers.zhihu import ZhihuCrawler
+from services.cookie_manager import CookieManager
 
 # The registry, not just the factory: the cookie panel needs each platform's
 # host list and login page to explain itself, and reaching those through
@@ -113,7 +114,15 @@ def get_crawler(
     # instead — a person cannot scan a QR code nobody can see.
     headless = True if Config.CLOUD_MODE else headless
     profile = browser_profiles.profile_dir_for(platform, enabled=use_profile, account=account)
-    stem = f'{platform}@{account}' if account else str(platform)
+    # One account, ONE spelling of its file. ``default`` is that login's NAME and ``''`` is its
+    # historical spelling, and the file is the unsuffixed one for both — the fold lives in
+    # :meth:`CookieManager.path_segment`. Splicing ``f'{platform}@{account}'`` here instead wrote
+    # ``weibo@default_cookies.json``, a name ``path_for`` never produces and ``account_files``
+    # refuses even to list, so every default-account crawl looked at a file that cannot exist:
+    # ``file_stamp('')`` blanked the profile's cookie stamp, permanently killing the deferred
+    # re-plant, and with 「本次不用 Profile」 the crawl ran anonymous without saying so.
+    segment = CookieManager.path_segment(account)
+    stem = f'{platform}@{segment}' if segment else str(platform)
     saved = f'{cookie_dir}/{stem}_cookies.json' if cookie_dir else ''
     # Import-once protects a *rotating* session from an older snapshot; it must not swallow a
     # newer one. When the panel saves a cookie whose profile is busy or mid-run, the plant is

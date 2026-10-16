@@ -198,6 +198,13 @@ Analyze strictly and output only the required plain string."""
         try:
             predictions = self._ml_predict(texts)
         except Exception as e:
+            # A model there is nothing to load from is REFUSED, not answered with a column of
+            # invented Neutral: the node would otherwise settle DONE over a table that measured
+            # nothing, and the study's charts cannot tell a manufactured class from a predicted one.
+            from analyzers.ml_base import ModelNotTrainedError
+
+            if isinstance(e, ModelNotTrainedError):
+                raise
             logger.error(t('ml.emotion_failed', err=e))
             predictions = [('Neutral', 0.5)] * len(texts)
         for idx, (label, score) in zip(process_indices, predictions, strict=False):

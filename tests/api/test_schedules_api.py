@@ -304,6 +304,33 @@ class TestTheGlueAppInstalled:
         assert answer == {'ok': False, 'error': _en('sched.canvasNeedsModel', name='要模型的画布')}
         assert called == [], 'a refused canvas was handed to the executor anyway'
 
+    def test_a_switched_off_model_node_does_not_hold_the_schedule(self, client, canvas, app_module, monkeypatch):
+        """A disabled node is not on the canvas — the engine's own rule, which validate, naming,
+        fingerprint and execution all obey. ``_workflow_needs_llm`` walked the DRAWN nodes, so a
+        canvas whose only model-shaped box was switched off was refused 「需要模型」 at save time
+        AND again at every fire, forever: the user had turned the cost off and the timer kept
+        charging it to the rule."""
+        set_lang('en')
+        off = dict(MODEL_NODE, params=dict(MODEL_NODE['params'], enabled=False))
+        canvas('模型关掉的画布', [NAME_NODE, off])
+        canvas('模型开着的画布', [NAME_NODE, MODEL_NODE])
+        task = {'id': 'x', 'name': '关掉也要模型', 'workflow': '模型关掉的画布', 'lang': 'zh'}
+        called = []
+        monkeypatch.setattr(
+            app_module, '_begin_run', lambda data, lang: called.append(data) or {'status': 200, 'body': {'ok': True}}
+        )
+
+        answer = app_module._start_scheduled_run(task, False)
+
+        assert answer['ok'] is True, answer
+        assert called, 'a canvas that calls no model was refused anyway'
+        # The switch-off is what makes the difference: the same node left ON stays refused.
+        still_on = dict(task, workflow='模型开着的画布')
+        assert app_module._start_scheduled_run(still_on, False) == {
+            'ok': False,
+            'error': _en('sched.canvasNeedsModel', name='模型开着的画布'),
+        }
+
     def test_it_hands_the_language_of_the_task_to_the_run(self, client, canvas, app_module, monkeypatch):
         task = self._task(client, canvas, lang='en')
         seen = []

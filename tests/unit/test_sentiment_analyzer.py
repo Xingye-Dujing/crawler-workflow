@@ -189,16 +189,20 @@ class TestSnowNLPMode:
 
 
 class TestMlMode:
-    def test_an_untrained_model_answers_this_operations_neutral_not_emotions(self, tmp_path, monkeypatch):
-        """``MLClassifier`` answers a model that was never fitted with the CALLER's neutral
-        word: a leaked 'Neutral' from the emotion label set would be a class these charts
-        have never seen, and a column of it reads as a finding."""
+    def test_an_untrained_model_is_refused_rather_than_answered_with_a_column_of_neutral(self, tmp_path, monkeypatch):
+        """There is no honest ``neutral`` to answer with when nothing was ever trained: a whole
+        polarity column at 0.5 reads as a finding, and the node would settle DONE over it. The
+        former test pinned exactly that manufacture (its real complaint — the emotion label set's
+        'Neutral' leaking into this column — is now moot, because the column is never written)."""
         from analyzers import ml_base
+        from analyzers.ml_base import ModelNotTrainedError
 
         monkeypatch.setattr(ml_base, 'MODEL_DIR', str(tmp_path))
-        rows = SentimentAnalyzer(mode='ml').analyze_dataframe(frame(), '正文').to_dict('records')
-        assert {r['sentiment'] for r in rows[:3]} == {'neutral'}
-        assert 'Neutral' not in [r['sentiment'] for r in rows], 'the emotion label set leaked into the polarity column'
+        with pytest.raises(ModelNotTrainedError) as refused:
+            SentimentAnalyzer(mode='ml').analyze_dataframe(frame(), '正文')
+        assert SentimentAnalyzer(mode='ml')._ML_MODEL_NAME in str(refused.value), (
+            'the refusal must name the model that is missing'
+        )
 
     def test_a_trained_model_separates_the_classes(self, tmp_path, monkeypatch):
         """Trained on the very sentences it is then asked about.

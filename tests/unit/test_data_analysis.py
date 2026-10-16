@@ -180,7 +180,7 @@ class TestRegistry:
                 {'column': '时间', 'new_col': '阶段', 'edges': ['2024-05-01', '2024-05-08'], 'labels': ['前']},
             ),
             ('topic_model', {'column': '正文', 'n_topics': 2, 'topn': 3}),
-            ('sentiment_evolution', {'column': '作者'}),
+            ('sentiment_evolution', {'column': '作者', 'label_col': '正文'}),
         ],
     )
     def test_every_registered_operation_is_reachable_from_the_pipeline(self, op, params):
@@ -3254,9 +3254,13 @@ class TestSentimentEvolution:
         assert out.at[0, 'positive_n'] == 1 and out.at[0, 'negative_n'] == 1
         assert out.at[0, 'sentiment_index'] == pytest.approx(0.0)
 
-    def test_a_missing_label_column_is_a_no_op(self):
+    def test_a_missing_label_column_is_refused_by_name(self):
+        """The step used to hand the table back unchanged, which settled the node DONE over a
+        curve that had counted nothing — and because it still writes sentiment_index, the chart
+        below it saw no gap. A renamed 极性 column is the user's choice, so the refusal names it."""
         frame = pd.DataFrame({'日期': ['2024-05-02']})
-        assert list(D.sentiment_evolution(frame, '日期').columns) == ['日期']
+        with pytest.raises(UnknownOperationError, match='sentiment'):
+            D.sentiment_evolution(frame, '日期')
 
     def test_the_intensity_columns_only_appear_when_a_score_column_is_named(self):
         """A table of all-NA 强度 would read as "the curve was checked and the crowd was

@@ -48,6 +48,7 @@ import pandas as pd
 
 from config import Config
 from i18n import t
+from services.cookie_manager import CookieManager
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +201,12 @@ def stable_params(params) -> dict:
     cached answers and children's dedupe scope must not claim the old model's.
     """
     out = {k: v for k, v in (params or {}).items() if str(k) not in _VOLATILE_PARAMS}
-    if str(out.get('account') or '').strip() == '':
+    # Folded through CookieManager, not compared to '': a node panel that stamps the default
+    # login by NAME (which is what the candidate list and a new node's preselection hand out)
+    # and one that leaves it BLANK are one session, so they must produce one fingerprint. Keyed
+    # apart, 继续 cannot find the paid rows of its own run and re-crawls — which spends the
+    # account again for a table that already exists.
+    if CookieManager.is_default(out.get('account') or ''):
         out.pop('account', None)
     if str(out.get('model') or '').strip() == '':
         out.pop('model', None)
@@ -924,11 +930,18 @@ class RunStore:
         return totals
 
     def purge(self, keep_per_workflow: int = None, keep_days: int = None, exclude_run_id=None) -> dict:
-        """Age out old runs. Finished runs go before interrupted ones, and the
-        most recent ``keep_per_workflow`` per workflow always stay.
-        ``exclude_run_id`` is the run (or, since a serial multi-workflow run closes
-        one record per workflow, *runs*) a live thread is still writing — deleting
-        their rows mid-run would silently destroy the very state being built.
+        """Age out old runs, in two independent sweeps that ADD.
+
+        ``keep_per_workflow`` spares the most recent N records PER WORKFLOW — but it does NOT
+        override the age cutoff: a run older than ``keep_days`` goes whatever its rank, so a
+        workflow nobody has run in a year keeps nothing. Reading the count rule as "the newest
+        N always stay" would promise retention the sweep does not implement (pinned by
+        ``test_age_cutoff_removes_everything_older``). Finished runs go before interrupted ones,
+        because an interrupted one may still be worth continuing.
+
+        ``exclude_run_id`` is the run (or, since a serial multi-workflow run closes one record
+        per workflow, *runs*) a live thread is still writing — deleting their rows mid-run would
+        silently destroy the very state being built.
         """
         exclude = [exclude_run_id] if isinstance(exclude_run_id, str) else list(exclude_run_id or [])
         keep = Config.RUN_KEEP_PER_WORKFLOW if keep_per_workflow is None else int(keep_per_workflow)

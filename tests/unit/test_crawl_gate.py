@@ -237,6 +237,29 @@ class TestStrictQueue:
         assert blocked.wait(5)
         thread.join(5)
 
+    def test_a_default_named_account_shares_the_blank_lane(self, monkeypatch, isolated):
+        """「default」 is the platform's own login's NAME and 「''」 is its historical spelling.
+        Before the fold they were two lanes, so a serial_only platform — whose measured wall is
+        one session paging itself twice — could be walked in on by one account under two names."""
+        _settings(monkeypatch, queue=True)
+        inside, release = threading.Event(), threading.Event()
+        holder = _holder('weibo', inside, release, account='default')
+        assert inside.wait(5)
+        blocked = threading.Event()
+
+        def waiter():
+            with crawl_gate.hold('weibo', account=''):
+                blocked.set()
+
+        thread = threading.Thread(target=waiter)
+        thread.start()
+        thread.join(0.2)
+        assert thread.is_alive(), 'the named default found a lane the blank spelling had not taken'
+        release.set()
+        holder.join(5)
+        assert blocked.wait(5)
+        thread.join(5)
+
     def test_a_wait_that_never_ends_is_refused_by_name(self, monkeypatch, isolated):
         """The ceiling exists so a browser that never closed cannot park a platform for
         the rest of the process — and the answer names it, since the alternative is a

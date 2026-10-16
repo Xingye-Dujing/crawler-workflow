@@ -194,6 +194,12 @@ class TestFingerprints:
         assert node_fingerprint(plain) == node_fingerprint(blank) == node_fingerprint(spaced)
         named = _node(params={'keyword': '三亚', 'account': 'work'})
         assert node_fingerprint(named) != node_fingerprint(plain)
+        # 「default」 is that same login spelled as a NAME — which is what the candidate list
+        # and a new node's preselection hand out. Kept in the hash, one session owned two
+        # fingerprints and 继续 could not find the rows it had already paid for.
+        by_name = _node(params={'keyword': '三亚', 'account': 'default'})
+        assert node_fingerprint(by_name) == node_fingerprint(plain) == node_fingerprint(blank)
+        assert node_fingerprint(by_name) != node_fingerprint(named)
 
     def test_a_blank_model_hashed_the_same_as_no_model_at_all(self):
         """A BLANK 模型 IS 跟随全局 — the run's single global model, exactly what an

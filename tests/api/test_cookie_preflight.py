@@ -230,6 +230,17 @@ class TestCache:
         cookie_preflight.probe('zhihu', fresh=True)
         assert probe_zhihu.platforms == ['zhihu', 'zhihu']
 
+    def test_the_default_login_shares_its_verdict_across_both_spellings(self, probe_zhihu):
+        """One login, one cache slot. The candidate list and a new node's preselection hand the
+        default account its NAME, while an old canvas leaves it blank; the panel's 验证 recorded
+        「default」 and the gate at Run read the blank one, so the 「已失效」 the user had just
+        measured did not block the run — and the same session bought a second Chrome."""
+        cookie_preflight.record('zhihu', {'login_wall': True})
+        verdict = cookie_preflight.probe('zhihu')
+        assert len(probe_zhihu.calls) == 0, 'the blank spelling re-probed a verdict already measured'
+        assert verdict['state'] == cookie_preflight.EXPIRED, verdict
+        assert verdict['cached'] is True
+
     def test_a_verdict_stops_being_quotable_after_the_ttl(self, probe_zhihu, monkeypatch):
         monkeypatch.setattr(Config, 'COOKIE_PREFLIGHT_TTL', -1)
         cookie_preflight.probe('zhihu')

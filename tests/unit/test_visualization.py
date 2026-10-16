@@ -213,6 +213,25 @@ class TestModelAgreement:
         _, matrix = V._agreement_matrix(tidy, '模型', 'emotion', '原行')
         assert matrix[0][1] == pytest.approx(50.0)
 
+    def test_two_models_answering_nothing_agree_on_nothing(self):
+        """The docstring already promised a pair is scored "only over rows where BOTH models
+        answered", and the code did not honour it: an empty cell equals an empty cell, so every
+        row BOTH models left unjudged was counted as a PAIR THEY CHOSE IDENTICALLY — the one
+        reading of that matrix a reader is guaranteed to take in stride."""
+        tidy = self._tidy()
+        # Both models come back blank on row 2. It is not an agreement, and it is not a
+        # disagreement either: the pair is scored over rows {0,1} only → 1 of 2 = 50%, where the
+        # old behaviour reported 2 of 3 = 66.7% and inflated the cell by a row nobody judged.
+        tidy.loc[tidy['原行'] == 2, 'emotion'] = ''
+        _, matrix = V._agreement_matrix(tidy, '模型', 'emotion', '原行')
+        assert matrix[0][1] == pytest.approx(50.0), matrix[0][1]
+        # And a pair that answered nothing on EVERY row has no measured agreement to report:
+        # 0 rows scored must not read as a confident 100%.
+        nothing = self._tidy()
+        nothing['emotion'] = ''
+        _, blank = V._agreement_matrix(nothing, '模型', 'emotion', '原行')
+        assert blank[0][1] == 0.0, blank
+
     def test_it_draws_a_square_heatmap_scaled_noughto_100(self):
         option = V.to_echarts_option(
             self._tidy(), 'model_agreement', model_field='模型', agreement_label_field='emotion', id_field='原行'

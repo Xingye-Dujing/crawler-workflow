@@ -370,6 +370,14 @@ Analyze strictly and output only the required plain string."""
             # emotion label set would be a class these charts have never seen.
             predictions = self._ml.predict(texts, neutral='neutral')
         except Exception as e:
+            # Refused, not manufactured — see the same guard in emotion.py. The caller's neutral is
+            # still the right WORD for a real prediction (a leaked 'Neutral' from the emotion label
+            # set would be a class these charts have never seen); it is no longer an ANSWER when
+            # there is no model behind it.
+            from analyzers.ml_base import ModelNotTrainedError
+
+            if isinstance(e, ModelNotTrainedError):
+                raise
             logger.error(t('sentiment.ml_failed', err=e))
             predictions = [('neutral', 0.5)] * len(texts)
         for idx, (label, score) in zip(indices, predictions, strict=False):

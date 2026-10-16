@@ -40,6 +40,7 @@ import time
 import crawl_capabilities as capabilities
 from config import Config
 from i18n import t
+from services.cookie_manager import CookieManager
 from settings_store import get_setting
 
 #: One lock per platform, created on first use and never removed: a workflow that
@@ -85,7 +86,13 @@ def _lane(platform: str, account: str = '') -> str:
     could not.
     """
     account = str(account or '').strip()
-    return f'{platform}@{account}' if account else platform
+    # ``default`` is that same login's NAME and ``''`` its historical spelling; the rule above
+    # says the default account owns the bare platform lane, so both spellings must land there.
+    # Splicing the raw name made 「微博 + default」 a SECOND lane beside 「微博 + blank」, and a
+    # serial_only platform can be paged twice at once across two lanes — the very wall this gate
+    # exists to remove. CookieManager.path_segment is the one fold (:meth:`CookieManager.key`).
+    segment = CookieManager.path_segment(account)
+    return f'{platform}@{segment}' if segment else platform
 
 
 def strict(platform: str = '') -> bool:

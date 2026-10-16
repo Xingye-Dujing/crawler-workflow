@@ -184,6 +184,15 @@ out.ai_closes_style = menuState();
 menu.toggleSettingsMenu({ stopPropagation() {} });
 out.settings_closes_ai = menuState();
 
+/* The third direction: 样式 is a wide panel too, and its toggle used to open WITHOUT closing
+   the others — so opening it over an open 设置 left two dropdowns stacked on screen. The chain
+   above only proved ai→style and settings→ai, which is exactly how the gap stayed invisible. */
+fresh();
+menu.toggleAiMenu({ stopPropagation() {} });
+menu.toggleSettingsMenu({ stopPropagation() {} });
+menu.toggleStyleMenu({ stopPropagation() {} });
+out.style_closes_the_others = menuState();
+
 /* outside click closes each one, a click inside does not */
 started();
 menu.toggleStyleMenu({ stopPropagation() {} });

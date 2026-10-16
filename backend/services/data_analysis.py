@@ -261,7 +261,7 @@ STEP_PARAMS: dict = {
         'nonblank': ('summary_col',),
         'enums': {'on_fail': ('abort', ON_FAIL)},
     },
-    'sentiment_evolution': {'one': ('column',)},
+    'sentiment_evolution': {'one': ('column', 'label_col')},
     # The three reads that follow the staged model all name the columns 分阶段 LDA writes: a
     # lifecycle built on a guessed word column is a story about the wrong cell, and these steps
     # would still print a complete-looking table. ``size_col`` for the timeline is gated for the
@@ -647,9 +647,16 @@ def _embedding_topic_rows(texts, tokenized, topics, topn, embedding_model) -> pd
 
     rows: list = []
     lines: list = []
+    empty_clusters: list[str] = []
     for cluster in range(topics):
         members = np.where(labels == cluster)[0]
         if len(members) == 0:
+            # An unused topic is the MODEL's answer, not the user's mistake (the same rule
+            # 分阶段 LDA files a zero-doc row for). KMeans has no centroid to describe an empty
+            # cluster, so there is no row to emit — but the run must say which topic it left out
+            # and that the requested count was not what came back, rather than print 「{n} 个主题」
+            # over the gap it just skipped.
+            empty_clusters.append(f'Topic-{cluster + 1}')
             continue
         centroid = np.asarray(tf[members].sum(axis=0)).ravel()
         best = centroid.argsort()[::-1][: max(1, topn)]
@@ -668,6 +675,8 @@ def _embedding_topic_rows(texts, tokenized, topics, topn, embedding_model) -> pd
     if not rows:
         raise UnknownOperationError(t('analysis.topic_rows', rows=len(texts), topics=topics))
     logger.info(t('analysis.topic_embed_done', model=model_name, n=topics, rows=len(texts)))
+    for gone in empty_clusters:
+        logger.warning(t('analysis.topic_empty_cluster', topic=gone, n=topics, got=topics - len(empty_clusters)))
     for line in lines:
         logger.info(line)
     return pd.DataFrame(rows, columns=['topic', 'rank', 'keyword', 'weight'])
@@ -3072,8 +3081,13 @@ class DataAnalysisService:
         order by — the NUMBER 按时间划分阶段's 序号列 writes, or a time — and a group whose
         rows hold none of it is refused by name rather than appended at the end.
         """
-        if column not in df.columns or label_col not in df.columns:
-            return df
+        if column not in df.columns:
+            raise UnknownOperationError(t('analysis.step_col_missing', op='sentiment_evolution', col=column))
+        if label_col not in df.columns:
+            # The polarity column IS what this step counts. Handing the table back unchanged read
+            # as a successful curve whose 极性 column had simply been renamed — and the step still
+            # emits sentiment_index, so the downstream chart saw no gap at all.
+            raise UnknownOperationError(t('analysis.step_col_missing', op='sentiment_evolution', col=label_col))
         if score_col and score_col not in df.columns:
             # The user asked for the intensity curve and named a column this table does not
             # hold. Answering with the shares only would ship a chart with one line and no

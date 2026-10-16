@@ -19,6 +19,7 @@ overridden, and the fast tier additionally runs under ``--disable-socket``).
 
 import logging
 import re
+import threading
 
 import pandas as pd
 import pytest
@@ -651,10 +652,11 @@ class TestAggressionLlmMode:
         assert seen['text_column'] == '正文'
         assert seen['op'] == 'aggression'
         assert seen['result_columns'] == ['aggression', 'aggression_score', 'aggression_hits']
-        # A row the model cannot judge is left at ``none`` with its raw words kept, NOT at some
-        # invented level: the lexicon column of the same run is comparable only if a failed row
-        # reads as "nothing found" rather than as a verdict.
-        assert seen['blank'] == ['none', '', '']
+        # A row the model cannot judge is reported at the failure value with its raw words kept,
+        # while the BLANK must be a value the model can never answer: 'none' is what a clean
+        # comment legitimately gets, and using it here made the runner read every clean row as
+        # "never reached". 未处理 is the marker every other row-by-row analyzer uses.
+        assert seen['blank'] == ['未处理', '', '']
         assert seen['fail_value'] == ('none', '', '模型未判定')
 
     def test_one_row_is_asked_once_with_its_own_text_in_the_prompt(self):
@@ -686,6 +688,30 @@ class TestAggressionLlmMode:
         )
         assert result.loc[0, 'aggression'] == 'none'
         assert str(result.loc[0, 'aggression_hits']), 'the model is answered with its own words kept'
+
+    def test_a_clean_verdict_is_not_relabelled_as_never_judged(self):
+        """「模型判定为不暴力」 and 「模型从没看到这一行」 are two different facts, and the runner
+        tells them apart by comparing the cell against ``blank[0]``. That sentinel used to be
+        ``'none'`` — a level this analyzer's own parser legitimately ANSWERS for a clean comment —
+        so every clean row was re-stamped 模型未判定 at a finished run, and counted into 未处理 at a
+        Stop. The audit column this module exists to produce was lying about which rows it judged."""
+        result = AggressionAnalyzer(mode='llm').analyze_dataframe(
+            pd.DataFrame({'正文': ['我觉得这条挺正常的']}),
+            '正文',
+            ctx={'client': ScriptedClient(default='none|无')},
+        )
+        assert result.loc[0, 'aggression'] == 'none', result.loc[0].to_dict()
+        assert str(result.loc[0, 'aggression_hits']) != '模型未判定', result.loc[0].to_dict()
+
+    def test_a_row_the_stopped_run_never_reached_keeps_the_unprocessed_mark(self):
+        """The other half of the same sentinel: the marker must survive for the rows nobody asked,
+        or the Stop would hide a gap in the audit table behind a verdict that was never made."""
+        cancel = threading.Event()
+        cancel.set()
+        result = AggressionAnalyzer(mode='llm').analyze_dataframe(
+            pd.DataFrame({'正文': ['这人怎么不去死']}), '正文', ctx={'client': ScriptedClient(), 'cancel_event': cancel}
+        )
+        assert result.loc[0, 'aggression'] == '未处理', result.loc[0].to_dict()
 
     def test_the_lexicon_mode_is_not_routed_through_the_runner(self, monkeypatch):
         seen = TestRunnerDeclaration.capture(monkeypatch, aggression_module)
