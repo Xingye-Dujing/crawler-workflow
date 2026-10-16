@@ -23,7 +23,10 @@ from services.export_browser import (
     part_batch_names,
     resolve_download_path,
     resolve_export_file,
+    resolve_report_path,
 )
+from services.part_writer import PartWriter, safe_stem
+from utils.helpers import MAX_FILENAME_LENGTH
 
 pytestmark = pytest.mark.unit
 
@@ -263,3 +266,69 @@ class TestPartBatchNames:
     def test_an_unknown_name_returns_empty_not_error(self, tmp_path):
         d = _dir(tmp_path, ['a.part000.csv'])
         assert part_batch_names(d, 'ghost.part000.csv') == [], 'a shard whose batch is already gone deletes nothing'
+
+
+class TestNamesLongerThanTheWriteCapStillResolve:
+    """The export panel writes a file by capping the STEM to ``MAX_FILENAME_LENGTH`` and THEN
+    appending a suffix (``.partNNN.csv``, ``-{timestamp}.csv``, ``.live.csv``, a report's
+    ``-{timestamp}.html``). The name that lands on disk is therefore legitimately LONGER than the
+    cap. A resolver that re-applies the cap chops the suffix off, ``isfile`` fails, and a real export
+    answers 404 while 智能清除 forgets a file still on disk. These pin the read/write agreement."""
+
+    def _make(self, directory, name):
+        (directory / name).write_text('x\n', encoding='utf-8')
+        return str(directory)
+
+    def test_a_long_shard_resolves_for_read_download_and_delete(self, tmp_path):
+        stem = 'S' * MAX_FILENAME_LENGTH  # already at the cap before the suffix
+        name = f'{stem}.part001.csv'
+        assert len(name) > MAX_FILENAME_LENGTH, 'the fixture must actually exceed the write cap'
+        d = self._make(tmp_path, name)
+        assert os.path.basename(resolve_export_file(d, name)) == name
+        assert os.path.basename(resolve_download_path(d, name)) == name
+        assert delete_export_file(d, name) is True
+
+    def test_a_long_timestamped_export_still_resolves(self, tmp_path):
+        name = f'{"T" * MAX_FILENAME_LENGTH}-20261016-120000.csv'
+        d = self._make(tmp_path, name)
+        assert os.path.basename(resolve_export_file(d, name)) == name
+
+    def test_a_long_report_resolves_through_the_report_door(self, tmp_path):
+        name = f'report-{"R" * MAX_FILENAME_LENGTH}-20261016-120000.html'
+        d = self._make(tmp_path, name)
+        assert os.path.basename(resolve_report_path(d, name)) == name
+
+    def test_a_long_shard_batch_is_found_whole(self, tmp_path):
+        stem = 'P' * MAX_FILENAME_LENGTH
+        d = self._make(tmp_path, f'{stem}.part000.csv')
+        for n in (1, 2):
+            self._make(tmp_path, f'{stem}.part00{n}.csv')
+        assert sorted(part_batch_names(d, f'{stem}.part001.csv')) == [
+            f'{stem}.part000.csv',
+            f'{stem}.part001.csv',
+            f'{stem}.part002.csv',
+        ]
+
+    def test_partwriter_output_is_resolvable_by_export_browser(self, tmp_path):
+        """The two sides end-to-end: PartWriter names the shards, export_browser reads them back.
+        If either changes its mind about the cap, this is where the 404 would reappear."""
+        directory = tmp_path / 'exports'
+        long_label = '一份很长的中文工作流名称' * 12  # comfortably over the cap once composed
+        stem = safe_stem(f'{long_label}-src-2')
+        writer = PartWriter(str(directory), stem, fmt='csv', batch_size=1, keep_parts=True)
+        writer.add([{'标题': '三亚'}])
+        shard = next(row['name'] for row in list_exports(str(directory)))
+        assert len(shard) > MAX_FILENAME_LENGTH, 'the composed shard name must exceed the cap to test it'
+        assert os.path.basename(resolve_export_file(str(directory), shard)) == shard
+
+    def test_the_cap_release_did_not_loosen_traversal_defence(self, tmp_path):
+        """Not truncating must still refuse a name that reaches outside the directory. A padded
+        traversal is exactly the input that used to be knocked out by the length guard instead; now
+        it has to be refused by the real defence — separator stripping plus the containment check."""
+        d = self._make(tmp_path, 'safe.csv')
+        (tmp_path / 'outside.csv').write_text('secret\n', encoding='utf-8')
+        pad = 'z' * (MAX_FILENAME_LENGTH * 2)
+        assert resolve_export_file(d, '../outside.csv') == ''
+        assert resolve_export_file(d, '..\\outside.csv') == ''
+        assert resolve_export_file(d, f'../{pad}/outside.csv') == ''
+        assert (tmp_path / 'outside.csv').exists()

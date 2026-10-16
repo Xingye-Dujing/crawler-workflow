@@ -65,7 +65,7 @@ def resolve_report_path(export_dir: str, name: str) -> str:
     stray page dropped into the folder, another user's file — answers as it would
     for a path outside the directory: nothing found.
     """
-    cleaned = sanitize_filename(name)
+    cleaned = sanitize_filename(name, truncate=False)
     if not cleaned.startswith(REPORT_PREFIX):
         return ''
     if os.path.splitext(cleaned)[1].lower() not in ('.html', '.htm'):
@@ -113,7 +113,10 @@ def resolve_export_file(export_dir: str, name: str) -> str:
     handing out a directory oracle, so both cases return '' and the endpoints
     both answer 404.
     """
-    cleaned = sanitize_filename(name)
+    # ``truncate=False``: the real file may be longer than the write cap (a suffix is
+    # appended after the stem is capped), so capping here would make a present file
+    # unresolvable. Separators/traversal are still stripped; containment is checked below.
+    cleaned = sanitize_filename(name, truncate=False)
     if not cleaned or not export_dir:
         return ''
     root = os.path.realpath(export_dir)
@@ -179,7 +182,7 @@ def part_batch_names(export_dir: str, name: str):
     other extensions are NEVER included; matching reads the same directory listing the panel shows,
     so a name here is always a real file inside the export folder.
     """
-    clicked = _PART_NAME.match(sanitize_filename(name))
+    clicked = _PART_NAME.match(sanitize_filename(name, truncate=False))
     if not clicked:
         return None
     stem, ext = clicked.group('stem'), clicked.group('ext').lower()

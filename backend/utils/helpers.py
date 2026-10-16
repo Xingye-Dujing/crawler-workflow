@@ -151,17 +151,27 @@ def split_columns(value) -> list:
     return split_names(value)
 
 
-def sanitize_filename(name: str) -> str:
+def sanitize_filename(name: str, *, truncate: bool = True) -> str:
     """Make *name* safe to use as a single path component.
 
     Strips directory separators (so a caller-supplied name can never escape the
     target directory), control characters, leading/trailing dots and spaces, and
     caps the length so the write itself cannot fail with a path-too-long error.
+
+    ``truncate=False`` skips ONLY the length cap and keeps every other guard. The read
+    side needs it: a name is written by capping the *stem* to ``MAX_FILENAME_LENGTH`` and
+    then appending a suffix (``{stem}.part001.csv`` from PartWriter, ``{root}-{timestamp}.csv``
+    from the exporter, ``{stem}.live{ext}``, ``report-{stem}-{ts}.html``), so the file that
+    lands on disk is legitimately LONGER than the cap. A resolver that re-sanitizes that
+    full name with the cap chops the suffix off, ``isfile`` then fails, and a real export
+    answers 404 while 智能清除 forgets a file still sitting on disk. The cap exists to keep a
+    *user-typed* name writable, not to judge a name that already exists; containment is
+    enforced separately by ``resolve_export_file``'s realpath + prefix check.
     """
     clean = re.sub(r'[\x00-\x1f\\/*?:"<>|]', '_', str(name or ''))
     clean = clean.strip().strip('.')
     # Keep the extension visible when truncating a long name.
-    if len(clean) > MAX_FILENAME_LENGTH:
+    if truncate and len(clean) > MAX_FILENAME_LENGTH:
         root, ext = os.path.splitext(clean)
         keep = max(1, MAX_FILENAME_LENGTH - len(ext))
         clean = root[:keep] + ext
