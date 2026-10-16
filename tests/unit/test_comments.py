@@ -419,6 +419,31 @@ def _xhs_card(author, text, date='09-10', likes='赞'):
     )
 
 
+class _GrowingXhsDriver(FakeDriver):
+    """A 小红书 panel that mounts ``per_round`` more comments on every scroll, up to ``total``.
+
+    The first screen already holds ``per_round`` comments (a scroll only ever follows a read), so the
+    walk has something to collect before it decides the panel is or is not still growing.
+    """
+
+    def __init__(self, per_round, total, body='正常笔记'):
+        super().__init__(body=body, pages={})
+        self._all = [_xhs_card(f'u{i}', f'内容{i}', date=f'09-{1 + i % 28}') for i in range(total)]
+        self._per = per_round
+        self._shown = per_round  # the first screen is already mounted
+
+    def find_elements(self, by, selector):
+        if selector == '.comment-item':
+            return self._all[: self._shown]
+        return []
+
+    def execute_script(self, script, *args):
+        self.scripts.append(script)
+        if 'scrollBy' in script:
+            self._shown = min(len(self._all), self._shown + self._per)
+        return 120
+
+
 class TestXhsAdapter:
     def test_collects_and_dedupes_across_rounds(self):
         cards = [_xhs_card('甲', '很全的攻略'), _xhs_card('乙', '图一在哪')]
@@ -441,6 +466,47 @@ class TestXhsAdapter:
         session = CommentSession(driver, nap=lambda s: None)
         rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
         assert rows == [] and status == OK
+
+    def test_a_budget_that_cuts_a_still_growing_panel_is_named(self):
+        """The regression the douyin "no budget" fix and the zhihu capped line already teach: a fixed
+        round count that ends the walk quietly makes 采不满 read as 这条笔记就这么多评论."""
+        said = []
+        driver = _GrowingXhsDriver(per_round=2, total=50)  # far more than 3 rounds can reach
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        previous = CommentSession.XHS_SCROLL_ROUNDS
+        try:
+            CommentSession.XHS_SCROLL_ROUNDS = 3
+            rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
+        finally:
+            CommentSession.XHS_SCROLL_ROUNDS = previous
+        assert status == OK
+        assert len(rows) == 6, 'three rounds of two new comments each'
+        assert i18n.t('comment.xhsPanelCapped', url='https://www.xiaohongshu.com/explore/x', rows=6, rounds=3) in said
+
+    def test_a_panel_that_empties_itself_before_the_budget_is_not_reported_as_capped(self):
+        """The two-sided half: a thread the SITE ran out of must NOT gain the capped line, or 「capped」
+        stops meaning anything."""
+        said = []
+        driver = _GrowingXhsDriver(per_round=2, total=4)  # 2 rounds exhausts it, budget is 3
+        session = CommentSession(driver, log=said.append, nap=lambda s: None)
+        previous = CommentSession.XHS_SCROLL_ROUNDS
+        try:
+            CommentSession.XHS_SCROLL_ROUNDS = 3
+            rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
+        finally:
+            CommentSession.XHS_SCROLL_ROUNDS = previous
+        assert status == OK and len(rows) == 4, 'the panel emptied on its own before the third round'
+        assert not any('xhsPanelCapped' in line or '滚满' in line for line in said), f'said: {said}'
+
+    def test_a_stop_ends_the_xhs_walk_without_claiming_the_budget_ran_out(self):
+        """停止 is the user, not our constant: it must break the loop and must NOT print the capped line."""
+        said = []
+        driver = _GrowingXhsDriver(per_round=2, total=50)
+        session = CommentSession(driver, log=said.append, nap=lambda s: None, abort=lambda: True)
+        rows, status = session.crawl_xiaohongshu('https://www.xiaohongshu.com/explore/x', 0)
+        assert status == OK
+        assert len(rows) == 2, 'one round collected, then 停止'
+        assert not any('滚满' in line for line in said), f'a user stop is not a budget cut: {said}'
 
 
 # ─── zhihu adapter (DOM, panels behind buttons) ─────────────────────────

@@ -1039,6 +1039,7 @@ _ZH = {
     'comment.zhihuPanelCapped': '[知乎评论] 滚满 {n} 轮（含展开子回复）仍未走完，按轮次上限收工（本次 {rows} 条）',
     'comment.zhihuRound': '[知乎评论] 第 {r} 轮新增 {n} 条（累计 {total}）',
     'comment.zhihuPanelShort': '[知乎评论] 页面写着 {declared} 条，本次取到 {rows} 条（差额未采到）',
+    'comment.xhsPanelCapped': '[小红书评论] 滚满 {rounds} 轮仍未走完，按轮次上限收工（本次 {rows} 条）：{url}',
     'comment.prefix': '[评论]',
     'comment.platformMismatch': '已忽略 {n} 个与所选平台（{platform}）不符的链接',
     'comment.allMismatched': '所有链接都与所选平台（{platform}）不符，请检查文章链接',
@@ -2508,6 +2509,10 @@ _EN = {
     ),
     'comment.zhihuRound': '[zhihu comments] round {r} added {n} rows ({total} so far)',
     'comment.zhihuPanelShort': '[zhihu comments] the page says {declared} comments, {rows} were taken',
+    'comment.xhsPanelCapped': (
+        '[xiaohongshu comments] stopped after {rounds} scroll rounds with the panel still growing; '
+        'took {rows} rows: {url}'
+    ),
     'comment.prefix': '[comments]',
     'comment.platformMismatch': 'skipped {n} link(s) that do not match the selected platform ({platform})',
     'comment.allMismatched': 'every link conflicts with the selected platform ({platform}) — check the article URLs',

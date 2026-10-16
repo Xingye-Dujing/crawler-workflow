@@ -255,13 +255,20 @@ class CommentSession:
 
     # -- xiaohongshu --------------------------------------------------------
 
+    #: How many screens one 小红书 comment panel is scrolled before the walk gives up on it. This is
+    #: OUR budget, not the site's end, so when it runs out on a panel that is STILL mounting comments
+    #: the walk says so by name — the same shape the zhihu walk uses (``ZHIHU_PANEL_ROUNDS`` +
+    #: ``comment.zhihuPanelCapped``) and the bug douyin's "no round budget" fix removed: a fixed number
+    #: that ends the walk quietly makes 「怎么采不满」 look like 「这条笔记就这么多评论」.
+    XHS_SCROLL_ROUNDS = 12
+
     def crawl_xiaohongshu(self, url: str, limit: int) -> tuple:
         self.driver.get(url)
         self.nap(5)
         if looks_blocked(self._body_head()):
             return [], BLOCKED
         seen, rows = set(), []
-        for _round in range(12):
+        for _round in range(self.XHS_SCROLL_ROUNDS):
             found = []
             for card in self.driver.find_elements('css selector', '.comment-item'):
                 author = self._first_text(card, '.author-wrapper .name, .name')
@@ -274,10 +281,15 @@ class CommentSession:
                 seen.add(key)
                 found.append((url, author, text, date, likes))
             rows.extend(parse_xhs_comments(found))
-            if not found or (limit and len(rows) >= limit):
+            if self.may_stop() or not found or (limit and len(rows) >= limit):
                 break
             self._scroll_comments()
             self.nap(1.2)
+        else:
+            # The ``for`` ran every round without a ``break``, so the last round still found new
+            # comments (an empty one would have broken above). The panel was cut short by OUR number,
+            # not by the site running out — name it, never return OK as though the thread were done.
+            self.log(t('comment.xhsPanelCapped', url=url, rows=len(rows), rounds=self.XHS_SCROLL_ROUNDS))
         return (rows[:limit] if limit else rows), OK
 
     def _first_text(self, root, selector) -> str:
