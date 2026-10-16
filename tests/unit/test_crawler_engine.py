@@ -553,6 +553,30 @@ def test_a_replaying_server_cursor_ends_the_walk_instead_of_looping():
     assert walk.pages == 2
 
 
+def test_a_resume_replaying_the_last_held_page_advances_instead_of_dying():
+    """A 继续 starts on the cursor the ledger already holds, so the FIRST page it re-reads yields
+    nothing new BY DESIGN. Convicting that as ``no_new`` made every weibo-author/comments resume land
+    on UNDER_TARGET and replay the identical dead walk forever. A zero-fresh page is the resume's
+    replay only as the first page of the walk, so adopt the answer's cursor and move on; a runaway
+    cursor (the test above) replays AFTER progress and still ends."""
+    pages = {2: {'items': [{'id': 3}], 'next': 7}, 7: {'items': [{'id': 4}], 'next': None}}
+    fetch, extract = server(pages)
+    kept = []
+    walk = walk_pages(
+        fetch,
+        extract,
+        lambda row: kept.append(row) or True,
+        start_cursor=2,
+        collected=lambda: len(kept),
+        target=99,
+        seen={3},  # the ledger already holds page 2's row
+        identity=lambda row: row['id'],
+    )
+    assert [r['id'] for r in kept] == [4], 'the replayed page is skipped, the NEXT page is collected'
+    assert walk.stopped_reason == 'end', walk.stopped_reason
+    assert walk.pages == 2, 'the replay (first page) plus the page that carried new rows'
+
+
 def test_a_failed_page_keeps_what_was_already_collected():
     pages = {'start': {'items': [{'id': 1}], 'next': 2}}
     fetch, extract = server(pages)

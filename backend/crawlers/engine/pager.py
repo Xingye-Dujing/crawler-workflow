@@ -102,11 +102,15 @@ def walk_pages(
         if nxt is None:
             walk.stopped_reason = walk.stopped_reason or 'end'
             break
-        # A page that carried nothing new is the end of the list even when the
-        # server still hands out a cursor — this is precisely the bilibili
-        # failure mode, where ``next=1`` replayed page 0 and an incrementing
-        # loop would have stored the same comments forever.
-        if fresh_here == 0:
+        # A page that carried nothing new is the end of the list even when the server still hands a
+        # cursor — the bilibili ``next=1`` failure, where asking again replayed page 0 and an
+        # incrementing loop stored the same comments forever. There is ONE legitimate case where the
+        # FIRST page is empty-by-design: a 继续 starts on the cursor the ledger already holds, so the
+        # page it re-reads yields nothing new. Convicting THAT made every weibo-author / comments
+        # resume land on ``no_new`` → UNDER_TARGET → refuse, and replay the identical dead walk on
+        # every retry. So a zero-fresh page only ends the walk AFTER progress (pages > 1); the first
+        # page of a resume falls through and adopts the answer's cursor, advancing past the replay.
+        if fresh_here == 0 and walk.pages > 1:
             walk.stopped_reason = 'no_new'
             break
         walk.cursor = nxt
