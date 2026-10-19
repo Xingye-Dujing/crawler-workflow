@@ -774,6 +774,13 @@ _ZH = {
     'crawl.hg.cmt.dramaSkipped': (
         '[红果短剧] 界面树始终没有唤醒，本次跳过这部剧：{title}（点一下播放器窗口后「继续」可补采）'
     ),
+    # Named because the player's own feed walks away from the drama we entered: measured
+    # 2026-10-20, after the first ↓ every following page belonged to the show the account had
+    # been watching, and those rows would have been filed under the requested 剧名.
+    'crawl.hg.cmt.feedDrifted': (
+        '[红果短剧] 《{title}》走到第 {ep} 集时播放流已切到另一部剧（book {book}），'
+        '该剧余下的集数不再尝试——已收的行属于所请求的剧'
+    ),
     'crawl.hg.cmt.repliesExpanded': '[红果短剧] 已展开 {n} 处子回复',
     'crawl.hg.cmt.episodeShort': (
         '[红果短剧] 《{title}》第 {ep} 集只拿到 {have} 条，站点报 {site_total} 条——该集不完整'
@@ -1275,8 +1282,9 @@ _ZH = {
     # the rows the six yielded stay in the table (the user chose 保留), and these four are
     # what 继续 still owes.
     'run.commentsSkipped': (
-        '{platform} 有 {n} 部剧没能进入播放器：{names}——其余剧的行已保留；'
-        '点「继续」会回到第一部未进入的剧起重走（已入库的评论按 评论ID 去重，不会重复入库）'
+        '{platform} 有 {n} 部剧没有采完（没能进入播放器，或播放流中途切到了别的剧）：{names}——'
+        '其余剧的行已保留；点「继续」会回到第一部未采完的剧起重走'
+        '（已入库的评论按 评论ID 去重，不会重复入库）'
     ),
     # Said out loud because the alternative is silence that reads as "closed", while the
     # user may be looking at the window that is still open.
@@ -2302,6 +2310,13 @@ _EN = {
     'crawl.hg.cmt.dramaNotFound': "[Hongguo] the player's search found no such drama: {title}",
     'crawl.hg.cmt.dramaSkipped': "[Hongguo] the player's UI tree never woke, skipping this drama: {title} "
     '(click the player window once, then 继续/Resume to harvest it)',
+    # Named because the player's own feed walks away from the drama we entered: measured
+    # 2026-10-20, after the first ↓ every following page belonged to the show the account had
+    # been watching, and those rows would have been filed under the requested 剧名.
+    'crawl.hg.cmt.feedDrifted': (
+        '[Hongguo] during {title} episode {ep} the player feed moved to another drama (book {book}); '
+        'the rest of this drama is not attempted — the rows already kept belong to the requested drama'
+    ),
     'crawl.hg.cmt.repliesExpanded': '[Hongguo] expanded {n} reply thread(s)',
     'crawl.hg.cmt.episodeShort': '[Hongguo] {title} episode {ep}: kept {have} of the {site_total} the site counts '
     '— this episode is incomplete',
@@ -2865,9 +2880,9 @@ _EN = {
     # omits it rather than printing a fake measurement of zeros.
     'run.underTargetWalk': ' (walk: scanned {scanned}, kept {kept}, refused {refused})',
     'run.commentsSkipped': (
-        "{platform}: {n} drama(s) never opened in the player ({names}) — the other dramas' rows are kept; "
-        'Resume re-walks from the first one that was missed (comments already stored are deduped by 评论ID, '
-        'so nothing double-stores)'
+        '{platform}: {n} drama(s) were not harvested completely (never opened in the player, or the feed '
+        'moved to another drama mid-walk): {names} — the other dramas’ rows are kept; Resume re-walks from '
+        'the first incomplete one (comments already stored are deduped by 评论ID, so nothing double-stores)'
     ),
     # Said out loud because the alternative is silence that reads as "closed", while the
     # user may be looking at the window that is still open.

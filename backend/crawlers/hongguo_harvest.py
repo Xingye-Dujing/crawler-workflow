@@ -609,6 +609,9 @@ class HongguoCommentHarness:
         self._drama_reply_keys: set[str] = set()
         #: Threads this drama already named short, so the same gap is not printed twice.
         self._named_groups: set[str] = set()
+        #: The other drama's ``book_id``, set the first time a page arrives for it mid-walk:
+        #: the player's feed sliding off the requested drama is what the identity gate sees.
+        self._drift_book = ''
         #: ``group_id`` → the 1-based episode position the walk was standing on when that
         #: thread first answered. A payload never says which episode it is, and 集序号 is
         #: the column a reader (and any per-episode analysis) needs to group by.
@@ -672,6 +675,7 @@ class HongguoCommentHarness:
         self._drama_groups = set()
         self._drama_reply_keys = set()
         self._named_groups = set()
+        self._drift_book = ''
         self._ensure_stack()
         opened = self._open_drama(title)
         if opened != 'ok':
@@ -709,6 +713,21 @@ class HongguoCommentHarness:
             record = self._await_page(series_id, wait_s, stamp=(article_url, title, ep))
             if record is None:
                 licensed = False
+                if self._drift_book:
+                    # The player's feed slid off the requested drama (measured 2026-10-20: after
+                    # the first ↓ the traffic belongs to the show the account was watching
+                    # before, whose threads run to 2000+ comments). Those rows are refused by
+                    # the identity gate instead of being stamped with this name — and the walk
+                    # STOPS here rather than spending every remaining episode's full wait on
+                    # traffic it will never accept. Counted in skipped_targets because a drama
+                    # harvested 1 of 5 is not a finished crawl, and the site printed no total
+                    # for the episodes never reached, so ``shortfall`` alone cannot say it.
+                    self._log(t('crawl.hg.cmt.feedDrifted', title=title, ep=ep, book=self._drift_book))
+                    self.skipped_targets.append(title)
+                    if not rows:
+                        self._mark_short()
+                        return [], DEAD
+                    break
                 self._log(t('crawl.hg.cmt.noTraffic', seconds=wait_s, title=title))
                 if not rows:
                     # Counted, not just logged: an uncountable ``([], DEAD)`` let a five-drama
@@ -902,6 +921,29 @@ class HongguoCommentHarness:
             self._log(t('crawl.hg.cmt.danmakuSkipped', n=dropped))
         return fresh, dropped, prog, has_more
 
+    @staticmethod
+    def _reply_episode_group(record):
+        """The EPISODE group a reply page belongs to, read out of its own body.
+
+        A reply record's ``group_id`` is the PARENT COMMENT id, not the episode (measured:
+        the path is ``reply/list/{comment_id}``), so the episode has to come from the
+        payload — the parent comment's ``common.group_id``. Reading it is what lets
+        ``集序号`` be the episode the thread really is in rather than the one the walk
+        happened to be standing on when it clicked 展开.
+        """
+        data = (record.get('payload') or {}).get('data') or {}
+        parent = data.get('comment') if isinstance(data.get('comment'), dict) else {}
+        common = parent.get('common') if isinstance(parent.get('common'), dict) else {}
+        group = str(common.get('group_id') or '')
+        if group:
+            return group
+        for element in data.get('reply_list') or []:
+            body = (element or {}).get('Common') if isinstance((element or {}).get('Common'), dict) else {}
+            group = str(body.get('group_id') or '')
+            if group:
+                return group
+        return ''
+
     def _harvest_replies(self, url, title='', episode=0):
         """Fold in every ``reply/list`` page that landed since the last look.
 
@@ -929,7 +971,11 @@ class HongguoCommentHarness:
             parent = self._reply_parent_cid(record.get('req_body') or '')
             floor = self._floors_by_cid.get(parent, 0)
             page_url, page_title, page_ep = record.get('_stamp') or (url, title, episode)
-            group = str(record.get('group_id') or '')
+            # A reply record's own ``group_id`` is the PARENT COMMENT id — that is the thread
+            # key. The EPISODE has to be read out of the body, or every thread of one episode
+            # would merge into a single ledger entry.
+            parent_key = str(record.get('group_id') or '')
+            group = self._reply_episode_group(record) or parent_key
             page_rows, dropped, total, _more = hg_comment_rows(
                 payload,
                 page_url,
@@ -941,7 +987,7 @@ class HongguoCommentHarness:
             fresh = [r for r in page_rows if str(r['评论ID']) not in self._reply_ids]
             self._reply_ids.update(str(r['评论ID']) for r in fresh)
             self._next_floor += len(fresh)
-            key = parent or group or f'anon-reply-{len(self._reply_progress)}'
+            key = parent or parent_key or f'anon-reply-{len(self._reply_progress)}'
             rprog = self._reply_progress.setdefault(key, {'kept': 0, 'total': 0, 'floor': floor})
             rprog['kept'] += len(fresh)
             if total:
@@ -969,25 +1015,27 @@ class HongguoCommentHarness:
         return ''
 
     def _await_page(self, series_id, seconds, allow_repeat=False, stamp=None):
-        """Block until a fresh ``comment/list`` for *series_id* lands in the capture.
+        """Block until a fresh ``comment/list`` page of THIS drama lands in the capture.
 
         Fresh = a group this walk has not harvested (``allow_repeat`` additionally
         admits a NEWER page of the same group — the drawer's cursor pages). Every
         read batch is BUFFERED first: the record that answers may sit behind a
         reply page or a later episode's page, and an early return must not throw
         those away (the tail offset already passed them). Reply pages go to the
-        inbox; a page whose payload names another drama is refused by name — 错剧
+        inbox; a page whose REQUEST names another drama is refused by name — 错剧
         rows in the table are worse than a missing episode.
 
         *stamp* is the ``(文章URL, 剧名, 集序号)`` of the target whose drawer asked for
         the page, carried onto every reply record the inbox takes on. The walk drains
         the inbox whenever it next looks, which can already be the following drama.
 
-        The 错剧 guard has two shapes because the walk has two inputs. A LINK names its
-        ``series_id``, so every page must answer to it. A fed 剧名 names nothing the payload
-        can be checked against, so the first NON-zero ``book_id`` of this drama becomes its
-        reference and any later page belonging to another book is refused — a name-fed walk
-        still cannot mix two dramas into one table.
+        The reference is the FIRST page's own ``book_id`` — read off the request the player
+        sent, because a page's rows usually print ``expand.book_id == "0"``. The web
+        ``series_id`` is deliberately NOT compared to it: measured 2026-10-20, one and the
+        same drama is ``series_id=7696437705822981182`` on the web page and
+        ``book_id=7697823071830297624`` in the client, two separate id spaces, so comparing
+        them would refuse every page a LINK-fed walk asked for correctly. *series_id* stays
+        in the signature because callers pass it; the identity answer comes from the traffic.
         """
         deadline = time.time() + max(5, int(seconds))
         while time.time() < deadline:
@@ -996,25 +1044,28 @@ class HongguoCommentHarness:
             keep, hit = [], None
             for record in self._pending:
                 kind = record.get('kind')
+                if kind not in ('reply', 'comment'):
+                    continue
+                # The identity gate runs on BOTH kinds. A child page is asked for by whatever
+                # is on screen, so when the feed has drifted it belongs to the wrong drama —
+                # and stamping it with ours would put another show's replies in this table.
+                book = self._request_book_id(record) or self._payload_book_id(record)
+                if book:
+                    if self._current_book and book != self._current_book:
+                        self._drift_book = book
+                        self._log(t('crawl.hg.cmt.groupMismatch', got=book, want=self._current_book))
+                        continue
+                    self._current_book = book
                 if kind == 'reply':
                     if stamp is not None:
                         record['_stamp'] = stamp
                     self._reply_inbox.append(record)
-                    continue
-                if kind != 'comment':
                     continue
                 group = str(record.get('group_id') or '')
                 if not group:
                     continue
                 if group in self._groups_done and not allow_repeat:
                     continue
-                book = self._payload_book_id(record)
-                want = series_id or self._current_book
-                if book:
-                    if want and book != want:
-                        self._log(t('crawl.hg.cmt.groupMismatch', got=book, want=want))
-                        continue
-                    self._current_book = book
                 if hit is None:
                     hit = record
                 else:
@@ -1026,11 +1077,29 @@ class HongguoCommentHarness:
         return None
 
     @staticmethod
+    def _request_book_id(record):
+        """The drama the PLAYER asked this page about, read off the request it sent.
+
+        Measured 2026-10-20 on a kept capture: EVERY ``comment/list`` and ``reply/list``
+        request carries ``business_param.book_id``, while the ROWS of a page belonging to
+        another drama print ``expand.book_id == "0"``. So grading the payload alone waves a
+        strange drama's thread straight into our table — that run kept 30 rows of book
+        ``7615465407347952664`` under the fed 剧名 and stamped them 集序号 1. The request is
+        the only field that names the drama on every page, so it is the gate.
+        """
+        try:
+            body = json.loads(record.get('req_body') or '{}')
+        except (TypeError, ValueError):
+            return ''
+        param = body.get('business_param') if isinstance(body.get('business_param'), dict) else {}
+        return str(param.get('book_id') or '')
+
+    @staticmethod
     def _payload_book_id(record):
-        # A real comment row may carry ``expand.book_id == "0"`` (measured in the
-        # morning capture: the drawer's comments of a feed video print 0), so 0 is
-        # "the payload does not name the drama" — not a mismatch. The guard fires
-        # only on a NON-zero book that differs from the asked one.
+        # The fallback, and only a fallback: a real comment row may carry
+        # ``expand.book_id == "0"`` (measured — the drawer's comments of a feed video print
+        # 0), so 0 is "the payload does not name the drama", not a mismatch. A reply page has
+        # no ``data_list`` at all, so this sees nothing there; ``_request_book_id`` does.
         for item in ((record.get('payload') or {}).get('data') or {}).get('data_list') or []:
             book = str(((item or {}).get('comment') or {}).get('expand', {}).get('book_id') or '')
             if book and book != '0':

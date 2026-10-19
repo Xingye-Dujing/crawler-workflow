@@ -58,7 +58,8 @@ python app.py
   （Instagram 已可存 Cookie，采集待接入），关键词 / 某作者的作品 / 热榜 / 评论多种模式，
   红果短剧的评论由带代理的桌面播放器旁听收割（App 协议签名不复刻，见 docs/collection.md）：
   每行输入可以是剧集链接，也可以直接是**剧名**（在播放器自己的榜单里找——网页热榜与客户端榜单是两套排序），
-  输出带 剧名 / 集序号 / 分集ID，某集没收满或某部剧进不去都会在结束时**具名报错**、已采行照常保留，
+  输出带 剧名 / 集序号 / 分集ID，某集没收满、某部剧进不去、或播放流中途切到了别的剧都会在结束时
+  **具名报错**（陌生剧的行按请求体的 book 丢弃，绝不盖本剧剧名）、已采行照常保留，
   采集量只由你填的目标数决定，支持分批输出、上游喂链接、多账号与持久 Profile。→ [`docs/collection.md`](docs/collection.md)
 - **AI 分析**：Ollama / OpenRouter 双提供方，情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式，**默认微调 BERT**，跑不动自动降级到 ml/snownlp 并打印实际模式；BERT 截断长度可调）、
   情感极性、NER、关键词、聚类、异常、相关性、显著性检验（按分组列比较数值列：Welch t / ANOVA / Mann-Whitney / Kruskal-Wallis，p 值走 scipy 真实分布、非 Student 的 Welch 会如实标注）、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、为何主推微调 BERT → [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)

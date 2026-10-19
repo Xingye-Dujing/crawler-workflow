@@ -220,6 +220,19 @@
   board; and 停止 is asked inside every UIA wait (`PlayerUI` holds the harness `abort`, and `open_drama`'s
   `except Exception` re-raises `CrawlerStopped`), otherwise a cold tree burns minutes per drama uninterruptibly
   and a Stop mid-open was filed as 「搜不到这部剧」.
+  **Three more, measured on the third live run (2026-10-20, capture kept on disk)**: `reply/list` is a
+  DIFFERENT envelope — `data.comment_list_info` + `data.reply_list[]`, element body under a CAPITALISED
+  `Common`, own id `reply_id`, parent in `data.comment`, and **no `data_list` at all** — so reading only
+  `data_list` made every 「包含子回复」 run silently collect ZERO children (53 expansion clicks, 0 rows);
+  normalise the element into the `comment/list` shape and keep ONE row builder. Which drama a page belongs
+  to is asked of the **request** (`req_body.business_param.book_id`), never of the rows: another drama's
+  comment pages print `expand.book_id == "0"`, and grading the payload let 30 stranger rows into the table
+  under the fed 剧名. The gate covers reply pages too (the expansion clicks on whatever is on screen). And
+  the web `series_id` is **not** the client `book_id` (same drama measured: `7696437705822981182` vs
+  `7697823071830297624`) — two id spaces, so the reference is the first page's own book and comparing the
+  two would refuse every page a link-fed walk correctly asked for. When a page arrives for a different
+  book the walk names it and **stops the drama** (`feedDrifted`) rather than spending every remaining
+  episode's full wait on traffic it will never accept.
 - **instagram**: capture-only (`supports_crawl = False`), refused by `run.notCrawlable` and earlier by validation;
   such a platform still needs `domain` + `login_url`, stays OUT of `CAPABILITIES`, and must clear
   `TestCookiePanelParity` + `TestPlatformOrder`.

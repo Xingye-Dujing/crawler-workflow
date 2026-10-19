@@ -179,13 +179,29 @@ class TestWalk:
         assert ui.switches == 1
         assert harness.end_reason == 'site_end'
 
-    def test_a_page_of_another_drama_is_refused_by_name_not_kept(self, tmp_path):
-        lines = [_record(entries=[_entry('7001', '错剧', 1792313924)], book='0000000000000000000')]
-        harness, said = _harness(tmp_path, capture_lines=lines, params={'harvest_timeout': 5})
+    def test_a_second_page_that_names_another_drama_is_refused_by_name_not_kept(self, tmp_path):
+        # Corrected 2026-10-20 from a kept capture. This case used to refuse the FIRST page by
+        # comparing its book against the LINK's series_id — and those are different id spaces
+        # for one and the same drama (web 7696437705822981182, client 7697823071830297624), so
+        # that rule would have refused every page a link-fed walk asked for correctly. The
+        # reference is now the first page's own book, and what gets refused is a LATER page
+        # naming a different one — the measured drift.
+        first = _record(entries=[_entry('7001', '第一', 1792313924)], book=BOOK)
+        stranger = _record(
+            entries=[_entry('7002', '错剧', 1792313925)], group='8888888888888888888', book='9999999999999999999'
+        )
+        harness, said = _harness(
+            tmp_path,
+            capture_lines=[first, stranger],
+            params={'harvest_timeout': 5, 'episode_count': 2, 'include_replies': False},
+        )
         rows, status = harness.crawl_hongguo(ARTICLE, 0)
-        assert (rows, status) == ([], DEAD)
-        named = i18n.t('crawl.hg.cmt.groupMismatch', got='0000000000000000000', want='7696063528179878937')
-        assert any(named in line for line in said)
+        assert status == OK, 'the rows that do answer to the drama are still handed over'
+        assert [r['评论ID'] for r in rows] == ['7001'], 'a stranger drama’s page is not this table'
+        named = i18n.t('crawl.hg.cmt.groupMismatch', got='9999999999999999999', want=BOOK)
+        assert any(named in line for line in said), said
+        assert harness.skipped_targets == ['测试剧'], 'a drama that drifted away mid-walk is not finished'
+        assert harness.end_reason == UNDER_TARGET
 
     def test_the_node_limit_caps_the_walk_and_licenses_the_end(self, tmp_path):
         lines = [_record(entries=[_entry('7001', '甲', 1792313924), _entry('7002', '乙', 1792313925)], total=2)]
@@ -761,6 +777,137 @@ class TestBoardSwitcherIsOpenedFirst:
         assert ui._pick_board('不存在的榜') is False
         assert ui._board_option('热播榜') == '热播榜'
         assert ui._board_option('不存在的榜') is None
+
+
+class TestIdentityFromTheRequest:
+    """Which drama a page belongs to is read off the REQUEST the player sent.
+
+    Measured 2026-10-20 on a kept capture: a page's ROWS print ``expand.book_id == "0"``,
+    so grading the payload waves another drama's thread into this table — that run kept 30
+    rows of book ``7615465407347952664`` under the fed 剧名 and stamped them 集序号 1. Every
+    request, comment or reply, carries ``business_param.book_id``.
+    """
+
+    FOREIGN = '7615465407347952664'
+
+    def _req(self, book, **extra):
+        return json.dumps({'aid': 8662, 'business_param': {'book_id': book}, **extra})
+
+    def test_a_page_whose_rows_print_0_but_asks_another_drama_is_refused(self, tmp_path):
+        harness, said = _harness(tmp_path, capture_lines=[])
+        harness._current_book = BOOK
+        stranger = _record(
+            entries=[_entry('7777', '别人家的评论', 1792313999)], group='9999', book='0', req=self._req(self.FOREIGN)
+        )
+        with open(harness._capture, 'a', encoding='utf-8') as handle:
+            handle.write(stranger + '\n')
+        assert harness._await_page('', 5) is None, 'the payload alone would have accepted this page'
+        assert harness._drift_book == self.FOREIGN
+        assert any(i18n.t('crawl.hg.cmt.groupMismatch', got=self.FOREIGN, want=BOOK) in line for line in said)
+
+    def test_the_request_book_becomes_the_reference_when_the_payload_names_nothing(self, tmp_path):
+        harness, said = _harness(tmp_path, capture_lines=[])
+        page = _record(entries=[_entry('7001', '第一', 1792313924)], book='0', req=self._req(BOOK))
+        with open(harness._capture, 'a', encoding='utf-8') as handle:
+            handle.write(page + '\n')
+        hit = harness._await_page('', 5)
+        assert hit is not None
+        assert harness._current_book == BOOK, 'the identity came from the request, not a zero-valued row'
+        assert not any(BOOK in line and '而不是' in line for line in said)
+
+    def test_a_web_series_id_is_never_compared_with_a_client_book_id(self, tmp_path):
+        # Measured: the SAME drama is series_id=7696437705822981182 on the web page and
+        # book_id=7697823071830297624 in the client. Two id spaces — so a link-fed walk must
+        # take its reference from the first page's own book, or every page it asked for
+        # correctly would be refused.
+        harness, said = _harness(tmp_path, capture_lines=[])
+        web_series = '7696437705822981182'
+        client_book = '7697823071830297624'
+        page = _record(entries=[_entry('7001', '第一', 1792313924)], book='0', req=self._req(client_book))
+        with open(harness._capture, 'a', encoding='utf-8') as handle:
+            handle.write(page + '\n')
+        hit = harness._await_page(web_series, 5)
+        assert hit is not None, 'a link-fed walk must not refuse its own drama over an id-space difference'
+        assert harness._current_book == client_book
+        assert not any('而不是' in line for line in said), said
+
+    def test_a_child_page_from_another_drama_never_reaches_the_inbox(self, tmp_path):
+        harness, _said = _harness(tmp_path, capture_lines=[])
+        harness._current_book = BOOK
+        foreign_reply = _record(
+            kind='reply',
+            group='7620733881692750616',
+            entries=[_entry('9001', '别人家的回复', 1792313999, group='7615470196337151038')],
+            req=self._req(self.FOREIGN, comment_id='7620733881692750616'),
+        )
+        with open(harness._capture, 'a', encoding='utf-8') as handle:
+            handle.write(foreign_reply + '\n')
+        assert harness._await_page('', 5) is None
+        assert harness._reply_inbox == [], 'a stranger drama’s replies stamped with our name is corruption'
+
+    def test_the_walk_stops_and_names_the_drama_when_the_feed_moves_on(self, tmp_path):
+        """The measured drift: our episode 1, then every page belongs to the previous show."""
+        our_page = _record(entries=[_entry('7001', '第一', 1792313924)], req=self._req(BOOK))
+        foreign_page = _record(
+            entries=[_entry(f'9{i:03d}', f'别人{i}', 1792314000 + i) for i in range(30)],
+            group='7615470192985902142',
+            total=30,
+            book='0',
+            req=self._req(self.FOREIGN),
+        )
+        ui = _FakeUI(second_page_lines=[foreign_page])
+        harness, said = _harness(
+            tmp_path,
+            ui=ui,
+            capture_lines=[our_page],
+            params={'episode_count': 3, 'include_replies': False, 'harvest_timeout': 5},
+        )
+        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        assert status == OK, 'the rows it legitimately kept are still handed over'
+        assert len(rows) == 1, f'the drifted feed contributed rows to this table: {len(rows)}'
+        assert {r['分集ID'] for r in rows} == {GROUP}, 'only our own episode is in the table'
+        assert harness.skipped_targets == ['测试剧'], 'a drama walked 1 of 3 is not a finished crawl'
+        assert harness.end_reason == UNDER_TARGET
+        assert any(
+            i18n.t('crawl.hg.cmt.feedDrifted', title='测试剧', ep=2, book=self.FOREIGN) in line for line in said
+        ), said
+
+    def test_a_child_pages_episode_is_read_from_its_body_not_its_path(self, tmp_path):
+        # A reply record's group_id is the PARENT COMMENT id (the path is reply/list/{cid}),
+        # so 集序号 has to come from the parent comment's own group_id in the payload.
+        harness, _said = _harness(tmp_path)
+        episode_group = '7615470196337151038'
+        harness._ep_of_group[episode_group] = 4
+        record = {
+            'kind': 'reply',
+            'group_id': '7620733881692750616',
+            'req_body': self._req(BOOK, comment_id='7620733881692750616'),
+            'payload': {
+                'data': {
+                    'comment': {'comment_id': '7620733881692750616', 'common': {'group_id': episode_group}},
+                    'comment_list_info': {'total': 1, 'has_more': False, 'cursor': ''},
+                    'reply_list': [
+                        {
+                            'Common': {
+                                'content': {'text': '子'},
+                                'create_timestamp': 1792313930,
+                                'group_id': episode_group,
+                                'user_info': {'base_info': {'user_name': '甲'}},
+                            },
+                            'reply_id': '9001',
+                            'reply_to_comment_id': '7620733881692750616',
+                            'stat': {'digg_count': 0, 'reply_count': 0},
+                        }
+                    ],
+                }
+            },
+        }
+        assert harness._reply_episode_group(record) == episode_group
+        harness._reply_inbox.append(record)
+        rows, _refused = harness._harvest_replies('', '某剧', 1)
+        assert rows and rows[0]['集序号'] == 4, 'the thread’s real episode, not the one being played'
+        assert rows[0]['评论ID'] == '9001'
+        assert harness.shortfall == 0 and harness._reply_progress['7620733881692750616']['kept'] == 1
 
 
 class TestCardMatching:

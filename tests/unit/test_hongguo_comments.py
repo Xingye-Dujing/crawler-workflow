@@ -189,3 +189,120 @@ class TestLinkHelpers:
     def test_a_page_without_a_title_gives_no_name(self):
         assert hg_page_title('<html></html>') == ''
         assert hg_page_title('') == ''
+
+
+def _reply_element(rid, text, ts, *, group, parent, digg=0, book='7615465407347952664', stamp_zero=False):
+    """One ``data.reply_list[]`` element in the shape a REAL child page prints.
+
+    Measured 2026-10-20 from a kept capture: the body key is a CAPITALISED ``Common``, the
+    child's own id is ``reply_id``, its parent is ``reply_to_comment_id``, and there is no
+    ``comment``/``data_list`` wrapper at all — which is why reading only ``data_list`` made
+    every expansion click answer zero rows for a day.
+    """
+    return {
+        'Common': {
+            'comment_type': 0,
+            'content': {'text': text},
+            'create_timestamp': 0 if stamp_zero else ts,
+            'group_id': group,
+            'service_id': 4,
+            'status': 1,
+            'user_info': {'base_info': {'user_name': f'用户{rid[-3:]}'}, 'user_id': '605154498058220'},
+        },
+        'expand': {'book_id': book},
+        'reply_id': rid,
+        'reply_to_comment_id': parent,
+        'reply_to_reply_id': '',
+        'stat': {'digg_count': digg, 'reply_count': 0},
+        'sub_reply': [],
+    }
+
+
+def _reply_parent(cid='7620733881692750616', *, group='7615470196337151038', replies=4):
+    """``data.comment`` — the parent comment, in the ``comment/list`` element shape."""
+    return _entry(cid, '父评论', 1774343143, group=group, replies=replies)['comment']
+
+
+def _reply_envelope(elements, total, parent=None, has_more=False):
+    return {
+        'BaseResp': {'StatusCode': 0, 'StatusMessage': 'success'},
+        'code': 0,
+        'data': {
+            'comment': parent if parent is not None else _reply_parent(),
+            'comment_list_info': {'cursor': '50', 'has_more': has_more, 'total': total},
+            'extra': {},
+            'reply_list': elements,
+        },
+    }
+
+
+class TestReplyShape:
+    """``reply/list`` is a DIFFERENT envelope, and the parser has to know that."""
+
+    def test_a_real_child_page_yields_child_rows_not_an_empty_table(self):
+        payload = _reply_envelope(
+            [
+                _reply_element(
+                    '7697252120426136345',
+                    '修仙小妖怪',
+                    1792160661,
+                    group='7615470196337151038',
+                    parent='7620733881692750616',
+                ),
+                _reply_element(
+                    '7697252120426136346',
+                    '好看',
+                    1792160700,
+                    group='7615470196337151038',
+                    parent='7620733881692750616',
+                    digg=3,
+                ),
+            ],
+            total=4,
+        )
+        rows, dropped, total, has_more = hg_comment_rows(
+            payload, ARTICLE, first_floor=9, parent_floor=2, drama_title='某剧', episode_index=1
+        )
+        assert dropped == 0, 'a real child row is not a danmaku prompt'
+        assert [r['评论ID'] for r in rows] == ['7697252120426136345', '7697252120426136346'], 'reply_id is the id'
+        assert all(r['父楼层'] == 2 for r in rows), 'a child links back to its parent floor'
+        assert [r['楼层'] for r in rows] == [9, 10], 'floors continue from the walker, newest-first inside a page'
+        assert rows[0]['分集ID'] == '7615470196337151038', 'the episode group is read out of the body'
+        assert rows[0]['剧名'] == '某剧' and rows[0]['评论者'] == '用户345'
+        assert rows[1]['点赞数'] == 3
+
+    def test_the_child_pages_total_comes_from_its_own_pagination_block(self):
+        # comment/list paginates in ``common_list_info``, reply/list in ``comment_list_info``.
+        # The walker grades 展开 N 条回复 against this number, so reading the wrong block made
+        # every thread look complete at zero.
+        payload = _reply_envelope(
+            [_reply_element('1', '甲', 1792160661, group='g', parent='p')],
+            total=200,
+        )
+        rows, _dropped, total, has_more = hg_comment_rows(payload, ARTICLE)
+        assert len(rows) == 1 and total == 200 and has_more is False
+
+    def test_a_child_row_without_a_body_is_counted_as_dropped(self):
+        payload = _reply_envelope(
+            [
+                _reply_element('1', '甲', 1792160661, group='g', parent='p'),
+                _reply_element('2', '乙', 0, group='g', parent='p'),  # create_timestamp 0 → prompt
+            ],
+            total=2,
+        )
+        rows, dropped, _total, _more = hg_comment_rows(payload, ARTICLE)
+        assert len(rows) == 1 and dropped == 1
+
+    def test_an_element_that_names_no_body_is_refused_rather_than_blanked(self):
+        # A payload shape change (the capitalised key renamed) must not become a table of
+        # empty rows: it is refused here, loudly, and the walker's shortfall then names it.
+        payload = _reply_envelope([{'comment': {'comment_id': '1'}}], total=1)
+        rows, dropped, _total, _more = hg_comment_rows(payload, ARTICLE)
+        assert rows == [] and dropped == 1
+
+    def test_the_comment_list_shape_still_reads_as_the_other_envelope(self):
+        # The branch is chosen by where the list lives, so an ordinary page must not be
+        # re-read as a child page just because the reply keys exist somewhere else.
+        payload = _envelope([_entry('7697905336342594366', '女主好飒', 1792313924)])
+        rows, dropped, total, _more = hg_comment_rows(payload, ARTICLE)
+        assert len(rows) == 1 and dropped == 0 and total == 3

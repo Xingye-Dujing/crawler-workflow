@@ -7,10 +7,19 @@ even a byte-identical replay with a fresh ticket answers ``Code 110001``. Instea
 desktop player is run behind our own mitmproxy and this module reads the JSON the
 player legitimately fetched (full measurement in ``docs/crawler_notes.md`` 红果短剧).
 
-Two payload shapes reach here, both keyed by ``group_id`` (one EPISODE's comment page):
+Two payload shapes reach here, and they are NOT the same shape (measured 2026-10-20 on a
+capture kept from a real player session):
 
-* ``comment/list`` — ``data.common_list_info{cursor,has_more,total}`` + ``data_list``;
-* ``reply/list`` — the same envelope for one comment's children (``父楼层`` links back).
+* ``comment/list`` — ``data.common_list_info{cursor,has_more,total}`` + ``data.data_list[]``,
+  each element ``{comment:{comment_id, common, expand, stat}}``;
+* ``reply/list`` — ``data.comment_list_info{cursor,has_more,total}`` + ``data.reply_list[]``,
+  each element ``{Common:{…}, reply_id, reply_to_comment_id, expand, stat}`` — a CAPITALISED
+  body key, its own id field, no ``data_list`` at all, and the parent comment in ``data.comment``.
+
+Reading only ``data_list`` from a reply page yields nothing, which is how 「包含子回复」 sat in
+the settings panel for a day while every one of the 53 expansion clicks a real walk made
+answered zero rows. :func:`hg_comment_rows` therefore normalises the reply element into the
+``comment/list`` shape and keeps ONE row builder — a second parser would drift.
 
 The walker feeds every entry through :func:`hg_comment_rows`, which drops the
 danmaku-guide rows the feed injects (measured: ``create_timestamp == 0`` and an
@@ -154,6 +163,31 @@ def _one_comment(
     }
 
 
+def _reply_entry(element):
+    """A ``reply_list`` element → the ``data_list`` shape :func:`_one_comment` reads.
+
+    Normalised rather than re-parsed on purpose: the danmaku filter, the name lookup, the
+    epoch stamping and the column set all live in one builder, and a second parser for the
+    child shape would drift from it silently. The child's OWN id is ``reply_id`` and
+    ``reply_to_comment_id`` names its parent; the body sits under a capitalised ``Common``.
+    """
+    if not isinstance(element, dict):
+        return None
+    common = element.get('Common')
+    if not isinstance(common, dict):
+        # A payload that capitalises nothing (a shape change) is refused here loudly — the
+        # element drops out as 「not a comment」 rather than becoming a blank row.
+        return None
+    return {
+        'comment': {
+            'comment_id': element.get('reply_id') or '',
+            'common': common,
+            'expand': element.get('expand') if isinstance(element.get('expand'), dict) else {},
+            'stat': element.get('stat') if isinstance(element.get('stat'), dict) else {},
+        }
+    }
+
+
 def hg_comment_rows(
     payload: dict,
     article_url: str,
@@ -162,26 +196,37 @@ def hg_comment_rows(
     drama_title: str = '',
     episode_index: int = 0,
 ) -> tuple:
-    """A ``comment/list`` / ``reply/list`` envelope → ``(rows, dropped, total, has_more)``.
+    """A ``comment/list`` OR ``reply/list`` envelope → ``(rows, dropped, total, has_more)``.
+
+    The two shapes are told apart by where their list lives (``data_list`` vs
+    ``reply_list``) and read their pagination from the block that goes with it
+    (``common_list_info`` vs ``comment_list_info``) — the totals are the SITE's own words
+    either way, and a child thread's ``total`` is what grades 展开 N 条回复 against what
+    actually came home.
 
     ``first_floor`` keeps 楼层 whole across the pages one episode's walk fetches (the
     payload itself orders newest-first inside a page but prints no floor); a reply
-    page passes its parent's floor and every row links to it. ``total``/``has_more``
-    are the SITE's own words and travel to the walker for the end-of-list license.
+    page passes its parent's floor and every row links to it.
     ``drama_title``/``episode_index`` are the walker's own facts (the web title it
     resolved, the episode position it was standing on) — a payload never names its own
     drama, so a row without them would be attributable only by an unreadable id.
     """
     data = payload.get('data') if isinstance(payload.get('data'), dict) else {}
-    info = data.get('common_list_info') if isinstance(data.get('common_list_info'), dict) else {}
     entries = data.get('data_list')
-    entries = entries if isinstance(entries, list) else []
+    if isinstance(entries, list):
+        info = data.get('common_list_info') if isinstance(data.get('common_list_info'), dict) else {}
+        elements = entries
+        is_reply = False
+    else:
+        info = data.get('comment_list_info') if isinstance(data.get('comment_list_info'), dict) else {}
+        elements = data.get('reply_list') if isinstance(data.get('reply_list'), list) else []
+        is_reply = True
     rows = []
     dropped = 0
     floor = first_floor
-    for entry in entries:
+    for element in elements:
         row = _one_comment(
-            entry,
+            _reply_entry(element) if is_reply else element,
             article_url,
             floor,
             parent_floor=parent_floor,
