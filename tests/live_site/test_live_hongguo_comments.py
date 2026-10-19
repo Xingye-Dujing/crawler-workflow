@@ -25,6 +25,7 @@ import requests
 
 import settings_store
 from crawlers import hongguo
+from crawlers.base import UNDER_TARGET
 from crawlers.comments_base import OK
 from crawlers.comments_hongguo import hg_series_id
 from crawlers.hongguo_harvest import HongguoCommentHarness, find_mitmdump, find_player
@@ -102,7 +103,10 @@ def test_one_drama_two_episodes_harvest_real_comments():
         abort=lambda: False,
     )
     try:
-        rows, status = harness.crawl_hongguo(link, 0)
+        # A bounded ask (40 rows): the arithmetic licenses (kept vs the site's
+        # total, merge dedupe, UNDER_TARGET) are pinned in the unit tier; this
+        # case proves the CHAIN — proxy, player, navigation, drawer, capture.
+        rows, status = harness.crawl_hongguo(link, 40)
     finally:
         harness.close()
     assert status == OK, f'the harvest refused: {said[-3:]}'
@@ -115,8 +119,8 @@ def test_one_drama_two_episodes_harvest_real_comments():
         assert row['评论时间'] >= '20', row  # an epoch that never became a stamp would sort nowhere
     total = harness.target_total
     assert total and len(rows) <= total, f'kept {len(rows)} rows over a site total of {total}'
+    # Every exit must be a NAMED one: the user's cap, the site's own end, or the
+    # convicted short — never silence over a thin table.
+    assert harness.end_reason in ('capped', 'site_end', UNDER_TARGET), f'unnamed end: {harness.end_reason!r}'
     if harness.end_reason == 'site_end':
         assert len(rows) == total, f'site_end claims the walk is whole: {len(rows)} kept of {total}'
-    else:
-        # Not site_end → the walk must SAY it was short, never sit silent at a thin table.
-        assert harness.end_reason, f'end_reason left unset: {said[-3:]}'

@@ -44,7 +44,12 @@ def response(flow):
     if flow.response is None or flow.response.status_code != 200:
         return
     try:
-        payload = flow.response.get_json()
+        # ``Response.content`` is the DECODED body (mitm transparently
+        # decompresses the site's brotli); ``get_json()`` does not exist on this
+        # mitmproxy's Response object (measured 2026-10-19: AttributeError, which
+        # a bare ``except`` turned into a silently empty capture file), so the
+        # JSON step is spelled out here.
+        payload = json.loads(flow.response.content.decode('utf-8', 'replace'))
     except Exception:
         return
     if not isinstance(payload, dict):

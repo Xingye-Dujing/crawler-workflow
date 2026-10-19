@@ -170,14 +170,21 @@
   body-covering (byte-identical replay answers 110001, measured 2026-10-19), so the 评论 mode drives the third-party
   desktop player behind our own mitmproxy and parses what the player legitimately fetched
   (`crawlers/hongguo_harvest.py`; full chain in `docs/crawler_notes.md` 红果短剧). Rules that keep it honest: a player
-  window the USER opened is refused by name, never killed — only Popen-children of this node get reaped; danmaku-guide
-  rows (`create_timestamp == 0`) are dropped and counted, never emitted as comments; a page whose `book_id` names
-  another drama is discarded by name (错剧 rows are worse than missing ones); the walk may only say `site_end` when the
-  envelope itself closed (`has_more == false` and its own `total` kept) — drawer-scroll failure leaves
-  `UNDER_TARGET`; a UIA tree that never wakes (cold WebView2 accessibility, measured) is its OWN named
-  refusal (`treeCold`), never a fake 搜不到剧; and the comment engine's U1 gate reads `end_reason` BY
-  ATTRIBUTE, so every browser adapter stays untouched. WebView2 CDP is a dead end (the loader env var is
-  overridden by the app's own options) — do not retry it.
+  window the USER opened is refused by name, never killed — only Popen-children of this node get reaped;
+  navigation is the leaderboard page's per-card ``▶ 播放`` (the 找剧 page has NO search box — measured), and
+  the comment trigger is the action-rail ``💬 <count>`` click that opens the drawer (the feed's silent prefetch
+  died with a protocol update the same day); danmaku-guide rows (`create_timestamp == 0`) are dropped and
+  counted, never emitted as comments; a page whose NON-ZERO `book_id` names another drama is discarded by
+  name (real rows print `book_id: "0"`, so 0 means "unnamed", not "wrong show"); the walk may only say
+  `site_end` when the ARITHMETIC closes — every group's kept reached the `total` the site itself printed
+  (`has_more: false` alone is a cursor window ending, not a thread: measured 20 kept of 800) — and any
+  scroll failure leaves `UNDER_TARGET`; a UIA tree that never wakes is its OWN named refusal (`treeCold`),
+  never a fake 搜不到剧 — and warming is the FULL walk itself (partial early-return walks read the tree cold
+  forever); mitmproxy 11's `Response` has no `get_json()` (a bare `except` turned it into a silently empty
+  capture — decode `response.content` explicitly); a topmost window over the player silently steals every
+  synthetic click (measured); and the comment engine's U1 gate reads `end_reason` BY ATTRIBUTE, so every
+  browser adapter stays untouched. WebView2 CDP is a dead end (the loader env var is overridden by the
+  app's own options) — do not retry it.
 - **instagram**: capture-only (`supports_crawl = False`), refused by `run.notCrawlable` and earlier by validation;
   such a platform still needs `domain` + `login_url`, stays OUT of `CAPABILITIES`, and must clear
   `TestCookiePanelParity` + `TestPlatformOrder`.

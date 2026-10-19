@@ -27,6 +27,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -49,6 +50,9 @@ logger = logging.getLogger(__name__)
 _ADDON = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'harvest_addon.py')
 #: The window class the Wails player registers (measured; also the UIA root's ClassName).
 _PLAYER_CLASS = 'wailsWindow'
+#: The action-rail comment button: ``💬`` plus the site's own count (``410``, ``5.1万``)
+#: — the sidebar's feedback button is ``💬 反馈`` and must not be clicked for comments.
+_RAIL_COMMENT_RE = re.compile(r'^💬\s*[\d.]+\s*[万千]?\+?$')
 
 
 def find_player() -> str:
@@ -151,25 +155,45 @@ class PlayerUI:
             time.sleep(0.5)
         return None
 
-    def _find(self, win, needle, ctype=None, depth=0):
-        """First control whose Name contains *needle* (bounded walk), or ``None``."""
-        if win is None or depth > 14:
-            return None
-        try:
-            children = win.GetChildren()
-        except Exception:
-            return None
-        for child in children:
+    def collect(self, max_depth: int = 20):
+        """Every (control, type, name, rect) of the window's tree, collected WHOLE.
+
+        The whole-tree walk is the wake-up itself: measured 2026-10-19, a partial
+        walk that early-returns on the first hit leaves the renderer's UIA tree
+        unbuilt (it answers cold, and the next caller sees only the title bar),
+        while a complete walk both reads the page and keeps it warm for the next.
+        A poisoned branch that raises mid-walk is skipped, not fatal.
+        """
+        self._ensure_library()
+        win = self.window()
+        if win is None:
+            return []
+        items = []
+
+        def walk(c, d):
+            if d > max_depth:
+                return
             try:
-                name = child.Name or ''
-                kind = child.ControlTypeName
+                items.append((c, c.ControlTypeName, c.Name or '', c.BoundingRectangle))
             except Exception:
-                continue
+                return
+            try:
+                children = c.GetChildren()
+            except Exception:
+                return
+            for ch in children:
+                walk(ch, d + 1)
+
+        walk(win, 0)
+        return items
+
+    def _find(self, win, needle, ctype=None, depth=0):
+        """First control whose Name contains *needle* — via the warming full walk."""
+        if win is None:
+            return None
+        for ctrl, kind, name, _rect in self.collect():
             if needle in name and (ctype is None or kind == ctype):
-                return child
-            hit = self._find(child, needle, ctype, depth + 1)
-            if hit is not None:
-                return hit
+                return ctrl
         return None
 
     def _click(self, ctrl) -> bool:
@@ -182,35 +206,82 @@ class PlayerUI:
             return False
 
     def open_drama(self, title: str) -> bool:
-        """Search *title* in the player and open the first matching result."""
+        """Open *title* through the 排行榜 page — the measured navigation.
+
+        Measured 2026-10-19: the 找剧 page has NO search box (it is a browse feed),
+        while 排行榜 lists dramas as cards, each with its title text and its own
+        ``▶ 播放`` button — clicking there starts the feed AT that drama, exactly
+        what the comment harvest needs. The page's own board switcher (「总榜 ▾」)
+        offers 总榜 / 必看榜 / 推荐榜 / AI剧 — the same four lists the web boards
+        publish — so *board* (the node's stored board value) selects the matching
+        list first. The card order is stable in the tree (title … then that card's
+        播放), so the play button is the first one AFTER the matched title. A title
+        the pages do not hold is searched by scrolling (bounded); not finding it
+        returns False and the caller answers DEAD.
+        """
         if self.wait_content() is None:
-            # The window exists but its DOM never became walkable (measured
-            # 2026-10-19: a freshly launched WebView2 can keep a title-bar-only
-            # UIA tree indefinitely; the session that saw a full tree had had a
-            # human mouse inside it). This is an environment fact the user can
-            # fix (touch the window once) — it must be NAMED, never a silent
-            # drama-not-found.
+            # The window exists but its DOM never became walkable (see wait_content)
+            # — an environment fact the user can fix, named, never a fake 搜不到剧.
             raise ValueError(t('crawl.hg.cmt.treeCold'))
         try:
-            tab = self._find_until('找剧', 'ButtonControl', seconds=15)
-            if tab is None or not self._click(tab):
+            rank = self._find_until('排行榜', 'ButtonControl', seconds=20)
+            if rank is None or not self._click(rank):
                 return False
-            box = self._find_until('', 'EditControl', seconds=12)
-            if box is None:
-                return False
-            self._click(box)
-            box.SendKeys(title)
-            time.sleep(0.8)
-            box.SendKeys('{Enter}')
-            card = self._find_until(title[:6], seconds=15)
-            if card is None:
-                return False
-            opened = self._click(card)
-            time.sleep(3.0)
-            return opened
+            time.sleep(4)
+            # The comment node cannot know WHICH web board a pasted link came from
+            # (its input is the link, not the board), so the walk asks the player's
+            # own lists in order — measured 2026-10-19: the web hot board's rank-1
+            # drama sat on the player's 必看榜, and the switcher also offers 热播榜
+            # / 总榜 / 推荐榜 / AI剧. Each list is one switch plus a bounded scroll.
+            for label in ('必看榜', '热播榜', '总榜', '推荐榜', 'AI剧'):
+                self._pick_board(label)
+                for _scroll in range(4):
+                    hit = self._play_for_title(title)
+                    if hit is not None:
+                        self._click(hit)
+                        time.sleep(3.0)
+                        return True
+                    self._ensure_library().WheelDown(wheelTimes=3, interval=0.12)
+                    time.sleep(2.0)
+            return False
         except Exception as exc:
             logger.debug('hongguo harvest: open_drama failed: %s', exc)
             return False
+
+    def _pick_board(self, label: str) -> bool:
+        """Switch the leaderboard's own board select to *label* (总榜/必看榜/推荐榜/AI剧)."""
+        toggle = self._find_until('榜 ▾', 'ButtonControl', seconds=8) or self._find_until(
+            '剧 ▾', 'ButtonControl', seconds=3
+        )
+        if toggle is None or not self._click(toggle):
+            return False
+        time.sleep(1.5)
+        option = None
+        for _c, kind, name, rect in self.collect():
+            if kind == 'ButtonControl' and name.strip() == label and rect.width() > 0:
+                option = _c
+                break
+        if option is None:
+            return False
+        clicked = self._click(option)
+        time.sleep(3.5)
+        return clicked
+
+    def _play_for_title(self, title: str):
+        """The card of *title*: its ``▶ 播放`` button, else the title control itself."""
+        items = self.collect()
+        for i, (_ctrl, kind, name, rect) in enumerate(items):
+            if rect.width() <= 0 or not name:
+                continue
+            if title in name or name in title:
+                if kind == 'ButtonControl' and '播放' in name:
+                    return _ctrl
+                for entry in items[i + 1 :]:
+                    _c2, kind2, name2, rect2 = entry
+                    if kind2 == 'ButtonControl' and '播放' in name2 and rect2.width() > 0:
+                        return entry[0]
+                return _ctrl
+        return None
 
     def next_episode(self) -> bool:
         """Advance the player to the next episode (the feed answers ↑/↓, measured)."""
@@ -228,23 +299,35 @@ class PlayerUI:
             logger.debug('hongguo harvest: next_episode failed: %s', exc)
             return False
 
-    def open_drawer(self) -> bool:
-        """Best effort: click the comment entry of the current video."""
-        try:
-            entry = self._find(self.window(), '评论')
-            return bool(entry is not None and self._click(entry))
-        except Exception as exc:
-            logger.debug('hongguo harvest: open_drawer failed: %s', exc)
-            return False
-
     def scroll_drawer(self) -> bool:
         """Best effort: wheel inside the open drawer (each move buys one cursor page)."""
         try:
-            self._ensure_library().WheelDown(wheelIterations=2, waitTime=0.15)
+            self._ensure_library().WheelDown(wheelTimes=2, interval=0.15)
             time.sleep(1.2)
             return True
         except Exception as exc:
             logger.debug('hongguo harvest: scroll_drawer failed: %s', exc)
+            return False
+
+    def open_comments(self) -> bool:
+        """Click the action rail's ``💬 <count>`` button — the measured comment door.
+
+        The feed's background comment prefetch died with a protocol update on
+        2026-10-19 (byte-identical player builds, morning yes / afternoon no), and
+        the drawer is the trigger that still answers: its button name carries the
+        site's OWN comment count (``💬 410``), and opening it fires comment/list.
+        The sidebar's ``💬 反馈`` is told apart by the numeric tail.
+        """
+        try:
+            win = self.window()
+            if win is None:
+                return False
+            for ctrl, kind, name, rect in self.collect():
+                if kind == 'ButtonControl' and rect.width() > 0 and _RAIL_COMMENT_RE.match(name or ''):
+                    return self._click(ctrl)
+            return False
+        except Exception as exc:
+            logger.debug('hongguo harvest: open_comments failed: %s', exc)
             return False
 
     def expand_replies(self) -> bool:
@@ -295,7 +378,7 @@ class HongguoCommentHarness:
         self.target_total = 0
         self._was_short = False
         self.walk_counts = {}
-        self._totals_by_group = {}
+        self._group_progress = {}
         self._groups_done = set()
         self._floors_by_cid = {}
         self._next_floor = 1
@@ -320,7 +403,11 @@ class HongguoCommentHarness:
             self._log(t('crawl.hg.cmt.titleMissing', url=url))
             return [], DEAD
         self._ensure_stack()
-        if not self.ui.open_drama(title):
+        # One retry: the walk through the player's five lists is a chain of UIA
+        # reads, and one cold-page stretch in the middle is a flake, not a missing
+        # drama (measured: identical builds open on the second try). Short-circuit
+        # `and` IS the retry — the second call only runs when the first failed.
+        if not self.ui.open_drama(title) and not self.ui.open_drama(title):
             self._log(t('crawl.hg.cmt.dramaNotFound', title=title))
             return [], DEAD
         episodes = int(self.params.get('episode_count') or 10)
@@ -339,6 +426,9 @@ class HongguoCommentHarness:
         licensed = True
         for ep in range(1, episodes + 1):
             self._check_abort()
+            # The drawer is the trigger (the feed's silent prefetch died with the
+            # protocol update); its click also proves the episode is on screen.
+            self.ui.open_comments()
             record = self._await_page(series_id, wait_s)
             if record is None:
                 licensed = False
@@ -346,28 +436,37 @@ class HongguoCommentHarness:
                 if not rows:
                     return [], DEAD
                 break
-            page_rows, page_refused, total, has_more = self._harvest(record, url)
+            page_rows, page_refused, prog, has_more = self._harvest(record, url)
             scanned += _entry_count(record)
             refused += page_refused
             rows.extend(page_rows)
-            self._log(t('crawl.hg.cmt.episode', n=ep, total=episodes, have=len(page_rows), site_total=total))
-            # Past the first page the feed's auto-fetch stops; the drawer is the only
-            # door left and it is best-effort (see PlayerUI) — a lost scroll leaves the
-            # walk UNDER_TARGET by name, never a claimed 'site_end'.
-            while has_more:
+            self._log(t('crawl.hg.cmt.episode', n=ep, total=episodes, have=len(page_rows), site_total=prog['total']))
+            # The drawer's own ``total`` is the denominator, not ``has_more``:
+            # measured 2026-10-19, page 1 of an 800-comment thread answers
+            # ``has_more: false`` (the cursor window is done — the thread is not).
+            # So the walk keeps scrolling while the site still counts more rows
+            # than this group has; a lost scroll leaves UNDER_TARGET, never a
+            # claimed 'site_end'.
+            while (has_more or prog['kept'] < prog['total']) and not (limit and len(rows) >= limit):
                 self._check_abort()
-                if not (self.ui.open_drawer() and self.ui.scroll_drawer()):
+                if not self.ui.scroll_drawer():
                     licensed = False
                     break
                 more = self._await_page(series_id, min(20, wait_s), allow_repeat=True)
                 if more is None:
                     licensed = False
                     break
-                extra, extra_refused, _total, has_more = self._harvest(more, url)
+                extra, extra_refused, prog, has_more = self._harvest(more, url)
                 scanned += _entry_count(more)
                 refused += extra_refused
                 rows.extend(extra)
             if with_replies:
+                # One best-effort expand click per episode (the drawer's first
+                # 回复/展开 control), then everything the player fetched — from
+                # this click, from its own prefetch, or from a human scrolling —
+                # is drained from the inbox and linked by its request body.
+                self.ui.expand_replies()
+                time.sleep(1.5)
                 reply_rows, reply_refused = self._harvest_replies(url)
                 scanned += len(reply_rows) + reply_refused
                 refused += reply_refused
@@ -378,27 +477,42 @@ class HongguoCommentHarness:
             if ep < episodes and not self.ui.next_episode():
                 licensed = False
                 break
-        self._finish('site_end' if licensed else UNDER_TARGET, rows, scanned, refused)
+        # 'site_end' demands the arithmetic, not just a quiet loop: every group's
+        # kept count must have reached the total the site printed for it.
+        whole = all(p['kept'] >= p['total'] for p in self._group_progress.values() if p['total'])
+        self._finish('site_end' if (licensed and whole) else UNDER_TARGET, rows, scanned, refused)
         self._log(t('crawl.hg.cmt.finished', n=len(rows), episodes=episodes))
         return rows, OK
 
     # ─── the captured pages ───
 
     def _harvest(self, record, url):
-        """Parse one ``comment/list`` record; floors continue across pages/groups."""
+        """Parse one ``comment/list`` page into the run's rows.
+
+        Pages of one group merge by 评论ID: the feed's prefetch page and the
+        drawer's page of the SAME episode both arrive, and a comment counted
+        twice is a table that lies about its own size. ``total`` is the group's
+        running site-attested denominator; floors continue across everything.
+        """
         payload = record.get('payload') or {}
         rows, dropped, total, has_more = hg_comment_rows(payload, url, first_floor=self._next_floor)
         group = str(record.get('group_id') or '')
-        for row in rows:
+        prog = self._group_progress.setdefault(
+            group or f'anon-{len(self._group_progress)}', {'kept': 0, 'total': 0, 'ids': set()}
+        )
+        fresh = [r for r in rows if str(r['评论ID']) not in prog['ids']]
+        prog['ids'].update(str(r['评论ID']) for r in fresh)
+        prog['kept'] += len(fresh)
+        if total:
+            prog['total'] = max(prog['total'], total)
+        for row in fresh:
             self._floors_by_cid[str(row['评论ID'])] = row['楼层']
-        self._next_floor += len(rows)
+        self._next_floor += len(fresh)
         if group:
             self._groups_done.add(group)
-            # The envelope repeats its own total on every page of the group; count it once.
-            self._totals_by_group.setdefault(group, total)
         if dropped:
             self._log(t('crawl.hg.cmt.danmakuSkipped', n=dropped))
-        return rows, dropped, total, has_more
+        return fresh, dropped, prog, has_more
 
     def _harvest_replies(self, url):
         """Fold in every ``reply/list`` page that landed since the last look."""
@@ -477,10 +591,14 @@ class HongguoCommentHarness:
 
     @staticmethod
     def _payload_book_id(record):
+        # A real comment row may carry ``expand.book_id == "0"`` (measured in the
+        # morning capture: the drawer's comments of a feed video print 0), so 0 is
+        # "the payload does not name the drama" — not a mismatch. The guard fires
+        # only on a NON-zero book that differs from the asked one.
         for item in ((record.get('payload') or {}).get('data') or {}).get('data_list') or []:
-            book = ((item or {}).get('comment') or {}).get('expand', {}).get('book_id')
-            if book:
-                return str(book)
+            book = str(((item or {}).get('comment') or {}).get('expand', {}).get('book_id') or '')
+            if book and book != '0':
+                return book
         return ''
 
     def _read_records(self):
@@ -653,7 +771,7 @@ class HongguoCommentHarness:
         if reason == UNDER_TARGET:
             self._was_short = True
         self.end_reason = UNDER_TARGET if self._was_short else reason
-        self.target_total = sum(self._totals_by_group.values())
+        self.target_total = sum(p['total'] for p in self._group_progress.values())
         # The funnel is handed over only when every leg was measured; the engine
         # omits it otherwise rather than printing fake zeros.
         self.walk_counts = {'scanned': scanned, 'kept': len(rows), 'refused': refused}
