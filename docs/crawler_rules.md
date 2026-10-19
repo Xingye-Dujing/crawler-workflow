@@ -178,13 +178,48 @@
   name (real rows print `book_id: "0"`, so 0 means "unnamed", not "wrong show"); the walk may only say
   `site_end` when the ARITHMETIC closes — every group's kept reached the `total` the site itself printed
   (`has_more: false` alone is a cursor window ending, not a thread: measured 20 kept of 800) — and any
-  scroll failure leaves `UNDER_TARGET`; a UIA tree that never wakes is its OWN named refusal (`treeCold`),
+  scroll failure leaves `UNDER_TARGET`; the harness ALSO publishes `shortfall` (rows the site counted
+  that this walk did not keep), because comparing ROWS against the total is NOT a fair test — reply rows
+  ride in the table under no episode's printed total, and a short 698-comment episode can otherwise be
+  masked by 400 children harvested elsewhere; a UIA tree that never wakes is its OWN named refusal (`treeCold`),
   never a fake 搜不到剧 — and warming is the FULL walk itself (partial early-return walks read the tree cold
   forever); mitmproxy 11's `Response` has no `get_json()` (a bare `except` turned it into a silently empty
   capture — decode `response.content` explicitly); a topmost window over the player silently steals every
   synthetic click (measured); and the comment engine's U1 gate reads `end_reason` BY ATTRIBUTE, so every
   browser adapter stays untouched. WebView2 CDP is a dead end (the loader env var is overridden by the
   app's own options) — do not retry it.
+  **Four more, from the second live run the same night** (each one cost real rows): the drawer's per-comment
+  button is literally named `回复` and it opens the COMPOSER — clicking it steals the keyboard from the wheel and
+  an 800-comment episode comes home as 20 rows, so an expand click must match `is_expand_control` (the name
+  carries 回复 AND one of 展开/查看/更多), every visible expansion gets clicked per episode (not one), and
+  `SendKeys {Esc}` hands the focus back. One silent scroll is never the end of a thread: paging retries with an
+  escalating action (wheel → Esc+harder wheel → `{PageDown}`) and a growing window, and only after `_MAX_STALLS`
+  silences does the episode settle short — naming `kept` against the site's `total`. The WEB board and the
+  CLIENT's boards are two different rankings, so the comment form also accepts a plain 剧名: that is declared
+  once as `Field.accepts_names` and the panel check, `engine.workflow` validation and the comment router all read
+  the matrix (a name-fed row keeps `文章URL` BLANK — no page was opened, no link is invented — and the 错剧 guard
+  falls back to the first non-zero `book_id` of the walk as its reference). A tree that goes cold MID-walk raises
+  the dedicated `TreeCold` (never compare message text), gets one louder re-wake, and then skips THAT drama by
+  name into `skipped_targets` while the rest still harvest; the engine refuses the node at the end naming them,
+  rows kept. `文章URL` itself is NOT renamed for the drama's sake: it is the join key of all eight comment tables
+  (66 references), and 短剧 semantics live in the added columns 剧名 / 集序号 / 分集ID (the id column held a
+  per-EPISODE `group_id` and was misnamed 剧集ID).
+  **And six more, from auditing that change** (each is a way the node could still settle `DONE` over a hole):
+  an expanded child thread prints its OWN `total` too, so `reply/list` pages are graded in `_reply_progress`
+  and `site_end` now requires children as well as episodes — clicking 展开 once and taking 20 of 200 is a named
+  gap (`子回复不完整`), never a full table; a walk that ends with NOTHING (`titleMissing`, or `noTraffic` on the
+  first episode — the popup-blocked-drama case) goes through `_mark_short()` + `skipped_targets` like any other
+  hole, because a bare `([], DEAD)` fed neither tail gate and a five-drama feed came home as a four-drama table
+  marked 正常; a reply page is stamped with the drama whose drawer asked for it (`_stamp`), since expansion
+  fires up to 40 requests, the per-episode grace is short, and a late page drained under the NEXT target
+  corrupts 剧名/文章URL rather than merely losing a row; card matching takes an EXACT normalised title across
+  the whole tree before any prefix match, because `斗罗大陆` answers a request for `斗罗大陆 第二季` and the 错剧
+  guard cannot catch it on a name-fed walk (the reference `book_id` is read from the wrong drama's own first
+  page); the board list is read AFTER the switcher is opened, never from the closed page — one tab named like a
+  board satisfies the same pattern as the whole list, and the walk then "cannot find" every drama on another
+  board; and 停止 is asked inside every UIA wait (`PlayerUI` holds the harness `abort`, and `open_drama`'s
+  `except Exception` re-raises `CrawlerStopped`), otherwise a cold tree burns minutes per drama uninterruptibly
+  and a Stop mid-open was filed as 「搜不到这部剧」.
 - **instagram**: capture-only (`supports_crawl = False`), refused by `run.notCrawlable` and earlier by validation;
   such a platform still needs `domain` + `login_url`, stays OUT of `CAPABILITIES`, and must clear
   `TestCookiePanelParity` + `TestPlatformOrder`.

@@ -33,11 +33,13 @@ from crawl_capabilities import (
     feed_of,
     fields_for,
     has_platform,
+    is_url_cell,
     link_fields,
     mode_for,
     mode_keys_for,
     mode_of_node,
     modes_for,
+    names_also_accepted,
     needs_session,
     platform_ids,
     required_missing,
@@ -475,6 +477,9 @@ class TestPayloadShape:
         # `nameKey` is deliberately absent: that word names the field in the
         # console, which is the backend's language, and shipping it would invite
         # the panel to grow a second, untranslated label path.
+        # `acceptsNames` rides along because the panel's own link check has to make the
+        # same call the executor does: 红果's comment form takes a drama TITLE as input, and
+        # a browser that flagged it would refuse a crawl the engine runs fine.
         assert set(mode['fields'][0]) == {
             'key',
             'control',
@@ -487,6 +492,7 @@ class TestPayloadShape:
             'required',
             'coerce',
             'linksOf',
+            'acceptsNames',
             'placeholder',
             'fedBy',
         }
@@ -906,3 +912,54 @@ class TestFeed:
             'https://www.zhihu.com/question/1',
             'https://www.zhihu.com/question/2',
         ]
+
+
+class TestWhichLinesAreNames:
+    """The one question a name-feeding mode has to answer, spelled exactly once.
+
+    ``static/js/workflow.js`` decides the SAME thing for the panel from the payload's
+    ``acceptsNames``. Both sides used a ``\\w``-style word class, and the two languages
+    disagree about what that covers — Python's includes Chinese, JavaScript's does not —
+    so a title holding a question mark and an equals sign was a LINK to the executor (and
+    dropped by count) and a NAME to the panel (and blessed). One spelling per rule, pinned
+    here for the server and in ``test_frontend_js`` for the browser.
+    """
+
+    @pytest.mark.parametrize(
+        'cell',
+        [
+            'https://hongguoduanju.com/detail?series_id=7696063528179878937',
+            '//hongguoduanju.com/detail?series_id=1',
+            'hongguoduanju.com/detail?series_id=1',
+            'detail?a=1&b=2',
+        ],
+    )
+    def test_a_line_that_carries_a_link_shape_is_a_link(self, cell):
+        assert is_url_cell(cell) is True
+
+    @pytest.mark.parametrize(
+        'cell',
+        [
+            '聚宝仙盆之杂灵根才是真BOSS',
+            '测试剧',
+            '我重扎过去成为太阳',
+            # The divergence case: a name the OLD Python pattern read as a query.
+            '我在八零年代？第=集',
+            '  ',
+            '',
+            None,
+        ],
+    )
+    def test_a_name_is_a_name_in_both_languages(self, cell):
+        assert is_url_cell(cell) is False
+
+    def test_only_the_mode_that_walks_the_client_declares_it_takes_names(self):
+        assert names_also_accepted(mode_for('hongguo', 'comments')) is True
+        for platform in ('zhihu', 'xiaohongshu', 'douyin', 'weibo', 'bilibili'):
+            assert names_also_accepted(mode_for(platform, 'comments')) is False, (
+                f'{platform} routes by domain only; a name there is a dropped line'
+            )
+
+    def test_a_mode_without_a_link_list_never_claims_to_take_names(self):
+        assert names_also_accepted(mode_for('hongguo', 'hot_drama')) is False
+        assert names_also_accepted(None) is False

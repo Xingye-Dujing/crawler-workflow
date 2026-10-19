@@ -393,7 +393,14 @@ class WorkflowEngine:
                 # foreign links at execution time; that is the net, not this check.
                 continue
             urls = field.value_from(params)
-            bad = sum(1 for u in urls if platform_for(u) != field.links_of)
+            # A field that declares it also takes NAMES (红果: the walk runs inside the
+            # client, whose own boards answer to a title) is not told a title is a broken
+            # link; a line that DOES look like a link still has to belong to the platform.
+            bad = sum(
+                1
+                for u in urls
+                if not (field.accepts_names and not capabilities.is_url_cell(u)) and platform_for(u) != field.links_of
+            )
             if bad:
                 errors.append(t('engine.source_link_mismatch', nid=label, n=bad, platform=field.links_of))
         return errors

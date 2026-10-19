@@ -365,6 +365,196 @@ def test_a_harness_that_walked_short_names_the_gap(app_module, recorder, monkeyp
     assert recorder == [], 'a comments node must never fall through to the crawler'
 
 
+def test_a_drama_the_client_would_not_open_is_named_at_the_end(app_module, recorder, monkeypatch):
+    """A skipped drama is refused by name, and the rows that DID harvest stay.
+
+    The client's boards answer to a ranking of their own, so a feed of several dramas can
+    legitimately open all but one. 「新增 N 条（正常）」 over the missing one was the bug:
+    the node settled DONE on a table with a hole in it. Reading ``skipped_targets`` BY
+    ATTRIBUTE keeps this gate dormant for every platform whose adapter has no such list.
+    """
+    import crawlers.hongguo as hongguo_module
+
+    class _SkippingHarness:
+        driver = None
+        risk_blocked = False
+        login_wall = False
+        end_reason = None
+        target_total = 0
+        walk_counts = {}
+        skipped_targets = ['甲剧', '乙剧']
+
+        def __init__(self, params=None, log=None, abort=None):
+            pass
+
+        def crawl_hongguo(self, url, limit):
+            return [{'评论ID': 'c1', '评论内容': '很好', '文章URL': url}], 'ok'
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        hongguo_module.HongguoCrawler,
+        'browserless_comment_harness',
+        staticmethod(lambda **kw: _SkippingHarness()),
+    )
+    mode = capabilities.mode_for('hongguo', 'comments')
+    params = _params_for('hongguo', mode)
+    params['urls'] = 'https://hongguoduanju.com/detail?series_id=7696063528179878937'
+    node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
+    with pytest.raises(ValueError) as caught:
+        app_module._execute_source_node(node, headless=True, ctx=None)
+    message = str(caught.value)
+    assert '甲剧' in message and '乙剧' in message, f'the refusal must name the dramas it skipped: {message}'
+    assert recorder == [], 'a comments node must never fall through to the crawler'
+
+
+def test_a_row_total_that_masks_a_short_episode_is_still_refused(app_module, recorder, monkeypatch):
+    """The gate reads the harness's own missing count, not just rows-vs-total.
+
+    A comment table carries reply rows that no episode's printed ``total`` includes, so
+    「kept at least as many rows as the site counted」 can be literally true while an episode
+    came home with 20 of its 698. That is the difference between a short table and a node
+    that settles DONE, and a false license here is the bug this repo already refused twice.
+    """
+    import crawlers.hongguo as hongguo_module
+
+    class _MaskingHarness:
+        driver = None
+        risk_blocked = False
+        login_wall = False
+        end_reason = UNDER_TARGET
+        target_total = 1
+        shortfall = 500
+        walk_counts = {'scanned': 520, 'kept': 520, 'refused': 0}
+        skipped_targets = []
+
+        def __init__(self, params=None, log=None, abort=None):
+            pass
+
+        def crawl_hongguo(self, url, limit):
+            return [{'评论ID': f'c{i}', '评论内容': f'评{i}', '文章URL': url} for i in range(20)], 'ok'
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        hongguo_module.HongguoCrawler,
+        'browserless_comment_harness',
+        staticmethod(lambda **kw: _MaskingHarness()),
+    )
+    mode = capabilities.mode_for('hongguo', 'comments')
+    params = _params_for('hongguo', mode)
+    params['urls'] = 'https://hongguoduanju.com/detail?series_id=7696063528179878937'
+    node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
+    with pytest.raises(ValueError) as caught:
+        app_module._execute_source_node(node, headless=True, ctx=None)
+    message = str(caught.value)
+    assert '520' in message, f'the refusal quotes what the table holds: {message}'
+    # The denominator is the rows in hand PLUS the gap the harness named. Printing the site's
+    # own per-episode total here would read 「采到 20/1 条就停了」 — a sentence that convicts
+    # the node with arithmetic nobody can audit, and the 500-comment hole never appears.
+    assert '20/520' in message, f'the refusal must print have/want as one auditable fraction: {message}'
+    assert '20/1 ' not in message and '20/1\n' not in message, message
+
+
+def test_a_fed_drama_name_reaches_the_harness_not_the_domain_router(app_module, recorder, monkeypatch):
+    """The comment router sorts its input by DOMAIN — and obeys the matrix when a mode
+    declares that a line may also be a plain NAME. 红果 harvests inside the desktop client,
+    whose own boards answer to a title; dropping every 剧名 as an "unsupported link" would
+    have left the name-fed walk unreachable through the engine that owns it."""
+    seen = []
+    _patch_harness(monkeypatch, seen)
+    mode = capabilities.mode_for('hongguo', 'comments')
+    params = _params_for('hongguo', mode)
+    params['urls'] = '聚宝仙盆之杂灵根才是真BOSS'
+    node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
+
+    rows = app_module._execute_source_node(node, headless=True, ctx=None)
+
+    assert rows, 'a name-fed drama is an input, not a dropped line'
+    assert seen and seen[0][1] == '聚宝仙盆之杂灵根才是真BOSS', f'reached the harness as {seen}'
+
+
+def test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named(app_module, recorder, monkeypatch, tmp_path):
+    """「继续」 must be able to pay what the skip refusal promises — which a pre-written cursor could not.
+
+    The position used to be recorded *before* each target, so a full pass left it at
+    ``len(urls)-1``: resuming a feed that skipped drama 2 of 3 re-walked the LAST drama only, a
+    fresh harness reported no skips at all, both tail gates slept, and the node settled DONE over
+    a table permanently missing that drama — while the console had promised it would be collected.
+    A real store sits under this because the thing under test is the hand-off between attempts.
+    """
+    import crawlers.hongguo as hongguo_module
+    from services.run_store import RunStore
+
+    urls = [f'https://hongguoduanju.com/detail?series_id={7696063528179878930 + i}' for i in range(3)]
+    seen = []
+    # The hole opens once, on the first attempt only: the resume must find the second drama there.
+    state = {'skip_second': True}
+
+    class _HoleHarness:
+        driver = None
+        risk_blocked = False
+        login_wall = False
+        end_reason = None
+        target_total = 0
+        shortfall = 0
+        walk_counts = {}
+
+        def __init__(self, params=None, log=None, abort=None):
+            self.skipped_targets = []
+
+        def crawl_hongguo(self, url, limit):
+            seen.append(url)
+            if url == urls[1] and state['skip_second']:
+                state['skip_second'] = False
+                self.skipped_targets.append('乙剧')
+                self.end_reason = UNDER_TARGET
+                return [], 'dead'
+            # Reset deliberately: the cursor must stay pinned at the hole even when the
+            # following target comes back clean, so this fake must not inherit the real
+            # harness's sticky ``end_reason`` and make the assertion pass by accident.
+            self.end_reason = None
+            return [{'平台': 'hongguo', '评论ID': f'c-{url}', '评论内容': '很好', '文章URL': url}], 'ok'
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        hongguo_module.HongguoCrawler,
+        'browserless_comment_harness',
+        staticmethod(lambda **kw: _HoleHarness()),
+    )
+    monkeypatch.setattr(app_module, 'add_log', lambda _m: None)
+    mode = capabilities.mode_for('hongguo', 'comments')
+    params = _params_for('hongguo', mode)
+    params['urls'] = '\n'.join(urls)
+    node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
+
+    store = RunStore(str(tmp_path / 'hole.db'))
+    store.start_run('r-hole', 'holewf', 'fp-hole', headless=True)
+    store.begin_node('r-hole', 'node-1', 'source', title='评论', fingerprint='fp-node')
+    ctx = {'store': store, 'run_id': 'r-hole', 'fingerprints': {'node-1': 'fp-node'}, 'skipped_seen': {}}
+
+    with pytest.raises(ValueError) as caught:
+        app_module._execute_comment_node(node, headless=True, ctx=ctx)
+    assert '乙剧' in str(caught.value), f'the refusal names the drama it could not open: {caught.value}'
+    cursor = store.get_cursor('r-hole', 'node-1')
+    assert cursor.get('url_index') == 1, f'the position may only rest past inputs this node PROVED complete: {cursor}'
+
+    # 继续: the hole is closed now, and the replay must re-walk BOTH the skipped drama and
+    # everything after it — never start from the end of the list.
+    seen.clear()
+    rows = app_module._execute_comment_node(node, headless=True, ctx=dict(ctx, resume=True))
+    assert seen == urls[1:], f'继续 re-walked {seen}, expected only the unproven tail {urls[1:]}'
+    # Three, not four: the re-walk of the THIRD drama re-files nothing, because the ledger
+    # already owns that comment. The replay costs the player its time and never costs the table
+    # a duplicate row — which is what makes rewinding the cursor safe to do at all.
+    assert len(rows) == 3, f'expected the two kept rows plus the closed hole: {rows}'
+    assert [str(r['评论ID']) for r in rows].count(f'c-{urls[2]}') == 1, f'the replay double-stored: {rows}'
+
+
 @pytest.mark.parametrize('platform,mode_key', _pairs())
 def test_the_matrix_offers_no_mode_that_cannot_be_dispatched(platform, mode_key):
     """A handler the runtime cannot reach is a refusal at crawl time, not a fallback.

@@ -27,7 +27,7 @@ import settings_store
 from crawlers import hongguo
 from crawlers.base import UNDER_TARGET
 from crawlers.comments_base import OK
-from crawlers.comments_hongguo import hg_series_id
+from crawlers.comments_hongguo import hg_page_title, hg_series_id
 from crawlers.hongguo_harvest import HongguoCommentHarness, find_mitmdump, find_player
 
 pytestmark = [pytest.mark.live_site, pytest.mark.live_cn, pytest.mark.enable_socket]
@@ -89,6 +89,17 @@ def _first_board_link() -> str:
     raise AssertionError('the hot board carried no rank payload in four tries')
 
 
+def _detail_title(link: str) -> str:
+    """The drama name the WEB detail page prints — the name a board row corresponds to.
+
+    Read here so the name-fed case asks the client for a drama the site actually ranks
+    first, rather than for a title somebody typed.
+    """
+    reply = requests.get(link, timeout=_TIMEOUT, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+    reply.raise_for_status()
+    return hg_page_title(reply.text)
+
+
 def test_one_drama_two_episodes_harvest_real_comments():
     if not _configure_player():
         pytest.skip('红果播放器未配置（settings hongguo_player_path）—— live 层专属')
@@ -124,3 +135,43 @@ def test_one_drama_two_episodes_harvest_real_comments():
     assert harness.end_reason in ('capped', 'site_end', UNDER_TARGET), f'unnamed end: {harness.end_reason!r}'
     if harness.end_reason == 'site_end':
         assert len(rows) == total, f'site_end claims the walk is whole: {len(rows)} kept of {total}'
+    # The drama's own words, measured from the real payload: a table of ids nobody can
+    # read is not a 短剧 table, and 集序号 outside the walked range would mean the walker
+    # labelled a page it never stood on.
+    for row in rows:
+        assert str(row['剧名']).strip(), f'a harvested row carries no drama name: {row}'
+        assert 1 <= int(row['集序号']) <= 2, f'episode index outside the walk: {row}'
+        assert str(row['分集ID']).strip(), f'a comment row names no episode thread: {row}'
+
+
+def test_a_drama_title_walks_the_players_own_board():
+    """The client is its own authority: fed a bare 剧名, the walk finds the card in the
+    player's 排行榜 without ever asking the website. Measured as the reason this exists —
+    the web board and the client's boards are two different rankings, and a link-fed walk
+    can search the client for a drama the client does not list."""
+    if not _configure_player():
+        pytest.skip('红果播放器未配置（settings hongguo_player_path）—— live 层专属')
+    if not find_mitmdump():
+        pytest.skip('mitmproxy 未安装（requirements-optional.txt）—— live 层专属')
+    link = _first_board_link()
+    title = _detail_title(link)
+    assert title, f'the detail page printed no drama name for {link}'
+    said = []
+    harness = HongguoCommentHarness(
+        params={'episode_count': 1, 'harvest_timeout': _TIMEOUT, 'include_replies': False},
+        log=said.append,
+        abort=lambda: False,
+    )
+    try:
+        # One episode, 20 rows: the point is the ENTRY (name → client card → drawer), not
+        # the depth, and every second of this spends the user's desktop.
+        rows, status = harness.crawl_hongguo(title, 20)
+    finally:
+        harness.close()
+    assert status == OK, f'the name-fed walk refused: {said[-3:]}'
+    assert rows, f'no rows for {title}; console said: {said}'
+    for row in rows:
+        assert row['剧名'] == title, f'a name-fed row must carry the name the walk asked for: {row}'
+        assert row['文章URL'] == '', f'no web page was opened, so no link may appear: {row}'
+        assert int(row['集序号']) == 1, row
+    assert harness.skipped_targets == [], f'the client would not open the drama it listed: {harness.skipped_targets}'

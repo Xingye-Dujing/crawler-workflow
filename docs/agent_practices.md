@@ -201,6 +201,25 @@ committing; CI (`ruff check` + `ruff format --check`) is the unskippable gate.
   HTTP response returns is workflow zero's row; 继续 adopts each workflow's own row by name. **A chip must describe what
   happened:** `并行 ×N` only when `mode == 'parallel'`, and a serial row says `串行 ×1` because that row *is* one workflow.
   Resume state stays **per workflow** (`fingerprints_for_workflow`), so a failure in B restores A.
+- **A cursor records what the node PROVED, never what it attempted.** `_execute_comment_node` wrote
+  `{'url_index': idx - 1}` *before* handing a link to its adapter, so a pass that walked all ten dramas left the
+  cursor at `9`. Both end-of-node refusals (a drama the client would not open; a walk short of the site's total)
+  raise *after* the loop, so 继续 skipped 1..9 and re-walked the last link alone: the harness is freshly built per
+  attempt, `skipped_targets` was empty, both gates slept, and the node settled **DONE** over the hole the console
+  had just named — with a message promising 「继续只补这几部」. The write now happens after the walk and only while
+  the run of completed inputs is unbroken, so the cursor means "leading inputs proven complete"; the blocked/
+  cookie-wall refusal laundered the same way is fixed by the same change. Rewinding is safe only because the ledger
+  refuses a re-walked comment (`item_key` below), and that is what `test_a_tail_refusal_leaves_the_cursor_behind_
+  the_hole_it_named` measures with a real `RunStore`.
+- **A row's ledger key is its site identity, not its content.** `run_store.item_key` identifies an item by link, else
+  by title+author+the head of the body, else by a hash of the WHOLE row. Comment columns deliberately avoid the first
+  two field lists (`crawlers/comments.py` says why: every comment of one article would then share a key and all but
+  the first would be dropped) — which left them on the whole-row hash, and that row carries `楼层`, which a fresh
+  harness numbers from 1 again. So any resume that re-walked an article re-stored all of its comments with invented
+  floors, and the comment engine's own in-run dedupe already used `评论ID` (`identity=lambda row: row['评论ID']`) —
+  two answers to one question in the same feature. A comment is now keyed by (`平台`, `评论ID`): the id alone would
+  let a 知乎 numeric id meet a 微博 one inside a mixed-input node. Changing the function rotates existing keys, so a
+  saved comment node re-files its set exactly once — a one-time cost for a dedupe that previously did not hold at all.
 
 ## Console, messages and i18n
 

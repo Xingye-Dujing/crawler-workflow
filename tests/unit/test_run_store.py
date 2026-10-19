@@ -94,6 +94,36 @@ class TestItemKey:
         assert item_key({}) == item_key({})
         assert item_key({}) != item_key({'x': 1})
 
+    def test_a_comment_is_the_same_comment_at_a_different_floor(self):
+        """The resume invariant a comment table cannot get from the whole-row hash.
+
+        A comment row deliberately keeps out of ``_URL_FIELDS`` / ``_AUTHOR_FIELDS`` /
+        ``_BODY_FIELDS`` (``crawlers/comments.py`` says why: every comment of one article
+        would otherwise hash alike and all but the first would be dropped), so it used to
+        fall through to a hash of the WHOLE row — and that row carries 楼层, which a fresh
+        harness numbers from 1 again. 继续 over a re-walked article therefore re-stored every
+        comment a second time with invented floors. ``评论ID`` is the only field that survives
+        a replay, so it now answers for the row.
+        """
+        a = {'平台': 'hongguo', '文章URL': '', '剧名': '甲', '集序号': 1, '评论ID': '900', '楼层': 21, '评论内容': '好'}
+        b = dict(a, 楼层=5, 父楼层=2, 集序号=3, 剧名='')
+        assert item_key(a) == item_key(b), 'the same comment at another floor is not a new item'
+
+    def test_two_comments_never_share_a_key(self):
+        base = {'平台': 'hongguo', '评论ID': '900', '评论内容': '好', '楼层': 1}
+        assert item_key(base) != item_key(dict(base, 评论ID='901'))
+
+    def test_two_platforms_id_spaces_do_not_meet(self):
+        """A comment id is unique inside a site, not across them: a mixed-input comment node
+        must not read 知乎's ``900`` as 微博's already-collected ``900``."""
+        assert item_key({'平台': 'zhihu', '评论ID': '900'}) != item_key({'平台': 'weibo', '评论ID': '900'})
+
+    def test_an_article_row_is_still_keyed_by_its_link(self):
+        """The comment branch may not swallow the source node's identity: a row with a 链接
+        and no 评论ID is an article, and two articles of one author are not one item."""
+        assert item_key({'链接': 'https://x/1', '标题': 'A'}) == item_key({'链接': 'https://x/1', '标题': 'B'})
+        assert item_key({'链接': 'https://x/1'}) != item_key({'链接': 'https://x/2'})
+
 
 # ─── fingerprints ──────────────────────────────────────────────────────
 

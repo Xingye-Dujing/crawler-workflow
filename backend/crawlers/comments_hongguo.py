@@ -87,12 +87,25 @@ def _user_name(user: dict) -> str:
     return ''
 
 
-def _one_comment(entry: dict, article_url: str, floor: int, parent_floor: int = 0) -> dict | None:
-    """One ``data_list`` entry → a standard comment row; ``None`` when it is not one.
+def _one_comment(
+    entry: dict,
+    article_url: str,
+    floor: int,
+    parent_floor: int = 0,
+    drama_title: str = '',
+    episode_index: int = 0,
+) -> dict | None:
+    """One ``data_list`` entry → a comment row; ``None`` when it is not one.
 
     A danmaku-guide row is the feed's own prompt (「发送弹幕…」), not a comment: it carries
     an activity block and ``create_timestamp == 0``. Dropping it is the difference
     between a comment table and a table that claims the site's prompts are opinions.
+
+    ``文章URL`` keeps its shared name on purpose: it is the key every platform's comment
+    table already joins on (8 crawlers emit it, the cross-platform analyses read it), so
+    renaming it here would split 红果 off the shared tables over a matter of wording. The
+    drama's own words live beside it — ``剧名`` and ``集序号`` — because a 短剧 comment is
+    about an EPISODE, and a payload id nobody can read is not a name.
     """
     if not isinstance(entry, dict):
         return None
@@ -115,6 +128,12 @@ def _one_comment(entry: dict, article_url: str, floor: int, parent_floor: int = 
     return {
         '平台': 'hongguo',
         '文章URL': article_url,
+        # The two facts a 短剧 table actually needs and the payload cannot print itself:
+        # the drama's name (the web detail ``<title>``, or the 剧名 the walk was fed) and
+        # which episode of it this thread belongs to. A walk fed by name carries no web
+        # link at all — ``文章URL`` then stays blank, never invented from a search guess.
+        '剧名': drama_title,
+        '集序号': episode_index or '',
         '评论者': _user_name(user),
         # The payload hands out a numeric user_id and no profile URL; a link built here
         # would be a guess at a page this app never shows (评论者主页 blank, not invented).
@@ -128,18 +147,30 @@ def _one_comment(entry: dict, article_url: str, floor: int, parent_floor: int = 
         '父楼层': parent_floor or '',
         '评论ID': cid,
         # Facts a reader may want for one drama's table: which episode and which parent.
-        '剧集ID': str(common.get('group_id') or ''),
+        # ``分集ID`` is the ``group_id`` of ONE episode's thread (a drama has as many of
+        # them as it has episodes) — it is not the drama's id, which is ``series_id``.
+        '分集ID': str(common.get('group_id') or ''),
         '子回复数': _as_int(stat.get('reply_count')),
     }
 
 
-def hg_comment_rows(payload: dict, article_url: str, first_floor: int = 1, parent_floor: int = 0) -> tuple:
+def hg_comment_rows(
+    payload: dict,
+    article_url: str,
+    first_floor: int = 1,
+    parent_floor: int = 0,
+    drama_title: str = '',
+    episode_index: int = 0,
+) -> tuple:
     """A ``comment/list`` / ``reply/list`` envelope → ``(rows, dropped, total, has_more)``.
 
     ``first_floor`` keeps 楼层 whole across the pages one episode's walk fetches (the
     payload itself orders newest-first inside a page but prints no floor); a reply
     page passes its parent's floor and every row links to it. ``total``/``has_more``
     are the SITE's own words and travel to the walker for the end-of-list license.
+    ``drama_title``/``episode_index`` are the walker's own facts (the web title it
+    resolved, the episode position it was standing on) — a payload never names its own
+    drama, so a row without them would be attributable only by an unreadable id.
     """
     data = payload.get('data') if isinstance(payload.get('data'), dict) else {}
     info = data.get('common_list_info') if isinstance(data.get('common_list_info'), dict) else {}
@@ -149,7 +180,14 @@ def hg_comment_rows(payload: dict, article_url: str, first_floor: int = 1, paren
     dropped = 0
     floor = first_floor
     for entry in entries:
-        row = _one_comment(entry, article_url, floor, parent_floor=parent_floor)
+        row = _one_comment(
+            entry,
+            article_url,
+            floor,
+            parent_floor=parent_floor,
+            drama_title=drama_title,
+            episode_index=episode_index,
+        )
         if row is None:
             dropped += 1
             continue

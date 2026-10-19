@@ -158,6 +158,30 @@ def results(tmp_path_factory, capabilities_matrix):
             'connections': [{'from': 'n1', 'to': 'out-1'}],
         },
         {
+            'id': 'comments_names',
+            'nodes': [
+                _node(
+                    'n1',
+                    'source',
+                    {
+                        # 红果's comment form declares it also takes plain drama titles (the
+                        # crawl runs inside the client, whose boards answer to a name). The
+                        # browser must not flag what the engine will crawl — and must still
+                        # flag the one line that IS a foreign link.
+                        # The third line is the shared-spelling case: a title holding a
+                        # question mark and an equals sign. Python's \w covers Chinese and
+                        # JavaScript's does not, so the two sides used to answer opposite
+                        # questions about exactly this string.
+                        'platform': 'hongguo',
+                        'collect': 'comments',
+                        'urls': '聚宝仙盆之杂灵根才是真BOSS\n繁花\nhttps://weibo.com/1/a\n我在八零年代？第=集',
+                    },
+                ),
+                _save(),
+            ],
+            'connections': [{'from': 'n1', 'to': 'out-1'}],
+        },
+        {
             'id': 'comments_ok',
             'nodes': [
                 _node(
@@ -461,6 +485,18 @@ class TestValidateGate:
         assert fields['n'] == '2'
         assert fields['plat'] == 'zhihu'
         assert fields['title'] == 't'
+
+    def test_a_platform_that_takes_names_flags_only_the_real_foreign_link(self, results):
+        # Same rule as the backend's validate, asked of the same matrix payload: the
+        # browser and the engine must not disagree about what one input line IS. The
+        # 「我在八零年代？第=集」 line is the one that used to disagree: both sides now spell
+        # the query test with an ASCII word class (crawl_capabilities.is_url_cell).
+        parsed = [_parse(m) for m in results['validate']['comments_names']]
+        assert len(parsed) == 1
+        key, fields = parsed[0]
+        assert key == 'validate.sourceCommentPlat'
+        assert fields['n'] == '1', 'three drama titles are inputs, not three broken links'
+        assert fields['plat'] == 'hongguo'
 
     def test_comma_separated_links_are_split_like_the_backend(self, results):
         # The backend's split_urls accepts commas; the validator must not flag

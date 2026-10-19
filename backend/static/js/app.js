@@ -933,6 +933,9 @@ const I18n = {
             'settings.urls': 'Article URLs',
             'settings.urlsHint': 'One URL per line — WeChat crawls these articles',
             'settings.commentUrls': 'Article Links',
+            'settings.hgCommentUrls': 'Drama link or title (one per line)',
+            'settings.hgCommentUrlsHint':
+                'Either a hongguoduanju.com/detail?series_id=… link or a plain drama title. A title is searched in the PLAYER\u2019s own boards — the website ranking and the client ranking are two different lists, so a title is the input the client can actually answer.',
             'settings.inputColumn': 'Upstream Column',
             'settings.inputColumnHint':
                 'Name the wired table column to crawl one link per row; the box above is then ignored. Cells holding several links are split.',
@@ -969,7 +972,7 @@ const I18n = {
             'settings.partTimestampHint': 'Names the shards (and the file they merge into) after the moment this run started, so a second pass keeps the first one\'s files. A 续跑 of the same run keeps writing the same names.',
             'settings.commentHint': 'The comments load by scrolling the page. A windowed run scrolls visibly; a headless run opens no window and collects the same rows (#148). Every part_size comments are written as a part file into the export directory.',
             'settings.commentFetchHint': 'These comments are read from inside one loaded page, so a window would just sit there. A headless run opens no window and collects the same rows. Every part_size comments are written as a part file into the export directory.',
-            'settings.hgCommentNote': 'Hongguo comments exist only in the app protocol: this node launches the Hongguo desktop player through a local proxy and reads the comment pages the player itself fetches. The player must be LOGGED IN, and any player window already open (without this proxy) must be closed first.',
+            'settings.hgCommentNote': 'Hongguo comments exist only in the app protocol: this node launches the Hongguo desktop player through a local proxy and reads the comment pages the player itself fetches. The player must be LOGGED IN, and any player window already open (without this proxy) must be closed first. Each input line may be a drama link or a plain title (searched in the player\u2019s own boards). The table carries 剧名 / 集序号 / 分集ID; an episode that kept fewer rows than the site counts, and any drama the player would not open, are refused by name at the end — the rows already harvested are kept.',
             'settings.hgEpisodeCount': 'Episodes to walk (per drama)',
             'settings.hgEpisodeCountHint': 'Comments hang on one episode each; the walk opens episodes 1..N in the player and harvests each episode\'s page.',
             'settings.hgIncludeReplies': 'Include child replies',
@@ -2164,6 +2167,9 @@ const I18n = {
             'settings.urls': '文章链接',
             'settings.urlsHint': '每行一个链接，微信按这些文章逐个抓取',
             'settings.commentUrls': '文章链接',
+            'settings.hgCommentUrls': '剧集链接或剧名（每行一个）',
+            'settings.hgCommentUrlsHint':
+            '可填 hongguoduanju.com/detail?series_id=… 链接，也可直接填剧名。填剧名时直接在播放器自己的榜单里找——网页热榜与客户端榜单是两套排序，剧名才是客户端答得出的输入。',
             'settings.inputColumn': '上游列名',
             'settings.inputColumnHint':
                 '填上游表格的列名＝逐行读该列链接去爬（链接框此时失效、其内容被忽略）；一格多链接自动拆开；不接表格请留空',
@@ -2197,7 +2203,7 @@ const I18n = {
             'settings.partTimestampHint': '按本次运行的开始时间命名分片（以及合并后的文件），再跑一次不会覆盖上一次的文件。同一次运行的「续跑」仍然写同一组名字。',
             'settings.commentHint': '评论区靠滚动页面加载。选窗口运行会可见地滚动；选无头运行则不弹窗，采集到的行数一样（#148）。每 part_size 条评论写入一个分片文件到导出目录。',
             'settings.commentFetchHint': '此平台的评论在页面内一次性取数，开窗口也只是停在首页。无头运行不弹窗，采集到的行数一样。每 part_size 条评论写入一个分片文件到导出目录。',
-            'settings.hgCommentNote': '红果的评论只存在于 App 协议里：本节点会带本地代理启动红果桌面播放器，收割播放器自己拉取的评论页。播放器必须已登录；运行前若发现播放器已开着（不带本代理），需要先关闭它。',
+            'settings.hgCommentNote': '红果的评论只存在于 App 协议里：本节点会带本地代理启动红果桌面播放器，收割播放器自己拉取的评论页。播放器必须已登录；运行前若发现播放器已开着（不带本代理），需要先关闭它。每行输入可以是剧集链接，也可以是剧名（在播放器自己的榜单里找）。输出带 剧名 / 集序号 / 分集ID；某集站点报的条数没收满、或某部剧没能进入播放器，都会在结束时按名报错，已采到的行照常保留。',
             'settings.hgEpisodeCount': '采集集数（每部剧）',
             'settings.hgEpisodeCountHint': '评论挂在单集上：走查会在播放器里逐集打开第 1..N 集并收割每集的评论页。',
             'settings.hgIncludeReplies': '包含子回复',

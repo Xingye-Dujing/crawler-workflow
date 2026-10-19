@@ -91,6 +91,12 @@ _URL_FIELDS = ('链接', '笔记链接', '文章链接', '链接地址', '原文
 _TITLE_FIELDS = ('标题', 'title')
 _AUTHOR_FIELDS = ('作者', '发布者', '公众号', '博主', 'author')
 _BODY_FIELDS = ('正文', '内容', '摘要', 'body', 'content')
+# A comment's own site id, which every comment crawler in this repo emits (and which
+# ``crawlers.comments`` already uses as the IN-RUN identity — see the ``identity=`` there).
+_COMMENT_ID_FIELDS = ('评论ID',)
+# Carried alongside it so a mixed batch cannot collapse a 知乎 numeric id onto a 微博 one:
+# the two sites draw their ids from separate spaces and neither knows the other's.
+_COMMENT_PLATFORM_FIELDS = ('平台',)
 
 
 def _dumps(value) -> str:
@@ -133,13 +139,21 @@ def first_text(item: dict, fields) -> str:
 def item_key(item) -> str:
     """Fingerprint of one crawled item — "have I already got this?".
 
-    A link is the best identity when the crawler captured one. Otherwise title
+    A **comment** is identified by its own site id, and must be: its row also carries
+    楼层 (and 父楼层), which a fresh harness numbers from 1 again, so the whole-row hash
+    below would read the same comment as a NEW item on every resume and re-store the
+    whole set with invented floors. The site id is the only field that survives a replay.
+
+    Otherwise a link is the best identity when the crawler captured one. Otherwise title
     + author + the head of the body: enough to recognise the same post after a
     re-crawl, while ignoring the parts that change between visits (like/comment
     counts, "展开全文" artefacts, whitespace).
     """
     if not isinstance(item, dict):
         return _sha1('raw', item)
+    cid = first_text(item, _COMMENT_ID_FIELDS)
+    if cid:
+        return _sha1('comment', first_text(item, _COMMENT_PLATFORM_FIELDS), cid)
     link = first_text(item, _URL_FIELDS)
     if link:
         return _sha1('url', link)

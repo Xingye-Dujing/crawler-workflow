@@ -40,6 +40,7 @@ import requests
 from config import Config
 from i18n import t
 from settings_store import get_setting
+from utils.helpers import as_bool
 
 from .base import UNDER_TARGET, CrawlerStopped
 from .comments_base import DEAD, OK
@@ -50,9 +51,91 @@ logger = logging.getLogger(__name__)
 _ADDON = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'harvest_addon.py')
 #: The window class the Wails player registers (measured; also the UIA root's ClassName).
 _PLAYER_CLASS = 'wailsWindow'
+#: The web detail page, rebuilt from a bare ``series_id`` so the title can be read from it
+#: (``crawlers.hongguo.BASE`` is the same host; the harvest does not import that crawler).
+_DETAIL_BASE = 'https://hongguoduanju.com/detail'
 #: The action-rail comment button: ``💬`` plus the site's own count (``410``, ``5.1万``)
 #: — the sidebar's feedback button is ``💬 反馈`` and must not be clicked for comments.
 _RAIL_COMMENT_RE = re.compile(r'^💬\s*[\d.]+\s*[万千]?\+?$')
+#: A comment's OWN action button is literally ``回复`` (or ``回复 3``); it opens the
+#: composer and steals the keyboard focus the drawer scroll needs. Measured on a real
+#: run 2026-10-19: the old needle '回复' clicked one of those, the wheel then paged
+#: nothing, and a thread the site counted at 698 came home with 20 rows.
+_BARE_REPLY_RE = re.compile(r'^回复\s*[\d.]*$')
+#: The expand control says BOTH "replies" and "there are more of them to see".
+_EXPAND_WORDS = ('展开', '查看', '更多')
+#: A card name may legitimately differ from the requested one by a season suffix the
+#: other side does not print (「剧名」/「剧名 第二季」) — but never by containment in the
+#: middle, which is what put another drama's comments into this table.
+_MIN_TITLE_PREFIX = 4
+_TITLE_NOISE = re.compile(r'[\s《》「」『』【】()（）·、,，.。!！?？:：\-—]+')
+#: What the leaderboard's switcher names its lists — 总榜/必看榜/臻果榜/AI剧 … The client
+#: owns this list; the tuple below is only the fallback when its popup refuses.
+_BOARD_NAME_RE = re.compile(r'^[\w一-鿿]{1,8}(?:榜|剧)$')
+_FALLBACK_BOARDS = ('必看榜', '热播榜', '总榜', '推荐榜', 'AI剧')
+#: How many silent scrolls one episode tolerates before the walk calls it a stall. A page
+#: that arrives on the third try is the whole point (the first live run lost ~600 comments
+#: to a single silent one).
+_MAX_STALLS = 3
+#: How long a tree that went cold MID-walk gets to answer again, longer than a cold launch:
+#: the renderer is already running, it has simply stopped being asked loudly enough.
+_COLD_REWAKE_SECONDS = 120
+#: How long the walk waits after its last expansion click, before it closes the door on this
+#: drama. A reply page in flight is not a page the next drama owns: drained without this grace
+#: it lands in the NEXT walk and is stamped with another 剧名's rows.
+_REPLY_SETTLE_SECONDS = 2.0
+
+
+class TreeColdError(ValueError):
+    """The window is there and its UIA tree is not — an environment refusal, not a miss.
+
+    Its own type because the caller must tell "the player's page will not wake" apart from
+    "this drama is not in the client's lists": the first is a machine fact the user can fix
+    by touching the window, the second is a ranking fact about the site, and only the second
+    one is a reason to move on to the next drama. Comparing message text for that would break
+    the moment a translation changed.
+    """
+
+
+def is_expand_control(name) -> bool:
+    """Is this drawer control the 「展开 N 条回复」 link (and NOT a comment's 回复 button)?
+
+    Pure, and pinned by a table test, because the rule cost a whole episode's comments:
+    a name must speak of 回复 AND promise MORE of them. ``回复``/``回复 3`` refuse, and so
+    does a section header like ``热门回复`` — nothing here opens a composer.
+    """
+    text = str(name or '').strip()
+    if '回复' not in text:
+        return False
+    if _BARE_REPLY_RE.match(text):
+        return False
+    return any(word in text for word in _EXPAND_WORDS)
+
+
+def _norm_title(text) -> str:
+    """A drama name compared the way the two pages spell it: no punctuation, no spacing."""
+    return _TITLE_NOISE.sub('', str(text or '')).lower()
+
+
+def _same_drama(want_norm: str, name: str) -> bool:
+    """Does this card name the drama the walk asked for?
+
+    Equality after normalisation, or a start-with relation whose shorter side is long
+    enough to be a name of its own. The loose containment this replaced matched a short
+    card title inside a longer one, and 错剧 rows are a corrupted table rather than a
+    smaller one — a missing drama is refused by name instead.
+
+    This is the FALLBACK matcher only: :meth:`PlayerUI._play_for_title` asks for an exact
+    card across the whole tree first, because this rule on its own still opens 斗罗大陆 for
+    a request that named 斗罗大陆 第二季.
+    """
+    have = _norm_title(name)
+    if not want_norm or not have:
+        return False
+    if want_norm == have:
+        return True
+    shorter, longer = sorted((want_norm, have), key=len)
+    return len(shorter) >= _MIN_TITLE_PREFIX and longer.startswith(shorter)
 
 
 def find_player() -> str:
@@ -89,9 +172,24 @@ class PlayerUI:
     feed already auto-fetches — depth lost, never a crash and never a lie.
     """
 
-    def __init__(self, log=None):
+    def __init__(self, log=None, abort=None):
         self._log = log or (lambda _m: None)
+        # 停止 has to interrupt the WAITING, not only the walking: a cold tree costs
+        # ``wait_content(120)`` per retry on top of ``open_drama``'s own budgets, so a node
+        # over ten dramas could spend minutes asking nothing. This repo's rule is that every
+        # page settles by polling and asks the caller's abort — a slept-through Stop once
+        # turned a 2000-comment video into a 5-row crawl that looked like success.
+        self._abort = abort or (lambda: False)
         self._auto = None
+
+    def _stopped(self) -> bool:
+        return bool(self._abort())
+
+    def _check_stopped(self):
+        """Raise, never return None: a Stop that reads as a timeout would be filed as
+        「这部剧搜不到」 and the node would name a drama the user simply stopped on."""
+        if self._stopped():
+            raise CrawlerStopped(t('crawl.stopped'))
 
     def _ensure_library(self):
         if self._auto is None:
@@ -119,6 +217,7 @@ class PlayerUI:
         run: ``open_drama`` raced the splash and refused in 3 s)."""
         deadline = time.time() + seconds
         while time.time() < deadline:
+            self._check_stopped()
             win = self.window()
             if win is not None:
                 return win
@@ -137,6 +236,7 @@ class PlayerUI:
         """
         deadline = time.time() + seconds
         while time.time() < deadline:
+            self._check_stopped()
             win = self.window()
             if win is not None:
                 hit = self._find(win, '推荐', 'ButtonControl')
@@ -149,6 +249,7 @@ class PlayerUI:
         """``_find`` re-asked until the page finished rendering, or the budget ends."""
         deadline = time.time() + seconds
         while time.time() < deadline:
+            self._check_stopped()
             hit = self._find(self.window(), needle, ctype)
             if hit is not None:
                 return hit
@@ -211,31 +312,28 @@ class PlayerUI:
         Measured 2026-10-19: the 找剧 page has NO search box (it is a browse feed),
         while 排行榜 lists dramas as cards, each with its title text and its own
         ``▶ 播放`` button — clicking there starts the feed AT that drama, exactly
-        what the comment harvest needs. The page's own board switcher (「总榜 ▾」)
-        offers 总榜 / 必看榜 / 推荐榜 / AI剧 — the same four lists the web boards
-        publish — so *board* (the node's stored board value) selects the matching
-        list first. The card order is stable in the tree (title … then that card's
-        播放), so the play button is the first one AFTER the matched title. A title
-        the pages do not hold is searched by scrolling (bounded); not finding it
-        returns False and the caller answers DEAD.
+        what the comment harvest needs. WHICH lists that walk may enter is the
+        client's own answer (see :meth:`_board_labels`), because the web 热榜 and the
+        player's 排行榜 are two different ranking families: a drama the web board ranks
+        first sat on the player's 必看榜, and one the client does not list at all simply
+        is not findable here — the caller says so by name. The card order is stable in
+        the tree (title … then that card's 播放), so the play button is the first one
+        AFTER the matched title.
         """
         if self.wait_content() is None:
             # The window exists but its DOM never became walkable (see wait_content)
             # — an environment fact the user can fix, named, never a fake 搜不到剧.
-            raise ValueError(t('crawl.hg.cmt.treeCold'))
+            raise TreeColdError(t('crawl.hg.cmt.treeCold'))
         try:
             rank = self._find_until('排行榜', 'ButtonControl', seconds=20)
             if rank is None or not self._click(rank):
                 return False
             time.sleep(4)
-            # The comment node cannot know WHICH web board a pasted link came from
-            # (its input is the link, not the board), so the walk asks the player's
-            # own lists in order — measured 2026-10-19: the web hot board's rank-1
-            # drama sat on the player's 必看榜, and the switcher also offers 热播榜
-            # / 总榜 / 推荐榜 / AI剧. Each list is one switch plus a bounded scroll.
-            for label in ('必看榜', '热播榜', '总榜', '推荐榜', 'AI剧'):
+            for label in self._board_labels():
+                self._check_stopped()
                 self._pick_board(label)
-                for _scroll in range(4):
+                for _scroll in range(3):
+                    self._check_stopped()
                     hit = self._play_for_title(title)
                     if hit is not None:
                         self._click(hit)
@@ -244,43 +342,114 @@ class PlayerUI:
                     self._ensure_library().WheelDown(wheelTimes=3, interval=0.12)
                     time.sleep(2.0)
             return False
+        except CrawlerStopped:
+            # 停止 is not a search that failed. Swallowed here it would file the drama the
+            # user stopped on under 「搜不到这部剧」 and name it in the skip refusal.
+            raise
         except Exception as exc:
             logger.debug('hongguo harvest: open_drama failed: %s', exc)
             return False
 
-    def _pick_board(self, label: str) -> bool:
-        """Switch the leaderboard's own board select to *label* (总榜/必看榜/推荐榜/AI剧)."""
-        toggle = self._find_until('榜 ▾', 'ButtonControl', seconds=8) or self._find_until(
+    def _board_labels(self) -> list[str]:
+        """The board names the player's own switcher offers, in the order it prints them.
+
+        Hard-coding the five lists somebody remembered was a second opinion about a page
+        the client owns: it silently stops working the day the app renames 臻果榜 or adds
+        a 新剧榜, and the walk then refuses a drama that was on screen the whole time.
+
+        The switcher is opened BEFORE the page is read, and a read taken from the closed
+        page is only a fallback. One tab named like a board — or the selected board printed
+        without its ▾ — matches the very pattern that recognises the whole list, so trusting
+        that read first returned a one-name list, the switcher never opened, and every drama
+        sitting on another board was refused as 「搜不到这部剧」: the miss this walk exists to
+        fix, reimposed by its own shortcut.
+        """
+        labels = []
+        toggle = self._board_toggle()
+        if toggle is not None and self._click(toggle):
+            time.sleep(1.5)
+            labels = self._visible_boards()
+        return labels or self._visible_boards() or list(_FALLBACK_BOARDS)
+
+    def _board_toggle(self):
+        """The leaderboard's own 「总榜 ▾」 switcher button, or ``None``."""
+        return self._find_until('榜 ▾', 'ButtonControl', seconds=8) or self._find_until(
             '剧 ▾', 'ButtonControl', seconds=3
         )
-        if toggle is None or not self._click(toggle):
-            return False
-        time.sleep(1.5)
-        option = None
-        for _c, kind, name, rect in self.collect():
-            if kind == 'ButtonControl' and name.strip() == label and rect.width() > 0:
-                option = _c
-                break
+
+    def _visible_boards(self) -> list[str]:
+        """Every board-name button currently on screen (open popup, or the visible tabs).
+
+        Nothing is truncated: the measured switcher lists eleven names, and dropping the
+        tail to save time would silently skip the list a drama actually sits on — which is
+        the failure this walk is not allowed to have. The cost is bounded elsewhere (three
+        scrolls per list, and the search stops the moment the card is found).
+        """
+        found = []
+        for _ctrl, kind, name, rect in self.collect():
+            if kind != 'ButtonControl' or rect.width() <= 0:
+                continue
+            text = (name or '').strip()
+            if _BOARD_NAME_RE.match(text) and text not in found:
+                found.append(text)
+        return found
+
+    def _pick_board(self, label: str) -> bool:
+        """Switch the leaderboard's list to *label*, opening the switcher only if needed."""
+        option = self._board_option(label)
+        if option is None:
+            toggle = self._board_toggle()
+            if toggle is None or not self._click(toggle):
+                return False
+            time.sleep(1.5)
+            option = self._board_option(label)
         if option is None:
             return False
         clicked = self._click(option)
         time.sleep(3.5)
         return clicked
 
+    def _board_option(self, label: str):
+        """The on-screen button named exactly *label*, or ``None``."""
+        for ctrl, kind, name, rect in self.collect():
+            if kind == 'ButtonControl' and (name or '').strip() == label and rect.width() > 0:
+                return ctrl
+        return None
+
     def _play_for_title(self, title: str):
-        """The card of *title*: its ``▶ 播放`` button, else the title control itself."""
+        """The card of *title*: its ``▶ 播放`` button, else the title control itself.
+
+        An EXACT card wins over a prefix one, asked in a first pass over the whole tree.
+        斗罗大陆 and 斗罗大陆 第二季 are two dramas, and the prefix rule alone lets the shorter
+        card answer the longer request; the 错剧 guard cannot catch that on a name-fed walk,
+        because the reference ``book_id`` is read from the WRONG drama's own first page and
+        every later page then agrees with the mistake — and the 剧名 column would stamp the
+        requested name onto another drama's rows.
+        """
         items = self.collect()
-        for i, (_ctrl, kind, name, rect) in enumerate(items):
+        for exact_only in (True, False):
+            hit = self._card_for(items, title, exact_only)
+            if hit is not None:
+                return hit
+        return None
+
+    def _card_for(self, items, title: str, exact_only: bool):
+        """One pass for *title* over a collected tree; *exact_only* demands the whole name."""
+        want = _norm_title(title)
+        for i, (ctrl, kind, name, rect) in enumerate(items):
             if rect.width() <= 0 or not name:
                 continue
-            if title in name or name in title:
-                if kind == 'ButtonControl' and '播放' in name:
-                    return _ctrl
-                for entry in items[i + 1 :]:
-                    _c2, kind2, name2, rect2 = entry
-                    if kind2 == 'ButtonControl' and '播放' in name2 and rect2.width() > 0:
-                        return entry[0]
-                return _ctrl
+            if exact_only:
+                if _norm_title(name) != want:
+                    continue
+            elif not _same_drama(want, name):
+                continue
+            if kind == 'ButtonControl' and '播放' in name:
+                return ctrl
+            for _c2, kind2, name2, rect2 in items[i + 1 :]:
+                if kind2 == 'ButtonControl' and '播放' in (name2 or '') and rect2.width() > 0:
+                    return _c2
+            return ctrl
         return None
 
     def next_episode(self) -> bool:
@@ -299,15 +468,35 @@ class PlayerUI:
             logger.debug('hongguo harvest: next_episode failed: %s', exc)
             return False
 
-    def scroll_drawer(self) -> bool:
-        """Best effort: wheel inside the open drawer (each move buys one cursor page)."""
+    def scroll_drawer(self, attempt: int = 0) -> bool:
+        """One scroll step inside the open drawer, escalating with the attempt number.
+
+        Measured 2026-10-19: after a composer had taken the keyboard the wheel alone
+        stopped paging, and the walk read that silence as the end of an 800-comment
+        thread. So a stalled page is asked again, louder: attempt 1 clears the focus
+        first, attempt 2+ sends the page key the app's own list honours.
+        """
         try:
-            self._ensure_library().WheelDown(wheelTimes=2, interval=0.15)
+            auto = self._ensure_library()
+            if attempt:
+                self.dismiss_composer()
+            if attempt >= 2:
+                auto.SendKeys('{PageDown}{PageDown}')
+            else:
+                auto.WheelDown(wheelTimes=5 if attempt else 2, interval=0.15)
             time.sleep(1.2)
             return True
         except Exception as exc:
             logger.debug('hongguo harvest: scroll_drawer failed: %s', exc)
             return False
+
+    def dismiss_composer(self) -> None:
+        """Press ESC so a reply box that grabbed the keyboard gives it back to the drawer."""
+        try:
+            self._ensure_library().SendKeys('{Esc}')
+            time.sleep(0.4)
+        except Exception as exc:
+            logger.debug('hongguo harvest: composer dismiss failed: %s', exc)
 
     def open_comments(self) -> bool:
         """Click the action rail's ``💬 <count>`` button — the measured comment door.
@@ -330,19 +519,39 @@ class PlayerUI:
             logger.debug('hongguo harvest: open_comments failed: %s', exc)
             return False
 
-    def expand_replies(self) -> bool:
-        """Best effort: click a 回复/展开 control so reply/list fires."""
-        try:
-            win = self.window()
-            for needle in ('回复', '展开'):
-                ctrl = self._find(win, needle, 'ButtonControl') or self._find(win, needle)
-                if ctrl is not None and self._click(ctrl):
-                    time.sleep(1.0)
-                    return True
-            return False
-        except Exception as exc:
-            logger.debug('hongguo harvest: expand_replies failed: %s', exc)
-            return False
+    def expand_replies(self, max_clicks: int = 40) -> int:
+        """Expand EVERY 「展开…回复」 the drawer currently shows; returns how many it clicked.
+
+        One click per episode was reply-blind by design: a drawer with 30 threads and
+        children under six of them yielded six expansions, and the table then claimed the
+        conversation had no replies. So the walk re-reads the tree and clicks the first
+        not-yet-clicked expansion until the page offers none (bounded — a control that
+        refuses to disappear must not spin here forever), then hands the keyboard back:
+        whatever the click opened, the scroll that follows must own the focus.
+        """
+        clicked = 0
+        seen: set[tuple] = set()
+        while clicked < max_clicks:
+            target = None
+            for ctrl, kind, name, rect in self.collect():
+                if rect.width() <= 0 or not is_expand_control(name):
+                    continue
+                key = (kind, str(name).strip(), rect.left, rect.top)
+                if key in seen:
+                    continue
+                target = ctrl
+                seen.add(key)
+                break
+            if target is None:
+                break
+            if not self._click(target):
+                break
+            clicked += 1
+            time.sleep(1.0)
+        self.dismiss_composer()
+        if clicked:
+            self._log(t('crawl.hg.cmt.repliesExpanded', n=clicked))
+        return clicked
 
 
 class HongguoCommentHarness:
@@ -363,7 +572,7 @@ class HongguoCommentHarness:
         self.params = dict(params or {})
         self._log = log or (lambda _m: None)
         self._abort = abort or (lambda: False)
-        self.ui = ui or PlayerUI(self._log)
+        self.ui = ui or PlayerUI(self._log, self._abort)
         self._capture = capture_path or os.path.join(
             Config.HARVEST_DIR, f'capture-{time.strftime("%Y%m%d-%H%M%S")}-{uuid.uuid4().hex[:6]}.jsonl'
         )
@@ -376,10 +585,42 @@ class HongguoCommentHarness:
         # U1 facts the engine reads after the walk, by ATTRIBUTE (never platform name).
         self.end_reason = None
         self.target_total = 0
+        #: Rows the SITE counted for a thread this walk did not keep (see ``_finish``).
+        self.shortfall = 0
         self._was_short = False
         self.walk_counts = {}
+        #: Every drama the client would not open, in the order it refused them. The engine
+        #: names them at the end of the node: a feed of ten dramas that harvested six is a
+        #: partial table, and 「1 个失败」 without the six names is not an explanation.
+        self.skipped_targets: list[str] = []
         self._group_progress = {}
         self._groups_done = set()
+        #: One entry per CHILD thread a click expanded, keyed by its parent 评论ID. A
+        #: ``reply/list`` page prints its OWN ``total``, and a thread that reported 200
+        #: children and answered 20 is a hole no comment group can see — so the reply pages
+        #: are counted in the same arithmetic that licenses 「site_end」.
+        self._reply_progress: dict[str, dict] = {}
+        #: Threads the 评论上限 cut off on purpose. They are kept short by the user's own
+        #: request, so they are excluded from the gap rather than convicting a node that did
+        #: exactly what the box asked for.
+        self._capped_groups: set[str] = set()
+        self._capped_reply_keys: set[str] = set()
+        #: The reply threads the CURRENT drama expanded (reset per target, like ``_drama_groups``).
+        self._drama_reply_keys: set[str] = set()
+        #: Threads this drama already named short, so the same gap is not printed twice.
+        self._named_groups: set[str] = set()
+        #: ``group_id`` → the 1-based episode position the walk was standing on when that
+        #: thread first answered. A payload never says which episode it is, and 集序号 is
+        #: the column a reader (and any per-episode analysis) needs to group by.
+        self._ep_of_group: dict[str, int] = {}
+        #: 评论ID of every reply row already taken from the inbox (see `_harvest_replies`).
+        self._reply_ids: set[str] = set()
+        #: The drama the walk is standing in, as the payload can be asked to confirm it:
+        #: the link's ``series_id`` when there was one, else the first book its pages named.
+        self._current_series = ''
+        self._current_book = ''
+        #: The threads the CURRENT drama opened (reset per link; see `crawl_hongguo`).
+        self._drama_groups: set[str] = set()
         self._floors_by_cid = {}
         self._next_floor = 1
         self._titles = {}
@@ -387,32 +628,67 @@ class HongguoCommentHarness:
     # ─── the adapter contract ───
 
     def crawl_hongguo(self, url, limit):
-        """One drama link → its comment rows, walked episode by episode.
+        """One drama — a web detail link, a bare ``series_id`` or a plain 剧名 — walked episode by episode.
 
         ``limit`` is the node's 评论上限 across this drama (0 = every comment).
-        ``(rows, DEAD)`` answers links this machine cannot serve (no id, no title,
-        no such drama, no traffic at all); a missing player/proxy/cert RAISES by
-        name — nobody's empty table may hide an unprepared machine.
+        ``(rows, DEAD)`` answers a target this machine cannot serve (no id, no name, no
+        such drama, no traffic at all); a missing player/proxy/cert RAISES by name —
+        nobody's empty table may hide an unprepared machine. A target the CLIENT will not
+        open is skipped by name and counted in ``skipped_targets`` instead of failing the
+        node: the web 热榜 and the player's 排行榜 are two different ranking families
+        (measured 2026-10-19), so one drama the client does not list must not cost the
+        other nine their comments — and the node still refuses by name at the end.
         """
-        series_id = hg_series_id(url)
-        if not series_id:
-            self._log(t('crawl.hg.cmt.titleMissing', url=url))
+        target = str(url or '').strip()
+        if not target:
             return [], DEAD
-        title = self._title_for(url)
-        if not title:
-            self._log(t('crawl.hg.cmt.titleMissing', url=url))
-            return [], DEAD
+        if '://' in target or hg_series_id(target):
+            series_id = hg_series_id(target)
+            # A bare ``series_id`` is promoted to the link the site itself prints. Asking the
+            # page for 「7696063528179878937」 as a URL answers with no title, which used to
+            # refuse the one input this docstring advertised as supported.
+            article_url = target if '://' in target else f'{_DETAIL_BASE}?series_id={series_id}'
+            title = self._title_for(article_url) if series_id else ''
+            if not series_id or not title:
+                # Skipped AND counted. A bare ``([], DEAD)`` fed neither tail gate, so a node
+                # whose target could not even be named settled DONE beside the hole.
+                self._mark_short()
+                self.skipped_targets.append(target)
+                self._log(t('crawl.hg.cmt.titleMissing', url=target))
+                return [], DEAD
+        else:
+            # A 剧名 read from an upstream column (the board's 作品名): the player is then the
+            # ONLY authority on which drama this is, which is exactly why the name-fed walk
+            # exists — matching a web board row to a client card by hand was how dramas got
+            # searched for in lists that never carried them. No web page was opened, so
+            # ``文章URL`` stays blank; the name lives in ``剧名``.
+            series_id = ''
+            title = target
+            article_url = ''
+        self._current_series = series_id
+        self._current_book = ''
+        #: The ``group_id``s this one drama opened, so its end-of-walk check reads its own
+        #: threads (the harness is reused across a node's links).
+        self._drama_groups = set()
+        self._drama_reply_keys = set()
+        self._named_groups = set()
         self._ensure_stack()
-        # One retry: the walk through the player's five lists is a chain of UIA
-        # reads, and one cold-page stretch in the middle is a flake, not a missing
-        # drama (measured: identical builds open on the second try). Short-circuit
-        # `and` IS the retry — the second call only runs when the first failed.
-        if not self.ui.open_drama(title) and not self.ui.open_drama(title):
-            self._log(t('crawl.hg.cmt.dramaNotFound', title=title))
+        opened = self._open_drama(title)
+        if opened != 'ok':
+            # Skipped, counted, and the node moves to the next drama. `_mark_short` keeps the
+            # ledger honest: the walk as a whole did NOT reach what the site counted, so the
+            # engine's own gate will refuse the node by name at the end rather than let a
+            # nine-drama table settle DONE next to a ten-drama request.
+            self._mark_short()
+            self.skipped_targets.append(title)
+            self._log(t('crawl.hg.cmt.dramaSkipped' if opened == 'cold' else 'crawl.hg.cmt.dramaNotFound', title=title))
             return [], DEAD
         episodes = int(self.params.get('episode_count') or 10)
         wait_s = int(self.params.get('harvest_timeout') or 90)
-        with_replies = bool(self.params.get('include_replies', True))
+        # Read, never compared: the panel stores this switch as a real boolean, but a hand
+        # written or fed canvas can hold the TEXT 'false', which ``bool()`` reads as on — and
+        # 「包含子回复」 off would then still click every thread open.
+        with_replies = as_bool(self.params.get('include_replies'), True)
         self._log(
             t(
                 'crawl.hg.cmt.start',
@@ -424,19 +700,26 @@ class HongguoCommentHarness:
         rows = []
         scanned = refused = 0
         licensed = True
+        group_of_prog = ''
         for ep in range(1, episodes + 1):
             self._check_abort()
             # The drawer is the trigger (the feed's silent prefetch died with the
             # protocol update); its click also proves the episode is on screen.
             self.ui.open_comments()
-            record = self._await_page(series_id, wait_s)
+            record = self._await_page(series_id, wait_s, stamp=(article_url, title, ep))
             if record is None:
                 licensed = False
                 self._log(t('crawl.hg.cmt.noTraffic', seconds=wait_s, title=title))
                 if not rows:
+                    # Counted, not just logged: an uncountable ``([], DEAD)`` let a five-drama
+                    # feed whose third drama a popup blocked settle 「正常」 over four, and one
+                    # drama fed with no traffic at all settle DONE on an EMPTY table.
+                    self._mark_short()
+                    self.skipped_targets.append(title)
                     return [], DEAD
                 break
-            page_rows, page_refused, prog, has_more = self._harvest(record, url)
+            page_rows, page_refused, prog, has_more = self._harvest(record, article_url, title, ep)
+            group_of_prog = str(record.get('group_id') or '')
             scanned += _entry_count(record)
             refused += page_refused
             rows.extend(page_rows)
@@ -447,27 +730,47 @@ class HongguoCommentHarness:
             # So the walk keeps scrolling while the site still counts more rows
             # than this group has; a lost scroll leaves UNDER_TARGET, never a
             # claimed 'site_end'.
+            stalled = 0
             while (has_more or prog['kept'] < prog['total']) and not (limit and len(rows) >= limit):
                 self._check_abort()
-                if not self.ui.scroll_drawer():
+                if not self.ui.scroll_drawer(stalled):
                     licensed = False
                     break
-                more = self._await_page(series_id, min(20, wait_s), allow_repeat=True)
+                more = self._await_page(
+                    series_id, self._page_wait(wait_s, stalled), allow_repeat=True, stamp=(article_url, title, ep)
+                )
                 if more is None:
-                    licensed = False
-                    break
-                extra, extra_refused, prog, has_more = self._harvest(more, url)
+                    # Silence is not the end of the thread: it is a scroll the page did not
+                    # honour (a composer had the focus, the pointer was off the drawer). Ask
+                    # again, louder, before any of it is read as "no more comments".
+                    stalled += 1
+                    if stalled >= _MAX_STALLS:
+                        licensed = False
+                        self._named_groups.add(group_of_prog)
+                        self._log(
+                            t(
+                                'crawl.hg.cmt.episodeShort',
+                                title=title,
+                                ep=ep,
+                                have=prog['kept'],
+                                site_total=prog['total'],
+                            )
+                        )
+                        break
+                    continue
+                stalled = 0
+                extra, extra_refused, prog, has_more = self._harvest(more, article_url, title, ep)
+                group_of_prog = str(more.get('group_id') or '')
                 scanned += _entry_count(more)
                 refused += extra_refused
                 rows.extend(extra)
             if with_replies:
-                # One best-effort expand click per episode (the drawer's first
-                # 回复/展开 control), then everything the player fetched — from
-                # this click, from its own prefetch, or from a human scrolling —
-                # is drained from the inbox and linked by its request body.
+                # Expand every thread the drawer offers (one click left the table reply-blind
+                # and a 30-thread drawer answered six), then drain everything the player
+                # fetched — from these clicks, its own prefetch, or a human scrolling.
                 self.ui.expand_replies()
                 time.sleep(1.5)
-                reply_rows, reply_refused = self._harvest_replies(url)
+                reply_rows, reply_refused = self._harvest_replies(article_url, title, ep)
                 scanned += len(reply_rows) + reply_refused
                 refused += reply_refused
                 rows.extend(reply_rows)
@@ -477,16 +780,93 @@ class HongguoCommentHarness:
             if ep < episodes and not self.ui.next_episode():
                 licensed = False
                 break
-        # 'site_end' demands the arithmetic, not just a quiet loop: every group's
-        # kept count must have reached the total the site printed for it.
-        whole = all(p['kept'] >= p['total'] for p in self._group_progress.values() if p['total'])
+        if with_replies:
+            # One last look before the door closes. Expanding fires up to forty requests and the
+            # per-episode grace is short, so a child page can still be in flight after the last
+            # episode: drained NOW it belongs to this drama, left in the inbox it would be read
+            # at the NEXT drama's episode end and stamped with a 剧名 that never carried it.
+            time.sleep(_REPLY_SETTLE_SECONDS)
+            late, late_refused = self._harvest_replies(article_url, title, episodes)
+            scanned += len(late) + late_refused
+            refused += late_refused
+            rows.extend(late)
+        # 'site_end' demands the arithmetic, not just a quiet loop: every group's kept count
+        # must have reached the total the site printed for it, and a group that fell short is
+        # named so the user knows which episode is thin rather than hunting a total. Asked of
+        # THIS drama's groups only — the harness is cached per platform and one node walks
+        # several dramas, and a previous drama's already-named shortfall must not be printed
+        # again as if it were this one's.
+        for group in self._drama_groups:
+            if group in self._named_groups:
+                # The stall that ended this thread already said it, with the episode name;
+                # printing the same gap twice is the double line this repo bans.
+                continue
+            prog = self._group_progress.get(group) or {}
+            if prog.get('total') and prog['kept'] < prog['total']:
+                licensed = False
+                self._log(
+                    t(
+                        'crawl.hg.cmt.groupShort',
+                        group=group,
+                        ep=self._ep_of_group.get(group, 0) or '?',
+                        have=prog['kept'],
+                        site_total=prog['total'],
+                    )
+                )
+        # An expanded child thread is graded too: its page printed a total, and a walk that
+        # clicked 展开 N 条回复 and collected fewer than N has a hole no comment group can show.
+        for key in self._drama_reply_keys:
+            prog = self._reply_progress.get(key) or {}
+            if prog.get('total') and prog['kept'] < prog['total']:
+                licensed = False
+                self._log(
+                    t(
+                        'crawl.hg.cmt.replyShort',
+                        floor=prog.get('floor') or '?',
+                        have=prog['kept'],
+                        site_total=prog['total'],
+                    )
+                )
+        whole = all(kept >= total for total, kept in self._outstanding())
         self._finish('site_end' if (licensed and whole) else UNDER_TARGET, rows, scanned, refused)
         self._log(t('crawl.hg.cmt.finished', n=len(rows), episodes=episodes))
         return rows, OK
 
+    def _open_drama(self, title) -> str:
+        """Open *title*, re-waking the tree when it went cold mid-walk: 'ok' / 'notfound' / 'cold'.
+
+        Two facts the first live multi-drama run taught (2026-10-19): the chain of UIA reads
+        sometimes needs a second pass, and a WebView2 tree that was warm for drama 1 can be
+        cold again by drama 2 — where the old code let that flake FAIL the whole node and nine
+        un-harvested dramas rode downstream as one exception. So the cold answer is woken and
+        asked again; only a page that stays cold steps aside by name.
+        """
+        cold = False
+        for _attempt in range(2):
+            self._check_abort()
+            try:
+                if self.ui.open_drama(title):
+                    return 'ok'
+                # The page ANSWERED this time and still had no card: that is a miss, whatever
+                # the earlier attempt did.
+                cold = False
+            except TreeColdError:
+                cold = True
+                if self.ui.wait_content(seconds=_COLD_REWAKE_SECONDS) is None:
+                    return 'cold'
+        # A tree that stayed cold through every attempt is named cold: 「搜不到这部剧」 would
+        # blame the library for a renderer that never woke, and the user would go looking for a
+        # drama that was never the problem.
+        return 'cold' if cold else 'notfound'
+
+    @staticmethod
+    def _page_wait(wait_s: int, stalled: int) -> int:
+        """How long one page may take, growing with the stall count it is answering."""
+        return min(60, max(15, wait_s // 2) + 10 * stalled)
+
     # ─── the captured pages ───
 
-    def _harvest(self, record, url):
+    def _harvest(self, record, url, title='', episode=0):
         """Parse one ``comment/list`` page into the run's rows.
 
         Pages of one group merge by 评论ID: the feed's prefetch page and the
@@ -495,8 +875,16 @@ class HongguoCommentHarness:
         running site-attested denominator; floors continue across everything.
         """
         payload = record.get('payload') or {}
-        rows, dropped, total, has_more = hg_comment_rows(payload, url, first_floor=self._next_floor)
+        rows, dropped, total, has_more = hg_comment_rows(
+            payload, url, first_floor=self._next_floor, drama_title=title, episode_index=episode
+        )
         group = str(record.get('group_id') or '')
+        if group and episode:
+            # First page of a thread fixes its episode position for the whole run — reply
+            # pages carry a group id and no episode number of their own, and 集序号 has to
+            # agree between a comment and its children or the grouping is fiction.
+            self._ep_of_group.setdefault(group, episode)
+            self._drama_groups.add(group)
         prog = self._group_progress.setdefault(
             group or f'anon-{len(self._group_progress)}', {'kept': 0, 'total': 0, 'ids': set()}
         )
@@ -514,8 +902,25 @@ class HongguoCommentHarness:
             self._log(t('crawl.hg.cmt.danmakuSkipped', n=dropped))
         return fresh, dropped, prog, has_more
 
-    def _harvest_replies(self, url):
-        """Fold in every ``reply/list`` page that landed since the last look."""
+    def _harvest_replies(self, url, title='', episode=0):
+        """Fold in every ``reply/list`` page that landed since the last look.
+
+        Reply pages are deduped by 评论ID across the WHOLE drama, not merely within one
+        page: the walk now expands every thread it can see, and it re-expands on the next
+        episode's pass, so the same child list arrives again and again. Doubles would not
+        survive the run's own ledger, but they would inflate 楼层 and this node's table on
+        the way there.
+
+        Every row is stamped with the drama the PAGE arrived under (``_stamp``, set by
+        :meth:`_await_page`), not with the target the walk happens to be standing on when the
+        inbox is next drained: a child page that landed late would otherwise be filed under a
+        剧名 and 文章URL that never carried it, which is a corrupted table rather than a
+        smaller one.
+
+        The page's own ``total`` goes into ``_reply_progress``, keyed by its parent comment:
+        a thread the site counts at 200 children and the walk brought home 20 is a gap the
+        comment groups cannot express, and ``site_end`` may not be claimed beside it.
+        """
         rows = []
         refused = 0
         inbox, self._reply_inbox = self._reply_inbox, []
@@ -523,12 +928,28 @@ class HongguoCommentHarness:
             payload = record.get('payload') or {}
             parent = self._reply_parent_cid(record.get('req_body') or '')
             floor = self._floors_by_cid.get(parent, 0)
-            page_rows, dropped, _total, _more = hg_comment_rows(
-                payload, url, first_floor=self._next_floor, parent_floor=floor
+            page_url, page_title, page_ep = record.get('_stamp') or (url, title, episode)
+            group = str(record.get('group_id') or '')
+            page_rows, dropped, total, _more = hg_comment_rows(
+                payload,
+                page_url,
+                first_floor=self._next_floor,
+                parent_floor=floor,
+                drama_title=page_title,
+                episode_index=self._ep_of_group.get(group) or page_ep,
             )
-            self._next_floor += len(page_rows)
-            self._log(t('crawl.hg.cmt.replyPage', floor=floor or '?', n=len(page_rows)))
-            rows.extend(page_rows)
+            fresh = [r for r in page_rows if str(r['评论ID']) not in self._reply_ids]
+            self._reply_ids.update(str(r['评论ID']) for r in fresh)
+            self._next_floor += len(fresh)
+            key = parent or group or f'anon-reply-{len(self._reply_progress)}'
+            rprog = self._reply_progress.setdefault(key, {'kept': 0, 'total': 0, 'floor': floor})
+            rprog['kept'] += len(fresh)
+            if total:
+                rprog['total'] = max(rprog['total'], total)
+            self._drama_reply_keys.add(key)
+            if fresh:
+                self._log(t('crawl.hg.cmt.replyPage', floor=floor or '?', n=len(fresh)))
+            rows.extend(fresh)
             refused += dropped
         return rows, refused
 
@@ -547,7 +968,7 @@ class HongguoCommentHarness:
                     return str(holder[key])
         return ''
 
-    def _await_page(self, series_id, seconds, allow_repeat=False):
+    def _await_page(self, series_id, seconds, allow_repeat=False, stamp=None):
         """Block until a fresh ``comment/list`` for *series_id* lands in the capture.
 
         Fresh = a group this walk has not harvested (``allow_repeat`` additionally
@@ -557,6 +978,16 @@ class HongguoCommentHarness:
         those away (the tail offset already passed them). Reply pages go to the
         inbox; a page whose payload names another drama is refused by name — 错剧
         rows in the table are worse than a missing episode.
+
+        *stamp* is the ``(文章URL, 剧名, 集序号)`` of the target whose drawer asked for
+        the page, carried onto every reply record the inbox takes on. The walk drains
+        the inbox whenever it next looks, which can already be the following drama.
+
+        The 错剧 guard has two shapes because the walk has two inputs. A LINK names its
+        ``series_id``, so every page must answer to it. A fed 剧名 names nothing the payload
+        can be checked against, so the first NON-zero ``book_id`` of this drama becomes its
+        reference and any later page belonging to another book is refused — a name-fed walk
+        still cannot mix two dramas into one table.
         """
         deadline = time.time() + max(5, int(seconds))
         while time.time() < deadline:
@@ -566,6 +997,8 @@ class HongguoCommentHarness:
             for record in self._pending:
                 kind = record.get('kind')
                 if kind == 'reply':
+                    if stamp is not None:
+                        record['_stamp'] = stamp
                     self._reply_inbox.append(record)
                     continue
                 if kind != 'comment':
@@ -576,9 +1009,12 @@ class HongguoCommentHarness:
                 if group in self._groups_done and not allow_repeat:
                     continue
                 book = self._payload_book_id(record)
-                if book and book != series_id:
-                    self._log(t('crawl.hg.cmt.groupMismatch', got=book, want=series_id))
-                    continue
+                want = series_id or self._current_book
+                if book:
+                    if want and book != want:
+                        self._log(t('crawl.hg.cmt.groupMismatch', got=book, want=want))
+                        continue
+                    self._current_book = book
                 if hit is None:
                     hit = record
                 else:
@@ -758,20 +1194,60 @@ class HongguoCommentHarness:
         if self._abort():
             raise CrawlerStopped(t('crawl.stopped'))
 
-    def _finish(self, reason, rows, scanned, refused):
-        """Same three-state contract the Crawler base enforces (``note_end``).
+    def _mark_short(self):
+        """Record that this walk did NOT reach what the site counted, without a row table.
 
-        Cumulative across the links of one node run (the engine caches this harness
-        per platform and calls it once per drama): once a walk was cut short by
-        anything but the site's own end, the node is short, whoever later says
-        ``site_end`` about their own episode notwithstanding.
+        A skipped drama has no funnel to report and no denominator to add, but it does change
+        the one answer the engine reads by attribute — ``end_reason``. Going through
+        :meth:`_finish` with an empty table would overwrite the cumulative funnel of the
+        dramas that DID harvest with zeros, so the short flag is raised here directly.
+        """
+        self._was_short = True
+        self.end_reason = UNDER_TARGET
+
+    def _outstanding(self):
+        """Every ``(site-counted, kept)`` pair the walk still owes.
+
+        Both ledgers are asked, because a comment thread and an expanded child thread print
+        the same kind of ``total`` and only the first was ever graded: a drama whose every
+        episode came home full could still be holding 20 of a 200-child thread. Threads the
+        评论上限 cut off on purpose are excluded — the user asked for that shortfall.
+        """
+        for group, prog in self._group_progress.items():
+            if prog['total'] and group not in self._capped_groups:
+                yield prog['total'], prog['kept']
+        for key, prog in self._reply_progress.items():
+            if prog['total'] and key not in self._capped_reply_keys:
+                yield prog['total'], prog['kept']
+
+    def _finish(self, reason, rows, scanned, refused):
+        """Same three-state contract as the source crawl's ``note_end``.
+
+        ``shortfall`` is part of that contract and the reason it is its own number: the
+        engine's gate compares ROWS against the site's total, and reply rows are not in any
+        episode's printed ``total`` — so a node that lost 300 comments under one episode and
+        harvested 400 children elsewhere would otherwise read as "the row count reached the
+        total" and settle DONE.
+
+        Cumulative across the links of one node run (the engine caches this harness per
+        platform and calls it once per drama): once a walk was cut short by anything but the
+        site's own end, the node is short, whoever later says ``site_end`` about their own
+        episode notwithstanding.
         """
         if reason != UNDER_TARGET and reason not in ('site_end', 'capped', 'empty'):
             raise ValueError(f'hongguo harvest: {reason!r} is not a licensed end')
         if reason == UNDER_TARGET:
             self._was_short = True
+        if reason == 'capped':
+            # Reached by request, not by a lost scroll: file this drama's threads as owed
+            # nothing, or the next drama's arithmetic convicts the whole node.
+            self._capped_groups |= set(self._drama_groups)
+            self._capped_reply_keys |= set(self._drama_reply_keys)
         self.end_reason = UNDER_TARGET if self._was_short else reason
-        self.target_total = sum(p['total'] for p in self._group_progress.values())
+        self.target_total = sum(p['total'] for p in self._group_progress.values()) + sum(
+            p['total'] for p in self._reply_progress.values()
+        )
+        self.shortfall = sum(max(0, total - kept) for total, kept in self._outstanding())
         # The funnel is handed over only when every leg was measured; the engine
         # omits it otherwise rather than printing fake zeros.
         self.walk_counts = {'scanned': scanned, 'kept': len(rows), 'refused': refused}

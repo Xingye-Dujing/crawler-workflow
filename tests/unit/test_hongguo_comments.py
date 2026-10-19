@@ -56,7 +56,7 @@ def _envelope(entries, total=3, has_more=False, cursor='{"start_offset_time":0,"
 class TestRows:
     def test_a_real_comment_becomes_the_standard_columns(self):
         payload = _envelope([_entry('7697905336342594366', '女主好飒', 1792313924, digg=1, replies=2)])
-        rows, dropped, total, has_more = hg_comment_rows(payload, ARTICLE)
+        rows, dropped, total, has_more = hg_comment_rows(payload, ARTICLE, drama_title='测试剧', episode_index=3)
         assert dropped == 0 and total == 3 and has_more is False
         row = rows[0]
         assert row['平台'] == 'hongguo'
@@ -64,11 +64,40 @@ class TestRows:
         assert row['评论内容'] == '女主好飒'
         assert row['评论ID'] == '7697905336342594366'
         assert row['点赞数'] == 1 and row['子回复数'] == 2 and row['楼层'] == 1
-        assert row['剧集ID'] == '7696074722013875224'
+        assert row['分集ID'] == '7696074722013875224'
+        # A 短剧 comment is about an EPISODE of a NAMED drama, and neither fact is in the
+        # payload: the walker hands both down, or the table is a list of unreadable ids.
+        assert row['剧名'] == '测试剧'
+        assert row['集序号'] == 3
         # A bare epoch second must leave as a Beijing wall-clock stamp, not the number.
         assert row['评论时间'].startswith('20') and ':' in row['评论时间']
         # The payload offers no profile URL for a commenter: blank, never invented.
         assert row['评论者主页'] == ''
+
+    def test_the_column_set_is_the_shared_key_plus_the_dramas_own_words(self):
+        # Pinned whole because a column added on one side is a chart or an analysis
+        # looking for it on the other: 文章URL stays the cross-platform join key (every
+        # platform's comment table carries it) and the drama shape lives beside it.
+        payload = _envelope([_entry('7001', '甲', 1792313924)])
+        rows, _dropped, _total, _more = hg_comment_rows(payload, ARTICLE)
+        assert set(rows[0]) == {
+            '平台',
+            '文章URL',
+            '剧名',
+            '集序号',
+            '评论者',
+            '评论者主页',
+            '评论内容',
+            '评论时间',
+            '点赞数',
+            '楼层',
+            '父楼层',
+            '评论ID',
+            '分集ID',
+            '子回复数',
+        }
+        # No walker facts, no invention: called bare, the drama columns stay empty/blank.
+        assert rows[0]['剧名'] == '' and rows[0]['集序号'] == ''
 
     def test_the_danmaku_guide_row_is_dropped_and_counted(self):
         payload = _envelope(

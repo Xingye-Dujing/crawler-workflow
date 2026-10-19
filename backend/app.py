@@ -4412,16 +4412,25 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     # A Data Source in comments mode carries the platform the user selected;
     # links from another site must not silently crawl a platform nobody chose.
     # The standalone Comment node has no platform param, so it stays mixed-input.
-    want = str(params.get('platform') or '').strip().lower()
+    # Read the same two places the source executor reads (a hand-written or fed file can
+    # hold it at either), because the answer decides which input lines are name-feeding.
+    want = str(params.get('platform') or node.get('platform') or '').strip().lower()
     # Which saved login (and device) walks these comments; blank is the historical
     # default account. The comment wall is a per-ACCOUNT rate limit — the reason
     # multi-account exists — so this must reach every get_crawler call below.
     account = str(params.get('account') or '').strip()
+    # Does this platform's own comment form take plain names as well as links? Asked of the
+    # matrix, because the router below sorts its input by DOMAIN and would otherwise drop a
+    # 红果 剧名 as an unsupported link — 红果 crawls inside the client, where a title is
+    # exactly what the client's own boards answer to.
+    accepts_names = capabilities.names_also_accepted(capabilities.mode_for(want, 'comments')) if want else False
     all_urls = split_urls(params.get('urls'))
     urls, dropped, mismatched = [], [], []
     for u in all_urls:
         plat = platform_for(u)
-        if not plat:
+        if not plat and accepts_names and not capabilities.is_url_cell(u):
+            urls.append(u)
+        elif not plat:
             dropped.append(u)
         elif want and plat != want:
             mismatched.append(u)
@@ -4429,6 +4438,13 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             urls.append(u)
     if dropped:
         add_log(t('comment.unsupported', n=len(dropped), platforms=_COMMENT_PLATFORMS))
+        if not want:
+            # Which mode takes plain names is a per-platform fact, so a mixed-input comment
+            # node cannot route a 剧名 at all. Said as the reason it was refused, not filed
+            # under a count of 「unsupported links」 the user then hunts through real links.
+            named = [u for u in dropped if not capabilities.is_url_cell(u)]
+            if named:
+                add_log(t('comment.unsupportedNames', n=len(named)))
     if mismatched:
         add_log(t('comment.platformMismatch', n=len(mismatched), platform=want))
     if not urls:
@@ -4473,6 +4489,12 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         # (The ledger refuses them as duplicates, so nothing double-stores.)
         rows_out = list(ctx['store'].load_rows(ctx['run_id'], nid))
     counts = {OK: 0, BLOCKED: 0, DEAD: 0}
+    # Inputs the node did NOT prove complete, in order. This is what decides whether the
+    # cursor may advance (see the write below), and it is the reason the tail refusals can
+    # promise 「继续」: a cursor written *before* the walk rested at ``len(urls)-1`` after a
+    # full pass, so resuming a node that skipped four dramas re-walked the LAST drama only,
+    # a fresh harness reported no skips at all, and the node settled DONE over the hole.
+    unproven: list[int] = []
     # Which platforms actually answered with a login page, in the order they did.
     blocked_by: list[str] = []
     # Blocked platforms whose owning crawler named 风控 (back off) rather than a dead cookie
@@ -4504,7 +4526,11 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 break
             if idx <= resumed_index:
                 continue
-            kind = platform_for(url)
+            # The adapter's platform, chosen the same way the input list was: by DOMAIN, or —
+            # for a mode whose matrix declares it takes NAMES (红果) — by the platform this
+            # node already names. Never a guess: an unknown kind still lands on the named
+            # ``comment.noAdapter`` below, which is the whole reason the router exists.
+            kind = platform_for(url) or (want if accepts_names else '')
             if kind not in sessions:
                 harness_factory = getattr(crawler_class(kind), 'browserless_comment_harness', None)
                 if harness_factory is not None:
@@ -4558,8 +4584,6 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                     # registered browser that nothing here would ever close.
                     execution_state['active_crawlers'].add(crawler)
             _crawler, session = sessions[kind]
-            if cursor_sink is not None:
-                cursor_sink({'url_index': idx - 1, 'url_total': len(urls)})
             # The adapter is named after the platform the router picked, so adding
             # a platform to ``utils.helpers._COMMENT_DOMAINS`` without writing its
             # ``crawl_<platform>`` is a refusal here rather than the old silent
@@ -4568,8 +4592,27 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             adapter = getattr(session, f'crawl_{kind}', None)
             if adapter is None:
                 raise ValueError(t('comment.noAdapter', platform=kind, url=url))
+            skipped_before = len(getattr(_crawler, 'skipped_targets', ()) or ())
             rows, status = adapter(url, limit)
             counts[status] = counts.get(status, 0) + 1
+            if (
+                status != OK
+                or len(getattr(_crawler, 'skipped_targets', ()) or ()) > skipped_before
+                or getattr(_crawler, 'end_reason', None) == UNDER_TARGET
+            ):
+                # Not proven: a dead or walled link, one the harness names as skipped, or one
+                # whose own walk came home short of what the site counted.
+                unproven.append(idx)
+            elif cursor_sink is not None and not unproven:
+                # Recorded AFTER the walk, and only while the run of completed inputs is
+                # UNBROKEN — so ``url_index`` means "the leading inputs this node PROVED", the
+                # one thing 继续 has to trust. A hole at 2 must pin the cursor at 1 even when
+                # 3..10 all come back clean: advancing over the hole is exactly the laundering
+                # this rewrite exists to stop. The replay then re-walks from 2, and the ledger
+                # refuses the rows it already paid for (``item_key`` now keys a comment by its
+                # own site id), so the replay costs the player its time and never costs a
+                # duplicate row.
+                cursor_sink({'url_index': idx, 'url_total': len(urls)})
             if status == BLOCKED:
                 # Named by what actually walled. The message used to fall back to a
                 # hand-written list of four platforms, so a YouTube or X comment run
@@ -4668,18 +4711,39 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     # DONE. Browser adapters never set ``end_reason`` (it stays absent → None), so
     # this gate is dormant for every platform but the ones that declare a harness.
     for kind, (owner, _session) in sessions.items():
+        missing = list(getattr(owner, 'skipped_targets', ()) or ())
+        if missing:
+            # Read BY ATTRIBUTE, exactly like the gate below: a browser adapter never grows
+            # this list, so the check stays dormant for every platform but the ones that
+            # declare a harness. A feed of ten dramas that opened six is not a finished
+            # crawl, and 「新增 749 条（正常）」 was the sentence the run ended with.
+            raise ValueError(t('run.commentsSkipped', platform=kind, n=len(missing), names='、'.join(missing)))
+    for kind, (owner, _session) in sessions.items():
         if getattr(owner, 'end_reason', None) != UNDER_TARGET:
             continue
         want_total = getattr(owner, 'target_total', 0) or 0
-        if not want_total or len(rows_out) >= want_total:
+        # The harness names its own missing count, because ROWS are not a fair denominator:
+        # a comment crawl's table carries reply rows that no episode's printed ``total``
+        # includes, so "we kept at least as many rows as the site counted" can be true while
+        # an episode came home short. Asked by attribute — a browser adapter reports none,
+        # and for those the row-count comparison is the whole rule.
+        short_by = int(getattr(owner, 'shortfall', 0) or 0)
+        if not want_total and not short_by:
             continue
+        if not short_by and len(rows_out) >= want_total:
+            continue
+        # The denominator the console must print: with a named gap it is the rows in hand
+        # PLUS that gap, never the site's own total alone — a crawl holding 520 rows over an
+        # episode 500 short would otherwise read 「采到 520/1 条就停了」, convicting itself with
+        # arithmetic nobody can audit.
+        want = len(rows_out) + short_by if short_by else want_total
         counts = getattr(owner, 'walk_counts', {}) or {}
         walk = (
             t('run.underTargetWalk', scanned=counts['scanned'], kept=counts['kept'], refused=counts['refused'])
             if {'scanned', 'kept', 'refused'} <= set(counts)
             else ''
         )
-        raise ValueError(t('run.underTargetShort', platform=kind, have=len(rows_out), want=want_total, walk=walk))
+        raise ValueError(t('run.underTargetShort', platform=kind, have=len(rows_out), want=want, walk=walk))
     rows_out = _filter_comments_by_time(rows_out, params, node_label(node, str(nid)))
     return rows_out
 

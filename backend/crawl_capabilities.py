@@ -25,6 +25,7 @@ crawler read, so a copy here would be an unchecked claim — the live-site tests
 derive columns from real crawls instead.
 """
 
+import re
 from dataclasses import dataclass, replace
 
 from utils.helpers import as_bool, split_urls
@@ -83,6 +84,14 @@ class Field:
     #: answer to "which modes accept a feed", so no file can hold its own opinion.
     #: A mode is feedable iff one of its fields sets this.
     fed_by: str = ''
+
+    #: Set → a line of this link list may also be a plain NAME. Declared for 红果's
+    #: comment form, whose crawl runs inside the desktop client: the web board and the
+    #: client's 排行榜 are two different rankings, so the input the client can actually
+    #: answer is the drama's title, and a comment router that sorts every line by DOMAIN
+    #: would otherwise throw those names away as "unsupported links". Panel, validation
+    #: and executor all read this one declaration.
+    accepts_names: bool = False
 
     def is_link_list(self) -> bool:
         return self.coerce == 'urls'
@@ -564,12 +573,17 @@ def _hongguo_comment_mode() -> Mode:
             Field(
                 key='urls',
                 control='textarea',
-                label_key='settings.commentUrls',
+                label_key='settings.hgCommentUrls',
                 name_key='field.urls',
                 required=True,
                 coerce='urls',
                 links_of='hongguo',
-                placeholder='https://hongguoduanju.com/detail?series_id=...',
+                # The walk happens INSIDE the client, and the client's own 排行榜 is the
+                # only ranking it can answer to — so a drama title is a first-class input
+                # here, not a malformed link.
+                accepts_names=True,
+                placeholder='https://hongguoduanju.com/detail?series_id=…（或每行一个剧名）',
+                hint_key='settings.hgCommentUrlsHint',
                 fed_by='input_column',
             ),
             _INPUT_COLUMN,
@@ -1094,6 +1108,30 @@ def link_fields(mode: Mode) -> list[Field]:
     return [f for f in mode.fields if f.is_link_list() and f.links_of]
 
 
+def names_also_accepted(mode: Mode | None) -> bool:
+    """Does this mode's link list also take plain names? (See :attr:`Field.accepts_names`.)"""
+    return bool(mode) and any(f.accepts_names for f in mode.fields if f.is_link_list())
+
+
+def is_url_cell(cell) -> bool:
+    """Does this input line look like a link at all (rather than a name)?
+
+    The one question the router needs to route a line, and deliberately not a URL parser:
+    a 红果 drama title never parses, and a bare ``series_id=…`` link the user pasted without
+    its scheme still has to route by domain. Anything holding a scheme or a query is a
+    link; everything else is the name the client's own board is searched with.
+
+    The query test spells its word class as ``[A-Za-z0-9_]``, not a shorthand one: ``static/js/
+    workflow.js`` answers the SAME question for the panel (``field.acceptsNames``) with a
+    JavaScript word class, which is ASCII-only while Python's covers Chinese. One shared
+    spelling of one rule — a title holding a Chinese character is a NAME in both, never a link
+    the panel blesses and the engine then refuses. Pinned by
+    ``test_a_name_the_panel_agrees_is_a_name``.
+    """
+    text = str(cell or '').strip()
+    return '://' in text or bool(re.search(r'[?&][A-Za-z0-9_]+=', text))
+
+
 def as_dict() -> dict:
     """The whole matrix, ready for ``GET /api/capabilities``.
 
@@ -1143,6 +1181,7 @@ def _field_as_dict(f: Field) -> dict:
         'required': f.required,
         'coerce': f.coerce,
         'linksOf': f.links_of,
+        'acceptsNames': f.accepts_names,
         'placeholder': f.placeholder,
         'fedBy': f.fed_by,
     }

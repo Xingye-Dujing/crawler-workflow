@@ -1317,13 +1317,15 @@ def test_e4_a_stop_between_articles_keeps_the_panels_that_reported(client, app_m
             'the comments node has to be the one named as stopped'
         )
         cursor = harness.cursor_of(run.record, 'node-1')
-        # The offset is written *before* each article (``app._execute_comment_node`` hands over
-        # ``{'url_index': idx - 1}`` for idx in 1..len(urls)), so the number that grades it is how
-        # many panels reported, not how many links were asked: asked-for is an upper bound the
-        # product always satisfies, whatever the cursor holds. One behind the reported panels is
-        # the article that reported and finished; level with them is the one 停止 found open. One
-        # ahead would restart 继续 past a panel that never reported — a silent skip of exactly the
-        # kind the cursor legs exist to watch.
+        # The position is written *after* each article, and only across a run of inputs the node
+        # PROVED complete (``app._execute_comment_node`` hands over ``{'url_index': idx}`` once an
+        # article's rows have landed, and stops advancing at the first hole), so the number that
+        # grades it is how many panels reported: the article 停止 found open never printed one and
+        # never raised the cursor. Asking for a foreign link used to be the other way — the offset
+        # was recorded before the walk, so a tail refusal left the cursor resting past the hole it
+        # had just named, and 继续 re-walked only the LAST link. One ahead would restart 继续 past a
+        # panel that never reported — a silent skip of exactly the kind the cursor legs exist to
+        # watch. One behind re-opens a paid panel, which the row ledger then refuses.
         offset = int(cursor.get('url_index') or 0)
         assert len(reported) - 1 <= offset <= len(reported), (
             f'{len(reported)} panels reported and the cursor points at offset {offset} of '

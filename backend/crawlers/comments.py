@@ -7,6 +7,11 @@ Design notes that the code cannot shout later:
   The dedupe ledger picks identity from those field lists; a comment has no
   link of its own, so borrowing those names would make every comment of one
   article hash to the same key and silently drop all but the first.
+  Its identity comes from ``评论ID`` instead (``run_store._COMMENT_ID_FIELDS``, plus
+  ``平台`` so two sites' id spaces cannot meet): the ledger must NOT fall back to the
+  whole-row hash here, because a row also carries ``楼层``, which a fresh harness
+  numbers from 1 again — a resume would then re-store every comment of a re-walked
+  article with invented floors.
 * One article can fail for different reasons and they must not blur:
   ``ok`` (rows, maybe zero — zero means 无评论), ``blocked`` (risk-control or
   login wall answered instead of content), ``dead`` (link unreadable/404).

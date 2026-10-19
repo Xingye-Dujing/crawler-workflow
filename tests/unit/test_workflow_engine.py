@@ -647,6 +647,27 @@ class TestValidateUsesLabels:
         errors = WorkflowEngine(_wf([node], [])).validate()
         assert any('2 link(s) do not match the selected platform (Zhihu)' in e for e in errors)
 
+    def test_a_platform_that_takes_names_accepts_a_line_that_is_not_a_link(self, en):
+        # 红果's comment crawl runs inside the desktop client, whose boards answer to a
+        # title. The rule that refuses a foreign domain must not read a 剧名 as a broken
+        # link — while a line that IS a link still has to belong to the chosen platform.
+        # The corpus is the SAME four lines the browser's validator is driven with in
+        # test_frontend_js.py, so the panel, this validation and the executor's router are
+        # asked one question with one spelling of it (crawl_capabilities.is_url_cell).
+        names = {
+            'id': 'node-1',
+            'type': 'source',
+            'params': {
+                'platform': 'hongguo',
+                'collect': 'comments',
+                'urls': '聚宝仙盆之杂灵根才是真BOSS\n繁花\n我在八零年代？第=集',
+            },
+        }
+        assert WorkflowEngine(_wf([names], [])).validate() == []
+        mixed = dict(names, params=dict(names['params'], urls='聚宝仙盆之杂灵根才是真BOSS\nhttps://weibo.com/1/AbC'))
+        errors = WorkflowEngine(_wf([mixed], [])).validate()
+        assert any('1 link(s) do not match the selected platform' in e for e in errors)
+
     def test_wechat_node_reads_a_stale_comments_flag_as_article_crawl(self, en):
         # WeChat has no comment adapter, so its entry in the matrix carries a
         # single mode: a stale collect='comments' left in an old file resolves to

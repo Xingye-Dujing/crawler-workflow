@@ -118,6 +118,14 @@ renders a drag-and-drop workflow canvas.
   re-crawls/re-pays; keep `runs.db` state compatible. Three pinned rules: the row sink writes **one transaction per
   row**; the next slot is `MAX(seq)+1`, **never `COUNT(*)`**; a **cursor records position, not content** (`Crawler.seed`
   supplies ids; never re-feed an id list into `mark_position`).
+- **A cursor records what the node PROVED, never what it attempted.** The comment engine writes its `url_index` *after*
+  an input's rows land and stops advancing at the first hole — writing it *before* left it at `len(urls)-1` after a
+  full pass, so a tail refusal (skipped drama, under-target) was laundered by 继续: the replay re-walked the LAST link
+  only, a fresh harness reported no skips, and the node settled DONE over the hole its own console line had named.
+- **A row's ledger key is its site identity, not its content.** `item_key` answers a comment by (`平台`, `评论ID`) —
+  its columns deliberately avoid `_URL_FIELDS`/`_AUTHOR_FIELDS`/`_BODY_FIELDS` (that would collapse one article's whole
+  comment set into one key), and falling through to the whole-row hash keyed on volatile `楼层`, which a fresh harness
+  numbers from 1 again, so every resume re-stored a re-walked article's comments with invented floors.
 - **A label is not an input.** A node fingerprint feeds children and the dedupe scope (`'item:'+node_fingerprint`), so a
   *name* inside one breaks the chain. `_VOLATILE_PARAMS` answers "chooses data, or just describes?": ids in, labels and
   switches (`recrawl`/`enabled`) out.

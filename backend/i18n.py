@@ -769,6 +769,24 @@ _ZH = {
         '[红果短剧] 等待 {seconds} 秒没有收到这一集的评论页（{title}）——播放器可能未登录、被弹窗挡住或版本过旧'
     ),
     'crawl.hg.cmt.dramaNotFound': '[红果短剧] 在播放器里搜不到这部剧：{title}',
+    # A drama the client would not open steps aside and is named; only a run that never
+    # reached what the site counted is a failure, and the node says so at the end.
+    'crawl.hg.cmt.dramaSkipped': (
+        '[红果短剧] 界面树始终没有唤醒，本次跳过这部剧：{title}（点一下播放器窗口后「继续」可补采）'
+    ),
+    'crawl.hg.cmt.repliesExpanded': '[红果短剧] 已展开 {n} 处子回复',
+    'crawl.hg.cmt.episodeShort': (
+        '[红果短剧] 《{title}》第 {ep} 集只拿到 {have} 条，站点报 {site_total} 条——该集不完整'
+    ),
+    'crawl.hg.cmt.groupShort': (
+        '[红果短剧] 分集 {group}（第 {ep} 集）只拿到 {have} 条，站点报 {site_total} 条——该集不完整'
+    ),
+    # Said because an expanded child thread prints its own total, and the walk clicks 展开 once
+    # per thread: without this line a thread the site counts at 200 children and delivers 20
+    # would still let the node claim the site said it was done.
+    'crawl.hg.cmt.replyShort': (
+        '[红果短剧] 第 {floor} 楼的子回复只收到 {have} 条，站点报 {site_total} 条——该楼子回复不完整'
+    ),
     'crawl.hg.cmt.treeCold': (
         '[红果短剧] 播放器窗口已打开，但界面树迟迟没有建立（WebView2 可访问性未唤醒）。'
         '用鼠标点一下播放器窗口再重跑本节点'
@@ -1016,6 +1034,10 @@ _ZH = {
     # the fifth landed.
     'comment.no_urls': '评论节点没有可抓取的链接（支持：{platforms}）',
     'comment.unsupported': '评论节点忽略了 {n} 个不支持的链接（仅支持：{platforms}）',
+    # Named because a count of dropped 「links」 sends the user hunting for a typo in a URL,
+    # when what the node actually lacks is the platform that declared it takes plain names.
+    'comment.unsupportedNames': '其中 {n} 行不是链接而是名称：按名称喂入需节点先选定平台'
+    '（红果短剧 的「评论」模式按剧名走播放器自己的榜单）',
     'comment.noAdapter': '{platform} 还没有评论抓取实现，该链接无法处理：{url}',
     'comment.commentsClosed': '该内容未开放评论区（或未产生评论）：{url}',
     'comment.ytNoPage': 'YouTube 页面没有加载成视频页（可能需要登录或被拦截）：{url}',
@@ -1249,6 +1271,13 @@ _ZH = {
     # The funnel clause only when the crawler reported counts; a convicted short without
     # them omits it, rather than printing a fake measurement of zeros.
     'run.underTargetWalk': '（走查：扫 {scanned}、留 {kept}、拒 {refused}）',
+    # Named because a feed of ten dramas that opened six is not a completed comment crawl;
+    # the rows the six yielded stay in the table (the user chose 保留), and these four are
+    # what 继续 still owes.
+    'run.commentsSkipped': (
+        '{platform} 有 {n} 部剧没能进入播放器：{names}——其余剧的行已保留；'
+        '点「继续」会回到第一部未进入的剧起重走（已入库的评论按 评论ID 去重，不会重复入库）'
+    ),
     # Said out loud because the alternative is silence that reads as "closed", while the
     # user may be looking at the window that is still open.
     'run.browserStuck': (
@@ -2271,6 +2300,20 @@ _EN = {
         'player may be logged out, blocked by a dialog, or too old'
     ),
     'crawl.hg.cmt.dramaNotFound': "[Hongguo] the player's search found no such drama: {title}",
+    'crawl.hg.cmt.dramaSkipped': "[Hongguo] the player's UI tree never woke, skipping this drama: {title} "
+    '(click the player window once, then 继续/Resume to harvest it)',
+    'crawl.hg.cmt.repliesExpanded': '[Hongguo] expanded {n} reply thread(s)',
+    'crawl.hg.cmt.episodeShort': '[Hongguo] {title} episode {ep}: kept {have} of the {site_total} the site counts '
+    '— this episode is incomplete',
+    'crawl.hg.cmt.groupShort': '[Hongguo] episode group {group} (episode {ep}): kept {have} of the {site_total} the '
+    'site counts — this episode is incomplete',
+    # Said because an expanded child thread prints its own total and the walk clicks 展开 once
+    # per thread: without this line a thread the site counts at 200 children and delivers 20
+    # would still let the node claim the site said it was done.
+    'crawl.hg.cmt.replyShort': (
+        '[Hongguo] the child thread at floor {floor}: kept {have} of the {site_total} the site counts — '
+        'its replies are incomplete'
+    ),
     'crawl.hg.cmt.treeCold': (
         '[Hongguo] the player window is open but its UI tree never became walkable '
         '(WebView2 accessibility did not wake up). Click inside the player window once, then rerun this node'
@@ -2527,6 +2570,12 @@ _EN = {
     'engine.comment_no_urls': 'Node {nid}: comment node has no article URLs yet',
     'comment.no_urls': 'comment node has no crawlable URLs (supported: {platforms})',
     'comment.unsupported': 'comment node ignored {n} unsupported link(s) (supported: {platforms})',
+    # Named because a count of dropped 「links」 sends the user hunting for a typo in a URL,
+    # when what the node actually lacks is the platform that declared it takes plain names.
+    'comment.unsupportedNames': (
+        '{n} of them are names rather than links: feeding names needs the node to name its platform first '
+        "(红果短剧's 评论 mode walks the player's own boards by title)"
+    ),
     'comment.noAdapter': '{platform} has no comment crawler, so this link cannot be handled: {url}',
     'comment.commentsClosed': 'this content has no open comment section (or none yet): {url}',
     'comment.ytNoPage': 'the YouTube page never loaded as a video page (login or interception?): {url}',
@@ -2815,6 +2864,11 @@ _EN = {
     # The funnel clause only when the crawler reported counts; a convicted short without them
     # omits it rather than printing a fake measurement of zeros.
     'run.underTargetWalk': ' (walk: scanned {scanned}, kept {kept}, refused {refused})',
+    'run.commentsSkipped': (
+        "{platform}: {n} drama(s) never opened in the player ({names}) — the other dramas' rows are kept; "
+        'Resume re-walks from the first one that was missed (comments already stored are deduped by 评论ID, '
+        'so nothing double-stores)'
+    ),
     # Said out loud because the alternative is silence that reads as "closed", while the
     # user may be looking at the window that is still open.
     'run.browserStuck': (

@@ -1425,8 +1425,18 @@ function sourceNodeErrors(node, label, hasDataInput) {
                 return;
             }
             /* Each pasted line has to belong to the platform named for it — the
-               engine refuses others at crawl time; say it before the run. */
-            var bad = links.filter(function (u) { return urlPlatform(u) !== field.linksOf; }).length;
+               engine refuses others at crawl time; say it before the run. A field
+               that declares it also takes NAMES (红果: the walk runs inside the
+               client, whose own boards answer to a title) does not call a title a
+               broken link; a line that does look like a link still has to match.
+               The link test is spelled [A-Za-z0-9_] rather than \w so it is the
+               ONE rule the server answers too (crawl_capabilities.is_url_cell) —
+               JS \w is ASCII, Python \w is not, and two spellings would let the
+               panel bless a line the engine then refuses. */
+            var bad = links.filter(function (u) {
+                if (field.acceptsNames && !/:\/\/|[?&][A-Za-z0-9_]+=/.test(u)) return false;
+                return urlPlatform(u) !== field.linksOf;
+            }).length;
             if (bad) {
                 errors.push(I18n.t('validate.sourceCommentPlat')
                     .replace('{title}', label)

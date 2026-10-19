@@ -5,11 +5,11 @@
       "type": "name",
       "title": "工作流命名",
       "params": {
-        "workflow_name": "红果热榜剧评论（榜单驱动）",
-        "enabled": true
+        "enabled": true,
+        "workflow_name": "红果热榜剧评论（按剧名走播放器自己的榜单）"
       },
       "x": 0,
-      "y": 0,
+      "y": 7,
       "folded": false
     },
     {
@@ -19,16 +19,16 @@
       "platform": "hongguo",
       "params": {
         "board": "hot_drama",
+        "enabled": true,
         "format": "csv",
         "keep_parts": false,
         "part_size": 0,
         "part_timestamp": false,
         "platform": "hongguo",
         "recrawl": true,
-        "target_count": 10,
-        "enabled": true
+        "target_count": 10
       },
-      "x": 340,
+      "x": 372,
       "y": 0,
       "folded": false
     },
@@ -38,25 +38,25 @@
       "title": "数据源",
       "platform": "hongguo",
       "params": {
-        "platform": "hongguo",
         "collect": "comments",
-        "urls": "",
-        "input_column": "链接",
+        "comment_end": "",
         "comment_limit": 0,
         "comment_start": "",
-        "comment_end": "",
+        "enabled": true,
         "episode_count": 5,
-        "include_replies": true,
-        "harvest_timeout": 90,
-        "per_article_file": true,
-        "recrawl": false,
         "format": "csv",
-        "part_size": 0,
+        "harvest_timeout": 90,
+        "include_replies": true,
+        "input_column": "作品名",
         "keep_parts": false,
-        "enabled": true
+        "part_size": 0,
+        "per_article_file": true,
+        "platform": "hongguo",
+        "recrawl": false,
+        "urls": ""
       },
-      "x": 680,
-      "y": 7,
+      "x": 712,
+      "y": 0,
       "folded": false
     },
     {
@@ -64,14 +64,14 @@
       "type": "output",
       "title": "输出",
       "params": {
-        "operation": "save",
-        "format": "csv",
+        "enabled": true,
         "filename": "红果热榜剧评论.csv",
         "filename_timestamp": true,
-        "enabled": true
+        "format": "csv",
+        "operation": "save"
       },
       "operation": "save",
-      "x": 1020,
+      "x": 1052,
       "y": 7,
       "folded": false
     },
@@ -80,11 +80,11 @@
       "type": "name",
       "title": "工作流命名",
       "params": {
-        "workflow_name": "红果单剧评论（手动链接·默认禁用）",
-        "enabled": false
+        "enabled": false,
+        "workflow_name": "红果单剧评论（手动链接·默认禁用）"
       },
       "x": 0,
-      "y": 153,
+      "y": 141,
       "folded": false
     },
     {
@@ -93,25 +93,25 @@
       "title": "数据源",
       "platform": "hongguo",
       "params": {
-        "platform": "hongguo",
         "collect": "comments",
-        "urls": "https://hongguoduanju.com/detail?series_id=7696063528179878937",
-        "input_column": "",
+        "comment_end": "",
         "comment_limit": 0,
         "comment_start": "",
-        "comment_end": "",
+        "enabled": true,
         "episode_count": 3,
-        "include_replies": true,
-        "harvest_timeout": 90,
-        "per_article_file": true,
-        "recrawl": false,
         "format": "csv",
-        "part_size": 0,
+        "harvest_timeout": 90,
+        "include_replies": true,
+        "input_column": "",
         "keep_parts": false,
-        "enabled": true
+        "part_size": 0,
+        "per_article_file": true,
+        "platform": "hongguo",
+        "recrawl": false,
+        "urls": "https://hongguoduanju.com/detail?series_id=7696063528179878937"
       },
-      "x": 340,
-      "y": 153,
+      "x": 412,
+      "y": 134,
       "folded": false
     },
     {
@@ -119,15 +119,15 @@
       "type": "output",
       "title": "输出",
       "params": {
-        "operation": "save",
-        "format": "csv",
+        "enabled": true,
         "filename": "红果单剧评论.csv",
         "filename_timestamp": true,
-        "enabled": true
+        "format": "csv",
+        "operation": "save"
       },
       "operation": "save",
-      "x": 680,
-      "y": 160,
+      "x": 752,
+      "y": 141,
       "folded": false
     }
   ],
@@ -159,8 +159,8 @@
     "max_workers": 4,
     "disabledTypes": [],
     "view": {
-      "panX": 60,
-      "panY": 60,
+      "panX": 217.5,
+      "panY": 376,
       "zoom": 1
     }
   },

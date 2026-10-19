@@ -44,6 +44,7 @@ const SHORT = {
     'platform.weibo': 'weibo',
     'platform.xiaohongshu': 'xiaohongshu',
     'platform.wechat': 'wechat',
+    'platform.hongguo': 'hongguo',
     'node.source': 'Source',
     'node.upload': 'Upload',
     'node.process': 'Process',
