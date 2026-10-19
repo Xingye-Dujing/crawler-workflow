@@ -35,7 +35,7 @@ Everything is offline: the crawler is a scripted recorder, no browser and no net
 import pytest
 
 import crawl_capabilities as capabilities
-from crawlers.base import as_index
+from crawlers.base import UNDER_TARGET, as_index
 
 pytestmark = pytest.mark.api
 
@@ -55,6 +55,7 @@ _SAMPLES = {
     ('urls', 'douyin'): 'https://www.douyin.com/video/7665683746674183459',
     ('urls', 'youtube'): 'https://www.youtube.com/watch?v=abc',
     ('urls', 'twitter'): 'https://x.com/nasa/status/1234567890',
+    ('urls', 'hongguo'): 'https://hongguoduanju.com/detail?series_id=7696074722013875224',
 }
 
 _ROWS = [{'标题': f'条目{i}', '链接': f'https://example.com/{i}'} for i in range(1, 4)]
@@ -305,6 +306,7 @@ def test_a_comments_mode_reaches_the_comment_engine(app_module, recorder, monkey
             return crawl
 
     monkeypatch.setattr(comments_module, 'CommentSession', _Session)
+    _patch_harness(monkeypatch, seen)
     mode = capabilities.mode_for(platform, mode_key)
     params = _params_for(platform, mode)
     node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': platform}
@@ -319,6 +321,48 @@ def test_a_comments_mode_reaches_the_comment_engine(app_module, recorder, monkey
     assert url and url.strip() and platform in url.replace('x.com', 'twitter'), (
         f'{platform}/{mode_key} sent a link that is not its own: {url}'
     )
+
+
+def test_a_harness_that_walked_short_names_the_gap(app_module, recorder, monkeypatch):
+    """The comment engine's U1 gate reads ``end_reason`` BY ATTRIBUTE.
+
+    A browser adapter never sets it (absent → None → the gate is dormant for every
+    platform but the one that declares a harness); a harness that stopped without
+    the site attesting an end must fail the node — keeping its rows and offering
+    继续 — never settle clean DONE over a thin table.
+    """
+    import crawlers.hongguo as hongguo_module
+
+    class _ShortHarness:
+        driver = None
+        risk_blocked = False
+        login_wall = False
+        end_reason = UNDER_TARGET
+        target_total = 99
+        walk_counts = {'scanned': 99, 'kept': 1, 'refused': 0}
+
+        def __init__(self, params=None, log=None, abort=None):
+            pass
+
+        def crawl_hongguo(self, url, limit):
+            return [{'评论ID': 'c1', '评论内容': '很好', '文章URL': url}], 'ok'
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        hongguo_module.HongguoCrawler,
+        'browserless_comment_harness',
+        staticmethod(lambda **kw: _ShortHarness()),
+    )
+    mode = capabilities.mode_for('hongguo', 'comments')
+    params = _params_for('hongguo', mode)
+    node = {'id': 'node-1', 'type': 'source', 'title': '评论', 'params': params, 'platform': 'hongguo'}
+    with pytest.raises(ValueError) as caught:
+        app_module._execute_source_node(node, headless=True, ctx=None)
+    message = str(caught.value)
+    assert '99' in message, f'the refusal must quote the site-attested total: {message}'
+    assert recorder == [], 'a comments node must never fall through to the crawler'
 
 
 @pytest.mark.parametrize('platform,mode_key', _pairs())
@@ -341,6 +385,13 @@ def test_the_matrix_offers_no_mode_that_cannot_be_dispatched(platform, mode_key)
     if mode.handler == 'comments':
         target = getattr(CommentSession, f'crawl_{platform}', None)
         named = f'CommentSession.crawl_{platform}()'
+        if target is None:
+            # The second door a comments mode may legitimately point at: a platform
+            # whose comment crawl runs no browser declares a harness factory on its
+            # registry class (红果短剧 — docs/crawler_notes.md). Either name existing
+            # is dispatchable; neither is the matrix pointing at nothing.
+            target = getattr(CRAWLERS.get(platform), 'browserless_comment_harness', None)
+            named = f'{platform}.browserless_comment_harness()'
     else:
         crawler_class = CRAWLERS.get(platform)
         assert crawler_class is not None, f'{platform} is in the matrix but not in the crawler registry'
@@ -641,7 +692,7 @@ def test_the_board_a_site_does_offer_reaches_the_crawler_as_a_value(app_module, 
     assert kwargs.get('board') == chosen, f'{platform}/{mode_key} sent board={kwargs.get("board")!r}'
 
 
-def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_two():
+def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_four():
     """``needs_session`` decides what a canvas may run without a cookie, so it is
     answered pair by pair — never by "this platform is usually logged in".
 
@@ -654,14 +705,16 @@ def test_the_cookie_gate_is_asked_for_a_session_from_every_pair_but_two():
     """
     pairs = [(cap.platform, mode.key) for cap in capabilities.CAPABILITIES for mode in cap.modes]
     anonymous = [(platform, key) for platform, key in pairs if not capabilities.needs_session(platform, key)]
-    # Three exemptions, each for a measured reason: weibo's board answers an anonymous
+    # Four exemptions, each for a measured reason: weibo's board answers an anonymous
     # browser, wechat has no session to have at all (it has never been a cookie platform),
-    # and 红果短剧's four boards are served to a fresh browser on a platform with no login_url.
-    assert anonymous == [('weibo', 'hot'), ('wechat', 'posts'), ('hongguo', 'hot')], (
-        f'of {len(pairs)} pairs these asked for no session: {anonymous}'
-    )
+    # 红果短剧's four boards are served to a fresh browser on a platform with no login_url,
+    # and 红果短剧's comment harvest holds NO session of ours — the desktop player carries
+    # its own login (measured 2026-10-19), so a cookie question here could only be answered
+    # "no" about a file this tool never reads or writes.
+    exempt = {('weibo', 'hot'), ('wechat', 'posts'), ('hongguo', 'hot'), ('hongguo', 'comments')}
+    assert {tuple(p) for p in anonymous} == exempt, f'of {len(pairs)} pairs these asked for no session: {anonymous}'
     for platform, key in pairs:
-        if (platform, key) in {('weibo', 'hot'), ('wechat', 'posts'), ('hongguo', 'hot')}:
+        if (platform, key) in exempt:
             continue
         assert capabilities.needs_session(platform, key) is True, f'{platform}/{key} quietly stopped needing a cookie'
 
@@ -750,6 +803,40 @@ def test_the_account_on_the_node_selects_the_browser(app_module, browser_asked):
 # ─── Feed: an upstream table column becomes the link list ───────────────
 
 
+def _patch_harness(monkeypatch, seen, fail_url=None):
+    """The browserless seam: 红果短剧's comment crawl runs no Selenium at all — the
+    executor builds ``crawler_class(kind).browserless_comment_harness(...)`` instead of
+    a session. The fake records through the SAME ``seen`` list so every comments test
+    below asserts both doors identically."""
+    import crawlers.hongguo as hongguo_module
+
+    class _Harness:
+        driver = None
+        risk_blocked = False
+        login_wall = False
+        end_reason = None
+        target_total = 0
+        walk_counts = {}
+
+        def __init__(self, params=None, log=None, abort=None):
+            self.params = params or {}
+
+        def crawl_hongguo(self, url, limit):
+            seen.append(('crawl_hongguo', url, limit))
+            if fail_url == url:
+                raise RuntimeError('wall at the fed article')
+            return [{'评论ID': f'c-{url}', '评论内容': '很好', '文章URL': url}], 'ok'
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        hongguo_module.HongguoCrawler,
+        'browserless_comment_harness',
+        staticmethod(lambda **kw: _Harness(**kw)),
+    )
+
+
 def _patch_session(monkeypatch, seen, fail_url=None):
     """The comment engine's adapter seam: record (adapter, url, limit) per link.
 
@@ -775,6 +862,7 @@ def _patch_session(monkeypatch, seen, fail_url=None):
             return crawl
 
     monkeypatch.setattr(comments_module, 'CommentSession', _Session)
+    _patch_harness(monkeypatch, seen, fail_url=fail_url)
 
 
 def _comments_feed_node(platform, column='链接'):

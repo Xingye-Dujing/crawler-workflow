@@ -392,6 +392,48 @@ _HONGGUO_BOARD = Field(
     ),
 )
 
+#: How many of a drama's EPISODES the 红果 comment harvest walks. Comments hang on one
+#: episode each (a ``group_id`` per episode — measured in the player's own traffic), so
+#: "all comments of a drama" is a per-episode walk, and the walk's depth is a cost
+#: decision the user makes: each extra episode is one player episode-switch and its
+#: comment page(s). The floor is 1 (one episode is a whole question); the ceiling is
+#: generous because the site's own boards carry 200+ episode dramas nobody should be
+#: forced to slice by hand.
+_HONGGUO_EPISODES = Field(
+    key='episode_count',
+    control='number',
+    label_key='settings.hgEpisodeCount',
+    default=10,
+    minimum=1,
+    maximum=200,
+    hint_key='settings.hgEpisodeCountHint',
+    coerce='number',
+)
+#: Whether each comment's children (``reply/list``) are fetched too. Default ON: the
+#: drawer shows them inline and an analysis of 互动 without replies reads a half
+#: conversation as a whole one. Turning it off halves the UIA walking, which is the
+#: only reason to refuse.
+_HONGGUO_REPLIES = Field(
+    key='include_replies',
+    control='checkbox',
+    label_key='settings.hgIncludeReplies',
+    default=True,
+    hint_key='settings.hgIncludeRepliesHint',
+    coerce='bool',
+)
+#: How long one episode's comment page may take to ARRIVE before the walk names it.
+#: A per-node data choice (how much patience this crawl buys), not a settings key.
+_HONGGUO_WAIT = Field(
+    key='harvest_timeout',
+    control='number',
+    label_key='settings.hgHarvestTimeout',
+    default=90,
+    minimum=10,
+    maximum=600,
+    hint_key='settings.hgHarvestTimeoutHint',
+    coerce='number',
+)
+
 #: How many rows zhihu's board really holds. Measured at 30 with ``limit=50``,
 #: ``limit=100`` and ``offset=30`` all returning the SAME 30 (30/30 ids overlap) and
 #: ``paging.next`` empty — so the target box is capped by the site, not by us, and the
@@ -499,6 +541,49 @@ def _comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
         # must NOT claim a window; it keeps the same 分片文件 sentence.
         note_key='settings.commentHint' if collects != 'fetch' else 'settings.commentFetchHint',
         collects=collects,
+    )
+
+
+def _hongguo_comment_mode() -> Mode:
+    """红果短剧's comment form: the shared shape minus the account, plus the walk's depth.
+
+    It cannot reuse :func:`_comment_mode` for two measured reasons. There is no
+    account to pick — the session is the desktop player's own login, which this tool
+    neither holds nor asks about (``needs_session=False``, the same exemption the
+    boards carry). And the crawl is a per-EPISODE walk (comments hang on ``group_id``s,
+    one per episode), so the form must ask how deep to walk, whether replies ride
+    along, and how long one episode's page may take — none of which exist on the
+    link-in/rows-out browser platforms.
+    """
+    return Mode(
+        key='comments',
+        label_key='settings.collectComments',
+        handler='comments',
+        rows='comments',
+        fields=(
+            Field(
+                key='urls',
+                control='textarea',
+                label_key='settings.commentUrls',
+                name_key='field.urls',
+                required=True,
+                coerce='urls',
+                links_of='hongguo',
+                placeholder='https://hongguoduanju.com/detail?series_id=...',
+                fed_by='input_column',
+            ),
+            _INPUT_COLUMN,
+            _COMMENT_LIMIT,
+            *_COMMENT_TIMES,
+            _HONGGUO_EPISODES,
+            _HONGGUO_REPLIES,
+            _HONGGUO_WAIT,
+            _PER_ARTICLE,
+            _RECOLLECT,
+        ),
+        note_key='settings.hgCommentNote',
+        collects='external_app',
+        needs_session=False,
     )
 
 
@@ -713,6 +798,10 @@ CAPABILITIES: tuple[Capability, ...] = (
             # board is served to a fresh browser with no cookie, which is why the node
             # carries no account field and the pre-run gate asks it no session question.
             _hot_mode(_HONGGUO_BOARD, board=False, needs_session=False),
+            # Comments exist only in the app protocol; the crawl drives the desktop
+            # player behind our own proxy and reads what it legitimately fetched
+            # (docs/crawler_notes.md 红果短剧 for the whole measurement chain).
+            _hongguo_comment_mode(),
         ),
     ),
     # The overseas three come last on purpose: they are the newest entries and the
@@ -793,7 +882,7 @@ def serial_only_of(platform: str) -> bool:
 
 #: The vocabulary of :attr:`Mode.collects`. One of these four on every mode, checked
 #: by the tests so a mode cannot declare a word the panel and executor do not know.
-COLLECT_KINDS = ('fetch', 'dom_read', 'dom_scroll', 'modal_per_row', 'page_per_row')
+COLLECT_KINDS = ('fetch', 'dom_read', 'dom_scroll', 'modal_per_row', 'page_per_row', 'external_app')
 
 
 def needs_session(platform: str, mode_key: str) -> bool:

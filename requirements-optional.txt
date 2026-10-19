@@ -57,3 +57,19 @@ sentence-transformers
 bertopic
 umap-learn
 hdbscan
+
+# ── 红果短剧 comment harvest: the desktop player's proxy signer needs both ──────
+# The Hongguo comment endpoint is signature-guarded (x-medusa/x-helios; a byte-identical
+# replay answers 110001 — docs/crawler_notes.md 红果短剧), so this crawl does not speak the
+# protocol: it runs the third-party desktop player behind `mitmdump` and reads what the
+# player legitimately fetched. `mitmproxy` supplies the mitmdump executable AND the
+# presence probe the harness refuses by name without; `uiautomation` (Windows-only,
+# comtypes-based) drives the player's window. Both are imported/probed only inside
+# crawlers/hongguo_harvest.py — an absent stack is a NAMED refusal on that one node, every
+# other platform keeps working, and CI never installs them (Windows desktop feature, like
+# the player itself). mitmproxy pulls a large twisted/cryptography tree, hence this file.
+#
+# Used by: the Data Source node, platform 红果短剧, mode 评论.
+
+mitmproxy
+uiautomation

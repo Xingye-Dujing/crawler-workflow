@@ -149,6 +149,20 @@ class HongguoCrawler(Crawler):
         disagreeing."""
         raise ValueError(t('crawl.hg.noDetail', url=str(url or '')))
 
+    @classmethod
+    def browserless_comment_harness(cls, **kwargs):
+        """The comment crawl of this platform runs NO browser: it drives the desktop
+        player behind our own proxy (:mod:`crawlers.hongguo_harvest`; why the protocol
+        is not spoken directly is measured in ``docs/crawler_notes.md`` 红果短剧).
+
+        The comment executor looks this name up on the registry class — one
+        declarative attribute, so the executor grows no ``if platform ==`` branch
+        and the matrix stays the only answer to what a platform can collect.
+        """
+        from .hongguo_harvest import HongguoCommentHarness
+
+        return HongguoCommentHarness(**kwargs)
+
     # ─── the crawl ───
 
     def hot(self, target_count: int = 50, board: str = 'hot_drama', **kwargs):

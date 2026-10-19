@@ -47,6 +47,11 @@ class Config:
     # device twice in a row instead of a blank one replaying an old cookie snapshot
     # (see services-free module ``browser_profiles`` for why this exists).
     BROWSER_PROFILE_DIR = os.path.join(DATA_DIR, 'chrome_profile')
+    # Scratch root for the 红果 comment harvest: the capture JSONL the mitm addon
+    # writes (the CA itself lives in mitmproxy's own default ~/.mitmproxy — it is a
+    # machine fact, not per-run scratch). Declared here so
+    # ``tests/conftest.ISOLATED_PATHS`` can redirect it exactly like the other dirs.
+    HARVEST_DIR = os.path.join(DATA_DIR, 'harvest')
 
     # Durable run state: per-node output rows, crawl cursors, crawled-item
     # fingerprints and the LLM answer cache. This is what makes an interrupted
@@ -169,5 +174,5 @@ class Config:
     #: size, and a body over it still carries the trailing ``…`` marker.
     WECHAT_BODY_MAX_CHARS = 0
 
-    for d in [COOKIE_DIR, EXPORT_DIR, WORKFLOW_DIR, LOG_DIR, LLM_CHECKPOINT_DIR, BROWSER_PROFILE_DIR]:
+    for d in [COOKIE_DIR, EXPORT_DIR, WORKFLOW_DIR, LOG_DIR, LLM_CHECKPOINT_DIR, BROWSER_PROFILE_DIR, HARVEST_DIR]:
         os.makedirs(d, exist_ok=True)

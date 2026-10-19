@@ -67,6 +67,10 @@ ISOLATED_PATHS = (
     # A crawler built by any test would otherwise drop a real Chrome profile into the user's
     # data/ directory and keep reusing it across runs.
     ('BROWSER_PROFILE_DIR', 'data/chrome_profile'),
+    # The 红果 harvest's scratch (mitm CA dir + capture JSONL): a test that leaked a real
+    # mitmdump run must not touch the user's data/harvest, and the isolation guard has to
+    # be able to see the write.
+    ('HARVEST_DIR', 'data/harvest'),
     ('LOG_DIR', 'logs'),
 )
 

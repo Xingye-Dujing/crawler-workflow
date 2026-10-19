@@ -861,6 +861,11 @@ _LIVE_SKIP_ALLOWANCE = {
     ('test_live_comments.py', 'no searched weibo post had comments'),
     ('test_live_zhihu.py', 'refused the headless session'),
     ('test_live_cookie_preflight.py', 'no saved cookies'),
+    # The 红果 comment harvest runs on the desktop: the player exe and mitmdump are
+    # machines to have, like a browser is — their absence is an environment fact,
+    # while anything the CRAWL answers (no rows, wrong drama, silence) stays red.
+    ('test_live_hongguo_comments.py', '红果播放器未配置'),
+    ('test_live_hongguo_comments.py', 'mitmproxy 未安装'),
 }
 
 

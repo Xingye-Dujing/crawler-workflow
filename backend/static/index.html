@@ -1887,6 +1887,55 @@
         </span>
       </div>
       <div class="dd-item-row">
+        <span data-i18n="set.hgPlayer">红果播放器路径</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-hg-player"
+            class="settings-input"
+            placeholder="红果短剧.exe"
+            oninput="onSettingInput('hongguo_player_path', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.mitmdump">mitmdump 路径</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-mitmdump"
+            class="settings-input"
+            placeholder="mitmdump.exe（留空=自动）"
+            oninput="onSettingInput('mitmdump_path', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.harvestPort">收割代理端口</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="set-harvest-port"
+            class="settings-input settings-input-sm"
+            placeholder="8860"
+            oninput="onSettingInput('harvest_proxy_port', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
+        <span data-i18n="set.harvestCA">自动安装抓包证书</span>
+        <span class="dd-ctrl">
+          <label class="settings-checkbox-label">
+            <input
+              type="checkbox"
+              id="set-harvest-ca"
+              onchange="onSettingInput('harvest_auto_install_ca', this.checked)"
+            />
+            <span data-i18n="set.harvestCAInline">红果评论收割需要 mitmproxy 根证书进入当前用户「受信任的根」；关闭后节点只打印手动命令、不碰证书库</span>
+          </label>
+        </span>
+      </div>
+      <div class="dd-item-row">
         <span data-i18n="set.overseasAsk">海外平台运行前问一句外网</span>
         <span class="dd-ctrl">
           <label class="settings-checkbox-label">

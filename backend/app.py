@@ -4506,41 +4506,57 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 continue
             kind = platform_for(url)
             if kind not in sessions:
-                # The run's 无头/窗口 choice is honoured verbatim (#148). A headless Chrome now
-                # carries a desktop fingerprint, and a *scrolled* comment panel was measured
-                # serving the same rows in both shapes (zhihu comments 5/5 headless, real profile,
-                # 2026-09-26), so the old rule that forced a window onto scroll-only panels inside a
-                # headless run is gone: no comment panel overrides what the user asked for.
-                crawler = get_crawler(
-                    kind,
-                    headless=headless,
-                    cookie_dir=Config.COOKIE_DIR,
-                    use_profile=(ctx or {}).get('use_profile'),
-                    abort=stop_requested,
-                    # The node's chosen login walks its comments too: the comment rate
-                    # limit is an ACCOUNT limit, which is the whole reason multi-account
-                    # exists. Blank = the historical default session.
-                    account=account,
-                )
-                # Registered for the same reason the source node registers its own:
-                # a browser 停止 does not know about is a window the user watches keep
-                # working — and this loop only asks "may I stop?" between URLs, so one
-                # article's page walk could run the whole node out after the Stop.
-                sessions[kind] = (
-                    crawler,
-                    # The comment engine reports per-URL facts; prefix them so a
-                    # line in the shared console says which node it came from.
-                    CommentSession(
-                        crawler.driver,
+                harness_factory = getattr(crawler_class(kind), 'browserless_comment_harness', None)
+                if harness_factory is not None:
+                    # A platform whose comment crawl drives an external desktop app instead
+                    # of a browser (红果短剧; the measurement that forced this shape is in
+                    # docs/crawler_notes.md): the harness plays BOTH cached roles, owns its
+                    # own processes, and dies in this node's ``finally`` and on 停止 through
+                    # the same reaper — its ``driver`` is None, which the reaper already
+                    # reads as "no pid to kill", and its own close() aims the kills.
+                    harness = harness_factory(
+                        params=params,
                         log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
                         abort=stop_requested,
-                        # The live attribute, not just its value: see CommentSession.driver.
-                        owner=crawler,
-                    ),
-                )
-                # Last, so a refusal while building the session cannot leave a
-                # registered browser that nothing here would ever close.
-                execution_state['active_crawlers'].add(crawler)
+                    )
+                    sessions[kind] = (harness, harness)
+                    execution_state['active_crawlers'].add(harness)
+                else:
+                    # The run's 无头/窗口 choice is honoured verbatim (#148). A headless Chrome now
+                    # carries a desktop fingerprint, and a *scrolled* comment panel was measured
+                    # serving the same rows in both shapes (zhihu comments 5/5 headless, real profile,
+                    # 2026-09-26), so the old rule that forced a window onto scroll-only panels inside a
+                    # headless run is gone: no comment panel overrides what the user asked for.
+                    crawler = get_crawler(
+                        kind,
+                        headless=headless,
+                        cookie_dir=Config.COOKIE_DIR,
+                        use_profile=(ctx or {}).get('use_profile'),
+                        abort=stop_requested,
+                        # The node's chosen login walks its comments too: the comment rate
+                        # limit is an ACCOUNT limit, which is the whole reason multi-account
+                        # exists. Blank = the historical default session.
+                        account=account,
+                    )
+                    # Registered for the same reason the source node registers its own:
+                    # a browser 停止 does not know about is a window the user watches keep
+                    # working — and this loop only asks "may I stop?" between URLs, so one
+                    # article's page walk could run the whole node out after the Stop.
+                    sessions[kind] = (
+                        crawler,
+                        # The comment engine reports per-URL facts; prefix them so a
+                        # line in the shared console says which node it came from.
+                        CommentSession(
+                            crawler.driver,
+                            log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
+                            abort=stop_requested,
+                            # The live attribute, not just its value: see CommentSession.driver.
+                            owner=crawler,
+                        ),
+                    )
+                    # Last, so a refusal while building the session cannot leave a
+                    # registered browser that nothing here would ever close.
+                    execution_state['active_crawlers'].add(crawler)
             _crawler, session = sessions[kind]
             if cursor_sink is not None:
                 cursor_sink({'url_index': idx - 1, 'url_total': len(urls)})
@@ -4647,6 +4663,23 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # cookie — that is the source crawler's rule, applied to the comment node too.
             raise ValueError(t('run.riskControlled', platform=target_word))
         raise ValueError(t('run.cookieExpired', platform=target_word))
+    # U1 for the comment engine, asked the SAME attribute way as the source path: a
+    # session that walked short without the site attesting an end must not settle
+    # DONE. Browser adapters never set ``end_reason`` (it stays absent → None), so
+    # this gate is dormant for every platform but the ones that declare a harness.
+    for kind, (owner, _session) in sessions.items():
+        if getattr(owner, 'end_reason', None) != UNDER_TARGET:
+            continue
+        want_total = getattr(owner, 'target_total', 0) or 0
+        if not want_total or len(rows_out) >= want_total:
+            continue
+        counts = getattr(owner, 'walk_counts', {}) or {}
+        walk = (
+            t('run.underTargetWalk', scanned=counts['scanned'], kept=counts['kept'], refused=counts['refused'])
+            if {'scanned', 'kept', 'refused'} <= set(counts)
+            else ''
+        )
+        raise ValueError(t('run.underTargetShort', platform=kind, have=len(rows_out), want=want_total, walk=walk))
     rows_out = _filter_comments_by_time(rows_out, params, node_label(node, str(nid)))
     return rows_out
 

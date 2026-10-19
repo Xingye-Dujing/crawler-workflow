@@ -5312,6 +5312,7 @@ function urlPlatform(url) {
         ['douyin', ['douyin.com', 'iesdouyin.com']],
         ['youtube', ['youtube.com', 'youtu.be']],
         ['twitter', ['x.com', 'twitter.com', 'fxtwitter.com', 'vxtwitter.com']],
+        ['hongguo', ['hongguoduanju.com']],
     ];
     for (var i = 0; i < TABLE.length; i++) {
         for (var j = 0; j < TABLE[i][1].length; j++) {

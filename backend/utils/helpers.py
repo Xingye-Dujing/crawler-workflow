@@ -26,6 +26,9 @@ _COMMENT_DOMAINS = (
     # would read as "this link is unsupported".
     ('youtube', ('youtube.com', 'youtu.be')),
     ('twitter', ('x.com', 'twitter.com', 'fxtwitter.com', 'vxtwitter.com')),
+    # 红果短剧's detail links name the drama; the comment walk itself runs through the
+    # desktop player behind a proxy (no web comment page exists — docs/crawler_notes.md).
+    ('hongguo', ('hongguoduanju.com',)),
 )
 
 

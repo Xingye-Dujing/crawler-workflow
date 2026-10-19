@@ -922,6 +922,61 @@ loader 键已在但 `content` 还没有 `_data`（约 2 s 后才填），所以�
 热度/收藏/点赞是站点四舍五入后的「万」标签（`8134万热度`/`53.7万收藏`/`141.8万点赞`），
 用共享的 `parse_count` 展开；站点没印数字的格子留**空**，不填 0。
 
+### 评论只活在 App 协议里：播放器当签名预言机（measured 2026-10-19）
+
+红果的**网页端没有评论区**（四榜是网页的极限）；评论挂在单集上：
+`POST https://api5-normal-lq.fqnovel.com/novel/commentapi/comment/list/{group_id}/v1/?<设备公共参数>`，
+子回复是同一信封的 `reply/list`。请求头带 `x-medusa`/`x-helios`/`x-khronos`/`x-reading-request`
+全套字节系签名。**复刻签名这条路已实测封死**：把第三方桌面播放器（hongguo-player，Wails/Go，
+`红果短剧.exe`）的完整请求原样重放、换新鲜 `_rticket`/`x-khronos` 重放、换目标剧集重放，
+三种组合全部 `Code 110001 未知异常`——签名覆盖请求体且绑时间戳，不是能抄的模板。
+
+于是本平台的评论采集**不说话，只旁听**（`crawlers/hongguo_harvest.py`）：
+第三方播放器已把整套协议逆向完（二进制里能读出 `hg-go/pkg/hgapi` 的端点常量、
+`hg-go/pkg/sign` 的 XGorgon/Medusa 实现、伪造的小米14 设备注册池），让它当签名预言机，
+我们只收割它合法拿到的明文 JSON。三条实测支撑这条通道成立：
+
+1. **播放器的 Go HTTP 客户端认 `HTTPS_PROXY` 环境变量**（PowerShell 注入 → 全部 API 流量
+   经 mitmproxy；`NO_PROXY=localhost,127.0.0.1` 保住它的本地播放服务 `GET /nd/{token}`）。
+2. **它不做证书 pinning**：mitmproxy CA 进「当前用户-受信任的根」后 TLS 全通解
+   （`certutil -addstore -user Root` 在 Win11 会弹确认框，PowerShell `Import-Certificate`
+   静默成功——安装与探测都走后者）。
+3. **信息流每切一个视频、且每 60 s 自动拉一次当前集的 `comment/list`**（`count=90`、
+   `comment_source=601`、时间窗游标 `{"start_offset_time":…,"end_offset_time":…}`）——
+   所以「打开剧 + 逐集切换」就能白拿每集第一页；90 条以后的深页需要评论抽屉滚动，
+   抽屉控件**尚未测量**，失手只降深度、不谎报采完（`has_more=true` 收不了尾 → `UNDER_TARGET`）。
+
+**payload 的坑**：`data_list` 里混着**弹幕引导行**（`comment_id` 是 `11114` 这种小数字、
+`create_timestamp==0`、带 `expand.danmaku_activity_info`）——它们不是评论，解析器丢弃并计数
+（`danmakuSkipped`）。真评论 `comment_id` 是大 id（`7697905336342594366`），身份就用它。
+登录态影响 `user_info`：未登录只有 `user_id`（评论者留空，不编名字），登录后名字在
+**`base_info.user_name`**（不是 screen_name/nickname）。`expand.book_id` = 剧集的 series_id，
+用它核对「这页属于这部剧」——错剧的行**具名丢弃**（`groupMismatch`），表里进错剧比缺一集更糟。
+
+**UIA 层实测（同日，多轮）**：找剧页**没有搜索框**（它是 关注/漫剧/真人剧/推荐 的浏览流）；
+右侧动作栏（`💬 588` 等，按钮名自带**站点打印的评论数**）在树里的出现与鼠标/前台状态相关；
+最麻烦的是 **WebView2 可访问性树冷启动**——新起进程可以连续 100 s 只有标题栏（程序化
+SetForegroundWindow/点击/WM_GETOBJECT 都唤不热，而当天有真人鼠标在里面操作过的会话树是全的），
+所以 `open_drama` 在内容树 60 s 不出现时**具名拒绝** `crawl.hg.cmt.treeCold`
+（提示用户点一下窗口），绝不静默报「搜不到这部剧」。信息流的 60 s 自动评论刷新也**不再可靠**
+（当天 15:3x 观察到、17:4x 起观察不到）——评论的确定性触发是点动作栏 `💬` 开抽屉，
+该路径待人在场时用真窗口测量后再收紧。
+
+**剧名从网页拿，vid 列表不从网页拿**：详情页 `<title>` 是「剧名_红果短剧…」
+（纯 HTTP 可读，取第一个 `_` 前段，播放器里拿它搜索）；详情页主体载荷是客户端 XHR，
+SSR HTML 里没有（实测 `videoList` 只有推荐位 16 条，目标剧不在其中）——所以目标集由
+**播放器自己的流量**给出（每页响应自带 `group_id`），网页只负责剧名与 series_id。
+热榜页的数据倒是以 `mergeLoaderData` 补丁的形式流式嵌在 HTML 里（live 层选目标用它，免开浏览器）。
+
+**播放器窗口属于用户**：节点发现已有一个不带本代理的播放器窗口在跑 → `playerBusy` **具名拒绝**
+并让用户关闭，绝不杀用户开的窗口；自己 Popen 的才在 `finally`/停止里 `taskkill /F /T`。
+UIA 侧（窗口类 `wailsWindow`）：导航按钮有名字（`🔍 找剧`…）、集计数器印 `1 / 9+`、
+方向键切集——已测；WebView2 的 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 被 Wails 的代码级参数
+覆盖，**CDP 注入这条路是死的**（别再试）。`Mode.collects='external_app'`：这个模式不开任何
+Selenium 窗口，评论引擎按 `crawler_class(kind).browserless_comment_harness` 声明式分叉，
+harness 同时扮演 session（`crawl_hongguo`）与 crawler（`close`/墙标志恒 False）。
+U1 在评论引擎里按**属性**（`end_reason`）问，浏览器适配器恒 None、门对它们休眠。
+
 ## A login page on the way through is not a wall (measured 2026-09-24)
 
 `Crawler.open()` judged the wall on the *first* reading after `driver.get`, which is the moment a

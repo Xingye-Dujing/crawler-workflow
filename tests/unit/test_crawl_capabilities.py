@@ -307,7 +307,7 @@ class TestModeResolution:
         assert mode_keys_for('zhihu') == ('posts', 'author', 'hot', 'comments')
         assert mode_keys_for('weibo') == ('posts', 'author', 'hot', 'comments')
         assert mode_keys_for('douyin') == ('author', 'hot', 'comments')
-        assert mode_keys_for('hongguo') == ('hot',), '红果 offers its boards and nothing else'
+        assert mode_keys_for('hongguo') == ('hot', 'comments'), 'boards, plus the player-backed comment harvest'
         assert mode_keys_for('wechat') == ('posts',), 'WeChat has no comment adapter'
         assert 'hot' not in mode_keys_for('xiaohongshu'), '小红书 has no measurable board'
 
@@ -647,13 +647,23 @@ class TestCollectionKind:
         ``hongguo/hot`` is the same shape as wechat's: the four boards are served to a
         fresh browser (measured 2026-10), and the platform has no ``login_url`` for a
         cookie to be valid on, so a session question here could only be answered "no".
+        ``hongguo/comments`` asks the cookie gate nothing because the session is not
+        this tool's to hold: the crawl drives the desktop player, which carries its own
+        login (measured 2026-10-19: comment pages arrive with the player logged in and
+        the tool never touches a cookie file).
         """
         anonymous = {(cap.platform, mode.key) for cap in CAPABILITIES for mode in cap.modes if not mode.needs_session}
-        assert anonymous == {('weibo', 'hot'), ('wechat', 'posts'), ('hongguo', 'hot')}, anonymous
+        assert anonymous == {
+            ('weibo', 'hot'),
+            ('wechat', 'posts'),
+            ('hongguo', 'hot'),
+            ('hongguo', 'comments'),
+        }, anonymous
         assert needs_session('weibo', 'hot') is False
         assert needs_session('weibo', 'posts') is True, 'the same platform, a different answer'
         assert needs_session('wechat', 'posts') is False
         assert needs_session('hongguo', 'hot') is False, 'all four boards answer a fresh browser (measured 2026-10)'
+        assert needs_session('hongguo', 'comments') is False, "the session is the player's, not this tool's"
         assert needs_session('zhihu', 'hot') is True, 'the zhihu board is 401 without a session'
         # No answer is not evidence of anonymity: an unknown platform or mode keeps
         # the probe on.

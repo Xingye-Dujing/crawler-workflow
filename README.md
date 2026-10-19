@@ -56,6 +56,7 @@ python app.py
 
 - **多平台数据采集**：知乎 / 微博 / 小红书 / 微信公众号 / 哔哩哔哩 / 抖音 / 红果短剧 / YouTube / X（推特）
   （Instagram 已可存 Cookie，采集待接入），关键词 / 某作者的作品 / 热榜 / 评论多种模式，
+  红果短剧的评论由带代理的桌面播放器旁听收割（App 协议签名不复刻，见 docs/collection.md），
   采集量只由你填的目标数决定，支持分批输出、上游喂链接、多账号与持久 Profile。→ [`docs/collection.md`](docs/collection.md)
 - **AI 分析**：Ollama / OpenRouter 双提供方，情感 / 倾向 / 情绪（LLM · sklearn ML · 微调 BERT 三模式，**默认微调 BERT**，跑不动自动降级到 ml/snownlp 并打印实际模式；BERT 截断长度可调）、
   情感极性、NER、关键词、聚类、异常、相关性、显著性检验（按分组列比较数值列：Welch t / ANOVA / Mann-Whitney / Kruskal-Wallis，p 值走 scipy 真实分布、非 Student 的 Welch 会如实标注）、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、为何主推微调 BERT → [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)

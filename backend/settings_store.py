@@ -92,6 +92,20 @@ DEFAULTS = {
     #: just been challenged the safe move is to back off rather than push. On costs wall-clock
     #: (a deep crawl runs several times slower); off is today's behaviour.
     'gentle_crawl': False,
+    #: 红果短剧 comment harvest (``crawlers/hongguo_harvest.py``): the desktop player
+    # whose already-reverse-engineered protocol signs the comment requests, the
+    # mitmdump that reads them, and the port both share. The player path is NOT
+    # auto-detected — the install directory is the user's choice and a guessed path
+    # would harvest against the wrong build; the refusal names this setting.
+    'hongguo_player_path': '',
+    # Empty = PATH, then this venv's Scripts (where ``pip install mitmproxy`` lands).
+    'mitmdump_path': '',
+    'harvest_proxy_port': 8860,
+    #: Put the mitmproxy root cert into the CURRENT USER's trusted roots on first
+    # harvest (Windows asks once; the player's Go client accepts exactly this store,
+    # measured 2026-10-19). Off = the harvest refuses with the manual command —
+    # touching a trust store is never a surprise.
+    'harvest_auto_install_ca': True,
 }
 
 _values = None
@@ -108,6 +122,7 @@ _NUMERIC_RANGES = {
     # panel cannot promise a concurrency the server would silently clamp anyway.
     'max_visible_browsers': (1, 16),
     'max_headless_browsers': (1, 16),
+    'harvest_proxy_port': (1024, 65535),
 }
 
 
@@ -171,6 +186,11 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 if v and not os.path.isfile(v):
                     warnings.append(t('set.latexMissing', path=v))
                 vals[key] = v
+            elif key in ('hongguo_player_path', 'mitmdump_path'):
+                v = str(raw or '').strip().strip('"')
+                if v and not os.path.isfile(v):
+                    warnings.append(t('set.harvestMissing', tool=key, path=v))
+                vals[key] = v
             elif key == 'window_size':
                 v = str(raw or '').strip()
                 if re.fullmatch(r'\d{2,5}x\d{2,5}', v):
@@ -211,6 +231,7 @@ def save_settings(patch: dict) -> tuple[dict, list]:
                 'ask_overseas_network',
                 'clear_console_before_run',
                 'gentle_crawl',
+                'harvest_auto_install_ca',
             ):
                 # The browser may send a real bool or the 'true'/'false' string
                 # the checkbox helpers historically produced; anything else

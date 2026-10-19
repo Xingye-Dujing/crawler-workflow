@@ -740,6 +740,41 @@ _ZH = {
     'crawl.hg.noPageRefused': '[红果短剧] 浏览器自己拒绝了这一页，因此不可能有榜单数据：{url}{detail}',
     'crawl.hg.searchUnsupported': '[红果短剧] 该站点只提供四个热播榜单，没有关键词搜索（收到关键词：{keyword}）',
     'crawl.hg.noDetail': '[红果短剧] 该平台没有「按链接采集」的模式，也还没有测量过详情页读取（{url}）',
+    # ─── 评论收割（桌面播放器 + 本地代理；机制见 docs/crawler_notes.md 红果短剧）───
+    'crawl.hg.cmt.start': '[红果短剧] 开始收割评论：{title}（{episodes} 集，子回复{replies}）',
+    'crawl.hg.cmt.on': '开',
+    'crawl.hg.cmt.off': '关',
+    'crawl.hg.cmt.episode': '[红果短剧] 第 {n}/{total} 集：{have} 条评论（站点报 {site_total} 条）',
+    'crawl.hg.cmt.replyPage': '[红果短剧] 楼层 {floor} 的子回复：{n} 条',
+    'crawl.hg.cmt.danmakuSkipped': '[红果短剧] 丢弃 {n} 条弹幕引导行（它们不是评论）',
+    'crawl.hg.cmt.finished': '[红果短剧] 评论收割结束，共 {n} 行（{episodes} 集）',
+    'crawl.hg.cmt.noPlayer': (
+        '[红果短剧] 找不到红果短剧桌面播放器（{path}）——请在 设置 › 红果播放器路径 填写它的 exe 位置'
+    ),
+    'crawl.hg.cmt.noMitmdump': (
+        '[红果短剧] 找不到 mitmdump（{detail}）——安装：pip install mitmproxy（见 requirements-optional.txt）'
+    ),
+    'crawl.hg.cmt.needsExtras': (
+        '[红果短剧] 评论收割是 Windows 桌面功能，'
+        '本机缺少 {missing}（按 requirements-optional.txt 安装；云端模式不可用）'
+    ),
+    'crawl.hg.cmt.caNotTrusted': (
+        '[红果短剧] mitmproxy 根证书未受信任且自动安装未成功。手动命令（PowerShell）：{command}'
+    ),
+    'crawl.hg.cmt.caInstalled': '[红果短剧] 已把 mitmproxy 根证书装入当前用户受信任的根（播放器解密需要）',
+    'crawl.hg.cmt.playerBusy': (
+        '[红果短剧] 红果播放器已经开着且不走本工具的代理——请先关闭它，本节点会自己带代理启动播放器'
+    ),
+    'crawl.hg.cmt.noTraffic': (
+        '[红果短剧] 等待 {seconds} 秒没有收到这一集的评论页（{title}）——播放器可能未登录、被弹窗挡住或版本过旧'
+    ),
+    'crawl.hg.cmt.dramaNotFound': '[红果短剧] 在播放器里搜不到这部剧：{title}',
+    'crawl.hg.cmt.treeCold': (
+        '[红果短剧] 播放器窗口已打开，但界面树迟迟没有建立（WebView2 可访问性未唤醒）。'
+        '用鼠标点一下播放器窗口再重跑本节点'
+    ),
+    'crawl.hg.cmt.titleMissing': '[红果短剧] 详情页没有打印剧名，播放器里不知道该搜什么：{url}',
+    'crawl.hg.cmt.groupMismatch': '[红果短剧] 收到的评论页属于 {got} 而不是所请求的 {want}，已丢弃',
     'crawl.platformNotCrawlable': '该平台目前只支持保存登录 Cookie，还不支持采集（{platform}）——'
     '请先改用已支持的平台，或等待该平台的抓取实现完成',
     'cookie.xiaohongshu.purpose': '解锁小红书搜索、笔记正文与评论；未登录会撞登录墙且只给首屏。',
@@ -1149,6 +1184,7 @@ _ZH = {
     'set.driverEmpty': '驱动路径为空，已恢复默认值',
     'set.browserMissing': '浏览器程序不存在：{path}',
     'set.latexMissing': 'MiKTeX 编译程序不存在：{path}',
+    'set.harvestMissing': '红果收割组件（{tool}）不是已存在的文件：{path}',
     'set.badWindow': '窗口大小格式应为 宽x高（如 1920x1080），已恢复默认 {default}',
     'set.badNumber': '{setting} 不是数字，已恢复默认 {value}',
     'set.outOfRange': '{setting} 超出范围 {lo}-{hi}，已恢复默认 {value}',
@@ -2200,6 +2236,49 @@ _EN = {
     '(received keyword: {keyword})',
     'crawl.hg.noDetail': '[Hongguo] no link-based mode exists for this platform, and its detail page has not '
     'been measured yet ({url})',
+    # ─── comment harvest (desktop player behind a local proxy; docs/crawler_notes.md Hongguo) ───
+    'crawl.hg.cmt.start': '[Hongguo] harvesting comments: {title} ({episodes} episodes, replies {replies})',
+    'crawl.hg.cmt.on': 'on',
+    'crawl.hg.cmt.off': 'off',
+    'crawl.hg.cmt.episode': '[Hongguo] episode {n}/{total}: {have} comments (the site says {site_total})',
+    'crawl.hg.cmt.replyPage': '[Hongguo] replies under floor {floor}: {n}',
+    'crawl.hg.cmt.danmakuSkipped': '[Hongguo] dropped {n} danmaku-guide rows (they are not comments)',
+    'crawl.hg.cmt.finished': '[Hongguo] comment harvest done, {n} rows ({episodes} episodes)',
+    'crawl.hg.cmt.noPlayer': (
+        '[Hongguo] the Hongguo desktop player was not found ({path}) \u2014 set its exe location in '
+        'Settings \u203a Hongguo player path'
+    ),
+    'crawl.hg.cmt.noMitmdump': (
+        '[Hongguo] mitmdump was not found ({detail}) \u2014 install it with: pip install mitmproxy '
+        '(see requirements-optional.txt)'
+    ),
+    'crawl.hg.cmt.needsExtras': (
+        '[Hongguo] the comment harvest is a Windows desktop feature and this machine lacks {missing} '
+        '(install per requirements-optional.txt; unavailable in cloud mode)'
+    ),
+    'crawl.hg.cmt.caNotTrusted': (
+        '[Hongguo] the mitmproxy root certificate is not trusted and auto-install did not succeed. '
+        'Manual command (PowerShell): {command}'
+    ),
+    'crawl.hg.cmt.caInstalled': "[Hongguo] installed the mitmproxy root certificate into the current user's "
+    'trusted roots (the player needs it to decrypt)',
+    'crawl.hg.cmt.playerBusy': (
+        "[Hongguo] the Hongguo player is already running and does not carry this tool's proxy \u2014 close "
+        'it first and this node will launch the player through the proxy itself'
+    ),
+    'crawl.hg.cmt.noTraffic': (
+        '[Hongguo] waited {seconds}s and no comment page arrived for this episode ({title}) \u2014 the '
+        'player may be logged out, blocked by a dialog, or too old'
+    ),
+    'crawl.hg.cmt.dramaNotFound': "[Hongguo] the player's search found no such drama: {title}",
+    'crawl.hg.cmt.treeCold': (
+        '[Hongguo] the player window is open but its UI tree never became walkable '
+        '(WebView2 accessibility did not wake up). Click inside the player window once, then rerun this node'
+    ),
+    'crawl.hg.cmt.titleMissing': '[Hongguo] the detail page printed no drama name, so the player has nothing '
+    'to search for: {url}',
+    'crawl.hg.cmt.groupMismatch': '[Hongguo] a comment page arrived for {got} instead of the requested {want} '
+    'and was dropped',
     'crawl.platformNotCrawlable': 'This platform only supports storing a login cookie so far, not crawling '
     '({platform}) \u2014 use a supported platform, or wait for its crawler to land',
     'cookie.xiaohongshu.purpose': 'Unlocks Xiaohongshu search, note bodies and comments; logged out you hit the '
@@ -2657,6 +2736,7 @@ _EN = {
     'set.driverEmpty': 'Driver path was empty — restored the default',
     'set.browserMissing': 'Browser executable does not exist: {path}',
     'set.latexMissing': 'MiKTeX compiler does not exist: {path}',
+    'set.harvestMissing': 'Hongguo harvest component ({tool}) is not an existing file: {path}',
     'set.badWindow': 'Window size must look like WIDTHxHEIGHT (e.g. 1920x1080) — restored the default {default}',
     'set.badNumber': '{setting} is not a number — restored the default {value}',
     'set.outOfRange': '{setting} is outside {lo}-{hi} — restored the default {value}',
