@@ -96,6 +96,7 @@ class _FakeUI:
     ):
         self.opened = opened
         self.switches = 0
+        self.closes = 0
         self.second_page_lines = list(second_page_lines)
         self.cold_times = cold_times
         self.wakes = wakes
@@ -126,6 +127,10 @@ class _FakeUI:
             with open(self.target, 'a', encoding='utf-8') as handle:
                 for line in self.second_page_lines:
                     handle.write(line + '\n')
+        return True
+
+    def close_comments(self):
+        self.closes += 1
         return True
 
     def open_comments(self):
@@ -1144,3 +1149,63 @@ class TestWaitsCompressed:
         assert result is None
         assert harness._drift_book == foreign
         assert waited < 5, f'a proven drift should return at once, waited {waited:.1f}s'
+
+
+class _RowRect:
+    """A rect that carries a vertical position, for the header-anchored drawer close."""
+
+    def __init__(self, top, width=100, left=0):
+        self.top = top
+        self.left = left
+        self._w = width
+
+    def width(self):
+        return self._w
+
+
+class TestDrawerClose:
+    """Closing the drawer before ↓ must click the drawer's own 关闭 — never the window chrome."""
+
+    @staticmethod
+    def _drawer_tree():
+        # Copied from the measured drawer dump: a zero-width window 关闭, the titlebar 关闭 at
+        # y≈197, the 评论 header at y≈326 and ITS close at y≈321 (same row), plus a reply link.
+        return [
+            (object(), 'ButtonControl', '关闭', _RowRect(0, width=0)),
+            (object(), 'ButtonControl', '最小化', _RowRect(195)),
+            ('titlebar-close', 'ButtonControl', '关闭', _RowRect(197)),
+            (object(), 'TextControl', '评论 · 3076', _RowRect(326)),
+            ('drawer-close', 'ButtonControl', '关闭', _RowRect(321)),
+            (object(), 'ButtonControl', '展开 8 条回复 ▾', _RowRect(1166)),
+        ]
+
+    def test_the_close_is_the_drawer_button_sharing_the_comment_header_row(self):
+        clicked = []
+        ui = PlayerUI(log=lambda _m: None)
+        ui.collect = lambda max_depth=20: list(self._drawer_tree())
+        ui._click = lambda ctrl: clicked.append(ctrl) or True
+        assert ui.close_comments() is True
+        assert clicked == ['drawer-close'], 'clicked the drawer close, not the titlebar/window one'
+
+    def test_no_comment_header_means_the_drawer_is_not_open_and_nothing_is_clicked(self):
+        clicked = []
+        ui = PlayerUI(log=lambda _m: None)
+        ui.collect = lambda max_depth=20: [
+            ('titlebar-close', 'ButtonControl', '关闭', _RowRect(197)),
+            (object(), 'TextControl', '@测试剧', _RowRect(1071)),
+        ]
+        ui._click = lambda ctrl: clicked.append(ctrl) or True
+        assert ui.close_comments() is False
+        assert clicked == [], 'no 评论 header → never a click that could quit the player'
+
+    def test_the_walk_closes_the_drawer_once_per_episode_switch(self, tmp_path):
+        page2 = _record(group='9999', entries=[_entry('8001', '第二集', 1792313924)])
+        ui = _FakeUI(second_page_lines=[page2])
+        harness, _said = _harness(
+            tmp_path,
+            ui=ui,
+            capture_lines=[_record()],
+            params={'episode_count': 2, 'harvest_timeout': 5, 'include_replies': False},
+        )
+        harness.crawl_hongguo(ARTICLE, 0)
+        assert ui.switches == 1 and ui.closes == 1, 'one drawer close, handed back before the one ↓'

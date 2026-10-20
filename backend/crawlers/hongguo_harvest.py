@@ -91,6 +91,11 @@ _REPLY_SETTLE_SECONDS = 2.0
 #: (no sleeps on the healthy path), so only the rare suspicious case pays the settle.
 _SCREEN_SETTLE_READS = 2
 _SCREEN_SETTLE_SECONDS = 0.3
+#: How close (in px) a ``关闭`` must sit to the ``评论`` header row to be the DRAWER's own close.
+#: The measured drawer dump carries a titlebar ``关闭`` (window chrome, y≈197) and a zero-width
+#: window ``关闭`` alongside the drawer's (y≈321, same row as ``评论 · 3076`` at y≈326). Clicking
+#: the chrome one would quit the player — so the header row is the anchor that tells them apart.
+_DRAWER_CLOSE_ROW_TOLERANCE = 60
 
 
 class TreeColdError(ValueError):
@@ -602,6 +607,43 @@ class PlayerUI:
             logger.debug('hongguo harvest: open_comments failed: %s', exc)
             return False
 
+    def close_comments(self) -> bool:
+        """Close the comment drawer by clicking its OWN 关闭, anchored to the 评论 header row.
+
+        The episode-switch gesture (``滚轮 / ↑↓ 切换``, measured on the video page) belongs to the
+        VIDEO, but a key goes to whatever has focus — and the open drawer holds it, so a ``↓``
+        pressed with the drawer still up scrolls comments instead of advancing the episode. That is
+        the most parsimonious reading of the drift the user saw: after the first ``↓`` every page
+        belonged to the account's own feed, because the video never left episode 1. Closing the
+        drawer first hands ``↓`` back to the video.
+
+        Safety is the whole design here: the drawer's 关闭 shares the 评论 header row, while the
+        WINDOW chrome has its own 关闭 (the titlebar button) that would quit the player, and a
+        zero-width window 关闭. The close is chosen ONLY as the 关闭 within one header row of the
+        评论 header, so the chrome button is never clicked. No 评论 header (drawer not open) → no-op.
+        """
+        try:
+            items = self.collect()
+            header_top = None
+            for _ctrl, kind, name, rect in items:
+                if kind == 'TextControl' and rect.width() > 0 and (name or '').strip().startswith('评论'):
+                    header_top = rect.top
+                    break
+            if header_top is None:
+                return False
+            for ctrl, kind, name, rect in items:
+                if (
+                    kind == 'ButtonControl'
+                    and rect.width() > 0
+                    and (name or '').strip() == '关闭'
+                    and abs(rect.top - header_top) <= _DRAWER_CLOSE_ROW_TOLERANCE
+                ):
+                    return self._click(ctrl)
+            return False
+        except Exception as exc:
+            logger.debug('hongguo harvest: close_comments failed: %s', exc)
+            return False
+
     def expand_replies(self, max_clicks: int = 40) -> int:
         """Expand EVERY 「展开…回复」 the drawer currently shows; returns how many it clicked.
 
@@ -880,6 +922,10 @@ class HongguoCommentHarness:
                 self._finish('capped', rows, scanned, refused)
                 return rows[:limit], OK
             if ep < episodes:
+                # The drawer owns the keyboard while it is open, so a ↓ pressed now would scroll
+                # comments, not switch the episode (see close_comments). Hand the key back to the
+                # video before advancing.
+                self.ui.close_comments()
                 if not self.ui.next_episode():
                     licensed = False
                     # Counted, not just licensed-false: the episodes never reached print no site
