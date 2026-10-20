@@ -4257,7 +4257,9 @@ def _execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
     wordcloud_style = params.get('wordcloud_style')
 
     if not current_input:
-        add_log(t('wf.visualize_no_input'))
+        # A refused export answers as data, not as a console line: _run_node_durable turns this
+        # {'error': …} into the single attributed wf.node_failed line, so printing the bare
+        # sentence here too was the second console line for one failure.
         return {'error': t('wf.visualize_no_input')}
     df = pd.DataFrame(current_input)
 
@@ -4526,6 +4528,19 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             )
         return writers[stem]
 
+    def _publish_parts() -> list:
+        """Finish every writer into its merged file and record it in the run→files ledger.
+
+        Called once on the success path (a real merge error then fails the node like any other),
+        and best-effort on the exception path — so a comment crawl that dies mid-walk still ships
+        the shards it produced instead of leaving them orphaned (「保留分片」 off means they were
+        never individually recorded, so 智能清除-by-record cannot find them). The source crawl
+        closes this exact hole in every one of its handlers."""
+        finished = [writer.finish() for writer in writers.values()]
+        for _info in finished:
+            _record_run_file(ctx, nid, _info['path'], 'merged')
+        return finished
+
     try:
         for idx, url in enumerate(urls, 1):
             if not execution_state['running']:
@@ -4647,6 +4662,13 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             writer.add(fresh)
             rows_out.extend(fresh)
             add_log(t('comment.article', url=url, n=len(fresh), status=t(f'comment.status.{status}')))
+    except BaseException:
+        # Whatever the walk raised (a refused adapter, a harness that failed to start, a locked
+        # runs.db in the sink, a full export dir), publish the part files first — but suppressed,
+        # so a merge bookkeeping error can never REPLACE the real one that fails this node.
+        with contextlib.suppress(Exception):
+            _publish_parts()
+        raise
     finally:
         for crawler, _session in sessions.values():
             # Out of the registry first: if 停止 reaches it on its own thread while
@@ -4654,9 +4676,7 @@ def _execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             execution_state['active_crawlers'].discard(crawler)
             _close_login_browser(crawler)
 
-    files = [writer.finish() for writer in writers.values()]
-    for _info in files:
-        _record_run_file(ctx, nid, _info['path'], 'merged')
+    files = _publish_parts()
     if stop_requested():
         # The article loop above stops taking URLs once the run is not wanted, and then it
         # *returns* — so without this check a comment node cut short by 停止 settled DONE

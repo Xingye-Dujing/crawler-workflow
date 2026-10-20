@@ -1202,6 +1202,42 @@ def test_a_fed_resume_rebuilds_the_list_and_crawls_only_the_missing_one(app_modu
     assert len(rows) == 2, f'the resumed table must carry BOTH articles, got {rows}'
 
 
+def test_a_comment_node_that_raises_still_publishes_its_part_files(app_module, recorder, monkeypatch, tmp_path):
+    """A failed comment node still owes the user the shards it already wrote (M4).
+
+    The executor merged its PartWriters AFTER the ``try/finally``, so anything that escaped the
+    walk — a refused adapter, a harness that would not start, a locked runs.db in the sink — lost
+    the merged file too, and with 「保留分片」 off those shards were never individually recorded,
+    so 智能清除-by-record could not find them: orphaned files in the export folder. The source
+    crawl closes the same hole by merging in every handler; the comment path must too."""
+    from services.run_store import RunStore
+
+    u1 = _SAMPLES[('urls', 'zhihu')]
+    u2 = u1 + '9'
+    store = RunStore(str(tmp_path / 'raise-merge.db'))
+    store.start_run('r-raise', 'raisewf', 'fp-canvas', headless=True)
+    store.begin_node('r-raise', 'node-1', 'source', title='评论', fingerprint='fp-raise')
+
+    export = tmp_path / 'exports'
+    export.mkdir()
+    monkeypatch.setattr(app_module.Config, 'EXPORT_DIR', str(export))
+
+    seen = []
+    _patch_session(monkeypatch, seen, fail_url=u2)
+    node = _comments_feed_node('zhihu')
+    node['params']['urls'] = f'{u1}\n{u2}'
+    node['params']['keep_parts'] = False  # merged-only: the ONLY file is the one finish() writes
+    node['params']['format'] = 'json'
+    ctx = {'store': store, 'run_id': 'r-raise', 'fingerprints': {'node-1': 'fp-raise'}, 'skipped_seen': {}}
+
+    with pytest.raises(RuntimeError):
+        app_module._execute_comment_node(node, headless=True, ctx=ctx)
+    written = sorted(p.name for p in export.glob('*'))
+    assert written, 'the walk raised after u1 landed, yet no merged file was published (orphaned rows)'
+    body = '\n'.join(p.read_text(encoding='utf-8') for p in export.glob('*'))
+    assert u1 in body, f'the merged file must carry the link that did succeed: {written}'
+
+
 def test_a_repeated_comment_run_names_the_ledger_skip(app_module, recorder, monkeypatch, tmp_path):
     """A comment node that files 0 rows because the ledger owns every comment must SAY so.
 

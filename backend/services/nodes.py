@@ -63,7 +63,9 @@ def execute_compile_node(node: dict, current_input: list, upstream: list = None,
     out_name = f'compile-{node.get("id")}.pdf'
     out, name = latex_compile.compile_pdf(latex_compile.compose_tex(docs), out_name, Config.EXPORT_DIR)
     if 'error' in out:
-        add_log(t('run.compileFailed', err=out['error']))
+        # Fold the reason into the returned error so _run_node_durable's single wf.node_failed
+        # line carries it; a separate add_log was the duplicate line for one failure.
+        out['error'] = t('run.compileFailed', err=out['error'])
         return out
     # Register the staged PDF in the run→files ledger so 智能清除 can find a compile a chain
     # leaves in the export folder with no downstream save. A later output renames it and forgets

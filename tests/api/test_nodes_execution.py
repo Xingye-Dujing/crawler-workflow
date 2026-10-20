@@ -267,6 +267,28 @@ class TestVisualizeNode:
         assert 'nope' in (node['error'] or '')
         assert run['status'] == 'failed', 'a run with a failed node is not completed'
 
+    def test_a_wireless_visualize_node_prints_the_reason_once(self, client, app_module):
+        """One failure, one line.
+
+        _run_node_durable turns a node's ``{'error': …}`` into the single attributed
+        wf.node_failed line, so the visualize executor ALSO printing the bare sentence was a
+        second console line for one failure. A chart node with no incoming wire reaches the
+        refusal (the empty-upstream skip only fires when there IS an upstream), so this is the
+        path that printed twice."""
+        # A valid chart spec so validation passes, but NO incoming wire: the empty-upstream skip
+        # needs an upstream, so the node runs with current_input empty and hits the runtime refusal.
+        workflow = _wf([_node('node-1', 'visualize', {'chart_type': 'bar', 'x_field': 'x', 'y_field': 'y'})], [])
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'lonely-chart'})
+        assert started.get_json().get('ok') is True, started.get_json()
+        assert _wait(app_module)
+        run = app_module._RUN_STORE.get_run(started.get_json()['run_id'])
+        # The stored error is the exact reason string the worker rendered (language-independent).
+        reason = next(e for e in run['nodes'] if e['node_id'] == 'node-1')['error']
+        logs = client.get('/api/workflow/status').get_json()['logs']
+        assert reason and reason in '\n'.join(logs), f'the refusal reason never reached the console: {logs}'
+        occurrences = sum(line.count(reason) for line in logs)
+        assert occurrences == 1, f'the reason printed {occurrences}× (one failure, two lines): {logs}'
+
 
 class TestAnomalyNode:
     """An anomaly node that cannot score must fail, not publish a clean bill of
