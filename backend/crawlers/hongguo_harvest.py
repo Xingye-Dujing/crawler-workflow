@@ -84,6 +84,13 @@ _COLD_REWAKE_SECONDS = 120
 #: drama. A reply page in flight is not a page the next drama owns: drained without this grace
 #: it lands in the NEXT walk and is stamped with another 剧名's rows.
 _REPLY_SETTLE_SECONDS = 2.0
+#: How many extra reads the screen gate takes when the header first names a DIFFERENT show.
+#: The header prints whatever is on stage and the browse page still names the PREVIOUS drama
+#: for a moment after a card click, so one foreign read is not a verdict — the walk re-asks
+#: before discarding a drama the user paid to open. A match or a cold tree short-circuits this
+#: (no sleeps on the healthy path), so only the rare suspicious case pays the settle.
+_SCREEN_SETTLE_READS = 2
+_SCREEN_SETTLE_SECONDS = 0.3
 
 
 class TreeColdError(ValueError):
@@ -138,6 +145,23 @@ def _same_drama(want_norm: str, name: str) -> bool:
     return len(shorter) >= _MIN_TITLE_PREFIX and longer.startswith(shorter)
 
 
+def _screen_names(want_norm: str, have_norm: str) -> bool:
+    """Does the on-screen header name the drama the walk asked for?
+
+    A DIFFERENT rule from :func:`_same_drama`, on purpose. That one matches a CARD to a request
+    and must not let 斗罗大陆 answer 斗罗大陆 第二季, so it floors the prefix. This one is the
+    screen gate, and it is read while the page is still repainting: a wrong 'drifted' throws
+    away a whole drama the user paid to open, while a wrong 'keep going' is caught one layer
+    down by the traffic gate (which refuses another book's pages by id). So the bias is to
+    proceed, and the one relation the measurement supports — the header is the BASE name and the
+    request may carry a season suffix, or the reverse (measured both ways) — is a prefix in
+    EITHER direction, at ANY length. Only a name with no prefix relation at all is a drift.
+    """
+    if not want_norm or not have_norm:
+        return False
+    return want_norm == have_norm or want_norm.startswith(have_norm) or have_norm.startswith(want_norm)
+
+
 def find_player() -> str:
     """The player exe: explicit setting only.
 
@@ -165,11 +189,14 @@ def find_mitmdump() -> str:
 class PlayerUI:
     """UI Automation over the player window — every method best-effort.
 
-    The spine (named nav buttons, the ``1 / 9+`` episode counter, arrow-key episode
-    switching) was measured against the real window 2026-10-19. The comment
-    drawer's controls were NOT yet measured, so opening and scrolling it is
-    attempted generically and its failure degrades the harvest to the pages the
-    feed already auto-fetches — depth lost, never a crash and never a lie.
+    The spine (named nav buttons, the 排行榜 card grid, arrow-key episode switching) was measured
+    against the real window 2026-10-19, and the comment drawer against a warm dump 2026-10-20.
+    Two measured facts shape the reads: a cold WebView2 tree holds ZERO controls (so silence is
+    never a confirmation), and the ``N / M`` episode counter is on the video page but ABSENT from
+    the tree once the drawer is open — so the walk reads only the ``@剧名`` header off the screen
+    and lets the traffic gate (which refuses another book's pages by id) stand underneath it.
+    Where a read is generic and the page does not answer, the harvest degrades to what the feed
+    already fetched — depth lost, never a crash and never a lie.
     """
 
     def __init__(self, log=None, abort=None):
@@ -452,6 +479,46 @@ class PlayerUI:
             return ctrl
         return None
 
+    def screen_drama_title(self) -> str:
+        """The drama the player prints as being on stage, or '' when the tree says nothing.
+
+        Measured twice over: the 2026-10-19 dumps, and a 2026-10-20 dump taken WHILE the
+        comment drawer was open, each carry a ``TextControl`` named ``@剧名``. Whether that name
+        carries the season suffix is not consistent (``@…才是真BOSS`` dropped ``第十四季`` while
+        ``@捧杀儿子… 第一季`` kept it), so the caller compares with the bidirectional prefix rule
+        (:func:`_screen_names`), never by equality: equality here would false-refuse a correctly
+        opened drama.
+
+        The empty answer means 「the tree did not say」 — a cold tree holds NO controls at all
+        (measured: 453 controls after warming, 0 before), OR the page carries more than one
+        ``@``-prefixed text (a 弹幕 or a reply that opens with ``@昵称``, which tree order puts
+        BEFORE the header) — and either way there is no single answer, so the caller gets silence
+        and lets the traffic gate do its job rather than inventing a refusal out of a guess.
+
+        Deliberately absent: the ``N / M`` episode counter. It is on the video page but NOT in
+        the tree once the drawer is open (measured in that same dump), so a walk could not read
+        its own position from it; ``第N集`` does appear there, but what it numbers was not
+        established, and a gate built on a guess would refuse dramas it was harvesting correctly.
+        """
+        try:
+            items = self.collect()
+        except Exception as exc:
+            # A failed walk is not a cold tree, but the best-effort answer is the same (no
+            # evidence) and the caller leans on the traffic gate; this is the developer channel,
+            # matching every other UIA read here that degrades rather than crashing.
+            logger.debug('hongguo harvest: screen title read failed (not a cold tree): %s', exc)
+            return ''
+        candidates = []
+        for _ctrl, kind, name, rect in items:
+            if kind != 'TextControl' or rect.width() <= 0:
+                continue
+            text = (name or '').strip()
+            if text.startswith('@') and len(text) > 2:
+                candidates.append(text[1:].strip())
+        # Exactly one @-prefixed text is the header. Two is a comment that happens to open with
+        # a @mention, and naming the first one would report a stranger's comment as the drama.
+        return candidates[0] if len(candidates) == 1 else ''
+
     def next_episode(self) -> bool:
         """Advance the player to the next episode (the feed answers ↑/↓, measured)."""
         try:
@@ -655,8 +722,7 @@ class HongguoCommentHarness:
             if not series_id or not title:
                 # Skipped AND counted. A bare ``([], DEAD)`` fed neither tail gate, so a node
                 # whose target could not even be named settled DONE beside the hole.
-                self._mark_short()
-                self.skipped_targets.append(target)
+                self._count_unfinished(target)
                 self._log(t('crawl.hg.cmt.titleMissing', url=target))
                 return [], DEAD
         else:
@@ -683,11 +749,16 @@ class HongguoCommentHarness:
             # ledger honest: the walk as a whole did NOT reach what the site counted, so the
             # engine's own gate will refuse the node by name at the end rather than let a
             # nine-drama table settle DONE next to a ten-drama request.
-            self._mark_short()
-            self.skipped_targets.append(title)
+            self._count_unfinished(title)
             self._log(t('crawl.hg.cmt.dramaSkipped' if opened == 'cold' else 'crawl.hg.cmt.dramaNotFound', title=title))
             return [], DEAD
         episodes = int(self.params.get('episode_count') or 10)
+        if self._confirm_position(title) == 'drifted':
+            # The card answered, but the screen is showing another drama: everything the
+            # drawer would fetch next belongs to that show, and the 剧名 column would say
+            # otherwise. Checked BEFORE the first page, not after the traffic disagrees.
+            self._count_unfinished(title)
+            return [], DEAD
         wait_s = int(self.params.get('harvest_timeout') or 90)
         # Read, never compared: the panel stores this switch as a real boolean, but a hand
         # written or fed canvas can hold the TEXT 'false', which ``bool()`` reads as on — and
@@ -715,17 +786,14 @@ class HongguoCommentHarness:
                 licensed = False
                 if self._drift_book:
                     # The player's feed slid off the requested drama (measured 2026-10-20: after
-                    # the first ↓ the traffic belongs to the show the account was watching
-                    # before, whose threads run to 2000+ comments). Those rows are refused by
-                    # the identity gate instead of being stamped with this name — and the walk
-                    # STOPS here rather than spending every remaining episode's full wait on
-                    # traffic it will never accept. Counted in skipped_targets because a drama
-                    # harvested 1 of 5 is not a finished crawl, and the site printed no total
-                    # for the episodes never reached, so ``shortfall`` alone cannot say it.
+                    # the first ↓ every page for the rest of the walk belonged to the show the
+                    # account had been watching, whose threads run to 2000+ comments). Those rows
+                    # are refused by the identity gate rather than stamped with this name, and the
+                    # drama is counted: 1 of 5 is not a finished crawl, and the site printed no
+                    # total for the episodes never reached, so ``shortfall`` alone cannot say it.
                     self._log(t('crawl.hg.cmt.feedDrifted', title=title, ep=ep, book=self._drift_book))
-                    self.skipped_targets.append(title)
+                    self._count_unfinished(title)
                     if not rows:
-                        self._mark_short()
                         return [], DEAD
                     break
                 self._log(t('crawl.hg.cmt.noTraffic', seconds=wait_s, title=title))
@@ -733,8 +801,7 @@ class HongguoCommentHarness:
                     # Counted, not just logged: an uncountable ``([], DEAD)`` let a five-drama
                     # feed whose third drama a popup blocked settle 「正常」 over four, and one
                     # drama fed with no traffic at all settle DONE on an EMPTY table.
-                    self._mark_short()
-                    self.skipped_targets.append(title)
+                    self._count_unfinished(title)
                     return [], DEAD
                 break
             page_rows, page_refused, prog, has_more = self._harvest(record, article_url, title, ep)
@@ -796,9 +863,25 @@ class HongguoCommentHarness:
             if limit and len(rows) >= limit:
                 self._finish('capped', rows, scanned, refused)
                 return rows[:limit], OK
-            if ep < episodes and not self.ui.next_episode():
-                licensed = False
-                break
+            if ep < episodes:
+                if not self.ui.next_episode():
+                    licensed = False
+                    # Counted, not just licensed-false: the episodes never reached print no site
+                    # total, so shortfall stays 0 and the engine's row-vs-total gate would call a
+                    # 2-of-10 walk 「正常」 the moment any reply rows pushed the table over the
+                    # two harvested episodes' totals. Naming it here is the only thing that makes
+                    # a key that stopped landing a refusal rather than a silent yield cut.
+                    self._count_unfinished(title)
+                    break
+                # The key press is not evidence: ↓ walks whatever queue the player holds, so on
+                # the last episode it steps into the NEXT drama (measured: after the first ↓,
+                # every page for the rest of the walk belonged to the show the account had been
+                # watching). The screen says which show is on stage, so ask it before spending
+                # another episode's wait on traffic that is not ours.
+                if self._confirm_position(title) == 'drifted':
+                    licensed = False
+                    self._count_unfinished(title)
+                    break
         if with_replies:
             # One last look before the door closes. Expanding fires up to forty requests and the
             # per-episode grace is short, so a child page can still be in flight after the last
@@ -850,6 +933,36 @@ class HongguoCommentHarness:
         self._finish('site_end' if (licensed and whole) else UNDER_TARGET, rows, scanned, refused)
         self._log(t('crawl.hg.cmt.finished', n=len(rows), episodes=episodes))
         return rows, OK
+
+    def _confirm_position(self, want_title) -> str:
+        """Ask the player what it is showing: 'ok' or 'drifted'.
+
+        'ok' covers two cases on purpose — the screen names the requested drama, and the tree
+        says nothing at all (cold). The second is no evidence, and the walk must not stop on it
+        nor claim it as confirmation: the traffic gate underneath is what refuses another
+        drama's pages when the screen cannot answer.
+
+        A first read that names ANOTHER show is not a verdict either: the header prints whatever
+        is on stage and the browse page keeps naming the previous drama for a moment after the
+        card click, so the walk re-asks (asking 停止 between reads) and only concludes 'drifted'
+        when the wrong name survives the settle. The false-refuse is the expensive direction —
+        it throws away a drama the user already paid to open — whereas a false 'ok' is caught a
+        layer down by the traffic gate.
+        """
+        want_norm = _norm_title(want_title)
+        self._check_abort()
+        have = self.ui.screen_drama_title()
+        if not have or _screen_names(want_norm, _norm_title(have)):
+            return 'ok'
+        for _ in range(_SCREEN_SETTLE_READS):
+            self._check_abort()
+            time.sleep(_SCREEN_SETTLE_SECONDS)
+            again = self.ui.screen_drama_title()
+            if not again or _screen_names(want_norm, _norm_title(again)):
+                return 'ok'  # went cold, or settled onto the requested drama
+            have = again
+        self._log(t('crawl.hg.cmt.screenMismatch', want=want_title, have=have))
+        return 'drifted'
 
     def _open_drama(self, title) -> str:
         """Open *title*, re-waking the tree when it went cold mid-walk: 'ok' / 'notfound' / 'cold'.
@@ -1262,6 +1375,20 @@ class HongguoCommentHarness:
     def _check_abort(self):
         if self._abort():
             raise CrawlerStopped(t('crawl.stopped'))
+
+    def _count_unfinished(self, target) -> None:
+        """Name a drama that was NOT harvested completely, exactly once.
+
+        Several paths reach that verdict for the same drama — no title to search with, the
+        client refusing to open it, the screen showing another show, traffic that stopped
+        coming, a switch that walked off the drama, and a ↓ that simply stopped landing — and the
+        tail refusal prints this list with a count, so a duplicate would report one hole as
+        many. Marking short is part of it: the engine's gate reads ``end_reason`` and must not
+        see a clean end beside a hole.
+        """
+        self._mark_short()
+        if target not in self.skipped_targets:
+            self.skipped_targets.append(target)
 
     def _mark_short(self):
         """Record that this walk did NOT reach what the site counted, without a row table.

@@ -84,7 +84,15 @@ class _FakeUI:
     "the client would not wake at all".
     """
 
-    def __init__(self, opened=True, second_page_lines=(), cold_times=0, wakes=True, scroll_ok=True):
+    def __init__(
+        self,
+        opened=True,
+        second_page_lines=(),
+        cold_times=0,
+        wakes=True,
+        scroll_ok=True,
+        screen_title='',
+    ):
         self.opened = opened
         self.switches = 0
         self.second_page_lines = list(second_page_lines)
@@ -93,7 +101,14 @@ class _FakeUI:
         self.scroll_ok = scroll_ok
         self.scroll_attempts = []
         self.expands = 0
+        # What the player prints as the drama on stage. Blank by default: a cold tree says
+        # NOTHING (measured: 0 controls), and the walk must then lean on the traffic gate
+        # rather than invent a refusal out of silence.
+        self.screen_title = screen_title
         self.target = None  # the capture file, set by _harness()
+
+    def screen_drama_title(self):
+        return self.screen_title
 
     def open_drama(self, _title):
         if self.cold_times:
@@ -908,6 +923,151 @@ class TestIdentityFromTheRequest:
         assert rows and rows[0]['集序号'] == 4, 'the thread’s real episode, not the one being played'
         assert rows[0]['评论ID'] == '9001'
         assert harness.shortfall == 0 and harness._reply_progress['7620733881692750616']['kept'] == 1
+
+
+class TestScreenFacts:
+    """The player names the drama on stage; the walk asks BEFORE it harvests.
+
+    Measured 2026-10-20 on a UIA dump taken WHILE the comment drawer was open: exactly one
+    ``TextControl`` named ``@剧名`` is present (453 controls in the warm tree), and it prints the
+    drama's BASE name — the season suffix the board's title carries is not on screen. The
+    ``N / M`` counter visible on the video page is NOT in that tree, so the walk does not
+    pretend to verify its episode position from the screen: ``第N集`` does appear there, but
+    what it numbers was never established, and a gate built on that guess would refuse dramas
+    it was harvesting correctly.
+    """
+
+    def test_the_header_names_the_drama_and_nothing_else_answers(self):
+        ui = PlayerUI(log=lambda _m: None)
+        ui.collect = lambda max_depth=20: [
+            (object(), 'TextControl', '1 / 10+', _AnyRect()),
+            (object(), 'TextControl', '第1集', _AnyRect()),
+            (object(), 'TextControl', '@穿成傀儡皇帝，反手整顿朝堂', _AnyRect()),
+            (object(), 'ButtonControl', '@不是文本控件', _AnyRect()),
+        ]
+        assert ui.screen_drama_title() == '穿成傀儡皇帝，反手整顿朝堂'
+
+    def test_a_second_at_prefixed_text_is_not_taken_for_the_header(self):
+        # A 弹幕 or reply that opens with "@昵称" is a TextControl too, and tree order puts it
+        # BEFORE the header. Picking the first @ would report a stranger's comment as the drama
+        # on stage; not exactly one @ means the tree did not uniquely say which show this is.
+        ui = PlayerUI(log=lambda _m: None)
+        ui.collect = lambda max_depth=20: [
+            (object(), 'TextControl', '@张三 这剧情太离谱了', _AnyRect()),
+            (object(), 'TextControl', '@穿成傀儡皇帝，反手整顿朝堂', _AnyRect()),
+        ]
+        assert ui.screen_drama_title() == '', 'two @-prefixed texts is no single answer'
+
+    def test_a_cold_tree_says_nothing_and_that_is_not_a_refusal(self, tmp_path):
+        # Measured cold state: the tree held ZERO controls. Silence is no evidence either way,
+        # so the harvest proceeds and the traffic gate stays underneath it.
+        ui = PlayerUI(log=lambda _m: None)
+        ui.collect = lambda max_depth=20: []
+        assert ui.screen_drama_title() == ''
+        harness, said = _harness(tmp_path, ui=_FakeUI(), capture_lines=[_record()])
+        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        assert status == OK and len(rows) == 1
+        mismatch = i18n.t('crawl.hg.cmt.screenMismatch', want='测试剧', have='')
+        assert not any(mismatch in line for line in said), said
+        assert not harness.skipped_targets, 'a cold tree must not count the drama as skipped'
+
+    def test_a_first_header_that_names_the_previous_drama_is_re_asked_not_believed(self, tmp_path):
+        # The header prints whatever is on stage, and the browse page keeps naming the PREVIOUS
+        # show for a moment after a card click. One foreign read must not discard a drama the
+        # user already paid to open — the gate re-asks, and the second read names ours.
+        reads = {'n': 0}
+
+        def stale_then_ours():
+            reads['n'] += 1
+            return '别的剧' if reads['n'] == 1 else '测试剧'
+
+        ui = _FakeUI()
+        ui.screen_drama_title = stale_then_ours
+        harness, said = _harness(tmp_path, ui=ui, capture_lines=[_record()], params={'harvest_timeout': 5})
+        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        assert status == OK and len(rows) == 1, f'a stale repaint read threw away the drama: {said}'
+        assert not harness.skipped_targets
+        assert reads['n'] >= 2, 'the suspicious read was re-asked, not concluded on'
+
+    def test_a_short_base_name_on_screen_does_not_false_refuse_a_longer_request(self, tmp_path):
+        # _same_drama floors its prefix at 4 to keep 斗罗大陆 off 斗罗大陆 第二季; the screen gate
+        # cannot use that floor, because the header is often the short BASE name (赘婿) while the
+        # request carries the season (赘婿归来). A wrong 'drifted' here loses a whole drama.
+        ui = _FakeUI(screen_title='赘婿')
+        harness, said = _harness(tmp_path, ui=ui, capture_lines=[_record()], params={'harvest_timeout': 5})
+        rows, status = harness.crawl_hongguo('赘婿归来', 0)
+        assert status == OK and len(rows) == 1, f'the short base name on screen read as another drama: {said}'
+        assert rows[0]['剧名'] == '赘婿归来'
+
+    def test_a_switch_that_stops_landing_counts_the_drama_as_unfinished(self, tmp_path):
+        # ↓ failing is invisible to shortfall: the never-reached episodes print no site total, so
+        # with episode 1 full the table can satisfy len(rows) >= target_total and the node would
+        # settle 「正常」 over a 1-of-3 walk. The failed switch must name the hole itself.
+        ui = _FakeUI()
+        ui.next_episode = lambda: False
+        harness, _said = _harness(
+            tmp_path,
+            ui=ui,
+            capture_lines=[_record()],
+            params={'episode_count': 3, 'harvest_timeout': 5, 'include_replies': False},
+        )
+        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        assert status == OK and [r['评论ID'] for r in rows] == ['7001'], 'episode 1 was ours and stays'
+        assert harness.skipped_targets == ['测试剧'], 'a key that stopped landing is a named hole'
+        assert harness.end_reason == UNDER_TARGET
+
+    def test_the_screen_may_name_the_base_title_without_the_season_suffix(self, tmp_path):
+        # Measured on the real player: a walk asked for 「聚宝仙盆之杂灵根才是真BOSS第十四季」
+        # read the header as 「聚宝仙盆之杂灵根才是真BOSS」. Equality would false-refuse a drama
+        # that opened correctly, which is the opposite of why this check exists.
+        long_ui = _FakeUI(screen_title='聚宝仙盆之杂灵根才是真BOSS')
+        harness, said = _harness(tmp_path, ui=long_ui, capture_lines=[_record()])
+        rows, status = harness.crawl_hongguo('聚宝仙盆之杂灵根才是真BOSS第十四季', 0)
+        assert status == OK and len(rows) == 1, f'the base name on screen read as another drama: {said}'
+        assert rows[0]['剧名'] == '聚宝仙盆之杂灵根才是真BOSS第十四季', 'the row keeps the name it was fed'
+
+    def test_a_card_that_lands_on_another_drama_harvests_nothing(self, tmp_path):
+        ui = _FakeUI(screen_title='别的剧')
+        harness, said = _harness(tmp_path, ui=ui, capture_lines=[_record()], params={'harvest_timeout': 5})
+        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        assert (rows, status) == ([], DEAD), 'the wrong show is caught before its rows are read'
+        assert harness.skipped_targets == ['测试剧'] and harness.end_reason == UNDER_TARGET
+        assert any(i18n.t('crawl.hg.cmt.screenMismatch', want='测试剧', have='别的剧') in line for line in said), said
+
+    def test_a_switch_onto_another_drama_stops_the_walk_and_keeps_what_is_ours(self, tmp_path):
+        page2 = _record(group='9999', entries=[_entry('8001', '第二集', 1792313924)])
+        ui = _FakeUI(second_page_lines=[page2])
+        state = {'switched': False}
+        real_switch = ui.next_episode
+
+        def next_episode():
+            state['switched'] = True
+            return real_switch()
+
+        ui.next_episode = next_episode
+        ui.screen_drama_title = lambda: '别的剧' if state['switched'] else '测试剧'
+        harness, said = _harness(
+            tmp_path,
+            ui=ui,
+            capture_lines=[_record()],
+            params={'episode_count': 3, 'harvest_timeout': 5, 'include_replies': False},
+        )
+        rows, status = harness.crawl_hongguo(ARTICLE, 0)
+        assert status == OK and [r['评论ID'] for r in rows] == ['7001'], 'episode 1 was ours and stays'
+        assert state['switched'] and ui.switches == 1, 'the switch was asked before the screen was'
+        assert harness.skipped_targets == ['测试剧'], 'a drama left at 1 of 3 is not a finished crawl'
+        assert harness.end_reason == UNDER_TARGET
+        assert any(i18n.t('crawl.hg.cmt.screenMismatch', want='测试剧', have='别的剧') in line for line in said), said
+
+    def test_the_same_drama_is_counted_as_unfinished_only_once(self, tmp_path):
+        # Three paths can name the same hole (no title, cold tree, drifted screen); the tail
+        # refusal prints this list with a count, so a duplicate would report one hole as two.
+        ui = _FakeUI(cold_times=99, wakes=True)
+        harness, _said = _harness(tmp_path, ui=ui, capture_lines=[_record()])
+        harness.crawl_hongguo(ARTICLE, 0)
+        harness._count_unfinished('测试剧')
+        harness._count_unfinished('测试剧')
+        assert harness.skipped_targets == ['测试剧'], harness.skipped_targets
 
 
 class TestCardMatching:

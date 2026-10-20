@@ -232,7 +232,22 @@
   `7697823071830297624`) — two id spaces, so the reference is the first page's own book and comparing the
   two would refuse every page a link-fed walk correctly asked for. When a page arrives for a different
   book the walk names it and **stops the drama** (`feedDrifted`) rather than spending every remaining
-  episode's full wait on traffic it will never accept.
+  episode's full wait on traffic it will never accept. The walk also **asks the screen before it
+  harvests** (`PlayerUI.screen_drama_title` → `_confirm_position`): the player prints `@剧名` in the
+  header. That header is the ONLY screen fact the drawer-open tree offers — the `N / M` episode
+  counter is on the video page but **absent once the comment drawer is open** (measured in the warm
+  dump), so the walk cannot read its own position from it and a gate built on `第N集` (what it numbers
+  was never established) would refuse dramas it was harvesting correctly. The header answers at entry
+  and after each `next_episode`, and it is read with two rules that bias toward PROCEEDING, because a
+  wrong 「drifted」 throws away a drama the user paid to open while a wrong 「keep going」 is caught a
+  layer down by the traffic gate: a single foreign read is **re-asked** before it is a verdict (the
+  header prints whatever is on stage and the browse page keeps naming the PREVIOUS show for a moment
+  after a card click), and the match is a prefix in EITHER direction at any length (the header is the
+  BASE name, the request may carry a season suffix — or the reverse). Not exactly one `@`-prefixed
+  text means no answer (a 弹幕/reply that opens with `@昵称` sits before the header in tree order). A
+  tree that prints nothing confirms nothing, and the traffic gate stays underneath as the second line
+  of defense. A `next_episode()` that fails to land is **counted** (`_count_unfinished`), not just
+  licensed false: the never-reached episodes print no total, so shortfall alone cannot name that hole.
 - **instagram**: capture-only (`supports_crawl = False`), refused by `run.notCrawlable` and earlier by validation;
   such a platform still needs `domain` + `login_url`, stays OUT of `CAPABILITIES`, and must clear
   `TestCookiePanelParity` + `TestPlatformOrder`.

@@ -781,6 +781,15 @@ _ZH = {
         '[红果短剧] 《{title}》走到第 {ep} 集时播放流已切到另一部剧（book {book}），'
         '该剧余下的集数不再尝试——已收的行属于所请求的剧'
     ),
+    # Said from the SCREEN, not the traffic: the player prints the drama it is showing as
+    # ``@剧名`` in its header. Asking that before harvesting keeps another show's comments out
+    # of this table when a card click lands elsewhere or a ↓ walks off into the account's own
+    # queue. The episode counter is NOT readable while the drawer is open (measured), so no
+    # message here claims a position the walk cannot see.
+    'crawl.hg.cmt.screenMismatch': (
+        '[红果短剧] 屏幕上正在播的是《{have}》，不是所请求的《{want}》——本剧到此不再往下采'
+        '（已收下的行仍属于所请求的剧；这不是搜不到，是播放器没把这部剧放在台上）'
+    ),
     'crawl.hg.cmt.repliesExpanded': '[红果短剧] 已展开 {n} 处子回复',
     'crawl.hg.cmt.episodeShort': (
         '[红果短剧] 《{title}》第 {ep} 集只拿到 {have} 条，站点报 {site_total} 条——该集不完整'
@@ -2316,6 +2325,16 @@ _EN = {
     'crawl.hg.cmt.feedDrifted': (
         '[Hongguo] during {title} episode {ep} the player feed moved to another drama (book {book}); '
         'the rest of this drama is not attempted — the rows already kept belong to the requested drama'
+    ),
+    # Said from the SCREEN, not the traffic: the player prints the drama it is showing as
+    # ``@剧名`` in its header. Asking that before harvesting keeps another show's comments out
+    # of this table when a card click lands elsewhere or a ↓ walks off into the account's own
+    # queue. The episode counter is NOT readable while the drawer is open (measured), so no
+    # message here claims a position the walk cannot see.
+    'crawl.hg.cmt.screenMismatch': (
+        '[Hongguo] the screen is showing “{have}”, not the requested “{want}” — the rest of this drama '
+        'is not attempted (rows already kept belong to the requested show; this is not a search miss, '
+        'the player did not put this drama on stage)'
     ),
     'crawl.hg.cmt.repliesExpanded': '[Hongguo] expanded {n} reply thread(s)',
     'crawl.hg.cmt.episodeShort': '[Hongguo] {title} episode {ep}: kept {have} of the {site_total} the site counts '
