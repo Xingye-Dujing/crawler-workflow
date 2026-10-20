@@ -769,6 +769,10 @@ _ZH = {
         '[红果短剧] 等待 {seconds} 秒没有收到这一集的评论页（{title}）——播放器可能未登录、被弹窗挡住或版本过旧'
     ),
     'crawl.hg.cmt.dramaNotFound': '[红果短剧] 在播放器里搜不到这部剧：{title}',
+    # Emitted per board during the search, so a drama that is absent from the client reads as
+    # "working through the boards", not as a frozen window (the not-found case grinds every
+    # board×scroll before dramaSkipped fires — without this line the user saw no progress).
+    'crawl.hg.cmt.scanningBoard': '[红果短剧] 在《{label}》里查找《{title}》…',
     # A drama the client would not open steps aside and is named; only a run that never
     # reached what the site counted is a failure, and the node says so at the end.
     'crawl.hg.cmt.dramaSkipped': (
@@ -2317,6 +2321,7 @@ _EN = {
         'player may be logged out, blocked by a dialog, or too old'
     ),
     'crawl.hg.cmt.dramaNotFound': "[Hongguo] the player's search found no such drama: {title}",
+    'crawl.hg.cmt.scanningBoard': '[Hongguo] looking for “{title}” in the {label} board…',
     'crawl.hg.cmt.dramaSkipped': "[Hongguo] the player's UI tree never woke, skipping this drama: {title} "
     '(click the player window once, then 继续/Resume to harvest it)',
     # Named because the player's own feed walks away from the drama we entered: measured

@@ -1281,3 +1281,28 @@ class TestGuardedClick:
         ui.window = lambda: None
         assert ui._click(_FakeControl(_FixedRect(500, 500, 600, 560))) is False
         assert auto.clicks == []
+
+
+class TestBoardScanProgress:
+    """A drama absent from every board must LOOK like it is working, not frozen (the user read
+    the silent board grind as a hang on 2026-10-20)."""
+
+    def test_every_board_scanned_is_announced_then_the_miss_is_reported(self, monkeypatch):
+        from crawlers import hongguo_harvest as hh
+
+        monkeypatch.setattr(hh.time, 'sleep', lambda *_a, **_k: None)
+        said = []
+        ui = PlayerUI(log=said.append, abort=lambda: False)
+        ui.wait_content = lambda seconds=60.0: object()
+        ui._find_until = lambda *a, **k: object()  # 排行榜 found
+        ui._click = lambda ctrl: True
+        ui._board_labels = lambda: ['必看榜', '新剧', '热播榜']
+        ui._pick_board = lambda label: True
+        ui.collect = lambda max_depth=20: [('x', 'TextControl', '无关剧名', _AnyRect())]
+        ui._play_for_title = lambda title, items=None: None  # never matches → not-found grind
+        ui._ensure_library = lambda: type('A', (), {'WheelDown': lambda *a, **k: None})()
+
+        assert ui.open_drama('不存在这部剧') is False
+        # One progress line per board announced (not a silent grind), with the drama named.
+        for label in ('必看榜', '新剧', '热播榜'):
+            assert i18n.t('crawl.hg.cmt.scanningBoard', label=label, title='不存在这部剧') in said, said

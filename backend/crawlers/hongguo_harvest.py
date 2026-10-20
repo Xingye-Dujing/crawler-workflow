@@ -399,6 +399,11 @@ class PlayerUI:
             time.sleep(4)
             for label in self._board_labels():
                 self._check_stopped()
+                # Progress the user can see: without it a drama absent from every board grinds
+                # silently through all lists and reads as a frozen window (measured 2026-10-20 —
+                # the user asked "why is it stuck on 新剧"). One line per board, then the walk
+                # still ends in dramaSkipped/dramaNotFound which names the miss properly.
+                self._log(t('crawl.hg.cmt.scanningBoard', label=label, title=title))
                 self._pick_board(label)
                 for _scroll in range(3):
                     self._check_stopped()
