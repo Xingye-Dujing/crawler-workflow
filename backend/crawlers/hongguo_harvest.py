@@ -361,7 +361,15 @@ class PlayerUI:
                 self._pick_board(label)
                 for _scroll in range(3):
                     self._check_stopped()
-                    hit = self._play_for_title(title)
+                    items = self.collect()
+                    if not items:
+                        # The tree was warm enough to reach the board and has since gone cold
+                        # (measured: a WebView2 tree re-freezes mid-walk). Grinding the rest of
+                        # every board × every scroll would only pay fixed sleeps against nothing
+                        # — that was where ~110 s of dead waiting went. Bail now so the caller
+                        # re-wakes and re-asks, or names the drama cold.
+                        raise TreeColdError(t('crawl.hg.cmt.treeCold'))
+                    hit = self._play_for_title(title, items)
                     if hit is not None:
                         self._click(hit)
                         time.sleep(3.0)
@@ -372,6 +380,10 @@ class PlayerUI:
         except CrawlerStopped:
             # 停止 is not a search that failed. Swallowed here it would file the drama the
             # user stopped on under 「搜不到这部剧」 and name it in the skip refusal.
+            raise
+        except TreeColdError:
+            # A tree that froze mid-walk is an environment fact, not a search miss — it must
+            # reach _open_drama's re-wake, not be flattened into the False below (「搜不到这部剧」).
             raise
         except Exception as exc:
             logger.debug('hongguo harvest: open_drama failed: %s', exc)
@@ -443,7 +455,7 @@ class PlayerUI:
                 return ctrl
         return None
 
-    def _play_for_title(self, title: str):
+    def _play_for_title(self, title: str, items=None):
         """The card of *title*: its ``▶ 播放`` button, else the title control itself.
 
         An EXACT card wins over a prefix one, asked in a first pass over the whole tree.
@@ -452,8 +464,12 @@ class PlayerUI:
         because the reference ``book_id`` is read from the WRONG drama's own first page and
         every later page then agrees with the mistake — and the 剧名 column would stamp the
         requested name onto another drama's rows.
+
+        *items* lets a caller that already walked the tree hand it over (open_drama re-uses
+        one ``collect()`` for both the cold check and the match, instead of walking twice).
         """
-        items = self.collect()
+        if items is None:
+            items = self.collect()
         for exact_only in (True, False):
             hit = self._card_for(items, title, exact_only)
             if hit is not None:
@@ -1186,6 +1202,12 @@ class HongguoCommentHarness:
             self._pending = keep
             if hit is not None:
                 return hit
+            if self._drift_book:
+                # A foreign book has already proved the feed left this drama (measured: after the
+                # first drift, EVERY later page is theirs). Holding the rest of the window open
+                # would wait 90 s on pages the identity gate discards — the walk wants to stop the
+                # drama now, not at the deadline.
+                return None
             time.sleep(0.5)
         return None
 

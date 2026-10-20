@@ -10,6 +10,7 @@ rows, and every refusal by its own name. The process half itself is device/live 
 
 import json
 import os
+import time
 
 import pytest
 
@@ -1097,3 +1098,49 @@ class TestCardMatching:
         ui = PlayerUI(log=lambda _m: None)
         ui.collect = lambda max_depth=20: list(self.ITEMS)
         assert ui._play_for_title('完全另一部剧') is None
+
+
+class TestWaitsCompressed:
+    """The two dead waits the user reported are gone — both are Hongguo-only."""
+
+    def test_a_tree_that_goes_cold_mid_board_walk_bails_instead_of_grinding(self, monkeypatch):
+        # Measured cost of NOT doing this: the board walk slept through every board × every
+        # scroll against a tree that had re-frozen to 0 controls (~110 s of dead waiting).
+        from crawlers import hongguo_harvest as hh
+
+        monkeypatch.setattr(hh.time, 'sleep', lambda *_a, **_k: None)
+        ui = PlayerUI(log=lambda _m: None, abort=lambda: False)
+        ui.wait_content = lambda seconds=60.0: object()
+        ui._find_until = lambda *a, **k: object()
+        ui._click = lambda ctrl: True
+        ui._board_labels = lambda: ['总榜', '必看榜', '热播榜', '推荐榜', 'AI剧']
+        ui._pick_board = lambda label: True
+        reads = {'collect': 0}
+
+        def cold_collect(max_depth=20):
+            reads['collect'] += 1
+            return []
+
+        ui.collect = cold_collect
+
+        def no_scroll(*_a, **_k):
+            raise AssertionError('scrolled a board after the tree was already cold')
+
+        ui._ensure_library = no_scroll
+        with pytest.raises(TreeColdError):
+            ui.open_drama('测试剧')
+        assert reads['collect'] == 1, 'bailed on the first cold read, not after walking every board'
+
+    def test_await_page_returns_as_soon_as_the_drift_is_proven(self, tmp_path):
+        # The page after the reference proves the feed left the drama; keeping the rest of the
+        # window open would wait out harvest_timeout on pages the identity gate already discards.
+        foreign = '9999999999999999999'
+        line = _record(group='7777', book=foreign, entries=[_entry('7099', '别剧', 1792313999)])
+        harness, _said = _harness(tmp_path, ui=_FakeUI(), capture_lines=[line])
+        harness._current_book = BOOK  # an earlier page of ours fixed the reference already
+        started = time.monotonic()
+        result = harness._await_page('', 60)  # a 60 s window that must NOT be paid
+        waited = time.monotonic() - started
+        assert result is None
+        assert harness._drift_book == foreign
+        assert waited < 5, f'a proven drift should return at once, waited {waited:.1f}s'
