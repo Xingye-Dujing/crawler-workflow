@@ -1306,3 +1306,46 @@ class TestBoardScanProgress:
         # One progress line per board announced (not a silent grind), with the drama named.
         for label in ('必看榜', '新剧', '热播榜'):
             assert i18n.t('crawl.hg.cmt.scanningBoard', label=label, title='不存在这部剧') in said, said
+
+
+class TestInputFocus:
+    """Synthetic wheel/key input lands only on the FOREGROUND window (measured 2026-10-20:
+    nothing moved until the user physically clicked). Every input path must activate first."""
+
+    def _fake_auto(self):
+        return type('A', (), {'WheelDown': lambda *a, **k: None, 'SendKeys': lambda *a, **k: None})()
+
+    def test_scroll_drawer_foregrounds_before_wheeling(self):
+        called = []
+        ui = PlayerUI(log=lambda _m: None)
+        ui._activate = lambda: called.append('activate')
+        ui._ensure_library = self._fake_auto
+        assert ui.scroll_drawer(0) is True
+        assert called == ['activate'], 'the wheel was issued without foregrounding the player'
+
+    def test_next_episode_foregrounds_before_the_arrow_key(self):
+        called = []
+        ui = PlayerUI(log=lambda _m: None)
+        ui._activate = lambda: called.append('activate')
+        ui.window = lambda: type('W', (), {'SetFocus': lambda _s: None})()
+        ui._ensure_library = self._fake_auto
+        assert ui.next_episode() is True
+        assert 'activate' in called, 'the {Down} was sent without foregrounding the player'
+
+    def test_open_drama_foregrounds_before_the_first_click(self, monkeypatch):
+        from crawlers import hongguo_harvest as hh
+
+        monkeypatch.setattr(hh.time, 'sleep', lambda *_a, **_k: None)
+        called = []
+        ui = PlayerUI(log=lambda _m: None, abort=lambda: False)
+        ui._activate = lambda: called.append('activate')
+        ui.wait_content = lambda seconds=60.0: object()
+        ui._find_until = lambda *a, **k: object()
+        ui._click = lambda ctrl: True
+        ui._board_labels = lambda: ['必看榜']
+        ui._pick_board = lambda label: True
+        ui.collect = lambda max_depth=20: [('x', 'TextControl', '无关剧名', _AnyRect())]
+        ui._play_for_title = lambda title, items=None: None
+        ui._ensure_library = self._fake_auto
+        ui.open_drama('不存在这部剧')
+        assert called, 'open_drama clicked a board without ever foregrounding the player'

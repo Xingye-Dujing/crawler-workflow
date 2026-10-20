@@ -243,6 +243,23 @@ class PlayerUI:
                 continue
         return None
 
+    def _activate(self) -> None:
+        """Bring the player to the OS foreground so synthetic input actually lands.
+
+        Measured live (2026-10-20): ``WheelDown``/``SendKeys``/coordinate clicks were silently
+        ignored until the user physically clicked the window — the Wails player was not the
+        foreground window, and a UIA ``SetFocus`` on the top control does NOT foreground the OS
+        window the way synthetic mouse/keyboard input needs. ``BringWindowToTop`` +
+        ``SetForegroundWindow`` do. Best-effort: Windows may refuse a background process's
+        SetForegroundWindow (focus-stealing prevention); the guarded coordinate click then still
+        foregrounds it — which is exactly why the user's manual click made it start scrolling."""
+        hwnd = ctypes.windll.user32.FindWindowW(_PLAYER_CLASS, None)
+        if not hwnd:
+            return
+        with contextlib.suppress(Exception):
+            ctypes.windll.user32.BringWindowToTop(hwnd)
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+
     def wait_window(self, seconds: float = 40.0):
         """The window, once it EXISTS — a cold Wails launch needs a few seconds and
         the first probe right after Popen found nothing (measured on the first live
@@ -393,6 +410,10 @@ class PlayerUI:
             # — an environment fact the user can fix, named, never a fake 搜不到剧.
             raise TreeColdError(t('crawl.hg.cmt.treeCold'))
         try:
+            # Foreground the player before the first synthetic click — a fresh Wails launch does
+            # not reliably take the OS foreground itself, and a click/wheel on a non-foreground
+            # window is silently dropped (measured 2026-10-20: nothing moved until a manual click).
+            self._activate()
             rank = self._find_until('排行榜', 'ButtonControl', seconds=20)
             if rank is None or not self._click(rank):
                 return False
@@ -420,6 +441,10 @@ class PlayerUI:
                         self._click(hit)
                         time.sleep(3.0)
                         return True
+                    # Re-activate before scrolling: the board's own re-render can drop the window
+                    # from the foreground, and a wheel on a non-foreground window scrolls nothing
+                    # (the 「滚动几次又不动」 the user saw — until a manual click foregrounded it).
+                    self._activate()
                     self._ensure_library().WheelDown(wheelTimes=3, interval=0.12)
                     time.sleep(2.0)
             return False
@@ -588,6 +613,10 @@ class PlayerUI:
             win = self.window()
             if win is None:
                 return False
+            # Foreground first: the {Down} only switches episodes on a window that actually has
+            # input focus (measured 2026-10-20 — with the player not foreground, the key was
+            # silently dropped and the walk re-read the SAME episode, exactly the 「没变化」 symptom).
+            self._activate()
             with contextlib.suppress(Exception):
                 win.SetFocus()
             auto.SendKeys('{Down}')
@@ -607,6 +636,9 @@ class PlayerUI:
         """
         try:
             auto = self._ensure_library()
+            # The wheel/page key is delivered to the foreground window; without this the drawer
+            # stopped scrolling the moment focus drifted (measured — user's click resumed it).
+            self._activate()
             if attempt:
                 self.dismiss_composer()
             if attempt >= 2:
