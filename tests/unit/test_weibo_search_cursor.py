@@ -72,3 +72,30 @@ class TestTheCursorRecordsPositionNotContent:
         total = position.get('url_total')
         assert total and total > 1, f'the walk records how many windows there are, got {total}'
         assert position.get('url_index') == total, 'and that it walked them all'
+
+
+class TestARefusedWindowIsNotProof:
+    """M1: the cursor must rest BEHIND a window the session refused, not cross it.
+
+    The loop used to write ``url_index=idx`` and THEN check ``_refused()``, so the refused
+    window was already marked done — 继续 started after it and SKIPPED the exact link the user
+    is told refreshing the cookie will retry. A refusal is now checked first, so a bounced
+    window leaves the cursor at the last clean one."""
+
+    def test_the_cursor_stays_behind_a_window_the_session_refused(self, monkeypatch):
+        crawler = _bare(monkeypatch)
+        calls = {'n': 0}
+
+        def scrape(url, target):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                crawler._collected.append({'微博ID': 'x1'})
+                return ['x1']  # first window proves
+            crawler.login_wall = True  # the second window bounces the session
+            return []
+
+        monkeypatch.setattr(crawler, '_scrape_single_search', scrape)
+        crawler.search('三亚', start_time='2026-01-01', end_time='2026-01-02', target_count=10_000)
+        position = crawler.position
+        assert position.get('url_index') == 1, f'the refused window was marked done → 继续 skips it: {position}'
+        assert calls['n'] == 2, 'the walk stopped AT the refusal, not walked every window'

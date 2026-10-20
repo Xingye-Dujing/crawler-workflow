@@ -163,10 +163,12 @@ class WeiboCrawler(Crawler):
             walked = idx
             logger.info(t('crawl.weibo.link_done', i=idx, n=len(page_data)))
             logger.info(t('crawl.weibo.accumulated', n=self.collected()))
-            # Position after each window: a kill here costs at most the window
-            # in flight, never the windows already walked.
-            self.mark_position(url_index=idx, done=self.collected())
-
+            # Position after each window — but ONLY once the window completed without a refusal.
+            # A refusal is checked first, because a window the session bounced (a wall / 风控) is
+            # not proof: advancing url_index past it made 继续 silently SKIP the very link the user
+            # is told refreshing the cookie will retry. Leaving the cursor at the last clean window
+            # re-attempts exactly the refused one (the ledger de-dupes by 微博ID, so re-entering
+            # already-walked windows costs requests, never duplicate rows).
             if self._refused():
                 # Every further window would meet the same answer. This used to test `login_wall`
                 # alone, which meant a session answered by risk control — or a browser whose network
@@ -175,6 +177,8 @@ class WeiboCrawler(Crawler):
                 # 末尾」. A refusal of any kind is the reason the walk stopped, and it is the reason
                 # the user needs to hear.
                 break
+
+            self.mark_position(url_index=idx, done=self.collected())
 
             if idx < total_urls and self.collected() < target:
                 self._polite_pause(self.POLITE_BASE, self.POLITE_SPREAD)

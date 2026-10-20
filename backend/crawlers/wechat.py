@@ -85,6 +85,12 @@ class WechatCrawler(Crawler):
         # mis-locate, but it can never smuggle a stale "already saw this" that hides a re-crawl.
         self.mark_position(url_total=total, url_index=start_index, done=have)
 
+        # A link that produced nothing is not proof: once one hole appears, ``url_index`` stops
+        # advancing (``done`` still moves), so 继续 re-fetches the first failed link instead of
+        # silently skipping it. Later links are still collected this pass; the ledger de-dupes, so
+        # re-walking a proven link on the resume costs requests, never duplicate rows.
+        unproven = False
+
         for idx, url in enumerate(urls, start=1):
             if idx <= start_index:
                 continue
@@ -109,10 +115,15 @@ class WechatCrawler(Crawler):
                     logger.debug(t('crawl.wechat.duplicate', url=url))
             else:
                 logger.warning(t('crawl.wechat.failed', i=idx, total=total))
+                unproven = True
 
-            # The cursor moves with the article, so a kill here costs at most
-            # the page in flight.
-            self.mark_position(url_index=idx, done=self.collected())
+            # The cursor moves with the article ONLY while no hole has appeared; past the first
+            # failed link ``url_index`` stays pinned (``done`` keeps advancing) so 继续 re-fetches
+            # it rather than skipping the link that failed.
+            if unproven:
+                self.mark_position(done=self.collected())
+            else:
+                self.mark_position(url_index=idx, done=self.collected())
 
             if idx < total:
                 logger.debug(t('crawl.wechat.wait'))
