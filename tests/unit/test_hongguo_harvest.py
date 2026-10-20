@@ -1219,18 +1219,11 @@ class _FixedRect:
         return self.right - self.left
 
 
-class _FakePatternId:
-    InvokePattern = 10000
-    LegacyIAccessiblePattern = 30015
-
-
 class _FakeAuto:
     """Stand-in for the uiautomation module: records the physical clicks it is asked to issue.
 
-    The real library exposes PascalCase members (``Click``, the ``PatternId`` enum); the method is
-    kept lowercase for the linter and exposed under the name the product code calls."""
-
-    PatternId = _FakePatternId
+    The real library exposes PascalCase ``Click``; the method is kept lowercase for the linter and
+    exposed under the name the product code calls, so the guard is exercised against the real API."""
 
     def __init__(self):
         self.clicks = []
@@ -1240,65 +1233,51 @@ class _FakeAuto:
         self.clicks.append((x, y))
 
 
-class _Invokable:
-    def __init__(self):
-        self.invoked = False
-        self.Invoke = self._invoke
-
-    def _invoke(self):
-        self.invoked = True
-
-
 class _FakeControl:
-    def __init__(self, rect, invoke=None):
-        self.BoundingRectangle = rect
-        self._invoke = invoke
-        self.GetPattern = self._get_pattern
+    """Only ``BoundingRectangle`` is read — the click is a coordinate click on that rect's centre."""
 
-    def _get_pattern(self, pid):
-        if pid == _FakePatternId.InvokePattern and self._invoke is not None:
-            return self._invoke
-        return None
+    def __init__(self, rect):
+        self.BoundingRectangle = rect
+
+
+def _window(left=0, top=0, right=1920, bottom=1040):
+    return lambda: type('W', (), {'BoundingRectangle': _FixedRect(left, top, right, bottom)})()
 
 
 class TestGuardedClick:
-    """No click may move the real cursor to pixels outside the player window (the taskbar fix)."""
+    """The player navigates ONLY via coordinate clicks; the safety is refusing clicks that land
+    outside its window (measured 2026-10-20: a stale rect drove the cursor onto the taskbar tray).
+    UIA Invoke was tried first and the SPA never moved — so a click is issued on the centre point
+    exactly when that point is proven strictly inside the window."""
 
-    def test_a_control_offering_invoke_is_activated_without_any_mouse_event(self):
+    def _ui(self):
         auto = _FakeAuto()
         ui = PlayerUI(log=lambda _m: None)
         ui._auto = auto
-        ui.window = lambda: type('W', (), {'BoundingRectangle': _FixedRect(0, 0, 1920, 1040)})()
-        invokable = _Invokable()
-        ctrl = _FakeControl(_FixedRect(100, 100, 200, 200), invoke=invokable)
-        assert ui._click(ctrl) is True
-        assert invokable.invoked, 'the control pattern was not used'
-        assert auto.clicks == [], 'a control with an Invoke pattern must never need the mouse'
+        ui.window = _window()
+        return auto, ui
 
-    def test_a_patternless_control_at_a_taskbar_coordinate_is_refused_not_clicked(self):
-        auto = _FakeAuto()
-        ui = PlayerUI(log=lambda _m: None)
-        ui._auto = auto
-        ui.window = lambda: type('W', (), {'BoundingRectangle': _FixedRect(0, 0, 1920, 1040)})()
-        stale = _FakeControl(_FixedRect(1890, 1400, 1920, 1430))  # center (1905,1415) is below the window
-        assert ui._click(stale) is False
-        assert auto.clicks == [], 'the stale rect would have driven the cursor onto the taskbar tray'
+    def test_a_control_inside_the_window_is_clicked_at_its_centre(self):
+        auto, ui = self._ui()
+        assert ui._click(_FakeControl(_FixedRect(500, 500, 600, 560))) is True
+        assert auto.clicks == [(550, 530)], 'the coordinate click is how this player navigates'
 
-    def test_a_patternless_control_inside_the_window_still_clicks(self):
-        auto = _FakeAuto()
-        ui = PlayerUI(log=lambda _m: None)
-        ui._auto = auto
-        ui.window = lambda: type('W', (), {'BoundingRectangle': _FixedRect(0, 0, 1920, 1040)})()
-        inside = _FakeControl(_FixedRect(500, 500, 600, 560))
-        assert ui._click(inside) is True
-        assert auto.clicks == [(550, 530)]
+    def test_a_stale_rect_below_the_window_is_refused_not_clicked(self):
+        auto, ui = self._ui()
+        # centre (1905,1415) sits below the 1040 window — the real taskbar/clock row.
+        assert ui._click(_FakeControl(_FixedRect(1890, 1400, 1920, 1430))) is False
+        assert auto.clicks == [], 'a click driven onto the taskbar is exactly what must not happen'
 
     def test_a_collapsed_zero_rect_is_refused(self):
-        # A cold/clamped WebView2 control reports (0,0,0,0); its centre (0,0) must never be clicked.
+        # A cold/clamped WebView2 control reports (0,0,0,0); its centre is a corner, not a target.
+        auto, ui = self._ui()
+        assert ui._click(_FakeControl(_FixedRect(0, 0, 0, 0))) is False
+        assert auto.clicks == []
+
+    def test_no_window_means_no_click(self):
         auto = _FakeAuto()
         ui = PlayerUI(log=lambda _m: None)
         ui._auto = auto
-        ui.window = lambda: type('W', (), {'BoundingRectangle': _FixedRect(0, 0, 1920, 1040)})()
-        collapsed = _FakeControl(_FixedRect(0, 0, 0, 0))
-        assert ui._click(collapsed) is False
+        ui.window = lambda: None
+        assert ui._click(_FakeControl(_FixedRect(500, 500, 600, 560))) is False
         assert auto.clicks == []

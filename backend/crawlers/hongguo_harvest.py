@@ -334,55 +334,21 @@ class PlayerUI:
         return ((rect.left + rect.right) // 2, (rect.top + rect.bottom) // 2)
 
     def _click(self, ctrl) -> bool:
-        """Activate a control — by UIA pattern, NEVER by an unchecked screen coordinate.
+        """Click a control's centre — but ONLY inside the player window, never on the taskbar.
 
-        The old version always issued a physical ``mouse_event`` at the control's
-        ``BoundingRectangle`` centre. That moves the user's real cursor to absolute pixels, so
-        a control whose rect has gone stale (the page navigated after the tree was read) or
-        clamped off-screen lands the click wherever those pixels now are — measured, onto the
-        taskbar's bottom-right notification/clock area, opening the user's tray and clicking
-        their desktop. UIA ``Invoke`` / ``DoDefaultAction`` act on the control itself: no mouse,
-        no frontmost window, no coordinate — so they cannot miss onto another window. A
-        coordinate click remains only as a last resort, and then only when the point is proven
-        inside the player window (see _coordinate_click)."""
-        for attempt in (self._invoke_pattern, self._legacy_default_action):
-            if attempt(ctrl):
-                return True
-        return self._coordinate_click(ctrl)
+        Measured live (2026-10-20): a bare ``auto.Click(rect centre)`` moves the user's real
+        cursor to absolute pixels, and when a control's ``BoundingRectangle`` had gone stale (the
+        page navigated after the tree was read) or WebView2 clamped it to an off-window corner,
+        that shot landed on whatever is at those pixels — the taskbar's bottom-right clock/tray,
+        opening the user's tray and clicking their desktop. The guard below makes that impossible:
+        a click is issued only when the point is proven strictly inside the window.
 
-    def _invoke_pattern(self, ctrl) -> bool:
-        # The clean no-mouse path. Returns False only when the control truly offers no Invoke
-        # pattern — a control that DOES have one but whose Invoke raises is a real failure and is
-        # reported, not silently re-clicked at the coordinate that just hurt the user.
-        try:
-            pattern = ctrl.GetPattern(self._ensure_library().PatternId.InvokePattern)
-        except Exception:
-            return False
-        if pattern is None:
-            return False
-        try:
-            pattern.Invoke()
-            return True
-        except Exception as exc:
-            logger.debug('hongguo harvest: Invoke pattern failed: %s', exc)
-            return True
-
-    def _legacy_default_action(self, ctrl) -> bool:
-        try:
-            pattern = ctrl.GetPattern(self._ensure_library().PatternId.LegacyIAccessiblePattern)
-        except Exception:
-            return False
-        if pattern is None:
-            return False
-        try:
-            pattern.DoDefaultAction()
-            return True
-        except Exception as exc:
-            logger.debug('hongguo harvest: legacy default action failed: %s', exc)
-            return True
-
-    def _coordinate_click(self, ctrl) -> bool:
-        """Last resort — and only ever INSIDE the player window, never on the taskbar."""
+        I first tried UIA ``Invoke`` / ``DoDefaultAction`` as the PRIMARY (no mouse, so it can
+        never miss onto another window) — the hang on 找剧 proved the buttons do not respond: the
+        navigation ``Invoke`` returns without raising and the WebView2 SPA never moves, so the walk
+        waits forever. The coordinate click IS the mechanism that navigates this player; the safety
+        is the window-bounds guard, not the pattern. (Re-add Invoke only after it is shown to
+        actually navigate a click on a future build.)"""
         try:
             win = self.window()
             if win is None:
@@ -392,15 +358,15 @@ class PlayerUI:
             # Strictly inside, and the window itself must have real extent: a rect that fell to a
             # clamped/zero or off-window value can never drive the cursor onto the taskbar corner.
             if not (left < cx < right and top < cy < bottom):
-                # A refusal here is a developer fact (the click is not taken; the walk degrades and
-                # the traffic gate / screen gate carry the user-facing story), so it stays on the
-                # debug channel — same as every other UIA best-effort miss in this module.
+                # A refusal is a developer fact (the click is not taken; the walk degrades and the
+                # traffic gate / screen gate carry the user-facing story), so it stays on the debug
+                # channel — same as every other UIA best-effort miss in this module.
                 logger.debug('hongguo harvest: refused coordinate click outside the player window (%d,%d)', cx, cy)
                 return False
             self._ensure_library().Click(cx, cy)
             return True
         except Exception as exc:
-            logger.debug('hongguo harvest: coordinate click failed: %s', exc)
+            logger.debug('hongguo harvest: click failed: %s', exc)
             return False
 
     @staticmethod
