@@ -2470,10 +2470,16 @@ def _source_stream(ctx: dict, nid: str, scope: str, label: str = ''):
     def row_sink(item):
         # A sink answers "was this new?" — the crawler drops duplicates itself,
         # which is how a resumed crawl re-reading the same page stays honest.
-        kept, _dropped = store.append_rows(run_id, nid, [item], dedupe_scope=scope, label=label)
-        if not kept:
+        kept, dropped = store.append_rows(run_id, nid, [item], dedupe_scope=scope, label=label)
+        # kept=0,dropped>0 is a genuine ledger dedupe ("already collected"); kept=0,dropped=0 is
+        # the STORAGE CAP (the row was never tried against the ledger, the store hit its limit and
+        # already logged run.row_limit once). Tallied only the first: the console/advice says 开启
+        # 「重新采集」 to release the claim, but a capped row has no claim to release — that advice
+        # re-crawls into the same cap. And return True on a cap, so the pager does not read "the
+        # site carried nothing new" from a local disk limit and print it as the site's own funnel.
+        if not kept and dropped:
             tally[nid] = tally.get(nid, 0) + 1
-        return bool(kept)
+        return bool(kept) or not dropped
 
     def cursor_sink(position):
         store.save_cursor(run_id, nid, position)

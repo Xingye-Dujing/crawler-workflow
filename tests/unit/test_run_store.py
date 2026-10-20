@@ -58,6 +58,37 @@ def _start(store, run_id='r1', name='wf', fp='fp-a', total=0):
     store.start_run(run_id, name, fp, node_total=total)
 
 
+class _DepthLock:
+    """An RLock stand-in that records, per thread, whether it is currently held.
+
+    Used to pin the deadlock invariant: a log line emitted while this lock is held can
+    re-enter the console sink, which wants the same lock from another thread (AB-BA)."""
+
+    def __init__(self):
+        self._inner = threading.RLock()
+        self._depth: dict[int, int] = {}
+
+    def _held(self) -> int:
+        return self._depth.get(threading.get_ident(), 0)
+
+    def acquire(self, *args, **kwargs):
+        got = self._inner.acquire(*args, **kwargs)
+        if got:
+            self._depth[threading.get_ident()] = self._held() + 1
+        return got
+
+    def release(self):
+        self._depth[threading.get_ident()] -= 1
+        self._inner.release()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
+
+
 # ─── item identity ─────────────────────────────────────────────────────
 
 
@@ -199,6 +230,34 @@ class TestFingerprints:
         # And the data-choosing parameters still do move it.
         other = _node(params={'keyword': '海口', 'target_count': 3})
         assert node_fingerprint(plain) != node_fingerprint(other)
+
+    def test_an_output_shape_switch_does_not_rekey_a_paid_crawl(self):
+        """分片/格式/时间戳… describe how the file is spelled, not what is collected.
+
+        A 700-row crawl interrupted, the user ticked 「保留分片」 and pressed 继续 — because the
+        switch was inside the fingerprint, the node's durable rows were dropped and its cursor
+        NULLed, so the walk re-opened every link and spent the account again for a table that
+        already existed. The export is re-rendered from the kept ``node_rows`` anyway, so leaving
+        these switches out strands no stale file — the next export honours the new shape.
+        """
+        base = {'keyword': '三亚', 'target_count': 3}
+        plain = _node(params=dict(base))
+        for switch in (
+            {'keep_parts': True},
+            {'part_size': 500},
+            {'format': 'json'},
+            {'per_article_file': True},
+            {'live_export': True},
+            {'part_timestamp': True},
+            {'filename_timestamp': 'day'},
+            {'filename_time_range': True},
+            {'emit_latex': True},
+            {'emit_latex_table': True},
+        ):
+            flipped = _node(params={**base, **switch})
+            assert node_fingerprint(plain) == node_fingerprint(flipped), f'{switch} re-keyed the crawl'
+        # A real data choice still moves it (this is not a blanket ignore).
+        assert node_fingerprint(plain) != _node(params={**base, 'keyword': '海口'})
 
     def test_toggling_enabled_is_not_a_new_computation(self):
         """``enabled`` is an on/off instruction, not a choice of data — so, like the 重新采集
@@ -597,6 +656,51 @@ class TestRows:
         kept, _dropped = store.append_rows('r1', 'n1', sample_rows[2:5])
         assert kept == 1, 'only the slot the cap leaves was taken'
         assert store.row_count('r1', 'n1') == 3
+
+    def test_the_row_cap_warning_is_emitted_while_the_store_lock_is_free(self, store, sample_rows, monkeypatch):
+        # Deadlock guard: append_rows used to logger.warning INSIDE the SQLite RLock. That log
+        # runs through the console handler into _push_log, which takes _completed_lock and then
+        # the durable sink re-enters append_log → the same RLock; a concurrent add_log holds
+        # _completed_lock and wants that RLock — AB-BA. The warning must fire OUTSIDE the lock.
+        import logging
+
+        import services.run_store as run_store_mod
+
+        recorder = _DepthLock()
+        store._lock = recorder
+        monkeypatch.setattr(Config, 'RUN_MAX_ROWS_PER_NODE', 2)
+        _start(store)
+
+        held_at_emit = []
+
+        class _Probe(logging.Handler):
+            def emit(self, record):
+                held_at_emit.append(recorder._held())
+
+        probe = _Probe()
+        run_store_mod.logger.addHandler(probe)
+        try:
+            store.append_rows('r1', 'n1', sample_rows)  # 5 rows over a cap of 2 → the cap fires
+        finally:
+            run_store_mod.logger.removeHandler(probe)
+        assert held_at_emit, 'the cap warning never fired at all'
+        assert max(held_at_emit) == 0, f'logged while _lock was held (depth={max(held_at_emit)}) → AB-BA'
+
+    def test_a_capped_append_is_not_reported_as_a_ledger_dedupe(self, store, sample_rows, monkeypatch):
+        # row_sink tells cap from 已采集 by the dropped count: a cap leaves dropped=0 (the row was
+        # never tried against the ledger), a real already-collected skip sets dropped>0. Tallied
+        # wrong, the console says 「此前已采集」 and advises 「重新采集」 — which releases claims the
+        # disk cap never made and re-crawls into the same cap.
+        monkeypatch.setattr(Config, 'RUN_MAX_ROWS_PER_NODE', 1)
+        _start(store)
+        assert store.append_rows('r1', 'n1', sample_rows[:1]) == (1, 0)
+        assert store.append_rows('r1', 'n1', sample_rows[1:2]) == (0, 0), 'over-cap is not a dedupe'
+
+    def test_a_real_dedupe_still_reports_dropped(self, store, sample_rows, monkeypatch):
+        monkeypatch.setattr(Config, 'RUN_MAX_ROWS_PER_NODE', 100)
+        _start(store)
+        store.append_rows('r1', 'n1', sample_rows[:2], dedupe_scope='sig')
+        assert store.append_rows('r1', 'n1', sample_rows[:2], dedupe_scope='sig') == (0, 2)
 
     def test_appending_never_counts_the_table_to_find_the_next_slot(self, store, monkeypatch):
         """The next-slot lookup is an index seek, not a scan.

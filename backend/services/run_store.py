@@ -195,7 +195,36 @@ def item_key(item) -> str:
 # *present at all* in the structure fingerprint is decided one level up — :func:`effective_workflow`
 # removes disabled nodes from the graph before the fingerprint is taken — so this only keeps the
 # surviving nodes' own data fingerprint free of the switch.
-_VOLATILE_PARAMS = frozenset({'dataset_name', 'row_count', 'workflow_name', 'recrawl', 'enabled', 'layout_order'})
+#
+# The output-shape switches joined for the SAME class of reason, and one measurement made the
+# cost concrete: a 700-row crawl interrupted, the user ticks 「保留分片」 (or flips 格式 csv→json)
+# in the panel and presses 继续 — and because these keys were in the fingerprint, the node's
+# paid-for rows were DELETED and its cursor NULLed, so the walk re-opened every link and spent
+# the account again for a table that already existed. None of them chooses DATA (the keyword, the
+# URLs, the target do); they choose how a file is spelled on disk. And an export is re-rendered
+# from the durable ``node_rows`` on demand, so leaving them out of the fingerprint strands no
+# stale-format artifact — the next export from the kept rows honours the new switch.
+_VOLATILE_PARAMS = frozenset(
+    {
+        'dataset_name',
+        'row_count',
+        'workflow_name',
+        'recrawl',
+        'enabled',
+        'layout_order',
+        # output-shape only: never a choice of what is collected
+        'part_size',
+        'keep_parts',
+        'per_article_file',
+        'format',
+        'live_export',
+        'part_timestamp',
+        'filename_timestamp',
+        'filename_time_range',
+        'emit_latex',
+        'emit_latex_table',
+    }
+)
 
 
 def stable_params(params) -> dict:
@@ -1178,6 +1207,7 @@ class RunStore:
         if not rows:
             return 0, 0
         limit = Config.RUN_MAX_ROWS_PER_NODE
+        capped = False
         with self._lock:
             # ``MAX(seq)+1`` and not ``COUNT(*)``: the primary key is
             # (run_id, node_id, seq), so the maximum is a single index seek while a
@@ -1199,7 +1229,13 @@ class RunStore:
             seen_batch = set()
             for row in rows:
                 if existing + kept >= limit:
-                    logger.warning(t('run.row_limit', nid=label or node_id, limit=limit))
+                    # The cap is NOT a ledger dedupe: leave ``dropped`` alone so the caller can
+                    # tell the two apart, and record only that a warning is owed — never log here.
+                    # logger.warning runs through the console handler, which takes _completed_lock
+                    # and then the durable sink re-enters append_log → this same RLock; another
+                    # thread adding a log holds _completed_lock and wants this RLock — a textbook
+                    # AB-BA deadlock that froze the worker AND /api/workflow/status.
+                    capped = True
                     break
                 key = item_key(row)
                 if key in seen_batch:
@@ -1218,6 +1254,8 @@ class RunStore:
                     batch,
                 )
             self._conn.commit()
+        if capped:
+            logger.warning(t('run.row_limit', nid=label or node_id, limit=limit))
         return kept, dropped
 
     def append_log(self, run_id: str, rows: list) -> int:
