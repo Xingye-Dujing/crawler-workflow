@@ -135,6 +135,30 @@ class TestFlushCadence:
         w.flush()
         assert store.batches == [], 'a new run must not inherit the previous buffer'
 
+    def test_reset_takes_the_console_lock(self, writer, monkeypatch):
+        """reset() swaps ``_buf`` while push() appends to it under ``_completed_lock``.
+
+        Doing the swap outside the lock let a concurrent push append into the list reset had
+        just replaced, so a stopped run's durable console lost its tail. reset() must acquire
+        the same lock flush() uses."""
+        module, w, _store, _state = writer
+
+        class _Probe:
+            def __init__(self):
+                self.n = 0
+
+            def __enter__(self):
+                self.n += 1
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+        probe = _Probe()
+        monkeypatch.setattr(module, '_completed_lock', probe)
+        w.reset()
+        assert probe.n == 1, 'reset must serialize with push under _completed_lock'
+
 
 class TestStoreFailure:
     def test_a_failed_flush_keeps_the_lines_for_a_later_try(self, writer):

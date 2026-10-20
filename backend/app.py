@@ -389,10 +389,13 @@ class _RunLogWriter:
     def reset(self) -> None:
         """Drop any leftover batch without writing it (a new run, or an armed re-entry).
 
-        Called under ``_completed_lock`` so it cannot interleave with ``push``.
-        """
-        self._buf = []
-        self._buf_run_id = None
+        Takes ``_completed_lock`` for the whole swap (the same way ``flush`` does): ``push``
+        runs under that lock, so replacing ``_buf`` without it let a concurrent push append
+        into the list ``reset`` had just swapped out — the durable log of a stopped run lost
+        its tail. Neither caller holds the lock, so acquiring it here cannot self-deadlock."""
+        with _completed_lock:
+            self._buf = []
+            self._buf_run_id = None
 
     def push(self, parts, wf_idx, level) -> None:
         # Runs while the caller holds ``_completed_lock`` (see ``state._push_log``); every
