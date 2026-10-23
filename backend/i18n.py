@@ -144,10 +144,13 @@ _ZH = {
     'biblio.entity.term': '主题词',
     'biblio.entity.category': '学科',
     'biblio.entity.journal': '来源期刊（耦合）',
+    'biblio.entity.source': '来源期刊（Source）',
     'biblio.entity.funder': '基金/资助机构',
+    'biblio.entity.grant': '基金（Grant）',
     'biblio.entity.document_cocitation': '文献共被引',
     'biblio.entity.author_cocitation': '作者共被引',
     'biblio.entity.journal_cocitation': '期刊共被引',
+    'biblio.entity.article': '被引文献（Article）',
     'biblio.entity.document': '文献（耦合）',
     'biblio.entity.bibliographic_coupling': '文献耦合',
     'biblio.bad_option': '{nid}：{param} 的值「{value}」无效（可选：{allowed}）',
@@ -164,8 +167,11 @@ _ZH = {
     'biblio.year_missing': '{n} 条记录缺少年份，已跳过（时间切片需要年份）',
     'biblio.records_skipped': '{n} 条记录没有可分析的实体，已跳过',
     'biblio.wide_ref_skipped': '{n} 条参考文献被超过 {cap} 篇文献同时引用，已跳过其两两配对（过大团会淹没图）',
-    'biblio.mst_done': 'MST 剪枝：{before} → {after} 条边',
+    'biblio.mst_done': 'MST 剪枝（{scope}）：{before} → {after} 条边',
     'biblio.pathfinder_done': 'Pathfinder 剪枝：{before} → {after} 条边（{slices} 个切片）',
+    'biblio.pathfinder_merged_equals_mst': (
+        'Pathfinder 合并网络作用域下 PFNET(r=∞,q=n−1) 等价于最大生成树，已如实按合并网络处理'
+    ),
     'biblio.betweenness_sampled': '节点数 {n} 超过 2000，中介中心性使用 {k} 个源点采样',
     'biblio.eigen_failed': '特征向量中心性未收敛，已改用归一化加权度（0–1）作为回退并播报',
     'biblio.burst_done': '突现检测：{nodes}/{total} 个节点有突现',
@@ -1675,10 +1681,13 @@ _EN = {
     'biblio.entity.term': 'Term',
     'biblio.entity.category': 'Category',
     'biblio.entity.journal': 'Source journal (coupling)',
+    'biblio.entity.source': 'Source (journal coupling)',
     'biblio.entity.funder': 'Funder/Grant',
+    'biblio.entity.grant': 'Grant (funder)',
     'biblio.entity.document_cocitation': 'Document co-citation',
     'biblio.entity.author_cocitation': 'Author co-citation',
     'biblio.entity.journal_cocitation': 'Journal co-citation',
+    'biblio.entity.article': 'Cited article',
     'biblio.entity.document': 'Document (coupling)',
     'biblio.entity.bibliographic_coupling': 'Bibliographic coupling',
     'biblio.bad_option': '{nid}: {param} = "{value}" is not valid (allowed: {allowed})',
@@ -1702,8 +1711,12 @@ _EN = {
         '{n} references were cited by more than {cap} papers; their pairwise links were skipped '
         '(a giant clique would bury the graph)'
     ),
-    'biblio.mst_done': 'MST pruning: {before} → {after} edges',
+    'biblio.mst_done': 'MST pruning ({scope}): {before} → {after} edges',
     'biblio.pathfinder_done': 'Pathfinder pruning: {before} → {after} edges ({slices} slices)',
+    'biblio.pathfinder_merged_equals_mst': (
+        'Pathfinder on the merged network is PFNET(r=∞,q=n−1), which equals a maximum spanning tree; '
+        'the actual method is reported'
+    ),
     'biblio.betweenness_sampled': 'More than {n} nodes; betweenness uses {k} sampled sources',
     'biblio.eigen_failed': (
         'Eigenvector centrality did not converge; normalized weighted degree (0–1) was used and printed'

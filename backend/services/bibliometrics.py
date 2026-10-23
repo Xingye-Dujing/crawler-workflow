@@ -50,10 +50,13 @@ ENTITY_LABEL_KEYS = {
     'term': 'biblio.entity.term',
     'category': 'biblio.entity.category',
     'journal': 'biblio.entity.journal',
+    'source': 'biblio.entity.source',
     'funder': 'biblio.entity.funder',
+    'grant': 'biblio.entity.grant',
     'document_cocitation': 'biblio.entity.document_cocitation',
     'author_cocitation': 'biblio.entity.author_cocitation',
     'journal_cocitation': 'biblio.entity.journal_cocitation',
+    'article': 'biblio.entity.article',
     'document': 'biblio.entity.document',
     'bibliographic_coupling': 'biblio.entity.bibliographic_coupling',
 }
@@ -195,7 +198,7 @@ def _require_columns(df: pd.DataFrame, params: dict) -> dict:
             required.insert(0, columns['reference'])
         if entity in ('document', 'bibliographic_coupling'):
             required.append(columns['title'])
-        if entity == 'journal':
+        if entity in ('journal', 'source'):
             required.append(columns['entity'])
     elif entity == 'term':
         if columns['title'] not in df.columns and columns['abstract'] not in df.columns:
@@ -292,7 +295,7 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
             continue
 
         if entity in COUPLING_TYPES:
-            if entity == 'journal':
+            if entity in ('journal', 'source'):
                 name = str(record.get(columns['entity']) or '').strip()
             else:
                 title = str(record.get(columns['title']) or '').strip()
@@ -531,29 +534,9 @@ def _max_links(edges: dict, params: dict) -> dict:
     }
 
 
-def _prune(edges: dict, edge_slices: dict, params: dict, notes: list[str]) -> dict:
-    mode = params['pruning']
-    if mode == 'none':
-        return edges
-    if mode == 'mst':
-        graph = nx.Graph()
-        for (left, right), info in edges.items():
-            graph.add_edge(left, right, weight=info['weight'], count=info['count'])
-        if graph.number_of_edges() == 0:
-            return {}
-        tree = nx.maximum_spanning_tree(graph, weight='weight')
-        kept = {}
-        for left, right, data in tree.edges(data=True):
-            key = (left, right) if left < right else (right, left)
-            kept[key] = {'weight': float(data.get('weight') or 0.0), 'count': int(data.get('count') or 0)}
-        notes.append(t('biblio.mst_done', before=len(edges), after=len(kept)))
-        return kept
-
-    # Pathfinder: PFNET(r=∞, q=n−1) is a maximum spanning tree on one slice;
-    # CiteSpace applies it per slice and merges, which is why the result can
-    # keep more links than one global MST. The retained count is reported.
+def _slice_mst_keys(edges: dict, edge_slices: dict) -> tuple[set[tuple[str, str]], int]:
     keep_keys: set[tuple[str, str]] = set()
-    slices_seen: set[int] = set()
+    slices_seen = 0
     for slice_id in sorted({sid for ids in edge_slices.values() for sid in ids}):
         graph = nx.Graph()
         for key, ids in edge_slices.items():
@@ -563,12 +546,46 @@ def _prune(edges: dict, edge_slices: dict, params: dict, notes: list[str]) -> di
             graph.add_edge(left, right, weight=edges[key]['weight'])
         if graph.number_of_edges() == 0:
             continue
-        slices_seen.add(slice_id)
+        slices_seen += 1
         tree = nx.maximum_spanning_tree(graph, weight='weight')
         for left, right in tree.edges():
             keep_keys.add((left, right) if left < right else (right, left))
+    return keep_keys, slices_seen
+
+
+def _global_mst_keys(edges: dict) -> set[tuple[str, str]]:
+    graph = nx.Graph()
+    for (left, right), info in edges.items():
+        graph.add_edge(left, right, weight=info['weight'])
+    return {
+        (left, right) if left < right else (right, left)
+        for left, right in nx.maximum_spanning_tree(graph, weight='weight').edges()
+    }
+
+
+def _prune(edges: dict, edge_slices: dict, params: dict, notes: list[str]) -> dict:
+    mode = params['pruning']
+    if mode == 'none':
+        return edges
+    scope = params.get('pruning_scope') or 'slices'
+
+    if mode == 'mst':
+        keep_keys = _slice_mst_keys(edges, edge_slices)[0] if scope == 'slices' else _global_mst_keys(edges)
+        kept = {key: info for key, info in edges.items() if key in keep_keys}
+        notes.append(t('biblio.mst_done', before=len(edges), after=len(kept), scope=scope))
+        return kept
+
+    # Pathfinder: PFNET(r=∞, q=n−1) is a maximum spanning tree on one slice;
+    # CiteSpace applies it per slice and merges, which is why the result can
+    # keep more links than one global MST. The retained count is reported.
+    if scope == 'merged':
+        keep_keys = _global_mst_keys(edges)
+        slices_seen = 1
+        notes.append(t('biblio.pathfinder_merged_equals_mst'))
+    else:
+        keep_keys, slices_seen = _slice_mst_keys(edges, edge_slices)
     kept = {key: info for key, info in edges.items() if key in keep_keys}
-    notes.append(t('biblio.pathfinder_done', before=len(edges), after=len(kept), slices=len(slices_seen)))
+    notes.append(t('biblio.pathfinder_done', before=len(edges), after=len(kept), slices=slices_seen))
     return kept
 
 

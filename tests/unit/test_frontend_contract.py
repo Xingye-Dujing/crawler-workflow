@@ -29,6 +29,7 @@ from services.biblio_schema import (
     LINK_MEASURES,
     OUTPUT_SHAPES,
     PRUNING_MODES,
+    PRUNING_SCOPES,
     SELECTION_MODES,
 )
 from services.chart_contracts import BIBLIO_CHART_TYPES
@@ -340,6 +341,7 @@ class TestBiblioPanelContract:
         assert self._js_array('BIBLIO_SELECTION_MODES') == list(SELECTION_MODES)
         assert self._js_array('BIBLIO_LINK_MEASURES') == list(LINK_MEASURES)
         assert self._js_array('BIBLIO_PRUNING_MODES') == list(PRUNING_MODES)
+        assert self._js_array('BIBLIO_PRUNING_SCOPES') == list(PRUNING_SCOPES)
         assert self._js_array('BIBLIO_LABEL_METHODS') == list(LABEL_METHODS)
         assert self._js_array('BIBLIO_OUTPUT_SHAPES') == list(OUTPUT_SHAPES)
         assert self._js_array('BIBLIO_CHARTS') == list(BIBLIO_CHART_TYPES)

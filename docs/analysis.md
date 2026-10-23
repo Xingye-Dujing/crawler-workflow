@@ -246,8 +246,8 @@ AI 分析（双提供方 / 情感 / 倾向 / NER / 关键词等）、通用数�
 CiteSpace 风格的知识图谱能力以 **Bibliometrics 节点**接入工作流。它是普通表格节点：上游可以是 Upload（CSV/Excel/JSON/CNKI/CSSCI），也可以是爬虫节点；列映射把任意表接成网络，CNKI/CSSCI 只是默认列名。实现为净室重写（Kleinberg 突现、PFNET、谱聚类、LLR 等公开算法），不包含 CiteSpace 代码或其 JCR 基线数据。
 
 - **导入**：格式注册表识别 **CNKI RefWorks、CSSCI、WoS 纯文本、Scopus CSV、PubMed XML/NBIB、Dimensions CSV、Lens CSV、RIS、BibTeX、EndNote tagged**。规范化列为 `记录ID/题名/作者/作者单位/来源期刊/年份/卷/期/页码/关键词/摘要/参考文献/DOI/格式`，并按实际数据追加 `国家/学科/引用次数/使用次数/使用次数2013/基金/文献类型/语言/引文`。`引文` 是结构化 JSON；普通文本与不满足文献签名的 CSV/Excel 仍保持原导入行为。
-- **实体**：关键词 / 作者 / 机构 / 国家 / 学科 / 主题词 / 基金共现；文献、作者、期刊共被引；文献耦合；来源期刊耦合。共现类只需要实体列与年份列；引文/耦合类需要参考文献列。CNKI RefWorks 通常没有参考文献，引文模式会按名拒绝并提示改用 CSSCI/WoS/Scopus 等含引文的导出。
-- **网络**：按年份切片（`slice_years`），每片按 TopN / Top% / g-index / 阈值三元组选择后合并；支持 look-back years、最低 TC/usage 过滤、cosine / Dice / Jaccard / association、每节点最大连边 + LRF、cc/ccv 边过滤、最大连通分量；剪枝 none / 最大生成树 / 逐片 PFNET（Pathfinder）。实际剪枝前后边数写入控制台，不静默替换算法。
+- **实体**：关键词 / 作者 / 机构 / 国家 / 学科 / 主题词 / 基金共现；文献、作者、期刊共被引；文献耦合；来源期刊耦合。CiteSpace 的 `Source`、`Grant`、`Article` 分别作为 `source`、`grant`、`article` 节点类型接入，并与本项目的 `journal`、`funder`、`document_cocitation` 保持同一算法语义。共现类只需要实体列与年份列；引文/耦合类需要参考文献列。CNKI RefWorks 通常没有参考文献，引文模式会按名拒绝并提示改用 CSSCI/WoS/Scopus 等含引文的导出。
+- **网络**：按年份切片（`slice_years`），每片按 TopN / Top% / g-index / 阈值三元组选择后合并；支持 look-back years、最低 TC/usage 过滤、cosine / Dice / Jaccard / association、每节点最大连边 + LRF、cc/ccv 边过滤、最大连通分量；剪枝 none / MST / Pathfinder，并可选作用域 `slices`（逐片后合并，默认）或 `merged`（合并网络）。实际剪枝前后边数与作用域写入控制台，不静默替换算法。
 - **指标**：度、中介中心性（距离 = 1/权重，节点多时按 500 源点采样并播报）、特征向量中心性（按连通分量计算）、PageRank、Sigma = `(中介中心性+1)^突现强度`；输入含 `引用次数` 时追加 `总被引/H指数`，含 `使用次数` 时追加 `使用次数合计`。
 - **聚类**：归一化 Laplacian 谱聚类，聚类数留空时按特征值间隙自动选择；模块度 Q、逐节点/逐簇轮廓值写入运行摘要；标签支持 LLR / LSI / MI / TF-IDF，候选词来自簇内实体与关联文献的题名/摘要/关键词。
 - **突现**：两状态 Kleinberg Viterbi，按逐年文档数计算；每个节点保留最强突现区间，突现词表另写 CSV。耦合类节点是施引单元本身，禁止突现。

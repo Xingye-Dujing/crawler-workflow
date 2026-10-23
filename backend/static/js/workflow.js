@@ -3304,10 +3304,11 @@ function renderAnalysisSettings(nodeId, p) {
 }
 
 /* ── Bibliometrics node settings ── */
-var BIBLIO_ENTITY_TYPES = ['keyword', 'author', 'institution', 'country', 'term', 'category', 'journal', 'funder', 'document_cocitation', 'author_cocitation', 'journal_cocitation', 'document', 'bibliographic_coupling'];
+var BIBLIO_ENTITY_TYPES = ['keyword', 'author', 'institution', 'country', 'term', 'category', 'journal', 'source', 'funder', 'grant', 'document_cocitation', 'author_cocitation', 'journal_cocitation', 'article', 'document', 'bibliographic_coupling'];
 var BIBLIO_SELECTION_MODES = ['top_n', 'top_pct', 'g_index', 'threshold'];
 var BIBLIO_LINK_MEASURES = ['cosine', 'dice', 'jaccard', 'association'];
 var BIBLIO_PRUNING_MODES = ['none', 'mst', 'pathfinder'];
+var BIBLIO_PRUNING_SCOPES = ['slices', 'merged'];
 var BIBLIO_LABEL_METHODS = ['llr', 'lsi', 'mi', 'tfidf'];
 var BIBLIO_OUTPUT_SHAPES = ['nodes', 'edges', 'clusters', 'bursts'];
 
@@ -3330,13 +3331,16 @@ function biblioMeasureOptions(values) {
 function biblioPruningOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.pruning.' + value)); });
 }
+function biblioPruningScopeOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.scope.' + value)); });
+}
 function biblioLabelOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.label.' + value)); });
 }
 function biblioOutputShapeOptions(values) {
     return values.map(function (value) { return biblioOption(value, I18n.t('biblio.shape.' + value)); });
 }
-var BIBLIO_COUPLING_TYPES = ['document', 'bibliographic_coupling', 'journal'];
+var BIBLIO_COUPLING_TYPES = ['document', 'bibliographic_coupling', 'journal', 'source'];
 function isBiblioCoupling(entity) {
     return BIBLIO_COUPLING_TYPES.indexOf(entity) >= 0;
 }
@@ -3389,7 +3393,8 @@ function renderBiblioSettings(nodeId, p) {
     html += renderParamSelect(nodeId, p, 'link_measure', 'biblio.ui.linkMeasure', 'cosine', biblioMeasureOptions(BIBLIO_LINK_MEASURES)) +
         renderParamInput(nodeId, p, 'max_links_per_node', 'biblio.ui.maxLinks', 'number', 10) +
         renderParamInput(nodeId, p, 'lrf', 'biblio.ui.lrf', 'number', 2.5) +
-        renderParamSelect(nodeId, p, 'pruning', 'biblio.ui.pruning', 'none', biblioPruningOptions(BIBLIO_PRUNING_MODES));
+        renderParamSelect(nodeId, p, 'pruning', 'biblio.ui.pruning', 'none', biblioPruningOptions(BIBLIO_PRUNING_MODES)) +
+        renderParamSelect(nodeId, p, 'pruning_scope', 'biblio.ui.pruningScope', 'slices', biblioPruningScopeOptions(BIBLIO_PRUNING_SCOPES));
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.cluster') + '</div>';
     html += renderParamCheckbox(nodeId, p, 'cluster', 'biblio.ui.cluster', true) +

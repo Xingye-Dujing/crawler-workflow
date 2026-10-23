@@ -102,7 +102,7 @@ class TestKeywordNetwork:
         assert first['rows'] == second['rows']
 
     def test_mst_keeps_a_tree(self):
-        result = bibliometrics.build(_keywords(), _params(pruning='mst'), 'test')
+        result = bibliometrics.build(_keywords(), _params(pruning='mst', pruning_scope='merged'), 'test')
         assert len(result['edges']) == len(result['rows']) - 1
 
     def test_pathfinder_runs_per_slice_and_reports_its_pruning(self):
@@ -252,6 +252,31 @@ class TestPhaseTwoContracts:
         )
         assert {row['节点'] for row in result['rows']} == {'丙', '丁'}
         assert any('最大连通分量' in note or 'largest connected component' in note for note in result['notes'])
+
+    def test_cite_space_node_names_alias_the_same_constructions(self):
+        journal = bibliometrics.build(_refs(), _params(entity_type='journal', burst=False), 'test')
+        source = bibliometrics.build(_refs(), _params(entity_type='source', burst=False), 'test')
+        funder = bibliometrics.build(_refs(), _params(entity_type='funder', burst=False), 'test')
+        grant = bibliometrics.build(_refs(), _params(entity_type='grant', burst=False), 'test')
+        document = bibliometrics.build(_refs(), _params(entity_type='document_cocitation', burst=False), 'test')
+        article = bibliometrics.build(_refs(), _params(entity_type='article', burst=False), 'test')
+        assert {row['节点'] for row in source['rows']} == {row['节点'] for row in journal['rows']}
+        assert {row['节点'] for row in grant['rows']} == {row['节点'] for row in funder['rows']}
+        assert {row['节点'] for row in article['rows']} == {row['节点'] for row in document['rows']}
+
+    def test_mst_pruning_scope_can_run_per_slice_or_merged(self):
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': '甲;乙;丙', '摘要': ''},
+                {'题名': 'b', '年份': 2021, '关键词': '甲;乙;丙', '摘要': ''},
+            ]
+        )
+        slices = bibliometrics.build(frame, _params(pruning='mst', pruning_scope='slices'), 'test')
+        merged = bibliometrics.build(frame, _params(pruning='mst', pruning_scope='merged'), 'test')
+        assert len(merged['edges']) == len(merged['rows']) - 1
+        assert len(slices['edges']) >= len(merged['edges'])
+        assert any('MST 剪枝（slices）' in note or 'MST pruning (slices)' in note for note in slices['notes'])
+        assert any('MST 剪枝（merged）' in note or 'MST pruning (merged)' in note for note in merged['notes'])
 
     def test_citation_metrics_are_emitted_only_when_the_data_has_them(self):
         with_metrics = bibliometrics.build(_refs(), _params(entity_type='author_cocitation', burst=False), 'test')

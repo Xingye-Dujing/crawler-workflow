@@ -18,10 +18,13 @@ ENTITY_TYPES = (
     'term',
     'category',
     'journal',
+    'source',
     'funder',
+    'grant',
     'document_cocitation',
     'author_cocitation',
     'journal_cocitation',
+    'article',
     'document',
     'bibliographic_coupling',
 )
@@ -30,13 +33,14 @@ CITATION_TYPES = (
     'document_cocitation',
     'author_cocitation',
     'journal_cocitation',
+    'article',
 )
 
 #: Document coupling and source-journal coupling read a paper's references and
 #: connect the citing units that share them. ``document`` and
 #: ``bibliographic_coupling`` are the same construction under the names used by
 #: CiteSpace and by this project; keeping both is a compatibility choice.
-COUPLING_TYPES = ('document', 'bibliographic_coupling', 'journal')
+COUPLING_TYPES = ('document', 'bibliographic_coupling', 'journal', 'source')
 
 COUPLING_TYPE = 'bibliographic_coupling'
 
@@ -45,6 +49,7 @@ OUTPUT_SHAPES = ('nodes', 'edges', 'clusters', 'bursts')
 SELECTION_MODES = ('top_n', 'top_pct', 'g_index', 'threshold')
 LINK_MEASURES = ('cosine', 'dice', 'jaccard', 'association')
 PRUNING_MODES = ('none', 'mst', 'pathfinder')
+PRUNING_SCOPES = ('slices', 'merged')
 LABEL_METHODS = ('llr', 'lsi', 'mi', 'tfidf')
 
 #: The canonical input column each entity kind reads. ``term`` reads two columns
@@ -57,10 +62,13 @@ ENTITY_COLUMNS = {
     'term': '题名',
     'category': '学科',
     'journal': '来源期刊',
+    'source': '来源期刊',
     'funder': '基金',
+    'grant': '基金',
     'document_cocitation': '参考文献',
     'author_cocitation': '参考文献',
     'journal_cocitation': '参考文献',
+    'article': '参考文献',
     'document': '题名',
     'bibliographic_coupling': '参考文献',
 }
@@ -75,10 +83,13 @@ ENTITY_REQUIRED = {
     'term': ('题名', '年份'),
     'category': ('学科', '年份'),
     'journal': ('参考文献', '来源期刊', '年份'),
+    'source': ('参考文献', '来源期刊', '年份'),
     'funder': ('基金', '年份'),
+    'grant': ('基金', '年份'),
     'document_cocitation': ('参考文献', '年份'),
     'author_cocitation': ('参考文献', '年份'),
     'journal_cocitation': ('参考文献', '年份'),
+    'article': ('参考文献', '年份'),
     'document': ('参考文献', '题名', '年份'),
     'bibliographic_coupling': ('参考文献', '题名', '年份'),
 }
@@ -114,6 +125,7 @@ DEFAULTS = {
     'max_links_per_node': 10,
     'lrf': 2.5,
     'pruning': 'none',
+    'pruning_scope': 'slices',
     'cluster': True,
     'cluster_count': '',
     'label_method': 'llr',
@@ -274,6 +286,10 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
     if pruning not in PRUNING_MODES:
         errors.append(_bad(nid, 'pruning', pruning, ', '.join(PRUNING_MODES)))
 
+    scope = str(params.get('pruning_scope') or DEFAULTS['pruning_scope']).strip()
+    if scope not in PRUNING_SCOPES:
+        errors.append(_bad(nid, 'pruning_scope', scope, ', '.join(PRUNING_SCOPES)))
+
     label_method = str(params.get('label_method') or DEFAULTS['label_method']).strip()
     if label_method not in LABEL_METHODS:
         errors.append(_bad(nid, 'label_method', label_method, ', '.join(LABEL_METHODS)))
@@ -394,6 +410,7 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         ),
         'lrf': _number(nid, 'lrf', params.get('lrf', DEFAULTS['lrf']), 1.0, 100.0),
         'pruning': str(params.get('pruning') or DEFAULTS['pruning']).strip(),
+        'pruning_scope': str(params.get('pruning_scope') or DEFAULTS['pruning_scope']).strip(),
         'cluster': as_bool(params.get('cluster'), DEFAULTS['cluster']),
         'cluster_count': count,
         'label_method': str(params.get('label_method') or DEFAULTS['label_method']).strip(),
