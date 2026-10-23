@@ -2210,6 +2210,16 @@ button.history-del:hover {
 .runs-mgr-btn:hover {
   background: var(--hover);
 }
+/* A disabled action has to look disabled. The workspace's 上一页/下一页 carry the attribute at
+   exactly the two moments they do nothing (first page, last page), and without this rule they
+   read as clickable — the screenshot showed a live-looking pair on a one-page table. */
+.runs-mgr-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.runs-mgr-btn:disabled:hover {
+  background: transparent;
+}
 .runs-mgr-btn.del:hover {
   background: rgba(140, 40, 40, 0.08);
   border-color: rgba(140, 40, 40, 0.4);
@@ -3061,12 +3071,28 @@ input:-webkit-autofill:focus {
   flex-direction: column;
   overflow: hidden;
 }
+/* The bibliometrics workspace docks in the same slot as the other readers. */
+#biblio-panel {
+  position: fixed;
+  bottom: var(--barH);
+  left: 0;
+  width: 100%;
+  height: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  z-index: 100;
+  transition: height 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 #runs-panel.open,
 #exports-panel.open,
 #dataset-panel.open,
 #workflows-panel.open,
 #cookies-panel.open,
 #lexicon-panel.open,
+#biblio-panel.open,
 #schedules-panel.open {
   height: 240px;
 }
@@ -3079,6 +3105,7 @@ input:-webkit-autofill:focus {
 #workflows-resize-handle,
 #cookies-resize-handle,
 #lexicon-resize-handle,
+#biblio-resize-handle,
 #schedules-resize-handle {
   position: absolute;
   top: 0;
@@ -3101,6 +3128,8 @@ input:-webkit-autofill:focus {
 #cookies-resize-handle.active,
 #lexicon-resize-handle:hover,
 #lexicon-resize-handle.active,
+#biblio-resize-handle:hover,
+#biblio-resize-handle.active,
 #schedules-resize-handle:hover,
 #schedules-resize-handle.active {
   background: var(--line);
@@ -3111,7 +3140,8 @@ input:-webkit-autofill:focus {
 #workflows-mgr-body,
 #cookies-mgr-body,
 #lexicon-body,
-#schedules-mgr-body {
+#schedules-mgr-body,
+#biblio-mgr-body {
   flex: 1;
   overflow: auto;
   padding: 0 8px 8px;
@@ -3123,6 +3153,7 @@ input:-webkit-autofill:focus {
   #workflows-panel.open,
   #cookies-panel.open,
   #lexicon-panel.open,
+  #biblio-panel.open,
   #schedules-panel.open {
     height: 140px;
   }
@@ -3169,6 +3200,61 @@ input:-webkit-autofill:focus {
 }
 .sched-row-off td {
   opacity: 0.6;
+}
+
+/* ── Bibliometrics workspace ──────────────────────────────────────────────
+   The table is the shared .runs-mgr-table; these carry the picker row (run,
+   node, paging), the one-line state the server answered with, and the artefact
+   chips. Nothing here decides layout the panel does not print. */
+.biblio-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.biblio-bar label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.biblio-bar select,
+.biblio-bar input {
+  font-size: 12px;
+  max-width: 260px;
+}
+.biblio-shape {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.biblio-note {
+  font-size: 11px;
+  color: var(--warn);
+  white-space: normal;
+}
+.biblio-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0 8px;
+  font-size: 11px;
+}
+.biblio-files a {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+.biblio-files a:hover {
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 /* ── Processes panel ────────────────────────────────────────────────────── */

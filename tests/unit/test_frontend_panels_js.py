@@ -49,6 +49,7 @@ PANELS = [
     'lexicon-panel',
     'schedules-panel',
     'processes-panel',
+    'biblio-panel',
 ]
 
 

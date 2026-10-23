@@ -263,6 +263,10 @@ class TestCitations:
         assert {'journal', 'category', 'overlay'} <= sides
         assert any(row['source'] and row['target'] and row['map'] == 'overlay' for row in result['rows'])
         assert result['summary']['output_shape'] == 'dual_map'
+        # x/y are also a table cell the workspace and the CSV show, so a layout artifact
+        # (97.36842105263159) must not reach them. Edge rows carry neither, by design.
+        placed = [row for row in result['rows'] if str(row['y']) != '']
+        assert placed and all(float(row['y']) == round(float(row['y']), 2) for row in placed)
 
     def test_dual_map_without_basemap_is_refused_by_name(self):
         with pytest.raises(ValueError, match='basemap'):

@@ -190,6 +190,15 @@
           Scheduled Tasks
         </button>
         <button
+          class="menu-btn"
+          type="button"
+          id="btn-biblio"
+          onclick="toggleBiblioPanel()"
+          data-i18n="biblioWs.header"
+        >
+          Bibliometrics
+        </button>
+        <button
           class="menu-btn toggle-on"
           type="button"
           id="btn-parallel"
@@ -989,6 +998,38 @@
       <div id="schedules-mgr-body" class="data-preview-table-wrap"></div>
     </div>
 
+    <!-- Bibliometrics Workspace — reads what a run's bibliometrics node left behind -->
+    <div id="biblio-panel">
+      <div id="biblio-resize-handle"></div>
+      <div class="console-header">
+        <span data-i18n="biblioWs.header">Bibliometrics</span>
+        <div class="console-actions">
+          <button
+            class="panel-close"
+            onclick="biblioWorkspace.refresh()"
+            data-i18n="btn.refresh"
+          >
+            Refresh
+          </button>
+          <button
+            class="panel-close"
+            onclick="biblioWorkspace.locate()"
+            data-i18n="biblioWs.locate"
+          >
+            Locate on canvas
+          </button>
+          <button
+            class="panel-close"
+            onclick="toggleBiblioPanel()"
+            data-i18n="stats.close"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+      <div id="biblio-mgr-body" class="data-preview-table-wrap"></div>
+    </div>
+
     <!-- Processes Panel -->
     <div id="processes-panel">
       <div class="console-header">
@@ -1043,6 +1084,14 @@
         data-i18n="schedMgr.header"
       >
         Scheduled Tasks
+      </button>
+      <button
+        class="status-btn"
+        id="btn-biblio-dock"
+        onclick="toggleBiblioPanel()"
+        data-i18n="biblioWs.header"
+      >
+        Bibliometrics
       </button>
       <button
         class="status-btn"

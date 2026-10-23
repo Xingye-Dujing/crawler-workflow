@@ -1056,7 +1056,9 @@ def build_dual_map(df: pd.DataFrame, params: dict, basemap_df: pd.DataFrame | No
                 'weight': sum(value for pair, value in cited_edges.items() if name in pair),
                 'label': name,
                 'x': 150,
-                'y': 50 + index * (900 / max(1, min(len(left_nodes), 120) - 1)),
+                # Rounded because this column is also a table cell the workspace and the CSV
+                # show: 「97.36842105263159」 is a layout artifact, not a measurement.
+                'y': round(50 + index * (900 / max(1, min(len(left_nodes), 120) - 1)), 2),
             }
         )
     for index, name in enumerate(right_nodes[:120]):
@@ -1068,7 +1070,7 @@ def build_dual_map(df: pd.DataFrame, params: dict, basemap_df: pd.DataFrame | No
                 'weight': sum(value for pair, value in category_edges.items() if name in pair),
                 'label': name,
                 'x': 850,
-                'y': 50 + index * (900 / max(1, min(len(right_nodes), 120) - 1)),
+                'y': round(50 + index * (900 / max(1, min(len(right_nodes), 120) - 1)), 2),
             }
         )
     for (left, right), weight in cited_edges.items():

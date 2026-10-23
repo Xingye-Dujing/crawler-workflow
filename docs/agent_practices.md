@@ -377,3 +377,14 @@ first "dual_map is refused" and "the chart needs an x field" were that rival's b
 then refused the fresh port outright: `5060`/`5061` are on its unsafe-port list, so the page never loaded and the symptom
 was `echarts is not defined` — a missing global that was really `ERR_UNSAFE_PORT`. Probe ports are Chrome-safe ports
 (5057/5058/5077), and a probe should say which of the two it saw.
+
+**A dock that reads a run record has to page it, and a page boundary is a multiple of the page
+size.** The bibliometrics workspace clamps its Next button with `min(total - 1, offset + LIMIT)`
+— which a real browser then demonstrated on a 164-row table with a 200-row page: Next was
+"enabled by the arithmetic", the offset jumped to 163, and the panel showed the last row alone of
+a table that fits on one page. `lastStart = floor((total - 1) / LIMIT) * LIMIT` is the honest
+clamp, and the case is pinned in the node harness (`singlePage`) because no Python test can see a
+button's disabled state. The same probe is why `refresh()`/`pickRun()`/`page()` **return** their
+load promise: a fire-and-forget `this.load()` left the caller guessing how many microtask turns
+the table needs to land, and a test that guessed wrong measured an empty panel and called it a
+pass.

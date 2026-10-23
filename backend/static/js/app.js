@@ -1335,6 +1335,29 @@ const I18n = {
                itself carries (its trigger, its next run, a refusal), so nothing here describes a
                moment: these are the panel's own words. */
             'schedMgr.header': 'Scheduled Tasks',
+            /* Bibliometrics workspace — every number and shape word on this panel is the
+               server's answer about a stored run; these are only its labels. */
+            'biblioWs.header': 'Bibliometrics',
+            'biblioWs.run': 'Run',
+            'biblioWs.node': 'Node',
+            'biblioWs.chooseRun': '(choose a run)',
+            'biblioWs.chooseNode': '(choose a node)',
+            'biblioWs.noRuns': 'No recorded run holds a bibliometrics node yet — run a canvas with one',
+            'biblioWs.unreachable': 'The run ledger could not be read',
+            'biblioWs.search': 'Filter this page…',
+            'biblioWs.page': 'rows {from}–{to} of {total}',
+            'biblioWs.filtered': '{shown} matched on this page',
+            'biblioWs.prev': 'Previous',
+            'biblioWs.next': 'Next',
+            'biblioWs.noFiles': 'This node registered no artefacts',
+            'biblioWs.locate': 'Locate on canvas',
+            'biblioWs.locateMissing': 'Node {nid} is not on this canvas',
+            'biblioWs.shapeUnknown': 'unknown shape',
+            'biblioWs.shape.nodes': 'node table',
+            'biblioWs.shape.edges': 'edge table',
+            'biblioWs.shape.clusters': 'cluster table',
+            'biblioWs.shape.bursts': 'burst table',
+            'biblioWs.shape.dual_map': 'dual-map table',
             'schedMgr.create': 'New task',
             'schedMgr.empty': 'No scheduled tasks yet',
             'schedMgr.unreachable': 'The server could not be reached',
@@ -2657,6 +2680,28 @@ const I18n = {
             /* 定时任务（面板在 schedules.js）。任务自己带的句子（时间说法、下次运行、被拒绝的原因）
                都由服务端生成，这里只有面板自己的词。 */
             'schedMgr.header': '定时任务',
+            /* 文献计量工作区：表里的数字与形态都由 /api/biblio/* 回答，这里只有面板的标签。 */
+            'biblioWs.header': '文献计量',
+            'biblioWs.run': '运行',
+            'biblioWs.node': '节点',
+            'biblioWs.chooseRun': '（选择运行）',
+            'biblioWs.chooseNode': '（选择节点）',
+            'biblioWs.noRuns': '还没有含文献计量节点的运行——请先运行一张带该节点的画布',
+            'biblioWs.unreachable': '无法读取运行台账',
+            'biblioWs.search': '在本页中筛选…',
+            'biblioWs.page': '第 {from}–{to} 行 / 共 {total} 行',
+            'biblioWs.filtered': '本页匹配 {shown} 行',
+            'biblioWs.prev': '上一页',
+            'biblioWs.next': '下一页',
+            'biblioWs.noFiles': '该节点没有登记产物',
+            'biblioWs.locate': '在画布中定位',
+            'biblioWs.locateMissing': '当前画布没有节点 {nid}',
+            'biblioWs.shapeUnknown': '输出形态未知',
+            'biblioWs.shape.nodes': '节点表',
+            'biblioWs.shape.edges': '边表',
+            'biblioWs.shape.clusters': '聚类表',
+            'biblioWs.shape.bursts': '突现表',
+            'biblioWs.shape.dual_map': '双图叠加表',
             'schedMgr.create': '新建任务',
             'schedMgr.empty': '还没有定时任务',
             'schedMgr.unreachable': '无法连接服务器',
@@ -3936,6 +3981,8 @@ initDockResize('schedules-resize-handle', 'schedules-panel');
 /* The lexicon dock carries the same handle markup but was never given a handler, so the bar
    dragged with no effect — the eighth dock wired exactly like the other seven. */
 initDockResize('lexicon-resize-handle', 'lexicon-panel');
+/* The bibliometrics workspace is the ninth dock in the same slot, with the same handle. */
+initDockResize('biblio-resize-handle', 'biblio-panel');
 
 /* ── Cookie dialog: close on outside click ──
    The platform dropdown is a CustomSelect: its menu is rendered into <body>,
