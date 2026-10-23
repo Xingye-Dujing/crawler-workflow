@@ -19,6 +19,7 @@ import crawl_gate
 import pandas as pd
 import scheduler
 from api.analysis import bp as analysis_bp
+from api.biblio import bp as biblio_bp
 from api.browser_profiles import bp as browser_profiles_bp
 from api.capabilities import bp as capabilities_bp
 from api.config import bp as config_bp
@@ -6507,6 +6508,11 @@ app.register_blueprint(history_bp)
 # scheduler's two seams, never this module, so it registers like every other Blueprint; the clock
 # itself is started by the ``__main__`` block below.
 app.register_blueprint(schedules_bp)
+#
+# /api/biblio/* (the Bibliometrics Workspace's read side) lives in api/biblio.py: it answers
+# "which runs hold a bibliometrics node" and "what did that node store" from the durable ledger,
+# so the panel holds no second opinion about either.
+app.register_blueprint(biblio_bp)
 
 
 # ─── Resumable runs ────────────────────────────────────────────

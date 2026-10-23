@@ -949,6 +949,79 @@ class RunStore:
         out.sort(key=lambda rec: rec['started_at'], reverse=True)
         return out
 
+    #: The ledger kinds a ``biblio`` node writes (``biblio_graphml`` / ``biblio_gml`` /
+    #: ``biblio_json`` / ``biblio_nodes`` …) plus the LaTeX add-ons of its charts.
+    BIBLIO_KINDS = ('biblio_', 'latex')
+
+    def list_biblio_runs(self, limit: int = 50) -> list:
+        """Runs that hold at least one bibliometrics node, newest first, with those nodes.
+
+        The workspace asks the server which runs ARE bibliometric and what each node left
+        behind: a browser that decided this from the canvas would offer a run whose node
+        produced no rows, and hide a paid-for run whose canvas was since rewired.
+        """
+        limit = max(1, int(limit))
+        grouped: dict[str, dict] = {}
+        order: list[str] = []
+        for row in self._query(
+            'SELECT r.run_id, r.workflow_name, r.started_at, r.status, '
+            '       n.node_id, n.title, n.status AS node_status, n.row_count, n.component_name '
+            "FROM node_runs n JOIN runs r ON r.run_id = n.run_id WHERE n.node_type = 'biblio' "
+            'ORDER BY r.seq DESC, n.node_id',
+            (),
+        ):
+            run_id = str(row['run_id'])
+            if run_id not in grouped:
+                if len(order) >= limit:
+                    break
+                grouped[run_id] = {
+                    'run_id': run_id,
+                    'workflow_name': row['workflow_name'] or '',
+                    'started_at': row['started_at'] or '',
+                    'status': row['status'] or '',
+                    'nodes': [],
+                }
+                order.append(run_id)
+            files = [
+                entry
+                for entry in self.files_for_run(run_id, node_id=str(row['node_id']))
+                if str(entry.get('kind') or '').startswith(self.BIBLIO_KINDS[0])
+                or str(entry.get('kind') or '') == self.BIBLIO_KINDS[1]
+            ]
+            grouped[run_id]['nodes'].append(
+                {
+                    'node_id': str(row['node_id']),
+                    'title': row['title'] or '',
+                    'status': row['node_status'] or '',
+                    'row_count': int(row['row_count'] or 0),
+                    'component_name': row['component_name'] or '',
+                    'files': files,
+                }
+            )
+        return [grouped[run_id] for run_id in order]
+
+    def load_rows_page(self, run_id: str, node_id: str, offset: int = 0, limit: int = 200) -> tuple[int, list]:
+        """One page of a node's stored rows plus the total row count.
+
+        A bibliometric node table is one row per entity and can be thousands deep; the
+        workspace pages it instead of materialising the whole run node into one response.
+        """
+        total = self._query(
+            'SELECT COUNT(*) AS n FROM node_rows WHERE run_id = ? AND node_id = ?', (str(run_id), str(node_id))
+        )
+        count = int(total[0]['n']) if total else 0
+        rows = self._query(
+            'SELECT payload FROM node_rows WHERE run_id = ? AND node_id = ? ORDER BY seq LIMIT ? OFFSET ?',
+            (str(run_id), str(node_id), max(1, int(limit)), max(0, int(offset))),
+        )
+        out = []
+        for row in rows:
+            try:
+                out.append(json.loads(row['payload']))
+            except (TypeError, ValueError):
+                continue
+        return count, out
+
     def forget_run_files(self, run_id: str) -> int:
         """Drop a run's file map (used once its files are cleared from disk)."""
         return self._execute('DELETE FROM run_files WHERE run_id = ?', (str(run_id),)).rowcount

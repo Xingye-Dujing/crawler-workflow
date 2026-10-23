@@ -439,3 +439,31 @@ class TestContracts:
         assert WorkflowEngine(workflow).validate() == []
         biblio_params = [n['params'] for n in workflow['nodes'] if n['type'] == 'biblio']
         assert biblio_params and all('year_column' in params for params in biblio_params)
+
+
+@pytest.mark.parametrize(
+    ('columns', 'shape'),
+    [
+        (['节点', '频次', '连接', '突现强度', '突现起始', '突现结束'], 'nodes'),
+        (['source', 'target', 'weight', 'count'], 'edges'),
+        (['聚类', '聚类标签', '节点数', '节点', '轮廓值'], 'clusters'),
+        (['节点', '突现起始', '突现结束', '突现强度'], 'bursts'),
+        (['map', 'source', 'target', 'weight', 'label', 'x', 'y'], 'dual_map'),
+        (['whatever'], ''),
+        ([], ''),
+    ],
+)
+def test_a_stored_table_reads_back_the_shape_it_was_emitted_as(columns, shape):
+    """The workspace labels a run's table with this, and the run record keeps no parameters —
+    so the columns are the only honest evidence, and no evidence must answer "unknown"."""
+    from services.biblio_schema import classify_shape
+
+    assert classify_shape(columns) == shape
+
+
+def test_every_output_shape_reads_back():
+    """One direction without the other is how a new shape would silently lose its label."""
+    from services.biblio_schema import OUTPUT_SHAPES, classify_shape
+
+    for shape in OUTPUT_SHAPES:
+        assert classify_shape(output_columns({'output_shape': shape})) == shape

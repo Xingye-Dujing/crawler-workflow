@@ -229,6 +229,28 @@ def output_columns(params: dict, input_columns: list[str] | None = None) -> list
     return cols
 
 
+def classify_shape(columns) -> str:
+    """The output shape a stored table was emitted as, read back off its own columns.
+
+    ``output_columns`` is the forward direction; the workspace panel needs the reverse one
+    because a run record stores rows, not the node's parameters. An unrecognised table answers
+    ``''`` — the panel then says it cannot tell, which is the honest reading of a table whose
+    shape the columns do not determine.
+    """
+    names = {str(column) for column in columns or ()}
+    if 'map' in names:
+        return 'dual_map'
+    if {'source', 'target', 'weight', 'count'} <= names:
+        return 'edges'
+    if '节点数' in names:
+        return 'clusters'
+    if {'突现起始', '突现结束', '突现强度'} <= names and '频次' not in names:
+        return 'bursts'
+    if '节点' in names:
+        return 'nodes'
+    return ''
+
+
 def _bad(nid: str, param: str, value, allowed) -> str:
     return t('biblio.bad_option', nid=nid or '(biblio)', param=param, value=value, allowed=allowed)
 
