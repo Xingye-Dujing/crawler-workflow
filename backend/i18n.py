@@ -162,6 +162,7 @@ _ZH = {
     ),
     'biblio.refs_low_rate': '参考文献解析率 {rate} 低于 {floor}：无法可靠构建引文图谱',
     'biblio.refs_field_low': '{field} 解析率 {rate} 低于 {floor}：无法可靠构建引文图谱',
+    'biblio.citation_expansion_done': '引文扩展 depth={depth}：通过数据集内已有文献新增 {added} 条可解析引文',
     'biblio.no_records': '没有可用文献记录：请确认年份列可解析',
     'biblio.no_records_in_range': '{start}–{end} 范围内没有文献记录',
     'biblio.year_missing': '{n} 条记录缺少年份，已跳过（时间切片需要年份）',
@@ -1703,6 +1704,9 @@ _EN = {
     ),
     'biblio.refs_low_rate': 'Reference parse rate {rate} is below {floor}; a citation graph cannot be built reliably',
     'biblio.refs_field_low': '{field} parse rate {rate} is below {floor}; a citation graph cannot be built reliably',
+    'biblio.citation_expansion_done': (
+        'Citation expansion depth={depth}: added {added} parseable references from records in this table'
+    ),
     'biblio.no_records': 'No usable bibliographic records: check that the year column is parseable',
     'biblio.no_records_in_range': 'No records in {start}–{end}',
     'biblio.year_missing': '{n} records have no year and were skipped (time slicing needs a year)',

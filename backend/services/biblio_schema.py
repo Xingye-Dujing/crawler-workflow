@@ -122,6 +122,7 @@ DEFAULTS = {
     'min_usage': '',
     'largest_component': False,
     'link_measure': 'cosine',
+    'citation_expansion': 0,
     'max_links_per_node': 10,
     'lrf': 2.5,
     'pruning': 'none',
@@ -316,6 +317,7 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
             nid, 'max_links_per_node', params.get('max_links_per_node', DEFAULTS['max_links_per_node']), 1, 200
         )
     )
+    check(lambda: _whole(nid, 'citation_expansion', params.get('citation_expansion', 0), 0, 2))
     check(lambda: _number(nid, 'lrf', params.get('lrf', DEFAULTS['lrf']), 1.0, 100.0))
     check(lambda: _whole(nid, 'top_terms', params.get('top_terms', DEFAULTS['top_terms']), 1, 20))
     check(lambda: _number(nid, 'burst_gamma', params.get('burst_gamma', DEFAULTS['burst_gamma']), 0.01, 100.0))
@@ -405,6 +407,7 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         'min_usage': _optional_whole(nid, 'min_usage', params.get('min_usage', DEFAULTS['min_usage'])),
         'largest_component': as_bool(params.get('largest_component'), DEFAULTS['largest_component']),
         'link_measure': str(params.get('link_measure') or DEFAULTS['link_measure']).strip(),
+        'citation_expansion': _whole(nid, 'citation_expansion', params.get('citation_expansion', 0), 0, 2),
         'max_links_per_node': _whole(
             nid, 'max_links_per_node', params.get('max_links_per_node', DEFAULTS['max_links_per_node']), 1, 200
         ),

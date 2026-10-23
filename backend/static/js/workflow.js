@@ -3391,6 +3391,7 @@ function renderBiblioSettings(nodeId, p) {
         renderParamInput(nodeId, p, 'min_usage', 'biblio.ui.minUsage', 'number', '') +
         renderParamCheckbox(nodeId, p, 'largest_component', 'biblio.ui.largestComponent', false);
     html += renderParamSelect(nodeId, p, 'link_measure', 'biblio.ui.linkMeasure', 'cosine', biblioMeasureOptions(BIBLIO_LINK_MEASURES)) +
+        renderParamInput(nodeId, p, 'citation_expansion', 'biblio.ui.citationExpansion', 'number', 0) +
         renderParamInput(nodeId, p, 'max_links_per_node', 'biblio.ui.maxLinks', 'number', 10) +
         renderParamInput(nodeId, p, 'lrf', 'biblio.ui.lrf', 'number', 2.5) +
         renderParamSelect(nodeId, p, 'pruning', 'biblio.ui.pruning', 'none', biblioPruningOptions(BIBLIO_PRUNING_MODES)) +

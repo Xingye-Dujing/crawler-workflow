@@ -198,6 +198,25 @@ class TestCitations:
         params.pop('burst')
         assert normalize_params(params, 'test')['burst'] is False
 
+    def test_citation_expansion_uses_references_from_records_in_the_table(self):
+        frame = pd.DataFrame(
+            [
+                {'题名': 'A', '年份': 2021, '参考文献': '[1] B. B.'},
+                {'题名': 'B', '年份': 2020, '参考文献': '[1] C. C.\n[2] D. D.'},
+                {'题名': 'E', '年份': 2022, '参考文献': '[1] C. C.\n[2] D. D.'},
+            ]
+        )
+        direct = bibliometrics.build(frame, _params(entity_type='document_cocitation', burst=False), 'test')
+        expanded = bibliometrics.build(
+            frame,
+            _params(entity_type='document_cocitation', burst=False, citation_expansion=1),
+            'test',
+        )
+        assert {row['节点'] for row in direct['rows']} == {'C', 'D'}
+        assert {row['节点'] for row in expanded['rows']} == {'B', 'C', 'D'}
+        assert len(expanded['edges']) > len(direct['edges'])
+        assert any('引文扩展' in note or 'Citation expansion' in note for note in expanded['notes'])
+
 
 class TestPhaseTwoContracts:
     def test_document_is_the_cite_space_name_for_bibliographic_coupling(self):
