@@ -97,10 +97,10 @@ class TestTheDock:
 
 
 class TestServerAnswersAreNotInvented:
-    def test_no_recorded_run_says_so_and_asks_once(self, placed):
+    def test_no_recorded_run_says_so_and_asks_only_the_two_lists(self, placed):
         case = placed['empty']
         assert case['saidSo'] is True
-        assert case['asked'] == 1, 'the panel asked more than the run list'
+        assert case['asked'] == ['/api/biblio/runs', '/api/biblio/projects'], 'what did the dock ask for?'
         assert case['hasTable'] is False
 
     def test_the_pickers_list_exactly_what_the_server_listed(self, placed):
@@ -158,6 +158,46 @@ class TestPagingAndFiltering:
         assert case['kept'] is True and case['dropped'] is True
         assert case['saidHowMany'] is True
         assert case['totalStillServers'] is True
+
+
+class TestCapturesAndDiff:
+    def test_a_capture_that_cannot_happen_is_refused_before_it_is_sent(self, placed):
+        """No project chosen → the button is dead AND says why, and nothing was POSTed.
+        A disabled control with no reason beside it reads as a broken panel."""
+        case = placed['captureBlocked']
+        assert case['disabled'] is True
+        assert case['reason'] is True
+        assert case['sent'] == 0, 'the panel sent a capture it knew would be refused'
+
+    def test_with_a_project_the_button_lives_and_the_kept_captures_are_listed(self, placed):
+        case = placed['captureReady']
+        assert case['enabled'] is True
+        assert case['listsSnapshots'] is True
+        assert case['paramsWords'] is True, 'verified / not-verified is the server claim about provenance'
+        assert case['compareDisabledWithoutBaseline'] is True
+
+    def test_the_create_button_is_an_element_and_not_swallowed_text(self, placed):
+        """An `onclick` whose quote never closed turned the rest of the bar into a text node —
+        the panel looked intact to the DOM stub and was broken in Chrome."""
+        case = placed['captureReady']
+        assert case['createButton'] is True
+        assert case['noStrayMarkup'] is True
+
+    def test_setting_a_baseline_enables_the_other_capture_and_prints_the_diff(self, placed):
+        case = placed['diff']
+        assert case['compareEnabled'] is True
+        assert case['title'] is True
+        assert case['askedUrl'] == '/api/biblio/compare?a=s-1&b=s-2'
+        assert case['paramsLine'] is True, 'the parameter that moved is the headline, not a footnote'
+        assert case['nodesLine'] is True
+        assert case['changedCell'] is True
+        assert case['capped'] is True, '31 added links with one listed must say so'
+        assert case['hidden'] is True
+
+    def test_an_identical_pair_says_so_without_empty_headings(self, placed):
+        case = placed['diffQuiet']
+        assert case['saidSo'] is True
+        assert case['noHeadings'] is True
 
 
 class TestLocateAndArtefacts:

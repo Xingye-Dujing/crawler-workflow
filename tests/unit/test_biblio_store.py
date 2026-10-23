@@ -126,6 +126,40 @@ class TestCompare:
         assert diff['same_shape'] is False
 
 
+class TestCapture:
+    """`snapshot_capture` splits a stored table into nodes and edges before it is filed."""
+
+    def test_a_nodes_table_loses_its_adjacency_to_the_edge_list_once(self):
+        from services.bibliometrics import snapshot_capture
+
+        rows = [
+            {'节点': '甲', '频次': 3, '连接': '[{"target": "乙", "value": 1.0, "count": 2}]'},
+            {'节点': '乙', '频次': 2, '连接': '[{"target": "甲", "value": 1.0, "count": 2}]'},
+        ]
+        captured = snapshot_capture(rows)
+        assert [row['节点'] for row in captured['nodes']] == ['甲', '乙']
+        assert all('连接' not in row for row in captured['nodes']), 'the same fact twice is how they drift'
+        assert len(captured['edges']) == 1, 'the link is listed from both ends of the node table'
+        # stored under the canonical (code-point) endpoint pair, the way the diff compares them
+        assert captured['edges'][0] == {'source': '乙', 'target': '甲', 'weight': 1.0, 'count': 2}
+
+    def test_a_dual_map_table_keeps_its_nodes_not_only_its_links(self):
+        """A dual-map table names entities in ``source`` and marks a node row by an empty
+        ``target``; reading only ``节点`` captured its links and lost every node."""
+        from services.bibliometrics import snapshot_capture
+
+        rows = [
+            {'map': 'journal', 'source': '甲刊', 'target': '', 'weight': 14},
+            {'map': 'category', 'source': '公共管理', 'target': '', 'weight': 9},
+            {'map': 'journal', 'source': '甲刊', 'target': '乙刊', 'weight': 3},
+            {'map': 'overlay', 'source': '甲刊', 'target': '公共管理', 'weight': 5},
+        ]
+        captured = snapshot_capture(rows)
+        assert {row['节点'] for row in captured['nodes']} == {'甲刊', '公共管理'}
+        assert {'source': '乙刊', 'target': '甲刊', 'weight': 3.0, 'count': 0} in captured['edges']
+        assert sum(1 for e in captured['edges'] if '公共管理' in (e['source'], e['target'])) == 1
+
+
 class TestStore:
     @pytest.fixture
     def store(self, tmp_path):

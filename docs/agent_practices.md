@@ -388,3 +388,26 @@ button's disabled state. The same probe is why `refresh()`/`pickRun()`/`page()` 
 load promise: a fire-and-forget `this.load()` left the caller guessing how many microtask turns
 the table needs to land, and a test that guessed wrong measured an empty panel and called it a
 pass.
+
+**A capture is not a run record, and its parameters are only provenance if they are proved.** A
+`node_runs` row stores a node's *fingerprint*, not its settings — the canvas file holds those. So
+`POST /api/biblio/snapshot` reads the parameters out of the **saved** workflow and recomputes the
+node fingerprint: equal, and the snapshot carries them with `params_verified=1`; unequal (canvas
+rewired, file deleted), and it stores `{}` with `params_verified=0` and the panel prints 「未核对」.
+Filing the settings a panel happens to be holding as "the parameters that produced these rows" is
+how a paper ends up describing a run that never happened. The same reason drives two other rules
+there: the capture reads **all** stored rows (a prefix of a table compared against another prefix
+measures the page size, not the corpus), and the diff is computed server-side, with undirected
+edges keyed by their canonical endpoint pair — a node table lists every link from both ends, so
+comparing rows in arrival order reports a weight change on every edge that merely came from the
+other side.
+
+**An `onclick` attribute is two grammars and the DOM stub will not tell you.** The workspace's
+新建 button was built as `'… onclick="x.createProject(' + "document.getElementById('id').value)" + '>…'`
+— the fragment that looked like it ended the attribute ended the *string* instead, so the quote
+never closed and Chrome swallowed the rest of the bar as a text node. Every node-harness assertion
+still passed: the stub parses attributes it recognises and ignores the wreckage. Two fixes, both
+now rules here: the handler reads its own input element (`createProject()` with no argument), so
+nothing but a plain literal sits inside the attribute; and the harness asserts the button is a
+closed element (`/onclick="…createProject\(\)">[^<]*<\/button>/`) plus that no `</button></div>`
+sequence ever appears inside an attribute value.

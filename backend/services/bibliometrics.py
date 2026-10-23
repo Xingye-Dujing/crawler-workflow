@@ -1363,9 +1363,18 @@ def snapshot_capture(rows: list[dict]) -> dict:
         if source and target:
             remember(source, target, row.get('weight'), row.get('count'))
             continue
+        # A dual-map table has no `节点` column: it names its entities in `source` and marks the
+        # node rows by an empty `target`. Reading only `节点` captured none of them, so a
+        # dual-map snapshot stored its links and lost its nodes.
+        if not name:
+            name = source
         if not name:
             continue
-        nodes.append({key: value for key, value in row.items() if key not in ('连接', '年份序列')})
+        nodes.append(
+            {key: (value if key != '节点' else name) for key, value in row.items() if key not in ('连接', '年份序列')}
+        )
+        if '节点' not in row:
+            nodes[-1]['节点'] = name
         for link in _as_list(row.get('连接')):
             remember(name, str(link.get('target') or ''), link.get('value'), link.get('count'))
 

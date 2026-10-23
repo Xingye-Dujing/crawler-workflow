@@ -83,6 +83,56 @@ const TABLE = {
     files: NODE.files,
 };
 
+const PROJECTS = {
+    ok: true,
+    projects: [
+        {
+            project_id: 'p-1',
+            name: '数字治理五年',
+            snapshots: [
+                {
+                    snapshot_id: 's-1', label: '2020 基线', created_at: '2026-10-20T10:00:00', shape: 'nodes',
+                    node_count: 38, edge_count: 120, params_verified: 1, node_id: 'node-2',
+                },
+                {
+                    snapshot_id: 's-2', label: '2021 增量', created_at: '2026-10-21T10:00:00', shape: 'nodes',
+                    node_count: 44, edge_count: 151, params_verified: 0, node_id: 'node-2',
+                },
+            ],
+        },
+    ],
+};
+const DIFF = {
+    ok: true,
+    diff: {
+        a: { label: '2020 基线', snapshot_id: 's-1' },
+        b: { label: '2021 增量', snapshot_id: 's-2' },
+        same_shape: true,
+        same_project: true,
+        params_differ: { total: 1, items: [{ name: 'slice_years', a: 2, b: 3 }] },
+        nodes: {
+            a: 38, b: 44, common: 30,
+            added: { total: 6, items: ['数字治理', '数据要素'] },
+            removed: { total: 0, items: [] },
+            changed: { total: 1, items: [{ name: '公共服务', columns: { 频次: { a: 4, b: 9 } } }] },
+        },
+        edges: {
+            a: 120, b: 151,
+            added: { total: 31, items: [{ source: '甲', target: '乙' }] },
+            removed: { total: 0, items: [] },
+            weight_changed: { total: 0, items: [] },
+        },
+        clusters: {
+            a: 4, b: 5, added: { total: 1, items: ['4'] }, removed: { total: 0, items: [] },
+            relabeled: { total: 0, items: [] }, size_changed: { total: 0, items: [] },
+        },
+        bursts: {
+            a: 3, b: 4, added: { total: 1, items: ['算法问责'] }, removed: { total: 0, items: [] },
+            strength_changed: { total: 0, items: [] },
+        },
+    },
+};
+
 function world(answers) {
     const sandbox = {
         ...baseSandbox(),
@@ -107,7 +157,10 @@ function world(answers) {
     sandbox.fetch = (url) => {
         const u = String(url);
         requests.push(u);
-        const payload = u.indexOf('/api/biblio/table') >= 0 ? answers.table : answers.runs;
+        let payload = answers.runs;
+        if (u.indexOf('/api/biblio/table') >= 0) payload = answers.table;
+        else if (u.indexOf('/api/biblio/projects') >= 0) payload = answers.projects || { ok: true, projects: [] };
+        else if (u.indexOf('/api/biblio/compare') >= 0) payload = answers.diff || { ok: false, error: 'no diff stub' };
         return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(payload)), status: 200 });
     };
     return {
@@ -142,7 +195,7 @@ const out = {};
     const w = await scenario({ runs: { ok: true, runs: [] }, table: TABLE });
     out.empty = {
         saidSo: w.html().indexOf(w.x.I18n.t('biblioWs.noRuns')) >= 0,
-        asked: w.requests.length,
+        asked: w.requests,
         hasTable: w.html().indexOf('<table') >= 0,
     };
 }
@@ -293,6 +346,79 @@ const out = {};
         changed: before !== after,
         otherWordInAfter: after.indexOf(other) >= 0,
         otherWordNotInBefore: before.indexOf(other) < 0,
+    };
+}
+
+// 11 · a capture is refused BEFORE it is sent, and the button says why.
+{
+    const w = await scenario({ runs: RUNS, table: { ...TABLE }, projects: { ok: true, projects: [] } });
+    const html = w.html();
+    out.captureBlocked = {
+        disabled: /onclick="biblioWorkspace\.capture\(\)" disabled/.test(html),
+        reason: html.indexOf(w.x.I18n.t('biblioWs.captureNeedsProject')) >= 0,
+        sent: w.requests.filter((u) => u.indexOf('/api/biblio/snapshot') >= 0).length,
+    };
+}
+
+// 12 · with a project chosen the button lives, and the list shows what the project kept.
+{
+    const w = await scenario({ runs: RUNS, table: { ...TABLE }, projects: PROJECTS });
+    const html = w.html();
+    out.captureReady = {
+        enabled: /onclick="biblioWorkspace\.capture\(\)" disabled/.test(html) === false,
+        listsSnapshots: html.indexOf('2020 基线') >= 0 && html.indexOf('2021 增量') >= 0,
+        // The create button must be a closed element: an unbalanced quote in an `onclick`
+        // once turned the rest of the bar into text, and only a browser noticed.
+        createButton: /onclick="biblioWorkspace\.createProject\(\)">[^<]*<\/button>/.test(html),
+        noStrayMarkup: html.indexOf('</button></div><div class="') < 0,
+        // The verified/unverified flag is the server's claim about provenance, printed as such.
+        paramsWords: [w.x.I18n.t('biblioWs.paramsVerified'), w.x.I18n.t('biblioWs.paramsUnverified')].every(
+            (word) => html.indexOf(word) >= 0
+        ),
+        compareDisabledWithoutBaseline:
+            (html.match(/onclick="biblioWorkspace\.compareWith\('s-1'\)" disabled/g) || []).length === 1,
+    };
+}
+
+// 13 · setting a baseline enables comparing the other capture, and the diff prints the server's.
+{
+    const w = await scenario({ runs: RUNS, table: { ...TABLE }, projects: PROJECTS, diff: DIFF });
+    w.x.biblioWorkspace.setBaseline('s-1');
+    const afterBaseline = w.html();
+    await w.x.biblioWorkspace.compareWith('s-2');
+    const html = w.html();
+    out.diff = {
+        compareEnabled: /onclick="biblioWorkspace\.compareWith\('s-2'\)" disabled/.test(afterBaseline) === false,
+        title: html.indexOf(w.x.I18n.t('biblioWs.diffTitle', { a: '2020 基线', b: '2021 增量' })) >= 0,
+        paramsLine: html.indexOf('slice_years: 2 → 3') >= 0,
+        nodesLine: html.indexOf(w.x.I18n.t('biblioWs.line.nodesAdded', { total: 6 })) >= 0,
+        changedCell: html.indexOf('公共服务') >= 0 && html.indexOf('频次: 4 → 9') >= 0,
+        // 31 links were added but only one is listed: the cap has to say so.
+        capped: html.indexOf(w.x.I18n.t('biblioWs.capped', { shown: 1, total: 31 })) >= 0,
+        askedUrl: w.requests.filter((u) => u.indexOf('/api/biblio/compare') >= 0).pop(),
+    };
+    w.x.biblioWorkspace.clearDiff();
+    out.diff.hidden = w.html().indexOf(w.x.I18n.t('biblioWs.diffTitle', { a: '2020 基线', b: '2021 增量' })) < 0;
+}
+
+// 14 · an identical pair says "no difference" instead of printing five empty headings.
+{
+    const empty = await scenario({ runs: RUNS, table: { ...TABLE }, projects: PROJECTS });
+    const none = { total: 0, items: [] };
+    empty.x.biblioWorkspace._diff = {
+        a: { label: 'A' }, b: { label: 'B' }, same_shape: true, same_project: true,
+        params_differ: none,
+        nodes: { a: 38, b: 38, common: 38, added: none, removed: none, changed: none },
+        edges: { a: 120, b: 120, added: none, removed: none, weight_changed: none },
+        clusters: { a: 4, b: 4, added: none, removed: none, relabeled: none, size_changed: none },
+        bursts: { a: 3, b: 3, added: none, removed: none, strength_changed: none },
+    };
+    empty.x.biblioWorkspace.render();
+    out.diffQuiet = {
+        saidSo: empty.html().indexOf(empty.x.I18n.t('biblioWs.diffNone')) >= 0,
+        // Counted by the heading element, not by its word: 「Nodes」 is also a table column
+        // header on this same panel, so a substring test would fail for the wrong reason.
+        noHeadings: (empty.html().match(/class="sched-status"/g) || []).length === 0,
     };
 }
 

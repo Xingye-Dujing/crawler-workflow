@@ -63,6 +63,10 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 | `/api/exports/download` | GET | 按**文件名**下载某个导出文件（越界名→404，脚本类扩展名→404） |
 | `/api/exports/delete` | POST | 删除单个导出文件（不接受路径、前缀或递归） |
 | `/api/exports/clear` | POST | 清空导出目录，**必须带 `{"confirm": true}`**（否则 400）：只逐个删面板列出的那些名字（复用单条删除的同一个解析器，所以子目录与被拒的符号链接不会因为"批量"就漏网），并**反复清到某一轮什么也没删掉为止**（面板列表有 500 条上限，只跑一轮会删掉最新的几百个然后重载出一堆"没清掉"的文件，还报一句已清空）；**有运行在跑时 409 整体拒绝**（流式节点正在往里写分片） |
+| `/api/biblio/compare` | GET | 两次快照的差异，**在服务端算**（`biblio_store.compare_snapshots`）：`params_differ` / `nodes.added·removed·changed`（逐列 a→b）/ `edges.added·removed·weight_changed`（无向边按规范化端点对比较——节点表把每条边从两端各列一次，按原始行序比会谎报权重变化）/ `clusters.added·removed·relabeled·size_changed` / `bursts.added·removed·strength_changed`；每段超过 60 条只列前 60，但同时给出 `total`（截断的 diff 装作完整就是错的 diff）。`a`/`b` 缺一个或相同 → 400；任一快照不存在 → 404 并报出是哪个 id |
+| `/api/biblio/projects` | GET | 每个项目连同其快照表头（标签 / 时间 / 形态 / 节点数 / 边数 / `params_verified`），一次调用给全面板所需；表头**不带**已存行，行只在 `/api/biblio/snapshots/<id>` 里给（预览上限 100 条，并写出 `node_total`/`edge_total`/`preview_limit`） |
+| `/api/biblio/project` `/rename` `/delete` | POST | 建 / 改名 / 删项目；名字为空按 400 拒，项目不存在按 404 指名，删除连带清掉它下面的快照并回报数量 |
+| `/api/biblio/snapshot` `/delete` | POST | 把某运行某节点的**全部**已存行捕获进项目（不是当前那一页——前缀相同的两份表比出来的差异是前缀的长度）；参数从**已保存的画布**读取并用运行记下的节点指纹核对，核对不上记 `params_verified=0`，不把面板当前设置当 provenance。非 `biblio` 节点 400、无已存行 400、项目/运行不存在 404，都指名 |
 | `/api/exports/ledger` | GET | 列出**写过导出文件**的每一次运行及其文件清单（`run_id`/`workflow_name`/`started_at`/`files[{name,kind,node_id}]`）——「智能清除」选择器的数据源，读 `runs.db` 的运行→文件台账而非目录扫描，所以只给可操作的记录 |
 | `/api/biblio/runs` | GET | 文献计量工作区的数据源：按时间倒序列出**含 `biblio` 节点的运行**，每条带该运行里的节点（`node_id/title/status/row_count/component_name`）与其登记产物（`biblio_*` / `latex`）。判定「哪些算文献计量运行」是服务端对 `node_runs.node_type` 的读取，浏览器不再自己判断，因此重启后、刷新后、画布改过后仍能找回那次付费运行 |
 | `/api/biblio/table` | GET | 分页读回某运行某节点的已存表：`run_id` + `node_id` + `offset`/`limit`（默认 200，上限 1000，非法值收敛为更小的一页而非 500），返回 `columns/rows/total/offset/shape/files`。`shape` 由**列本身**判读（`classify_shape`：`nodes`/`edges`/`clusters`/`bursts`/`dual_map`，判不出为空串），面板据此显示「输出形态未知」而不是猜一个。运行不存在→404 并报出 id；节点不在该运行→404；节点不是文献计量→400；节点存在但没有已存行（被停止/失败/清理）→200 且带 `note` 指名该节点，绝不画成一张空表 |
