@@ -117,6 +117,35 @@ class TestKeywordNetwork:
         assert {'聚类', '聚类标签', '轮廓值'} <= set(clustered['rows'][0])
         assert clustered['summary']['clusters']['k'] >= 1
 
+    def test_a_person_can_name_a_cluster(self):
+        """LLR picks a label from the corpus; sometimes the researcher already knows what the
+        group is. The override wins, and the summary says which method actually produced the
+        labels rather than the one that was asked for."""
+        asked = sorted({row['聚类'] for row in bibliometrics.build(_keywords(), _params(cluster=True), 'test')['rows']})
+        first = asked[0]
+        result = bibliometrics.build(_keywords(), _params(cluster=True, cluster_labels=f'#{first}=人工命名'), 'test')
+        landed = {row['聚类标签'] for row in result['rows'] if str(row['聚类']) == str(first)}
+        assert landed == {'人工命名'}
+        assert '+manual' in result['summary']['clusters']['method']
+        assert any('人工簇标签已应用' in note for note in result['notes'])
+
+    def test_a_cluster_label_without_the_hash_still_lands(self):
+        result = bibliometrics.build(_keywords(), _params(cluster=True, cluster_labels='0=裸键'), 'test')
+        assert any(row['聚类标签'] == '裸键' for row in result['rows'] if str(row['聚类']) == '0')
+
+    def test_a_label_for_a_cluster_that_is_not_there_is_named_not_dropped(self):
+        """A stale line from an earlier slicing is a fact the user should see; silently ignoring
+        it leaves them believing the cluster is called that."""
+        result = bibliometrics.build(_keywords(), _params(cluster=True, cluster_labels='#77=不存在的簇'), 'test')
+        assert any('#77' in note and '未生效' in note for note in result['notes'])
+        assert not any('人工簇标签已应用' in note for note in result['notes'])
+
+    def test_cluster_labels_without_clustering_are_refused_by_name(self):
+        from services.biblio_schema import collect_errors
+
+        errors = collect_errors({'entity_type': 'keyword', 'cluster': False, 'cluster_labels': '#0=x'}, 'test')
+        assert any('cluster_labels' in error or '聚类' in error for error in errors)
+
     def test_a_missing_column_is_refused_by_name(self):
         frame = _keywords().drop(columns=['关键词'])
         with pytest.raises(ValueError, match='关键词'):

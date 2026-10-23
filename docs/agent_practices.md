@@ -411,3 +411,13 @@ now rules here: the handler reads its own input element (`createProject()` with 
 nothing but a plain literal sits inside the attribute; and the harness asserts the button is a
 closed element (`/onclick="…createProject\(\)">[^<]*<\/button>/`) plus that no `</button></div>`
 sequence ever appears inside an attribute value.
+
+**A manual label counts only when it lands, and a stale one is named.** `cluster_labels` overrides
+what LLR/LSI/MI/TF-IDF picked, and the note has to report the number that actually matched a
+cluster in *this* run — counting the lines the box holds would tell the reader three overrides
+applied when one named a cluster that no longer exists. So the applied count comes from the
+matched keys, each unmatched `#k` gets its own console line, and `summary.clusters.method` grows a
+`+manual` suffix only when something really landed (a summary that names the asked-for method
+after a person overrode it is the same lie as a degraded analyzer printing the model it did not
+use). Filling the box while clustering is off is refused before the run: the labels choose names
+for objects that will not exist, which is a configuration mistake, not a preference.

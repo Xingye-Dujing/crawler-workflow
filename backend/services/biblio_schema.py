@@ -136,6 +136,7 @@ DEFAULTS = {
     'burst_top': 20,
     'aliases': '',
     'exclude_values': '',
+    'cluster_labels': '',
     'basemap_dataset_id': '',
     'output_shape': 'nodes',
     'export_files': True,
@@ -376,6 +377,10 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
         errors.append(t('biblio.shape_needs_burst', nid=nid or '(biblio)'))
     if shape == 'dual_map' and not str(params.get('basemap_dataset_id') or '').strip():
         errors.append(t('biblio.dual_map_needs_basemap', nid=nid or '(biblio)'))
+    if str(params.get('cluster_labels') or '').strip() and not as_bool(params.get('cluster'), DEFAULTS['cluster']):
+        # Naming clusters that will not exist is a stale box, not a preference: say which switch
+        # is missing instead of quietly ignoring the labels the user typed.
+        errors.append(t('biblio.cluster_labels_need_cluster', nid=nid or '(biblio)'))
     return errors
 
 
@@ -457,6 +462,7 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         'burst_top': _whole(nid, 'burst_top', params.get('burst_top', DEFAULTS['burst_top']), 1, 500),
         'aliases': str(params.get('aliases') or '').strip(),
         'exclude_values': str(params.get('exclude_values') or '').strip(),
+        'cluster_labels': str(params.get('cluster_labels') or '').strip(),
         'basemap_dataset_id': str(params.get('basemap_dataset_id') or '').strip(),
         'output_shape': str(params.get('output_shape') or DEFAULTS['output_shape']).strip(),
         'export_files': as_bool(params.get('export_files'), DEFAULTS['export_files']),

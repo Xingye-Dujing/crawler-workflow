@@ -460,6 +460,48 @@ def _parse_exclusion_set(text: str) -> set[str]:
     return {line.strip() for line in str(text or '').splitlines() if line.strip()}
 
 
+def _parse_cluster_overrides(text: str) -> dict[str, str]:
+    """``#<cluster>=<label>`` lines: a person, not LLR, decides what a cluster is called.
+
+    The key keeps its ``#`` because that is how every surface here prints a cluster, and a
+    bare ``0=…`` would read as a row index to whoever edits the box later.
+    """
+    overrides: dict[str, str] = {}
+    for line in str(text or '').splitlines():
+        if '=' not in line:
+            continue
+        key, _, label = line.partition('=')
+        key = key.strip()
+        label = label.strip()
+        if key and label:
+            overrides[key if key.startswith('#') else f'#{key}'] = label
+    return overrides
+
+
+def _apply_cluster_overrides(clusters: dict, text: str) -> tuple[int, list[str]]:
+    """Rewrite the stored cluster labels; report how many landed and which named no cluster.
+
+    An override for a cluster the run did not produce is a stale line from an earlier slicing,
+    so it is named on the console rather than dropped in silence — and it is not a refusal: the
+    labels that DO match are the ones the user asked for.
+    """
+    overrides = _parse_cluster_overrides(text)
+    if not overrides:
+        return 0, []
+    present = {f"#{member.get('cluster')}" for member in clusters['members'].values()}
+    applied = [key for key in overrides if key in present]
+    for key in applied:
+        for member in clusters['members'].values():
+            if f"#{member.get('cluster')}" == key:
+                member['cluster_label'] = overrides[key]
+    summary = clusters.setdefault('summary', {})
+    if applied and summary.get('method'):
+        # The label a reader sees was produced by a person, not by the asked-for method, and the
+        # summary has to say so — a count of lines that merely *exist* would overstate it.
+        summary['method'] = f"{summary['method']}+manual"
+    return len(applied), sorted(set(overrides) - set(applied))
+
+
 def _apply_label_rules(
     labels: dict[str, str],
     year_counts: dict[str, Counter],
@@ -1235,6 +1277,11 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
                     used=clusters['summary']['method'],
                 )
             )
+        applied, unmatched = _apply_cluster_overrides(clusters, params.get('cluster_labels') or '')
+        if applied:
+            notes.append(t('biblio.cluster_labels_applied', n=applied))
+        for key in unmatched:
+            notes.append(t('biblio.cluster_label_unmatched', cluster=key))
 
     positions = _layout(graph, final_nodes)
     type_label = t(ENTITY_LABEL_KEYS[params['entity_type']])

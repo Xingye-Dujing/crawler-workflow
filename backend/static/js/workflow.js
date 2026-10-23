@@ -3423,6 +3423,16 @@ function renderBiblioSettings(nodeId, p) {
         '<textarea class="settings-input" rows="4" placeholder="' + escapeHtml(I18n.t('biblio.ui.exclusionsPlaceholder')) + '" ' +
         'onchange="updateParam(\'' + nodeId + '\',\'exclude_values\',this.value)">' + escapeHtml(p.exclude_values || '') + '</textarea>' +
         '<div class="settings-hint">' + I18n.t('biblio.ui.correctionHint') + '</div></div>';
+    if (!isBiblioCoupling(entity)) {
+        // A coupling network's clusters are the citing documents, which no one names by hand;
+        // the box only appears where a label can actually be overridden.
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('biblio.ui.clusterLabels') + '</label>' +
+            '<textarea class="settings-input" rows="3" placeholder="' +
+            escapeHtml(I18n.t('biblio.ui.clusterLabelsPlaceholder')) + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'cluster_labels\',this.value)">' +
+            escapeHtml(p.cluster_labels || '') + '</textarea>' +
+            '<div class="settings-hint">' + I18n.t('biblio.ui.clusterLabelsHint') + '</div></div>';
+    }
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.output') + '</div>';
     html += renderParamSelect(nodeId, p, 'output_shape', 'biblio.ui.outputShape', 'nodes', biblioOutputShapeOptions(BIBLIO_OUTPUT_SHAPES));
