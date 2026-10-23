@@ -14,6 +14,7 @@ BIBLIO_CHART_TYPES = (
     'landscape',
     'biblio_heatmap',
     'graph3d',
+    'dual_map',
 )
 
 #: Charts whose x axis is not a user-selected column. Validation must not demand
@@ -33,4 +34,5 @@ BIBLIO_CHART_READS = {
     'landscape': ('节点', '聚类', '聚类标签', '频次'),
     'biblio_heatmap': ('节点', '聚类', '聚类标签', '年份序列', '频次'),
     'graph3d': ('节点', 'x', 'y', '连接', '频次'),
+    'dual_map': ('map', 'source', 'target', 'weight'),
 }

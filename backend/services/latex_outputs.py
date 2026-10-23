@@ -19,7 +19,7 @@ from state import add_log
 from config import Config
 from i18n import t
 from services.latex_charts import LatexChartService
-from services.visualizer import ECHARTS_ONLY_TYPES
+from services.visualizer import LATEX_UNBUILDABLE_TYPES
 from utils.helpers import as_bool, sanitize_filename
 
 logger = logging.getLogger(__name__)
@@ -64,9 +64,10 @@ def build_latex_outputs(
     and named on the console once (in a real run, not a transient preview).
     """
     out: dict = {}
-    if chart_type in ECHARTS_ONLY_TYPES:
-        # An echarts-only figure (wordcloud/sankey/网络图/模型一致率…) has no LaTeX twin by
-        # design; emitting would record a spurious latex_error for a chart that rendered fine.
+    if chart_type in LATEX_UNBUILDABLE_TYPES:
+        # 模型一致率 is the one catalogue entry with no paper twin; emitting for it would record a
+        # spurious latex_error for a chart that rendered fine. Everything else — including the
+        # ECharts-only word cloud, sankey, map and bibliometric views — has a TikZ builder.
         return {}
     common = dict(
         x=x_field,

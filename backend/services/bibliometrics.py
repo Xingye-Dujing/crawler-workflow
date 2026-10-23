@@ -980,9 +980,140 @@ def _layout(graph: nx.Graph, nodes: list[str]) -> dict[str, tuple[float, float]]
 # ─── Public build ───────────────────────────────────────────────
 
 
-def build(df: pd.DataFrame, params: dict, nid: str = '') -> dict:
+def _basemap_lookup(basemap_df: pd.DataFrame) -> tuple[dict[str, list[str]], list[str], list[str]]:
+    if basemap_df is None or basemap_df.empty:
+        raise BiblioError(t('biblio.dual_map_needs_basemap', nid='(biblio)'))
+    journal_column = next(
+        (c for c in basemap_df.columns if _ref_key(c) in {'期刊', 'journal', 'source', '来源期刊'}), ''
+    )
+    category_column = next(
+        (c for c in basemap_df.columns if _ref_key(c) in {'学科', 'category', 'subject', 'wc', 'sc'}), ''
+    )
+    if not journal_column or not category_column:
+        raise BiblioError(
+            t(
+                'biblio.dual_map_columns',
+                journal=journal_column or '期刊/journal',
+                category=category_column or '学科/category',
+            )
+        )
+    mapping: dict[str, list[str]] = defaultdict(list)
+    for _, row in basemap_df.iterrows():
+        journal = str(row.get(journal_column) or '').strip()
+        categories = _split(row.get(category_column))
+        if not journal or not categories:
+            continue
+        for category in categories:
+            if category not in mapping[journal]:
+                mapping[journal].append(category)
+    return dict(mapping), list(mapping), sorted({category for values in mapping.values() for category in values})
+
+
+def build_dual_map(df: pd.DataFrame, params: dict, basemap_df: pd.DataFrame | None, nid: str = '') -> dict:
+    """Build the journal/category dual-map table from records plus a basemap."""
+    columns = _require_columns(df, params)
+    mapping, journals, categories = _basemap_lookup(basemap_df)
+    cited_edges: Counter = Counter()
+    category_edges: Counter = Counter()
+    overlay: Counter = Counter()
+    cited_labels: dict[str, str] = {}
+    for _, row in df.iterrows():
+        record = row.to_dict()
+        raw_refs, structured = _document_references(record, columns)
+        nodes, direct, _total = _reference_nodes(raw_refs, 'journal_cocitation', structured)
+        cited = []
+        for key, info in nodes.items():
+            label = str(info.get('label') or key).strip()
+            if label:
+                cited.append(label)
+                cited_labels.setdefault(label, label)
+        cited = sorted(set(cited))
+        for left, right in combinations(cited, 2):
+            cited_edges[(left, right)] += 1
+        source_journal = (
+            str(record.get(columns['entity']) or '').strip()
+            if params['entity_type'] in ('journal', 'source')
+            else str(record.get('来源期刊') or '').strip()
+        )
+        record_categories = _split(record.get('学科'))
+        if not record_categories and source_journal:
+            record_categories = mapping.get(source_journal, [])
+        record_categories = sorted(set(record_categories))
+        for left, right in combinations(record_categories, 2):
+            category_edges[(left, right)] += 1
+        for journal in cited:
+            for category in record_categories:
+                overlay[(journal, category)] += 1
+    rows: list[dict] = []
+    left_nodes = sorted({name for pair in cited_edges for name in pair} | {name for name, _ in overlay})
+    right_nodes = sorted({name for pair in category_edges for name in pair} | {name for _, name in overlay})
+    for index, name in enumerate(left_nodes[:120]):
+        rows.append(
+            {
+                'map': 'journal',
+                'source': name,
+                'target': '',
+                'weight': sum(value for pair, value in cited_edges.items() if name in pair),
+                'label': name,
+                'x': 150,
+                'y': 50 + index * (900 / max(1, min(len(left_nodes), 120) - 1)),
+            }
+        )
+    for index, name in enumerate(right_nodes[:120]):
+        rows.append(
+            {
+                'map': 'category',
+                'source': name,
+                'target': '',
+                'weight': sum(value for pair, value in category_edges.items() if name in pair),
+                'label': name,
+                'x': 850,
+                'y': 50 + index * (900 / max(1, min(len(right_nodes), 120) - 1)),
+            }
+        )
+    for (left, right), weight in cited_edges.items():
+        rows.append(
+            {'map': 'journal', 'source': left, 'target': right, 'weight': weight, 'label': '', 'x': '', 'y': ''}
+        )
+    for (left, right), weight in category_edges.items():
+        rows.append(
+            {'map': 'category', 'source': left, 'target': right, 'weight': weight, 'label': '', 'x': '', 'y': ''}
+        )
+    for (left, right), weight in overlay.items():
+        rows.append(
+            {'map': 'overlay', 'source': left, 'target': right, 'weight': weight, 'label': '', 'x': '', 'y': ''}
+        )
+    if not any(row['source'] and row['target'] for row in rows):
+        raise BiblioError(t('biblio.no_edges', start='', end=''))
+    summary = {
+        'entity_type': params['entity_type'],
+        'window': {},
+        'slices': 0,
+        'nodes': len(left_nodes) + len(right_nodes),
+        'edges': len(cited_edges) + len(category_edges) + len(overlay),
+        'pruning': params['pruning'],
+        'link_measure': params['link_measure'],
+        'clusters': None,
+        'bursts': 0,
+        'output_shape': 'dual_map',
+        'notes': [t('biblio.dual_map_done', journals=len(left_nodes), categories=len(right_nodes))],
+    }
+    return {
+        'rows': rows,
+        'edges': rows,
+        'bursts': [],
+        'clusters': [],
+        'graph': None,
+        'summary': summary,
+        'notes': summary['notes'],
+    }
+
+
+def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFrame | None = None) -> dict:
     """Build the node table and every artifact the Visualize node may need."""
     params = normalize_params(params, nid)
+    if params['output_shape'] == 'dual_map':
+        return build_dual_map(df, params, basemap_df, nid)
     notes: list[str] = []
     docs, ref_nodes, window, doc_notes = _documents(df, params)
     notes += doc_notes
@@ -1209,13 +1340,15 @@ def export_result(result: dict, out_dir: str, base_name: str) -> dict[str, str]:
     target.mkdir(parents=True, exist_ok=True)
     safe = __import__('re').sub(r'[\\/:*?"<>|\s]+', '_', base_name or 'biblio').strip('._') or 'biblio'
     files: dict[str, str] = {}
-    graph_path = target / f'{safe}_graph.graphml'
-    nx.write_graphml(result['graph'], graph_path)
-    files['biblio_graphml'] = str(graph_path)
+    graph = result.get('graph')
+    if graph is not None:
+        graph_path = target / f'{safe}_graph.graphml'
+        nx.write_graphml(graph, graph_path)
+        files['biblio_graphml'] = str(graph_path)
 
-    gml_path = target / f'{safe}_graph.gml'
-    nx.write_gml(result['graph'], gml_path)
-    files['biblio_gml'] = str(gml_path)
+        gml_path = target / f'{safe}_graph.gml'
+        nx.write_gml(graph, gml_path)
+        files['biblio_gml'] = str(gml_path)
 
     json_path = target / f'{safe}_graph.json'
     snapshot = {

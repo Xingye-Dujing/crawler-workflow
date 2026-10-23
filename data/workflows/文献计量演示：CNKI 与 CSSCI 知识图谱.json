@@ -458,6 +458,72 @@
       "x": 1200,
       "y": 500,
       "folded": false
+    },
+    {
+      "id": "node-20",
+      "type": "biblio",
+      "title": "双图叠加（期刊 × 学科）",
+      "params": {
+        "enabled": false,
+        "entity_type": "journal",
+        "entity_column": "",
+        "year_column": "年份",
+        "title_column": "题名",
+        "abstract_column": "摘要",
+        "reference_column": "参考文献",
+        "tc_column": "引用次数",
+        "usage_column": "使用次数",
+        "time_start": "",
+        "time_end": "",
+        "slice_years": 2,
+        "look_back_years": 0,
+        "selection": "top_n",
+        "top_n": 50,
+        "top_pct": 10,
+        "g_index": 25,
+        "min_count": 1,
+        "threshold_c": 0,
+        "threshold_cc": 1,
+        "threshold_ccv": 0,
+        "min_tc": "",
+        "min_usage": "",
+        "largest_component": false,
+        "link_measure": "cosine",
+        "max_links_per_node": 10,
+        "lrf": 2.5,
+        "pruning": "none",
+        "cluster": false,
+        "cluster_count": "",
+        "label_method": "llr",
+        "top_terms": 5,
+        "burst": false,
+        "burst_gamma": 1.0,
+        "burst_min_duration": 2,
+        "burst_weight": 2.0,
+        "burst_top": 20,
+        "output_shape": "dual_map",
+        "basemap_dataset_id": "",
+        "export_files": true
+      },
+      "x": 640,
+      "y": 1560,
+      "folded": false
+    },
+    {
+      "id": "node-21",
+      "type": "visualize",
+      "title": "双图叠加图",
+      "params": {
+        "enabled": false,
+        "chart_type": "dual_map",
+        "engine": "echarts",
+        "title": "CSSCI 期刊—学科双图叠加",
+        "emit_latex": true,
+        "emit_latex_table": true
+      },
+      "x": 980,
+      "y": 1560,
+      "folded": false
     }
   ],
   "connections": [
@@ -479,7 +545,9 @@
     { "from": "node-9", "to": "node-17" },
     { "from": "node-10", "to": "node-11" },
     { "from": "node-15", "to": "node-16" },
-    { "from": "node-17", "to": "node-18" }
+    { "from": "node-17", "to": "node-18" },
+    { "from": "node-9", "to": "node-20" },
+    { "from": "node-20", "to": "node-21" }
   ],
   "settings": {
     "mode": "parallel",

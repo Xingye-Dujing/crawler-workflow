@@ -264,7 +264,13 @@ def execute_biblio_node(node: dict, current_input: list, upstream: list = None, 
     if upstream is not None and len(upstream) > 1:
         raise ValueError(t('engine.biblio_multi_input', nid=label, n=len(upstream)))
 
-    result = bibliometrics.build(pd.DataFrame(current_input), params, label)
+    basemap_df = None
+    basemap_id = str(params.get('basemap_dataset_id') or '').strip()
+    if basemap_id:
+        basemap_df = _load_dataset(basemap_id)
+        if basemap_df is None:
+            raise ValueError(t('biblio.dual_map_needs_basemap', nid=label))
+    result = bibliometrics.build(pd.DataFrame(current_input), params, label, basemap_df=basemap_df)
     summary = result.get('summary') or {}
     entity = str(summary.get('entity_type') or params.get('entity_type') or 'keyword')
     window = summary.get('window') or {}
@@ -296,5 +302,6 @@ def execute_biblio_node(node: dict, current_input: list, upstream: list = None, 
         'edges': result['edges'],
         'clusters': result['clusters'],
         'bursts': result['bursts'],
+        'dual_map': result['rows'],
     }.get(shape, result['rows'])
     return _json_safe_records(pd.DataFrame(rows))

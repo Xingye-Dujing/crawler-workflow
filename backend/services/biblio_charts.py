@@ -23,6 +23,17 @@ LABEL_LIMIT = 70
 #: Approximate pixels represented by one graph coordinate unit. The collision
 #: resolver places labels in coordinate space and hands ECharts a pixel offset.
 GRAPH_SCALE = 1.5
+#: Characters of a cluster label shown in the legend column.
+LEGEND_LABEL_WIDTH = 14
+#: The band a graph series is drawn inside: the title and subtitle above, the cluster
+#: legend column on the right. Node labels that wander into either read as a rendering bug.
+GRAPH_TOP = 70
+GRAPH_RIGHT = 170
+GRAPH_LEFT = 24
+GRAPH_BOTTOM = 30
+#: A dual map draws two stacked label columns; past this many names per side the
+#: column is taller than the canvas, so the tail belongs in the CSV/LaTeX table.
+DUAL_MAP_SIDE_LIMIT = 80
 
 
 class BiblioChartError(ValueError):
@@ -88,13 +99,19 @@ def _categories(rows: dict[str, dict], names: list[str], base: dict, frame: pd.D
     category_names: list[str] = []
     category_index: dict[str, int] = {}
     if use_clusters:
+        shown: set[str] = set()
         for name in names:
             cluster = _text(rows[name]['聚类'])
             label = _text(rows[name]['聚类标签']) or f'#{cluster}'
             key = f'#{cluster} {label}'
             if key not in category_index:
+                # Two clusters whose truncated heads agree would merge into one legend entry,
+                # so the tie keeps the full label. Colour is taken by index, never by name.
+                short = _legend_name(key)
+                entry = short if short not in shown else key
+                shown.add(entry)
                 category_index[key] = len(category_names)
-                category_names.append(key)
+                category_names.append(entry)
     else:
         category_names = [t('chart.biblio_single_category')]
         category_index = {category_names[0]: 0}
@@ -263,13 +280,25 @@ def _graph_links(rows: dict[str, dict], names: list[str]) -> dict[tuple[str, str
     }
 
 
+def _legend_name(key: str) -> str:
+    """One cluster's legend entry: ``#k`` plus a head of the LLR label, never the whole line.
+
+    A five-term label is wider than the scroll pager is tall, and the two boxes collided in a
+    real browser. The full label is in the cluster table, the CSV and the tooltip.
+    """
+    return key if len(key) <= LEGEND_LABEL_WIDTH else f'{key[: LEGEND_LABEL_WIDTH - 1]}…'
+
+
 def _legend(category_names: list[str]) -> dict:
     return {
         'data': category_names,
-        'type': 'scroll',
+        # A plain legend has no page marker: the ``1/1`` it scrolls to used to sit on top of the
+        # first cluster's text. Entries are short enough that the column never needs paging.
+        'type': 'plain',
         'orient': 'vertical',
         'right': 8,
         'top': 40,
+        'itemGap': 6,
         'textStyle': {'color': '#444', 'fontSize': 10, 'fontFamily': 'sans-serif'},
         'itemWidth': 10,
         'itemHeight': 10,
@@ -287,7 +316,14 @@ def _graph_option(df: pd.DataFrame, base: dict, *, layout: str, require_coordina
         'layout': layout,
         'roam': True,
         'draggable': True,
-        'circular': {'rotateLabel': True} if layout == 'circular' else {},
+        'left': GRAPH_LEFT,
+        'top': GRAPH_TOP,
+        'right': GRAPH_RIGHT,
+        'bottom': GRAPH_BOTTOM,
+        # A rotated label cannot be pulled back into the reserved band — the solver moves a box,
+        # not a glyph turned 90°, and the browser measured one standing on the chart title.
+        # Circular terms read horizontally here, like every other view in this project.
+        'circular': {'rotateLabel': False},
         'categories': [{'name': name} for name in categories[1]],
         'data': data,
         'links': sorted(links.values(), key=lambda item: (-item['value'], item['source'], item['target'])),
@@ -754,6 +790,160 @@ def _graph3d(df: pd.DataFrame, base: dict) -> dict:
     return base
 
 
+def _side_slot(index: int, size: int) -> float:
+    """One node's vertical slot in a dual-map column, centred when the column has one node."""
+    return 500.0 if size < 2 else round(50 + index * (900 / (size - 1)), 2)
+
+
+def _dual_map(df: pd.DataFrame, base: dict) -> dict:
+    _require(df, 'map', 'source', 'target', 'weight')
+    _base_graph_series(base, base['title']['text'])
+    rows = []
+    seeds: dict[tuple[str, str], float] = {}
+    for _, row in df.iterrows():
+        side = _text(row['map']).lower()
+        source = _text(row['source'])
+        target = _text(row['target'])
+        weight = _number(row['weight'], 0.0)
+        if side not in ('journal', 'category', 'overlay') or not source:
+            continue
+        if not target:
+            # A ``biblio`` dual-map table also lists its nodes (empty 终点) with their incident
+            # weight. A journal cited by exactly one other journal is a real node with no
+            # same-side link, and dropping it hides half of the overlay.
+            if side != 'overlay' and weight > 0:
+                seeds[(side, source)] = weight
+            continue
+        if weight > 0:
+            rows.append((side, source, target, weight))
+    if not rows:
+        raise BiblioChartError(t('chart.biblio_no_links'))
+    # A same-side edge is undirected, so BOTH of its endpoints belong to that side; reading only
+    # `source` left a journal that ever appeared as a target without a position, dropping its links.
+    left = {source for side, source, _t, _w in rows if side in ('journal', 'overlay')}
+    left |= {target for side, _s, target, _w in rows if side == 'journal'}
+    right = {target for side, _s, target, _w in rows if side in ('category', 'overlay')}
+    right |= {source for side, source, _t, _w in rows if side == 'category'}
+    left |= {name for (side, name) in seeds if side == 'journal'}
+    right |= {name for (side, name) in seeds if side == 'category'}
+    if not left or not right:
+        raise BiblioChartError(t('chart.biblio_no_nodes'))
+    # Keep the largest side within the drawing budget; the full table remains
+    # in the CSV/LaTeX appendix. A dual map that prints 500 unreadable labels
+    # is not a figure.
+    left_names = sorted(left)[:DUAL_MAP_SIDE_LIMIT]
+    right_names = sorted(right)[:DUAL_MAP_SIDE_LIMIT]
+    positions = {}
+    for index, name in enumerate(left_names):
+        positions[('journal', name)] = (150, _side_slot(index, len(left_names)))
+    for index, name in enumerate(right_names):
+        positions[('category', name)] = (850, _side_slot(index, len(right_names)))
+    incident: dict[tuple[str, str], float] = {}
+    for side, source, target, weight in rows:
+        if side == 'overlay':
+            ends = [('journal', source), ('category', target)]
+        elif side == 'journal':
+            ends = [('journal', source), ('journal', target)]
+        else:
+            ends = [('category', source), ('category', target)]
+        for end in ends:
+            if end in positions:
+                incident[end] = incident.get(end, 0.0) + weight
+    max_incident = max(incident.values(), default=1.0) or 1.0
+    # Two categories, so the legend toggles a side that actually exists: one graph series
+    # cannot hold two legend entries, and a third entry for the overlay lines would be a
+    # control that switches nothing off.
+    categories = [
+        {'name': t('chart.biblio_journal_map'), 'itemStyle': {'color': base['color'][0]}},
+        {'name': t('chart.biblio_category_map'), 'itemStyle': {'color': base['color'][1]}},
+    ]
+    show_labels = len(positions) <= 120
+    # Walk the positions, not the summed weights: a node the table listed without a
+    # same-side link has an entry in `seeds` and none in `incident`, and iterating the
+    # latter quietly deletes exactly the sparse end of a real dual map.
+    data = []
+    for (side, name), (x, y) in positions.items():
+        value = max(incident.get((side, name), 0.0), seeds.get((side, name), 0.0))
+        data.append(
+            {
+                'name': name,
+                'x': x,
+                'y': y,
+                'value': round(value, 4),
+                'symbolSize': round(8 + 30 * math.sqrt(max(0.0, value / max_incident)), 2),
+                'category': 0 if side == 'journal' else 1,
+                'label': {'show': show_labels, 'position': 'left' if side == 'journal' else 'right'},
+            }
+        )
+    links = []
+    max_weight = max((weight for *_rest, weight in rows), default=1.0) or 1.0
+    for side, source, target, weight in rows:
+        if side == 'overlay':
+            a = positions.get(('journal', source))
+            b = positions.get(('category', target))
+        elif side == 'journal':
+            a = positions.get(('journal', source))
+            b = positions.get(('journal', target))
+        else:
+            a = positions.get(('category', source))
+            b = positions.get(('category', target))
+        if not a or not b:
+            continue
+        links.append(
+            {
+                'source': source,
+                'target': target,
+                'value': round(weight, 6),
+                'lineStyle': {
+                    'width': round(0.8 + 4 * math.sqrt(max(0.0, weight / max_weight)), 2),
+                    'opacity': 0.16 if side == 'overlay' else 0.28,
+                    # Both endpoints of a same-side link sit on the SAME column, so a straight
+                    # or barely-curved line draws every journal–journal link on top of the
+                    # column itself — a braid nobody can read. Bowing it out of the column is
+                    # what makes the intra-map network visible at all.
+                    'curveness': 0.45 if side == 'overlay' else 0.62,
+                },
+            }
+        )
+    if not links:
+        raise BiblioChartError(t('chart.biblio_no_links'))
+    base['legend'] = {
+        'data': [entry['name'] for entry in categories],
+        'top': 36,
+        'left': 'center',
+    }
+    base['series'] = [
+        {
+            'type': 'graph',
+            'layout': 'none',
+            'roam': True,
+            'draggable': True,
+            # Room for the bowed same-side arcs AND the outward label columns: a journal name is
+            # drawn to the left of its dot, so the reserve has to be wider than the longest label
+            # or the canvas clips it. A percentage, because the same option is drawn in a 600px
+            # preview panel and a full-screen canvas.
+            'left': '12%',
+            'top': GRAPH_TOP,
+            'right': '12%',
+            'bottom': GRAPH_BOTTOM,
+            'categories': categories,
+            'data': data,
+            'links': links,
+            'label': {
+                'show': True,
+                'fontSize': 9,
+                'backgroundColor': 'rgba(255,255,255,0.82)',
+                'padding': [2, 4],
+                'borderRadius': 3,
+            },
+            'labelLayout': {'hideOverlap': True, 'moveOverlap': 'shiftY', 'draggable': True},
+            'lineStyle': {'color': 'source'},
+            'emphasis': {'focus': 'adjacency'},
+        }
+    ]
+    return base
+
+
 BUILDERS = {
     'knowledge_graph': _knowledge_graph,
     'cluster_timeline': _cluster_timeline,
@@ -763,6 +953,7 @@ BUILDERS = {
     'landscape': _landscape,
     'biblio_heatmap': _biblio_heatmap,
     'graph3d': _graph3d,
+    'dual_map': _dual_map,
 }
 
 

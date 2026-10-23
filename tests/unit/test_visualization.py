@@ -58,8 +58,10 @@ USABLE = {
     'model_agreement': {'model_field': '作者', 'agreement_label_field': '平台', 'id_field': '阅读'},
 }
 
-#: The four bibliometric views read fixed columns; their happy path is the
+#: The bibliometric views read fixed columns; their happy path is the
 #: ``biblio_df`` fixture below, not the generic category/value table.
+#: 双图叠加 is the exception: a ``dual_map`` biblio node emits a per-edge table, not a
+#: node table, so it reads its own frame.
 BIBLIO_USABLE = {chart_type: {} for chart_type in BIBLIO_CHART_TYPES}
 
 # Group keys sort by code point, which is why 丙 precedes 乙 precedes 甲 here.
@@ -119,16 +121,30 @@ def biblio_df():
     )
 
 
+@pytest.fixture
+def dual_df():
+    """What a ``biblio`` node with ``output_shape=dual_map`` emits: one row per map edge."""
+    return pd.DataFrame(
+        {
+            'map': ['journal', 'category', 'overlay', 'journal', 'category'],
+            'source': ['甲刊', '公共管理', '甲刊', '甲刊', '公共管理'],
+            'target': ['乙刊', '信息科学', '公共管理', '丙刊', '信息科学'],
+            'weight': [3.0, 2.0, 5.0, 1.0, 1.0],
+        }
+    )
+
+
 # ─── catalogue ─────────────────────────────────────────────────────────
 
 
 class TestChartCatalogue:
-    def test_every_advertised_type_can_build_an_option(self, df, biblio_df):
+    def test_every_advertised_type_can_build_an_option(self, df, biblio_df, dual_df):
         assert set(USABLE) | set(BIBLIO_USABLE) == set(CHART_TYPES)
         for chart_type, kwargs in USABLE.items():
             assert V.to_echarts_option(df, chart_type, **kwargs)['series'], chart_type
         for chart_type in BIBLIO_CHART_TYPES:
-            assert V.to_echarts_option(biblio_df, chart_type)['series'], chart_type
+            frame = dual_df if chart_type == 'dual_map' else biblio_df
+            assert V.to_echarts_option(frame, chart_type)['series'], chart_type
 
     def test_echarts_only_types_are_a_subset_of_the_catalogue(self):
         assert set(ECHARTS_ONLY_TYPES) < set(CHART_TYPES)
@@ -633,8 +649,8 @@ class TestChartDisplayLocalisation:
 
 class TestOptionJsonSafety:
     @pytest.mark.parametrize('chart_type', CHART_TYPES)
-    def test_options_are_json_serialisable(self, df, biblio_df, chart_type):
-        frame = biblio_df if chart_type in BIBLIO_CHART_TYPES else df
+    def test_options_are_json_serialisable(self, df, biblio_df, dual_df, chart_type):
+        frame = (dual_df if chart_type == 'dual_map' else biblio_df) if chart_type in BIBLIO_CHART_TYPES else df
         kwargs = BIBLIO_USABLE[chart_type] if chart_type in BIBLIO_USABLE else USABLE[chart_type]
         option = V.to_echarts_option(frame, chart_type, title='标题', **kwargs)
         assert json.dumps(option, allow_nan=False)

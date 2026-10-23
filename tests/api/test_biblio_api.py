@@ -178,3 +178,79 @@ def test_upload_biblio_visualize_end_to_end(client, app_module):
     assert biblio_rows
     assert '节点' in biblio_rows[0] and '连接' in biblio_rows[0]
     assert any('文献计量完成' in line or 'Bibliometrics done' in line for line in status['logs'])
+
+
+@pytest.mark.serial
+def test_dual_map_overlay_runs_end_to_end(client, app_module):
+    """The basemap is a dataset the node reaches BY ID, never a second input edge: a second
+    input would merge the journal-category table into the record table."""
+    records = _upload(client, 'biblio_cssci_demo.txt')
+    basemap = _upload(client, 'biblio_basemap_demo.csv')
+    assert basemap['biblio_format'] is None, 'a two-column mapping table is an ordinary dataset'
+    params = {
+        'entity_type': 'journal',
+        'year_column': '年份',
+        'title_column': '题名',
+        'reference_column': '参考文献',
+        'slice_years': 2,
+        'selection': 'top_n',
+        'top_n': 50,
+        'link_measure': 'cosine',
+        'pruning': 'none',
+        'cluster': False,
+        'burst': False,
+        'output_shape': 'dual_map',
+        'basemap_dataset_id': basemap['dataset_id'],
+        'export_files': False,
+    }
+    workflow = {
+        'nodes': [
+            {
+                'id': 'node-1',
+                'type': 'upload',
+                'title': '上传文献',
+                'params': {'dataset_id': records['dataset_id'], 'dataset_name': 'cssci.txt', 'row_count': 16},
+                'x': 0,
+                'y': 0,
+            },
+            {'id': 'node-2', 'type': 'biblio', 'title': '双图叠加', 'params': params, 'x': 240, 'y': 0},
+            {
+                'id': 'node-3',
+                'type': 'visualize',
+                'title': '双图叠加图',
+                'params': {
+                    'chart_type': 'dual_map',
+                    'engine': 'echarts',
+                    'title': '期刊—学科双图叠加',
+                    'emit_latex': True,
+                    'emit_latex_table': True,
+                },
+                'x': 480,
+                'y': 0,
+            },
+        ],
+        'connections': [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-3'}],
+        'settings': {'mode': 'serial', 'headless': True, 'max_workers': 1},
+    }
+    started = client.post(
+        '/api/workflow/execute',
+        json={'workflow': workflow, 'workflow_name': 'biblio-dual-map'},
+    )
+    assert started.status_code == 200, started.get_json()
+    run_id = started.get_json()['run_id']
+    assert _wait_for_worker(app_module), 'the execute thread did not finish in time'
+
+    status = client.get('/api/workflow/status').get_json()
+    assert status['running'] is False
+    assert status['completed_nodes'] == 3, status['logs']
+    option = status['chart_results']['node-3']['option']
+    sides = {entry['name'] for entry in option['series'][0]['categories']}
+    assert len(sides) == 2
+    assert option['series'][0]['links']
+
+    rows = app_module._RUN_STORE.load_rows(run_id, 'node-2')
+    assert {'map', 'source', 'target', 'weight'} <= set(rows[0])
+    assert {row['map'] for row in rows} == {'journal', 'category', 'overlay'}
+    # LaTeX for the overlay figure and its appendix table ships with the chart result.
+    assert status['chart_results']['node-3']['latex']
+    assert status['chart_results']['node-3']['latex_table']

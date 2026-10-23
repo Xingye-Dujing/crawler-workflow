@@ -69,6 +69,7 @@ CHART_TYPES = (
     'landscape',
     'biblio_heatmap',
     'graph3d',
+    'dual_map',
     'wordcloud',
     'map',
 )
@@ -427,12 +428,20 @@ ECHARTS_ONLY_TYPES = (
     'landscape',
     'biblio_heatmap',
     'graph3d',
+    'dual_map',
 )
 
 #: Chart types that can carry dated event markers (a vertical line at one category). Any other
 #: type that is handed the box is refused rather than ignored: an annotation the figure does not
 #: show is worse than no annotation, because the user believes it is there.
 ANNOTATED_TYPES = ('bar', 'line', 'dual_line')
+
+#: The chart types ``services.latex_charts`` cannot draw on paper — exactly one, the model
+#: agreement matrix, whose point is the on-screen colour ramp. This is deliberately NOT
+#: ``ECHARTS_ONLY_TYPES``: that list says what *matplotlib* cannot render, while pgfplots draws
+#: the word cloud, the sankey, the map and every bibliometric view. Reading the wrong list here
+#: is how the visualize node's LaTeX box silently did nothing for those charts.
+LATEX_UNBUILDABLE_TYPES = ('model_agreement',)
 
 
 class ChartConfigError(ValueError):

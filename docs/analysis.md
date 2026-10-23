@@ -252,12 +252,12 @@ CiteSpace 风格的知识图谱能力以 **Bibliometrics 节点**接入工作流
 - **聚类**：归一化 Laplacian 谱聚类，聚类数留空时按特征值间隙自动选择；模块度 Q、逐节点/逐簇轮廓值写入运行摘要；标签支持 LLR / LSI / MI / TF-IDF，候选词来自簇内实体与关联文献的题名/摘要/关键词。
 - **突现**：两状态 Kleinberg Viterbi，按逐年文档数计算；每个节点保留最强突现区间，突现词表另写 CSV。耦合类节点是施引单元本身，禁止突现。
 - **人工校正**：`aliases` 每行 `规范名=别名1|别名2`，`exclude_values` 每行一个排除标签；两者在建图前合并/移除节点，并计入节点指纹，因此续跑不会复用未校正的图。
-- **输出**：默认 `output_shape=nodes`，一行一节点，固定列 `节点/类型/频次/首年/末年/年份序列/度/中介中心性/特征向量中心性/PageRank/Sigma/x/y/连接`；开启聚类追加 `聚类/聚类标签/轮廓值`，开启突现追加 `突现强度/突现起始/突现结束`。`连接` 与 `年份序列` 是规范 JSON 文本，图谱图直接读取；每个节点的 `连接` 存完整局部邻接，图构建时按端点对去重。`output_shape` 还可输出 `edges`/`clusters`/`bursts` 普通表，供下游继续处理。
-- **图**：`knowledge_graph`（固定布局知识图谱）、`circular`（环形图谱）、`cluster_timeline`（聚类时间线）、`landscape`（景观图）、`burst`（突现词图）、`timezone`（时区图）、`biblio_heatmap`（聚类—年份热力图），均仅 ECharts。缺列/无连边/未开聚类或突现时按名拒绝。七类图均有 TikZ/pgfplots LaTeX 图源与 booktabs 三线表，并附余弦、Dice、Jaccard、中介中心性、PageRank、Sigma 公式。前端 `labelLayout` 会按实际渲染矩形避让中文标签，放不下的低频标签隐藏并保留 hover。
-- **产物**：默认写 `<节点>_graph.graphml`、`_graph.gml`、`_graph.json`、`_nodes.csv`、`_edges.csv`，开启聚类/突现时另写 `_clusters.csv`/`_bursts.csv`，登记到本次运行，可在导出目录下载；`export_files` 可关闭。
-- **边界**：CNKI 无被引次数与 CR，因此无共被引/耦合/引用突现；双图叠加需要外部 JCR 期刊—学科基线，本期不提供假数据。
+- **输出**：默认 `output_shape=nodes`，一行一节点，固定列 `节点/类型/频次/首年/末年/年份序列/度/中介中心性/特征向量中心性/PageRank/Sigma/x/y/连接`；开启聚类追加 `聚类/聚类标签/轮廓值`，开启突现追加 `突现强度/突现起始/突现结束`。`连接` 与 `年份序列` 是规范 JSON 文本，图谱图直接读取；每个节点的 `连接` 存完整局部邻接，图构建时按端点对去重。`output_shape` 还可输出 `edges`/`clusters`/`bursts` 普通表，供下游继续处理；`dual_map` 输出 `map/source/target/weight/label/x/y` 的叠加表（`map` 取 `journal`/`category`/`overlay`，端点为空的行是该侧的一个节点），需要 `basemap_dataset_id` 指向一份自备的「期刊—学科」两列表，缺基线按名拒绝。
+- **图**：`knowledge_graph`（固定布局知识图谱）、`circular`（环形图谱）、`cluster_timeline`（聚类时间线）、`landscape`（景观图）、`burst`（突现词图）、`timezone`（时区图）、`biblio_heatmap`（聚类—年份热力图）、`graph3d`（三维图谱，ECharts GL）、`dual_map`（双图叠加：左期刊列、右学科列、中间叠加引用弧），均仅 ECharts。缺列/无连边/未开聚类或突现时按名拒绝。九类图均有 TikZ/pgfplots LaTeX 图源与 booktabs 三线表，并附余弦、Dice、Jaccard、中介中心性、PageRank、Sigma 公式；`emit_latex` / `emit_latex_table` 在节点上默认开启，画出来的图与论文里的图是同一份行的两个投影。前端 `labelLayout` 按实际渲染矩形避让中文标签，并且只在 series 自己声明的 `left/top/right/bottom` 预留带内落位（带上沿是标题与聚类图例），放不下的标签隐藏并保留 hover。
+- **产物**：默认写 `<节点>_graph.graphml`、`_graph.gml`、`_graph.json`、`_nodes.csv`、`_edges.csv`，开启聚类/突现时另写 `_clusters.csv`/`_bursts.csv`，登记到本次运行，可在导出目录下载；`export_files` 可关闭。`dual_map` 形态没有单一网络图，只写表。
+- **边界**：CNKI 无被引次数与 CR，因此无共被引/耦合/引用突现；双图叠加的期刊—学科基线由用户导入（`samples/biblio_basemap_demo.csv` 是合成样例），不内置任何商业 JCR 数据，缺文件按名拒绝而不是画空图。
 
-演示：`data/workflows/文献计量演示：CNKI 与 CSSCI 知识图谱.json`（CNKI 关键词/作者 + CSSCI 文献共被引/来源期刊耦合/作者共被引，共 11 张图），样例在 `samples/`。工作流按数据集 id 引用本机已注册的两份样例；换一台机器时先上传 `samples/biblio_cnki_demo.txt` 与 `samples/biblio_cssci_demo.txt`，再在两个 Upload 节点里重新选择即可。
+演示：`data/workflows/文献计量演示：CNKI 与 CSSCI 知识图谱.json`（CNKI 关键词/作者 + CSSCI 文献共被引/来源期刊耦合/作者共被引，共 12 张图；双图叠加那条链默认**关闭**，因为基线要用户自备——先在数据集管理里上传 `samples/biblio_basemap_demo.csv`，在「双图叠加」节点选它作 basemap，再启用这两个节点）。工作流按数据集 id 引用本机已注册的两份样例；换一台机器时先上传 `samples/biblio_cnki_demo.txt` 与 `samples/biblio_cssci_demo.txt`，再在两个 Upload 节点里重新选择即可。
 
 ## 可视化
 - **图表是论文样式，不是仪表盘样式**：一套印刷安全的配色（首个色是深板岩蓝，不再是荧光蓝）、衬线字体

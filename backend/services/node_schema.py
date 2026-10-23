@@ -424,6 +424,8 @@ def referenced_columns(nodes: dict) -> dict:
                 found.append(columns['tc'])
             if str(params.get('min_usage') or '').strip():
                 found.append(columns['usage'])
+            if str(params.get('output_shape') or '') == 'dual_map':
+                found += ['参考文献', '来源期刊', '学科', '年份']
         elif ntype == 'analysis':
             for step in _steps_of(params):
                 spec = STEP_PARAMS.get(str(step.get('op') or ''), {})

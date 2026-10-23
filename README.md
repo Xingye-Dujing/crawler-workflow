@@ -68,10 +68,11 @@ python app.py
 `auto`（装了编码器用 embedding+KMeans，没装自动走 LDA，控制台都如实写明用了哪种；可选装 `requirements-optional.txt`，也可显式选 `embedding`/`lda`），输出列三种方法一致，通用导出（CSV/JSON/Excel/TXT/HTML/Markdown，Parquet 需可选引擎 pyarrow）、一键运行报告与「智能清除」（按运行、按节点分片）。→ [`docs/analysis.md`](docs/analysis.md)
 - **文献计量 / 知识图谱**：Upload 自动识别 **CNKI RefWorks、CSSCI、WoS、Scopus、PubMed、Dimensions、Lens、RIS、BibTeX、EndNote** 等文献导出，也保留普通文本行为；Bibliometrics 节点按时间切片构建关键词 / 作者 / 机构 /
   国家 / 学科 / 主题词 / 来源期刊耦合 / 基金共现 / 文献耦合，以及文献·作者·期刊共被引，支持 TopN / Top% / g-index / 阈值三元组、TC/usage 过滤、look-back、cosine/Dice/Jaccard/关联强度、
-  MST / Pathfinder、最大连通分量、度 / 中介 / 特征向量 / PageRank / Sigma / H 指数、谱聚类与 LLR/LSI/MI/TF-IDF 标签、Kleinberg 突现，输出 GraphML/GML/JSON/CSV。
+  MST / Pathfinder、最大连通分量、度 / 中介 / 特征向量 / PageRank / Sigma / H 指数、谱聚类与 LLR/LSI/MI/TF-IDF 标签、Kleinberg 突现，输出 GraphML/GML/JSON/CSV；
+  输出形态可选节点 / 边表 / 聚类表 / 突现表 / **双图叠加**（期刊网络 × 学科网络 + 叠加引用线，需要自备「期刊—学科」basemap 数据集，缺基线按名拒绝，不内置任何商业 JCR 数据）。
   它吃的是**普通表格**：列映射可把爬取数据的「话题 / 用户名 / 发布时间」接进来，不只服务文献。→ [`docs/analysis.md`](docs/analysis.md#文献计量)
 - **可视化**：论文印刷风格图表（ECharts / Matplotlib 双引擎）、主题距离图 / 显著词图 / 关系图 / 桑基 /
-  占比堆叠 / 模型一致率 / 知识图谱 / 环形图谱 / 聚类时间线 / 景观图 / 突现词图 / 时区图 / 聚类年份热力图、LaTeX 图与三线表、MiKTeX 编译成 PDF、Chart Studio 工作台；文献图谱标签会碰撞避让。→ [`docs/analysis.md`](docs/analysis.md)
+  占比堆叠 / 模型一致率 / 知识图谱 / 环形图谱 / 聚类时间线 / 景观图 / 突现词图 / 时区图 / 聚类年份热力图 / 三维图谱 / 双图叠加图、LaTeX 图与三线表（除「模型一致率」外每种图都有，含九类文献计量图）、MiKTeX 编译成 PDF、Chart Studio 工作台；文献图谱标签会碰撞避让并留在标题与图例预留带内。→ [`docs/analysis.md`](docs/analysis.md)
 - **工作流引擎**：拖拽画布、连线 fan-in/fan-out 语义、禁用即等同于不存在、撤销/重做、视角持久化、
   右侧大纲侧栏一键定位节点、自动排布上下顺序可指定、运行队列、停止与并行/串行执行。→ [`docs/workflow.md`](docs/workflow.md)
 - **断点续跑与运行记录**：节点级检查点、LLM 答案缓存、增量采集台账、Cookie 中途过期续跑、Resume 节点、

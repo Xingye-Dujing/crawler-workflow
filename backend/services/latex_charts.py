@@ -332,6 +332,7 @@ class LatexChartService:
             'landscape',
             'biblio_heatmap',
             'graph3d',
+            'dual_map',
         ):
             return cls._biblio_figure(df, chart_type)
         if chart_type == 'sankey':
@@ -1116,7 +1117,7 @@ class LatexChartService:
             )
         height = f'{1 + len(items) * 1.15:.2f}cm'
         return (
-            '\\begin{tikzpicture}\\begin{axis}[hide y axis line,hide x axis line,y=-1.15cm,'
+            '\\begin{tikzpicture}\\begin{axis}[axis y line=none,axis x line=none,y=-1.15cm,'
             'symbolic y coords={' + _sym(categories) + '},ytick=data,'
             'yticklabel style={font=\\scriptsize},'
             f'xmin={min(years) - 1},xmax={max(years) + 2},xlabel={{年份}},width=16cm,height='
@@ -1153,7 +1154,7 @@ class LatexChartService:
                 f'\\node[lblbox,anchor=east,font=\\scriptsize] at (axis cs:{years[0] - 0.5},{y:.2f}) {{{_esc(name)}}};'
             )
         return (
-            '\\begin{tikzpicture}\\begin{axis}[hide y axis line,hide x axis line,no marks,'
+            '\\begin{tikzpicture}\\begin{axis}[axis y line=none,axis x line=none,no marks,'
             f'xmin={years[0] - 1.5},xmax={years[-1] + 1},ymin=-0.6,'
             f'ymax={len(ordered) * 1.15:.2f},xlabel={{年份}},width=16cm,'
             f'height={len(ordered) * 1.2:.2f}cm]\n' + '\n'.join(body) + '\n\\end{axis}\\end{tikzpicture}'
@@ -1259,6 +1260,81 @@ class LatexChartService:
         return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
 
     @classmethod
+    def _biblio_dual_map(cls, df) -> str:
+        cls._require_biblio(df, 'map', 'source', 'target', 'weight')
+        edges = []
+        seeded: dict[str, set[str]] = {'journal': set(), 'category': set()}
+        for _, row in df.iterrows():
+            side = cls._biblio_text(row.get('map')).lower()
+            source = cls._biblio_text(row.get('source'))
+            target = cls._biblio_text(row.get('target'))
+            weight = cls._biblio_float(row.get('weight'), 0.0)
+            if side not in ('journal', 'category', 'overlay') or not source:
+                continue
+            if not target:
+                # The table lists its nodes too (empty 终点) so a journal with only overlay
+                # links, or a category with only one, is still part of the figure.
+                if side != 'overlay' and weight > 0:
+                    seeded[side].add(source)
+                continue
+            if weight > 0:
+                edges.append((side, source, target, weight))
+        if not edges:
+            raise ChartConfigError(t('chart.biblio_no_links'))
+        # A same-side edge is undirected: both endpoints sit on that side's column.
+        left = {source for side, source, _t, _w in edges if side in ('journal', 'overlay')}
+        left |= {target for side, _s, target, _w in edges if side == 'journal'}
+        right = {target for side, _s, target, _w in edges if side in ('category', 'overlay')}
+        right |= {source for side, source, _t, _w in edges if side == 'category'}
+        left |= seeded['journal']
+        right |= seeded['category']
+        left = sorted(left)[:60]
+        right = sorted(right)[:60]
+        if not left or not right:
+            raise ChartConfigError(t('chart.biblio_no_nodes'))
+        positions = {}
+        for index, name in enumerate(left):
+            positions[('journal', name)] = (2.0, 9.0 - index * (8.0 / max(1, len(left) - 1)))
+        for index, name in enumerate(right):
+            positions[('category', name)] = (14.0, 9.0 - index * (8.0 / max(1, len(right) - 1)))
+        header = '\\node[font=\\small,text=black!65,anchor=south] at ({x},9.8) {{{label}}};'
+        out = [
+            header.format(x=2, label=_esc(t('chart.biblio_journal_map'))),
+            header.format(x=14, label=_esc(t('chart.biblio_category_map'))),
+            header.format(x=8, label=_esc(t('chart.biblio_overlay'))),
+        ]
+        max_weight = max(weight for *_rest, weight in edges) or 1.0
+        for side, source, target, weight in edges:
+            if side == 'overlay':
+                a = positions.get(('journal', source))
+                b = positions.get(('category', target))
+                color = 'black!25'
+            elif side == 'journal':
+                a = positions.get(('journal', source))
+                b = positions.get(('journal', target))
+                color = 'cA!55'
+            else:
+                a = positions.get(('category', source))
+                b = positions.get(('category', target))
+                color = 'cB!55'
+            if not a or not b:
+                continue
+            width = 0.2 + 2.5 * math.sqrt(max(0.0, weight / max_weight))
+            out.append(
+                f'\\draw[{color},line width={width:.2f}pt,opacity=0.55] '
+                f'({a[0]:.2f},{a[1]:.2f}) -- ({b[0]:.2f},{b[1]:.2f});'
+            )
+        for (side, name), (x, y) in positions.items():
+            color = 'cA' if side == 'journal' else 'cB'
+            anchor = 'east' if side == 'journal' else 'west'
+            offset = -0.25 if side == 'journal' else 0.25
+            out.append(
+                f'\\draw[fill={color}!55,draw={color},line width=0.55pt] ({x:.2f},{y:.2f}) circle (0.12);'
+                f'\\node[lblbox,anchor={anchor},font=\\scriptsize] at ({x + offset:.2f},{y:.2f}) {{{_esc(name)}}};'
+            )
+        return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
+
+    @classmethod
     def _biblio_figure(cls, df, chart_type: str) -> str:
         if chart_type in ('knowledge_graph', 'circular', 'graph3d'):
             if chart_type == 'knowledge_graph':
@@ -1277,6 +1353,8 @@ class LatexChartService:
             pic = cls._biblio_timezone(df)
         elif chart_type == 'graph3d':
             pic = cls._biblio_graph3d(df)
+        elif chart_type == 'dual_map':
+            pic = cls._biblio_dual_map(df)
         elif chart_type == 'biblio_heatmap':
             pic = cls._biblio_heatmap(df)
         else:
@@ -1304,6 +1382,39 @@ class LatexChartService:
                         values.append(_num(cls._biblio_float(row.get(column), 0.0)))
                 rows.append(values)
             return head, rows
+        if chart_type == 'dual_map':
+            cls._require_biblio(df, 'map', 'source', 'target', 'weight')
+            # The table's own columns are machine tokens (a chart contract, not prose);
+            # the paper table prints the same words the figure uses.
+            sides = {
+                'journal': t('chart.biblio_journal_map'),
+                'category': t('chart.biblio_category_map'),
+                'overlay': t('chart.biblio_overlay'),
+            }
+            rows = []
+            for _, row in df.iterrows():
+                side = cls._biblio_text(row.get('map')).lower()
+                source = cls._biblio_text(row.get('source'))
+                target = cls._biblio_text(row.get('target'))
+                if not source or not target:
+                    continue
+                rows.append(
+                    [
+                        _esc(sides.get(side, side)),
+                        _esc(source),
+                        _esc(target),
+                        _num(cls._biblio_float(row.get('weight'), 0.0)),
+                    ]
+                )
+            return (
+                [
+                    _esc(t('chart.biblio_map_layer')),
+                    _esc(t('chart.biblio_map_source')),
+                    _esc(t('chart.biblio_map_target')),
+                    _esc(t('chart.biblio_map_weight')),
+                ],
+                rows,
+            )
         if chart_type == 'cluster_timeline':
             rows, names = cls._biblio_node_rows(df, ('节点', '聚类', '聚类标签', '首年', '末年', '频次'))
             groups = {}
@@ -1418,6 +1529,7 @@ class LatexChartService:
             'landscape',
             'biblio_heatmap',
             'graph3d',
+            'dual_map',
         ):
             return cls._biblio_table_data(df, chart_type)
         if chart_type == 'stack_pct':

@@ -42,9 +42,7 @@ CITATION_TYPES = (
 #: CiteSpace and by this project; keeping both is a compatibility choice.
 COUPLING_TYPES = ('document', 'bibliographic_coupling', 'journal', 'source')
 
-COUPLING_TYPE = 'bibliographic_coupling'
-
-OUTPUT_SHAPES = ('nodes', 'edges', 'clusters', 'bursts')
+OUTPUT_SHAPES = ('nodes', 'edges', 'clusters', 'bursts', 'dual_map')
 
 SELECTION_MODES = ('top_n', 'top_pct', 'g_index', 'threshold')
 LINK_MEASURES = ('cosine', 'dice', 'jaccard', 'association')
@@ -138,6 +136,7 @@ DEFAULTS = {
     'burst_top': 20,
     'aliases': '',
     'exclude_values': '',
+    'basemap_dataset_id': '',
     'output_shape': 'nodes',
     'export_files': True,
 }
@@ -175,6 +174,7 @@ CITATION_METRIC_COLUMNS = ('总被引', 'H指数')
 USAGE_METRIC_COLUMNS = ('使用次数合计',)
 
 EDGE_COLUMNS = ('source', 'target', 'weight', 'count')
+DUAL_MAP_COLUMNS = ('map', 'source', 'target', 'weight', 'label', 'x', 'y')
 CLUSTER_TABLE_COLUMNS = ('聚类', '聚类标签', '节点数', '节点', '轮廓值')
 BURST_TABLE_COLUMNS = ('节点', '突现起始', '突现结束', '突现强度')
 
@@ -211,6 +211,8 @@ def output_columns(params: dict, input_columns: list[str] | None = None) -> list
         return list(CLUSTER_TABLE_COLUMNS)
     if shape == 'bursts':
         return list(BURST_TABLE_COLUMNS)
+    if shape == 'dual_map':
+        return list(DUAL_MAP_COLUMNS)
     cols = list(BASE_COLUMNS)
     if as_bool(params.get('cluster'), DEFAULTS['cluster']):
         cols += list(CLUSTER_COLUMNS)
@@ -344,12 +346,14 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
         errors.append(t('biblio.time_range', nid=nid or '(biblio)', start=start, end=end))
 
     burst_default = False if entity in COUPLING_TYPES else DEFAULTS['burst']
-    if entity in COUPLING_TYPES and as_bool(params.get('burst'), False):
+    if entity in COUPLING_TYPES and as_bool(params.get('burst'), burst_default):
         errors.append(t('biblio.coupling_no_burst', nid=nid or '(biblio)'))
     if shape == 'clusters' and not as_bool(params.get('cluster'), DEFAULTS['cluster']):
         errors.append(t('biblio.shape_needs_cluster', nid=nid or '(biblio)'))
     if shape == 'bursts' and not as_bool(params.get('burst'), burst_default):
         errors.append(t('biblio.shape_needs_burst', nid=nid or '(biblio)'))
+    if shape == 'dual_map' and not str(params.get('basemap_dataset_id') or '').strip():
+        errors.append(t('biblio.dual_map_needs_basemap', nid=nid or '(biblio)'))
     return errors
 
 
@@ -420,7 +424,7 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         'cluster_count': count,
         'label_method': str(params.get('label_method') or DEFAULTS['label_method']).strip(),
         'top_terms': _whole(nid, 'top_terms', params.get('top_terms', DEFAULTS['top_terms']), 1, 20),
-        'burst': as_bool(params.get('burst'), False if entity == COUPLING_TYPE else DEFAULTS['burst']),
+        'burst': as_bool(params.get('burst'), False if entity in COUPLING_TYPES else DEFAULTS['burst']),
         'burst_gamma': _number(nid, 'burst_gamma', params.get('burst_gamma', DEFAULTS['burst_gamma']), 0.01, 100.0),
         'burst_min_duration': _whole(
             nid, 'burst_min_duration', params.get('burst_min_duration', DEFAULTS['burst_min_duration']), 1, 50
@@ -431,6 +435,7 @@ def normalize_params(params: dict, nid: str = '') -> dict:
         'burst_top': _whole(nid, 'burst_top', params.get('burst_top', DEFAULTS['burst_top']), 1, 500),
         'aliases': str(params.get('aliases') or '').strip(),
         'exclude_values': str(params.get('exclude_values') or '').strip(),
+        'basemap_dataset_id': str(params.get('basemap_dataset_id') or '').strip(),
         'output_shape': str(params.get('output_shape') or DEFAULTS['output_shape']).strip(),
         'export_files': as_bool(params.get('export_files'), DEFAULTS['export_files']),
     }

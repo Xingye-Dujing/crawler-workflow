@@ -14,7 +14,7 @@ import pytest
 
 from services.chart_contracts import BIBLIO_CHART_TYPES
 from services.latex_charts import LatexChartService as L
-from services.visualizer import CHART_TYPES, ChartConfigError
+from services.visualizer import CHART_TYPES, LATEX_UNBUILDABLE_TYPES, ChartConfigError
 
 pytestmark = pytest.mark.unit
 
@@ -91,6 +91,17 @@ def _biblio():
     )
 
 
+def _dual():
+    return pd.DataFrame(
+        {
+            'map': ['journal', 'category', 'overlay', 'journal', 'category', 'journal'],
+            'source': ['甲刊', '公共管理', '甲刊', '甲刊', '公共管理', '丁刊'],
+            'target': ['乙刊', '信息科学', '公共管理', '丙刊', '信息科学', ''],
+            'weight': [3.0, 2.0, 5.0, 1.0, 1.0, 4.0],
+        }
+    )
+
+
 # One usable spec + one frame per chart type, so the happy path is swept in one test.
 CASES = {
     'bar': (_cat(), dict(x='g', y='v')),
@@ -114,6 +125,7 @@ CASES = {
     'landscape': (_biblio(), dict()),
     'biblio_heatmap': (_biblio(), dict()),
     'graph3d': (_biblio(), dict()),
+    'dual_map': (_dual(), dict()),
     'wordcloud': (_cat(), dict(x='g', value_field='v')),
     'map': (_cat(), dict(x='g', value_field='v')),
 }
@@ -121,6 +133,13 @@ CASES = {
 
 def test_cases_cover_every_bibliometric_chart():
     assert set(BIBLIO_CHART_TYPES) <= set(CASES)
+
+
+def test_only_the_agreement_matrix_has_no_paper_twin():
+    """``build_latex_outputs`` asks which types it may skip. Reading the wrong list — the one
+    that says what *matplotlib* cannot draw — made the node's LaTeX box a no-op for the word
+    cloud, the sankey, the map and every bibliometric view, all of which are drawn here."""
+    assert set(CHART_TYPES) - set(LATEX_UNBUILDABLE_TYPES) == set(CASES)
 
 
 class TestFigure:
@@ -142,6 +161,13 @@ class TestFigure:
         out = L.to_latex_document(_cat(), 'bar', x='g', y='v')
         # the aggregated value for 甲 (10+5) and the category label itself must both be in there
         assert '甲' in out and '15' in out
+
+    def test_dual_map_draws_a_node_that_has_only_an_overlay_link(self):
+        """The dual-map table lists its nodes with an empty 终点; the figure must still put a
+        dot and a name on the page for the journal no same-side link reaches."""
+        out = L.to_latex_document(_dual(), 'dual_map', title='图 X')
+        assert '丁刊' in out
+        assert '期刊网络' in out and '学科网络' in out
 
     def test_tex_specials_are_escaped(self):
         df = pd.DataFrame({'g': ['a_b&c%d'], 'v': [3.0]})
@@ -237,3 +263,10 @@ class TestTable:
         assert '积极占比 (\\%)' in out, 'the % must be escaped or it comments out the row'
         # 发酵期 row: 8 / 20 / 72
         assert '8' in out and '72' in out
+
+    def test_dual_map_table_localises_the_machine_tokens(self):
+        """The table's own columns are a chart contract (``map``/``source``/…), but a paper
+        table prints the words the figure uses, not the tokens."""
+        out = L.to_latex_table(_dual(), 'dual_map', title='表 X')
+        assert '图层' in out and '权重' in out
+        assert '期刊网络' in out and '学科网络' in out

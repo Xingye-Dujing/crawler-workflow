@@ -350,7 +350,9 @@ class TestBiblioPanelContract:
         src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
         assert 'function _graphLabelLayout' in src, 'graph/scatter labels need the collision resolver'
         assert "s.type === 'graph' || s.type === 'scatter'" in src
-        assert 's.labelLayout = _graphLabelLayout(s)' in src
+        # The solver measures the canvas it draws on, so it has to be given that instance.
+        assert 's.labelLayout = _graphLabelLayout(s, instance)' in src
+        assert 'function bounds()' in src, 'the resolver must keep labels inside the reserved band'
 
 
 class TestPaletteContract:

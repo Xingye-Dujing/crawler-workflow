@@ -3310,7 +3310,7 @@ var BIBLIO_LINK_MEASURES = ['cosine', 'dice', 'jaccard', 'association'];
 var BIBLIO_PRUNING_MODES = ['none', 'mst', 'pathfinder'];
 var BIBLIO_PRUNING_SCOPES = ['slices', 'merged'];
 var BIBLIO_LABEL_METHODS = ['llr', 'lsi', 'mi', 'tfidf'];
-var BIBLIO_OUTPUT_SHAPES = ['nodes', 'edges', 'clusters', 'bursts'];
+var BIBLIO_OUTPUT_SHAPES = ['nodes', 'edges', 'clusters', 'bursts', 'dual_map'];
 
 function biblioOption(value, label) {
     /* Both shapes: `selectOptionTags` reads value/label, `renderParamSelect`
@@ -3425,16 +3425,26 @@ function renderBiblioSettings(nodeId, p) {
         '<div class="settings-hint">' + I18n.t('biblio.ui.correctionHint') + '</div></div>';
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.output') + '</div>';
-    html += renderParamSelect(nodeId, p, 'output_shape', 'biblio.ui.outputShape', 'nodes', biblioOutputShapeOptions(BIBLIO_OUTPUT_SHAPES)) +
-        renderParamCheckbox(nodeId, p, 'export_files', 'biblio.ui.exportFiles', true) +
+    html += renderParamSelect(nodeId, p, 'output_shape', 'biblio.ui.outputShape', 'nodes', biblioOutputShapeOptions(BIBLIO_OUTPUT_SHAPES));
+    var basemapId = escapeHtml(p.basemap_dataset_id || '');
+    var basemapOptions = '<option value="' + basemapId + '" selected>' + escapeHtml(p.basemap_dataset_id || I18n.t('biblio.ui.noBasemap')) + '</option>';
+    if (p.basemap_dataset_id && dataNodes._datasets && dataNodes._datasets[p.basemap_dataset_id]) {
+        basemapOptions = '<option value="' + basemapId + '" selected>' + escapeHtml(dataNodes._dsLabel(dataNodes._datasets[p.basemap_dataset_id])) + '</option>';
+    }
+    html += '<div class="settings-group"><label class="settings-label">' + I18n.t('biblio.ui.basemap') + '</label>' +
+        '<select class="settings-select" id="biblio-basemap-' + nodeId + '" onchange="updateParam(\'' + nodeId + '\',\'basemap_dataset_id\',this.value)">' +
+        basemapOptions + '</select>' +
+        '<button class="menu-btn" onclick="dataNodes.loadBiblioBasemapOptions(\'' + nodeId + '\')">' + I18n.t('settings.capLoaded') + '</button>' +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.basemapHint') + '</div></div>';
+    html += renderParamCheckbox(nodeId, p, 'export_files', 'biblio.ui.exportFiles', true) +
         '<div class="settings-hint">' + I18n.t('biblio.ui.exportHint') + '</div>' +
         '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
     return html;
 }
 
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'wordcloud', 'map'];
-var BIBLIO_CHARTS = ['knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d'];
+var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'dual_map', 'wordcloud', 'map'];
+var BIBLIO_CHARTS = ['knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'dual_map'];
 
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
@@ -3460,7 +3470,7 @@ var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct', 'model_agreemen
 // rare word look bigger than a common one.
 var CHARTS_WITH_Y2 = ['dual_line', 'topic_terms'];
 var CHARTS_WITH_LABEL = ['topic_map'];
-var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d'];
+var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'dual_map'];
 // The types that draw a vertical line at one x-axis label, so an event ("5/19 公安通报") sits
 // on the curve it explains. Kept equal to the backend's ANNOTATED_TYPES by
 // tests/unit/test_visualization.py: a box the figure cannot honour would drop the date in
@@ -3781,6 +3791,22 @@ var dataNodes = {
                 hint.innerHTML = '';
             }
         }
+    },
+
+    async loadBiblioBasemapOptions(nodeId) {
+        var result = await fetchJSON('/api/data/datasets?limit=1000').catch(function () { return null; });
+        if (!result || !result.ok) return;
+        dataNodes._datasets = {};
+        (result.datasets || []).forEach(function (d) { dataNodes._datasets[d.dataset_id] = d; });
+        var select = document.getElementById('biblio-basemap-' + nodeId);
+        if (!select || !canvas.nodes[nodeId]) return;
+        var current = String(canvas.nodes[nodeId].params.basemap_dataset_id || '');
+        var items = Object.keys(dataNodes._datasets).map(function (id) {
+            return { value: id, label: escapeHtml(dataNodes._dsLabel(dataNodes._datasets[id])) };
+        });
+        select.innerHTML = '<option value="">' + escapeHtml(I18n.t('biblio.ui.noBasemap')) + '</option>' +
+            selectOptionTags(items, current, '');
+        select.value = current;
     },
 
     filterDatasets(nodeId, term) {
@@ -4175,12 +4201,31 @@ function patchOptionForTheme(option) {
 /* ECharts' hideOverlap is not enough for a bibliometric graph: the labels are
    placed before the solver settles, so dense Chinese terms still print on top of
    one another. labelLayout runs after the node rect is known, so it can shift a
-   label into the first free slot and hide only what cannot fit. */
-function _graphLabelLayout(series) {
+   label into the first free slot and hide only what cannot fit.
+   The series' own left/top/right/bottom are the band the backend reserved for the
+   title and the cluster legend; a label the solver pushes out of that band reads as
+   a rendering bug even though it touches no other label. */
+function _graphLabelLayout(series, instance) {
     var placed = [];
     function overlaps(a, b) {
         return a.x < b.x + b.width + 6 && b.x < a.x + a.width + 6 &&
                a.y < b.y + b.height + 6 && b.y < a.y + a.height + 6;
+    }
+    function inset(value, span) {
+        if (typeof value === 'number') return value;
+        var text = String(value === undefined || value === null ? '' : value).trim();
+        if (text.slice(-1) === '%') return parseFloat(text) / 100 * span;
+        return 0;
+    }
+    function bounds() {
+        var width = instance && instance.getWidth ? instance.getWidth() : 0;
+        var height = instance && instance.getHeight ? instance.getHeight() : 0;
+        return {
+            x0: inset(series.left, width),
+            y0: inset(series.top, height),
+            x1: width - inset(series.right, width),
+            y1: height - inset(series.bottom, height)
+        };
     }
     return function (params, api) {
         if (params.dataIndex === 0) placed = [];
@@ -4188,6 +4233,11 @@ function _graphLabelLayout(series) {
         if (item) placed.push({x: item.x - 3, y: item.y - 3, width: item.width + 6, height: item.height + 6});
         var rect = params.labelRect || (api && api.getLabelRect && api.getLabelRect());
         var width = rect.width, height = rect.height;
+        var box = bounds();
+        function fits(candidate) {
+            return candidate[0] >= box.x0 && candidate[1] >= box.y0 &&
+                   candidate[0] + width <= box.x1 && candidate[1] + height <= box.y1;
+        }
         var candidates = [[rect.x, rect.y]];
         for (var shift = 6; shift <= 600; shift += 6) {
             candidates.push([rect.x, rect.y - shift]);
@@ -4200,14 +4250,15 @@ function _graphLabelLayout(series) {
             candidates.push([rect.x + shift, rect.y - shift]);
         }
         for (var i = 0; i < candidates.length; i++) {
-            var box = {x: candidates[i][0], y: candidates[i][1], width: width, height: height};
+            if (!fits(candidates[i])) continue;
+            var placedBox = {x: candidates[i][0], y: candidates[i][1], width: width, height: height};
             var clear = true;
             for (var j = 0; j < placed.length; j++) {
-                if (overlaps(box, placed[j])) { clear = false; break; }
+                if (overlaps(placedBox, placed[j])) { clear = false; break; }
             }
             if (clear) {
-                placed.push(box);
-                return {x: box.x, y: box.y, width: width, height: height};
+                placed.push(placedBox);
+                return {x: placedBox.x, y: placedBox.y, width: width, height: height};
             }
         }
         return {ignore: true};
@@ -4218,7 +4269,7 @@ function applyEchartsOption(instance, option) {
     patchOptionForTheme(option);
     (option.series || []).forEach(function (s) {
         if (s && (s.type === 'graph' || s.type === 'scatter') && Array.isArray(s.data) && s.data.length) {
-            s.labelLayout = _graphLabelLayout(s);
+            s.labelLayout = _graphLabelLayout(s, instance);
         }
     });
     var mapSeries = (option.series || []).find(function (s) { return s.type === 'map'; });
@@ -8096,6 +8147,9 @@ workflow.validateDetailed = function () {
             }
             if (shape === 'bursts' && !boolParam(params.burst, !isBiblioCoupling(entity))) {
                 add(id, I18n.t('validate.biblioShapeBurst').replace('{title}', label));
+            }
+            if (shape === 'dual_map' && !String(params.basemap_dataset_id || '').trim()) {
+                add(id, I18n.t('validate.biblioBasemap').replace('{title}', label));
             }
         }
 

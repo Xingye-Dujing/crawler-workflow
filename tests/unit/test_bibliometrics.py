@@ -233,6 +233,41 @@ class TestCitations:
         assert len(expanded['edges']) > len(direct['edges'])
         assert any('引文扩展' in note or 'Citation expansion' in note for note in expanded['notes'])
 
+    def test_dual_map_output_uses_a_journal_category_basemap(self):
+        records = pd.DataFrame(
+            [
+                {
+                    '题名': 'A',
+                    '年份': 2021,
+                    '来源期刊': '甲源',
+                    '学科': '公共管理',
+                    '参考文献': '[1] 张三. 甲文[J]. 甲刊, 2020(1): 1-2.\n[2] 李四. 乙文[J]. 乙刊, 2021(2): 3-4.',
+                },
+                {
+                    '题名': 'B',
+                    '年份': 2022,
+                    '来源期刊': '乙源',
+                    '学科': '信息科学',
+                    '参考文献': '[1] 张三. 甲文[J]. 甲刊, 2020(1): 1-2.\n[2] 李四. 乙文[J]. 乙刊, 2021(2): 3-4.',
+                },
+            ]
+        )
+        basemap = pd.DataFrame({'期刊': ['甲源', '乙源'], '学科': ['公共管理', '信息科学']})
+        result = bibliometrics.build(
+            records,
+            _params(entity_type='journal', output_shape='dual_map', basemap_dataset_id='x', burst=False),
+            'dual',
+            basemap_df=basemap,
+        )
+        sides = {row['map'] for row in result['rows']}
+        assert {'journal', 'category', 'overlay'} <= sides
+        assert any(row['source'] and row['target'] and row['map'] == 'overlay' for row in result['rows'])
+        assert result['summary']['output_shape'] == 'dual_map'
+
+    def test_dual_map_without_basemap_is_refused_by_name(self):
+        with pytest.raises(ValueError, match='basemap'):
+            normalize_params(_params(output_shape='dual_map'), 'test')
+
 
 class TestPhaseTwoContracts:
     def test_document_is_the_cite_space_name_for_bibliographic_coupling(self):
