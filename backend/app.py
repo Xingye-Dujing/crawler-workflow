@@ -107,6 +107,7 @@ from services.exporter import DataExporter, UnsupportedFormatError
 from services.latex_outputs import build_latex_outputs as _latex_outputs
 from services.nodes import execute_biblio_node as _execute_biblio_node
 from services.nodes import execute_compile_node as _execute_compile_node
+from services.nodes import execute_fuse_node as _execute_fuse_node
 from services.nodes import execute_name_node as _execute_name_node
 from services.nodes import execute_resume_node as _execute_resume_node
 from services.nodes import execute_tokenize_node as _execute_tokenize_node
@@ -1883,7 +1884,10 @@ def _begin_run(data: dict, lang_header: str) -> dict:
             if not parents:
                 # A source (crawler or upload) has nothing upstream.
                 return [], []
-            if len(parents) > 1:
+            # ``fuse`` is the one node type where several wires are the feature, not a warning:
+            # it folds every parent and logs what each contributed, so the "the first is the
+            # primary input" sentence would describe a rule this node deliberately does not have.
+            if len(parents) > 1 and _node_of(nid).get('type') != 'fuse':
                 add_log(
                     t(
                         'wf.multi_input',
@@ -5074,6 +5078,9 @@ def _execute_node(
         return _execute_analysis_node(node, current_input, upstream=upstream, ctx=ctx)
     if ntype == 'biblio':
         return _execute_biblio_node(node, current_input, upstream=upstream, ctx=ctx)
+    if ntype == 'fuse':
+        # The parents' own tables, not the merged fan-in: a fused row has to know its source.
+        return _execute_fuse_node(node, current_input, upstream=upstream, ctx=ctx)
     if ntype == 'visualize':
         return _execute_visualize_node(node, current_input, ctx=ctx)
     if ntype == 'tokenize':

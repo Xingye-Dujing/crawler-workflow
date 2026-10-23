@@ -394,6 +394,10 @@ def _documents(df: pd.DataFrame, params: dict) -> tuple[list[dict], dict, dict, 
                 'entities': list(dict.fromkeys(entities)),
                 'terms': _doc_terms(record, columns, entity),
                 'name': name,
+                # Only a fused table carries 来源; a plain literature or crawl table never does,
+                # and then the node table grows neither column (an all-empty provenance column
+                # would read as a claim that everything came from nowhere in particular).
+                'source': str(record.get('来源') or '').strip() if '来源' in df.columns else '',
                 'tc': _numeric(record.get(columns['tc'])) if columns['tc'] in df.columns else None,
                 'usage': _numeric(record.get(columns['usage'])) if columns['usage'] in df.columns else None,
             }
@@ -488,17 +492,17 @@ def _apply_cluster_overrides(clusters: dict, text: str) -> tuple[int, list[str]]
     overrides = _parse_cluster_overrides(text)
     if not overrides:
         return 0, []
-    present = {f"#{member.get('cluster')}" for member in clusters['members'].values()}
+    present = {f'#{member.get("cluster")}' for member in clusters['members'].values()}
     applied = [key for key in overrides if key in present]
     for key in applied:
         for member in clusters['members'].values():
-            if f"#{member.get('cluster')}" == key:
+            if f'#{member.get("cluster")}' == key:
                 member['cluster_label'] = overrides[key]
     summary = clusters.setdefault('summary', {})
     if applied and summary.get('method'):
         # The label a reader sees was produced by a person, not by the asked-for method, and the
         # summary has to say so — a count of lines that merely *exist* would overstate it.
-        summary['method'] = f"{summary['method']}+manual"
+        summary['method'] = f'{summary["method"]}+manual'
     return len(applied), sorted(set(overrides) - set(applied))
 
 
@@ -810,6 +814,24 @@ def _node_usage_stats(nodes: list[str], node_docs: dict[str, set[int]], docs: li
                     total += max(0.0, float(value))
         stats[name] = round(total, 4)
     return stats
+
+
+def _node_sources(nodes: list[str], node_docs: dict[str, set[int]], docs: list[dict]) -> dict[str, list[str]]:
+    """Which corpora each entity actually appears in — the reading a fused graph exists for.
+
+    A term that shows up in the papers and in the posts is the interesting one, and the graph
+    cannot say so unless the provenance of the documents behind the node is kept. Empty when no
+    document named a source, which is what keeps the column off a plain literature run's output.
+    """
+    found: dict[str, list[str]] = {}
+    for name in nodes:
+        labels = {
+            docs[index]['source']
+            for index in node_docs.get(name, set())
+            if 0 <= index < len(docs) and docs[index].get('source')
+        }
+        found[name] = sorted(labels)
+    return found
 
 
 def _normalized_degree(graph: nx.Graph) -> dict[str, float]:
@@ -1236,6 +1258,9 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
     input_columns = set(df.columns)
     citation_stats = _node_citation_stats(final_nodes, node_docs, docs) if params['tc_column'] in input_columns else {}
     usage_stats = _node_usage_stats(final_nodes, node_docs, docs) if params['usage_column'] in input_columns else {}
+    # Only a fused record table carries 来源, so only there does the node table grow the
+    # provenance columns. A plain literature run must not gain an all-empty 来源 it cannot justify.
+    source_stats = _node_sources(final_nodes, node_docs, docs) if '来源' in input_columns else {}
     bursts: dict[str, dict] = {}
     burst_rows: list[dict] = []
     if params['burst']:
@@ -1324,6 +1349,9 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
             row.update(citation_stats.get(name, {'总被引': 0.0, 'H指数': 0}))
         if usage_stats:
             row['使用次数合计'] = usage_stats.get(name, 0.0)
+        if source_stats:
+            row['来源'] = ';'.join(source_stats.get(name) or [])
+            row['跨源'] = len(source_stats.get(name) or ()) > 1
         if clusters is not None:
             cluster = clusters['members'].get(name, {})
             row['聚类'] = int(cluster.get('cluster', 0))

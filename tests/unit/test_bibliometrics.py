@@ -146,6 +146,18 @@ class TestKeywordNetwork:
         errors = collect_errors({'entity_type': 'keyword', 'cluster': False, 'cluster_labels': '#0=x'}, 'test')
         assert any('cluster_labels' in error or '聚类' in error for error in errors)
 
+    def test_provenance_columns_appear_only_for_a_fused_table(self):
+        """A plain literature table says nothing about which corpora use a term; growing an
+        empty 来源 column would let the output look like a fusion that never happened."""
+        plain = bibliometrics.build(_keywords(), _params(), 'test')
+        assert '来源' not in plain['rows'][0] and '跨源' not in plain['rows'][0]
+        fused = [dict(row, 来源='文献') for row in _keywords().to_dict('records')]
+        import pandas as _pd
+
+        result = bibliometrics.build(_pd.DataFrame(fused), _params(), 'test')
+        assert {'来源', '跨源'} <= set(result['rows'][0])
+        assert all(row['来源'] == '文献' and row['跨源'] is False for row in result['rows'])
+
     def test_a_missing_column_is_refused_by_name(self):
         frame = _keywords().drop(columns=['关键词'])
         with pytest.raises(ValueError, match='关键词'):

@@ -17,6 +17,8 @@ columns and flags a provable miss — the schema truth lives here, the wording l
 
 from __future__ import annotations
 
+from services.biblio_fuse import OUTPUT_COLUMNS as FUSE_OUTPUT_COLUMNS
+from services.biblio_fuse import ROLE_PARAMS as FUSE_ROLE_PARAMS
 from services.biblio_schema import (
     CITATION_TYPES,
     COUPLING_TYPES,
@@ -378,6 +380,11 @@ def compute_columns(nodes: dict, connections: list) -> dict:
             out[nid] = _analysis_output(params, merged)
         elif ntype == 'biblio':
             out[nid] = biblio_output_columns(params, merged or [])
+        elif ntype == 'fuse':
+            # A fusion node's output is a fixed contract, not a projection of its inputs: that
+            # is the whole point — downstream reads canonical names whatever the sources called
+            # their columns.
+            out[nid] = list(FUSE_OUTPUT_COLUMNS)
         else:
             out[nid] = None  # source/comment/resume/visualize/output/compile: unknown or non-tabular
     return out
@@ -407,6 +414,11 @@ def referenced_columns(nodes: dict) -> dict:
             found += _split_columns(params.get('stack_fields'))
             chart = str(params.get('chart_type') or '')
             found += list(BIBLIO_CHART_READS.get(chart, ()))
+        elif ntype == 'fuse':
+            # Every candidate column, because which one a given parent answers with is data-
+            # dependent; diagnostics flags a candidate only when NO parent can supply it.
+            for key in FUSE_ROLE_PARAMS:
+                found += _split_columns(params.get(key))
         elif ntype == 'biblio':
             entity = str(params.get('entity_type') or 'keyword')
             columns = biblio_read_columns(params)

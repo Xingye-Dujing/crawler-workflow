@@ -2411,6 +2411,8 @@ function openSettings(nodeId) {
             I18n.t('btn.previewData') + '</button></div>';
     } else if (node.type === 'biblio') {
         html += renderBiblioSettings(nodeId, node.params);
+    } else if (node.type === 'fuse') {
+        html += renderFuseSettings(nodeId, node.params);
     } else if (node.type === 'process') {
         var p = node.params;
         var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
@@ -3352,6 +3354,35 @@ function updateBiblioEntity(nodeId, entity) {
        chosen; an EXPLICIT true is still refused by the backend by name. */
     if (isBiblioCoupling(entity)) updateParam(nodeId, 'burst', false);
     openSettings(nodeId);
+}
+
+/* One candidate list per role, in the order the fold tries them. */
+var FUSE_ROLE_FIELDS = [
+    ['entity_columns', 'fuse.ui.entityColumns'],
+    ['year_columns', 'fuse.ui.yearColumns'],
+    ['title_columns', 'fuse.ui.titleColumns'],
+    ['author_columns', 'fuse.ui.authorColumns'],
+    ['affiliation_columns', 'fuse.ui.affiliationColumns'],
+    ['text_columns', 'fuse.ui.textColumns'],
+    ['reference_columns', 'fuse.ui.referenceColumns'],
+    ['source_columns', 'fuse.ui.sourceColumns']
+];
+
+function renderFuseSettings(nodeId, p) {
+    var html = '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+        I18n.t('fuse.ui.hint') + '</div>';
+    FUSE_ROLE_FIELDS.forEach(function (field) {
+        html += renderParamInput(nodeId, p, field[0], field[1], 'text', '');
+    });
+    html += '<div class="settings-group"><label class="settings-label">' + I18n.t('fuse.ui.sourceLabels') + '</label>' +
+        '<textarea class="settings-input" rows="3" placeholder="' +
+        escapeHtml(I18n.t('fuse.ui.sourceLabelsPlaceholder')) + '" ' +
+        'onchange="updateParam(\'' + nodeId + '\',\'source_labels\',this.value)">' +
+        escapeHtml(p.source_labels || '') + '</textarea>' +
+        '<div class="settings-hint">' + I18n.t('fuse.ui.sourceLabelsHint') + '</div></div>';
+    html += renderParamCheckbox(nodeId, p, 'keep_undated', 'fuse.ui.keepUndated', true);
+    html += renderParamCheckbox(nodeId, p, 'export_files', 'fuse.ui.exportFiles', false);
+    return html;
 }
 
 function renderBiblioSettings(nodeId, p) {

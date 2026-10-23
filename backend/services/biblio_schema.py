@@ -174,6 +174,10 @@ BURST_COLUMNS = ('突现强度', '突现起始', '突现结束')
 CITATION_METRIC_COLUMNS = ('总被引', 'H指数')
 USAGE_METRIC_COLUMNS = ('使用次数合计',)
 
+#: Emitted only when the input is a fused record table (``fuse`` node upstream): which corpora
+#: an entity appears in, and whether that is more than one.
+SOURCE_COLUMNS = ('来源', '跨源')
+
 EDGE_COLUMNS = ('source', 'target', 'weight', 'count')
 DUAL_MAP_COLUMNS = ('map', 'source', 'target', 'weight', 'label', 'x', 'y')
 CLUSTER_TABLE_COLUMNS = ('聚类', '聚类标签', '节点数', '节点', '轮廓值')
@@ -227,6 +231,9 @@ def output_columns(params: dict, input_columns: list[str] | None = None) -> list
         cols += list(CITATION_METRIC_COLUMNS)
     if columns['usage'] in available:
         cols += list(USAGE_METRIC_COLUMNS)
+    # Provenance travels only from a fused record table.
+    if '来源' in available:
+        cols += list(SOURCE_COLUMNS)
     return cols
 
 

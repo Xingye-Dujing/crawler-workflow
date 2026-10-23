@@ -8,6 +8,7 @@ import cookie_preflight
 import crawl_capabilities as capabilities
 from config import Config
 from i18n import t
+from services.biblio_fuse import collect_errors as fuse_param_errors
 from services.biblio_schema import collect_errors as biblio_param_errors
 from services.chart_contracts import NO_X_TYPES
 from services.cookie_manager import CookieManager
@@ -110,7 +111,7 @@ def node_label(node: dict, nid: str) -> str:
 #: no rows is one the canvas draws and the run ignores — the silent half of the picture
 #: this rule exists to refuse.
 TABLE_NODE_TYPES = frozenset(
-    {'source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'biblio', 'output'}
+    {'source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'biblio', 'fuse', 'output'}
 )
 
 #: Node types that carry a PDF-able LaTeX artifact downstream rather than a row table: ``visualize`` emits a
@@ -560,6 +561,14 @@ class WorkflowEngine:
                     )
                 for message in biblio_param_errors(params, label):
                     add(nid, 'engine.biblio', message)
+            if ntype == 'fuse':
+                # Unlike ``biblio``, fusion WANTS several parents — that is the feature. A name
+                # node still does not count as a table, so the check is on data inputs, not on
+                # the raw wire count.
+                if nid not in data_inputs:
+                    add(nid, 'fuse.no_input', t('fuse.no_input', nid=label))
+                for message in fuse_param_errors(params, label):
+                    add(nid, 'engine.fuse', message)
             if ntype == 'tokenize' and not params.get('text_column'):
                 add(nid, 'engine.tokenize_no_column', t('engine.tokenize_no_column', nid=label))
             if ntype == 'visualize':

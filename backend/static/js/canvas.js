@@ -1490,6 +1490,22 @@ const canvas = {
             export_files: true
         };
         if (type === 'visualize') return { chart_type: 'bar', x_field: '', y_field: '', value_field: '', agg: 'sum', engine: 'echarts', title: '', tokenize: false, emit_latex: true, emit_latex_table: true };
+        /* Candidate columns, tried in order per role: a fusion exists because the literature
+           calls it 关键词 and the posts call it 话题. `source_labels` names a parent that carries
+           no source column of its own. */
+        if (type === 'fuse') return {
+            entity_columns: '关键词,话题,主题,主题词,标签',
+            year_columns: '年份,发布时间,发表日期,日期',
+            title_columns: '题名,标题,内容,正文',
+            author_columns: '作者,用户名,昵称,发布者',
+            affiliation_columns: '作者单位,机构',
+            text_columns: '摘要,正文,内容',
+            reference_columns: '参考文献,引文',
+            source_columns: '平台,来源',
+            source_labels: '',
+            keep_undated: true,
+            export_files: false
+        };
         if (type === 'tokenize') return { text_column: '', top_n: '', output_mode: 'word_freq' };
         /* Empty run ids mean "auto": pick the newest interrupted run, and
            inside it whichever node holds the most rows. */
@@ -1593,6 +1609,13 @@ const canvas = {
             var shape = params.output_shape || 'nodes';
             var shapeLine = shape === 'nodes' ? '' : '\n' + I18n.t('biblio.shape.' + shape);
             return I18n.t('biblio.entity.' + entity) + ' · ' + range + '\n' + choice + shapeLine;
+        }
+        if (type === 'fuse') {
+            /* The card says what a reader needs to know before opening it: which column becomes
+               the graph's entity, and that the parents' own names travel with every row. */
+            var roles = String(params.entity_columns || '').split(',').filter(Boolean).length;
+            return I18n.t('fuse.ui.summary') + ' · ' + I18n.t('fuse.ui.entityRoles').replace('{n}', roles) +
+                '\n' + (params.entity_columns || '?');
         }
         if (type === 'visualize') {
             var ct = params.chart_type || '';
