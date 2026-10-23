@@ -669,6 +669,91 @@ def _biblio_heatmap(df: pd.DataFrame, base: dict) -> dict:
     return base
 
 
+def _graph3d(df: pd.DataFrame, base: dict) -> dict:
+    rows, names = _node_rows(df, require_coordinates=True)
+    _base_graph_series(base, base['title']['text'])
+    max_freq = max((_number(rows[name]['频次'], 0.0) for name in names), default=1.0) or 1.0
+    xs = [_number(rows[name]['x'], 0.0) for name in names]
+    ys = [_number(rows[name]['y'], 0.0) for name in names]
+    zs = [_number(rows[name].get('中介中心性'), 0.0) if '中介中心性' in df.columns else 0.0 for name in names]
+    if not any(zs):
+        zs = [_number(rows[name]['频次'], 0.0) / max_freq for name in names]
+    min_x, max_x, min_y, max_y, min_z, max_z = min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)
+    span_x = max_x - min_x or 1.0
+    span_y = max_y - min_y or 1.0
+    span_z = max_z - min_z or 1.0
+    positions = {
+        name: (
+            round(100 * (xs[i] - min_x) / span_x, 3),
+            round(100 * (ys[i] - min_y) / span_y, 3),
+            round(100 * (zs[i] - min_z) / span_z, 3),
+        )
+        for i, name in enumerate(names)
+    }
+    ranked = sorted(names, key=lambda name: (-_number(rows[name]['频次'], 0.0), name))
+    labelled = set(ranked[:40])
+    data = []
+    for name in names:
+        frequency = _number(rows[name]['频次'], 0.0)
+        size = round(4 + 18 * math.sqrt(max(0.0, frequency / max_freq)), 2)
+        data.append(
+            {
+                'name': name,
+                'value': [*positions[name], round(frequency, 4)],
+                'symbolSize': size,
+                'itemStyle': {'color': base['color'][0], 'opacity': 0.88},
+                'label': {'show': name in labelled, 'formatter': '{b}', 'fontSize': 9},
+            }
+        )
+    links = _graph_links(rows, names)
+    biggest = max(link['value'] for link in links.values()) or 1.0
+    line_data = []
+    for link in links.values():
+        left = positions[link['source']]
+        right = positions[link['target']]
+        size = round(1.8 + 3.0 * math.sqrt(max(0.0, link['value'] / biggest)), 2)
+        for step in range(1, 10):
+            ratio = step / 10.0
+            line_data.append(
+                {
+                    'value': [
+                        round(left[0] + (right[0] - left[0]) * ratio, 3),
+                        round(left[1] + (right[1] - left[1]) * ratio, 3),
+                        round(left[2] + (right[2] - left[2]) * ratio, 3),
+                    ],
+                    'symbolSize': size,
+                }
+            )
+    base['tooltip']['formatter'] = None
+    base['grid3D'] = {
+        'viewDistance': 180,
+        'alpha': 22,
+        'beta': 35,
+        'boxWidth': 100,
+        'boxDepth': 100,
+        'boxHeight': 100,
+        'axisLine': {'lineStyle': {'color': '#999'}},
+        'axisLabel': {'show': False},
+        'axisPointer': {'show': False},
+        'light': {'main': {'intensity': 1.2, 'alpha': 30, 'beta': 40}},
+    }
+    base['xAxis3D'] = {'name': 'X', 'min': 0, 'max': 100, 'axisLabel': {'show': False}}
+    base['yAxis3D'] = {'name': 'Y', 'min': 0, 'max': 100, 'axisLabel': {'show': False}}
+    base['zAxis3D'] = {'name': 'Centrality', 'min': 0, 'max': 100, 'axisLabel': {'show': False}}
+    base['series'] = [
+        {
+            'type': 'scatter3D',
+            'name': t('chart.biblio_links'),
+            'data': line_data,
+            'symbolSize': 2.2,
+            'itemStyle': {'color': '#666', 'opacity': 0.45},
+            'silent': True,
+        },
+        {'type': 'scatter3D', 'name': t('chart.biblio_nodes'), 'data': data, 'emphasis': {'focus': 'self'}},
+    ]
+    return base
+
+
 BUILDERS = {
     'knowledge_graph': _knowledge_graph,
     'cluster_timeline': _cluster_timeline,
@@ -677,6 +762,7 @@ BUILDERS = {
     'circular': _circular,
     'landscape': _landscape,
     'biblio_heatmap': _biblio_heatmap,
+    'graph3d': _graph3d,
 }
 
 

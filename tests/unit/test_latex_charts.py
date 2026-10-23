@@ -113,6 +113,7 @@ CASES = {
     'circular': (_biblio(), dict()),
     'landscape': (_biblio(), dict()),
     'biblio_heatmap': (_biblio(), dict()),
+    'graph3d': (_biblio(), dict()),
     'wordcloud': (_cat(), dict(x='g', value_field='v')),
     'map': (_cat(), dict(x='g', value_field='v')),
 }

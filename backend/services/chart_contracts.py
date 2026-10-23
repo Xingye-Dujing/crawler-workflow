@@ -13,6 +13,7 @@ BIBLIO_CHART_TYPES = (
     'circular',
     'landscape',
     'biblio_heatmap',
+    'graph3d',
 )
 
 #: Charts whose x axis is not a user-selected column. Validation must not demand
@@ -31,4 +32,5 @@ BIBLIO_CHART_READS = {
     'circular': ('节点', '连接', '频次'),
     'landscape': ('节点', '聚类', '聚类标签', '频次'),
     'biblio_heatmap': ('节点', '聚类', '聚类标签', '年份序列', '频次'),
+    'graph3d': ('节点', 'x', 'y', '连接', '频次'),
 }

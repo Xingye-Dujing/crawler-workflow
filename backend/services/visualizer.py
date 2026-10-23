@@ -68,6 +68,7 @@ CHART_TYPES = (
     'circular',
     'landscape',
     'biblio_heatmap',
+    'graph3d',
     'wordcloud',
     'map',
 )
@@ -425,6 +426,7 @@ ECHARTS_ONLY_TYPES = (
     'circular',
     'landscape',
     'biblio_heatmap',
+    'graph3d',
 )
 
 #: Chart types that can carry dated event markers (a vertical line at one category). Any other

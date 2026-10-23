@@ -331,6 +331,7 @@ class LatexChartService:
             'circular',
             'landscape',
             'biblio_heatmap',
+            'graph3d',
         ):
             return cls._biblio_figure(df, chart_type)
         if chart_type == 'sankey':
@@ -1210,9 +1211,62 @@ class LatexChartService:
         return pic
 
     @classmethod
+    def _biblio_graph3d(cls, df) -> str:
+        rows, names = cls._biblio_node_rows(df, ('节点', 'x', 'y', '连接', '频次'))
+        links = cls._biblio_links(rows, names)
+        max_freq = max((cls._biblio_float(rows[name]['频次'], 0.0) for name in names), default=1.0) or 1.0
+        xs = [cls._biblio_float(rows[name]['x'], 0.0) for name in names]
+        ys = [cls._biblio_float(rows[name]['y'], 0.0) for name in names]
+        zs = (
+            [cls._biblio_float(rows[name].get('中介中心性'), 0.0) for name in names]
+            if '中介中心性' in df.columns
+            else []
+        )
+        if not any(zs):
+            zs = [cls._biblio_float(rows[name]['频次'], 0.0) / max_freq for name in names]
+        min_x, max_x, min_y, max_y, min_z, max_z = min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)
+        span_x = max_x - min_x or 1.0
+        span_y = max_y - min_y or 1.0
+        span_z = max_z - min_z or 1.0
+        positions = {}
+        for i, name in enumerate(names):
+            x = (xs[i] - min_x) / span_x * 100
+            y = (ys[i] - min_y) / span_y * 100
+            z = (zs[i] - min_z) / span_z * 100
+            positions[name] = ((x - y) * 0.07 + 7.5, (x + y) * 0.035 - z * 0.055 + 5.5, z)
+        ranked = sorted(names, key=lambda name: (-cls._biblio_float(rows[name]['频次'], 0.0), name))
+        labelled = set(ranked[:80])
+        max_weight = max((link['value'] for link in links), default=1.0) or 1.0
+        out = []
+        for link in links[:180]:
+            x1, y1, _z1 = positions[link['source']]
+            x2, y2, _z2 = positions[link['target']]
+            width = 0.2 + 2.2 * math.sqrt(max(0.0, link['value'] / max_weight))
+            out.append(f'\\draw[black!14,line width={width:.2f}pt] ({x1:.2f},{y1:.2f}) -- ({x2:.2f},{y2:.2f});')
+        for name in names:
+            x, y, z = positions[name]
+            frequency = cls._biblio_float(rows[name]['频次'], 0.0)
+            radius = 0.06 + 0.34 * math.sqrt(max(0.0, frequency / max_freq))
+            shade = int(35 + 45 * z / 100)
+            out.append(f'\\draw[fill=cA!{shade},draw=cA,line width=0.55pt] ({x:.2f},{y:.2f}) circle ({radius:.2f});')
+            if name in labelled:
+                label_x = x + radius + 0.1
+                out.append(f'\\node[lblbox,anchor=west,font=\\scriptsize] at ({label_x:.2f},{y:.2f}) {{{_esc(name)}}};')
+        out.append(
+            '\\node[font=\\scriptsize,text=black!60,anchor=south west] at (0,0)'
+            '{等轴投影：z 轴为中介中心性（无该列时使用频次）；完整三维交互见 ECharts 图。};'
+        )
+        return '\\begin{tikzpicture}\n' + '\n'.join(out) + '\n\\end{tikzpicture}'
+
+    @classmethod
     def _biblio_figure(cls, df, chart_type: str) -> str:
-        if chart_type in ('knowledge_graph', 'circular'):
-            pic = cls._biblio_fixed_graph(df) if chart_type == 'knowledge_graph' else cls._biblio_circular(df)
+        if chart_type in ('knowledge_graph', 'circular', 'graph3d'):
+            if chart_type == 'knowledge_graph':
+                pic = cls._biblio_fixed_graph(df)
+            elif chart_type == 'circular':
+                pic = cls._biblio_circular(df)
+            else:
+                pic = cls._biblio_graph3d(df)
         elif chart_type == 'landscape':
             pic = cls._biblio_landscape(df)
         elif chart_type == 'cluster_timeline':
@@ -1221,6 +1275,8 @@ class LatexChartService:
             pic = cls._biblio_burst(df)
         elif chart_type == 'timezone':
             pic = cls._biblio_timezone(df)
+        elif chart_type == 'graph3d':
+            pic = cls._biblio_graph3d(df)
         elif chart_type == 'biblio_heatmap':
             pic = cls._biblio_heatmap(df)
         else:
@@ -1229,7 +1285,7 @@ class LatexChartService:
 
     @classmethod
     def _biblio_table_data(cls, df, chart_type: str):
-        if chart_type in ('knowledge_graph', 'circular'):
+        if chart_type in ('knowledge_graph', 'circular', 'graph3d'):
             required = ['节点', '频次', '度', '中介中心性', '特征向量中心性', 'PageRank', 'Sigma']
             if '聚类标签' in df.columns:
                 required.append('聚类标签')
@@ -1361,6 +1417,7 @@ class LatexChartService:
             'circular',
             'landscape',
             'biblio_heatmap',
+            'graph3d',
         ):
             return cls._biblio_table_data(df, chart_type)
         if chart_type == 'stack_pct':
