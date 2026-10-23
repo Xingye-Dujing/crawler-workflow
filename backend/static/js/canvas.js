@@ -1486,6 +1486,7 @@ const canvas = {
             pathfinder_r: 'inf', pathfinder_lmax: 0, pathfinder_dmax: 1.0,
             cluster: true, cluster_count: '', label_method: 'llr', top_terms: 5,
             burst: true, burst_gamma: 1.0, burst_min_duration: 2, burst_weight: 2.0, burst_top: 20,
+            variation: false, variation_min: 0.05,
             aliases: '', exclude_values: '', cluster_labels: '', basemap_dataset_id: '',
             output_shape: 'nodes',
             export_files: true

@@ -48,10 +48,28 @@ def test_every_bibliometric_view_is_on_the_demo_canvas():
 def test_the_dual_map_chain_is_off_and_names_the_dataset_it_wants():
     off = [node for node in _draft()['nodes'] if not (node.get('params') or {}).get('enabled', True)]
     assert {node['type'] for node in off} == {'biblio', 'visualize', 'fuse', 'upload'}
-    shape = next((node.get('params') or {}) for node in off if node['type'] == 'biblio')
-    assert shape['output_shape'] == 'dual_map'
+    shapes = {str((node.get('params') or {}).get('output_shape') or '') for node in off if node['type'] == 'biblio'}
+    assert shapes == {'nodes', 'dual_map'}, shapes
+    dual = next(
+        (node.get('params') or {}) for node in off if (node.get('params') or {}).get('output_shape') == 'dual_map'
+    )
     # Blank by design: the basemap is the user's own journal-category table, never bundled.
-    assert not str(shape.get('basemap_dataset_id') or '').strip()
+    assert not str(dual.get('basemap_dataset_id') or '').strip()
+
+
+def test_the_variation_table_is_on_the_demo_canvas_and_runs():
+    """Structural variation needs nothing the repository lacks, so unlike the dual map and the
+    fusion chain it ships switched ON — a capability no demo uses is a capability nobody finds."""
+    live = effective_workflow(_graph(_draft()))['nodes']
+    variation = [
+        node
+        for node in live
+        if node.get('type') == 'biblio' and (node.get('params') or {}).get('output_shape') == 'variation'
+    ]
+    assert len(variation) == 1
+    params = variation[0]['params']
+    assert params['variation'] is True
+    assert params['cluster'] is False and params['burst'] is False
 
 
 def test_the_fusion_chain_is_off_until_the_third_dataset_is_uploaded():

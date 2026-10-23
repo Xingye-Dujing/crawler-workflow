@@ -302,6 +302,7 @@ def execute_biblio_node(node: dict, current_input: list, upstream: list = None, 
         'edges': result['edges'],
         'clusters': result['clusters'],
         'bursts': result['bursts'],
+        'variation': result['variation'],
         'dual_map': result['rows'],
     }.get(shape, result['rows'])
     return _json_safe_records(pd.DataFrame(rows))

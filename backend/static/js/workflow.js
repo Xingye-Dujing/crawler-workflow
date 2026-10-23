@@ -3325,7 +3325,7 @@ var BIBLIO_PRUNING_MODES = ['none', 'mst', 'pathfinder'];
 var BIBLIO_PRUNING_SCOPES = ['slices', 'merged'];
 var BIBLIO_PATHFINDER_R = ['1', '2', 'inf'];
 var BIBLIO_LABEL_METHODS = ['llr', 'lsi', 'mi', 'tfidf'];
-var BIBLIO_OUTPUT_SHAPES = ['nodes', 'edges', 'clusters', 'bursts', 'dual_map'];
+var BIBLIO_OUTPUT_SHAPES = ['nodes', 'edges', 'clusters', 'bursts', 'variation', 'dual_map'];
 
 function biblioOption(value, label) {
     /* Both shapes: `selectOptionTags` reads value/label, `renderParamSelect`
@@ -3464,6 +3464,16 @@ function renderBiblioSettings(nodeId, p) {
         '<div class="settings-hint">' + I18n.t('biblio.ui.burstHint') + '</div>';
     if (isBiblioCoupling(entity)) {
         html += '<div class="settings-group" style="font-size:11px;color:#e67e22;">' + I18n.t('biblio.ui.burstCoupling') + '</div>';
+    }
+
+    html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.variation') + '</div>';
+    html += renderParamCheckbox(nodeId, p, 'variation', 'biblio.ui.variation', false) +
+        renderParamInput(nodeId, p, 'variation_min', 'biblio.ui.variationMin', 'number', 0.05) +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.variationHint') + '</div>';
+    if (isBiblioCoupling(entity)) {
+        // The switch is refused by the server here, so the panel says so instead of offering a
+        // box that only ever produces an error at run time.
+        html += '<div class="settings-group" style="font-size:11px;color:#e67e22;">' + I18n.t('biblio.ui.variationCoupling') + '</div>';
     }
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.correction') + '</div>';
@@ -8929,9 +8939,10 @@ var biblioWorkspace = {
     },
 
     _shapeWord(shape) {
-        var known = ['nodes', 'edges', 'clusters', 'bursts', 'dual_map'];
+        // Read off the one list the panel and the settings select already share — a second
+        // literal copy is how a shipped shape ends up labelled 「输出形态未知」.
         var s = String(shape || '');
-        return known.indexOf(s) >= 0 ? I18n.t('biblioWs.shape.' + s) : I18n.t('biblioWs.shapeUnknown');
+        return BIBLIO_OUTPUT_SHAPES.indexOf(s) >= 0 ? I18n.t('biblioWs.shape.' + s) : I18n.t('biblioWs.shapeUnknown');
     },
 
     _rows() {

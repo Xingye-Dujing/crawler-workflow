@@ -124,6 +124,12 @@ class TestServerAnswersAreNotInvented:
         assert case['unknown'] is True
         assert case['notGuessed'] is True, 'a shape the server did not name must not print 节点表'
 
+    def test_a_newly_shipped_shape_gets_its_word_without_a_second_list(self, placed):
+        """`variation` was added to the server without touching the panel's own literal copy of
+        the known shapes, and the copy is what decided whether the chip said 结构变异表 or
+        「输出形态未知」. The panel now reads the same list the settings select does."""
+        assert placed['shape']['variation'] is True
+
     def test_a_refusal_keeps_the_servers_words_and_paints_no_table(self, placed):
         case = placed['refusal']
         assert case['printed'] is True

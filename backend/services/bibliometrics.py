@@ -591,6 +591,11 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
         total_freq[name] = sum(counts.values())
 
     if entity in COUPLING_TYPES:
+        if params['variation']:
+            # A coupling link belongs to two CITING papers, not to the year one event happened
+            # in; assigning it a slice is a convention, so "how its pattern moved between slices"
+            # has no referent here. Refuse rather than score a made-up timeline.
+            raise BiblioError(t('biblio.variation_no_coupling', entity=entity))
         # Coupling is a relation between citing units, not between two events inside
         # one year: a 2021 paper and a 2022 paper that share references are
         # coupled. Counting pairs inside a slice missed exactly that case.
@@ -629,6 +634,12 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
         return total_freq, merged_edges, edge_slices, {'slices': len(slices), 'node_docs': node_docs}
 
     look_back = params.get('look_back_years') or 0
+    # Structural variation reads one network per slice, so it needs the pair counts and the
+    # node frequencies SEPARATELY per slice; the merged totals cannot answer "what moved".
+    # Collected only when asked: a 20-slice run over 100k edges would otherwise carry 20 copies.
+    counts_by_slice: dict[int, Counter] = {}
+    freqs_by_slice: dict[int, Counter] = {}
+    keep_slices = bool(params['variation'])
     for slice_id, members in sorted(slices.items()):
         slice_freq: Counter = Counter()
         for doc in members:
@@ -644,14 +655,29 @@ def _slice_graphs(docs: list[dict], params: dict, node_meta) -> tuple[Counter, C
             selected = _select(selection_freq, params)
         else:
             selected = _select(slice_freq, params)
+        slice_counts: Counter = Counter()
         for doc in members:
             chosen = sorted(name for name in doc['entities'] if name in selected)
             for left, right in combinations(chosen, 2):
                 key = (left, right) if left < right else (right, left)
                 merged_edges[key] += 1
                 edge_slices[key].add(slice_id)
+                slice_counts[key] += 1
+        if keep_slices:
+            counts_by_slice[slice_id] = slice_counts
+            freqs_by_slice[slice_id] = Counter(slice_freq)
 
-    return total_freq, merged_edges, edge_slices, {'slices': len(slices), 'node_docs': node_docs}
+    return (
+        total_freq,
+        merged_edges,
+        edge_slices,
+        {
+            'slices': len(slices),
+            'node_docs': node_docs,
+            'counts': counts_by_slice,
+            'freqs': freqs_by_slice,
+        },
+    )
 
 
 def _normalized_edges(merged: Counter, total_freq: Counter, measure: str) -> dict[tuple[str, str], dict]:
@@ -846,6 +872,95 @@ def _pruning_scope_word(scope: str) -> str:
     """The scope as the reader sees it: a raw ``slices`` inside a Chinese console line is a
     token, not a word, and the line is the only place the user learns what was pruned."""
     return t('biblio.pruning_scope.slices' if scope == 'slices' else 'biblio.pruning_scope.merged')
+
+
+def _neighbor_distributions(edges: dict) -> dict[str, dict[str, float]]:
+    """``{node: {neighbor: weight}}`` — the connection pattern one slice shows."""
+    out: dict[str, dict[str, float]] = defaultdict(dict)
+    for (left, right), info in edges.items():
+        weight = float(info['weight'])
+        out[left][right] = weight
+        out[right][left] = weight
+    return out
+
+
+def _jsd(left: dict[str, float], right: dict[str, float]) -> float:
+    """Jensen–Shannon divergence in bits between two link-strength distributions.
+
+    Chosen over raw KL because a neighbour that appears or disappears makes KL infinite, and an
+    infinite score is not something a table can rank. Both inputs are normalized over their
+    union, so the result is bounded by 1 bit: 0 = the same pattern, 1 = nothing in common."""
+    keys = set(left) | set(right)
+    total_left = sum(left.values())
+    total_right = sum(right.values())
+    if total_left <= 0 or total_right <= 0:
+        return 0.0
+    p = {key: left.get(key, 0.0) / total_left for key in keys}
+    q = {key: right.get(key, 0.0) / total_right for key in keys}
+    mixed = {key: (p[key] + q[key]) / 2.0 for key in keys}
+
+    def _kl(a: dict[str, float]) -> float:
+        return sum(value * math.log2(value / mixed[key]) for key, value in a.items() if value > 0)
+
+    return 0.5 * _kl(p) + 0.5 * _kl(q)
+
+
+def _structural_variation(slice_counts: dict, slice_freqs: dict, params: dict) -> tuple[list[dict], list[str]]:
+    """How far each node's connection pattern moves between CONSECUTIVE slices.
+
+    A node is scored only where it has links in both slices of a pair: "it had a pattern and
+    then had none" is a disappearance, not a measurable change of shape, and inventing a score
+    for it would rank an absence above a restructuring. Gaps in the slicing (a year range with
+    no records) are not treated as consecutive.
+    """
+    notes: list[str] = []
+    measure = params['link_measure']
+    width = params['slice_years']
+    start = params['start']
+    ids = sorted(slice_counts)
+    patterns = {
+        slice_id: _neighbor_distributions(_normalized_edges(slice_counts[slice_id], slice_freqs[slice_id], measure))
+        for slice_id in ids
+    }
+    rows: list[dict] = []
+    # Consecutive PAIRS, so the tail slice has no partner — the short end is the point.
+    for left_id, right_id in zip(ids, ids[1:], strict=False):
+        if right_id - left_id != 1:
+            continue
+        left_map, right_map = patterns[left_id], patterns[right_id]
+        for name in sorted(set(left_map) & set(right_map)):
+            left, right = left_map[name], right_map[name]
+            score = _jsd(left, right)
+            if score + 1e-12 < params['variation_min']:
+                continue
+            rows.append(
+                {
+                    '节点': name,
+                    '起始年': start + left_id * width,
+                    '结束年': start + right_id * width,
+                    '结构变化': round(score, 6),
+                    '前邻居': len(left),
+                    '后邻居': len(right),
+                    '新增邻居': '；'.join(sorted(set(right) - set(left))),
+                    '消失邻居': '；'.join(sorted(set(left) - set(right))),
+                }
+            )
+    rows.sort(key=lambda row: (-row['结构变化'], row['节点'], row['起始年']))
+    if rows:
+        top = rows[0]
+        notes.append(
+            t(
+                'biblio.variation_done',
+                rows=len(rows),
+                node=top['节点'],
+                pair=f'{top["起始年"]}→{top["结束年"]}',
+                score=top['结构变化'],
+                floor=params['variation_min'],
+            )
+        )
+    else:
+        notes.append(t('biblio.variation_empty', floor=params['variation_min']))
+    return rows, notes
 
 
 def _prune(edges: dict, edge_slices: dict, params: dict, notes: list[str]) -> dict:
@@ -1280,6 +1395,7 @@ def build_dual_map(df: pd.DataFrame, params: dict, basemap_df: pd.DataFrame | No
         'link_measure': params['link_measure'],
         'clusters': None,
         'bursts': 0,
+        'variation': 0,
         'output_shape': 'dual_map',
         'notes': [t('biblio.dual_map_done', journals=len(left_nodes), categories=len(right_nodes))],
     }
@@ -1288,6 +1404,7 @@ def build_dual_map(df: pd.DataFrame, params: dict, basemap_df: pd.DataFrame | No
         'edges': rows,
         'bursts': [],
         'clusters': [],
+        'variation': [],
         'graph': None,
         'summary': summary,
         'notes': summary['notes'],
@@ -1327,6 +1444,15 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
         docs, params, (labels, year_counts, node_docs, node_years)
     )
     notes += params.pop('_notes', [])
+    variation_rows: list[dict] = []
+    if params['variation']:
+        if len(slice_meta['counts']) < 2:
+            # Two slices are the minimum a "change between them" can be measured over; one
+            # slice is a snapshot, and reporting zeros for every node would read as stability.
+            raise BiblioError(t('biblio.variation_needs_slices', n=len(slice_meta['counts'])))
+        rows, variation_notes = _structural_variation(slice_meta['counts'], slice_meta['freqs'], params)
+        variation_rows += rows
+        notes += variation_notes
     if not merged_edges:
         raise BiblioError(t('biblio.no_edges', start=window['start'], end=window['end']))
     edges = _normalized_edges(merged_edges, total_freq, params['link_measure'])
@@ -1516,6 +1642,7 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
         'link_measure': params['link_measure'],
         'clusters': clusters['summary'] if clusters else None,
         'bursts': len(bursts),
+        'variation': len(variation_rows),
         'output_shape': params['output_shape'],
         'notes': notes,
     }
@@ -1524,6 +1651,7 @@ def build(df: pd.DataFrame, params: dict, nid: str = '', basemap_df: pd.DataFram
         'edges': edge_rows,
         'bursts': burst_rows,
         'clusters': cluster_rows,
+        'variation': variation_rows,
         'graph': graph,
         'summary': summary,
         'notes': notes,
@@ -1622,6 +1750,7 @@ def export_result(result: dict, out_dir: str, base_name: str) -> dict[str, str]:
         'edges': result.get('edges') or [],
         'clusters': result.get('clusters') or [],
         'bursts': result.get('bursts') or [],
+        'variation': result.get('variation') or [],
     }
     json_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2, sort_keys=True), encoding='utf-8')
     files['biblio_json'] = str(json_path)
@@ -1642,4 +1771,8 @@ def export_result(result: dict, out_dir: str, base_name: str) -> dict[str, str]:
         bursts_path = target / f'{safe}_bursts.csv'
         pd.DataFrame(result['bursts']).to_csv(bursts_path, index=False, encoding='utf-8-sig')
         files['biblio_bursts'] = str(bursts_path)
+    if result.get('variation'):
+        variation_path = target / f'{safe}_variation.csv'
+        pd.DataFrame(result['variation']).to_csv(variation_path, index=False, encoding='utf-8-sig')
+        files['biblio_variation'] = str(variation_path)
     return files

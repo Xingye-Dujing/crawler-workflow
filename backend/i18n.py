@@ -196,6 +196,16 @@ _ZH = {
     'biblio.largest_component': '已保留最大连通分量：节点 {before} → {after}，其余分量已剪除',
     'biblio.shape_needs_cluster': '{nid}：输出形态 clusters 需要开启聚类，请先开启或改回 nodes/edges',
     'biblio.shape_needs_burst': '{nid}：输出形态 bursts 需要开启突现检测，请先开启或改回 nodes/edges',
+    'biblio.shape_needs_variation': '{nid}：输出形态 variation 需要开启结构变异检测，请先开启或改回其它形态',
+    'biblio.variation_needs_slices': (
+        '结构变异要比较相邻两个切片，本次只有 {n} 个切片可比（请缩小 slice_years 或放宽年份范围）'
+    ),
+    'biblio.variation_no_coupling': (
+        '结构变异只适用于按年切片的关系网络：耦合网络（{entity}）的连边属于两篇施引文献、不属于某一年，'
+        '没有切片间的变化可测'
+    ),
+    'biblio.variation_done': '结构变异：{rows} 行（最高 {node} {pair} = {score} bit，阈值 {floor}）',
+    'biblio.variation_empty': '结构变异：没有节点在相邻切片间的连接模式变化达到阈值 {floor} bit',
     'biblio.dual_map_needs_basemap': '{nid}：输出形态 dual_map 需要选择期刊—学科 basemap 数据集',
     'biblio.dual_map_columns': '双图叠加 basemap 需要期刊列（{journal}）和学科列（{category}）',
     'biblio.dual_map_done': '双图叠加已生成：期刊 {journals} 个 / 学科 {categories} 个',
@@ -1800,6 +1810,21 @@ _EN = {
     'biblio.shape_needs_cluster': '{nid}: output_shape clusters needs clustering enabled; enable it or use nodes/edges',
     'biblio.shape_needs_burst': (
         '{nid}: output_shape bursts needs burst detection enabled; enable it or use nodes/edges'
+    ),
+    'biblio.shape_needs_variation': (
+        '{nid}: output_shape variation needs structural-variation detection enabled; enable it or use another shape'
+    ),
+    'biblio.variation_needs_slices': (
+        'Structural variation compares consecutive slices, and this run has only {n} slice to compare '
+        '(narrow slice_years or widen the year range)'
+    ),
+    'biblio.variation_no_coupling': (
+        'Structural variation needs a network sliced by year: in a coupling network ({entity}) a link belongs to '
+        'two citing papers rather than to one year, so there is no slice-to-slice change to measure'
+    ),
+    'biblio.variation_done': 'Structural variation: {rows} rows (highest {node} {pair} = {score} bits, floor {floor})',
+    'biblio.variation_empty': (
+        'Structural variation: no node moved its connection pattern by {floor} bits between consecutive slices'
     ),
     'biblio.dual_map_needs_basemap': '{nid}: output_shape dual_map needs a journal-category basemap dataset',
     'biblio.dual_map_columns': (

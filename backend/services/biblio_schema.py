@@ -42,7 +42,7 @@ CITATION_TYPES = (
 #: CiteSpace and by this project; keeping both is a compatibility choice.
 COUPLING_TYPES = ('document', 'bibliographic_coupling', 'journal', 'source')
 
-OUTPUT_SHAPES = ('nodes', 'edges', 'clusters', 'bursts', 'dual_map')
+OUTPUT_SHAPES = ('nodes', 'edges', 'clusters', 'bursts', 'variation', 'dual_map')
 
 SELECTION_MODES = ('top_n', 'top_pct', 'g_index', 'threshold')
 LINK_MEASURES = ('cosine', 'dice', 'jaccard', 'association')
@@ -145,6 +145,11 @@ DEFAULTS = {
     'burst_min_duration': 2,
     'burst_weight': 2.0,
     'burst_top': 20,
+    # Structural variation: how far a node's connection pattern moves between two
+    # consecutive slices. ``variation_min`` is the divergence (in bits) a row must reach
+    # to be reported at all — 0 would list every node that merely gained a neighbour.
+    'variation': False,
+    'variation_min': 0.05,
     'aliases': '',
     'exclude_values': '',
     'cluster_labels': '',
@@ -197,6 +202,20 @@ EDGE_COLUMNS = ('source', 'target', 'weight', 'count')
 DUAL_MAP_COLUMNS = ('map', 'source', 'target', 'weight', 'label', 'x', 'y')
 CLUSTER_TABLE_COLUMNS = ('聚类', '聚类标签', '节点数', '节点', '轮廓值')
 BURST_TABLE_COLUMNS = ('节点', '突现起始', '突现结束', '突现强度')
+#: One row per node per pair of CONSECUTIVE slices: how far its connection pattern moved.
+#: The score is the Jensen–Shannon divergence (bits) between the node's two link-strength
+#: distributions, so it is bounded and symmetric — a neighbour that appears or disappears is a
+#: real structural change, not an infinite KL term.
+VARIATION_COLUMNS = (
+    '节点',
+    '起始年',
+    '结束年',
+    '结构变化',
+    '前邻居',
+    '后邻居',
+    '新增邻居',
+    '消失邻居',
+)
 
 
 def read_columns(params: dict) -> dict[str, str]:
@@ -231,6 +250,8 @@ def output_columns(params: dict, input_columns: list[str] | None = None) -> list
         return list(CLUSTER_TABLE_COLUMNS)
     if shape == 'bursts':
         return list(BURST_TABLE_COLUMNS)
+    if shape == 'variation':
+        return list(VARIATION_COLUMNS)
     if shape == 'dual_map':
         return list(DUAL_MAP_COLUMNS)
     cols = list(BASE_COLUMNS)
@@ -269,6 +290,8 @@ def classify_shape(columns) -> str:
         return 'clusters'
     if {'突现起始', '突现结束', '突现强度'} <= names and '频次' not in names:
         return 'bursts'
+    if '结构变化' in names:
+        return 'variation'
     if '节点' in names:
         return 'nodes'
     return ''
@@ -385,6 +408,7 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
     )
     check(lambda: _number(nid, 'burst_weight', params.get('burst_weight', DEFAULTS['burst_weight']), 1.0001, 100.0))
     check(lambda: _whole(nid, 'burst_top', params.get('burst_top', DEFAULTS['burst_top']), 1, 500))
+    check(lambda: _number(nid, 'variation_min', params.get('variation_min', DEFAULTS['variation_min']), 0.0, 1.0))
 
     raw_count = params.get('cluster_count', DEFAULTS['cluster_count'])
     if raw_count not in (None, ''):
@@ -405,6 +429,10 @@ def collect_errors(params: dict, nid: str = '') -> list[str]:
         errors.append(t('biblio.shape_needs_cluster', nid=nid or '(biblio)'))
     if shape == 'bursts' and not as_bool(params.get('burst'), burst_default):
         errors.append(t('biblio.shape_needs_burst', nid=nid or '(biblio)'))
+    if shape == 'variation' and not as_bool(params.get('variation'), DEFAULTS['variation']):
+        # Asking for the variation table without the switch is a stale box, not a preference:
+        # say which one is missing instead of emitting an empty table the charts then refuse.
+        errors.append(t('biblio.shape_needs_variation', nid=nid or '(biblio)'))
     if shape == 'dual_map' and not str(params.get('basemap_dataset_id') or '').strip():
         errors.append(t('biblio.dual_map_needs_basemap', nid=nid or '(biblio)'))
     if str(params.get('cluster_labels') or '').strip() and not as_bool(params.get('cluster'), DEFAULTS['cluster']):
@@ -497,6 +525,10 @@ def normalize_params(params: dict, nid: str = '') -> dict:
             nid, 'burst_weight', params.get('burst_weight', DEFAULTS['burst_weight']), 1.0001, 100.0
         ),
         'burst_top': _whole(nid, 'burst_top', params.get('burst_top', DEFAULTS['burst_top']), 1, 500),
+        'variation': as_bool(params.get('variation'), DEFAULTS['variation']),
+        'variation_min': _number(
+            nid, 'variation_min', params.get('variation_min', DEFAULTS['variation_min']), 0.0, 1.0
+        ),
         'aliases': str(params.get('aliases') or '').strip(),
         'exclude_values': str(params.get('exclude_values') or '').strip(),
         'cluster_labels': str(params.get('cluster_labels') or '').strip(),

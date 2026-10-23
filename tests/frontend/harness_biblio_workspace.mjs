@@ -223,9 +223,21 @@ const out = {};
     const w = await scenario({ runs: RUNS, table: { ...TABLE } });
     const w2 = await scenario({ runs: RUNS, table: { ...TABLE, shape: '' } });
     const w3 = await scenario({ runs: RUNS, table: { ...TABLE, shape: 'dual_map' } });
+    const w4 = await scenario({
+        runs: RUNS,
+        table: {
+            ...TABLE,
+            shape: 'variation',
+            columns: ['节点', '起始年', '结束年', '结构变化', '前邻居', '后邻居', '新增邻居', '消失邻居'],
+            rows: [{ 节点: '甲', 起始年: 2020, 结束年: 2021, 结构变化: 1.0, 前邻居: 1, 后邻居: 1, 新增邻居: '丙', 消失邻居: '乙' }],
+        },
+    });
     out.shape = {
         nodes: w.html().indexOf(w.x.I18n.t('biblioWs.shape.nodes')) >= 0,
         dual: w3.html().indexOf(w3.x.I18n.t('biblioWs.shape.dual_map')) >= 0,
+        // The list of known shapes is read off BIBLIO_OUTPUT_SHAPES, not a copy: a shipped
+        // shape missing from a second literal list reads as 「输出形态未知」.
+        variation: w4.html().indexOf(w4.x.I18n.t('biblioWs.shape.variation')) >= 0,
         unknown: w2.html().indexOf(w2.x.I18n.t('biblioWs.shapeUnknown')) >= 0,
         // A shape the server did not name must not be answered with a guessed word.
         notGuessed: w2.html().indexOf(w2.x.I18n.t('biblioWs.shape.nodes')) < 0,

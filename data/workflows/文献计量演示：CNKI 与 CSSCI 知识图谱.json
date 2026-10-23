@@ -629,6 +629,34 @@
       "x": 1320,
       "y": 1760,
       "folded": false
+    },
+    {
+      "id": "node-26",
+      "type": "biblio",
+      "title": "结构变异表（相邻切片之间）",
+      "params": {
+        "entity_type": "keyword",
+        "entity_column": "关键词",
+        "year_column": "年份",
+        "title_column": "题名",
+        "abstract_column": "摘要",
+        "reference_column": "参考文献",
+        "slice_years": 1,
+        "selection": "top_n",
+        "top_n": 50,
+        "min_count": 1,
+        "link_measure": "cosine",
+        "pruning": "none",
+        "cluster": false,
+        "burst": false,
+        "variation": true,
+        "variation_min": 0.05,
+        "output_shape": "variation",
+        "export_files": true
+      },
+      "x": 640,
+      "y": 1900,
+      "folded": false
     }
   ],
   "connections": [
@@ -656,7 +684,8 @@
     { "from": "node-1", "to": "node-23" },
     { "from": "node-22", "to": "node-23" },
     { "from": "node-23", "to": "node-24" },
-    { "from": "node-24", "to": "node-25" }
+    { "from": "node-24", "to": "node-25" },
+    { "from": "node-1", "to": "node-26" }
   ],
   "settings": {
     "mode": "parallel",

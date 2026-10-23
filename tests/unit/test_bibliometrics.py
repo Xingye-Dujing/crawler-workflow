@@ -9,7 +9,13 @@ import pytest
 from engine.workflow import WorkflowEngine
 from i18n import t
 from services import bibliometrics
-from services.biblio_schema import collect_errors, normalize_params, output_columns
+from services.biblio_schema import (
+    VARIATION_COLUMNS,
+    classify_shape,
+    collect_errors,
+    normalize_params,
+    output_columns,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -629,3 +635,115 @@ class TestPathfinderParameters:
         preference for the default, and 0 on the depth would mean "unlimited" while 0 on the
         fraction would mean "keep nothing" — the two readings differ, so the box asks."""
         assert any(name in line for line in collect_errors(_params(**{name: ''}), 'test'))
+
+
+def _sv_frame():
+    """甲 shares its slice with 乙, then with 丙, then with both again."""
+    return pd.DataFrame(
+        [
+            {'题名': 'a', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+            {'题名': 'b', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+            {'题名': 'c', '年份': 2021, '关键词': '甲;丙', '摘要': ''},
+            {'题名': 'd', '年份': 2021, '关键词': '甲;丙', '摘要': ''},
+            {'题名': 'e', '年份': 2022, '关键词': '甲;乙;丙', '摘要': ''},
+        ]
+    )
+
+
+class TestStructuralVariation:
+    def _rows(self, frame=None, **overrides):
+        base = {'variation': True, 'variation_min': 0.0}
+        base.update(overrides)
+        params = _params(**base)
+        # A DataFrame has no truth value, so the default cannot be `frame or …`.
+        result = bibliometrics.build(_sv_frame() if frame is None else frame, params, 'test')
+        return result['variation']
+
+    def test_a_completely_different_neighbourhood_is_one_bit(self):
+        row = next(r for r in self._rows() if r['节点'] == '甲' and r['起始年'] == 2020)
+        assert row['结构变化'] == 1.0
+        assert row['新增邻居'] == '丙' and row['消失邻居'] == '乙'
+
+    def test_gaining_one_of_two_partners_is_the_textbook_half_bit_case(self):
+        """p = [1] against q = [.5,.5] has JSD = 0.311278… bits; the number is checked against
+        the hand computation, not against whatever the code produced."""
+        row = next(r for r in self._rows() if r['节点'] == '甲' and r['起始年'] == 2021)
+        assert row['结构变化'] == pytest.approx(0.311278, abs=1e-5)
+        assert row['消失邻居'] == ''
+
+    def test_only_nodes_present_in_both_slices_are_scored(self):
+        """乙/丙 appear in both slices here, but a node with links in ONE slice has no pattern
+        to compare — scoring that absence would rank a disappearance above a restructuring."""
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+                {'题名': 'b', '年份': 2021, '关键词': '丙;丁', '摘要': ''},
+            ]
+        )
+        assert self._rows(frame) == []
+
+    def test_the_threshold_decides_what_counts_as_a_change(self):
+        everything = self._rows()
+        above = self._rows(variation_min=0.5)
+        assert len(above) < len(everything)
+        assert all(row['结构变化'] >= 0.5 for row in above)
+
+    def test_the_table_is_ranked_by_the_change_not_by_the_node(self):
+        scores = [row['结构变化'] for row in self._rows()]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_a_year_with_no_records_is_not_compared_across_the_gap(self):
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+                {'题名': 'b', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+                {'题名': 'c', '年份': 2022, '关键词': '甲;丙', '摘要': ''},
+                {'题名': 'd', '年份': 2022, '关键词': '甲;丙', '摘要': ''},
+            ]
+        )
+        # 2021 has no records, so slice 0 and slice 2 are not consecutive: comparing them would
+        # report a change that is really two years of missing data.
+        assert self._rows(frame) == []
+        assert self._rows(frame, variation_min=0.5) == []
+
+    def test_the_variation_table_has_its_own_shape_and_reads_back(self):
+        params = _params(variation=True, output_shape='variation')
+        assert output_columns(params) == list(VARIATION_COLUMNS)
+        result = bibliometrics.build(_sv_frame(), params, 'test')
+        assert list(result['variation'][0]) == list(VARIATION_COLUMNS)
+        assert classify_shape(result['variation'][0]) == 'variation'
+
+    def test_asking_for_the_table_without_the_switch_is_refused_by_name(self):
+        with pytest.raises(ValueError) as exc:
+            normalize_params(_params(output_shape='variation'), 'test')
+        assert 'variation' in str(exc.value)
+
+    def test_one_slice_cannot_show_a_change_and_says_so(self):
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': '甲;乙', '摘要': ''},
+                {'题名': 'b', '年份': 2020, '关键词': '甲;乙;丙', '摘要': ''},
+            ]
+        )
+        with pytest.raises(ValueError) as exc:
+            bibliometrics.build(frame, _params(variation=True), 'test')
+        assert '切片' in str(exc.value) or 'slice' in str(exc.value)
+
+    def test_a_coupling_network_refuses_the_switch_rather_than_inventing_slices(self):
+        frame = pd.DataFrame(
+            [
+                {'题名': 'a', '年份': 2020, '关键词': '甲', '参考文献': 'REF1', '摘要': ''},
+                {'题名': 'b', '年份': 2021, '关键词': '乙', '参考文献': 'REF1', '摘要': ''},
+            ]
+        )
+        with pytest.raises(ValueError) as exc:
+            bibliometrics.build(
+                frame, _params(entity_type='bibliographic_coupling', variation=True, burst=False), 'test'
+            )
+        assert '耦合' in str(exc.value) or 'coupling' in str(exc.value)
+
+    def test_the_variation_table_is_written_as_an_artifact(self, tmp_path):
+        result = bibliometrics.build(_sv_frame(), _params(variation=True), 'test')
+        files = bibliometrics.export_result(result, str(tmp_path), 'sv')
+        assert 'biblio_variation' in files
+        assert '结构变化' in Path(files['biblio_variation']).read_text(encoding='utf-8-sig')

@@ -254,3 +254,56 @@ def test_dual_map_overlay_runs_end_to_end(client, app_module):
     # LaTeX for the overlay figure and its appendix table ships with the chart result.
     assert status['chart_results']['node-3']['latex']
     assert status['chart_results']['node-3']['latex_table']
+
+
+@pytest.mark.serial
+def test_structural_variation_table_runs_end_to_end(client, app_module):
+    """The shape switch lives in the node executor, not in the algorithm, so only a run proves
+    that what lands downstream — and what a chart or a save node would then read — is the
+    variation table rather than the node table."""
+    uploaded = _upload(client, 'biblio_cnki_demo.txt')
+    params = {
+        'entity_type': 'keyword',
+        'slice_years': 1,
+        'selection': 'top_n',
+        'top_n': 50,
+        'min_count': 1,
+        'link_measure': 'cosine',
+        'pruning': 'none',
+        'cluster': False,
+        'burst': False,
+        'variation': True,
+        'variation_min': 0.0,
+        'output_shape': 'variation',
+        'export_files': False,
+    }
+    workflow = {
+        'nodes': [
+            {
+                'id': 'node-1',
+                'type': 'upload',
+                'title': '上传文献',
+                'params': {'dataset_id': uploaded['dataset_id'], 'dataset_name': 'cnki.txt', 'row_count': 36},
+                'x': 0,
+                'y': 0,
+            },
+            {'id': 'node-2', 'type': 'biblio', 'title': '结构变异', 'params': params, 'x': 240, 'y': 0},
+        ],
+        'connections': [{'from': 'node-1', 'to': 'node-2'}],
+        'settings': {'mode': 'serial', 'headless': True, 'max_workers': 1},
+    }
+    started = client.post(
+        '/api/workflow/execute',
+        json={'workflow': workflow, 'workflow_name': 'variation-e2e'},
+    )
+    assert started.status_code == 200, started.get_json()
+    run_id = started.get_json()['run_id']
+    assert _wait_for_worker(app_module), 'the execute thread did not finish in time'
+    status = client.get('/api/workflow/status').get_json()
+    assert status['completed_nodes'] == 2, status['logs']
+
+    rows = app_module._RUN_STORE.load_rows(run_id, 'node-2')
+    assert rows, status['logs']
+    assert '结构变化' in rows[0] and '连接' not in rows[0]
+    assert {'起始年', '结束年', '新增邻居', '消失邻居'} <= set(rows[0])
+    assert any('结构变异' in line or 'Structural variation' in line for line in status['logs'])
