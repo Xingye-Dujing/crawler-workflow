@@ -87,6 +87,7 @@ _ZH = {
     'wf.tokenize_done': '[分词] {mode} 已切分 {col} → {n} 行',
     'wf.visualize_no_input': '没有上游数据，请连接数据源或文件上传节点',
     'wf.visualize_done': '[可视化] 已渲染 {chart} 图表（{engine}），共 {n} 行',
+    'wf.latex_unsupported': '[可视化] {chart} 没有 LaTeX 图源，已跳过 LaTeX 产物（图本身已生成）',
     'wf.browser_opened': '已打开浏览器用于 {platform} 登录（{url}），等待 {n} 秒完成登录…',
     'wf.cookies_generated': '已生成 {platform} 的 Cookie（{n} 项）',
     # ── LLM ───────────────────────────────────────────────────
@@ -136,6 +137,71 @@ _ZH = {
     'upload.no_file': '文件上传节点未选择文件，请在节点设置里上传 CSV / JSON / TXT',
     'upload.stale': '已上传的数据集失效（服务可能重启过），请重新上传文件',
     'upload.loaded': '已载入上传文件 {name}：{n} 行',
+    # ── bibliometrics / knowledge graph ───────────────────────
+    'biblio.entity.keyword': '关键词',
+    'biblio.entity.author': '作者',
+    'biblio.entity.institution': '机构',
+    'biblio.entity.country': '国家/地区',
+    'biblio.entity.term': '主题词',
+    'biblio.entity.category': '学科',
+    'biblio.entity.document_cocitation': '文献共被引',
+    'biblio.entity.author_cocitation': '作者共被引',
+    'biblio.entity.journal_cocitation': '期刊共被引',
+    'biblio.entity.bibliographic_coupling': '文献耦合',
+    'biblio.bad_option': '{nid}：{param} 的值「{value}」无效（可选：{allowed}）',
+    'biblio.time_range': '{nid}：时间范围无效：{start} > {end}',
+    'biblio.coupling_no_burst': '{nid}：文献耦合的节点是施引文献本身，突现检测在此没有意义；请关闭突现',
+    'biblio.column_missing': '文献计量需要「{col}」列（{entity}），当前表没有该列',
+    'biblio.refs_missing': (
+        '{type} 需要参考文献：每条记录至少 2 条【参考文献】；CNKI RefWorks 通常不含参考文献，请改用 CSSCI 导出'
+    ),
+    'biblio.refs_low_rate': '参考文献解析率 {rate} 低于 {floor}：无法可靠构建引文图谱',
+    'biblio.refs_field_low': '{field} 解析率 {rate} 低于 {floor}：无法可靠构建引文图谱',
+    'biblio.no_records': '没有可用文献记录：请确认年份列可解析',
+    'biblio.no_records_in_range': '{start}–{end} 范围内没有文献记录',
+    'biblio.year_missing': '{n} 条记录缺少年份，已跳过（时间切片需要年份）',
+    'biblio.records_skipped': '{n} 条记录没有可分析的实体，已跳过',
+    'biblio.wide_ref_skipped': '{n} 条参考文献被超过 {cap} 篇文献同时引用，已跳过其两两配对（过大团会淹没图）',
+    'biblio.mst_done': 'MST 剪枝：{before} → {after} 条边',
+    'biblio.pathfinder_done': 'Pathfinder 剪枝：{before} → {after} 条边（{slices} 个切片）',
+    'biblio.betweenness_sampled': '节点数 {n} 超过 2000，中介中心性使用 {k} 个源点采样',
+    'biblio.eigen_failed': '特征向量中心性未收敛，已改用归一化加权度（0–1）作为回退并播报',
+    'biblio.burst_done': '突现检测：{nodes}/{total} 个节点有突现',
+    'biblio.burst_truncated': (
+        '节点表只标记最强 {kept}/{total} 段突现（图上展示上限来自 burst_top；完整突现表仍在 CSV 产物中）'
+    ),
+    'biblio.cluster_too_many': '节点数 {n} 超过谱聚类上限 {cap}：请收紧 TopN/时间范围，或关闭聚类',
+    'biblio.label_fallback': '聚类标签方法 {asked} 没有可用文本，实际使用 {used}（已在运行摘要中如实标明）',
+    'biblio.no_edges': '{start}–{end} 年没有共现边：请降低阈值、扩大时间范围或换一种实体类型',
+    'biblio.no_edges_after_prune': '{pruning} 剪枝后没有边：请减少最大连边数或改用 none',
+    'biblio.isolates_dropped': '{n} 个孤立节点在成图后没有连边，已从节点表移除',
+    'biblio.too_many_nodes': '节点数 {n} 超过上限 {cap}：请收紧 TopN 或缩短时间范围',
+    'biblio.too_many_edges': '边数 {n} 超过上限 {cap}：请收紧 TopN/最大连边数',
+    'biblio.links_too_large': '节点「{node}」的连接 JSON 超过 {cap} 字节：请降低最大连边数',
+    'biblio.import_duplicates': '{n} 条重复文献已合并',
+    'biblio.import_no_year': '{n} 条文献缺少年份',
+    'biblio.import_skipped': '{n} 条空记录已跳过',
+    'biblio.import_ok': '已识别 {format} 文献导出：{n} 条记录',
+    'biblio.build_done': '文献计量完成：{entity}，{nodes} 个节点 / {edges} 条边（{start}–{end}）',
+    'biblio.export_failed': '文献计量导出失败：{err}',
+    'chart.biblio_missing': '文献计量图缺少列：{cols}（请让上游文献计量节点输出完整表）',
+    'chart.biblio_no_nodes': '文献计量图没有可画的节点',
+    'chart.biblio_no_links': '知识图谱没有连接：请检查“连接”列或降低筛选阈值',
+    'chart.biblio_no_years': '文献计量图没有可用的年份：请检查首年/末年或年份序列',
+    'chart.biblio_no_bursts': '没有突现词可画：请在上游节点开启突现检测并调整 gamma/最短时长',
+    'chart.biblio_bad_json': '「{col}」不是合法 JSON：请让上游文献计量节点重新生成结果',
+    'chart.biblio_single_category': '节点',
+    'chart.biblio_unknown': '不支持的文献计量图类型：{type}',
+    'chart.biblio_year': '年份',
+    'chart.biblio_cluster': '聚类',
+    'chart.biblio_span': '时间跨度',
+    'chart.biblio_duration': '持续年数',
+    'chart.biblio_burst': '突现区间',
+    'chart.biblio_activity': '年度活动',
+    'api.biblioEmpty': '无法从 {format} 文件中解析出任何文献记录',
+    'api.biblioDecode': '无法解码文件 {name}（已尝试 UTF-8 与 GB18030）',
+    'engine.biblio_no_input': '{nid} 需要且只接受一个上游数据表（文献导入节点）',
+    'engine.biblio_multi_input': '{nid} 有 {n} 个上游连接：文献计量只接受一个输入，请只保留一条连线',
     # ── analyzer labels (console prefix) ──────────────────────
     'label.clean': '清洗',
     'label.emotion': '情感分析',
@@ -155,6 +221,7 @@ _ZH = {
     'node.resume': '断点续跑',
     'node.comment': '评论采集',
     'node.compile': '编译',
+    'node.biblio': '文献计量',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': '开始搜索知乎关键词: "{kw}"，目标获取 {n} 条结果',
     'crawl.zhihu.authorStart': '[知乎] 采集作者「{author}」的回答与文章，目标 {n} 条',
@@ -1538,6 +1605,9 @@ _EN = {
     'wf.tokenize_done': '[Tokenize] {mode} segmented {col} -> {n} rows',
     'wf.visualize_no_input': 'no upstream data — connect a data source or an upload node',
     'wf.visualize_done': '[Visualize] Rendered {chart} chart ({engine}) from {n} rows',
+    'wf.latex_unsupported': (
+        '[Visualize] {chart} has no LaTeX figure source; LaTeX artifacts skipped (the chart itself was drawn)'
+    ),
     'wf.browser_opened': 'Browser opened for {platform} login ({url}); waiting {n}s for the user to log in',
     'wf.cookies_generated': 'Cookies generated for {platform} ({n} cookies)',
     # ── LLM ───────────────────────────────────────────────────
@@ -1589,6 +1659,91 @@ _EN = {
     'upload.no_file': 'Upload node has no file yet — upload a CSV / JSON / TXT in its settings',
     'upload.stale': 'That uploaded dataset is gone (the server may have restarted) — upload the file again',
     'upload.loaded': 'Loaded uploaded file {name}: {n} rows',
+    # ── bibliometrics / knowledge graph ───────────────────────
+    'biblio.entity.keyword': 'Keyword',
+    'biblio.entity.author': 'Author',
+    'biblio.entity.institution': 'Institution',
+    'biblio.entity.country': 'Country/Region',
+    'biblio.entity.term': 'Term',
+    'biblio.entity.category': 'Category',
+    'biblio.entity.document_cocitation': 'Document co-citation',
+    'biblio.entity.author_cocitation': 'Author co-citation',
+    'biblio.entity.journal_cocitation': 'Journal co-citation',
+    'biblio.entity.bibliographic_coupling': 'Bibliographic coupling',
+    'biblio.bad_option': '{nid}: {param} = "{value}" is not valid (allowed: {allowed})',
+    'biblio.time_range': '{nid}: invalid time range: {start} > {end}',
+    'biblio.coupling_no_burst': (
+        '{nid}: bibliographic-coupling nodes are the citing papers themselves; burst detection has no meaning '
+        'there — turn burst off'
+    ),
+    'biblio.column_missing': 'Bibliometrics needs the "{col}" column ({entity}); this table has no such column',
+    'biblio.refs_missing': (
+        '{type} needs cited references: at least 2 【参考文献】 entries per record. CNKI RefWorks usually has none — '
+        'use a CSSCI export instead'
+    ),
+    'biblio.refs_low_rate': 'Reference parse rate {rate} is below {floor}; a citation graph cannot be built reliably',
+    'biblio.refs_field_low': '{field} parse rate {rate} is below {floor}; a citation graph cannot be built reliably',
+    'biblio.no_records': 'No usable bibliographic records: check that the year column is parseable',
+    'biblio.no_records_in_range': 'No records in {start}–{end}',
+    'biblio.year_missing': '{n} records have no year and were skipped (time slicing needs a year)',
+    'biblio.records_skipped': '{n} records had no analysable entity and were skipped',
+    'biblio.wide_ref_skipped': (
+        '{n} references were cited by more than {cap} papers; their pairwise links were skipped '
+        '(a giant clique would bury the graph)'
+    ),
+    'biblio.mst_done': 'MST pruning: {before} → {after} edges',
+    'biblio.pathfinder_done': 'Pathfinder pruning: {before} → {after} edges ({slices} slices)',
+    'biblio.betweenness_sampled': 'More than {n} nodes; betweenness uses {k} sampled sources',
+    'biblio.eigen_failed': (
+        'Eigenvector centrality did not converge; normalized weighted degree (0–1) was used and printed'
+    ),
+    'biblio.burst_done': 'Burst detection: {nodes}/{total} nodes have a burst',
+    'biblio.burst_truncated': (
+        'The node table marks only the strongest {kept}/{total} bursts (burst_top controls the chart; '
+        'the full burst table is still in the CSV artifact)'
+    ),
+    'biblio.cluster_too_many': (
+        'Node count {n} exceeds the spectral-clustering cap ({cap}): narrow TopN/the time range, or turn clustering off'
+    ),
+    'biblio.label_fallback': (
+        'Cluster-label method {asked} had no usable text; {used} was used and is named in the run summary'
+    ),
+    'biblio.no_edges': (
+        'No co-occurrence edges in {start}–{end}: lower the threshold, widen the time range, or choose another entity'
+    ),
+    'biblio.no_edges_after_prune': '{pruning} pruning left no edges: lower max links per node or use none',
+    'biblio.isolates_dropped': '{n} isolated nodes had no edge after graph construction and were removed',
+    'biblio.too_many_nodes': '{n} nodes exceed the cap ({cap}): narrow TopN or the time range',
+    'biblio.too_many_edges': '{n} edges exceed the cap ({cap}): narrow TopN or max links per node',
+    'biblio.links_too_large': 'Node "{node}" has a link JSON larger than {cap} bytes: lower max links per node',
+    'biblio.import_duplicates': '{n} duplicate records were merged',
+    'biblio.import_no_year': '{n} records have no year',
+    'biblio.import_skipped': '{n} empty records were skipped',
+    'biblio.import_ok': 'Recognised a {format} export: {n} records',
+    'biblio.build_done': 'Bibliometrics done: {entity}, {nodes} nodes / {edges} edges ({start}–{end})',
+    'biblio.export_failed': 'Bibliometric export failed: {err}',
+    'chart.biblio_missing': (
+        'Bibliometric chart is missing column(s): {cols} (let the upstream biblio node emit the full table)'
+    ),
+    'chart.biblio_no_nodes': 'The bibliometric chart has no nodes to draw',
+    'chart.biblio_no_links': 'The knowledge graph has no links: check the 连接 column or lower the selection threshold',
+    'chart.biblio_no_years': 'The bibliometric chart has no usable years: check 首年/末年 or 年份序列',
+    'chart.biblio_no_bursts': 'No burst terms to draw: enable burst detection upstream and adjust gamma/min duration',
+    'chart.biblio_bad_json': '"{col}" is not valid JSON: re-run the upstream biblio node',
+    'chart.biblio_single_category': 'Nodes',
+    'chart.biblio_unknown': 'Unsupported bibliometric chart type: {type}',
+    'chart.biblio_year': 'Year',
+    'chart.biblio_cluster': 'Cluster',
+    'chart.biblio_span': 'Time span',
+    'chart.biblio_duration': 'Duration (years)',
+    'chart.biblio_burst': 'Burst interval',
+    'chart.biblio_activity': 'Yearly activity',
+    'api.biblioEmpty': 'No bibliographic records could be parsed from the {format} file',
+    'api.biblioDecode': 'Could not decode {name} (tried UTF-8 and GB18030)',
+    'engine.biblio_no_input': '{nid} needs exactly one upstream data table (an Upload node)',
+    'engine.biblio_multi_input': (
+        '{nid} has {n} upstream connections: bibliometrics accepts one input; keep a single wire'
+    ),
     # ── analyzer labels (console prefix) ──────────────────────
     'label.clean': 'Clean',
     'label.emotion': 'Emotion',
@@ -1608,6 +1763,7 @@ _EN = {
     'node.resume': 'Resume Run',
     'node.comment': 'Comments',
     'node.compile': 'Compile',
+    'node.biblio': 'Bibliometrics',
     # ── crawlers: zhihu ───────────────────────────────────────
     'crawl.zhihu.start': 'Searching Zhihu for "{kw}", target {n} results',
     'crawl.zhihu.authorStart': '[Zhihu] collecting answers and articles of "{author}", target {n} rows',

@@ -19,6 +19,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from services.chart_contracts import BIBLIO_CHART_TYPES
 from services.visualizer import ANNOTATED_TYPES, CHART_TYPES, ECHARTS_ONLY_TYPES, ChartConfigError
 from services.visualizer import VisualizationService as V
 
@@ -57,6 +58,10 @@ USABLE = {
     'model_agreement': {'model_field': '作者', 'agreement_label_field': '平台', 'id_field': '阅读'},
 }
 
+#: The four bibliometric views read fixed columns; their happy path is the
+#: ``biblio_df`` fixture below, not the generic category/value table.
+BIBLIO_USABLE = {chart_type: {} for chart_type in BIBLIO_CHART_TYPES}
+
 # Group keys sort by code point, which is why 丙 precedes 乙 precedes 甲 here.
 #: The category axis keeps the TABLE's order — first appearance, not code-point order. This
 #: constant used to read ['丙', '乙', '甲'], which was the fixture's rows re-sorted by
@@ -78,14 +83,52 @@ def df():
     )
 
 
+@pytest.fixture
+def biblio_df():
+    """The exact columns a ``biblio`` node emits, with two clusters and one burst."""
+    return pd.DataFrame(
+        {
+            '节点': ['甲', '乙', '丙'],
+            'x': [0.0, 10.0, 20.0],
+            'y': [0.0, 10.0, 20.0],
+            '连接': [
+                json.dumps([{'target': '乙', 'value': 1.0, 'count': 2}], ensure_ascii=False),
+                json.dumps(
+                    [{'target': '甲', 'value': 1.0, 'count': 2}, {'target': '丙', 'value': 0.5, 'count': 1}],
+                    ensure_ascii=False,
+                ),
+                json.dumps([{'target': '乙', 'value': 0.5, 'count': 1}], ensure_ascii=False),
+            ],
+            '频次': [3, 2, 1],
+            '聚类': [0, 0, 1],
+            '聚类标签': ['甲组', '甲组', '乙组'],
+            '轮廓值': [0.7, 0.7, 0.7],
+            '突现强度': [2.0, 0.0, 0.0],
+            '突现起始': [2020, '', ''],
+            '突现结束': [2021, '', ''],
+            '首年': [2020, 2020, 2021],
+            '末年': [2021, 2021, 2021],
+            '年份序列': [
+                json.dumps({'2020': 1, '2021': 2}),
+                json.dumps({'2020': 2}),
+                json.dumps({'2021': 1}),
+            ],
+            '中介中心性': [0.2, 0.0, 0.0],
+            'Sigma': [1.5, 1.0, 1.0],
+        }
+    )
+
+
 # ─── catalogue ─────────────────────────────────────────────────────────
 
 
 class TestChartCatalogue:
-    def test_every_advertised_type_can_build_an_option(self, df):
-        assert set(USABLE) == set(CHART_TYPES)
+    def test_every_advertised_type_can_build_an_option(self, df, biblio_df):
+        assert set(USABLE) | set(BIBLIO_USABLE) == set(CHART_TYPES)
         for chart_type, kwargs in USABLE.items():
             assert V.to_echarts_option(df, chart_type, **kwargs)['series'], chart_type
+        for chart_type in BIBLIO_CHART_TYPES:
+            assert V.to_echarts_option(biblio_df, chart_type)['series'], chart_type
 
     def test_echarts_only_types_are_a_subset_of_the_catalogue(self):
         assert set(ECHARTS_ONLY_TYPES) < set(CHART_TYPES)
@@ -590,8 +633,10 @@ class TestChartDisplayLocalisation:
 
 class TestOptionJsonSafety:
     @pytest.mark.parametrize('chart_type', CHART_TYPES)
-    def test_options_are_json_serialisable(self, df, chart_type):
-        option = V.to_echarts_option(df, chart_type, title='标题', **USABLE[chart_type])
+    def test_options_are_json_serialisable(self, df, biblio_df, chart_type):
+        frame = biblio_df if chart_type in BIBLIO_CHART_TYPES else df
+        kwargs = BIBLIO_USABLE[chart_type] if chart_type in BIBLIO_USABLE else USABLE[chart_type]
+        option = V.to_echarts_option(frame, chart_type, title='标题', **kwargs)
         assert json.dumps(option, allow_nan=False)
         assert option['title']['text'] == '标题'
 
@@ -601,7 +646,10 @@ class TestOptionJsonSafety:
         assert values[0] is None
         assert json.dumps(values, allow_nan=False)
 
-    @pytest.mark.parametrize('chart_type', [c for c in CHART_TYPES if c not in ('network', 'model_agreement')])
+    @pytest.mark.parametrize(
+        'chart_type',
+        [c for c in CHART_TYPES if c not in ('network', 'model_agreement') and c not in BIBLIO_CHART_TYPES],
+    )
     def test_a_frame_full_of_missing_numbers_still_serialises(self, chart_type):
         # ``network`` is out of this sweep for a reason, not by oversight: on a frame with no
         # usable numbers it has no edge to draw, and an edge-less graph is a refusal
@@ -954,7 +1002,7 @@ class TestConfigErrors:
             V.to_echarts_option(df, chart_type, **kwargs)
         assert needle in str(excinfo.value)
 
-    @pytest.mark.parametrize('chart_type', [c for c in CHART_TYPES if c != 'box'])
+    @pytest.mark.parametrize('chart_type', [c for c in CHART_TYPES if c != 'box' and c not in BIBLIO_CHART_TYPES])
     def test_a_field_that_is_not_in_the_data_is_reported(self, df, chart_type):
         kwargs = {key: '不存在的列' for key in USABLE[chart_type]}
         with pytest.raises(ChartConfigError, match='Field not found in the data'):

@@ -42,7 +42,7 @@ Flask 后端全部 HTTP 端点，按功能分组。工作流的编排、运行�
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/data/upload` | POST | 上传 CSV/TSV/JSON/TXT/.xlsx/.xls 文件并注册为持久化数据集（未知扩展名→400，不再当 CSV 猜） |
+| `/api/data/upload` | POST | 上传 CSV/TSV/JSON/TXT/.xlsx/.xls 文件并注册为持久化数据集（未知扩展名→400，不再当 CSV 猜）；`.txt` 自动识别 CNKI RefWorks / CSSCI 并解析为文献记录表，响应额外返回 `biblio_format` 与 `warnings`，此时 `is_txt=false`；普通文本仍为单行 `content`、`is_txt=true` |
 | `/api/data/paste` | POST | 将粘贴的 JSON 数组注册为数据集 |
 | `/api/data/datasets` | GET | 列出已注册数据集 |
 | `/api/data/datasets/<id>` | GET / DELETE | 查看 / 删除单个数据集 |

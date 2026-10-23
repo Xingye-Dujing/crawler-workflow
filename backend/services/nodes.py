@@ -22,9 +22,10 @@ from stores import _apply_dataset_meta, _load_dataset, get_dataset_store
 
 from config import Config
 from i18n import t
-from services import latex_compile
+from services import bibliometrics, latex_compile
 from services.run_store import RUN_RUNNING
 from services.visualizer import VisualizationService
+from utils.helpers import as_bool
 from utils.helpers import json_safe_records as _json_safe_records
 
 
@@ -246,3 +247,48 @@ def execute_upload_node(node: dict, headless: bool = True):
     _apply_dataset_meta(params, meta)
     add_log(t('upload.loaded', name=params.get('dataset_name') or dataset_id, n=len(df)))
     return _json_safe_records(df)
+
+
+def execute_biblio_node(node: dict, current_input: list, upstream: list = None, ctx: dict = None):
+    """Bibliometric node: records in, one node/attribute row per entity out.
+
+    The result is a plain row table on purpose (not a chart spec): the run store
+    persists it, a resume reuses it, and a downstream Visualize node draws it.
+    GraphML/CSV artifacts are a side effect of the node, registered in the
+    run→files ledger when a run context is present.
+    """
+    params = node.get('params') or {}
+    label = str(node.get('title') or node.get('id') or 'biblio')
+    if not current_input:
+        raise ValueError(t('engine.biblio_no_input', nid=label))
+    if upstream is not None and len(upstream) > 1:
+        raise ValueError(t('engine.biblio_multi_input', nid=label, n=len(upstream)))
+
+    result = bibliometrics.build(pd.DataFrame(current_input), params, label)
+    summary = result.get('summary') or {}
+    entity = str(summary.get('entity_type') or params.get('entity_type') or 'keyword')
+    window = summary.get('window') or {}
+    for note in result.get('notes') or []:
+        add_log(note)
+
+    if as_bool(params.get('export_files'), True):
+        try:
+            files = bibliometrics.export_result(result, Config.EXPORT_DIR, f'{label}-{node.get("id") or "biblio"}')
+        except Exception as exc:
+            raise ValueError(t('biblio.export_failed', err=exc)) from exc
+        if ctx and ctx.get('store') and ctx.get('run_id'):
+            for kind, path in files.items():
+                with contextlib.suppress(Exception):
+                    ctx['store'].record_file(ctx['run_id'], str(node.get('id') or ''), path, kind)
+
+    add_log(
+        t(
+            'biblio.build_done',
+            entity=t(f'biblio.entity.{entity}'),
+            nodes=summary.get('nodes', len(result.get('rows') or [])),
+            edges=summary.get('edges', len(result.get('edges') or [])),
+            start=window.get('start', ''),
+            end=window.get('end', ''),
+        )
+    )
+    return _json_safe_records(pd.DataFrame(result['rows']))

@@ -17,6 +17,17 @@ columns and flags a provable miss — the schema truth lives here, the wording l
 
 from __future__ import annotations
 
+from services.biblio_schema import (
+    CITATION_TYPES,
+    COUPLING_TYPE,
+)
+from services.biblio_schema import (
+    output_columns as biblio_output_columns,
+)
+from services.biblio_schema import (
+    read_columns as biblio_read_columns,
+)
+from services.chart_contracts import BIBLIO_CHART_READS
 from services.data_analysis import STEP_PARAMS
 
 # process ops that ADD these columns and pass the rest through (verified against each
@@ -365,6 +376,8 @@ def compute_columns(nodes: dict, connections: list) -> dict:
                 out[nid] = None  # keyword/ner/cluster/bot/bert/…: data-dependent
         elif ntype == 'analysis':
             out[nid] = _analysis_output(params, merged)
+        elif ntype == 'biblio':
+            out[nid] = biblio_output_columns(params)
         else:
             out[nid] = None  # source/comment/resume/visualize/output/compile: unknown or non-tabular
     return out
@@ -392,6 +405,21 @@ def referenced_columns(nodes: dict) -> dict:
                 if v:
                     found.append(v)
             found += _split_columns(params.get('stack_fields'))
+            chart = str(params.get('chart_type') or '')
+            found += list(BIBLIO_CHART_READS.get(chart, ()))
+        elif ntype == 'biblio':
+            entity = str(params.get('entity_type') or 'keyword')
+            columns = biblio_read_columns(params)
+            if entity in CITATION_TYPES or entity == COUPLING_TYPE:
+                found += [columns['reference'], columns['year']]
+                if entity == COUPLING_TYPE:
+                    found.append(columns['title'])
+            elif entity == 'term':
+                # Either title or abstract is enough; naming both would flag a
+                # table that runs, so the hard read here is only the year.
+                found.append(columns['year'])
+            else:
+                found += [columns['entity'], columns['year']]
         elif ntype == 'analysis':
             for step in _steps_of(params):
                 spec = STEP_PARAMS.get(str(step.get('op') or ''), {})

@@ -1216,7 +1216,7 @@ const canvas = {
        back, so a node config travels between canvases, machines or a chat message. The snippet
        is exactly the in-canvas clipboard shape ({type,title,params}), so import reuses
        pasteClipboardAt — one paste path, no second implementation to drift. */
-    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'analysis', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment'],
+    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'analysis', 'biblio', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment'],
 
     copyNodeAsJson(id) {
         const n = this.nodes[id];
@@ -1299,6 +1299,7 @@ const canvas = {
             upload: I18n.t('node.upload'),
             process: I18n.t('node.process'),
             analysis: I18n.t('node.analysis'),
+            biblio: I18n.t('node.biblio'),
             visualize: I18n.t('node.visualize'),
             tokenize: I18n.t('node.tokenize'),
             output: I18n.t('node.output'),
@@ -1474,6 +1475,16 @@ const canvas = {
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '', live_export: false, format: 'csv' };
         if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };
+        if (type === 'biblio') return {
+            entity_type: 'keyword',
+            entity_column: '', year_column: '年份', title_column: '题名', abstract_column: '摘要', reference_column: '参考文献',
+            time_start: '', time_end: '', slice_years: 1,
+            selection: 'top_n', top_n: 50, top_pct: 10, g_index: 25, min_count: 2,
+            link_measure: 'cosine', max_links_per_node: 10, lrf: 2.5, pruning: 'none',
+            cluster: true, cluster_count: '', label_method: 'llr', top_terms: 5,
+            burst: true, burst_gamma: 1.0, burst_min_duration: 2, burst_weight: 2.0, burst_top: 20,
+            export_files: true
+        };
         if (type === 'visualize') return { chart_type: 'bar', x_field: '', y_field: '', value_field: '', agg: 'sum', engine: 'echarts', title: '', tokenize: false, emit_latex: true, emit_latex_table: true };
         if (type === 'tokenize') return { text_column: '', top_n: '', output_mode: 'word_freq' };
         /* Empty run ids mean "auto": pick the newest interrupted run, and
@@ -1566,8 +1577,22 @@ const canvas = {
             var op = params.operation || '';
             return I18n.t('settings.operation') + ': ' + (op ? I18n.t('op.' + op) : '?');
         }
+        if (type === 'biblio') {
+            var entity = params.entity_type || 'keyword';
+            var start = String(params.time_start || '').trim();
+            var end = String(params.time_end || '').trim();
+            var range = (start || end) ? ((start || '…') + '–' + (end || '…')) : I18n.t('biblio.ui.fullRange');
+            var selection = params.selection || 'top_n';
+            var choice = selection === 'top_n'
+                ? I18n.t('biblio.ui.topSuffix').replace('{n}', params.top_n || 50)
+                : I18n.t('biblio.selection.' + selection);
+            return I18n.t('biblio.entity.' + entity) + ' · ' + range + '\n' + choice;
+        }
         if (type === 'visualize') {
-            return I18n.t('settings.chartType') + ': ' + (params.chart_type || '?') +
+            var ct = params.chart_type || '';
+            var ctLabel = ct ? I18n.t('chart.' + ct) : '?';
+            if (ct && ctLabel === 'chart.' + ct) ctLabel = ct;
+            return I18n.t('settings.chartType') + ': ' + ctLabel +
                 '\n' + I18n.t('settings.engine') + ': ' + (params.engine || 'echarts');
         }
         if (type === 'tokenize') {

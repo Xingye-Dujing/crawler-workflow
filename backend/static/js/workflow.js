@@ -2293,7 +2293,7 @@ function openSettings(nodeId) {
     /* The columns this node will emit — the edit-time lineage. A producer whose shape
        the server can see lists them; a crawl/comment/resume says so plainly rather than
        guessing. */
-    var OUTPUT_PRODUCERS = ['source', 'upload', 'process', 'analysis', 'tokenize', 'resume', 'comment'];
+    var OUTPUT_PRODUCERS = ['source', 'upload', 'process', 'analysis', 'biblio', 'tokenize', 'resume', 'comment'];
     if (OUTPUT_PRODUCERS.indexOf(node.type) >= 0 && typeof Diagnostics !== 'undefined') {
         var _oc = Diagnostics.outputColumns(nodeId);
         var _ocText = _oc === null
@@ -2409,6 +2409,8 @@ function openSettings(nodeId) {
         }
         html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' +
             I18n.t('btn.previewData') + '</button></div>';
+    } else if (node.type === 'biblio') {
+        html += renderBiblioSettings(nodeId, node.params);
     } else if (node.type === 'process') {
         var p = node.params;
         var PROCESS_OPS = ['clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
@@ -3301,8 +3303,105 @@ function renderAnalysisSettings(nodeId, p) {
     return html;
 }
 
+/* ── Bibliometrics node settings ── */
+var BIBLIO_ENTITY_TYPES = ['keyword', 'author', 'institution', 'country', 'term', 'category', 'document_cocitation', 'author_cocitation', 'journal_cocitation', 'bibliographic_coupling'];
+var BIBLIO_SELECTION_MODES = ['top_n', 'top_pct', 'g_index', 'threshold'];
+var BIBLIO_LINK_MEASURES = ['cosine', 'dice', 'jaccard', 'association'];
+var BIBLIO_PRUNING_MODES = ['none', 'mst', 'pathfinder'];
+var BIBLIO_LABEL_METHODS = ['llr', 'lsi', 'mi', 'tfidf'];
+
+function biblioOption(value, label) {
+    /* Both shapes: `selectOptionTags` reads value/label, `renderParamSelect`
+       reads v/l. One list, so a new entity type cannot appear in one control
+       and be missing from the other. The key prefixes are spelled literally so
+       the i18n reachability audit can see every label this panel renders. */
+    return { value: value, label: label, v: value, l: label };
+}
+function biblioEntityOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.entity.' + value)); });
+}
+function biblioSelectionOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.selection.' + value)); });
+}
+function biblioMeasureOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.measure.' + value)); });
+}
+function biblioPruningOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.pruning.' + value)); });
+}
+function biblioLabelOptions(values) {
+    return values.map(function (value) { return biblioOption(value, I18n.t('biblio.label.' + value)); });
+}
+
+function updateBiblioEntity(nodeId, entity) {
+    updateParam(nodeId, 'entity_type', entity);
+    /* Coupling nodes are the citing papers themselves, so burst detection has
+       no meaning there. Uncheck it as a derived default when that mode is
+       chosen; an EXPLICIT true is still refused by the backend by name. */
+    if (entity === 'bibliographic_coupling') updateParam(nodeId, 'burst', false);
+    openSettings(nodeId);
+}
+
+function renderBiblioSettings(nodeId, p) {
+    var entity = p.entity_type || 'keyword';
+    var html = '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('biblio.ui.hint') + '</div>';
+
+    html += '<div class="settings-group"><label class="settings-label">' + I18n.t('biblio.ui.entityType') + '</label>' +
+        '<select class="settings-select" onchange="updateBiblioEntity(\'' + nodeId + '\', this.value)">' +
+        selectOptionTags(biblioEntityOptions(BIBLIO_ENTITY_TYPES), entity, 'keyword') +
+        '</select></div>';
+
+    html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.columns') + '</div>';
+    html += renderParamInput(nodeId, p, 'entity_column', 'biblio.ui.entityColumn', 'text', '') +
+        renderParamInput(nodeId, p, 'year_column', 'biblio.ui.yearColumn', 'text', '年份') +
+        renderParamInput(nodeId, p, 'title_column', 'biblio.ui.titleColumn', 'text', '题名') +
+        renderParamInput(nodeId, p, 'abstract_column', 'biblio.ui.abstractColumn', 'text', '摘要') +
+        renderParamInput(nodeId, p, 'reference_column', 'biblio.ui.referenceColumn', 'text', '参考文献') +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.columnsHint') + '</div>';
+
+    html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.network') + '</div>';
+    html += renderParamInput(nodeId, p, 'time_start', 'biblio.ui.timeStart', 'number', '') +
+        renderParamInput(nodeId, p, 'time_end', 'biblio.ui.timeEnd', 'number', '') +
+        renderParamInput(nodeId, p, 'slice_years', 'biblio.ui.sliceYears', 'number', 1) +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.timeHint') + '</div>';
+    html += renderParamSelect(nodeId, p, 'selection', 'biblio.ui.selection', 'top_n', biblioSelectionOptions(BIBLIO_SELECTION_MODES)) +
+        renderParamInput(nodeId, p, 'top_n', 'biblio.ui.topN', 'number', 50) +
+        renderParamInput(nodeId, p, 'top_pct', 'biblio.ui.topPct', 'number', 10) +
+        renderParamInput(nodeId, p, 'g_index', 'biblio.ui.gIndex', 'number', 25) +
+        renderParamInput(nodeId, p, 'min_count', 'biblio.ui.minCount', 'number', 2);
+    html += renderParamSelect(nodeId, p, 'link_measure', 'biblio.ui.linkMeasure', 'cosine', biblioMeasureOptions(BIBLIO_LINK_MEASURES)) +
+        renderParamInput(nodeId, p, 'max_links_per_node', 'biblio.ui.maxLinks', 'number', 10) +
+        renderParamInput(nodeId, p, 'lrf', 'biblio.ui.lrf', 'number', 2.5) +
+        renderParamSelect(nodeId, p, 'pruning', 'biblio.ui.pruning', 'none', biblioPruningOptions(BIBLIO_PRUNING_MODES));
+
+    html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.cluster') + '</div>';
+    html += renderParamCheckbox(nodeId, p, 'cluster', 'biblio.ui.cluster', true) +
+        renderParamInput(nodeId, p, 'cluster_count', 'biblio.ui.clusterCount', 'number', '') +
+        renderParamSelect(nodeId, p, 'label_method', 'biblio.ui.labelMethod', 'llr', biblioLabelOptions(BIBLIO_LABEL_METHODS)) +
+        renderParamInput(nodeId, p, 'top_terms', 'biblio.ui.topTerms', 'number', 5) +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.clusterHint') + '</div>';
+
+    html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.burst') + '</div>';
+    html += renderParamCheckbox(nodeId, p, 'burst', 'biblio.ui.burst', true) +
+        renderParamInput(nodeId, p, 'burst_gamma', 'biblio.ui.burstGamma', 'number', 1.0) +
+        renderParamInput(nodeId, p, 'burst_min_duration', 'biblio.ui.burstMinDuration', 'number', 2) +
+        renderParamInput(nodeId, p, 'burst_weight', 'biblio.ui.burstWeight', 'number', 2.0) +
+        renderParamInput(nodeId, p, 'burst_top', 'biblio.ui.burstTop', 'number', 20) +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.burstHint') + '</div>';
+    if (entity === 'bibliographic_coupling') {
+        html += '<div class="settings-group" style="font-size:11px;color:#e67e22;">' + I18n.t('biblio.ui.burstCoupling') + '</div>';
+    }
+
+    html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.output') + '</div>';
+    html += renderParamCheckbox(nodeId, p, 'export_files', 'biblio.ui.exportFiles', true) +
+        '<div class="settings-hint">' + I18n.t('biblio.ui.exportHint') + '</div>' +
+        '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
+    return html;
+}
+
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'wordcloud', 'map'];
+var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'wordcloud', 'map'];
+var BIBLIO_CHARTS = ['knowledge_graph', 'cluster_timeline', 'burst', 'timezone'];
 
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
@@ -3319,7 +3418,7 @@ var CHART_X_LABEL_KEY = {
 var CHART_Y_LABEL_KEY = { heatmap: 'settings.yFieldCat2', sankey: 'settings.targetField', network: 'settings.targetField' };
 var CHARTS_WITH_Y_AS_CATEGORY = ['heatmap', 'sankey', 'network'];
 var CHARTS_WITH_VALUE_FIELD = ['heatmap', 'sankey', 'network', 'wordcloud', 'map', 'topic_map'];
-var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct', 'model_agreement'].concat(CHARTS_WITH_Y_AS_CATEGORY);
+var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct', 'model_agreement'].concat(BIBLIO_CHARTS).concat(CHARTS_WITH_Y_AS_CATEGORY);
 // The right-hand scale, which only 双轴折线 asks for. Kept equal to the backend's
 // ECHARTS_ONLY_TYPES by tests/unit/test_visualization.py, because the renderer that cannot
 // draw two axes refuses by name and the panel must not offer it silently.
@@ -3328,7 +3427,7 @@ var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct', 'model_agreemen
 // rare word look bigger than a common one.
 var CHARTS_WITH_Y2 = ['dual_line', 'topic_terms'];
 var CHARTS_WITH_LABEL = ['topic_map'];
-var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement'];
+var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone'];
 // The types that draw a vertical line at one x-axis label, so an event ("5/19 公安通报") sits
 // on the curve it explains. Kept equal to the backend's ANNOTATED_TYPES by
 // tests/unit/test_visualization.py: a box the figure cannot honour would drop the date in
@@ -3408,7 +3507,12 @@ function renderVisualizeSettings(nodeId, p) {
     if (p.engine === 'matplotlib' && ECHARTS_ONLY_CHARTS.indexOf(ct) >= 0) {
         html += '<div class="settings-group" style="color:#e67e22;font-size:11px;">' + I18n.t('warn.echartsOnly') + '</div>';
     }
-    if (ct === 'model_agreement') {
+    if (BIBLIO_CHARTS.indexOf(ct) >= 0) {
+        /* These four read the fixed columns a Bibliometrics node emits, so x/y boxes would
+           promise a choice the builder never reads. */
+        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('biblio.ui.chartHint') + '</div>';
+    } else if (ct === 'model_agreement') {
         // 模型一致率 reads the tidy multi-model table by three columns, not x/y: which names a
         // model, which holds its label, which aligns the same text across models. Defaults match
         // what the analysis step writes, so a fresh chart needs no typing.
@@ -3504,14 +3608,18 @@ function renderVisualizeSettings(nodeId, p) {
         html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.mapRegionNames') + '</div>';
     }
     // LaTeX export is orthogonal to the renderer: the node still draws its chart, and these add a
-    // compilable figure source / a booktabs three-line table as .txt next to it.
-    html += '<div class="settings-group"><label class="settings-checkbox-label">' +
-        '<input type="checkbox" ' + (boolParam(p.emit_latex, true) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex\',this.checked)"> ' +
-        I18n.t('settings.emitLatex') + '</label>' +
-        '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + I18n.t('settings.emitLatexHint') + '</div></div>';
-    html += '<div class="settings-group"><label class="settings-checkbox-label">' +
-        '<input type="checkbox" ' + (boolParam(p.emit_latex_table, true) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex_table\',this.checked)"> ' +
-        I18n.t('settings.emitLatexTable') + '</label></div>';
+    // compilable figure source / a booktabs three-line table as .txt next to it. The four
+    // bibliometric views have no LaTeX figure builder, so the boxes are not offered there —
+    // the executor says by name that it skipped them instead of failing on an invisible default.
+    if (BIBLIO_CHARTS.indexOf(ct) < 0) {
+        html += '<div class="settings-group"><label class="settings-checkbox-label">' +
+            '<input type="checkbox" ' + (boolParam(p.emit_latex, true) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex\',this.checked)"> ' +
+            I18n.t('settings.emitLatex') + '</label>' +
+            '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + I18n.t('settings.emitLatexHint') + '</div></div>';
+        html += '<div class="settings-group"><label class="settings-checkbox-label">' +
+            '<input type="checkbox" ' + (boolParam(p.emit_latex_table, true) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex_table\',this.checked)"> ' +
+            I18n.t('settings.emitLatexTable') + '</label></div>';
+    }
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.title') + '</label>' +
         '<input class="settings-input" value="' + escapeHtml(p.title || '') + '" ' +
         'onchange="updateParam(\'' + nodeId + '\',\'title\',this.value)"></div>';
@@ -3555,9 +3663,18 @@ var dataNodes = {
                     node.params.row_count = result.row_count || 0;
                     /* A .txt arrives as one row in a 'content' column — worth
                        saying out loud, since word clouds read that column. */
-                    showToast(result.is_txt
-                        ? I18n.t('toast.txtUploaded') + ' (' + result.row_count + ' rows)'
-                        : I18n.t('toast.datasetUploaded') + ' (' + result.row_count + ' rows)');
+                    var uploadMsg = result.biblio_format
+                        ? I18n.t('toast.biblioUploaded').replace('{format}', result.biblio_format).replace('{n}', result.row_count)
+                        : result.is_txt
+                            ? I18n.t('toast.txtUploaded') + ' (' + result.row_count + ' rows)'
+                            : I18n.t('toast.datasetUploaded') + ' (' + result.row_count + ' rows)';
+                    /* Dropped duplicates / year-less records are part of what
+                       the import decided; a toast that only says "N records"
+                       would hide the rows that did not arrive. */
+                    if (result.warnings && result.warnings.length) {
+                        uploadMsg += ' · ' + result.warnings.join('；');
+                    }
+                    showToast(uploadMsg);
                     canvas.updateNodeDisplay(nodeId);
                     canvas.saveState();
                 }
@@ -7824,7 +7941,7 @@ workflow.validateDetailed = function () {
         var src = nodes[c.from];
         if (src && nodes[c.to]) (parentTypes[c.to] = parentTypes[c.to] || []).push(src.type);
     });
-    var TABLE_TYPES = ['source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'output'];
+    var TABLE_TYPES = ['source', 'upload', 'resume', 'comment', 'process', 'analysis', 'biblio', 'tokenize', 'output'];
 
     Object.keys(nodes).forEach(function (id) {
         var node = nodes[id];
@@ -7877,6 +7994,21 @@ workflow.validateDetailed = function () {
             }
         }
 
+        if (type === 'biblio') {
+            var biblioParents = parentTypes[id] || [];
+            if (!dataInput[id]) {
+                add(id, I18n.t('validate.biblioInput').replace('{title}', label));
+            } else if (biblioParents.length > 1) {
+                add(id, I18n.t('validate.biblioOneInput').replace('{title}', label).replace('{n}', biblioParents.length));
+            }
+            if (BIBLIO_ENTITY_TYPES.indexOf(params.entity_type || 'keyword') < 0) {
+                add(id, I18n.t('validate.biblioEntity').replace('{title}', label));
+            }
+            if ((params.entity_type || '') === 'bibliographic_coupling' && boolParam(params.burst, true)) {
+                add(id, I18n.t('validate.biblioBurstCoupling').replace('{title}', label));
+            }
+        }
+
         if (type === 'name') {
             /* The name node is metadata, not data: it must sit at the head of
                the workflow (no incoming edges), wire into something, and
@@ -7910,9 +8042,12 @@ workflow.validateDetailed = function () {
                 add(id, I18n.t('validate.visualizeChartType').replace('{title}', label));
             }
             // 模型一致率 has no x/y — it reads the tidy table's label column (the model/id columns
-            // default to 模型/原行). Requiring x_field here would block a chart that never uses it,
-            // so ask for the field THIS type really needs, matching the backend's own refusal.
-            if (params.chart_type === 'model_agreement') {
+            // default to 模型/原行). The four bibliometric views read fixed columns too. Requiring
+            // x_field here would block a chart that never uses it, so ask for the field THIS type
+            // really needs, matching the backend's own refusal.
+            if (BIBLIO_CHARTS.indexOf(params.chart_type) >= 0) {
+                // fixed columns; nothing to ask for
+            } else if (params.chart_type === 'model_agreement') {
                 if (!params.agreement_label_field || !String(params.agreement_label_field).trim()) {
                     add(id, I18n.t('validate.visualizeAgreementLabel').replace('{title}', label));
                 }

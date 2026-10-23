@@ -60,6 +60,10 @@ CHART_TYPES = (
     'model_agreement',
     'sankey',
     'network',
+    'knowledge_graph',
+    'cluster_timeline',
+    'burst',
+    'timezone',
     'wordcloud',
     'map',
 )
@@ -410,6 +414,10 @@ ECHARTS_ONLY_TYPES = (
     'topic_terms',
     'network',
     'model_agreement',
+    'knowledge_graph',
+    'cluster_timeline',
+    'burst',
+    'timezone',
 )
 
 #: Chart types that can carry dated event markers (a vertical line at one category). Any other
@@ -633,6 +641,15 @@ class VisualizationService:
             'animationDuration': 800,
             'animationEasing': 'cubicOut',
         }
+
+        # ── Bibliometric views (fixed columns from the biblio node) ──
+        if chart_type in ('knowledge_graph', 'cluster_timeline', 'burst', 'timezone'):
+            from services import biblio_charts
+
+            try:
+                return biblio_charts.build(df, chart_type, base)
+            except biblio_charts.BiblioChartError as exc:
+                raise ChartConfigError(str(exc)) from exc
 
         # ── Pie ──
         if chart_type == 'pie':

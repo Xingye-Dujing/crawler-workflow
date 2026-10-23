@@ -24,3 +24,6 @@ jieba
 scipy
 scikit-learn
 snownlp
+# Bibliometric graphs (metrics, pruning, GraphML export); installed in .venv but
+# previously relied on transitively, which a resolver change could break.
+networkx

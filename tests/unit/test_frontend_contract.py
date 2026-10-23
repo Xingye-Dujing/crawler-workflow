@@ -23,6 +23,14 @@ from node_runner import run_node
 
 import i18n
 from crawlers import CRAWLERS, is_crawlable
+from services.biblio_schema import (
+    ENTITY_TYPES,
+    LABEL_METHODS,
+    LINK_MEASURES,
+    PRUNING_MODES,
+    SELECTION_MODES,
+)
+from services.chart_contracts import BIBLIO_CHART_TYPES
 from services.cookie_manager import CookieManager
 
 pytestmark = pytest.mark.unit
@@ -314,6 +322,25 @@ class TestFrontendCatalog:
         # A regex that matches nothing would make the check above pass forever.
         html = (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
         assert len(_DATA_I18N.findall(html)) > 50
+
+
+class TestBiblioPanelContract:
+    """The panel's option lists are the Python enums, not a second opinion."""
+
+    @staticmethod
+    def _js_array(name: str) -> list[str]:
+        src = (JS_DIR / 'workflow.js').read_text(encoding='utf-8')
+        match = re.search(rf'var {name} = \[([^\]]*)\];', src)
+        assert match, f'workflow.js no longer declares {name} as a flat array'
+        return re.findall(r"'([^']*)'", match.group(1))
+
+    def test_every_panel_list_matches_the_service(self):
+        assert self._js_array('BIBLIO_ENTITY_TYPES') == list(ENTITY_TYPES)
+        assert self._js_array('BIBLIO_SELECTION_MODES') == list(SELECTION_MODES)
+        assert self._js_array('BIBLIO_LINK_MEASURES') == list(LINK_MEASURES)
+        assert self._js_array('BIBLIO_PRUNING_MODES') == list(PRUNING_MODES)
+        assert self._js_array('BIBLIO_LABEL_METHODS') == list(LABEL_METHODS)
+        assert self._js_array('BIBLIO_CHARTS') == list(BIBLIO_CHART_TYPES)
 
 
 class TestPaletteContract:

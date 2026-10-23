@@ -66,8 +66,12 @@ python app.py
 - **数据处理**：确定性清洗算子、去重（含 SimHash 近重复）、分组聚合（多指标）、**事件研究套件**（阶段划分 / 分阶段 LDA /
   主题流向 / 情感演化 / 二次爆发预警 / 曲线外推（移动平均 · Holt · 季节 Holt-Winters/朴素）），主题步骤（主题模型 / 分阶段 / 距离图 / 显著词）默认
 `auto`（装了编码器用 embedding+KMeans，没装自动走 LDA，控制台都如实写明用了哪种；可选装 `requirements-optional.txt`，也可显式选 `embedding`/`lda`），输出列三种方法一致，通用导出（CSV/JSON/Excel/TXT/HTML/Markdown，Parquet 需可选引擎 pyarrow）、一键运行报告与「智能清除」（按运行、按节点分片）。→ [`docs/analysis.md`](docs/analysis.md)
+- **文献计量 / 知识图谱**：Upload 自动识别 **CNKI RefWorks** 与 **CSSCI** 导出 txt；Bibliometrics 节点按时间切片构建关键词 / 作者 / 机构 /
+  国家 / 学科 / 主题词共现、文献·作者·期刊共被引与文献耦合，支持 TopN / Top% / g-index / 阈值选择、cosine/Dice/Jaccard/关联强度、
+  MST / Pathfinder 剪枝、度 / 中介 / 特征向量 / PageRank / Sigma、谱聚类与 LLR/LSI/MI/TF-IDF 标签、Kleinberg 突现，输出 GraphML/CSV。
+  它吃的是**普通表格**：列映射可把爬取数据的「话题 / 用户名 / 发布时间」接进来，不只服务文献。→ [`docs/analysis.md`](docs/analysis.md#文献计量)
 - **可视化**：论文印刷风格图表（ECharts / Matplotlib 双引擎）、主题距离图 / 显著词图 / 关系图 / 桑基 /
-  占比堆叠 / 模型一致率、LaTeX 图与三线表、MiKTeX 编译成 PDF、Chart Studio 工作台。→ [`docs/analysis.md`](docs/analysis.md)
+  占比堆叠 / 模型一致率 / 知识图谱 / 聚类时间线 / 突现词图 / 时区图、LaTeX 图与三线表、MiKTeX 编译成 PDF、Chart Studio 工作台。→ [`docs/analysis.md`](docs/analysis.md)
 - **工作流引擎**：拖拽画布、连线 fan-in/fan-out 语义、禁用即等同于不存在、撤销/重做、视角持久化、
   右侧大纲侧栏一键定位节点、自动排布上下顺序可指定、运行队列、停止与并行/串行执行。→ [`docs/workflow.md`](docs/workflow.md)
 - **断点续跑与运行记录**：节点级检查点、LLM 答案缓存、增量采集台账、Cookie 中途过期续跑、Resume 节点、
@@ -83,7 +87,7 @@ python app.py
   按任务时区算好送来，前端不自己算时间也不猜状态词。台账在 `data/schedules.json`（gitignore）。
   → [`docs/workflow.md`](docs/workflow.md#定时任务)
 - **界面**：中英双语、亮/暗主题（`自动`跟随系统或手动切换，图表配色与 PNG 导出同步跟随）、节点库与右侧大纲支持按名称/类型/缩写搜索过滤、节点库条目为 `role=button` 且 Tab 可达（`Enter`/空格或直接点击即在画布添加该类型节点）、`Ctrl`/`Cmd`+`F` 唤起大纲查找、选中节点 `Ctrl`/`Cmd`+`C`/`V` 复制粘贴（副本错位叠开）与方向键微移（`Shift` 精调 1px）在输入框外生效、框内不劫持、`W`/`A`/`S`/`D` 键把选中跳到该方向最近的节点（纯选择、不挪位置，与方向键微调互不抢键）、选中节点按 `Enter` **开合其设置面板**（即切换：再按一次即关，面板打开后焦点已落在首个控件、面板内对普通输入框按 `Enter` 也关，但按钮/链接/多行文本框/自定义下拉不抢其 `Enter`）、右键「复制节点为 JSON / 从 JSON 导入节点」可跨画布分享单个节点、对话框为模态且键盘可达（Tab 焦点锁在框内、Esc 关闭、role/aria-modal 语义）、启动步骤各自兜异常、离线不拖垮整页；画布支持触控板双指滚动平移 / 捏合缩放与平板双指手势；状态栏一个 `●` 表示画布有未保存改动（只跟踪节点/连线模型，平移视角不算改动，保存/打开即清除），打开另一份工作流仅在确有未保存改动时才二次确认；已打开的文件在每次改动后**静默自动保存**（几秒去抖、绝不新建未命名文件、无提示音），刷新/关闭页面前若有未保存改动则浏览器原生提醒；`L` 键连线（选中一个节点按 `L` 定起点、选中第二个再按 `L` 完成，`Esc` 取消）；`Shift` 点选 + 空白处**框选**可多选，批量删除/方向键微移一次生效（选择是视图态，不进撤销历史）；右下角**缩略总览图**按当前缩放画出所有节点与视口框、点击即把画布居中到该处；**剪贴板抽屉**（顶栏「视图」组或 `toggleClipboardDrawer()` 开合）把每次复制（单/多选节点、复制为 JSON、手动「添加文本」）累积成一份持久化清单，存于独立的 `crawler_clipboard` 键（与草稿 `crawler_canvas` 分离、刷新/重开仍在），可对任意一条**粘贴 / 重命名 / 置顶 / 删除 / 全部清空**，节点条目还能直接**拖到画布**生成（与「粘贴」按钮共用同一粘贴通道、落点即放置处）；抽屉与菜单栏/状态栏各留 12px 间距、浮于画布之上（同右侧大纲栏，不再互相遮盖），支持搜索过滤、上限 50 条且**置顶条目不被容量淘汰**；文本条目若是节点 JSON 还能「作为节点插入」。抽屉是视图态，绝不进 `getState()`/撤销历史，粘贴一律复用画布同一 `_pasteAt` 通道，且**跨标签页实时同步**（另一处窗口改了剪贴板，本窗口经 `storage` 事件自动刷新）；状态栏新增缩放控件 `[−] 百分比 [+]`（点数字即「适应」，另可 `+`/`-`/`0` 键位），`?`/`F1` 打开**快捷键一览浮层**（逐条对应实际绑定）；多选后右键可**对齐 / 分布**（左右上下、水平/垂直居中、水平/垂直等距，一次操作=一步撤销）；拖线**拒绝成环**（在唯一提交点 `connectNodes` 前置有向可达性检测，指针与 `L` 键两路同规则，避免跑出无解的环）；「视图」菜单另有**剪贴板抽屉**与快捷键入口。后端：运行**队列重启不再丢失**（待运行请求镜像到 `runs.db`，开机自动回填，仍严格一次跑一个）；运行详情的每张节点卡片可对已完成节点**「从此节点重跑」**（只重算该节点及其全部下游，未变的上游已存行原样复用、绝不重采/重付费）；数据集面板可勾选两份**行级对比**（`POST /api/data/diff`，报出新增/删除行与增删列，仅在显式指定唯一键列时才判定「变更行」，绝不臆测主键）。**运行前诊断**：每个节点常驻校验角标（缺配置 / 断线 / 引用了上游没有的列，悬浮看原因、点击选中并滚到该节点），设置面板顶部显示该节点**会输出哪些列**（爬虫 / 续跑等运行前不可知者如实标注、绝不臆造），状态栏给出**预计行数与 LLM 调用数**（按采集矩阵默认值估，无界情形标「不封顶」）——把「跑完才发现列名 / 配置错」提前到编辑期。→ [`docs/workflow.md`](docs/workflow.md)
-- **节点类型**：Name / Data Source / Upload / Process / Analysis / Visualize / Compile / Tokenize / Output / Resume / Comment。→ [`docs/workflow.md`](docs/workflow.md#节点类型)
+- **节点类型**：Name / Data Source / Upload / Process / Analysis / Bibliometrics / Visualize / Compile / Tokenize / Output / Resume / Comment。→ [`docs/workflow.md`](docs/workflow.md#节点类型)
 - **词库 / 停用词管理**：底栏「词库」面板可增删两类用户词表——**停用词**（在内置列表之外，额外从关键词 / 主题 / 词云 / ML 结果过滤掉）与**领域词库**（让分词器整体保留的专业词，可带词频）。持久化于 `data/lexicon.db`（`/api/lexicon`），分析管线经唯一入口 `analyzers/stopwords.py` 读取并按版本缓存失效；领域词在应用启动时写入并全局加载 jieba 用户词典（修掉了此前只有关键词路径可见的缺陷）。改词**从下一次运行起生效**。网暴词族是正则、按 AGENTS 保持「在代码里」，不在可编辑范围。
 - **HTTP API**：工作流、运行记录、数据集、分析/可视化/导出、Chart Studio、统计/历史、AI/Cookie/系统全部端点。→ [`docs/api.md`](docs/api.md)
 - **配置**：环境变量、运行时设置（`data/settings.json`）、保留策略 / 内存 / 排队-错峰-预检常量、云端部署。→ [`docs/config.md`](docs/config.md)
@@ -122,8 +126,11 @@ crawler_workflow/
 → 可选 Analysis 做确定性清洗、Tokenize 出词频 → 加 Visualize 看分布、Output 选导出格式 → 连线、加 Name 命名
 → 菜单 Execute 运行。
 
-**只处理已有数据（不采集）**：直接拖一个 Visualize（或 Analysis）节点，把数据源切成 Upload File 上传
-CSV/TSV/JSON/TXT/Excel，配好字段后点 Preview Chart 即可，不必跑整条工作流。Excel 一次只导入**一张表**：
+**只处理已有数据（不采集）**：直接拖一个 Visualize（或 Analysis / Bibliometrics）节点，把数据源切成 Upload File 上传
+CSV/TSV/JSON/TXT/Excel，配好字段后点 Preview Chart 即可，不必跑整条工作流。`.txt` 若是 **CNKI RefWorks** 或 **CSSCI** 导出，
+会自动解析成文献记录表（`记录ID/题名/作者/作者单位/来源期刊/年份/关键词/摘要/参考文献…`），其它 `.txt` 仍按单列文本导入。
+Bibliometrics 节点的列映射可以把任意表（包括爬取数据的「话题 / 用户名 / 发布时间」）接成网络，不绑定文献导出。
+Excel 一次只导入**一张表**：
 含多个非空工作表的工作簿会**按名拒绝**并列出各表名，请先把要用的那张拆成单表再上传（过去会静默只读第一张、
 却把它的行列当成整份文件的结果）。Upload 节点还能在面板的
 「从已保存数据集选择」下拉里直接挂载数据库里已存的文件（此前上传、粘贴或分析产出的），无需重复上传。

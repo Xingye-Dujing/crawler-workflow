@@ -46,6 +46,7 @@
   --accent-upload: #4a8fa5;
   --accent-process: #a85454;
   --accent-analysis: #9a7740;
+  --accent-biblio: #3d7a72;
   --accent-visualize: #4e8061;
   --accent-compile: #3d6b6b;
   --accent-tokenize: #8a6ea8;
@@ -1272,6 +1273,9 @@ body.style-menu-open #workspace #resume-banner {
 .node-type-analysis .node-header {
   border-left: 3px solid var(--accent-analysis);
 }
+.node-type-biblio .node-header {
+  border-left: 3px solid var(--accent-biblio);
+}
 .node-type-visualize .node-header {
   border-left: 3px solid var(--accent-visualize);
 }
@@ -1304,6 +1308,9 @@ body.style-menu-open #workspace #resume-banner {
 }
 .node-type-analysis.selected {
   border-color: var(--accent-analysis);
+}
+.node-type-biblio.selected {
+  border-color: var(--accent-biblio);
 }
 .node-type-visualize.selected {
   border-color: var(--accent-visualize);
@@ -2336,6 +2343,9 @@ button.history-del:hover {
 }
 .rm-node.nt-analysis {
   border-left-color: var(--accent-analysis);
+}
+.rm-node.nt-biblio {
+  border-left-color: var(--accent-biblio);
 }
 .rm-node.nt-visualize {
   border-left-color: var(--accent-visualize);

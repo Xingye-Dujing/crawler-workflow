@@ -10,6 +10,7 @@ the suite depend on a TeX installation it is not allowed to need.
 import pandas as pd
 import pytest
 
+from services.chart_contracts import BIBLIO_CHART_TYPES
 from services.latex_charts import LatexChartService as L
 from services.visualizer import CHART_TYPES, ChartConfigError
 
@@ -73,10 +74,13 @@ CASES = {
 
 
 class TestFigure:
-    # model_agreement is an on-screen comparison figure this round: it reads the tidy multi-model
-    # table and has no paper twin yet (README lists the LaTeX version as a follow-up), so it is
-    # deliberately out of both LaTeX sweeps — the LaTeX service has no CASES entry for it.
-    @pytest.mark.parametrize('chart_type', [c for c in CHART_TYPES if c != 'model_agreement'])
+    # model_agreement and the four bibliometric views are on-screen figures this round: they have
+    # no paper twin yet (the Visualize executor prints a named skip instead of failing), so they
+    # are deliberately out of both LaTeX sweeps — the LaTeX service has no CASES entry for them.
+    @pytest.mark.parametrize(
+        'chart_type',
+        [c for c in CHART_TYPES if c != 'model_agreement' and c not in BIBLIO_CHART_TYPES],
+    )
     def test_every_type_emits_a_standalone_document(self, chart_type):
         df, kw = CASES[chart_type]
         out = L.to_latex_document(df, chart_type, title='图 X', **kw)
@@ -169,10 +173,12 @@ class TestPaperStyle:
 
 
 class TestTable:
-    # model_agreement is an on-screen comparison figure this round: it reads the tidy multi-model
-    # table and has no paper twin yet (README lists the LaTeX version as a follow-up), so it is
-    # deliberately out of both LaTeX sweeps — the LaTeX service has no CASES entry for it.
-    @pytest.mark.parametrize('chart_type', [c for c in CHART_TYPES if c != 'model_agreement'])
+    # model_agreement and the four bibliometric views are on-screen figures this round: they have
+    # no paper twin yet, so they are deliberately out of both LaTeX sweeps.
+    @pytest.mark.parametrize(
+        'chart_type',
+        [c for c in CHART_TYPES if c != 'model_agreement' and c not in BIBLIO_CHART_TYPES],
+    )
     def test_every_type_makes_a_booktabs_three_line_table(self, chart_type):
         df, kw = CASES[chart_type]
         out = L.to_latex_table(df, chart_type, title='表 X', **kw)

@@ -20,6 +20,7 @@ from stores import _load_dataset, _register_dataset, get_dataset_store
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
+from services.biblio_import import BiblioDecodeError, decode_text, parse_bytes
 from services.data_analysis import DataAnalysisService
 from services.dataset_store import SOURCE_PASTE, SOURCE_UPLOAD
 from utils.helpers import as_bool
@@ -38,12 +39,38 @@ def upload_dataset():
         return jsonify({'ok': False, 'error': t('api.badRequest', what='missing file')}), 400
     filename = file.filename or 'upload'
     name_lower = filename.lower()
+    biblio_format = None
+    warnings: list[str] = []
+    is_txt = False
     try:
         if name_lower.endswith('.json'):
             df = pd.DataFrame(json.load(file.stream))
         elif name_lower.endswith('.txt'):
-            text = file.stream.read().decode('utf-8', errors='replace')
-            df = pd.DataFrame({'content': [text]})
+            raw = file.stream.read()
+            try:
+                parsed = parse_bytes(raw, filename)
+            except BiblioDecodeError:
+                # An undecodable .txt keeps the pre-bibliometrics behaviour: the
+                # whole file becomes one replacement-character text cell. It is
+                # not a bibliographic export we can name, so refusing it would
+                # break an upload that used to work.
+                parsed = None
+            except ValueError as e:
+                return jsonify({'ok': False, 'error': str(e)}), 400
+            if parsed is None:
+                # Ordinary text keeps its old shape: one row, one ``content``
+                # cell. A bibliographic export becomes a record table instead.
+                try:
+                    text = decode_text(raw, filename)
+                except ValueError:
+                    text = raw.decode('utf-8', errors='replace')
+                df = pd.DataFrame({'content': [text]})
+                is_txt = True
+            else:
+                df = pd.DataFrame(parsed['rows'], columns=parsed['columns'])
+                biblio_format = parsed['format']
+                warnings = parsed['warnings']
+                logger.info(t('biblio.import_ok', format=biblio_format, n=len(df)))
         elif name_lower.endswith(('.xlsx', '.xls', '.xlsm')):
             # Spreadsheets are the format a non-technical user's data actually
             # arrives in. Without this branch the file fell through to
@@ -78,7 +105,6 @@ def upload_dataset():
         # missing engine is a fixable environment gap, not a 500.
         return jsonify({'ok': False, 'error': t('api.parseFailed', err=e)}), 400
 
-    is_txt = name_lower.endswith('.txt')
     try:
         dataset_id = _register_dataset(df, name=filename, source=SOURCE_UPLOAD)
     except ValueError as e:
@@ -94,7 +120,11 @@ def upload_dataset():
             'name': filename,
             'columns': list(df.columns),
             'row_count': len(df),
+            # True only for the old whole-file single ``content`` cell; a CNKI /
+            # CSSCI export has many rows and must not be described as one text.
             'is_txt': is_txt,
+            'biblio_format': biblio_format,
+            'warnings': warnings,
             # False when identical rows were already stored: the UI can then
             # say "already saved" rather than pretending it wrote something new.
             'persisted': True,

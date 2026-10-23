@@ -8,6 +8,8 @@ import cookie_preflight
 import crawl_capabilities as capabilities
 from config import Config
 from i18n import t
+from services.biblio_schema import collect_errors as biblio_param_errors
+from services.chart_contracts import NO_X_TYPES
 from services.cookie_manager import CookieManager
 from utils.helpers import as_bool, platform_for, split_urls
 
@@ -107,7 +109,9 @@ def node_label(node: dict, nid: str) -> str:
 #: there: the save node now MERGES its incoming tables, so a wire from a node that carries
 #: no rows is one the canvas draws and the run ignores — the silent half of the picture
 #: this rule exists to refuse.
-TABLE_NODE_TYPES = frozenset({'source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'output'})
+TABLE_NODE_TYPES = frozenset(
+    {'source', 'upload', 'resume', 'comment', 'process', 'analysis', 'tokenize', 'biblio', 'output'}
+)
 
 #: Node types that carry a PDF-able LaTeX artifact downstream rather than a row table: ``visualize`` emits a
 #: chart SPEC whose ``latex``/``latex_table`` fields a save node can compile, and ``compile`` emits the PDF
@@ -540,12 +544,28 @@ class WorkflowEngine:
                         add(nid, 'engine.output_no_table', t('engine.output_no_table', nid=label))
             if ntype == 'analysis' and not (params.get('steps') or operation):
                 add(nid, 'engine.analysis_no_op', t('engine.analysis_no_op', nid=label))
+            if ntype == 'biblio':
+                # Count EVERY incoming wire, including a name node: the executor
+                # receives the whole upstream list, so filtering names here let a
+                # name→biblio + upload→biblio canvas pass validation and then read
+                # the name node's empty rows as its primary input.
+                parents = [str(conn.get('from')) for conn in self.connections if str(conn.get('to')) == str(nid)]
+                if nid not in data_inputs:
+                    add(nid, 'engine.biblio_no_input', t('engine.biblio_no_input', nid=label))
+                elif len(parents) > 1:
+                    add(
+                        nid,
+                        'engine.biblio_multi_input',
+                        t('engine.biblio_multi_input', nid=label, n=len(parents)),
+                    )
+                for message in biblio_param_errors(params, label):
+                    add(nid, 'engine.biblio', message)
             if ntype == 'tokenize' and not params.get('text_column'):
                 add(nid, 'engine.tokenize_no_column', t('engine.tokenize_no_column', nid=label))
             if ntype == 'visualize':
                 if not params.get('chart_type'):
                     add(nid, 'engine.visualize_no_chart', t('engine.visualize_no_chart', nid=label))
-                if not params.get('x_field'):
+                if not params.get('x_field') and params.get('chart_type') not in NO_X_TYPES:
                     add(nid, 'engine.visualize_no_x', t('engine.visualize_no_x', nid=label))
             if ntype == 'name':
                 # The name node is pure metadata: it carries no data, so it
